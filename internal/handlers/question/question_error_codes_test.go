@@ -21,8 +21,8 @@ import (
 func TestQuestionRPCs_RepositoryFailureCodes(t *testing.T) {
 	t.Parallel()
 
-	own := func(_ context.Context, id string) (*db.Chat, error) {
-		return &db.Chat{ID: id, UserID: "test-user"}, nil
+	ownRow := func(_ context.Context, id string) (*db.ChatRow, error) {
+		return &db.ChatRow{ID: id, UserID: "test-user"}, nil
 	}
 	for _, tc := range []struct {
 		name string
@@ -45,7 +45,7 @@ func TestQuestionRPCs_RepositoryFailureCodes(t *testing.T) {
 		t.Run("ListAsyncQuestions, reading the chat: "+tc.name, func(t *testing.T) {
 			t.Parallel()
 			svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Repo: &question.MockRepository{
-				GetChatFunc: func(context.Context, string) (*db.Chat, error) { return nil, tc.err },
+				GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err },
 			}}))
 			_, err := svc.ListAsyncQuestions(question.AuthedContext(t), connect.NewRequest(&pb.ListAsyncQuestionsRequest{ChatId: "chat-1"}))
 			requireClientReads(t, err, tc.want)
@@ -53,7 +53,7 @@ func TestQuestionRPCs_RepositoryFailureCodes(t *testing.T) {
 		t.Run("ListPendingQuestions, listing: "+tc.name, func(t *testing.T) {
 			t.Parallel()
 			svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Repo: &question.MockRepository{
-				GetChatFunc: own,
+				GetChatRowFunc: ownRow,
 				ListAnswerablePendingQuestionsByChatFunc: func(context.Context, string) ([]*db.Question, error) {
 					return nil, tc.err
 				},

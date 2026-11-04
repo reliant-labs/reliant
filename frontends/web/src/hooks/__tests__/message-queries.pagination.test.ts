@@ -55,6 +55,13 @@ describe("oldestSeqOf", () => {
   it("returns 0 for an empty list (the 'unknown' sentinel)", () => {
     expect(oldestSeqOf([])).toBe(0);
   });
+
+  it("ignores messages without a seq, wherever they sit", () => {
+    // A seq-0 message last used to win and return 0, which stops paging for good.
+    expect(oldestSeqOf([msg("a", 5), msg("b", 0)])).toBe(5);
+    expect(oldestSeqOf([msg("b", 0), msg("a", 5), msg("c", 9)])).toBe(5);
+    expect(oldestSeqOf([msg("b", 0)])).toBe(0);
+  });
 });
 
 describe("setMessagesInCache", () => {

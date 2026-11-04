@@ -37,8 +37,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -53,7 +51,14 @@ import (
 // sql.ErrNoRows, as for threads (see noRows).
 
 // InsertContextWindow stores a new context window and returns it as stored.
+// It first raises the thread's context_window counter to the window's
+// sequence, so a counter is never behind a window and the thread's next
+// sequence is AllocateContextWindowSequence's to hand out. Run it in a
+// transaction (Repo.CreateContextWindow opens one).
 func InsertContextWindow(ctx context.Context, db orm.Context, cw *core.ContextWindow) (*core.ContextWindow, error) {
+	if err := raiseCounter(ctx, db, CounterContextWindow, cw.ThreadID, int64(cw.Sequence)); err != nil {
+		return nil, err
+	}
 	row := contextWindowToRow(cw)
 	if err := CreateContextWindow(ctx, db, row); err != nil {
 		return nil, fmt.Errorf("failed to create context window: %w", err)
@@ -117,8 +122,9 @@ func ListContextWindowsByThread(ctx context.Context, db orm.Context, threadID st
 
 // GetMaxSequenceForThread returns the thread's highest window sequence, -1
 // when it has none. It replaced the messages-side
-// GetLatestContextSequenceByThread (P5b L1a), and is read wherever a new
-// window is numbered, so it binds its argument (the raw passthrough's $1).
+// GetLatestContextSequenceByThread (P5b L1a). It names the CURRENT window;
+// a new window is numbered by AllocateContextWindowSequence, never by this
+// plus one. It binds its argument (the raw passthrough's $1).
 func GetMaxSequenceForThread(ctx context.Context, db orm.Context, threadID string) (int, error) {
 	var seq int
 	err := db.QueryRow(ctx, `SELECT COALESCE(MAX(sequence), -1) FROM context_windows WHERE thread_id = $1`, threadID).Scan(&seq)
@@ -179,21 +185,6 @@ func SetCompactionSummaryMessage(ctx context.Context, db orm.Context, cwID, mess
 		return nil, noRows("failed to set compaction summary message", "context window", err)
 	}
 	return contextWindowFromRow(row), nil
-}
-
-// RemoveContextWindow deletes the window; one that does not exist is already
-// gone.
-func RemoveContextWindow(ctx context.Context, db orm.Context, id string) error {
-	if err := DeleteContextWindow(ctx, db, id); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	return nil
-}
-
-// DeleteContextWindowsByThread deletes every window of the thread.
-func DeleteContextWindowsByThread(ctx context.Context, db orm.Context, threadID string) error {
-	_, err := db.Bun().NewDelete().Model((*ContextWindow)(nil)).Where("thread_id = ?", threadID).Exec(ctx)
-	return err
 }
 
 func contextWindowToRow(cw *core.ContextWindow) *ContextWindow {

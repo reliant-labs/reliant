@@ -33,36 +33,36 @@ const STATE_STYLES: Record<DomainState, StateStyle> = {
   // Waiting on the TENANT. Neutral and dashed: not an error, but not progress
   // either — nothing moves until they act.
   "pending-dns": {
-    container: "bg-transparent border border-dashed border-border text-muted-foreground",
+    container: "bg-transparent border border-dashed border-border text-ink-muted",
     icon: CircleDashed,
   },
   // Waiting on US. Same neutral hue, but spinning: work is happening.
   verifying: {
-    container: "bg-muted/40 border border-solid border-border text-muted-foreground",
+    container: "bg-surface-sunken border border-solid border-border text-ink-muted",
     icon: Loader2,
     spin: true,
   },
   issuing: {
-    container: "bg-muted/40 border border-solid border-border text-muted-foreground",
+    container: "bg-surface-sunken border border-solid border-border text-ink-muted",
     icon: Loader2,
     spin: true,
   },
   live: {
-    container: "bg-success/15 border border-solid border-success/40 text-success-ink",
+    container: "bg-success-surface border border-solid border-success-border text-success-ink",
     icon: CheckCircle2,
   },
   failed: {
-    container: "bg-destructive/15 border border-solid border-destructive/40 text-destructive-ink",
+    container: "bg-danger-surface border border-solid border-danger-border text-danger-ink",
     icon: AlertTriangle,
   },
   // A different glyph from `failed` on purpose: the fix is a human dispute,
   // not a retry, and a tenant should not read it as "try again".
   conflict: {
-    container: "bg-destructive/15 border border-solid border-destructive/40 text-destructive-ink",
+    container: "bg-danger-surface border border-solid border-danger-border text-danger-ink",
     icon: ShieldAlert,
   },
   unknown: {
-    container: "bg-transparent border border-dashed border-border text-muted-foreground",
+    container: "bg-transparent border border-dashed border-border text-ink-muted",
     icon: CircleDashed,
   },
 };

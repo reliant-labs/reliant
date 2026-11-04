@@ -24,12 +24,12 @@
  *   longer describes what would happen.
  *
  * The facts here are read off the structured error detail, never parsed from the
- * message string. See promoteRefusalOf in api/forge-grpc.ts.
+ * message string. See promoteRefusalOf in hooks/forge-model.ts.
  */
 
 import { ShieldAlert } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { describeActualBinding, type PromoteRefusal } from "@/services/forge/promote";
 
 export interface PromoteRefusalNoticeProps {
@@ -48,7 +48,7 @@ export function PromoteRefusalNotice({
     <section
       data-testid="promote-refusal"
       data-reason={refusal.reason}
-      className="space-y-3 rounded-lg border border-solid border-warning/50 bg-warning/10 px-4 py-3"
+      className="space-y-3 rounded-lg border border-solid border-warning-border bg-warning-surface px-4 py-3"
     >
       <div className="flex items-center gap-2 text-warning-ink">
         <ShieldAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -58,31 +58,31 @@ export function PromoteRefusalNotice({
         </h3>
       </div>
 
-      <p className="text-xs text-foreground" data-testid="promote-refusal-detail">
+      <p className="text-xs text-ink" data-testid="promote-refusal-detail">
         {refusal.detail ||
           "The environment's binding is not what this page last saw, so the promote was not applied."}
       </p>
 
       {/* Expected vs actual. The diff IS the refusal. */}
       <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
-        <dt className="text-muted-foreground">You confirmed</dt>
-        <dd className="font-mono text-foreground" data-testid="promote-refusal-expected">
+        <dt className="text-ink-muted">You confirmed</dt>
+        <dd className="font-mono text-ink" data-testid="promote-refusal-expected">
           {refusal.expectedUnbound
             ? "no binding — a first promote"
             : refusal.expectedCurrentRelease || "an unnamed release"}
         </dd>
 
-        <dt className="text-muted-foreground">Actually bound to</dt>
-        <dd className="font-mono text-foreground" data-testid="promote-refusal-actual">
+        <dt className="text-ink-muted">Actually bound to</dt>
+        <dd className="font-mono text-ink" data-testid="promote-refusal-actual">
           {describeActualBinding(refusal)}
         </dd>
 
         {refusal.actualPromotedAt && (
           <>
-            <dt className="text-muted-foreground">That binding was written</dt>
+            <dt className="text-ink-muted">That binding was written</dt>
             {/* Seconds ago or last week — this is what says whether someone is
                 working alongside you right now. */}
-            <dd className="text-foreground" data-testid="promote-refusal-when">
+            <dd className="text-ink" data-testid="promote-refusal-when">
               {formatStamp(refusal.actualPromotedAt)}
             </dd>
           </>
@@ -102,7 +102,7 @@ export function PromoteRefusalNotice({
         >
           {isReplanning ? "Re-planning…" : "Show me the current diff"}
         </Button>
-        <span className="text-2xs text-muted-foreground">
+        <span className="text-2xs text-ink-muted">
           The diff you approved no longer describes what would happen.
         </span>
       </div>

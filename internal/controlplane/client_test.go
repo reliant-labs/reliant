@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	accesstokenv1 "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1"
 	accesstokenv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1/controlplanev1connect"
@@ -26,7 +28,7 @@ func TestClient_MintLLMKey_RequestsAPerDeviceRotatingLLMToken(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	key, err := New(Deps{BaseURL: server.URL}).MintLLMKey(context.Background(), " jwt-token ", "laptop")
+	key, err := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: server.URL}}).MintLLMKey(context.Background(), " jwt-token ", "laptop")
 	if err != nil {
 		t.Fatalf("MintLLMKey: %v", err)
 	}
@@ -53,6 +55,18 @@ func TestAttachAuthorization_LeavesHeaderUnsetWhenBlank(t *testing.T) {
 // An adapter given no base URL dials the local default. The deployment's own
 // control plane is configured (ControlPlaneConfig) and passed in; it is never
 // read from the environment here.
+// The control plane comes from ServerProcessConfig (ControlPlaneConfig);
+// cmd/reliant/cmd TestControlPlaneEnvContract pins the variables.
+func TestEndpointFrom(t *testing.T) {
+	got := EndpointFrom(&configv1.ControlPlaneConfig{Url: " http://admin-server:8090 ", InternalServiceSecret: " s "})
+	if want := (Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"}); got != want {
+		t.Fatalf("EndpointFrom = %+v, want %+v", got, want)
+	}
+	if got := EndpointFrom(nil); got != (Endpoint{}) || got.Hosted() {
+		t.Fatalf("EndpointFrom(nil) = %+v, want the zero (self-hosted) Endpoint", got)
+	}
+}
+
 func TestNew_NoBaseURLIsTheLocalDefault(t *testing.T) {
 	t.Setenv("RELIANT_CONTROL_PLANE_URL", "http://not-read.example")
 	if got := New(Deps{}).(*client).baseURL; got != defaultBaseURL {

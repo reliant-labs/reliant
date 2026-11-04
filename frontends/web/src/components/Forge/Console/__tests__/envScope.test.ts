@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-/** Decision D1's refinements: remembered per project, default prod (not All), never scoped to nothing. */
+/** The scope's refinements: remembered per project, default prod (not All), never scoped to nothing. */
 
 import { beforeEach, describe, expect, it } from "vitest";
 

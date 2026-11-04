@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -89,7 +90,7 @@ func TestSpawnSend_ToRunningChild_QueuesHonestReceipt(t *testing.T) {
 	tool := NewSpawnSendTool(repo, nil)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "status check"})
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "  Status check  ", Message: "status check"})
 	require.False(t, resp.IsError, "response: %+v", resp)
 	require.Contains(t, resp.Content, "Queued for delivery")
 	require.Contains(t, resp.Content, "It has NOT been read yet")
@@ -98,7 +99,38 @@ func TestSpawnSend_ToRunningChild_QueuesHonestReceipt(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.Equal(t, "status check", queued[0].Body)
+	require.Equal(t, "Status check", queued[0].Subject, "the subject is persisted, trimmed")
 	require.Equal(t, parentID, queued[0].FromThreadID)
+}
+
+// TestSpawnSend_RejectsBadSubject: the subject is the one line the transcript
+// shows for the message, so it must exist, be one line and be short. A bad
+// one is refused (and nothing queued) rather than silently truncated.
+func TestSpawnSend_RejectsBadSubject(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
+	tool := NewSpawnSendTool(repo, nil)
+	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
+
+	for name, tc := range map[string]struct{ subject, wantErr string }{
+		"missing":   {subject: "   ", wantErr: "subject is required"},
+		"multiline": {subject: "line one\nline two", wantErr: "single line"},
+		"too long":  {subject: strings.Repeat("x", spawnSendMaxSubjectRunes+1), wantErr: "at most 100"},
+	} {
+		resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: tc.subject, Message: "body"})
+		require.True(t, resp.IsError, "%s: response: %+v", name, resp)
+		require.Contains(t, resp.Content, tc.wantErr, name)
+	}
+
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
+	require.NoError(t, err)
+	require.Empty(t, queued, "a refused send queues nothing")
 }
 
 // recordingAgentMessageNotifier captures doorbell rings.
@@ -135,7 +167,7 @@ func TestSpawnSend_ChildToParent_RingsMailboxDoorbell(t *testing.T) {
 	// The CHILD is the caller here, messaging its parent.
 	rc := rctx.NewToolContext(ctx, chatID, childID, nil, nil)
 
-	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: parentID, Message: "found the root cause"})
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: parentID, Subject: "Status", Message: "found the root cause"})
 	require.False(t, resp.IsError, "response: %+v", resp)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, parentID)
@@ -166,7 +198,7 @@ func TestSpawnSend_RefusedSend_DoesNotRingDoorbell(t *testing.T) {
 	tool := NewSpawnSendTool(repo, notifier)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "are you there?"})
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "are you there?"})
 	require.True(t, resp.IsError)
 	require.Empty(t, notifier.rings, "nothing was queued, so there is nothing to wake for")
 }
@@ -187,7 +219,7 @@ func TestSpawnSend_NilNotifier_StillQueues(t *testing.T) {
 	tool := NewSpawnSendTool(repo, nil)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "still queued"})
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "still queued"})
 	require.False(t, resp.IsError, "response: %+v", resp)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
@@ -211,7 +243,7 @@ func TestSpawnSend_ToFinishedAgent_FailsWithGuidance(t *testing.T) {
 	tool := NewSpawnSendTool(repo, nil)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "are you still there?"})
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "are you still there?"})
 	require.True(t, resp.IsError, "sending to a finished agent must fail, not silently succeed")
 	require.Contains(t, resp.Content, "spawn(agent_id=")
 	require.Contains(t, resp.Content, "already finished")
@@ -239,7 +271,7 @@ func TestSpawnSend_ToFailedChild_ResumesIt(t *testing.T) {
 	tool := NewSpawnSendTool(repo, notifier)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "use the other provider and carry on"})
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "use the other provider and carry on"})
 	require.False(t, resp.IsError, "a failed sub-agent must be resumable by its parent's message: %+v", resp)
 	require.Contains(t, resp.Content, "resum", "the receipt must say the message resumes the agent")
 	require.Contains(t, resp.Content, "It has NOT been read yet")
@@ -268,7 +300,7 @@ func TestSpawnSend_ToFailedChild_WithoutDoorbell_FailsWithGuidance(t *testing.T)
 	tool := NewSpawnSendTool(repo, nil)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "carry on"})
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "carry on"})
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "spawn(agent_id=")
 
@@ -292,7 +324,7 @@ func TestSpawnSend_ToCancelledChild_FailsWithGuidance(t *testing.T) {
 	tool := NewSpawnSendTool(repo, notifier)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "carry on"})
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "carry on"})
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "already finished")
 	require.Empty(t, notifier.rings)
@@ -319,7 +351,7 @@ func TestSpawnSend_ToSibling_Rejected(t *testing.T) {
 	tool := NewSpawnSendTool(repo, nil)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: otherID, Message: "hello"})
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: otherID, Subject: "Status", Message: "hello"})
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "parent")
 }
@@ -340,7 +372,7 @@ func TestSpawnSend_ChildToParent_Allowed(t *testing.T) {
 	// Called FROM the child thread, addressed TO the parent.
 	rc := rctx.NewToolContext(ctx, chatID, childID, nil, nil)
 
-	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: parentID, Message: "I need clarification"})
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: parentID, Subject: "Status", Message: "I need clarification"})
 	require.False(t, resp.IsError, "response: %+v", resp)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, parentID)

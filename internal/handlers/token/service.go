@@ -35,6 +35,12 @@ type Deps struct {
 	// self-hosted server, where GetGitToken answers FailedPrecondition.
 	// forge:optional-dep
 	GitTokens GitTokenSource
+
+	// GitBotTokens mints the GitHub App's installation tokens (control-plane).
+	// Nil on a self-hosted server, where GetGitHubBotToken answers
+	// FailedPrecondition.
+	// forge:optional-dep
+	GitBotTokens GitBotTokenSource
 }
 
 // Authority is the slice of tokenauthority.Authority the token handlers use.
@@ -50,6 +56,12 @@ type Authority interface {
 // gitcredentialclient.New's client satisfies it.
 type GitTokenSource interface {
 	UserAccessToken(ctx context.Context, externalUserID, provider string) (gitcredentialclient.Token, error)
+}
+
+// GitBotTokenSource is what GetGitHubBotToken needs from the git token
+// authority. gitcredentialclient.New's client satisfies it.
+type GitBotTokenSource interface {
+	MintInstallationToken(ctx context.Context, req gitcredentialclient.InstallationRequest) (gitcredentialclient.InstallationToken, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

@@ -28,7 +28,7 @@ vi.mock("../../../store/chatStore", () => ({
   useChatStore: { getState: () => ({ branchChat: vi.fn(), connectChatToMachine: vi.fn() }) },
 }));
 vi.mock("../../../api/client", () => ({
-  api: { toolCalls: { cancel: vi.fn(), convertToBackground: vi.fn() } },
+  api: {},
 }));
 vi.mock("../../../lib/logger", () => ({
   logger: { debug: vi.fn(), error: vi.fn(), info: vi.fn(), warn: vi.fn() },
@@ -58,7 +58,6 @@ function assistantAskingForAMachine(): Message {
         toolCallId: "call-1",
         toolName: "request_machine",
         input: JSON.stringify({ reason: "Fixing the failing test needs a checkout of the repository." }),
-        matchedResult: { toolCallId: "call-1", content: "The user has been shown your reason.", isError: false },
       },
     ],
     createdAt: "2024-01-01T00:00:00.000Z",

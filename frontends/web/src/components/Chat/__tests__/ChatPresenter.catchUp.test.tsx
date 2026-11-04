@@ -22,7 +22,9 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
+import { setTransport } from "../../../lib/connect";
 import { queryClient } from "../../../lib/query-client";
+import { mockTransport } from "../../../lib/test-utils";
 import { ChatPresenter } from "../ChatPresenter";
 import type { Message } from "../../../api/client";
 import { useChatStore } from "../../../store/chatStore";
@@ -40,19 +42,6 @@ const { listMessagesMock, scrollTimelineToBottom } = vi.hoisted(() => ({
   listMessagesMock: vi.fn(),
   scrollTimelineToBottom: vi.fn(),
 }));
-
-vi.mock("../../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/client")>(
-    "../../../api/client",
-  );
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      chatsV2: { ...actual.api.chatsV2, listMessages: listMessagesMock },
-    },
-  };
-});
 
 vi.mock("../ChatInputWrapper", () => ({
   ChatInputWrapper: () => <div data-testid="chat-input" />,
@@ -73,11 +62,11 @@ vi.mock("../BackgroundWorkPill", () => ({ BackgroundWorkPill: () => null }));
 
 // ChatPresenter reads the chat's pending questions to tell whether the thread
 // in view is waiting on the user; none is pending here.
-vi.mock("../../../hooks/approval-queries", async () => {
+vi.mock("../../../hooks/question-queries", async () => {
   const actual = await vi.importActual<
-    typeof import("../../../hooks/approval-queries")
-  >("../../../hooks/approval-queries");
-  return { ...actual, usePendingQuestions: () => ({ data: [] }) };
+    typeof import("../../../hooks/question-queries")
+  >("../../../hooks/question-queries");
+  return { ...actual, usePendingQuestions: () => ({ data: { questions: [] } }) };
 });
 // A running chat reads its machine; none is needed here.
 vi.mock("@/hooks/useOnboardingQueries", () => ({
@@ -204,10 +193,17 @@ const frame = () => screen.getByTestId("chat-messages");
 const status = () => screen.getByTestId("timeline-catchup-status");
 const shownIds = () => screen.getByTestId("timeline").getAttribute("data-ids");
 
+/** A ListMessages request for one whole thread (no `recent` bound). */
+function wholeThreadRead(threadId: string) {
+  return expect.objectContaining({ chatId: CHAT, threadId });
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   scrollTimelineToBottom.mockClear();
   listMessagesMock.mockReset();
+  // A thread's history is ListMessages, answered at the transport by `listMessagesMock(request)`.
+  setTransport(mockTransport({ "ChatService.ListMessages": (req: unknown) => listMessagesMock(req) }));
   clearAllMessagesCache();
   useChatStore.setState({ chatSyncPendingId: null });
 });
@@ -216,6 +212,7 @@ afterEach(() => {
   useChatStore.setState({ chatSyncPendingId: null });
   clearAllMessagesCache();
   vi.useRealTimers();
+  setTransport(null);
 });
 
 describe("ChatPresenter timeline catch-up overlay — opening a chat", () => {
@@ -313,7 +310,8 @@ describe("ChatPresenter timeline catch-up overlay — opening a spawn thread", (
     setup();
 
     await openThread("open spawn");
-    expect(listMessagesMock).toHaveBeenCalledWith(CHAT, { threadId: SPAWN, recent: undefined });
+    expect(listMessagesMock).toHaveBeenCalledWith(wholeThreadRead(SPAWN));
+    expect(listMessagesMock.mock.calls.at(-1)?.[0].recent).toBeUndefined();
     expect(overlay()).not.toBeInTheDocument();
 
     await advance(CATCH_UP_SHOW_DELAY_MS);
@@ -401,10 +399,7 @@ describe("ChatPresenter timeline catch-up overlay — opening a spawn thread", (
     await advance(CATCH_UP_SHOW_DELAY_MS);
 
     expect(overlay()).toBeInTheDocument();
-    expect(listMessagesMock).toHaveBeenCalledWith(CHAT, {
-      threadId: OTHER_SPAWN,
-      recent: undefined,
-    });
+    expect(listMessagesMock).toHaveBeenCalledWith(wholeThreadRead(OTHER_SPAWN));
   });
 
   it("covers a spawn opened on mobile too (same ChatContainer path)", async () => {

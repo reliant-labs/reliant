@@ -1,0 +1,22 @@
+name: fixture
+inputs:
+  pr_number: {type: integer, default: 0}
+triggers:
+- name: queued
+  integration:
+    integration: github
+    events: [pull_request.labeled]
+    match: {repository: acme/app, label: 'merge:queue'}
+  inputs:
+    pr_number: '{{ trigger.payload.data.pull_request.number }}'
+entry: [done]
+nodes:
+- id: done
+  type: save_message
+  args: {role: assistant, content: 'queued #{{ inputs.pr_number }}'}
+on_failure:
+  sequence:
+  - id: tell
+    type: action
+    uses: github/issue.comment@1
+    with: {owner: acme, repo: app, issue_number: '{{ inputs.pr_number }}', body: 'failed at {{ failure.node_id }}'}

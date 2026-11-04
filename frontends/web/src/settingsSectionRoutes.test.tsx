@@ -80,20 +80,31 @@ describe("settings section routes", () => {
     expect(screen.queryByTestId("route-error")).not.toBeInTheDocument();
   });
 
-  it("treats /settings/machines as the Machines section", async () => {
-    const router = renderAt("/settings/machines?from=connectors");
-    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/environments"));
-    expect(await page()).toMatchObject({ section: "environments", search: { from: "connectors" } });
+  it.each([
+    ["general", "ai"],
+    ["environments", "machines"],
+    ["workspaces", "branches"],
+    ["machine", "machines"],
+  ])("redirects the old or near-miss slug /settings/%s to /settings/%s, keeping the query", async (from, to) => {
+    const router = renderAt(`/settings/${from}?from=connectors`);
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/settings/${to}`));
+    expect(await page()).toMatchObject({ section: to, search: { from: "connectors" } });
   });
 
-  it("opens one machine at /settings/environments/$machineId", async () => {
-    renderAt("/settings/environments/d-1");
+  it("opens one machine at /settings/machines/$machineId", async () => {
+    renderAt("/settings/machines/d-1");
     expect(await page()).toMatchObject({ machineId: "d-1" });
+  });
+
+  it("redirects a machine link under the old id to the new path", async () => {
+    const router = renderAt("/settings/environments/d-1?from=connectors");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/machines/d-1"));
+    expect(await page()).toMatchObject({ machineId: "d-1", search: { from: "connectors" } });
   });
 
   it("moves the older ?daemon=<id> link onto the path, keeping other params", async () => {
     const router = renderAt("/settings/environments?daemon=d-2&from=connectors");
-    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/environments/d-2"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/machines/d-2"));
     expect(await page()).toMatchObject({ machineId: "d-2", search: { from: "connectors" } });
   });
 });

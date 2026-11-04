@@ -32,7 +32,14 @@
  * A code is useless to anyone else: CompleteOAuth refuses a user other than
  * the one who started the flow, and burns the flow when it does.
  */
-import { connectionGrpc, type Connection } from '@/api/connection-grpc'
+import { ConnectionService } from '@/gen/reliant/v1/connection_pb'
+import { connectionFromProto, type Connection } from '@/hooks/connection-queries'
+import { connectClient } from '@/lib/connect'
+
+// A flow is imperative (it navigates away, or waits on a desktop receiver),
+// not a cached read, so it calls the client directly. The dialog that started
+// it invalidates the connection and catalog keys when it finishes.
+const client = connectClient(ConnectionService)
 
 /** The web route the API relays a browser flow to (Go: connections.AppCallbackPath). */
 export const CONNECTION_OAUTH_CALLBACK_PATH = '/connections/oauth/callback'
@@ -64,6 +71,31 @@ export interface ConnectionOAuthInput {
   /** Relative path to land on afterwards (web). */
   redirectAfter: string
   params?: Record<string, string>
+}
+
+/**
+ * Begin an OAuth flow for the signed-in user and return the provider URL to
+ * send them to. Without `loopbackRedirect` the code is relayed back to this
+ * web app's origin (the browser's Origin header, which the server checks
+ * against the origins it serves); a desktop app passes its loopback receiver.
+ */
+async function startOAuth(input: ConnectionOAuthInput & { loopbackRedirect?: string }): Promise<string> {
+  const response = await client.startOAuth({
+    integrationId: input.integrationId,
+    name: input.name ?? '',
+    redirectAfter: input.redirectAfter,
+    params: input.params ?? {},
+    loopbackRedirect: input.loopbackRedirect ?? '',
+  })
+  if (!response.authorizeUrl) throw new Error('The server did not return an authorization URL')
+  return response.authorizeUrl
+}
+
+/** Finish a flow with the code and state the API relayed back. */
+export async function completeOAuth(relayed: { state: string; code: string }): Promise<{ connection: Connection; redirectAfter: string }> {
+  const response = await client.completeOAuth(relayed)
+  if (!response.connection) throw new Error('No connection in response')
+  return { connection: connectionFromProto(response.connection), redirectAfter: response.redirectAfter }
 }
 
 export type ConnectionOAuthOutcome =
@@ -104,7 +136,7 @@ export async function connectWithOAuth(
 ): Promise<ConnectionOAuthOutcome> {
   const api = bridge()
   if (!api?.startConnectionOAuthReceiver || !api.waitForProviderOAuth || !api.openExternal) {
-    const authorizeUrl = await connectionGrpc.startOAuth(input)
+    const authorizeUrl = await startOAuth(input)
     window.location.assign(authorizeUrl)
     return { kind: 'redirecting' }
   }
@@ -116,7 +148,7 @@ export async function connectWithOAuth(
   signal?.addEventListener('abort', release, { once: true })
   try {
     if (signal?.aborted) throw new ConnectionOAuthCancelled()
-    const authorizeUrl = await connectionGrpc.startOAuth({ ...input, loopbackRedirect: redirectUri })
+    const authorizeUrl = await startOAuth({ ...input, loopbackRedirect: redirectUri })
     if (signal?.aborted) throw new ConnectionOAuthCancelled()
     await api.openExternal(authorizeUrl)
 
@@ -131,7 +163,7 @@ export async function connectWithOAuth(
     }
     if (signal?.aborted) throw new ConnectionOAuthCancelled()
 
-    const { connection } = await connectionGrpc.completeOAuth(relayed)
+    const { connection } = await completeOAuth(relayed)
     return { kind: 'connected', connection }
   } catch (err) {
     release()

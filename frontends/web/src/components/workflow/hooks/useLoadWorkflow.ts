@@ -30,7 +30,7 @@ import { useEffect } from "react";
 import type { Edge, Node } from "@xyflow/react";
 import type { Workflow } from "../../../types/workflow";
 import { workflowToFlowElements } from "../../../lib/workflow-flow";
-import { workflowGrpc, type ValidationError } from "../../../api/workflow-grpc";
+import { validateWorkflow, type ValidationError } from "../../../hooks/workflow-queries";
 import type { ValidationStatus } from "../workflowFindings";
 import type { InlineEditContext } from "./useInlineEditStack";
 
@@ -146,8 +146,7 @@ export function useLoadWorkflow({
 
     // Validate on open
     if (currentProjectId && initialWorkflow) {
-      workflowGrpc
-        .validateWorkflow(currentProjectId, initialWorkflow)
+      validateWorkflow(currentProjectId, initialWorkflow)
         .then((result) => {
           setValidationErrors(result.errors);
           setValidationStatus(result.valid ? "valid" : "invalid");

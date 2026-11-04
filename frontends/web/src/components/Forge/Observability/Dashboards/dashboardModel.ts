@@ -20,6 +20,7 @@ import type { Dashboard, Panel } from "@/services/controlPlane/observability/typ
 import { RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import type { ChartBand } from "../charts/UPlotChart";
+import { GROUP_LABELS, groupOf, type DashboardGroup } from "./dashboardGroups";
 
 // ── Index ────────────────────────────────────────────────────────────────────
 
@@ -28,13 +29,14 @@ export const SOURCE_LABELS: Record<DashboardSource, string> = {
   repo: "repo",
   workspace: "workspace",
   template: "template",
+  builtin: "built-in",
 };
 
 export type SourceFilter = "release" | "workspace";
 
 /** Who a dashboard belongs to, as the Owner filter names it: forge, the repo, or its author. */
 export function ownerOf(summary: DashboardSummary): string {
-  if (summary.source === "generated") return "forge";
+  if (summary.source === "generated" || summary.source === "builtin") return "forge";
   if (summary.source === "repo") return "repo";
   const user = summary.workspace?.createdBy;
   return user?.name || user?.email || "unknown";
@@ -46,7 +48,7 @@ export function ownersOf(dashboards: readonly DashboardSummary[]): string[] {
   let forge = false;
   let repo = false;
   for (const d of dashboards) {
-    if (d.source === "generated") forge = true;
+    if (d.source === "generated" || d.source === "builtin") forge = true;
     else if (d.source === "repo") repo = true;
     else people.add(ownerOf(d));
   }
@@ -57,12 +59,23 @@ export interface IndexFilter {
   q?: string;
   source?: SourceFilter;
   owner?: string;
+  /** One page group (dashboardGroups.ts). */
+  group?: DashboardGroup;
+}
+
+/**
+ * What a search matches: the title, description, key (so a workload name),
+ * the tags and the group's name — across every group at once.
+ */
+function searchText(d: DashboardSummary): string {
+  return [d.title, d.description, d.ref.key, ...(d.tags ?? []), GROUP_LABELS[groupOf(d)]].join("\u0000").toLowerCase();
 }
 
 export function filterIndex(dashboards: readonly DashboardSummary[], filter: IndexFilter): DashboardSummary[] {
   const q = (filter.q ?? "").trim().toLowerCase();
   return dashboards.filter((d) => {
-    if (q && !`${d.title}\u0000${d.description}\u0000${d.ref.key}`.toLowerCase().includes(q)) return false;
+    if (q && !searchText(d).includes(q)) return false;
+    if (filter.group && groupOf(d) !== filter.group) return false;
     if (filter.source === "release" && d.ref.kind !== "release") return false;
     if (filter.source === "workspace" && d.ref.kind !== "workspace") return false;
     if (filter.owner && ownerOf(d) !== filter.owner) return false;
@@ -94,7 +107,7 @@ export function sameRef(a: DashboardRef, b: DashboardRef): boolean {
 export type DashboardPageKind = Exclude<DashboardKind, "template">;
 
 export function isDashboardPageKind(value: string | undefined): value is DashboardPageKind {
-  return value === "release" || value === "workspace";
+  return value === "release" || value === "workspace" || value === "builtin";
 }
 
 /**
@@ -143,8 +156,23 @@ export function refreshMs(interval: RefreshInterval): number | false {
 export interface DashboardSearch {
   range?: RangePreset;
   service?: string;
+  /** RPC attributes, NOT the deployed process's service.name. */
+  rpcService?: string;
+  rpcMethod?: string;
+  rpcProcedure?: string;
+  /** Other explicitly declared filter ids and their viewer values. */
+  variables?: Record<string, string>;
+  /** Absent: saved grouping. "none": explicitly ungrouped. Otherwise a supported semantic field. */
+  breakdown?: string;
+  hiddenSections?: string[];
+  hiddenPanels?: string[];
+  /** Absent: on, when supported by the dashboard. */
+  releases?: boolean;
+  alerts?: boolean;
   compare?: CompareMode;
   refresh?: RefreshInterval;
+  /** An org-scoped dashboard's picked environments, as `project/env` names; absent: every environment of the org. */
+  orgEnvs?: string[];
   /** Full screen, for a wall display. */
   tv?: boolean;
   /** Open a workspace dashboard's older version (read-only). */

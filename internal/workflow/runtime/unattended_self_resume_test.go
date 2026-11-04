@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -230,9 +231,14 @@ func repeatedSelfPauseWorkflow(ctx workflow.Context) (string, error) {
 	// reached.
 	for i := 0; i < len(selfPauseBackoff)+3; i++ {
 		pc.RequestPause()
+		pc.noteSelfPauseCause(errors.New("the machine did not answer"))
 		pc.CheckPause(ctx)
 		if ctx.Err() != nil {
 			return "", temporal.NewCanceledError("still parked when cancelled")
+		}
+		// What every self-pause site does on waking: a run that gave up ends.
+		if gaveUp := pc.GaveUp(); gaveUp != nil {
+			return "", gaveUp
 		}
 		_ = workflow.ExecuteActivity(
 			workflow.WithActivityOptions(ctx, ao), selfResumeCounterStub,
@@ -243,12 +249,11 @@ func repeatedSelfPauseWorkflow(ctx workflow.Context) (string, error) {
 }
 
 func (s *SelfResumeSuite) TestUnattendedSelfPause_LadderIsBounded() {
-	// A cause that outlives every rung is not a rate limit — it needs a
-	// person. The ladder must run out and leave the run parked where someone
-	// can see it, rather than burning tokens against it forever.
-	if testing.Short() {
-		s.T().Skip("takes 30s of wall clock (deadlock detector); skipped under -short")
-	}
+	// A cause that outlives every rung is not a rate limit or a blip. The
+	// ladder must run out rather than burn tokens against it forever — and
+	// then END the run with the cause, not park it: a parked unattended run
+	// is an open execution nobody is watching, and it held its automation's
+	// capacity slot for hours (cp-merge, 2026-10-30).
 	env := s.NewTestWorkflowEnvironment()
 
 	resumes := 0
@@ -266,8 +271,42 @@ func (s *SelfResumeSuite) TestUnattendedSelfPause_LadderIsBounded() {
 
 	env.ExecuteWorkflow(repeatedSelfPauseWorkflow)
 
-	s.requireCancelledWhileParked(env,
-		"the workflow must still be parked when the ladder runs out")
+	s.True(env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	s.False(temporal.IsCanceledError(err), "the run must end on its own, not wait to be cancelled: %v", err)
+	var appErr *temporal.ApplicationError
+	s.Require().ErrorAs(err, &appErr)
+	s.Equal(unattendedPauseGaveUpErrType, appErr.Type())
+	s.Contains(err.Error(), "the machine did not answer", "the failure names the cause")
 	s.Equal(len(selfPauseBackoff), resumes,
 		"the ladder must grant exactly one resume per rung and then stop")
+}
+
+// attendedRepeatedSelfPauseWorkflow is repeatedSelfPauseWorkflow on an
+// attended run.
+func attendedRepeatedSelfPauseWorkflow(ctx workflow.Context) (string, error) {
+	pc := newPauseCoordinator(ctx, "wf-test", pauseOptions{HoldResume: true, Unattended: false})
+	pc.RequestPause()
+	pc.noteSelfPauseCause(errors.New("the machine did not answer"))
+	pc.CheckPause(ctx)
+	if ctx.Err() != nil {
+		return "", temporal.NewCanceledError("still parked when cancelled")
+	}
+	if gaveUp := pc.GaveUp(); gaveUp != nil {
+		return "", gaveUp
+	}
+	return "resumed", nil
+}
+
+func (s *SelfResumeSuite) TestAttendedSelfPause_NeverGivesUp() {
+	// Giving up is the unattended ladder's end. An attended run's pause is
+	// how it asks its person, and it waits for them however long it takes.
+	env := s.NewTestWorkflowEnvironment()
+	env.RegisterDelayedCallback(func() {
+		env.CancelWorkflow()
+	}, 6*time.Hour)
+
+	env.ExecuteWorkflow(attendedRepeatedSelfPauseWorkflow)
+
+	s.requireCancelledWhileParked(env, "an attended run stays parked for its person")
 }

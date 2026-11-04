@@ -39,7 +39,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -123,14 +122,6 @@ func ReplaceTask(ctx context.Context, db orm.Context, t *core.Task) error {
 	}
 	t.UpdatedAt = row.UpdatedAt
 	return nil
-}
-
-// UpdateTaskStatus moves the task to status, setting completed_at as given
-// (nil clears it). A missing task is orm.ErrNoRows.
-func UpdateTaskStatus(ctx context.Context, db orm.Context, id string, status int32, completedAt *time.Time) error {
-	s := reliantv1.TaskStatus(status)
-	return UpdateTaskMasked(ctx, db, &Task{ID: id, Status: &s, CompletedAt: completedAt},
-		[]string{TaskFieldStatus, TaskFieldCompletedAt})
 }
 
 // RemoveTask deletes the task; its dependencies go with it (ON DELETE

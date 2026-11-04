@@ -35,7 +35,7 @@
 import { Plus } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useForgeEnvShape, useRegisterEnvironment } from "@/hooks/forge-queries";
 import { liveKindLabel } from "@/services/forge/live";
 import { registerCandidate } from "@/services/forge/register";
@@ -73,7 +73,7 @@ export function RegisterEnvPanel({
     >
       {/* The env's name and "not registered" are the page's header and this
           panel's card title; repeating them here read as a second page. */}
-      <p className="flex items-center gap-2 text-sm text-foreground">
+      <p className="flex items-center gap-2 text-sm text-ink">
         <Badge label="would be created" variant="neutral" size="sm" />
         <span>
           Registering creates <span className="font-mono">{envName}</span> in Reliant.
@@ -83,26 +83,26 @@ export function RegisterEnvPanel({
       {/* The customer's nouns (#366): what they get, not where we file it.
           "Reliant has no record of it" is a fact about their project;
           "the control plane has no row" is a fact about our database. */}
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-ink-muted">
         {declaredHere
           ? "Your code declares this environment. Registering records what forge renders for it, so its releases and secrets are tracked here — even with your daemon offline."
           : "Reliant hasn't seen this environment yet. Adding it records what forge renders for it."}
       </p>
 
       {shape.isLoading && (
-        <p data-testid="register-shape-loading" className="text-xs text-muted-foreground">
+        <p data-testid="register-shape-loading" className="text-xs text-ink-muted">
           Rendering <span className="font-mono">{envName}</span>…
         </p>
       )}
 
       {candidate.ok ? (
         <>
-          <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+          <dl className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-ink-muted">
             <Fact label="Runs as">
-              <span className="text-foreground">{liveKindLabel(candidate.candidate.kind)}</span>
+              <span className="text-ink">{liveKindLabel(candidate.candidate.kind)}</span>
             </Fact>
             <Fact label="Project">
-              <span className="font-mono text-foreground">{candidate.candidate.project}</span>
+              <span className="font-mono text-ink">{candidate.candidate.project}</span>
             </Fact>
           </dl>
           <div className="flex flex-wrap items-center gap-2">
@@ -126,7 +126,7 @@ export function RegisterEnvPanel({
             // rather than rewriting — a declaration whose immutable fields
             // disagree with what is already recorded, and that refusal is the
             // one message worth passing through verbatim.
-            <p data-testid="register-error" className="text-xs text-muted-foreground">
+            <p data-testid="register-error" className="text-xs text-ink-muted">
               Couldn&apos;t add <span className="font-mono">{envName}</span>.{" "}
               <span className="font-mono text-2xs">{register.error.message}</span>
             </p>
@@ -134,7 +134,7 @@ export function RegisterEnvPanel({
         </>
       ) : (
         !shape.isLoading && (
-          <p data-testid="register-unavailable" className="text-xs text-muted-foreground">
+          <p data-testid="register-unavailable" className="text-xs text-ink-muted">
             {candidate.reason}
           </p>
         )

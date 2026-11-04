@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/controlplane"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,8 +18,8 @@ import (
 )
 
 var (
-	hosted     = controlplane.Endpoint{URL: "http://cp", InternalServiceSecret: "x"}
-	selfHosted = controlplane.Endpoint{}
+	hosted     = &configv1.ControlPlaneConfig{Url: "http://cp", InternalServiceSecret: "x"}
+	selfHosted = &configv1.ControlPlaneConfig{}
 	webhooks   = webhook.RegistryConfig{GitHubWebhookSecret: "s"}
 )
 
@@ -28,7 +28,7 @@ func TestWireGitHubAccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, r, "no webhook secret: GitHub events never arrive, so nothing to keep fresh")
 
-	_, err = wireGitHubAccess(nil, nil, controlplane.Endpoint{URL: "http://cp"}, webhooks)
+	_, err = wireGitHubAccess(nil, nil, &configv1.ControlPlaneConfig{Url: "http://cp"}, webhooks)
 	require.Error(t, err, "hosted without the internal-service secret must not boot")
 	assert.Contains(t, err.Error(), "INTERNAL_SERVICE_SECRET")
 

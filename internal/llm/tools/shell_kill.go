@@ -69,6 +69,10 @@ func (b *shellKillTool) Execute(rctx *rctx.ToolContext, params ShellKillParams) 
 		return NewTextErrorResponse("process_id is required"), nil
 	}
 
+	// Killing is using it too: if the kill fails, the process an agent just
+	// tried to stop is not also "idle".
+	touchProcesses(rctx, params.ProcessID)
+
 	// Kill the process via daemon
 	err := rctx.Daemon.KillProcess(rctx.Context, params.ProcessID)
 	if err != nil {

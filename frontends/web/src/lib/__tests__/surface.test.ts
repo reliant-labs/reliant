@@ -23,9 +23,17 @@ describe('surface capabilities', () => {
     // reasonable-sounding feature request, so pin them.
     const caps = capabilitiesFor('mobile')
     expect(caps.workflowAuthoring).toBe(false)
-    expect(caps.chatWorkflowParams).toBe(false)
+    expect(caps.chatWorkflowParams).toBe(true) // Execution configuration, not authoring.
     expect(caps.terminal).toBe(false)
     expect(caps.chatExecutionSidebar).toBe(false)
+  })
+
+  it('has a terminal only on desktop', () => {
+    // There is no terminal panel on /m/* or in an embed, so "Open Terminal"
+    // would open nothing there (mobile-chat-redesign §5.2).
+    expect(capabilitiesFor('desktop').terminal).toBe(true)
+    expect(capabilitiesFor('mobile').terminal).toBe(false)
+    expect(capabilitiesFor('embed').terminal).toBe(false)
   })
 
   it('enables the iteration-1 mobile feature set', () => {
@@ -90,7 +98,7 @@ describe('surface capabilities', () => {
     const caps = capabilitiesFor('mobile')
     expect(caps.gitManagement).toBe(false)
     expect(caps.worktreeManage).toBe(false)
-    expect(caps.chatAttachments).toBe(false)
+    expect(caps.chatAttachments).toBe(true)
   })
 
   it('lets mobile manage machines through the dedicated machine surface', () => {

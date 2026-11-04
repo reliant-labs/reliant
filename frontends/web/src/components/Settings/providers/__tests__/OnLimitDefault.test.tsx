@@ -70,9 +70,12 @@ describe("OnLimitDefault (Settings → Providers)", () => {
     await waitFor(() => expect(select().value).toBe("gpt-5.6-sol@codex"));
   });
 
-  it("renders nothing with a single provider connected", () => {
+  it("says how to get a fallback when only one provider is connected", () => {
     mocks.models = [claude];
     renderDefault();
     expect(screen.queryByTestId("on-limit-default")).toBeNull();
+    expect(screen.getByTestId("on-limit-unavailable")).toHaveTextContent(
+      "Connect another provider to fall back when Claude subscription is limited",
+    );
   });
 });

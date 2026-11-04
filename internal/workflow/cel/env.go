@@ -375,6 +375,7 @@ func CustomFunctions() []cel.EnvOption {
 		celParseDurationFunction(),
 		celNowFunction(),
 		celSpawnFunction(),
+		celUntrustedFunctions(),
 	}
 }
 

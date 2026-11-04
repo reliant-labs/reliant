@@ -16,6 +16,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DaemonInfoSchema, DaemonStatus, type DaemonInfo } from "../../../gen/reliant/v1/daemon_registry_pb";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { ComposerWakeStatus } from "../ComposerWakeStatus";
+import { ComposerStatusSlot, StatusSlotItem } from "../ComposerStatusSlot";
 
 const state = vi.hoisted(() => ({
   daemons: [] as DaemonInfo[],
@@ -23,6 +24,12 @@ const state = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
+// Where the project is installed decides which machine a new chat names
+// (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),
+}));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
   useDaemonList: () => ({ data: state.daemons, isLoading: false }),
   useResumeDaemon: () => ({ mutate: state.resume, isPending: false }),
@@ -80,5 +87,22 @@ describe("ComposerWakeStatus: a run held for its machine", () => {
     state.daemons = [daemon("d-1", "Cloud box", DaemonStatus.FAILED)];
     const { container } = renderWithQuery(<ComposerWakeStatus sending={false} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("reports the line it shows to the composer's status slot", () => {
+    state.daemons = [daemon("d-1", "Cloud box", DaemonStatus.FAILED)];
+    renderWithQuery(
+      <ComposerStatusSlot
+        layout="compact"
+        upper={null}
+        approvals={null}
+        lower={
+          <StatusSlotItem id="wake">
+            <ComposerWakeStatus sending={false} daemonId="d-1" waitingOnMachine />
+          </StatusSlotItem>
+        }
+      />,
+    );
+    expect(screen.getByTestId("status-slot-line-wake")).toHaveTextContent("Your machine failed to start");
   });
 });

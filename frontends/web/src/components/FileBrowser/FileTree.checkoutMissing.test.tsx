@@ -33,8 +33,9 @@ vi.mock("../../api/fileSystem", () => ({
   getFileContent: vi.fn(),
   getFilePreviewInfo: vi.fn(),
 }));
-vi.mock("../../api/project-grpc", () => ({
-  projectGrpc: { createProjectFromRepo: apiMocks.createProjectFromRepo },
+vi.mock("../../hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/project-queries")>()),
+  createProjectFromRepo: apiMocks.createProjectFromRepo,
 }));
 vi.mock("../../hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({

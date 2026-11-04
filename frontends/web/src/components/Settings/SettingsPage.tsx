@@ -1,7 +1,6 @@
 import { useCallback, useEffect } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { X } from "lucide-react";
-import { SettingsHeader } from "./SettingsHeader";
 import { SettingsViewerTab } from "./SettingsViewerTab";
 import { useSettingsClose } from "@/hooks/useSettingsClose";
 import {
@@ -16,7 +15,7 @@ export function SettingsPage() {
   // capture, so we don't fight it: this handler only fires for Escape.
   // `section` is the URL — bare /settings yields no param and falls back to
   // DEFAULT_SETTINGS_SECTION. /settings/$section provides it, and
-  // /settings/environments/$machineId is the Machines section with one machine
+  // /settings/machines/$machineId is the Machines section with one machine
   // open. An unknown slug never gets here: the route redirects it to bare
   // /settings with `notFound=<slug>` (settingsSectionRoutes.tsx).
   const params = useParams({ strict: false }) as { section?: string; machineId?: string };
@@ -25,7 +24,7 @@ export function SettingsPage() {
   const onClose = useSettingsClose();
 
   const section: SettingsSection = params.machineId
-    ? "environments"
+    ? "machines"
     : isSettingsSection(params.section)
       ? params.section
       : DEFAULT_SETTINGS_SECTION;
@@ -43,12 +42,11 @@ export function SettingsPage() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.defaultPrevented) return;
       const target = e.target as HTMLElement;
       if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.contentEditable === "true"
+        target.closest("input, textarea, select, [contenteditable='true']") ||
+        document.querySelector('[aria-modal="true"]')
       ) {
         return;
       }
@@ -62,7 +60,6 @@ export function SettingsPage() {
 
   return (
     <div className="flex h-screen w-full flex-col bg-background">
-      <SettingsHeader onClose={onClose} />
       {search.notFound && (
         <div
           role="status"
@@ -77,14 +74,14 @@ export function SettingsPage() {
             type="button"
             onClick={dismissNotFound}
             aria-label="Dismiss notice"
-            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
       )}
       <div className="flex-1 overflow-hidden">
-        <SettingsViewerTab section={section} onSectionChange={onSectionChange} />
+        <SettingsViewerTab section={section} onSectionChange={onSectionChange} onClose={onClose} />
       </div>
     </div>
   );

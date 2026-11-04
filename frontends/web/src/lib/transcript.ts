@@ -49,7 +49,9 @@ export function formatTranscript(
   const sections: string[] = [];
 
   for (const message of messages) {
-    const label = roleLabel(message.role);
+    const label = message.sender
+      ? `Message from ${message.sender.title || "another agent"}`
+      : roleLabel(message.role);
     if (!label) continue;
 
     const text = messageText(message);

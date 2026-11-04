@@ -11,6 +11,7 @@
       MaxIdleConns: 17
       ConnectTimeout: 47s
       SchemaWait: 2m3s
+      KeepIdleWarm: true
     }
     DataDir: "/surface/data"
     TemporalHost: "temporal.surface.test"
@@ -70,6 +71,7 @@
       URL: "http://cp.surface.test:8080"
       InternalServiceSecret: "cp-secret"
     }
+    AllowPrivateEgress: true
     PublicURL: "https://public.surface.test"
     VaultKey: "v1:c3VyZmFjZS12YXVsdC1rZXktMzItYnl0ZXMtbG9uZyE="
     Webhooks: webhook.RegistryConfig {
@@ -89,14 +91,6 @@
       OTLPEndpoint: "http://otel.surface.test:4318"
       OTLPEnabled: true
       PrometheusEnabled: false
-    }
-    Sentry: telemetry.SentryConfig {
-      DSN: "https://key@o0.ingest.sentry.io/42"
-      Environment: "surface"
-      Release: ""
-      Debug: false
-      Enabled: true
-      TracesSampleRate: 0.25
     }
     Analytics: analytics.Settings {
       Disabled: true

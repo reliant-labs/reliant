@@ -59,7 +59,7 @@ message was waiting for "the agent's next turn".
   histories of `97654413`, `3f03dc31` and `098c210d` (with their claim-checked
   payloads) against the gated code: all three replay cleanly.
 - Frozen fixture sets (`replaytest/fixtures/frozen/`), pinned by checksum and
-  replayed alongside the current set; `make freeze-replay-fixtures`; the
+  replayed alongside the current set; `task replay-fixtures:freeze`; the
   README now requires a gate plus a frozen set for a command-sequence change.
 - The reconciler acts on a wedge again, by default, but only when the run's
   history records a workflow-task FAILURE every retry repeats, and only after

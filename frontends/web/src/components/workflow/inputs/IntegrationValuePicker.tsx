@@ -4,8 +4,7 @@
  * IntegrationValuePicker — one control for every typed input
  * (`github.repository`, `github.label`, `github.user`, and every type an
  * integration adds later). It renders from CatalogService.ListInputOptions
- * and nothing else, so nothing in it is per integration
- * (research/autopilot/automation-ux-spec.md §3.5).
+ * and nothing else, so nothing in it is per integration.
  *
  * A WAI-ARIA 1.2 combobox with a listbox popup: the field shows the selected
  * values as chips (multi) or one value (single); opening it moves focus to a
@@ -30,7 +29,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { AlertTriangle, Check, ChevronDown, Loader2, Plus, RefreshCw, X } from "lucide-react";
 
-import type { InputOption } from "@/api/input-options-grpc";
+import type { InputOption } from "@/hooks/input-options-queries";
 import { inputOptionsErrorReason, useInputOptions, useResolvedInputOptions } from "@/hooks/input-options-queries";
 import { cn } from "@/lib/utils";
 import { inputTypeNouns } from "./inputTypeNouns";
@@ -85,6 +84,7 @@ interface Section {
 
 const DEBOUNCE_MS = 300;
 const PAGE_JUMP = 10;
+const NO_OPTIONS: InputOption[] = [];
 
 function asValues(value: IntegrationValuePickerProps["value"], multi: boolean): string[] {
   if (Array.isArray(value)) return value.map(String).filter(Boolean);
@@ -173,9 +173,8 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
     actingIdentity,
     enabled: !scopeMissing && !disabled,
   });
-  const pages = useMemo(() => optionsQuery.data?.pages ?? [], [optionsQuery.data]);
-  const needsConnection = pages[0]?.connectionState === "needs_connection";
-  const loaded = useMemo(() => pages.flatMap((page) => page.options), [pages]);
+  const needsConnection = optionsQuery.data?.connectionState === "needs_connection";
+  const loaded = optionsQuery.data?.options ?? NO_OPTIONS;
   const byValue = useMemo(() => new Map(loaded.map((o) => [o.value, o])), [loaded]);
 
   // Stored values the loaded options do not label (an id stored for a login,
@@ -511,7 +510,7 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
       <div
         className={cn(
           "flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1 text-sm",
-          "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30",
+          "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring",
           invalid && "border-destructive",
           blocked && "opacity-70",
         )}
@@ -574,7 +573,7 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
               e.stopPropagation();
               onChange("");
             }}
-            className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="rounded-sm p-0.5 text-muted-foreground hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="h-3.5 w-3.5" aria-hidden />
           </button>
@@ -599,7 +598,7 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
             <button
               type="button"
               onClick={onConnect}
-              className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Plus className="h-3.5 w-3.5" aria-hidden /> Connect {nouns.integration}
             </button>
@@ -698,7 +697,7 @@ function Chip({
         onKeyDown={onKeyDown}
         disabled={disabled}
         aria-label={`Remove ${label}`}
-        className="-mr-0.5 rounded-sm p-0.5 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="-mr-0.5 rounded-sm p-0.5 hover:bg-muted/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="h-3 w-3" aria-hidden />
       </button>
@@ -756,7 +755,7 @@ function PickerPanel(p: PickerPanelProps) {
           onChange={(e) => p.onQuery(e.target.value)}
           onKeyDown={p.onSearchKeyDown}
           placeholder={`Search ${p.nouns.plural}…`}
-          className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
+          className="h-8 w-full rounded-md border border-input bg-background px-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
           data-testid="picker-search"
         />
       </div>
@@ -816,7 +815,7 @@ function PickerPanel(p: PickerPanelProps) {
             <button
               type="button"
               onClick={p.onRetry}
-              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <RefreshCw className="h-3 w-3" aria-hidden /> Try again
             </button>
@@ -829,7 +828,7 @@ function PickerPanel(p: PickerPanelProps) {
             <button
               type="button"
               onClick={p.onRetry}
-              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="mt-1 inline-flex items-center gap-1 rounded-sm font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <RefreshCw className="h-3 w-3" aria-hidden /> Refresh
             </button>
@@ -896,7 +895,7 @@ function OptionRow({
   };
   if (row.kind === "select_all") {
     return (
-      <div {...common} role="option" aria-selected={false} className={cn(base, "text-primary")}>
+      <div {...common} role="option" aria-selected={false} className={cn(base, "text-primary-ink")}>
         <Plus className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
         Select all {row.values.length} in {row.group}
       </div>

@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import type { EnableWorkflowResult, WorkflowTriggerResult } from "@/api/trigger-grpc";
+import type { EnableWorkflowResult, WorkflowTriggerResult } from "@/hooks/trigger-model";
 import type { DeclaredTrigger } from "@/lib/declaredTriggers";
 import { planEnable, refusalHeadline, summarizeEnable, triggersNeedingPrompt, workflowEnableState } from "../enableWorkflow";
 

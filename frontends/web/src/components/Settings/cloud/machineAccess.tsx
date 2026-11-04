@@ -17,47 +17,58 @@
  * machine can carry grants too.
  */
 import { useId, useMemo, useState } from "react";
-import { create } from "@bufbuild/protobuf";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries } from "@tanstack/react-query";
 import { Check, Copy, Plug, Plus, ShieldAlert, Terminal, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { grpcClient } from "@/api/grpc-client";
 import {
   ConnectorExecMode,
-  CreateConnectorRequestSchema,
-  ListAvailableToolsRequestSchema,
-  ListConnectorActivityRequestSchema,
-  ListConnectorsRequestSchema,
-  RevokeConnectorRequestSchema,
   type Connector,
   type ConnectorActivity,
   type ConnectorTool,
+  type ListAvailableToolsResponse,
+  type ListConnectorActivityResponse,
+  type ListConnectorsResponse,
 } from "@/gen/reliant/v1/connector_pb";
-import { Badge, Button, Card, CardContent, CardHeader, CardInset, CardTitle } from "./ui";
+import {
+  connectorServiceQueries,
+  useCreateConnector,
+  useListAvailableTools,
+  useListConnectors,
+  useRevokeConnector,
+} from "@/hooks/connector-service-hooks_gen";
+import Button from "@/components/forge-ui/button";
+import { Badge, Card, CardContent, CardHeader, CardInset, CardTitle } from "./ui";
 
 // ── Data ────────────────────────────────────────────────────────────────────
+
+// ConnectorService on forge's generated keys. Creating a grant invalidates
+// `connectorServiceKeys.connector` (the grant list); revoking one invalidates
+// every ConnectorService read. Nothing on the stream touches these.
+
+function selectConnectors(response: ListConnectorsResponse): Connector[] {
+  return response.connectors;
+}
+
+function selectTools(response: ListAvailableToolsResponse): ConnectorTool[] {
+  return response.tools;
+}
 
 /**
  * Every grant the user holds, across machines. ListConnectors is user-scoped
  * (there is no per-daemon filter), so the machine list's app count and each
  * detail view read this one query and filter it — one request, not one per row.
  */
-export const connectorsQueryKey = ["connectors", "list"] as const;
-const toolsQueryKey = ["connectors", "tools"] as const;
-const activityQueryKey = (grantIds: string[]) => ["connectors", "activity", ...grantIds] as const;
-
-async function listConnectors(): Promise<Connector[]> {
-  const res = await grpcClient.connector().listConnectors(create(ListConnectorsRequestSchema, {}));
-  return res.connectors;
+export function useConnectors() {
+  return useListConnectors({}, { staleTime: 15_000, select: selectConnectors });
 }
 
-export function useConnectors() {
-  return useQuery({
-    queryKey: connectorsQueryKey,
-    queryFn: listConnectors,
-    staleTime: 15_000,
-  });
+/** The newest 50 calls across a machine's grants, newest first. */
+function mergeActivity(results: { data?: ListConnectorActivityResponse }[]): ConnectorActivity[] {
+  return results
+    .flatMap((r) => r.data?.activity ?? [])
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+    .slice(0, 50);
 }
 
 /** Grants that still reach their machine. A revoked grant does not. */
@@ -113,7 +124,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
       </label>
       <div className="flex items-center gap-2">
         <input id={id} value={value} readOnly className={cn(inputCls, "font-mono")} />
-        <Button variant="outline" size="sm" onClick={copy} aria-label={`Copy ${label}`}>
+        <Button variant="outline" size="md" onClick={copy} aria-label={`Copy ${label}`}>
           {copied ? <Check className="h-4 w-4 text-success-ink" /> : <Copy className="h-4 w-4" />}
         </Button>
       </div>
@@ -146,7 +157,6 @@ export function MachineAccess({
   defaultPathRoot,
   suggestedRoots = [],
 }: MachineAccessProps) {
-  const qc = useQueryClient();
   const titleId = useId();
   const nameId = useId();
   const pathId = useId();
@@ -175,36 +185,24 @@ export function MachineAccess({
   );
   const grantIds = useMemo(() => grants.map((g) => g.id), [grants]);
 
-  const toolsQ = useQuery({
-    queryKey: toolsQueryKey,
-    queryFn: async () =>
-      (await grpcClient.connector().listAvailableTools(create(ListAvailableToolsRequestSchema, {}))).tools,
-    staleTime: 5 * 60_000,
-    // Only the create form needs the catalog.
-    enabled: showCreate,
-  });
+  const toolsQ = useListAvailableTools(
+    {},
+    {
+      staleTime: 5 * 60_000,
+      // Only the create form needs the catalog.
+      enabled: showCreate,
+      select: selectTools,
+    },
+  );
   const tools: ConnectorTool[] = useMemo(() => toolsQ.data ?? [], [toolsQ.data]);
 
   // Activity is read per grant rather than account-wide: an account-wide page
   // of 50 is dominated by whichever machine is busiest, and would silently
   // show this machine nothing.
-  const activityQ = useQuery({
-    queryKey: activityQueryKey(grantIds),
-    queryFn: async () => {
-      const client = grpcClient.connector();
-      const pages = await Promise.all(
-        grantIds.map((grantId) =>
-          client.listConnectorActivity(create(ListConnectorActivityRequestSchema, { grantId, limit: 25 })),
-        ),
-      );
-      return pages
-        .flatMap((p) => p.activity)
-        .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
-        .slice(0, 50);
-    },
-    enabled: grantIds.length > 0,
+  const activity = useQueries({
+    queries: grantIds.map((grantId) => connectorServiceQueries.listConnectorActivity({ grantId, limit: 25 })),
+    combine: mergeActivity,
   });
-  const activity: ConnectorActivity[] = grantIds.length > 0 ? (activityQ.data ?? []) : [];
   const grantNames = useMemo(() => new Map(grants.map((g) => [g.id, g.name])), [grants]);
   const deniedCount = activity.filter((a) => a.denied).length;
 
@@ -226,43 +224,35 @@ export function MachineAccess({
     setPickedTools(next);
   };
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["connectors"] });
-
-  const createMut = useMutation({
-    mutationFn: async () =>
-      grpcClient.connector().createConnector(
-        create(CreateConnectorRequestSchema, {
-          name: name.trim(),
-          daemonId,
-          allowedTools: Array.from(selectedTools),
-          pathRoot: pathRoot.trim(),
-          execMode,
-          execAllowlist:
-            execMode === ConnectorExecMode.ALLOWLIST
-              ? execAllowlist
-                  .split(",")
-                  .map((s) => s.trim())
-                  .filter(Boolean)
-              : [],
-        }),
-      ),
-    onSuccess: (res) => {
-      setCreated({ credential: res.credential, mcpUrl: res.mcpUrl, name: name.trim() });
+  const createMut = useCreateConnector({
+    onSuccess: (res, req) => {
+      setCreated({ credential: res.credential, mcpUrl: res.mcpUrl, name: req.name ?? "" });
       setShowCreate(false);
       setName("");
       setError(null);
-      invalidate();
     },
     onError: (err) => setError(errorMessage(err, "Failed to grant access.")),
   });
+  const submitCreate = () =>
+    createMut.mutate({
+      name: name.trim(),
+      daemonId,
+      allowedTools: Array.from(selectedTools),
+      pathRoot: pathRoot.trim(),
+      execMode,
+      execAllowlist:
+        execMode === ConnectorExecMode.ALLOWLIST
+          ? execAllowlist
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [],
+    });
 
-  const revokeMut = useMutation({
-    mutationFn: async (id: string) =>
-      grpcClient.connector().revokeConnector(create(RevokeConnectorRequestSchema, { id })),
+  const revokeMut = useRevokeConnector({
     onSuccess: () => {
       setRevokingId(null);
       setError(null);
-      invalidate();
     },
     onError: () => setError("Failed to revoke access."),
   });
@@ -290,8 +280,8 @@ export function MachineAccess({
             </p>
           </div>
           {!showCreate && (
-            <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4" /> Give an app access
+            <Button size="md" onClick={() => setShowCreate(true)} leftIcon={<Plus />}>
+              Give an app access
             </Button>
           )}
         </div>
@@ -311,7 +301,7 @@ export function MachineAccess({
             <p className="text-xs font-medium text-warning-ink">
               This credential is shown only once. Copy it now — it cannot be retrieved later.
             </p>
-            <Button variant="ghost" size="sm" onClick={() => setCreated(null)}>
+            <Button variant="ghost" size="md" onClick={() => setCreated(null)}>
               Done
             </Button>
           </CardInset>
@@ -469,10 +459,10 @@ export function MachineAccess({
             </div>
 
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" onClick={() => createMut.mutate()} disabled={!canSubmit} isLoading={createMut.isPending}>
+              <Button size="md" onClick={submitCreate} disabled={!canSubmit} loading={createMut.isPending}>
                 Grant access
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>
+              <Button variant="ghost" size="md" onClick={() => setShowCreate(false)}>
                 Cancel
               </Button>
             </div>
@@ -528,19 +518,19 @@ export function MachineAccess({
                         <div className="flex items-center gap-2">
                           <Button
                             variant="danger"
-                            size="sm"
-                            isLoading={revokeMut.isPending}
-                            onClick={() => revokeMut.mutate(c.id)}
+                            size="md"
+                            loading={revokeMut.isPending}
+                            onClick={() => revokeMut.mutate({ id: c.id })}
                           >
                             Confirm
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setRevokingId(null)}>
+                          <Button variant="ghost" size="md" onClick={() => setRevokingId(null)}>
                             Cancel
                           </Button>
                         </div>
                       ) : (
-                        <Button variant="ghost" size="sm" onClick={() => setRevokingId(c.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" /> Revoke
+                        <Button variant="ghost" size="md" onClick={() => setRevokingId(c.id)} leftIcon={<Trash2 className="text-destructive" />}>
+                          Revoke
                         </Button>
                       )}
                     </div>

@@ -200,3 +200,43 @@ func TestValidateSkillReferencesChecksLiteralsInAMixedList(t *testing.T) {
 	assert.Contains(t, errs[0].Message, `"forge/testing"`)
 	assert.Contains(t, errs[0].Suggestion, `"testing"`)
 }
+
+// TestValidateSkillReferencesReachesInlineLoopBody covers the walk: a skill
+// named on a node inside a loop body skips exactly as silently as one on the
+// root graph, so the layer has to reach it. Before the walk this passed
+// validation and the guidance never reached the agent.
+func TestValidateSkillReferencesReachesInlineLoopBody(t *testing.T) {
+	t.Parallel()
+	wf := &reliantv1.Workflow{
+		Name:  "charter",
+		Entry: []string{"loop"},
+		Nodes: []*reliantv1.Node{{
+			Id:   "loop",
+			Type: "loop",
+			Args: &reliantv1.Node_Loop{Loop: &reliantv1.LoopArgs{
+				While: &reliantv1.DirectCelBool{Expr: "true"},
+				Inline: &reliantv1.Workflow{
+					Name:  "loop-body",
+					Entry: []string{"ask"},
+					Nodes: []*reliantv1.Node{{
+						Id:   "ask",
+						Type: "call_llm",
+						Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{
+							Skills: &reliantv1.CelStringList{
+								Value: &reliantv1.CelStringList_Literal{
+									Literal: &reliantv1.StringList{Values: []string{"forge/service-layer"}},
+								},
+							},
+						}},
+					}},
+				},
+			}},
+		}},
+	}
+
+	errs := skillErrors(t, wf, testResolver("service-layer"))
+	require.Len(t, errs, 1, "the unresolvable name inside the loop body should be reported")
+	assert.Contains(t, errs[0].Message, `"forge/service-layer"`)
+	assert.Contains(t, errs[0].Suggestion, `"service-layer"`)
+	assert.Equal(t, []string{"nodes", "loop", "inline", "nodes", "ask", "call_llm"}, errs[0].Path)
+}

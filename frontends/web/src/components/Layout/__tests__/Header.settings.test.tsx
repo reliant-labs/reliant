@@ -1,15 +1,14 @@
 /**
- * The Header's Settings button must survive project-picker mode.
+ * The Header's Settings button must be there with no project.
  *
  * The app's only other Settings link lives in the Sidebar, which renders
  * exclusively inside ModernApp's main app shell — and that shell requires a
- * selected project. A user whose daemon never provisions never gets a project,
- * so if this button is gated on `!projectPickerMode` (as every other control
- * on the row is) there is no route to /settings at all, and therefore no way
- * to sign out.
+ * project. A user with none yet (the first-run state, or a machine that never
+ * provisions) would otherwise have no route to /settings at all, and
+ * therefore no way to sign out.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("../../../store/projectStore", () => ({
@@ -20,6 +19,12 @@ vi.mock("../../../store/projectStore", () => ({
 vi.mock("../../../store/worktreeStore", () => ({
   useWorktreeStore: (selector: (s: unknown) => unknown) =>
     selector({ currentWorktree: null, worktrees: [] }),
+}));
+// Workspace rows are read through hooks/worktree-queries; answer them from the
+// same fixture.
+vi.mock("../../../hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/worktree-queries")>()),
+  ...(await import("../../../test/worktreeQueriesMock")).worktreeQueriesMock(() => ({ currentWorktree: null, worktrees: [] })),
 }));
 
 vi.mock("../../../store/shortcutsStore", () => ({
@@ -73,10 +78,10 @@ describe("Header settings escape hatch", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders the Settings button in project-picker mode", async () => {
+  it("renders the Settings button with no project (the first-run state)", async () => {
     const onNavigateToSettings = vi.fn();
     render(
-      <Header projectPickerMode onNavigateToSettings={onNavigateToSettings} />,
+      <Header onNavigateToSettings={onNavigateToSettings} />,
     );
 
     const button = screen.getByTestId("header-settings-button");
@@ -85,10 +90,19 @@ describe("Header settings escape hatch", () => {
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);
   });
 
-  it("renders it outside picker mode too", () => {
-    render(
-      <Header projectPickerMode={false} onNavigateToSettings={vi.fn()} />,
-    );
-    expect(screen.getByTestId("header-settings-button")).toBeInTheDocument();
+  it("leads with the Reliant mark, a link home that stays in the SPA on a plain click", async () => {
+    const onNavigateHome = vi.fn();
+    render(<Header onNavigateHome={onNavigateHome} />);
+
+    const mark = screen.getByRole("link", { name: "Reliant home" });
+    expect(mark).toHaveAttribute("href", "/");
+    expect(mark.querySelector("svg")).not.toBeNull();
+
+    await userEvent.click(mark);
+    expect(onNavigateHome).toHaveBeenCalledTimes(1);
+
+    // A modifier-click is the browser's (new tab), not the router's.
+    fireEvent.click(mark, { metaKey: true });
+    expect(onNavigateHome).toHaveBeenCalledTimes(1);
   });
 });

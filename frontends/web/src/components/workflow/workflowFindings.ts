@@ -7,7 +7,7 @@
  * "workflow.nodes.[1](call_llm).model: … (suggestion)" shape for older
  * readers, and is only the fallback text when `detail` is absent.
  */
-import type { ValidationError } from "../../api/workflow-grpc";
+import type { ValidationError } from "../../hooks/workflow-queries";
 import { isWarning } from "./workflowDraftStatus";
 
 /** A finding with the location the canvas needs. */

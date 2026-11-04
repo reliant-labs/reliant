@@ -50,10 +50,10 @@ type ServerProcessConfig struct {
 	StreamingDriver string               `protobuf:"bytes,6,opt,name=streaming_driver,json=streamingDriver,proto3" json:"streaming_driver,omitempty"`
 	Integrations    *IntegrationsConfig  `protobuf:"bytes,7,opt,name=integrations,proto3" json:"integrations,omitempty"`
 	Observability   *ObservabilityConfig `protobuf:"bytes,8,opt,name=observability,proto3" json:"observability,omitempty"`
-	Sentry          *SentryConfig        `protobuf:"bytes,9,opt,name=sentry,proto3" json:"sentry,omitempty"`
 	Analytics       *AnalyticsConfig     `protobuf:"bytes,10,opt,name=analytics,proto3" json:"analytics,omitempty"`
 	Llm             *LLMConfig           `protobuf:"bytes,11,opt,name=llm,proto3" json:"llm,omitempty"`
 	Preview         *PreviewConfig       `protobuf:"bytes,12,opt,name=preview,proto3" json:"preview,omitempty"`
+	Network         *NetworkConfig       `protobuf:"bytes,13,opt,name=network,proto3" json:"network,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -144,13 +144,6 @@ func (x *ServerProcessConfig) GetObservability() *ObservabilityConfig {
 	return nil
 }
 
-func (x *ServerProcessConfig) GetSentry() *SentryConfig {
-	if x != nil {
-		return x.Sentry
-	}
-	return nil
-}
-
 func (x *ServerProcessConfig) GetAnalytics() *AnalyticsConfig {
 	if x != nil {
 		return x.Analytics
@@ -172,6 +165,67 @@ func (x *ServerProcessConfig) GetPreview() *PreviewConfig {
 	return nil
 }
 
+func (x *ServerProcessConfig) GetNetwork() *NetworkConfig {
+	if x != nil {
+		return x.Network
+	}
+	return nil
+}
+
+// NetworkConfig is the network reach of the dials a user steers from a server
+// role: fetch, websearch, sourcegraph, model-endpoint probes and local-model
+// routes. The rules every config here follows are in config.proto's header.
+type NetworkConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Off by default, and nothing else turns it on: not a missing control-plane
+	// URL, not a hosted or self-hosted guess. A server role is a shared process
+	// next to databases, brokers and a cloud metadata service, so a URL a user
+	// types must not reach loopback, RFC 1918, link-local, metadata or CGNAT
+	// addresses. Set it only for a self-hosted deployment whose users mean those
+	// addresses (an Ollama on the server's own LAN); the process logs a warning
+	// at startup when it is on.
+	AllowPrivateEgress bool `protobuf:"varint,1,opt,name=allow_private_egress,json=allowPrivateEgress,proto3" json:"allow_private_egress,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *NetworkConfig) Reset() {
+	*x = NetworkConfig{}
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NetworkConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NetworkConfig) ProtoMessage() {}
+
+func (x *NetworkConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NetworkConfig.ProtoReflect.Descriptor instead.
+func (*NetworkConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *NetworkConfig) GetAllowPrivateEgress() bool {
+	if x != nil {
+		return x.AllowPrivateEgress
+	}
+	return false
+}
+
 // NatsConfig is the NATS server a server role connects to: daemon routing,
 // and the streaming hub's transport.
 type NatsConfig struct {
@@ -188,7 +242,7 @@ type NatsConfig struct {
 
 func (x *NatsConfig) Reset() {
 	*x = NatsConfig{}
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -200,7 +254,7 @@ func (x *NatsConfig) String() string {
 func (*NatsConfig) ProtoMessage() {}
 
 func (x *NatsConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -213,7 +267,7 @@ func (x *NatsConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NatsConfig.ProtoReflect.Descriptor instead.
 func (*NatsConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{1}
+	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *NatsConfig) GetUrl() string {
@@ -249,7 +303,7 @@ type TemporalConfig struct {
 
 func (x *TemporalConfig) Reset() {
 	*x = TemporalConfig{}
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[2]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -261,7 +315,7 @@ func (x *TemporalConfig) String() string {
 func (*TemporalConfig) ProtoMessage() {}
 
 func (x *TemporalConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[2]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -274,7 +328,7 @@ func (x *TemporalConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TemporalConfig.ProtoReflect.Descriptor instead.
 func (*TemporalConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{2}
+	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *TemporalConfig) GetHost() string {
@@ -315,7 +369,7 @@ type ServerTLSConfig struct {
 
 func (x *ServerTLSConfig) Reset() {
 	*x = ServerTLSConfig{}
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[3]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -327,7 +381,7 @@ func (x *ServerTLSConfig) String() string {
 func (*ServerTLSConfig) ProtoMessage() {}
 
 func (x *ServerTLSConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_server_config_proto_msgTypes[3]
+	mi := &file_reliant_config_v1_server_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -340,7 +394,7 @@ func (x *ServerTLSConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerTLSConfig.ProtoReflect.Descriptor instead.
 func (*ServerTLSConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{3}
+	return file_reliant_config_v1_server_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ServerTLSConfig) GetCertFile() string {
@@ -368,7 +422,7 @@ var File_reliant_config_v1_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a(reliant/config/v1/analytics_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xfc\x06\n" +
+	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a(reliant/config/v1/analytics_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x8d\a\n" +
 	"\x13ServerProcessConfig\x12J\n" +
 	"\rcontrol_plane\x18\x01 \x01(\v2%.reliant.config.v1.ControlPlaneConfigR\fcontrolPlane\x121\n" +
 	"\x04nats\x18\x02 \x01(\v2\x1d.reliant.config.v1.NatsConfigR\x04nats\x12=\n" +
@@ -379,14 +433,18 @@ const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\x10streaming_driver\x18\x06 \x01(\tBM\x82\xce\x18I\n" +
 	"\x10STREAMING_DRIVER\x12\x10streaming-driver\x1a\x04nats*\x17Streaming driver (nats)J\x04natsR\x0fstreamingDriver\x12I\n" +
 	"\fintegrations\x18\a \x01(\v2%.reliant.config.v1.IntegrationsConfigR\fintegrations\x12L\n" +
-	"\robservability\x18\b \x01(\v2&.reliant.config.v1.ObservabilityConfigR\robservability\x127\n" +
-	"\x06sentry\x18\t \x01(\v2\x1f.reliant.config.v1.SentryConfigR\x06sentry\x12@\n" +
+	"\robservability\x18\b \x01(\v2&.reliant.config.v1.ObservabilityConfigR\robservability\x12@\n" +
 	"\tanalytics\x18\n" +
 	" \x01(\v2\".reliant.config.v1.AnalyticsConfigR\tanalytics\x12.\n" +
 	"\x03llm\x18\v \x01(\v2\x1c.reliant.config.v1.LLMConfigR\x03llm\x12:\n" +
-	"\apreview\x18\f \x01(\v2 .reliant.config.v1.PreviewConfigR\apreview:\x17\xca\xc1\x18\x13\n" +
+	"\apreview\x18\f \x01(\v2 .reliant.config.v1.PreviewConfigR\apreview\x12:\n" +
+	"\anetwork\x18\r \x01(\v2 .reliant.config.v1.NetworkConfigR\anetwork:\x17\xca\xc1\x18\x13\n" +
 	"\areliant\x1a\b\n" +
-	"\x06server\"\xec\x01\n" +
+	"\x06serverJ\x04\b\t\x10\n" +
+	"R\x06sentry\"\x83\x02\n" +
+	"\rNetworkConfig\x12\xf1\x01\n" +
+	"\x14allow_private_egress\x18\x01 \x01(\bB\xbe\x01\x82\xce\x18\xb9\x01\n" +
+	"\x1cRELIANT_ALLOW_PRIVATE_EGRESS*\x98\x01Let user-steered server-side requests (fetch, websearch, model endpoints) reach private, loopback and link-local addresses; self-hosted deployments onlyR\x12allowPrivateEgress\"\xec\x01\n" +
 	"\n" +
 	"NatsConfig\x125\n" +
 	"\x03url\x18\x01 \x01(\tB#\x82\xce\x18\x1f\n" +
@@ -422,31 +480,31 @@ func file_reliant_config_v1_server_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_server_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_reliant_config_v1_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_reliant_config_v1_server_config_proto_goTypes = []any{
 	(*ServerProcessConfig)(nil), // 0: reliant.config.v1.ServerProcessConfig
-	(*NatsConfig)(nil),          // 1: reliant.config.v1.NatsConfig
-	(*TemporalConfig)(nil),      // 2: reliant.config.v1.TemporalConfig
-	(*ServerTLSConfig)(nil),     // 3: reliant.config.v1.ServerTLSConfig
-	(*ControlPlaneConfig)(nil),  // 4: reliant.config.v1.ControlPlaneConfig
-	(*IntegrationsConfig)(nil),  // 5: reliant.config.v1.IntegrationsConfig
-	(*ObservabilityConfig)(nil), // 6: reliant.config.v1.ObservabilityConfig
-	(*SentryConfig)(nil),        // 7: reliant.config.v1.SentryConfig
+	(*NetworkConfig)(nil),       // 1: reliant.config.v1.NetworkConfig
+	(*NatsConfig)(nil),          // 2: reliant.config.v1.NatsConfig
+	(*TemporalConfig)(nil),      // 3: reliant.config.v1.TemporalConfig
+	(*ServerTLSConfig)(nil),     // 4: reliant.config.v1.ServerTLSConfig
+	(*ControlPlaneConfig)(nil),  // 5: reliant.config.v1.ControlPlaneConfig
+	(*IntegrationsConfig)(nil),  // 6: reliant.config.v1.IntegrationsConfig
+	(*ObservabilityConfig)(nil), // 7: reliant.config.v1.ObservabilityConfig
 	(*AnalyticsConfig)(nil),     // 8: reliant.config.v1.AnalyticsConfig
 	(*LLMConfig)(nil),           // 9: reliant.config.v1.LLMConfig
 	(*PreviewConfig)(nil),       // 10: reliant.config.v1.PreviewConfig
 }
 var file_reliant_config_v1_server_config_proto_depIdxs = []int32{
-	4,  // 0: reliant.config.v1.ServerProcessConfig.control_plane:type_name -> reliant.config.v1.ControlPlaneConfig
-	1,  // 1: reliant.config.v1.ServerProcessConfig.nats:type_name -> reliant.config.v1.NatsConfig
-	2,  // 2: reliant.config.v1.ServerProcessConfig.temporal:type_name -> reliant.config.v1.TemporalConfig
-	3,  // 3: reliant.config.v1.ServerProcessConfig.tls:type_name -> reliant.config.v1.ServerTLSConfig
-	5,  // 4: reliant.config.v1.ServerProcessConfig.integrations:type_name -> reliant.config.v1.IntegrationsConfig
-	6,  // 5: reliant.config.v1.ServerProcessConfig.observability:type_name -> reliant.config.v1.ObservabilityConfig
-	7,  // 6: reliant.config.v1.ServerProcessConfig.sentry:type_name -> reliant.config.v1.SentryConfig
-	8,  // 7: reliant.config.v1.ServerProcessConfig.analytics:type_name -> reliant.config.v1.AnalyticsConfig
-	9,  // 8: reliant.config.v1.ServerProcessConfig.llm:type_name -> reliant.config.v1.LLMConfig
-	10, // 9: reliant.config.v1.ServerProcessConfig.preview:type_name -> reliant.config.v1.PreviewConfig
+	5,  // 0: reliant.config.v1.ServerProcessConfig.control_plane:type_name -> reliant.config.v1.ControlPlaneConfig
+	2,  // 1: reliant.config.v1.ServerProcessConfig.nats:type_name -> reliant.config.v1.NatsConfig
+	3,  // 2: reliant.config.v1.ServerProcessConfig.temporal:type_name -> reliant.config.v1.TemporalConfig
+	4,  // 3: reliant.config.v1.ServerProcessConfig.tls:type_name -> reliant.config.v1.ServerTLSConfig
+	6,  // 4: reliant.config.v1.ServerProcessConfig.integrations:type_name -> reliant.config.v1.IntegrationsConfig
+	7,  // 5: reliant.config.v1.ServerProcessConfig.observability:type_name -> reliant.config.v1.ObservabilityConfig
+	8,  // 6: reliant.config.v1.ServerProcessConfig.analytics:type_name -> reliant.config.v1.AnalyticsConfig
+	9,  // 7: reliant.config.v1.ServerProcessConfig.llm:type_name -> reliant.config.v1.LLMConfig
+	10, // 8: reliant.config.v1.ServerProcessConfig.preview:type_name -> reliant.config.v1.PreviewConfig
+	1,  // 9: reliant.config.v1.ServerProcessConfig.network:type_name -> reliant.config.v1.NetworkConfig
 	10, // [10:10] is the sub-list for method output_type
 	10, // [10:10] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name
@@ -471,7 +529,7 @@ func file_reliant_config_v1_server_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_server_config_proto_rawDesc), len(file_reliant_config_v1_server_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

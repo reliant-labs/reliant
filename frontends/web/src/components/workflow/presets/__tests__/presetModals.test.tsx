@@ -13,13 +13,17 @@
  *   - PresetList deletes a user preset with DeletePreset after a confirm.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
-import type { Preset } from "@/store/globalDataStore";
+import type { Preset } from "@/hooks/preset-queries";
 import { getWorkflowByName } from "../../run/__tests__/runFormFixtures";
 
 const mocks = vi.hoisted(() => ({
@@ -32,22 +36,26 @@ const mocks = vi.hoisted(() => ({
   deletePreset: vi.fn(),
 }));
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    workflow: () => ({ getWorkflow: mocks.getWorkflow, listWorkflows: mocks.listWorkflows }),
-    preset: () => ({
+// PresetService is reached through connectClient (hooks/preset-queries), so
+// it is answered at the transport by the same fakes.
+beforeEach(() => {
+  setTransport(mockTransport({ ...serviceHandlers("WorkflowService", { getWorkflow: mocks.getWorkflow, listWorkflows: mocks.listWorkflows }), ...serviceHandlers("PresetService", {
       getDefaultPresetsBatch: mocks.getDefaultPresetsBatch,
       setDefaultPreset: mocks.setDefaultPreset,
       createPreset: mocks.createPreset,
       updatePreset: mocks.updatePreset,
       deletePreset: mocks.deletePreset,
-    }),
-  },
-}));
+    }) }));
+});
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
-import { usePreferencesStore } from "@/store/preferencesStore";
 import { PresetConfigModal } from "../PresetConfigModal";
 import { PresetEditModal } from "../PresetEditModal";
 import { PresetList } from "../PresetList";
@@ -82,13 +90,6 @@ beforeEach(() => {
   mocks.createPreset.mockResolvedValue({ success: true });
   mocks.updatePreset.mockResolvedValue({ success: true });
   mocks.deletePreset.mockResolvedValue({ success: true });
-  // The modals read preferences; a loaded, empty set keeps them off the network.
-  usePreferencesStore.setState({
-    preferences: {} as never,
-    loadPreferences: vi.fn(async () => undefined),
-    isPresetHidden: () => false,
-    togglePresetVisibility: vi.fn(async () => undefined),
-  } as never);
 });
 
 describe("PresetConfigModal", () => {

@@ -123,9 +123,16 @@ export function scrubInternals(text: string): string {
  * A runtime error line in words: the container runtime's reason names are
  * replaced where they stand ("OOMKilled" reads "ran out of memory") and the
  * internals are scrubbed. Text with no known word passes through scrubbed.
+ *
+ * The reason names are adjectives in the server's sentences ("Container api
+ * was OOMKilled", "is in CrashLoopBackOff"), so the phrase around one goes
+ * first: a bare in-place swap reads "was ran out of memory".
  */
 export function plainErrorText(text: string): string {
   return scrubInternals(text)
+    .replace(/\b(?:was|got|been) OOMKilled\b/g, "ran out of memory")
+    .replace(/\bis OOMKilling\b/g, "is running out of memory")
+    .replace(/\b(?:is )?in CrashLoopBackOff\b/g, "keeps restarting")
     .replace(/\bOOMKilled\b/g, "ran out of memory")
     .replace(/\bOOMKilling\b/g, "ran out of memory")
     .replace(/\bCrashLoopBackOff\b/g, "keeps restarting")

@@ -64,9 +64,12 @@ WHERE tool_calls.chat_id = EXCLUDED.chat_id
 // the same chat's. A row recorded for another chat is never replaced: the
 // write fails with core.ErrToolCallIDInAnotherChat.
 func UpsertToolCall(ctx context.Context, db orm.Context, call *core.ToolCall) error {
+	// ErrorMessage is a failed call's output (the same text its result
+	// carries), so it gets the result's protection against bytes PostgreSQL
+	// text cannot store (validUTF8).
 	res, err := db.Exec(ctx, upsertToolCallSQL,
 		call.ID, call.ChatID, call.ThreadID, call.MessageID, call.ToolName, jsonbArg(call.Input), int32(call.Status),
-		call.ErrorMessage, call.ChildWorkflowID, call.BackgroundProcessID,
+		validUTF8Ptr(call.ErrorMessage), call.ChildWorkflowID, call.BackgroundProcessID,
 		call.RequestedAt, call.StartedAt, call.CompletedAt, call.CreatedAt, call.UpdatedAt,
 		call.DaemonID,
 	)
@@ -280,11 +283,26 @@ func ListStrandedBackgroundSpawnToolCalls(ctx context.Context, db orm.Context) (
 //
 // Served by idx_tool_calls_chat_live (status IN (1,2,6)), which stays small
 // once the sweep keeps status 6 honest.
+//
+// chat_running (a pending or active workflow of the chat, any thread; served
+// by idx_workflows_chat_state) and workspace_archived (the call's thread's
+// workspace, else its chat's, has deleted_at) are what the daemon's idle
+// reaper needs to stop a finished chat's process.
 const listBackgroundedProcessToolCallsSQL = `
 SELECT tc.id, tc.chat_id, tc.tool_name, tc.background_process_id, tc.daemon_id,
-       tc.requested_at, c.user_id
+       tc.requested_at, c.user_id,
+       EXISTS (
+         SELECT 1 FROM workflows w
+         WHERE w.chat_id = tc.chat_id AND w.state IN (1, 2)
+       ) AS chat_running,
+       EXISTS (
+         SELECT 1 FROM worktrees wt
+         WHERE wt.id = COALESCE(th.worktree_id, c.worktree_id)
+           AND wt.deleted_at IS NOT NULL
+       ) AS workspace_archived
 FROM tool_calls tc
 JOIN chats c ON c.id = tc.chat_id
+LEFT JOIN threads th ON th.id = tc.thread_id
 WHERE tc.status = 6
   AND tc.child_workflow_id IS NULL
 ORDER BY tc.requested_at ASC
@@ -301,6 +319,8 @@ func ListBackgroundedProcessToolCalls(ctx context.Context, db orm.Context) ([]*c
 		DaemonID            *string   `bun:"daemon_id"`
 		RequestedAt         time.Time `bun:"requested_at"`
 		UserID              string    `bun:"user_id"`
+		ChatRunning         bool      `bun:"chat_running"`
+		WorkspaceArchived   bool      `bun:"workspace_archived"`
 	}
 	if err := db.Bun().NewRaw(listBackgroundedProcessToolCallsSQL).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("failed to list backgrounded process tool calls: %w", err)
@@ -315,6 +335,8 @@ func ListBackgroundedProcessToolCalls(ctx context.Context, db orm.Context) ([]*c
 			BackgroundProcessID: row.BackgroundProcessID,
 			DaemonID:            row.DaemonID,
 			RequestedAt:         row.RequestedAt,
+			ChatRunning:         row.ChatRunning,
+			WorkspaceArchived:   row.WorkspaceArchived,
 		})
 	}
 	return calls, nil
@@ -644,6 +666,69 @@ func LatestSpawnRunForThread(ctx context.Context, db orm.Context, chatID, thread
 		WorktreePath: row.WorktreePath,
 		SpawnDepth:   row.SpawnDepth,
 	}, nil
+}
+
+// ListStoppedSpawnRecords reads all failed latest spawn runs, ancestry and
+// report-slot counters in one round trip. Ranking happens before status
+// filtering, so an old failure behind a completed/resumed run is not revived.
+func ListStoppedSpawnRecords(ctx context.Context, db orm.Context, chatID string) ([]core.StoppedSpawnRecord, error) {
+	var records []core.StoppedSpawnRecord
+	err := db.Bun().NewRaw(`WITH RECURSIVE latest AS (
+        SELECT DISTINCT ON (w.thread) w.id, w.thread, w.parent_id, w.state, w.stop_reason, w.created_at
+        FROM workflows w
+        WHERE w.chat_id = ?0
+          AND EXISTS (SELECT 1 FROM tool_calls tc WHERE tc.child_workflow_id = w.id AND tc.tool_name = 'spawn')
+        ORDER BY w.thread, w.created_at DESC, w.id DESC
+    ), failed AS (
+        SELECT l.id, l.thread, l.parent_id FROM latest l JOIN threads t ON t.id = l.thread
+        WHERE l.state = 3 AND l.stop_reason = 2 AND t.status = 4 AND t.origin = 'spawn'
+    ), ancestors AS (
+        SELECT f.id AS child, p.id, p.parent_id, 1 AS depth FROM failed f JOIN workflows p ON p.id = f.parent_id
+        UNION ALL
+        SELECT a.child, p.id, p.parent_id, a.depth + 1 FROM ancestors a JOIN workflows p ON p.id = a.parent_id WHERE a.depth < 64
+    )
+    SELECT tc.id AS tool_call_id, tc.thread_id AS parent_thread_id, tc.input::text AS tool_input,
+           f.thread AS child_thread_id, f.id AS child_workflow_id, f.parent_id AS issuing_workflow_id,
+           COALESCE((SELECT MAX(depth) FROM ancestors a WHERE a.child = f.id), 0)::int AS spawn_depth,
+           COALESCE(wt.path, '') AS worktree_path,
+           COALESCE((SELECT MAX(substring(am.tool_call_id FROM length(tc.id) + 9)::int)
+                     FROM agent_messages am WHERE am.chat_id = ?0 AND am.kind IN (2,3,4)
+                       AND starts_with(am.tool_call_id, tc.id || '#resume-')
+                       AND substring(am.tool_call_id FROM length(tc.id) + 9) ~ '^[0-9]+$'), 0)::int AS resumes,
+           COALESCE((SELECT am.body FROM agent_messages am
+                     WHERE am.chat_id = ?0 AND am.kind = 4 AND NOT am.synthesized
+                       AND (am.tool_call_id = tc.id OR starts_with(am.tool_call_id, tc.id || '#resume-'))
+                     ORDER BY am.created_at DESC, am.id DESC LIMIT 1), '') AS last_failure
+    FROM failed f JOIN threads t ON t.id = f.thread
+    JOIN LATERAL (SELECT tc.id,tc.thread_id,tc.input FROM tool_calls tc WHERE tc.child_workflow_id=f.id AND tc.tool_name='spawn' ORDER BY tc.requested_at DESC LIMIT 1) tc ON true
+    LEFT JOIN worktrees wt ON wt.id=t.worktree_id AND wt.deleted_at IS NULL
+    WHERE tc.thread_id IS NOT NULL
+    ORDER BY spawn_depth, f.thread`, chatID).Scan(ctx, &records)
+	return records, err
+}
+
+// LatestSpawnFailureReport is the body of the latest real failure report a
+// spawn's runs have written in chatID, under its own slot (toolCallID) or a
+// resumed run's (toolCallID#resume-N); "" when it has none. A reconciler's
+// synthesized placeholder is not one: no run wrote it.
+func LatestSpawnFailureReport(ctx context.Context, db orm.Context, chatID, toolCallID string) (string, error) {
+	var bodies []string
+	err := db.Bun().NewSelect().Model((*AgentMessage)(nil)).
+		ColumnExpr("body").
+		Where("chat_id = ?", chatID).
+		Where("kind = 4").
+		Where("NOT synthesized").
+		Where("(tool_call_id = ? OR starts_with(tool_call_id, ?))", toolCallID, toolCallID+"#resume-").
+		OrderExpr("created_at DESC, id DESC").
+		Limit(1).
+		Scan(ctx, &bodies)
+	if err != nil {
+		return "", fmt.Errorf("failed to read the latest failure report of %s: %w", toolCallID, err)
+	}
+	if len(bodies) == 0 {
+		return "", nil
+	}
+	return bodies[0], nil
 }
 
 // SpawnResumeReportIDs is the report slots a spawn's resumed runs have

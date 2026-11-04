@@ -30,7 +30,10 @@ class FakeWebSocket {
   onclose: ((event: { code: number; reason: string }) => void) | null = null;
   sent: string[] = [];
 
-  constructor(public url: string) {
+  url: string;
+
+  constructor(url: string) {
+    this.url = url;
     sockets.push(this);
   }
 
@@ -126,8 +129,9 @@ vi.mock("../../../lib/supabase", () => ({
   supabase: { auth: { getSession: async () => ({ data: { session: { access_token: "t" } } }) } },
 }));
 
-vi.mock("../../../api/grpc-client", () => ({
-  getGRPCBaseURLPublic: () => "http://localhost:8080",
+vi.mock("@/lib/connect", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/connect")>()),
+  reliantApiBaseUrl: () => "http://localhost:8080",
 }));
 
 const terminalStoreState = vi.hoisted(() => ({
@@ -294,10 +298,11 @@ describe("Terminal machine not serving", () => {
 });
 
 describe("Terminal with no machine on the account", () => {
-  // The server reports "no machine at all" under the same daemon_unavailable
-  // code as a machine that is asleep. Treated as a wait, the terminal showed
-  // "Waiting for your machine" and retried forever for a machine that does
-  // not exist. It must say there is none, offer to connect one, and stop.
+  // "No machine at all" was once sent like a machine that is asleep.
+  // Treated as a wait, the terminal showed "Waiting for your machine" and
+  // retried forever for a machine that does not exist. The server now sends
+  // its own code (no_machine); the terminal must say there is none, offer to
+  // connect one, and stop.
   const NO_MACHINE =
     "create terminal session: no daemon available: no machine is connected to your account yet";
 
@@ -307,11 +312,11 @@ describe("Terminal with no machine on the account", () => {
     await flushConnect();
 
     await act(async () => {
-      sockets[0].fail("daemon_unavailable", NO_MACHINE);
+      sockets[0].fail("no_machine", NO_MACHINE);
     });
 
-    expect(screen.getByTestId("no-machine-state").textContent).toContain("No machine connected");
-    expect(screen.getByRole("button", { name: "Connect a machine" })).toBeTruthy();
+    expect(screen.getByTestId("no-machine-state").textContent).toContain("No machine yet");
+    expect(screen.getByRole("button", { name: "Add machine" })).toBeTruthy();
 
     await act(async () => {
       vi.advanceTimersByTime(LONGEST_RETRY_MS * 5);

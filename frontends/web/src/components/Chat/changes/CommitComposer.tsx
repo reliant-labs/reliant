@@ -1,8 +1,8 @@
 import { useId } from "react";
 import { ArrowDown, ArrowUp, ArrowUpFromLine, ExternalLink, GitPullRequest, Loader2, X } from "lucide-react";
 import type { ExistingPRResponse } from "../../../api/git";
-import { Button } from "../../ui/Button";
-import { Tooltip } from "../../ui/Tooltip";
+import Button from "@/components/forge-ui/button";
+import Tooltip from "../../forge-ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { pluralize } from "./fileStatus";
 import { MOD, SHIFT } from "./keys";
@@ -123,13 +123,13 @@ export function CommitComposer({
         disabled={busy}
         className={cn(
           "field-sizing-content max-h-40 min-h-14 w-full resize-none rounded-md border border-border bg-background px-2.5 py-2 text-sm",
-          "placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20",
+          "placeholder:text-muted-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring",
           "disabled:cursor-not-allowed disabled:opacity-60",
         )}
       />
 
       <div className="flex w-full">
-        <Tooltip content={commitHint} delay={300} wrapperClassName="flex min-w-0 flex-1">
+        <Tooltip content={commitHint} delay={300} triggerClassName="flex min-w-0 flex-1">
           <Button
             variant="primary"
             size="md"
@@ -141,7 +141,7 @@ export function CommitComposer({
             {op === "commit" ? "Committing…" : commitLabel}
           </Button>
         </Tooltip>
-        <Tooltip content={`Commit and push (${MOD}${SHIFT}Enter)`} delay={300} wrapperClassName="flex">
+        <Tooltip content={`Commit and push (${MOD}${SHIFT}Enter)`} delay={300} triggerClassName="flex">
           <button
             type="button"
             aria-label="Commit and push"
@@ -149,7 +149,7 @@ export function CommitComposer({
             disabled={!canCommit}
             className={cn(
               "inline-flex h-8 w-8 items-center justify-center rounded-r-md border border-l-0 border-primary/20 bg-primary text-primary-foreground",
-              "shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50",
+              "shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               "disabled:cursor-not-allowed disabled:opacity-50",
               "relative before:absolute before:inset-y-1.5 before:left-0 before:w-px before:bg-primary-foreground/25",
             )}
@@ -166,7 +166,7 @@ export function CommitComposer({
       {showSyncRow && (
         <div className="flex flex-wrap gap-2">
           {ahead > 0 && (
-            <Tooltip content={`Push ${pluralize(ahead, "commit")} to the remote`} delay={300} wrapperClassName="flex min-w-0 flex-1">
+            <Tooltip content={`Push ${pluralize(ahead, "commit")} to the remote`} delay={300} triggerClassName="flex min-w-0 flex-1">
               <Button
                 variant="outline"
                 size="sm"
@@ -181,7 +181,7 @@ export function CommitComposer({
             </Tooltip>
           )}
           {behind > 0 && (
-            <Tooltip content={`Pull ${pluralize(behind, "commit")} from the remote`} delay={300} wrapperClassName="flex min-w-0 flex-1">
+            <Tooltip content={`Pull ${pluralize(behind, "commit")} from the remote`} delay={300} triggerClassName="flex min-w-0 flex-1">
               <Button
                 variant="outline"
                 size="sm"
@@ -216,17 +216,17 @@ function PullRequestAction({
   if (existing?.exists && existing.url) {
     const state = existing.state ? existing.state.toLowerCase() : "";
     return (
-      <Tooltip content={existing.title ? `Open “${existing.title}” on GitHub` : "Open pull request on GitHub"} delay={300} wrapperClassName="flex min-w-0 flex-1">
+      <Tooltip content={existing.title ? `Open “${existing.title}” on GitHub` : "Open pull request on GitHub"} delay={300} triggerClassName="flex min-w-0 flex-1">
         <a
           href={existing.url}
           target="_blank"
           rel="noopener noreferrer"
           className={cn(
             "inline-flex h-7 w-full min-w-0 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground",
-            "transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+            "transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
-          <GitPullRequest className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <GitPullRequest className="h-3.5 w-3.5 shrink-0 text-primary-ink" />
           <span className="truncate">PR #{existing.number}</span>
           {state && state !== "open" && <span className="text-muted-foreground">{state}</span>}
           <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -239,7 +239,7 @@ function PullRequestAction({
     <Tooltip
       content={ghCliMissing ? "Install the GitHub CLI (gh) from cli.github.com to create pull requests" : "Open a pull request for this branch"}
       delay={300}
-      wrapperClassName="flex min-w-0 flex-1"
+      triggerClassName="flex min-w-0 flex-1"
     >
       <Button
         variant="outline"

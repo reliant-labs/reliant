@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"runtime"
 	"strconv"
 	"syscall"
 	"time"
@@ -27,12 +28,27 @@ func Dispatch() {
 	if len(os.Args) < 2 || os.Args[1] != WrapperArg {
 		return
 	}
+	// The wrapper polls a lock and then waits on its child: one P is all it
+	// uses. Left at the machine's width, a waiter's scheduler and GC spread
+	// over every CPU and it holds 15–19 threads, and a busy machine has
+	// dozens of waiters against a thread limit (RLIMIT_NPROC counts
+	// threads). The gate starts it with GOMAXPROCS=1 in its environment,
+	// because by the time this runs package init has already grown those
+	// threads; this call covers a wrapper started any other way. Neither
+	// reaches the child: see --child-gomaxprocs.
+	runtime.GOMAXPROCS(1)
 	os.Exit(RunWrapper(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 }
 
-// RunWrapper is `<self> __heavy-slot --dir D [--slots N] [--label L] -- argv...`:
-// take a heavy slot, waiting while every slot is held, run argv as a child
-// holding it, and return the child's exit status.
+// RunWrapper is `<self> __heavy-slot --dir D [--slots N] [--share N]
+// [--child-gomaxprocs V] [--label L] -- argv...`: take a heavy slot, waiting
+// while every slot is held, run argv as a child holding it, and return the
+// child's exit status. The child runs on its share of the CPUs (see the
+// package doc): GOMAXPROCS and UV_THREADPOOL_SIZE, each unless its
+// environment already sets it, from --share or else DefaultShare of the
+// pool. --child-gomaxprocs is the GOMAXPROCS the command was given before
+// the gate started this wrapper on one P ("" for none); the child gets it
+// back instead of the wrapper's 1.
 //
 // The child runs as a child rather than through exec(2) because the slot's
 // lock is held by THIS process: a background process the command leaves
@@ -42,7 +58,8 @@ func Dispatch() {
 // be created or locked runs the command unqueued with a warning — a broken
 // limiter is not a reason to refuse a build.
 func RunWrapper(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	opt, argv, err := parseWrapperArgs(args)
+	w, err := parseWrapperArgs(args)
+	opt, argv := w.opt, w.argv
 	if err != nil {
 		fmt.Fprintf(stderr, "reliant %s: %v\n", WrapperArg, err)
 		return 2
@@ -70,8 +87,14 @@ func RunWrapper(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "▶ reliant: running `%s` in %s after %s waiting\n", opt.Label, slot, slot.Waited().Round(time.Second))
 	}
 
+	share := shareOf(slot, w.share)
+	// A hard cap, not only GOMAXPROCS: it binds what GOMAXPROCS does not
+	// reach (cpumax_linux.go). Set before the child starts, so nothing of
+	// the command runs uncapped.
+	_ = limitCPU(share)
 	c := exec.Command(argv[0], argv[1:]...)
-	c.Env = append(os.Environ(), slot.Env()...) //nolint:forbidigo // passes this process environment to a child process; not configuration
+	c.Env = append(childEnv(os.Environ(), w.childGOMAXPROCS), slot.Env()...) //nolint:forbidigo // passes this process environment to a child process; not configuration
+	c.Env = append(c.Env, shareEnv(c.Env, share)...)
 	c.Stdin, c.Stdout, c.Stderr = stdin, stdout, stderr
 	if err := c.Start(); err != nil {
 		fmt.Fprintf(stderr, "reliant: %v\n", err)
@@ -121,8 +144,20 @@ func exitStatus(err error) int {
 	return 1
 }
 
-func parseWrapperArgs(args []string) (hostslot.Options, []string, error) {
-	var opt hostslot.Options
+// wrapperArgs is the wrapper's command line.
+type wrapperArgs struct {
+	opt hostslot.Options
+	// share is --share; zero derives it.
+	share int
+	// childGOMAXPROCS is --child-gomaxprocs; nil when absent (the wrapper
+	// was not started on one P by the gate, so its environment is the
+	// child's as it stands).
+	childGOMAXPROCS *string
+	argv            []string
+}
+
+func parseWrapperArgs(args []string) (wrapperArgs, error) {
+	var w wrapperArgs
 	for len(args) > 0 {
 		flag := args[0]
 		if flag == "--" {
@@ -130,37 +165,49 @@ func parseWrapperArgs(args []string) (hostslot.Options, []string, error) {
 			break
 		}
 		if len(args) < 2 {
-			return opt, nil, fmt.Errorf("flag %s needs a value", flag)
+			return w, fmt.Errorf("flag %s needs a value", flag)
 		}
 		val := args[1]
 		args = args[2:]
 		switch flag {
 		case "--dir":
-			opt.Dir = val
+			w.opt.Dir = val
 		case "--label":
-			opt.Label = val
-		case "--slots":
+			w.opt.Label = val
+		case "--child-gomaxprocs":
+			w.childGOMAXPROCS = &val
+		case "--slots", "--share":
 			n, err := strconv.Atoi(val)
 			if err != nil || n < 1 {
-				return opt, nil, fmt.Errorf("--slots %q: want a positive number", val)
+				return w, fmt.Errorf("%s %q: want a positive number", flag, val)
 			}
-			opt.Slots = n
+			if flag == "--slots" {
+				w.opt.Slots = n
+			} else {
+				w.share = n
+			}
 		default:
-			return opt, nil, fmt.Errorf("unknown flag %s", flag)
+			return w, fmt.Errorf("unknown flag %s", flag)
 		}
 	}
 	if len(args) == 0 {
-		return opt, nil, errors.New("no command given after --")
+		return w, errors.New("no command given after --")
 	}
-	if opt.Label == "" {
-		opt.Label = fmt.Sprint(args)
+	if w.opt.Label == "" {
+		w.opt.Label = fmt.Sprint(args)
 	}
-	return opt, args, nil
+	w.argv = args
+	return w, nil
 }
 
 // waitNotice is the writer hostslot prints its waiting lines to. Before the
 // first one it says, once, in reliant's words, what is happening and why;
 // hostslot's own line then names the holders and the queue.
+//
+// The header and that first line go out in ONE write. A reader of the
+// command's output (an agent's tool result, or WaitedFor polling it) that sees
+// the marker must also see who holds the slot: written separately, the header
+// could be read on its own.
 type waitNotice struct {
 	w      io.Writer
 	label  string
@@ -168,9 +215,12 @@ type waitNotice struct {
 }
 
 func (n *waitNotice) Write(p []byte) (int, error) {
-	if !n.headed {
-		n.headed = true
-		fmt.Fprintf(n.w, "%s: `%s` waits for one of this machine's heavy slots (shared by every agent and forge lane) before it runs\n", waitingMarker, n.label)
+	if n.headed {
+		return n.w.Write(p)
 	}
-	return n.w.Write(p)
+	n.headed = true
+	header := fmt.Sprintf("%s: `%s` waits for one of this machine's heavy slots (shared by every agent and forge lane) before it runs\n", waitingMarker, n.label)
+	written, err := n.w.Write(append([]byte(header), p...))
+	// The caller asked to write p: report how much of it went out.
+	return max(written-len(header), 0), err
 }

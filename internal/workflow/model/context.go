@@ -17,9 +17,15 @@ type IterContext struct {
 // run without a directory is an evaluation error, not "" (see
 // wfcel.CheckWorkflowPathReference). Branch and WorktreePath are empty when the
 // scope is not the chat's own worktree.
+//
+// ChatID is the chat the run belongs to: the id its page is reached by
+// (/workflows/runs/<chat_id>), so a run can link to itself from what it writes
+// (a GitHub check run's details_url). Empty where no chat is known (an
+// activation's form preview).
 type WorkflowContext struct {
 	ID           string `json:"id"`
 	Name         string `json:"name"`
+	ChatID       string `json:"chat_id"`
 	Path         string `json:"path"`
 	Branch       string `json:"branch"`
 	Mode         string `json:"mode"`

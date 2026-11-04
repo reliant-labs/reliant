@@ -90,6 +90,8 @@ describe("the issue list", () => {
     renderPanel(createFixtureApi(), { view: "errors", q: "nothing-matches-this" }, ENV_PLACE);
     expect(await screen.findByTestId("obs-no-data")).toHaveTextContent("No open issues match");
     expect(screen.getByTestId("obs-clear-filters")).toBeInTheDocument();
+    // A filtered empty is about the filter, not about how errors arrive.
+    expect(screen.queryByTestId("obs-no-data-source")).not.toBeInTheDocument();
   });
 
   it("explains a control plane without issues inline", async () => {

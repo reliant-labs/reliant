@@ -63,7 +63,7 @@ func TestPublisher_LifecycleAndRateLimit(t *testing.T) {
 
 	p := NewPublisher(nc)
 	const daemonID = "d-1"
-	p.Connected(daemonID, "u-1", "cloud")
+	p.Connected(daemonID, "u-1", "cloud", daemonwire.Build{})
 	p.Activity(daemonID, "u-1", "cloud", "tool call shell")
 	p.Activity(daemonID, "u-1", "cloud", "terminal input")
 	p.Activity(daemonID, "u-1", "cloud", "terminal input")

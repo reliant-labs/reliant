@@ -2,7 +2,9 @@ syntax = "proto3";
 
 package reliant.config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
 
@@ -27,9 +29,9 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 // The origin half is the server URL the command resolves.
 message DaemonInstanceConfig {
   // Unset: the instance's own directory under ~/.reliant/instances, derived
-  // from the instance key. Containers set it to the mounted volume
-  // (docker-compose.yml, the workspace operator), where derivation would put
-  // the daemon's state on the ephemeral filesystem.
+  // from the instance key. Containers set it to the mounted volume (the
+  // workspace operator's pods), where derivation would put the daemon's state
+  // on the ephemeral filesystem.
   string data_dir = 1 [(forge.v1.config) = {
     env_var: "DAEMON_DATA_DIR"
     flag: "data-dir"
@@ -73,8 +75,9 @@ message DaemonConfig {
 
   // The local daemon gateway's daemon port: the port `reliant server gateway`
   // listens for daemons on, under the same TOOLS_DAEMON_PORT the gateway
-  // reads (GatewayConfig). Electron and scripts/dev.sh export it to both. It
-  // is dialled only when no gateway URL is known. Not the port THIS daemon
+  // reads (GatewayConfig). Electron and the dev stack (control-plane's
+  // `forge env up dev`) export it to both. It is dialled only when no gateway
+  // URL is known. Not the port THIS daemon
   // listens on: that is listen_port.
   int32 gateway_port = 3 [(forge.v1.config) = {
     env_var: "TOOLS_DAEMON_PORT"
@@ -218,6 +221,99 @@ message DaemonConfig {
     default_value: "go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build"
     description: "Comma-separated commands queued behind the machine's heavy slots"
   }];
+
+  // The CPUs each command run under a heavy slot may use, exported to it as
+  // GOMAXPROCS and UV_THREADPOOL_SIZE unless it sets its own
+  // (internal/heavyjob). 0 (unset) derives it from the slot pool:
+  // max(2, 2*CPUs/slots), 8 on 32 CPUs and 8 slots.
+  int32 heavy_share = 28 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_HEAVY_SHARE"
+      description: "CPUs each heavy-slot command may use, as GOMAXPROCS and UV_THREADPOOL_SIZE (0: max(2, 2*CPUs/slots))"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+
+  // The threads (processes count as one each) each command the daemon runs
+  // may have at once, where Linux cgroups allow a limit per command
+  // (internal/proctree): a Go or Node process has about one thread per CPU.
+  // 0 (unset) derives it from the machine: 1024 + 64 per CPU, at most half
+  // the limit all commands share, 3008 on 31 CPUs. A command that reaches it
+  // is told so, naming this setting.
+  int32 command_threads = 29 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_COMMAND_THREADS"
+      description: "Threads each command may have at once (0: 1024 + 64 per CPU, at most half of what all commands share)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+
+  // How long a background process an agent started may sit idle — no
+  // output, and no agent read, waited on, listed or killed it — once the
+  // chat that started it has no run in progress, before the daemon stops it
+  // (SIGTERM to its process group, SIGKILL after a grace period). A process
+  // started with keep_alive is exempt. Processes of an archived workspace
+  // are stopped whatever this says. 0 turns idle stopping off.
+  google.protobuf.Duration background_idle_reap = 30 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_BACKGROUND_IDLE_REAP"
+      default_value: "4h"
+      description: "How long a finished chat's background process may sit idle before the daemon stops it (0 = off)"
+    },
+    (buf.validate.field).duration.gte = {}
+  ];
+
+  // Let the fetch tool reach this machine's own localhost and private network
+  // (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, fc00::/7, ...). Off by default:
+  // fetch is usually auto-approved and a fetched page can steer the next fetch,
+  // so a default-open policy would be an SSRF into the user's own environment.
+  // Link-local and cloud-metadata addresses (169.254.0.0/16, fe80::/10, the
+  // metadata hostnames, fd00:ec2::254, ...) are refused whatever this says.
+  // A managed daemon ignores it: a workspace pod's network is the platform's,
+  // not the user's. A refused fetch names this setting in its error.
+  bool fetch_allow_private_network = 23 [(forge.v1.config) = {
+    env_var: "RELIANT_FETCH_ALLOW_PRIVATE_NETWORK"
+    description: "Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)"
+  }];
+
+  // Egress limits for the tools this daemon runs that dial a third party
+  // (fetch, websearch, sourcegraph, integration actions), so one daemon
+  // cannot hammer a site, or exhaust a shared NAT's ports, on its own. A
+  // refused call is a non-fatal tool result ("rate limited, retry after Ns").
+  // 0 (unset) takes the daemon's default: generous on a machine whose traffic
+  // leaves from the user's own address. A managed daemon ignores all four and
+  // always runs the platform defaults: its traffic leaves through a shared
+  // NAT. This is an abuse brake for a well-behaved daemon, not a security
+  // boundary; the daemon is user-controlled, and the server-side NAT
+  // protections are the backstop.
+  int32 egress_user_per_minute = 24 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DAEMON_EGRESS_USER_PER_MINUTE"
+      description: "Egress tool calls per minute this daemon may make (0: default 600; managed daemons: 60, fixed)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+  int32 egress_user_burst = 25 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DAEMON_EGRESS_USER_BURST"
+      description: "Egress burst this daemon may make at once (0: default 100; managed daemons: 20, fixed)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+  int32 egress_user_max_concurrent = 26 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DAEMON_EGRESS_USER_MAX_CONCURRENT"
+      description: "Egress calls this daemon may have in flight (0: default 32; managed daemons: 6, fixed)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+  int32 egress_host_max_concurrent = 27 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT"
+      description: "Egress calls this daemon may have in flight to one destination host (0: default 32; managed daemons: 16, fixed)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.

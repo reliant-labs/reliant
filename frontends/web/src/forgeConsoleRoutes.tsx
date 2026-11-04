@@ -1,22 +1,25 @@
 /**
- * The forge console's routes (research/console-v3/PROPOSAL.md §3.2), as a
- * factory so the route tree (routes.tsx) and its tests mount the SAME
+ * The forge console's routes, as a factory so the route tree (routes.tsx) and its tests mount the SAME
  * definitions — paths, search schemas, the redirects — with only the page
  * components swapped. A test that mirrored the tree by hand would pass
  * against the mirror while the real tree drifted.
  *
  *   _forge                                  ForgeLayout: Escape, the exit
- *     /forge                                → resolve the project, redirect
- *     /forge/env/$env, /forge/observability,
- *     /forge/domains, /forge/topology, …    → the retired URLs, redirected
+ *     /forge                                → /apps (the Apps list); ?project= / ?forgeProject= → that app's console
+ *     _forgeOrg                             OrgConsoleLayout: the org's nav (no app chosen)
+ *       /forge/observability                org-wide Observability (?project= → that app's)
+ *       /forge/observability/$view          errors · sessions · logs · traces · metrics · profiles · dashboards · alerts
+ *     /forge/env/$env, /forge/domains,
+ *     /forge/topology, …                    → the retired URLs, redirected
  *     /forge/p/$project                     ConsoleLayout: nav, top bar, scope
  *       /                                   Overview (with the workloads)
  *       /workloads/$env/$name               one workload
  *       /releases, /releases/$version
- *       /observability, /observability/$view
+ *       /observability/$view
  *       /observability/dashboards, /observability/dashboards/$kind/$key
  *       /environments, /environments/$env
- *       /secrets, /domains, /monitoring, /settings, /activity
+ *       /secrets, /domains, /activity
+ *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
  *
  * The path builders and the redirect mapping live in
  * components/Forge/Console/paths.ts; this file only declares the routes.
@@ -24,7 +27,7 @@
 
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 
-import { isObsNavView } from './components/Forge/Console/paths'
+import { isObsNavView, OBS_NAV_VIEWS, ORG_USAGE_PATH } from './components/Forge/Console/paths'
 import {
   forgeConsoleActivitySearchSchema,
   forgeConsoleDashboardSearchSchema,
@@ -39,7 +42,7 @@ import {
   forgeConsoleWorkloadSearchSchema,
   forgeLegacyEnvSearchSchema,
   forgeLegacySearchSchema,
-  forgeObservabilitySearchSchema,
+  forgeOrgObsSearchSchema,
   forgeResolveSearchSchema,
 } from './routeSchemas'
 
@@ -53,22 +56,22 @@ export interface ForgeConsoleComponents {
   workload: RouteComponent
   releases: RouteComponent
   release: RouteComponent
-  observability: RouteComponent
   observabilityView: RouteComponent
-  /** Observability › Dashboards, and one dashboard (decision DB). */
+  /** Observability › Dashboards, and one dashboard. */
   dashboards: RouteComponent
   dashboard: RouteComponent
   environments: RouteComponent
   environment: RouteComponent
   secrets: RouteComponent
   domains: RouteComponent
-  monitoring: RouteComponent
-  settings: RouteComponent
   activity: RouteComponent
-  /** The entries that resolve a project and redirect (ForgeEntryRoutes.tsx). */
+  /** The pathless `_forgeOrg` layout: the org console's chrome (components/Forge/Org). */
+  orgLayout: RouteComponent
+  /** /forge/observability and /forge/observability/$view: org-wide Observability. */
+  orgObservability: RouteComponent
+  /** /forge: to the Apps list, or the entry that resolves a project and redirects (ForgeEntryRoutes.tsx). */
   landing: RouteComponent
   legacyEnv: RouteComponent
-  legacyObservability: RouteComponent
   legacyDomains: RouteComponent
   legacyCommand: RouteComponent
 }
@@ -85,6 +88,30 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     component: components.layout,
   })
 
+  // ── The org console: org-wide Observability ──
+  const orgLayoutRoute = createRoute({
+    getParentRoute: () => layoutRoute,
+    id: '_forgeOrg',
+    component: components.orgLayout,
+  })
+  const orgObservabilityRoute = createRoute({
+    getParentRoute: () => orgLayoutRoute,
+    path: '/forge/observability',
+    validateSearch: forgeOrgObsSearchSchema,
+    component: components.orgObservability,
+  })
+  // A view that is not a nav entry (a hand-edited URL) lands on the org Observability overview.
+  const orgObservabilityViewRoute = createRoute({
+    getParentRoute: () => orgLayoutRoute,
+    path: '/forge/observability/$view',
+    validateSearch: forgeOrgObsSearchSchema,
+    beforeLoad: ({ params, location }) => {
+      if (isObsNavView(params.view)) return
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
+    },
+    component: components.orgObservability,
+  })
+
   // ── Entries that resolve a project and redirect ──
   const landingRoute = createRoute({
     getParentRoute: () => layoutRoute,
@@ -97,12 +124,6 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     path: '/forge/env/$env',
     validateSearch: forgeLegacyEnvSearchSchema,
     component: components.legacyEnv,
-  })
-  const legacyObservabilityRoute = createRoute({
-    getParentRoute: () => layoutRoute,
-    path: '/forge/observability',
-    validateSearch: forgeObservabilitySearchSchema,
-    component: components.legacyObservability,
   })
   const legacyDomainsRoute = createRoute({
     getParentRoute: () => layoutRoute,
@@ -148,21 +169,24 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleReleaseSearchSchema,
     component: components.release,
   })
+  // The retired Observability home: its health strip, services and recent
+  // releases were the Overview's, so the Overview is where it lands.
   const observabilityRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'observability',
-    validateSearch: forgeConsoleObsSearchSchema,
-    component: components.observability,
+    beforeLoad: ({ location }) => {
+      throw redirect({ href: `${location.pathname.replace(/\/observability\/?$/, '')}${location.searchStr}`, replace: true })
+    },
   })
-  // A view that is not a nav entry (a hand-edited URL) lands on the
-  // Observability overview rather than an empty page.
+  // A view that is not a nav entry (a hand-edited URL) lands on the first
+  // view rather than an empty page.
   const observabilityViewRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'observability/$view',
     validateSearch: forgeConsoleObsSearchSchema,
     beforeLoad: ({ params, location }) => {
       if (isObsNavView(params.view)) return
-      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, `/${OBS_NAV_VIEWS[0]}`)}${location.searchStr}`, replace: true })
     },
     component: components.observabilityView,
   })
@@ -208,11 +232,14 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleSearchSchema,
     component: components.domains,
   })
+  // The retired "Monitoring settings" placeholder: alert routing and silences
+  // are Observability › Alerts.
   const monitoringRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'monitoring',
-    validateSearch: forgeConsoleSearchSchema,
-    component: components.monitoring,
+    beforeLoad: ({ location }) => {
+      throw redirect({ href: `${location.pathname.replace(/\/monitoring\/?$/, '/observability/alerts')}${location.searchStr}`, replace: true })
+    },
   })
   const activityRoute = createRoute({
     getParentRoute: () => consoleRoute,
@@ -220,17 +247,20 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeConsoleActivitySearchSchema,
     component: components.activity,
   })
+  // The retired "Project settings": it held only the organization's usage,
+  // which the app's Settings › Billing shows.
   const settingsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'settings',
-    validateSearch: forgeConsoleObsSearchSchema,
-    component: components.settings,
+    beforeLoad: () => {
+      throw redirect({ href: ORG_USAGE_PATH, replace: true })
+    },
   })
 
   return layoutRoute.addChildren([
     landingRoute,
+    orgLayoutRoute.addChildren([orgObservabilityRoute, orgObservabilityViewRoute]),
     legacyEnvRoute,
-    legacyObservabilityRoute,
     legacyDomainsRoute,
     legacyCommandRoute('/forge/topology'),
     legacyCommandRoute('/forge/environments'),

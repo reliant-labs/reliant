@@ -12,11 +12,15 @@ import (
 	"github.com/reliant-labs/reliant/internal/memtemp"
 )
 
+// fixtureTime stamps the credentials these tests store: no assertion reads
+// the time, so a fixed one keeps them off the wall clock.
+var fixtureTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
 // isolateCLI points HOME and the shared credentials file at a temp dir and
 // clears the RELIANT_* variables the resolver reads, so no test can read or
-// write a developer's real login. A shell that has sourced .dev-ports.sh
-// exports RELIANT_SERVER_URL, which outranks the compiled defaults tests
-// assert on; an empty value reads as unset. Returns the credentials path.
+// write a developer's real login. A dev shell often exports
+// RELIANT_SERVER_URL, which outranks the compiled defaults tests assert on; an
+// empty value reads as unset. Returns the credentials path.
 func isolateCLI(t *testing.T) string {
 	t.Helper()
 	// In memory: every login these tests store is an fsync (internal/memtemp).
@@ -31,6 +35,7 @@ func isolateCLI(t *testing.T) string {
 	} {
 		t.Setenv(name, "")
 	}
+	presentDesktop(t)
 	path, err := cliauth.CredentialsPath()
 	if err != nil || !strings.HasPrefix(path, home) {
 		t.Fatalf("credentials path %q escaped temp HOME %q — aborting to protect the real file", path, home)
@@ -42,7 +47,7 @@ func isolateCLI(t *testing.T) string {
 // `reliant auth login --server <server>` would.
 func loginFor(t *testing.T, server, token string) {
 	t.Helper()
-	if _, err := cliauth.Store(server, credentials.Credential{Token: token, CreatedAt: time.Now()}); err != nil {
+	if _, err := cliauth.Store(server, credentials.Credential{Token: token, CreatedAt: fixtureTime}); err != nil {
 		t.Fatal(err)
 	}
 }

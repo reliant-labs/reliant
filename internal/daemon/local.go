@@ -16,6 +16,7 @@ import (
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/cmdutil"
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/fileutil"
@@ -24,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
 	"github.com/reliant-labs/reliant/internal/pdfutil"
+	"github.com/reliant-labs/reliant/internal/proctree"
 )
 
 // localMemReader reads the workspace cgroup's memory accounting for
@@ -63,11 +65,17 @@ func (c *LocalClient) WithHeavyGate(g *heavyjob.Gate) *LocalClient {
 
 // ReadFile reads a file and returns the requested line window, byte for byte.
 func (c *LocalClient) ReadFile(ctx context.Context, path string, opts *ReadFileOpts) (*FileContent, error) {
+	if err := daemonpolicy.DenyCredentialFile(path); err != nil {
+		return nil, err
+	}
 	return ReadFileContent(path, opts)
 }
 
 // ReadBinaryFile reads a file's raw bytes up to maxBytes.
 func (c *LocalClient) ReadBinaryFile(ctx context.Context, path string, maxBytes int64) ([]byte, error) {
+	if err := daemonpolicy.DenyCredentialFile(path); err != nil {
+		return nil, err
+	}
 	info, err := os.Stat(path)
 	if err != nil {
 		return nil, fmt.Errorf("stat %s: %w", path, err)
@@ -106,6 +114,9 @@ func (c *LocalClient) ReadPDFPages(ctx context.Context, path string, pages strin
 
 // WriteFile writes content to a file, creating parent directories as needed.
 func (c *LocalClient) WriteFile(ctx context.Context, path string, content string) (*WriteResult, error) {
+	if err := daemonpolicy.DenyCredentialFile(path); err != nil {
+		return nil, err
+	}
 	var oldContent string
 	created := true
 
@@ -172,6 +183,9 @@ func (c *LocalClient) WriteBinaryFile(ctx context.Context, path string, content 
 
 // PatchFile applies a set of edits to a file.
 func (c *LocalClient) PatchFile(ctx context.Context, path string, edits []PatchEdit) (*PatchResult, error) {
+	if err := daemonpolicy.DenyCredentialFile(path); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading file %s: %w", path, err)
@@ -678,6 +692,9 @@ func (c *LocalClient) FindReplace(ctx context.Context, pattern string, replaceme
 
 	var changes []FindReplaceChange
 	for _, filePath := range filesToProcess {
+		if daemonpolicy.IsReliantCredentialFile(filePath) {
+			continue
+		}
 		info, err := os.Stat(filePath)
 		if err != nil || info.IsDir() {
 			continue
@@ -791,13 +808,13 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	if len(req.Env) > 0 || credentials == daemonpolicy.CredentialsNone {
+	switch {
+	case credentials == daemonpolicy.CredentialsNone:
+		cmd.Env = daemonpolicy.WithoutCredentials(os.Environ(), req.Env) //nolint:forbidigo // filtered to the allowlist for a credentials-none child; not configuration
+	case len(req.Env) > 0:
 		cmd.Env = os.Environ() //nolint:forbidigo // passes this process environment to a child process; not configuration
 		for k, v := range req.Env {
 			cmd.Env = append(cmd.Env, k+"="+v)
-		}
-		if credentials == daemonpolicy.CredentialsNone {
-			cmd.Env = daemonpolicy.WithoutCredentials(cmd.Env)
 		}
 	}
 
@@ -809,10 +826,18 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 		// Refused (a nearly full disk): it never starts, and says why.
 		return &CommandResult{ExitCode: heavyjob.RefusedExitCode, Stderr: err.Error(), Combined: err.Error()}, nil
 	}
+	// credentials: none runs where the daemon's credential files are absent; see
+	// credsandbox. Outside the heavy-slot rewrite above.
+	if refusal := credsandbox.Wrap(cmd, credentials); refusal != "" {
+		return &CommandResult{ExitCode: credsandbox.RefusedExitCode, Stderr: refusal, Combined: refusal}, nil
+	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	// Output stamps activity, so if the command is detached into the
+	// background its idle time starts from its last output, not the detach.
+	activity := shell.NewOutputActivity(nil)
+	cmd.Stdout = activity.Writer(&stdoutBuf)
+	cmd.Stderr = activity.Writer(&stderrBuf)
 
 	// A bytes.Buffer stdout means os/exec reads through an OS pipe, and
 	// cmd.Wait() blocks until the LAST holder of that pipe exits — which is not
@@ -840,9 +865,18 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
 	oomSnap := localMemReader.SnapshotOOMKills()
 
+	// Its own cgroup with a process limit where the machine allows, so a
+	// runaway command fails alone (internal/proctree). Last before Start:
+	// the heavy-slot and sandbox rewrites above change what cmd execs.
+	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
+
 	start := time.Now()
 	err = cmd.Start()
+	if err != nil {
+		tree.Started(0)
+	}
 	if err == nil {
+		tree.Started(cmd.Process.Pid)
 		// Steer the kernel OOM killer toward the workload (and descendants,
 		// which inherit the score) rather than the daemon. No-op outside
 		// Linux; best-effort everywhere.
@@ -876,6 +910,11 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 			StdoutBuf:  &stdoutBuf,
 			StderrBuf:  &stderrBuf,
 			WaitErrCh:  waitCh,
+			Tree:       tree,
+			ChatID:     req.ChatID,
+			ThreadID:   req.ThreadID,
+			KeepAlive:  req.KeepAlive,
+			Activity:   activity,
 		})
 		if backgrounded {
 			// Adopted: the background manager owns the command now. Release
@@ -885,6 +924,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 			return &bgResp, nil
 		}
 		err = <-waitCh
+		tree.Release()
 	}
 	// Finished: nothing may stop it now, and Err() below stays the reason it
 	// was stopped, if it was.
@@ -897,6 +937,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	stdout := stdoutBuf.String()
 	outcome := ClassifyExecOutcome(err, deadline.Err(), stdout, stderrBuf.String(), localMemReader, oomSnap, diskwatch.Default())
 	outcome.NoteHeavyTimeout(heavy)
+	outcome.NoteThreadLimit(tree.LimitNote())
 
 	return &CommandResult{
 		ExitCode:         outcome.ExitCode,
@@ -928,11 +969,25 @@ func (c *LocalClient) StartBackground(ctx context.Context, req *RunCommandReques
 		Credentials: credentials,
 		HeavyGate:   c.heavy,
 		Heavy:       req.Heavy,
+		AgentID:     req.ChatID,
+		// The chat that started it, so the idle reaper may stop it once
+		// that chat has finished (shell/background_reaper.go).
+		ChatID:         req.ChatID,
+		ThreadID:       req.ThreadID,
+		KeepAlive:      req.KeepAlive,
+		WorktreeID:     req.WorktreeID,
+		PackageCommand: req.PackageCommand,
 	})
 	if err != nil {
 		return "", fmt.Errorf("starting background process: %w", err)
 	}
 	return process.ID, nil
+}
+
+// TouchProcesses records an agent's use of background processes.
+func (c *LocalClient) TouchProcesses(_ context.Context, processIDs []string) error {
+	shell.GetBackgroundManager().Touch(processIDs...)
+	return nil
 }
 
 // GetProcessOutput retrieves output from a background process.
@@ -1040,19 +1095,37 @@ func (c *LocalClient) ListProcesses(ctx context.Context) ([]*ProcessInfo, error)
 
 	result := make([]*ProcessInfo, 0, len(all))
 	for _, p := range all {
+		live := p.Live()
 		// DaemonID stays empty: a LocalClient runs the process on the user's
 		// own machine, so its loopback is directly reachable and needs no proxy.
-		result = append(result, &ProcessInfo{
-			ID:        p.ID,
-			Command:   p.Command,
-			Status:    p.Status,
-			ExitCode:  p.ExitCode,
-			StartTime: p.StartTime,
-			EndTime:   p.EndTime,
-			Ports:     shellPortsToDaemon(p.Ports),
-		})
+		info := &ProcessInfo{
+			ID:             p.ID,
+			Command:        p.Command,
+			Status:         live.Status,
+			ExitCode:       live.ExitCode,
+			StartTime:      p.StartTime,
+			EndTime:        live.EndTime,
+			Ports:          shellPortsToDaemon(live.Ports),
+			WorkingDir:     p.WorkingDir,
+			WorktreeID:     p.WorktreeID,
+			PackageCommand: p.PackageCommand,
+		}
+		StampReapOutlook(info, bgm, p)
+		result = append(result, info)
 	}
 	return result, nil
+}
+
+// StampReapOutlook fills info's chat and idle-reaper fields from p: who
+// started it, how long it has been idle, and when the reaper would stop it.
+func StampReapOutlook(info *ProcessInfo, bgm *shell.BackgroundManager, p *shell.BackgroundProcess) {
+	info.ChatID, info.ThreadID, info.KeepAlive = p.ChatID, p.ThreadID, p.KeepAlive
+	outlook := bgm.ReapOutlook(p)
+	info.LastActive = outlook.LastActive
+	info.ChatRunning = outlook.ChatRunning
+	if info.Status == "running" {
+		info.StopsAfter, info.StopExempt = outlook.StopsAfter, outlook.Exempt
+	}
 }
 
 // shellPortsToDaemon converts the shell package's PortInfo (internal process

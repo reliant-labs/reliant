@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { UserStreamingService } from "../streaming-grpc";
 import type { ConnectionStatus } from "../../types/streaming";
 
-// This stream is the app's ONLY push path. Every path that leaves it neither
+// The user stream is the app's push path for everything outside the open chat. Every path that leaves it neither
 // connected nor scheduled to reconnect strands the entire UI on stale state
 // until a full page reload — the observed failure mode was a chat that had
 // completed server-side (workflow status "completed" persisted in
@@ -25,10 +25,8 @@ type ServiceInternals = {
   connectAttemptInFlight: boolean;
   lastEventAt: number;
   reconnectAttempts: number;
-  lastChatSequence: bigint;
   lastSequence: bigint;
   abortController: AbortController | null;
-  subscribedChatId: string | undefined;
   connectionOpenedAt: number;
   reconnectNow(reason: string): void;
 };
@@ -41,7 +39,6 @@ function makeService() {
     onStatusChange,
     onSync: vi.fn(),
     onError,
-    onChatUpdate: vi.fn(),
   });
   const internals = service as unknown as ServiceInternals;
   const connectSpy = vi
@@ -109,8 +106,7 @@ describe("reconnect persistence", () => {
 describe("half-open connection watchdog", () => {
   it("forces a reconnect when no event arrives for 2.5 heartbeat intervals", () => {
     const { internals, connectSpy, onStatusChange } = makeService();
-    internals.subscribedChatId = "c1";
-    internals.lastChatSequence = 42n;
+    internals.lastSequence = 42n;
     internals.isConnected_ = true;
     internals.armWatchdog();
     connectSpy.mockClear();
@@ -120,9 +116,8 @@ describe("half-open connection watchdog", () => {
 
     expect(connectSpy).toHaveBeenCalledTimes(1);
     expect(onStatusChange).toHaveBeenCalledWith("disconnected");
-    // Cursors must survive so the server replays the missed range from the DB.
-    expect(internals.lastChatSequence).toBe(42n);
-    expect(internals.subscribedChatId).toBe("c1");
+    // The cursor must survive so the server replays the missed range from the DB.
+    expect(internals.lastSequence).toBe(42n);
   });
 
   it("stays quiet while heartbeats keep arriving", () => {
@@ -164,12 +159,11 @@ describe("start() after a dead connection", () => {
     internals.connectAttemptInFlight = false;
     connectSpy.mockClear();
 
-    service.start(7, "c1", 3);
+    service.start(7);
 
     // The old guard keyed off the non-aborted controller and no-op'd forever.
     expect(connectSpy).toHaveBeenCalledTimes(1);
     expect(internals.lastSequence).toBe(7n);
-    expect(internals.lastChatSequence).toBe(3n);
   });
 
   it("still refuses to double-connect a live stream", () => {
@@ -177,7 +171,7 @@ describe("start() after a dead connection", () => {
     internals.isConnected_ = true;
     connectSpy.mockClear();
 
-    service.start(1, "c1", 1);
+    service.start(1);
 
     expect(connectSpy).not.toHaveBeenCalled();
   });

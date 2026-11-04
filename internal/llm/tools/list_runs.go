@@ -74,6 +74,7 @@ type RunSummary struct {
 	Workflow     string `json:"workflow,omitempty"`
 	ProjectID    string `json:"project_id"`
 	State        string `json:"state"`
+	Waiting      string `json:"waiting,omitempty"`
 	LastActiveAt string `json:"last_active_at"`
 	Current      bool   `json:"current,omitempty"`
 }
@@ -119,6 +120,7 @@ func (l *listRunsTool) Execute(rctx *rctx.ToolContext, params ListRunsParams) (T
 			Workflow:     run.WorkflowName,
 			ProjectID:    run.ProjectID,
 			State:        runListStateLabel(run),
+			Waiting:      runWaitLabel(run.Activity),
 			LastActiveAt: formatRunTime(run.LastActive),
 			Current:      run.ChatID == rctx.ChatID,
 		})
@@ -139,8 +141,12 @@ func (l *listRunsTool) Execute(rctx *rctx.ToolContext, params ListRunsParams) (T
 		if run.Current {
 			marker = "  <- this run (you)"
 		}
+		state := run.State
+		if run.Waiting != "" {
+			state += ", " + run.Waiting
+		}
 		fmt.Fprintf(&sb, "- %s  [%s]  %s  workflow=%s  project=%s  active=%s%s\n",
-			run.RunID, run.State, title, run.Workflow, run.ProjectID, run.LastActiveAt, marker)
+			run.RunID, state, title, run.Workflow, run.ProjectID, run.LastActiveAt, marker)
 	}
 	return WithResponseMetadata(NewTextResponse(sb.String()), map[string]any{"runs": summaries}), nil
 }

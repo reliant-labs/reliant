@@ -13,33 +13,28 @@
  * condition that actually tripped was the user's own empty wallet, which is a
  * top-up, not a tier.
  *
- * These tests pin the three properties that keep that from coming back:
+ * These tests pin what keeps that from coming back, plus how the modal fixes
+ * the refusal in place:
  *
  *   1. No reason's copy claims a free tier exists.
- *   2. An exhausted wallet is described as a credit balance, with an "Add
- *      credit" action.
- *   3. The service-wide operator cap — which money CANNOT clear — offers no
- *      billing action at all, because taking payment for something that stays
- *      blocked is worse than showing no button.
+ *   2. An exhausted wallet is described as a credit balance, and the credit
+ *      top-up mounts in the modal — no trip to billing.
+ *   3. A compute reason mounts the compute checkout in the modal; after it
+ *      settles, ONE explicit button repeats the refused request. Nothing
+ *      billable re-runs on its own.
+ *   4. A missing email (account_required, billing_email_missing) is the one
+ *      account prompt, and the refused request re-runs once it is linked.
  */
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const goToBilling = vi.fn();
 vi.mock("@/hooks/useGoToBilling", () => ({
   useGoToBilling: () => goToBilling,
 }));
 
-// The Modal primitive portals and manages focus; neither matters here, and
-// rendering children inline keeps the assertions about copy rather than chrome.
-vi.mock("../ui/Modal", () => ({
-  Modal: ({
-    title,
-    children,
-  }: {
-    title?: string;
-    children: React.ReactNode;
-  }) => (
+vi.mock("../forge-ui/modal", () => ({
+  default: ({ title, children }: { title?: string; children: React.ReactNode }) => (
     <div>
       <h2>{title}</h2>
       {children}
@@ -48,31 +43,45 @@ vi.mock("../ui/Modal", () => ({
 }));
 
 vi.mock("../Billing/LinkIdentityModal", () => ({
-  LinkIdentityModal: ({ intro }: { intro?: string }) => (
-    <div data-testid="link-identity-modal">{intro}</div>
+  LinkIdentityModal: ({ intro, onLinked }: { intro?: string; onLinked: () => void }) => (
+    <div data-testid="link-identity-modal">
+      {intro}
+      <button type="button" onClick={onLinked}>
+        Link account
+      </button>
+    </div>
   ),
+}));
+vi.mock("../Billing/ComputeSubscriptionCheckout", () => ({
+  ComputeSubscriptionCheckout: ({ onDone }: { onDone: () => void }) => (
+    <button type="button" onClick={onDone}>
+      Pay for a plan
+    </button>
+  ),
+}));
+vi.mock("../Billing/InlineCreditTopup", () => ({
+  InlineCreditTopup: ({ onDone }: { onDone: () => void }) => (
+    <button type="button" onClick={onDone}>
+      Add credit
+    </button>
+  ),
+}));
+vi.mock("@/hooks/useCloudBillingQueries", () => ({
+  usePlans: () => ({ isLoading: false, data: { plans: [] } }),
+  useComputeSubscription: () => ({ data: {}, refetch: vi.fn() }),
+}));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
 
 import { UpgradeRequiredModal } from "../UpgradeRequiredModal";
+import type { UpgradeRequiredData } from "../../store/modalStore";
 
-function renderModal(reason: string, message = "") {
-  return render(
-    <UpgradeRequiredModal
-      isOpen
-      onClose={() => {}}
-      data={{ reason, message }}
-    />,
-  );
+function renderModal(reason: string, message = "", extra: Partial<UpgradeRequiredData> = {}, onClose = () => {}) {
+  return render(<UpgradeRequiredModal isOpen onClose={onClose} data={{ reason, message, ...extra }} />);
 }
 
-// Every reason the app can actually deliver, plus an unrecognized one to cover
-// the generic fallback.
-//
-// Three codes used to be here and are now gone from control-plane entirely:
-// `free_tier_global_budget` (a service-wide operator cap),
-// `free_tier_compute_minutes` (a per-owner free allowance), and `trial_expired`
-// (a signup compute trial that no longer exists — there is no free compute).
-// Nothing can emit any of them, so the modal no longer carries copy for them.
 const ALL_REASONS = [
   "reliant_credit_exhausted",
   "compute_budget_exhausted",
@@ -86,45 +95,53 @@ describe("UpgradeRequiredModal", () => {
   it("never tells the user there is a free tier", () => {
     for (const reason of ALL_REASONS) {
       const { unmount } = renderModal(reason);
-      // Matches "free tier", "free-tier", and "free compute minutes".
       expect(document.body.textContent).not.toMatch(/free[\s-]?(tier|compute)/i);
       unmount();
     }
   });
 
-  it("describes an empty wallet as credit, and offers to add credit", () => {
+  it("describes an empty wallet as credit, and tops it up in place", () => {
     renderModal("reliant_credit_exhausted");
-
     expect(screen.getByText(/out of Reliant credit/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /add credit/i })).toBeTruthy();
-    // "Upgrade" would be the wrong verb: credit is a top-up, not a tier.
     expect(screen.queryByRole("button", { name: /upgrade/i })).toBeNull();
+    expect(goToBilling).not.toHaveBeenCalled();
   });
 
-  it("keeps an upgrade action for compute reasons and for unknown reasons", () => {
-    const { unmount } = renderModal("compute_budget_exhausted");
-    expect(screen.getByRole("button", { name: /upgrade plan/i })).toBeTruthy();
-    unmount();
+  it("takes payment in place for a compute reason, then repeats the action only on a click", async () => {
+    const retry = vi.fn().mockResolvedValue(undefined);
+    const onClose = vi.fn();
+    renderModal("no_compute_subscription", "", { retry, retryLabel: "Start my machine" }, onClose);
 
-    // An unrecognized reason must not silently lose its action — the generic
-    // copy tells the user to upgrade, so the button has to be there to obey it.
+    fireEvent.click(screen.getByRole("button", { name: "Pay for a plan" }));
+    expect(await screen.findByTestId("upgrade-paid")).toBeTruthy();
+    expect(retry).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start my machine" }));
+    await waitFor(() => expect(retry).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(goToBilling).not.toHaveBeenCalled();
+  });
+
+  it("keeps a way to billing for a reason it cannot fix in place", () => {
     renderModal("something_we_have_never_seen");
-    expect(screen.getByRole("button", { name: /upgrade plan/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /open billing/i })).toBeTruthy();
   });
 
   it("renders the server's own message alongside our copy", () => {
-    // The backend message is the authoritative account of what happened, so it
-    // is shown verbatim. Our per-reason copy must not contradict it.
     renderModal("reliant_credit_exhausted", "wallet balance is 0");
-
     expect(screen.getByText("wallet balance is 0")).toBeTruthy();
   });
 
-  it("opens the identity link, not the plans page, for account_required", () => {
-    renderModal("account_required", "sign in with an email account to start a cloud machine");
-
-    expect(screen.getByTestId("link-identity-modal").textContent).toMatch(/add an email/i);
-    expect(screen.queryByRole("button", { name: /upgrade plan/i })).toBeNull();
+  it("is the one account prompt for account_required and billing_email_missing, and re-runs the call once linked", async () => {
+    for (const reason of ["account_required", "billing_email_missing"]) {
+      const retry = vi.fn().mockResolvedValue(undefined);
+      const { unmount } = renderModal(reason, "needs an email", { retry });
+      expect(screen.getByTestId("link-identity-modal").textContent).toMatch(/add an email/i);
+      fireEvent.click(screen.getByRole("button", { name: "Link account" }));
+      await waitFor(() => expect(retry).toHaveBeenCalledTimes(1));
+      unmount();
+    }
     expect(goToBilling).not.toHaveBeenCalled();
   });
 });

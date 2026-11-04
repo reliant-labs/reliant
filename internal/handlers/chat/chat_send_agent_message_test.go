@@ -481,7 +481,7 @@ func TestListQueuedAgentMessages_ReturnsQueuedInSendOrderExcludingDelivered(t *t
 	require.Len(t, resp.Msg.Messages, 2)
 	assert.Equal(t, "first", resp.Msg.Messages[0].Body)
 	assert.Equal(t, "second", resp.Msg.Messages[1].Body)
-	assert.Equal(t, int32(core.AgentMessageKindHumanMessage), resp.Msg.Messages[0].SenderKind)
+	assert.Equal(t, core.AgentMessageKindHumanMessage, resp.Msg.Messages[0].SenderKind)
 	assert.NotEmpty(t, resp.Msg.Messages[0].CreatedAt)
 }
 

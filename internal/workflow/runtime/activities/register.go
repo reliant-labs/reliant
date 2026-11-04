@@ -6,6 +6,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -162,7 +163,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// A node's save_message is written by the worker that executes the node,
 	// through the same write path as the SaveMessage activity.
 	registry.SetMessageWriter(saveMessage)
-	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder).WithLocalModels(deps.DaemonRouter).WithControlPlane(deps.ControlPlaneURL).WithAccountRouting(deps.AccountRouting))
+	v2.RegisterActivity(registry, handlers.NewCallLLMActivity(deps.Repo, deps.StreamingHub, deps.ToolsFactory, deps.ConfigProvider, deps.DriverResolver, deps.MCPBinder).WithDaemonRouter(deps.DaemonRouter).WithPrivateEgress(deps.AllowPrivateEgress).WithAccountRouting(deps.AccountRouting))
 
 	// ========================================================================
 	// TOOL EXECUTION ACTIVITIES
@@ -171,22 +172,24 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// The skill tool reads the project's skills through the same config
 	// provider CallLLM offered them from (cached per config version on the
 	// worker), not by re-reading the whole config row per call.
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider))
-	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger))
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter))
+	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions))
 
 	// ========================================================================
 	// CONTEXT MANAGEMENT ACTIVITIES
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewCompactActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
-	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver))
+	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting))
+	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.Repo))
 
 	// ========================================================================
 	// APPROVAL ACTIVITIES
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewApprovalCreateActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewAutomationApprovalActivity(deps.ToolsFactory).WithExecutionStore(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(deps.Repo))
 
 	// ========================================================================
@@ -200,7 +203,13 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// RUN STEP ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewExecuteRunStepActivity(deps.Repo, deps.ToolExecutor, deps.RunExecutor))
+	runStep := handlers.NewExecuteRunStepActivity(deps.Repo, deps.ToolExecutor, deps.RunExecutor).WithDaemonRouter(deps.DaemonRouter)
+	if deps.DaemonRouter != nil {
+		// A command that never reached its machine watches the machine while
+		// it waits, as wait_for_machine does.
+		runStep = runStep.WithMachineObserver(toolexec.NewRunMachine(deps.DaemonRouter))
+	}
+	v2.RegisterActivity(registry, runStep)
 
 	// ========================================================================
 	// WORKTREE ACTIVITIES
@@ -216,6 +225,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 
 	v2.RegisterActivity(registry, handlers.NewLoadWorkflowActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewPreflightDaemonCheckActivity(deps.Repo, deps.ToolExecutor))
+	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(deps.Repo))

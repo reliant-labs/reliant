@@ -1,140 +1,109 @@
-import { lazy, Suspense, useState } from "react";
-import { cn } from "../../lib/utils";
+import { useMemo, useState } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
+import Button from "@/components/forge-ui/button";
+import { resolveAISettingsTab, type AISettingsTab, type SettingsTab } from "../../routeSchemas";
+import { useProviderStatuses } from "../../hooks/settings-queries";
 import { SettingsPageHeader } from "./SettingsPageHeader";
-import { CombinedGeneralSettings } from "./CombinedGeneralSettings";
+import { ModelPreferences } from "./ModelPreferences";
 import { ToolPreferences } from "./ToolPreferences";
 import { LocalModelsSection } from "./LocalModelsSection";
-import { reliantAIAvailable } from "../../services/controlPlane/reliantAI";
-import { ProviderAccountsSection, accountProviderIds, useAccountsSection } from "./providers/AccountList";
+import { ProvidersSection } from "./providers/ProvidersSection";
+import { SettingsTabPanel, SettingsTabs, type SettingsTabItem } from "./SettingsTabs";
 
-// ReliantAISection is code-split out of the main settings chunk — it's only
-// fetched when the user opens the "Reliant AI" tab. The named export is adapted
-// to the default export React.lazy expects.
-const ReliantAISection = lazy(() =>
-  import("./cloud/reliantAI").then((m) => ({ default: m.ReliantAISection }))
-);
+const TABS: ReadonlyArray<SettingsTabItem<AISettingsTab>> = [
+  { id: "providers", label: "Providers" },
+  { id: "models", label: "Models" },
+  { id: "local", label: "Local & custom" },
+];
 
-interface AISettingsProps {
-  providers: Array<{
-    provider: string;
-    displayName: string;
-    hasApiKey: boolean;
-    configured: boolean;
-  }>;
-  onProvidersUpdate?: () => void;
+/** The provider statuses ModelPreferences / ToolPreferences filter their choices by. */
+function useProviderRows() {
+  const { data } = useProviderStatuses();
+  return useMemo(
+    () =>
+      (data?.providers ?? []).map((p) => ({
+        provider: p.provider,
+        displayName: p.displayName,
+        configured: p.configured,
+        hasApiKey: p.accountCount > 0,
+      })),
+    [data],
+  );
 }
 
-type AITab = "providers" | "local" | "tools" | "reliant";
-
 /**
- * Single "AI" settings section with internal tabs:
- *   - "Your providers" → bring-your-own provider keys ({@link CombinedGeneralSettings}).
- *   - "Tools"          → global bindings for tools that resolve a model on the
- *                        user's behalf ({@link ToolPreferences}).
- *   - "Reliant AI"     → Reliant-managed keys/credits/spend (ReliantAISection).
+ * Settings → AI, in three tabs:
+ *   - Providers       the accounts your agents run on ({@link ProvidersSection}),
+ *                     with the page's one "Add provider" action in the header;
+ *   - Models          which model each tier uses, and which provider a tool
+ *                     that picks a model for you (image generation) uses —
+ *                     both answer "which model does X use";
+ *   - Local & custom  models on your machines, and custom endpoints.
  *
- * The Reliant AI tab only renders when the managed-AI surface is wired up
- * (`reliantAIAvailable`); self-host / non-cloud users see the other two.
+ * The tab is the URL's `?tab=` (providers | models | local), so "Default
+ * models" can be linked to and survives a refresh.
+ *
+ * Reliant's managed keys and spend live in Billing ("Reliant AI"), linked from
+ * the Reliant provider card. Response streaming is a chat preference and lives
+ * in Chat & editor.
  */
-export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
-  const [tab, setTab] = useState<AITab>("providers");
-  // Non-null once the server answers ProviderAccountService with accounts. Until
-  // then — loading, a server that does not serve the RPCs yet (Unimplemented),
-  // or no accounts — the single-credential list below is today's view, unchanged.
-  const accounts = useAccountsSection();
-
-  // The providers tab preserves the old settings-card look: a narrow card with
-  // injected heading styles so CombinedGeneralSettings' h2/h3 render as they did
-  // when it lived inside SettingsContent's generic card.
-  const providersContent = (
-    <div className="mx-auto max-w-[700px] rounded-xl border border-border/50 bg-card p-6 shadow-sm [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-foreground">
-      <CombinedGeneralSettings
-        providers={providers}
-        onProvidersUpdate={onProvidersUpdate}
-        onOpenReliantAI={
-          reliantAIAvailable ? () => setTab("reliant") : undefined
-        }
-        configuredProvidersSlot={
-          accounts ? <ProviderAccountsSection accounts={accounts} /> : undefined
-        }
-        accountProviders={accounts ? accountProviderIds(accounts) : undefined}
-      />
-    </div>
-  );
-
-  // Global tool preferences. Deliberately NOT part of Model Preferences: that
-  // panel picks the model the CONVERSATION runs on and its rows are quality
-  // tiers, whereas these settings configure tools that resolve a model on the
-  // user's behalf and are never chosen by the agent. Same card treatment as
-  // the providers tab so the two read as siblings.
-  const toolsContent = (
-    <div className="mx-auto max-w-[700px] rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-      <ToolPreferences providers={providers} />
-    </div>
-  );
-
-  const tabs: Array<{ id: AITab; label: string }> = [
-    { id: "providers", label: "Your providers" },
-    { id: "local", label: "Custom & local models" },
-    { id: "tools", label: "Tools" },
-    ...(reliantAIAvailable
-      ? [{ id: "reliant" as const, label: "Reliant AI" }]
-      : []),
-  ];
+export function AISettings() {
+  const navigate = useNavigate();
+  const search = useSearch({ strict: false }) as { tab?: SettingsTab };
+  const tab = resolveAISettingsTab(search.tab);
+  const setTab = (next: AISettingsTab) => {
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, tab: next === "providers" ? undefined : next }),
+      replace: true,
+    });
+  };
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const providers = useProviderRows();
 
   return (
     <>
-      {tab !== "reliant" && (
       <SettingsPageHeader
-        title="AI"
-        description="Choose which AI models your agents can use. Add your own provider keys, set the models that tools use behind the scenes, or manage Reliant's managed AI credits and spend."
+        title="AI providers"
+        description="Connect the AI accounts your agents run on, and choose which models they use."
+        actions={
+          <Button
+            variant="primary"
+            size="lg"
+            leftIcon={<Plus />}
+            aria-expanded={tab === "providers" && pickerOpen}
+            onClick={() => {
+              setTab("providers");
+              setPickerOpen(true);
+            }}
+          >
+            Add provider
+          </Button>
+        }
         className="mb-4 border-b-0 pb-0"
       />
-      )}
-      <div className="mb-6 flex gap-1 border-b border-border">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={cn(
-              "-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-              tab === t.id
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <SettingsTabs tabs={TABS} value={tab} onChange={setTab} idPrefix="ai-settings" ariaLabel="AI settings" className="mb-6" />
 
-      {tab === "providers" ? (
-        providersContent
-      ) : tab === "local" ? (
-        <div className="mx-auto max-w-[700px]">
-          <LocalModelsSection />
-        </div>
-      ) : tab === "tools" ? (
-        toolsContent
-      ) : (
-        // ReliantAISection is styled to expect the `.cloud-settings` scope
-        // (Inter + admin-like density), mirroring how the cloud sections render
-        // in SettingsContent.
-        <div className="cloud-settings">
-          <Suspense
-            fallback={
-              <div className="flex h-full items-center justify-center">
-                <div className="rounded-lg border border-border/50 bg-card px-4 py-3 text-sm text-muted-foreground">
-                  Loading…
-                </div>
+      <SettingsTabPanel idPrefix="ai-settings" tab={tab} data-onboarding="ai-providers-settings">
+        {tab === "providers" ? (
+          <ProvidersSection pickerOpen={pickerOpen} onPickerOpenChange={setPickerOpen} />
+        ) : tab === "models" ? (
+          <div className="space-y-4">
+            <section aria-label="Default models" className="rounded-lg border border-border bg-card p-4">
+              <h2 className="text-sm font-semibold text-foreground">Default models</h2>
+              <div className="mt-1">
+                <ModelPreferences providers={providers} />
               </div>
-            }
-          >
-            <ReliantAISection />
-          </Suspense>
-        </div>
-      )}
+            </section>
+            <section aria-label="Tool models" className="rounded-lg border border-border bg-card p-4">
+              <ToolPreferences providers={providers} />
+            </section>
+          </div>
+        ) : (
+          <LocalModelsSection />
+        )}
+      </SettingsTabPanel>
     </>
   );
 }

@@ -11,7 +11,7 @@
 
 import { ArrowLeft, X } from "lucide-react";
 
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 
 /** The exit, as an icon in the sidebar's brand row. */
@@ -19,12 +19,12 @@ export function ForgeCloseButton({ onClose }: { onClose: () => void }) {
   const { isElectron, noDragRegionStyle } = useTitleBarChrome({ alignedToWindowEdge: false });
   const label = isElectron ? "Close Apps" : "Back to app";
   return (
-    <Tooltip content={`${label} (Esc)`} placement="bottom" delay={300}>
+    <Tooltip content={`${label} (Esc)`} side="bottom" delay={300}>
       <button
         type="button"
         onClick={onClose}
         style={noDragRegionStyle}
-        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={label}
         data-testid="forge-close"
       >

@@ -8,23 +8,23 @@
  * per shell (ModernApp on desktop, MobileShell on `/m/*`), so every screen
  * under it is live, including one opened directly by URL.
  *
- * `ready` is the shell's word that the project's chats have loaded: that is
- * what sets the sequence the stream resumes from, and globalUpdatesStore's
+ * `ready` is the shell's word that the chat list has loaded: that is what
+ * sets the sequence the stream resumes from, and globalUpdatesStore's
  * connect() defers until it has. A screen that subscribed before then rides
  * this connection — connect() forwards the subscribed chat into the stream's
- * first request. Reconnects on a project switch; disconnects when the shell
- * unmounts.
+ * first request. The stream spans every project, so switching projects never
+ * reconnects it; it disconnects when the shell unmounts.
  */
 
 import { useEffect } from "react";
 import { useGlobalUpdatesStore } from "../store/globalUpdatesStore";
 
-export function useUpdateStreamConnection(projectId: string | undefined, ready: boolean): void {
+export function useUpdateStreamConnection(ready: boolean): void {
   useEffect(() => {
-    if (!ready || !projectId) return;
+    if (!ready) return;
     useGlobalUpdatesStore.getState().connect();
     return () => {
       useGlobalUpdatesStore.getState().disconnect();
     };
-  }, [ready, projectId]);
+  }, [ready]);
 }

@@ -56,7 +56,7 @@ func main() {
 		stale = append(stale, s...)
 	}
 	if *check && len(stale) > 0 {
-		fatal(fmt.Errorf("generated integration files are out of date; run `make generate-integrations` and commit:\n  %s", strings.Join(stale, "\n  ")))
+		fatal(fmt.Errorf("generated integration files are out of date; run `task generate:forge` and commit:\n  %s", strings.Join(stale, "\n  ")))
 	}
 }
 

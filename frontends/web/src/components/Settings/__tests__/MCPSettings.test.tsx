@@ -1,35 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { MCPSettings, resetMCPSettingsCacheForTests } from "../MCPSettings";
-import {
-  ConfigScope,
-  type MCPServer,
-  type RecommendedServer,
-} from "../../../api/mcp-grpc";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+
+import { ConfigScope } from "@/gen/reliant/v1/common_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { MCPSettings } from "../MCPSettings";
 
 const listServersMock = vi.fn();
 const listRecommendedMock = vi.fn();
+const restartServerMock = vi.fn();
 const updatePreferencesMock = vi.fn();
-const loadPreferencesMock = vi.fn();
-
-vi.mock("../../../api/mcp-grpc", () => ({
-  ConfigScope: {
-    GLOBAL: 0,
-    PROJECT: 1,
-    PROJECT_LOCAL: 2,
-  },
-  mcpGrpc: {
-    listServers: (...args: unknown[]) => listServersMock(...args),
-    listRecommended: (...args: unknown[]) => listRecommendedMock(...args),
-    installServer: vi.fn(),
-    restartServer: vi.fn(),
-    uninstallServer: vi.fn(),
-    setServerEnabled: vi.fn(),
-    moveServerScope: vi.fn(),
-    getServerTools: vi.fn(),
-    updateServerConfig: vi.fn(),
-  },
-}));
 
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (
@@ -37,17 +20,11 @@ vi.mock("../../../store/projectStore", () => ({
   ) => selector({ currentProject: { id: "project-test" } }),
 }));
 
-vi.mock("../../../store/preferencesStore", () => ({
-  usePreferencesStore: () => ({
-    preferences: { defaultMcpScope: ConfigScope.PROJECT },
-    updatePreferences: updatePreferencesMock,
-    loadPreferences: loadPreferencesMock,
-    isLoading: false,
-  }),
-}));
-
-vi.mock("../../../store/refetchStore", () => ({
-  subscribeToRefetch: () => () => {},
+const scopePrefs = vi.hoisted(() => ({ data: { defaultMcpScope: 2 /* ConfigScope.PROJECT */ }, isPending: false }));
+vi.mock("../../../hooks/settings-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/settings-queries")>()),
+  useScopePreferences: () => scopePrefs,
+  useUpdateScopePreferences: () => ({ isPending: false, mutateAsync: updatePreferencesMock }),
 }));
 
 vi.mock("sonner", () => ({
@@ -58,62 +35,67 @@ vi.mock("sonner", () => ({
   },
 }));
 
-const baseRecommended: RecommendedServer[] = [
+const baseRecommended = [
   {
     name: "github",
     displayName: "GitHub",
     description: "GitHub tools",
     category: "dev",
-    setupRequired: false,
     config: {
       command: "npx",
       args: ["-y", "@modelcontextprotocol/server-github"],
-      env: [],
       type: "stdio",
-      headers: {},
-      url: "",
     },
-    docsUrl: "",
     installed: false,
   },
 ];
 
-const buildInstalledServer = (overrides?: Partial<MCPServer>): MCPServer => ({
+const installedServer = {
   name: "github",
   connected: true,
   enabled: true,
   scope: ConfigScope.PROJECT,
   toolCount: 1,
-  resourcesEnabled: false,
-  promptsEnabled: false,
-  serverInfo: {
-    name: "GitHub",
-    version: "1.0.0",
-    description: "GitHub tools",
-  },
+  serverInfo: { name: "GitHub", version: "1.0.0" },
   config: {
     command: "npx",
     args: ["-y", "@modelcontextprotocol/server-github"],
-    env: [],
     type: "stdio",
-    headers: {},
-    url: "",
   },
-  lastError: "",
-  ...overrides,
-});
+};
+
+let queryClient: QueryClient;
+
+function renderSettings() {
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+  return render(<MCPSettings />, { wrapper });
+}
 
 describe("MCPSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    resetMCPSettingsCacheForTests();
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    // MCPService is on its generated hooks, so it is answered at the transport.
+    setTransport(
+      mockTransport({
+        "MCPService.ListServers": (req) => listServersMock(req),
+        "MCPService.ListRecommended": (req) => listRecommendedMock(req),
+        "MCPService.RestartServer": (req) => restartServerMock(req),
+      }),
+    );
   });
+
+  afterEach(() => setTransport(null));
 
   it("defaults to Discover tab when no MCP servers are installed", async () => {
     listServersMock.mockResolvedValue({ servers: [] });
     listRecommendedMock.mockResolvedValue({ recommended: baseRecommended });
 
-    render(<MCPSettings />);
+    renderSettings();
 
     const discoverTab = await screen.findByRole("tab", { name: /^Discover/i });
 
@@ -125,10 +107,10 @@ describe("MCPSettings", () => {
   });
 
   it("keeps Installed tab selected when at least one MCP server is installed", async () => {
-    listServersMock.mockResolvedValue({ servers: [buildInstalledServer()] });
+    listServersMock.mockResolvedValue({ servers: [installedServer] });
     listRecommendedMock.mockResolvedValue({ recommended: baseRecommended });
 
-    render(<MCPSettings />);
+    renderSettings();
 
     const installedTab = await screen.findByRole("tab", { name: /^Installed/i });
 
@@ -136,21 +118,22 @@ describe("MCPSettings", () => {
       expect(installedTab).toHaveAttribute("aria-selected", "true");
     });
 
-    expect(screen.getByRole("button", { name: "1 tools" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "1 tools" })).toBeInTheDocument();
+    expect(listServersMock).toHaveBeenCalledWith(expect.objectContaining({ projectId: "project-test" }));
   });
 
   it("reuses cached MCP data on repeat visits", async () => {
-    listServersMock.mockResolvedValue({ servers: [buildInstalledServer()] });
+    listServersMock.mockResolvedValue({ servers: [installedServer] });
     listRecommendedMock.mockResolvedValue({ recommended: baseRecommended });
 
-    const { unmount } = render(<MCPSettings />);
+    const { unmount } = renderSettings();
 
     expect(
       await screen.findByRole("button", { name: "1 tools" }),
     ).toBeInTheDocument();
     unmount();
 
-    render(<MCPSettings />);
+    renderSettings();
 
     expect(
       screen.getByRole("button", { name: "1 tools" }),
@@ -158,5 +141,26 @@ describe("MCPSettings", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(listServersMock).toHaveBeenCalledTimes(1);
     expect(listRecommendedMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("refetches the server list after a restart, so the status shown is the server's", async () => {
+    let connected = false;
+    listServersMock.mockImplementation(async () => ({ servers: [{ ...installedServer, connected }] }));
+    listRecommendedMock.mockResolvedValue({ recommended: baseRecommended });
+    restartServerMock.mockImplementation(async () => {
+      connected = true;
+      return { success: true, name: "github" };
+    });
+
+    renderSettings();
+    await screen.findByRole("button", { name: "1 tools" });
+    expect(listServersMock).toHaveBeenCalledTimes(1);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /^Server settings for/ }));
+    await user.click(screen.getByRole("button", { name: /^Restart/ }));
+
+    await waitFor(() => expect(restartServerMock).toHaveBeenCalledWith(expect.objectContaining({ projectId: "project-test", name: "github" })));
+    await waitFor(() => expect(listServersMock).toHaveBeenCalledTimes(2));
   });
 });

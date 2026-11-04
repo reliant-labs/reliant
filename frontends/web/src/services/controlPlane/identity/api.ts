@@ -41,7 +41,6 @@ import {
 import { IdentityService } from "@/gen/controlplane/services/identity/v1/identity_pb";
 
 import { getControlPlaneClient } from "../client";
-import { getWalletOverview } from "../reliantAI";
 
 function client() {
   return getControlPlaneClient(IdentityService);
@@ -270,10 +269,7 @@ function mapUser(u: WireUser): IdentityUser {
 
 // ── RPCs ─────────────────────────────────────────────────────────────────────
 
-/** The org every identity request is scoped by: the caller's current one, as the billing surfaces resolve it. */
-export async function currentOrgId(): Promise<string | null> {
-  return (await getWalletOverview())?.organization?.id ?? null;
-}
+export { currentOrgId } from "../orgs";
 
 export async function getIdentityStatus(orgId: string, environmentId: string): Promise<IdentityStatus> {
   const r = await client().getIdentityStatus({ orgId, environmentId });

@@ -4,7 +4,7 @@ import { type CSSProperties } from "react";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { cn } from "../../lib/utils";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { machineDisplayName } from "@/lib/machineName";
 
 const RECENT_HEARTBEAT_SECONDS = 60;
@@ -64,7 +64,7 @@ export function DaemonStatusDot() {
   const meta = getStatusMeta(status, activeDaemon ? machineDisplayName(activeDaemon) : undefined, heartbeatAgeSeconds);
 
   return (
-    <Tooltip content={meta.label} placement="bottom" delay={300}>
+    <Tooltip content={meta.label} side="bottom" delay={300} triggerClassName="block">
       <div
         className="header-icon-btn relative flex h-7 w-7 items-center justify-center rounded text-xs transition-colors"
         role="status"

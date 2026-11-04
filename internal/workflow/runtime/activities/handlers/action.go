@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
+	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 	"go.temporal.io/sdk/activity"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 )
@@ -34,6 +35,23 @@ type ActionActivity struct {
 	catalog     *catalog.Catalog
 	runner      writeledger.Runner
 	credentials httpaction.CredentialSource
+	hosted      HostedActionExecutor
+}
+
+// HostedActionExecutor is used only by fixed action nodes, never by the
+// generic integration-tool credential source. It issues a durable one-use
+// ticket from trusted activity context before dispatching to the controller.
+type HostedActionExecutor interface {
+	ExecuteAction(ctx context.Context, runID, nodeID, grantID string, req hostedhttp.Request) (*hostedhttp.Result, error)
+}
+
+// WithHostedExecutor enables explicitly granted hosted HTTP actions. A nil
+// executor leaves them fail-closed; it never falls back to an unauthenticated
+// request or saved connection.
+func (a *ActionActivity) WithHostedExecutor(executor HostedActionExecutor) *ActionActivity {
+	clone := *a
+	clone.hosted = executor
+	return &clone
 }
 
 // WithLedger records every mutating call this activity makes in the write
@@ -98,6 +116,11 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 	// here, on the worker, at call time, and never enters history.
 	if connection := strings.TrimSpace(model.CelStringRaw(args.GetConnection())); connection != "" {
 		params[httpaction.ConnectionParam] = connection
+	}
+
+	if args.GetHostedUse() != nil {
+		grant := strings.TrimSpace(model.CelStringRaw(args.GetHostedUse()))
+		return a.executeHosted(ctx, uses, grant, params, rtx), nil
 	}
 
 	site := httpaction.CallSite{

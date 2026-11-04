@@ -21,7 +21,8 @@ Each process has a stable resource identity:
 
 `service.version` comes from Reliant build metadata and `service.instance.id`
 comes from the hostname. `Config.Environment` is resolved from
-`SENTRY_ENVIRONMENT`, then `ENVIRONMENT`, then legacy `RELIANT_ENV`; it is not
+`ENVIRONMENT` (`ObservabilityConfig.environment`), then the root config's
+`RELIANT_ENV`, then `development`; it is not
 exported as an OTel resource attribute by Reliant. The platform contract sets
 `deployment.environment.name` through `OTEL_RESOURCE_ATTRIBUTES`, which forge's
 KCL renders for every workload and the Forge runtime merges into the resource.
@@ -55,8 +56,8 @@ makes the endpoint return 404.
 Structured logs stay on stdout and are collected by the runtime collector agent;
 Reliant does not install an OTel logs SDK.
 
-Sentry remains an independent error/crash pipeline and is initialized and
-flushed independently of OTel.
+There is no Sentry: server errors reach ClickStack with the rest of the logs and
+traces.
 
 ## Propagation
 

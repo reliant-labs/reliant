@@ -6,15 +6,19 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Code } from "@connectrpc/connect";
+import { screen, within } from "@testing-library/react";
+import { Code, ConnectError } from "@connectrpc/connect";
+
+// This file pins the explicitly retained, read-only rollout fallback.
+vi.mock("@/hooks/observability-billing-queries", () => ({
+  useObsBillingUsage: () => ({ isPending: false, error: new ConnectError("not deployed", Code.Unimplemented), refetch: vi.fn() }),
+}));
 
 import { createFixtureApi, fixtureUsage, FIXTURE_ORG } from "../__fixtures__/fixtureApi";
 import type { ObservabilityUsage } from "@/services/controlPlane/observability/types";
 import { usageNotice } from "../usageModel";
-import { UsageView } from "../UsageView";
-import { renderPanel, renderWithApi } from "./obsTestUtils";
+import { LegacyUsageView as UsageView } from "../UsageView";
+import { renderWithApi } from "./obsTestUtils";
 
 vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("./obsMocks")).obsMocks.virtual());
@@ -138,29 +142,5 @@ describe("usageNotice", () => {
   });
   it("exempt wins over everything", () => {
     expect(usageNotice({ ...base, exempt: true, state: "over_150" })?.title).toMatch(/not billed/);
-  });
-});
-
-describe("Usage tab", () => {
-  it("is reachable from the panel and works before the tenant store exists", async () => {
-    const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi({ failWith: undefined }), {});
-    await user.click(await screen.findByTestId("obs-view-usage"));
-    expect(harness.current().view).toBe("usage");
-    expect(await screen.findByTestId("obs-usage")).toBeInTheDocument();
-  });
-
-  it("is not hidden by the not-set-up state of the other views", async () => {
-    const api = createFixtureApi({ usage: {} });
-    const notSet = {
-      ...api,
-      getServiceOverview: async () => {
-        const { ConnectError } = await import("@connectrpc/connect");
-        throw new ConnectError("observability is not set up for this organization yet", Code.FailedPrecondition);
-      },
-    };
-    renderPanel(notSet, { view: "usage" });
-    await waitFor(() => expect(screen.getByTestId("obs-usage")).toBeInTheDocument());
-    expect(screen.queryByTestId("obs-not-set-up")).not.toBeInTheDocument();
   });
 });

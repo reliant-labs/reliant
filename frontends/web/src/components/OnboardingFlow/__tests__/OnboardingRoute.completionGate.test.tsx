@@ -31,7 +31,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockNavigate = vi.fn();
 vi.mock("@tanstack/react-router", () => ({
@@ -48,7 +48,7 @@ let serverUser = {
   createdAtMs: USER_CREATED_MS,
 };
 
-const mockCompleteOnboarding = vi.fn(async () => {
+const mockCompleteOnboarding = vi.fn(async (_data?: unknown) => {
   serverUser = { ...serverUser, onboardingCompleted: true };
 });
 
@@ -68,29 +68,13 @@ vi.mock("@/services/controlPlane/daemon", () => ({
   deleteDaemon: vi.fn(),
 }));
 
-// useDaemonList reads the reliant daemon registry, not the control-plane
-// daemon service above (docs/design/one-daemon-list.md). Faked at the same
-// transport layer: the user has no machine yet.
-vi.mock("@/api/grpc-client", async () => {
-  const actual = await vi.importActual<typeof import("@/api/grpc-client")>("@/api/grpc-client");
-  return {
-    ...actual,
-    grpcClient: new Proxy(actual.grpcClient, {
-      get(target, prop) {
-        if (prop === "daemonRegistry") return () => ({ listDaemons: async () => ({ daemons: [] }) });
-        return Reflect.get(target, prop);
-      },
-    }),
-  };
-});
-
 vi.mock("@/services/controlPlane/billing", () => ({
   getComputeEligibility: async () => ({ eligible: false }),
   ComputeIneligibleReason: { NO_SUBSCRIPTION: 3, NO_ORGANIZATION: 4 },
 }));
 
 vi.mock("@/services/controlPlane/git", () => ({
-  gitService: { listRepos: vi.fn(), cloneRepo: vi.fn(), getOAuthURL: () => "" },
+  gitService: { listRepos: vi.fn(), cloneRepo: vi.fn(), buildOAuthURL: () => "" },
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -142,6 +126,15 @@ vi.mock("../OnboardingPage", () => ({
 
 import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { OnboardingRoute } from "../OnboardingRoute";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// useDaemonList reads the reliant daemon registry, not the control-plane
+// daemon service above (docs/design/one-daemon-list.md), through
+// connectClient — so it is answered at the transport: the user has no machine
+// yet.
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: async () => ({ daemons: [] }) })));
+afterEach(() => setTransport(null));
 
 function renderRoute() {
   const queryClient = new QueryClient({

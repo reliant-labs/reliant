@@ -34,7 +34,7 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     name: "hosted",
     project: "acme",
     kind: "persistent",
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: "v1.5.15",
     releaseProvenance: null,
@@ -43,6 +43,9 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     phase: "unspecified",
     provenance: "v1.5.15 · main@abc1234",
     holds: [],
+    observed: { state: "not-reported" },
+    drift: { state: "not-reported" },
+    driftDetail: "",
     ...overrides,
   };
 }

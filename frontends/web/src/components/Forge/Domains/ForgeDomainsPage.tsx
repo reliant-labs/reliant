@@ -167,12 +167,12 @@ export function ForgeDomainsPage() {
     return (
       <div className="p-6">
         <PageHeader title="Custom domains" subtitle="Serve your project on a hostname you own." />
-        <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-sm text-foreground">
+        <div className="rounded-lg border border-border bg-surface p-4">
+          <p className="text-sm text-ink">
             {DOMAIN_AVAILABILITY_EXPLANATIONS[availability]}
           </p>
           {availability === "unreachable" && data?.detail && (
-            <p className="mt-1 text-xs text-muted-foreground">{data.detail}</p>
+            <p className="mt-1 text-xs text-ink-muted">{data.detail}</p>
           )}
         </div>
       </div>
@@ -191,7 +191,7 @@ export function ForgeDomainsPage() {
               href={CUSTOM_DOMAINS_DOCS_URL}
               target="_blank"
               rel="noreferrer"
-              className="text-primary underline underline-offset-2"
+              className="text-primary-ink underline underline-offset-2"
             >
               How custom domains work
             </a>
@@ -208,7 +208,7 @@ export function ForgeDomainsPage() {
       />
 
       {isLoading && domains.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Loading domains…</p>
+        <p className="text-sm text-ink-muted">Loading domains…</p>
       ) : domains.length === 0 ? (
         <EmptyState
           icon={<Globe className="h-7 w-7" aria-hidden="true" />}
@@ -224,21 +224,21 @@ export function ForgeDomainsPage() {
             return (
               <li
                 key={domain.id}
-                className="overflow-hidden rounded-lg border border-border bg-card"
+                className="overflow-hidden rounded-lg border border-border bg-surface"
                 data-testid={`domain-row-${domain.hostname}`}
               >
                 <button
                   type="button"
                   onClick={() => setExpanded(open ? null : domain.id)}
                   aria-expanded={open}
-                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition hover:bg-muted/40"
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition hover:bg-ink/5"
                 >
-                  <span className="font-mono text-sm text-foreground">{domain.hostname}</span>
+                  <span className="font-mono text-sm text-ink">{domain.hostname}</span>
                   <DomainStateBadge state={domain.state} />
                   <span
                     className={cn(
                       "ml-auto text-xs",
-                      domain.binding ? "text-muted-foreground" : "text-muted-foreground/70"
+                      domain.binding ? "text-ink-muted" : "text-ink-subtle"
                     )}
                   >
                     {domain.binding && !domain.binding.redirectTo

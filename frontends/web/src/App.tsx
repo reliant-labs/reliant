@@ -1,17 +1,9 @@
 // Main App Entry Point
-import { useEffect } from "react";
-import { useViewerStore } from "./store/viewerStore";
 import ModernApp from "./ModernApp";
 
 function App() {
-  // Clear all viewer state on mount/remount
-  useEffect(() => {
-    // Close all viewers and reset state IMMEDIATELY
-    const viewerState = useViewerStore.getState();
-    viewerState.closeAllViewers();
-    viewerState.setActiveViewer(null);
-  }, []);
-
+  // Viewer lifecycle belongs to project/workspace selection, not this route's
+  // mount: global Runs and Settings temporarily unmount the chat app.
   return <ModernApp />;
 }
 

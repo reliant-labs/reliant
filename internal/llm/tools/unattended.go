@@ -44,8 +44,14 @@ var unattendedWithheld = []struct {
 		// start_run's run is attended (agent.start_run), so it would be handed
 		// everything withheld here. send_to_run instructs a run that may hold
 		// those tools, and control_run stops or resumes the user's own work.
-		withholds: toolNamed(ToolStartRun, ToolSendToRun, ToolControlRun),
+		withholds: toolNamed(ToolStartRun, ToolSendToRun, ToolControlRun, ToolFireTrigger),
 		reason:    "unattended runs can't start, message or control other runs",
+	},
+	{
+		// Starting a machine spends the user's money. Named, it still only
+		// starts the machine the run's activation targets (machine_tools.go).
+		withholds: toolNamed(ToolManageMachine),
+		reason:    "unattended runs can't start, stop or resize machines",
 	},
 	{
 		// An integration action that changes something outside Reliant —
@@ -74,6 +80,13 @@ func toolNamed(names ...string) func(string) bool {
 // other run.
 func UnattendedWithholding(name string) string {
 	name = strings.TrimSpace(name)
+	// A named activation tool is reachable, and the owner's
+	// automation-approvals setting then decides each call: one that widens
+	// an activation's power needs a card, which an unattended run cannot
+	// show, so it is refused (activation_tools.go).
+	if IsActivationManagementTool(name) {
+		return "unattended runs can't manage trigger activations"
+	}
 	for _, category := range unattendedWithheld {
 		if category.withholds(name) {
 			return category.reason

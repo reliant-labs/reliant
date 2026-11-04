@@ -1,10 +1,12 @@
 import { useCallback, useState } from "react";
 import { usePreferences } from "../../hooks/settings-queries";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import { useWorktreeStore } from "../../store/worktreeStore";
 import { useChatStore } from "../../store/chatStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import type { Chat } from "../../types/chat";
+import { deleteWorktree } from "../../hooks/worktree-actions";
+import { resolveWorktree, type Worktree } from "../../hooks/worktree-queries";
 
 type CleanupOptions = { deleteGitBranch: boolean };
 
@@ -17,7 +19,6 @@ type CleanupOptions = { deleteGitBranch: boolean };
  * and the detail view, so the two cannot drift.
  */
 export function useArchiveWorkspace() {
-  const deleteWorktree = useWorktreeStore((state) => state.deleteWorktree);
   const { data: preferences } = usePreferences();
   const [pending, setPending] = useState<Worktree | null>(null);
 
@@ -35,14 +36,14 @@ export function useArchiveWorkspace() {
           : { deleteGitBranch: false };
       void deleteWorktree(worktree.id, options);
     },
-    [deleteWorktree, preferences],
+    [preferences],
   );
 
   const confirm = useCallback(
     async (options?: CleanupOptions) => {
       if (pending) await deleteWorktree(pending.id, options);
     },
-    [deleteWorktree, pending],
+    [pending],
   );
 
   return { requestArchive, pending, confirm, cancel: () => setPending(null) };
@@ -71,7 +72,7 @@ export function useOpenWorkspace(onAfterOpen?: () => void) {
       const projectId = useProjectStore.getState().currentProject?.id;
       if (!projectId) return;
       const worktree = chat.worktreeId
-        ? await useWorktreeStore.getState().resolveWorktree(chat.worktreeId)
+        ? await resolveWorktree(chat.worktreeId)
         : null;
       await switchWorktreeContext(projectId, worktree);
       useChatStore.getState().selectChat(chat);

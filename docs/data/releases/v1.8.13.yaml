@@ -1,0 +1,13 @@
+version: "v1.8.13"
+date: "2026-10-30"
+title: "Dashboards together, workflows on the right machine"
+summary: "Find dashboards in a new Overview hub, retry failed panels, and run workflows with the definitions and tools of their own machine."
+items:
+  - title: "Explore dashboards from one hub"
+    description: "The dashboards Overview hub and grouped list bring your dashboards together. Panels queue within the server's read limit and offer Retry when a request fails."
+  - title: "Use the workflow catalog a run started with"
+    description: "Runs load workflow definitions from their original catalog. Automations use the project's workflow rather than a same-named account workflow, and skills, memories and MCP configuration stay scoped to each machine."
+  - title: "Select the intended machine"
+    description: "A daemon: shorthand containing a machine ID now selects that machine correctly."
+  - title: "More accurate usage analytics"
+    description: "Page visits and completed model calls are recorded again, and workflow events correctly identify child runs."

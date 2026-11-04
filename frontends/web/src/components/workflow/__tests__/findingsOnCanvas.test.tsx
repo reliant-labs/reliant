@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { Node, NodeProps } from "@xyflow/react";
 
-import type { ValidationError } from "../../../api/workflow-grpc";
+import type { ValidationError } from "../../../hooks/workflow-queries";
 import type { ProtoFieldSchema } from "../../../types/workflowFieldSchema";
 import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import { NodeFindingsScope, WorkflowFindingsProvider, type FindingFocus } from "../WorkflowFindingsContext";

@@ -1,10 +1,11 @@
 /**
  * Settings → Providers, account-aware: the account list (desktop and mobile
- * variants), its usage bars and status pills, rename / pause / reorder /
- * remove through ProviderAccountService, and the gate that falls back to
- * today's single-credential view when the server does not serve the RPCs.
+ * variants), exception-first rows (a healthy account is one line; a limited,
+ * nearly limited or signed-out one opens itself), rename / pause / reorder /
+ * remove through ProviderAccountService, and the list-query gate.
  *
- * The client is mocked; the backend handler is a scaffold until P3.2.
+ * ProviderAccountService is answered at the transport (test/providerAccountTransport),
+ * so the generated hooks run for real.
  */
 
 import { screen, waitFor, within } from "@testing-library/react";
@@ -12,7 +13,10 @@ import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../../test/renderWithQuery";
-import type { ProviderAccount, UsageWindow } from "../../../../api/provider-account-grpc";
+import type { ProviderAccount, UsageWindow } from "../../../../types/providerAccount";
+import { setTransport } from "../../../../lib/connect";
+import { mockTransport } from "../../../../lib/test-utils";
+import { providerAccountHandlers } from "../../../../test/providerAccountTransport";
 
 const mocks = vi.hoisted(() => ({
   listAccounts: vi.fn(),
@@ -25,22 +29,6 @@ const mocks = vi.hoisted(() => ({
   upsertStringSetting: vi.fn(),
   refetchModels: vi.fn(),
 }));
-
-vi.mock("../../../../api/provider-account-grpc", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../../api/provider-account-grpc")>();
-  return {
-    ...actual,
-    providerAccountGrpc: {
-      listAccounts: mocks.listAccounts,
-      updateAccount: mocks.updateAccount,
-      reorderAccounts: mocks.reorderAccounts,
-      deleteAccount: mocks.deleteAccount,
-      addApiKey: mocks.addApiKey,
-      refreshUsage: mocks.refreshUsage,
-      getChatAccount: vi.fn(),
-    },
-  };
-});
 
 vi.mock("../../../../lib/settingsPersistence", () => ({
   readSetting: mocks.readSetting,
@@ -163,8 +151,24 @@ function renderList(accounts: ProviderAccount[], variant: "desktop" | "mobile" =
   return renderWithQuery(<AccountList accounts={accounts} variant={variant} />);
 }
 
+/** The account's row in its provider's table. */
 function rowFor(label: string): HTMLElement {
-  return screen.getByRole("listitem", { name: label });
+  const row = screen.getAllByTestId("account-row").find((r) => within(r).queryByText(label) !== null);
+  if (!row) throw new Error(`no account row for ${label}`);
+  return row;
+}
+
+/** The row's expanded detail: the full usage bars and identity line. */
+function detailFor(label: string): HTMLElement {
+  const detail = rowFor(label).nextElementSibling;
+  if (!(detail instanceof HTMLElement) || detail.getAttribute("data-row-detail") !== "true") {
+    throw new Error(`${label} is not expanded`);
+  }
+  return detail;
+}
+
+async function expand(label: string) {
+  await userEvent.setup().click(screen.getByRole("button", { name: `Details for ${label}` }));
 }
 
 beforeEach(() => {
@@ -176,53 +180,80 @@ beforeEach(() => {
   mocks.refetchModels.mockResolvedValue(undefined);
   mocks.readSetting.mockResolvedValue({ status: "missing" });
   mocks.upsertStringSetting.mockResolvedValue(undefined);
+  setTransport(mockTransport(providerAccountHandlers(mocks)));
 });
 
 afterEach(() => {
+  setTransport(null);
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
 describe("account rows", () => {
-  it("renders all four statuses, the plan badge, both bars and the email label", () => {
+  it("keeps a healthy account to one line: label, plan as text, small meters, no status", () => {
     renderList([alice, bob, carol, dave]);
 
     const a = within(rowFor("alice@example.com"));
+    expect(rowFor("alice@example.com")).toHaveAttribute("data-expanded", "false");
     expect(a.getByText("alice@example.com")).toBeInTheDocument();
-    expect(a.getByTestId("plan-badge")).toHaveTextContent("Max 20×");
-    expect(a.getByTestId("status-pill")).toHaveTextContent("Available");
+    expect(a.getByTestId("account-plan")).toHaveTextContent("Max 20×");
+    // No "Available" pill: a healthy account says nothing about its health.
+    expect(a.queryByTestId("account-status")).not.toBeInTheDocument();
+    expect(a.queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(a.getByRole("img", { name: "5-hour 42% used" })).toBeInTheDocument();
+    expect(a.getByRole("img", { name: "Weekly 60% used" })).toBeInTheDocument();
+  });
+
+  it("opens a limited or signed-out account by itself and says what is wrong in one sentence", () => {
+    renderList([alice, bob, carol, dave]);
+
+    const b = within(rowFor("bob@work.example"));
+    expect(rowFor("bob@work.example")).toHaveAttribute("data-expanded", "true");
+    expect(b.getByTestId("account-status")).toHaveTextContent(/^Limited: 5-hour cap · back /);
+    expect(b.getByTestId("account-plan")).toHaveTextContent("Pro");
+    expect(within(detailFor("bob@work.example")).getByRole("progressbar")).toBeInTheDocument();
+
+    expect(within(rowFor("carol@example.com")).getByTestId("account-status")).toHaveTextContent("Paused");
+    expect(rowFor("carol@example.com")).toHaveAttribute("data-expanded", "false");
+
+    const d = within(rowFor("dave@example.com"));
+    expect(rowFor("dave@example.com")).toHaveAttribute("data-expanded", "true");
+    expect(d.getByTestId("account-status")).toHaveTextContent("Needs sign-in");
+    expect(d.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
+    expect(within(detailFor("dave@example.com")).getByText("The sign-in expired.")).toBeInTheDocument();
+  });
+
+  it("opens any row on request for its bars", async () => {
+    renderList([alice]);
+    await expand("alice@example.com");
+    const a = within(detailFor("alice@example.com"));
     expect(a.getAllByRole("progressbar")).toHaveLength(2);
     expect(a.getByText(/42% used · resets in 2h 13m/)).toBeInTheDocument();
     expect(a.getByText(/60% used · resets in 2d 2h/)).toBeInTheDocument();
-
-    const b = within(rowFor("bob@work.example"));
-    expect(b.getByTestId("status-pill")).toHaveTextContent(/^Limited until /);
-    expect(b.getByTestId("plan-badge")).toHaveTextContent("Pro");
-
-    expect(within(rowFor("carol@example.com")).getByTestId("status-pill")).toHaveTextContent("Paused");
-
-    const d = within(rowFor("dave@example.com"));
-    expect(d.getByTestId("status-pill")).toHaveTextContent("Needs sign-in");
-    expect(d.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
-    expect(d.getByText("The sign-in expired.")).toBeInTheDocument();
   });
 
-  it("shows the masked key and 'Per-minute limits only' for an API-key account", () => {
+  it("shows the masked key, and 'Per-minute limits only' once opened, for an API-key account", async () => {
     renderList([key]);
     const row = within(rowFor("sk-ant-…a1b2"));
     expect(row.getByText("sk-ant-…a1b2")).toBeInTheDocument();
-    expect(row.getByText("Per-minute limits only")).toBeInTheDocument();
-    expect(row.queryByRole("progressbar")).not.toBeInTheDocument();
+    expect(row.queryByTestId("usage-meters")).not.toBeInTheDocument();
+    await expand("sk-ant-…a1b2");
+    const detail = within(detailFor("sk-ant-…a1b2"));
+    expect(detail.getByText("Per-minute limits only")).toBeInTheDocument();
+    expect(detail.queryByRole("progressbar")).not.toBeInTheDocument();
   });
 
-  it("captions usage 'as of N min ago' once it is stale, and not while fresh", () => {
+  it("captions usage 'as of N min ago' once it is stale, and not while fresh", async () => {
     renderList([alice, bob]);
-    expect(within(rowFor("bob@work.example")).getByText("as of 30 min ago")).toBeInTheDocument();
-    expect(within(rowFor("alice@example.com")).queryByText(/^as of /)).not.toBeInTheDocument();
+    expect(within(detailFor("bob@work.example")).getByText("as of 30 min ago")).toBeInTheDocument();
+    await expand("alice@example.com");
+    expect(within(detailFor("alice@example.com")).queryByText(/^as of /)).not.toBeInTheDocument();
   });
 
-  it("degrades to 'Usage unknown' for a window with no reported fraction", () => {
+  it("degrades to 'Usage unknown' for a window with no reported fraction", async () => {
     renderList([account({ id: "u", email: "u@x.example", label: "u@x.example", windows: [win({ name: "5h", label: "5-hour" })] })]);
+    expect(screen.getByRole("img", { name: "5-hour usage unknown" })).toBeInTheDocument();
+    await expand("u@x.example");
     const bar = screen.getByRole("progressbar", { name: "5-hour usage" });
     expect(bar).toHaveAttribute("aria-valuetext", "unknown");
     expect(screen.getByText("Usage unknown")).toBeInTheDocument();
@@ -239,10 +270,12 @@ describe("account rows", () => {
       ],
     });
     renderList([hot, bob]);
-    const h = within(rowFor("h@x.example")).getAllByRole("progressbar");
+    // At 80% the account is near its limit, so it opens by itself.
+    expect(rowFor("h@x.example")).toHaveAttribute("data-expanded", "true");
+    const h = within(detailFor("h@x.example")).getAllByRole("progressbar");
     expect(h[0]).toHaveAttribute("data-tone", "ok");
     expect(h[1]).toHaveAttribute("data-tone", "warn");
-    expect(within(rowFor("bob@work.example")).getByRole("progressbar")).toHaveAttribute("data-tone", "danger");
+    expect(within(detailFor("bob@work.example")).getByRole("progressbar")).toHaveAttribute("data-tone", "danger");
   });
 });
 
@@ -304,10 +337,10 @@ describe("account actions", () => {
     const user = userEvent.setup();
     renderList([alice, bob]);
     await user.click(screen.getByRole("button", { name: "Actions for alice@example.com" }));
-    expect(screen.getByRole("menuitem", { name: "Move up" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Move up" })).toHaveAttribute("aria-disabled", "true");
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Actions for bob@work.example" }));
-    expect(screen.getByRole("menuitem", { name: "Move down" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Move down" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("reorders from the keyboard on the drag handle (arrow keys)", async () => {
@@ -334,19 +367,20 @@ describe("account actions", () => {
     await waitFor(() => expect(mocks.reorderAccounts).toHaveBeenCalledWith("claude", ["a3", "a1", "a2"]));
   });
 
-  it("removes only after the user confirms, and says where its chats go", async () => {
+  it("removes only after the in-app confirm, and says where its chats go", async () => {
     const user = userEvent.setup();
-    const confirmSpy = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
-    vi.stubGlobal("confirm", confirmSpy);
     renderList([alice, bob]);
 
     await user.click(screen.getByRole("button", { name: "Actions for bob@work.example" }));
     await user.click(screen.getByRole("menuitem", { name: "Remove" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("move to your other Claude accounts");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(mocks.deleteAccount).not.toHaveBeenCalled();
-    expect(confirmSpy.mock.calls[0][0]).toContain("move to your other Claude subscription accounts");
 
     await user.click(screen.getByRole("button", { name: "Actions for bob@work.example" }));
     await user.click(screen.getByRole("menuitem", { name: "Remove" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(mocks.deleteAccount).toHaveBeenCalledWith("a2"));
   });
 
@@ -366,42 +400,60 @@ describe("account actions", () => {
     mocks.refreshUsage.mockResolvedValue({ account: null, throttled: true });
     renderList([alice]);
 
+    await user.click(screen.getByRole("button", { name: "Details for alice@example.com" }));
     await user.click(screen.getByRole("button", { name: "Refresh usage for alice@example.com" }));
     expect(mocks.refreshUsage).toHaveBeenCalledWith("a1");
     expect(await screen.findByRole("status")).toHaveTextContent(/try again in a minute/i);
   });
 });
 
-describe("routing mode and adding", () => {
-  it("offers Balance (default) | In order per provider and persists the choice", async () => {
+describe("rotation and adding", () => {
+  it("offers Balance (default) | In order on the card's header line and persists the choice", async () => {
     const user = userEvent.setup();
     renderList([alice, bob]);
 
-    const select = await screen.findByRole("combobox", { name: "Routing" });
+    const select = await screen.findByRole("combobox", { name: "Rotation" });
     expect(select).toHaveValue("balance");
     await user.selectOptions(select, "priority");
 
     await waitFor(() => expect(mocks.upsertStringSetting).toHaveBeenCalledWith("provider.routing.claude", "priority"));
-    expect(screen.getByRole("combobox", { name: "Routing" })).toHaveValue("priority");
+    expect(screen.getByRole("combobox", { name: "Rotation" })).toHaveValue("priority");
   });
 
   it("reads a saved routing mode", async () => {
     mocks.readSetting.mockResolvedValue({ status: "found", value: "priority" });
     renderList([alice, bob]);
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Routing" })).toHaveValue("priority"));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Rotation" })).toHaveValue("priority"));
   });
 
-  it("hides the routing select when a provider has one account", () => {
+  it("hides the rotation select, the grip and the move items when a provider has one account", async () => {
     renderList([alice]);
-    expect(screen.queryByRole("combobox", { name: "Routing" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Rotation" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Reorder / })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Actions for alice@example.com" }));
+    expect(screen.queryByRole("menuitem", { name: "Move up" })).not.toBeInTheDocument();
   });
 
-  it("offers 'Add another account' for sign-in providers and 'Add another key' for keys", () => {
+  it("scopes the add button to its provider: 'Add another Claude account', 'Add another Anthropic key'", () => {
     renderList([alice, key]);
-    const claude = within(screen.getByRole("region", { name: "Claude subscription" }));
+    const claude = within(screen.getByRole("region", { name: "Claude" }));
     const anthropic = within(screen.getByRole("region", { name: "Anthropic API" }));
-    expect(claude.getByRole("button", { name: "Add another account" })).toBeInTheDocument();
-    expect(anthropic.getByRole("button", { name: "Add another key" })).toBeInTheDocument();
+    expect(claude.getByRole("button", { name: "Add another Claude account" })).toBeInTheDocument();
+    expect(anthropic.getByRole("button", { name: "Add another Anthropic key" })).toBeInTheDocument();
+  });
+
+  it("gives every provider its own mark, so no two avatars collide", () => {
+    renderList([
+      alice,
+      key,
+      account({ id: "o", provider: "openrouter", authKind: "api_key", label: "o" }),
+      account({ id: "g", provider: "gemini", authKind: "api_key", label: "g" }),
+      account({ id: "ag", provider: "antigravity", label: "ag" }),
+      account({ id: "cp", provider: "copilot", authKind: "device", label: "cp" }),
+    ]);
+    const marks = screen.getAllByTestId("provider-mark").map((m) => m.getAttribute("data-mark"));
+    expect(new Set(marks).size).toBe(marks.length);
+    expect(marks).not.toContain("fallback");
   });
 
   it("adds another API key through AddProviderAPIKey and reports a duplicate", async () => {
@@ -409,7 +461,8 @@ describe("routing mode and adding", () => {
     mocks.addApiKey.mockResolvedValue({ account: null, created: false });
     renderList([key]);
 
-    await user.click(screen.getByRole("button", { name: "Add another key" }));
+    await user.click(screen.getByRole("button", { name: "Add another Anthropic key" }));
+    expect(screen.getByTestId("connect-panel")).toHaveTextContent("Extra keys are used in turn");
     await user.type(screen.getByLabelText("API key"), "sk-ant-second");
     await user.click(screen.getByRole("button", { name: "Add key" }));
 
@@ -429,21 +482,21 @@ describe("mobile variant", () => {
     const user = userEvent.setup();
     renderList([alice, bob], "mobile");
 
-    expect(within(rowFor("alice@example.com")).getByTestId("status-pill")).toHaveTextContent("Available");
-    expect(within(rowFor("bob@work.example")).getByTestId("status-pill")).toHaveTextContent(/^Limited until /);
+    expect(within(rowFor("alice@example.com")).queryByTestId("account-status")).not.toBeInTheDocument();
+    expect(within(rowFor("bob@work.example")).getByTestId("account-status")).toHaveTextContent(/^Limited: /);
     expect(screen.queryByRole("button", { name: /^Reorder / })).not.toBeInTheDocument();
 
     const menuButton = screen.getByRole("button", { name: "Actions for bob@work.example" });
     expect(menuButton.className).toContain("min-h-[44px]");
     await user.click(menuButton);
-    const moveUp = screen.getByRole("menuitem", { name: "Move up" });
-    expect(moveUp.className).toContain("min-h-[44px]");
-    await user.click(moveUp);
+    // Touch-sized items: the menu sizes every item it holds.
+    expect(screen.getByRole("menu").className).toContain("[&_[role=menuitem]]:min-h-[44px]");
+    await user.click(screen.getByRole("menuitem", { name: "Move up" }));
     await waitFor(() => expect(mocks.reorderAccounts).toHaveBeenCalledWith("claude", ["a2", "a1"]));
   });
 });
 
-describe("the gate (fallback to today's view)", () => {
+describe("the list query", () => {
   function Probe() {
     const view = useProviderAccountsView();
     return <div data-testid="view">{view.status === "ready" ? `ready:${view.accounts.length}` : view.status}</div>;

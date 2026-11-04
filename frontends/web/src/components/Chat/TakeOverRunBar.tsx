@@ -48,7 +48,7 @@ export function TakeOverRunBar({ chat, onReply }: { chat: TakeOverChat; onReply:
       <button
         type="button"
         onClick={onReply}
-        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <MessageSquareReply className="h-4 w-4" aria-hidden="true" />
         Reply to take it over
@@ -77,7 +77,7 @@ export function useAdoptOnSend<Args extends unknown[]>(
       await send(...args);
       if (!shouldAdopt || !chatId) return;
       try {
-        await mutateAsync(chatId);
+        await mutateAsync({ chatId });
       } catch (error) {
         logger.error("[TakeOverRunBar] Adopting after reply failed", { chatId, error });
       }

@@ -39,7 +39,7 @@ vi.mock("../../../hooks/useCloudBillingQueries", () => ({
           priceCents: 4700n,
           displayOrder: 2,
           structuredLimits: {
-            allowedDaemonSizes: ["small", "medium"],
+            allowedDaemonSizes: ["m", "l"],
             includedSmallDaemonHours: 43n,
           },
         },
@@ -49,7 +49,7 @@ vi.mock("../../../hooks/useCloudBillingQueries", () => ({
           priceCents: 2300n,
           displayOrder: 1,
           structuredLimits: {
-            allowedDaemonSizes: ["small"],
+            allowedDaemonSizes: ["m"],
             includedSmallDaemonHours: 20n,
           },
         },
@@ -127,10 +127,10 @@ describe("MobileBillingScreen", () => {
     renderScreen();
 
     expect(
-      screen.getByRole("button", { name: /alpha.*\$23\.00/i }),
+      screen.getByRole("button", { name: /alpha.*\$23\/mo/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /beta.*\$47\.00/i }),
+      screen.getByRole("button", { name: /beta.*\$47\/mo/i }),
     ).toBeInTheDocument();
   });
 

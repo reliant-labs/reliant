@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/daemon"
@@ -46,6 +46,14 @@ func bumpFakeOOMKill(t *testing.T, dir string) {
 	}
 }
 
+// oomExitCommand changes the fake cgroup from the command itself. handleExecRun
+// has already captured its baseline when it starts the child, and the post-exit
+// classification cannot run before the write finishes.
+func oomExitCommand(dir string, code int) string {
+	path := "'" + strings.ReplaceAll(filepath.Join(dir, "memory.events"), "'", "'\"'\"'") + "'"
+	return fmt.Sprintf("printf 'low 0\\nhigh 0\\nmax 0\\noom 1\\noom_kill 1\\n' > %s && exit %d", path, code)
+}
+
 // TestHandleExecRunOOMClassification exercises the exec.run wiring: a
 // SIGKILL-shaped exit (137) coinciding with an oom_kill increment in the
 // (fake) cgroup must yield OOMKilled=true and the actionable message on
@@ -56,15 +64,10 @@ func TestHandleExecRunOOMClassification(t *testing.T) {
 	}
 	dir := fakeCgroup(t, "0")
 
-	// Bump the counter while the command is sleeping, between the pre-exec
-	// snapshot and the post-kill check.
-	go func() {
-		time.Sleep(150 * time.Millisecond)
-		bumpFakeOOMKill(t, dir)
-	}()
-
+	// The child changes the fixture after the handler's pre-exec snapshot,
+	// before exiting: no scheduling race against a sleeping goroutine.
 	payload, _ := json.Marshal(daemon.RunCommandRequest{
-		Command:   "sleep 0.6; exit 137",
+		Command:   oomExitCommand(dir, 137),
 		TimeoutMs: 10_000,
 	})
 	out, err := handleExecRun(context.Background(), payload)
@@ -98,13 +101,8 @@ func TestHandleExecRunOrdinaryFailureNotOOM(t *testing.T) {
 		t.Skip("bash-based test")
 	}
 	dir := fakeCgroup(t, "0")
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		bumpFakeOOMKill(t, dir)
-	}()
-
 	payload, _ := json.Marshal(daemon.RunCommandRequest{
-		Command:   "sleep 0.4; exit 1",
+		Command:   oomExitCommand(dir, 1),
 		TimeoutMs: 10_000,
 	})
 	out, err := handleExecRun(context.Background(), payload)

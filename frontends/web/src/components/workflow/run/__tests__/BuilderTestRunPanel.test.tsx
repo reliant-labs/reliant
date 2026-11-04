@@ -6,7 +6,11 @@
  * asserted is the order of the two calls and the StartChatRequest they build.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -40,16 +44,28 @@ const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
 const getChat = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    workflow: () => ({ listWorkflows, getWorkflow }),
-    preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
-    worktree: () => ({ listWorktrees }),
-    chat: () => ({ startChat, getChat }),
-    daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
-  },
-}));
+// PresetService is reached through connectClient (hooks/preset-queries), so
+// it is answered at the transport by the same fakes.
+beforeEach(() => {
+  setTransport(
+    mockTransport({
+      "ChatService.StartChat": (req: unknown) => startChat(req as never),
+      "ChatService.GetChat": (req: unknown) => getChat(req as never),
+      ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
+      ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+      ...serviceHandlers("ProjectService", { listProjectDaemons }),
+      ...serviceHandlers("DaemonRegistryService", { listDaemons }),
+      // The run form lists workspaces through the generated WorktreeService hooks.
+      ...serviceHandlers("WorktreeService", { listWorktrees }),
+    }),
+  );
+});
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({ currentProject: { id: "proj-1", name: "Forge" }, projects: [] });

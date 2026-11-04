@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 /**
@@ -20,7 +20,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const mocks = vi.hoisted(() => ({
   caps: { cloudDaemons: true },
-  listDaemons: vi.fn(async () => ({ daemons: [] })),
+  listDaemons: vi.fn(async () => ({ daemons: [] as unknown[] })),
   getDaemon: vi.fn(),
   getComputeSubscription: vi.fn(async () => ({})),
   getComputeEligibility: vi.fn(async () => ({
@@ -29,14 +29,17 @@ const mocks = vi.hoisted(() => ({
     hasActiveSubscription: true,
     grantedSmallDaemonSecondsRemaining: 0,
     planName: 'Compute Small',
-    allowedDaemonSizes: ['small'],
+    allowedDaemonSizes: ['m'],
   })),
-  listDaemonTokens: vi.fn(async () => []),
   suspendDaemon: vi.fn(async () => {}),
   resumeEnvironment: vi.fn(async () => {}),
+  renameMachine: vi.fn(async (_req: { daemonId: string; name: string }) => ({})),
   navigate: vi.fn(),
 }))
 
+// The Add machine sheet (billing checkout, catalog) is not under test here.
+vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
+vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
 vi.mock('@/services/controlPlane/billing', () => ({
   getComputeEligibility: mocks.getComputeEligibility,
 }))
@@ -81,7 +84,6 @@ vi.mock('@/services/controlPlane/environments', () => ({
   portAccessRulesQueryKey: (daemonId: string) => ['cp', 'ports', daemonId],
   listDaemons: mocks.listDaemons,
   getComputeSubscription: mocks.getComputeSubscription,
-  listDaemonTokens: mocks.listDaemonTokens,
   getDaemon: mocks.getDaemon,
   createEnvironment: vi.fn(),
   deleteDaemon: vi.fn(),
@@ -90,23 +92,23 @@ vi.mock('@/services/controlPlane/environments', () => ({
   listPortAccessRules: vi.fn(async () => []),
   setPortAccess: vi.fn(),
   removePortAccess: vi.fn(),
-  createDaemonToken: vi.fn(),
-  revokeDaemonToken: vi.fn(),
-}))
-
-// The machine LIST comes from reliant's daemon registry
-// (docs/design/one-daemon-list.md). It is fed from the same mocks.listDaemons
-// the tests already drive, so their setup calls keep working unchanged.
-vi.mock('@/api/grpc-client', () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: async () => mocks.listDaemons(),
-    }),
-  },
 }))
 
 import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
+import { setTransport } from '@/lib/connect'
+import { daemonRegistryTransport } from '@/test/daemonRegistry'
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() =>
+  setTransport(
+    daemonRegistryTransport({
+      listDaemons: () => mocks.listDaemons(),
+      renameMachine: (req: { daemonId: string; name: string }) => mocks.renameMachine(req),
+    }),
+  ),
+)
+afterEach(() => setTransport(null))
 
 const ACTIVE = DaemonStatus.ACTIVE
 const SUSPENDED = DaemonStatus.SUSPENDED
@@ -126,7 +128,7 @@ function cloudDaemon(over: Record<string, unknown> = {}) {
     status: ACTIVE,
     lifecyclePhase: PHASE_READY,
     platform: '',
-    size: 'medium',
+    size: 'l',
     lastStatusMessage: '',
     ...over,
   }
@@ -275,7 +277,7 @@ describe('machine detail — status presentation', () => {
 
     const header = await screen.findByTestId('machine-detail-header')
     expect(
-      within(header).getAllByText(/disconnected/i),
+      within(header).getAllByText(/^offline$/i),
     ).toHaveLength(1)
   })
 
@@ -310,5 +312,40 @@ describe('machine detail — status presentation', () => {
 
     expect(await screen.findByText(/^connected at$/i)).toBeInTheDocument()
     expect(screen.queryByText(/last connected/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('machine detail — rename', () => {
+  beforeEach(() => {
+    mocks.caps.cloudDaemons = true
+    vi.clearAllMocks()
+  })
+
+  // The header's name is the inline rename control: the pencil swaps it for
+  // a field, a save renames by id, and the header shows the new name.
+  it('renames the machine from its header', async () => {
+    const user = userEvent.setup()
+    showMachine(cloudDaemon({ name: 'cloud-2xl' }))
+    renderDetail()
+
+    const header = await screen.findByTestId('machine-detail-header')
+    await user.click(within(header).getByRole('button', { name: 'Rename cloud-2xl' }))
+    const input = within(header).getByRole('textbox', { name: 'Machine name' })
+    mocks.listDaemons.mockResolvedValue({ daemons: [cloudDaemon({ name: 'big-box' })] })
+    await user.clear(input)
+    await user.type(input, 'big-box{Enter}')
+
+    await waitFor(() => expect(mocks.renameMachine).toHaveBeenCalledTimes(1))
+    expect(mocks.renameMachine.mock.calls[0][0]).toMatchObject({ daemonId: 'd-1', name: 'big-box' })
+    expect(await within(header).findByRole('heading', { name: 'big-box' })).toBeInTheDocument()
+  })
+
+  it('offers no rename without a control plane, which owns the name', async () => {
+    mocks.caps.cloudDaemons = false
+    showMachine(selfHostedDaemon({ name: 'laptop' }))
+    renderDetail()
+
+    const header = await screen.findByTestId('machine-detail-header')
+    expect(within(header).queryByRole('button', { name: /^rename/i })).not.toBeInTheDocument()
   })
 })

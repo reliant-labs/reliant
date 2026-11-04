@@ -1,13 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { planGrpc } from "../api/plan-grpc";
-import {
-  taskGrpc,
-  type Task as V2Task,
-  TaskStatus as ProtoTaskStatus,
-} from "../api/task-grpc";
+/**
+ * A chat's plan and its tasks: PlanService and TaskService on the generated
+ * hooks and keys, kept fresh by the chat stream's `plan_tasks` refetch.
+ *
+ * The cache holds what the generated hooks fetch (GetPlanByChatIdResponse,
+ * ListTasksResponse); the panels read TaskItem, a view of a proto Task with
+ * its status as a string, mapped from that cache entry.
+ */
 
-// Re-export types that consumers need
-export type { Plan } from "../api/plan-grpc";
+import { TaskStatus as ProtoTaskStatus, type ListTasksResponse, type Task } from "../gen/reliant/v1/task_pb";
+import { queryClient } from "../lib/query-client";
+import { planServiceKeys, useGetPlanByChatId } from "./plan-service-hooks_gen";
+import { taskServiceKeys, useListTasks } from "./task-service-hooks_gen";
 
 export type TaskStatus =
   | "pending"
@@ -29,16 +32,6 @@ export interface TaskItem {
   planId?: string;
   position?: number;
 }
-
-// ── Key factory ─────────────────────────────────────────────────────────────
-
-export const taskKeys = {
-  all: ["tasks"] as const,
-  plans: () => [...taskKeys.all, "plans"] as const,
-  plan: (chatId: string) => [...taskKeys.plans(), chatId] as const,
-  lists: () => [...taskKeys.all, "list"] as const,
-  list: (planId: string) => [...taskKeys.lists(), planId] as const,
-};
 
 // ── Proto mapping ───────────────────────────────────────────────────────────
 
@@ -64,69 +57,38 @@ function taskStatusFromProto(status: ProtoTaskStatus): TaskStatus {
   }
 }
 
-function taskStatusToProto(status?: TaskStatus): ProtoTaskStatus | undefined {
-  if (!status) return undefined;
-  switch (status) {
-    case "pending":
-      return ProtoTaskStatus.PENDING;
-    case "in_progress":
-      return ProtoTaskStatus.IN_PROGRESS;
-    case "completed":
-      return ProtoTaskStatus.COMPLETED;
-    case "failed":
-      return ProtoTaskStatus.FAILED;
-    case "blocked":
-      return ProtoTaskStatus.BLOCKED;
-    case "skipped":
-      return ProtoTaskStatus.SKIPPED;
-    case "cancelled":
-      return ProtoTaskStatus.CANCELLED;
-    default:
-      return ProtoTaskStatus.PENDING;
-  }
-}
-
-function v2TaskToTaskItem(task: V2Task): TaskItem {
+function taskItemFromProto(task: Task): TaskItem {
   return {
     id: task.id,
     title: task.title,
     status: taskStatusFromProto(task.status),
     description: task.description || undefined,
-    updatedAt: task.updated_at,
-    createdAt: task.created_at,
-    parentId: task.parent_task_id || undefined,
-    planId: task.plan_id,
+    updatedAt: task.updatedAt,
+    createdAt: task.createdAt,
+    parentId: task.parentTaskId || undefined,
+    planId: task.planId,
     position: task.position,
   };
 }
 
 // ── Query hooks ─────────────────────────────────────────────────────────────
 
-/** Fetch the plan for a chat. Returns null when no plan exists. */
+/** The plan for a chat (`data.plan`, unset when the chat has none). */
 export function usePlanForChat(chatId?: string | null) {
-  return useQuery({
-    queryKey: taskKeys.plan(chatId!),
-    queryFn: () => planGrpc.getByChatId(chatId!),
-    enabled: !!chatId,
-    staleTime: 30_000,
-  });
+  return useGetPlanByChatId({ chatId: chatId ?? "" }, { enabled: !!chatId });
 }
 
-/** Fetch all tasks for a chat (resolves plan automatically). */
+/**
+ * Every task of a chat's plan, as TaskItems (resolves the plan first). The
+ * query is the generated useListTasks; `data` is its tasks, mapped.
+ */
 export function useTasksForChat(chatId?: string | null) {
-  const planQuery = usePlanForChat(chatId);
-  const planId = planQuery.data?.id;
-
-  return useQuery({
-    queryKey: taskKeys.list(planId!),
-    queryFn: async () => {
-      const { tasks } = await taskGrpc.list(planId!);
-      return tasks.map(v2TaskToTaskItem);
-    },
-    enabled: !!planId,
-    staleTime: 30_000,
-  });
+  const planId = usePlanForChat(chatId).data?.plan?.id;
+  return useListTasks({ planId }, { enabled: !!planId, select: taskItemsOf });
 }
+
+// Module-level, so React Query re-maps only when the response changes.
+const taskItemsOf = (response: ListTasksResponse) => response.tasks.map(taskItemFromProto);
 
 /** Derived stats from tasks for a chat. */
 export function useTaskStats(chatId?: string | null) {
@@ -141,55 +103,15 @@ export function useTaskStats(chatId?: string | null) {
   return { total, completed, inProgress, pending, percent };
 }
 
-// ── Mutation hooks ──────────────────────────────────────────────────────────
+// ── Stream ──────────────────────────────────────────────────────────────────
 
-export function useCreateTask() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (vars: {
-      plan_id: string;
-      title: string;
-      description?: string;
-    }) => taskGrpc.create(vars),
-    onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: taskKeys.list(vars.plan_id) });
-    },
-  });
-}
-
-export function useUpdateTask() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (vars: {
-      taskId: string;
-      planId: string;
-      updates: {
-        title?: string;
-        description?: string;
-        status?: TaskStatus;
-        position?: number;
-      };
-    }) =>
-      taskGrpc.update(vars.taskId, {
-        ...vars.updates,
-        status: taskStatusToProto(vars.updates.status),
-      }),
-    onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: taskKeys.list(vars.planId) });
-    },
-  });
-}
-
-export function useDeleteTask() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (vars: { taskId: string; planId: string }) =>
-      taskGrpc.delete(vars.taskId),
-    onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: taskKeys.list(vars.planId) });
-    },
-  });
+/**
+ * The chat stream's `plan_tasks` refetch: the server emits it whenever a
+ * chat's plan or its tasks change (the plan/task tools, PlanService writes).
+ * It carries no payload, so it marks both services' reads stale; only the
+ * mounted ones refetch.
+ */
+export function invalidatePlanTasks(): void {
+  void queryClient.invalidateQueries({ queryKey: planServiceKeys.all });
+  void queryClient.invalidateQueries({ queryKey: taskServiceKeys.all });
 }

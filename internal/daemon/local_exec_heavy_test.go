@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/hostslot"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 )
 
@@ -217,6 +218,7 @@ func TestRunCommand_LightCommandNeverWaits(t *testing.T) {
 }
 
 func TestStartBackground_HeavyCommandQueuesWithoutBlocking(t *testing.T) {
+	testkit.Slow(t, "runs real background shell commands")
 	c, slots := oneSlotClient(t)
 	release := holdSlot(t, c)
 

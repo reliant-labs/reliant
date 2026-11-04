@@ -7,6 +7,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/validation"
 )
 
 // TriggerRun is what one declared trigger does with one sample event: whether
@@ -132,6 +133,11 @@ func DryRunTrigger(wt *reliantv1.WorkflowTrigger, workflowInputs map[string]*rel
 			run.InputErrors = append(run.InputErrors, ierr.Error())
 		} else {
 			run.Inputs = inputs
+			// What a firing of this event would be refused for: the values
+			// against the workflow's inputs, by the launch's own rule.
+			for _, problem := range validation.ValidateTriggerInputValues(workflowInputs, inputs, nil) {
+				run.InputErrors = append(run.InputErrors, "inputs: "+problem)
+			}
 		}
 	}
 	if key := wt.GetDedupeKey(); key != "" {

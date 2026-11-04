@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -32,7 +33,19 @@ service ConnectionService {
   rpc GetConnection(GetConnectionRequest) returns (GetConnectionResponse) {}
 
   // CreateApiKeyConnection saves a pasted API key or basic credential.
-  rpc CreateApiKeyConnection(CreateApiKeyConnectionRequest) returns (CreateApiKeyConnectionResponse) {}
+  rpc CreateApiKeyConnection(CreateApiKeyConnectionRequest) returns (CreateApiKeyConnectionResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "create"
+        target: {
+          kind: "connection"
+          id: "response.connection.id"
+          label: "response.connection.name"
+        }
+        detail: ["integration_id"]
+      }
+    };
+  }
 
   // StartOAuth begins an authorization-code flow bound to the caller and
   // returns the provider URL to send the user to. The provider redirects to
@@ -40,21 +53,64 @@ service ConnectionService {
   // code back to the client: a web app's /connections/oauth/callback route on
   // the request's Origin (which must be one this deployment serves), or a
   // desktop app's loopback_redirect.
-  rpc StartOAuth(StartOAuthRequest) returns (StartOAuthResponse) {}
+  rpc StartOAuth(StartOAuthRequest) returns (StartOAuthResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "OAuth handshake in flight: nothing is stored until CompleteOAuth records the connection"}
+    };
+  }
 
   // CompleteOAuth finishes a flow with the code and state the callback
   // relayed. Only the user who started the flow can finish it.
-  rpc CompleteOAuth(CompleteOAuthRequest) returns (CompleteOAuthResponse) {}
+  rpc CompleteOAuth(CompleteOAuthRequest) returns (CompleteOAuthResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "connect"
+        target: {
+          kind: "connection"
+          id: "response.connection.id"
+          label: "response.connection.name"
+        }
+        detail: ["response.connection.integration_id"]
+      }
+    };
+  }
 
   // TestConnection runs the integration's probe against the live credential
   // and records the account label it identifies.
-  rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse) {}
+  rpc TestConnection(TestConnectionRequest) returns (TestConnectionResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "probes the live credential; refreshing the account label it detects is bookkeeping, not a change a person made"}
+    };
+  }
 
-  rpc RenameConnection(RenameConnectionRequest) returns (RenameConnectionResponse) {}
+  rpc RenameConnection(RenameConnectionRequest) returns (RenameConnectionResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "rename"
+        target: {
+          kind: "connection"
+          id: "id"
+          label: "name"
+        }
+      }
+    };
+  }
 
   // SetDefaultConnection makes this the connection used when a workflow names
   // only the integration.
-  rpc SetDefaultConnection(SetDefaultConnectionRequest) returns (SetDefaultConnectionResponse) {}
+  rpc SetDefaultConnection(SetDefaultConnectionRequest) returns (SetDefaultConnectionResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_default"
+        target: {
+          kind: "connection"
+          id: "id"
+          label: "response.connection.name"
+        }
+        detail: ["response.connection.integration_id"]
+      }
+    };
+  }
 
   // DeleteConnection revokes at the provider where an API exists (best
   // effort), then soft-deletes the row and destroys its ciphertext.

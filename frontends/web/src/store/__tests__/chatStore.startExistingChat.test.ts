@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ContentBlockType,
   MessageRole,
@@ -7,20 +7,8 @@ import {
 import type { Message } from "../../types/chat";
 import type { ChatUpdate } from "../../types/streaming";
 
-vi.mock("../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../api/client")>(
-    "../../api/client",
-  );
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      chatsV2: { ...actual.api.chatsV2, start: vi.fn() },
-    },
-  };
-});
-
-import { api } from "../../api/client";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { useChatStore } from "../chatStore";
 import { useProjectStore } from "../projectStore";
 import {
@@ -29,7 +17,12 @@ import {
   setMessagesInCache,
 } from "../../hooks/message-queries";
 
-const start = vi.mocked(api.chatsV2.start);
+/** The fake StartChat: `start(request)` answers the chat it started. */
+const start = vi.fn();
+beforeEach(() =>
+  setTransport(mockTransport({ "ChatService.StartChat": async (req: unknown) => ({ chat: await start(req) }) })),
+);
+afterEach(() => setTransport(null));
 
 const inherited = {
   id: "inherited-1",
@@ -110,8 +103,8 @@ describe("startExistingChat", () => {
     await useChatStore.getState().startExistingChat("branch-1", "hi");
 
     const request = start.mock.calls[0][0];
-    expect(request.chat_id).toBe("branch-1");
-    expect(request.project_id).toBeUndefined();
+    expect(request.chatId).toBe("branch-1");
+    expect(request.projectId).toBe("");
   });
 
   it("startChat still replaces the (empty) cache and sends the selected project", async () => {
@@ -119,7 +112,7 @@ describe("startExistingChat", () => {
 
     await useChatStore.getState().startChat(undefined, "brand new");
 
-    expect(start.mock.calls[0][0].project_id).toBe("selected-project");
+    expect(start.mock.calls[0][0].projectId).toBe("selected-project");
     expect(getMessagesFromCache("branch-1")).toHaveLength(1);
   });
 });

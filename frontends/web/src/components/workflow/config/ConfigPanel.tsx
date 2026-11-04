@@ -1,5 +1,5 @@
 import { useCallback, useState, useEffect, useRef, useMemo } from "react";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { Check, X, Info, ChevronDown, ChevronRight } from "lucide-react";
 import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import type { ProtoFieldSchema } from "../../../types/workflowFieldSchema";
@@ -27,7 +27,7 @@ import {
   getStepThread,
 } from "../../../types/workflow";
 import { ConfigurationPanel } from "../ConfigurationPanel";
-import { workflowGrpc } from "../../../api/workflow-grpc";
+import { fetchWorkflow } from "../../../hooks/workflow-queries";
 import { useProjectStore } from "../../../store/projectStore";
 import { directCel, projectConfigLiteral } from "../../../lib/celAdapter";
 import { SaveMessageConfigEditor } from "../SaveMessageConfigEditor";
@@ -37,7 +37,7 @@ import { RunStepConfig } from "./RunStepConfig";
 import { ActionStepConfig } from "./ActionStepConfig";
 import { IntegrationActionConfig } from "./IntegrationActionConfig";
 import { getActionUses, isIntegrationActionStep } from "../../../lib/actionNodeArgs";
-import { useCatalogEntry } from "../../../hooks/connection-queries";
+import { useCatalogEntry } from "../../../hooks/catalog-queries";
 import { CELCurrentNodeProvider } from "../CELCompletionContext";
 import { WorkflowStepConfig } from "./WorkflowStepConfig";
 import { JoinStepConfig } from "./JoinStepConfig";
@@ -50,11 +50,13 @@ import { ConfigPanelTabBar, type ConfigTab } from "./ConfigPanelTabBar";
 import { useStepRun } from "../run/BuilderRunContext";
 import { StepRunFailureBanner, StepRunPanel } from "../run/StepRunPanel";
 
-import { getCatalogClient } from "../../../api/grpc-client";
+import { useListNodes } from "../../../hooks/catalog-service-hooks_gen";
 import type { NodeInfo } from "../../../gen/reliant/v1/catalog_pb";
 import { withWorkflowArgs, withLoopArgs, withRouterArgs } from "../../../types/workflow";
 import type { ConfigurationPanelAccent } from "../ConfigurationPanel";
 import { useWorkflowMutations } from "../WorkflowMutationContext";
+
+const NO_NODES: NodeInfo[] = [];
 
 interface ConfigPanelProps {
   step: Step;
@@ -164,8 +166,11 @@ export function ConfigPanel({
     [mutations],
   );
 
-  const [catalogNodes, setCatalogNodes] = useState<NodeInfo[]>([]);
-  const [catalogLoading, setCatalogLoading] = useState(true);
+  // Catalog nodes for output fields. Shared with ActionStepConfig via props,
+  // and with every other ListNodes reader through the generated entry.
+  const catalogQuery = useListNodes({});
+  const catalogNodes = catalogQuery.data?.nodes ?? NO_NODES;
+  const catalogLoading = catalogQuery.isLoading;
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = currentProject?.id;
 
@@ -280,19 +285,6 @@ export function ConfigPanel({
   const integrationUses = isIntegrationActionStep(step) ? getActionUses(step) : "";
   const integrationEntry = useCatalogEntry(integrationUses && !integrationUses.includes("{{") ? integrationUses : undefined).data;
 
-  // Fetch catalog nodes for output fields. Shared with ActionStepConfig via
-  // props so we don't fire two identical listNodes RPCs per panel open.
-  useEffect(() => {
-    let cancelled = false;
-    const client = getCatalogClient();
-    setCatalogLoading(true);
-    client.listNodes({})
-      .then((res) => { if (!cancelled) setCatalogNodes(res.nodes || []); })
-      .catch(console.error)
-      .finally(() => { if (!cancelled) setCatalogLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
-
   // Fetch referenced workflow def for output resolution
   const [refWorkflowOutputs, setRefWorkflowOutputs] = useState<Record<string, string> | undefined>();
 
@@ -304,7 +296,7 @@ export function ConfigPanel({
     if (!projectId || !stepRef) { setRefWorkflowOutputs(undefined); return; }
 
     let cancelled = false;
-    workflowGrpc.getWorkflow(projectId, { name: stepRef }).then((res) => {
+    fetchWorkflow(projectId, { name: stepRef }).then((res) => {
       if (!cancelled) {
         setRefWorkflowOutputs(res.workflow?.outputs ?? undefined);
       }
@@ -492,7 +484,7 @@ export function ConfigPanel({
               className={`cpv2-field-input flex-1 font-mono ${idError ? "!border-destructive" : ""}`}
               placeholder="node-id"
             />
-            <Tooltip content="Save" placement="bottom" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Save" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
               type="button"
               onClick={handleIdSave}
@@ -500,7 +492,7 @@ export function ConfigPanel({
               <Check />
             </button>
 </Tooltip>
-            <Tooltip content="Cancel" placement="bottom" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Cancel" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
               type="button"
               onClick={handleIdCancel}

@@ -7,9 +7,11 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -28,9 +30,9 @@ const (
 type DaemonInstanceConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unset: the instance's own directory under ~/.reliant/instances, derived
-	// from the instance key. Containers set it to the mounted volume
-	// (docker-compose.yml, the workspace operator), where derivation would put
-	// the daemon's state on the ephemeral filesystem.
+	// from the instance key. Containers set it to the mounted volume (the
+	// workspace operator's pods), where derivation would put the daemon's state
+	// on the ephemeral filesystem.
 	DataDir string `protobuf:"bytes,1,opt,name=data_dir,json=dataDir,proto3" json:"data_dir,omitempty"`
 	// Unset: the account of the stored credential, else the default instance.
 	Account string `protobuf:"bytes,2,opt,name=account,proto3" json:"account,omitempty"`
@@ -103,8 +105,9 @@ type DaemonConfig struct {
 	GatewayUrl string `protobuf:"bytes,2,opt,name=gateway_url,json=gatewayUrl,proto3" json:"gateway_url,omitempty"`
 	// The local daemon gateway's daemon port: the port `reliant server gateway`
 	// listens for daemons on, under the same TOOLS_DAEMON_PORT the gateway
-	// reads (GatewayConfig). Electron and scripts/dev.sh export it to both. It
-	// is dialled only when no gateway URL is known. Not the port THIS daemon
+	// reads (GatewayConfig). Electron and the dev stack (control-plane's
+	// `forge env up dev`) export it to both. It is dialled only when no gateway
+	// URL is known. Not the port THIS daemon
 	// listens on: that is listen_port.
 	GatewayPort int32 `protobuf:"varint,3,opt,name=gateway_port,json=gatewayPort,proto3" json:"gateway_port,omitempty"`
 	// Unset: TLS when a cert and key are given or the URL is https, else h2c.
@@ -163,8 +166,50 @@ type DaemonConfig struct {
 	// heavyjob.DefaultCommands (a test pins the two equal); an empty list
 	// ("," in the env, or --config) declares nothing heavy by pattern.
 	HeavyCommands []string `protobuf:"bytes,22,rep,name=heavy_commands,json=heavyCommands,proto3" json:"heavy_commands,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The CPUs each command run under a heavy slot may use, exported to it as
+	// GOMAXPROCS and UV_THREADPOOL_SIZE unless it sets its own
+	// (internal/heavyjob). 0 (unset) derives it from the slot pool:
+	// max(2, 2*CPUs/slots), 8 on 32 CPUs and 8 slots.
+	HeavyShare int32 `protobuf:"varint,28,opt,name=heavy_share,json=heavyShare,proto3" json:"heavy_share,omitempty"`
+	// The threads (processes count as one each) each command the daemon runs
+	// may have at once, where Linux cgroups allow a limit per command
+	// (internal/proctree): a Go or Node process has about one thread per CPU.
+	// 0 (unset) derives it from the machine: 1024 + 64 per CPU, at most half
+	// the limit all commands share, 3008 on 31 CPUs. A command that reaches it
+	// is told so, naming this setting.
+	CommandThreads int32 `protobuf:"varint,29,opt,name=command_threads,json=commandThreads,proto3" json:"command_threads,omitempty"`
+	// How long a background process an agent started may sit idle — no
+	// output, and no agent read, waited on, listed or killed it — once the
+	// chat that started it has no run in progress, before the daemon stops it
+	// (SIGTERM to its process group, SIGKILL after a grace period). A process
+	// started with keep_alive is exempt. Processes of an archived workspace
+	// are stopped whatever this says. 0 turns idle stopping off.
+	BackgroundIdleReap *durationpb.Duration `protobuf:"bytes,30,opt,name=background_idle_reap,json=backgroundIdleReap,proto3" json:"background_idle_reap,omitempty"`
+	// Let the fetch tool reach this machine's own localhost and private network
+	// (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, fc00::/7, ...). Off by default:
+	// fetch is usually auto-approved and a fetched page can steer the next fetch,
+	// so a default-open policy would be an SSRF into the user's own environment.
+	// Link-local and cloud-metadata addresses (169.254.0.0/16, fe80::/10, the
+	// metadata hostnames, fd00:ec2::254, ...) are refused whatever this says.
+	// A managed daemon ignores it: a workspace pod's network is the platform's,
+	// not the user's. A refused fetch names this setting in its error.
+	FetchAllowPrivateNetwork bool `protobuf:"varint,23,opt,name=fetch_allow_private_network,json=fetchAllowPrivateNetwork,proto3" json:"fetch_allow_private_network,omitempty"`
+	// Egress limits for the tools this daemon runs that dial a third party
+	// (fetch, websearch, sourcegraph, integration actions), so one daemon
+	// cannot hammer a site, or exhaust a shared NAT's ports, on its own. A
+	// refused call is a non-fatal tool result ("rate limited, retry after Ns").
+	// 0 (unset) takes the daemon's default: generous on a machine whose traffic
+	// leaves from the user's own address. A managed daemon ignores all four and
+	// always runs the platform defaults: its traffic leaves through a shared
+	// NAT. This is an abuse brake for a well-behaved daemon, not a security
+	// boundary; the daemon is user-controlled, and the server-side NAT
+	// protections are the backstop.
+	EgressUserPerMinute     int32 `protobuf:"varint,24,opt,name=egress_user_per_minute,json=egressUserPerMinute,proto3" json:"egress_user_per_minute,omitempty"`
+	EgressUserBurst         int32 `protobuf:"varint,25,opt,name=egress_user_burst,json=egressUserBurst,proto3" json:"egress_user_burst,omitempty"`
+	EgressUserMaxConcurrent int32 `protobuf:"varint,26,opt,name=egress_user_max_concurrent,json=egressUserMaxConcurrent,proto3" json:"egress_user_max_concurrent,omitempty"`
+	EgressHostMaxConcurrent int32 `protobuf:"varint,27,opt,name=egress_host_max_concurrent,json=egressHostMaxConcurrent,proto3" json:"egress_host_max_concurrent,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *DaemonConfig) Reset() {
@@ -335,6 +380,62 @@ func (x *DaemonConfig) GetHeavyCommands() []string {
 		return x.HeavyCommands
 	}
 	return nil
+}
+
+func (x *DaemonConfig) GetHeavyShare() int32 {
+	if x != nil {
+		return x.HeavyShare
+	}
+	return 0
+}
+
+func (x *DaemonConfig) GetCommandThreads() int32 {
+	if x != nil {
+		return x.CommandThreads
+	}
+	return 0
+}
+
+func (x *DaemonConfig) GetBackgroundIdleReap() *durationpb.Duration {
+	if x != nil {
+		return x.BackgroundIdleReap
+	}
+	return nil
+}
+
+func (x *DaemonConfig) GetFetchAllowPrivateNetwork() bool {
+	if x != nil {
+		return x.FetchAllowPrivateNetwork
+	}
+	return false
+}
+
+func (x *DaemonConfig) GetEgressUserPerMinute() int32 {
+	if x != nil {
+		return x.EgressUserPerMinute
+	}
+	return 0
+}
+
+func (x *DaemonConfig) GetEgressUserBurst() int32 {
+	if x != nil {
+		return x.EgressUserBurst
+	}
+	return 0
+}
+
+func (x *DaemonConfig) GetEgressUserMaxConcurrent() int32 {
+	if x != nil {
+		return x.EgressUserMaxConcurrent
+	}
+	return 0
+}
+
+func (x *DaemonConfig) GetEgressHostMaxConcurrent() int32 {
+	if x != nil {
+		return x.EgressHostMaxConcurrent
+	}
+	return 0
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.
@@ -522,14 +623,14 @@ var File_reliant_config_v1_daemon_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/daemon_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xe5\x03\n" +
+	"%reliant/config/v1/daemon_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xe5\x03\n" +
 	"\x14DaemonInstanceConfig\x12\x8a\x01\n" +
 	"\bdata_dir\x18\x01 \x01(\tBo\x82\xce\x18k\n" +
 	"\x0fDAEMON_DATA_DIR\x12\bdata-dir*NData directory (default: this instance's directory under ~/.reliant/instances)R\adataDir\x12\x96\x01\n" +
 	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
 	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
-	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\x81\x18\n" +
+	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xf6$\n" +
 	"\fDaemonConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance\x12\x9a\x01\n" +
 	"\vgateway_url\x18\x02 \x01(\tBy\x82\xce\x18u\n" +
@@ -576,7 +677,24 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x0edisk_refuse_at\x18\x15 \x01(\tBr\x82\xce\x18n\n" +
 	"\x16RELIANT_DISK_REFUSE_AT*TDisk use (percent, or off) past which the daemon refuses heavy commands (default 95)R\fdiskRefuseAt\x12\xe4\x02\n" +
 	"\x0eheavy_commands\x18\x16 \x03(\tB\xbc\x02\x82\xce\x18\xb7\x02\n" +
-	"\x16RELIANT_HEAVY_COMMANDS\x1a\xda\x01go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build*@Comma-separated commands queued behind the machine's heavy slotsR\rheavyCommands:\x1c\xca\xc1\x18\x18\n" +
+	"\x16RELIANT_HEAVY_COMMANDS\x1a\xda\x01go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build*@Comma-separated commands queued behind the machine's heavy slotsR\rheavyCommands\x12\xa8\x01\n" +
+	"\vheavy_share\x18\x1c \x01(\x05B\x86\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18{\n" +
+	"\x13RELIANT_HEAVY_SHARE*dCPUs each heavy-slot command may use, as GOMAXPROCS and UV_THREADPOOL_SIZE (0: max(2, 2*CPUs/slots))R\n" +
+	"heavyShare\x12\xb6\x01\n" +
+	"\x0fcommand_threads\x18\x1d \x01(\x05B\x8c\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x80\x01\n" +
+	"\x17RELIANT_COMMAND_THREADS*eThreads each command may have at once (0: 1024 + 64 per CPU, at most half of what all commands share)R\x0ecommandThreads\x12\xde\x01\n" +
+	"\x14background_idle_reap\x18\x1e \x01(\v2\x19.google.protobuf.DurationB\x90\x01\xbaH\x05\xaa\x01\x022\x00\x82\xce\x18\x83\x01\n" +
+	"\x1cRELIANT_BACKGROUND_IDLE_REAP\x1a\x024h*_How long a finished chat's background process may sit idle before the daemon stops it (0 = off)R\x12backgroundIdleReap\x12\xf3\x01\n" +
+	"\x1bfetch_allow_private_network\x18\x17 \x01(\bB\xb3\x01\x82\xce\x18\xae\x01\n" +
+	"#RELIANT_FETCH_ALLOW_PRIVATE_NETWORK*\x86\x01Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)R\x18fetchAllowPrivateNetwork\x12\xc9\x01\n" +
+	"\x16egress_user_per_minute\x18\x18 \x01(\x05B\x93\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x87\x01\n" +
+	"%RELIANT_DAEMON_EGRESS_USER_PER_MINUTE*^Egress tool calls per minute this daemon may make (0: default 600; managed daemons: 60, fixed)R\x13egressUserPerMinute\x12\xb2\x01\n" +
+	"\x11egress_user_burst\x18\x19 \x01(\x05B\x85\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18z\n" +
+	" RELIANT_DAEMON_EGRESS_USER_BURST*VEgress burst this daemon may make at once (0: default 100; managed daemons: 20, fixed)R\x0fegressUserBurst\x12\xcd\x01\n" +
+	"\x1aegress_user_max_concurrent\x18\x1a \x01(\x05B\x8f\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x83\x01\n" +
+	")RELIANT_DAEMON_EGRESS_USER_MAX_CONCURRENT*VEgress calls this daemon may have in flight (0: default 32; managed daemons: 6, fixed)R\x17egressUserMaxConcurrent\x12\xe6\x01\n" +
+	"\x1aegress_host_max_concurrent\x18\x1b \x01(\x05B\xa8\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x9c\x01\n" +
+	")RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT*oEgress calls this daemon may have in flight to one destination host (0: default 32; managed daemons: 16, fixed)R\x17egressHostMaxConcurrent:\x1c\xca\xc1\x18\x18\n" +
 	"\areliant\x12\x06daemon\x12\x05start\"x\n" +
 	"\x12DaemonStatusConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance:\x1d\xca\xc1\x18\x19\n" +
@@ -612,17 +730,19 @@ var file_reliant_config_v1_daemon_config_proto_goTypes = []any{
 	(*DaemonStopConfig)(nil),     // 3: reliant.config.v1.DaemonStopConfig
 	(*DaemonLogsConfig)(nil),     // 4: reliant.config.v1.DaemonLogsConfig
 	(*DaemonRegisterConfig)(nil), // 5: reliant.config.v1.DaemonRegisterConfig
+	(*durationpb.Duration)(nil),  // 6: google.protobuf.Duration
 }
 var file_reliant_config_v1_daemon_config_proto_depIdxs = []int32{
 	0, // 0: reliant.config.v1.DaemonConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	0, // 1: reliant.config.v1.DaemonStatusConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	0, // 2: reliant.config.v1.DaemonStopConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	0, // 3: reliant.config.v1.DaemonLogsConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	6, // 1: reliant.config.v1.DaemonConfig.background_idle_reap:type_name -> google.protobuf.Duration
+	0, // 2: reliant.config.v1.DaemonStatusConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
+	0, // 3: reliant.config.v1.DaemonStopConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
+	0, // 4: reliant.config.v1.DaemonLogsConfig.instance:type_name -> reliant.config.v1.DaemonInstanceConfig
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_daemon_config_proto_init() }

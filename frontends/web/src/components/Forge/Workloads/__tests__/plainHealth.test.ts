@@ -137,6 +137,9 @@ describe("a runtime error line in words", () => {
   it("replaces the runtime's reason names where they stand, and scrubs", () => {
     expect(plainErrorText("container worker OOMKilled: exceeded its 1Gi memory limit (14 restarts)")).toBe("container worker ran out of memory: exceeded its 1Gi memory limit (14 restarts)");
     expect(plainErrorText("ImagePullBackOff for 10.1.2.3:443")).toBe("can't pull its image for localhost:443");
+    // The reason is an adjective in the server's sentence: the phrase around it goes, not just the word.
+    expect(plainErrorText("Container api was OOMKilled")).toBe("Container api ran out of memory");
+    expect(plainErrorText("Container api is in CrashLoopBackOff")).toBe("Container api keeps restarting");
     expect(plainErrorText("0/3 nodes: FailedScheduling")).toBe("0/3 nodes: waiting for capacity");
     expect(plainErrorText("CrashLoopBackOff and ErrImagePull")).toBe("keeps restarting and can't pull its image");
     expect(plainErrorText("nothing to change")).toBe("nothing to change");

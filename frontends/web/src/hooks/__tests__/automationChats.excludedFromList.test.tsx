@@ -16,19 +16,16 @@
  *     exists" and cleared it, dropping the user out of the chat they had open.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { ChatSchema, GetChatResponseSchema, ListChatsResponseSchema } from "@/gen/reliant/v1/chat_pb";
 
+// The server's ListChats and GetChat, answered at the transport (beforeEach).
 const listChats = vi.fn();
 const getChat = vi.fn();
-
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { chat: () => ({ listChats, getChat }) },
-}));
 
 // ── Stores used by useWorkspaceRestore, as plain recorders ────────────────
 const selectChat = vi.fn();
@@ -67,14 +64,15 @@ vi.mock("@/store/projectStore", () => {
 
 vi.mock("@/store/worktreeStore", () => {
   const state = () => ({
-    worktrees: [{ id: "wt-main", name: "main", is_main: true }],
-    currentWorktree: null,
-    loadWorktrees: vi.fn(async () => undefined),
-    restoreLastWorktree: vi.fn(() => false),
+    currentWorktreeId: null,
     switchWorktreeContext: vi.fn(async () => undefined),
   });
   return { useWorktreeStore: Object.assign(() => state(), { getState: state }) };
 });
+
+// restoreLastWorktree is a lifecycle action now (it reads the cache, and the
+// main workspace over the network when the cache lacks it).
+vi.mock("@/hooks/worktree-actions", () => ({ restoreLastWorktree: vi.fn(async () => false) }));
 
 vi.mock("@/store/viewerStore", () => {
   const state = () => ({ restoreFromWorkspaceState: vi.fn(), viewers: [] });
@@ -98,11 +96,15 @@ vi.mock("@/store/chatStore", () => {
     // not in it, so this seeds nothing for it.
     loadChats: vi.fn(async () => undefined),
     selectChat,
+    persistActiveChat: vi.fn(),
+    activeChatId: "auto-chat",
   });
   return { useChatStore: Object.assign(() => state(), { getState: state }) };
 });
 
-import { chatGrpc } from "@/api/chat-grpc";
+import * as chatActions from "@/hooks/chat-actions";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { chatKeys, getChatFromCache, resolveChat } from "@/hooks/chat-queries";
 import { queryClient } from "@/lib/query-client";
 import { useWorkspaceRestore } from "@/hooks/useWorkspaceRestore";
@@ -122,16 +124,24 @@ beforeEach(() => {
   setActiveChatId.mockReset();
   workspace.activeChatId = "auto-chat";
   queryClient.clear();
+  setTransport(
+    mockTransport({
+      "ChatService.ListChats": (req: unknown) => listChats(req),
+      "ChatService.GetChat": (req: unknown) => getChat(req),
+    }),
+  );
 });
 
+afterEach(() => setTransport(null));
+
 describe("project chat list", () => {
-  it("asks the server to exclude automation chats", async () => {
+  it("asks for the project's chat list (the server leaves runs out)", async () => {
     listChats.mockResolvedValue(create(ListChatsResponseSchema, { chats: [], total: 0 }));
 
-    await chatGrpc.list("proj-1");
+    await chatActions.listChats("proj-1");
 
     expect(listChats).toHaveBeenCalledTimes(1);
-    expect(listChats.mock.calls[0]![0]).toMatchObject({ projectId: "proj-1", sidebarOnly: true });
+    expect(listChats.mock.calls[0]![0]).toMatchObject({ projectId: "proj-1" });
   });
 });
 
@@ -167,7 +177,10 @@ describe("workspace restore", () => {
     const { result } = renderHook(() => useWorkspaceRestore({ skipProjectRestore: true }));
 
     await waitFor(() => expect(result.current.isComplete).toBe(true));
-    expect(selectChat).toHaveBeenCalledWith(expect.objectContaining({ id: "auto-chat" }));
+    expect(selectChat).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "auto-chat" }),
+      { deferPersist: true },
+    );
     // The stored active chat was NOT cleared as "no longer exists".
     expect(setActiveChatId).not.toHaveBeenCalled();
     expect(result.current.warnings).toEqual([]);

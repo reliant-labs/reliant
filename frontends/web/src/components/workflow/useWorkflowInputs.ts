@@ -3,10 +3,9 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { fromJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
-import type { Workflow } from "../../api/workflow-grpc";
-import { presetGrpc } from "../../api/preset-grpc";
-import { useWorkflowPresets, type Preset } from "../../store/globalDataStore";
-import { usePreferencesStore } from "../../store/preferencesStore";
+import type { Workflow } from "../../hooks/workflow-queries";
+import { fetchDefaultPresets, useWorkflowPresets, type Preset } from "../../hooks/preset-queries";
+import { useHiddenItems } from "../../hooks/settings-queries";
 import type { InputGroupDef } from "./WorkflowInputGroup";
 import type { InputDef } from "../../lib/inputHelpers";
 import { getInputDefault } from "../../lib/inputHelpers";
@@ -193,7 +192,7 @@ export function useWorkflowInputs({
     if (currentValues && Object.keys(currentValues).length > 0 && hasModelValue) return;
 
     const loadDefaults = async () => {
-      const defaults = await presetGrpc.getDefaultPresets(projectId, fullWorkflowRef);
+      const defaults = await fetchDefaultPresets(projectId, fullWorkflowRef);
       if (Object.keys(defaults).length === 0) return;
 
       const newSelectedPresets: Record<string, string | null> = {};
@@ -220,7 +219,7 @@ export function useWorkflowInputs({
   }, [workflowDef, projectId, presetsLoading, presets, fullWorkflowRef, enabled, selectedPresets, storedPresetsFromStep]);
 
   // Get hidden preset check
-  const isPresetHidden = usePreferencesStore((state) => state.isPresetHidden);
+  const { isPresetHidden } = useHiddenItems();
 
   // Get presets filtered by tag and hidden state
   const getPresetsForGroup = useCallback(

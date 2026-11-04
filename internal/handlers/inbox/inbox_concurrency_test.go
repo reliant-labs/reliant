@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -49,6 +50,10 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 	m := r.MockRepository
 	trg := &core.Trigger{ID: "trg-1", Enabled: true, ProjectID: "p1", Name: "nightly"}
 	m.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
+		r.enter(ctx, hold)
+		return nil, nil
+	}
+	m.ListWorktreeRecoveriesFunc = func(ctx context.Context, _, _ string) ([]*core.WorktreeRecovery, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
@@ -199,6 +204,7 @@ func TestListInbox_AnAdvisoryReadFailingStillAnswers(t *testing.T) {
 // in prod the bodies were 1.8 MB of JSON per call, decoded into maps, and the
 // RPC took 3-4 s. The timing is logged, not asserted (shared CI machines).
 func TestListInbox_HeavyAutomationUser(t *testing.T) {
+	testkit.Slow(t, "DB-backed: seeds many inbox rows in pgtest's Postgres")
 	f := newInboxFixture(t)
 	payload := map[string]any{"body": strings.Repeat("x", 7000), "integration": "github"}
 	base := time.Now().UTC().Add(-48 * time.Hour)

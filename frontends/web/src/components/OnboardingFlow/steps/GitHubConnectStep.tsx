@@ -5,12 +5,12 @@ import { hasErrorReason } from "@/lib/errorReasons";
 import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
+import { fetchProjects } from "@/hooks/project-queries";
 import type { Project } from "@/store/projectStore";
-import { supabase } from "@/lib/supabase";
+import { connectGitHub } from "@/lib/github-connect";
 import { useEventBus } from "@/lib/event-context";
 import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { trackEvent } from "@/lib/analytics";
-import { gitService } from "@/services/controlPlane/git";
 import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
 import { leaveOnboarding } from "../leaveOnboarding";
 import { markOnboardingFinalized } from "../analytics";
@@ -42,7 +42,6 @@ function findProjectByPath(projects: Project[], path: string): Project | undefin
 
 export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
   const navigate = useNavigate();
-  const loadProjects = useProjectStore((state) => state.loadProjects);
 
   const eventBus = useEventBus();
   const completeOnboardingMutation = useCompleteOnboarding();
@@ -66,31 +65,12 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
   const handleConnect = async () => {
     setConnecting(true);
     setError("");
-    try {
-      // Always go through the control-plane custom OAuth flow. Supabase's
-      // GitHub provider is sign-in only (0 scopes); the long-lived repo-scoped
-      // token comes from /auth/github/authorize, which writes it to
-      // git_credentials.
-      const oauthURL = gitService.getOAuthURL();
-      if (!oauthURL) {
-        throw new Error("Control plane URL not configured");
-      }
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error("Not signed in");
-      }
-      // Preserve the onboarding step/plan params so the callback lands the
-      // user back on this step instead of restarting onboarding.
-      const returnTo = `${window.location.pathname}${window.location.search}`;
-      const params = new URLSearchParams({
-        token: session.access_token,
-        returnTo,
-      });
-      window.location.href = `${oauthURL}?${params.toString()}`;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect GitHub");
-      setConnecting(false);
-    }
+    // Keep the onboarding step/plan params so a web return lands back on this
+    // step instead of restarting onboarding; desktop finishes in place.
+    const outcome = await connectGitHub();
+    if (outcome.kind === "redirecting") return;
+    if (outcome.kind === "error") setError(outcome.message);
+    setConnecting(false);
   };
 
   const handleSelectRepo = (repo: GitRepo) => {
@@ -133,12 +113,12 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
         variant: "info",
       });
 
-      // Select the new project so the app opens on it. The store is the
-      // source of the full Project shape; the RPC returns a narrower one.
-      await loadProjects();
+      // Select the new project so the app opens on it, as the (refetched)
+      // project list holds it.
+      const listed = await fetchProjects();
       const opened = added.projectId
-        ? useProjectStore.getState().projects.find((p) => p.id === added.projectId)
-        : findProjectByPath(useProjectStore.getState().projects, clonedPath);
+        ? listed.find((p) => p.id === added.projectId)
+        : findProjectByPath(listed, clonedPath);
       if (opened) {
         await useProjectStore.getState().selectProject(opened);
       }
@@ -272,7 +252,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
                 setSelectedRepo(null);
                 setBranch("");
               }}
-              className="text-xs text-primary hover:text-primary/80 transition-colors"
+              className="text-xs text-primary-ink hover:text-primary-ink/80 transition-colors"
             >
               Change repo
             </button>
@@ -292,7 +272,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
               className={cn(
                 "w-full px-3 py-2.5 rounded-lg text-sm transition-colors",
                 "bg-background border border-border/40 text-foreground placeholder:text-muted-foreground/50",
-                "focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
+                "focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary/50",
               )}
             />
           </div>

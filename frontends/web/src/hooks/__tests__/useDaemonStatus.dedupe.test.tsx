@@ -7,7 +7,7 @@ import React from "react";
 // ---------------------------------------------------------------------------
 // A dozen surfaces read the daemon list — ModernApp, NewChatView, Terminal,
 // DaemonStatusDot, TabbedViewerPanel, DetectedPortsChip, OomKillBanner,
-// ProjectPicker, ConnectDaemonModal, WorkspacesSection, ComputeStep,
+// ProjectPicker, ConnectDaemonModal, BranchesSection, ComputeStep,
 // SelfHostedDaemonConnect. They share one query key, so consumers that mount
 // together already share a request.
 //
@@ -23,11 +23,13 @@ import React from "react";
 
 const listDaemonsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/grpc-client", () => ({
-  grpcClient: { daemonRegistry: () => ({ listDaemons: listDaemonsMock }) },
-}));
-
 import { useDaemonStatus } from "../useDaemonStatus";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => listDaemonsMock() })));
+afterEach(() => setTransport(null));
 
 function Reader() {
   const { daemons } = useDaemonStatus();

@@ -303,6 +303,14 @@ export interface AttentionItem {
   detail: string;
   /** For a workload or job, its name (the page it opens); for an alert, null (the Alerts page). */
   workload: string | null;
+  /**
+   * When the trouble was last seen, for linking it to the promotion before it:
+   * a workload's latest warning, a job run's start. Absent when nothing
+   * timestamps it.
+   */
+  troubleAtMs?: number;
+  /** The release the workload or job run was on, "" when unknown. */
+  release?: string;
 }
 
 /**
@@ -344,6 +352,8 @@ export function attentionItems(
       envName: w.envName,
       detail: w.healthReason || (w.restartsInWindow ? `${w.restartsInWindow} restarts` : ""),
       workload: w.workload,
+      troubleAtMs: w.latestWarning?.timeMs || undefined,
+      release: w.releaseVersion,
     });
   }
   for (const job of jobs) {
@@ -357,6 +367,8 @@ export function attentionItems(
       envName: job.envName,
       detail: jobFailurePhrase(job.latest.reason),
       workload: job.workload,
+      troubleAtMs: job.latest.startedAtMs ?? undefined,
+      release: job.latest.releaseVersion,
     });
   }
   return items;
@@ -437,7 +449,7 @@ export function githubRepoOf(sourceRepo: string): string | null {
 }
 
 /**
- * Where to change the declaration (decision D6: replicas are declared in code,
+ * Where to change the declaration (replicas are declared in code,
  * so the console's Scale is "Open PR", never a mutation).
  *
  * Repository, path and commit all come from ONE recorded bundle — the

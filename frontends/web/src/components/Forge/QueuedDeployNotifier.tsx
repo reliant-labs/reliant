@@ -24,7 +24,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useQueries, useQueryClient, type Query } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
-import { forgeKeys, liveViewQuery, type LiveViewResult } from "@/hooks/forge-queries";
+import { forgeCloudKeys, liveViewQuery, type LiveViewResult } from "@/hooks/forge-queries";
 import { showNotification } from "@/lib/notifications";
 import { hasLiveControlPlane } from "@/services/forge/live";
 import { watchPollInterval, watchedProjects, type SettledDeploy } from "@/services/forge/queuedDeploys";
@@ -33,7 +33,7 @@ import { useQueuedDeployStore } from "@/store/queuedDeployStore";
 
 import { consolePageOf, consolePath, withSearch } from "./Console/paths";
 
-const LIVE_VIEW_PREFIX = [...forgeKeys.all, "live-view"] as const;
+const LIVE_VIEW_PREFIX = forgeCloudKeys.liveView.all;
 
 export function QueuedDeployNotifier() {
   const queryClient = useQueryClient();

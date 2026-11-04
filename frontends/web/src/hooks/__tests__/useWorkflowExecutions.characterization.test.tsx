@@ -27,27 +27,26 @@ import React from "react";
 //   * WorkflowExecutionUpdate / ExecutionLogUpdate (streaming-grpc.ts,
 //     types/streaming.ts) are parsed but never consumed by any reader.
 // The live path that actually drives the workflow UI is THIS hook's fetch of
-// chatGrpc.getWorkflowExecutions + the "workflow_executions" refetch pulse.
+// ChatService.GetWorkflowExecutions + the "workflow_executions" refetch pulse.
 // ---------------------------------------------------------------------------
 
-// Minimal mock of the grpc module — the hook only touches
-// chatGrpc.getWorkflowExecutions. Mocking the whole module also keeps the real
-// grpc-client (and its supabase import) out of the test.
+// The fake server: the hook only reads ChatService.GetWorkflowExecutions.
 const getWorkflowExecutionsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../api/chat-grpc", () => ({
-  chatGrpc: {
-    getWorkflowExecutions: getWorkflowExecutionsMock,
-  },
-}));
+// Answered at the transport: the hook reads the generated
+// GetWorkflowExecutions entry, so the fake stands in for the server.
+beforeEach(() => setTransport(mockTransport(workflowExecutionsAnswer(getWorkflowExecutionsMock))));
+afterEach(() => setTransport(null));
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { workflowExecutionsAnswer } from "@/test/chatPullReads";
 import { useWorkflowExecutions } from "../useWorkflowExecutions";
 import { WorkflowExecutionView, WorkflowState, WorkflowStopReason } from "../../gen/reliant/v1/chat_pb";
 import { triggerRefetch } from "../../store/refetchStore";
-import type { WorkflowExecutionData } from "../../api/chat-grpc";
+import type { WorkflowExecutionData } from "../chat-model";
 
-// Build a minimal execution node — only `status` matters for the derived
-// hasRunningWorkflow flag; the rest is cast away.
+// Build a minimal execution node; the rest is cast away.
 function wf(
   overrides: Partial<WorkflowExecutionData> = {},
 ): WorkflowExecutionData {
@@ -101,8 +100,8 @@ describe("useWorkflowExecutions (characterization)", () => {
     // A reader that does not ask for a view gets the cheap one: the timeline's
     // handful of steps, not the chat's entire step history.
     expect(getWorkflowExecutionsMock).toHaveBeenCalledWith(chatId, WorkflowExecutionView.BASIC);
-    expect(result.current.data).toEqual(latest);
-    expect(result.current.allWorkflows).toEqual(all);
+    expect(result.current.data).toMatchObject(latest);
+    expect(result.current.allWorkflows).toMatchObject(all);
   });
 
   it("does not fetch when chatId is null", async () => {
@@ -116,40 +115,6 @@ describe("useWorkflowExecutions (characterization)", () => {
     expect(getWorkflowExecutionsMock).not.toHaveBeenCalled();
     expect(result.current.allWorkflows).toEqual([]);
     expect(result.current.data).toBeNull();
-  });
-
-  it("derives hasRunningWorkflow=true when any workflow is RUNNING", async () => {
-    const chatId = nextChatId();
-    const running = wf({ id: "r", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED });
-    getWorkflowExecutionsMock.mockResolvedValue({
-      latest: running,
-      all: [wf({ id: "done" }), running],
-    });
-
-    const { Wrapper } = makeWrapper();
-    const { result } = renderHook(() => useWorkflowExecutions(chatId), {
-      wrapper: Wrapper,
-    });
-
-    await waitFor(() =>
-      expect(result.current.hasRunningWorkflow).toBe(true),
-    );
-  });
-
-  it("derives hasRunningWorkflow=false when no workflow is RUNNING", async () => {
-    const chatId = nextChatId();
-    getWorkflowExecutionsMock.mockResolvedValue({
-      latest: wf({ id: "done", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED }),
-      all: [wf({ id: "done", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED })],
-    });
-
-    const { Wrapper } = makeWrapper();
-    const { result } = renderHook(() => useWorkflowExecutions(chatId), {
-      wrapper: Wrapper,
-    });
-
-    await waitFor(() => expect(result.current.allWorkflows).toHaveLength(1));
-    expect(result.current.hasRunningWorkflow).toBe(false);
   });
 
   it("re-fetches when a workflow_executions refetch pulse fires", async () => {

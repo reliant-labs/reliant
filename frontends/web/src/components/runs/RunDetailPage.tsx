@@ -15,14 +15,15 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 import type { Chat } from "@/api/client";
-import { runErrorMessage } from "@/api/run-grpc";
+import { runErrorMessage } from "@/hooks/run-queries";
 import { useChat } from "@/hooks/chat-queries";
 import { useAdoptRun, useRunControl } from "@/hooks/run-queries";
-import { useProjectStore } from "@/store/projectStore";
+import { useProject } from "@/hooks/project-queries";
 import Card from "../forge-ui/card";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { ChatContainer } from "../Chat/ChatContainer";
 import { RunHeader } from "./RunHeader";
+import { RunNodes } from "./RunNodes";
 import { useRunRoute } from "./RunRouteLoader";
 import { TriggerCard } from "./TriggerCard";
 import { useRerun } from "./useRerun";
@@ -60,9 +61,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
   // The detail cache is kept live by the update stream; the loaded chat only
   // covers the first render.
   const chat = useChat(initialChat.id).data ?? initialChat;
-  const projectName = useProjectStore(
-    (state) => state.projects.find((p) => p.id === chat.projectId)?.name,
-  );
+  const projectName = useProject(chat.projectId)?.name;
   const launch = useRunLaunch(chat);
   const triggerName = launch.triggerName;
   const rerun = useRerun(chat, launch.event, triggerName);
@@ -84,7 +83,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
       openInProject();
       return;
     }
-    adopt.mutate(chat.id, {
+    adopt.mutate({ chatId: chat.id }, {
       onSuccess: () => {
         toast.success("Added to your chats", { description: "It stays in the chat list from now on." });
         openInProject();
@@ -110,6 +109,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
             onOpenAsChat,
             onRerun: rerun.onRerun,
             onRunAutomationNow: rerun.onRunAutomationNow,
+            onSchedule: rerun.onSchedule,
           }}
         />
         <RunMachineBanner chat={chat} />
@@ -119,6 +119,8 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
           <TriggerCard
             launchKind={chat.launchKind}
             triggerId={chat.triggerId}
+            workflowName={chat.workflowName}
+            projectId={chat.projectId}
             triggerName={triggerName}
             timezone={launch.timezone}
             parent={launch.parent}
@@ -127,6 +129,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
           />
         )}
       </div>
+      {chat.workflowId && <RunNodes workflowId={chat.workflowId} />}
       {rerun.dialog}
       <div className="min-h-0 flex-1">
         <ChatContainer tabId={chat.id} hideChatTitle />
@@ -147,7 +150,7 @@ function RunNotFound() {
         <p className="mt-1 text-sm text-muted-foreground">It may have been deleted.</p>
         <Link
           to="/workflows/runs"
-          className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="mt-4 inline-flex h-9 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           All runs
         </Link>

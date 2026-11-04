@@ -35,7 +35,8 @@ func TestInboxStoreErrorCodes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			repo := &MockRepository{
-				ListInboxPendingFunc: func(context.Context, string) ([]*core.InboxPending, error) { return nil, tc.err },
+				ListWorktreeRecoveriesFunc: func(context.Context, string, string) ([]*core.WorktreeRecovery, error) { return nil, nil },
+				ListInboxPendingFunc:       func(context.Context, string) ([]*core.InboxPending, error) { return nil, tc.err },
 				// The other required read succeeds, so the pending read's
 				// error is the one the caller sees.
 				ListTriggersFunc: func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil },

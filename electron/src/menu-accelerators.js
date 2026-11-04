@@ -47,16 +47,20 @@ const MENU_SHORTCUT_BINDINGS = Object.freeze({
   prevChat: "Cmd+Shift+Up",
   nextRightSidebarTab: "Cmd+Shift+Right",
   prevRightSidebarTab: "Cmd+Shift+Left",
+  findInPage: "Cmd+F",
 });
 
 /**
  * The other shortcuts in config/shortcuts.yaml bound to a menu item's chord,
  * for the same stopgap: the composer and the editor keep Cmd+Shift+Arrow for
- * text selection, and the workflow canvas keeps Cmd+Shift+L, which clears the
- * terminal only while the terminal has focus. Once the renderer reports in, its
- * full table replaces this.
+ * text selection, the workflow canvas keeps Cmd+Shift+L, which clears the
+ * terminal only while the terminal has focus, and Cmd+F searches the
+ * conversation on screen, or the file in the editor, before it finds in the
+ * page. Once the renderer reports in, its full table replaces this.
  */
 const SHARED_CHORD_BINDINGS = Object.freeze({
+  chatSearch: "Cmd+F",
+  editorFind: "Cmd+F",
   connectSelectedSteps: "Cmd+Shift+L",
   selectionUpMonaco: "Cmd+Shift+Up",
   selectionDownMonaco: "Cmd+Shift+Down",

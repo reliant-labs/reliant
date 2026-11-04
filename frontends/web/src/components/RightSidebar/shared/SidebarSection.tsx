@@ -86,7 +86,7 @@ export function SidebarSection({
             className={cn(
               "text-xs font-bold uppercase tracking-[0.06em]",
               variant === "highlighted"
-                ? "text-primary"
+                ? "text-primary-ink"
                 : "text-muted-foreground/80"
             )}
           >
@@ -141,7 +141,7 @@ export function SidebarSectionItem({
         "w-full flex items-center gap-2 px-3 py-1.5 text-left text-sm rounded-md",
         "transition-colors",
         onClick && "cursor-pointer hover:bg-muted/50",
-        isActive && "bg-primary/10 text-primary",
+        isActive && "bg-primary/10 text-primary-ink",
         className
       )}
     >

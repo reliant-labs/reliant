@@ -1,12 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 
-import {
-  isProviderAccountsUnavailable,
-  providerAccountGrpc,
-  type ProviderAccount,
-} from "../api/provider-account-grpc";
+import { isProviderAccountsUnavailable, accountFromProto, type ProviderAccount } from "../types/providerAccount";
 import {
   usageLimitFallbackOf,
   type UsageLimitFallback,
@@ -14,7 +10,8 @@ import {
 import { useAuthStore } from "../store/authStore";
 import { useModels } from "../store/globalDataStore";
 import { useChatSelection } from "./chat-queries";
-import { providerAccountKeys, useProviderAccounts } from "./provider-account-queries";
+import { useProviderAccounts } from "./provider-account-queries";
+import { useGetChatProviderAccount } from "./provider-account-service-hooks_gen";
 
 const REFETCH_MS = 60_000;
 
@@ -36,25 +33,20 @@ export interface ChatAccountUsage {
 export function useChatAccountUsage(chatId: string | undefined): ChatAccountUsage {
   const hasSession = useAuthStore((state) => !!state.session);
   const list = useProviderAccounts();
-  const accounts = list.data?.kind === "ready" ? list.data.accounts : NO_ACCOUNTS;
+  const accounts = list?.kind === "ready" ? list.accounts : NO_ACCOUNTS;
 
-  const chatAccount = useQuery<ProviderAccount | null>({
-    queryKey: [...providerAccountKeys.all, "chat", chatId] as const,
-    queryFn: async () => {
-      try {
-        return await providerAccountGrpc.getChatAccount(chatId!);
-      } catch (error) {
-        if (isProviderAccountsUnavailable(error)) return null;
-        throw error;
-      }
+  const chatAccount = useGetChatProviderAccount(
+    { chatId: chatId ?? "" },
+    {
+      enabled: hasSession && !!chatId && accounts.length > 0,
+      staleTime: 15_000,
+      refetchInterval: REFETCH_MS,
+      retry: (failures, error) => !isProviderAccountsUnavailable(error) && failures < 1,
     },
-    enabled: hasSession && !!chatId && accounts.length > 0,
-    staleTime: 15_000,
-    refetchInterval: REFETCH_MS,
-    retry: 1,
-  });
+  );
 
-  const named = chatAccount.data ?? undefined;
+  const proto = chatAccount.data?.account;
+  const named = useMemo(() => (proto ? accountFromProto(proto) : undefined), [proto]);
   const active = named ? (accounts.find((a) => a.id === named.id) ?? named) : undefined;
   return { active, accounts };
 }

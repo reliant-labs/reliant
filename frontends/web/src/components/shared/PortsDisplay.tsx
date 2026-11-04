@@ -5,7 +5,7 @@
  * Shows first N ports inline, with a dropdown for additional ports.
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useState, useEffect, useRef } from "react";
 import { Globe, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -47,14 +47,14 @@ export function PortsDisplay({ ports, onOpenPort, maxVisible = 2, compact = fals
   };
 
   const PortButton = ({ port, showIcon = false }: { port: { port: number }; showIcon?: boolean }) => (
-    <Tooltip content={onOpenPort ? `Open localhost:${port.port} in browser` : `Port ${port.port}`} placement="bottom" delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={onOpenPort ? `Open localhost:${port.port} in browser` : `Port ${port.port}`} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
       onClick={(e) => handlePortClick(port.port, e)}
       disabled={!onOpenPort}
       className={cn(
-        "flex items-center gap-0.5 font-mono text-primary",
+        "flex items-center gap-0.5 font-mono text-primary-ink",
         compact ? "text-xs" : "text-xs",
-        onOpenPort && "hover:text-primary/80 hover:underline cursor-pointer"
+        onOpenPort && "hover:text-primary-ink/80 hover:underline cursor-pointer"
       )} aria-label={onOpenPort ? `Open localhost:${port.port} in browser` : `Port ${port.port}`}>
       {showIcon && <Globe className={cn(compact ? "w-3 h-3" : "w-3.5 h-3.5", "flex-shrink-0")} />}
       <span>{port.port}</span>
@@ -72,7 +72,7 @@ export function PortsDisplay({ ports, onOpenPort, maxVisible = 2, compact = fals
       {/* Overflow dropdown */}
       {hasOverflow && (
         <div className="relative" ref={dropdownRef}>
-          <Tooltip content={`${overflowPorts.length} more port${overflowPorts.length > 1 ? 's' : ''}`} placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content={`${overflowPorts.length} more port${overflowPorts.length > 1 ? 's' : ''}`} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={(e) => {
               e.stopPropagation();
@@ -103,7 +103,7 @@ export function PortsDisplay({ ports, onOpenPort, maxVisible = 2, compact = fals
                   className={cn(
                     "w-full px-3 py-1.5 text-left font-mono text-xs",
                     "hover:bg-accent transition-colors",
-                    onOpenPort ? "text-primary" : "text-muted-foreground"
+                    onOpenPort ? "text-primary-ink" : "text-muted-foreground"
                   )}
                 >
                   :{p.port}

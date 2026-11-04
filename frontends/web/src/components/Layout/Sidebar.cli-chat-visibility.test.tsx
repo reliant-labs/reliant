@@ -1,6 +1,8 @@
 /**
- * Regression: a chat created by `reliant workflow run` must appear in the
- * sidebar.
+ * Regression: a chat started with no worktree_id must appear in the sidebar.
+ * (A `reliant workflow run` start is now a cli.run run, listed in Runs until
+ * adopted; once adopted it lists here like any chat, so the grouping below
+ * still applies to it.)
  *
  * The CLI sends no worktree_id, and chats used to persist with worktree_id
  * NULL. The sidebar groups by worktree and drops chats whose worktree does not
@@ -15,32 +17,22 @@
  */
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
 import { ChatState, ChatActivity } from "../../gen/reliant/v1/chat_pb";
-import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 
-vi.mock("../ui/Tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+vi.mock("../forge-ui/tooltip", () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("../ui/Button", () => ({
-  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
-}));
-
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: () => null,
-}));
+vi.mock("../forge-ui/context_menu", () => ({ default: () => null }));
 
 vi.mock("../../hooks/useDebounce", () => ({
   useDebounce: <T,>(value: T) => value,
@@ -58,7 +50,7 @@ const mockChatListData: Array<Record<string, unknown>> = [
     updatedAt: "2024-01-01T00:00:00.000Z",
     lastMessageAt: "2024-01-01T00:00:00.000Z",
     unread: false,
-    state: ChatState.ACTIVE,
+    state: ChatState.IDLE,
     worktreeId: MAIN_WORKTREE_ID,
     projectId: "project-1",
   },
@@ -69,7 +61,7 @@ const mockChatListData: Array<Record<string, unknown>> = [
     updatedAt: "2024-01-02T00:00:00.000Z",
     lastMessageAt: "2024-01-02T00:00:00.000Z",
     unread: false,
-    state: ChatState.ACTIVE,
+    state: ChatState.IDLE,
     worktreeId: MAIN_WORKTREE_ID,
     projectId: "project-1",
   },
@@ -80,19 +72,23 @@ vi.mock("../../hooks/chat-queries", () => ({
     data: {
       chats: mockChatListData,
       lastUserUpdateSequence: 0,
-      mainWorktree: {
-        id: MAIN_WORKTREE_ID,
-        name: "main",
-        branch: "main",
-        path: "/tmp/project",
-        isMain: true,
-        status: 1,
-      },
+      mainWorktrees: [
+        {
+          id: MAIN_WORKTREE_ID,
+          name: "main",
+          branch: "main",
+          path: "/tmp/project",
+          isMain: true,
+          status: 1,
+          projectId: "project-1",
+        },
+      ],
     },
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: [], isFetched: true }),
-  useDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
   useChat: () => ({ data: undefined }),
@@ -157,14 +153,10 @@ describe("Sidebar visibility for CLI-launched chats", () => {
 
     // Empty on purpose: the sidebar groups from the chat list alone.
     useWorktreeStore.setState({
-      worktrees: [],
-      currentWorktree: null,
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
-
-    useProcessStore.setState({
-      fetchProcesses: vi.fn(),
-    } as Partial<ReturnType<typeof useProcessStore.getState>>);
 
     useProjectStore.setState({
       currentProject: {
@@ -172,7 +164,7 @@ describe("Sidebar visibility for CLI-launched chats", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         created_at: "2024-01-01T00:00:00.000Z",
         updated_at: "2024-01-01T00:00:00.000Z",
         last_active: "2024-01-01T00:00:00.000Z",

@@ -8,7 +8,7 @@
 import { memo, useMemo } from "react";
 import { GitBranch } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import type { ThreadInfo } from "./useThreads";
 
 interface ContextUsageData {
@@ -81,7 +81,7 @@ function MiniContextIndicator({ usage, color }: { usage: ContextUsageData; color
   const tooltipContent = `Context: ${percent.toFixed(0)}% (${formatTokens(usage.threadTokenCount)}/${formatTokens(usage.compactionThreshold)})`;
   
   return (
-    <Tooltip content={tooltipContent} placement="bottom">
+    <Tooltip content={tooltipContent} side="bottom" triggerClassName="block">
       <div className="relative flex items-center justify-center w-4 h-4 flex-shrink-0">
         <svg width={size} height={size} className="transform -rotate-90">
           {/* Background circle */}
@@ -114,7 +114,7 @@ function MiniContextIndicator({ usage, color }: { usage: ContextUsageData; color
         <span
           // eslint-disable-next-line no-restricted-syntax
           className="absolute inset-0 flex items-center justify-center font-medium text-[6px]"
-          style={{ color: color || "hsl(var(--primary))" }}
+          style={{ color: color || "hsl(var(--primary-ink))" }}
         >
           {Math.round(percent)}
         </span>
@@ -169,7 +169,7 @@ export const ThreadTabs = memo(function ThreadTabs({
             "px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap flex items-center gap-1.5",
             "border",
             selectedThreadId === null
-              ? "bg-primary/10 text-primary border-primary/30"
+              ? "bg-primary/10 text-primary-ink border-primary/30"
               : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/50"
           )}
         >

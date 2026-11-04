@@ -12,7 +12,7 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
-import type { Daemon, DaemonSize, DaemonStatus, DaemonType, PortAccessMode, PortAccessRule, ResourceRequirements } from "../../../controlplane/v1/shared_pb";
+import type { Daemon, DaemonDiskMode, DaemonSize, DaemonStatus, DaemonType, PortAccessMode, PortAccessRule, ResourceRequirements } from "../../../controlplane/v1/shared_pb";
 import { file_controlplane_v1_shared } from "../../../controlplane/v1/shared_pb";
 import { file_forge_v1_forge } from "../../../forge/v1/forge_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -21,15 +21,15 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/daemon/v1/daemon.proto.
  */
 export const file_services_daemon_v1_daemon: GenFile = /*@__PURE__*/
-  fileDesc("Ch9zZXJ2aWNlcy9kYWVtb24vdjEvZGFlbW9uLnByb3RvEg9jb250cm9scGxhbmUudjEivwIKE0NyZWF0ZURhZW1vblJlcXVlc3QSDAoEbmFtZRgBIAEoCRIwCgtkYWVtb25fdHlwZRgCIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EYWVtb25UeXBlEg0KBWltYWdlGAMgASgJEjgKCXJlc291cmNlcxgEIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5SZXNvdXJjZVJlcXVpcmVtZW50cxIQCghnaXRfcmVwbxgFIAEoCRISCgpnaXRfYnJhbmNoGAYgASgJEhQKDHN0b3JhZ2Vfc2l6ZRgHIAEoCRIQCghob3N0bmFtZRgIIAEoCRIQCghwbGF0Zm9ybRgJIAEoCRIpCgRzaXplGAogASgOMhsuY29udHJvbHBsYW5lLnYxLkRhZW1vblNpemUSFAoMaWRsZV90aW1lb3V0GAsgASgJIj8KFENyZWF0ZURhZW1vblJlc3BvbnNlEicKBmRhZW1vbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24iJQoQR2V0RGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiWwoRR2V0RGFlbW9uUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbhIdChV3b3Jrc3BhY2VfYmFzZV9kb21haW4YAiABKAkimgEKEkxpc3REYWVtb25zUmVxdWVzdBI1CgtkYWVtb25fdHlwZRgBIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EYWVtb25UeXBlSACIAQESMgoGc3RhdHVzGAIgASgOMh0uY29udHJvbHBsYW5lLnYxLkRhZW1vblN0YXR1c0gBiAEBQg4KDF9kYWVtb25fdHlwZUIJCgdfc3RhdHVzIj8KE0xpc3REYWVtb25zUmVzcG9uc2USKAoHZGFlbW9ucxgBIAMoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24iWAoTVXBkYXRlRGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSEAoIbmV3X25hbWUYAiABKAlKBAgDEARKBAgEEAVSBWltYWdlUglyZXNvdXJjZXMiPwoUVXBkYXRlRGFlbW9uUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbiJIChNEZWxldGVEYWVtb25SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRIeChZzbmFwc2hvdF9iZWZvcmVfZGVsZXRlGAIgASgIIhYKFERlbGV0ZURhZW1vblJlc3BvbnNlIikKFFN1c3BlbmREYWVtb25SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCSJAChVTdXNwZW5kRGFlbW9uUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbiIoChNSZXN1bWVEYWVtb25SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCSI/ChRSZXN1bWVEYWVtb25SZXNwb25zZRInCgZkYWVtb24YASABKAsyFy5jb250cm9scGxhbmUudjEuRGFlbW9uIlMKE1Jlc2l6ZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEikKBHNpemUYAiABKA4yGy5jb250cm9scGxhbmUudjEuRGFlbW9uU2l6ZSI/ChRSZXNpemVEYWVtb25SZXNwb25zZRInCgZkYWVtb24YASABKAsyFy5jb250cm9scGxhbmUudjEuRGFlbW9uIkgKFUdyb3dEYWVtb25EaXNrUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSHAoLc3RvcmFnZV9naWIYAiABKAVCB7pIBBoCIAAiQQoWR3Jvd0RhZW1vbkRpc2tSZXNwb25zZRInCgZkYWVtb24YASABKAsyFy5jb250cm9scGxhbmUudjEuRGFlbW9uIm0KFFNldFBvcnRBY2Nlc3NSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRIMCgRwb3J0GAIgASgFEjQKC2FjY2Vzc19tb2RlGAMgASgOMh8uY29udHJvbHBsYW5lLnYxLlBvcnRBY2Nlc3NNb2RlIlwKFVNldFBvcnRBY2Nlc3NSZXNwb25zZRItCgRydWxlGAEgASgLMh8uY29udHJvbHBsYW5lLnYxLlBvcnRBY2Nlc3NSdWxlEhQKDGFjY2Vzc190b2tlbhgCIAEoCSI6ChdSZW1vdmVQb3J0QWNjZXNzUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSDAoEcG9ydBgCIAEoBSIaChhSZW1vdmVQb3J0QWNjZXNzUmVzcG9uc2UiNwoaTGlzdFBvcnRBY2Nlc3NSdWxlc1JlcXVlc3QSGQoJZGFlbW9uX2lkGAEgASgJQga6SAPIAQEiTQobTGlzdFBvcnRBY2Nlc3NSdWxlc1Jlc3BvbnNlEi4KBXJ1bGVzGAEgAygLMh8uY29udHJvbHBsYW5lLnYxLlBvcnRBY2Nlc3NSdWxlIm4KG1NldERlZmF1bHRQb3J0QWNjZXNzUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSPAoTZGVmYXVsdF9hY2Nlc3NfbW9kZRgCIAEoDjIfLmNvbnRyb2xwbGFuZS52MS5Qb3J0QWNjZXNzTW9kZSJHChxTZXREZWZhdWx0UG9ydEFjY2Vzc1Jlc3BvbnNlEicKBmRhZW1vbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24ymRQKDURhZW1vblNlcnZpY2US2gEKDENyZWF0ZURhZW1vbhIkLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEYWVtb25SZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLkNyZWF0ZURhZW1vblJlc3BvbnNlIn2iuxh5CAE6dTpzcmVsaWFudCB3b3Jrc3BhY2Ugc3VyZmFjZSAoZGFlbW9ucywgd29ya3NwYWNlIHByb2plY3RzLCBMTE0ga2V5cyksIG5vdCBhIGZvcmdlIGNvbnNvbGUgY2hhbmdlOyBhdWRpdF9sb2cgcmVjb3JkcyBpdBJaCglHZXREYWVtb24SIS5jb250cm9scGxhbmUudjEuR2V0RGFlbW9uUmVxdWVzdBoiLmNvbnRyb2xwbGFuZS52MS5HZXREYWVtb25SZXNwb25zZSIGorsYAggBEmAKC0xpc3REYWVtb25zEiMuY29udHJvbHBsYW5lLnYxLkxpc3REYWVtb25zUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5MaXN0RGFlbW9uc1Jlc3BvbnNlIgaiuxgCCAES2gEKDFVwZGF0ZURhZW1vbhIkLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVEYWVtb25SZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLlVwZGF0ZURhZW1vblJlc3BvbnNlIn2iuxh5CAE6dTpzcmVsaWFudCB3b3Jrc3BhY2Ugc3VyZmFjZSAoZGFlbW9ucywgd29ya3NwYWNlIHByb2plY3RzLCBMTE0ga2V5cyksIG5vdCBhIGZvcmdlIGNvbnNvbGUgY2hhbmdlOyBhdWRpdF9sb2cgcmVjb3JkcyBpdBLaAQoMRGVsZXRlRGFlbW9uEiQuY29udHJvbHBsYW5lLnYxLkRlbGV0ZURhZW1vblJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuRGVsZXRlRGFlbW9uUmVzcG9uc2UifaK7GHkIATp1OnNyZWxpYW50IHdvcmtzcGFjZSBzdXJmYWNlIChkYWVtb25zLCB3b3Jrc3BhY2UgcHJvamVjdHMsIExMTSBrZXlzKSwgbm90IGEgZm9yZ2UgY29uc29sZSBjaGFuZ2U7IGF1ZGl0X2xvZyByZWNvcmRzIGl0Et0BCg1TdXNwZW5kRGFlbW9uEiUuY29udHJvbHBsYW5lLnYxLlN1c3BlbmREYWVtb25SZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLlN1c3BlbmREYWVtb25SZXNwb25zZSJ9orsYeQgBOnU6c3JlbGlhbnQgd29ya3NwYWNlIHN1cmZhY2UgKGRhZW1vbnMsIHdvcmtzcGFjZSBwcm9qZWN0cywgTExNIGtleXMpLCBub3QgYSBmb3JnZSBjb25zb2xlIGNoYW5nZTsgYXVkaXRfbG9nIHJlY29yZHMgaXQS2gEKDFJlc3VtZURhZW1vbhIkLmNvbnRyb2xwbGFuZS52MS5SZXN1bWVEYWVtb25SZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLlJlc3VtZURhZW1vblJlc3BvbnNlIn2iuxh5CAE6dTpzcmVsaWFudCB3b3Jrc3BhY2Ugc3VyZmFjZSAoZGFlbW9ucywgd29ya3NwYWNlIHByb2plY3RzLCBMTE0ga2V5cyksIG5vdCBhIGZvcmdlIGNvbnNvbGUgY2hhbmdlOyBhdWRpdF9sb2cgcmVjb3JkcyBpdBLaAQoMUmVzaXplRGFlbW9uEiQuY29udHJvbHBsYW5lLnYxLlJlc2l6ZURhZW1vblJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuUmVzaXplRGFlbW9uUmVzcG9uc2UifaK7GHkIATp1OnNyZWxpYW50IHdvcmtzcGFjZSBzdXJmYWNlIChkYWVtb25zLCB3b3Jrc3BhY2UgcHJvamVjdHMsIExMTSBrZXlzKSwgbm90IGEgZm9yZ2UgY29uc29sZSBjaGFuZ2U7IGF1ZGl0X2xvZyByZWNvcmRzIGl0EuABCg5Hcm93RGFlbW9uRGlzaxImLmNvbnRyb2xwbGFuZS52MS5Hcm93RGFlbW9uRGlza1JlcXVlc3QaJy5jb250cm9scGxhbmUudjEuR3Jvd0RhZW1vbkRpc2tSZXNwb25zZSJ9orsYeQgBOnU6c3JlbGlhbnQgd29ya3NwYWNlIHN1cmZhY2UgKGRhZW1vbnMsIHdvcmtzcGFjZSBwcm9qZWN0cywgTExNIGtleXMpLCBub3QgYSBmb3JnZSBjb25zb2xlIGNoYW5nZTsgYXVkaXRfbG9nIHJlY29yZHMgaXQS3QEKDVNldFBvcnRBY2Nlc3MSJS5jb250cm9scGxhbmUudjEuU2V0UG9ydEFjY2Vzc1JlcXVlc3QaJi5jb250cm9scGxhbmUudjEuU2V0UG9ydEFjY2Vzc1Jlc3BvbnNlIn2iuxh5CAE6dTpzcmVsaWFudCB3b3Jrc3BhY2Ugc3VyZmFjZSAoZGFlbW9ucywgd29ya3NwYWNlIHByb2plY3RzLCBMTE0ga2V5cyksIG5vdCBhIGZvcmdlIGNvbnNvbGUgY2hhbmdlOyBhdWRpdF9sb2cgcmVjb3JkcyBpdBLmAQoQUmVtb3ZlUG9ydEFjY2VzcxIoLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVQb3J0QWNjZXNzUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVQb3J0QWNjZXNzUmVzcG9uc2UifaK7GHkIATp1OnNyZWxpYW50IHdvcmtzcGFjZSBzdXJmYWNlIChkYWVtb25zLCB3b3Jrc3BhY2UgcHJvamVjdHMsIExMTSBrZXlzKSwgbm90IGEgZm9yZ2UgY29uc29sZSBjaGFuZ2U7IGF1ZGl0X2xvZyByZWNvcmRzIGl0EngKE0xpc3RQb3J0QWNjZXNzUnVsZXMSKy5jb250cm9scGxhbmUudjEuTGlzdFBvcnRBY2Nlc3NSdWxlc1JlcXVlc3QaLC5jb250cm9scGxhbmUudjEuTGlzdFBvcnRBY2Nlc3NSdWxlc1Jlc3BvbnNlIgaiuxgCCAES8gEKFFNldERlZmF1bHRQb3J0QWNjZXNzEiwuY29udHJvbHBsYW5lLnYxLlNldERlZmF1bHRQb3J0QWNjZXNzUmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5TZXREZWZhdWx0UG9ydEFjY2Vzc1Jlc3BvbnNlIn2iuxh5CAE6dTpzcmVsaWFudCB3b3Jrc3BhY2Ugc3VyZmFjZSAoZGFlbW9ucywgd29ya3NwYWNlIHByb2plY3RzLCBMTE0ga2V5cyksIG5vdCBhIGZvcmdlIGNvbnNvbGUgY2hhbmdlOyBhdWRpdF9sb2cgcmVjb3JkcyBpdELTAQoTY29tLmNvbnRyb2xwbGFuZS52MUILRGFlbW9uUHJvdG9QAVpSZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2RhZW1vbi92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_buf_validate_validate, file_controlplane_v1_shared, file_forge_v1_forge]);
+  fileDesc("Ch9zZXJ2aWNlcy9kYWVtb24vdjEvZGFlbW9uLnByb3RvEg9jb250cm9scGxhbmUudjEijQMKE0NyZWF0ZURhZW1vblJlcXVlc3QSDAoEbmFtZRgBIAEoCRIwCgtkYWVtb25fdHlwZRgCIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EYWVtb25UeXBlEg0KBWltYWdlGAMgASgJEjgKCXJlc291cmNlcxgEIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5SZXNvdXJjZVJlcXVpcmVtZW50cxIQCghnaXRfcmVwbxgFIAEoCRISCgpnaXRfYnJhbmNoGAYgASgJEhQKDHN0b3JhZ2Vfc2l6ZRgHIAEoCRIQCghob3N0bmFtZRgIIAEoCRIQCghwbGF0Zm9ybRgJIAEoCRIpCgRzaXplGAogASgOMhsuY29udHJvbHBsYW5lLnYxLkRhZW1vblNpemUSFAoMaWRsZV90aW1lb3V0GAsgASgJEhgKEHJlZnJlc2hfZXhpc3RpbmcYDCABKAgSMgoJZGlza19tb2RlGA0gASgOMh8uY29udHJvbHBsYW5lLnYxLkRhZW1vbkRpc2tNb2RlIj8KFENyZWF0ZURhZW1vblJlc3BvbnNlEicKBmRhZW1vbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24iJQoQR2V0RGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiWwoRR2V0RGFlbW9uUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbhIdChV3b3Jrc3BhY2VfYmFzZV9kb21haW4YAiABKAkimgEKEkxpc3REYWVtb25zUmVxdWVzdBI1CgtkYWVtb25fdHlwZRgBIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EYWVtb25UeXBlSACIAQESMgoGc3RhdHVzGAIgASgOMh0uY29udHJvbHBsYW5lLnYxLkRhZW1vblN0YXR1c0gBiAEBQg4KDF9kYWVtb25fdHlwZUIJCgdfc3RhdHVzIj8KE0xpc3REYWVtb25zUmVzcG9uc2USKAoHZGFlbW9ucxgBIAMoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24irgEKE1VwZGF0ZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhAKCG5ld19uYW1lGAIgASgJEigKA2VudhgFIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5NYWNoaW5lRW52EhkKDGlkbGVfdGltZW91dBgGIAEoCUgAiAEBQg8KDV9pZGxlX3RpbWVvdXRKBAgDEARKBAgEEAVSBWltYWdlUglyZXNvdXJjZXMibgoKTWFjaGluZUVudhIzCgR2YXJzGAEgAygLMiUuY29udHJvbHBsYW5lLnYxLk1hY2hpbmVFbnYuVmFyc0VudHJ5GisKCVZhcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIj8KFFVwZGF0ZURhZW1vblJlc3BvbnNlEicKBmRhZW1vbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24iSAoTRGVsZXRlRGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSHgoWc25hcHNob3RfYmVmb3JlX2RlbGV0ZRgCIAEoCCIWChREZWxldGVEYWVtb25SZXNwb25zZSIpChRTdXNwZW5kRGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiQAoVU3VzcGVuZERhZW1vblJlc3BvbnNlEicKBmRhZW1vbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24iKAoTUmVzdW1lRGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiPwoUUmVzdW1lRGFlbW9uUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbiJTChNSZXNpemVEYWVtb25SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRIpCgRzaXplGAIgASgOMhsuY29udHJvbHBsYW5lLnYxLkRhZW1vblNpemUiPwoUUmVzaXplRGFlbW9uUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbiJIChVHcm93RGFlbW9uRGlza1JlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhwKC3N0b3JhZ2VfZ2liGAIgASgFQge6SAQaAiAAIkEKFkdyb3dEYWVtb25EaXNrUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbiJtChRTZXRQb3J0QWNjZXNzUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSDAoEcG9ydBgCIAEoBRI0CgthY2Nlc3NfbW9kZRgDIAEoDjIfLmNvbnRyb2xwbGFuZS52MS5Qb3J0QWNjZXNzTW9kZSJcChVTZXRQb3J0QWNjZXNzUmVzcG9uc2USLQoEcnVsZRgBIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5Qb3J0QWNjZXNzUnVsZRIUCgxhY2Nlc3NfdG9rZW4YAiABKAkiOgoXUmVtb3ZlUG9ydEFjY2Vzc1JlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEgwKBHBvcnQYAiABKAUiGgoYUmVtb3ZlUG9ydEFjY2Vzc1Jlc3BvbnNlIjcKGkxpc3RQb3J0QWNjZXNzUnVsZXNSZXF1ZXN0EhkKCWRhZW1vbl9pZBgBIAEoCUIGukgDyAEBIk0KG0xpc3RQb3J0QWNjZXNzUnVsZXNSZXNwb25zZRIuCgVydWxlcxgBIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5Qb3J0QWNjZXNzUnVsZSJuChtTZXREZWZhdWx0UG9ydEFjY2Vzc1JlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEjwKE2RlZmF1bHRfYWNjZXNzX21vZGUYAiABKA4yHy5jb250cm9scGxhbmUudjEuUG9ydEFjY2Vzc01vZGUiRwocU2V0RGVmYXVsdFBvcnRBY2Nlc3NSZXNwb25zZRInCgZkYWVtb24YASABKAsyFy5jb250cm9scGxhbmUudjEuRGFlbW9uMpkUCg1EYWVtb25TZXJ2aWNlEtoBCgxDcmVhdGVEYWVtb24SJC5jb250cm9scGxhbmUudjEuQ3JlYXRlRGFlbW9uUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEYWVtb25SZXNwb25zZSJ9orsYeQgBOnU6c3JlbGlhbnQgd29ya3NwYWNlIHN1cmZhY2UgKGRhZW1vbnMsIHdvcmtzcGFjZSBwcm9qZWN0cywgTExNIGtleXMpLCBub3QgYSBmb3JnZSBjb25zb2xlIGNoYW5nZTsgYXVkaXRfbG9nIHJlY29yZHMgaXQSWgoJR2V0RGFlbW9uEiEuY29udHJvbHBsYW5lLnYxLkdldERhZW1vblJlcXVlc3QaIi5jb250cm9scGxhbmUudjEuR2V0RGFlbW9uUmVzcG9uc2UiBqK7GAIIARJgCgtMaXN0RGFlbW9ucxIjLmNvbnRyb2xwbGFuZS52MS5MaXN0RGFlbW9uc1JlcXVlc3QaJC5jb250cm9scGxhbmUudjEuTGlzdERhZW1vbnNSZXNwb25zZSIGorsYAggBEtoBCgxVcGRhdGVEYWVtb24SJC5jb250cm9scGxhbmUudjEuVXBkYXRlRGFlbW9uUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVEYWVtb25SZXNwb25zZSJ9orsYeQgBOnU6c3JlbGlhbnQgd29ya3NwYWNlIHN1cmZhY2UgKGRhZW1vbnMsIHdvcmtzcGFjZSBwcm9qZWN0cywgTExNIGtleXMpLCBub3QgYSBmb3JnZSBjb25zb2xlIGNoYW5nZTsgYXVkaXRfbG9nIHJlY29yZHMgaXQS2gEKDERlbGV0ZURhZW1vbhIkLmNvbnRyb2xwbGFuZS52MS5EZWxldGVEYWVtb25SZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLkRlbGV0ZURhZW1vblJlc3BvbnNlIn2iuxh5CAE6dTpzcmVsaWFudCB3b3Jrc3BhY2Ugc3VyZmFjZSAoZGFlbW9ucywgd29ya3NwYWNlIHByb2plY3RzLCBMTE0ga2V5cyksIG5vdCBhIGZvcmdlIGNvbnNvbGUgY2hhbmdlOyBhdWRpdF9sb2cgcmVjb3JkcyBpdBLdAQoNU3VzcGVuZERhZW1vbhIlLmNvbnRyb2xwbGFuZS52MS5TdXNwZW5kRGFlbW9uUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5TdXNwZW5kRGFlbW9uUmVzcG9uc2UifaK7GHkIATp1OnNyZWxpYW50IHdvcmtzcGFjZSBzdXJmYWNlIChkYWVtb25zLCB3b3Jrc3BhY2UgcHJvamVjdHMsIExMTSBrZXlzKSwgbm90IGEgZm9yZ2UgY29uc29sZSBjaGFuZ2U7IGF1ZGl0X2xvZyByZWNvcmRzIGl0EtoBCgxSZXN1bWVEYWVtb24SJC5jb250cm9scGxhbmUudjEuUmVzdW1lRGFlbW9uUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5SZXN1bWVEYWVtb25SZXNwb25zZSJ9orsYeQgBOnU6c3JlbGlhbnQgd29ya3NwYWNlIHN1cmZhY2UgKGRhZW1vbnMsIHdvcmtzcGFjZSBwcm9qZWN0cywgTExNIGtleXMpLCBub3QgYSBmb3JnZSBjb25zb2xlIGNoYW5nZTsgYXVkaXRfbG9nIHJlY29yZHMgaXQS2gEKDFJlc2l6ZURhZW1vbhIkLmNvbnRyb2xwbGFuZS52MS5SZXNpemVEYWVtb25SZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLlJlc2l6ZURhZW1vblJlc3BvbnNlIn2iuxh5CAE6dTpzcmVsaWFudCB3b3Jrc3BhY2Ugc3VyZmFjZSAoZGFlbW9ucywgd29ya3NwYWNlIHByb2plY3RzLCBMTE0ga2V5cyksIG5vdCBhIGZvcmdlIGNvbnNvbGUgY2hhbmdlOyBhdWRpdF9sb2cgcmVjb3JkcyBpdBLgAQoOR3Jvd0RhZW1vbkRpc2sSJi5jb250cm9scGxhbmUudjEuR3Jvd0RhZW1vbkRpc2tSZXF1ZXN0GicuY29udHJvbHBsYW5lLnYxLkdyb3dEYWVtb25EaXNrUmVzcG9uc2UifaK7GHkIATp1OnNyZWxpYW50IHdvcmtzcGFjZSBzdXJmYWNlIChkYWVtb25zLCB3b3Jrc3BhY2UgcHJvamVjdHMsIExMTSBrZXlzKSwgbm90IGEgZm9yZ2UgY29uc29sZSBjaGFuZ2U7IGF1ZGl0X2xvZyByZWNvcmRzIGl0Et0BCg1TZXRQb3J0QWNjZXNzEiUuY29udHJvbHBsYW5lLnYxLlNldFBvcnRBY2Nlc3NSZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLlNldFBvcnRBY2Nlc3NSZXNwb25zZSJ9orsYeQgBOnU6c3JlbGlhbnQgd29ya3NwYWNlIHN1cmZhY2UgKGRhZW1vbnMsIHdvcmtzcGFjZSBwcm9qZWN0cywgTExNIGtleXMpLCBub3QgYSBmb3JnZSBjb25zb2xlIGNoYW5nZTsgYXVkaXRfbG9nIHJlY29yZHMgaXQS5gEKEFJlbW92ZVBvcnRBY2Nlc3MSKC5jb250cm9scGxhbmUudjEuUmVtb3ZlUG9ydEFjY2Vzc1JlcXVlc3QaKS5jb250cm9scGxhbmUudjEuUmVtb3ZlUG9ydEFjY2Vzc1Jlc3BvbnNlIn2iuxh5CAE6dTpzcmVsaWFudCB3b3Jrc3BhY2Ugc3VyZmFjZSAoZGFlbW9ucywgd29ya3NwYWNlIHByb2plY3RzLCBMTE0ga2V5cyksIG5vdCBhIGZvcmdlIGNvbnNvbGUgY2hhbmdlOyBhdWRpdF9sb2cgcmVjb3JkcyBpdBJ4ChNMaXN0UG9ydEFjY2Vzc1J1bGVzEisuY29udHJvbHBsYW5lLnYxLkxpc3RQb3J0QWNjZXNzUnVsZXNSZXF1ZXN0GiwuY29udHJvbHBsYW5lLnYxLkxpc3RQb3J0QWNjZXNzUnVsZXNSZXNwb25zZSIGorsYAggBEvIBChRTZXREZWZhdWx0UG9ydEFjY2VzcxIsLmNvbnRyb2xwbGFuZS52MS5TZXREZWZhdWx0UG9ydEFjY2Vzc1JlcXVlc3QaLS5jb250cm9scGxhbmUudjEuU2V0RGVmYXVsdFBvcnRBY2Nlc3NSZXNwb25zZSJ9orsYeQgBOnU6c3JlbGlhbnQgd29ya3NwYWNlIHN1cmZhY2UgKGRhZW1vbnMsIHdvcmtzcGFjZSBwcm9qZWN0cywgTExNIGtleXMpLCBub3QgYSBmb3JnZSBjb25zb2xlIGNoYW5nZTsgYXVkaXRfbG9nIHJlY29yZHMgaXRC0wEKE2NvbS5jb250cm9scGxhbmUudjFCC0RhZW1vblByb3RvUAFaUmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9kYWVtb24vdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_controlplane_v1_shared, file_forge_v1_forge]);
 
 /**
  * @generated from message controlplane.v1.CreateDaemonRequest
  */
 export type CreateDaemonRequest = Message<"controlplane.v1.CreateDaemonRequest"> & {
   /**
-   * Human-readable name for the new daemon. Used for display and for the
-   * (owner, name) idempotency check inside CreateDaemon; not a lookup key.
+   * Human-readable name for the new daemon. Unique per owner: a name the owner
+   * already uses is ALREADY_EXISTS unless refresh_existing is set.
    *
    * @generated from field: string name = 1;
    */
@@ -92,6 +92,30 @@ export type CreateDaemonRequest = Message<"controlplane.v1.CreateDaemonRequest">
    * @generated from field: string idle_timeout = 11;
    */
   idleTimeout: string;
+
+  /**
+   * What to do when the owner already has a daemon with this name.
+   *
+   * Unset (a person pressing Create): the request fails with ALREADY_EXISTS,
+   * so a second machine is never silently folded into the first. Set: the
+   * existing managed daemon is refreshed (size, image, repo) and returned —
+   * the retry-safe commit a flow that may run twice needs (onboarding names
+   * its one machine and re-sends the create on every retry).
+   *
+   * @generated from field: bool refresh_existing = 12;
+   */
+  refreshExisting: boolean;
+
+  /**
+   * Where a managed machine's disk lives; unspecified is PERSISTENT. EPHEMERAL
+   * gives every start a fresh disk that is deleted when the machine suspends,
+   * so a suspended machine costs nothing and keeps nothing: for stateless
+   * machines such as CI pool members. Fixed at create: refresh_existing with
+   * a different mode is FAILED_PRECONDITION.
+   *
+   * @generated from field: controlplane.v1.DaemonDiskMode disk_mode = 13;
+   */
+  diskMode: DaemonDiskMode;
 };
 
 /**
@@ -211,6 +235,28 @@ export type UpdateDaemonRequest = Message<"controlplane.v1.UpdateDaemonRequest">
    * @generated from field: string new_name = 2;
    */
   newName: string;
+
+  /**
+   * env, when present, REPLACES the machine's environment variables (an
+   * empty one clears them); absent leaves them as they are. Names Reliant
+   * sets on every machine (DAEMON_*, RELIANT_*, WORKSPACE_*, PATH, HOME, the
+   * proxy variables, ...) are refused. A running machine picks the new set
+   * up the next time its pod is built: resume, resize or re-create.
+   *
+   * @generated from field: controlplane.v1.MachineEnv env = 5;
+   */
+  env?: MachineEnv | undefined;
+
+  /**
+   * idle_timeout, when present, replaces how long a managed machine may sit
+   * idle before it suspends (a duration such as "10m"; at most 4h). Absent
+   * leaves it as it is. It applies to the running machine at once: the
+   * operator reads it at every idle check. A machine pool sets its members'
+   * with it (the pool's member_idle_timeout).
+   *
+   * @generated from field: optional string idle_timeout = 6;
+   */
+  idleTimeout?: string | undefined;
 };
 
 /**
@@ -219,6 +265,25 @@ export type UpdateDaemonRequest = Message<"controlplane.v1.UpdateDaemonRequest">
  */
 export const UpdateDaemonRequestSchema: GenMessage<UpdateDaemonRequest> = /*@__PURE__*/
   messageDesc(file_services_daemon_v1_daemon, 6);
+
+/**
+ * MachineEnv is a managed machine's declared environment.
+ *
+ * @generated from message controlplane.v1.MachineEnv
+ */
+export type MachineEnv = Message<"controlplane.v1.MachineEnv"> & {
+  /**
+   * @generated from field: map<string, string> vars = 1;
+   */
+  vars: { [key: string]: string };
+};
+
+/**
+ * Describes the message controlplane.v1.MachineEnv.
+ * Use `create(MachineEnvSchema)` to create a new message.
+ */
+export const MachineEnvSchema: GenMessage<MachineEnv> = /*@__PURE__*/
+  messageDesc(file_services_daemon_v1_daemon, 7);
 
 /**
  * @generated from message controlplane.v1.UpdateDaemonResponse
@@ -235,7 +300,7 @@ export type UpdateDaemonResponse = Message<"controlplane.v1.UpdateDaemonResponse
  * Use `create(UpdateDaemonResponseSchema)` to create a new message.
  */
 export const UpdateDaemonResponseSchema: GenMessage<UpdateDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 7);
+  messageDesc(file_services_daemon_v1_daemon, 8);
 
 /**
  * @generated from message controlplane.v1.DeleteDaemonRequest
@@ -257,7 +322,7 @@ export type DeleteDaemonRequest = Message<"controlplane.v1.DeleteDaemonRequest">
  * Use `create(DeleteDaemonRequestSchema)` to create a new message.
  */
 export const DeleteDaemonRequestSchema: GenMessage<DeleteDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 8);
+  messageDesc(file_services_daemon_v1_daemon, 9);
 
 /**
  * @generated from message controlplane.v1.DeleteDaemonResponse
@@ -270,7 +335,7 @@ export type DeleteDaemonResponse = Message<"controlplane.v1.DeleteDaemonResponse
  * Use `create(DeleteDaemonResponseSchema)` to create a new message.
  */
 export const DeleteDaemonResponseSchema: GenMessage<DeleteDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 9);
+  messageDesc(file_services_daemon_v1_daemon, 10);
 
 /**
  * @generated from message controlplane.v1.SuspendDaemonRequest
@@ -287,7 +352,7 @@ export type SuspendDaemonRequest = Message<"controlplane.v1.SuspendDaemonRequest
  * Use `create(SuspendDaemonRequestSchema)` to create a new message.
  */
 export const SuspendDaemonRequestSchema: GenMessage<SuspendDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 10);
+  messageDesc(file_services_daemon_v1_daemon, 11);
 
 /**
  * @generated from message controlplane.v1.SuspendDaemonResponse
@@ -304,7 +369,7 @@ export type SuspendDaemonResponse = Message<"controlplane.v1.SuspendDaemonRespon
  * Use `create(SuspendDaemonResponseSchema)` to create a new message.
  */
 export const SuspendDaemonResponseSchema: GenMessage<SuspendDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 11);
+  messageDesc(file_services_daemon_v1_daemon, 12);
 
 /**
  * @generated from message controlplane.v1.ResumeDaemonRequest
@@ -321,7 +386,7 @@ export type ResumeDaemonRequest = Message<"controlplane.v1.ResumeDaemonRequest">
  * Use `create(ResumeDaemonRequestSchema)` to create a new message.
  */
 export const ResumeDaemonRequestSchema: GenMessage<ResumeDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 12);
+  messageDesc(file_services_daemon_v1_daemon, 13);
 
 /**
  * @generated from message controlplane.v1.ResumeDaemonResponse
@@ -338,7 +403,7 @@ export type ResumeDaemonResponse = Message<"controlplane.v1.ResumeDaemonResponse
  * Use `create(ResumeDaemonResponseSchema)` to create a new message.
  */
 export const ResumeDaemonResponseSchema: GenMessage<ResumeDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 13);
+  messageDesc(file_services_daemon_v1_daemon, 14);
 
 /**
  * @generated from message controlplane.v1.ResizeDaemonRequest
@@ -362,7 +427,7 @@ export type ResizeDaemonRequest = Message<"controlplane.v1.ResizeDaemonRequest">
  * Use `create(ResizeDaemonRequestSchema)` to create a new message.
  */
 export const ResizeDaemonRequestSchema: GenMessage<ResizeDaemonRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 14);
+  messageDesc(file_services_daemon_v1_daemon, 15);
 
 /**
  * @generated from message controlplane.v1.ResizeDaemonResponse
@@ -379,7 +444,7 @@ export type ResizeDaemonResponse = Message<"controlplane.v1.ResizeDaemonResponse
  * Use `create(ResizeDaemonResponseSchema)` to create a new message.
  */
 export const ResizeDaemonResponseSchema: GenMessage<ResizeDaemonResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 15);
+  messageDesc(file_services_daemon_v1_daemon, 16);
 
 /**
  * @generated from message controlplane.v1.GrowDaemonDiskRequest
@@ -404,7 +469,7 @@ export type GrowDaemonDiskRequest = Message<"controlplane.v1.GrowDaemonDiskReque
  * Use `create(GrowDaemonDiskRequestSchema)` to create a new message.
  */
 export const GrowDaemonDiskRequestSchema: GenMessage<GrowDaemonDiskRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 16);
+  messageDesc(file_services_daemon_v1_daemon, 17);
 
 /**
  * @generated from message controlplane.v1.GrowDaemonDiskResponse
@@ -421,7 +486,7 @@ export type GrowDaemonDiskResponse = Message<"controlplane.v1.GrowDaemonDiskResp
  * Use `create(GrowDaemonDiskResponseSchema)` to create a new message.
  */
 export const GrowDaemonDiskResponseSchema: GenMessage<GrowDaemonDiskResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 17);
+  messageDesc(file_services_daemon_v1_daemon, 18);
 
 /**
  * @generated from message controlplane.v1.SetPortAccessRequest
@@ -448,7 +513,7 @@ export type SetPortAccessRequest = Message<"controlplane.v1.SetPortAccessRequest
  * Use `create(SetPortAccessRequestSchema)` to create a new message.
  */
 export const SetPortAccessRequestSchema: GenMessage<SetPortAccessRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 18);
+  messageDesc(file_services_daemon_v1_daemon, 19);
 
 /**
  * @generated from message controlplane.v1.SetPortAccessResponse
@@ -472,7 +537,7 @@ export type SetPortAccessResponse = Message<"controlplane.v1.SetPortAccessRespon
  * Use `create(SetPortAccessResponseSchema)` to create a new message.
  */
 export const SetPortAccessResponseSchema: GenMessage<SetPortAccessResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 19);
+  messageDesc(file_services_daemon_v1_daemon, 20);
 
 /**
  * @generated from message controlplane.v1.RemovePortAccessRequest
@@ -494,7 +559,7 @@ export type RemovePortAccessRequest = Message<"controlplane.v1.RemovePortAccessR
  * Use `create(RemovePortAccessRequestSchema)` to create a new message.
  */
 export const RemovePortAccessRequestSchema: GenMessage<RemovePortAccessRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 20);
+  messageDesc(file_services_daemon_v1_daemon, 21);
 
 /**
  * @generated from message controlplane.v1.RemovePortAccessResponse
@@ -507,7 +572,7 @@ export type RemovePortAccessResponse = Message<"controlplane.v1.RemovePortAccess
  * Use `create(RemovePortAccessResponseSchema)` to create a new message.
  */
 export const RemovePortAccessResponseSchema: GenMessage<RemovePortAccessResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 21);
+  messageDesc(file_services_daemon_v1_daemon, 22);
 
 /**
  * @generated from message controlplane.v1.ListPortAccessRulesRequest
@@ -524,7 +589,7 @@ export type ListPortAccessRulesRequest = Message<"controlplane.v1.ListPortAccess
  * Use `create(ListPortAccessRulesRequestSchema)` to create a new message.
  */
 export const ListPortAccessRulesRequestSchema: GenMessage<ListPortAccessRulesRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 22);
+  messageDesc(file_services_daemon_v1_daemon, 23);
 
 /**
  * @generated from message controlplane.v1.ListPortAccessRulesResponse
@@ -541,7 +606,7 @@ export type ListPortAccessRulesResponse = Message<"controlplane.v1.ListPortAcces
  * Use `create(ListPortAccessRulesResponseSchema)` to create a new message.
  */
 export const ListPortAccessRulesResponseSchema: GenMessage<ListPortAccessRulesResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 23);
+  messageDesc(file_services_daemon_v1_daemon, 24);
 
 /**
  * @generated from message controlplane.v1.SetDefaultPortAccessRequest
@@ -567,7 +632,7 @@ export type SetDefaultPortAccessRequest = Message<"controlplane.v1.SetDefaultPor
  * Use `create(SetDefaultPortAccessRequestSchema)` to create a new message.
  */
 export const SetDefaultPortAccessRequestSchema: GenMessage<SetDefaultPortAccessRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 24);
+  messageDesc(file_services_daemon_v1_daemon, 25);
 
 /**
  * @generated from message controlplane.v1.SetDefaultPortAccessResponse
@@ -586,7 +651,7 @@ export type SetDefaultPortAccessResponse = Message<"controlplane.v1.SetDefaultPo
  * Use `create(SetDefaultPortAccessResponseSchema)` to create a new message.
  */
 export const SetDefaultPortAccessResponseSchema: GenMessage<SetDefaultPortAccessResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 25);
+  messageDesc(file_services_daemon_v1_daemon, 26);
 
 /**
  * @generated from service controlplane.v1.DaemonService

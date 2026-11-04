@@ -7,16 +7,13 @@ vi.mock('@/api/settings-grpc', () => ({
   },
 }))
 
-vi.mock('@/api/daemon-grpc', () => ({
-  startOAuthViaDaemon: vi.fn(),
-}))
-
 vi.mock('@/lib/oauth-local', () => ({
+  startOAuthViaDaemon: vi.fn(),
   startOAuthViaLocalServer: vi.fn(),
 }))
 
 import { settingsGrpc } from '@/api/settings-grpc'
-import { startOAuthViaDaemon } from '@/api/daemon-grpc'
+import { startOAuthViaDaemon } from '@/lib/oauth-local'
 import { runClaudeOAuthFlow } from '@/lib/claude-oauth'
 import { runCodexOAuthFlow } from '@/lib/codex-oauth'
 
@@ -55,7 +52,7 @@ const setCryptoMock = () => {
 
 /** An Electron build whose main process has the local receiver. */
 const withLocalReceiver = () => {
-  const startProviderOAuth = vi.fn(async () => ({
+  const startProviderOAuth = vi.fn(async (_template: string) => ({
     flowId: 'flow-1',
     redirectUri: 'http://localhost:51000/callback',
   }))
@@ -158,7 +155,7 @@ describe.each([
     // resolved the redirect URI instead, the advertised address and the
     // listening socket could disagree — which is what the reported
     // ERR_CONNECTION_REFUSED looked like.
-    const template = startProviderOAuth.mock.calls[0][0] as string
+    const template = startProviderOAuth.mock.calls[0]![0]
     expect(template).toContain('{redirect_uri}')
   })
 

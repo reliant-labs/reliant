@@ -1,20 +1,19 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
+import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import React from "react";
 
-// The hook fetches through question-grpc; stub it so this characterizes
-// cache/render behavior rather than transport.
-vi.mock("../../api/question-grpc", () => ({
-  questionGrpc: {
-    listPendingQuestions: vi.fn(async () => []),
-    resolveQuestion: vi.fn(async () => ({})),
-  },
-}));
-
+import { create } from "@bufbuild/protobuf";
+import { QuestionInfoSchema } from "../../gen/reliant/v1/question_pb";
+import { setTransport } from "../../lib/connect";
+import { mockTransport } from "../../lib/test-utils";
 import { queryClient } from "../../lib/query-client";
-import { upsertPendingQuestionInCache, usePendingQuestions } from "../approval-queries";
+import { upsertPendingQuestionInCache, usePendingQuestions } from "../question-queries";
+
+// The hook fetches through the transport; answer it in memory so this
+// characterizes cache/render behavior rather than transport.
+setTransport(mockTransport({ "QuestionService.ListPendingQuestions": { response: { questions: [] } } }));
 
 // Evidence for WHERE the "already-answered ask briefly pops up when I open a
 // chat" flash had to be fixed.
@@ -41,16 +40,15 @@ import { upsertPendingQuestionInCache, usePendingQuestions } from "../approval-q
 const wrapper = ({ children }: { children: ReactNode }) =>
   React.createElement(QueryClientProvider, { client: queryClient }, children);
 
-const question = {
-  question_id: "q1",
-  chat_id: "c1",
-  workflow_id: "w1",
-  thread_id: "c1",
-  step_id: "s1",
+const question = create(QuestionInfoSchema, {
+  questionId: "q1",
+  chatId: "c1",
+  workflowId: "w1",
+  threadId: "c1",
+  stepId: "s1",
   status: "pending",
-  created_at: "",
   metadata: '{"type":"ask_user"}',
-} as never;
+});
 
 beforeEach(() => queryClient.clear());
 afterEach(() => queryClient.clear());
@@ -72,11 +70,11 @@ describe("pending question visibility on chat open", () => {
     // A superseded "pending" arriving on its own — the snapshot replaying an
     // answered question, or a resolve path that never announced itself.
     upsertPendingQuestionInCache("c1", question);
-    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    await waitFor(() => expect(result.current.data?.questions).toHaveLength(1));
 
     expect(
       seen.some((v) =>
-        (v as { question_id?: string }[] | undefined)?.some((q) => q.question_id === "q1"),
+        (v as { questions: { questionId: string }[] } | undefined)?.questions.some((q) => q.questionId === "q1"),
       ),
       "a pending question in the cache is rendered with no guard in between, " +
         "which is why the flash must be prevented upstream rather than hidden here",

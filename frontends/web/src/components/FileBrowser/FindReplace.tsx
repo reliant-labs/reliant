@@ -1,6 +1,7 @@
 // FindReplace - Find and replace text across files in the workspace
-import { Tooltip } from "../ui/Tooltip";
-import { useState, useEffect, useRef, useCallback } from "react";
+import Tooltip from "../forge-ui/tooltip";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { createPortal } from "react-dom";
 import {
   Search,
@@ -15,16 +16,11 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import {
-  searchFiles,
-  replaceInFiles,
-  type SearchResult,
-  type SearchMatch,
-  type ReplaceInFilesResult,
-} from "../../api/fileSystem";
+import { replaceInFiles, type ReplaceInFilesResult } from "../../api/fileSystem";
+import { useFileSearch, type SearchMatch } from "../../hooks/file-system-queries";
 import { useProjectStore } from "../../store/projectStore";
-import { useActiveWorktreeId } from "../../store/worktreeStore";
 import { useViewerStore } from "../../store/viewerStore";
+import { useActiveWorktreeId } from "../../hooks/worktree-queries";
 
 interface FindReplaceProps {
   isOpen: boolean;
@@ -34,16 +30,16 @@ interface FindReplaceProps {
 export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
   const [searchText, setSearchText] = useState("");
   const [replaceText, setReplaceText] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [totalMatches, setTotalMatches] = useState(0);
-  const [isSearching, setIsSearching] = useState(false);
   const [isReplacing, setIsReplacing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [replaceError, setReplaceError] = useState<string | null>(null);
   const [replaceResult, setReplaceResult] = useState<ReplaceInFilesResult | null>(null);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [showOptions, setShowOptions] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  // Every result is selected unless the user unticked it. Kept as the
+  // exceptions, so a re-run of the same search (after a replace) keeps the
+  // files the user left out, and a new file in the results starts selected.
+  const [deselectedFiles, setDeselectedFiles] = useState<Set<string>>(new Set());
 
   // Search options
   const [caseSensitive, setCaseSensitive] = useState(false);
@@ -52,12 +48,44 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const replaceInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const queryClient = useQueryClient();
   const currentProject = useProjectStore((state) => state.currentProject);
   
   // Use the global active worktree (from worktreeStore) as the single source of truth
   const effectiveWorktreeId = useActiveWorktreeId();
+
+  // Debounced; the term and every option are the key. A replace re-runs it.
+  const search = useFileSearch(searchText, {
+    worktreeId: effectiveWorktreeId,
+    caseSensitive,
+    filePattern,
+    maxResults: 100,
+    contextLines: 1,
+    enabled: isOpen,
+  });
+  const { results, totalMatches } = search;
+  const isSearching = search.isSearching;
+  const error = replaceError ?? (search.error ? search.error.message || "Search failed" : null);
+
+  const selectedFiles = useMemo(
+    () => new Set(results.map((r) => r.path).filter((path) => !deselectedFiles.has(path))),
+    [results, deselectedFiles],
+  );
+
+  // Each new answer: expand the first file.
+  useEffect(() => {
+    if (results.length > 0) {
+      setExpandedFiles(new Set([results[0].path]));
+    }
+  }, [results]);
+
+  // A different search starts over: everything selected, no replace report.
+  useEffect(() => {
+    setDeselectedFiles(new Set());
+    setReplaceResult(null);
+    setReplaceError(null);
+  }, [searchText, caseSensitive, filePattern, effectiveWorktreeId]);
 
   // Focus search input when opened
   useEffect(() => {
@@ -67,105 +95,34 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
       // Clear state when closed
       setSearchText("");
       setReplaceText("");
-      setResults([]);
-      setTotalMatches(0);
-      setError(null);
+      setReplaceError(null);
       setReplaceResult(null);
       setExpandedFiles(new Set());
       setHighlightedIndex(0);
-      setSelectedFiles(new Set());
+      setDeselectedFiles(new Set());
     }
   }, [isOpen]);
-
-  // Debounced search
-  const performSearch = useCallback(
-    async (query: string) => {
-      if (!query.trim() || !currentProject) {
-        setResults([]);
-        setTotalMatches(0);
-        setSelectedFiles(new Set());
-        return;
-      }
-
-      setIsSearching(true);
-      setError(null);
-      setReplaceResult(null);
-
-      try {
-        const response = await searchFiles(query, {
-          worktreeId: effectiveWorktreeId,
-          caseSensitive,
-          filePattern: filePattern || undefined,
-          maxResults: 100,
-          contextLines: 1,
-        });
-
-        setResults(response.results);
-        setTotalMatches(response.totalMatches);
-
-        // Auto-expand first result and select all files by default
-        if (response.results.length > 0) {
-          setExpandedFiles(new Set([response.results[0].path]));
-          setSelectedFiles(new Set(response.results.map((r) => r.path)));
-        }
-      } catch (err) {
-        console.error("Search failed:", err);
-        setError(err instanceof Error ? err.message : "Search failed");
-      } finally {
-        setIsSearching(false);
-      }
-    },
-    [currentProject, effectiveWorktreeId, caseSensitive, filePattern]
-  );
-
-  // Handle search input change with debounce
-  const handleSearchChange = (value: string) => {
-    setSearchText(value);
-
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    searchTimeoutRef.current = setTimeout(() => {
-      performSearch(value);
-    }, 300);
-  };
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, []);
 
   // Handle replace all
   const handleReplaceAll = async () => {
     if (!searchText.trim() || !currentProject || selectedFiles.size === 0) return;
 
     setIsReplacing(true);
-    setError(null);
+    setReplaceError(null);
 
     try {
+      // Re-runs this search too, so the list shows what is left to replace.
       const result = await replaceInFiles(searchText, replaceText, {
         worktreeId: effectiveWorktreeId,
         caseSensitive,
         filePattern: filePattern || undefined,
         filePaths: Array.from(selectedFiles),
-      });
+      }, queryClient);
 
       setReplaceResult(result);
-
-      // Clear search results after successful replace
-      if (result.filesModified > 0) {
-        setResults([]);
-        setTotalMatches(0);
-        setSelectedFiles(new Set());
-      }
     } catch (err) {
       console.error("Replace failed:", err);
-      setError(err instanceof Error ? err.message : "Replace failed");
+      setReplaceError(err instanceof Error ? err.message : "Replace failed");
     } finally {
       setIsReplacing(false);
     }
@@ -251,7 +208,7 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
   // Toggle file selection
   const toggleFileSelection = (path: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setSelectedFiles((prev) => {
+    setDeselectedFiles((prev) => {
       const next = new Set(prev);
       if (next.has(path)) {
         next.delete(path);
@@ -265,9 +222,9 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
   // Toggle select all files
   const toggleSelectAll = () => {
     if (selectedFiles.size === results.length) {
-      setSelectedFiles(new Set());
+      setDeselectedFiles(new Set(results.map((r) => r.path)));
     } else {
-      setSelectedFiles(new Set(results.map((r) => r.path)));
+      setDeselectedFiles(new Set());
     }
   };
 
@@ -311,13 +268,13 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
             ref={searchInputRef}
             type="text"
             value={searchText}
-            onChange={(e) => handleSearchChange(e.target.value)}
+            onChange={(e) => setSearchText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search for..."
             className="flex-1 bg-transparent text-sm font-mono outline-none placeholder:text-muted-foreground"
           />
           {isSearching && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
-          <Tooltip content="Search options" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <Tooltip content="Search options" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
             onClick={() => setShowOptions(!showOptions)}
             className={cn(
@@ -387,7 +344,7 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
                 value={filePattern}
                 onChange={(e) => setFilePattern(e.target.value)}
                 placeholder="e.g., *.ts, *.go"
-                className="flex-1 px-2 py-1 text-xs font-mono bg-background border border-border rounded outline-none focus:ring-1 focus:ring-primary/50"
+                className="flex-1 px-2 py-1 text-xs font-mono bg-background border border-border rounded outline-none focus:ring-1 focus:ring-ring"
               />
             </div>
           </div>
@@ -472,7 +429,7 @@ export function FindReplace({ isOpen, onClose }: FindReplaceProps) {
                           <ChevronRight className="w-3 h-3 text-muted-foreground" />
                         )}
                       </button>
-                      <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                      <FileText className="w-4 h-4 text-primary-ink flex-shrink-0" />
                       <span
                         className="text-sm font-mono truncate flex-1"
                         onClick={() => handleResultClick(result.path, undefined, false)} // Click - don't auto-focus

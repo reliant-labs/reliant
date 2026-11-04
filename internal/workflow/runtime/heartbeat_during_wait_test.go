@@ -23,7 +23,7 @@ import (
 // anything the activity could report: shell_wait parks for up to 20 minutes,
 // and a call whose daemon dropped waits up to toolexec.DaemonReconnectGrace
 // (90s) for it to reconnect. ExecuteTools is dispatched with HeartbeatTimeout =
-// activityHeartbeatTimeout (30s, StepExecutor.activityOptions), and an attempt
+// activityHeartbeatTimeout (60s, StepExecutor.activityOptions), and an attempt
 // the server times out is re-dispatched — which for a tool means
 // "interrupted", never a second run (isActivityRetry). So such a wait must not
 // cost the attempt its heartbeat.
@@ -38,7 +38,7 @@ import (
 // The margin here is narrower than in production. The test server derives
 // the heartbeat throttle as 0.8 x HeartbeatTimeout with no cap, so heartbeats
 // land every 3.2s against a 4s timeout. A worker caps the throttle at
-// workersetup's 2s, so in production they land every 2s against 30s.
+// workersetup's 15s, so in production they land every 15s against 60s.
 func TestActivityWrapper_HeartbeatsThroughAWaitLongerThanTheHeartbeatTimeout(t *testing.T) {
 	if testing.Short() {
 		t.Skip("-short: blocks for several heartbeat timeouts in real time; runs in the full lane")

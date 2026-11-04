@@ -46,6 +46,8 @@ export const CONTEXTS = [
   "file-tree",
   "workflow-canvas",
   "right-sidebar",
+  // What is on screen rather than where focus is: a workspace conversation.
+  "chat-view",
   // Outermost: always active, lowest precedence.
   "global",
 ] as const;
@@ -101,12 +103,15 @@ export function detectActiveContexts(
   if (typeof document !== "undefined") {
     // Modal state is a document-level fact, not a focus fact: a modal can be
     // open while focus is still settling into it.
-    if (document.querySelector('[data-modal-open="true"]')) {
+    // `data-modal-open` is reliant's own overlays' marker; `aria-modal` is
+    // every real dialog's, forge-ui/modal included.
+    if (document.querySelector('[data-modal-open="true"], [aria-modal="true"]')) {
       active.push("modal");
     }
     if (document.querySelector('[data-slash-menu-open="true"]')) {
       active.push("slash-menu");
     }
+    if (chatOnScreen()) active.push("chat-view");
   }
 
   if (target) {
@@ -124,6 +129,22 @@ export function detectActiveContexts(
 
   active.push("global");
   return sortByPrecedence(active) as ShortcutContext[];
+}
+
+/**
+ * True while the workspace shows a conversation — what Cmd+F searches.
+ *
+ * A document-level fact like `modal`: the conversation is what the user is
+ * looking at whether focus is in the composer, the transcript or a sidebar.
+ * The marker sits on the workspace's open chat only (ChatInterface, not the
+ * empty new-chat view), and a hidden one (display: none) does not count.
+ */
+export function chatOnScreen(): boolean {
+  if (typeof document === "undefined") return false;
+  const view = document.querySelector('[data-context="chat-view"]');
+  if (!view) return false;
+  // Not in jsdom, which renders nothing; presence is the best it can say.
+  return typeof view.checkVisibility === "function" ? view.checkVisibility() : true;
 }
 
 /**

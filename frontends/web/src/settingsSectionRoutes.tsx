@@ -3,17 +3,20 @@
  * and its tests mount the SAME definitions with only the page swapped — the
  * pattern settingsConnectorRoutes.tsx and workflowsAreaRoutes.tsx follow.
  *
- *   /settings/environments/$machineId  One machine's detail view (and its
+ *   /settings/machines/$machineId      One machine's detail view (and its
  *                                      Access card). A real URL, so Back
  *                                      returns to the list, a refresh keeps
  *                                      the machine open, and docs can link it.
  *                                      Static prefix, so the router ranks it
  *                                      above /settings/$section.
+ *   /settings/environments/$machineId  The same view under the section's old
+ *                                      id: redirects to the path above.
  *   /settings/$section                 Any section. A slug that is not a
  *                                      section never reaches the page:
- *                                        - an alias (`machines`, the nav label
- *                                          of the `environments` section)
- *                                          redirects to the real slug;
+ *                                        - an alias (an old id such as
+ *                                          `general` or `environments`, or a
+ *                                          singular like `machine`) redirects
+ *                                          to the real slug;
  *                                        - anything else redirects to bare
  *                                          /settings with `notFound=<slug>`,
  *                                          which the page shows as a notice.
@@ -39,9 +42,22 @@ export function createSettingsSectionRoutes<TParent extends AnyRoute>(
 ) {
   const machineDetailRoute = createRoute({
     getParentRoute,
-    path: '/settings/environments/$machineId',
+    path: '/settings/machines/$machineId',
     validateSearch: settingsSearchSchema,
     component: components.page,
+  })
+
+  // The machine detail under the section's old id, from links and bookmarks
+  // made before `environments` became `machines`.
+  const legacyMachineDetailRoute = createRoute({
+    getParentRoute,
+    path: '/settings/environments/$machineId',
+    beforeLoad: ({ params, location }) => {
+      throw redirect({
+        href: `/settings/machines/${encodeURIComponent(params.machineId)}${location.searchStr}`,
+        replace: true,
+      })
+    },
   })
 
   const sectionRoute = createRoute({
@@ -63,11 +79,11 @@ export function createSettingsSectionRoutes<TParent extends AnyRoute>(
       // by older links and bookmarks: move it onto the path.
       const query = new URLSearchParams(location.searchStr)
       const daemon = query.get('daemon')
-      if (slug === 'environments' && daemon) {
+      if (slug === 'machines' && daemon) {
         query.delete('daemon')
         const rest = query.toString()
         throw redirect({
-          href: `/settings/environments/${encodeURIComponent(daemon)}${rest ? `?${rest}` : ''}`,
+          href: `/settings/machines/${encodeURIComponent(daemon)}${rest ? `?${rest}` : ''}`,
           replace: true,
         })
       }
@@ -78,5 +94,5 @@ export function createSettingsSectionRoutes<TParent extends AnyRoute>(
     component: components.page,
   })
 
-  return [machineDetailRoute, sectionRoute]
+  return [machineDetailRoute, legacyMachineDetailRoute, sectionRoute]
 }

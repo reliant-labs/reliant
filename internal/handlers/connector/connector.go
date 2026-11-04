@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -306,6 +307,8 @@ func (s *Service) RevokeConnector(
 		if _, err := s.deps.Tokens.RevokeResource(ctx, connectorResource(id)); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Unavailable("failed to revoke connector credential"))
 		}
+	} else {
+		activity.Skip(ctx) // already revoked: nothing changed
 	}
 	return connect.NewResponse(&reliantv1.RevokeConnectorResponse{Revoked: revoked}), nil
 }
@@ -379,7 +382,7 @@ func (s *Service) ListAvailableTools(
 
 // mcpURL is the endpoint the user pastes into their MCP client.
 func (s *Service) mcpURL() string {
-	base := strings.TrimSuffix(strings.TrimSpace(s.deps.PublicURL), "/")
+	base := s.publicURL
 	if base == "" {
 		// Without a configured public URL, return the path alone rather than
 		// inventing a hostname that would silently be wrong.

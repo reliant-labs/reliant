@@ -147,7 +147,7 @@ func (h *testHelper) addMessageWithID(id, chatID, threadID, contextWindowID stri
 	h.t.Helper()
 	ctx := context.Background()
 
-	seq, err := h.repo.GetNextSeq(ctx, chatID, threadID)
+	_, seq, err := h.repo.AllocateMessageOrder(ctx, threadID, chatID)
 	if err != nil {
 		h.t.Fatalf("failed to get next seq: %v", err)
 	}
@@ -174,7 +174,7 @@ func (h *testHelper) addMessageWithTokens(chatID, threadID, contextWindowID stri
 	h.t.Helper()
 	ctx := context.Background()
 
-	seq, err := h.repo.GetNextSeq(ctx, chatID, threadID)
+	_, seq, err := h.repo.AllocateMessageOrder(ctx, threadID, chatID)
 	if err != nil {
 		h.t.Fatalf("failed to get next seq: %v", err)
 	}

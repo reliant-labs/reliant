@@ -1,6 +1,6 @@
 # 13 — P9: the web frontend on forge
 
-Status: **plan, not started.** Owner decisions are in §11. Shared context: `PLAN.md` §4 P9,
+Status: **in progress; R4 (hooks) is complete** (§8.1). Owner decisions are in §11. Shared context: `PLAN.md` §4 P9,
 `11-svcerr-plan.md` §2.3 and §7 Q3 (markers → reason header).
 
 Every claim below comes from reliant `origin/main` at `cbc5221a`, control-plane `origin/main` at
@@ -232,9 +232,9 @@ importers.
 | `Modal` | 56 + 2 | `forge-ui/modal` (8 already) | **S2**, after an a11y parity check (focus trap, Escape, nested modals in `ImagePreviewModal`) |
 | `Dropdown` | 6 | `dropdown_menu` | **S2** |
 | `Button` | 100 + 12 | `button` (`primary/secondary/outline/ghost/danger`, sizes, loading) | **S3**. Variant map: `destructive→danger`. `default`/`accent`/`gradient` have no forge twin (D6). |
-| `Tooltip` | 116 | none | keep. Upstream a `tooltip` to forge (the most-used primitive has no catalog entry). |
-| `SearchableDropdown`, `MultiSelectDropdown` | 2, 3 | `select` (no search/multi) | keep. Upstream `combobox`. |
-| `ContextMenu`, `HelpPopover` | 8, 6 | none | keep. Upstream `context_menu`/`popover`. |
+| `Tooltip` | 116 | `tooltip` (forge#1319, #1324) | **R5 done** (#1523): upstreamed, 226 sites migrated, deleted. |
+| `SearchableDropdown`, `MultiSelectDropdown` | 2, 3 | `combobox` (forge#1323) | **R5 done** (#1532): upstreamed, migrated, deleted; `components/ui/` is gone. |
+| `ContextMenu`, `HelpPopover` | 8, 6 | `context_menu`, `popover` point anchor (forge#1322) | **R5 done** (#1531): upstreamed, migrated; HelpPopover is a `workflow/` composition over `popover`. |
 | `FileIcon`, `ImagePreviewModal`, `RunStatusIndicator`, `ConfigScopeSelector` | 8, 6, 11, 2 | domain | move out of `ui/` into their feature directories (`ui/` is for primitives) |
 
 Installs keep going to `src/components/forge-ui/`, not `ui/` (C4). Every replaced site is wrapped in `.forge-ui` (or
@@ -324,6 +324,33 @@ R0 either (it touches no generated file). Start R3 first.
 | R5 S0/S1/S2/S3 | reliant | `src/index.css`, `src/components/ui/*`, `forge-ui/*`, call sites per primitive | R0 (for install-dir behaviour); S0 first |
 
 Critical path: F9-1…F9-5 → pin → R0 → R1 → R4 waves. R3 and R5-S0/S1 run alongside from day 1.
+
+### 8.1 R4 status: complete
+
+R4 is done. Every reliant.v1 service the web reads either has generated hooks and keys, or stays
+hand-written for a stated reason. `src/api/grpc-client.ts` is deleted: hand-written code calls
+`connectClient(<Service>)` from `src/lib/connect.ts` directly, the same seam the generated hooks use.
+
+- **Merged:** wave A #1385; B1 #1437, B2 #1472; C: Run #1508, Project #1513, Worktree #1514, Trigger #1515,
+  Workflow #1516; D (plan `16-p9-r4-wave-d-plan.md` #1518): D0 #1521, D1 #1533, D2 #1562, D3 #1537,
+  D4 #1544, D5 #1567, D6 #1569, D7 #1576, and DZ #1582, which deleted `grpc-client.ts` and
+  `daemon-grpc.ts` and removed the caller-less wrappers.
+- **Stayed hand-written** (D4's "acceptable where streaming owns the cache", decided per service in
+  16 §0):
+  - the chat core (`hooks/chat-model.ts` / `chat-actions.ts`): the stream writes it in place;
+  - the stream (`api/streaming-grpc.ts`, `api/process-output-streaming.ts`);
+  - the file tree and content (`api/fileSystem.ts`): per-machine, lazy, and the editor buffer is client state;
+  - `api/grpc-unauth.ts`: pre-session, kept apart for the import graph;
+  - the DaemonService OAuth helper, now in `lib/oauth-local.ts`;
+  - the shrunk `api/settings-grpc.ts` (owner decision S, option C).
+
+  Small module caches for non-React code (`node-metadata`, `cel-completion-service`, `catalog-models`)
+  and `api/scenarios.ts` (no wave scheduled ScenarioService) also stay. The full list and reasons are in
+  the Status section of `16-p9-r4-wave-d-plan.md`.
+- **Forge items delivered:** #1294 (select-typed data, `use<Rpc>Infinite`, full-message `mockTransport`),
+  #1312 (`lint --frontend-stores` across every frontend), #1316 (stale starter rows on a hook-kind flip;
+  `forge:query-scope`), #1318 (`<svc>Queries` for code outside React), #1320 (`<svc>Keys.<rpc>.all`
+  method-scope prefix), #1321 (adopted frontends raised to the web-runtime floor).
 
 ---
 

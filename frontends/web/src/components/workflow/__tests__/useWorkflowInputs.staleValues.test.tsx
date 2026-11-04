@@ -25,24 +25,21 @@ import { ValueSchema } from '@bufbuild/protobuf/wkt'
  * result of the previous one rather than onto a stale snapshot.
  */
 
-vi.mock('../../../api/workflow-grpc', () => ({
-  workflowGrpc: {
-    listWorkflows: vi.fn(async () => []),
-    getWorkflow: vi.fn(async () => ({ workflow: null })),
-  },
+vi.mock('../../../hooks/workflow-queries', () => ({
+  fetchWorkflowList: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })),
+  fetchWorkflow: vi.fn(async () => ({ workflow: undefined })),
 }))
 
-vi.mock('../../../api/preset-grpc', () => ({
-  presetGrpc: { getDefaultPresets: vi.fn(async () => ({})) },
-}))
-
-vi.mock('../../../store/globalDataStore', () => ({
+vi.mock('../../../hooks/preset-queries', () => ({
+  fetchDefaultPresets: vi.fn(async () => ({})),
   useWorkflowPresets: () => ({ presets: [], loading: false }),
 }))
 
-vi.mock('../../../store/preferencesStore', () => ({
-  usePreferencesStore: (selector: (s: unknown) => unknown) =>
-    selector({ isPresetHidden: () => false }),
+// One stable object: the hook memoizes on the predicate.
+const hidden = vi.hoisted(() => ({ isWorkflowHidden: () => false, isPresetHidden: () => false }))
+vi.mock('../../../hooks/settings-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../hooks/settings-queries')>()),
+  useHiddenItems: () => hidden,
 }))
 
 import { useWorkflowInputs } from '../useWorkflowInputs'

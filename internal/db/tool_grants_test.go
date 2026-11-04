@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -15,6 +16,7 @@ import (
 // by the call's thread and confined to the chat; a result rewritten without a
 // grant (an error replacing it) no longer grants anything.
 func TestListToolGrants(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)

@@ -1,6 +1,7 @@
 /**
  * ReliantAISection — the managed-Reliant AI settings surface, rendered as the
- * "Reliant AI" tab of the `/settings/general` AI section (see AISettings).
+ * "Reliant AI" tab of Billing (`/settings/billing?tab=ai`), which the Reliant
+ * provider card in Settings → AI links to.
  *
  * This is the END-USER view of Reliant-issued LLM access + spend, ported from
  * admin-web's `(dashboard)/ai/page.tsx` but built on the PUBLIC RPCs only:
@@ -9,13 +10,13 @@
  *   - LLMGatewayService.GetLLMSpend                → spend by model + usage rows
  *   - LLMGatewayService.ListLLMKeys / Create / Revoke / Rotate → key management
  *
- * Distinct from `/settings/general` (CombinedGeneralSettings), which manages the
- * user's OWN bring-your-own provider API keys. There is no platform-admin data
+ * Distinct from Settings → AI's providers, which manage the user's OWN
+ * bring-your-own provider accounts and keys. There is no platform-admin data
  * here — admin-web's BillingAdminService cards are intentionally omitted; the
  * per-user GetLLMSpend gives the end-user the equivalent spend view.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CreditCard,
   KeyRound,
@@ -28,19 +29,14 @@ import {
 } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
+import Button from "@/components/forge-ui/button";
+import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
+import DataTable from "@/components/forge-ui/data_table";
 import {
-  Button,
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-  PageHeader,
-  Table,
-  Thead,
-  Tbody,
-  Tr,
-  Th,
-  Td,
   Badge,
   EmptyState,
 } from "./ui";
@@ -62,6 +58,8 @@ import {
   useRotateLLMKey,
 } from "../../../hooks/useReliantAIQueries";
 import { LLMKeyStatus } from "../../../gen/controlplane/controlplane/v1/shared_pb";
+import { useActiveOrg } from "@/hooks/useOrgs";
+import { getActiveOrgId } from "@/store/activeOrgStore";
 
 // ---------------------------------------------------------------------------
 // Formatting helpers (self-contained — reliant-web has no lib/billing).
@@ -150,10 +148,6 @@ export function ReliantAISection() {
   if (!reliantAIAvailable) {
     return (
       <div className="space-y-6">
-        <PageHeader
-          title="Reliant AI"
-          subtitle="Managed AI access, credits, spend, and LLM keys."
-        />
         <EmptyState
           icon={KeyRound}
           title="Cloud not configured"
@@ -162,29 +156,38 @@ export function ReliantAISection() {
       </div>
     );
   }
-  return <ReliantAIPanel />;
+  return <OrgReliantAIPanel />;
 }
 
-function ReliantAIPanel() {
+function OrgReliantAIPanel() {
+  const orgId = useActiveOrg().activeOrgId ?? "";
+  return <ReliantAIPanel key={orgId} orgId={orgId} />;
+}
+
+function ReliantAIPanel({ orgId }: { orgId: string }) {
+  const live = useRef(true);
+  // A newer secret operation owns the reveal even inside the same org.
+  const secretOperation = useRef(0);
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; };
+  }, []);
   const [createOpen, setCreateOpen] = useState(false);
+  // The key a Revoke or Rotate is waiting on the user to confirm.
+  const [confirming, setConfirming] = useState<{ action: "revoke" | "rotate"; key: LLMKey } | null>(null);
   const [revealedKey, setRevealedKey] = useState<{
     name: string;
     secret: string;
     kind: "created" | "rotated";
   } | null>(null);
 
-  const goToBilling = useGoToBilling();
+  const goToBilling = useGoToBilling("reliant-ai");
   const overviewQ = useReliantOverview();
   const walletQ = useWalletOverview();
 
   const overview = overviewQ.data;
   const wallet = walletQ.data;
   const entitlement = overview?.entitlement;
-
-  // Org resolution mirrors admin-web: prefer the wallet's org, fall back to the
-  // entitlement's source ref. A signed-in user resolves to exactly one billing
-  // scope, so there is no org switcher.
-  const orgId = wallet?.organization?.id ?? entitlement?.sourceRefId ?? "";
 
   const { startDate, endDate } = useMemo(() => {
     const end = new Date();
@@ -231,28 +234,23 @@ function ReliantAIPanel() {
       ? (overviewQ.error as Error).message || "Failed to load Reliant AI data."
       : "";
 
-  const handleRevoke = (key: LLMKey) => {
-    if (!confirm(`Revoke "${key.name}"? This cannot be undone.`)) return;
-    revokeMut.mutate(key.id);
-  };
+  const handleRevoke = (key: LLMKey) => setConfirming({ action: "revoke", key });
+  const handleRotate = (key: LLMKey) => setConfirming({ action: "rotate", key });
 
-  const handleRotate = async (key: LLMKey) => {
-    if (
-      !confirm(
-        `Rotate "${key.name}"? A new secret is issued immediately; update your integrations.`,
-      )
-    )
-      return;
+  const revoke = (key: LLMKey) => revokeMut.mutate(key.id);
+
+  const rotate = async (key: LLMKey) => {
+    const operation = ++secretOperation.current;
     const res = await rotateMut.mutateAsync({ keyId: key.id });
+    if (!live.current || (getActiveOrgId() ?? "") !== orgId || secretOperation.current !== operation) return;
     setRevealedKey({ name: key.name, secret: res.plaintextKey, kind: "rotated" });
   };
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Reliant AI"
-        subtitle="Manage your Reliant-issued AI access, available models, credit balance, spend, and LLM keys."
-      />
+      <p className="text-sm text-muted-foreground">
+        Your Reliant-issued AI access: the models you can use, your credit balance, spend, and LLM keys.
+      </p>
 
       {fatalError && (
         <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive-ink">
@@ -432,28 +430,24 @@ function ReliantAIPanel() {
                   No AI spend recorded in the last 30 days.
                 </p>
               ) : (
-                <Table>
-                  <Thead>
-                    <Tr>
-                      <Th>Model</Th>
-                      <Th>Requests</Th>
-                      <Th>Spend</Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {spendByModel.map((row) => (
-                      <Tr key={row.model}>
-                        <Td className="font-medium text-foreground">
-                          {formatModelLabel(row.model)}
-                        </Td>
-                        <Td className="text-muted-foreground">
-                          {row.requests.toLocaleString("en-US")}
-                        </Td>
-                        <Td className="text-muted-foreground">{usd(row.spend)}</Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
+                <div className="forge-ui">
+                  <DataTable<{ model: string; row: (typeof spendByModel)[number] }>
+                    ariaLabel="Spend by model"
+                    columns={[
+                      { key: "model", header: "Model", className: "font-medium", render: (_, { row }) => formatModelLabel(row.model) },
+                      {
+                        key: "requests",
+                        header: "Requests",
+                        numeric: true,
+                        className: "text-muted-foreground",
+                        render: (_, { row }) => row.requests.toLocaleString("en-US"),
+                      },
+                      { key: "spend", header: "Spend", numeric: true, className: "text-muted-foreground", render: (_, { row }) => usd(row.spend) },
+                    ]}
+                    data={spendByModel.map((row) => ({ model: row.model, row }))}
+                    getRowKey={(r) => r.model}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -471,42 +465,30 @@ function ReliantAIPanel() {
                   No AI usage yet. Your first request will appear here.
                 </p>
               ) : (
-                <Table>
-                  <Thead>
-                    <Tr>
-                      <Th>Key</Th>
-                      <Th>Model</Th>
-                      <Th>Requests</Th>
-                      <Th>Spend</Th>
-                      {/* No "Period" column. It rendered
-                          `formatTimestamp(e.periodStart)`, and GetLLMSpend
-                          does not populate period_start — entries are
-                          aggregated per (key, model) across the whole
-                          requested range, so there is no per-entry period to
-                          show. Every row printed an em dash under a heading
-                          promising a date, which reads as missing data rather
-                          than as a column that never had any. The range is
-                          the same for every row and belongs in the card
-                          header, not repeated down a column. */}
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {spendEntries.map((e, i) => (
-                      <Tr key={`${e.keyId}-${e.model}-${i}`}>
-                        <Td className="font-medium text-foreground">
-                          {e.keyName || e.keyId || "—"}
-                        </Td>
-                        <Td className="text-muted-foreground">
-                          {formatModelLabel(e.model)}
-                        </Td>
-                        <Td className="text-muted-foreground">
-                          {Number(e.requests ?? 0n).toLocaleString("en-US")}
-                        </Td>
-                        <Td className="text-muted-foreground">{usd(e.spend)}</Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
+                // No "Period" column. It rendered `formatTimestamp(e.periodStart)`,
+                // and GetLLMSpend does not populate period_start — entries are
+                // aggregated per (key, model) across the whole requested range,
+                // so there is no per-entry period to show. The range is the same
+                // for every row and belongs in the card header.
+                <div className="forge-ui">
+                  <DataTable<{ key: string; e: (typeof spendEntries)[number] }>
+                    ariaLabel="Recent usage"
+                    columns={[
+                      { key: "keyName", header: "Key", className: "font-medium", render: (_, { e }) => e.keyName || e.keyId || "—" },
+                      { key: "model", header: "Model", className: "text-muted-foreground", render: (_, { e }) => formatModelLabel(e.model) },
+                      {
+                        key: "requests",
+                        header: "Requests",
+                        numeric: true,
+                        className: "text-muted-foreground",
+                        render: (_, { e }) => Number(e.requests ?? 0n).toLocaleString("en-US"),
+                      },
+                      { key: "spend", header: "Spend", numeric: true, className: "text-muted-foreground", render: (_, { e }) => usd(e.spend) },
+                    ]}
+                    data={spendEntries.map((e, i) => ({ key: `${e.keyId}-${e.model}-${i}`, e }))}
+                    getRowKey={(r) => r.key}
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
@@ -528,7 +510,9 @@ function ReliantAIPanel() {
             }
             creating={createMut.isPending}
             onCreate={async (args) => {
+              const operation = ++secretOperation.current;
               const res = await createMut.mutateAsync({ orgId, ...args });
+              if (!live.current || (getActiveOrgId() ?? "") !== orgId || secretOperation.current !== operation) return;
               setCreateOpen(false);
               setRevealedKey({
                 name: args.name,
@@ -541,6 +525,27 @@ function ReliantAIPanel() {
           />
         </>
       )}
+      <ConfirmationDialog
+        open={confirming !== null}
+        title={
+          confirming?.action === "rotate" ? `Rotate "${confirming.key.name}"?` : `Revoke "${confirming?.key.name ?? ""}"?`
+        }
+        description={
+          confirming?.action === "rotate"
+            ? "A new secret is issued immediately and the old one stops working. Update your integrations with the new one."
+            : "Anything using this key stops working at once. This can't be undone."
+        }
+        confirmLabel={confirming?.action === "rotate" ? "Rotate key" : "Revoke key"}
+        variant={confirming?.action === "rotate" ? "warning" : "danger"}
+        onConfirm={() => {
+          const pending = confirming;
+          setConfirming(null);
+          if (!pending) return;
+          if (pending.action === "revoke") revoke(pending.key);
+          else void rotate(pending.key);
+        }}
+        onCancel={() => setConfirming(null)}
+      />
     </div>
   );
 }
@@ -595,7 +600,7 @@ function RevealedKeyBanner({
         </button>
       </div>
       <div className="mt-3 flex justify-end">
-        <Button variant="outline" size="sm" onClick={copy}>
+        <Button variant="outline" size="md" onClick={copy}>
           {copied ? (
             <Check className="mr-1 h-3.5 w-3.5" />
           ) : (
@@ -630,7 +635,7 @@ interface LLMKeysCardProps {
     budgetDuration?: string;
   }) => Promise<void>;
   onRevoke: (key: LLMKey) => void;
-  onRotate: (key: LLMKey) => Promise<void>;
+  onRotate: (key: LLMKey) => void;
 }
 
 function LLMKeysCard({
@@ -660,8 +665,7 @@ function LLMKeysCard({
               Anthropic / Vertex SDKs via the Reliant gateway.
             </p>
           </div>
-          <Button onClick={onToggleCreate} variant={createOpen ? "outline" : "primary"}>
-            <Plus className="mr-1.5 h-4 w-4" />
+          <Button onClick={onToggleCreate} variant={createOpen ? "outline" : "primary"} size="xl" leftIcon={<Plus />}>
             {createOpen ? "Cancel" : "Create key"}
           </Button>
         </div>
@@ -689,70 +693,54 @@ function LLMKeysCard({
             Reliant gateway.
           </p>
         ) : (
-          <Table>
-            <Thead>
-              <Tr>
-                <Th>Name</Th>
-                <Th>Status</Th>
-                <Th>Budget</Th>
-                <Th>Spend</Th>
-                <Th>Created</Th>
-                <Th className="text-right">Actions</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {keys.map((k) => {
-                const status = keyStatusMeta(k.status);
-                const budget =
-                  k.maxBudget !== undefined
-                    ? (() => {
-                        const dur = formatBudgetDuration(k.budgetDuration);
-                        const amount = usd(k.maxBudget);
-                        return dur ? `${amount} / ${dur}` : amount;
-                      })()
-                    : "—";
-                return (
-                  <Tr key={k.id}>
-                    <Td className="font-medium text-foreground">{k.name}</Td>
-                    <Td>
-                      <Badge label={status.label} variant={status.variant} />
-                    </Td>
-                    <Td className="text-muted-foreground">{budget}</Td>
-                    <Td className="text-muted-foreground">
-                      {k.spend !== undefined ? usd(k.spend) : "—"}
-                    </Td>
-                    <Td className="text-muted-foreground">
-                      {formatTimestamp(k.createdAt)}
-                    </Td>
-                    <Td className="text-right">
-                      {status.isActive && (
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onRotate(k)}
-                            disabled={rotating}
-                          >
-                            <RefreshCw className="mr-1 h-3.5 w-3.5" />
-                            Rotate
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onRevoke(k)}
-                            disabled={revoking === k.id}
-                          >
-                            <Trash2 className="mr-1 h-3.5 w-3.5" />
-                            Revoke
-                          </Button>
-                        </div>
-                      )}
-                    </Td>
-                  </Tr>
-                );
-              })}
-            </Tbody>
-          </Table>
+          <div className="forge-ui">
+            <DataTable<{ id: string; k: LLMKey }>
+              ariaLabel="LLM keys"
+              columns={[
+                { key: "name", header: "Name", className: "font-medium", render: (_, { k }) => k.name },
+                {
+                  key: "status",
+                  header: "Status",
+                  render: (_, { k }) => {
+                    const status = keyStatusMeta(k.status);
+                    return <Badge label={status.label} variant={status.variant} />;
+                  },
+                },
+                {
+                  key: "budget",
+                  header: "Budget",
+                  className: "text-muted-foreground",
+                  render: (_, { k }) => {
+                    if (k.maxBudget === undefined) return "—";
+                    const dur = formatBudgetDuration(k.budgetDuration);
+                    const amount = usd(k.maxBudget);
+                    return dur ? `${amount} / ${dur}` : amount;
+                  },
+                },
+                { key: "spend", header: "Spend", className: "text-muted-foreground", render: (_, { k }) => (k.spend !== undefined ? usd(k.spend) : "—") },
+                { key: "created", header: "Created", className: "text-muted-foreground", render: (_, { k }) => formatTimestamp(k.createdAt) },
+                {
+                  key: "actions",
+                  header: "Actions",
+                  srHeader: true,
+                  className: "text-right",
+                  render: (_, { k }) =>
+                    keyStatusMeta(k.status).isActive && (
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="md" onClick={() => onRotate(k)} disabled={rotating} leftIcon={<RefreshCw />}>
+                          Rotate
+                        </Button>
+                        <Button variant="outline" size="md" onClick={() => onRevoke(k)} disabled={revoking === k.id} leftIcon={<Trash2 />}>
+                          Revoke
+                        </Button>
+                      </div>
+                    ),
+                },
+              ]}
+              data={keys.map((k) => ({ id: k.id, k }))}
+              getRowKey={(r) => r.id}
+            />
+          </div>
         )}
       </CardContent>
     </Card>
@@ -818,7 +806,7 @@ function CreateKeyForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. production-agent"
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring/40"
+          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring"
         />
       </div>
 
@@ -845,7 +833,7 @@ function CreateKeyForm({
                   className={cn(
                     "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
                     active
-                      ? "border-primary bg-primary/10 text-primary"
+                      ? "border-primary bg-primary/10 text-primary-ink"
                       : "border-border bg-background text-muted-foreground hover:bg-muted",
                   )}
                 >
@@ -867,7 +855,7 @@ function CreateKeyForm({
             onChange={(e) => setBudget(e.target.value)}
             inputMode="decimal"
             placeholder="e.g. 25"
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring/40"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring"
           />
         </div>
         <div className="space-y-2">
@@ -878,7 +866,7 @@ function CreateKeyForm({
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             disabled={!budget.trim()}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring/40 disabled:opacity-50"
+            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:ring-2 focus:ring-ring disabled:opacity-50"
           >
             <option value="1d">Daily</option>
             <option value="7d">Weekly</option>
@@ -890,8 +878,7 @@ function CreateKeyForm({
       {formError && <p className="text-sm text-destructive-ink">{formError}</p>}
 
       <div className="flex justify-end">
-        <Button onClick={submit} isLoading={creating} disabled={creating}>
-          <Plus className="mr-1.5 h-4 w-4" />
+        <Button onClick={submit} loading={creating} disabled={creating} size="xl" leftIcon={<Plus />}>
           Create key
         </Button>
       </div>

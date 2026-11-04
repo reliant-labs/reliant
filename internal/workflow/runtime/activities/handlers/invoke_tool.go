@@ -55,6 +55,13 @@ func (a *InvokeToolActivity) WithConfigProvider(provider cfgpkg.ConfigProvider) 
 	return a
 }
 
+// WithDaemonRouter gives the tool-execution path the router selectors
+// resolve through; see ExecuteToolsActivity.WithDaemonRouter.
+func (a *InvokeToolActivity) WithDaemonRouter(router toolexec.DaemonRouter) *InvokeToolActivity {
+	a.executeTools.WithDaemonRouter(router)
+	return a
+}
+
 // Name returns the activity name for registration.
 func (a *InvokeToolActivity) Name() string { return "InvokeTool" }
 

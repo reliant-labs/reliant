@@ -17,7 +17,7 @@ import { Download, VideoOff } from "lucide-react";
 import type { Attachment } from "../../types/chat";
 import { cn } from "../../lib/utils";
 import { getAuthTokenProvider } from "../../api/authProvider";
-import { getGRPCBaseURLPublic } from "../../api/grpc-client";
+import { reliantApiBaseUrl } from "../../lib/connect";
 
 export function isVideoMimeType(mimeType: string | undefined): boolean {
   return Boolean(mimeType?.startsWith("video/"));
@@ -27,7 +27,7 @@ export function isVideoMimeType(mimeType: string | undefined): boolean {
 export async function buildAttachmentContentUrl(
   attachmentId: string,
 ): Promise<string> {
-  const base = (getGRPCBaseURLPublic() ?? "").replace(/\/$/, "");
+  const base = (reliantApiBaseUrl() ?? "").replace(/\/$/, "");
   const path = `${base}/api/attachments/${encodeURIComponent(attachmentId)}/content`;
   const token = await getAuthTokenProvider().getToken();
   return token ? `${path}?token=${encodeURIComponent(token)}` : path;

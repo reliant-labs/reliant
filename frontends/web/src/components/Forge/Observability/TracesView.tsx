@@ -12,6 +12,11 @@
  * With a group-by, the server also answers the RED summary per group, drawn
  * as a comparison table above the list: prod against staging, one version
  * against the next. Choosing a group narrows to it (adds its filters).
+ *
+ * Above the list, the latency chart plots the same loaded traces, one dot
+ * each (traceScatter/TraceLatencyChart). Brushing a region of it narrows the
+ * list to the traces inside; the region is page state, not URL state, since
+ * it selects among the traces loaded so far.
  */
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
@@ -26,10 +31,10 @@ import {
   useTable,
   type SortingState,
 } from "@tanstack/react-table";
-import { AlertCircle, ArrowDown, ArrowUp, Search } from "lucide-react";
+import { AlertCircle, ArrowDown, ArrowUp, Search, X } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useListTraces, type TraceFilters } from "@/hooks/observability-queries";
 import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import type { ObsScope, TraceRed, TraceRedGroup, TraceSummary } from "@/services/controlPlane/observability/types";
@@ -41,10 +46,13 @@ import { formatCount, formatDuration, formatPercent, formatRate, formatTimestamp
 import { ServiceSelect } from "./LogsView";
 import { filterParam, formatFilterToken, groupLabel, type FilterToken } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
-import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
 import { TraceDetail } from "./TraceDetail";
+import { TraceLatencyChart } from "./traceScatter/TraceLatencyChart";
+import { inRegion, pointsOf, type TraceRegion } from "./traceScatter/traceScatterModel";
+import { operationName } from "./traceTitle";
 import { useRovingFocus } from "./useRovingFocus";
-import { StackedTable } from "@/components/Forge/StackedTable";
+import DataTable, { STACK, type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 
 const features = tableFeatures({
@@ -89,6 +97,7 @@ export function TracesView(props: {
         subject={props.subject}
         traceId={props.traceId}
         spanId={props.spanId}
+        range={props.range}
         navigate={props.navigate}
       />
     );
@@ -136,6 +145,17 @@ function TraceList({
   const redGroups = traces.data?.pages[0]?.redGroups ?? [];
   const filterError = traces.error && obsErrorKind(traces.error) === "invalid" ? obsErrorMessage(traces.error) : null;
   const filtered = !!rootSpanName || !!service || errorsOnly || !!minDuration;
+  const points = useMemo(() => pointsOf(rows), [rows]);
+  // The brushed region belongs to the filters it was drawn over: new filters
+  // load other traces, and a region kept across them would select nothing.
+  const [selection, setSelection] = useState<{ filters: TraceFilters; region: TraceRegion } | null>(null);
+  const region = selection?.filters === filters ? selection.region : null;
+  const visibleRows = useMemo(() => {
+    if (!region) return rows;
+    const inside = new Set(points.filter((p) => inRegion(p, region)).map((p) => p.traceId));
+    return rows.filter((row) => inside.has(row.traceId));
+  }, [rows, points, region]);
+  const failed = !!traces.error && !traces.data && !filterError;
 
   return (
     <div className="space-y-3" data-testid="obs-traces">
@@ -164,11 +184,26 @@ function TraceList({
           }}
         />
       )}
+      <TraceLatencyChart
+        status={traces.isLoading ? "loading" : failed ? "error" : "ready"}
+        points={points}
+        window={traces.data?.pages[0]?.window ?? null}
+        complete={!traces.hasNextPage}
+        total={red?.traceCount ?? null}
+        filtered={filtered}
+        region={region}
+        onRegion={(next) => setSelection(next ? { filters, region: next } : null)}
+        onOpen={(traceId) => navigate({ trace: traceId, span: undefined })}
+      />
+      {traces.data && <ObsAsOf updatedAt={traces.dataUpdatedAt} />}
+      {region && rows.length > 0 && (
+        <RegionBar region={region} shown={visibleRows.length} loaded={rows.length} onClear={() => setSelection(null)} />
+      )}
       {traces.isLoading ? (
         <Card padding="none">
           <ObsLoadingRows testId="obs-traces-loading" />
         </Card>
-      ) : traces.error && !traces.data && !filterError ? (
+      ) : failed ? (
         <ObsError error={traces.error} subject={subject} onRetry={() => void traces.refetch()} retrying={traces.isFetching} />
       ) : rows.length === 0 && !filterError ? (
         <ObsNoData
@@ -178,9 +213,17 @@ function TraceList({
           onWiden={() => navigate({ range: "7d" })}
           onClearFilters={() => navigate({ q: undefined, service: undefined, errors: undefined, minDuration: undefined })}
         />
+      ) : region && visibleRows.length === 0 ? (
+        <Card className="text-center" data-testid="obs-trace-region-empty">
+          <p className="text-sm font-medium text-ink">No loaded traces fall in the selected region</p>
+          <p className="mt-1 text-xs text-ink-muted">Drag a larger region on the chart, or clear the selection to see every loaded trace.</p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => setSelection(null)}>
+            Clear selection
+          </Button>
+        </Card>
       ) : rows.length > 0 ? (
         <TraceTable
-          traces={rows}
+          traces={visibleRows}
           subject={subject}
           hasMore={!!traces.hasNextPage}
           loadingMore={traces.isFetchingNextPage}
@@ -195,52 +238,65 @@ function TraceList({
 const NO_KEYS: string[] = [];
 const NO_TOKENS: FilterToken[] = [];
 
+/** What the brushed region is, how many loaded traces it keeps, and the way out of it. */
+function RegionBar({ region, shown, loaded, onClear }: { region: TraceRegion; shown: number; loaded: number; onClear: () => void }) {
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-1.5 text-xs"
+      data-testid="obs-trace-region"
+    >
+      <span className="text-ink">
+        <span className="font-medium tabular-nums">
+          {formatCount(shown)} of {formatCount(loaded)}
+        </span>{" "}
+        loaded traces started {formatTimestamp(region.startMs)} to {formatTimestamp(region.endMs)} and took{" "}
+        <span className="tabular-nums">
+          {formatDuration(region.minMs)} to {formatDuration(region.maxMs)}
+        </span>
+      </span>
+      <Button variant="ghost" size="sm" onClick={onClear} leftIcon={<X className="h-3.5 w-3.5" />} data-testid="obs-trace-region-clear">
+        Clear selection
+      </Button>
+    </div>
+  );
+}
+
+type RedGroupRow = { label: string; group: Record<string, string>; red: TraceRed };
+
 /** The RED summary per group, worst error rate first: the comparison a group-by asks for. */
 function RedGroups({ groups, groupBy, onNarrow }: { groups: TraceRedGroup[]; groupBy: string[]; onNarrow: (group: Record<string, string>) => void }) {
-  const sorted = [...groups].sort((a, b) => b.red.errorRate - a.red.errorRate || b.red.traceCount - a.red.traceCount);
+  const rows: RedGroupRow[] = [...groups]
+    .sort((a, b) => b.red.errorRate - a.red.errorRate || b.red.traceCount - a.red.traceCount)
+    .map(({ group, red }) => ({ label: groupLabel(group, groupBy), group, red }));
+  const columns: DataTableColumn<RedGroupRow>[] = [
+    { key: "label", header: groupBy.map(attributeLabel).join(" · "), render: (_, { label }) => <span className="font-mono">{label}</span> },
+    { key: "traces", header: "Traces", numeric: true, render: (_, { red }) => formatCount(red.traceCount) },
+    { key: "rate", header: "Rate", numeric: true, render: (_, { red }) => formatRate(red.ratePerSecond) },
+    {
+      key: "failed",
+      header: "Failed",
+      numeric: true,
+      render: (_, { red }) => <span className={cn(red.errorRate >= 0.05 && "text-danger-ink")}>{formatPercent(red.errorRate)}</span>,
+    },
+    { key: "p50", header: "p50", numeric: true, render: (_, { red }) => formatDuration(red.p50Ms) },
+    { key: "p95", header: "p95", numeric: true, render: (_, { red }) => formatDuration(red.p95Ms) },
+    { key: "p99", header: "p99", numeric: true, render: (_, { red }) => formatDuration(red.p99Ms) },
+  ];
   return (
-    <Card padding="none" data-testid="obs-trace-red-groups">
-      <StackedTable className="w-full text-sm">
-        <caption className="sr-only">Rate, errors and latency of the matching traces per {groupBy.map(attributeLabel).join(" and ")}</caption>
-        <thead>
-          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <th scope="col" className="px-4 py-2 font-medium">
-              {groupBy.map(attributeLabel).join(" · ")}
-            </th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Traces</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Rate</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Failed</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">p50</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">p95</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">p99</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map(({ group, red }) => {
-            const label = groupLabel(group, groupBy);
-            return (
-              <tr key={label} className="border-b border-border/60 last:border-b-0" data-testid={`obs-trace-red-group-${label}`}>
-                <th scope="row" className="px-4 py-1.5 text-left font-normal">
-                  <button
-                    type="button"
-                    onClick={() => onNarrow(group)}
-                    title="Narrow to this group"
-                    className="rounded-sm font-mono text-sm text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {label}
-                  </button>
-                </th>
-                <td className="px-4 py-1.5 text-right tabular-nums">{formatCount(red.traceCount)}</td>
-                <td className="px-4 py-1.5 text-right tabular-nums">{formatRate(red.ratePerSecond)}</td>
-                <td className={cn("px-4 py-1.5 text-right tabular-nums", red.errorRate >= 0.05 && "text-destructive")}>{formatPercent(red.errorRate)}</td>
-                <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p50Ms)}</td>
-                <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p95Ms)}</td>
-                <td className="px-4 py-1.5 text-right tabular-nums">{formatDuration(red.p99Ms)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </StackedTable>
+    <Card padding="none" className="overflow-hidden" data-testid="obs-trace-red-groups">
+      <DataTable<RedGroupRow>
+        flush
+        stacked
+        compact
+        ariaLabel={`Rate, errors and latency of the matching traces per ${groupBy.map(attributeLabel).join(" and ")}`}
+        columns={columns}
+        data={rows}
+        getRowKey={(row) => row.label}
+        getRowAction={(row) => () => onNarrow(row.group)}
+        getRowLabel={(row) => `Narrow to ${row.label}`}
+        getRowProps={(row) => ({ "data-testid": `obs-trace-red-group-${row.label}` })}
+      />
     </Card>
   );
 }
@@ -257,14 +313,14 @@ function RedStrip({ red }: { red: TraceRed }) {
   ];
   return (
     <dl
-      className="grid grid-cols-3 gap-3 rounded-lg border border-border bg-card px-4 py-3 sm:grid-cols-6"
+      className="grid grid-cols-3 gap-3 rounded-lg border border-border bg-surface px-4 py-3 sm:grid-cols-6"
       aria-label="Summary of the matching traces"
       data-testid="obs-trace-red"
     >
       {facts.map(([label, value, alert]) => (
         <div key={label}>
-          <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</dt>
-          <dd className={cn("text-sm font-semibold tabular-nums", alert ? "text-destructive" : "text-foreground")}>{value}</dd>
+          <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{label}</dt>
+          <dd className={cn("text-sm font-semibold tabular-nums", alert ? "text-danger-ink" : "text-ink")}>{value}</dd>
         </div>
       ))}
     </dl>
@@ -303,7 +359,7 @@ function TraceToolbar({
           Root operation contains
         </label>
         <div className="relative">
-          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-ink-muted" aria-hidden="true" />
           <input
             id="obs-trace-query"
             type="search"
@@ -313,14 +369,14 @@ function TraceToolbar({
             aria-invalid={filterError ? true : undefined}
             aria-describedby={filterError ? "obs-trace-query-error" : undefined}
             className={cn(
-              "h-8 w-full rounded-md border bg-background pl-8 pr-3 font-mono text-sm text-foreground placeholder:font-sans placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              filterError ? "border-destructive" : "border-border"
+              "h-8 w-full rounded-md border bg-surface-sunken pl-8 pr-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              filterError ? "border-danger" : "border-border"
             )}
             data-testid="obs-trace-query"
           />
         </div>
         {filterError && (
-          <p id="obs-trace-query-error" role="alert" className="mt-1 text-xs text-destructive">
+          <p id="obs-trace-query-error" role="alert" className="mt-1 text-xs text-danger-ink">
             {filterError}
           </p>
         )}
@@ -330,6 +386,7 @@ function TraceToolbar({
         range={range}
         value={service}
         onChange={(next) => navigate({ service: next }, { replace: true })}
+        signal="traces"
       />
       <label htmlFor="obs-min-duration" className="sr-only">
         Minimum duration
@@ -338,7 +395,7 @@ function TraceToolbar({
         id="obs-min-duration"
         value={minDuration ?? ""}
         onChange={(event) => navigate({ minDuration: event.target.value || undefined }, { replace: true })}
-        className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         data-testid="obs-min-duration"
       >
         <option value="">Any duration</option>
@@ -384,7 +441,7 @@ function TraceTable({
         column.accessor("startMs", {
           header: "Started",
           sortFn: "basic",
-          cell: (info) => <span className="tabular-nums text-muted-foreground">{formatTimestamp(info.getValue())}</span>,
+          cell: (info) => <span className="tabular-nums text-ink-muted">{formatTimestamp(info.getValue())}</span>,
         }),
         column.accessor("rootOperation", {
           header: "Root operation",
@@ -393,8 +450,10 @@ function TraceTable({
             const trace = info.row.original;
             return (
               <span className="flex min-w-0 items-baseline gap-2">
-                <span className="shrink-0 text-muted-foreground">{trace.rootService || "unknown"}</span>
-                <span className="truncate font-mono text-foreground">{trace.rootOperation || trace.traceId}</span>
+                <span className="shrink-0 text-ink-muted">{trace.rootService || "unknown"}</span>
+                <span className="truncate font-mono text-ink" title={trace.rootOperation || undefined}>
+                  {operationName(trace.rootOperation) || trace.traceId}
+                </span>
                 <OperatorBadge provenance={trace} />
               </span>
             );
@@ -408,18 +467,18 @@ function TraceTable({
           sortFn: "basic",
           cell: (info) => (
             <span className="flex items-center gap-2">
-              <span className="w-16 shrink-0 tabular-nums text-foreground">{formatDuration(info.getValue())}</span>
+              <span className="w-16 shrink-0 tabular-nums text-ink">{formatDuration(info.getValue())}</span>
               {info.row.original.durationMs > info.getValue() * 1.05 && (
                 <span className="sr-only">, trace {formatDuration(info.row.original.durationMs)} in all</span>
               )}
               <span className="h-1.5 w-24 overflow-hidden rounded-full bg-border/60" aria-hidden="true">
                 <span
-                  className={cn("block h-full rounded-full", info.row.original.errorCount > 0 ? "bg-destructive" : "bg-primary")}
+                  className={cn("block h-full rounded-full", info.row.original.errorCount > 0 ? "bg-danger" : "bg-primary")}
                   style={{ width: `${Math.max((info.getValue() / maxDuration) * 100, 2)}%` }}
                 />
               </span>
               {info.row.original.durationMs > info.getValue() * 1.05 && (
-                <span className="shrink-0 text-2xs tabular-nums text-muted-foreground" aria-hidden="true" title="Whole trace, including work after the root span returned">
+                <span className="shrink-0 text-2xs tabular-nums text-ink-muted" aria-hidden="true" title="Whole trace, including work after the root span returned">
                   {formatDuration(info.row.original.durationMs)} total
                 </span>
               )}
@@ -429,18 +488,18 @@ function TraceTable({
         column.accessor("spanCount", {
           header: "Spans",
           sortFn: "basic",
-          cell: (info) => <span className="tabular-nums text-muted-foreground">{info.getValue()}</span>,
+          cell: (info) => <span className="tabular-nums text-ink-muted">{info.getValue()}</span>,
         }),
         column.accessor("errorCount", {
           header: "Status",
           sortFn: "basic",
           cell: (info) =>
             info.getValue() > 0 ? (
-              <span className="text-destructive">
+              <span className="text-danger-ink">
                 {info.getValue()} error{info.getValue() === 1 ? "" : "s"}
               </span>
             ) : (
-              <span className="text-muted-foreground">OK</span>
+              <span className="text-ink-muted">OK</span>
             ),
         }),
       ]),
@@ -461,7 +520,7 @@ function TraceTable({
   const scrollRef = useRef<HTMLDivElement>(null);
   const requestFocus = useRovingFocus(scrollRef, "data-trace-index");
   // On a phone the five columns do not fit, so each trace is a stacked card
-  // (StackedTable) whose height depends on its content: measure, don't assume.
+  // (DataTable's STACK) whose height depends on its content: measure, don't assume.
   const narrow = useNarrowViewport();
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -504,16 +563,19 @@ function TraceTable({
           0px, the virtualizer would render no rows into it, and it would stay
           0px: the floor breaks that loop (as LogList's does). */}
       <div ref={scrollRef} className="max-h-[60vh] overflow-auto max-md:min-h-[12rem]" onKeyDown={onKeyDown}>
-        <StackedTable className="w-full table-fixed text-sm" data-testid="obs-trace-table">
+        {/* Not a DataTable: it is virtualized (spacer rows) with roving focus,
+            which DataTable does not do. It stacks on a phone with DataTable's
+            own STACK classes, so the two layouts cannot drift apart. */}
+        <table className={cn("w-full table-fixed text-sm", STACK.table)} data-testid="obs-trace-table">
           <caption className="sr-only">Traces from {subject}. Activate a root operation to open its waterfall.</caption>
-          <colgroup>
+          <colgroup className="max-md:hidden">
             <col className="w-36" />
             <col />
             <col className="w-64" />
             <col className="w-20" />
             <col className="w-24" />
           </colgroup>
-          <thead className="sticky top-0 z-10 bg-card">
+          <thead className={cn("sticky top-0 z-10 bg-surface", STACK.head)}>
             {table.getHeaderGroups().map((group) => (
               <tr key={group.id} className="border-b border-border">
                 {group.headers.map((header) => {
@@ -523,12 +585,12 @@ function TraceTable({
                       key={header.id}
                       scope="col"
                       aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : "none"}
-                      className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-muted-foreground"
+                      className="px-3 py-2 text-left text-xs font-medium uppercase tracking-wide text-ink-muted"
                     >
                       <button
                         type="button"
                         onClick={header.column.getToggleSortingHandler()}
-                        className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <table.FlexRender header={header} />
                         {sorted === "asc" && <ArrowUp className="h-3 w-3" aria-hidden="true" />}
@@ -540,7 +602,7 @@ function TraceTable({
               </tr>
             ))}
           </thead>
-          <tbody>
+          <tbody className={STACK.body}>
             {padTop > 0 && (
               <tr aria-hidden="true">
                 <td colSpan={5} style={{ height: padTop }} />
@@ -553,7 +615,7 @@ function TraceTable({
               return (
                 <tr
                   key={row.id}
-                  className="border-b border-border/50 hover:bg-muted/50"
+                  className={cn("border-b border-border/50 hover:bg-ink/5", STACK.row)}
                   style={narrow ? undefined : { height: ROW_HEIGHT }}
                   data-index={item.index}
                   ref={narrow ? virtualizer.measureElement : undefined}
@@ -561,7 +623,7 @@ function TraceTable({
                 >
                   {row.getAllCells().map((cell) =>
                     cell.column.id === "rootOperation" ? (
-                      <th key={cell.id} scope="row" data-stack-title className="px-3 py-1 text-left font-normal">
+                      <th key={cell.id} scope="row" className={cn("px-3 py-1 text-left font-normal", STACK.cell, STACK.title)}>
                         <button
                           type="button"
                           data-trace-index={item.index}
@@ -569,13 +631,17 @@ function TraceTable({
                           onFocus={() => setActive(item.index)}
                           onClick={() => onOpen(trace.traceId)}
                           className="flex w-full min-w-0 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:min-h-[44px] touch:items-center"
-                          aria-label={`Open trace ${trace.rootService} ${trace.rootOperation}, ${formatDuration(trace.rootDurationMs)}${trace.errorCount ? `, ${trace.errorCount} errors` : ""}`}
+                          aria-label={`Open trace ${trace.rootService} ${operationName(trace.rootOperation)}, ${formatDuration(trace.rootDurationMs)}${trace.errorCount ? `, ${trace.errorCount} errors` : ""}`}
                         >
                           <table.FlexRender cell={cell} />
                         </button>
                       </th>
                     ) : (
-                      <td key={cell.id} className="truncate px-3 py-1">
+                      <td
+                        key={cell.id}
+                        data-label={typeof cell.column.columnDef.header === "string" ? cell.column.columnDef.header : undefined}
+                        className={cn("truncate px-3 py-1", STACK.cell, STACK.labelled)}
+                      >
                         <table.FlexRender cell={cell} />
                       </td>
                     )
@@ -589,7 +655,7 @@ function TraceTable({
               </tr>
             )}
           </tbody>
-        </StackedTable>
+        </table>
       </div>
       {hasMore && (
         <div className="border-t border-border px-3 py-2">

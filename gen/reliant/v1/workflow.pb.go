@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -939,6 +940,7 @@ type DeleteWorkflowResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Slug          string                 `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"` // Slug of the deleted workflow (name is slugified to find it)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -983,6 +985,13 @@ func (x *DeleteWorkflowResponse) GetSuccess() bool {
 func (x *DeleteWorkflowResponse) GetMessage() string {
 	if x != nil {
 		return x.Message
+	}
+	return ""
+}
+
+func (x *DeleteWorkflowResponse) GetSlug() string {
+	if x != nil {
+		return x.Slug
 	}
 	return ""
 }
@@ -2133,6 +2142,7 @@ type SetWorkflowStatusResponse struct {
 	Status           WorkflowDraftStatus    `protobuf:"varint,3,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`        // Status after the call
 	ValidationErrors []*ValidationError     `protobuf:"bytes,4,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"` // Current findings (errors, then warnings)
 	Version          int64                  `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`                                          // Version after the call (for OCC)
+	Slug             string                 `protobuf:"bytes,6,opt,name=slug,proto3" json:"slug,omitempty"`                                                 // The workflow's slug
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -2202,12 +2212,19 @@ func (x *SetWorkflowStatusResponse) GetVersion() int64 {
 	return 0
 }
 
+func (x *SetWorkflowStatusResponse) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
 var File_reliant_v1_workflow_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/workflow.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xc5\a\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xc5\a\n" +
 	"\x10WorkflowListItem\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
@@ -2312,10 +2329,11 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12$\n" +
 	"\vworktree_id\x18\x03 \x01(\tH\x00R\n" +
 	"worktreeId\x88\x01\x01B\x0e\n" +
-	"\f_worktree_id\"L\n" +
+	"\f_worktree_id\"`\n" +
 	"\x16DeleteWorkflowResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"j\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\"j\n" +
 	"\x17ValidateWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x120\n" +
@@ -2429,29 +2447,45 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\bdraft_id\x18\x02 \x01(\tR\adraftId\x127\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12.\n" +
 	"\x10expected_version\x18\x04 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01B\x13\n" +
-	"\x11_expected_version\"\xec\x01\n" +
+	"\x11_expected_version\"\x80\x02\n" +
 	"\x19SetWorkflowStatusResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x127\n" +
 	"\x06status\x18\x03 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12H\n" +
 	"\x11validation_errors\x18\x04 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrors\x12\x18\n" +
-	"\aversion\x18\x05 \x01(\x03R\aversion*\x81\x01\n" +
+	"\aversion\x18\x05 \x01(\x03R\aversion\x12\x12\n" +
+	"\x04slug\x18\x06 \x01(\tR\x04slug*\x81\x01\n" +
 	"\x13WorkflowDraftStatus\x12%\n" +
 	"!WORKFLOW_DRAFT_STATUS_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bWORKFLOW_DRAFT_STATUS_DRAFT\x10\x01\x12\"\n" +
-	"\x1eWORKFLOW_DRAFT_STATUS_COMPLETE\x10\x022\x95\b\n" +
+	"\x1eWORKFLOW_DRAFT_STATUS_COMPLETE\x10\x022\x85\f\n" +
 	"\x0fWorkflowService\x12V\n" +
-	"\rListWorkflows\x12 .reliant.v1.ListWorkflowsRequest\x1a!.reliant.v1.ListWorkflowsResponse\"\x00\x12S\n" +
-	"\fSaveWorkflow\x12\x1f.reliant.v1.SaveWorkflowRequest\x1a .reliant.v1.SaveWorkflowResponse\"\x00\x12P\n" +
-	"\vGetWorkflow\x12\x1e.reliant.v1.GetWorkflowRequest\x1a\x1f.reliant.v1.GetWorkflowResponse\"\x00\x12Y\n" +
-	"\x0eDeleteWorkflow\x12!.reliant.v1.DeleteWorkflowRequest\x1a\".reliant.v1.DeleteWorkflowResponse\"\x00\x12_\n" +
-	"\x10ValidateWorkflow\x12#.reliant.v1.ValidateWorkflowRequest\x1a$.reliant.v1.ValidateWorkflowResponse\"\x00\x12Y\n" +
-	"\x0eImportWorkflow\x12!.reliant.v1.ImportWorkflowRequest\x1a\".reliant.v1.ImportWorkflowResponse\"\x00\x12Y\n" +
-	"\x0eExportWorkflow\x12!.reliant.v1.ExportWorkflowRequest\x1a\".reliant.v1.ExportWorkflowResponse\"\x00\x12n\n" +
-	"\x15SetWorkflowVisibility\x12(.reliant.v1.SetWorkflowVisibilityRequest\x1a).reliant.v1.SetWorkflowVisibilityResponse\"\x00\x12S\n" +
-	"\fCopyWorkflow\x12\x1f.reliant.v1.CopyWorkflowRequest\x1a .reliant.v1.CopyWorkflowResponse\"\x00\x12h\n" +
-	"\x13CreateWorkflowDraft\x12&.reliant.v1.CreateWorkflowDraftRequest\x1a'.reliant.v1.CreateWorkflowDraftResponse\"\x00\x12b\n" +
-	"\x11SetWorkflowStatus\x12$.reliant.v1.SetWorkflowStatusRequest\x1a%.reliant.v1.SetWorkflowStatusResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\rListWorkflows\x12 .reliant.v1.ListWorkflowsRequest\x1a!.reliant.v1.ListWorkflowsResponse\"\x00\x12\xb5\x01\n" +
+	"\fSaveWorkflow\x12\x1f.reliant.v1.SaveWorkflowRequest\x1a .reliant.v1.SaveWorkflowResponse\"b\xa2\xbb\x18^:\\\n" +
+	"\x04save\x121\n" +
+	"\bworkflow\x12\rresponse.slug\x1a\x16response.workflow.name*\x0fresponse.status*\x10response.version\x12P\n" +
+	"\vGetWorkflow\x12\x1e.reliant.v1.GetWorkflowRequest\x1a\x1f.reliant.v1.GetWorkflowResponse\"\x00\x12\x88\x01\n" +
+	"\x0eDeleteWorkflow\x12!.reliant.v1.DeleteWorkflowRequest\x1a\".reliant.v1.DeleteWorkflowResponse\"/\xa2\xbb\x18+:)\n" +
+	"\x06delete\x12\x1f\n" +
+	"\bworkflow\x12\rresponse.slug\x1a\x04name\x12b\n" +
+	"\x10ValidateWorkflow\x12#.reliant.v1.ValidateWorkflowRequest\x1a$.reliant.v1.ValidateWorkflowResponse\"\x03\x90\x02\x01\x12\xab\x01\n" +
+	"\x0eImportWorkflow\x12!.reliant.v1.ImportWorkflowRequest\x1a\".reliant.v1.ImportWorkflowResponse\"R\xa2\xbb\x18N:L\n" +
+	"\x06import\x121\n" +
+	"\bworkflow\x12\rresponse.slug\x1a\x16response.workflow.name*\x0fresponse.status\x12\\\n" +
+	"\x0eExportWorkflow\x12!.reliant.v1.ExportWorkflowRequest\x1a\".reliant.v1.ExportWorkflowResponse\"\x03\x90\x02\x01\x12\xb9\x01\n" +
+	"\x15SetWorkflowVisibility\x12(.reliant.v1.SetWorkflowVisibilityRequest\x1a).reliant.v1.SetWorkflowVisibilityResponse\"K\xa2\xbb\x18G:E\n" +
+	"\x0eset_visibility\x12(\n" +
+	"\bworkflow\x12\x04slug\x1a\x16response.workflow.name*\tis_hidden\x12\x91\x01\n" +
+	"\fCopyWorkflow\x12\x1f.reliant.v1.CopyWorkflowRequest\x1a .reliant.v1.CopyWorkflowResponse\">\xa2\xbb\x18::8\n" +
+	"\x04copy\x12#\n" +
+	"\bworkflow\x12\rresponse.slug\x1a\bnew_name*\vsource_slug\x12\xaa\x01\n" +
+	"\x13CreateWorkflowDraft\x12&.reliant.v1.CreateWorkflowDraftRequest\x1a'.reliant.v1.CreateWorkflowDraftResponse\"B\xa2\xbb\x18>:<\n" +
+	"\x06create\x12(\n" +
+	"\bworkflow\x12\rresponse.slug\x1a\rresponse.name*\btemplate\x12\x97\x01\n" +
+	"\x11SetWorkflowStatus\x12$.reliant.v1.SetWorkflowStatusRequest\x1a%.reliant.v1.SetWorkflowStatusResponse\"5\xa2\xbb\x181:/\n" +
+	"\n" +
+	"set_status\x12\x19\n" +
+	"\bworkflow\x12\rresponse.slug*\x06statusB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_workflow_proto_rawDescOnce sync.Once

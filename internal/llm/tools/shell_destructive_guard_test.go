@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -30,7 +29,7 @@ func runShellAgainst(t *testing.T, workingDir, command string) (*commandRecordin
 	tc := &rctx.ToolContext{
 		Context: context.Background(),
 		ChatID:  "chat-1",
-		Project: &db.Project{ID: "p", Path: workingDir},
+		Project: &rctx.Project{ID: "p", Checkout: workingDir},
 		Daemon:  d,
 	}
 	resp, err := (&shellTool{}).Execute(tc, ShellParams{Command: command})
@@ -47,7 +46,7 @@ func TestShellTool_RefusesDeletingCommandsAimedAtRoots(t *testing.T) {
 	t.Parallel()
 	refused := []string{
 		// The command that ran on 2026-10-06, verbatim in shape.
-		"rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='.dev-ports.sh' --exclude='data' --exclude='.env.local' \\\n" +
+		"rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='data' --exclude='.env.local' \\\n" +
 			"  \"/Users/u/.reliant/worktrees/p/compete-impl-2-abc/\" \\\n  \"/\"",
 		`rsync -a --delete src/ /`,
 		`rsync -a --delete-after src/ //`,

@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import {
@@ -16,13 +16,15 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { api } from "../../api/client";
+import { useListTools } from "../../hooks/catalog-service-hooks_gen";
 
 interface ToolInfo {
   name: string;
   description: string;
   category: string;
 }
+
+const NO_TOOLS: ToolInfo[] = [];
 
 interface ToolsSelectorProps {
   // Currently selected tool names and/or expressions
@@ -141,26 +143,13 @@ export function ToolsSelector({
   const [isOpen, setIsOpen] = useState(false);
   // Escape closes the list, and only the list (useEscapeLayer).
   const escapeLayer = useEscapeLayer(isOpen, useCallback(() => setIsOpen(false), []));
-  const [tools, setTools] = useState<ToolInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // The tool catalog, on the generated ListTools entry every selector shares.
+  const toolsQuery = useListTools({});
+  const tools: ToolInfo[] = toolsQuery.data?.tools ?? NO_TOOLS;
+  const isLoading = toolsQuery.isLoading;
   const [customToken, setCustomToken] = useState("");
   const [customError, setCustomError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Fetch available tools
-  useEffect(() => {
-    const fetchTools = async () => {
-      try {
-        const response = await api.tools.list();
-        setTools(response.tools || []);
-      } catch (error) {
-        console.error("Failed to fetch tools:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchTools();
-  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -279,7 +268,7 @@ export function ToolsSelector({
     if (isLikelyExpression(token)) {
       return "bg-amber-500/10 text-amber-700 border-amber-500/20";
     }
-    return "bg-primary/10 text-primary border-primary/20";
+    return "bg-primary/10 text-primary-ink border-primary/20";
   };
 
   return (
@@ -292,7 +281,7 @@ export function ToolsSelector({
               type="button"
               onClick={selectAll}
               disabled={!canInteract}
-              className="text-xs text-primary hover:underline disabled:opacity-50"
+              className="text-xs text-primary-ink hover:underline disabled:opacity-50"
             >
               Select all tools
             </button>
@@ -301,7 +290,7 @@ export function ToolsSelector({
               type="button"
               onClick={clearAll}
               disabled={!canInteract}
-              className="text-xs text-primary hover:underline disabled:opacity-50"
+              className="text-xs text-primary-ink hover:underline disabled:opacity-50"
             >
               Clear
             </button>
@@ -375,7 +364,7 @@ export function ToolsSelector({
                   {QUICK_EXPRESSIONS.map((expr) => {
                     const selected = value.includes(expr.token);
                     return (
-                      <Tooltip content={expr.description} placement="bottom" delay={300} wrapperClassName="inline-flex">
+                      <Tooltip content={expr.description} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                         key={expr.token}
                         type="button"
@@ -383,7 +372,7 @@ export function ToolsSelector({
                         className={cn(
                           "text-xs px-2 py-1 rounded border transition-colors",
                           selected
-                            ? "bg-primary/10 text-primary border-primary/30"
+                            ? "bg-primary/10 text-primary-ink border-primary/30"
                             : "bg-background hover:bg-accent border-border",
                         )} aria-label={expr.description}>
                         {expr.token}
@@ -439,9 +428,9 @@ export function ToolsSelector({
                       className="w-full px-3 py-1.5 text-xs font-semibold uppercase tracking-wide bg-muted/30 sticky top-0 flex items-center gap-2 hover:bg-muted/50 transition-colors"
                     >
                       {selectionState === "all" ? (
-                        <CheckSquare className="w-3.5 h-3.5 text-primary" />
+                        <CheckSquare className="w-3.5 h-3.5 text-primary-ink" />
                       ) : selectionState === "some" ? (
-                        <MinusSquare className="w-3.5 h-3.5 text-primary" />
+                        <MinusSquare className="w-3.5 h-3.5 text-primary-ink" />
                       ) : (
                         <Square className="w-3.5 h-3.5 text-muted-foreground" />
                       )}
@@ -474,7 +463,7 @@ export function ToolsSelector({
                                 </div>
                               )}
                             </div>
-                            {isSelected && <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />}
+                            {isSelected && <Check className="w-4 h-4 text-primary-ink flex-shrink-0 mt-0.5" />}
                           </div>
                         </button>
                       );

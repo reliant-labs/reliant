@@ -19,18 +19,18 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitremote"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 )
 
-// sendDaemonCommand forwards a JSON command to the user's daemon.
-func (s *Service) sendDaemonCommand(ctx context.Context, userID, commandType string, payload, resp interface{}) error {
+// sendToCheckout forwards a JSON command to the machine holding the
+// project's checkout (projectcheckout.Target): every command here names a
+// path under that checkout, which means nothing on any other machine.
+func (s *Service) sendToCheckout(ctx context.Context, userID string, t projectcheckout.Target, commandType string, payload, resp interface{}) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	if s.deps.Router == nil {
-		return fmt.Errorf("daemon command %s: no daemon router", commandType)
-	}
-	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, commandType, payloadBytes, 30_000)
+	respBytes, err := t.Send(ctx, s.deps.Router, userID, commandType, payloadBytes, 30_000)
 	if err != nil {
 		return fmt.Errorf("daemon command %s: %w", commandType, err)
 	}
@@ -40,6 +40,16 @@ func (s *Service) sendDaemonCommand(ctx context.Context, userID, commandType str
 		}
 	}
 	return nil
+}
+
+// checkout resolves the machine holding project's checkout and its path
+// there (projectcheckout.Resolve) — never projects.path, the creating
+// machine's. purpose finishes "clone it onto a machine to …".
+func (s *Service) checkout(ctx context.Context, userID string, project *db.Project, purpose string) (projectcheckout.Target, error) {
+	if s.deps.Router == nil {
+		return projectcheckout.Target{}, svcerr.Unavailable("no daemon available")
+	}
+	return projectcheckout.Resolve(ctx, s.deps.Repo, s.deps.Router, userID, project, purpose)
 }
 
 // authorizeRepo loads a repo and verifies the caller owns its parent project.
@@ -106,13 +116,19 @@ func (s *Service) DiscoverRepos(
 		RemoteURL    string `json:"remote_url,omitempty"`
 	}
 	var daemonResp struct {
-		Discovered []discoveredRepo `json:"discovered"`
+		Discovered      []discoveredRepo `json:"discovered"`
+		Truncated       bool             `json:"truncated"`
+		TruncatedReason string           `json:"truncated_reason"`
+	}
+	target, err := s.checkout(ctx, userID, project, "scan it for repos")
+	if err != nil {
+		return nil, err
 	}
 	payload := map[string]interface{}{
-		"path":      project.Path,
+		"path":      target.Path,
 		"max_depth": req.Msg.MaxDepth,
 	}
-	if err := s.sendDaemonCommand(ctx, userID, "repo.discover", payload, &daemonResp); err != nil {
+	if err := s.sendToCheckout(ctx, userID, target, "repo.discover", payload, &daemonResp); err != nil {
 		return nil, daemonerr.Error("scan the project for repos", err)
 	}
 
@@ -128,7 +144,11 @@ func (s *Service) DiscoverRepos(
 			UpdatedAt:    now,
 		}
 	}
-	return connect.NewResponse(&reliantv1.DiscoverReposResponse{Discovered: out}), nil
+	return connect.NewResponse(&reliantv1.DiscoverReposResponse{
+		Discovered:      out,
+		Truncated:       daemonResp.Truncated,
+		TruncatedReason: daemonResp.TruncatedReason,
+	}), nil
 }
 
 // =============================================================================
@@ -174,7 +194,11 @@ func (s *Service) AddRepo(
 	}
 
 	relPath := req.Msg.RelativePath
-	repoPath := filepath.Join(project.Path, relPath)
+	target, err := s.checkout(ctx, userID, project, "add a repo to it")
+	if err != nil {
+		return nil, err
+	}
+	repoPath := target.Join(relPath)
 
 	// Validate via daemon: confirm path is a git repo. We piggyback on
 	// repo.discover with max_depth=0 to scan just the requested path —
@@ -186,7 +210,7 @@ func (s *Service) AddRepo(
 	var daemonResp struct {
 		Discovered []discoveredRepo `json:"discovered"`
 	}
-	if err := s.sendDaemonCommand(ctx, userID, "repo.discover", map[string]interface{}{
+	if err := s.sendToCheckout(ctx, userID, target, "repo.discover", map[string]interface{}{
 		"path":      repoPath,
 		"max_depth": 1,
 	}, &daemonResp); err != nil {
@@ -299,7 +323,11 @@ func (s *Service) GetRepoGitInfo(
 		return nil, err
 	}
 
-	repoPath := filepath.Join(project.Path, repo.RelativePath)
+	target, err := s.checkout(ctx, userID, project, "see its git status")
+	if err != nil {
+		return nil, err
+	}
+	repoPath := target.Join(repo.RelativePath)
 
 	var gitInfo struct {
 		CurrentBranch  string   `json:"current_branch"`
@@ -312,7 +340,7 @@ func (s *Service) GetRepoGitInfo(
 		Ahead          int32    `json:"ahead"`
 		Behind         int32    `json:"behind"`
 	}
-	if err := s.sendDaemonCommand(ctx, userID, "project.git_info", map[string]string{"path": repoPath}, &gitInfo); err != nil {
+	if err := s.sendToCheckout(ctx, userID, target, "project.git_info", map[string]string{"path": repoPath}, &gitInfo); err != nil {
 		return nil, daemonerr.Error("get git info", err)
 	}
 

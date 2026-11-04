@@ -129,7 +129,7 @@ export function UpdateSection() {
         return {
           icon: RefreshCw,
           message: 'Checking for updates...',
-          iconClass: 'animate-spin text-primary',
+          iconClass: 'animate-spin text-primary-ink',
         };
       case 'available':
         return {
@@ -153,7 +153,7 @@ export function UpdateSection() {
         return {
           icon: Download,
           message: `Downloading ${Math.round(updateStatus.progress?.percent || 0)}%`,
-          iconClass: 'text-primary animate-pulse',
+          iconClass: 'text-primary-ink animate-pulse',
         };
       case 'error':
         return {
@@ -170,7 +170,7 @@ export function UpdateSection() {
 
   return (
     <>
-      <div className="bg-card/50 backdrop-blur-sm rounded-xl border border-border/50 p-4">
+      <div className="rounded-lg border border-border bg-card p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-sm font-medium text-foreground">Updates</span>
@@ -193,7 +193,7 @@ export function UpdateSection() {
             <button
               onClick={handleCheckForUpdates}
               disabled={isChecking || isDownloading}
-              className="text-xs font-medium text-primary hover:text-primary/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="text-xs font-medium text-primary-ink hover:text-primary-ink/80 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isChecking ? 'Checking...' : 'Check'}
             </button>
@@ -203,7 +203,7 @@ export function UpdateSection() {
         {/* Progress bar for downloads */}
         {updateStatus?.type === 'download-progress' && updateStatus.progress && (
           <div className="mt-3">
-            <div className="h-1 bg-muted rounded-full overflow-hidden">
+            <div className="h-1 bg-foreground/10 rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary transition-all duration-300"
                 style={{ width: `${updateStatus.progress.percent}%` }}

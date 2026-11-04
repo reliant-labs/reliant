@@ -1,23 +1,20 @@
 /**
- * Mobile-native "Privacy" panel — reuses `usePrivacyStore` exactly as
+ * Mobile-native "Privacy" panel — reads and writes privacy consent exactly as
  * desktop `PrivacySettings` does, so toggling crash reporting or analytics
- * here writes the same backend preference desktop reads.
+ * here writes the same backend preference desktop reads. The note under the
+ * switches is desktop's "Where your data lives", shortened.
  */
 
-import { useEffect } from "react";
-import { AlertTriangle } from "lucide-react";
-import { usePrivacyStore } from "../../store/privacyStore";
+import { ExternalLink } from "lucide-react";
+import { usePrivacyConsent, useUpdatePrivacySettings } from "../../hooks/privacy-queries";
 import { MobileToggleRow } from "./MobileSettingsRow";
+import { hasControlPlane } from "../../services/controlPlane/config";
+import { PRIVACY_DOCS_URL } from "../Settings/privacyLinks";
 
 export function MobilePrivacyPanel() {
-  const { crashReportingEnabled, analyticsEnabled, setCrashReporting, setAnalytics, initialize } =
-    usePrivacyStore();
-
-  useEffect(() => {
-    initialize().catch((err) => {
-      console.error("Failed to initialize privacy settings:", err);
-    });
-  }, [initialize]);
+  const { crashReportingEnabled, analyticsEnabled } = usePrivacyConsent();
+  const { setCrashReporting, setAnalytics } = useUpdatePrivacySettings();
+  const servers = hasControlPlane ? "Reliant's servers" : "your Reliant server";
 
   return (
     <div className="divide-y divide-border">
@@ -34,35 +31,22 @@ export function MobilePrivacyPanel() {
         onChange={setAnalytics}
       />
 
-      {(!crashReportingEnabled || !analyticsEnabled) && (
-        <div className="flex items-start gap-3 border-y border-amber-500/40 bg-amber-500/10 px-4 py-3">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
-          <div>
-            <p className="text-sm font-medium text-foreground">Privacy mode active</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {!crashReportingEnabled && !analyticsEnabled
-                ? "Crash reporting and analytics are currently disabled."
-                : !crashReportingEnabled
-                  ? "Crash reporting is currently disabled."
-                  : "Analytics is currently disabled."}
-            </p>
-          </div>
-        </div>
-      )}
-
-      <div className="bg-muted/30 p-4">
-        <p className="mb-2 text-xs text-muted-foreground">
-          <strong className="text-foreground">Note:</strong> Your code, conversations, and
-          project data are always stored locally and never automatically shared.
+      <div className="space-y-2 bg-background p-4 text-xs text-muted-foreground">
+        <p>
+          <strong className="text-foreground">Chats are stored on {servers}</strong>, with what agents read and
+          commands print. Your code stays on the machine it runs on; a Reliant cloud machine keeps the whole
+          repository on its disk.
         </p>
-        <p className="mb-2 text-xs text-muted-foreground">
-          <strong className="text-foreground">Changes take effect immediately</strong> — no
-          restart required.
-        </p>
-        <p className="text-xs text-muted-foreground">
-          <strong className="text-foreground">Default behavior:</strong> Data collection is
-          enabled by default. You can disable it at any time.
-        </p>
+        <p>These switches only control crash reports and usage analytics. A change applies immediately.</p>
+        <a
+          href={PRIVACY_DOCS_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-[44px] items-center gap-1 font-medium text-primary-ink"
+        >
+          What is stored where
+          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+        </a>
       </div>
     </div>
   );

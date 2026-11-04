@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -370,6 +371,7 @@ func TestLoadCurrentMessages_EmptyThread(t *testing.T) {
 // TestLoadCurrentMessages_ThreadWithSystemMessages tests that system messages
 // (like compaction summaries) are included in the message list.
 func TestLoadCurrentMessages_ThreadWithSystemMessages(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	h := newTestHelper(t)
@@ -471,6 +473,7 @@ func TestLoadCurrentMessages_NonExistentContextWindow(t *testing.T) {
 // TestLoadCurrentMessages_ForkFromEmptyParent tests forking from a parent
 // that has no messages.
 func TestLoadCurrentMessages_ForkFromEmptyParent(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	h := newTestHelper(t)

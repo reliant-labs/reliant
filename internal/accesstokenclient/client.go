@@ -68,26 +68,72 @@ type introspectResponse struct {
 	Resource     *resourceJSON `json:"resource"`
 	Ephemeral    bool          `json:"ephemeral"`
 	ExpiresAt    *time.Time    `json:"expiresAt"`
+	// AllScopes marks a daemon credential: Scopes is the control plane's
+	// resolution of "every scope", against ITS catalog.
+	AllScopes bool `json:"allScopes"`
+	// ActingUserEmail is the acting user's email, read from control-plane's
+	// users row at introspection. Absent from an older control plane.
+	ActingUserEmail string `json:"actingUserEmail"`
+}
+
+// wildcardScopes reads a daemon credential's resolved scopes, SKIPPING any
+// this binary does not know. The control plane may run a newer forge than
+// this server; a scope only it knows is held by definition and nothing here
+// can exercise it, so refusing the credential over it would take every daemon
+// offline between the control plane's deploy and this one's. An explicit list
+// still goes through fat.NewSet and is refused whole.
+//
+// forge (after v0.1.47) exports this as accesstoken.KnownScopes.
+func wildcardScopes(raw []string) fat.Set {
+	out := fat.Set{}
+	for _, s := range raw {
+		if scope, ok := fat.ParseScope(s); ok {
+			out[scope] = struct{}{}
+		}
+	}
+	return out
 }
 
 // Introspect resolves a presented token, uncached. A token that is not even
 // shaped like an `rlat_` is refused locally without a round trip.
 func (c *Client) Introspect(ctx context.Context, token string) (*fat.Principal, error) {
+	a, err := c.IntrospectAccount(ctx, token)
+	return a.Principal, err
+}
+
+// IntrospectAccount is Introspect plus the acting user's email, in the same
+// single round trip. The email is "" from a control plane that predates it.
+func (c *Client) IntrospectAccount(ctx context.Context, token string) (auth.AccessTokenAccount, error) {
 	if !fat.HasFormat(token) {
-		return nil, ErrInactive
+		return auth.AccessTokenAccount{}, ErrInactive
 	}
 	var out introspectResponse
 	if err := c.call(ctx, "Introspect", map[string]any{"token": token}, &out); err != nil {
-		return nil, err
+		return auth.AccessTokenAccount{}, err
 	}
 	if !out.Active {
-		return nil, ErrInactive
+		return auth.AccessTokenAccount{}, ErrInactive
 	}
-	scopes, err := fat.NewSet(out.Scopes)
+	p, err := out.principal()
 	if err != nil {
-		// A scope this binary cannot evaluate refuses, rather than
-		// authenticating with the understood subset.
-		return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, err)
+		return auth.AccessTokenAccount{}, err
+	}
+	return auth.AccessTokenAccount{Principal: p, Email: strings.TrimSpace(out.ActingUserEmail)}, nil
+}
+
+// principal maps an active introspection onto forge's principal.
+func (out introspectResponse) principal() (*fat.Principal, error) {
+	scopes := wildcardScopes(out.Scopes)
+	if !out.AllScopes {
+		var err error
+		if scopes, err = fat.NewSet(out.Scopes); err != nil {
+			// A scope this binary cannot evaluate refuses, rather than
+			// authenticating with the understood subset.
+			return nil, fmt.Errorf("accesstokenclient: token %s: %w", out.TokenID, err)
+		}
+	}
+	if len(scopes) == 0 {
+		return nil, fmt.Errorf("accesstokenclient: token %s carries no scope this server recognises", out.TokenID)
 	}
 	p := &fat.Principal{
 		TokenID:      out.TokenID,
@@ -114,6 +160,9 @@ type MintRequest struct {
 	// Rotate atomically replaces the user's live token(s) with this name and
 	// scope set.
 	Rotate bool
+	// OrgID is the org to mint in; it must be one the user belongs to.
+	// Empty: the user's default org.
+	OrgID string
 }
 
 // Minted is a freshly minted token. Plaintext is returned exactly once.
@@ -123,9 +172,11 @@ type Minted struct {
 	DisplayPrefix string
 	ExpiresAt     *time.Time
 	Rotated       bool
+	// Scopes is the authority actually minted, after current org grant clipping.
+	Scopes []string
 }
 
-// MintForUser mints a token acting as req.UserID in their primary org.
+// MintForUser mints a token acting as req.UserID in req.OrgID, else their default org.
 func (c *Client) MintForUser(ctx context.Context, req MintRequest) (Minted, error) {
 	body := map[string]any{
 		"userId":    req.UserID,
@@ -133,6 +184,9 @@ func (c *Client) MintForUser(ctx context.Context, req MintRequest) (Minted, erro
 		"scopes":    scopeStrings(req.Scopes),
 		"ephemeral": req.Ephemeral,
 		"rotate":    req.Rotate,
+	}
+	if req.OrgID != "" {
+		body["orgId"] = req.OrgID
 	}
 	if req.Resource != nil {
 		body["resource"] = resourceJSON{Kind: string(req.Resource.Kind), ID: req.Resource.ID}
@@ -146,6 +200,7 @@ func (c *Client) MintForUser(ctx context.Context, req MintRequest) (Minted, erro
 		DisplayPrefix string     `json:"displayPrefix"`
 		ExpiresAt     *time.Time `json:"expiresAt"`
 		Rotated       bool       `json:"rotated"`
+		Scopes        []string   `json:"scopes"`
 	}
 	if err := c.call(ctx, "MintForUser", body, &out); err != nil {
 		return Minted{}, err
@@ -154,7 +209,7 @@ func (c *Client) MintForUser(ctx context.Context, req MintRequest) (Minted, erro
 		return Minted{}, fmt.Errorf("accesstokenclient: MintForUser returned a malformed token")
 	}
 	return Minted{TokenID: out.TokenID, Plaintext: out.Secret, DisplayPrefix: out.DisplayPrefix,
-		ExpiresAt: out.ExpiresAt, Rotated: out.Rotated}, nil
+		ExpiresAt: out.ExpiresAt, Rotated: out.Rotated, Scopes: out.Scopes}, nil
 }
 
 // RevokeResource revokes every live token bound to resource.
@@ -292,6 +347,7 @@ func IsNotFound(err error) bool {
 type RPCError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	Reason  string `json:"-"`
 }
 
 func (e *RPCError) Error() string {
@@ -329,6 +385,7 @@ func (c *Client) call(ctx context.Context, method string, in, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		rpcErr := &RPCError{Code: http.StatusText(resp.StatusCode)}
 		_ = json.Unmarshal(body, rpcErr)
+		rpcErr.Reason = resp.Header.Get("x-forge-error-reason")
 		return rpcErr
 	}
 	if err := json.Unmarshal(body, out); err != nil {

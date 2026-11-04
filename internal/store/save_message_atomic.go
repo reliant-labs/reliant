@@ -43,6 +43,15 @@ type AtomicMessageWrite struct {
 	// message (messages.provider_account_id); nil for every other message.
 	ProviderAccountID *string
 
+	// SenderThreadID and SenderKind (messages.sender_thread_id/sender_kind)
+	// attribute a message another agent wrote; nil for the human and for the
+	// model's own output.
+	SenderThreadID *string
+	SenderKind     *reliantv1.AgentMessageKind
+	// SenderSubject (messages.sender_subject) is the sending agent's one-line
+	// subject; nil when it gave none.
+	SenderSubject *string
+
 	Blocks []core.MessageContentBlock
 
 	// ChatUpdateData is the chat_update payload. It is built by the caller
@@ -84,12 +93,13 @@ type AtomicMessageResult struct {
 //
 // # Why the counters
 //
-// ordinal and seq come from message_order_counters rather than MAX()+1. A
-// MAX() read followed by an INSERT into the range just read takes an SSI
-// predicate lock over that range, so concurrent savers abort each other. An
-// upsert on a single counter row takes a row lock instead: a concurrent writer
-// WAITS microseconds rather than aborting. See migration
-// 20260901000000_message_order_counters.sql.
+// ordinal and seq come from message_order_counters (messageOrderCTEs), never
+// from MAX()+1. A MAX() read followed by an INSERT into the range just read
+// takes an SSI predicate lock over that range, so concurrent savers abort each
+// other. An upsert on a single counter row takes a row lock instead: a
+// concurrent writer WAITS microseconds rather than aborting. The counters are
+// authoritative: every other message writer allocates from them too, or
+// raises them to the numbers it wrote (InsertMessage).
 //
 // # Why this is safe at READ COMMITTED
 //
@@ -112,42 +122,7 @@ type AtomicMessageResult struct {
 // +40% per save (P1 benchmark, research/forge-migration/08-p5b-spike.md).
 const saveMessageAtomicSQL = `
 WITH
--- Both allocators are SELF-HEALING: they take the greater of the counter's
--- next value and the table's actual high-water mark.
---
--- This is not belt-and-braces, it is required. Three production paths still
--- insert messages directly with their own allocation — the branch repair in
--- chat_branch.go, the orphan repair in cleanup.go, and the denial message in
--- approval.go. A row written by any of them advances the table past the
--- counter, and a counter that then handed out its own stale next value would
--- collide with messages_chat_seq_key (observed: SQLSTATE 23505 under exactly
--- this mix). Healing here means those writers stay correct without every one
--- of them having to know the counter exists.
---
--- The subquery is an indexed MAX on a single chat/thread, not the recursive
--- fork walk this replaced, and it is evaluated once per write rather than
--- scanning a range the insert then lands in — so it does not reintroduce the
--- SSI predicate conflict that motivated the change.
-ord AS (
-    INSERT INTO message_order_counters (counter_kind, scope_id, last_assigned)
-    VALUES ('ordinal', $1, COALESCE((SELECT MAX(ordinal) FROM messages WHERE thread_id = $1), -1) + 1)
-    ON CONFLICT (counter_kind, scope_id) DO UPDATE
-    SET last_assigned = GREATEST(
-            message_order_counters.last_assigned + 1,
-            COALESCE((SELECT MAX(ordinal) FROM messages WHERE thread_id = $1), -1) + 1
-        )
-    RETURNING last_assigned
-),
-sq AS (
-    INSERT INTO message_order_counters (counter_kind, scope_id, last_assigned)
-    VALUES ('seq', $2, COALESCE((SELECT MAX(seq) FROM messages WHERE chat_id = $2), -1) + 1)
-    ON CONFLICT (counter_kind, scope_id) DO UPDATE
-    SET last_assigned = GREATEST(
-            message_order_counters.last_assigned + 1,
-            COALESCE((SELECT MAX(seq) FROM messages WHERE chat_id = $2), -1) + 1
-        )
-    RETURNING last_assigned
-),
+` + messageOrderCTEs + `,
 upd AS (
     INSERT INTO update_stream_counters (stream_kind, stream_id, last_assigned_seq)
     VALUES ('chat', $2, 1)
@@ -160,13 +135,15 @@ msg AS (
         id, chat_id, ordinal, seq, thread_id, context_window_id,
         node_id, node_path, role, display_style, model, agent,
         token_count, cost, workflow_id, run_id, activity_id,
-        created_at, updated_at, provider_account_id
+        created_at, updated_at, provider_account_id,
+        sender_thread_id, sender_kind, sender_subject
     )
     SELECT
         $3, $2, ord.last_assigned, sq.last_assigned, $1, $4,
         $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15,
-        $16, $16, $31
+        $16, $16, $31,
+        $32, $33, $34
     FROM ord, sq
 ),
 blocks AS (
@@ -254,6 +231,9 @@ func SaveMessageAtomic(ctx context.Context, db orm.Context, w AtomicMessageWrite
 			cols.versions, cols.activityIDs, cols.workflowRunIDs,
 			cols.attemptNumbers, cols.phases,
 			emptyNilPtr(w.ProviderAccountID),
+			emptyNilPtr(w.SenderThreadID),
+			senderKindValue(w.SenderKind),
+			emptyNilPtr(w.SenderSubject),
 		).Scan(&result.Ordinal, &result.Seq, &result.UpdateSeq)
 		if err != nil {
 			return fmt.Errorf("failed to write message: %w", err)
@@ -332,6 +312,15 @@ func newBlockColumns(blocks []core.MessageContentBlock) blockColumns {
 		c.phases[i] = deref(b.Phase)
 	}
 	return c
+}
+
+// senderKindValue is the sender_kind column value: NULL, or the enum's number.
+func senderKindValue(k *reliantv1.AgentMessageKind) *int32 {
+	if k == nil {
+		return nil
+	}
+	v := int32(*k)
+	return &v
 }
 
 // displayStyleValue is the display_style column value: NULL, or the enum's

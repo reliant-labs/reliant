@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { systemGrpc } from "../api/system-grpc";
+import { useVersion } from "@/hooks/system-service-hooks_gen";
 import { appBuild } from "../lib/appBuild";
 import { formatVersion } from "../lib/releaseIdentity";
 
@@ -31,25 +31,10 @@ export function useVersionInfo(): VersionInfo {
   const build = appBuild();
   const baked = formatVersion(build?.version, build?.commit);
   const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
-  const [server, setServer] = useState<ServerVersion>({ state: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-    systemGrpc
-      .version()
-      .then((data) => {
-        if (cancelled) return;
-        const version = formatVersion(data.version, data.commit);
-        setServer(version ? { state: "known", version } : { state: "unknown" });
-      })
-      .catch((error) => {
-        console.error("Failed to fetch server version:", error);
-        if (!cancelled) setServer({ state: "unreachable" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Version declares NO_SIDE_EFFECTS, so forge generates it as a query
+  // under systemServiceKeys.version (inside systemServiceKeys.all).
+  const versionQuery = useVersion({});
+  const server = serverVersionFrom(versionQuery);
 
   // The packaged desktop app also knows its own version from Electron. The
   // baked identity is the same build's, so it wins; this only covers a bundle
@@ -73,6 +58,17 @@ export function useVersionInfo(): VersionInfo {
     server,
     release: build?.release || null,
   };
+}
+
+function serverVersionFrom(query: {
+  data?: { version: string; commit: string };
+  isError: boolean;
+}): ServerVersion {
+  if (query.data) {
+    const version = formatVersion(query.data.version, query.data.commit);
+    return version ? { state: "known", version } : { state: "unknown" };
+  }
+  return query.isError ? { state: "unreachable" } : { state: "loading" };
 }
 
 /** One-line text for the server's version, for the About screens. */

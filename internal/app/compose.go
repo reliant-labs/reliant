@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
@@ -65,6 +66,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/tool_call"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
+	"github.com/reliant-labs/reliant/internal/handlers/usage"
 	workflowhandler "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
@@ -82,7 +84,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/keyvalidate"
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
-	"github.com/reliant-labs/reliant/internal/pkgmgr"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/servergateway"
@@ -335,12 +336,11 @@ func (g *Graph) newProcessSettings() (*ProcessSettings, error) {
 
 func (g *Graph) newProcessRuntime() (*ProcessRuntime, error) {
 	return NewProcessRuntime(ProcessRuntimeDeps{
-		Settings:      g.ProcessSettings(),
-		ControlPlane:  g.ServerProcessConfig.GetControlPlane(),
-		Analytics:     g.ServerProcessConfig.GetAnalytics(),
-		Sentry:        g.ServerProcessConfig.GetSentry(),
-		Observability: g.ServerProcessConfig.GetObservability(),
-		DB:            g.Database(),
+		Settings:     g.ProcessSettings(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		Network:      g.ServerProcessConfig.GetNetwork(),
+		Analytics:    g.ServerProcessConfig.GetAnalytics(),
+		DB:           g.Database(),
 	})
 }
 
@@ -355,6 +355,7 @@ func (g *Graph) newTemporalClient() (*TemporalClient, error) {
 		Ctx:          g.Ctx,
 		Temporal:     g.ServerProcessConfig.GetTemporal(),
 		PayloadStore: g.PayloadStore(),
+		NATS:         g.NATSConn(),
 	})
 }
 
@@ -452,6 +453,7 @@ func (g *Graph) newRunLauncher() (*launch.Launcher, error) {
 		Temporal: g.TemporalClient(),
 		Runs:     g.RunLifecycle(),
 		DB:       g.Database(),
+		Router:   g.WorkerDaemonRouter(),
 	})
 }
 
@@ -491,12 +493,13 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 		Pollers:      g.TriggerPollers(),
 		Integrations: g.IntegrationSettings(),
 		DB:           g.Database(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		ControlPlane:  g.ServerProcessConfig.GetControlPlane(),
+		Network:       g.ServerProcessConfig.GetNetwork(),
 		Temporal:      g.TemporalClient(),
 		AgentRuns:     g.AgentRuns(),
 		Triggers:      g.WorkerTrigger(),
@@ -512,6 +515,16 @@ func (g *Graph) newRemoteExecutor() (*toolexec.RemoteExecutor, error) {
 	return NewRemoteExecutor(RemoteExecutorDeps{
 		Router: g.WorkerDaemonRouter(),
 		Tools:  g.WorkerToolsFactory(),
+		// Read here, not in the provider, so the worker root's config reach
+		// names them (pkg/config Roots).
+		Egress: egresslimit.Limits{
+			Replicas:          int(g.WorkerConfig.GetEgressReplicas()),
+			UserPerMinute:     int(g.WorkerConfig.GetEgressUserPerMinute()),
+			UserBurst:         int(g.WorkerConfig.GetEgressUserBurst()),
+			UserMaxConcurrent: int(g.WorkerConfig.GetEgressUserMaxConcurrent()),
+			HostMaxConcurrent: int(g.WorkerConfig.GetEgressHostMaxConcurrent()),
+			TurnMaxParallel:   int(g.WorkerConfig.GetEgressTurnMaxParallel()),
+		},
 	})
 }
 
@@ -534,12 +547,15 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		WriteLedger:    g.WriteLedger(),
 		Pollers:        g.TriggerPollers(),
 		ControlPlane:   g.ServerProcessConfig.GetControlPlane(),
+		Network:        g.ServerProcessConfig.GetNetwork(),
 		Recorder:       g.AccountRecorder(),
 		DB:             g.Database(),
 		// Read here, not in workersetup, so the worker root's config reach
 		// names them (pkg/config Roots).
 		WorkflowTaskSlots:   g.WorkerConfig.GetMaxConcurrentWorkflowTasks(),
 		WorkflowTaskPollers: g.WorkerConfig.GetWorkflowTaskPollers(),
+		Worker:              g.WorkerConfig,
+		NATS:                g.NATSConn(),
 	})
 }
 
@@ -642,9 +658,9 @@ func (g *Graph) newAPIDaemonRouter() (*APIDaemonRouter, error) {
 
 func (g *Graph) newAPIToolsFactory() (*tools.ToolsFactory, error) {
 	return NewAPIToolsFactory(APIToolsFactoryDeps{
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		Temporal:     g.TemporalClient(),
-		DB:           g.Database(),
+		Network:  g.ServerProcessConfig.GetNetwork(),
+		Temporal: g.TemporalClient(),
+		DB:       g.Database(),
 	})
 }
 
@@ -754,9 +770,10 @@ func (g *Graph) newDaemonEventsConsumer() (*DaemonEventsConsumer, error) {
 
 func (g *Graph) newWorktreeSweep() (*worktreesweep.Sweeper, error) {
 	return NewWorktreeSweep(WorktreeSweepDeps{
-		Router:   g.APIDaemonRouter(),
-		Settings: g.APISettings(),
-		DB:       g.Database(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		Router:       g.APIDaemonRouter(),
+		Settings:     g.APISettings(),
+		DB:           g.Database(),
 	})
 }
 
@@ -803,12 +820,19 @@ func (g *Graph) newWorkflowReconciler() (*WorkflowReconciler, error) {
 		Queued:     g.QueuedDeliverer(),
 		Router:     g.APIDaemonRouter(),
 		DB:         g.Database(),
+		Activity:   g.DaemonStatePublisher(),
 	})
 }
 
 func (g *Graph) newReliantKeySweep() (*ReliantKeySweep, error) {
 	return NewReliantKeySweep(ReliantKeySweepDeps{
 		Runtime: g.ProcessRuntime(),
+	})
+}
+
+func (g *Graph) newLLMUsageRetention() (*LLMUsageRetention, error) {
+	return NewLLMUsageRetention(LLMUsageRetentionDeps{
+		DB: g.Database(),
 	})
 }
 
@@ -860,6 +884,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		Workflow:        g.Workflow(),
 		Logger:          g.Log,
 		Options:         apiMountOptions(g.ApiServerConfig.GetDisableForgeApi()),
+		Usage:           g.Usage(),
 	})
 }
 
@@ -890,10 +915,10 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 // newAttachment constructs the attachment handler (internal/handlers/attachment).
 func (g *Graph) newAttachment() (*attachment.Service, error) {
 	return attachment.New(attachment.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Repo:        g.Database(),
-		MaxFileSize: g.APISettings().MaxUploadSize,
+		Logger: g.Log,
+		Config: g.Cfg,
+		Repo:   g.Database(),
+		API:    g.ApiServerConfig,
 	})
 }
 
@@ -919,26 +944,31 @@ func (g *Graph) newConnection() (*connection.Service, error) {
 
 // newWorktree constructs the worktree handler (internal/handlers/worktree).
 func (g *Graph) newWorktree() (*worktree.Service, error) {
+	credentials, err := gitTokens(g.ServerProcessConfig.GetControlPlane())
+	if err != nil {
+		return nil, err
+	}
 	return worktree.New(worktree.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Router:   g.APIDaemonRouter().NATSDaemonRouter,
-		Temporal: g.TemporalClient().Client,
-		Settler:  g.WorktreeSweep(),
+		GitCredentials: recoveryCredentials{client: credentials},
+		Logger:         g.Log,
+		Config:         g.Cfg,
+		Repo:           g.Database(),
+		Router:         g.APIDaemonRouter().NATSDaemonRouter,
+		Temporal:       g.TemporalClient().Client,
+		Settler:        g.WorktreeSweep(),
 	})
 }
 
 // newChat constructs the chat handler (internal/handlers/chat).
 func (g *Graph) newChat() (*chat.Service, error) {
 	return chat.New(chat.Deps{
-		Logger:    g.Log,
-		Config:    g.Cfg,
-		Repo:      g.Database(),
-		Temporal:  g.TemporalClient().Client,
-		Pause:     g.PauseService(),
-		TaskQueue: v2workflow.SharedTaskQueue,
-		Router:    g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		Temporal:    g.TemporalClient().Client,
+		Pause:       g.PauseService(),
+		Router:      g.APIDaemonRouter().NATSDaemonRouter,
+		LocalModels: local.NewRepoDirectory(g.Database()),
 	})
 }
 
@@ -969,7 +999,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Syncer:       syncer,
 		Fires:        fires,
 		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
-		PublicURL:    in.PublicURL,
+		Integrations: g.IntegrationSettings().Config,
 		Sealer:       in.Vault,
 		Catalog:      in.Registry,
 		Intake:       in.Intake,
@@ -977,6 +1007,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Senders:      g.TriggerSenders(),
 		Options:      optionsChecker{svc: g.InputOptions()},
 		Alerting:     alertingProvisioner(g.TriggerAlerting()),
+		Drafter:      automationDrafter(g.TemporalClient().Client, v2workflow.SharedTaskQueue),
 	})
 }
 
@@ -985,11 +1016,11 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 // redeems them from.
 func (g *Graph) newConnector() (*connector.Service, error) {
 	return connector.New(connector.Deps{
-		Logger:    g.Log,
-		Config:    g.Cfg,
-		Grants:    g.ConnectorGrants(),
-		Tokens:    g.TokenAuthority(),
-		PublicURL: g.IntegrationSettings().PublicURL,
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		Grants:       g.ConnectorGrants(),
+		Tokens:       g.TokenAuthority(),
+		Integrations: g.IntegrationSettings().Config,
 	})
 }
 
@@ -998,10 +1029,12 @@ func (g *Graph) newConnector() (*connector.Service, error) {
 // The ToolsDaemonService stream is the daemon-gateway's.
 func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 	return daemon_registry.New(daemon_registry.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
-		Repo:   g.Database(),
-		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		Repo:         g.Database(),
+		Router:       g.APIDaemonRouter().NATSDaemonRouter,
+		IdleTimeouts: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Names:        hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 	})
 }
 
@@ -1066,12 +1099,12 @@ func (g *Graph) newMessage() (*message.Service, error) {
 // answers ErrCredentialStoreUnavailable.
 func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 	return model_endpoint.New(model_endpoint.Deps{
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Repo:         g.Database(),
-		Router:       g.APIDaemonRouter().NATSDaemonRouter,
-		Credentials:  nil,
-		ControlPlane: modelEndpointControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		Router:      g.APIDaemonRouter().NATSDaemonRouter,
+		Credentials: nil,
+		Network:     g.ServerProcessConfig.GetNetwork(),
 	})
 }
 
@@ -1081,11 +1114,10 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 // (run against the api-server's, it silently returned an empty command list).
 func (g *Graph) newPackageCommands() (*package_commands.Service, error) {
 	return package_commands.New(package_commands.Deps{
-		Logger:    g.Log,
-		Config:    g.Cfg,
-		Router:    g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:      g.Database(),
-		Processes: pkgmgr.NewService(),
+		Logger: g.Log,
+		Config: g.Cfg,
+		Router: g.APIDaemonRouter().NATSDaemonRouter,
+		Repo:   g.Database(),
 	})
 }
 
@@ -1238,10 +1270,10 @@ func (g *Graph) newToken() (*token.Service, error) {
 		Config:    g.Cfg,
 		Authority: g.TokenAuthority(),
 		ControlPlane: token.TokenControlPlane{
-			Issuer:      g.APISettings().AuthorizationServer,
-			ClipsGrants: ControlPlaneEndpoint(cp).Hosted(),
+			Issuer: g.APISettings().AuthorizationServer,
 		},
-		GitTokens: git,
+		GitTokens:    git,
+		GitBotTokens: git,
 	})
 }
 
@@ -1266,5 +1298,15 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Repo:        g.Database(),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Automations: g.Trigger(),
+	})
+}
+
+// newUsage constructs the usage handler (internal/handlers/usage).
+func (g *Graph) newUsage() (*usage.Service, error) {
+	return usage.New(usage.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Now:    nil, // optional — no provider
 	})
 }

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The console's information architecture (research/console-v3/DECISIONS.md):
+ * The console's information architecture:
  * the nav lists the product's nouns in the decided order, never the
  * environment roster, and every link carries the scope.
  */
@@ -27,17 +27,29 @@ describe("buildConsoleNav", () => {
       ["Environments", "Configure"],
       ["Secrets", "Configure"],
       ["Domains", "Configure"],
-      ["Monitoring settings", "Configure"],
-      ["Project settings", "Configure"],
     ]);
     expect(footer.map((item) => item.label)).toEqual(["Activity"]);
   });
 
-  it("lists Observability's views as its children (D9)", () => {
+  it("opens Observability on Dashboards from its row: it has no home of its own", () => {
+    const { items } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS });
+    expect(items.find((item) => item.label === "Observability")?.href).toBe("/forge/p/shop/observability/dashboards?env=prod");
+  });
+
+  it("lists Observability's views as its children", () => {
     const { items } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS, alertsFiring: 2 });
     const obs = items.find((item) => item.label === "Observability")!;
-    expect(obs.children?.map((child) => child.label)).toEqual(["Errors", "Logs", "Traces", "Metrics", "Profiles", "Dashboards", "Alerts"]);
+    expect(obs.children?.map((child) => child.label)).toEqual(["Dashboards", "RPC explorer", "Errors", "Sessions", "Logs", "Traces", "Metrics", "Profiles", "Alerts", "Service graph"]);
     expect(obs.children?.find((child) => child.label === "Alerts")?.badge).toMatchObject({ type: "count", value: 2, tone: "danger" });
+  });
+
+  it("hides only known-empty optional views, retaining an active direct link", () => {
+    const base = { project: "shop", env: "prod", envs: ENVS, optionalViews: { sessions: false, profiles: false } };
+    const labels = (page: Parameters<typeof buildConsoleNav>[0]["page"]) => buildConsoleNav({ ...base, page }).items.find((item) => item.label === "Observability")!.children!.map((child) => child.label);
+    expect(labels({ kind: "overview" })).not.toContain("Sessions");
+    expect(labels({ kind: "overview" })).not.toContain("Profiles");
+    expect(labels({ kind: "obs-view", view: "sessions" })).toContain("Sessions");
+    expect(labels({ kind: "obs-view", view: "profiles" })).toContain("Profiles");
   });
 
   it("files environments under Configure, previews collapsed into one entry", () => {
@@ -69,7 +81,7 @@ describe("buildConsoleNav", () => {
     expect(release.items.find((item) => item.label === "Releases")?.active).toBe(true);
   });
 
-  it("files a workload under the Overview, not under its environment (DECISIONS: Overview › <name>)", () => {
+  it("files a workload under the Overview, not under its environment", () => {
     const page = { kind: "workload" as const, env: "prod", name: "admin-server" };
     const nav = buildConsoleNav({ project: "shop", page, env: "prod", envs: ENVS });
     expect(nav.items.find((item) => item.label === "Overview")?.active).toBe(true);
@@ -78,7 +90,7 @@ describe("buildConsoleNav", () => {
   });
 });
 
-describe("starred dashboards in the nav (decision DB)", () => {
+describe("starred dashboards in the nav", () => {
   const starred = [
     { title: "Checkout latency", dashKind: "workspace" as const, key: "checkout-latency" },
     { title: "Service · api", dashKind: "release" as const, key: "service-api" },
@@ -110,7 +122,7 @@ describe("starred dashboards in the nav (decision DB)", () => {
 describe("consoleCrumbs", () => {
   it("names the page, with its parent as a link", () => {
     expect(consoleCrumbs("shop", { kind: "obs-view", view: "traces" }, "prod")).toEqual([
-      { label: "Observability", href: "/forge/p/shop/observability?env=prod" },
+      { label: "Observability", href: "/forge/p/shop/observability/dashboards?env=prod" },
       { label: "Traces" },
     ]);
     expect(consoleCrumbs("shop", { kind: "environment", env: "dev" }, "prod")).toEqual([
@@ -118,7 +130,7 @@ describe("consoleCrumbs", () => {
       { label: "dev" },
     ]);
     expect(consoleCrumbs("shop", { kind: "dashboard", dashKind: "workspace", key: "checkout-latency" }, "prod", "Checkout latency")).toEqual([
-      { label: "Observability", href: "/forge/p/shop/observability?env=prod" },
+      { label: "Observability", href: "/forge/p/shop/observability/dashboards?env=prod" },
       { label: "Dashboards", href: "/forge/p/shop/observability/dashboards?env=prod" },
       { label: "Checkout latency" },
     ]);

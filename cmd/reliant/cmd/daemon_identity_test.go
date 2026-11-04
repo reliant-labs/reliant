@@ -182,3 +182,22 @@ func TestDaemonStartFailure_ForeignDaemonIDIsNotATokenProblem(t *testing.T) {
 	require.False(t, reRegister)
 	require.NotContains(t, failure.Error(), "token rejected")
 }
+
+// A login token asserting a daemon id reserved for daemon-bound credentials
+// (a managed cloud machine's) is refused as PermissionDenied, and the login
+// token itself is fine. Read as a credential failure, a daemon with no --token
+// would delete the good login credential and open a browser login, which
+// would mint another login token refused for the same id.
+func TestDaemonStartFailure_ReservedDaemonIDIsNotATokenProblem(t *testing.T) {
+	conn := &connection{ServerURL: "https://api.reliantapi.com", GatewayURL: "https://gateway.reliantapi.com"}
+	reserved := fmt.Errorf("daemon connection failed (not retrying): %w", bootstrap.NewReservedDaemonIDError())
+
+	require.False(t, daemonCredentialRefused(reserved))
+	for _, useToken := range []bool{true, false} {
+		failure, reRegister := daemonStartFailure(reserved, useToken, conn)
+		require.False(t, reRegister, "useToken=%v: a reserved daemon id must never discard the credential and re-run login", useToken)
+		require.Error(t, failure)
+		require.NotContains(t, failure.Error(), "token rejected", "useToken=%v", useToken)
+		require.Contains(t, failure.Error(), "reserved", "useToken=%v: the real cause must reach the user", useToken)
+	}
+}

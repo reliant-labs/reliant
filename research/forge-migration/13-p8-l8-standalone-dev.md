@@ -2,7 +2,7 @@
 
 Status: **built and proven** on branch `fm-w26-p8-l8-standalone-dev` (decision
 D-P8-1 (b), `12-p8-devtooling-plan.md` §0 finding 1, §8 L8, §9). Measured in
-the kata sandbox (no k3d, no nested k8s), with no control-plane process
+the kata sandbox (k3d was not used; it works there with a `/dev/kmsg` workaround; verified 2026-10-25), with no control-plane process
 running for this stack.
 
 ## 1. Spike: can the three roles run with no control plane?

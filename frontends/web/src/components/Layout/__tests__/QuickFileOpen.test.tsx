@@ -31,7 +31,7 @@ const mockProjectStore = { currentProject: { id: "proj-1", name: "Reliant", path
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector: (state: typeof mockProjectStore) => unknown) => selector(mockProjectStore),
 }));
-vi.mock("../../../store/worktreeStore", () => ({ useActiveWorktreeId: () => "wt-1" }));
+vi.mock("../../../hooks/worktree-queries", () => ({ useActiveWorktreeId: () => "wt-1" }));
 vi.mock("../../../store/viewerStore", () => ({
   useViewerStore: { getState: () => ({ openFileViewer: vi.fn() }) },
 }));

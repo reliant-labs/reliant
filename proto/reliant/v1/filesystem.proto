@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // FileNodeType distinguishes files from directories
@@ -32,7 +34,11 @@ service FileSystemService {
   rpc GetFileContent(GetFileContentRequest) returns (GetFileContentResponse) {}
   
   // SaveFileContent saves content to a specific file
-  rpc SaveFileContent(SaveFileContentRequest) returns (SaveFileContentResponse) {}
+  rpc SaveFileContent(SaveFileContentRequest) returns (SaveFileContentResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "file edit through the daemon: git records file changes, and editor saves are high-volume"}
+    };
+  }
   
   // GetFileMetadata returns metadata for a file or directory
   rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {}
@@ -44,19 +50,35 @@ service FileSystemService {
   rpc GetFilePreview(GetFilePreviewRequest) returns (GetFilePreviewResponse) {}
   
   // CreateFileOrFolder creates a new file or folder
-  rpc CreateFileOrFolder(CreateFileOrFolderRequest) returns (CreateFileOrFolderResponse) {}
+  rpc CreateFileOrFolder(CreateFileOrFolderRequest) returns (CreateFileOrFolderResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "filesystem edit through the daemon: git records the file once it is committed"}
+    };
+  }
   
   // DeleteFileOrFolder deletes a file or folder
-  rpc DeleteFileOrFolder(DeleteFileOrFolderRequest) returns (DeleteFileOrFolderResponse) {}
+  rpc DeleteFileOrFolder(DeleteFileOrFolderRequest) returns (DeleteFileOrFolderResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "filesystem edit through the daemon: git records the removal once it is committed"}
+    };
+  }
   
   // CopyFile copies a file to a new location
-  rpc CopyFile(CopyFileRequest) returns (CopyFileResponse) {}
+  rpc CopyFile(CopyFileRequest) returns (CopyFileResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "filesystem edit through the daemon: git records the copy once it is committed"}
+    };
+  }
   
   // SearchFiles searches for text within files in the workspace
   rpc SearchFiles(SearchFilesRequest) returns (SearchFilesResponse) {}
   
   // ReplaceInFiles replaces text in files across the workspace
-  rpc ReplaceInFiles(ReplaceInFilesRequest) returns (ReplaceInFilesResponse) {}
+  rpc ReplaceInFiles(ReplaceInFilesRequest) returns (ReplaceInFilesResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "bulk file edit through the daemon: git records each changed file once it is committed"}
+    };
+  }
 
   // ListDirectory lists entries in an arbitrary filesystem directory.
   // Used by the project picker in browser mode (no Electron).
@@ -65,7 +87,11 @@ service FileSystemService {
   // CreateDirectory creates a new directory at an arbitrary absolute path.
   // Used by the project picker in browser mode to make a "New folder" while
   // choosing where to open/create a project on the remote daemon.
-  rpc CreateDirectory(CreateDirectoryRequest) returns (CreateDirectoryResponse) {}
+  rpc CreateDirectory(CreateDirectoryRequest) returns (CreateDirectoryResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "filesystem edit through the daemon: an empty directory is not even something git records"}
+    };
+  }
 }
 
 // ============================================

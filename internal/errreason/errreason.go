@@ -7,8 +7,8 @@
 // The web's copy is the closed union in frontends/web/src/lib/errorReasons.ts;
 // the spelling here is the source of truth, and a value is never reused for a
 // different meaning. A producer stamps a reason with svcerr.WithReason and
-// leaves its message alone: clients from before the reason still match on the
-// text until R3w2 (research/forge-migration/13-p9-frontend-plan.md §7).
+// leaves its message alone: desktop builds from before the reason still match
+// on the text (research/forge-migration/13-p9-frontend-plan.md §7).
 package errreason
 
 const (
@@ -24,6 +24,10 @@ const (
 	// DaemonNotConnected: the machine's daemon has no responder on NATS —
 	// closed or restarting. Unavailable.
 	DaemonNotConnected = "daemon_not_connected"
+	// DaemonReconnecting: the machine registered a fresh stream but has not
+	// answered on it yet (toolexec.ErrDaemonReconnecting). Unavailable; the
+	// request was never sent, retry shortly.
+	DaemonReconnecting = "daemon_reconnecting"
 	// NoDaemon: no machine exists for the request at all
 	// (toolexec.ErrNoDaemon). FailedPrecondition; nothing to wait for.
 	NoDaemon = "no_daemon"

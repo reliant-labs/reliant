@@ -1,4 +1,4 @@
-import { projectGrpc } from "@/api/project-grpc";
+import { createProjectFromRepo } from "@/hooks/project-queries";
 import { cloudPathForRepo, repoNameFromUrl } from "@/lib/cloudProjectPath";
 import {
   createEnvironment,
@@ -80,7 +80,7 @@ export async function createMachine({
   }
 
   try {
-    const result = await projectGrpc.createProjectFromRepo({
+    const result = await createProjectFromRepo({
       cloneUrl: repo.cloneUrl,
       daemonId,
       name: projectName,

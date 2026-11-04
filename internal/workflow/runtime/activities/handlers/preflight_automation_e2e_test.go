@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	natstest "github.com/nats-io/nats-server/v2/test"
@@ -27,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
@@ -159,7 +162,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 
 	router := toolexec.NewNATSDaemonRouter(nc,
 		toolexec.WithDatabase(repo),
-		toolexec.WithDaemonResumer(controlplane.New(controlplane.Deps{BaseURL: cpSrv.URL})),
+		toolexec.WithDaemonResumer(controlplane.New(controlplane.Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: cpSrv.URL}})),
 		toolexec.WithControlPlaneCredentials(automationcred.New(automationcred.Deps{Keys: repo})))
 
 	projectID, chatID := uuid.NewString(), uuid.NewString()
@@ -202,7 +205,7 @@ func (h *automationHarness) preflightWait(t *testing.T, waitSeconds int) (Prefli
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(h.activity.Execute)
 	val, err := env.ExecuteActivity(h.activity.Execute, PreflightDaemonCheckInput{
-		ChatID: h.chatID, DaemonSelector: &toolexec.DaemonSelector{ID: h.daemonID}, WaitSeconds: waitSeconds})
+		ChatID: h.chatID, DaemonSelector: &activitytypes.DaemonSelector{ID: h.daemonID}, WaitSeconds: waitSeconds})
 	if err != nil {
 		return PreflightDaemonCheckOutput{}, err
 	}

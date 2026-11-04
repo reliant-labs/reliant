@@ -123,6 +123,8 @@ describe("response mapping", () => {
     client.getTrace.mockResolvedValue({
       traceId: "t",
       truncated: false,
+      relatedTraces: [{ traceId: "incoming", spanId: "server", linkedSpanId: "s" }],
+      relatedTracesTruncated: true,
       spans: [
         {
           spanId: "s",
@@ -137,7 +139,7 @@ describe("response mapping", () => {
           attributes: {},
           resourceAttributes: {},
           events: [],
-          links: [],
+          links: [{ traceId: "outgoing", spanId: "browser" }],
           source: "",
           operatorData: false,
         },
@@ -146,6 +148,10 @@ describe("response mapping", () => {
     const trace = await getTrace({ ...env, traceId: "t", window });
     expect(trace.spans[0]).toMatchObject({ kind: "server", status: "error", durationMs: 0.042 });
     expect(trace.spans[0].startMs - window.startMs).toBeCloseTo(0.25, 6);
+    expect(trace.spans[0].parentSpanId).toBe("");
+    expect(trace.spans[0].links).toEqual([{ traceId: "outgoing", spanId: "browser" }]);
+    expect(trace.relatedTraces).toEqual([{ traceId: "incoming", spanId: "server", linkedSpanId: "s" }]);
+    expect(trace.relatedTracesTruncated).toBe(true);
     expect(statusOf("Ok")).toBe("ok");
     expect(statusOf("")).toBe("unset");
   });
@@ -228,6 +234,54 @@ describe("traces and panels", () => {
     expect(req.panel).toMatchObject({ id: "p", ratio: true, groupBy: ["service.name"], series: [{ agg: "count", where: [{ field: "span.status", op: "eq", value: "error", values: [] }] }, { label: "requests" }] });
     expect(result.series[0]).toMatchObject({ label: "ratio", group: { "service.name": "api" }, timestamps: [window.startMs / 1000], values: [0.02] });
     expect(result.rows[0]).toEqual({ group: { "span.name": "a/B" }, values: [12] });
+    expect(result.columns).toEqual(["requests"]);
+  });
+
+  it("preserves SQL numeric column metadata separately from string group attributes", async () => {
+    client.queryPanel.mockResolvedValue({
+      panelId: "event-mix", kind: "sql", unit: "", stepSeconds: 0, truncated: true,
+      columns: ["events", "users"],
+      rows: [{ group: { event: "page_visited", clients: "electron,web" }, values: [120, Number.NaN] }],
+      series: [], funnelSteps: [], issues: [], sessions: [],
+    });
+    const result = await queryPanel({
+      ...env, window, services: [], stepSeconds: 0,
+      panel: { id: "event-mix", title: "Event mix", kind: "sql", signal: "traces", series: [], sql: "SELECT EventName AS event, count() AS events, uniqExact(UserId) AS users, arrayStringConcat(groupUniqArray(Client), ',') AS clients FROM product_events GROUP BY EventName" },
+    });
+    expect(result).toMatchObject({
+      kind: "sql", truncated: true, columns: ["events", "users"], series: [],
+      rows: [{ group: { event: "page_visited", clients: "electron,web" }, values: [120, null] }],
+    });
+    expect(client.queryPanel.mock.calls[0][0].panel).toMatchObject({ kind: "sql", series: [], groupBy: [], sql: expect.stringContaining("AS clients") });
+  });
+
+  it("carries the window it asked for, and the server's bucket width and zone for a Date-bucketed series", async () => {
+    const day = new Date(Date.UTC(2026, 9, 29));
+    client.queryPanel.mockResolvedValue({
+      panelId: "workflows-by-outcome", kind: "sql", unit: "", stepSeconds: 3600, truncated: false, bucketSeconds: 86_400, bucketTimezone: "UTC",
+      columns: [], rows: [], funnelSteps: [], issues: [], sessions: [],
+      series: [{ label: "runs", group: { outcome: "success" }, value: 0, points: [{ time: { seconds: BigInt(day.getTime() / 1000), nanos: 0 }, value: 53 }] }],
+    });
+    const result = await queryPanel({ ...env, window, services: [], stepSeconds: 0,
+      panel: { id: "workflows-by-outcome", title: "Runs", kind: "sql", signal: "", series: [], sql: "SELECT toDate(Timestamp) AS day, count() AS runs FROM product_events GROUP BY day", minStep: "1d" },
+    });
+    expect(result).toMatchObject({ window, bucketSeconds: 86_400, bucketTimezone: "UTC" });
+    expect(result.series[0].timestamps).toEqual([day.getTime() / 1000]);
+
+    client.queryPanel.mockResolvedValue({ panelId: "p", kind: "sql", unit: "", stepSeconds: 120, truncated: false, bucketSeconds: 120, bucketTimezone: "", columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [] });
+    const instants = await queryPanel({ ...env, window, services: [], stepSeconds: 0, panel: { id: "p", title: "P", kind: "sql", signal: "", series: [], sql: "SELECT 1" } });
+    expect(instants.bucketTimezone).toBeUndefined();
+  });
+
+  it("preserves a SQL NULL placeholder separately from a measured zero", async () => {
+    client.queryPanel.mockResolvedValue({ panelId: "nullable", kind: "sql", unit: "", stepSeconds: 0, truncated: false,
+      columns: ["unmeasured", "actual_zero", "count"], rows: [{ group: {}, values: [0, 0, 12], missingValueIndexes: [0] }],
+      series: [], funnelSteps: [], issues: [], sessions: [],
+    });
+    const result = await queryPanel({ ...env, window, services: [], stepSeconds: 0,
+      panel: { id: "nullable", title: "Nullable", kind: "sql", signal: "", series: [], sql: "SELECT NULL, 0, 12" },
+    });
+    expect(result.rows[0].values).toEqual([null, 0, 12]);
   });
 
   it("sends a funnel's steps and a sessions panel's has-error, and maps the browser kinds back (C7)", async () => {
@@ -266,7 +320,9 @@ describe("errors", () => {
     const notSetUp = new ConnectError("not set up", Code.FailedPrecondition);
     expect(obsErrorKind(notSetUp)).toBe("not-set-up");
     expect(obsRetry(0, notSetUp)).toBe(false);
-    expect(obsErrorKind(new ConnectError("quota", Code.ResourceExhausted))).toBe("over-quota");
+    // Only the hourly allowance is "over-quota"; any other ResourceExhausted is "busy" (quota.test.ts).
+    expect(obsErrorKind(new ConnectError("quota", Code.ResourceExhausted))).toBe("busy");
+    expect(obsErrorKind(new ConnectError("this organization's hourly observability query quota is used up", Code.ResourceExhausted))).toBe("over-quota");
     expect(obsErrorKind(new ConnectError("slow", Code.DeadlineExceeded))).toBe("too-broad");
     expect(obsRetry(0, new ConnectError("down", Code.Unavailable))).toBe(true);
     expect(obsRetry(1, new ConnectError("down", Code.Unavailable))).toBe(false);
@@ -410,7 +466,7 @@ describe("workloads (customer metadata, contract K2)", () => {
   });
 });
 
-describe("workloads: the server's verdict, pods, jobs and the declaration (console v3)", () => {
+describe("workloads: the server's verdict, pods, jobs and the declaration", () => {
   const wire = (over: Record<string, unknown> = {}) => ({
     envId: "env-1",
     envName: "prod",

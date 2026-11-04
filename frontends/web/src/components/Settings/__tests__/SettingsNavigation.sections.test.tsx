@@ -35,6 +35,6 @@ describe("Settings sections", () => {
     config.hasControlPlane = hasCP;
     vi.resetModules();
     const mod = await import("../SettingsNavigation");
-    expect(mod.getVisibleSettingsSectionIds()).toContain("environments");
+    expect(mod.getVisibleSettingsSectionIds()).toContain("machines");
   });
 });

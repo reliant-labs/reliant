@@ -217,7 +217,7 @@ export function createAlertingFixture(
 
   const gate = <T>(rpc: string, request: unknown, mutate: boolean, answer: () => T) =>
     call(rpc, request, () => {
-      if (mode === "not-configured") throw new ConnectError("alerting is not configured on this server", Code.Unavailable);
+      if (mode === "not-configured") throw new ConnectError("alerting is not configured on this server", Code.Unavailable, new Headers({ "x-forge-error-reason": "observability_not_configured" }));
       if (mutate && mode === "viewer") throw new ConnectError("this needs the organization admin role", Code.PermissionDenied);
       return answer();
     });

@@ -22,9 +22,12 @@
 # itself: a second expansion is a second place the config can drift, which is
 # the defect this whole path exists to prevent.
 #
-#   .vite  -> VITE_* read directly by `vite build` (no .env file is written)
-#   .main  -> consumed by generate-build-config.mjs, which writes
-#             electron/src/build-config.js (the main-process endpoints)
+#   .renderer -> consumed by generate-build-config.mjs, which writes
+#                electron/src/release-renderer-config.js — what the main
+#                process answers app://bundle/config.js with (the bundle
+#                itself reads nothing at build time)
+#   .main     -> consumed by generate-build-config.mjs, which writes
+#                electron/src/build-config.js (the main-process endpoints)
 #
 # Running this file directly is rejected below rather than silently building
 # against whatever the calling shell had — in a dev shell that is localhost.
@@ -63,7 +66,7 @@ BUILDER_CONFIG="electron/electron-builder.local.js"
 # run directly — in which case the safe move is to stop, not to guess. A bare
 # `./scripts/build-electron-prod-local.sh` from a dev shell would otherwise
 # inherit localhost endpoints and package them into a build labelled "prod".
-for var in VITE_API_URL VITE_CONTROL_PLANE_API_URL RELIANT_API_URL RELIANT_GATEWAY_URL; do
+for var in RELIANT_API_URL RELIANT_GATEWAY_URL RELIANT_CONTROL_PLANE_URL; do
   case "${!var:-}" in
     ""|*localhost*|*127.0.0.1*)
       echo "$var is '${!var:-}' — refusing to build a 'prod' app against a local endpoint." >&2
@@ -75,12 +78,11 @@ for var in VITE_API_URL VITE_CONTROL_PLANE_API_URL RELIANT_API_URL RELIANT_GATEW
 done
 
 echo "==> Building with prod config"
-echo "    VITE_API_URL               = $VITE_API_URL"
-echo "    VITE_CONTROL_PLANE_API_URL = $VITE_CONTROL_PLANE_API_URL"
+[[ -n "${RELIANT_RENDERER_CONFIG:-}" ]] || { echo "RELIANT_RENDERER_CONFIG is unset — run this through the npm target (cd electron && npm run dist:mac:prod-local)" >&2; exit 1; }
 echo "    RELIANT_API_URL            = $RELIANT_API_URL"
 echo "    RELIANT_GATEWAY_URL        = $RELIANT_GATEWAY_URL"
 
-echo "==> Writing electron/src/build-config.js"
+echo "==> Writing electron/src/build-config.js and release-renderer-config.js"
 ( cd electron && node ../.github/scripts/generate-build-config.mjs )
 
 # `npm run build`, NOT build:alpha. The difference is `tsc -b`: build:alpha is

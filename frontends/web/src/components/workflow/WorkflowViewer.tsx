@@ -54,11 +54,12 @@ import {
 } from './viewerViewport'
 import { useExpandedLoops } from './hooks/useExpandedLoops'
 import { WorkflowNodeCallbacksProvider } from './WorkflowNodeCallbacksContext'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
+import { builderReturnState } from '../../lib/routeParent'
 import { useProjectStore } from '../../store/projectStore'
-import { useWorktreeStore } from '../../store/worktreeStore'
-import { workflowGrpc } from '../../api/workflow-grpc'
+import { saveWorkflow } from '../../hooks/workflow-queries'
 import { cn } from '../../lib/utils'
+import { useCurrentWorktree } from '../../hooks/worktree-queries'
 
 interface WorkflowViewerProps {
   /** The workflow definition to visualize */
@@ -132,8 +133,10 @@ function WorkflowViewerInner({
 }: WorkflowViewerProps) {
   const { getNodes, getNodesBounds, getViewport, setViewport } = useReactFlow()
   const navigate = useNavigate()
+  // No warning without a RouterProvider: tests render the viewer bare.
+  const router = useRouter({ warn: false })
   const currentProject = useProjectStore((state) => state.currentProject)
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree)
+  const currentWorktree = useCurrentWorktree()
   
   // Track if we're currently saving positions (debounce)
   const savingPositionsRef = useRef(false)
@@ -527,7 +530,7 @@ function WorkflowViewerInner({
       } as Workflow
       
       // Save to backend
-      workflowGrpc.saveWorkflow(projectId, updatedWorkflow)
+      saveWorkflow(projectId, updatedWorkflow)
         .catch(() => {})
         .finally(() => {
           savingPositionsRef.current = false
@@ -799,6 +802,9 @@ function WorkflowViewerInner({
                   navigate({
                     to: '/workflow/$workflowName',
                     params: { workflowName: name },
+                    // The builder's Back returns here (a chat), not to the
+                    // workflow's page.
+                    state: router ? builderReturnState(router.state.location.href) : undefined,
                   });
                 }}
                 className="p-1 hover:bg-muted rounded"

@@ -115,13 +115,15 @@ func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixt
 	project, err := repo.GetProject(context.Background(), chat.ProjectID)
 	require.NoError(t, err)
 	// The project lives on the machine; on the worker this path is nothing.
+	// The tool knows it only as the run machine's checkout (rc.Project).
 	project.Path = worktreeToolHome + "/project"
 	if len(repos) == 0 {
 		repos = []*core.Repo{{ID: uuid.NewString(), ProjectID: project.ID, Name: "project", RelativePath: ""}}
 	}
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, runTestUser)
-	rc := rctx.NewToolContext(ctx, chatID, chatID, project, nil)
+	// The dispatcher resolved the run machine's checkout into the request.
+	rc := rctx.NewToolContext(ctx, chatID, chatID, &rctx.Project{ID: project.ID, Name: project.Name, Checkout: project.Path}, nil)
 	rc.Repos = repos
 	return &worktreeToolFixture{
 		repo:    repo,
@@ -369,16 +371,30 @@ func TestWorktreeTool_Create_FailureIsAllOrNothing(t *testing.T) {
 	assert.NotEmpty(t, f.machine.to("worktree.delete_directory"), "the api checkout that succeeded is torn down")
 }
 
-func TestWorktreeTool_CreateForce_CleansTheStaleBranchPerRepo(t *testing.T) {
-	f := newWorktreeToolFixture(t)
+// The tool forwards force into each create, not a separate cleanup that could
+// run before base/head validation. The real tool -> Finish -> daemon -> git
+// stale-branch reset and refusal behavior is pinned by
+// daemonruntime.TestWorktreeToolForceResetsStaleBranchesAfterValidation and
+// TestWorktreeFinishDriftPreservesExistingWorktreeAndBranch.
+func TestWorktreeTool_CreateForce_DelegatesResetInsideEachCreate(t *testing.T) {
+	f := newWorktreeToolFixture(t,
+		&core.Repo{ID: uuid.NewString(), Name: "api", RelativePath: "api"},
+		&core.Repo{ID: uuid.NewString(), Name: "web", RelativePath: "web"},
+	)
 
-	resp := f.call(t, WorktreeParams{Action: "create", Name: "again", Branch: "feat/again", Force: true})
+	resp := f.call(t, WorktreeParams{Action: "create", Name: "again", Branch: "feat/again", BaseBranch: "main", Force: true})
 	require.False(t, resp.IsError, resp.Content)
 
-	cleanups := f.machine.to("worktree.force_cleanup")
-	require.Len(t, cleanups, 1)
-	assert.Equal(t, "feat/again", cleanups[0].payload["branch"])
-	assert.Equal(t, "", cleanups[0].payload["worktree_path"], "the workspace dir is fresh; only the branch is stale")
+	creates := f.machine.to("worktree.create")
+	require.Len(t, creates, 2)
+	for _, create := range creates {
+		assert.Equal(t, true, create.payload["force"], "daemon owns reset after validation")
+		reuse, _ := create.payload["reuse_branch"].(bool) // false is omitted by the JSON protocol
+		assert.False(t, reuse, "adoption must not bypass the requested reset")
+		assert.Equal(t, "feat/again", create.payload["branch"])
+		assert.Equal(t, "main", create.payload["base_branch"])
+	}
+	assert.Empty(t, f.machine.to("worktree.force_cleanup"), "must not destructively clean before create validates its base")
 }
 
 // force keeps its permission prompt, as does delete.

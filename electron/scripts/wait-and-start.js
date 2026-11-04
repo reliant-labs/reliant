@@ -92,8 +92,8 @@ async function main() {
     // Without this, SIGTERM kills THIS process via Node's default action and
     // reparents Electron to PID 1 — orphaning the one process that runs
     // gracefulShutdown(), so the tools-daemon it spawned outlives the session
-    // and keeps its port. dev-multi.js forwards to us; we forward the rest of
-    // the way down.
+    // and keeps its port. Whoever launched us (forge env up's host runner)
+    // signals us; we forward the rest of the way down.
     forwardSignals(electron, {
       onForward: (message) => console.log(`[wait-and-start] ${message}`),
     });

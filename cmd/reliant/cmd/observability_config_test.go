@@ -11,14 +11,12 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/runenv"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
-// observabilityEnv is every variable ObservabilityConfig and SentryConfig
-// read, plus the tier the environment falls back to.
+// observabilityEnv is every variable ObservabilityConfig reads, plus the tier
+// the environment falls back to.
 var observabilityEnv = []string{
-	"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "SENTRY_ENVIRONMENT", "ENVIRONMENT",
-	"SENTRY_ENABLED", "SENTRY_DSN", "SENTRY_TRACES_SAMPLE_RATE", "RELIANT_ENV", "NODE_ENV",
+	"OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ENV", "NODE_ENV",
 }
 
 func isolateObservabilityEnv(t *testing.T) {
@@ -54,52 +52,30 @@ func TestObservabilityEnvContract(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel:4317")
 	t.Setenv("OTEL_ENABLED", "true")
 	t.Setenv("PROMETHEUS_ENABLED", "false")
-	t.Setenv("SENTRY_ENVIRONMENT", "production")
+	t.Setenv("ENVIRONMENT", "production")
 	for role, got := range observabilityOf(t) {
 		assert.Equal(t, observability.Settings{Environment: "production", OTLPEndpoint: "http://otel:4317", OTLPEnabled: true}, got, role)
 	}
 }
 
-// The environment telemetry is filed under: SENTRY_ENVIRONMENT, else the
-// deploy layer's ENVIRONMENT, else the tier as RELIANT_ENV spells it.
+// The environment telemetry is filed under: the deploy layer's ENVIRONMENT,
+// else the tier as RELIANT_ENV spells it.
 func TestObservabilityEnvironmentPrecedence(t *testing.T) {
 	isolateObservabilityEnv(t)
-	t.Setenv("SENTRY_ENVIRONMENT", "sentry-environment")
 	t.Setenv("ENVIRONMENT", "deployment-environment")
 	t.Setenv("RELIANT_ENV", "legacy-environment")
-	assert.Equal(t, "sentry-environment", observabilityOf(t)["api"].Environment)
-
-	t.Setenv("SENTRY_ENVIRONMENT", "")
+	assert.Equal(t, "deployment-environment", observabilityOf(t)["api"].Environment)
 	assert.Equal(t, "deployment-environment", observabilityOf(t)["worker"].Environment)
 
 	t.Setenv("ENVIRONMENT", "")
 	assert.Equal(t, "legacy-environment", observabilityOf(t)["gateway"].Environment)
 }
 
-// The API server and worker report to Sentry as prod/main.k configures them.
-func TestSentryEnvContract(t *testing.T) {
-	isolateObservabilityEnv(t)
-	var api apiOptions
-	require.NoError(t, loadServerAPIConfig(roleCommand(t, "api"), &api))
-	assert.Equal(t, telemetry.SentryConfig{Enabled: true}, api.Sentry, "defaults: on, nothing to report to")
-
-	t.Setenv("SENTRY_DSN", "https://public@example.ingest.sentry.io/1")
-	t.Setenv("SENTRY_ENABLED", "true")
-	t.Setenv("SENTRY_ENVIRONMENT", "production")
-	t.Setenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")
-	var worker workerOptions
-	require.NoError(t, loadServerWorkerConfig(roleCommand(t, "worker"), &worker))
-	assert.Equal(t, telemetry.SentryConfig{Enabled: true, DSN: "https://public@example.ingest.sentry.io/1",
-		Environment: "production", TracesSampleRate: 0.1}, worker.Sentry)
-}
-
 // A value the server cannot use stops it at load (each was a silent default).
 func TestObservabilityMisconfigurationFailsBoot(t *testing.T) {
 	for name, value := range map[string]string{
-		"OTEL_ENABLED":              "yes",
-		"PROMETHEUS_ENABLED":        "off",
-		"SENTRY_ENABLED":            "nope",
-		"SENTRY_TRACES_SAMPLE_RATE": "ten percent",
+		"OTEL_ENABLED":       "yes",
+		"PROMETHEUS_ENABLED": "off",
 	} {
 		t.Run(name+"="+value, func(t *testing.T) {
 			isolateObservabilityEnv(t)
@@ -110,14 +86,6 @@ func TestObservabilityMisconfigurationFailsBoot(t *testing.T) {
 			assert.Contains(t, err.Error(), name)
 		})
 	}
-	t.Run("SENTRY_TRACES_SAMPLE_RATE=1.5", func(t *testing.T) {
-		isolateObservabilityEnv(t)
-		t.Setenv("SENTRY_TRACES_SAMPLE_RATE", "1.5")
-		var worker workerOptions
-		err := loadServerWorkerConfig(roleCommand(t, "worker"), &worker)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "SENTRY_TRACES_SAMPLE_RATE")
-	})
 }
 
 // roleCommand is `reliant server <role>`, built from the real root.

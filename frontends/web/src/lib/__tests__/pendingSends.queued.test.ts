@@ -31,7 +31,7 @@ describe("withQueuedSendsInFlight", () => {
   it("keeps an in-flight send that the mailbox has not stored yet", () => {
     begin(row("client-1", "ship it"));
 
-    expect(withQueuedSendsInFlight([], "c1", "t1").map((message) => message.id)).toEqual([
+    expect(withQueuedSendsInFlight<QueuedRow>([], "c1", "t1").map((message) => message.id)).toEqual([
       "client-1",
     ]);
   });

@@ -9,7 +9,7 @@
  * screen together.
  */
 
-import { Tooltip } from "../../ui/Tooltip";
+import Tooltip from "../../forge-ui/tooltip";
 import { useState } from 'react'
 import { Braces, Rocket } from 'lucide-react'
 import { ConfigurationPanel } from '../ConfigurationPanel'
@@ -61,7 +61,7 @@ export function TriggerPayloadPanel({ onClose, bottomOffset, topOffset, docked =
             const path = triggerCelPath(field)
             return (
               <li key={field.name}>
-                <Tooltip content={target ? `Insert ${path}` : "Click into an expression field first"} placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip content={target ? `Insert ${path}` : "Click into an expression field first"} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   type="button"
                   className="cpv2-trigger-payload-field"

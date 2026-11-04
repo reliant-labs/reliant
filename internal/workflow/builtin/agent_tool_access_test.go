@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -70,8 +71,9 @@ func TestBuiltinAgentCanLoadAnyTool(t *testing.T) {
 
 	require.NotNil(t, tc.GetLoadableTools(),
 		"builtin://agent must declare loadable_tools so the intent is visible, not inferred")
-	assert.Contains(t, model.CelStringListValue(tc.GetLoadableTools()), "*",
-		"the coding agent must be able to load any tool; generate_image has no other route")
+	assert.Contains(t, tc.GetLoadableTools().GetExpr(), "['*']",
+		"the non-plan coding agent must load any tool; generate_image has no other route")
+	assert.Contains(t, tc.GetLoadableTools().GetExpr(), "inputs.mode == 'plan'")
 }
 
 // TestBuiltinAgentPreloadsTheDefaultBundle pins the other half: widening what is
@@ -91,6 +93,18 @@ func TestBuiltinAgentPreloadsTheDefaultBundle(t *testing.T) {
 // agentic builtin needs the wildcard; a new one that forgets it silently loses
 // access to every tool outside its starting bundle, which is precisely the
 // failure this replaced.
+func TestGeneralAssistantOrchestrationPolicy(t *testing.T) {
+	tc := findCallLLMToolsConfig(t, loadBuiltin(t, "agent.yaml"))
+	assert.Equal(t, tools.PermissionOrchestrator, model.CelStringValue(tc.GetPermission()))
+	structured := findCallLLMToolsConfig(t, loadBuiltin(t, "structured-agent.yaml"))
+	assert.Equal(t, tools.PermissionMutating, model.CelStringValue(structured.GetPermission()), "do not promote other defaults")
+	assert.Contains(t, tc.GetPreloadedTools().GetExpr(), "['tag:coding:plan', 'tag:shell']")
+	assert.Equal(t, "{{inputs.mode == 'plan' ? ['tag:coding:plan', 'tag:shell'] : ['*']}}", tc.GetLoadableTools().GetExpr())
+	plan := tools.ResolveCapabilities(tools.CapabilityInputs{Permission: model.CelStringValue(tc.GetPermission()), Access: tools.ResolveToolAccess([]string{"tag:coding:plan", "tag:shell"}, []string{"tag:coding:plan", "tag:shell"}, nil)})
+	assert.False(t, plan.Offers(tools.ToolFireTrigger))
+	assert.False(t, plan.CanLoad(tools.ToolFireTrigger), "plan mode must not load standing-work tools")
+}
+
 func TestAssistantBuiltinsDeclareLoadable(t *testing.T) {
 	t.Parallel()
 
@@ -99,8 +113,12 @@ func TestAssistantBuiltinsDeclareLoadable(t *testing.T) {
 			t.Parallel()
 			tc := findCallLLMToolsConfig(t, loadBuiltin(t, name))
 			require.NotNil(t, tc.GetLoadableTools(), "%s must declare loadable_tools", name)
-			assert.Contains(t, model.CelStringListValue(tc.GetLoadableTools()), "*",
-				"%s is an assistant and must be able to reach past its starting bundle", name)
+			if name == "agent.yaml" {
+				assert.Contains(t, tc.GetLoadableTools().GetExpr(), "['*']")
+			} else {
+				assert.Contains(t, model.CelStringListValue(tc.GetLoadableTools()), "*",
+					"%s is an assistant and must reach past its starting bundle", name)
+			}
 		})
 	}
 }

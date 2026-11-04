@@ -27,7 +27,7 @@ func TestPublishedSchemasAreCurrent(t *testing.T) {
 			t.Fatalf("%s: %v (run go generate ./internal/integrations/manifest/schema)", name, err)
 		}
 		if !bytes.Equal(got, b) {
-			t.Errorf("%s is stale: run go generate ./internal/integrations/manifest/schema (make generate-manifest-schema)", name)
+			t.Errorf("%s is stale: run go generate ./internal/integrations/manifest/schema (task generate:forge)", name)
 		}
 	}
 }

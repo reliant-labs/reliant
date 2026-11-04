@@ -6,21 +6,30 @@
  * and the dialog states what deletion does NOT cover. Both have been wrong in
  * shipped products, and neither is visible from the type signature.
  */
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { setTransport } from '@/lib/connect'
+import { mockTransport, renderWithTransport } from '@/lib/test-utils'
+import { serviceHandlers } from '@/test/serviceTransport'
 
 const mocks = vi.hoisted(() => ({
   previewAccountDeletion: vi.fn(),
   deleteAccount: vi.fn(),
 }))
 
-vi.mock('@/api/grpc-client', () => ({
-  createAccountClient: () => ({
-    previewAccountDeletion: mocks.previewAccountDeletion,
-    deleteAccount: mocks.deleteAccount,
-  }),
-}))
+// AccountService is reached through its generated hooks (connectClient), so
+// it answers at the transport.
+const transport = () =>
+  mockTransport(
+    serviceHandlers('AccountService', {
+      previewAccountDeletion: (req) => mocks.previewAccountDeletion(req),
+      deleteAccount: (req) => mocks.deleteAccount(req),
+    })
+  )
+
+afterEach(() => setTransport(null))
 
 vi.mock('@/lib/logger', () => ({
   logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() },
@@ -43,8 +52,9 @@ const previewWithEmail = {
 function renderDialog(overrides: Partial<React.ComponentProps<typeof DeleteAccountDialog>> = {}) {
   const onClose = vi.fn()
   const onDeleted = vi.fn()
-  render(
-    <DeleteAccountDialog isOpen onClose={onClose} onDeleted={onDeleted} {...overrides} />
+  renderWithTransport(
+    <DeleteAccountDialog isOpen onClose={onClose} onDeleted={onDeleted} {...overrides} />,
+    { transport: transport() }
   )
   return { onClose, onDeleted }
 }
@@ -75,7 +85,8 @@ describe('DeleteAccountDialog', () => {
     const confirmButton = await screen.findByRole('button', { name: /delete my account/i })
     expect(confirmButton).toBeDisabled()
 
-    const input = screen.getByLabelText(/to confirm/i)
+    // The field appears once the preview (which names the email) has arrived.
+    const input = await screen.findByLabelText(/to confirm/i)
     await user.type(input, 'wrong@example.com')
     expect(confirmButton).toBeDisabled()
 

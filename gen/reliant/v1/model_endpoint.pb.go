@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -366,10 +367,14 @@ func (*ListModelEndpointsRequest) Descriptor() ([]byte, []int) {
 }
 
 type ListModelEndpointsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Endpoints     []*ModelEndpoint       `protobuf:"bytes,1,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Endpoints []*ModelEndpoint       `protobuf:"bytes,1,rep,name=endpoints,proto3" json:"endpoints,omitempty"`
+	// Whether this server can store an endpoint's API key and header values (a
+	// sealed credential store is configured). False, a create or update that
+	// carries a key is refused, so the form offers no key field.
+	CredentialsAvailable bool `protobuf:"varint,2,opt,name=credentials_available,json=credentialsAvailable,proto3" json:"credentials_available,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ListModelEndpointsResponse) Reset() {
@@ -407,6 +412,13 @@ func (x *ListModelEndpointsResponse) GetEndpoints() []*ModelEndpoint {
 		return x.Endpoints
 	}
 	return nil
+}
+
+func (x *ListModelEndpointsResponse) GetCredentialsAvailable() bool {
+	if x != nil {
+		return x.CredentialsAvailable
+	}
+	return false
 }
 
 type ModelEndpointInput struct {
@@ -910,7 +922,7 @@ var File_reliant_v1_model_endpoint_proto protoreflect.FileDescriptor
 const file_reliant_v1_model_endpoint_proto_rawDesc = "" +
 	"\n" +
 	"\x1freliant/v1/model_endpoint.proto\x12\n" +
-	"reliant.v1\x1a\x1dreliant/v1/tools_daemon.proto\"\xf8\x02\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x1dreliant/v1/tools_daemon.proto\"\xf8\x02\n" +
 	"\rModelEndpoint\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x19\n" +
@@ -940,9 +952,10 @@ const file_reliant_v1_model_endpoint_proto_rawDesc = "" +
 	"\x12_supports_thinkingB\x0e\n" +
 	"\f_temperatureB\b\n" +
 	"\x06_top_p\"\x1b\n" +
-	"\x19ListModelEndpointsRequest\"U\n" +
+	"\x19ListModelEndpointsRequest\"\x8a\x01\n" +
 	"\x1aListModelEndpointsResponse\x127\n" +
-	"\tendpoints\x18\x01 \x03(\v2\x19.reliant.v1.ModelEndpointR\tendpoints\"\xfb\x02\n" +
+	"\tendpoints\x18\x01 \x03(\v2\x19.reliant.v1.ModelEndpointR\tendpoints\x123\n" +
+	"\x15credentials_available\x18\x02 \x01(\bR\x14credentialsAvailable\"\xfb\x02\n" +
 	"\x12ModelEndpointInput\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x124\n" +
@@ -979,13 +992,15 @@ const file_reliant_v1_model_endpoint_proto_rawDesc = "" +
 	"\x12ModelEndpointRoute\x12$\n" +
 	" MODEL_ENDPOINT_ROUTE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bMODEL_ENDPOINT_ROUTE_DIRECT\x10\x01\x12#\n" +
-	"\x1fMODEL_ENDPOINT_ROUTE_VIA_DAEMON\x10\x022\x9f\x04\n" +
+	"\x1fMODEL_ENDPOINT_ROUTE_VIA_DAEMON\x10\x022\xdc\x05\n" +
 	"\x14ModelEndpointService\x12e\n" +
 	"\x12ListModelEndpoints\x12%.reliant.v1.ListModelEndpointsRequest\x1a&.reliant.v1.ListModelEndpointsResponse\"\x00\x12h\n" +
-	"\x13CreateModelEndpoint\x12&.reliant.v1.CreateModelEndpointRequest\x1a'.reliant.v1.CreateModelEndpointResponse\"\x00\x12h\n" +
-	"\x13UpdateModelEndpoint\x12&.reliant.v1.UpdateModelEndpointRequest\x1a'.reliant.v1.UpdateModelEndpointResponse\"\x00\x12h\n" +
-	"\x13DeleteModelEndpoint\x12&.reliant.v1.DeleteModelEndpointRequest\x1a'.reliant.v1.DeleteModelEndpointResponse\"\x00\x12b\n" +
-	"\x11TestModelEndpoint\x12$.reliant.v1.TestModelEndpointRequest\x1a%.reliant.v1.TestModelEndpointResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x13CreateModelEndpoint\x12&.reliant.v1.CreateModelEndpointRequest\x1a'.reliant.v1.CreateModelEndpointResponse\"\x00\x12\xa4\x01\n" +
+	"\x13UpdateModelEndpoint\x12&.reliant.v1.UpdateModelEndpointRequest\x1a'.reliant.v1.UpdateModelEndpointResponse\"<\xa2\xbb\x188:6\n" +
+	"\x06update\x12,\n" +
+	"\x0emodel_endpoint\x12\x02id\x1a\x16response.endpoint.name\x12h\n" +
+	"\x13DeleteModelEndpoint\x12&.reliant.v1.DeleteModelEndpointRequest\x1a'.reliant.v1.DeleteModelEndpointResponse\"\x00\x12\xe1\x01\n" +
+	"\x11TestModelEndpoint\x12$.reliant.v1.TestModelEndpointRequest\x1a%.reliant.v1.TestModelEndpointResponse\"\x7f\xa2\xbb\x18{:y:wprobes an endpoint and reports its models and latency; a saved endpoint's last probe is cached, which no person changedB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_model_endpoint_proto_rawDescOnce sync.Once

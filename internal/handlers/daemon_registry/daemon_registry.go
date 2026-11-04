@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -169,6 +171,9 @@ func (s *Service) ClearMachineCaches(
 	for _, sk := range out.Skipped {
 		resp.Skipped = append(resp.Skipped, &reliantv1.ClearMachineCachesSkip{Kind: sk.Kind, Reason: sk.Reason})
 	}
+	if len(resp.Started) == 0 {
+		activity.Skip(ctx) // the machine refused every kind: nothing is being cleared
+	}
 	return connect.NewResponse(resp), nil
 }
 
@@ -315,7 +320,17 @@ func (s *Service) ResolveDaemon(
 	}
 
 	var best *db.Daemon
+	// A request that names no machine gets the user's default, in any state,
+	// exactly as toolexec's default resolution does.
+	if req.Msg.DaemonId == "" && req.Msg.DaemonName == "" {
+		if i := slices.IndexFunc(daemons, func(d *db.Daemon) bool { return d.IsDefault }); i >= 0 {
+			best = daemons[i]
+		}
+	}
 	for _, d := range daemons {
+		if best != nil && best.IsDefault && req.Msg.DaemonId == "" && req.Msg.DaemonName == "" {
+			break // the default chosen above
+		}
 		if req.Msg.DaemonId != "" && d.ID != req.Msg.DaemonId {
 			continue
 		}
@@ -499,6 +514,8 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 		LastStatusMessage: d.LastStatusMessage,
 		OomKillCount:      d.OOMKillCount,
 		CreatedAt:         timestamppb.New(d.CreatedAt),
+		Labels:            d.Labels,
+		IsDefault:         d.IsDefault,
 	}
 	// Sourced from the attachment lease, so both are absent while nothing is
 	// attached. That is deliberate: the lease row is deleted on disconnect and
@@ -534,6 +551,10 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 	}
 	if att != nil {
 		info.DetectedPorts = att.DetectedPorts
+		info.Version = att.Build.Version
+		info.Commit = att.Build.Commit
+		info.CommitTimeUnix = att.Build.CommitTimeUnix
+		info.ForgeVersion = att.Build.ForgeVersion
 	}
 	return info
 }

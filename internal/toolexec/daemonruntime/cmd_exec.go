@@ -13,12 +13,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/osutil"
+	"github.com/reliant-labs/reliant/internal/proctree"
 )
 
 // heavyGateRef is the gate exec.run and exec.bg_start queue heavy commands
@@ -38,6 +40,7 @@ func init() {
 	RegisterCommand("exec.bg_kill", handleExecBGKill)
 	RegisterCommand("exec.bg_list", handleExecBGList)
 	RegisterCommand("exec.bg_status", handleExecBGStatus)
+	RegisterCommand("exec.bg_touch", handleExecBGTouch)
 }
 
 // =============================================================================
@@ -64,6 +67,11 @@ func buildExecCommand(ctx context.Context, req daemon.RunCommandRequest) *exec.C
 }
 
 func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
+	releaseRecovery, err := beginRecoveryWork()
+	if err != nil {
+		return nil, err
+	}
+	defer releaseRecovery()
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -127,9 +135,19 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 		return json.Marshal(daemon.CommandResult{ExitCode: heavyjob.RefusedExitCode, Stderr: err.Error(), Combined: err.Error()})
 	}
 
+	// credentials: none is a sandbox, not just a scrubbed environment: the
+	// command runs where the daemon's credential files are absent. It wraps
+	// OUTSIDE the heavy-slot rewrite above, so the slot wrapper runs inside it.
+	if refusal := credsandbox.Wrap(cmd, credentials); refusal != "" {
+		return json.Marshal(daemon.CommandResult{ExitCode: credsandbox.RefusedExitCode, Stderr: refusal, Combined: refusal})
+	}
+
 	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
+	// Output stamps activity, so if the command is detached into the
+	// background its idle time starts from its last output, not the detach.
+	activity := shell.NewOutputActivity(nil)
+	cmd.Stdout = activity.Writer(&stdoutBuf)
+	cmd.Stderr = activity.Writer(&stderrBuf)
 
 	// A bytes.Buffer stdout means os/exec reads through an OS pipe, and
 	// cmd.Wait() blocks until the LAST holder of that pipe exits — which is not
@@ -156,9 +174,18 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
 	oomSnap := memReader.SnapshotOOMKills()
 
+	// Its own cgroup with a process limit where the machine allows, so a
+	// runaway command fails alone (internal/proctree). Last before Start:
+	// the heavy-slot and sandbox rewrites above change what cmd execs.
+	tree := proctree.Default().Prepare(cmd, proctree.Owner{ChatID: req.ChatID, Command: req.Command})
+
 	start := time.Now()
 	err = cmd.Start()
+	if err != nil {
+		tree.Started(0)
+	}
 	if err == nil {
+		tree.Started(cmd.Process.Pid)
 		// Steer the OOM killer toward the workload, away from the daemon.
 		steerOOMKiller(cmd)
 
@@ -177,6 +204,11 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 			StdoutBuf:  &stdoutBuf,
 			StderrBuf:  &stderrBuf,
 			WaitErrCh:  waitCh,
+			Tree:       tree,
+			ChatID:     req.ChatID,
+			ThreadID:   req.ThreadID,
+			KeepAlive:  req.KeepAlive,
+			Activity:   activity,
 		})
 		if backgrounded {
 			// Adopted: the background manager owns the command now. Release
@@ -186,6 +218,7 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 			return json.Marshal(bgResp)
 		}
 		err = <-waitCh
+		tree.Release()
 	}
 	// Finished: nothing may stop it now, and Err() below stays the reason it
 	// was stopped, if it was.
@@ -197,6 +230,7 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// what a failure looks like — see daemon.ClassifyExecOutcome.
 	outcome := daemon.ClassifyExecOutcome(err, deadline.Err(), stdoutBuf.String(), stderrBuf.String(), memReader, oomSnap, diskwatch.Default())
 	outcome.NoteHeavyTimeout(heavy)
+	outcome.NoteThreadLimit(tree.LimitNote())
 
 	logExecFinished(outcome, duration)
 
@@ -219,6 +253,11 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 // =============================================================================
 
 func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
+	releaseRecovery, err := beginRecoveryWork()
+	if err != nil {
+		return nil, err
+	}
+	defer releaseRecovery()
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -246,9 +285,17 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		// Tag the process with the grant that started it, so a later
 		// bg_output/bg_kill from a different connector cannot reach it.
 		// Empty for first-party callers.
-		GrantID:   daemonpolicy.GrantIDFromContext(ctx),
-		HeavyGate: heavyGateRef.Load(),
-		Heavy:     req.Heavy,
+		GrantID:        daemonpolicy.GrantIDFromContext(ctx),
+		HeavyGate:      heavyGateRef.Load(),
+		Heavy:          req.Heavy,
+		WorktreeID:     req.WorktreeID,
+		PackageCommand: req.PackageCommand,
+		AgentID:        req.ChatID,
+		// The chat that started it, so the idle reaper may stop it once
+		// that chat has finished (shell/background_reaper.go).
+		ChatID:    req.ChatID,
+		ThreadID:  req.ThreadID,
+		KeepAlive: req.KeepAlive,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start background: %w", err)
@@ -288,6 +335,16 @@ func handleExecBGOutput(ctx context.Context, payload []byte) ([]byte, error) {
 	combined, err := mgr.GetCombinedOutput(req.ProcessID)
 	if err != nil {
 		return nil, fmt.Errorf("get output: %w", err)
+	}
+
+	if req.Opts != nil && req.Opts.Lines {
+		lines := make([]daemon.ProcessOutputLine, len(combined))
+		total := 0
+		for i, line := range combined {
+			lines[i] = daemon.ProcessOutputLine{Stream: line.Type, Text: line.Text}
+			total += len(line.Text) + 1
+		}
+		return json.Marshal(daemon.ProcessOutput{Lines: lines, NextOffset: total, TotalBytes: total})
 	}
 
 	// Build the full combined output string
@@ -419,6 +476,17 @@ func handleExecBGStatus(ctx context.Context, payload []byte) ([]byte, error) {
 	mgr := shell.GetBackgroundManager()
 	grantID := daemonpolicy.GrantIDFromContext(ctx)
 
+	// The server's word on each process's chat, for the idle reaper. Only
+	// the server's own (first-party) poll may give it: a connector could
+	// otherwise talk the reaper into stopping the user's processes.
+	if grantID == "" && len(req.Chats) > 0 {
+		verdicts := make(map[string]shell.ChatVerdict, len(req.Chats))
+		for _, c := range req.Chats {
+			verdicts[c.ProcessID] = shell.ChatVerdict{Running: c.Running, WorkspaceArchived: c.WorkspaceArchived}
+		}
+		mgr.RecordChatVerdicts(verdicts)
+	}
+
 	visible := req.ProcessIDs
 	var hidden []string
 	if grantID != "" {
@@ -466,19 +534,40 @@ func handleExecBGList(_ context.Context, _ []byte) ([]byte, error) {
 
 	result := make([]*daemon.ProcessInfo, 0, len(processes))
 	for _, p := range processes {
+		live := p.Live()
 		info := &daemon.ProcessInfo{
-			ID:        p.ID,
-			Command:   p.Command,
-			Status:    p.Status,
-			ExitCode:  p.ExitCode,
-			StartTime: p.StartTime,
-			EndTime:   p.EndTime,
-			Ports:     shellPortsToDaemon(p.Ports),
-			DaemonID:  daemonID,
+			ID:             p.ID,
+			Command:        p.Command,
+			Status:         live.Status,
+			ExitCode:       live.ExitCode,
+			StartTime:      p.StartTime,
+			EndTime:        live.EndTime,
+			Ports:          shellPortsToDaemon(live.Ports),
+			DaemonID:       daemonID,
+			WorkingDir:     p.WorkingDir,
+			WorktreeID:     p.WorktreeID,
+			PackageCommand: p.PackageCommand,
 		}
+		daemon.StampReapOutlook(info, mgr, p)
 		result = append(result, info)
 	}
 	return json.Marshal(result)
+}
+
+// =============================================================================
+// exec.bg_touch — an agent used these background processes
+// =============================================================================
+
+// handleExecBGTouch resets the idle time of the named processes: an agent
+// read, waited on, listed or killed them, so they are not left behind. A
+// connector reaches only its own processes, as with bg_output and bg_kill.
+func handleExecBGTouch(ctx context.Context, payload []byte) ([]byte, error) {
+	var req daemon.TouchProcessesRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	shell.GetBackgroundManager().TouchForGrant(daemonpolicy.GrantIDFromContext(ctx), req.ProcessIDs...)
+	return json.Marshal(struct{}{})
 }
 
 // shellPortsToDaemon converts the shell package's PortInfo to the daemon wire

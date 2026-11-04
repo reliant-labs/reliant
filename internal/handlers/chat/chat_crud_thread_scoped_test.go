@@ -202,7 +202,11 @@ func TestListMessages_ThreadScoped_ThreadFromAnotherChat(t *testing.T) {
 }
 
 // TestListMessages_ThreadIDUnset_MatchesChatWideBehavior pins the additive
-// property: the field is opt-in, and omitting it changes nothing.
+// property: the field is opt-in, and omitting it reads the chat, not a thread.
+// A page (recent set) carries the transcript the snapshot carries -- the main
+// thread, and no spawn thread's messages, which a spawn card reads for itself
+// with thread_id. Without a page size the whole chat comes back, spawns
+// included.
 func TestListMessages_ThreadIDUnset_MatchesChatWideBehavior(t *testing.T) {
 	t.Parallel()
 
@@ -214,14 +218,20 @@ func TestListMessages_ThreadIDUnset_MatchesChatWideBehavior(t *testing.T) {
 	svc := &Service{deps: Deps{Repo: repo}}
 
 	recent := int32(50)
-	resp, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
+	page, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{
 		ChatId: f.chatID, Recent: &recent,
 	}))
 	require.NoError(t, err)
+	require.ElementsMatch(t, f.mainMsgIDs, idsOf(page.Msg.Messages),
+		"a page is the main transcript: spawn-thread messages stay out, as in the snapshot")
+	require.EqualValues(t, len(f.mainMsgIDs)+len(f.spawnMsgIDs), page.Msg.Total,
+		"total stays the chat-wide count, as in the snapshot")
 
+	all, err := svc.ListMessages(ctx, connect.NewRequest(&reliantv1.ListMessagesRequest{ChatId: f.chatID}))
+	require.NoError(t, err)
 	want := append(append([]string{}, f.mainMsgIDs...), f.spawnMsgIDs...)
-	require.ElementsMatch(t, want, idsOf(resp.Msg.Messages),
-		"omitting thread_id must still return the whole chat")
+	require.ElementsMatch(t, want, idsOf(all.Msg.Messages),
+		"omitting thread_id and recent still returns the whole chat")
 }
 
 func idsOf(msgs []*reliantv1.Message) []string {

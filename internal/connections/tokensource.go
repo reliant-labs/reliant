@@ -199,6 +199,15 @@ func (s *TokenSource) oauthToken(ctx context.Context, conn *core.Connection) (va
 	return s.refresh(ctx, conn, access.Generation)
 }
 
+// sameInstant reports whether two optional timestamps name the same instant
+// (both unset counts as the same).
+func sameInstant(a, b *time.Time) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
+}
+
 func (s *TokenSource) expiring(exp *time.Time) bool {
 	return exp != nil && !s.now().Add(refreshWindow).Before(*exp)
 }
@@ -315,8 +324,17 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 		access := secrets[core.SecretFieldAccessToken]
 		// Another worker may have refreshed while we waited for the lock: use
 		// its token rather than spending (and possibly invalidating) ours.
-		if access.Generation != seenGeneration {
-			fresh := tx.Connection()
+		//
+		// The generation alone does not always show it. A caller reads the
+		// connection (whose expiry it judged) and then, separately, the
+		// secrets (whose generation it hands over as seenGeneration); a
+		// refresh that commits between the two reads leaves it holding that
+		// refresh's NEW generation beside the OLD expiry. Under the lock both
+		// are read together, so an expiry that is no longer the one the
+		// caller judged also means the token was replaced after its read.
+		fresh := tx.Connection()
+		replaced := access.Generation != seenGeneration || !sameInstant(fresh.AccessExpiresAt, conn.AccessExpiresAt)
+		if replaced {
 			if !s.expiring(fresh.AccessExpiresAt) {
 				tok, err := s.open(ctx, fresh, access)
 				if err != nil {

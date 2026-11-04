@@ -3,7 +3,6 @@ import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase, setAuthStorageUnreadableHandler } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { getAppURL } from '@/lib/constants'
-import { setSentryUser } from '@/lib/sentry'
 import { setTelemetryUserId } from '@/lib/telemetry'
 import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
@@ -107,9 +106,9 @@ interface AuthState {
     password: string,
     state?: OAuthRedirectState,
   ) => Promise<{ user: User | null; verificationRequired: boolean }>
-  signInWithGoogle: () => Promise<void>
+  signInWithGoogle: (state?: OAuthRedirectState) => Promise<void>
   signInWithGithub: (state?: OAuthRedirectState) => Promise<void>
-  signInWithApple: () => Promise<void>
+  signInWithApple: (state?: OAuthRedirectState) => Promise<void>
   linkOAuthIdentity: (provider: LinkableProvider, state?: OAuthRedirectState) => Promise<void>
   linkGoogleAccount: (state?: OAuthRedirectState) => Promise<void>
   linkAppleAccount: (state?: OAuthRedirectState) => Promise<void>
@@ -128,6 +127,7 @@ interface AuthState {
     state?: OAuthRedirectState,
   ) => Promise<void>
   signInAnonymously: () => Promise<void>
+  adoptSession: (tokens: { accessToken: string; refreshToken: string }) => Promise<User>
   signOut: () => Promise<void>
   setApiKeySession: (apiKey: string) => void
 
@@ -346,19 +346,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // SAME exchangeCodeForSession call in both. Nothing about sign-in depends on
   // the daemon, so it works whether the daemon is local, remote, or absent —
   // unlike Claude/Codex OAuth, whose credentials are daemon-scoped by design.
-  signInWithGoogle: async () => {
-    await runOAuthSignIn('google')
+  signInWithGoogle: async (state?: OAuthRedirectState) => {
+    await runOAuthSignIn('google', state)
   },
 
   signInWithGithub: async (state?: OAuthRedirectState) => {
-    // The Supabase GitHub provider is sign-in only (0 scopes). We never persist
-    // the provider_token here — repo access comes from the dedicated
-    // /auth/github/authorize custom flow.
+    // Whether the provider_token is kept depends on which GitHub app backs the
+    // Supabase provider: a GitHub App user token (`ghu_`) is persisted by
+    // OAuthCallback via githubCredentialSync, a classic sign-in-only token
+    // (`gho_`, 0 scopes) is not, and repo access then comes from the dedicated
+    // /auth/github/authorize connect flow.
     await runOAuthSignIn('github', state)
   },
 
-  signInWithApple: async () => {
-    await runOAuthSignIn('apple')
+  signInWithApple: async (state?: OAuthRedirectState) => {
+    await runOAuthSignIn('apple', state)
   },
 
 
@@ -387,6 +389,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
   },
 
+  // Install a session the control plane released to this browser (the /claim
+  // page: OpenClaimSession hands over the anonymous user that deployed a site).
+  // Unlike `setSession` above, which only writes this store, this goes through
+  // supabase so the session is persisted and refreshed like any other, and
+  // every RPC after it carries the user's token. The tokens are never logged.
+  adoptSession: async ({ accessToken, refreshToken }) => {
+    const { data, error } = await supabase.auth.setSession({
+      access_token: accessToken,
+      refresh_token: refreshToken,
+    })
+    if (error) {
+      logger.error('[AuthStore] adoptSession failed', { code: (error as { code?: string }).code })
+      throw error
+    }
+    if (!data.user || !data.session) {
+      throw new Error('The released session could not be installed')
+    }
+    set({ user: data.user, session: data.session })
+    return data.user
+  },
+
   signOut: async () => {
     set({ loading: true })
     try {
@@ -404,19 +427,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { useChatStore } = await import('./chatStore')
       const { useProjectStore } = await import('./projectStore')
       const { useWorktreeStore } = await import('./worktreeStore')
+      const { resetWorktreeAnnouncements } = await import('../hooks/worktree-queries')
       const { useChatNavigationStore } = await import('./chatNavigationStore')
       const { useAttachmentStore } = await import('./attachmentStore')
-      const { useTasksStore } = await import('./tasksStore')
-      const { useProcessStore } = await import('./processStore')
 
       // Reset all stores (order matters: navigation first to trigger chat cleanup, then everything else)
       useChatNavigationStore.getState().reset()
       useChatStore.getState().reset()
       useProjectStore.getState().reset()
       useWorktreeStore.getState().reset()
+      // Workspace rows are in the query cache (cleared below); forget which
+      // creates this session was waiting on.
+      resetWorktreeAnnouncements()
       useAttachmentStore.getState().reset()
-      useTasksStore.getState().reset()
-      useProcessStore.getState().reset()
 
       // Drop every cached answer about who the user is.
       //
@@ -920,13 +943,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           session: session,
         })
 
-        // Update Sentry user context for error correlation
-        setSentryUser(session?.user ? { id: session.user.id, email: session.user.email } : null)
+        // Attach the user to telemetry for error correlation
         setTelemetryUserId(session?.user ? { id: session.user.id } : null)
 
-        // The Supabase GitHub provider is sign-in only (0 scopes); we never
-        // persist its provider_token. Repo access is owned by the dedicated
-        // /auth/github/authorize flow, which writes git_credentials directly.
+        // provider_token is deliberately not persisted here: this listener
+        // also fires on every token refresh and tab focus, when the provider
+        // token is gone or stale. The one-shot capture lives in OAuthCallback,
+        // which sees the session straight after the sign-in exchange.
 
         // NOTE: Supabase automatically saves session through custom storage adapter
       })

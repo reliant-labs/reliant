@@ -30,6 +30,37 @@ const { DAEMON_STREAM_AWAITING_CREDENTIALS } = require('../src/daemon-contract')
 
 const DAEMON_PID = 4242;
 
+// A clock the test owns. The repair loop's cadence is a property of the
+// policy, not of how quickly this machine runs a setInterval: a real 5ms timer
+// under a saturated CPU fires twice in 60ms instead of a dozen times, which is
+// exactly how this suite flaked. Here nothing fires until the test says so, and
+// each fire() is exactly one tick.
+function fakeClock() {
+  let nowMs = 1_000_000;
+  let nextHandle = 1;
+  const intervals = new Map();
+  return {
+    now: () => nowMs,
+    setInterval: (fn, ms) => {
+      const handle = nextHandle++;
+      intervals.set(handle, { fn, ms });
+      return handle;
+    },
+    clearInterval: (handle) => intervals.delete(handle),
+    get armed() {
+      return intervals.size;
+    },
+    intervalMs: () => [...intervals.values()].map((i) => i.ms),
+    advance: (ms) => {
+      nowMs += ms;
+    },
+    // Run one tick of every armed interval.
+    fire: () => {
+      for (const { fn } of [...intervals.values()]) fn();
+    },
+  };
+}
+
 function harness(t, { outcomes = [], authStorage = {} } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cred-repair-'));
 
@@ -44,7 +75,8 @@ function harness(t, { outcomes = [], authStorage = {} } = {}) {
     else process.env[ENV_INSTANCE_WORKSPACE] = prev;
   });
 
-  const manager = new BackendManager({ authStorage });
+  const clock = fakeClock();
+  const manager = new BackendManager({ authStorage, credRepairClock: clock });
   manager.daemonDataDir = () => dataDir;
   manager.process = { pid: DAEMON_PID, killed: false };
   // Collapse the backoff so the policy is exercised without wall-clock waits.
@@ -69,7 +101,16 @@ function harness(t, { outcomes = [], authStorage = {} } = {}) {
 
   t.after(() => manager.stopWatchingDaemonConnection());
 
-  return { manager, calls, writeState, dataDir };
+  // Let the fire-and-forget repair a tick started run to completion. The mint
+  // stand-in resolves without touching a timer, so this is a pure
+  // microtask/immediate drain with no duration in it.
+  const settle = async () => {
+    do {
+      await new Promise((r) => setImmediate(r));
+    } while (manager._credRepairInFlight);
+  };
+
+  return { manager, calls, writeState, dataDir, clock, settle };
 }
 
 const idling = { pid: DAEMON_PID, stream: DAEMON_STREAM_AWAITING_CREDENTIALS };
@@ -108,7 +149,7 @@ test('retries on its own clock, with the daemon-state record never changing once
   //
   // A change-driven repair scores exactly one attempt here and the assertion
   // fails — which is the same single-shot behaviour as the original bug.
-  const { manager, calls, writeState } = harness(t, {
+  const { manager, calls, writeState, clock, settle } = harness(t, {
     outcomes: [
       daemonCreds.ENSURE_FAILED,
       daemonCreds.ENSURE_FAILED,
@@ -118,33 +159,41 @@ test('retries on its own clock, with the daemon-state record never changing once
   writeState(idling); // ...and never again.
 
   manager.watchDaemonConnection(() => {});
-  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(clock.armed, 1, 'expected the repair to run on a timer of its own');
+  await settle();
+  assert.equal(calls.length, 1, 'the loop attempts once as soon as it starts');
 
-  assert.ok(
-    calls.length >= 3,
-    `expected repeated attempts against an unchanging record, got ${calls.length}: ${calls}`
-  );
-  assert.ok(
-    calls.includes(daemonCreds.ENSURE_MINTED),
-    'expected the repair to eventually mint once the API answered'
+  // Two more ticks, with the record untouched throughout. The attempt count is
+  // a function of the ticks fired, never of elapsed time.
+  clock.fire();
+  await settle();
+  clock.fire();
+  await settle();
+
+  assert.deepEqual(
+    calls,
+    [daemonCreds.ENSURE_FAILED, daemonCreds.ENSURE_FAILED, daemonCreds.ENSURE_MINTED],
+    'expected exactly three attempts against an unchanging record, ending in a mint'
   );
 });
 
 test('the repair loop stops with the watcher, and cannot hold the process alive', async (t) => {
-  const { manager, calls, writeState } = harness(t, {
+  const { manager, calls, writeState, clock, settle } = harness(t, {
     outcomes: [daemonCreds.ENSURE_FAILED],
   });
   writeState(idling);
 
   manager.watchDaemonConnection(() => {});
-  await new Promise((r) => setTimeout(r, 30));
-  assert.ok(calls.length >= 1, 'precondition: the loop was running');
+  await settle();
+  assert.equal(calls.length, 1, 'precondition: the loop was running');
+  assert.equal(clock.armed, 1, 'precondition: the repair timer is armed');
 
   manager.stopWatchingDaemonConnection();
-  const after = calls.length;
-  await new Promise((r) => setTimeout(r, 30));
+  assert.equal(clock.armed, 0, 'expected teardown to clear the repair timer');
 
-  assert.equal(calls.length, after, 'expected no further attempts after teardown');
+  clock.fire();
+  await settle();
+  assert.equal(calls.length, 1, 'expected no further attempts after teardown');
 });
 
 test('stops — and says why — when the store already holds a current credential', async (t) => {

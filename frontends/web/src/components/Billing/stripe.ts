@@ -32,6 +32,7 @@
  */
 
 import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import { loadConfig } from "@/lib/config_gen";
 
 let stripePromise: Promise<Stripe | null> | null = null;
 
@@ -41,8 +42,7 @@ let stripePromise: Promise<Stripe | null> | null = null;
  * is a normal state, not a misconfiguration to throw on.
  */
 function publishableKey(): string {
-  const key = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY;
-  return typeof key === "string" ? key : "";
+  return loadConfig().STRIPE_PUBLISHABLE_KEY;
 }
 
 export function isStripeConfigured(): boolean {

@@ -1,11 +1,8 @@
+import { computeEligibilityQueryKey } from './computeEligibilityKey';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConnectError, Code } from '@connectrpc/connect';
-import {
-  DAEMON_LIST_FALLBACK_POLL_MS,
-  DAEMON_LIST_QUERY_KEY,
-  fetchDaemonList,
-  invalidateDaemonList,
-} from '@/hooks/useDaemonStatus';
+import { DAEMON_LIST_FALLBACK_POLL_MS } from '@/hooks/useDaemonStatus';
+import { daemonListQuery, invalidateDaemonList } from '@/hooks/daemon-registry-queries';
 import {
   createDaemon,
   resumeDaemon,
@@ -90,7 +87,7 @@ export function useCurrentUser() {
   });
 }
 
-export const computeEligibilityQueryKey = ['onboarding', 'computeEligibility'] as const;
+export { computeEligibilityQueryKey };
 
 // Every string here names what the user can DO, not just what they lack.
 // NO_SUBSCRIPTION is the common case now that the signup auto-grant is gone —
@@ -149,8 +146,13 @@ export function useCloudEligibility() {
     eligible,
     reason,
     isLoading,
-    grantedSmallDaemonSecondsRemaining: computeEligibility?.grantedSmallDaemonSecondsRemaining ?? 0,
     refetch,
+    /** The sizes the server will admit for this caller ([] until known). */
+    allowedDaemonSizes: computeEligibility?.allowedDaemonSizes ?? [],
+    /** A monthly plan funds compute — false for a coupon-only caller. */
+    hasActiveSubscription: computeEligibility?.hasActiveSubscription ?? false,
+    /** Unspent coupon time, in coupon-unit (M) seconds; 0 when none or unknown. */
+    grantedSmallDaemonSecondsRemaining: computeEligibility?.grantedSmallDaemonSecondsRemaining ?? 0,
   };
 }
 
@@ -167,20 +169,18 @@ export function useCloudEligibility() {
 // of its own, which the mobile list passes while the tab is hidden. With no
 // option, the shared fallback poll applies.
 export function useDaemonList(options?: { refetchInterval?: number | false; enabled?: boolean }) {
-  return useQuery({
+  // The registry, not control-plane: one list that knows both whether a
+  // machine has attached and what it is doing. See
+  // docs/design/one-daemon-list.md. The MUTATIONS below stay on the
+  // control-plane transport — create/resume/suspend/delete are genuine
+  // control-plane commands, and only the list moved.
+  return useQuery(daemonListQuery({
     // Disabled, it still returns what another reader already fetched.
     enabled: options?.enabled ?? true,
-    queryKey: DAEMON_LIST_QUERY_KEY,
-    // The registry, not control-plane: one list that knows both whether a
-    // machine has attached and what it is doing. See
-    // docs/design/one-daemon-list.md. The MUTATIONS below stay on the
-    // control-plane transport — create/resume/suspend/delete are genuine
-    // control-plane commands, and only the list moved.
-    queryFn: fetchDaemonList,
     staleTime: DAEMON_LIST_FALLBACK_POLL_MS,
     refetchInterval: options?.refetchInterval ?? DAEMON_LIST_FALLBACK_POLL_MS,
     refetchIntervalInBackground: false,
-  });
+  }));
 }
 
 /**
@@ -226,7 +226,7 @@ export function useCreateDaemon(
  * TanStack-Query mutation for `controlplane.v1.DaemonService.ResumeDaemon`.
  *
  * Same error-routing contract as `useCreateDaemon` — see that hook's
- * docstring. ProjectPicker's "Resume a daemon" button used to hand-roll the
+ * docstring. The project picker's "Resume a daemon" button used to hand-roll the
  * reasoned-error check; the hook centralizes it so a future call site
  * can't forget.
  */

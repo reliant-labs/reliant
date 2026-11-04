@@ -43,6 +43,7 @@ func TestUnauthenticatedProceduresArePinned(t *testing.T) {
 		// interceptor refuses by design): not gated here, never anonymous.
 		"/reliant.v1.TokenService/ExchangeToken",
 		"/reliant.v1.TokenService/GetGitToken",
+		"/reliant.v1.TokenService/GetGitHubBotToken",
 	}
 	slices.Sort(want)
 

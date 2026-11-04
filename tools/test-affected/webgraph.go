@@ -66,6 +66,15 @@ type WebGraph struct {
 	// Reach[f] is the set of tests whose import closure contains f (f included
 	// for a test file).
 	Reach map[string][]string
+	// Near[f] is the subset of Reach[f] within nearDepth import edges: the
+	// test is f, imports f, or imports a module that imports f. It is the web
+	// lane's ReachDirect, the same cut as the Go lane's (a changed unit's own
+	// tests and the tests of the units importing it by name).
+	Near map[string][]string
+	// Direct[f] is the subset within one edge: the test is f or imports
+	// (or vi.mocks) f by name. ReachDirect falls back to it for a hub, a
+	// module whose Near set exceeds webHubFanout.
+	Direct map[string][]string
 	// Text is the source of tests that read files at run time.
 	Text map[string]string
 	// Walkers are tests that read whole trees.
@@ -88,7 +97,7 @@ func BuildWebGraph(files []string, read func(string) (string, bool)) *WebGraph {
 	sort.Strings(code)
 
 	deps := map[string][]string{}
-	wg := &WebGraph{Reach: map[string][]string{}, Text: map[string]string{}}
+	wg := &WebGraph{Reach: map[string][]string{}, Near: map[string][]string{}, Direct: map[string][]string{}, Text: map[string]string{}}
 	for _, f := range code {
 		text, ok := read(f)
 		if !ok {
@@ -107,27 +116,61 @@ func BuildWebGraph(files []string, read func(string) (string, bool)) *WebGraph {
 		}
 	}
 	for _, t := range wg.Tests {
-		seen := map[string]bool{t: true}
-		stack := []string{t}
-		for len(stack) > 0 {
-			f := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
+		// Breadth-first, so a file's recorded depth is its shortest import
+		// chain from the test.
+		depth := map[string]int{t: 0}
+		queue := []string{t}
+		for len(queue) > 0 {
+			f := queue[0]
+			queue = queue[1:]
 			for _, d := range deps[f] {
-				if !seen[d] {
-					seen[d] = true
-					stack = append(stack, d)
+				if _, ok := depth[d]; !ok {
+					depth[d] = depth[f] + 1
+					queue = append(queue, d)
 				}
 			}
 		}
-		for f := range seen {
+		for f, n := range depth {
 			wg.Reach[f] = append(wg.Reach[f], t)
+			if n <= nearDepth {
+				wg.Near[f] = append(wg.Near[f], t)
+			}
+			if n <= 1 {
+				wg.Direct[f] = append(wg.Direct[f], t)
+			}
 		}
 	}
 	for f := range wg.Reach {
 		sort.Strings(wg.Reach[f])
 	}
+	for _, m := range []map[string][]string{wg.Near, wg.Direct} {
+		for f := range m {
+			sort.Strings(m[f])
+		}
+	}
 	return wg
 }
+
+// nearDepth is how many import edges WebGraph.Near follows from a test: 1 is
+// the module under test, 2 the modules that module imports by name.
+const nearDepth = 2
+
+// webHubFanout is the size of a Near set past which the merge tier treats the
+// changed module as a hub and runs only its Direct tests. A store or the
+// transport is imported by hundreds of components, so two edges from it reach
+// most of the suite: in the merge queue on 2026-10-26 a change to chatStore.ts
+// and projectStore.ts selected 298 vitest files (~20 minutes on the loaded
+// host) at two edges. Its own tests, and every test that imports or mocks it
+// by name, still run; the rest run in the release gate.
+const webHubFanout = 60
+
+// webNearBudget caps the merge tier's web selection as a whole. Many modules
+// of moderate reach add up: UI changes in the merge queue selected 130-330
+// files at two edges, and at ~2s a file on the loaded host that alone is
+// past the gate's five minutes. Past this many files, every changed module
+// selects only the tests that import or mock it by name (WebPlan.Edges 1);
+// the rest run in the release gate.
+const webNearBudget = 150
 
 func containsAny(text string, markers []string) bool {
 	for _, m := range markers {

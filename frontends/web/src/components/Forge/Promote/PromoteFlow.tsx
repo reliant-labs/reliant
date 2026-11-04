@@ -21,8 +21,8 @@
 
 import { CheckCircle2 } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
-import type { ApplyPromoteResult } from "@/api/forge-grpc";
+import Button from "@/components/forge-ui/button";
+import type { ApplyPromoteResult } from "@/hooks/forge-model";
 import type { ForgePromotePlan } from "@/services/forge/promote";
 import type { ForgeOutcome } from "@/services/forge/topology";
 
@@ -74,7 +74,7 @@ export function PromoteFlow({
     return (
       <p
         data-testid="promote-planning"
-        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground"
+        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-ink-muted"
       >
         Computing the promote plan…
       </p>
@@ -85,7 +85,7 @@ export function PromoteFlow({
     return (
       <div
         data-testid="promote-plan-error"
-        className="rounded-lg border border-destructive/40 bg-destructive/10 px-6 py-8 text-center text-sm text-destructive-ink"
+        className="rounded-lg border border-danger-border bg-danger-surface px-6 py-8 text-center text-sm text-danger-ink"
       >
         Could not reach your daemon to plan this promote: {planError.message}
       </div>
@@ -121,10 +121,10 @@ export function PromoteFlow({
             // re-plan and look.
             <div
               data-testid="promote-apply-error"
-              className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive-ink"
+              className="space-y-2 rounded-lg border border-danger-border bg-danger-surface px-3 py-2 text-xs text-danger-ink"
             >
               <p>The promote could not be completed: {applyError.message}</p>
-              <p className="text-muted-foreground">
+              <p className="text-ink-muted">
                 Whether the binding was written is not known from this failure. Re-plan to see the
                 environment&apos;s current state.
               </p>
@@ -175,11 +175,11 @@ function AppliedPanel({
   if (outcome.kind !== "report") {
     return (
       <div className="space-y-3" data-testid="promote-applied">
-        <p className="text-sm text-foreground">
+        <p className="text-sm text-ink">
           The binding was written. Forge&apos;s report of it could not be read, so the details
           cannot be shown here.
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-muted">
           The release was recorded and applied, and forge waited for it to become healthy.
         </p>
         <div className="flex justify-end">

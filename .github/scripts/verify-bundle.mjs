@@ -15,19 +15,13 @@
 // of them, which is how v1.7.5 shipped with VITE_CONTROL_PLANE_API_URL
 // undefined and coupons throwing "Control plane API URL not configured".
 // Confirmed by grepping the released .dmg: 87 renderer assets containing
-// `api.reliantapi.com` and no `admin.reliantapi.com`. Check 3 below IS that
-// forensic grep, promoted to a gate.
+// `api.reliantapi.com` and no `admin.reliantapi.com`.
 //
-// ## The oracle is DERIVED, not typed
-//
-// The expected hostnames come from `electron/release.config.json` — the same
-// file that SUPPLIED the build env. That is the whole point. The web gate
-// hardcoded three URLs, which made it a fourth copy of an endpoint table that
-// already lives in control-plane's KCL, is projected into release.config.json
-// by sync-release-config.mjs, and is drift-gated against KCL in CI. Enumerating
-// the file rather than a list someone remembered to update is what closes the
-// 15-vs-22 variable gap BY CONSTRUCTION: a new endpoint added to the config is
-// required in the bundle by default, with no second place to update.
+// Endpoints are no longer in the bundle at all: it reads them at runtime from
+// config.js, so check 3 now asserts the bundle LOADS that document, and the
+// endpoint assertion belongs to whatever serves it (the desktop app's app://
+// handler). `--config` names the release config, echoed so a mis-targeted
+// build is visible in the log.
 //
 // ## Usage
 //
@@ -61,22 +55,6 @@ function ok(message) {
   console.log(`  ok: ${message}`);
 }
 
-/**
- * Endpoints whose hostname is legitimately ABSENT from a correct production
- * bundle, with the reason. Everything else in `.vite` is required — this list
- * is the only escape hatch, and adding to it is a deliberate, reviewable act.
- *
- * Without this the gate would false-fail on a perfectly good build, and a gate
- * that cries wolf gets disabled, which is strictly worse than no gate.
- */
-const NOT_IN_BUNDLE = {
-  VITE_GATEWAY_URL:
-    "read only by getGatewayURL(), reachable only through envPrefix(), which " +
-    "returns early when VITE_CLI_DEFAULTS_BAKED is \"true\" (see " +
-    "frontends/web/src/lib/cli-commands.ts). In a prod build that branch is " +
-    "dead-code-eliminated, so the hostname is correctly absent.",
-};
-
 /** Every .js/.css file under dist/assets, read once and reused by all checks. */
 function readAssets(dir) {
   const assetsDir = join(dir, "assets");
@@ -106,7 +84,6 @@ if (!existsSync(configPath)) {
 }
 
 const config = JSON.parse(readFileSync(configPath, "utf8"));
-const viteConfig = config.vite ?? {};
 const assets = readAssets(distDir);
 
 console.log(`verify-bundle: asserting on ${distDir}`);
@@ -156,53 +133,33 @@ if (leaked.length) {
   ok("same-origin transport branch eliminated (genuine production build)");
 }
 
-// ── 3. The bundle carries this environment's real backend config ─────────────
-// The v1.7.5 forensic grep. A value documented as "injected at build time" was
-// never injected; the defect was not the wrong default, it was that the wrong
-// default was SILENT.
-console.log("\n[3/4] endpoints baked in (derived from release config)");
-for (const [key, value] of Object.entries(viteConfig)) {
-  if (typeof value !== "string" || !/^https?:\/\//.test(value)) continue;
-
-  let host;
-  try {
-    host = new URL(value).hostname;
-  } catch {
-    fail(`vite.${key} is not a parseable URL: ${value}`);
-    continue;
-  }
-
-  if (key in NOT_IN_BUNDLE) {
-    console.log(`  skip: ${key} (${host}) — ${NOT_IN_BUNDLE[key]}`);
-    continue;
-  }
-
-  if (assets.some((a) => a.text.includes(host))) {
-    ok(`${key} → ${host}`);
-  } else {
+// ── 3. The bundle reads its config at runtime ────────────────────────────────
+// Endpoints are no longer baked in: the bundle reads them from config.js
+// (window.__FORGE_CONFIG__, frontends/web/src/lib/config_gen.ts), which each
+// environment serves beside the same bytes — the control plane for the hosted
+// SPA, the app:// handler for the desktop app. What the ARTIFACT must carry is
+// the tag that loads it, as a blocking classic script ahead of the module
+// bundle: without it every value silently takes its self-hosted default, which
+// is the v1.7.5 coupon outage's shape (a value "injected" that never was).
+// Whether the desktop app's config.js carries this release's endpoints is the
+// app:// handler's to assert (electron/), not the bundle's.
+console.log("\n[3/4] runtime config document loaded before the bundle");
+if (existsSync(indexHtmlPath)) {
+  const html = readFileSync(indexHtmlPath, "utf8");
+  const configTag = html.search(/<script src="\/config\.js"><\/script>/);
+  const moduleTag = html.search(/<script type="module"/);
+  if (configTag < 0) {
     fail(
-      `built bundle does not contain ${host} (vite.${key}) — VITE_* injection did not happen`,
-      "This is the exact shape of the v1.7.5 coupon outage. Either the build " +
-        "did not export this key, or the code reading it was eliminated — if " +
-        "the latter is correct and intended, add it to NOT_IN_BUNDLE with a reason.",
+      'index.html does not load /config.js with a classic <script src="/config.js"></script>',
+      "Every runtime config value would take its default. frontends/web/index.html must keep " +
+        'the <script src="%BASE_URL%config.js"></script> tag.',
     );
+  } else if (moduleTag >= 0 && moduleTag < configTag) {
+    fail("index.html loads the module bundle before /config.js — the config would arrive too late");
+  } else {
+    ok("index.html loads /config.js before the module bundle");
   }
 }
-
-// A localhost backend URL in a shipped artifact is the "builds green, useless
-// on a user's machine" failure. Only the API-ish keys: an unrelated localhost
-// default (OTLP exporter, Spotlight) is not a shipping defect.
-const LOCALHOST_NEAR_API = /(VITE_API_URL|VITE_GRPC_URL|VITE_CONTROL_PLANE_API_URL)[^,]{0,40}localhost/;
-const localhostHits = assets.filter((a) => LOCALHOST_NEAR_API.test(a.text));
-if (localhostHits.length) {
-  fail(
-    "a backend URL in the bundle points at localhost",
-    localhostHits.map((a) => `assets/${a.name}`).join("\n    "),
-  );
-} else {
-  ok("no backend URL points at localhost");
-}
-
 // ── 4. The asset base path is ABSOLUTE ───────────────────────────────────────
 //
 // vite.config.ts pins `base: "/"`. A RELATIVE base ("./") is silently fine at

@@ -142,7 +142,7 @@ func (s *Service) ListPendingQuestions(
 		if chatID == "" {
 			return nil, svcerr.InvalidArgument("chat_id, when set, must not be empty")
 		}
-		chat, getErr := s.deps.Repo.GetChat(ctx, chatID)
+		chat, getErr := s.deps.Repo.GetChatRow(ctx, chatID)
 		if getErr != nil {
 			return nil, svcerr.WrapOr(getErr, svcerr.Internal("failed to get chat"))
 		}

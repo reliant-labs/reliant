@@ -76,13 +76,9 @@ describe("SystemService hooks", () => {
       }),
     );
 
-    const { result } = renderHook(() => useHealth(), { wrapper });
-    await result.current.mutateAsync({} as never).catch(() => {
-      // Mutations may reject if the empty request fails validation upstream.
-      // The point of the starter is that the wiring resolves; tighten the
-      // assertions as you flesh out the page.
-    });
-    await waitForSettled(result);
+    const { result } = renderHook(() => useHealth({}), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeDefined();
   });
 
   it("useReady resolves a happy-path response", async () => {
@@ -92,13 +88,9 @@ describe("SystemService hooks", () => {
       }),
     );
 
-    const { result } = renderHook(() => useReady(), { wrapper });
-    await result.current.mutateAsync({} as never).catch(() => {
-      // Mutations may reject if the empty request fails validation upstream.
-      // The point of the starter is that the wiring resolves; tighten the
-      // assertions as you flesh out the page.
-    });
-    await waitForSettled(result);
+    const { result } = renderHook(() => useReady({}), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeDefined();
   });
 
   it("useInfo resolves a happy-path response", async () => {
@@ -108,13 +100,9 @@ describe("SystemService hooks", () => {
       }),
     );
 
-    const { result } = renderHook(() => useInfo(), { wrapper });
-    await result.current.mutateAsync({} as never).catch(() => {
-      // Mutations may reject if the empty request fails validation upstream.
-      // The point of the starter is that the wiring resolves; tighten the
-      // assertions as you flesh out the page.
-    });
-    await waitForSettled(result);
+    const { result } = renderHook(() => useInfo({}), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeDefined();
   });
 
   it("useVersion resolves a happy-path response", async () => {
@@ -124,13 +112,9 @@ describe("SystemService hooks", () => {
       }),
     );
 
-    const { result } = renderHook(() => useVersion(), { wrapper });
-    await result.current.mutateAsync({} as never).catch(() => {
-      // Mutations may reject if the empty request fails validation upstream.
-      // The point of the starter is that the wiring resolves; tighten the
-      // assertions as you flesh out the page.
-    });
-    await waitForSettled(result);
+    const { result } = renderHook(() => useVersion({}), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeDefined();
   });
 
   it("useStartOAuthSignIn resolves a happy-path response", async () => {

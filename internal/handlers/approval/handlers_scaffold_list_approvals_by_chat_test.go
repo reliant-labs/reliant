@@ -23,9 +23,9 @@ func TestListApprovalsByChat_Generated(t *testing.T) {
 
 	// chat-1 belongs to another user; no other chat exists.
 	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
 			if id == "chat-1" {
-				return &db.Chat{ID: id, UserID: "someone-else"}, nil
+				return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
 			}
 			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		},

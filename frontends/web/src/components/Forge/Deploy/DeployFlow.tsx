@@ -28,8 +28,8 @@
  * whatsoever is yet known about whether it worked.
  */
 
-import { Button } from "@/components/ui/Button";
-import type { DeployStatus, StartDeployResult } from "@/api/forge-grpc";
+import Button from "@/components/forge-ui/button";
+import type { DeployStatus, StartDeployResult } from "@/hooks/forge-model";
 import {
   deployBlockers,
   deployTokenFor,
@@ -127,7 +127,7 @@ export function DeployFlow({
     return (
       <p
         data-testid="deploy-planning"
-        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground"
+        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-ink-muted"
       >
         Computing the deploy plan — forge is reading the live target…
       </p>
@@ -147,7 +147,7 @@ export function DeployFlow({
     return (
       <div
         data-testid="deploy-plan-error"
-        className="rounded-lg border border-destructive/40 bg-destructive/10 px-6 py-8 text-center text-sm text-destructive-ink"
+        className="rounded-lg border border-danger-border bg-danger-surface px-6 py-8 text-center text-sm text-danger-ink"
       >
         Could not reach your daemon to plan this deploy: {planError.message}
       </div>
@@ -195,9 +195,9 @@ export function DeployFlow({
             // failure to investigate in the cluster.
             <div
               data-testid="deploy-not-started"
-              className="space-y-1 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
+              className="space-y-1 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-ink-muted"
             >
-              <p className="text-foreground">
+              <p className="text-ink">
                 No deploy was started, and nothing was applied.
               </p>
               <p>
@@ -214,10 +214,10 @@ export function DeployFlow({
             // genuinely unknown here, so this claims neither.
             <div
               data-testid="deploy-start-error"
-              className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive-ink"
+              className="space-y-2 rounded-lg border border-danger-border bg-danger-surface px-3 py-2 text-xs text-danger-ink"
             >
               <p>The deploy could not be started: {startError.message}</p>
-              <p className="text-muted-foreground">
+              <p className="text-ink-muted">
                 Whether a deploy got underway is not known from this failure. Re-plan before trying
                 again — if one did start, forge will refuse a second as already running.
               </p>
@@ -301,10 +301,10 @@ function ApprovalStage({
     return (
       <div
         data-testid="deploy-plan-refused"
-        className="space-y-2 rounded-lg border border-warning/50 bg-warning/10 px-3 py-2 text-xs"
+        className="space-y-2 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-xs"
       >
-        <p className="text-foreground">{planJobResult.refusal.detail}</p>
-        <p className="text-muted-foreground">
+        <p className="text-ink">{planJobResult.refusal.detail}</p>
+        <p className="text-ink-muted">
           Nothing was built and nothing was deployed.
         </p>
       </div>
@@ -315,10 +315,10 @@ function ApprovalStage({
     return (
       <div
         data-testid="deploy-plan-job-error"
-        className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive-ink"
+        className="space-y-2 rounded-lg border border-danger-border bg-danger-surface px-3 py-2 text-xs text-danger-ink"
       >
         <p>The changes could not be worked out: {planJobError.message}</p>
-        <p className="text-muted-foreground">
+        <p className="text-ink-muted">
           Nothing was deployed. Your environment is unchanged.
         </p>
         <Button variant="secondary" size="xs" onClick={onBuildAndPlan}>
@@ -376,12 +376,12 @@ function ApprovalStage({
     return (
       <div
         data-testid="deploy-plan-unacknowledged"
-        className="space-y-2 rounded-lg border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs"
+        className="space-y-2 rounded-lg border border-danger-border bg-danger-surface px-3 py-2 text-xs"
       >
-        <p className="text-foreground">
+        <p className="text-ink">
           This was not deployed, because it destroys something that was not accepted.
         </p>
-        <p className="text-muted-foreground">
+        <p className="text-ink-muted">
           Your environment is unchanged. Work the changes out again and accept each
           irreversible one explicitly.
         </p>
@@ -397,12 +397,12 @@ function ApprovalStage({
     return (
       <div
         data-testid="deploy-plan-other-refusal"
-        className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs"
+        className="space-y-1 rounded-lg border border-danger-border bg-danger-surface px-3 py-2 text-xs"
       >
-        <p className="text-foreground">
+        <p className="text-ink">
           {jobRefusal.detail || "forge declined to deploy this."}
         </p>
-        <p className="text-muted-foreground">Nothing was deployed.</p>
+        <p className="text-ink-muted">Nothing was deployed.</p>
       </div>
     );
   }
@@ -413,7 +413,7 @@ function ApprovalStage({
     return (
       <p
         data-testid="deploy-building-plan"
-        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground"
+        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-ink-muted"
       >
         Working out what this would ship. It builds your code first, so this takes a few
         minutes. Nothing is deployed yet.
@@ -427,9 +427,9 @@ function ApprovalStage({
     return (
       <div
         data-testid="deploy-plan-job-failed"
-        className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs"
+        className="space-y-2 rounded-lg border border-danger-border bg-danger-surface px-3 py-2 text-xs"
       >
-        <p className="text-foreground">
+        <p className="text-ink">
           {planJobStatus.jobStatusDetail || "The changes could not be worked out."}
         </p>
         <Button variant="secondary" size="xs" onClick={onBuildAndPlan}>
@@ -464,7 +464,7 @@ function ApprovalStage({
   // control here. The preview above cannot authorise a deploy.
   return (
     <section className="space-y-2" data-testid="deploy-stage-one">
-      <p className="text-xs text-muted-foreground">
+      <p className="text-xs text-ink-muted">
         Nothing is deployed yet. Work out the changes first — that builds your code and
         shows exactly what would ship.
       </p>
@@ -505,9 +505,9 @@ function BlockedNotice({
   return (
     <section
       data-testid="deploy-blocked"
-      className="space-y-2 rounded-lg border border-solid border-destructive/50 bg-destructive/10 px-4 py-3"
+      className="space-y-2 rounded-lg border border-solid border-danger-border bg-danger-surface px-4 py-3"
     >
-      <h3 className="text-sm font-medium text-destructive-ink" data-testid="deploy-blocked-heading">
+      <h3 className="text-sm font-medium text-danger-ink" data-testid="deploy-blocked-heading">
         This deploy cannot be confirmed
       </h3>
       <ul className="space-y-1">
@@ -515,7 +515,7 @@ function BlockedNotice({
           <li
             key={blocker.kind}
             data-testid={`deploy-blocker-${blocker.kind}`}
-            className="text-xs text-foreground"
+            className="text-xs text-ink"
           >
             {describeBlocker(blocker)}
           </li>
@@ -553,17 +553,17 @@ function DeployNotAuthorized() {
   return (
     <section
       data-testid="deploy-not-authorized"
-      className="space-y-2 rounded-lg border border-solid border-warning/50 bg-warning/10 px-4 py-3"
+      className="space-y-2 rounded-lg border border-solid border-warning-border bg-warning-surface px-4 py-3"
     >
       <h3 className="text-sm font-medium text-warning-ink">
         Forge isn&apos;t signed in to Reliant cloud
       </h3>
-      <p className="text-xs text-foreground">
+      <p className="text-xs text-ink">
         This deploy targets hosted infrastructure, and forge has no credential
         for it on this machine. Sign in to Reliant and forge picks up the same
         credential automatically — you do not need a second login.
       </p>
-      <p className="text-2xs text-muted-foreground">
+      <p className="text-2xs text-ink-muted">
         If you are already signed in, your session may have expired. Signing in
         again refreshes it.
       </p>
@@ -587,7 +587,7 @@ function DeployPermissionDenied({ permission }: { permission: string }) {
   return (
     <section
       data-testid="deploy-permission-denied"
-      className="space-y-2 rounded-lg border border-solid border-warning/50 bg-warning/10 px-4 py-3"
+      className="space-y-2 rounded-lg border border-solid border-warning-border bg-warning-surface px-4 py-3"
     >
       <h3 className="text-sm font-medium text-warning-ink">
         Your permissions don&apos;t include{" "}
@@ -597,11 +597,11 @@ function DeployPermissionDenied({ permission }: { permission: string }) {
           "what this deploy needs"
         )}
       </h3>
-      <p className="text-xs text-foreground">
+      <p className="text-xs text-ink">
         You are signed in, but your organization permissions do not cover this
         deploy. Nothing was changed.
       </p>
-      <p className="text-xs text-foreground">
+      <p className="text-xs text-ink">
         An organization admin can grant{" "}
         {permission ? (
           <span className="font-mono">{permission}</span>

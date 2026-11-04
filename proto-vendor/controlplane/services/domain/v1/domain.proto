@@ -140,6 +140,10 @@ message CreateDomainRequest {
   // and trimmed of a trailing dot server-side, so a value pasted out of a
   // DNS tool claims the same domain as one typed by hand.
   string hostname = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message CreateDomainResponse {
@@ -151,6 +155,10 @@ message GetDomainRequest {
   // just been told "this domain is taken" has the name and not the id.
   string domain_id = 1;
   string hostname = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message GetDomainResponse {
@@ -167,7 +175,12 @@ message GetDomainResponse {
 //
 // Orgs hold a handful of domains, not thousands, so this deliberately has no
 // pagination either.
-message ListDomainsRequest {}
+message ListDomainsRequest {
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 1;
+}
 
 message ListDomainsResponse {
   repeated Domain domains = 1;
@@ -175,12 +188,20 @@ message ListDomainsResponse {
 
 message DeleteDomainRequest {
   string domain_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message DeleteDomainResponse {}
 
 message VerifyDomainRequest {
   string domain_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message VerifyDomainResponse {
@@ -198,6 +219,10 @@ message CreateDomainBindingRequest {
   // Serve a 308 to this hostname instead of proxying to a target. Mutually
   // exclusive with target.
   string redirect_to = 4;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 5;
 }
 
 message CreateDomainBindingResponse {
@@ -209,12 +234,20 @@ message DeleteDomainBindingRequest {
   // holding the domain should not need a second read to unbind it.
   string binding_id = 1;
   string domain_id = 2;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 3;
 }
 
 message DeleteDomainBindingResponse {}
 
 message ListDomainBindingsRequest {
   optional string environment_id = 1;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 2;
 }
 
 message ListDomainBindingsResponse {

@@ -282,12 +282,20 @@ func TestStart_ManagedDaemonExitsWhenItsHomeVolumeIsLost(t *testing.T) {
 	}
 	ws := newIncidentWorkspace(t)
 	t.Setenv("HOME", ws.home)
-	previousInterval, previousExit := workspaceGuardPollInterval, workspaceGuardExit
+	previousInterval, previousExit, previousLog := workspaceGuardPollInterval, workspaceGuardExit, workspaceGuardTerminationLog
 	workspaceGuardPollInterval = 10 * time.Millisecond
 	// The backstop stays armed after Start returns; it must not take the
 	// test binary down with it.
 	workspaceGuardExit = func(int) {}
-	t.Cleanup(func() { workspaceGuardPollInterval, workspaceGuardExit = previousInterval, previousExit })
+	// Never the real /dev/termination-log: inside a workspace pod that is the
+	// pod's own, and this test's fault would become the machine's next
+	// failure message.
+	terminationLog := filepath.Join(t.TempDir(), "termination-log")
+	require.NoError(t, os.WriteFile(terminationLog, nil, 0o600))
+	workspaceGuardTerminationLog = terminationLog
+	t.Cleanup(func() {
+		workspaceGuardPollInterval, workspaceGuardExit, workspaceGuardTerminationLog = previousInterval, previousExit, previousLog
+	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -307,6 +315,9 @@ func TestStart_ManagedDaemonExitsWhenItsHomeVolumeIsLost(t *testing.T) {
 		assert.True(t, lost.Fault.Home)
 		assert.Equal(t, filepath.Clean(ws.home), lost.Fault.Path)
 		assert.NoError(t, ctx.Err(), "Start stopped itself; the caller did not cancel it")
+		msg, err := os.ReadFile(terminationLog)
+		require.NoError(t, err)
+		assert.Contains(t, string(msg), "is no longer the disk", "the reason went to the seam, not the pod's file")
 	case <-time.After(20 * time.Second):
 		t.Fatal("a managed daemon whose home volume was lost kept running")
 	}

@@ -60,6 +60,7 @@ import type { Stripe, StripeElements } from "@stripe/stripe-js";
 
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
 import { formatCentsAsDollars } from "@/components/Settings/cloud/billingUtils";
+import { formatPrice } from "./priceFormat";
 import {
   isCheckoutIdentityRequired,
   useCreateComputeSubscriptionIntent,
@@ -112,6 +113,8 @@ export type LegOutcome =
   /** Confirmed at Stripe, but the webhook has not granted it yet. */
   | { status: "unconfirmed" };
 
+import { MachineSaleConsent } from "./MachineSaleConsent";
+
 export interface OnboardingCheckoutProps {
   lines: CheckoutLine[];
   /** The compute plan to subscribe to. Absent when compute is covered. */
@@ -127,10 +130,17 @@ export interface OnboardingCheckoutProps {
   /** A coupon cleared a leg; the caller re-reads the facts. */
   onRedeemed: () => void;
   renderIdentityRequired?: (message: string) => React.ReactNode;
+  /** Offered when machine checkout cannot proceed; see MachineSaleConsent. */
+  onUseOwnComputer?: () => void;
   className?: string;
 }
 
 export function OnboardingCheckout(props: OnboardingCheckoutProps) {
+  if (props.computePlanId && props.lines.some(line => line.kind === "compute" && !line.covered)) return <div className="space-y-4"><MachineSaleConsent planId={props.computePlanId} onUseOwnComputer={props.onUseOwnComputer}>{monthlyPriceCents => <OnboardingCheckoutBody {...props} omitCoupon lines={monthlyPriceCents === undefined ? props.lines : props.lines.map(line => line.kind === "compute" && !line.covered ? { ...line, amountCents: monthlyPriceCents } : line)} />}</MachineSaleConsent><RedeemCouponForm variant="open" size="sm" onRedeemed={() => props.onRedeemed()} /></div>;
+  return <OnboardingCheckoutBody {...props} />;
+}
+
+function OnboardingCheckoutBody(props: OnboardingCheckoutProps & { omitCoupon?: boolean }) {
   const { lines, className } = props;
 
   const owed = lines.filter((line) => !line.covered);
@@ -279,7 +289,7 @@ export function OnboardingCheckout(props: OnboardingCheckoutProps) {
       {/* Set apart by a rule and a recess, not by a tint — the same treatment
           the compute checkout's coupon section gets. See the elevation note in
           forge-ui/card.tsx for why `bg-muted` is not it. */}
-      <section className="space-y-2 border-t border-border bg-background p-5">
+      {!props.omitCoupon && <section className="space-y-2 border-t border-border bg-background p-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Or use a code
         </h3>
@@ -292,7 +302,7 @@ export function OnboardingCheckout(props: OnboardingCheckoutProps) {
           size="sm"
           onRedeemed={() => props.onRedeemed()}
         />
-      </section>
+      </section>}
     </div>
   );
 }
@@ -343,7 +353,7 @@ function OrderSummary({
             )}
           >
             {line.covered ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary-ink" />
             ) : (
               <span
                 aria-hidden
@@ -354,7 +364,7 @@ function OrderSummary({
               <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
                 {line.label}
                 {line.covered && (
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary">
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary-ink">
                     {line.coveredBy ?? "covered"}
                   </span>
                 )}
@@ -366,11 +376,11 @@ function OrderSummary({
             <span className="shrink-0 text-sm font-semibold text-foreground">
               {line.covered ? (
                 <span className="text-muted-foreground line-through">
-                  {formatCentsAsDollars(line.amountCents)}
+                  {formatPrice(line.amountCents)}
                 </span>
               ) : (
                 <>
-                  {formatCentsAsDollars(line.amountCents)}
+                  {formatPrice(line.amountCents)}
                   {line.recurring && (
                     <span className="text-xs font-normal text-muted-foreground">
                       /mo
@@ -974,8 +984,8 @@ function Notice({
   const iconTones = {
     error: "text-destructive-ink",
     muted: "text-muted-foreground",
-    pending: "text-primary",
-    success: "text-primary",
+    pending: "text-primary-ink",
+    success: "text-primary-ink",
   } as const;
 
   return (

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,3 +55,48 @@ func TestRepoDiscoverReportsForgeProjectName(t *testing.T) {
 }
 
 func ptr(s string) *string { return &s }
+
+// A scan that cannot finish inside the command's deadline answers before it,
+// with what it found and the flag that says it is partial, instead of being
+// cut off by the deadline with no answer at all.
+func TestRepoDiscoverAnswersPartialBeforeItsDeadline(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "api", ".git"), 0o755))
+	payload, err := json.Marshal(repoDiscoverRequest{Path: root})
+	require.NoError(t, err)
+
+	// Out of time before the walk starts: the answer is "partial", not an
+	// error and not an empty list presented as complete.
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+	out, err := handleRepoDiscover(ctx, payload)
+	require.NoError(t, err)
+	var resp repoDiscoverResponse
+	require.NoError(t, json.Unmarshal(out, &resp))
+	assert.True(t, resp.Truncated)
+	assert.NotEmpty(t, resp.TruncatedReason)
+
+	// With time to finish it is whole, and says nothing about truncation.
+	whole := discoverForTest(t, root)
+	assert.False(t, whole.Truncated)
+	require.Len(t, whole.Discovered, 1)
+	assert.Equal(t, "api", whole.Discovered[0].RelativePath)
+}
+
+func TestAnswerByLeavesAMargin(t *testing.T) {
+	assert.True(t, answerBy(context.Background()).IsZero(), "no deadline, no bound")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	deadline, _ := ctx.Deadline()
+	assert.Equal(t, time.Second, deadline.Sub(answerBy(ctx)), "a second's margin at most")
+
+	// A short budget keeps a fifth of what is left as margin: at most 100ms
+	// of 500ms, however late this line runs, and never past the deadline.
+	short, cancelShort := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancelShort()
+	d2, _ := short.Deadline()
+	margin := d2.Sub(answerBy(short))
+	assert.Greater(t, margin, time.Duration(0))
+	assert.LessOrEqual(t, margin, 100*time.Millisecond, "a fifth of a short budget")
+}

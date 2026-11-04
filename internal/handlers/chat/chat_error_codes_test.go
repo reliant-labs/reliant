@@ -46,6 +46,10 @@ func ownedChat(_ context.Context, id string) (*db.Chat, error) {
 	return &db.Chat{ID: id, UserID: "test-user"}, nil
 }
 
+func ownedChatRow(_ context.Context, id string) (*db.ChatRow, error) {
+	return &db.ChatRow{ID: id, UserID: "test-user"}, nil
+}
+
 // The ownership read every chat rpc starts with passes a classified store
 // error through and redacts an opaque one. One rpc per shape of the read: by
 // id (Repo.GetChat, then the owner compared), and by id and owner
@@ -56,12 +60,14 @@ func TestChatOwnershipRead_RepositoryFailureCodes(t *testing.T) {
 	for _, tc := range readFailures {
 		byID := func(t *testing.T) *chat.Service {
 			return newChatService(t, &chat.MockRepository{
-				GetChatFunc: func(context.Context, string) (*db.Chat, error) { return nil, tc.err },
+				GetChatFunc:    func(context.Context, string) (*db.Chat, error) { return nil, tc.err },
+				GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) { return nil, tc.err },
 			})
 		}
 		byOwner := func(t *testing.T) *chat.Service {
 			return newChatService(t, &chat.MockRepository{
-				GetChatWithUserCheckFunc: func(context.Context, string, string) (*db.Chat, error) { return nil, tc.err },
+				GetChatWithUserCheckFunc:    func(context.Context, string, string) (*db.Chat, error) { return nil, tc.err },
+				GetChatRowWithUserCheckFunc: func(context.Context, string, string) (*db.ChatRow, error) { return nil, tc.err },
 			})
 		}
 		ctx := chat.AuthedContext(t)
@@ -123,6 +129,7 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 			t.Parallel()
 			svc := newChatService(t, &chat.MockRepository{
 				GetChatFunc:             ownedChat,
+				GetChatRowFunc:          ownedChatRow,
 				ListWorkflowsByChatFunc: func(context.Context, string) ([]*db.Workflow, error) { return nil, tc.err },
 			})
 			_, err := svc.GetWorkflowExecutions(ctx, connect.NewRequest(&pb.GetWorkflowExecutionsRequest{ChatId: "chat-1"}))
@@ -131,7 +138,8 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 		t.Run("UpdateChatState write: "+tc.name, func(t *testing.T) {
 			t.Parallel()
 			svc := newChatService(t, &chat.MockRepository{
-				GetChatFunc: ownedChat,
+				GetChatFunc:    ownedChat,
+				GetChatRowFunc: ownedChatRow,
 				UpdateChatStateFunc: func(context.Context, string, db.ChatState, string) error {
 					return tc.err
 				},
@@ -174,6 +182,9 @@ func TestChatOpaqueFailure_ReadsTheSummary(t *testing.T) {
 
 	svc := newChatService(t, &chat.MockRepository{
 		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
+			return nil, errors.New("dsn=postgres://u:secret@h")
+		},
+		GetChatRowFunc: func(context.Context, string) (*db.ChatRow, error) {
 			return nil, errors.New("dsn=postgres://u:secret@h")
 		},
 	})

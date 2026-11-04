@@ -83,7 +83,9 @@ const promotion = (patch: Partial<Promotion> = {}): Promotion => ({
 describe("release markers", () => {
   it("name the version, the environment when several are in view, and a rollback as one", () => {
     const [plain, rollback] = toChartMarkers([promotion(), promotion({ promotionId: "promo-2", kind: "rollback", version: "v1.8.2", envName: "staging" })], true);
-    expect(plain).toMatchObject({ timeSec: Date.UTC(2026, 9, 14, 12) / 1000, label: "prod v1.8.3", tone: "primary" });
+    // A promotion is drawn in the axis ink: a palette colour would read as one more series.
+    expect(plain).toMatchObject({ timeSec: Date.UTC(2026, 9, 14, 12) / 1000, label: "prod v1.8.3" });
+    expect(plain.tone).toBeUndefined();
     expect(plain.description).toBe("v1.8.3 (commit 3f2a9c1) promoted to prod by Ada Lovelace");
     expect(rollback).toMatchObject({ label: "staging ↩ v1.8.2", tone: "warning" });
     expect(rollback.description).toBe("staging rolled back to v1.8.2 (commit 3f2a9c1) by Ada Lovelace");
@@ -94,6 +96,11 @@ describe("release markers", () => {
     // Buckets start at 0, 60, 120: the chart spans to 180.
     const shown = visibleMarkers([{ timeSec: 150, label: "now-ish" }, { timeSec: 200, label: "future" }, { timeSec: -5, label: "before" }], [0, 60, 120]);
     expect(shown.map((m) => m.label)).toEqual(["now-ish"]);
+  });
+
+  it("draw a version promoted twice in the window once, at its latest landing", () => {
+    const shown = visibleMarkers([{ timeSec: 10, label: "v1" }, { timeSec: 70, label: "v2" }, { timeSec: 130, label: "v1" }], [0, 60, 120]);
+    expect(shown).toEqual([{ timeSec: 70, label: "v2" }, { timeSec: 130, label: "v1" }]);
   });
 
   it("say so when the ledger recorded no commit or actor", () => {

@@ -83,7 +83,54 @@ service ObservabilityService {
 
   // QueryMetric returns time series for one metric: an aggregation, optional
   // group-by attribute keys, and a step. Max range 30 days.
+  //
+  // Deprecated: it is a one-series line panel; call QueryPanel instead, which
+  // runs the same evaluator and also returns series_meta, series_total and
+  // warnings. Removed in a follow-up once the console and forge's cloud backend
+  // no longer call it.
   rpc QueryMetric(QueryMetricRequest) returns (QueryMetricResponse) {
+    option deprecated = true;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMetric is the metric detail the explorer's side pane opens on: the
+  // catalog entry, the export-interval estimate, whether the metric mixes
+  // temporalities, every attribute key with its distinct-value estimate (and
+  // the declared closed value set), and suggested breakdown keys. The range
+  // is capped at 24 hours for the attribute scan. Cached for a minute.
+  rpc GetMetric(GetMetricRequest) returns (GetMetricResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMetricExemplars returns up to 20 exemplars (a sampled observation with
+  // the trace it came from) of one metric, optionally narrowed to a series
+  // group and a minimum value. Exemplars whose trace is stored sort first.
+  // Max range 7 days.
+  rpc ListMetricExemplars(ListMetricExemplarsRequest) returns (ListMetricExemplarsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetServiceGraph aggregates received pre-tail evidence, never estimated total traffic.
+  // Maximum window 1 hour; arbitrary QueryScope attribute filters are rejected.
+  rpc GetServiceGraph(GetServiceGraphRequest) returns (GetServiceGraphResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetServiceGraphCatalog lists observed fully qualified RPC methods and available
+  // declared metadata. Missing hosted code inventory is explicitly unavailable.
+  rpc GetServiceGraphCatalog(GetServiceGraphCatalogRequest) returns (GetServiceGraphCatalogResponse) {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -148,6 +195,19 @@ service ObservabilityService {
     };
   }
 
+  // GetServiceSignals answers, per service in the scope, which signals it
+  // EMITS (traces, logs, profiles with data in the range) and which the
+  // recorded release of its environments DECLARES on: the console's answer to
+  // "should this service offer a Profiles view". One bounded statement over
+  // the telemetry plus the bundles the control plane already holds. Max range
+  // 7 days, at most 500 services, cached for a minute.
+  rpc GetServiceSignals(GetServiceSignalsRequest) returns (GetServiceSignalsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // ListWorkloads returns, per environment, workload and container: image,
   // service.version, replicas observed, restarts in the window, the last
   // terminated reason (OOMKilled, ...), CPU and memory against requests and
@@ -190,7 +250,10 @@ service ObservabilityService {
   // enforcing. It is a plain Postgres read of what the hourly meter wrote
   // (nothing here queries ClickHouse), so it works when the tenant is
   // unreachable. Membership-checked on org_id.
+  // Deprecated: use observability_billing.v1.ObservabilityBillingService.GetObservabilityUsage.
+  // Kept until deployed clients have migrated; it remains Postgres-only.
   rpc GetObservabilityUsage(GetObservabilityUsageRequest) returns (GetObservabilityUsageResponse) {
+    option deprecated = true;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -284,6 +347,190 @@ message QueryScope {
   repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
   // Generic attribute predicates, ANDed with each other and with everything else.
   repeated AttributeFilter filters = 7 [(buf.validate.field).repeated.max_items = 20];
+  // Read platform telemetry: the signals of a dashboard whose spec says
+  // `scope: "platform"` (a database, a message bus, a collector). They belong
+  // to no environment and carry no reliant.env.id, so the environment predicate
+  // is the one thing dropped. Nothing else is: the org's database, the caller's
+  // membership and every other predicate apply as always.
+  //
+  // Only the platform organization (tenant zero) has such telemetry, so any
+  // other org is refused PermissionDenied, as is a credential bound to one
+  // environment. It takes no env_ids and no project_id (both narrow by
+  // environment): sending either is InvalidArgument.
+  bool platform_scope = 8;
+}
+
+// === Service graph: identities never contain URLs, SQL or arbitrary attributes. ===
+message GetServiceGraphRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Full case-sensitive proto service/method, e.g. acme.v1.OrdersService/GetOrder.
+  repeated string rpc_ids = 2 [(buf.validate.field).repeated.max_items = 50];
+  repeated GraphEdgeKind edge_kinds = 3;
+  // Optional process node identity; narrows to incident edges.
+  string focus_node_id = 4;
+  // 0 defaults to 200, maximum 500.
+  uint32 max_edges = 5;
+  // Method expansion is separate from process traffic; never adds to request counts.
+  bool include_internal = 6;
+  // Exact fully qualified proto service; ANDed with rpc_ids, never expanded from a capped catalog.
+  string rpc_service = 7 [(buf.validate.field).string.max_len = 128];
+}
+message GetServiceGraphResponse {
+  repeated GraphNode nodes = 1;
+  repeated GraphEdge edges = 2;
+  GraphCompleteness completeness = 3;
+  TimeRange effective_time_range = 4;
+}
+enum GraphNodeKind {
+  GRAPH_NODE_KIND_UNSPECIFIED = 0;
+  GRAPH_NODE_KIND_PROCESS = 1;
+  GRAPH_NODE_KIND_RPC = 2;
+  GRAPH_NODE_KIND_INTERNAL_METHOD = 3;
+  GRAPH_NODE_KIND_DATABASE = 4;
+  GRAPH_NODE_KIND_EXTERNAL = 5;
+  GRAPH_NODE_KIND_BROKER = 6;
+  GRAPH_NODE_KIND_WORKFLOW = 7;
+  GRAPH_NODE_KIND_UNKNOWN = 8;
+  GRAPH_NODE_KIND_FRONTEND = 9;
+}
+enum GraphEdgeKind {
+  GRAPH_EDGE_KIND_UNSPECIFIED = 0;
+  GRAPH_EDGE_KIND_SYNC = 1;
+  GRAPH_EDGE_KIND_DATABASE = 2;
+  GRAPH_EDGE_KIND_EXTERNAL = 3;
+  GRAPH_EDGE_KIND_ASYNC_SEND = 4;
+  GRAPH_EDGE_KIND_ASYNC_CONSUME = 5;
+  GRAPH_EDGE_KIND_INTERNAL = 6;
+  GRAPH_EDGE_KIND_DECLARED = 7;
+}
+enum GraphEvidenceKind {
+  GRAPH_EVIDENCE_KIND_UNSPECIFIED = 0;
+  GRAPH_EVIDENCE_KIND_OBSERVED = 1;
+  GRAPH_EVIDENCE_KIND_DECLARED = 2;
+}
+message GraphNode {
+  string id = 1;
+  string env_id = 2;
+  GraphNodeKind kind = 3;
+  string label = 4;
+  string parent_node_id = 5;
+  string rpc_id = 6;
+  string instrumentation_scope = 7;
+  // Empty unless a verified hosted artifact supplies exact source mapping.
+  string source_unavailable_reason = 8;
+}
+message GraphHistogram {
+  // Noncumulative counts: one per bound plus a final +Inf bucket. Version 1.
+  uint32 version = 1;
+  repeated double upper_bounds_seconds = 2;
+  repeated uint64 bucket_counts = 3;
+  uint64 count = 4;
+  double sum_seconds = 5;
+}
+message GraphTraceExemplar {
+  string trace_id = 1;
+  string span_id = 2;
+  // Pre-tail evidence does not guarantee the trace survived tail sampling.
+  bool trace_availability_unknown = 3;
+}
+message GraphEdge {
+  string id = 1;
+  string source_node_id = 2;
+  string destination_node_id = 3;
+  string env_id = 4;
+  GraphEdgeKind kind = 5;
+  GraphEvidenceKind evidence = 6;
+  string rpc_id = 7;
+  // server_request, client_attempt, database_operation, delivery, publish, method_invocation.
+  string unit = 8;
+  // server, client, consumer, producer or internal; never sum viewpoints.
+  string viewpoint = 9;
+  string cohort = 10;
+  uint64 count = 11;
+  uint64 server_fault_count = 12;
+  uint64 user_outcome_count = 13;
+  uint64 cancelled_count = 14;
+  uint64 unknown_status_count = 15;
+  uint64 matched_count = 16;
+  uint64 unmatched_count = 17;
+  GraphHistogram duration = 18;
+  repeated GraphTraceExemplar exemplars = 19;
+  google.protobuf.Timestamp first_seen = 20;
+  google.protobuf.Timestamp last_seen = 21;
+}
+message GraphCompleteness {
+  // PRE_TAIL_RECEIVED: weight=1 after dedup, not all real traffic.
+  string metrics_origin = 1;
+  bool upstream_loss_unknown = 2;
+  bool upstream_sampling_unknown = 3;
+  bool truncated = 4;
+  bool provisional = 5;
+  uint64 duplicate_count = 6;
+  uint64 conflicting_count = 7;
+  uint64 unmatched_count = 8;
+  uint64 rejected_count = 9;
+  uint64 overflow_count = 10;
+  google.protobuf.Timestamp aggregated_through = 11;
+  repeated string warnings = 12;
+  uint32 available_minutes = 13;
+  uint32 requested_minutes = 14;
+}
+message GetServiceGraphCatalogRequest {
+  // scope.services is rejected: telemetry service.name has no verified mapping
+  // to declared process IDs. Use an environment scope; never guess by name.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Optional exact full proto service name.
+  string rpc_service = 2;
+  // Enumeration only: 0 defaults to 200, maximum 500.
+  uint32 max_methods = 3;
+  // Exact lookup, ANDed with rpc_service, applied before enumeration caps.
+  // Full case-sensitive proto service/method. Empty selects enumeration mode.
+  repeated string rpc_ids = 4 [(buf.validate.field).repeated.max_items = 50];
+}
+message GraphRPCMethod {
+  string rpc_id = 1;
+  string rpc_service = 2;
+  string method = 3;
+  repeated string process_node_ids = 4;
+  GraphEvidenceKind evidence = 5;
+  uint64 observed_count = 6;
+  string input_type = 7;
+  string output_type = 8;
+  string stream_mode = 9;
+  string source_unavailable_reason = 10;
+  // Declared only when supplied by a verified hosted catalog.
+  string idempotency = 11;
+  optional bool auth_required = 12;
+  repeated string serves_process_ids = 13;
+  repeated string can_call_process_ids = 14;
+  // Server-viewpoint outcomes of the same server_request observations that
+  // observed_count counts; client and server views are never added together.
+  uint64 server_fault_count = 15;
+  uint64 user_outcome_count = 16;
+  // Summed server_request durations. Unset when no observation carried one,
+  // or when observations disagreed on histogram version/bounds.
+  GraphHistogram duration = 17;
+}
+
+// Exact frozen release-bundle artifact; no current-runtime/version assignment implied.
+// Catalog JSON has schema forge.dev/service-catalog/v1, preserving the existing
+// forge_descriptor schema graph and validation dialect without a second schema.
+message GraphDeclaredCatalog {
+  string env_id = 1;
+  string release_id = 2;
+  string bundle_digest = 3;
+  string catalog_json = 4;
+  // Repository/commit are absent unless existing bundle provenance verifies them.
+  string repository = 5;
+  string commit = 6;
+}
+message GetServiceGraphCatalogResponse {
+  repeated GraphRPCMethod methods = 1;
+  GraphCompleteness completeness = 2;
+  // unavailable until a verified hosted metadata artifact is present; not daemon filesystem.
+  string declared_catalog_status = 3;
+  string declared_catalog_unavailable_reason = 4;
+  repeated GraphDeclaredCatalog declared_catalogs = 5;
 }
 
 enum SortOrder {
@@ -319,6 +566,17 @@ enum AttributeOp {
 message TimePoint {
   google.protobuf.Timestamp time = 1;
   double value = 2;
+  // The point's bucket is still open (it ends after now minus the metric's
+  // export interval), so its value may still grow: draw it dashed. Metrics
+  // panels only.
+  bool partial = 3;
+  // No value in this bucket: a gap, not a zero. `value` is 0 and must be
+  // ignored. Metrics panels only (a formula over a missing operand).
+  // A flag rather than `optional double value`: the latter turns the Go field
+  // into *float64 for every message that carries a TimePoint (service
+  // overview trends, QueryMetric, sql panels), a source-breaking change for
+  // callers that never see a gap.
+  bool null = 4;
 }
 
 // === Logs ===
@@ -472,6 +730,21 @@ message GetTraceResponse {
   repeated Span spans = 2;
   // True when the trace has more spans than the per-trace cap (10000).
   bool truncated = 3;
+  // Stored spans in other traces that link to this trace. These are causal
+  // references, NOT parent-child edges. Restricted to the same authorized org,
+  // environments and requested time range. Absence does not prove there was no
+  // backend call: sampling, retention or the range may exclude its spans.
+  repeated RelatedTrace related_traces = 4;
+  // At most 100 references are returned, in stable identity order.
+  bool related_traces_truncated = 5;
+}
+
+message RelatedTrace {
+  // Trace and span that carry the link (for example, a backend server span).
+  string trace_id = 1;
+  string span_id = 2;
+  // Span of the requested trace that the stored link points to.
+  string linked_span_id = 3;
 }
 
 message Span {
@@ -509,7 +782,15 @@ enum MetricType {
   METRIC_TYPE_UNSPECIFIED = 0;
   METRIC_TYPE_GAUGE = 1;
   METRIC_TYPE_SUM = 2; // counters and up-down counters
-  METRIC_TYPE_HISTOGRAM = 3;
+  METRIC_TYPE_HISTOGRAM = 3; // explicit-bounds histogram
+  METRIC_TYPE_EXPONENTIAL_HISTOGRAM = 4;
+  METRIC_TYPE_SUMMARY = 5;
+}
+
+enum MetricTemporality {
+  METRIC_TEMPORALITY_UNSPECIFIED = 0; // gauge, summary, or not known
+  METRIC_TEMPORALITY_DELTA = 1;
+  METRIC_TEMPORALITY_CUMULATIVE = 2;
 }
 
 enum MetricAggregation {
@@ -542,11 +823,134 @@ message ListMetricsResponse {
   bool truncated = 2;
 }
 
+// One catalog entry: what ListMetrics returns and GetMetric echoes. A metric
+// stored as more than one kind appears once per kind.
 message MetricInfo {
   string name = 1;
   MetricType type = 2;
   string unit = 3;
   string description = 4;
+  // Sums only: a counter (true) or an up-down counter (false).
+  bool monotonic = 5;
+  // Sums and histograms: how the SDK exports the value.
+  MetricTemporality temporality = 6;
+  // Up to 10 service.name values that emit the metric, in the scope's range
+  // (the catalog range, capped at 24 hours).
+  repeated string services = 7 [(buf.validate.field).repeated.max_items = 10];
+  // How many distinct services emit it (>= len(services)).
+  int32 service_count = 8;
+  // Newest data point in the range. Unset for a declared metric never seen.
+  google.protobuf.Timestamp last_seen = 9;
+  // Estimated number of distinct series (resource + data-point attributes).
+  int64 series_estimate = 10;
+  // False for a kind the query evaluator cannot run yet.
+  bool queryable = 11;
+  // A runtime or forge built-in metric (rpc., go., forge. prefixes), as
+  // opposed to an application's own.
+  bool builtin = 12;
+  // The release's declared metrics schema lists it; description and stability
+  // then come from the declaration.
+  bool declared = 13;
+  // It has data in the range. false with declared = true: declared but no data
+  // in this window.
+  bool seen = 14;
+  // The declaration's stability: "stable", "experimental" or "deprecated".
+  // Empty when not declared.
+  string stability = 15;
+  // The declared data-point attributes, with the closed value set when the
+  // declaration enumerates one. Empty when not declared.
+  repeated MetricAttributeSpec declared_attributes = 16;
+}
+
+message MetricAttributeSpec {
+  string key = 1;
+  // The declared closed set of values; empty when the attribute is open.
+  repeated string values = 2;
+}
+
+message GetMetricRequest {
+  // The range is capped at the last 24 hours for the attribute scan.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  string metric_name = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
+  // Unset: looked up from the org's data.
+  optional MetricType metric_type = 3;
+}
+
+message GetMetricResponse {
+  MetricInfo info = 1;
+  // Estimated export interval of the metric's series, in seconds: the floor of
+  // a useful query step. 0 when it cannot be estimated.
+  int32 interval_seconds = 2;
+  // The metric's series report both delta and cumulative temporality.
+  bool mixed_temporality = 3;
+  // At most 200 keys: the data-point attributes and the resource attributes
+  // that vary, most useful breakdown first.
+  repeated MetricAttribute attributes = 4;
+  // Attribute keys worth grouping by, best first: enumerated keys, then keys
+  // with 2 to 50 distinct values.
+  repeated string suggested_breakdowns = 5;
+}
+
+message MetricAttribute {
+  string key = 1;
+  // A resource attribute (service.name, k8s.*), not a data-point attribute.
+  bool resource = 2;
+  // Estimated distinct values over the range.
+  int64 distinct_estimate = 3;
+  // The declared closed value set, when there is one.
+  repeated string enumerated = 4;
+  // Grouping by this key (with the rest of the panel's group-by) could exceed
+  // the series cap; the builder allows it with a top-N.
+  bool high_cardinality = 5;
+}
+
+message ListMetricExemplarsRequest {
+  // Max range 7 days.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  string metric_name = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
+  // Unset: looked up from the org's data.
+  optional MetricType metric_type = 3;
+  // Narrow to series matching these predicates (same vocabulary as
+  // Panel.where).
+  repeated PanelPredicate where = 4 [(buf.validate.field).repeated.max_items = 10];
+  // Narrow to one series group: attribute key -> value (a PanelSeriesResult.group).
+  map<string, string> group = 5;
+  // The window to read exemplars from, inside scope.time_range (the bucket the
+  // user clicked). Unset: scope.time_range.
+  TimeRange time_range = 6;
+  // Only exemplars whose value is at or above this (the tail of a latency
+  // histogram). Unset: any value.
+  optional double min_value = 7;
+  // Default 20, max 20.
+  int32 limit = 8 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 20
+  ];
+}
+
+message ListMetricExemplarsResponse {
+  // Exemplars whose trace is stored first, then by time.
+  repeated MetricExemplar exemplars = 1;
+}
+
+message MetricExemplar {
+  google.protobuf.Timestamp time = 1;
+  double value = 2;
+  string trace_id = 3;
+  string span_id = 4;
+  // The exemplar's filtered attributes.
+  map<string, string> attributes = 5;
+  // The trace is in the trace store. false: it was sampled out and the trace
+  // view would be empty.
+  bool trace_stored = 6;
 }
 
 message QueryMetricRequest {
@@ -712,6 +1116,38 @@ message AttributeValue {
   int64 count = 2;
 }
 
+// === Service signals ===
+
+message GetServiceSignalsRequest {
+  // Max range 7 days. Traces and logs honour every part of the scope;
+  // profiles honour the environments and services and ignore attribute
+  // filters (what GetFlamegraph reads).
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+}
+
+message GetServiceSignalsResponse {
+  // By service name.
+  repeated ServiceSignals services = 1;
+  // True when more services emitted than the 500 listed.
+  bool truncated = 2;
+}
+
+// ServiceSignals is one service's signals. A signal name is "traces", "logs"
+// or "profiles".
+message ServiceSignals {
+  string service = 1;
+  // The signals with data from the service in the range, sorted.
+  repeated string emitting = 2;
+  // The signals the current release of at least one environment in scope
+  // declares on for the workload named like the service, sorted. Meaningful
+  // only when declaration_known.
+  repeated string declared = 3;
+  // True when an environment in scope records the spec of a workload named
+  // like the service. False: nothing is known of what it declares, and
+  // `declared` is empty for that reason, not because it declares nothing.
+  bool declaration_known = 4;
+}
+
 // === Workloads (infra for customers; console v2 owner decision 4, contract K2) ===
 //
 // Built from the node agent's telemetry: kubeletstats metrics
@@ -798,6 +1234,28 @@ message Workload {
   // Kubernetes event reason and its message with addresses removed), for a
   // "details" disclosure. Never the headline: health_reason is plain language.
   string health_detail = 20;
+  // When the workload entered its current health, derived from the cluster
+  // collector's continuous readiness series, so it is right whether or not
+  // anyone was looking at the time. Unset when no readiness sample exists in the
+  // range. health_since_known is false when the state was already in place at
+  // the first sample: the real start is then earlier than health_since (the
+  // console says "since at least ...").
+  google.protobuf.Timestamp health_since = 21;
+  bool health_since_known = 22;
+}
+
+// WorkloadHealthChange is one transition of a workload's health, derived from
+// its readiness series (internal/workloadhealth/history). A change is dated to
+// the first sample of the run that caused it. Missing data is UNKNOWN, never
+// HEALTHY.
+message WorkloadHealthChange {
+  string env_id = 1;
+  google.protobuf.Timestamp at = 2;
+  WorkloadHealth from = 3;
+  WorkloadHealth to = 4;
+  WorkloadCause cause = 5;
+  // Plain language, like Workload.health_reason.
+  string reason = 6;
 }
 
 // WorkloadCause says whose side a workload's fault is on.
@@ -1006,6 +1464,9 @@ message GetWorkloadResponse {
   // One summary per environment in scope that reports the workload: kind,
   // health, release_version, pods and the declared config (see Workload).
   repeated Workload workloads = 7;
+  // The workload's health transitions in the range, oldest first, per
+  // environment in scope. Derived from the readiness series, not recorded.
+  repeated WorkloadHealthChange health_changes = 8;
 }
 
 enum WorkloadMetric {
@@ -1136,14 +1597,58 @@ message QueryPanelResponse {
   // sessions panels: browser sessions that started in the range, newest first.
   repeated PanelSession sessions = 11;
   // With QueryPanelRequest.explain: what the panel compiles to, one entry per
-  // statement (a metrics panel runs one per series). Empty otherwise, and for
-  // the console kinds (funnel, issues, sessions), whose statements are the
-  // control plane's own.
+  // statement. A metrics panel lists, for each series, its metric's lookup, its
+  // attribute-key lookup when a group-by or filter needs one, and the series'
+  // own statement. Empty otherwise, and for the console kinds (funnel, issues,
+  // sessions), whose statements are the control plane's own.
   repeated CompiledStatement compiled_sql = 12;
   // heatmap panels: the non-empty cells, by time then value.
   repeated HeatmapCell heatmap = 13;
   // sql panels: the result's columns.
   repeated SqlColumn sql_columns = 14;
+  // metrics panels: what each entry of `series` means, in the same order and
+  // of the same length. Empty for every other signal.
+  repeated PanelSeriesMeta series_meta = 15;
+  // How many series (groups) matched before the cap; compare with
+  // len(series) (or len(rows)) for "showing 10 of 1,204". 0 when unknown or
+  // for a panel that is not capped by series.
+  int32 series_total = 16;
+  // Non-fatal notes about the result, as "<code>" or "<code>: <detail>":
+  // mixed_bounds, mixed_temporality, step_raised, metric_stored_as_n_kinds,
+  // metric_kind_mismatch, and metric_absent (a series' metric has no data in
+  // the scope and range: its series is empty, never an error). Metrics panels.
+  repeated string warnings = 17;
+  // sql panels drawn as a time series: the width of one bucket in seconds, so a
+  // client need not guess it from the points. A Date or Date32 first column is
+  // a calendar day (86400). A DateTime column is the {step} the statement was
+  // bound to when it uses {step}; a statement that buckets by its own rule
+  // reports 0 (unknown). 0 for every other panel kind (see step_seconds).
+  int32 bucket_seconds = 18;
+  // sql panels drawn as a time series: the zone the bucket dates are in. "UTC"
+  // when the first column is a Date or Date32: each point's time is that date's
+  // midnight UTC and a client labels it as that calendar date, never converts it
+  // to its own zone. Empty when the first column is a DateTime (instants).
+  string bucket_timezone = 19;
+}
+
+// What one PanelSeriesResult of a metrics panel measures, so a client can
+// format and label it without re-deriving the metric's semantics.
+message PanelSeriesMeta {
+  // PanelSeriesResult.label of the entry this describes.
+  string label = 1;
+  // The series' metric name. Empty for a formula entry.
+  string metric = 2;
+  MetricType metric_type = 3;
+  bool monotonic = 4;
+  MetricTemporality temporality = 5;
+  // The dashspec agg after defaulting (rate, increase, sum, avg, min, max,
+  // last, count, quantile).
+  string aggregation = 6;
+  // The quantile in (0, 1] when aggregation is "quantile"; 0 otherwise.
+  double quantile = 7;
+  // The unit of the values: <unit>/s for rate, {count} for count, otherwise the
+  // metric's unit.
+  string value_unit = 8;
 }
 
 message FunnelStepResult {
@@ -1216,8 +1721,10 @@ message PanelSeriesResult {
 
 message PanelTableRow {
   map<string, string> group = 1;
-  // One per entry of QueryPanelResponse.columns.
+  // One per entry of QueryPanelResponse.columns. Values whose zero-based
+  // index is in missing_value_indexes MUST be ignored (NULL, not zero).
   repeated double values = 2;
+  repeated uint32 missing_value_indexes = 3;
 }
 
 message GetDashboardsRequest {
@@ -1262,6 +1769,19 @@ message Dashboard {
   // one of the same name). Empty for a synthesized dashboard. Set by the server
   // from the recorded row, never read from the dashboard's own JSON.
   string source = 7;
+  repeated DashboardSection sections = 8;
+  // Which telemetry the panels read, forge's dashspec scope: "" or "project"
+  // (the route's project, the default), "org" (every project of the
+  // organization) or "platform" (infrastructure telemetry that belongs to no
+  // environment). Carried through from the recorded dashboard as authored, so a
+  // console can drop project scoping (org) or the environment predicate
+  // (platform). An unrecognized value is passed through untouched.
+  string scope = 9;
+}
+
+message DashboardSection {
+  string id = 1;
+  string title = 2;
 }
 
 message DashboardFilter {
@@ -1271,6 +1791,8 @@ message DashboardFilter {
   // traces | metrics | logs: the telemetry the dropdown reads its values from.
   // Empty is traces.
   string signal = 4;
+  // Empty applies to all panels; otherwise only these panel IDs.
+  repeated string panel_ids = 5;
 }
 
 // DashboardAnnotation declares where a dashboard's time-series markers come from.
@@ -1331,6 +1853,8 @@ message Panel {
   // {to:DateTime64(9)}, {step:UInt32}, {env_ids:Array(String)},
   // {envs:Array(String)} and {services:Array(String)}.
   string sql = 18;
+  // Optional declared presentation section; no implicit query filtering.
+  string section = 19;
 }
 
 // The definition a funnel panel draws (forge.Funnel): product event names in
@@ -1385,6 +1909,39 @@ message DashboardAlert {
   double threshold = 6;
   string status = 7;
   string note = 8;
+}
+
+// === Query quota ===
+
+// QueryQuotaLimit names which of the org's hourly ClickHouse read limits ran
+// out. The quota is one per organization, shared by everything that reads for
+// it: the console, the CLI and alert evaluation.
+enum QueryQuotaLimit {
+  QUERY_QUOTA_LIMIT_UNSPECIFIED = 0;
+  // The number of queries in the interval.
+  QUERY_QUOTA_LIMIT_QUERIES = 1;
+  // Bytes read from storage in the interval.
+  QUERY_QUOTA_LIMIT_READ_BYTES = 2;
+  // Total query execution time in the interval.
+  QUERY_QUOTA_LIMIT_EXECUTION_TIME = 3;
+}
+
+// QueryQuotaExhausted is the typed detail on the ResourceExhausted (reason
+// "obs_query_quota", or "obs_query_quota_soft" for a background poll refused
+// early to keep a reserve for a person's own query) an org's hourly
+// observability query quota answers with. Reads are paused until resets_at;
+// ingest is not affected and nothing is lost. A client keeps showing what it
+// already has and retries after resets_at, not before.
+message QueryQuotaExhausted {
+  // The limit that ran out. UNSPECIFIED when ClickHouse named a limit this
+  // enum does not (resets_at is still right).
+  QueryQuotaLimit limit = 1;
+  // When the quota interval ends and the budget refills. Always set.
+  google.protobuf.Timestamp resets_at = 2;
+  // The query lane whose allowance ran out: "interactive" (the console),
+  // "automation" (alert evaluation) or "agent" (the CLI and tokens). Empty
+  // when the quota is not split into lanes.
+  string lane = 3;
 }
 
 // === Usage and billing ===

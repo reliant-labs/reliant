@@ -6,7 +6,6 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -26,18 +25,38 @@ import (
 // codePresenceHangingRouter is a daemon that never answers the greenfield
 // code-presence probe — the remote, suspended or cold machine the request
 // path must not wait on. Every other command behaves like the plain fake.
+//
+// probed is closed the moment the probe is first sent, so a test learns that
+// the request path reached the daemon from the event itself rather than by
+// timing the call against a wall clock: StartChat's real database work can
+// take seconds on a loaded machine, and a budget it overruns is not the probe.
 type codePresenceHangingRouter struct {
 	*wakeRecordingRouter
 	release chan struct{}
+	probed  chan struct{}
 
 	mu     sync.Mutex
 	probes int
+}
+
+func newCodePresenceHangingRouter(t *testing.T, inner *wakeRecordingRouter) *codePresenceHangingRouter {
+	t.Helper()
+	r := &codePresenceHangingRouter{
+		wakeRecordingRouter: inner,
+		release:             make(chan struct{}),
+		probed:              make(chan struct{}),
+	}
+	t.Cleanup(func() { close(r.release) })
+	return r
 }
 
 func (r *codePresenceHangingRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
 	if commandType == "project.code_presence" {
 		r.mu.Lock()
 		r.probes++
+		if r.probes == 1 {
+			close(r.probed)
+		}
 		r.mu.Unlock()
 		// Deliberately ignores ctx: a hung daemon is exactly the case where
 		// nothing on the far side honours the caller's deadline.
@@ -64,11 +83,7 @@ func (r *codePresenceHangingRouter) probeCount() int {
 // does not answer used to hold the response for the probe's whole timeout.
 func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 	e := newStartDaemonEnv(t)
-	router := &codePresenceHangingRouter{
-		wakeRecordingRouter: e.router,
-		release:             make(chan struct{}),
-	}
-	t.Cleanup(func() { close(router.release) })
+	router := newCodePresenceHangingRouter(t, e.router)
 	e.svc = &Service{
 		deps: Deps{
 			Repo: e.repo, Temporal: e.temporal, Router: router,
@@ -86,10 +101,12 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 		done <- outcome{resp: resp, err: err}
 	}()
 
+	// The probe never answers, so a StartChat that sends it never returns:
+	// whichever of the two happens first is the verdict, at any machine load.
 	var got outcome
 	select {
 	case got = <-done:
-	case <-time.After(3 * time.Second):
+	case <-router.probed:
 		t.Fatal("StartChat is waiting on the daemon's project.code_presence probe; " +
 			"the request path must return once the chat is committed and the run accepted")
 	}
@@ -140,11 +157,7 @@ func newFirstTurnSendFixture(t *testing.T) (*Service, *codePresenceHangingRouter
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
 
-	router := &codePresenceHangingRouter{
-		wakeRecordingRouter: &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}},
-		release:             make(chan struct{}),
-	}
-	t.Cleanup(func() { close(router.release) })
+	router := newCodePresenceHangingRouter(t, &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}})
 	temporal := &sendRecordingTemporal{absorbTestTemporalClient: absorbTestTemporalClient{
 		exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	}}
@@ -190,7 +203,7 @@ func TestSendMessageFirstTurnDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 	select {
 	case err := <-done:
 		require.NoError(t, err)
-	case <-time.After(3 * time.Second):
+	case <-router.probed:
 		t.Fatal("SendMessage is waiting on the daemon's project.code_presence probe")
 	}
 	assert.Zero(t, router.probeCount(),

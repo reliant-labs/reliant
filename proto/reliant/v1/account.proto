@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // AccountService is the user's escape hatch: it removes everything reliant
@@ -26,7 +28,13 @@ service AccountService {
   // destroying anything. The UI shows these counts in the confirmation dialog
   // so the user sees the actual scale of what they are about to lose rather
   // than a generic warning.
-  rpc PreviewAccountDeletion(PreviewAccountDeletionRequest) returns (PreviewAccountDeletionResponse) {}
+  //
+  // It only reads (row counts here, the wallet quote from the control plane),
+  // and says so with NO_SIDE_EFFECTS: its name is not a read verb, so without
+  // it forge generates a mutation hook for it.
+  rpc PreviewAccountDeletion(PreviewAccountDeletionRequest) returns (PreviewAccountDeletionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // DeleteAccount permanently removes every row reliant holds for the caller.
   // Irreversible: there is no soft-delete and no undo.
@@ -35,7 +43,18 @@ service AccountService {
   // deliberate speed bump on an unrecoverable action, and it is verified
   // server-side against the JWT's email claim — a client that skips its own
   // dialog still cannot delete by accident.
-  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse) {}
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "account"
+          id: "response.user_id"
+        }
+        detail: ["response.deleted_row_count"]
+      }
+    };
+  }
 }
 
 message PreviewAccountDeletionRequest {}
@@ -117,4 +136,8 @@ message DeleteAccountResponse {
   // method and the deletion is finalized then; the user does nothing.
   bool refund_pending = 5;
   int64 refund_owed_cents = 6;
+
+  // The deleted account's user id: the target of the deletion's activity
+  // event (the request names the account only by its confirmation email).
+  string user_id = 7;
 }

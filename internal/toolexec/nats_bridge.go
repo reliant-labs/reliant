@@ -6,11 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -36,16 +39,29 @@ type NATSToolBridge struct {
 
 	// Per-daemon cancel functions for output-forwarder goroutines, keyed by daemonKey.
 	daemonCancels map[string]context.CancelFunc
-	// Per-daemon cancel functions for the pending-command poller alone, so a
-	// drain can stop it while the forwarders run on. Keyed by daemonKey;
-	// guarded by cancelsMu.
-	pollCancels map[string]context.CancelFunc
-	cancelsMu   sync.Mutex
+	// Per-daemon pending-command pollers, held apart from daemonCancels so a
+	// drain can stop one while the forwarders run on. Keyed by daemonKey;
+	// guarded by cancelsMu. See pendingPoller.
+	pollers   map[string]*pendingPoller
+	cancelsMu sync.Mutex
+
+	// excused counts, per queued pending command, the deliveries that failed
+	// through no fault of the command (see excuseDelivery). Lazily made;
+	// guarded by excusedMu.
+	excused   map[uint64]uint64
+	excusedMu sync.Mutex
 
 	// ctx and cancel control the lifetime of the entire bridge.
 	ctx    context.Context
 	cancel context.CancelFunc
-	wg     sync.WaitGroup
+	// wg counts the bridge's goroutines; Close waits for them. Every Add
+	// goes through goTracked, under trackMu, so none can race Close's Wait:
+	// a subscription callback still running when Close begins (nats.go
+	// delivers on its own goroutines, and Close unsubscribes only after
+	// waiting) would otherwise Add to a WaitGroup that is being waited on.
+	wg      sync.WaitGroup
+	trackMu sync.RWMutex
+	closed  bool // guarded by trackMu
 
 	// inFlight bounds the number of concurrently-handled request/reply
 	// messages. See handleAsync.
@@ -83,7 +99,7 @@ func NewNATSToolBridge(nc *nats.Conn, js jetstream.JetStream, mgr DaemonConnecti
 		mgr:           mgr,
 		daemonSubs:    make(map[string][]*nats.Subscription),
 		daemonCancels: make(map[string]context.CancelFunc),
-		pollCancels:   make(map[string]context.CancelFunc),
+		pollers:       make(map[string]*pendingPoller),
 		ctx:           ctx,
 		cancel:        cancel,
 		inFlight:      make(chan struct{}, maxInFlightRequests),
@@ -128,9 +144,7 @@ func (b *NATSToolBridge) handleAsync(subject string, msg *nats.Msg, onOverload f
 		return
 	}
 
-	b.wg.Add(1)
-	go func() {
-		defer b.wg.Done()
+	if !b.goTracked(func() {
 		defer func() { <-b.inFlight }()
 		defer func() {
 			// A panic here would otherwise take down the whole gateway
@@ -142,7 +156,25 @@ func (b *NATSToolBridge) handleAsync(subject string, msg *nats.Msg, onOverload f
 			}
 		}()
 		fn()
+	}) {
+		<-b.inFlight // the bridge is closing; the caller is left to time out
+	}
+}
+
+// goTracked runs fn on a goroutine Close waits for, and reports false — fn
+// not run — once Close has begun.
+func (b *NATSToolBridge) goTracked(fn func()) bool {
+	b.trackMu.RLock()
+	defer b.trackMu.RUnlock()
+	if b.closed {
+		return false
+	}
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		fn()
 	}()
+	return true
 }
 
 // assembleRequest feeds a received message through the request-chunk
@@ -578,8 +610,15 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 		Policy: daemonpolicy.WireToProto(req.Policy),
 	}
 
+	handleSpan := trace.SpanFromContext(ctx)
+	handleSpan.SetAttributes(
+		attribute.String("reliant.daemon.id", daemonID),
+		attribute.String("reliant.daemon.command.type", req.CommandType),
+		attribute.String("reliant.daemon.command.request_id", req.RequestID),
+	)
 	resp, err := b.mgr.SendDaemonCommandToDaemon(ctx, userID, daemonID, protoReq)
 	if err != nil {
+		natsotel.RecordError(handleSpan, err)
 		// Coded, so the requester can tell the gateway failing the round
 		// trip from the daemon refusing the command.
 		errResp, _ := json.Marshal(map[string]interface{}{
@@ -606,7 +645,16 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 	// the router reassembles, so user RPCs get the full payload. Only
 	// beyond the absolute cap do we substitute a structured, actionable
 	// error reply in the same envelope format.
+	// The reply is its own span: a multi-MB reply is chunked, and its
+	// publish is part of the round trip the requester waits on.
+	_, replySpan := natsotel.StartProducerSpan(ctx, msg.Reply, "nats.reply daemon.command")
 	chunks, err := publishReply(b.nc, msg.Reply, respData)
+	replySpan.SetAttributes(
+		attribute.Int("messaging.message.body.size", len(respData)),
+		attribute.Int("reliant.nats.reply.chunks", chunks),
+	)
+	natsotel.RecordError(replySpan, err)
+	replySpan.End()
 	switch {
 	case errors.Is(err, errReplyExceedsAbsoluteCap):
 		logging.ErrorContext(ctx, "[NATSToolBridge] Daemon command reply exceeds absolute reply cap",
@@ -691,8 +739,11 @@ func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.M
 // redials, but only for a request it knows is safe to repeat, and it cannot
 // tell that from a message.
 func transportErrorCode(err error) string {
-	if errors.Is(err, ErrDaemonConnectionInterrupted) {
+	switch {
+	case errors.Is(err, ErrDaemonConnectionInterrupted):
 		return ErrorCodeDaemonInterrupted
+	case errors.Is(err, ErrDaemonReconnecting):
+		return ErrorCodeDaemonReconnecting
 	}
 	return ErrorCodeDaemonRoundTrip
 }
@@ -719,19 +770,45 @@ func (b *NATSToolBridge) finishDaemonConnected(daemonCtx context.Context, userID
 	logging.InfoContext(daemonCtx, "[NATSToolBridge] Subscribing to daemon subjects",
 		"userID", userID, "daemonID", daemonID, "count", len(subs))
 
-	// Drain any pending commands queued before this daemon was online, then
-	// keep polling for as long as the daemon stays connected. The
-	// control-plane publishes to daemon.pending.{daemonID} via JetStream —
-	// for a genuinely fire-and-forget command (e.g. git.clone) that publish
-	// happens whether or not the daemon is online AT THAT MOMENT, so a
-	// one-shot drain at connect would miss anything enqueued after this
-	// daemon was already connected and stranded it until the daemon's next
-	// reconnect. See pollPendingCommands.
+	// The pending-command poller is created here, with the subscriptions,
+	// and started by OnDaemonLinkReady. See pendingPoller.
 	pollCtx, stopPolling := context.WithCancel(daemonCtx)
 	b.cancelsMu.Lock()
-	b.pollCancels[daemonKey(userID, daemonID)] = stopPolling
+	b.pollers[daemonKey(userID, daemonID)] = &pendingPoller{ctx: pollCtx, stop: stopPolling}
 	b.cancelsMu.Unlock()
-	go b.pollPendingCommands(pollCtx, userID, daemonID)
+}
+
+// pendingPoller is one daemon's pending-command poller. It drains any
+// commands queued before the daemon was online, then keeps polling for as
+// long as the daemon stays connected: the control plane publishes to
+// daemon.pending.{daemonID} via JetStream whether or not the daemon is online
+// AT THAT MOMENT, so a one-shot drain at connect would strand anything
+// enqueued later until the daemon's next reconnect (see pollPendingCommands).
+//
+// It is created when the daemon's subscriptions go live but started only when
+// its link is ready (OnDaemonLinkReady). Started at registration, it fired
+// every queued command into a stream that had not answered anything yet — a
+// laptop re-registering while mostly asleep — where each one timed out and
+// spent one of its maxPendingCommandDeliveries.
+type pendingPoller struct {
+	ctx     context.Context
+	stop    context.CancelFunc
+	started bool
+}
+
+// OnDaemonLinkReady implements DaemonLinkReadyListener: the daemon's stream
+// answered a probe, so the queued commands can go. Starts the poller once.
+func (b *NATSToolBridge) OnDaemonLinkReady(userID, daemonID, _, _, _ string) {
+	b.cancelsMu.Lock()
+	p := b.pollers[daemonKey(userID, daemonID)]
+	start := p != nil && !p.started && p.ctx.Err() == nil
+	if start {
+		p.started = true
+	}
+	b.cancelsMu.Unlock()
+	if start {
+		go b.pollPendingCommands(p.ctx, userID, daemonID)
+	}
 }
 
 // drainFlushTimeout bounds the flush that confirms the NATS server has
@@ -759,9 +836,9 @@ const drainFlushTimeout = 2 * time.Second
 func (b *NATSToolBridge) OnDaemonDraining(userID, daemonID string) {
 	key := daemonKey(userID, daemonID)
 	b.cancelsMu.Lock()
-	if stop, ok := b.pollCancels[key]; ok {
-		stop()
-		delete(b.pollCancels, key)
+	if p, ok := b.pollers[key]; ok {
+		p.stop()
+		delete(b.pollers, key)
 	}
 	b.cancelsMu.Unlock()
 
@@ -802,7 +879,7 @@ func (b *NATSToolBridge) OnDaemonDisconnected(userID, daemonID string) {
 		cancel()
 		delete(b.daemonCancels, key)
 	}
-	delete(b.pollCancels, key) // ended with daemonCtx above
+	delete(b.pollers, key) // ended with daemonCtx above
 	b.cancelsMu.Unlock()
 
 	// Unsubscribe all NATS subscriptions for this daemon.
@@ -847,9 +924,7 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 	logging.DebugContext(userCtx, "[NATSToolBridge] Starting terminal output forwarder",
 		"userID", userID, "sessionID", sessionID, "subject", subject)
 
-	b.wg.Add(1)
-	go func() {
-		defer b.wg.Done()
+	started := b.goTracked(func() {
 		defer unsub()
 		for {
 			select {
@@ -873,7 +948,10 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 				observability.NATSPublishTotal.WithLabelValues("daemon.terminal.output").Inc()
 			}
 		}
-	}()
+	})
+	if !started {
+		unsub() // the bridge is closing
+	}
 }
 
 // startProcessOutputForwarder subscribes to local process output and publishes
@@ -891,9 +969,7 @@ func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, us
 	logging.DebugContext(userCtx, "[NATSToolBridge] Starting process output forwarder",
 		"userID", userID, "processID", processID, "subject", subject)
 
-	b.wg.Add(1)
-	go func() {
-		defer b.wg.Done()
+	started := b.goTracked(func() {
 		defer unsub()
 		for {
 			select {
@@ -917,7 +993,10 @@ func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, us
 				observability.NATSPublishTotal.WithLabelValues("daemon.process.output").Inc()
 			}
 		}
-	}()
+	})
+	if !started {
+		unsub() // the bridge is closing
+	}
 }
 
 // sanitizePendingSubjectToken mirrors control-plane's
@@ -973,6 +1052,65 @@ const (
 	pendingCommandDispatchMaxTimeout = 5 * time.Minute
 )
 
+// linkLostBeforeAnswer reports whether a pending command's dispatch failed
+// because the daemon's connection went away rather than because of the
+// command: the gateway held it for a stream that never answered and released
+// it unsent (ErrDaemonReconnecting), the stream ended while it was in flight
+// (ErrDaemonConnectionInterrupted), or the poller's own connection context
+// ended. A timeout is not one of these: a command that wedges its daemon
+// times out on a live link too, and that is what the delivery bound is for.
+func linkLostBeforeAnswer(err error) bool {
+	return errors.Is(err, ErrDaemonReconnecting) ||
+		errors.Is(err, ErrDaemonConnectionInterrupted) ||
+		errors.Is(err, context.Canceled)
+}
+
+// maxExcusedDeliveryRecords bounds excusedDelivery's memory. Past it the map
+// is dropped whole: forgetting an excuse only costs a command one strike.
+const maxExcusedDeliveryRecords = 10_000
+
+// excusedDeliveryKey names one queued message: its daemon and its bytes,
+// which carry its unique request id and are the same on every redelivery.
+func excusedDeliveryKey(daemonID string, msg jetstream.Msg) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(daemonID))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write(msg.Data())
+	return h.Sum64()
+}
+
+// excuseDelivery records that this delivery of msg failed through no fault
+// of the command (linkLostBeforeAnswer, or never dispatched at all), so it
+// does not count toward maxPendingCommandDeliveries. JetStream's NumDelivered
+// counts every delivery and cannot be told otherwise; the excuses are
+// subtracted from it (excusedDeliveries). Per replica and in memory: another
+// replica, or a restart, sees the raw count, which at worst costs a command a
+// strike.
+func (b *NATSToolBridge) excuseDelivery(daemonID string, msg jetstream.Msg) {
+	key := excusedDeliveryKey(daemonID, msg)
+	b.excusedMu.Lock()
+	defer b.excusedMu.Unlock()
+	if b.excused == nil || len(b.excused) >= maxExcusedDeliveryRecords {
+		b.excused = make(map[uint64]uint64)
+	}
+	b.excused[key]++
+}
+
+// excusedDeliveries is how many of msg's numDelivered deliveries were excused,
+// never more than numDelivered.
+func (b *NATSToolBridge) excusedDeliveries(daemonID string, msg jetstream.Msg, numDelivered uint64) uint64 {
+	b.excusedMu.Lock()
+	defer b.excusedMu.Unlock()
+	return min(b.excused[excusedDeliveryKey(daemonID, msg)], numDelivered)
+}
+
+// forgetDelivery drops msg's excuses once it leaves the queue.
+func (b *NATSToolBridge) forgetDelivery(daemonID string, msg jetstream.Msg) {
+	b.excusedMu.Lock()
+	defer b.excusedMu.Unlock()
+	delete(b.excused, excusedDeliveryKey(daemonID, msg))
+}
+
 // pendingDrainFetchBudget bounds how long drainPendingCommands spends
 // pulling ALREADY-QUEUED messages off DAEMON_PENDING_COMMANDS on daemon
 // connect — it must NOT bound how long a dispatched command is allowed to
@@ -983,6 +1121,53 @@ const (
 // caller had already given up and NAK'd it for redelivery. Var (not const)
 // so tests can shrink it instead of running real-time against a 5s budget.
 var pendingDrainFetchBudget = 5 * time.Second
+
+// pendingFetchUnreachableFirstWait and pendingFetchUnreachableMaxWait bound
+// the backoff between fetches that found no consumer leader to answer them
+// (see fetchFoundNoConsumerLeader). Short: the gap they wait out is one
+// subscription propagating across a route, milliseconds on a healthy cluster.
+const (
+	pendingFetchUnreachableFirstWait = 25 * time.Millisecond
+	pendingFetchUnreachableMaxWait   = 500 * time.Millisecond
+)
+
+// fetchFoundNoConsumerLeader reports whether a pull came back "no responders":
+// no member the client reaches yet knows where the consumer's leader takes
+// pull requests. On a replicated stream that is the normal state of a consumer
+// for a moment after it is created, and after its leader moves.
+//
+// The create response is not proof the consumer can be pulled from. Its
+// leader sends that response in the system account, over the route reserved
+// for it, while its subscription to $JS.API.CONSUMER.MSG.NEXT.<stream>.<name>
+// is announced in the user's account, over another route. Nothing orders the
+// two, so the client can hear "created" and pull before the member it is
+// connected to has heard of the subscription; that member answers 503. A
+// pending command was then left queued until the next poll, 10s later — and
+// with InactiveThreshold reaping an idle consumer after a minute, the first
+// command after any quiet minute takes this path. On a 3-node cluster under
+// -race, eight runs at a time on four cores, about 1 first drain in 70 met it
+// (TestDrainPendingCommands_Cluster_ExactlyOnceInOrderWithExistingConsumer,
+// which failed the release gate on 95415470b this way).
+//
+// It is retried like nats.go retries a publish that meets the same 503 right
+// after a stream leader change (jetstream.WithRetryWait).
+func fetchFoundNoConsumerLeader(err error) bool {
+	return errors.Is(err, nats.ErrNoResponders)
+}
+
+// waitBeforeRefetch waits out one backoff step before the next fetch, and
+// reports false when ctx (the drain's fetch budget) ends first.
+func waitBeforeRefetch(ctx context.Context, wait *time.Duration) bool {
+	timer := time.NewTimer(*wait)
+	defer timer.Stop()
+	*wait = min(*wait*2, pendingFetchUnreachableMaxWait)
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
 
 // pendingCommandPollInterval controls how often pollPendingCommands re-runs
 // drainPendingCommands for a daemon that stays connected. A genuinely
@@ -1128,7 +1313,15 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 	defer fetchCancel()
 
 	var dispatched int
-	for fetchCtx.Err() == nil {
+	// unreachable is set while the last fetch found no consumer leader, and
+	// refetchWait is the backoff before the next try (see
+	// fetchFoundNoConsumerLeader).
+	unreachable, refetchWait := false, pendingFetchUnreachableFirstWait
+	// stopped is set when a dispatch met a transport failure: the rest of
+	// this pass goes back on the queue unsent rather than into the same
+	// dead link one timeout at a time. The next poll drains it.
+	var stopped error
+	for fetchCtx.Err() == nil && stopped == nil {
 		// Bound total time spent looping over fetch batches to the drain
 		// budget, independent of how long any individual dispatch below
 		// takes (dispatch now runs on its own context — see
@@ -1141,6 +1334,13 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				break
 			}
+			if fetchFoundNoConsumerLeader(err) {
+				unreachable = true
+				if waitBeforeRefetch(fetchCtx, &refetchWait) {
+					continue
+				}
+				break
+			}
 			logging.WarnContext(ctx, "[NATSToolBridge] Error fetching pending commands",
 				"daemonID", daemonID, "error", err)
 			break
@@ -1149,6 +1349,14 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 		gotMessages := false
 		for msg := range msgs.Messages() {
 			gotMessages = true
+
+			if stopped != nil {
+				// Fetched with the batch but never dispatched: back on
+				// the queue, and this delivery is not the command's fault.
+				b.excuseDelivery(daemonID, msg)
+				_ = msg.NakWithDelay(pendingCommandRedeliveryDelay)
+				continue
+			}
 
 			var envelope struct {
 				RequestID   string                   `json:"request_id"`
@@ -1219,14 +1427,32 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 				// command — the exact bug where an enqueued git.clone never ran
 				// after reconnect. Bound the retries so a genuinely poison
 				// command can't loop forever.
+				//
+				// Either way the pass stops: what failed this command is the
+				// link, as likely as not, and the next would meet it too.
+				stopped = err
+				if linkLostBeforeAnswer(err) {
+					// The connection, not the command: it was never sent,
+					// or its stream ended under it. Not a strike against
+					// it — a laptop that reconnects and drops again must
+					// not burn its queued commands' budget.
+					b.excuseDelivery(daemonID, msg)
+					logging.InfoContext(ctx, "[NATSToolBridge] Pending command not delivered: the daemon's link went away; leaving it queued",
+						"daemonID", daemonID, "commandType", envelope.CommandType,
+						"requestID", envelope.RequestID, "error", err)
+					_ = msg.NakWithDelay(pendingCommandRedeliveryDelay)
+					continue
+				}
 				numDelivered := uint64(0)
 				if md, mdErr := msg.Metadata(); mdErr == nil && md != nil {
 					numDelivered = md.NumDelivered
 				}
+				numDelivered -= b.excusedDeliveries(daemonID, msg, numDelivered)
 				if numDelivered >= maxPendingCommandDeliveries {
 					logging.ErrorContext(ctx, "[NATSToolBridge] Dropping pending command after max delivery attempts",
 						"daemonID", daemonID, "commandType", envelope.CommandType,
 						"requestID", envelope.RequestID, "numDelivered", numDelivered, "error", err)
+					b.forgetDelivery(daemonID, msg)
 					_ = msg.Ack()
 					continue
 				}
@@ -1236,19 +1462,39 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 				_ = msg.NakWithDelay(pendingCommandRedeliveryDelay)
 				continue
 			}
+			b.forgetDelivery(daemonID, msg)
 			_ = msg.Ack()
 			dispatched++
 		}
 
-		if msgs.Error() != nil {
+		if err := msgs.Error(); err != nil {
+			if fetchFoundNoConsumerLeader(err) {
+				unreachable = true
+				if waitBeforeRefetch(fetchCtx, &refetchWait) {
+					continue
+				}
+				break
+			}
 			// ErrMsgIteratorClosed or timeout — we're done draining.
 			break
 		}
+		unreachable, refetchWait = false, pendingFetchUnreachableFirstWait
 		if !gotMessages {
 			break
 		}
 	}
 
+	if stopped != nil {
+		logging.InfoContext(ctx, "[NATSToolBridge] Stopped draining pending commands after a transport failure; the rest stay queued for the next poll",
+			"daemonID", daemonID, "dispatched", dispatched, "error", stopped)
+	}
+	if unreachable {
+		// Nothing is lost: the commands stay on the WorkQueue stream and the
+		// next poll drains them. But a consumer leader nobody can reach for a
+		// whole fetch budget is an unhealthy cluster, not a propagation gap.
+		logging.WarnContext(ctx, "[NATSToolBridge] Pending commands consumer unreachable for the whole drain budget; leaving its commands queued for the next poll",
+			"daemonID", daemonID, "consumer", consumerName, "budget", pendingDrainFetchBudget)
+	}
 	if dispatched > 0 {
 		logging.InfoContext(ctx, "[NATSToolBridge] Drained pending commands",
 			"daemonID", daemonID, "count", dispatched)
@@ -1257,6 +1503,12 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 
 // Close cancels the bridge context, waits for goroutines, and unsubscribes everything.
 func (b *NATSToolBridge) Close() error {
+	// No goroutine starts after this (goTracked), so the Wait below cannot
+	// race an Add from a subscription callback still running.
+	b.trackMu.Lock()
+	b.closed = true
+	b.trackMu.Unlock()
+
 	// Cancel all goroutines (bridge-level context).
 	b.cancel()
 	b.wg.Wait()

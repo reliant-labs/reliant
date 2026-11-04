@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -147,6 +148,7 @@ func TestInterrupt_CancelOneToolLeavesSiblingResultIntact(t *testing.T) {
 // This is the case the guard `(execResult == nil || !execResult.Success)`
 // exists for. Removing that guard must fail this test.
 func TestInterrupt_ContextCancellationDoesNotClaimCompletedSiblings(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	f := setupDurableStatusFixture(t)

@@ -11,3 +11,4 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `pinning.md` — why reliant pins forge by commit pre-launch, and the commands.
 - `observability.md` — how reliant's own server binaries export traces, metrics and logs, and the known gaps.
 - `integration-manifests.md` — authoring an integration manifest: the generated JSON Schema, fragment layout, `$ref`, event conformance.
+- `design/mobile-chat-redesign.md` — mobile and tablet chat thread redesign: one top bar, inline composer, status slot, parity map.

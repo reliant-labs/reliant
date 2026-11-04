@@ -16,6 +16,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+// Versioned machine consent is separately transport-tested; isolate fee disclosure here.
+vi.mock("../MachineSaleConsent", () => ({ MachineSaleConsent: ({ children }: { children: (price?: number) => React.ReactNode }) => <>{children()}</> }));
+
 vi.mock("@stripe/react-stripe-js", () => ({
   Elements: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   PaymentElement: () => <div data-testid="payment-element" />,
@@ -105,7 +108,7 @@ describe("the service fee is disclosed before payment, as its own line", () => {
 
     // The credit line still shows what the user actually receives. Folding the
     // fee into it would misstate the credit.
-    expect(screen.getByTestId("checkout-line-credit")).toHaveTextContent("$25.00");
+    expect(screen.getByTestId("checkout-line-credit")).toHaveTextContent("$25");
 
     // And the total is what the card will be charged.
     expect(screen.getByTestId("checkout-total")).toHaveTextContent("$26.25");

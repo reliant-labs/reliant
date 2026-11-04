@@ -50,6 +50,7 @@ func (s *Service) recordSelection(
 	effective map[string]interface{},
 	moved []launch.ModelSubstitution,
 	expectedVersion int64,
+	binding ...*string,
 ) (*chatselection.Selection, error) {
 	patch := s.launcher().SelectionPatch(ctx, userID, chat.ProjectID, workflowName, sent)
 	if len(moved) > 0 {
@@ -60,8 +61,41 @@ func (s *Service) recordSelection(
 		return nil, nil
 	}
 	before, _ := s.selections().Get(ctx, chat.ID)
-	sel, err := s.selections().Merge(ctx, chat.ID, userID, workflowName, patch, expectedVersion)
+	var sel *chatselection.Selection
+	var err error
+	if len(binding) > 0 && binding[0] != nil {
+		sel, err = s.deps.Repo.MutateChatSelection(ctx, chat.ID, func(cur *chatselection.Selection) (*chatselection.Selection, error) {
+			if expectedVersion > 0 && (cur == nil || cur.Version != expectedVersion) {
+				return nil, chatselection.ErrVersionConflict
+			}
+			next := &chatselection.Selection{ChatID: chat.ID, UserID: userID, WorkflowName: workflowName, Params: map[string]any{}}
+			if cur != nil {
+				*next = *cur
+				next.Params = map[string]any{}
+				if cur.WorkflowName == workflowName {
+					for key, value := range cur.Params {
+						next.Params[key] = value
+					}
+				}
+			}
+			next.WorkflowName = workflowName
+			for key, value := range patch {
+				if value == nil {
+					delete(next.Params, key)
+				} else {
+					next.Params[key] = value
+				}
+			}
+			next.ChatProvider = *binding[0]
+			return next, nil
+		})
+	} else {
+		sel, err = s.selections().Merge(ctx, chat.ID, userID, workflowName, patch, expectedVersion)
+	}
 	if err != nil {
+		if len(binding) > 0 {
+			return nil, err
+		}
 		if errors.Is(err, chatselection.ErrVersionConflict) {
 			return nil, err
 		}

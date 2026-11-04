@@ -32,13 +32,14 @@ vi.mock("../projectStore", () => ({ useProjectStore: zustandStore }));
 vi.mock("../worktreeStore", () => ({ useWorktreeStore: zustandStore }));
 vi.mock("../chatNavigationStore", () => ({ useChatNavigationStore: zustandStore }));
 vi.mock("../attachmentStore", () => ({ useAttachmentStore: zustandStore }));
-vi.mock("../tasksStore", () => ({ useTasksStore: zustandStore }));
-vi.mock("../processStore", () => ({ useProcessStore: zustandStore }));
 
 vi.mock("@/lib/supabase", () => ({
   supabase: { auth: { signOut: vi.fn().mockResolvedValue({ error: null }) } },
 }));
 
+import { create } from "@bufbuild/protobuf";
+import { ListDaemonsResponseSchema } from "@/gen/reliant/v1/daemon_registry_pb";
+import { DAEMON_LIST_QUERY_KEY } from "@/hooks/daemon-registry-queries";
 import { queryClient } from "@/lib/query-client";
 import { useAuthStore } from "../authStore";
 
@@ -54,7 +55,11 @@ describe("signOut and the shared query cache", () => {
       onboardingCompleted: true,
       id: "user-a",
     });
-    queryClient.setQueryData(["onboarding", "daemons"], [{ id: "daemon-a" }]);
+    // The one daemon list — what OnboardingRoute's returning-user heal reads.
+    queryClient.setQueryData(
+      DAEMON_LIST_QUERY_KEY,
+      create(ListDaemonsResponseSchema, { daemons: [{ daemonId: "daemon-a" }] }),
+    );
 
     await useAuthStore.getState().signOut();
 
@@ -62,7 +67,7 @@ describe("signOut and the shared query cache", () => {
     // `onboardingCompleted: true` here is exactly what skips onboarding for a
     // brand-new account.
     expect(queryClient.getQueryData(["onboarding", "currentUser"])).toBeUndefined();
-    expect(queryClient.getQueryData(["onboarding", "daemons"])).toBeUndefined();
+    expect(queryClient.getQueryData(DAEMON_LIST_QUERY_KEY)).toBeUndefined();
   });
 
   it("still resets the zustand stores it always reset", async () => {

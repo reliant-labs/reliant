@@ -11,9 +11,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
 
-import type { Preset } from "../../../store/globalDataStore";
-import { presetGrpc } from "../../../api/preset-grpc";
-import { usePreferencesStore } from "../../../store/preferencesStore";
+import { deletePreset, type Preset } from "../../../hooks/preset-queries";
+import { useHiddenItems, useToggleHiddenItem } from "../../../hooks/settings-queries";
 import { RowMenu, type RowMenuAction } from "../../workflows/RowMenu";
 import { WorkflowBadge, WORKFLOW_SOURCE_LABEL } from "../../workflows/WorkflowSourceBadge";
 import { PresetEditModal } from "./PresetEditModal";
@@ -24,8 +23,8 @@ interface PresetListProps {
   presets: Preset[];
   /** Presets offered as parameter values in the edit form. */
   availablePresets?: Preset[];
-  /** Refetch after a change. */
-  onChanged: () => void;
+  /** Called after a change. The preset reads refetch on their own (hooks/preset-queries). */
+  onChanged?: () => void;
   /** aria-label for the list. */
   label: string;
 }
@@ -33,16 +32,16 @@ interface PresetListProps {
 export function PresetList({ projectId, presets, availablePresets, onChanged, label }: PresetListProps) {
   const [viewing, setViewing] = useState<Preset | null>(null);
   const [editing, setEditing] = useState<Preset | null>(null);
-  const isPresetHidden = usePreferencesStore((state) => state.isPresetHidden);
-  const togglePresetVisibility = usePreferencesStore((state) => state.togglePresetVisibility);
+  const { isPresetHidden } = useHiddenItems();
+  const { togglePresetVisibility } = useToggleHiddenItem();
 
   const remove = async (preset: Preset) => {
     if (!window.confirm(`Delete preset "${preset.name}"? This cannot be undone.`)) return;
     try {
-      const result = await presetGrpc.deletePreset(projectId, preset.name);
+      const result = await deletePreset(projectId, preset.name);
       if (result.success) {
         toast.success(`Deleted "${preset.name}"`);
-        onChanged();
+        onChanged?.();
       } else {
         toast.error(result.error || "Failed to delete preset");
       }
@@ -89,7 +88,7 @@ export function PresetList({ projectId, presets, availablePresets, onChanged, la
                 type="button"
                 onClick={() => setViewing(preset)}
                 aria-description={typeof preset.description === "string" && preset.description ? preset.description : undefined}
-                className="min-w-0 flex-1 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="min-w-0 flex-1 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="truncate text-sm font-medium text-foreground hover:underline">{name}</span>
@@ -116,7 +115,7 @@ export function PresetList({ projectId, presets, availablePresets, onChanged, la
         <PresetViewModal
           preset={viewing}
           projectId={projectId}
-          onCopy={onChanged}
+          onCopy={() => onChanged?.()}
           onClose={() => setViewing(null)}
         />
       )}
@@ -125,7 +124,7 @@ export function PresetList({ projectId, presets, availablePresets, onChanged, la
           preset={editing}
           projectId={projectId}
           availablePresets={availablePresets ?? presets}
-          onSave={onChanged}
+          onSave={() => onChanged?.()}
           onClose={() => setEditing(null)}
         />
       )}

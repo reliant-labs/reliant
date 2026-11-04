@@ -3,7 +3,7 @@
 #
 # Every artifact that reports a version derives it here: the web bundle (Vite,
 # frontends/web/vite-plugin-version-json.ts, which also writes /version.json), the Go
-# binary's internal/version.Version (Makefile, release.yml, build-images.yml,
+# binary's internal/version.Version (Taskfile.yml, release.yml, build-images.yml,
 # and control-plane's scripts/build-reliant-image.sh, which builds the prod
 # reliant image). One resolver, so the About page's "app" and "server" lines
 # can only disagree when the two really are different builds.
@@ -31,7 +31,13 @@
 # commit follows comes from electron/package.json — the version scripts/release.sh
 # bumps, present in every checkout and every `git archive` export.
 #
-# Usage: release-identity.sh [--repo DIR] [--commit SHA] [--tag TAG] [--ref REF]
+# Usage: release-identity.sh [--commit-time] [--repo DIR] [--commit SHA] [--tag TAG] [--ref REF]
+#   --commit-time print the build number instead of the identity: the committer
+#                 time (unix seconds) of the commit being built. It is the key
+#                 that orders builds — semver cannot, since every build between
+#                 two tags carries the same X.Y.Z (and ignores the +sha). Prints
+#                 0 ("unordered": never forced, shown as a dev build) when the
+#                 commit cannot be read or the tree is dirty; never fails.
 #   --repo DIR    the git checkout to read (default: the one holding this script)
 #   --commit SHA  the commit being built (default: HEAD of --repo). Naming it
 #                 skips the dirty check: the caller is describing a commit, not
@@ -46,13 +52,15 @@ repo=""
 commit=""
 tag=""
 ref=""
+want_commit_time=false
 while [ $# -gt 0 ]; do
   case "$1" in
     --repo) repo="${2:-}"; shift 2 ;;
     --commit) commit="${2:-}"; shift 2 ;;
     --tag) tag="${2:-}"; shift 2 ;;
     --ref) ref="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,44p' "$0"; exit 0 ;;
+    --commit-time) want_commit_time=true; shift ;;
+    -h|--help) sed -n '2,50p' "$0"; exit 0 ;;
     *) echo "release-identity.sh: unknown argument '$1' (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -79,6 +87,19 @@ if [ -z "$commit" ] && $git_ok; then
 elif [ -n "$commit" ] && $git_ok; then
   # Normalise an abbreviated sha to the full one when the repo has it.
   commit="$(git -C "$repo" rev-parse --verify --quiet "${commit}^{commit}" 2>/dev/null || echo "$commit")"
+fi
+if $want_commit_time; then
+  # The committer time of a commit, not of the build: two builds of one commit
+  # carry one number. A working tree with uncommitted changes is not a commit.
+  ct=0
+  if [ -n "$commit" ] && $git_ok; then
+    if [ -n "$explicit_commit" ] || git -C "$repo" diff --quiet HEAD -- 2>/dev/null; then
+      ct="$(git -C "$repo" show -s --format=%ct "${commit}^{commit}" 2>/dev/null || echo 0)"
+    fi
+  fi
+  [[ "$ct" =~ ^[0-9]+$ ]] || ct=0
+  echo "$ct"
+  exit 0
 fi
 if [ -z "$tag" ] && [ -n "$commit" ] && $git_ok; then
   tag="$(git -C "$repo" describe --tags --exact-match --match 'v[0-9]*' "$commit" 2>/dev/null || true)"

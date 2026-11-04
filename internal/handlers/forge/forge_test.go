@@ -20,10 +20,13 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
 )
+
+func ptrOrg(s string) *string { return &s }
 
 // authedCtx is a request context signed in as "test-user", the way the API's
 // auth interceptor leaves it.
@@ -38,33 +41,86 @@ func authedCtx() context.Context {
 type forgeTestRouter struct {
 	toolexectest.Stub
 	lastCommandType string
+	lastDaemonID    string
 	lastPayload     []byte
 	lastTimeoutMs   int32
 	reply           []byte
 	replyErr        error
+	// defaultDaemon is what default resolution answers; "" is no machine.
+	defaultDaemon string
+	// unplaceable machines answer ErrNoDaemon when named.
+	unplaceable map[string]bool
+	// sends counts every dispatch, pinned or not.
+	sends int
 }
 
-func (r *forgeTestRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
-}
-
-func (r *forgeTestRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+func (r *forgeTestRouter) SendDaemonCommandToDaemon(_ context.Context, _, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	r.sends++
+	r.lastDaemonID = daemonID
 	r.lastCommandType = commandType
 	r.lastPayload = payload
 	r.lastTimeoutMs = timeoutMs
 	return r.reply, r.replyErr
 }
 
-// forgeTestProjects resolves one project owned by the authed test user, at
-// path. Its forge name is never written: the tests that use it assert on the
-// dispatch, not on the row.
+// SendDaemonCommand is project-blind default resolution. Every forge.*
+// command is pinned to the checkout's machine, so reaching it is the bug.
+func (r *forgeTestRouter) SendDaemonCommand(_ context.Context, _, commandType string, _ []byte, _ int32) ([]byte, error) {
+	r.sends++
+	return nil, fmt.Errorf("%s sent by default resolution: forge commands must be pinned to the machine holding the checkout", commandType)
+}
+
+func (r *forgeTestRouter) PlacementDaemonID(_ context.Context, _, daemonID string) (string, error) {
+	if daemonID == "" {
+		if r.defaultDaemon == "" {
+			return "", toolexec.ErrNoDaemon
+		}
+		return r.defaultDaemon, nil
+	}
+	if r.unplaceable[daemonID] {
+		return "", toolexec.ErrNoDaemon
+	}
+	return daemonID, nil
+}
+
+// forgeTestDaemon is the machine forgeTestProjects records the checkout on.
+const forgeTestDaemon = "daemon-cloud"
+
+// forgeTestCreatorPath is projects.path in forgeTestProjects: where the
+// project was created, on a DIFFERENT machine (the owner's laptop). No forge
+// command may ever carry it.
+const forgeTestCreatorPath = "/Users/creator/src/control-plane"
+
+// forgeTestProjects resolves one project owned by the authed test user,
+// checked out at path on forgeTestDaemon, while the row's own path is
+// forgeTestCreatorPath — so every test asserting the dispatched path also
+// proves the per-machine path is the one sent. Its forge name is never
+// written: the tests that use it assert on the dispatch, not on the row.
 func forgeTestProjects(path string) *MockRepository {
+	return forgeTestInstalls(&core.ProjectDaemon{DaemonID: forgeTestDaemon, Path: path, InstallState: core.ProjectInstallInstalled})
+}
+
+// forgeTestInstalls is forgeTestProjects with the given checkouts, each on a
+// machine the test user owns.
+func forgeTestInstalls(rows ...*core.ProjectDaemon) *MockRepository {
 	return &MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, _ string) (*db.Project, error) {
-			return &db.Project{ID: id, Path: path}, nil
+			return &db.Project{ID: id, Name: "control-plane", Path: forgeTestCreatorPath}, nil
 		},
 		SetProjectForgeNameFunc: func(context.Context, string, string, string) (bool, error) {
 			return false, nil
+		},
+		ListProjectDaemonsForProjectFunc: func(_ context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+			out := make([]*core.ProjectDaemon, 0, len(rows))
+			for _, row := range rows {
+				cp := *row
+				cp.ProjectID = projectID
+				out = append(out, &cp)
+			}
+			return out, nil
+		},
+		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
+			return &db.Daemon{ID: id, UserID: "test-user"}, nil
 		},
 	}
 }
@@ -112,7 +168,7 @@ func TestForgeService_GetTopology_PassesReportThroughVerbatim(t *testing.T) {
 	router := &forgeTestRouter{reply: forgeDaemonReply(t, true, true, 0, report)}
 
 	resp, err := newForgeTestService(router).GetTopology(authedCtx(),
-		connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1"}))
+		connect.NewRequest(&reliantv1.GetForgeTopologyRequest{ProjectId: "proj-1", OrgId: ptrOrg("org-b")}))
 	require.NoError(t, err)
 
 	assert.Equal(t, "forge.topology", router.lastCommandType)
@@ -131,8 +187,10 @@ func TestForgeService_GetTopology_PassesReportThroughVerbatim(t *testing.T) {
 	var sent struct {
 		ProjectPath string `json:"project_path"`
 		Verify      bool   `json:"verify"`
+		OrgID       string `json:"org_id"`
 	}
 	require.NoError(t, json.Unmarshal(router.lastPayload, &sent))
+	assert.Equal(t, "org-b", sent.OrgID, "the web's active org must reach forge's credential helper")
 	assert.Equal(t, "/daemon/workspace/control-plane", sent.ProjectPath)
 	assert.False(t, sent.Verify)
 }

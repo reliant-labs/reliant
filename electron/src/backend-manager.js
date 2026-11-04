@@ -92,6 +92,14 @@ class BackendManager {
     this.resetDaemonCredentialRepair();
     this._credRepairInFlight = false;
     this._credRepairTimer = null;
+    // The repair's only source of time: `now` for the backoff deadlines and
+    // setInterval/clearInterval for the tick. A test hands in a fake so the
+    // attempt count never depends on how fast the machine runs.
+    this.credRepairClock = opts?.credRepairClock ?? {
+      now: () => Date.now(),
+      setInterval: (fn, ms) => setInterval(fn, ms),
+      clearInterval: (handle) => clearInterval(handle),
+    };
 
     // Optional auth-session source for the pre-spawn PAT mint preflight.
     // Null is fine — ensureDaemonCreds() short-circuits silently in that case.
@@ -205,6 +213,152 @@ class BackendManager {
       return process.env.RELIANT_API_URL;
     }
     return DEFAULT_API_URL;
+  }
+
+  /**
+   * The environment the daemon is spawned with: Electron's own environment,
+   * then the paths and URLs this app sets on top. Anything else the user
+   * exported (a RELIANT_* daemon setting, say) reaches the daemon unchanged;
+   * this sets none of the daemon's guard settings, so it runs their defaults
+   * unless the user chose otherwise. appPath is Electron's app.getPath,
+   * injectable for tests.
+   */
+  buildDaemonEnv(appPath = (name) => app.getPath(name)) {
+    const homeDir = require('os').homedir();
+    let backendEnv = {
+      ...process.env,
+      TOOLS_DAEMON_PORT: this.daemonPort.toString(),
+      // User config: ~/.reliant/ (user-editable, git-friendly)
+      RELIANT_USER_CONFIG_DIR: path.join(homeDir, '.reliant'),
+      // Internal app data: platform-specific (databases, analytics, auth, cache)
+      RELIANT_APP_DATA_DIR: appPath('userData'),
+      // Logs: platform-specific logs directory
+      RELIANT_LOGS_PATH: appPath('logs'),
+      // Temp: system temp directory
+      RELIANT_TEMP_PATH: appPath('temp'),
+      // CRITICAL: Set environment mode for the Go backend
+      // In packaged apps, NODE_ENV is not set automatically, causing the backend to default to dev mode
+      RELIANT_ENV: this.isDevelopment ? 'dev' : 'prod',
+      // Pass hosted API URLs to the daemon process as env vars
+      RELIANT_SERVER_URL: this.apiUrl,
+    };
+
+    // Pass gateway URL if explicitly configured
+    if (this.gatewayUrl) {
+      backendEnv.RELIANT_GATEWAY_URL = this.gatewayUrl;
+    }
+
+    // CRITICAL: In production, ensure PATH includes common locations for MCP tools
+    // MCP servers often use npx, uvx, python, etc. which aren't in Electron's default PATH
+    if (!this.isDevelopment) {
+      const isWindows = process.platform === 'win32';
+      const pathSeparator = isWindows ? ';' : ':';
+
+      let additionalPaths = [];
+
+      if (isWindows) {
+        // Windows-specific paths
+        additionalPaths = [
+          path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'nodejs'),
+          path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'npm'),
+          path.join(homeDir, 'AppData', 'Local', 'Programs', 'Python'),
+          path.join(homeDir, '.local', 'bin'),
+          path.join(homeDir, 'go', 'bin'),  // Go binaries on Windows
+        ];
+      } else {
+        // Unix-specific paths (macOS/Linux)
+        additionalPaths = [
+          '/usr/local/bin',
+          '/opt/homebrew/bin',  // macOS Apple Silicon Homebrew
+          '/usr/bin',
+          '/bin',
+          path.join(homeDir, 'go', 'bin'),  // Go binaries (air, etc.)
+          path.join(homeDir, '.local', 'bin'),  // Python user binaries (uvx, etc.)
+          path.join(homeDir, '.npm-global', 'bin'),  // Global npm binaries
+          '/opt/homebrew/opt/python/libexec/bin',  // Homebrew python
+          '/usr/local/go/bin',  // System Go installation
+        ];
+
+        // Try to find nvm-managed node installations (Unix only)
+        const nvmDir = path.join(homeDir, '.nvm', 'versions', 'node');
+        if (fs.existsSync(nvmDir)) {
+          try {
+            const versions = fs.readdirSync(nvmDir);
+            if (versions.length > 0) {
+              // Use the latest version (or default)
+              const latestVersion = versions.sort().reverse()[0];
+              const nvmNodeBin = path.join(nvmDir, latestVersion, 'bin');
+              if (fs.existsSync(nvmNodeBin)) {
+                additionalPaths.push(nvmNodeBin);
+                log.info('[BackendManager] Found nvm node installation:', nvmNodeBin);
+              }
+            }
+          } catch (err) {
+            log.warn('[BackendManager] Error scanning nvm directory:', err.message);
+          }
+        }
+      }
+
+      // Get existing PATH and deduplicate
+      const existingPath = backendEnv.PATH || backendEnv.Path || '';
+      const pathParts = existingPath.split(pathSeparator).filter(p => p);
+
+      // Add additional paths if they exist and aren't already in PATH
+      for (const dir of additionalPaths) {
+        if (fs.existsSync(dir) && !pathParts.includes(dir)) {
+          pathParts.push(dir);
+        }
+      }
+
+      backendEnv.PATH = pathParts.join(pathSeparator);
+      if (isWindows) {
+        backendEnv.Path = backendEnv.PATH; // Windows uses both PATH and Path
+      }
+      log.debug('[BackendManager] Production PATH set', { entries: pathParts.length });
+
+      // Ensure critical environment variables are set for MCP servers
+      if (!isWindows) {
+        if (!backendEnv.SHELL) {
+          backendEnv.SHELL = '/bin/zsh';  // macOS default
+        }
+      }
+      if (!backendEnv.HOME && !isWindows) {
+        backendEnv.HOME = homeDir;
+      }
+      if (!backendEnv.USERPROFILE && isWindows) {
+        backendEnv.USERPROFILE = homeDir;
+      }
+      // Some MCP servers need USER/USERNAME
+      if (!backendEnv.USER && !isWindows) {
+        backendEnv.USER = require('os').userInfo().username;
+      }
+      if (!backendEnv.USERNAME && isWindows) {
+        backendEnv.USERNAME = require('os').userInfo().username;
+      }
+      // TERM is needed for scripts that use tput or terminal capabilities
+      if (!backendEnv.TERM && !isWindows) {
+        backendEnv.TERM = 'xterm-256color';
+      }
+
+      log.info('[BackendManager] Environment variables set:', {
+        SHELL: backendEnv.SHELL,
+        HOME: backendEnv.HOME,
+        USERPROFILE: backendEnv.USERPROFILE,
+        USER: backendEnv.USER,
+        USERNAME: backendEnv.USERNAME,
+        PATH_length: backendEnv.PATH.length
+      });
+    }
+
+    // Set data directory based on mode
+    // In development: use ./data (relative to cwd) for worktree isolation
+    // In production: use userData/data for shared app data
+    if (!backendEnv.RELIANT_DATA_DIR) {
+      backendEnv.RELIANT_DATA_DIR = this.isDevelopment
+        ? './data'  // Dev: local to each worktree
+        : path.join(appPath('userData'), 'data');  // Prod: shared app data
+    }
+    return backendEnv;
   }
 
   /**
@@ -410,8 +564,8 @@ class BackendManager {
    * The absent case is a normal steady state, not a defect and not an upgrade
    * artifact, so it is not warned about. The Go side derives the field from
    * the data directory's own position under ~/.reliant/instances, and a
-   * container that sets DAEMON_DATA_DIR=/data (docker-compose.yml and
-   * docker-compose.cloud.yml both do) has no such position, so it legitimately
+   * container that sets DAEMON_DATA_DIR to its mounted volume (the workspace
+   * operator's pods do) has no such position, so it legitimately
    * writes no stamp at all. Deriving it from the path rather than the caller
    * is also what makes the field trustworthy here: a record cannot claim one
    * instance while sitting in another's directory.
@@ -594,14 +748,14 @@ class BackendManager {
       }
     };
 
-    this._credRepairTimer = setInterval(tick, this.credRepairTickMs || BackendManager.CRED_REPAIR_TICK_MS);
+    this._credRepairTimer = this.credRepairClock.setInterval(tick, this.credRepairTickMs || BackendManager.CRED_REPAIR_TICK_MS);
     this._credRepairTimer.unref?.();
     tick();
   }
 
   stopDaemonCredentialRepairLoop() {
     if (this._credRepairTimer) {
-      clearInterval(this._credRepairTimer);
+      this.credRepairClock.clearInterval(this._credRepairTimer);
       this._credRepairTimer = null;
     }
   }
@@ -652,7 +806,7 @@ class BackendManager {
     if (this._credRepairInFlight) return;
     if (this._credRepairStopped) return;
     if (!this.authStorage) return;
-    if (Date.now() < this._credRepairNextAt) return;
+    if (this.credRepairClock.now() < this._credRepairNextAt) return;
 
     this._credRepairInFlight = true;
     try {
@@ -669,7 +823,7 @@ class BackendManager {
               'waiting for it to pick them up'
           );
           this._credRepairAttempt += 1;
-          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          this._credRepairNextAt = this.credRepairClock.now() + this.credRepairBackoffMs();
           return;
 
         case daemonCreds.ENSURE_NO_SESSION:
@@ -683,7 +837,7 @@ class BackendManager {
           // Deliberately does NOT consume an attempt: a long signed-out spell
           // must not leave a later genuine race with only the long tail of
           // the schedule to work with.
-          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          this._credRepairNextAt = this.credRepairClock.now() + this.credRepairBackoffMs();
           return;
 
         case daemonCreds.ENSURE_ALREADY_CURRENT:
@@ -700,10 +854,10 @@ class BackendManager {
           // teaching this switch about it. Treat the unknown as transient:
           // retrying costs one RPC, while wrongly giving up is the bug.
           this._credRepairAttempt += 1;
-          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          this._credRepairNextAt = this.credRepairClock.now() + this.credRepairBackoffMs();
           log.warn(
             `[BackendManager] Could not mint credentials for the idling daemon ` +
-              `(outcome: ${outcome}); retrying in ${this._credRepairNextAt - Date.now()}ms`
+              `(outcome: ${outcome}); retrying in ${this._credRepairNextAt - this.credRepairClock.now()}ms`
           );
           return;
       }
@@ -935,19 +1089,28 @@ class BackendManager {
    * that keeps us from killing anything.
    */
   isProcessAlive(pid) {
-    const { execSync } = require('child_process');
-    try {
-      if (process.platform === 'win32') {
+    if (process.platform === 'win32') {
+      const { execSync } = require('child_process');
+      try {
         const out = execSync(`tasklist /FI "PID eq ${pid}" /NH`, {
           encoding: 'utf8',
           timeout: 5000
         });
         return out.includes(String(pid));
+      } catch (e) {
+        return true;
       }
-      execSync(`kill -0 ${pid}`, { timeout: 1000 });
+    }
+    // Signal 0 in-process: no shell, so no timeout to lose. This used to
+    // shell out to `kill -0` with a 1s timeout, and on a loaded machine the
+    // timeout fired and read as "dead", which convicted a live owner's daemon
+    // as an orphan. Only ESRCH means the process is gone. EPERM means it
+    // exists but belongs to someone else, and anything else is no answer.
+    try {
+      process.kill(pid, 0);
       return true;
     } catch (e) {
-      return false;
+      return e.code !== 'ESRCH';
     }
   }
 
@@ -1715,141 +1878,7 @@ class BackendManager {
 
       // Get binary path
       const binaryPath = this.getBinaryPath();
-      // Build environment variables
-      const homeDir = require('os').homedir();
-      let backendEnv = {
-        ...process.env,
-        TOOLS_DAEMON_PORT: this.daemonPort.toString(),
-        // User config: ~/.reliant/ (user-editable, git-friendly)
-        RELIANT_USER_CONFIG_DIR: path.join(homeDir, '.reliant'),
-        // Internal app data: platform-specific (databases, analytics, auth, cache)
-        RELIANT_APP_DATA_DIR: app.getPath('userData'),
-        // Logs: platform-specific logs directory
-        RELIANT_LOGS_PATH: app.getPath('logs'),
-        // Temp: system temp directory
-        RELIANT_TEMP_PATH: app.getPath('temp'),
-        // CRITICAL: Set environment mode for the Go backend
-        // In packaged apps, NODE_ENV is not set automatically, causing the backend to default to dev mode
-        RELIANT_ENV: this.isDevelopment ? 'dev' : 'prod',
-        // Pass hosted API URLs to the daemon process as env vars
-        RELIANT_SERVER_URL: this.apiUrl,
-      };
-
-      // Pass gateway URL if explicitly configured
-      if (this.gatewayUrl) {
-        backendEnv.RELIANT_GATEWAY_URL = this.gatewayUrl;
-      }
-
-      // CRITICAL: In production, ensure PATH includes common locations for MCP tools
-      // MCP servers often use npx, uvx, python, etc. which aren't in Electron's default PATH
-      if (!this.isDevelopment) {
-        const isWindows = process.platform === 'win32';
-        const pathSeparator = isWindows ? ';' : ':';
-
-        let additionalPaths = [];
-
-        if (isWindows) {
-          // Windows-specific paths
-          additionalPaths = [
-            path.join(process.env.PROGRAMFILES || 'C:\\Program Files', 'nodejs'),
-            path.join(process.env.APPDATA || path.join(homeDir, 'AppData', 'Roaming'), 'npm'),
-            path.join(homeDir, 'AppData', 'Local', 'Programs', 'Python'),
-            path.join(homeDir, '.local', 'bin'),
-            path.join(homeDir, 'go', 'bin'),  // Go binaries on Windows
-          ];
-        } else {
-          // Unix-specific paths (macOS/Linux)
-          additionalPaths = [
-            '/usr/local/bin',
-            '/opt/homebrew/bin',  // macOS Apple Silicon Homebrew
-            '/usr/bin',
-            '/bin',
-            path.join(homeDir, 'go', 'bin'),  // Go binaries (air, etc.)
-            path.join(homeDir, '.local', 'bin'),  // Python user binaries (uvx, etc.)
-            path.join(homeDir, '.npm-global', 'bin'),  // Global npm binaries
-            '/opt/homebrew/opt/python/libexec/bin',  // Homebrew python
-            '/usr/local/go/bin',  // System Go installation
-          ];
-
-          // Try to find nvm-managed node installations (Unix only)
-          const nvmDir = path.join(homeDir, '.nvm', 'versions', 'node');
-          if (fs.existsSync(nvmDir)) {
-            try {
-              const versions = fs.readdirSync(nvmDir);
-              if (versions.length > 0) {
-                // Use the latest version (or default)
-                const latestVersion = versions.sort().reverse()[0];
-                const nvmNodeBin = path.join(nvmDir, latestVersion, 'bin');
-                if (fs.existsSync(nvmNodeBin)) {
-                  additionalPaths.push(nvmNodeBin);
-                  log.info('[BackendManager] Found nvm node installation:', nvmNodeBin);
-                }
-              }
-            } catch (err) {
-              log.warn('[BackendManager] Error scanning nvm directory:', err.message);
-            }
-          }
-        }
-
-        // Get existing PATH and deduplicate
-        const existingPath = backendEnv.PATH || backendEnv.Path || '';
-        const pathParts = existingPath.split(pathSeparator).filter(p => p);
-
-        // Add additional paths if they exist and aren't already in PATH
-        for (const dir of additionalPaths) {
-          if (fs.existsSync(dir) && !pathParts.includes(dir)) {
-            pathParts.push(dir);
-          }
-        }
-
-        backendEnv.PATH = pathParts.join(pathSeparator);
-        if (isWindows) {
-          backendEnv.Path = backendEnv.PATH; // Windows uses both PATH and Path
-        }
-        log.debug('[BackendManager] Production PATH set', { entries: pathParts.length });
-
-        // Ensure critical environment variables are set for MCP servers
-        if (!isWindows) {
-          if (!backendEnv.SHELL) {
-            backendEnv.SHELL = '/bin/zsh';  // macOS default
-          }
-        }
-        if (!backendEnv.HOME && !isWindows) {
-          backendEnv.HOME = homeDir;
-        }
-        if (!backendEnv.USERPROFILE && isWindows) {
-          backendEnv.USERPROFILE = homeDir;
-        }
-        // Some MCP servers need USER/USERNAME
-        if (!backendEnv.USER && !isWindows) {
-          backendEnv.USER = require('os').userInfo().username;
-        }
-        if (!backendEnv.USERNAME && isWindows) {
-          backendEnv.USERNAME = require('os').userInfo().username;
-        }
-        // TERM is needed for scripts that use tput or terminal capabilities
-        if (!backendEnv.TERM && !isWindows) {
-          backendEnv.TERM = 'xterm-256color';
-        }
-
-        log.info('[BackendManager] Environment variables set:', {
-          SHELL: backendEnv.SHELL,
-          HOME: backendEnv.HOME,
-          USERPROFILE: backendEnv.USERPROFILE,
-          USER: backendEnv.USER,
-          USERNAME: backendEnv.USERNAME,
-          PATH_length: backendEnv.PATH.length
-        });
-      }
-
-      // Set data directory based on mode
-      // In development: use ./data (relative to cwd) for worktree isolation
-      // In production: use userData/data for shared app data
-      if (!backendEnv.RELIANT_DATA_DIR) {
-        backendEnv.RELIANT_DATA_DIR = this.isDevelopment
-          ? './data'  // Dev: local to each worktree
-          : path.join(app.getPath('userData'), 'data');  // Prod: shared app data
-      }
+      const backendEnv = this.buildDaemonEnv();
 
       // Spawn daemon process.
       //

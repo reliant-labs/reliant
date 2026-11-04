@@ -14,6 +14,7 @@
 import { z } from "zod";
 import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
+import { DASHBOARD_GROUPS } from "./components/Forge/Observability/Dashboards/dashboardGroups";
 import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observability/Dashboards/dashboardModel";
 import { RELEASE_TABS, STATUS_FILTERS } from "./components/Forge/Releases/releaseModel";
 import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from "./components/Forge/Workloads/workloadModel";
@@ -32,9 +33,9 @@ const tourParam = z.enum(ONBOARDING_STEP_IDS).optional();
 export const launchPlanSchema = z
   .object({
     // Keep in sync with OnboardingIntent in
-    // components/OnboardingFlow/types.ts — only the two values the rendered
+    // components/OnboardingFlow/types.ts — only the values the rendered
     // wizard can set are accepted here.
-    intent: z.enum(["build_app", "existing_codebase"]).optional(),
+    intent: z.enum(["build_app", "existing_codebase", "chat"]).optional(),
     compute: z
       .enum(["cloud_free_trial", "cloud_paid", "local_daemon", "undecided"])
       .optional(),
@@ -164,10 +165,28 @@ export const indexSearchSchema = z.object({
   devForceShow: z.boolean().optional(),
   "onboarding-credits": z.string().optional(),
   tour: tourParam,
+  // `?start=app` opens the new chat with the app-building composer
+  // (components/Apps/appStart.ts): onboarding's "Build an app" and every
+  // other "build an app" entry land here. NewChatView applies it once and
+  // drops it.
+  start: z.enum(["app"]).optional(),
 });
 
 export const authSearchSchema = z.object({
   redirect: z.string().optional(),
+});
+
+// Search params for `/apps`. `claimed` names the app (the forge project) a
+// finished claim just made the user's own, so the page can point at it. It is
+// a highlight, not a filter: every app is still listed, and the param is
+// dropped once the page has shown it.
+export const appsSearchSchema = z.object({
+  claimed: z.string().optional(),
+  // A claim paused one of the person's two free static sites (they chose which):
+  // the name of the paused site, and which one they kept live. The page says what
+  // happened and that subscribing undoes it.
+  pausedSite: z.string().optional(),
+  kept: z.enum(["claimed", "existing"]).optional(),
 });
 
 // Search params for `/upgrade`. `returnTo` is the URL the user should be sent
@@ -265,13 +284,25 @@ export const workflowSearchSchema = z.object({
 // SettingsNavigation icon graph.
 export const SETTINGS_SECTION_IDS = [
   "account",
-  "general",
+  // AI providers, models, and local & custom models. Was `general`, a name
+  // that said nothing; /settings/general redirects here.
+  "ai",
   "shortcuts",
   "prompts",
-  "workspaces",
+  // Git worktrees for branched chats. Was `workspaces`, which collided with
+  // the product's other "workspace" (a cloud workspace); /settings/workspaces
+  // redirects here.
+  "branches",
   "projects",
+  // When an agent's change to a trigger activation needs the owner's
+  // approval card (the automation.approvals setting).
+  "automations",
   "browser",
   "appearance",
+  // Chat, transcript and editor display: response streaming, spawn and
+  // tool-call display, the workflow viewer, the file browser and the code
+  // editor. Split out of Appearance, which keeps theme, scheme and fonts.
+  "chat-editor",
   "notifications",
   "privacy",
   "mcp",
@@ -284,19 +315,21 @@ export const SETTINGS_SECTION_IDS = [
   // workflow's own presets live on its detail page in the Workflows area.
   "presets",
   "git-connections",
+  // Every integration connection (ConnectionService): rename, test, make
+  // default, revoke, and which automations name it.
+  "integrations",
   "developer",
-  // Cloud settings sections — in-app control-plane (controlplane.v1) surfaces
-  // that replaced the external "Manage cloud account" portal link. Routes:
-  // /settings/billing, /settings/environments. (Managed Reliant AI keys/spend
-  // now live as a tab inside the /settings/general "AI" section.)
+  // Cloud settings sections — in-app control-plane (controlplane.v1) surfaces.
+  // Billing also holds Reliant AI's managed keys and spend (`?tab=ai`).
   "billing",
   // Per-member org permissions. Cloud-only: a self-hosted deployment has no
   // organization to grant within, so SettingsNavigation gates the entry on
   // hasControlPlane. Route: /settings/member-permissions.
   "member-permissions",
   // Machines. Shown in every build: registered machines, and the outside AI
-  // apps granted access to each, exist without a control plane too.
-  "environments",
+  // apps granted access to each, exist without a control plane too. Was
+  // `environments`; /settings/environments redirects here.
+  "machines",
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTION_IDS)[number];
 export const DEFAULT_SETTINGS_SECTION: SettingsSection = "account";
@@ -306,14 +339,22 @@ export function isSettingsSection(value: string | undefined): value is SettingsS
 }
 
 /**
- * Slugs that are not section ids but that a person would reasonably type,
- * mapped to the section they mean. /settings/$section redirects them
- * (settingsSectionRoutes.tsx). Keys are lower case.
+ * Slugs that are not section ids but that a link may still carry, or a person
+ * would reasonably type, mapped to the section they mean. /settings/$section
+ * redirects them (settingsSectionRoutes.tsx). Keys are lower case.
  */
 export const SETTINGS_SECTION_ALIASES: Readonly<Record<string, SettingsSection>> = {
-  // The nav label of the `environments` section is "Machines".
-  machines: "environments",
-  machine: "environments",
+  // The ids sections had before they were named after their labels.
+  general: "ai",
+  environments: "machines",
+  workspaces: "branches",
+  // Singulars and near misses.
+  machine: "machines",
+  worktrees: "branches",
+  providers: "ai",
+  editor: "chat-editor",
+  chat: "chat-editor",
+  "web-browser": "browser",
 };
 
 // Billing sub-navigation. This was `useState` inside BillingSection, with a
@@ -333,6 +374,8 @@ export const BILLING_TAB_IDS = [
   "plans",
   "invoices",
   "usage",
+  "ai",
+  "limits",
 ] as const;
 export type BillingTab = (typeof BILLING_TAB_IDS)[number];
 
@@ -342,13 +385,29 @@ export type BillingTab = (typeof BILLING_TAB_IDS)[number];
  * were one tab pretending to be two, and reconciling a number meant checking
  * both.
  */
-export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage"] as const;
+export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage", "ai"] as const;
 export type VisibleBillingTab = (typeof VISIBLE_BILLING_TABS)[number];
 
 /** Where an inbound `?tab=` lands now that invoices has been folded in. */
-export function resolveBillingTab(tab?: BillingTab): VisibleBillingTab {
-  return tab === "invoices" ? "usage" : (tab ?? "overview");
+export function resolveBillingTab(tab?: SettingsTab): VisibleBillingTab {
+  if (tab === "invoices" || tab === "limits") return "usage";
+  return (VISIBLE_BILLING_TABS as readonly string[]).includes(tab ?? "") ? (tab as VisibleBillingTab) : "overview";
 }
+
+/**
+ * Settings → AI providers' tabs, addressable like Billing's so a link (or a
+ * refresh) can land on "Models" rather than always on Providers.
+ */
+export const AI_SETTINGS_TAB_IDS = ["providers", "models", "local"] as const;
+export type AISettingsTab = (typeof AI_SETTINGS_TAB_IDS)[number];
+
+export function resolveAISettingsTab(tab?: SettingsTab): AISettingsTab {
+  return (AI_SETTINGS_TAB_IDS as readonly string[]).includes(tab ?? "") ? (tab as AISettingsTab) : "providers";
+}
+
+/** Every `?tab=` a settings section accepts; each section resolves its own. */
+export const SETTINGS_TAB_IDS = [...BILLING_TAB_IDS, ...AI_SETTINGS_TAB_IDS] as const;
+export type SettingsTab = (typeof SETTINGS_TAB_IDS)[number];
 
 /**
  * Search params for `/settings` and `/settings/$section`.
@@ -361,7 +420,7 @@ export function resolveBillingTab(tab?: BillingTab): VisibleBillingTab {
  * subscription against the server rather than asserting it.
  */
 export const settingsSearchSchema = z.object({
-  tab: z.enum(BILLING_TAB_IDS).optional(),
+  tab: z.enum(SETTINGS_TAB_IDS).optional(),
   checkout: z.enum(["success", "cancelled"]).optional(),
   // Which plan the user was buying, so the return state can check the right one
   // against the server. Named `planId` and NOT `plan` on purpose: `/` and
@@ -375,7 +434,11 @@ export const settingsSearchSchema = z.object({
   // mid-wizard had no way home. `forge`: an environment whose deploy is queued
   // on billing; the way back is its page. `connectors`: the retired
   // /settings/connectors redirect, so Machines can say where Connectors went.
-  from: z.enum(["onboarding", "forge", "connectors"]).optional(),
+  // Every other value is a surface that sent the user to billing
+  // (hooks/useGoToBilling's BillingOrigin); billing offers the way back.
+  from: z
+    .enum(["onboarding", "forge", "connectors", "machines", "chat", "runs", "inbox", "reliant-ai", "credit", "upgrade", "claim"])
+    .optional(),
   // The exact URL to return to, captured at the moment the user left. Carries
   // onboarding's `plan` search param — the wizard's ENTIRE state — so the trip
   // through billing (and Stripe, which is a full cold boot) is resumable.
@@ -384,8 +447,8 @@ export const settingsSearchSchema = z.object({
   // Validated at the point of use, not here: it is a URL from the address bar,
   // so it must be same-origin-checked before being navigated to.
   returnTo: z.string().optional(),
-  // The pre-path deep link into one machine. /settings/environments redirects
-  // it to /settings/environments/$machineId (settingsSectionRoutes.tsx);
+  // The pre-path deep link into one machine. /settings/machines redirects
+  // it to /settings/machines/$machineId (settingsSectionRoutes.tsx);
   // declared so validation does not strip it before that redirect reads it.
   daemon: z.string().optional(),
   // The slug of a /settings/<slug> URL that matched no section. Set only by
@@ -429,7 +492,7 @@ export const forgeResolveSearchSchema = z.object({
 });
 
 /**
- * The console's environment scope (decision D1, Console/envScope.ts): an
+ * The console's environment scope (Console/envScope.ts): an
  * environment name or `all`, on every console page. Absent, the console
  * resolves the remembered scope (default prod) and writes it back.
  */
@@ -456,11 +519,13 @@ export const forgeConsoleReleasesSearchSchema = z.object({
   author: textParam,
   status: z.enum(STATUS_FILTERS).optional().catch(undefined),
   every: z.boolean().optional().catch(undefined),
+  /** The deploy whose output is open in the Deploys section (the Overview's banner links here). */
+  deploy: textParam,
 });
 
 /**
  * Activity: the scope, and the target an object's History link pre-filters to
- * (`release:<version>`, PROPOSAL §4.5) — kept in the URL so the link means
+ * (`release:<version>`) — kept in the URL so the link means
  * the same thing once the Activity page reads it.
  */
 export const forgeConsoleActivitySearchSchema = z.object({
@@ -514,6 +579,10 @@ export const obsSearchShape = {
   view: z.enum(OBS_VIEWS).optional().catch(undefined),
   range: z.enum(RANGE_PRESETS).optional().catch(undefined),
   service: z.string().optional().catch(undefined),
+  rpcService: z.string().max(512).optional().catch(undefined),
+  rpcId: z.string().max(1024).optional().catch(undefined),
+  declared: z.boolean().optional().catch(undefined),
+  internal: z.boolean().optional().catch(undefined),
   severity: z.string().optional().catch(undefined),
   q: z.string().optional().catch(undefined),
   trace: z.string().optional().catch(undefined),
@@ -523,6 +592,7 @@ export const obsSearchShape = {
   errors: z.boolean().optional().catch(undefined),
   minDuration: z.string().optional().catch(undefined),
   envs: z.array(z.string()).optional().catch(undefined),
+  apps: z.array(z.string()).optional().catch(undefined),
   f: z.array(z.string()).optional().catch(undefined),
   groupBy: z.array(z.string()).optional().catch(undefined),
   alerts: z.enum(ALERTS_TABS).optional().catch(undefined),
@@ -533,6 +603,12 @@ export const obsSearchShape = {
   istatus: z.string().optional().catch(undefined),
   platform: z.enum(ISSUE_PLATFORMS).optional().catch(undefined),
   isort: z.enum(ISSUE_SORTS).optional().catch(undefined),
+  assignee: z.string().optional().catch(undefined),
+  session: z.string().optional().catch(undefined),
+  t: z.number().int().nonnegative().optional().catch(undefined),
+  replay: z.boolean().optional().catch(undefined),
+  user: z.string().optional().catch(undefined),
+  cursor: z.array(z.string()).optional().catch(undefined),
 };
 
 /** Every ObsSearch key has a schema entry and vice versa (the launchPlan drift guard, for the same reason). */
@@ -545,9 +621,10 @@ export type _ObsShapeMatchesSearch = AssertTrue<
 /**
  * A console page hosting an Observability view (Console/ObservabilityHost):
  * the panel's keys minus the two the console moved out of the query — the
- * view is the page's path, and the environment filter is the scope (`env`).
+ * view is the page's path, and the environment filter is the scope (`env`) —
+ * and the org's app filter, which a one-app console has no use for.
  */
-const { view: _view, envs: _envs, ...obsConsoleShape } = obsSearchShape;
+const { view: _view, envs: _envs, apps: _apps, ...obsConsoleShape } = obsSearchShape;
 export const forgeConsoleObsSearchSchema = z.object({
   env: envScopeParam,
   ...obsConsoleShape,
@@ -577,13 +654,17 @@ export const forgeConsoleWorkloadSearchSchema = z.object({
 });
 
 /**
- * Observability › Dashboards: the index's search box and its two filters
- * (source: release or workspace; owner: forge, repo or a person). The scope
- * (`env`) narrows the index server-side; these narrow it in place.
+ * Observability › Dashboards: which view (the Overview hub, or `all`: the
+ * grouped list), the list's search box and its filters (group; source:
+ * release or workspace; owner: forge, repo or a person). The scope (`env`)
+ * narrows the index server-side; these narrow it in place.
  */
 export const forgeConsoleDashboardsSearchSchema = z.object({
   env: envScopeParam,
+  // Absent is the Overview hub; "all" is the grouped list.
+  view: z.enum(["all"]).optional().catch(undefined),
   q: z.string().optional().catch(undefined),
+  group: z.enum(DASHBOARD_GROUPS).optional().catch(undefined),
   source: z.enum(["release", "workspace"]).optional().catch(undefined),
   owner: z.string().optional().catch(undefined),
 });
@@ -600,27 +681,43 @@ export const forgeConsoleDashboardSearchSchema = z.object({
   service: z.string().optional().catch(undefined),
   compare: z.enum(COMPARE_MODES).optional().catch(undefined),
   refresh: z.enum(REFRESH_INTERVALS).optional().catch(undefined),
+  rpcService: z.string().optional().catch(undefined),
+  rpcMethod: z.string().optional().catch(undefined),
+  rpcProcedure: z.string().optional().catch(undefined),
+  variables: z.record(z.string(), z.string()).optional().catch(undefined),
+  breakdown: z.string().optional().catch(undefined),
+  hiddenSections: z.array(z.string()).optional().catch(undefined),
+  hiddenPanels: z.array(z.string()).optional().catch(undefined),
+  releases: z.boolean().optional().catch(undefined),
+  alerts: z.boolean().optional().catch(undefined),
   tv: z.boolean().optional().catch(undefined),
   version: z.number().int().positive().optional().catch(undefined),
   release: z.string().optional().catch(undefined),
+  // An org-scoped dashboard's project/env picker ("<project>/<env>" names):
+  // undeclared, zod would strip it and every routed view would read all envs.
+  orgEnvs: z.array(z.string()).optional().catch(undefined),
 });
 
 /**
- * The retired /forge/observability: read only to redirect to the page
- * hosting `view`, with `envs` turned into the scope (Console/paths.ts).
- */
-/**
- * The retired URLs' view: a current view, or the retired `workloads` (the
+ * The retired URLs' view: a current view, the retired `workloads` (the
  * workloads are the Overview's now, with a page per workload) and the
- * workload it had open — read only so the redirect lands on the right page.
+ * workload it had open, or the retired `usage` (the app's Settings › Billing)
+ * — read only so the redirect lands on the right page.
  */
 const legacyObsShape = {
   ...obsSearchShape,
-  view: z.enum([...OBS_VIEWS, "workloads"]).optional().catch(undefined),
+  view: z.enum([...OBS_VIEWS, "workloads", "usage"]).optional().catch(undefined),
   workload: z.string().optional().catch(undefined),
 };
 
-export const forgeObservabilitySearchSchema = z.object({
+/**
+ * The org-wide /forge/observability[/:view]: the panel's keys, where `envs`
+ * (`app/env` names) and `apps` are the filters. `project` and `forgeProject`
+ * (a link to ONE app, redirected to its console) and a bare `view` /
+ * `workload` (the retired URLs) are read only so those redirects land right
+ * (ForgeEntryRoutes).
+ */
+export const forgeOrgObsSearchSchema = z.object({
   project: z.string().optional(),
   forgeProject: forgeProjectParam,
   ...legacyObsShape,
@@ -700,36 +797,46 @@ export const forgeLegacySearchSchema = z.object({
  * be able to read the project from the URL (WorkflowsShell resolves it).
  * Absent means "resolve it the normal way", not "no project".
  *
+ * `allProjects` is the area's ONE scope: the header's project menu sets it,
+ * every tab honours it (the Workflows list, a workflow's Triggers and Recent
+ * runs, Runs), and it rides along between tabs with `project`. Absent means
+ * the current project — or every project, when there is none.
+ *
  * `tour` is here because the onboarding tour's hub step spotlights the
- * Library, and strict search validation would otherwise strip it.
+ * Workflows list, and strict search validation would otherwise strip it.
  */
 export const workflowsAreaSearchSchema = z.object({
   project: z.string().optional().catch(undefined),
+  allProjects: z.boolean().optional().catch(undefined),
   tour: tourParam.catch(undefined),
 });
 export type WorkflowsAreaSearch = Partial<z.output<typeof workflowsAreaSearchSchema>>;
 
-// ── /workflows/library ──────────────────────────────────────────────────────
-
-/** The Library's source filter. Absent means every source. */
-export const LIBRARY_SOURCE_KEYS = ["yours", "builtin", "failed"] as const;
-export type LibrarySourceKey = (typeof LIBRARY_SOURCE_KEYS)[number];
+// ── /workflows/library (the Workflows tab) ──────────────────────────────────
 
 /**
- * The Library's sort. Absent means by name: a list that reorders itself when
+ * The Workflows list's filter chips. Absent means All. "on" is what runs by
+ * itself (what the Automations tab used to list); "needs-you" is what the
+ * Inbox would raise about it; the rest narrow by where the definition lives.
+ */
+export const WORKFLOWS_SHOW_KEYS = ["on", "needs-you", "yours", "builtin", "failed"] as const;
+export type WorkflowsShowKey = (typeof WORKFLOWS_SHOW_KEYS)[number];
+
+/**
+ * The list's sort. Absent means by name: a list that reorders itself when
  * the last-run data arrives would move rows under the pointer.
  */
 export const LIBRARY_SORT_KEYS = ["name", "recent"] as const;
 export type LibrarySortKey = (typeof LIBRARY_SORT_KEYS)[number];
 
 /**
- * /workflows/library (§2.2). The search, source and sort live in the URL like
- * the Runs filters, so a narrowed library is a link and Back restores it. An
+ * /workflows/library (§2.2). The search, filter and sort live in the URL like
+ * the Runs filters, so a narrowed list is a link and Back restores it. An
  * unknown value is dropped rather than failing the route.
  */
 export const librarySearchSchema = workflowsAreaSearchSchema.extend({
   q: z.string().optional().catch(undefined),
-  source: z.enum(LIBRARY_SOURCE_KEYS).optional().catch(undefined),
+  show: z.enum(WORKFLOWS_SHOW_KEYS).optional().catch(undefined),
   sort: z.enum(LIBRARY_SORT_KEYS).optional().catch(undefined),
 });
 /** Every key optional: absent is the default, which is what links omit. */
@@ -740,17 +847,28 @@ export type LibrarySearch = Partial<z.output<typeof librarySearchSchema>>;
 /**
  * The Runs list's state filter, in the words a user picks (§5.2), not the
  * wire enum. One chip can cover several display states ("Live" is queued,
- * running, paused and waiting for a machine); run-grpc maps them.
+ * running, paused and waiting for a machine); run-queries maps them.
  */
 export const RUN_STATE_FILTER_KEYS = ["needs_you", "live", "failed", "completed", "cancelled"] as const;
 export type RunStateFilterKey = (typeof RUN_STATE_FILTER_KEYS)[number];
 
 /**
- * Launch kinds the kind chips offer. The server matches any string. With no
- * kind chip pressed it leaves builder.test out: a test run from the workflow
- * builder is scratch work, listed only under the "Tests" chip.
+ * Launch kinds the "Started by" filter offers — every kind a run can carry,
+ * attended and unattended (runStatus.ts LaunchKind). The server matches any
+ * string. With no kind picked it leaves builder.test out: a test run from the
+ * workflow builder is scratch work, listed only under "Tests".
  */
-export const RUN_KIND_FILTER_KEYS = ["chat.start", "manual.run", "schedule", "agent.start_run", "builder.test"] as const;
+export const RUN_KIND_FILTER_KEYS = [
+  "chat.start",
+  "manual.run",
+  "schedule",
+  "webhook",
+  "integration",
+  "workflow_event",
+  "agent.start_run",
+  "cli.run",
+  "builder.test",
+] as const;
 
 export const RUN_RANGE_KEYS = ["24h", "7d", "30d", "all"] as const;
 export type RunRangeKey = (typeof RUN_RANGE_KEYS)[number];
@@ -791,7 +909,7 @@ export const runsSearchSchema = z.object({
   trigger: z.string().optional().catch(undefined),
   range: z.enum(RUN_RANGE_KEYS).optional().catch(undefined),
   q: z.string().optional().catch(undefined),
-  /** Widen past the current project (decision 10: Runs defaults to it). */
+  /** The area's scope (workflowsAreaSearchSchema): every project, not the current one. */
   allProjects: z.boolean().optional().catch(undefined),
   /** False turns off grouping of repeated automation runs (on by default). */
   group: z.boolean().optional().catch(undefined),

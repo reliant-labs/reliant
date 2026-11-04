@@ -7,7 +7,7 @@
  * promote, domain bindings, the local dev stack).
  *
  * This was the console's Overview while the nav was the environment roster.
- * Environment is the top bar's scope now (decision D1), so this list is the
+ * Environment is the top bar's scope now, so this list is the
  * one page that does not narrow to it: it is where the scope's choices are
  * configured.
  *
@@ -33,7 +33,9 @@ import { useNavigate } from "@tanstack/react-router";
 import { CircleDashed, Layers } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
+import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
+import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
+import { DeployStatusUnread, deployStatusUnread } from "@/components/Forge/Console/DeployStatusUnread";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useCloudEnvStatuses } from "@/hooks/forge-queries";
@@ -72,6 +74,8 @@ export function EnvironmentsPage() {
   );
   const checkoutEnvs = useMemo(() => roster.envs.filter((env) => env.source === "checkout"), [roster.envs]);
   const rows = useEnvironmentRows(backendEnvs);
+  // A failed read lists nothing; it is not "no environments recorded".
+  const unread = deployStatusUnread(roster.live);
 
   const openEnv = useCallback(
     (env: string) => void navigate({ href: href({ kind: "environment", env }) }),
@@ -103,17 +107,32 @@ export function EnvironmentsPage() {
 
       <CloudNotice availability={roster.live.data?.availability} detail={roster.live.data?.detail} />
 
-      {rows.length === 0 ? (
+      {rows.length === 0 && unread ? (
+        <DeployStatusUnread state={unread} testId="forge-environments-unread" />
+      ) : rows.length === 0 ? (
         <div data-testid="forge-environments-empty">
-          <EmptyState
-            icon={<Layers className="h-6 w-6" aria-hidden="true" />}
+          <GettingStarted
+            testId="environments-getting-started"
+            icon={<Layers className="h-4 w-4" />}
             title="No environments recorded yet"
-            description={
-              checkoutEnvs.length > 0
-                ? "Your code declares the environments below. Open one and register it to track its releases and set its secrets here."
-                : "Run forge env build <env> to record the first one, or open an environment your code declares and register it."
-            }
-          />
+            about="Environments lists where this project runs: each environment's host, the release it is on, where that came from, and when it last moved."
+            agent={<DeployWithAgentButton env={null} />}
+            steps={[
+              {
+                text: "Deploy one through Reliant from your checkout. That records the environment and its first release.",
+                command: "reliant forge env deploy <env>",
+              },
+              {
+                text:
+                  checkoutEnvs.length > 0
+                    ? "Or open one of the environments your code declares, below, and register it to set its secrets before the first deploy."
+                    : "Or open an environment your code declares and register it to set its secrets before the first deploy.",
+              },
+            ]}
+            docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
+          >
+            <p>A local environment (reliant forge env up) runs your working tree on your machine; it has no releases and needs no registering.</p>
+          </GettingStarted>
         </div>
       ) : (
         <EnvironmentTable rows={rows} onOpen={openEnv} />
@@ -146,20 +165,20 @@ function UnregisteredEnvs({ envs, onOpen }: { envs: RosterEnv[]; onOpen: (env: s
               type="button"
               onClick={() => onOpen(env.name)}
               data-testid={`unregistered-${env.name}`}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
-              <CircleDashed className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <span className="font-mono text-sm font-medium text-foreground">{env.name}</span>
+              <CircleDashed className="h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+              <span className="font-mono text-sm font-medium text-ink">{env.name}</span>
               {/* Only a lifecycle someone actually stated. Without a control-
                   plane row or forge's runtime answer, "deployed" would be a
                   guess — dev's destination is `mixed`, same as prod's. */}
-              {env.lifecycle === "local" && <span className="text-xs text-muted-foreground">Runs locally</span>}
+              {env.lifecycle === "local" && <span className="text-xs text-ink-muted">Runs locally</span>}
               {env.forge?.release && (
-                <span className="text-xs text-muted-foreground">
-                  · forge ledger: <span className="font-mono text-foreground">{env.forge.release}</span>
+                <span className="text-xs text-ink-muted">
+                  · forge ledger: <span className="font-mono text-ink">{env.forge.release}</span>
                 </span>
               )}
-              <span className="ml-auto text-xs text-primary">Open</span>
+              <span className="ml-auto text-xs text-primary-ink">Open</span>
             </button>
           </li>
         ))}

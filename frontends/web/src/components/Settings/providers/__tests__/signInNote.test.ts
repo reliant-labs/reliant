@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { signInNote } from "../AddAccountButton";
+import { signInNote } from "../ConnectPanel";
 
 // What the connect panel tells the user after a sign-in that did not do what they expected.
 describe("signInNote", () => {

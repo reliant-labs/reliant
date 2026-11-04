@@ -226,7 +226,7 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 	if err != nil {
 		return fail("invalid copy_files: %v", err)
 	}
-	project, err := w.project(rc)
+	project, err := w.project(ctx, rc)
 	if err != nil {
 		return fail("%v", err)
 	}
@@ -237,7 +237,14 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 	if err != nil {
 		return fail("%v", err)
 	}
-	repos, err := w.projectRepos(ctx, rc, project, machine)
+	// The repos are the run machine's checkout of the project: the dispatcher
+	// resolved it for the machine this call is pinned to (and refused the
+	// call, with the way out, when that machine has none).
+	checkout := rc.Project.Checkout
+	if checkout == "" {
+		return fail("this run's machine has no checkout of the project; switch the chat to a machine that has it, or clone the project onto this one")
+	}
+	repos, err := w.projectRepos(ctx, rc, project, machine, checkout)
 	if err != nil {
 		return fail("%v", err)
 	}
@@ -256,6 +263,7 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 	}
 	req := workspacecreate.Request{
 		Project:       project,
+		Checkout:      checkout,
 		Repos:         repos,
 		Name:          p.Name,
 		Branch:        p.Branch,
@@ -333,7 +341,7 @@ func (w *worktreeTool) handleList(ctx context.Context, rc *rctx.ToolContext) (To
 	if w.repo == nil {
 		return NewTextErrorResponse("Database not available for listing worktrees"), nil
 	}
-	project, err := w.project(rc)
+	project, err := w.project(ctx, rc)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to list worktrees: %v", err)), nil
 	}
@@ -381,7 +389,7 @@ func (w *worktreeTool) handleGet(ctx context.Context, p *WorktreeParams, rc *rct
 	if w.repo == nil {
 		return NewTextErrorResponse("Database not available for getting worktree"), nil
 	}
-	project, err := w.project(rc)
+	project, err := w.project(ctx, rc)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to get worktree: %v", err)), nil
 	}
@@ -443,7 +451,7 @@ func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rc *
 	if w.repo == nil {
 		return fail("database not available")
 	}
-	project, err := w.project(rc)
+	project, err := w.project(ctx, rc)
 	if err != nil {
 		return fail("%v", err)
 	}
@@ -466,7 +474,7 @@ func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rc *
 	case row.Status == int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING):
 		return fail("'%s' is still being created", p.Name)
 	}
-	if busy, err := w.liveChatIn(ctx, userID, project.ID, row.ID); err != nil {
+	if busy, err := w.liveChatIn(ctx, row.ID); err != nil {
 		return fail("%v", err)
 	} else if busy != "" {
 		return fail("chat %s is working in '%s'; archive that chat or the worktree from the Reliant UI", busy, p.Name)
@@ -476,7 +484,7 @@ func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rc *
 		return fail("archive: %v", err)
 	}
 	w.emitChanged(ctx, userID, project.ID, row.ID)
-	w.settleArchived(ctx, userID, project.Path, row.ID)
+	w.settleArchived(ctx, userID, rc, row)
 
 	content := fmt.Sprintf("Archived worktree '%s'. Its directory is removed later, only if it is clean, its work is pushed or already merged, and it is unused; otherwise it is kept and listed in the Reliant inbox.", p.Name)
 	return WithResponseMetadata(NewTextResponse(content), WorktreeResponseMetadata{Action: "delete", WorktreeID: row.ID}), nil
@@ -487,11 +495,20 @@ func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rc *
 // archive has already succeeded, and a run that ends must not abandon a
 // half-finished removal. The daemon judges the directory; whatever it declines
 // is recorded and offered in the storage inbox.
-func (w *worktreeTool) settleArchived(ctx context.Context, userID, projectPath, worktreeID string) {
-	if w.settler == nil {
+//
+// The settle runs git in the owner's checkout of the project. The only
+// checkout this tool knows is the run machine's (rc.Project.Checkout), so a
+// worktree owned by another machine is left to the sweep, which joins each
+// row to its owner's checkout.
+func (w *worktreeTool) settleArchived(ctx context.Context, userID string, rc *rctx.ToolContext, row *db.Worktree) {
+	if w.settler == nil || rc.Project == nil || rc.Project.Checkout == "" {
 		return
 	}
-	archived, err := w.repo.GetWorktree(ctx, worktreeID)
+	if owner := ownerOf(row); owner == "" || owner != w.runDaemonID(ctx, userID) {
+		return
+	}
+	projectPath := rc.Project.Checkout
+	archived, err := w.repo.GetWorktree(ctx, row.ID)
 	if err != nil || archived == nil {
 		return
 	}
@@ -534,6 +551,26 @@ func (m *workspaceMachine) SendDaemonCommand(ctx context.Context, _, commandType
 	return m.RunMachine.Send(ctx, m.userID, m.daemonID, commandType, payload, timeoutMs)
 }
 
+// ownerOf is the machine a worktree row records as holding its checkouts.
+func ownerOf(row *db.Worktree) string {
+	if row == nil || row.DaemonID == nil {
+		return ""
+	}
+	return *row.DaemonID
+}
+
+// runDaemonID is the machine this run's tools execute on, "" when unknown.
+func (w *worktreeTool) runDaemonID(ctx context.Context, userID string) string {
+	if w.machine == nil {
+		return ""
+	}
+	id, err := w.machine.DaemonID(ctx, userID)
+	if err != nil {
+		return ""
+	}
+	return id
+}
+
 // runMachine resolves the machine this run's tools execute on.
 func (w *worktreeTool) runMachine(ctx context.Context) (*workspaceMachine, error) {
 	if w.machine == nil {
@@ -550,22 +587,28 @@ func (w *worktreeTool) runMachine(ctx context.Context) (*workspaceMachine, error
 	return &workspaceMachine{RunMachine: w.machine, userID: userID, daemonID: daemonID}, nil
 }
 
-// project is the chat's project. Its Path is the main checkout, never the
-// chat's working directory, which may be inside another workspace.
-func (w *worktreeTool) project(rc *rctx.ToolContext) (*db.Project, error) {
+// project is the chat's project row: its id, name and remote, for the
+// records a workspace writes and the errors that name it. Its Path is the
+// creating machine's and is never used; the checkout on the run's machine is
+// rc.Project.Checkout.
+func (w *worktreeTool) project(ctx context.Context, rc *rctx.ToolContext) (*db.Project, error) {
 	if w.repo == nil {
 		return nil, errors.New("database not available")
 	}
-	if rc == nil || rc.Project == nil {
+	if rc == nil || rc.Project == nil || rc.Project.ID == "" {
 		return nil, errors.New("this chat has no project")
 	}
-	return rc.Project, nil
+	project, err := w.repo.GetProject(ctx, rc.Project.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load the chat's project: %w", err)
+	}
+	return project, nil
 }
 
 // projectRepos lists the repositories a workspace gets a checkout of: the
 // chat's, else the registry's, else whatever exists on the machine (the
 // registry trails the filesystem after a manual `git init`).
-func (w *worktreeTool) projectRepos(ctx context.Context, rc *rctx.ToolContext, project *db.Project, m *workspaceMachine) ([]*core.Repo, error) {
+func (w *worktreeTool) projectRepos(ctx context.Context, rc *rctx.ToolContext, project *db.Project, m *workspaceMachine, checkout string) ([]*core.Repo, error) {
 	repos := rc.Repos
 	if len(repos) == 0 {
 		var err error
@@ -575,10 +618,13 @@ func (w *worktreeTool) projectRepos(ctx context.Context, rc *rctx.ToolContext, p
 		}
 	}
 	if len(repos) == 0 {
-		repos = repopkg.AdoptFromDaemon(ctx, w.repo, m, project)
+		var err error
+		if repos, err = repopkg.AdoptFromDaemon(ctx, w.repo, m, project, checkout); err != nil {
+			return nil, fmt.Errorf("could not check the project for git repositories on this run's machine: %w", err)
+		}
 	}
 	if len(repos) == 0 {
-		return nil, errors.New("the project has no git repositories; initialize one before creating worktrees")
+		return nil, errors.New(repopkg.NoReposMessage(checkout))
 	}
 	return repos, nil
 }
@@ -620,19 +666,13 @@ func (w *worktreeTool) byName(ctx context.Context, projectID, name string) (*db.
 	return w.repo.GetLiveWorktreeByName(ctx, projectID, name)
 }
 
-// liveChatIn returns the id of a non-archived chat of userID bound to the
-// worktree, or "".
-func (w *worktreeTool) liveChatIn(ctx context.Context, userID, projectID, worktreeID string) (string, error) {
-	chats, err := w.repo.ListChats(ctx, db.ChatFilters{UserID: userID, ProjectID: &projectID, ExcludeArchived: true, Limit: 1000})
+// liveChatIn returns the id of a non-archived chat bound to the worktree, or "".
+func (w *worktreeTool) liveChatIn(ctx context.Context, worktreeID string) (string, error) {
+	id, err := w.repo.GetLiveChatIDForWorktree(ctx, worktreeID)
 	if err != nil {
 		return "", fmt.Errorf("look up chats using the worktree: %w", err)
 	}
-	for _, chat := range chats {
-		if chat.WorktreeID != nil && *chat.WorktreeID == worktreeID {
-			return chat.ID, nil
-		}
-	}
-	return "", nil
+	return id, nil
 }
 
 // emitChanged tells the user's connected clients the worktree list changed.

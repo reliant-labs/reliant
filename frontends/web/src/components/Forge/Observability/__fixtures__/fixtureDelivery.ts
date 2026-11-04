@@ -228,7 +228,7 @@ export function createDeliveryFixture(
   const ledger = mode === "empty" ? [] : fixtureLedger(now());
   const gate = <T>(rpc: string, request: { envIds: string[] }, answer: () => T) =>
     call(rpc, request, () => {
-      if (mode === "not-member") throw new ConnectError("not a member of this organization", Code.PermissionDenied);
+      if (mode === "not-member") throw new ConnectError("not a member of this organization", Code.PermissionDenied, new Headers({ "x-forge-error-reason": "not_org_member" }));
       if (mode === "env-denied" && request.envIds.length) {
         throw new ConnectError("one or more environments are not available to this organization", Code.PermissionDenied);
       }

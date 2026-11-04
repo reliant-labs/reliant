@@ -19,8 +19,8 @@ import { useId, useMemo, useState } from "react";
 import { AlertTriangle, Bell, Globe, Lock, Mail, MessageSquare, Pencil, Plus, Send, Siren, Trash2 } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { useAlertingMutation, useReceivers } from "@/hooks/observability-queries";
 import type {
   CreateReceiverInput,
@@ -36,7 +36,7 @@ import type { ObsEnvironment } from "./obsPlace";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
 
 const FIELD =
-  "h-8 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
+  "h-8 w-full rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
 
 /** The receiver every organization has; notifications land in the console. */
 export const INAPP_RECEIVER = "reliant-inapp";
@@ -114,7 +114,7 @@ export function settingsSummary(receiver: Pick<Receiver, "type" | "settings">): 
     case "webhook":
       return s.url ?? "";
     case "inapp":
-      return "Notifications in the Reliant console";
+      return "Notifications in Reliant";
     default:
       return "";
   }
@@ -228,23 +228,23 @@ export function AlertReceivers({ orgId, environments, readOnly, onDenied }: Aler
         >
           New receiver
         </Button>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-ink-muted">
           Routes in your code name a receiver (<code className="font-mono">forge.AlertRoute.receiver</code>); this is where each name gets its
           destination.
         </p>
       </div>
 
       {missing.length > 0 && (
-        <div className="space-y-2 rounded-lg border border-warning/40 bg-background px-4 py-3" role="status" data-testid="obs-receivers-missing">
-          <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-            <AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />
+        <div className="space-y-2 rounded-lg border border-warning-border bg-surface-sunken px-4 py-3" role="status" data-testid="obs-receivers-missing">
+          <p className="flex items-center gap-1.5 text-sm font-medium text-ink">
+            <AlertTriangle className="h-4 w-4 text-warning-ink" aria-hidden="true" />
             {missing.length === 1 ? "A route names a receiver" : `${missing.length} routes name receivers`} that isn&apos;t set up
           </p>
           <ul className="space-y-1.5">
             {missing.map(([name, envs]) => (
-              <li key={name} className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" data-testid={`obs-receiver-missing-${name}`}>
+              <li key={name} className="flex flex-wrap items-center gap-2 text-xs text-ink-muted" data-testid={`obs-receiver-missing-${name}`}>
                 <span>
-                  <EnvList envs={envs} /> {envs.length === 1 ? "sends" : "send"} alerts to <code className="font-mono text-foreground">{name}</code>,
+                  <EnvList envs={envs} /> {envs.length === 1 ? "sends" : "send"} alerts to <code className="font-mono text-ink">{name}</code>,
                   which doesn&apos;t exist, so those notifications go nowhere.
                 </span>
                 <Button variant="outline" size="xs" disabled={readOnly} onClick={() => setEditing({ mode: "create", name })}>
@@ -291,7 +291,7 @@ function EnvList({ envs }: { envs: ObsEnvironment[] }) {
       {envs.map((env, i) => (
         <span key={env.id}>
           {i > 0 && (i === envs.length - 1 ? " and " : ", ")}
-          <span className="font-mono text-foreground">{env.name}</span>
+          <span className="font-mono text-ink">{env.name}</span>
         </span>
       ))}
     </>
@@ -335,22 +335,22 @@ function ReceiverRow({
   return (
     <li className="space-y-2 px-4 py-3" data-testid={`obs-receiver-${receiver.name}`} data-type={receiver.type}>
       <div className="flex flex-wrap items-start gap-3">
-        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-medium text-foreground">{receiver.name}</span>
-            <span className="rounded border border-border px-1.5 py-px text-2xs text-muted-foreground">{RECEIVER_TYPE_LABELS[receiver.type]}</span>
+            <span className="font-mono text-sm font-medium text-ink">{receiver.name}</span>
+            <span className="rounded border border-border px-1.5 py-px text-2xs text-ink-muted">{RECEIVER_TYPE_LABELS[receiver.type]}</span>
             {builtIn ? (
-              <span className="text-2xs text-muted-foreground">built in</span>
+              <span className="text-2xs text-ink-muted">built in</span>
             ) : receiver.hasSecret ? (
-              <span className="inline-flex items-center gap-1 text-2xs text-muted-foreground" data-testid="obs-receiver-secret" title="The secret is stored encrypted and never shown again">
+              <span className="inline-flex items-center gap-1 text-2xs text-ink-muted" data-testid="obs-receiver-secret" title="The secret is stored encrypted and never shown again">
                 <Lock className="h-3 w-3" aria-hidden="true" />
                 secret set
               </span>
             ) : null}
           </div>
-          <p className="break-all text-xs text-foreground">{settingsSummary(receiver)}</p>
-          <p className="text-xs text-muted-foreground" data-testid="obs-receiver-routed">
+          <p className="break-all text-xs text-ink">{settingsSummary(receiver)}</p>
+          <p className="text-xs text-ink-muted" data-testid="obs-receiver-routed">
             {routedFrom.length ? (
               <>
                 Routed from <EnvList envs={routedFrom} />
@@ -383,7 +383,7 @@ function ReceiverRow({
               </Button>
               {confirming ? (
                 <Button
-                  variant="destructive"
+                  variant="danger"
                   size="sm"
                   disabled={remove.isPending}
                   loading={remove.isPending}
@@ -420,7 +420,7 @@ function ReceiverRow({
       </div>
       {result && <TestResult result={result} receiver={receiver} />}
       {problem && (
-        <p role="alert" className="pl-7 text-xs text-destructive" data-testid="obs-receiver-problem">
+        <p role="alert" className="pl-7 text-xs text-danger-ink" data-testid="obs-receiver-problem">
           {problem}
         </p>
       )}
@@ -431,13 +431,13 @@ function ReceiverRow({
 function TestResult({ result, receiver }: { result: TestReceiverResult; receiver: Receiver }) {
   const where = receiver.type === "inapp" ? "the notifications list" : settingsSummary(receiver) || receiver.name;
   const [tone, text] = !result.accepted
-    ? ["text-destructive", "Alertmanager didn't accept the test alert. Try again in a minute."]
+    ? ["text-danger-ink", "Alertmanager didn't accept the test alert. Try again in a minute."]
     : !result.receiverLive
       ? [
-          "text-warning",
+          "text-warning-ink",
           `Accepted, but ${receiver.name} isn't live yet: Alertmanager picks up a new or changed receiver within about a minute, so this test may not arrive. Send another shortly.`,
         ]
-      : ["text-success", `Test sent. It should reach ${where} within a minute.`];
+      : ["text-success-ink", `Test sent. It should reach ${where} within a minute.`];
   return (
     <p role="status" className={cn("pl-7 text-xs", tone)} data-testid="obs-receiver-test-result" data-accepted={result.accepted} data-live={result.receiverLive}>
       {text}
@@ -505,7 +505,7 @@ function ReceiverDialog({
   };
 
   return (
-    <Modal isOpen onClose={onClose} title={current ? `Edit ${current.name}` : "New receiver"} size="md">
+    <Modal open onClose={onClose} title={current ? `Edit ${current.name}` : "New receiver"} size="md">
       <form
         className="space-y-4"
         data-testid="obs-receiver-dialog"
@@ -517,7 +517,7 @@ function ReceiverDialog({
         {!current && (
           <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
             <div>
-              <label htmlFor={nameId} className="mb-1 block text-xs font-medium text-muted-foreground">
+              <label htmlFor={nameId} className="mb-1 block text-xs font-medium text-ink-muted">
                 Name
               </label>
               <input
@@ -531,7 +531,7 @@ function ReceiverDialog({
               />
             </div>
             <div>
-              <label htmlFor={typeId} className="mb-1 block text-xs font-medium text-muted-foreground">
+              <label htmlFor={typeId} className="mb-1 block text-xs font-medium text-ink-muted">
                 Type
               </label>
               <select
@@ -551,14 +551,14 @@ function ReceiverDialog({
           </div>
         )}
         {!current && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-ink-muted">
             A route reaches this receiver by name:{" "}
-            <code className="font-mono text-foreground">forge.AlertRoute {"{"} receiver = &quot;{form.name || "name"}&quot; {"}"}</code>.
+            <code className="font-mono text-ink">forge.AlertRoute {"{"} receiver = &quot;{form.name || "name"}&quot; {"}"}</code>.
           </p>
         )}
         {target && (
           <div>
-            <label htmlFor={targetId} className="mb-1 block text-xs font-medium text-muted-foreground">
+            <label htmlFor={targetId} className="mb-1 block text-xs font-medium text-ink-muted">
               {target.label}
             </label>
             <input
@@ -574,7 +574,7 @@ function ReceiverDialog({
         )}
         {secret && (
           <div>
-            <label htmlFor={secretId} className="mb-1 block text-xs font-medium text-muted-foreground">
+            <label htmlFor={secretId} className="mb-1 block text-xs font-medium text-ink-muted">
               {secret.label}
             </label>
             <input
@@ -588,11 +588,11 @@ function ReceiverDialog({
               autoComplete="new-password"
               spellCheck={false}
             />
-            <p className="mt-1 text-2xs text-muted-foreground">Stored encrypted. Reliant never shows it again, here or anywhere else.</p>
+            <p className="mt-1 text-2xs text-ink-muted">Stored encrypted. Reliant never shows it again, here or anywhere else.</p>
           </div>
         )}
         {problems.length > 0 && (
-          <ul role="alert" className="space-y-0.5 rounded-md border border-destructive/40 bg-background px-3 py-2 text-xs text-destructive" data-testid="obs-receiver-problems">
+          <ul role="alert" className="space-y-0.5 rounded-md border border-danger-border bg-surface-sunken px-3 py-2 text-xs text-danger-ink" data-testid="obs-receiver-problems">
             {problems.map((p) => (
               <li key={p}>{p}</li>
             ))}

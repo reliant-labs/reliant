@@ -6,8 +6,8 @@
  *
  *   ⌛ Waiting on billing                                    [Set up billing]
  *      Release v2.0.0 is recorded. This runs compute (1 workload) and the
- *      organization has no active compute plan.
- *      Subscribe to a Reliant Compute plan … nothing needs to be re-run.
+ *      organization has no active app hosting usage agreement.
+ *      Enable independent app hosting billing … nothing needs to be re-run.
  *      Queued 5 minutes ago
  *
  * The control plane accepted the deploy instead of refusing it, so there is
@@ -34,7 +34,7 @@
 import { useCallback, useState } from "react";
 import { Check, Copy, Hourglass } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { queuedOnLabel, type LiveHold } from "@/services/forge/live";
@@ -63,7 +63,7 @@ export function QueuedDeployBanner({ release, holds, onSetUpBilling, now }: Queu
 
   return (
     <section
-      className="flex flex-col gap-3 rounded-lg border border-warning/40 bg-warning/5 px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+      className="flex flex-col gap-3 rounded-lg border border-warning-border bg-warning-surface px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
       data-testid="queued-deploy-banner"
       data-can-resolve={canResolve}
       aria-labelledby="queued-deploy-title"
@@ -71,13 +71,13 @@ export function QueuedDeployBanner({ release, holds, onSetUpBilling, now }: Queu
       <div className="flex min-w-0 gap-3">
         <Hourglass className="mt-0.5 h-4 w-4 shrink-0 text-warning-ink" aria-hidden="true" />
         <div className="min-w-0 space-y-1">
-          <h2 id="queued-deploy-title" className="text-sm font-medium text-foreground">
+          <h2 id="queued-deploy-title" className="text-sm font-medium text-ink">
             Waiting on {label}
           </h2>
-          <p className="text-sm text-muted-foreground" data-testid="queued-deploy-reason">
+          <p className="text-sm text-ink-muted" data-testid="queued-deploy-reason">
             {release !== "" ? (
               <>
-                Release <span className="font-mono text-foreground">{release}</span> is recorded.
+                Release <span className="font-mono text-ink">{release}</span> is recorded.
               </>
             ) : (
               "This deploy is recorded."
@@ -85,12 +85,12 @@ export function QueuedDeployBanner({ release, holds, onSetUpBilling, now }: Queu
             {reasons.map((reason) => ` ${reason}`)}
           </p>
           {fixes.map((fix) => (
-            <p key={fix} className="text-sm text-muted-foreground" data-testid="queued-deploy-fix">
+            <p key={fix} className="text-sm text-ink-muted" data-testid="queued-deploy-fix">
               {fix}
             </p>
           ))}
           {since && (
-            <p className="text-xs text-muted-foreground" title={since}>
+            <p className="text-xs text-ink-muted" title={since}>
               Queued {formatRelativeTime(since, now)}
             </p>
           )}
@@ -104,7 +104,7 @@ export function QueuedDeployBanner({ release, holds, onSetUpBilling, now }: Queu
           </Button>
         ) : (
           <>
-            <p className="max-w-xs text-xs text-muted-foreground sm:text-right" data-testid="queued-deploy-ask">
+            <p className="max-w-xs text-xs text-ink-muted sm:text-right" data-testid="queued-deploy-ask">
               {(billing
                 ? "Only an organization admin can set up billing."
                 : "Someone with access has to act on this.") +

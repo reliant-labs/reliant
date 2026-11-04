@@ -52,31 +52,8 @@ vi.mock("../../../hooks/chat-queries", async () => {
     }),
   };
 });
-vi.mock("../../../api/client", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/client")>("../../../api/client");
-  return {
-    ...actual,
-    api: {
-      ...actual.api,
-      chatsV2: {
-        ...actual.api.chatsV2,
-        updateWorkflowParams: vi.fn(
-          async (_chatId: string, params: Record<string, unknown>, _thread?: string, expectedVersion?: bigint) => {
-            if (server.failNextWith) {
-              const error = server.failNextWith;
-              server.failNextWith = null;
-              throw error;
-            }
-            server.updates.push({ params, expectedVersion });
-            return { success: true, chat_id: CHAT_ID, message: "ok", selection: undefined };
-          },
-        ),
-      },
-    },
-  };
-});
-vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestions: () => ({ data: [], isLoading: false }),
+vi.mock("../../../hooks/question-queries", () => ({
+  usePendingQuestions: () => ({ data: { questions: [] }, isLoading: false }),
 }));
 
 const DEFINITION = {
@@ -97,24 +74,47 @@ const MODELS = {
   tiers: {},
 };
 vi.mock("../../../store/globalDataStore", () => ({
-  usePresetsForWorkflow: () => PRESETS,
   useModels: () => MODELS,
   useGlobalDataStore: Object.assign(() => undefined, { getState: () => ({ models: [] }) }),
 }));
-vi.mock("../../../hooks/workflow-config-queries", async () => {
-  const actual = await vi.importActual<typeof import("../../../hooks/workflow-config-queries")>(
-    "../../../hooks/workflow-config-queries",
+vi.mock("../../../hooks/workflow-queries", async () => {
+  const actual = await vi.importActual<typeof import("../../../hooks/workflow-queries")>(
+    "../../../hooks/workflow-queries",
   );
   return { ...actual, useWorkflowDefinitionQuery: () => DEFINITION };
 });
 vi.mock("../../Settings/ModelPreferences", () => ({ loadTagModelConfigs: vi.fn().mockResolvedValue({}) }));
 vi.mock("../../../hooks/useSlashCommands", () => ({ useSlashCommands: () => [] }));
-vi.mock("../../../api/preset-grpc", () => ({
-  presetGrpc: { getDefaultPresets: vi.fn().mockResolvedValue({}), listPresets: vi.fn().mockResolvedValue([]) },
+vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
+  usePresetsForWorkflow: () => PRESETS,
+  fetchDefaultPresets: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
 import { ChatInput } from "../ChatInput";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
+import { paramsOf } from "../../../test/chatServer";
+import type { UpdateWorkflowParamsRequest } from "../../../gen/reliant/v1/chat_pb";
+
+// The server's UpdateWorkflowParams, at the transport: it records each edit,
+// or refuses the next one with `server.failNextWith`. For the whole file, not
+// per test: the composer also pushes on leaving a chat, after a test ends.
+setTransport(
+  mockTransport({
+    "ChatService.UpdateWorkflowParams": (req: unknown) => {
+      const request = req as UpdateWorkflowParamsRequest;
+      if (server.failNextWith) {
+        const error = server.failNextWith;
+        server.failNextWith = null;
+        throw error;
+      }
+      server.updates.push({ params: paramsOf(request.params), expectedVersion: request.expectedVersion });
+      return { success: true, message: "ok" };
+    },
+  }),
+);
 
 const LEGACY_KEY = "reliant-chat-params";
 

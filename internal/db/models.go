@@ -20,16 +20,24 @@ const (
 	ChatStateArchived ChatState = core.ChatStateArchived
 )
 
+// ChatOrigin is who started a chat; see core.ChatOrigin.
+type ChatOrigin = core.ChatOrigin
+
+// ChatOriginUser is a conversation a person started; see core.ChatOriginUser.
+const ChatOriginUser = core.ChatOriginUser
+
 // ProviderOAuthMarker is the api_keys value an OAuth provider stores when it
 // connects; never a credential. See core.ProviderOAuthMarker.
 const ProviderOAuthMarker = core.ProviderOAuthMarker
 
 // Run-list types.
 type (
-	RunListFilters  = core.RunListFilters
-	RunListItem     = core.RunListItem
-	RunCursor       = core.RunCursor
-	RunDisplayState = core.RunDisplayState
+	RunListFilters = core.RunListFilters
+	RunListItem    = core.RunListItem
+	RunCursor      = core.RunCursor
+
+	UnlaunchedTriggerEvent = core.UnlaunchedTriggerEvent
+	RunDisplayState        = core.RunDisplayState
 )
 
 const (
@@ -45,14 +53,20 @@ const (
 
 // Chat represents a top-level conversation.
 type Chat = core.Chat
+
+// ChatRow is core.ChatRow.
+type ChatRow = core.ChatRow
+
 type ChatActivityState = core.ChatActivityState
 
 // ArchivedChatInfo represents an archived chat with worktree information.
 type ArchivedChatInfo = core.ArchivedChatInfo
 
-// QueuedForMachineChat, PausedForMachineChat and WaitingForMachineRun: see core.
+// QueuedForMachineChat, QueuedMachine, PausedForMachineChat and
+// WaitingForMachineRun: see core.
 type (
 	QueuedForMachineChat = core.QueuedForMachineChat
+	QueuedMachine        = core.QueuedMachine
 	PausedForMachineChat = core.PausedForMachineChat
 	WaitingForMachineRun = core.WaitingForMachineRun
 )
@@ -179,6 +193,7 @@ type (
 	DaemonLifecycleUpdate  = core.DaemonLifecycleUpdate
 	DaemonAttachmentSource = core.DaemonAttachmentSource
 	DaemonAttachment       = core.DaemonAttachment
+	DaemonBuild            = core.DaemonBuild
 )
 
 const (

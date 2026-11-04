@@ -4,8 +4,8 @@ import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
-import { DEFAULT_WORKFLOW, usePreferencesStore } from "../../store/preferencesStore";
-import { chatGrpc } from "../../api/chat-grpc";
+import { useDefaultWorkflow } from "../../hooks/settings-queries";
+import * as chatActions from "../../hooks/chat-actions";
 
 interface UseChatInputStateProps {
   chatId?: string;
@@ -18,7 +18,7 @@ export function useChatInputState({
 }: UseChatInputStateProps) {
   // Get project/worktree context for draft persistence
   const currentProjectId = useProjectStore((state) => state.currentProject?.id);
-  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktree?.id ?? null);
+  const currentWorktreeId = useWorktreeStore((state) => state.currentWorktreeId);
   
   // For new chats (no chatId), use project-level draft storage
   // This ensures drafts persist when switching workspaces within NewChatView
@@ -46,8 +46,7 @@ export function useChatInputState({
   const draftSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get user's default workflow from preferences
-  const userDefaultWorkflow = usePreferencesStore((state) => state.preferences?.defaultWorkflow);
-  const effectiveDefaultWorkflow = userDefaultWorkflow ?? DEFAULT_WORKFLOW;
+  const effectiveDefaultWorkflow = useDefaultWorkflow();
 
   // Workflow selection state - tracks which workflow is selected.
   // null means use user's default workflow (from preferences).
@@ -81,7 +80,7 @@ export function useChatInputState({
 
   const saveDraft = useCallback((value: string) => {
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
 
     if (projectId) {
       // For new chats, use project-level draft (persists across worktree switches)
@@ -178,7 +177,7 @@ export function useChatInputState({
       : currentChat.workflowName || null;
     
     setSelectedWorkflow(workflow);
-  }, [currentChat, effectiveDefaultWorkflow, chatId, userDefaultWorkflow]);
+  }, [currentChat, effectiveDefaultWorkflow, chatId]);
 
   // Reset state when chatId or tabId changes
   useEffect(() => {
@@ -195,7 +194,7 @@ export function useChatInputState({
     
     // Immediately clear the draft from persistence
     const projectId = useProjectStore.getState().currentProject?.id;
-    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+    const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
     
     if (projectId) {
       // Clear any pending debounced save
@@ -218,6 +217,58 @@ export function useChatInputState({
     }
   }, [draftKey, isNewChat]);
 
+  // The composer's draft identity as of the last render, read by a submitted
+  // draft's cleanup to tell whether this composer still shows that draft.
+  const identityRef = useRef({ projectId: currentProjectId, worktreeId: currentWorktreeId ?? null, draftKey, isNewChat });
+  identityRef.current = { projectId: currentProjectId, worktreeId: currentWorktreeId ?? null, draftKey, isNewChat };
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
+
+  // Bind a draft's cleanup to the draft being submitted, for a send that clears
+  // only after it completes. By then the user may have moved to another chat,
+  // worktree or project, and handleClearInput would clear whatever draft is
+  // current then. The returned function clears the submitted draft's own
+  // persisted copy (only while it still holds the submitted text) and empties
+  // the composer only if it still shows that draft, which it reports.
+  const captureSubmittedDraft = useCallback((submitted: string) => {
+    const target = {
+      projectId: useProjectStore.getState().currentProject?.id,
+      worktreeId: useWorktreeStore.getState().currentWorktreeId ?? null,
+      draftKey,
+      isNewChat,
+    };
+    // Persist the submitted text now, so a debounced save cannot write it back
+    // after the clear below.
+    if (draftSaveTimeoutRef.current) {
+      clearTimeout(draftSaveTimeoutRef.current);
+      draftSaveTimeoutRef.current = null;
+    }
+    saveDraft(submitted);
+    return () => {
+      const { projectId } = target;
+      if (projectId) {
+        const store = useWorkspaceStateStore.getState();
+        if (target.isNewChat) {
+          if (store.getNewChatDraft(projectId) === submitted) store.clearNewChatDraft(projectId);
+        } else {
+          const saved = store.getWorktreeState(projectId, target.worktreeId).chatDrafts?.[target.draftKey] ?? "";
+          if (saved === submitted) store.clearChatDraft(projectId, target.worktreeId, target.draftKey);
+        }
+      }
+      const now = identityRef.current;
+      const stillShown = mountedRef.current &&
+        now.projectId === target.projectId &&
+        now.worktreeId === target.worktreeId &&
+        now.draftKey === target.draftKey &&
+        now.isNewChat === target.isNewChat;
+      if (stillShown) setInputRaw((prev) => (prev === submitted ? "" : prev));
+      return stillShown;
+    };
+  }, [draftKey, isNewChat, saveDraft]);
+
   // Check if chat is pending (hasn't started yet - can switch workflows)
   // A pending chat has no messages yet (lastMessageAt is unset)
   const isPendingChat = !chatId || !currentChat?.lastMessageAt;
@@ -231,7 +282,7 @@ export function useChatInputState({
     if (chatId && isPendingChat) {
       try {
         const workflowName = workflow ?? effectiveDefaultWorkflow;
-        const updatedChat = await chatGrpc.update(chatId, { workflow_name: workflowName });
+        const updatedChat = await chatActions.updateChat(chatId, { workflow_name: workflowName });
         // Home the updated chat into the React Query caches (the single source
         // of truth): replace the detail entry and patch workflowName in the
         // list so the sidebar stays in sync.
@@ -266,5 +317,6 @@ export function useChatInputState({
 
     // Handlers
     handleClearInput,
+    captureSubmittedDraft,
   };
 }

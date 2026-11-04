@@ -5,12 +5,11 @@
  * the shared picker: grouped, searchable, each workflow with its title and
  * description, and manual entry for a project:// path or an expression.
  */
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const listWorkflows = vi.fn();
-vi.mock("../../../../api/client", () => ({ api: { workflows: { list: (projectId: string) => listWorkflows(projectId) } } }));
 vi.mock("../../../../store/projectStore", () => ({
   useProjectStore: (selector: (state: unknown) => unknown) => selector({ currentProject: { id: "project-1" } }),
 }));
@@ -30,6 +29,20 @@ vi.mock("../../useWorkflowInputs", () => ({
 import { WorkflowStepConfig } from "../WorkflowStepConfig";
 import { getStepInputs, getStepPresets, getStepRef, type WorkflowStep } from "../../../../types/workflow";
 import { celString } from "../../../../lib/celAdapter";
+import { setTransport } from "../../../../lib/connect";
+import { mockTransport } from "../../../../lib/test-utils";
+import { renderWithQuery } from "../../../../test/renderWithQuery";
+
+// The picker lists the project's workflows through the generated
+// ListWorkflows read, so it is answered at the transport.
+beforeAll(() =>
+  setTransport(
+    mockTransport({
+      "WorkflowService.ListWorkflows": (req) => listWorkflows((req as { projectId: string }).projectId),
+    }),
+  ),
+);
+afterAll(() => setTransport(null));
 
 listWorkflows.mockResolvedValue({
   workflows: [
@@ -50,7 +63,7 @@ function step(ref: string): WorkflowStep {
 
 function renderStep(ref = "") {
   const onUpdate = vi.fn();
-  render(<WorkflowStepConfig step={step(ref)} onUpdate={onUpdate} currentWorkflowName="editing" />);
+  renderWithQuery(<WorkflowStepConfig step={step(ref)} onUpdate={onUpdate} currentWorkflowName="editing" />);
   return { onUpdate, latest: () => onUpdate.mock.calls.at(-1)![0] as WorkflowStep };
 }
 

@@ -38,6 +38,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 )
@@ -89,6 +90,39 @@ func InsertVaultKeyIfAbsent(ctx context.Context, db orm.Context, key WrappedVaul
 		KekID: kekID, WrappedDek: key.WrappedDEK, State: key.State,
 	}).On("CONFLICT DO NOTHING").Exec(ctx)
 	return err
+}
+
+// ListLiveVaultKeys returns every data key that is not destroyed, by id.
+func ListLiveVaultKeys(ctx context.Context, db orm.Context) ([]*VaultKey, error) {
+	var rows []*VaultKey
+	err := db.Bun().NewSelect().Model(&rows).Where("state <> ?", "destroyed").OrderExpr("id").Scan(ctx)
+	return rows, err
+}
+
+// ListLiveVaultKeysForUpdate is ListLiveVaultKeys with the rows locked FOR UPDATE, so two
+// rewraps of the same key take turns.
+func ListLiveVaultKeysForUpdate(ctx context.Context, db orm.Context) ([]*VaultKey, error) {
+	var rows []*VaultKey
+	err := db.Bun().NewSelect().Model(&rows).Where("state <> ?", "destroyed").OrderExpr("id").For("UPDATE").Scan(ctx)
+	return rows, err
+}
+
+// RewrapVaultKey replaces one data key's wrapping: the same DEK, wrapped under kekID.
+func RewrapVaultKey(ctx context.Context, db orm.Context, id, kekID string, wrapped []byte) error {
+	res, err := db.Bun().NewUpdate().Model((*VaultKey)(nil)).
+		Set("kek_id = ?", kekID).
+		Set("wrapped_dek = ?", wrapped).
+		Where("id = ?", id).
+		Exec(ctx)
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err != nil {
+		return err
+	} else if n != 1 {
+		return fmt.Errorf("rewrap vault key %s: %d rows updated, want 1", id, n)
+	}
+	return nil
 }
 
 // SealedCredentialsExist reports whether anything was ever sealed: a vault key, or an api_keys

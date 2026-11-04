@@ -24,6 +24,7 @@ import {
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
 import { getControlPlaneClient } from "../client";
+import { obsClient } from "./obsClient";
 import { msOf } from "./api";
 import {
   RELEASES_LIMIT,
@@ -211,14 +212,14 @@ export function mapReleaseHealth(res: GetReleaseHealthResponse): ReleaseHealth {
  * when `promotionId` is absent). The scope must name exactly one environment;
  * the windows come from the promotion, so no time range is sent.
  */
-export async function getReleaseHealth(req: ReleaseHealthRequest): Promise<ReleaseHealth> {
+export async function getReleaseHealth(req: ReleaseHealthRequest, options: { signal?: AbortSignal } = {}): Promise<ReleaseHealth> {
   const now = Date.now();
-  const res = await getControlPlaneClient(ObservabilityService).getReleaseHealth({
+  const res = await obsClient(ObservabilityService).getReleaseHealth({
     // time_range is required on every QueryScope and ignored here (the
     // promotion decides the windows): the last minute satisfies the validator.
     scope: { ...wireDeliveryScope(req, { startMs: now - 60_000, endMs: now }), services: [], filters: [] },
     subject: req.promotionId ? { case: "promotionId", value: req.promotionId } : { case: undefined },
     window: req.windowMs ? duration(req.windowMs) : undefined,
-  });
+  }, options);
   return mapReleaseHealth(res);
 }

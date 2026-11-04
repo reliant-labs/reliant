@@ -39,8 +39,6 @@ export interface SerializedViewer {
   browserTabId?: string; // for browser viewer
   worktreeId?: string; // for file context
   processId?: string; // for commands viewer
-  chatId?: string; // for workflow viewer
-  workflowName?: string; // for workflow viewer
 }
 
 /** Right sidebar tab options */
@@ -99,6 +97,12 @@ interface WorkspaceStateStore {
 
   // === Global State ===
   lastProjectId: string | null;
+  /**
+   * The sidebar's project filter: the one project whose chats it lists, or
+   * null for "All projects". A view setting, separate from the project the
+   * open chat runs in (projectStore.currentProject).
+   */
+  projectFilterId: string | null;
   /** Global left sidebar (chat sidebar) expanded state - same across all workspaces */
   leftSidebarExpanded: boolean;
 
@@ -107,6 +111,7 @@ interface WorkspaceStateStore {
 
   // === Global Actions ===
   setLastProject: (projectId: string | null) => void;
+  setProjectFilterId: (projectId: string | null) => void;
   setLeftSidebarExpandedGlobal: (expanded: boolean) => void;
 
   // === Project-level Actions ===
@@ -418,6 +423,7 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
     publishOnlyChanges((set, get) => ({
       version: CURRENT_VERSION,
       lastProjectId: null,
+      projectFilterId: null,
       leftSidebarExpanded: true,
       projects: {},
 
@@ -425,6 +431,10 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
       setLastProject: (projectId) => {
         logger.info("[WorkspaceState] setLastProject", { projectId });
         set({ lastProjectId: projectId });
+      },
+
+      setProjectFilterId: (projectId) => {
+        set({ projectFilterId: projectId });
       },
 
       setLeftSidebarExpandedGlobal: (expanded) => {
@@ -814,6 +824,9 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
             // Clear lastProjectId if it was this project
             lastProjectId:
               state.lastProjectId === projectId ? null : state.lastProjectId,
+            // A filter on a project that is gone shows all projects.
+            projectFilterId:
+              state.projectFilterId === projectId ? null : state.projectFilterId,
           };
         });
       },
@@ -944,6 +957,9 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
             lastProjectId: validProjectIds.includes(state.lastProjectId ?? "")
               ? state.lastProjectId
               : null,
+            projectFilterId: validProjectIds.includes(state.projectFilterId ?? "")
+              ? state.projectFilterId
+              : null,
           };
         });
       },
@@ -953,6 +969,7 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
         set({
           version: CURRENT_VERSION,
           lastProjectId: null,
+          projectFilterId: null,
           projects: {},
         });
       },
@@ -963,6 +980,7 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
       partialize: (state) => ({
         version: state.version,
         lastProjectId: state.lastProjectId,
+        projectFilterId: state.projectFilterId,
         leftSidebarExpanded: state.leftSidebarExpanded,
         projects: state.projects,
       }),

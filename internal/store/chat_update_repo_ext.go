@@ -73,11 +73,19 @@ func ChatUpdatesSince(ctx context.Context, db orm.Context, chatID string, sinceS
 
 // SnapshotHeadsSQL is LatestNonMessageUpdatesPerEntity's statement, exported
 // so the partial-index tests (internal/db/snapshot_heads_index_test.go) read
-// exactly what runs. It takes one parameter, the chat id, in four places.
+// exactly what runs. It takes one parameter, the chat id, in five places.
 //
-//	1 = MESSAGE, 4 = TOOL_CALL, 19 = STREAM_FINALIZED  (idx_chat_updates_snapshot_heads excludes these)
-//	3 = THREAD, 18 = QUESTION                          (re-keyed, read separately via idx_chat_updates_snapshot_rekeyed)
-//	20 = AGENT_MESSAGES_DRAINED                        (live-only; still in the index, filtered by the probe)
+//	1 = MESSAGE, 4 = TOOL_CALL, 19 = STREAM_FINALIZED  (not snapshot state at all)
+//	3 = THREAD, 18 = QUESTION                          (re-keyed, read separately via idx_chat_updates_snapshot_rekey_heads)
+//	5 = WORKFLOW_STATUS, 9 = NODE_EXECUTION            (workflow state: not in a snapshot; WorkflowNodeHeadsSQL)
+//	20 = AGENT_MESSAGES_DRAINED                        (live-only)
+//
+// The skip scan probes once per distinct entity it walks, so it must not walk
+// workflow state: a node's entity is "<workflow>:<node>", every run a chat ever
+// made adds its own, and a chat with a long history had tens of thousands of
+// them (prod: this read at p50 0.2s, p95 2.5s, max 11s). The skip scan's list
+// is EXACTLY idx_chat_updates_snapshot_entity_heads' predicate, so every probe
+// is answered from that index alone and never walks a row it would discard.
 //
 // The update types are LITERALS, not bind parameters, and that is
 // load-bearing. The planner can use a partial index only when it can PROVE the
@@ -90,13 +98,21 @@ func ChatUpdatesSince(ctx context.Context, db orm.Context, chatID string, sinceS
 // IS bound (raw passthrough, $1): a statement text per chat would re-plan the
 // recursive skip scan on every chat open.
 //
-// The skip scan's list must stay a SUPERSET of the heads index's predicate,
-// or the planner cannot prove the query implies it and loses the index.
+// The skip scan's list must stay EQUAL to the heads index's predicate: a
+// superset still lets the planner use it, but every probe then rechecks each
+// index entry on the heap and walks past the excluded ones.
+//
+// The re-keyed half (THREAD, QUESTION) is a second skip scan, over
+// SnapshotRekeyKeySQL through idx_chat_updates_snapshot_rekey_heads: one
+// probe per key, landing on that key's newest row. It used to read every
+// thread and question update the chat ever wrote and DISTINCT ON them; those
+// rows are scattered over the table, so on a cold cache each was a random heap
+// read (prod: 2,142 blocks to keep 457 rows, 1.86s of the chat open).
 const SnapshotHeadsSQL = `
 		WITH RECURSIVE heads AS (
 			(SELECT entity_id, sequence_number
 			   FROM chat_updates
-			  WHERE chat_id = $1 AND update_type NOT IN (1, 4, 19, 3, 18, 20)
+			  WHERE chat_id = $1 AND update_type NOT IN (1, 3, 4, 5, 9, 18, 19, 20)
 			  ORDER BY entity_id, sequence_number DESC
 			  LIMIT 1)
 			UNION ALL
@@ -105,25 +121,27 @@ const SnapshotHeadsSQL = `
 			  CROSS JOIN LATERAL (
 				SELECT entity_id, sequence_number
 				  FROM chat_updates
-				 WHERE chat_id = $1 AND update_type NOT IN (1, 4, 19, 3, 18, 20)
+				 WHERE chat_id = $1 AND update_type NOT IN (1, 3, 4, 5, 9, 18, 19, 20)
 				   AND entity_id > h.entity_id
 				 ORDER BY entity_id, sequence_number DESC
 				 LIMIT 1) nxt
 		),
 		rekeyed AS (
-			SELECT DISTINCT ON (dedup_key) id, sequence_number
-			FROM (
-				SELECT
-					id,
-					sequence_number,
-					CASE
-						WHEN update_type = 18 THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id)))
-						ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id)
-					END AS dedup_key
-				FROM chat_updates
-				WHERE chat_id = $1 AND update_type IN (3, 18)
-			) k
-			ORDER BY dedup_key, sequence_number DESC
+			(SELECT (` + SnapshotRekeyKeySQL + `) AS dedup_key, sequence_number
+			   FROM chat_updates
+			  WHERE chat_id = $1 AND update_type IN (3, 18)
+			  ORDER BY (` + SnapshotRekeyKeySQL + `), sequence_number DESC
+			  LIMIT 1)
+			UNION ALL
+			SELECT nxt.dedup_key, nxt.sequence_number
+			  FROM rekeyed r
+			  CROSS JOIN LATERAL (
+				SELECT (` + SnapshotRekeyKeySQL + `) AS dedup_key, sequence_number
+				  FROM chat_updates
+				 WHERE chat_id = $1 AND update_type IN (3, 18)
+				   AND (` + SnapshotRekeyKeySQL + `) > r.dedup_key
+				 ORDER BY (` + SnapshotRekeyKeySQL + `), sequence_number DESC
+				 LIMIT 1) nxt
 		)
 		SELECT
 			cu.id,
@@ -142,12 +160,92 @@ const SnapshotHeadsSQL = `
 		ORDER BY cu.sequence_number
 	`
 
+// SnapshotRekeyKeySQL is the key a THREAD or QUESTION update is deduplicated
+// by in the snapshot: a thread by its payload's `thread` (else its entity), a
+// question by its id without the trailing "-<n>". It is also the key column of
+// idx_chat_updates_snapshot_rekey_heads, written there character for
+// character: the planner matches an expression index only to the same
+// expression, so the two must not drift (TestSnapshotHeadsQueryMatchesPartialIndex).
+const SnapshotRekeyKeySQL = `CASE WHEN update_type = 18 THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id))) ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id) END`
+
 // LatestNonMessageUpdatesPerEntity returns, for each entity of a chat, its
 // newest non-message update, in sequence order — the chat snapshot's update
 // heads. db.Repo.GetLatestNonMessageUpdatesPerEntity explains the shape: why
 // one row per entity, which types re-key, and which are excluded.
 func LatestNonMessageUpdatesPerEntity(ctx context.Context, db orm.Context, chatID string) ([]core.ChatUpdate, error) {
-	rows, err := db.Query(ctx, SnapshotHeadsSQL, chatID)
+	updates, err := scanChatUpdates(ctx, db, SnapshotHeadsSQL, chatID)
+	if err != nil {
+		return nil, err
+	}
+	// DISTINCT ON forces ORDER BY entity_id inside; restore sequence order so
+	// consumers see updates in the order they were emitted.
+	sort.Slice(updates, func(i, j int) bool { return updates[i].SequenceNumber < updates[j].SequenceNumber })
+	return updates, nil
+}
+
+// WorkflowNodeHeadsSQL is LatestWorkflowNodeUpdates' statement, exported so
+// the partial-index tests read exactly what runs. $1 is the chat, $2 the
+// workflow id.
+//
+// A node's entity_id is "<workflow id>:<node id>", so one workflow's nodes are
+// the range [id || ':', id || ';'), walked by a skip scan: one probe per node,
+// so the cost is the size of the workflow's graph, never the length of its
+// history (an agent loop's call_llm runs once per turn, all under one entity).
+// The range is taken under COLLATE "C", the collation
+// idx_chat_updates_workflow_heads indexes entity_id with, so it is the byte
+// range whatever the database's default collation is: a linguistic one may
+// ignore ':' at the first level and interleave another workflow's nodes. The
+// update type is a literal for SnapshotHeadsSQL's reason: a bound parameter
+// hides it from a generic plan, which then cannot prove the partial index
+// applies.
+const WorkflowNodeHeadsSQL = `
+		WITH RECURSIVE nodes AS (
+			(SELECT entity_id COLLATE "C" AS k, sequence_number
+			   FROM chat_updates
+			  WHERE chat_id = $1 AND update_type = 9
+			    AND entity_id COLLATE "C" > ($2 || ':') COLLATE "C"
+			    AND entity_id COLLATE "C" < ($2 || ';') COLLATE "C"
+			  ORDER BY entity_id COLLATE "C", sequence_number DESC
+			  LIMIT 1)
+			UNION ALL
+			SELECT nxt.k, nxt.sequence_number
+			  FROM nodes n
+			  CROSS JOIN LATERAL (
+				SELECT entity_id COLLATE "C" AS k, sequence_number
+				  FROM chat_updates
+				 WHERE chat_id = $1 AND update_type = 9
+				   AND entity_id COLLATE "C" > n.k
+				   AND entity_id COLLATE "C" < ($2 || ';') COLLATE "C"
+				 ORDER BY entity_id COLLATE "C", sequence_number DESC
+				 LIMIT 1) nxt
+		)
+		SELECT
+			cu.id,
+			cu.chat_id,
+			cu.sequence_number,
+			cu.update_type,
+			cu.entity_id,
+			cu.data,
+			cu.created_at
+		FROM nodes
+		JOIN chat_updates cu ON cu.chat_id = $1 AND cu.sequence_number = nodes.sequence_number
+		ORDER BY cu.sequence_number
+	`
+
+// LatestWorkflowNodeUpdates returns the newest NODE_EXECUTION update of each
+// node of one workflow of a chat, in sequence order. A workflow with none, or
+// of another chat, has none.
+func LatestWorkflowNodeUpdates(ctx context.Context, db orm.Context, chatID, workflowID string) ([]core.ChatUpdate, error) {
+	if workflowID == "" {
+		return []core.ChatUpdate{}, nil
+	}
+	return scanChatUpdates(ctx, db, WorkflowNodeHeadsSQL, chatID, workflowID)
+}
+
+// scanChatUpdates runs a statement selecting chat_updates' columns in table
+// order and reads its rows.
+func scanChatUpdates(ctx context.Context, db orm.Context, query string, args ...any) ([]core.ChatUpdate, error) {
+	rows, err := db.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -166,9 +264,6 @@ func LatestNonMessageUpdatesPerEntity(ctx context.Context, db orm.Context, chatI
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	// DISTINCT ON forces ORDER BY entity_id inside; restore sequence order so
-	// consumers see updates in the order they were emitted.
-	sort.Slice(updates, func(i, j int) bool { return updates[i].SequenceNumber < updates[j].SequenceNumber })
 	return updates, nil
 }
 

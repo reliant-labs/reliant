@@ -41,7 +41,7 @@ function hydrate() {
  * assert on the first match rather than trying to disambiguate by breakpoint.
  */
 function startEditing() {
-  const editButtons = screen.getAllByRole("button", { name: "" });
+  const editButtons = screen.getAllByRole("button", { name: "Edit shortcut" });
   fireEvent.click(editButtons[0]);
 }
 
@@ -124,9 +124,7 @@ describe("KeyboardShortcutsSettings capture", () => {
 
       press({ key: "k", ctrlKey: true });
 
-      const save = screen
-        .getAllByRole("button")
-        .find((b) => b.querySelector("svg.lucide-check"));
+      const [save] = screen.getAllByRole("button", { name: "Save shortcut" });
       expect(save?.hasAttribute("disabled")).toBe(true);
     });
 

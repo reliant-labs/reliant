@@ -9,7 +9,7 @@ import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
 import { normalizeWorkflowRef } from '../useWorkflowInputs'
 import { useWorkflowNodeCallbacks } from '../WorkflowNodeCallbacksContext'
 
-interface WorkflowNodeProps {
+export interface WorkflowNodeProps {
   id: string
   data: {
     step: WorkflowStep

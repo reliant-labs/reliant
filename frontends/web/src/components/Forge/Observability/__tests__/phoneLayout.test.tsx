@@ -3,8 +3,8 @@
 /**
  * The Observability views at phone width (below `md`), where layout cannot be
  * left to CSS alone: the trace list stacks into cards led by the root
- * operation (StackedTable, `data-stack-title`), and the waterfall puts each
- * span's name above its bar, in rows tall enough to tap. The pixel layout is
+ * operation (DataTable's STACK classes: the row header leads), and the
+ * waterfall puts each span's name above its bar, in rows tall enough to tap. The pixel layout is
  * pinned by e2e/mobile-console.spec.ts; this pins the structure.
  */
 
@@ -42,10 +42,13 @@ describe("traces on a phone", () => {
   it("stack, each card led by its root operation and labelled by column", async () => {
     renderPanel(createFixtureApi(), { view: "traces" });
     const table = await screen.findByTestId("obs-trace-table");
-    expect(table).toHaveClass("stack-narrow");
+    // The header row is for screen readers only below `md`.
+    expect(table.querySelector("thead")).toHaveClass("max-md:sr-only");
     const row = (await screen.findAllByTestId("obs-trace-row"))[0]!;
-    const title = row.querySelector("[data-stack-title]");
+    const title = row.querySelector('th[scope="row"]');
     expect(title).not.toBeNull();
+    // The root operation leads the card, wherever its column is.
+    expect(title).toHaveClass("max-md:order-first");
     expect(title).not.toHaveAttribute("data-label");
     // Started is the first column but not the title: it is a labelled line.
     expect(row.querySelector('[data-label="Started"]')).not.toBeNull();

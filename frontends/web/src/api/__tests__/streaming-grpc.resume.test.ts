@@ -31,7 +31,6 @@ function makeService() {
     onStatusChange,
     onSync: vi.fn(),
     onError: vi.fn(),
-    onChatUpdate: vi.fn(),
   });
   const connectSpy = vi
     .spyOn(service as unknown as { establishConnection: () => Promise<void> }, "establishConnection")

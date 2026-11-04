@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -16,7 +17,18 @@ enum QuestionStatus {
 
 service QuestionService {
   // ResolveQuestion resolves a pending question with the user's answer
-  rpc ResolveQuestion(ResolveQuestionRequest) returns (ResolveQuestionResponse) {}
+  rpc ResolveQuestion(ResolveQuestionRequest) returns (ResolveQuestionResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "resolve"
+        target: {
+          kind: "question"
+          id: "question_id"
+        }
+        detail: ["action"]
+      }
+    };
+  }
   // ListPendingQuestions lists every pending question in a chat, oldest
   // first, each naming the thread that asked it. A chat with several spawned
   // agents can have one question pending per thread, so a client must pick

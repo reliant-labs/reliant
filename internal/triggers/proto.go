@@ -77,10 +77,13 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 		Message:          t.Message,
 		DaemonId:         t.DaemonID,
 		NoMachine:        t.NoMachine,
+		MachinePoolId:    t.MachinePoolID,
+		MachinePoolName:  t.MachinePoolName,
 		ActingIdentity:   ActingIdentityToProto(t.ActingIdentity),
 		NotifyOnComplete: t.NotifyOnComplete,
 		ProjectName:      t.ProjectName,
 		DaemonName:       t.DaemonName,
+		MachineState:     t.MachineState,
 		Health:           WithSource(ComputeHealth(firings), reg, time.Now()),
 		Filter:           t.Filter,
 		ConnectionId:     t.ConnectionID,
@@ -117,17 +120,39 @@ func EventToProto(ev *core.TriggerEvent) (*reliantv1.TriggerEvent, error) {
 		// matters.
 		payload = nil
 	}
+	fireID := ""
+	switch ev.Kind {
+	case core.TriggerEventKindSchedule:
+		fireID = ev.DedupeKey
+	case core.TriggerEventKindWebhook, core.TriggerEventKindIntegration, core.TriggerEventKindWorkflowEvent:
+		fireID = EventFireWorkflowID(ev.ID)
+	}
 	return &reliantv1.TriggerEvent{
-		Id:            ev.ID,
-		TriggerId:     ev.TriggerID,
-		Kind:          eventKindToProto(ev.Kind),
-		OccurredAt:    ev.OccurredAt.UTC().Format(time.RFC3339),
-		Outcome:       outcomeToProto(ev.Outcome),
-		OutcomeDetail: ev.OutcomeDetail,
-		ChatId:        ev.ChatID,
-		Payload:       payload,
-		Sender:        senderToProto(ev.Sender),
+		FireWorkflowId: fireID,
+		Id:             ev.ID,
+		TriggerId:      ev.TriggerID,
+		Kind:           eventKindToProto(ev.Kind),
+		OccurredAt:     ev.OccurredAt.UTC().Format(time.RFC3339),
+		Outcome:        outcomeToProto(ev.Outcome),
+		OutcomeDetail:  ev.OutcomeDetail,
+		ChatId:         ev.ChatID,
+		Payload:        payload,
+		Sender:         senderToProto(ev.Sender),
+		Definition:     DefinitionToProto(ev.Definition),
 	}, nil
+}
+
+// DefinitionToProto renders the definition a firing resolved; nil stays unset.
+func DefinitionToProto(d *core.TriggerEventDefinition) *reliantv1.TriggerEventDefinition {
+	if d == nil {
+		return nil
+	}
+	return &reliantv1.TriggerEventDefinition{
+		Workflow: d.Workflow, Source: d.Source, Path: d.Path,
+		DaemonId: d.DaemonID, DaemonName: d.Machine,
+		Repo: d.Repo, Branch: d.Branch, Commit: d.Commit, Dirty: d.Dirty,
+		ContentHash: d.ContentHash, Error: d.Error, Summary: d.Describe(), CatalogPin: d.CatalogPin,
+	}
 }
 
 // senderToProto renders trigger.sender; nil stays unset.
@@ -173,6 +198,8 @@ func eventKindToProto(kind core.TriggerEventKind) reliantv1.TriggerEventKind {
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_WORKFLOW_EVENT
 	case core.TriggerEventKindManualRun:
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_MANUAL_RUN
+	case core.TriggerEventKindCLIRun:
+		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_CLI_RUN
 	default:
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_UNSPECIFIED
 	}

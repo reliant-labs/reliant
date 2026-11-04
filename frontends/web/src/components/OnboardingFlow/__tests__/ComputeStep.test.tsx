@@ -24,7 +24,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ConnectError, Code } from "@connectrpc/connect";
+import { ConnectError } from "@connectrpc/connect";
 import type { ReactNode } from "react";
 
 import {
@@ -118,19 +118,12 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
   // omits is `undefined` at runtime. Leaving it out made the resume-denial
   // path throw "isEntitlementDenial is not a function" as an unhandled error.
   //
-  // Real behavior (keyed on the x-reliant-reason header the server sets on
+  // Real behavior (keyed on the x-forge-error-reason header the server sets on
   // every deliberate denial) rather than a constant, so the resume-denial
   // test exercises the same branch production does.
   isEntitlementDenial: (err: unknown) =>
-    err instanceof ConnectError && !!err.metadata.get("x-reliant-reason"),
+    err instanceof ConnectError && !!err.metadata.get("x-forge-error-reason"),
 }));
-
-/** Builds the shape the server really returns for an entitlement denial. */
-function deniedError(message: string, code: Code, reason: string): ConnectError {
-  const headers = new Headers();
-  headers.set("x-reliant-reason", reason);
-  return new ConnectError(message, code, headers);
-}
 
 // Redeem-coupon mutation, mocked so the coupon UI can be driven
 // deterministically without a network layer. `mutate` mimics TanStack's
@@ -299,7 +292,7 @@ describe("ComputeStep loading gate", () => {
 
     await act(async () => {
       renderComputeStep({
-        daemons: [makeDaemon({ id: "d-1", status: DaemonStatus.ACTIVE })],
+        daemons: [makeDaemon({ daemonId: "d-1", status: DaemonStatus.ACTIVE })],
         loading: false,
         onNext,
         updatePlan,
@@ -480,7 +473,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     ).not.toBeDisabled();
   });
 
-  it("redeeming a compute coupon shows the granted minutes and refetches eligibility so the button enables in place", async () => {
+  it("redeeming a compute coupon confirms it and refetches eligibility so the button enables in place", async () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: "No compute plan yet",
@@ -509,7 +502,8 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByText(/10 hours on a Small machine/),
+        // #1844: the usage balance, not the coupon toast, states the hours.
+        screen.getByText(/Added 10 hours on an M machine/),
       ).toBeInTheDocument();
     });
     expect(mockRefetchCloudEligibility).toHaveBeenCalled();
@@ -592,7 +586,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
   // The user's report: "why is the CreateDaemon button even clickable just to
   // return an error to the user" — and its twin, a DISABLED button for a user
   // whose CreateDaemon actually succeeds (their real state: an active
-  // plan_compute_small subscription, 0 minutes used, but no
+  // plan_compute_m subscription, 0 minutes used, but no
   // reliant_user_entitlements row, which the OLD gate read as "no credits").
   //
   // Both are the same defect: the button's enabled state must track what the

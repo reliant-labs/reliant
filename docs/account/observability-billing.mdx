@@ -1,0 +1,118 @@
+---
+title: "Observability billing & limits"
+description: "The included allowance, ingest pricing, spend caps, retention and query fair use for Reliant hosting"
+---
+
+Reliant hosting includes **10 GiB of observability ingestion per organization per UTC calendar month**, shared across all projects and environments. Beyond that, ingestion is billed per GB at the rate on the [pricing page](https://reliantlabs.io/pricing), with retention included. There is no separate storage or query charge.
+
+**Here, the pricing label “GB” means GiB: 1,073,741,824 bytes (2³⁰), not one billion bytes.** The included amount is therefore 10,737,418,240 bytes. The same rate applies to logs, traces, metrics and profiles alike.
+
+Open **Settings → Billing & usage → Usage & limits → Observability** to see ingestion, the stored-now snapshot, your cap and limit change history. The observability **Usage** view in Apps also shows these figures. These are organization-wide billing figures, not an environment-specific bill.
+
+## What counts toward the bill
+
+You pay for **uncompressed telemetry inserted into the store**, after sampling and ingest filtering. This is the database's uncompressed columnar size at insertion, not the size of an OTLP request, its compressed network payload, or the compressed disk space it occupies. Sending a 1 GiB payload does not necessarily add 1 GiB to the meter. Data sampled away or dropped before storage is not billed.
+
+Logs, traces, metrics and raw profiles count. Session replay counts under logs; browser spans count under traces. Customer workload metadata collected by the platform counts too. Reliant's own operator telemetry and derived tables, such as error summaries, session summaries and profile aggregates, are not billed again. Product-event retention is a plan feature, not a separate per-byte ingestion charge.
+
+Browser telemetry has an additional protection: **at most 2 GiB per organization per month can count toward billable ingestion**, including session replay. That is 20% of the included allowance, not an extra allowance on top of it. Browser bytes above that ceiling are not charged, whether or not the organization has a paid subscription. This is a billing ceiling, not a promise to retain unlimited browser data: collection controls, filtering and ingest quota rules still apply.
+
+Paid overage requires an **in-force, Stripe-sourced compute subscription** for the organization. A saved card, wallet credit or a granted entitlement alone does not qualify. Observability overage goes onto that subscription's Stripe invoice; it does not draw down your Reliant AI wallet. Observability usage resets on the first of each month at 00:00 UTC, even if your subscription's invoice cycle starts on another day.
+
+## Ingested this month is not stored now
+
+The monthly meter is cumulative: it records what arrived during the month. Expiring or deleting old telemetry does not subtract from past ingestion. The daily table and CSV break ingestion down by signal and service. In those reports, **Billable** means bytes eligible for charging before the included allowance and spend cap; it can include bytes ultimately kept free above the cap. **Charged so far** is the organization-wide overage after those protections. Service rows do not allocate invoice dollars.
+
+**What's stored now** answers a different question: how much uncompressed data remains in active database parts at the snapshot time. It can include data ingested last month, and it shrinks as data ages out. The snapshot covers the metered signal tables, not every derived table in the database. Its per-signal totals are measured; **per-service shares are estimates**, apportioned from recent ingestion within each signal's retention window. They are not exact current storage measurements for each service.
+
+Neither view is instantaneous. The ingest meter closes whole UTC hours after a 10-minute delay and runs every 15 minutes. In normal operation a new record can take roughly **up to 85 minutes**, plus processing time, to affect the meter and quota state; failures or backlogs can make it longer. Check **Measured through**, rather than treating the displayed total as live. A projection extrapolates measured ingestion, not a guaranteed bill.
+
+Stored-now snapshots refresh with the metering pass and have their own **as of** timestamp. Before the first snapshot, storage is unknown, not a measured zero; after a refresh failure, the previous snapshot remains. Billing views read cached accounting data without consuming your tenant's query allowance.
+
+### Worked bill
+
+Suppose your organization has a qualifying subscription and the following uncompressed ingestion after sampling in one UTC month:
+
+| Ingestion | Recorded | Counts toward billable ingestion |
+|---|---:|---:|
+| Service logs | 20 GiB | 20 GiB |
+| Traces | 10 GiB | 10 GiB |
+| Metrics | 6 GiB | 6 GiB |
+| Raw profiles | 2 GiB | 2 GiB |
+| Browser telemetry, including replay | 3 GiB | 2 GiB |
+| **Total** | **41 GiB** | **40 GiB** |
+
+The browser ceiling removes 1 GiB from billable ingestion. Subtract the shared 10 GiB allowance from 40 GiB, leaving **30 GiB of overage**. You are charged 30 GiB at the per-GiB rate on the [pricing page](https://reliantlabs.io/pricing), as long as that amount is below your monthly observability cap. It is separate from the subscription price and other usage charges. Nothing is added for keeping that data through its retention period.
+
+If your cap were worth only 20 GiB of overage at that rate, the chargeable ledger would stop at 30 GiB total: 10 GiB included plus 20 GiB of paid overage. The charge would be **at most the cap**, even if more telemetry had already arrived while the meter caught up. The recorded ingestion need not stop at 30 GiB: retained bytes beyond the cap are uncharged, and the gateway switches to reduced collection once it learns the cap has been reached.
+
+The ledger uses KiB (1,024 bytes), rounding each metered hour's eligible bytes up to KiB. The displayed overage rounds up to whole cents; the cap calculation rounds permitted KiB down so this cannot push the charge above the cap. CSV exports contain exact bytes rather than rounded display GB.
+
+## Spend caps and what happens at the limit
+
+Owners and admins can change the cap and usage-notice preferences; members can view them. The default observability overage cap is **$50 per organization per month**. Self-service caps range from **$0 to $1,000**; there is no uncapped option. **No overage ($0)** means only the included allowance may enter the chargeable ledger.
+
+For a funded organization, **the monthly observability overage cannot exceed its effective cap**. The meter clamps the chargeable ledger, not just the gateway's ingestion rate. Data retained while the gateway catches up, and data it continues retaining afterward, cannot increase the bill beyond that ceiling. The cap does not limit your compute subscription, other hosting charges or AI spend.
+
+The gateway applies these rules to new telemetry:
+
+| Organization state | Logs | Traces | Metrics | Profiles |
+|---|---|---|---|---|
+| Funded, below the spend cap | Normal collection | Normal sampling | Kept | Kept if enabled |
+| Funded, at the cap, including $0 once the allowance is reached | ERROR and above only | Error-status spans only | Kept | Dropped |
+| No qualifying subscription, at 10 GiB but below 15 GiB of billable ingestion | TRACE/DEBUG dropped; other levels kept | Traces containing an error-status span kept, including their context | Kept | Kept if enabled |
+| No qualifying subscription, at 15 GiB or more | ERROR and above only | Error-status spans only | Kept | Dropped |
+
+An unfunded organization is not charged for overage. Reaching a funded cap goes straight to the stricter row; it does not wait for 150% of the included allowance.
+
+“Errors and metrics are kept” is shorthand for the processor rules above, **not a guarantee that every browser error event or entire failed trace survives**. Log severity determines which logs survive; a span must have OpenTelemetry error status to survive the strict trace rule. Other filtering, sampling and collection settings still apply. Quota drops are acknowledged to telemetry senders rather than rejected for retry, so dropped data is not recovered later. Your application keeps running.
+
+Gateway state is polled every 30 seconds. A missing or stale quota-state source fails open, allowing normal collection; the billing ledger cap is independent of that gateway decision. Existing stored data still follows its retention policy.
+
+Raising the cap re-evaluates the organization immediately, with gateway changes following a poll; if that evaluation fails, the next metering pass retries. Normal collection can resume, but previously dropped data cannot be restored. Recent hours can be re-metered until their ledger buckets are finalized for Stripe; raising a cap is not a promise that every previously clamped byte stays permanently free.
+
+Lowering the cap cannot undo charges already recorded this month. If you request a cap lower than what has already been charged this month, the server saves **the amount already charged**, reports that it raised your request to the charged floor, and shows the saved value. That floor is checked again while saving, including any metering that completed while you were editing. A new lower setting is not automatically scheduled for next month.
+
+Settings are versioned. If another admin changes them while your editor is open, your save is rejected without overwriting their change. Reload the latest limits, review them and edit again. Saved changes appear in the organization-wide limit history with the actor and time.
+
+## Usage notices
+
+The meter implements configurable percentage thresholds of the **included allowance**, defaulting to **50%, 80% and 100%**, plus an optional **cap reached** notice. These are not percentages of your dollar cap. The editor offers threshold checkboxes and a separate cap-reached switch.
+
+Notices are sent by **email to organization owners and admins**, using each person's confirmed billing email when available, otherwise their account email. They are evaluated from metered usage, not live ingestion. Crossed thresholds are processed in order, with a claim for each threshold and cap notice per organization per UTC month to avoid repeat sends. A failed delivery attempt releases its claim for retry; email is a courtesy, not what enforces the cap.
+
+This email path is connected in the hosted application through its transactional email sender. The current UI's note that threshold delivery is not connected is stale. Choosing a Slack channel, webhook or other recipient for these threshold notices is **not implemented**. The separate `ObservabilityQuotaOver100` and `ObservabilityQuotaOver150` alert rules use [observability alert receivers](/forge/observability/dashboards-and-alerts#alerts); they are not configurable threshold-notice routing.
+
+## Retention is included
+
+You pay once at ingestion, not again for each day of retention. Hosted defaults are:
+
+| Data | Retention |
+|---|---|
+| Logs | TRACE/DEBUG: 3 days; INFO: 14 days; WARN and above: 30 days |
+| Traces | 7 days |
+| Metrics | 30 days |
+| Profiles | **24 hours raw; 30 days aggregated** |
+| Browser errors (derived) | 30 days |
+| Session replay | 14 days |
+| Product events | Up to 90 days without a paid compute subscription; up to 400 days with one, bounded by the environment's declaration |
+
+Expiration is handled by database TTL processing, not an instantaneous deletion at the exact retention boundary. The billing editor shows retention read-only; changing your spend cap does not change it. To control collection, change the environment's [observability signal settings](/forge/observability/where-it-goes#opting-out) and deploy.
+
+## Queries are free, with separate fair-use lanes
+
+Queries have no usage price and do not consume your ingestion allowance or dollar cap. Each organization has separate hourly budgets for people using the console, background automation and agents. Exhausting one lane does not consume another lane's budget, but it can defer work in the exhausted lane.
+
+| Lane | Queries/hour | Read volume/hour | Execution seconds/hour |
+|---|---:|---:|---:|
+| Console (interactive) | 3,000 | 500 GiB | 1,800 |
+| Alerts & automation | 9,000 | 150 GiB | 3,600 |
+| Agents, CLI and organization tokens | 1,500 | 200 GiB | 900 |
+
+The per-query limits are **30 seconds** and **1,000,000,000 bytes of memory** (decimal 1 GB, about 0.93 GiB). Billing publishes a **30-day maximum query range**; individual explorers can impose shorter ranges. Hourly quotas reset at the next clock hour. A quota-exhausted response identifies the lane and reset time; waiting for that reset, narrowing a query or reducing repeated reads is the remedy, not buying ingestion overage.
+
+The billing limits view currently reports the configured budgets, **not live lane consumption**: its API marks usage as unknown and does not supply a measured reset timestamp. An absent usage reading is not zero queries used, nor proof that a lane has room. Do not infer live remaining capacity before a usage snapshot is available.
+
+## Related topics
+
+[Observability](/forge/observability) covers collection, explorers, dashboards and alerts. [Billing, wallet & Reliant AI](/account/billing) explains subscription and wallet charges; [Reliant hosting](/forge/hosting) covers the other hosted resources.

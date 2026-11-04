@@ -21,6 +21,8 @@ import type { OnboardingStepId } from "./types";
 import { WORKFLOWS_LIBRARY_PATH } from "../../lib/workflowsArea";
 import { useTourStore } from "../../store/tourStore";
 import { useChatStore } from "../../store/chatStore";
+import { useProjectStore } from "../../store/projectStore";
+import { chatRouteAfterTour } from "../OnboardingFlow/useOnboardingComplete";
 
 // Whitelist of valid step IDs. The route schemas reject unknown values via
 // Zod, but routes without a schema (or tests using a memory router) can let
@@ -117,14 +119,18 @@ export function useTourNavigation(): TourNavigation {
     [navigate],
   );
 
-  // Ending the tour (finish OR skip) must also LAND the user somewhere they
-  // can chat. exitTour only strips `?tour=`, preserving the pathname, so a
-  // tour whose last steps live on /workflow/... left the user stranded there.
+  // Ending the tour (finish OR skip) must LAND the user somewhere they can
+  // chat, in ONE navigation. exitTour only strips `?tour=`, preserving the
+  // pathname, so a tour whose last steps live on /workflow/... left the user
+  // stranded there. Stripping the param first and then loading the
+  // destination behind a dynamic import was two hops with a chunk load
+  // between them: the tour vanished, the user sat on the workflow builder
+  // until the import settled, and a click in that gap was overridden by the
+  // late jump. The destination's `search: {}` already drops `?tour=`, so the
+  // single navigation both ends the tour and lands the user.
   const goToChatAfterTour = useCallback(async () => {
-    const [{ chatRouteAfterTour }, { useProjectStore }] = await Promise.all([
-      import("../OnboardingFlow/useOnboardingComplete"),
-      import("../../store/projectStore"),
-    ]);
+    // Clear the active chat so the user lands on a fresh new-chat view.
+    useChatStore.getState().clearCurrentChat();
     const projectId = useProjectStore.getState().currentProject?.id;
     await navigate(chatRouteAfterTour(projectId) as never);
   }, [navigate]);
@@ -148,17 +154,13 @@ export function useTourNavigation(): TourNavigation {
     if (nextId) {
       goToStep(nextId);
     } else {
-      // Last step — tour finished.
+      // Last step — tour finished. Land on the chat, then prompt for an API
+      // key if we still don't have one.
       await useTourStore.getState().markTourCompleted();
-      exitTour();
-      // Match the prior wizard behavior: clear active chat so the user lands
-      // on a fresh new-chat view after finishing the tour, then prompt for an
-      // API key if we still don't have one.
-      useChatStore.getState().clearCurrentChat();
       await goToChatAfterTour();
       void promptApiKeyIfNeededAfterTour();
     }
-  }, [currentStepId, goToStep, exitTour, goToChatAfterTour]);
+  }, [currentStepId, goToStep, goToChatAfterTour]);
 
   const goBack = useCallback(() => {
     if (!currentStepId) return;
@@ -179,13 +181,11 @@ export function useTourNavigation(): TourNavigation {
     // RPCs), which made "Skip tour" take ~10s.
     store.markRemainingSkipped();
     await store.markTourCompleted();
-    exitTour();
-    useChatStore.getState().clearCurrentChat();
-    // Skipping ends the tour just as finishing does, and leaves the user on
-    // whatever page the abandoned step had them on — same landing fix.
+    // Skipping ends the tour just as finishing does, and would leave the user
+    // on whatever page the abandoned step had them on — same landing.
     await goToChatAfterTour();
     void promptApiKeyIfNeededAfterTour();
-  }, [exitTour, goToChatAfterTour]);
+  }, [goToChatAfterTour]);
 
   return {
     currentStepId,

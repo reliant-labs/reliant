@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -16,16 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
-	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -182,71 +175,30 @@ func TestTerminalWS_MissingWorkingDirIsReportedAsWorkingDirUnavailable(t *testin
 	require.Equal(t, projectWorkingDir, record["requested_working_dir"])
 }
 
-// openStreamTerminalAt serves the terminal Service over h2c and opens a
-// stream asking for workingDir, returning the stream's first receive.
-func openStreamTerminalAt(t *testing.T, router toolexec.DaemonRouter, workingDir string) (*reliantv1.TerminalStreamOutput, error) {
-	t.Helper()
-	path, handler := reliantv1connect.NewTerminalServiceHandler(NewTestTerminal(t, WithTerminalDeps(Deps{Router: router})),
-		connect.WithInterceptors(svcerr.Interceptor()))
-	mux := http.NewServeMux()
-	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, terminalTestUserID)
-		handler.ServeHTTP(w, r.WithContext(ctx))
-	}))
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.EnableHTTP2 = true
-	srv.StartTLS()
-	t.Cleanup(srv.Close)
-
-	client := reliantv1connect.NewTerminalServiceClient(srv.Client(), srv.URL)
-	stream := client.StreamTerminal(context.Background())
-	t.Cleanup(func() {
-		_ = stream.CloseRequest()
-		_ = stream.CloseResponse()
-	})
-	require.NoError(t, stream.Send(&reliantv1.TerminalStreamInput{
-		Input: &reliantv1.TerminalStreamInput_Create{Create: &reliantv1.TerminalCreateRequest{WorkingDir: workingDir}},
-	}))
-	return stream.Receive()
-}
-
-func TestStreamTerminal_MissingWorkingDirIsFailedPrecondition(t *testing.T) {
-	router := &terminalCreateRouter{createErr: errMissingWorkingDirTransport}
-
-	_, err := openStreamTerminalAt(t, router, projectWorkingDir)
-
-	require.Error(t, err)
-	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err),
-		"a directory that does not exist is the caller's precondition, not a server fault")
-	var cerr *connect.Error
-	require.ErrorAs(t, err, &cerr)
-	require.Equal(t, "create terminal session: create session: terminal working directory unavailable: "+projectWorkingDir+" does not exist",
-		cerr.Message(), "the daemon's words reach the user; the router's do not")
-}
-
-func TestStreamTerminal_SessionCreatedLogsRequestedAndEffectiveWorkingDir(t *testing.T) {
-	logs := captureLogs(t)
-	router := &terminalCreateRouter{}
-	router.createResponse, _ = json.Marshal(map[string]any{
-		"session_id":  "daemon-session-1",
-		"pid":         4242,
-		"working_dir": projectWorkingDir,
-	})
-
-	first, err := openStreamTerminalAt(t, router, projectWorkingDir)
-	require.NoError(t, err)
-	require.Equal(t, "daemon-session-1", first.GetCreated().GetSessionId())
-
-	record := logRecord(t, logs, "[Terminal] Stream session created")
-	require.Equal(t, projectWorkingDir, record["requested_working_dir"])
-	require.Equal(t, projectWorkingDir, record["working_dir"])
-}
-
 // fakeTerminalCheckouts serves the workspace records TerminalWSHandler reads
 // to decide whether a missing working directory may still appear.
 type fakeTerminalCheckouts struct {
 	worktrees      map[string]*db.Worktree
+	chats          map[string]*db.Chat
 	projectDaemons map[string][]*db.ProjectDaemon
+	// projectOwners maps a project to its owner; unlisted projects are the
+	// test user's.
+	projectOwners map[string]string
+}
+
+func (f fakeTerminalCheckouts) GetProject(_ context.Context, id string) (*db.Project, error) {
+	owner := terminalTestUserID
+	if o, ok := f.projectOwners[id]; ok {
+		owner = o
+	}
+	return &db.Project{ID: id, UserID: owner}, nil
+}
+
+func (f fakeTerminalCheckouts) GetChat(_ context.Context, id string) (*db.Chat, error) {
+	if chat, ok := f.chats[id]; ok {
+		return chat, nil
+	}
+	return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 }
 
 func (f fakeTerminalCheckouts) GetWorktree(_ context.Context, id string) (*db.Worktree, error) {

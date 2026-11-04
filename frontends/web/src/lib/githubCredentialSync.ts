@@ -2,9 +2,19 @@
  * githubCredentialSync
  *
  * Centralized, retrying, observable bridge between Supabase GitHub OAuth and
- * the control-plane `git_credentials` table. Whenever Supabase hands us a
- * transient `provider_token` (a one-shot GitHub PAT) we have to persist it
- * to the control plane so subsequent git operations can use it.
+ * the control-plane `git_credentials` table.
+ *
+ * Supabase's GitHub provider may be backed by either of two GitHub apps, and
+ * only one of them yields a token worth keeping:
+ *
+ *   - the GitHub App `reliant-labs`: `provider_token` is a user-to-server token
+ *     (`ghu_…`) that expires, with a `provider_refresh_token`. Signing in IS
+ *     connecting GitHub, so we persist both and the user consents once.
+ *   - a classic OAuth app (`gho_…`, 0 scopes): sign-in only. Persisting it
+ *     would store a token that cannot read a single private repo, so we don't.
+ *     Repo access then comes from the dedicated connect flow.
+ *
+ * `syncProviderTokenFromSession` is the gate between the two.
  *
  * Historically each callsite did a fire-and-forget `gitService.saveCredential`
  * with a console.warn on failure. When that save failed the user would land
@@ -62,6 +72,7 @@ async function sync(
   providerToken: string,
   scopes: string = "repo",
   trigger: GitHubCredentialSyncTrigger = "signin",
+  refreshToken: string = "",
 ): Promise<GitHubCredentialSyncResult> {
   // Local-only deploys have no control plane; treat as success no-op.
   if (!hasControlPlane) {
@@ -82,7 +93,7 @@ async function sync(
   let lastError: unknown = null;
   for (let attempt = 1; attempt <= RETRY_DELAYS_MS.length; attempt += 1) {
     try {
-      await gitService.saveCredential("github", providerToken, scopes);
+      await gitService.saveCredential("github", providerToken, scopes, refreshToken);
       try {
         const now = new Date().toISOString();
         queryClient.setQueryData(GITHUB_CREDENTIAL_QUERY_KEY, {
@@ -139,6 +150,26 @@ async function sync(
   return { ok: false, error: errorMessage };
 }
 
+/** Prefix of a GitHub App user-to-server token. */
+const GITHUB_APP_USER_TOKEN_PREFIX = "ghu_";
+
+/**
+ * Persist the GitHub credential a Supabase sign-in produced, when it is one
+ * worth persisting: a GitHub App user token. Anything else — a classic
+ * `gho_` token, another provider's token, no token — is left alone.
+ */
+async function syncProviderTokenFromSession(session: {
+  provider_token?: string | null;
+  provider_refresh_token?: string | null;
+} | null): Promise<GitHubCredentialSyncResult | null> {
+  const token = session?.provider_token;
+  if (!token || !token.startsWith(GITHUB_APP_USER_TOKEN_PREFIX)) return null;
+  // An App token's access is governed by its installations, not by an OAuth
+  // scope string, so there is no scope to claim here.
+  return sync(token, "", "signin", session?.provider_refresh_token ?? "");
+}
+
 export const githubCredentialSync = {
   sync,
+  syncProviderTokenFromSession,
 };

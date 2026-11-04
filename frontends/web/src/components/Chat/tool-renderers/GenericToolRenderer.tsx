@@ -52,7 +52,7 @@ function GenericToolRendererComponent({ ctx }: ToolContentProps) {
           <div className={`px-2 py-1 text-2xs ${result.is_error ? 'text-warning-ink' : 'text-muted-foreground'} bg-muted/40 border-b border-border/20 flex items-center justify-between`}>
             <span>{result.is_error ? 'Warning' : 'Output'}</span>
             {!result.is_error && result.content && (
-              <CopyButton content={result.content} className="opacity-100" />
+              <CopyButton content={result.content} resolveContent={ctx.loadFullResult} className="opacity-100" />
             )}
           </div>
           {result.is_error ? (

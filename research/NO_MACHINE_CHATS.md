@@ -314,7 +314,16 @@ evidence: default resolution for the chat, the sweep's adoption for the
 worktree, connect-time reconcile for the install. Migration
 `20261010020219` released the rows earlier removals left dangling.
 
-**An unpinned chat is not tool-less.** A chat with no `active_daemon_id` (and
-`no_machine = false`) routes each tool call by default resolution, the same
-resolution the Files tab uses for its main checkout; nothing binds it, and
-nothing needs to.
+**An unpinned chat is not tool-less, and does not stay unpinned.** A chat with
+no `active_daemon_id` (and `no_machine = false`) is still a chat on a machine,
+but it is no longer left to route each tool call by default resolution: that
+re-evaluates on every call, prefers a connected local machine, and ignores which
+machine has the project, so connecting a laptop moved every such chat onto it
+(research/CHAT_MACHINE_PLACEMENT.md). Every run start now pins the chat first
+(`daemonplacement.Pinner`): the worktree's owner, else the project-aware default
+among the machines the project is installed on, written once and never moved
+except by the user (`SetChatDaemon`) or by the machine's removal (which
+unpins; the next run pins again). Only a user with no machine at all leaves a
+chat unpinned, and it then routes by default resolution as before. Project-level
+surfaces that have no chat (the Files tab on the main checkout) still use
+default resolution.

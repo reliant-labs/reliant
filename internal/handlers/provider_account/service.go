@@ -25,7 +25,7 @@ type Store interface {
 	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
 	ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error
 	DeleteProviderAccount(ctx context.Context, userID, accountID string) error
-	GetChatWithUserCheck(ctx context.Context, id, userID string) (*db.Chat, error)
+	GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*db.ChatRow, error)
 	GetRootThread(ctx context.Context, chatID string) (*db.Thread, error)
 	ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error)
 	LatestServingAccount(ctx context.Context, threadID string) (string, error)

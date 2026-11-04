@@ -6,9 +6,9 @@
  *
  *   - Spawns are chat-scoped. The live chat stream supplies immediate rows,
  *     while the workflow execution tree is the durable title/lifecycle source.
- *   - Background bash processes are worktree-scoped and polled through
- *     processStore, and a single worktree is shared by every chat open
- *     against it.
+ *   - Background bash processes are worktree-scoped and read from
+ *     BackgroundService (useBackgroundProcesses, kept live by the stream),
+ *     and a single worktree is shared by every chat open against it.
  *
  * Failed spawns come from the workflow tree alone. A sub-agent whose step
  * fails stops on its own — the rest of the chat keeps running — and reports to
@@ -34,9 +34,8 @@
 
 import { useMemo } from "react";
 import { useActiveThreads } from "../../store/threadActivityStore";
-import { useProcessStore } from "../../store/processStore";
-import { BackgroundProcessStatus } from "../../api/background-grpc";
-import { usePendingQuestions } from "../../hooks/approval-queries";
+import { BackgroundProcessStatus, useBackgroundProcesses } from "../../hooks/background-queries";
+import { usePendingQuestions } from "../../hooks/question-queries";
 import { questionThreadId, viewedThreadId } from "../../lib/pendingQuestions";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { isWorkflowLive, workflowStoppedBecause } from "../../lib/workflowLifecycle";
@@ -257,8 +256,8 @@ export function useBackgroundWork(
   mainThreadId?: string | null,
 ): BackgroundWork {
   const activeThreads = useActiveThreads(chatId ?? "");
-  const processes = useProcessStore((state) => state.processes);
-  const { data: pendingQuestions } = usePendingQuestions(chatId);
+  const { data: processes } = useBackgroundProcesses();
+  const pendingQuestions = usePendingQuestions(chatId).data?.questions;
   const { allWorkflows } = useWorkflowExecutions(chatId ?? null);
 
   return useMemo(() => {
@@ -266,7 +265,7 @@ export function useBackgroundWork(
 
     const questions = pendingQuestions ?? [];
     const questionThreads = new Set(questions.map((q) => questionThreadId(q, chatId, mainThreadId)));
-    const questionWorkflows = new Set(questions.map((q) => q.workflow_id).filter(Boolean));
+    const questionWorkflows = new Set(questions.map((q) => q.workflowId).filter(Boolean));
 
     const spawnWorkflows = indexSpawnWorkflows(allWorkflows);
     const spawns: ActiveSpawn[] = [];
@@ -324,7 +323,7 @@ export function useBackgroundWork(
       if (threadId === inView || spawnRows.has(threadId)) continue;
       const isMainThread = threadId === chatId;
       waitingByThread.set(threadId, {
-        questionId: question.question_id,
+        questionId: question.questionId,
         threadId,
         isMainThread,
         title: isMainThread

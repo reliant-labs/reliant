@@ -5,7 +5,7 @@ import { RightSidebar } from "../FileBrowser/RightSidebar";
 import { RecentChanges } from "../Chat/RecentChanges";
 import { useProjectStore } from "../../store/projectStore";
 import { useSidebarStore } from "../../store/sidebarStore";
-import { useActiveWorktreeId } from "../../store/worktreeStore";
+import { useActiveWorktreeId } from "../../hooks/worktree-queries";
 
 export type RightContentView = "files" | "changes" | null;
 
@@ -27,7 +27,7 @@ export function RightContentPanel({
 
   const renderPanelHeader = () => (
     <div className="flex h-11 items-center justify-between border-b border-border bg-card px-3">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h2 className="text-xs font-medium text-muted-foreground">
         Reliant
       </h2>
       <button

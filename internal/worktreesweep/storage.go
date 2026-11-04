@@ -30,6 +30,11 @@ type StorageStore interface {
 	Store
 	ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error)
 	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
+	// MergeUnownedWorktreeCleanupMetadata is MergeWorktreeCleanupMetadata for
+	// an archived row that still has no machine on record, under the same row
+	// lock a machine claiming it takes; false when the row has a machine, is
+	// not archived, or fn wrote nothing.
+	MergeUnownedWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *core.CleanupMetadata) bool) (bool, error)
 }
 
 // Held is one archived worktree a machine kept, for display.
@@ -47,11 +52,16 @@ type Held struct {
 	Removable bool
 	// Cleaning: a clean-up is running for it right now.
 	Cleaning bool
+	// Forgettable: Forget may drop it — no machine is on record for it, and
+	// every connected machine said it does not have the folder.
+	Forgettable bool
 }
 
 // MachineStorage is one machine's storage picture. A machine appears only when
 // it has something worth showing.
 type MachineStorage struct {
+	// DaemonID is "" for the archived worktrees no machine is on record for:
+	// no disk, no Clean up, Online when any of the user's machines is.
 	DaemonID string
 	Held     []Held
 	// Disk is the machine's last heartbeat disk report (diskwatch), every
@@ -66,7 +76,15 @@ type MachineStorage struct {
 	// Since is when the problem began: the pressure episode's start when the
 	// disk is low, otherwise when the oldest held worktree was archived.
 	Since time.Time
+	// Processes is set while the machine refuses background heavy commands
+	// for being near its process limit (internal/procguard): the count, the
+	// limit and the largest process trees. Its own inbox item.
+	Processes *reliantv1.ProcessReport
 }
+
+// StorageItem reports whether the machine has a disk or kept-workspace
+// problem to show (as opposed to only a process one).
+func (m *MachineStorage) StorageItem() bool { return m.DiskLow() || len(m.Held) > 0 }
 
 // DiskLow reports whether at least one volume is under pressure.
 func (m *MachineStorage) DiskLow() bool { return m.Severity > diskwatch.SeverityNone }
@@ -101,17 +119,26 @@ func StorageView(ctx context.Context, store StorageStore, userID string) ([]*Mac
 	}
 	for _, h := range held {
 		wt := h.Worktree
-		// A worktree with no recorded machine cannot be cleaned up: nobody is
-		// known to hold its directory. The periodic sweep adopts it first.
-		if wt.DaemonID == nil || *wt.DaemonID == "" || wt.CleanupMetadata == nil {
+		if wt.CleanupMetadata == nil {
 			continue
 		}
 		meta := wt.CleanupMetadata
-		m := get(*wt.DaemonID)
+		// A worktree with no recorded machine cannot be cleaned up: nobody is
+		// known to hold its directory. The periodic sweep asks every
+		// connected machine, and the one that has the folder claims it. Until
+		// then it is listed under no machine (DaemonID ""), where it can be
+		// forgotten once no connected machine has it.
+		daemonID := ptrString(wt.DaemonID)
+		m := get(daemonID)
+		if daemonID == "" {
+			m.Online = len(connected) > 0
+		}
 		m.Held = append(m.Held, Held{
 			WorktreeID: wt.ID, Name: wt.Name, ProjectName: h.ProjectName, Path: wt.Path,
 			Reason: meta.HeldReason, Detail: meta.HeldDetail, SizeBytes: meta.SizeBytes,
-			Removable: worktreereclaim.HeldReason(meta.HeldReason).Removable(), Cleaning: meta.CleaningNow(time.Now()),
+			Removable:   daemonID != "" && worktreereclaim.HeldReason(meta.HeldReason).Removable(),
+			Cleaning:    meta.CleaningNow(time.Now()),
+			Forgettable: daemonID == "" && forgettable(meta, connected),
 		})
 		if wt.DeletedAt != nil && (m.Since.IsZero() || wt.DeletedAt.Before(m.Since)) {
 			m.Since = *wt.DeletedAt
@@ -134,6 +161,9 @@ func StorageView(ctx context.Context, store StorageStore, userID string) ([]*Mac
 		} else if m := machines[id]; m != nil {
 			m.Disk = rep
 		}
+		if diskwatch.RefusingForProcesses(rep) {
+			get(id).Processes = rep.Processes
+		}
 	}
 
 	out := make([]*MachineStorage, 0, len(machines))
@@ -143,6 +173,67 @@ func StorageView(ctx context.Context, store StorageStore, userID string) ([]*Mac
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].DaemonID < out[j].DaemonID })
 	return out, nil
+}
+
+// forgettable reports whether an archived row held for having no machine on
+// record may be forgotten: at least one of the user's machines is connected,
+// and every connected one answered that it does not have the folder. With no
+// machine connected nothing has been asked, so nothing is offered.
+func forgettable(meta *core.CleanupMetadata, connected []string) bool {
+	if meta == nil || meta.DirectoryDeleted || meta.HeldReason != string(worktreereclaim.ReasonNoMachine) || len(connected) == 0 {
+		return false
+	}
+	for _, id := range connected {
+		if !slices.Contains(meta.AbsentOn, id) {
+			return false
+		}
+	}
+	return true
+}
+
+// ErrNotForgettable means Forget was refused: the row is not one no machine
+// is on record for, or a connected machine has not said it lacks the folder.
+var ErrNotForgettable = errors.New("not forgettable")
+
+// ErrNotHeld means the user has no archived worktree held with that id.
+var ErrNotHeld = errors.New("no such held worktree")
+
+// Forget drops the record of the folder of one of the user's archived
+// worktrees that no machine is on record for and no connected machine has
+// (forgettable), so the hold no longer sits in Storage forever. Nothing on
+// any disk is touched: the row is marked DirectoryDeleted (and Forgotten),
+// which takes it out of the sweep and the Storage view, and stays in the
+// archive. The check is repeated under the row's lock, and the row must still
+// have no machine: a machine claiming it at the same moment wins.
+func Forget(ctx context.Context, store StorageStore, userID, worktreeID string) error {
+	held, err := store.ListHeldWorktreesForUser(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if !slices.ContainsFunc(held, func(h *core.HeldWorktree) bool { return h.Worktree.ID == worktreeID }) {
+		return ErrNotHeld
+	}
+	connected, err := store.ListAttachedDaemonIDsForUser(ctx, userID, connectedLease)
+	if err != nil {
+		return err
+	}
+	forgot, err := store.MergeUnownedWorktreeCleanupMetadata(ctx, worktreeID, func(m *core.CleanupMetadata) bool {
+		if !forgettable(m, connected) {
+			return false
+		}
+		m.DirectoryDeleted, m.Forgotten = true, true
+		m.HeldReason, m.HeldDetail, m.SizeBytes, m.Rechecks, m.Transient = "", "", 0, 0, ""
+		m.Cleaning, m.CleaningBy, m.CleaningUntil = false, "", nil
+		m.AbsentOn = nil
+		return true
+	})
+	if err != nil {
+		return err
+	}
+	if !forgot {
+		return ErrNotForgettable
+	}
+	return nil
 }
 
 // CleanupOutcome is the per-worktree result of a confirmed cleanup.
@@ -208,7 +299,9 @@ func (s *Sweeper) StartCleanup(ctx context.Context, store StorageStore, userID, 
 		return nil, skipped, nil
 	}
 	bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupBudget)
+	s.cleanups.Add(1)
 	go func() {
+		defer s.cleanups.Done()
 		defer cancel()
 		stop := s.keepCleaningAlive(bg, cands)
 		defer stop()
@@ -323,14 +416,14 @@ func (s *Sweeper) cleanBatch(ctx context.Context, t target, batch []*core.Reclai
 		*out = append(*out, CleanupResult{WorktreeID: c.Worktree.ID, Outcome: CleanupFailed, Message: msg})
 		s.mergeMeta(ctx, c.Worktree, func(m *core.CleanupMetadata) { m.Cleaning, m.CleaningBy, m.CleaningUntil = false, "", nil })
 	}
-	req, shared := s.describe(ctx, batch, live, false)
+	req, shared := s.describe(ctx, batch, live, false, nil)
 	byID := map[string]*core.ReclaimCandidate{}
 	for _, c := range batch {
 		byID[c.Worktree.ID] = c
 	}
 	for _, h := range shared {
 		delete(byID, h.cand.Worktree.ID)
-		s.recordHold(ctx, h.cand.Worktree, worktreereclaim.ReasonSharedWithLive, h.detail, 0, nil)
+		s.recordHold(ctx, h.cand.Worktree, h.reason, h.detail, 0, nil)
 		*out = append(*out, CleanupResult{WorktreeID: h.cand.Worktree.ID, Outcome: CleanupSkipped, Message: "left in place: " + h.detail})
 	}
 	if len(req.Worktrees) == 0 {

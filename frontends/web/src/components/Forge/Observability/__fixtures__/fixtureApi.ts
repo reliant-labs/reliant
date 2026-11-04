@@ -12,6 +12,7 @@
  * relative to the request's window, so "last hour" always has data in it.
  */
 
+import { fixtureMetricCatalog, fixtureMetricDetail, fixtureMetricEntry, fixtureMetricExemplars, fixtureMetricPanel } from "./metricFixtures";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import forgeSpecRaw from "./forge-dashboard-spec.json?raw";
@@ -19,8 +20,10 @@ import { createAlertingFixture, type AlertingFixtureOptions } from "./fixtureAle
 import { createDashboardFixture, type DashboardFixtureOptions } from "./fixtureDashboards";
 import { createDeliveryFixture, versionAt, type DeliveryFixtureOptions } from "./fixtureDelivery";
 import { createIssuesFixture, type IssuesFixtureOptions } from "./fixtureIssues";
+import { createSessionsFixture, type SessionsFixtureOptions } from "./fixtureSessions";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { fixtureGraph, fixtureCatalog } from "./fixtureGraph";
 import type {
   AttributeValueCount,
   Dashboard,
@@ -30,6 +33,7 @@ import type {
   WorkloadDetail,
   WorkloadHealth,
   WorkloadEvent,
+  WorkloadJob,
   WorkloadMetric,
   WorkloadSeries,
   Flamegraph,
@@ -39,6 +43,7 @@ import type {
   PanelResult,
   SeriesIntent,
   ServiceHealth,
+  ServiceSignalsResult,
   Severity,
   Span,
   TimeWindow,
@@ -383,6 +388,77 @@ export function fixtureReleaseDashboards(): { generated: Dashboard[]; repo: Dash
   return { generated, repo: [checkout, frontend] };
 }
 
+/** control-plane's product-usage shape: day-grained sql panels on a dashboard that declares a 7d default. Opt-in (`dashboardsDayGrained`): the console's own panel checks do not know the sql kind. */
+export function fixtureDayGrainedDashboard(): Dashboard {
+  const usage: Dashboard = {
+    id: "product-usage",
+    title: "Product: usage",
+    description: "Day-grained product panels. Opens on 7 days: a day bucket in a 1 hour window is one point.",
+    filters: [],
+    annotations: [],
+    defaultRange: "7d",
+    panels: [
+      {
+        id: "workflows-by-outcome",
+        title: "Workflow runs per day by outcome",
+        kind: "sql",
+        signal: "",
+        series: [],
+        sql: "SELECT toDate(Timestamp) AS day, if(Props['success'] = 'true', 'success', 'failed') AS outcome, count() AS runs FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY day, outcome ORDER BY day",
+        minStep: "1d",
+        width: 12,
+        height: 8,
+      },
+      {
+        id: "events-by-step",
+        title: "Events per bucket",
+        kind: "sql",
+        signal: "",
+        series: [],
+        sql: "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, count() AS events FROM product_events WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} GROUP BY t ORDER BY t",
+        width: 12,
+        height: 8,
+      },
+      // A metrics panel, so the dashboard's own range reaches "Explore in Metrics".
+      { id: "goroutines", title: "Goroutines", kind: "line", signal: "metrics", series: [{ label: "goroutines", agg: "sum", field: "go.goroutine.count", metricType: "sum" }], unit: "count", width: 12, height: 7 },
+    ],
+  };
+  return usage;
+}
+
+/**
+ * A sql panel answered the way control-plane answers it: a Date first column is
+ * one point per UTC calendar day whose start falls in the window (its time is
+ * that date's midnight UTC), tagged as UTC days; a {step} statement is one
+ * point per step. 834 successful runs today, as in the audit's screenshot.
+ */
+function fixtureSqlPanel(panel: Panel, window: TimeWindow): PanelResult {
+  const base = { kind: "sql", unit: panel.unit ?? "", truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"], ...NO_BROWSER_ROWS, ...NO_METRIC_EXTRAS, window };
+  const DAY = 86_400_000;
+  if (/toDate\(/.test(panel.sql ?? "")) {
+    const first = Math.floor(window.startMs / DAY) * DAY;
+    const days: number[] = [];
+    for (let day = first; day < window.endMs; day += DAY) days.push(day);
+    const perDay = [5, 19, 68, 160, 35, 834, 62];
+    const failed = [0, 0, 1, 3439, 5479, 17, 2];
+    const at = (i: number, from: number[]) => from[from.length - days.length + i] ?? from[0]!;
+    const timestamps = days.map((d) => d / 1000);
+    return {
+      ...base,
+      stepSeconds: 3600,
+      bucketSeconds: 86_400,
+      bucketTimezone: "UTC",
+      series: [
+        { label: "runs", group: { outcome: "success" }, timestamps, values: days.map((_, i) => at(i, perDay)), value: null },
+        { label: "runs", group: { outcome: "failed" }, timestamps, values: days.map((_, i) => at(i, failed)), value: null },
+      ],
+    };
+  }
+  const step = Math.max(60, Math.round((window.endMs - window.startMs) / 1000 / 30));
+  const timestamps = Array.from({ length: 30 }, (_, i) => Math.round(window.startMs / 1000) + i * step);
+  return { ...base, stepSeconds: step, bucketSeconds: step, series: [{ label: "events", group: {}, timestamps, values: timestamps.map((_, i) => 40 + ((i * 7) % 23)), value: null }] };
+}
+
 /** A small speedscope "sampled" profile: an rpc handler, JSON encoding and a database call. */
 export function fixtureSpeedscope(): string {
   const frames = ["main", "net/http.(*conn).serve", "orders.(*Service).CreateOrder", "encoding/json.Marshal", "database/sql.(*DB).QueryContext", "runtime.mallocgc", "syscall.Syscall"].map((name) => ({ name }));
@@ -425,12 +501,16 @@ export function fixtureComparePanel(panel: Panel, window: TimeWindow, envIds: st
     truncated: false,
     series: [],
     ...NO_BROWSER_ROWS,
+    ...NO_METRIC_EXTRAS,
     columns,
     rows: [workload("api", regress ? 0.24 : 0.21, regress ? 216 * 2 ** 20 : 182 * 2 ** 20), workload("worker", 0.08, 96 * 2 ** 20)],
   };
 }
 
 const NO_BROWSER_ROWS: Pick<PanelResult, "funnelSteps" | "issues" | "sessions"> = { funnelSteps: [], issues: [], sessions: [] };
+
+/** What only a metrics panel fills in: its series metadata, the pre-cap series count, warnings, and explain output. */
+const NO_METRIC_EXTRAS: Pick<PanelResult, "seriesMeta" | "seriesTotal" | "warnings" | "compiledSql"> = { seriesMeta: [], seriesTotal: 0, warnings: [], compiledSql: [] };
 
 /**
  * The browser kinds (C7) over the fixture app's `web` frontend: a checkout
@@ -533,7 +613,7 @@ export function fixturePanel(
         : fixtureGroups(groupBy.map((key) => key.replace(/^(resource|metric|log|span)\.attr\./, "")), scope).map((group, i) =>
             Object.fromEntries(Object.entries(group).map(([k, v], j) => [groupBy[j] ?? k, v ?? String(i)]))
           );
-  const base = { kind: panel.kind, unit: panel.unit ?? "", stepSeconds: 120, truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"], ...NO_BROWSER_ROWS };
+  const base = { kind: panel.kind, unit: panel.unit ?? "", stepSeconds: 120, truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"], ...NO_BROWSER_ROWS, ...NO_METRIC_EXTRAS };
 
   if (panel.kind === "funnel" || panel.kind === "issues" || panel.kind === "sessions") {
     return { ...base, series: [], ...fixtureBrowserPanel(panel, window, services) };
@@ -669,6 +749,39 @@ function summary(
  * near the limit), a `worker` (crash-looping in staging) and a `web` with no
  * limits set — the three shapes the Workloads view has to draw.
  */
+/**
+ * The fixture app's job runs, newest first, as ListWorkloads answers them:
+ * in prod the search reindex keeps failing and the nightly report failed once
+ * then recovered; the migration succeeds everywhere.
+ */
+export function fixtureJobs(scope: Pick<ObsScope, "envIds">, now: number): WorkloadJob[] {
+  const run = (env: (typeof FIXTURE_ENVS)[number], workload: string, suffix: string, result: WorkloadJob["result"], hoursAgo: number, reason = ""): WorkloadJob => ({
+    envId: env.id,
+    envName: env.name,
+    name: `${workload}-${suffix}`,
+    workload,
+    result,
+    reason,
+    releaseVersion: VERSIONS[1],
+    startedAtMs: now - hoursAgo * 3_600_000 - 90_000,
+    finishedAtMs: now - hoursAgo * 3_600_000,
+    durationSeconds: 90,
+  });
+  return envsOf(scope)
+    .flatMap((env) =>
+      env.name === "prod"
+        ? [
+            run(env, "search-reindex", "c41f", "failed", 1, "BackoffLimitExceeded"),
+            run(env, "nightly-report", "9a20", "succeeded", 3),
+            run(env, "shop-migrate", "b9e1", "succeeded", 5),
+            run(env, "search-reindex", "77d2", "failed", 7, "DeadlineExceeded"),
+            run(env, "nightly-report", "41cc", "failed", 20, "BackoffLimitExceeded"),
+          ]
+        : [run(env, "shop-migrate", "b9e1", "succeeded", 6)]
+    )
+    .sort((a, b) => (b.finishedAtMs ?? 0) - (a.finishedAtMs ?? 0));
+}
+
 export function fixtureWorkloads(scope: Pick<ObsScope, "envIds">, now: number): Workload[] {
   return envsOf(scope).flatMap((env, envIndex): Workload[] => {
     const prod = env.name === "prod";
@@ -817,20 +930,32 @@ export function fixtureWorkloadDetail(scope: Pick<ObsScope, "envIds">, workload:
   return { series, events, imageChanges, versionChanges, stepSeconds: Math.round((window.endMs - window.startMs) / 1000 / 40), truncated: false, workloads: rows };
 }
 
-export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureOptions, DashboardFixtureOptions, IssuesFixtureOptions {
+export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureOptions, DashboardFixtureOptions, IssuesFixtureOptions, SessionsFixtureOptions {
   /** Overrides on the usage fixture, to put the page in a given state. */
   usage?: Partial<ObservabilityUsage>;
   /** Every call fails with this (FailedPrecondition is the "not set up" org). */
   failWith?: Code;
+  /** Every call fails with exactly this error. Read at call time, so a test may set or clear it later. */
+  failError?: unknown;
   /** An environment that has sent nothing. */
   empty?: boolean;
+  graphUnknown?: boolean;
+  /** DEV-only negative cases for catalog review regressions. */
+  graphReview?: "retained-denied" | "retained-unavailable" | "rpc-201" | "artifacts-21" | "unsupported";
   /** Called for each RPC, with its request — tests assert on what was asked. */
   onCall?: (rpc: string, request: unknown) => void;
+  /**
+   * GetServiceSignals' answer. Unset, the RPC answers Unimplemented, as a
+   * control plane that predates it does: nothing is known of any service's
+   * signals, so every view stays offered.
+   */
+  signals?: ServiceSignalsResult;
 }
 
 export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi {
   const call = async <T>(rpc: string, request: unknown, answer: () => T): Promise<T> => {
     options.onCall?.(rpc, request);
+    if (options.failError !== undefined) throw options.failError;
     if (options.failWith !== undefined) {
       const message =
         options.failWith === Code.FailedPrecondition ? "observability is not set up for this organization yet" : "fixture failure";
@@ -838,9 +963,28 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
     }
     return answer();
   };
+  let catalogCalls = 0;
   const delivery = createDeliveryFixture(options, call);
   return {
     currentOrgId: async () => FIXTURE_ORG,
+    getServiceGraph: (req) => call("GetServiceGraph", req, () => fixtureGraph(options.empty, options.graphUnknown)),
+    getServiceGraphCatalog: (req) => call("GetServiceGraphCatalog", req, () => {
+      catalogCalls++;
+      if (options.graphReview === "unsupported") throw new ConnectError("unknown procedure", Code.Unimplemented);
+      if (catalogCalls > 1 && options.graphReview?.startsWith("retained-")) throw new ConnectError("catalog no longer readable", options.graphReview === "retained-denied" ? Code.PermissionDenied : Code.Unavailable);
+      const result = fixtureCatalog(options.empty, options.graphUnknown);
+      if (options.graphReview === "rpc-201") {
+        const selectedId = "shop.v1.OrdersService/ZZMethod201";
+        result.methods = req.rpcIds?.includes(selectedId) ? [{ ...result.methods[0], id: selectedId, method: "ZZMethod201" }] : [];
+      }
+      if (options.graphReview === "artifacts-21") {
+        result.declaredCatalogs = Array.from({ length: 21 }, (_, i) => ({ ...result.declaredCatalogs[0], envId: `env-${i}`, bundleDigest: `bundle-${i}` }));
+        const last = JSON.parse(result.declaredCatalogs[20].json);
+        last.services[0].descriptor.Schemas["shop.v1.GetOrderRequest"] = [{ name: "different_schema_in_21st", kind: "int64" }];
+        result.declaredCatalogs[20].json = JSON.stringify(last);
+      }
+      return result;
+    }),
     getServiceOverview: (req) =>
       call("GetServiceOverview", req, () => {
         if (options.empty) return { services: [], trendStepSeconds: 60 };
@@ -902,6 +1046,8 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         if (unsupported) {
           throw new ConnectError(`aggregation "count_distinct" is not supported on field ${unsupported.field}`, Code.InvalidArgument);
         }
+        if (panel.signal === "metrics" && panel.series.some((series) => fixtureMetricEntry(series.field ?? ""))) return fixtureMetricPanel(panel, req.window, req.window.endMs);
+        if (panel.kind === "sql") return fixtureSqlPanel(panel, req.window);
         if (panel.id.startsWith("compare-")) return fixtureComparePanel(panel, req.window, req.envIds, delivery.ledger);
         return fixturePanel(panel, req.window, req.services, req.groupBy, req);
       }),
@@ -914,12 +1060,26 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         availableProfileTypes: ["cpu", "alloc_space", "inuse_space", "goroutine"],
         truncated: false,
       })),
+    getServiceSignals: (req) =>
+      call("GetServiceSignals", req, () => {
+        if (!options.signals) throw new ConnectError("unknown procedure controlplane.v1.ObservabilityService/GetServiceSignals", Code.Unimplemented);
+        return options.signals;
+      }),
     getObservabilityUsage: (orgId) => call("GetObservabilityUsage", { orgId }, () => fixtureUsage(Date.now(), options.usage)),
     ...createDashboardFixture(options, call),
     ...createAlertingFixture(options, call),
     listReleases: delivery.listReleases,
     getDoraMetrics: delivery.getDoraMetrics,
     ...createIssuesFixture(options, call, delivery.ledger),
+    ...createSessionsFixture(options, call),
+    listMetricCatalog: (req) => call("ListMetrics", req, () => (options.empty ? { metrics: [], truncated: false } : fixtureMetricCatalog(req.window.endMs, req.name, req.limit))),
+    getMetric: (req) =>
+      call("GetMetric", req, () => {
+        const detail = fixtureMetricDetail(req.name, req.window.endMs);
+        if (!detail) throw new ConnectError(`metric "${req.name}" has no data in this window`, Code.NotFound);
+        return detail;
+      }),
+    listMetricExemplars: (req) => call("ListMetricExemplars", req, () => fixtureMetricExemplars(req.window.endMs, req.limit)),
     listAttributeValues: (req) =>
       call("ListAttributeValues", req, () => {
         const values: AttributeValueCount[] = valuesOf(req.key, req)
@@ -931,7 +1091,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
       call("ListWorkloads", req, () => {
         if (options.empty) return { workloads: [], truncated: false, jobs: [], jobsTruncated: false };
         const all = fixtureWorkloads(req, req.window.endMs);
-        return { workloads: req.services?.length ? all.filter((w) => req.services!.includes(w.workload)) : all, truncated: false, jobs: [], jobsTruncated: false };
+        return { workloads: req.services?.length ? all.filter((w) => req.services!.includes(w.workload)) : all, truncated: false, jobs: fixtureJobs(req, req.window.endMs), jobsTruncated: false };
       }),
     getWorkload: (req) => call("GetWorkload", req, () => fixtureWorkloadDetail(req, req.workload, req.container, req.window)),
   };

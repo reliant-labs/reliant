@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
@@ -9,23 +9,18 @@ import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 
-vi.mock("../ui/Tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+// Keeps the trigger wrapper's classes (triggerClassName): the hover-only
+// actions hide and show on it.
+vi.mock("../forge-ui/tooltip", () => ({
+  default: ({ children, triggerClassName }: { children: ReactNode; triggerClassName?: string }) =>
+    triggerClassName ? <span className={triggerClassName}>{children}</span> : <>{children}</>,
 }));
 
-vi.mock("../ui/Button", () => ({
-  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
-}));
-
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: () => null,
-}));
+vi.mock("../forge-ui/context_menu", () => ({ default: () => null }));
 
 // The real Dropdown is used here on purpose: these tests assert open/close
 // behavior (choose-an-option and Escape), which a passthrough mock would fake.
@@ -54,7 +49,7 @@ const mockChatListData = [
     updatedAt: "2024-01-01T00:00:00.000Z",
     lastMessageAt: "2024-01-01T00:00:00.000Z",
     unread: false,
-    state: ChatState.ACTIVE,
+    state: ChatState.IDLE,
     worktreeId: "worktree-1",
     projectId: "project-1",
   },
@@ -62,13 +57,18 @@ const mockChatListData = [
 
 const mockArchivedChatData: Array<Record<string, unknown>> = [];
 
+// Stable, as a query result is: a new array each render would re-run the
+// sidebar's effects on every render.
+const NO_MAIN_WORKTREES: never[] = [];
+
 vi.mock("../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: () => ({
-    data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktree: undefined },
+    data: { chats: mockChatListData, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: mockArchivedChatData, isFetched: true }),
-  useDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
   useChat: () => ({ data: undefined }),
@@ -94,7 +94,6 @@ vi.mock("../../hooks/message-queries", () => ({
 }));
 
 describe("Sidebar selected chat scroll", () => {
-  const fetchProcesses = vi.fn();
   const switchWorktreeContext = vi.fn(async () => undefined);
   const scrollIntoViewMock = vi.fn();
 
@@ -119,7 +118,7 @@ describe("Sidebar selected chat scroll", () => {
             updatedAt: "2024-01-01T00:00:00.000Z",
             lastMessageAt: "2024-01-01T00:00:00.000Z",
             unread: false,
-            state: ChatState.ACTIVE,
+            state: ChatState.IDLE,
             worktreeId: "worktree-1",
             projectId: "project-1",
           },
@@ -135,14 +134,10 @@ describe("Sidebar selected chat scroll", () => {
 
     // Empty on purpose: the sidebar groups from the chat list alone.
     useWorktreeStore.setState({
-      worktrees: [],
-      currentWorktree: null,
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext,
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
-
-    useProcessStore.setState({
-      fetchProcesses,
-    } as Partial<ReturnType<typeof useProcessStore.getState>>);
 
     useProjectStore.setState({
       currentProject: {
@@ -150,7 +145,7 @@ describe("Sidebar selected chat scroll", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         created_at: "2024-01-01T00:00:00.000Z",
         updated_at: "2024-01-01T00:00:00.000Z",
         last_active: "2024-01-01T00:00:00.000Z",
@@ -204,6 +199,9 @@ describe("Sidebar selected chat scroll", () => {
       worktreeName: "Archived workspace",
       projectId: "project-1",
     });
+    // One project's archive groups by workspace (across projects it groups
+    // by project: Sidebar.projectClarity.test.tsx).
+    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
 
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -226,6 +224,7 @@ describe("Sidebar selected chat scroll", () => {
     // The group expands and the list must NOT snap back to the active tab.
     expect(screen.getByText("Archived chat")).toBeInTheDocument();
     expect(screen.queryByText("Selected chat")).not.toBeInTheDocument();
+    useWorkspaceStateStore.setState({ projectFilterId: null });
   });
 
   it("closes the list menu after choosing an option, and on Escape", () => {
@@ -270,11 +269,49 @@ describe("Sidebar selected chat scroll", () => {
     expect(screen.queryByText("Flat list")).not.toBeInTheDocument();
   });
 
+  // At the default 240px width a workspace's name read "percent-r…": its
+  // hover-only buttons were opacity-0 and still took their width (#624).
+  it("keeps hover-only actions out of the layout, and names truncated titles in full", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    // A truncated name is still readable in full, on hover.
+    expect(screen.getByText("Selected chat")).toHaveAttribute("title", "Selected chat");
+    const workspaceTitle = screen.getByText("feature/test");
+    expect(workspaceTitle).toHaveAttribute("title", "feature/test");
+
+    // The workspace header's New chat and Archive: display:none until the
+    // header is hovered or focused, never a transparent box holding width.
+    const header = workspaceTitle.closest(".group\\/header") as HTMLElement;
+    const hoverOnly = Array.from(header.querySelectorAll("button")).filter(
+      (b) => !b.contains(workspaceTitle) && b.querySelector(".lucide-plus, .lucide-archive"),
+    );
+    expect(hoverOnly).toHaveLength(2);
+    for (const button of hoverOnly) {
+      expect(button.className).not.toMatch(/opacity-0/);
+      const wrapper = button.parentElement!;
+      expect(wrapper.className).toMatch(/(^|\s)hidden(\s|$)/);
+      expect(wrapper.className).toContain("group-hover/header:inline-flex");
+      expect(wrapper.className).toContain("group-focus-within/header:inline-flex");
+    }
+
+    // The chat row's More options likewise.
+    const row = screen.getByText("Selected chat").closest("[data-chat-id]") as HTMLElement;
+    const more = row.querySelector('button[aria-haspopup="menu"]')!.closest("div")!;
+    expect(more.className).toMatch(/(^|\s)hidden(\s|$)/);
+    expect(more.className).toContain("group-hover:block");
+  });
+
   it("renders Codex-style navigation actions and calls their handlers", () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    const onNavigateToProjectPicker = vi.fn();
     const onOpenWorkflows = vi.fn();
     const onOpenChatSearch = vi.fn();
     const onNavigateToSettings = vi.fn();
@@ -283,7 +320,6 @@ describe("Sidebar selected chat scroll", () => {
     render(
       <QueryClientProvider client={queryClient}>
         <Sidebar
-          onNavigateToProjectPicker={onNavigateToProjectPicker}
           onOpenWorkflows={onOpenWorkflows}
           onOpenChatSearch={onOpenChatSearch}
           onNavigateToSettings={onNavigateToSettings}
@@ -297,7 +333,9 @@ describe("Sidebar selected chat scroll", () => {
     const nav = screen.getByRole("navigation", { name: "Chat sidebar navigation" });
     expect(nav).toContainElement(screen.getByTestId("sidebar-inbox-button"));
     expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
-    expect(screen.getByRole("button", { name: "Projects" })).toBeInTheDocument();
+    // No "Projects" page to go to: the project is the chat list's filter.
+    expect(screen.queryByRole("button", { name: "Projects" })).toBeNull();
+    expect(screen.getByTestId("project-filter-label")).toHaveTextContent("All projects");
     expect(screen.getByRole("button", { name: "Workflows" })).toBeInTheDocument();
     // Automations and Runs are tabs of the Workflows area now (§1.2), not
     // sidebar entries of their own.
@@ -310,14 +348,12 @@ describe("Sidebar selected chat scroll", () => {
       "workflow-button"
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Projects" }));
     fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     fireEvent.click(screen.getByTestId("sidebar-inbox-button"));
 
     expect(onOpenInbox).toHaveBeenCalledTimes(1);
-    expect(onNavigateToProjectPicker).toHaveBeenCalledTimes(1);
     expect(onOpenWorkflows).toHaveBeenCalledTimes(1);
     expect(onOpenChatSearch).toHaveBeenCalledTimes(1);
     expect(onNavigateToSettings).toHaveBeenCalledTimes(1);

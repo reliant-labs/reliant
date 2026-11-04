@@ -26,13 +26,17 @@ import (
 // A token bound to a daemon (resource daemon:<id>) authenticates as that
 // daemon only: the bound id is placed on the context, and the gateway uses it
 // as the daemon's authoritative identity instead of guessing from hostname.
+//
+// The authority also names the account's email, when it knows one; it goes on
+// the context (auth.GetUserEmailFromContext) so the gateway can tell the
+// daemon which account it connected as.
 type DaemonAuthInterceptor struct {
-	tokens auth.AccessTokenIntrospector
+	tokens auth.AccessTokenAccountIntrospector
 }
 
 // NewDaemonAuthInterceptor creates an interceptor that validates daemon
 // credentials through tokens.
-func NewDaemonAuthInterceptor(tokens auth.AccessTokenIntrospector) (*DaemonAuthInterceptor, error) {
+func NewDaemonAuthInterceptor(tokens auth.AccessTokenAccountIntrospector) (*DaemonAuthInterceptor, error) {
 	if tokens == nil {
 		return nil, fmt.Errorf("daemon credential introspector is required")
 	}
@@ -53,15 +57,19 @@ func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(st
 		return nil, svcerr.ToConnect(svcerr.Unauthenticated("daemon credential must be an rlat_ access token; re-register the daemon"))
 	}
 
-	p, err := i.tokens.Introspect(ctx, rawToken)
+	account, err := i.tokens.IntrospectAccount(ctx, rawToken)
+	p := account.Principal
 	if err != nil {
 		if errors.Is(err, auth.ErrAccessTokenInactive) {
 			return nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid daemon auth token"))
 		}
 		// The authority is unreachable: our outage, not the daemon's bad
 		// credential. Unavailable makes the daemon retry instead of
-		// discarding a good token.
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon credential verification unavailable: %w", err))
+		// discarding a good token. The daemon reads only the fixed text;
+		// the authority's own error stays server-side as the cause, which
+		// the "rpc failed" record logs.
+		return nil, svcerr.ToConnect(svcerr.WithCause(
+			svcerr.Unavailable("daemon credential verification unavailable"), err))
 	}
 	if !p.Scopes.Permits(fat.ScopeDaemonConnect) || p.ActingUserID == "" {
 		return nil, svcerr.ToConnect(svcerr.Unauthenticated("token does not grant daemon:connect"))
@@ -71,6 +79,9 @@ func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(st
 	}
 
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, p.ActingUserID)
+	if account.Email != "" {
+		ctx = context.WithValue(ctx, auth.UserEmailContextKey, account.Email)
+	}
 	if p.Resource != nil {
 		ctx = context.WithValue(ctx, auth.DaemonIDContextKey, p.Resource.ID)
 	}

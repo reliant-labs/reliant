@@ -27,8 +27,8 @@ func TestBatchDeny_Generated(t *testing.T) {
 			}
 			return nil, nil // the store answers a missing approval with (nil, nil)
 		},
-		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
-			return &db.Chat{ID: id, UserID: "someone-else"}, nil
+		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+			return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
 		},
 	}}))
 

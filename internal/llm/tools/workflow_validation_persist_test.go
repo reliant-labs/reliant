@@ -103,6 +103,16 @@ func TestEditWorkflow_CompleteWorkflowRejectsInvalidEdit(t *testing.T) {
 		assertUnchanged(t, repo, draft)
 	})
 
+	t.Run("unknown runtime key is rejected without changing the runnable row", func(t *testing.T) {
+		draft := createValidPersistDraft(t, repo)
+		resp := runWorkflowTool(t, tool, EditWorkflowToolName, EditWorkflowParams{
+			ID: draft.ID, OldString: "edges: []", NewString: "edges: []\ninvented_runtime_field: true",
+		})
+		assert.True(t, resp.IsError, "%s", resp.Content)
+		assert.Contains(t, resp.Content, "invented_runtime_field")
+		assertUnchanged(t, repo, draft)
+	})
+
 	t.Run("unparseable YAML is not saved", func(t *testing.T) {
 		draft := createValidPersistDraft(t, repo)
 		resp := runWorkflowTool(t, tool, EditWorkflowToolName, EditWorkflowParams{

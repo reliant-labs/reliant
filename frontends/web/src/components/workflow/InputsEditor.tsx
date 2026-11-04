@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
 import { CELInput } from './CELInput';
 import { formatValueForDisplay } from '../../lib/paramUtils';
@@ -193,7 +193,7 @@ export function InputsEditor({
                 placeholder="key"
               />
               {renderInput(key, value)}
-              <Tooltip content="Remove" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Remove" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={() => removeInput(key)}
                 className="p-1.5 text-muted-foreground hover:text-destructive-ink transition-colors" aria-label="Remove">

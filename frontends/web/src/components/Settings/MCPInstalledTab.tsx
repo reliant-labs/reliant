@@ -1,8 +1,8 @@
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { type MCPServer, type RecommendedServer, ConfigScope } from "../../api/mcp-grpc";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
+import { type MCPServer, type RecommendedServer, ConfigScope } from "../../hooks/mcp-queries";
+import Input from "../forge-ui/input";
+import Button from "@/components/forge-ui/button";
 import { MCPServerListItem } from "./MCPServerListItem";
 import { MCPTabs } from "./MCPTabs";
 import { getMcpIconUrl } from "./mcpAvatar";
@@ -138,13 +138,20 @@ export function MCPInstalledTab({
 
   return (
     <div className="space-y-4">
-      <Input
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search installed servers"
-        leftIcon={<Search className="h-4 w-4" />}
-        aria-label="Search installed MCP servers"
-      />
+      <div className="forge-ui relative">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search installed servers"
+          aria-label="Search installed MCP servers"
+          className="pl-10"
+        />
+      </div>
 
       <MCPTabs
         tabs={tabItems}
@@ -192,7 +199,7 @@ export function MCPInstalledTab({
             })}
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-border/70 bg-muted/30 p-8 text-center">
+          <div className="rounded-xl border border-dashed border-border/70 bg-background p-8 text-center">
             <h3 className="text-sm font-semibold text-foreground">No servers match your current view</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               Try a different search or filter, or install a new MCP server from Discover.

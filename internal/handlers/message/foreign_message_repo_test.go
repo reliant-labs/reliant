@@ -26,6 +26,6 @@ func (foreignMessageRepo) GetMessage(_ context.Context, id string) (*db.Message,
 	return &db.Message{ID: id, ChatID: "chat-foreign"}, nil
 }
 
-func (foreignMessageRepo) GetChat(_ context.Context, id string) (*db.Chat, error) {
-	return &db.Chat{ID: id, UserID: "someone-else"}, nil
+func (foreignMessageRepo) GetChatRow(_ context.Context, id string) (*db.ChatRow, error) {
+	return &db.ChatRow{ID: id, UserID: "someone-else"}, nil
 }

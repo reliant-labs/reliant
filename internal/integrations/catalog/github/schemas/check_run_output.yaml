@@ -1,0 +1,25 @@
+type: object
+additionalProperties: false
+required: [title, summary]
+title: Output
+description: What the check's details page shows. title and summary are required together.
+examples: [{ title: "Passed (MEDIUM): no blockers", summary: "One pass on GPT-6 Luna; nothing blocking." }]
+properties:
+  title:
+    type: string
+    minLength: 1
+    maxLength: 255
+    title: Title
+    description: One line, shown beside the check's name.
+    examples: ["Passed (HIGH): two passes, no blockers"]
+  summary:
+    type: string
+    minLength: 1
+    maxLength: 65535
+    title: Summary
+    description: The details in GitHub-flavored markdown.
+  text:
+    type: string
+    maxLength: 65535
+    title: Text
+    description: More markdown below the summary.

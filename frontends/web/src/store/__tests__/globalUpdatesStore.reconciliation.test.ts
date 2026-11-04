@@ -1,6 +1,6 @@
 // Regression test for the "slot theft" variant of the stuck-chat bug: the
-// user has chat A open, some other component (a workflow-editor panel, a
-// reconnect that forwards a stale id) steals the single subscription slot,
+// user has chat A open, some other component (a workflow-editor panel)
+// takes the chat stream over,
 // and nothing re-asserts A afterward. The rendered chat is the source of
 // truth; reconcileChatSubscription is the mechanism that keeps the
 // subscription honest without polling — callers invoke it on every render of
@@ -9,10 +9,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type MockService = {
   isConnected: () => boolean;
-  getSubscribedChatId: () => string | undefined;
-  subscribeToChatDetails: ReturnType<typeof vi.fn>;
-  unsubscribeFromChatDetails: ReturnType<typeof vi.fn>;
-  start: ReturnType<typeof vi.fn>;
+  getChatId: () => string | undefined;
+  subscribeToChat: ReturnType<typeof vi.fn>;
+  unsubscribe: ReturnType<typeof vi.fn>;
+  setProjectScope: ReturnType<typeof vi.fn>;
   stop: ReturnType<typeof vi.fn>;
   connected: boolean;
   subscribed: string | undefined;
@@ -23,23 +23,24 @@ function makeService(): MockService {
     connected: true,
     subscribed: undefined,
     isConnected: () => svc.connected,
-    getSubscribedChatId: () => svc.subscribed,
-    subscribeToChatDetails: vi.fn((chatId: string) => {
+    getChatId: () => svc.subscribed,
+    subscribeToChat: vi.fn((chatId: string) => {
       svc.subscribed = chatId;
     }),
-    unsubscribeFromChatDetails: vi.fn(() => {
+    unsubscribe: vi.fn(() => {
       svc.subscribed = undefined;
     }),
-    start: vi.fn((_seq: number, chatId?: string) => {
-      svc.subscribed = chatId;
-    }),
+    setProjectScope: vi.fn(),
     stop: vi.fn(),
   };
   return svc;
 }
 
+vi.mock("../../api/chat-streaming-grpc", () => ({
+  ChatStreamingService: vi.fn().mockImplementation(() => makeService()),
+}));
 vi.mock("../../api/streaming-grpc", () => ({
-  UserStreamingService: vi.fn().mockImplementation(() => makeService()),
+  UserStreamingService: vi.fn().mockImplementation(() => ({ isConnected: () => false, start: vi.fn(), stop: vi.fn() })),
 }));
 
 vi.mock("../../lib/notifications", async (importOriginal) => {
@@ -60,6 +61,7 @@ const CHAT_B = "bbbbbbbb-5555-6666-7777-888888888888";
 beforeEach(() => {
   useGlobalUpdatesStore.setState({
     wsService: null,
+    chatStream: null,
     subscribedChatId: null,
     connectionStatus: "disconnected",
     lastSequence: 0,
@@ -73,7 +75,7 @@ describe("reconcileChatSubscription", () => {
     // (e.g. a panel subscribing to its own chat) without ever
     // giving it back.
     useGlobalUpdatesStore.setState({
-      wsService: svc as never,
+      chatStream: svc as never,
       subscribedChatId: CHAT_B,
       connectionStatus: "connected",
     });
@@ -81,16 +83,16 @@ describe("reconcileChatSubscription", () => {
 
     useGlobalUpdatesStore.getState().reconcileChatSubscription(CHAT_A);
 
-    expect(svc.subscribeToChatDetails).toHaveBeenCalledWith(CHAT_A);
+    expect(svc.subscribeToChat).toHaveBeenCalledWith(CHAT_A);
     expect(useGlobalUpdatesStore.getState().subscribedChatId).toBe(CHAT_A);
-    expect(svc.getSubscribedChatId()).toBe(CHAT_A);
+    expect(svc.getChatId()).toBe(CHAT_A);
   });
 
   it("does not resubscribe when the rendered chat already matches the subscription (no loop)", () => {
     const svc = makeService();
     svc.subscribed = CHAT_A;
     useGlobalUpdatesStore.setState({
-      wsService: svc as never,
+      chatStream: svc as never,
       subscribedChatId: CHAT_A,
       connectionStatus: "connected",
     });
@@ -99,7 +101,7 @@ describe("reconcileChatSubscription", () => {
     useGlobalUpdatesStore.getState().reconcileChatSubscription(CHAT_A);
     useGlobalUpdatesStore.getState().reconcileChatSubscription(CHAT_A);
 
-    expect(svc.subscribeToChatDetails).not.toHaveBeenCalled();
+    expect(svc.subscribeToChat).not.toHaveBeenCalled();
     expect(useGlobalUpdatesStore.getState().subscribedChatId).toBe(CHAT_A);
   });
 
@@ -107,14 +109,14 @@ describe("reconcileChatSubscription", () => {
     const svc = makeService();
     svc.subscribed = CHAT_B;
     useGlobalUpdatesStore.setState({
-      wsService: svc as never,
+      chatStream: svc as never,
       subscribedChatId: CHAT_B,
       connectionStatus: "connected",
     });
 
     useGlobalUpdatesStore.getState().reconcileChatSubscription(null);
 
-    expect(svc.subscribeToChatDetails).not.toHaveBeenCalled();
+    expect(svc.subscribeToChat).not.toHaveBeenCalled();
     expect(useGlobalUpdatesStore.getState().subscribedChatId).toBe(CHAT_B);
   });
 
@@ -124,14 +126,14 @@ describe("reconcileChatSubscription", () => {
     // (e.g. a reconnect raced and the new connection came up unsubscribed).
     svc.subscribed = undefined;
     useGlobalUpdatesStore.setState({
-      wsService: svc as never,
+      chatStream: svc as never,
       subscribedChatId: CHAT_A,
       connectionStatus: "connected",
     });
 
     useGlobalUpdatesStore.getState().reconcileChatSubscription(CHAT_A);
 
-    expect(svc.subscribeToChatDetails).toHaveBeenCalledWith(CHAT_A);
-    expect(svc.getSubscribedChatId()).toBe(CHAT_A);
+    expect(svc.subscribeToChat).toHaveBeenCalledWith(CHAT_A);
+    expect(svc.getChatId()).toBe(CHAT_A);
   });
 });

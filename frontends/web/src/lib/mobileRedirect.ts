@@ -65,7 +65,8 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
   // has no `/m/*` twin on purpose: its chrome collapses to an off-canvas nav
   // below `md` (forge-ui/sidebar_layout.tsx), so the one console serves both,
   // and redirecting it would make Apps and Observability unreachable from a
-  // phone — which is what this list used to do.
+  // phone — which is what this list used to do. /apps, the list of apps the
+  // console opens from, is one responsive page for the same reason.
   const PRESERVED = [
     "/auth",
     "/oauth",
@@ -74,8 +75,12 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     "/reset-password",
     "/verify-email",
     "/upgrade",
+    // A claim link is opened from wherever the agent's human reads their
+    // messages, often a phone, and its page is built to fit one.
+    "/claim",
     "/design-sandbox",
     "/forge",
+    "/apps",
   ];
   if (PRESERVED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return false;
@@ -83,6 +88,23 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
 
   return width <= MOBILE_MAX_WIDTH && coarsePointer;
 }
+
+/**
+ * Desktop settings sections that have a screen in /m/settings, by the id of
+ * that screen (`/m/settings?section=<id>`). A section with no phone screen
+ * lands on the list.
+ */
+export const MOBILE_SETTINGS_SECTION_FOR: Readonly<Record<string, string>> = {
+  account: "account",
+  billing: "billing",
+  "git-connections": "github",
+  ai: "ai",
+  appearance: "appearance",
+  notifications: "notifications",
+  branches: "workspace",
+  privacy: "privacy",
+  about: "about",
+};
 
 /**
  * Where a redirected desktop path lands on the mobile surface.
@@ -93,15 +115,35 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
  * twin maps to it; everything else still lands on the chat list, the mobile
  * home. A run IS a chat, so a run link opens that chat.
  */
-export function mobilePathFor(pathname: string): string {
+export function mobilePathFor(pathname: string, search = ""): string {
   const path = pathname.replace(/\/+$/, "") || "/";
   if (path === "/inbox" || path.startsWith("/inbox/")) return "/m/inbox";
 
   const run = /^\/workflows\/runs\/([^/]+)/.exec(path);
   if (run) return `/m/chats/${run[1]}`;
-  if (path === "/workflows" || path.startsWith("/workflows/library")) return "/m/workflows";
+  if (path === "/workflows/runs") return "/m/runs";
+  // A workflow's page (where its triggers are — what an automation link
+  // opens) is its read-only viewer; an automation id is resolved first.
+  const workflow = /^\/workflows\/library\/([^/]+)/.exec(path);
+  if (workflow) return `/m/workflows/${workflow[1]}`;
+  const automation = /^\/(?:workflows\/)?automations\/([^/]+)/.exec(path);
+  if (automation) return `/m/automations/${automation[1]}`;
+  if (path === "/workflows" || path.startsWith("/workflows/")) return "/m/workflows";
 
-  if (path.startsWith("/settings/environments")) return "/m/daemons";
+  if (path.startsWith("/settings/machines") || path.startsWith("/settings/environments")) return "/m/daemons";
+  // Billing on a phone is a screen inside /m/settings. A visit that has a way
+  // back (the claim page sends people here to subscribe) keeps it: the mobile
+  // twin opens on billing and offers the same return.
+  if (path === "/settings/billing") {
+    const q = new URLSearchParams(search);
+    const returnTo = q.get("returnTo");
+    if (returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+      return `/m/settings?${new URLSearchParams({ section: "billing", returnTo })}`;
+    }
+  }
+  const section = /^\/settings\/([^/]+)$/.exec(path)?.[1];
+  const mobileSection = section ? MOBILE_SETTINGS_SECTION_FOR[section] : undefined;
+  if (mobileSection) return `/m/settings?${new URLSearchParams({ section: mobileSection })}`;
   if (path === "/settings" || path.startsWith("/settings/")) return "/m/settings";
 
   return "/m/chats";

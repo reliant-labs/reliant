@@ -74,6 +74,11 @@ const config = {
       to: "preload.js"
     },
     {
+      // The find bar view's preload (src/find-bar.js), beside the window's.
+      from: "src/find-bar-preload.js",
+      to: "find-bar-preload.js"
+    },
+    {
       from: "../LICENSE",
       to: "LICENSE"
     },

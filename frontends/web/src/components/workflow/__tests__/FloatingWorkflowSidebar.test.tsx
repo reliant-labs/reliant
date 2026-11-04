@@ -17,15 +17,19 @@ import {
   NodeInfoSchema,
 } from "@/gen/reliant/v1/catalog_pb";
 import { renderWithQuery } from "@/test/renderWithQuery";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const listCatalogIntegrations = vi.fn();
 const listNodes = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { catalog: () => ({ listCatalogIntegrations }) },
-  getCatalogClient: () => ({ listNodes }),
-  getGRPCBaseURLPublic: () => null,
-}));
+// CatalogService is on its generated hooks, so it is answered at the transport.
+setTransport(
+  mockTransport({
+    "CatalogService.ListCatalogIntegrations": (req) => listCatalogIntegrations(req),
+    "CatalogService.ListNodes": (req) => listNodes(req),
+  }),
+);
 
 import { FloatingWorkflowSidebar } from "../FloatingWorkflowSidebar";
 
@@ -71,7 +75,7 @@ describe("FloatingWorkflowSidebar", () => {
     expect(github.querySelector('[data-integration-logo="github"]')).not.toBeNull();
     expect(within(github).getByRole("img", { name: "Connected" })).toBeInTheDocument();
     expect(within(screen.getByText("Slack").closest("button")!).queryByRole("img", { name: "Connected" })).not.toBeInTheDocument();
-    expect(listCatalogIntegrations).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 4 }), expect.anything());
+    expect(listCatalogIntegrations).toHaveBeenCalledWith(expect.objectContaining({ pageSize: 4 }));
 
     await user.click(github);
     expect(props.onOpenIntegration).toHaveBeenCalledWith("github");

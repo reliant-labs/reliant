@@ -104,13 +104,18 @@ jobs:
             echo "channel=latest" >> $GITHUB_OUTPUT
           fi
 
+      - name: Install pnpm
+        # The version that wrote frontends/web/pnpm-lock.yaml (its engines.pnpm).
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12.15.0
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: "npm"
           cache-dependency-path: |
-            frontends/web/package-lock.json
             electron/package-lock.json
 
       - name: Extract Electron tool versions from package.json
@@ -139,12 +144,13 @@ jobs:
 
       - name: Install web dependencies
         working-directory: frontends/web
-        run: npm ci --legacy-peer-deps --prefer-offline
+        run: pnpm install --frozen-lockfile
 
-      # NO CODE GENERATION HERE. Generated code is committed, and PR CI's
-      # "Generated code is up to date" job runs `make generate-all` on every
-      # PR and every push to main and fails on any diff — so the tagged commit
-      # already holds exactly what the generators produce, and a release
+      # NO CODE GENERATION HERE. Generated code is committed, and the gates
+      # fail on any diff a regenerate makes: the merge gate whenever a change
+      # reaches a generator's input, and the release gate (`task generate:check`,
+      # `task generate:docs:check`) on the commit a release tags — so the tagged
+      # commit already holds exactly what the generators produce, and a release
       # builds what was reviewed.
       #
       # This job used to regenerate anyway, which could only ever ship
@@ -164,45 +170,18 @@ jobs:
       # "Control plane API URL not configured" on the desktop app.
       #
       # electron/release.config.json is GENERATED from control-plane's
-      # deploy/kcl/lib/env.k by .github/scripts/sync-release-config.mjs, and it
-      # carries the SAME VITE_* list the hosted app is built with. The step
-      # below verifies it has not drifted, then exports it.
-      #
-      # No .env file is written. `vite build` reads VITE_* straight from the
-      # process environment, so $GITHUB_ENV is sufficient and there is no
-      # generated dotfile to leak into an artifact or fall out of date.
+      # deploy/kcl/lib/env.k by .github/scripts/sync-release-config.mjs, and its
+      # `renderer` block carries the SAME runtime_config keys the hosted app is
+      # served. The step below verifies it has not drifted.
       - name: Verify release config matches control-plane KCL
         run: node .github/scripts/sync-release-config.mjs --check
 
-      - name: Export renderer build config
-        env:
-          # Secrets are NOT in KCL and never in this repo. They are merged in
-          # here, on top of the KCL-sourced public values.
-          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          VITE_STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
-          VITE_SENTRY_REPLAY_CANVAS: ${{ vars.VITE_SENTRY_REPLAY_CANVAS }}
-        run: |
-          set -euo pipefail
-
-          # KCL-sourced public config (endpoints, auth mode, Supabase URL +
-          # publishable key, Sentry enable flags). jq -e fails if `.vite` is
-          # missing rather than exporting an empty set.
-          jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' \
-            electron/release.config.json >> "$GITHUB_ENV"
-
-          # Secret-backed and CI-tunable values layered on top.
-          {
-            echo "VITE_SENTRY_DSN=${VITE_SENTRY_DSN}"
-            echo "VITE_STATSIG_CLIENT_KEY=${VITE_STATSIG_CLIENT_KEY}"
-            echo "VITE_SENTRY_TRACES_SAMPLE_RATE=0.1"
-            echo "VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE=0.1"
-            echo "VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE=1.0"
-            echo "VITE_SENTRY_REPLAY_CANVAS=${VITE_SENTRY_REPLAY_CANVAS}"
-          } >> "$GITHUB_ENV"
-
-          echo "Renderer config exported from KCL:"
-          jq -r '.vite | "  VITE_CONTROL_PLANE_API_URL = \(.VITE_CONTROL_PLANE_API_URL)\n  VITE_GATEWAY_URL           = \(.VITE_GATEWAY_URL)"' \
-            electron/release.config.json
+      # No renderer build config is exported: the bundle reads every
+      # per-environment value from config.js at runtime (R2a), and the
+      # packaged app's config.js is answered by its main process from
+      # release.config.json's `renderer` block (electron/src/runtime-config.js,
+      # written by generate-build-config.mjs in each platform job). The one
+      # build-time value is VITE_APP_VERSION, from scripts/release-identity.sh.
 
       # `build`, not `build:alpha` — the difference is `tsc -b`.
       #
@@ -254,8 +233,9 @@ jobs:
       # Cost is a grep over dist/assets: sub-second, on a build already paid
       # for.
       #
-      # PR CI's `web` job runs this same build and this same check on every PR
-      # and every push to main (pinned by .github/scripts/verify-bundle.test.mjs),
+      # ci.yml's `web-bundle` job (`task build:web:verify`) runs this same build
+      # and this same check on every PR that can alter the bundle and every
+      # push to main (pinned by .github/scripts/verify-bundle.test.mjs),
       # so a failure that first shows up here means the two have diverged. If
       # this run fails anyway, release-health.yml opens a `release:failed`
       # issue for the tag.
@@ -433,8 +413,9 @@ jobs:
           else
             IDENTITY="$(bash scripts/release-identity.sh --commit "$COMMIT")"
           fi
-          echo "Stamping version=${IDENTITY} commit=${COMMIT}"
-          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${IDENTITY} -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT}"
+          COMMIT_TIME="$(bash scripts/release-identity.sh --commit-time --commit "$COMMIT")"
+          echo "Stamping version=${IDENTITY} commit=${COMMIT} commit_time=${COMMIT_TIME}"
+          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${IDENTITY} -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT} -X github.com/reliant-labs/reliant/internal/version.CommitTime=${COMMIT_TIME}"
 
           # Build-time defaults: the release's hosted endpoints, stamped into
           # pkg/config.BuildDefaults (forge's build-defaults layer, between the
@@ -611,8 +592,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}
@@ -801,8 +780,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}
@@ -950,8 +927,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}
@@ -1047,7 +1022,7 @@ jobs:
   #
   # The release notes themselves are still authored HERE, in
   # docs/data/releases/<version>.yaml — that directory renders docs/changelog.mdx
-  # via `make generate-changelog` for the Mintlify docs site. control-plane
+  # via `task generate:docs:changelog` for the Mintlify docs site. control-plane
   # fetches the file at send time; nothing about authoring changes.
   # ============================================================================
 
@@ -1181,7 +1156,7 @@ jobs:
 
           | Architecture | Universal | Debian/Ubuntu |
           |:------------|:----------|:--------------|
-          | **x64** (AMD/Intel) | [:arrow_down: AppImage](${BASE_URL}/Reliant-${VERSION_NUM}-linux-x64.AppImage) | [:package: .deb](${BASE_URL}/Reliant-${VERSION_NUM}-linux-amd64.deb) |
+          | **x64** (AMD/Intel) | [:arrow_down: AppImage](${BASE_URL}/Reliant-${VERSION_NUM}-linux-x86_64.AppImage) | [:package: .deb](${BASE_URL}/Reliant-${VERSION_NUM}-linux-amd64.deb) |
           | **ARM64** | [:arrow_down: AppImage](${BASE_URL}/Reliant-${VERSION_NUM}-linux-arm64.AppImage) | [:package: .deb](${BASE_URL}/Reliant-${VERSION_NUM}-linux-arm64.deb) |
 
           EOF
@@ -1246,10 +1221,14 @@ jobs:
           # 404 and left the real feed cached: after v1.7.7 published, clients
           # were still served version 1.7.5 for ~20h (cf-cache-status HIT,
           # age 72856 against max-age 86400) while origin was already correct.
+          #
+          # Linux arm64 has a feed of its own, `<channel>-linux-arm64.yml`. It
+          # was missing from this list through v1.8.6, so arm64 Linux clients
+          # read a cached feed for up to a day after every release.
           if [[ "$CHANNEL" == "latest" ]]; then
-            FILES+=("${BASE_URL}/latest-mac.yml" "${BASE_URL}/latest-linux.yml" "${BASE_URL}/latest.yml")
+            FILES+=("${BASE_URL}/latest-mac.yml" "${BASE_URL}/latest-linux.yml" "${BASE_URL}/latest-linux-arm64.yml" "${BASE_URL}/latest.yml")
           else
-            FILES+=("${BASE_URL}/alpha-mac.yml" "${BASE_URL}/alpha-linux.yml" "${BASE_URL}/alpha.yml")
+            FILES+=("${BASE_URL}/alpha-mac.yml" "${BASE_URL}/alpha-linux.yml" "${BASE_URL}/alpha-linux-arm64.yml" "${BASE_URL}/alpha.yml")
           fi
 
           # Purge versioned download URLs per platform
@@ -1289,7 +1268,12 @@ jobs:
           # stale feed a day later.
           missing=0
           for url in "${FILES[@]}"; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$url")
+            # HEAD, not GET: a GET downloads the whole ~200 MB installer, which
+            # does not fit in --max-time, and curl's exit 28 under `bash -e`
+            # killed the step before anything was purged (v1.8.6: feeds stayed
+            # cached at 1.8.5 while origin served 1.8.6). A transport error is
+            # reported as code 000 rather than aborting the step.
+            code=$(curl -sI -o /dev/null -w "%{http_code}" --max-time 30 "$url" || echo 000)
             if [[ "$code" != "200" ]]; then
               echo "::error::purge target does not exist (HTTP ${code}): ${url}"
               missing=$((missing + 1))
@@ -1416,3 +1400,43 @@ jobs:
           - **Job:** Finalize Release
           - **Duration:** ${MINS}m ${SECS}s
           EOF
+
+  # ============================================================================
+  # VERIFY: the release is downloadable, as a client sees it
+  # ============================================================================
+  # A green build has not meant "released": v1.8.1 failed late and v1.8.6's
+  # purge died, and both times the feeds kept serving the previous version
+  # while the run looked done. This job reads what downloads.reliantlabs.io
+  # serves through the CDN: every variant's installer and archive returns 200,
+  # every update feed of the channel reads this version, every file a feed
+  # names exists, and the GitHub Release page exists. Any miss fails the run,
+  # which release-health.yml turns into a `release:failed` issue.
+  #
+  # The web SPA is not checked here: app.reliantlabs.io ships with the prod
+  # API (control-plane scripts/promote-prod.sh), not with the tag, so that the
+  # SPA never calls RPCs the deployed API does not have yet.
+  verify-published:
+    name: Verify published release
+    needs: [prepare, finalize]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: always() && needs.prepare.result == 'success' && github.event.inputs.dry_run != 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Every variant and every feed is live
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+        run: scripts/verify-release-artifacts.sh "$VERSION" --channel "$CHANNEL" --wait 600
+
+      - name: The GitHub Release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          gh release view "$VERSION" --json tagName,url -q '"\(.tagName) \(.url)"' \
+            || { echo "::error::no GitHub Release for $VERSION: Finalize's 'Publish the GitHub Release' did not run or failed"; exit 1; }

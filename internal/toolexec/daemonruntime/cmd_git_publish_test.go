@@ -61,15 +61,91 @@ func newPublishFixture(t *testing.T) publishFixture {
 	pubGit(t, f.clone, "add", "-A")
 	pubGit(t, f.clone, "commit", "-q", "-m", "init")
 	pubGit(t, f.clone, "push", "-q", "origin", "main")
+	allowTestRemote(t, root, "")
 	return f
 }
 
-// allowFileRemotes lets a publish push to the local bare repository.
+// allowFileRemotes lets this test's publishes push to its own fixtures: the
+// local bare repository (newPublishFixture) and any smart-HTTP server in front
+// of it (allowServer). A test that does not call it gets the production check.
+//
+// The allowance is per test, not a swap of publishURLAllowed: TestMain
+// installs allowTestRemotes once for the binary, so the publish tests run in
+// parallel. Swapping the package variable per test made all of them serial,
+// and ten of them in a row took most of the package's 300s -race budget.
 func allowFileRemotes(t *testing.T) {
 	t.Helper()
-	old := publishURLAllowed
-	publishURLAllowed = func(u *url.URL) bool { return u.Scheme == "file" || u.Scheme == "http" }
-	t.Cleanup(func() { publishURLAllowed = old })
+	testRemotes.Lock()
+	defer testRemotes.Unlock()
+	testRemotes.tests[t] = true
+	t.Cleanup(func() {
+		testRemotes.Lock()
+		defer testRemotes.Unlock()
+		delete(testRemotes.tests, t)
+	})
+}
+
+// testRemotes are the destinations tests opted in to: fixture directories
+// (file://) and test server hosts (http://).
+var testRemotes = struct {
+	sync.Mutex
+	tests map[*testing.T]bool
+	dirs  map[string]bool
+	hosts map[string]bool
+}{tests: map[*testing.T]bool{}, dirs: map[string]bool{}, hosts: map[string]bool{}}
+
+// allowTestRemote opens dir or host to pushes for t's lifetime, when t called
+// allowFileRemotes.
+func allowTestRemote(t *testing.T, dir, host string) {
+	t.Helper()
+	testRemotes.Lock()
+	defer testRemotes.Unlock()
+	if !testRemotes.tests[t] {
+		return
+	}
+	if dir != "" {
+		testRemotes.dirs[dir] = true
+	}
+	if host != "" {
+		testRemotes.hosts[host] = true
+	}
+	t.Cleanup(func() {
+		testRemotes.Lock()
+		defer testRemotes.Unlock()
+		delete(testRemotes.dirs, dir)
+		delete(testRemotes.hosts, host)
+	})
+}
+
+// allowServer opens srv to t's pushes (see allowFileRemotes).
+func allowServer(t *testing.T, srv *httptest.Server) {
+	t.Helper()
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+	allowTestRemote(t, "", u.Host)
+}
+
+// allowTestRemotes is publishURLAllowed for the test binary: prod, or a
+// destination a running test opted in to.
+func allowTestRemotes(prod func(*url.URL) bool) func(*url.URL) bool {
+	return func(u *url.URL) bool {
+		if prod(u) {
+			return true
+		}
+		testRemotes.Lock()
+		defer testRemotes.Unlock()
+		switch u.Scheme {
+		case "file":
+			for dir := range testRemotes.dirs {
+				if u.Path == dir || strings.HasPrefix(u.Path, dir+"/") {
+					return true
+				}
+			}
+		case "http":
+			return testRemotes.hosts[u.Host]
+		}
+		return false
+	}
 }
 
 func prepare(t *testing.T, worktree, message string) gitpublish.PrepareResponse {
@@ -106,6 +182,7 @@ func remoteHead(t *testing.T, f publishFixture, branch string) string {
 }
 
 func TestGitPublish_PushesAFeatureBranchWithTrailers(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	allowFileRemotes(t)
 	f := newPublishFixture(t)
@@ -135,6 +212,7 @@ func TestGitPublish_PushesAFeatureBranchWithTrailers(t *testing.T) {
 
 // Nothing to commit is not an error, and nothing is pushed.
 func TestGitPublish_NoChangesMeansNoPushAndNoError(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	allowFileRemotes(t)
 	f := newPublishFixture(t)
@@ -147,6 +225,7 @@ func TestGitPublish_NoChangesMeansNoPushAndNoError(t *testing.T) {
 
 // A second publish of the same checkout finds nothing new.
 func TestGitPublish_RepeatPublishHasNothingToPublish(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	allowFileRemotes(t)
 	f := newPublishFixture(t)
@@ -164,6 +243,7 @@ func TestGitPublish_RepeatPublishHasNothingToPublish(t *testing.T) {
 
 // Commits the agent made itself are published too, not only uncommitted changes.
 func TestGitPublish_PublishesCommitsMadeBeforeTheNode(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	allowFileRemotes(t)
 	f := newPublishFixture(t)
@@ -182,6 +262,7 @@ func TestGitPublish_PublishesCommitsMadeBeforeTheNode(t *testing.T) {
 
 // A diverged remote is refused, never overwritten: there is no force path.
 func TestGitPublish_NeverForcePushes(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	allowFileRemotes(t)
 	f := newPublishFixture(t)
@@ -207,6 +288,7 @@ func TestGitPublish_NeverForcePushes(t *testing.T) {
 }
 
 func TestGitPublish_RefusesDefaultProtectedAndOddBranches(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	allowFileRemotes(t)
 	f := newPublishFixture(t)
@@ -224,6 +306,7 @@ func TestGitPublish_RefusesDefaultProtectedAndOddBranches(t *testing.T) {
 }
 
 func TestGitPublish_RefusesAMovedCheckout(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	allowFileRemotes(t)
 	f := newPublishFixture(t)
@@ -243,6 +326,7 @@ func TestGitPublish_RefusesAMovedCheckout(t *testing.T) {
 // Only the URL the server built is used: a remote the agent repointed, or a
 // config that rewrites URLs or adds a credential helper, cannot capture a push.
 func TestGitPublish_IgnoresTheCheckoutsRemotesAndRefusesDangerousConfig(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	allowFileRemotes(t)
 	f := newPublishFixture(t)
@@ -277,6 +361,7 @@ func TestGitPublish_IgnoresTheCheckoutsRemotesAndRefusesDangerousConfig(t *testi
 }
 
 func TestGitPublish_RefusesDisallowedDestinations(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	f := newPublishFixture(t) // publishURLAllowed is the production check
 	require.NoError(t, os.WriteFile(filepath.Join(f.clone, "a.txt"), []byte("a\n"), 0o644))
@@ -300,6 +385,7 @@ func TestGitPublish_RefusesDisallowedDestinations(t *testing.T) {
 }
 
 func TestGitPublish_RefusalsNeverContainTheToken(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	allowFileRemotes(t)
 	f := newPublishFixture(t)
@@ -352,6 +438,7 @@ func newSmartHTTP(t *testing.T, remote string) *smartHTTP {
 		h.ServeHTTP(w, r)
 	}))
 	t.Cleanup(s.Close)
+	allowServer(t, s.Server)
 	return s
 }
 
@@ -383,7 +470,14 @@ func TestGitPublish_CredentialIsUsedOnceAndNeverLeaks(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "ghp_DAEMON_ENV_TOKEN")
 	t.Setenv("GIT_ASKPASS", "/bin/false")
 
-	before := pubSnapshot(t, os.TempDir(), f.clone, os.Getenv("HOME"))
+	// A temp directory of this test's own: the push and every git it runs put
+	// their temp files under $TMPDIR, so this is the "temp" to search. The
+	// machine's /tmp is shared with every other process on it (128k files on a
+	// busy dev box), and reading it twice took minutes.
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+
+	before := pubSnapshot(t, tmp, f.clone, os.Getenv("HOME"))
 	req := f.pushReq("autopilot/x", prep.HeadSHA)
 	req.RemoteURL = srv.URL + "/remote.git"
 	res := push(t, req)
@@ -396,7 +490,7 @@ func TestGitPublish_CredentialIsUsedOnceAndNeverLeaks(t *testing.T) {
 	}
 
 	// Nowhere on disk: not the repo's config, not the credential files, not temp.
-	for path, content := range pubSnapshot(t, os.TempDir(), f.clone, os.Getenv("HOME")) {
+	for path, content := range pubSnapshot(t, tmp, f.clone, os.Getenv("HOME")) {
 		if before[path] == content {
 			continue
 		}
@@ -410,6 +504,7 @@ func TestGitPublish_CredentialIsUsedOnceAndNeverLeaks(t *testing.T) {
 
 // A wrong credential is a refusal that says so, with nothing pushed.
 func TestGitPublish_WrongCredentialIsRefused(t *testing.T) {
+	t.Parallel()
 	needGit(t)
 	allowFileRemotes(t)
 	f := newPublishFixture(t)
@@ -450,6 +545,7 @@ func TestGitPublish_CredentialIsNotInArgvOrEnvironmentOfAnyProcess(t *testing.T)
 		http.Error(w, "closed", http.StatusForbidden)
 	}))
 	t.Cleanup(srv.Close)
+	allowServer(t, srv)
 
 	require.NoError(t, os.WriteFile(filepath.Join(f.clone, "a.txt"), []byte("a\n"), 0o644))
 	prep := prepare(t, f.clone, "a")

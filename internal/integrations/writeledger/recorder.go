@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -201,7 +202,13 @@ func (r *Recorder) PruneLoop(ctx context.Context, pruner Pruner) {
 	tick := time.NewTicker(time.Hour)
 	defer tick.Stop()
 	for {
-		if n, err := r.Prune(ctx, pruner); err != nil {
+		var n int64
+		err := observe.RunRoot(ctx, "writeledger.prune", func(ctx context.Context) error {
+			var err error
+			n, err = r.Prune(ctx, pruner)
+			return err
+		})
+		if err != nil {
 			slog.WarnContext(ctx, "integration write ledger: prune failed", "error", err)
 		} else if n > 0 {
 			slog.InfoContext(ctx, "integration write ledger: pruned", "rows", n)

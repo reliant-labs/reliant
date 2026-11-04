@@ -45,6 +45,7 @@ import {
 import { reliantAIAvailable } from "@/services/controlPlane/reliantAI";
 
 import { assessCredit, type CreditStatus } from "./lowCredit";
+import { useActiveOrg } from "@/hooks/useOrgs";
 
 export interface LowCreditStatus {
   status: CreditStatus;
@@ -80,7 +81,7 @@ export function useLowCreditStatus(): LowCreditStatus {
   );
   const available = reliantAIAvailable && reliantEnabled;
 
-  const orgId = walletQ.data?.organization?.id ?? "";
+  const orgId = useActiveOrg().activeOrgId ?? "";
   const window = useMemo(spendWindow, []);
   const spendQ = useLLMSpend({ orgId, ...window });
 

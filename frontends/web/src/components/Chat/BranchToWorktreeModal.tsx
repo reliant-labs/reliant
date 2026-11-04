@@ -1,17 +1,18 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Copy, FileText, Settings2 } from "lucide-react";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useChatStore } from "../../store/chatStore";
 import { useBranchChat } from "../../hooks/message-queries";
 import { usePreferences, useUpdateWorktreePreferences } from "../../hooks/settings-queries";
-import { worktreeGrpc } from "../../api/worktree-grpc";
-import { repoGrpc, type Repo } from "../../api/repo-grpc";
+import { fetchWorktreeGitStatus } from "../../hooks/worktree-git-queries";
+import { useListRepos } from "../../hooks/repo-service-hooks_gen";
 import { logger } from "../../lib/logger";
 import { repoPathToWorkspacePath } from "../../lib/worktreeCopyPaths";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { toast } from "../../lib/toast-manager";
+import { useWorktreeById, useMainWorktree, getCachedWorktree } from "../../hooks/worktree-queries";
 
 interface BranchToWorktreeModalProps {
   isOpen: boolean;
@@ -32,7 +33,8 @@ export function BranchToWorktreeModal({
 }: BranchToWorktreeModalProps) {
   const branchChat = useBranchChat();
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const worktrees = useWorktreeStore((state) => state.worktrees);
+  const chatWorktree = useWorktreeById(sourceWorktreeId);
+  const mainWorktree = useMainWorktree(projectId);
   const { data: preferences } = usePreferences();
   const branchCopyUncommittedFilesDefault = preferences?.worktree.branchCopyUncommittedFilesDefault ?? false;
   const updateWorktreePrefs = useUpdateWorktreePreferences();
@@ -74,18 +76,8 @@ export function BranchToWorktreeModal({
   }, [isOpen, branchCopyUncommittedFilesDefault]);
   
   // Get the source worktree from the chat's worktree_id, or fall back to main
-  const sourceWorktree = useMemo(() => {
-    // If sourceWorktreeId is provided (from the chat), find that worktree
-    if (sourceWorktreeId) {
-      const worktree = worktrees.find(w => w.id === sourceWorktreeId);
-      if (worktree) {
-        return worktree;
-      }
-    }
-    // Otherwise, fallback to the main worktree for this project
-    return worktrees.find(w => w.is_main && w.project_id === projectId) || null;
-  }, [sourceWorktreeId, worktrees, projectId]);
-  
+  const sourceWorktree = (sourceWorktreeId ? chatWorktree : undefined) ?? mainWorktree ?? null;
+
   // Fetch current branch and changed files when modal opens.
   //
   // git status is per repo, and its paths are relative to THAT repo, while
@@ -93,29 +85,33 @@ export function BranchToWorktreeModal({
   // project separately and prefix its paths with the repo's location. A
   // multi-repo project used to call this once with no repo id, which the
   // server rejects — uncommitted files were silently never copied there.
+  // A failed repo list is treated as no registered repo.
+  const reposQuery = useListRepos({ projectId }, { enabled: isOpen && !!sourceWorktree?.id });
+  const reposSettled = reposQuery.isSuccess || reposQuery.isError;
+  const repos = reposQuery.data?.repos;
+  useEffect(() => {
+    if (reposQuery.error) logger.warn("Failed to list repos for branch copy:", reposQuery.error);
+  }, [reposQuery.error]);
   useEffect(() => {
     if (!isOpen || !sourceWorktree?.id) {
       setCurrentBranch(undefined);
       setChangedFiles([]);
       return;
     }
+    if (!reposSettled) return;
     let cancelled = false;
     const worktreeId = sourceWorktree.id;
     (async () => {
-      const { repos } = await repoGrpc.list(projectId).catch((error) => {
-        logger.warn("Failed to list repos for branch copy:", error);
-        return { repos: [] as Repo[] };
-      });
       // No registered repo: the workspace root is the repo, and the server
       // resolves an empty repo id to it.
-      const targets = repos.length > 0 ? repos : [{ id: "", relative_path: "" } as Repo];
+      const targets: { id: string; relativePath: string }[] =
+        repos && repos.length > 0 ? repos : [{ id: "", relativePath: "" }];
       const statuses = await Promise.all(
         targets.map((repo) =>
-          worktreeGrpc
-            .getGitStatus(worktreeId, repo.id || undefined)
+          fetchWorktreeGitStatus(worktreeId, repo.id || undefined)
             .then((status) => ({ repo, status }))
             .catch((error) => {
-              logger.warn("Failed to fetch git status:", { repo: repo.relative_path, error });
+              logger.warn("Failed to fetch git status:", { repo: repo.relativePath, error });
               return null;
             }),
         ),
@@ -130,7 +126,7 @@ export function BranchToWorktreeModal({
           ...(result.status.staged_files || []),
           ...(result.status.untracked_files || []),
         ]) {
-          files.add(repoPathToWorkspacePath(result.repo.relative_path, file));
+          files.add(repoPathToWorkspacePath(result.repo.relativePath, file));
         }
       }
       // The base branch only means something for one repo; a multi-repo
@@ -142,7 +138,7 @@ export function BranchToWorktreeModal({
     return () => {
       cancelled = true;
     };
-  }, [isOpen, sourceWorktree?.id, projectId]);
+  }, [isOpen, sourceWorktree?.id, reposSettled, repos]);
 
   const handleWorktreeCreated = async (worktreeId: string) => {
     try {
@@ -156,7 +152,7 @@ export function BranchToWorktreeModal({
       });
       
       // Select the new worktree
-      const newWorktree = worktrees.find(w => w.id === worktreeId);
+      const newWorktree = getCachedWorktree(worktreeId);
       if (newWorktree) {
         await switchWorktreeContext(projectId, newWorktree);
       }

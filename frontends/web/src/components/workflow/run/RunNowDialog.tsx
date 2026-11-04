@@ -1,14 +1,18 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Run now — start a workflow by hand, with its inputs, on a machine of your
- * choosing, optionally replaying a past event.
+ * Run… — start a workflow by hand, with its inputs, on a machine of your
+ * choosing, optionally replaying a past event. Attended: it opens the run.
+ * (Firing a trigger by hand, unattended under its settings, is "Fire trigger
+ * now" on the trigger, a different thing with a different name.)
  *
  * A thin host for RunWorkflowForm, like RunWorkflowDialog, but it starts the run
  * with ChatService.RunNow: the launch is recorded as manual.run, it works
  * for a workflow whose Chat trigger is off (pressing the button is how such a
  * workflow is run by hand), the message is optional, and "No machine" is a
- * choice. A manual run is attended: it opens as a chat.
+ * choice. A manual run is attended: it opens as a chat — or, from the
+ * Workflows area, on its run page there (`opensIn: "run"`), so the person
+ * stays in the area and Back returns to it.
  *
  * Replay: a workflow that declares triggers can be run against an event one of
  * them received ("Start from: A recent event"). The trigger's own inputs and
@@ -18,24 +22,23 @@
  * only runs on integration events, a recent event is the default: it is the
  * only meaningful hand run of it.
  *
- * Same frame as the setup dialog (automation-ux-spec.md §3.6): numbered
- * sections and the actions pinned in the footer. Typed inputs get the picker
+ * Same frame as the setup dialog: numbered sections and the actions pinned in
+ * the footer. Typed inputs get the picker
  * through RunWorkflowForm, like every other form.
  */
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { ConnectError } from "@connectrpc/connect";
 
-import { chatGrpc } from "@/api/chat-grpc";
-import { triggerGrpc, type ReplayCandidate } from "@/api/trigger-grpc";
+import type { ReplayCandidate } from "@/hooks/trigger-model";
+import { previewReplay, useReplayCandidates } from "@/hooks/trigger-queries";
 import { NO_MACHINE, noMachineBlockerFor } from "@/components/Automations/daemonChoices";
 import { loadRunContext } from "@/components/runs/loadRunContext";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
-import { Modal } from "../../ui/Modal";
-import { Button } from "../../ui/Button";
+import Modal from "../../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { SetupSection } from "../../Automations/setup/SetupSection";
 import { cn } from "@/lib/utils";
 import { getWorkflowDisplayName } from "../useWorkflowInputs";
@@ -44,12 +47,15 @@ import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "./runFormStyles";
 import { candidateLabel, formatPayload, parsePayload, REPLAY_KINDS } from "./runNowReplay";
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
+import * as chatActions from "@/hooks/chat-actions";
 
 export interface RunNowDialogProps {
   open: boolean;
   onClose: () => void;
   projectId: string;
   workflowRef: string;
+  /** Where the started run opens: the project's chat view (default), or its run page in the Workflows area. */
+  opensIn?: "chat" | "run";
 }
 
 const HAND_WRITTEN = "";
@@ -71,7 +77,7 @@ interface Mapping {
   prompt: string;
 }
 
-function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps) {
+function RunNowDialogBody({ onClose, projectId, workflowRef, opensIn = "chat" }: RunNowDialogProps) {
   const navigate = useNavigate();
   const ids = useId();
   const id = (name: string) => `${ids}-${name}`;
@@ -113,12 +119,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
 
   const effectiveTrigger = triggerName || (triggerNames.length === 1 ? triggerNames[0]! : "");
 
-  const candidatesQuery = useQuery({
-    queryKey: ["run-now", "replay-events", projectId, workflowRef],
-    queryFn: () => triggerGrpc.listReplayEvents(projectId, workflowRef),
-    enabled: replaying,
-    staleTime: 15_000,
-  });
+  const candidatesQuery = useReplayCandidates(projectId, workflowRef, replaying);
   const candidates = useMemo(
     () =>
       (candidatesQuery.data ?? []).filter((c) => !effectiveTrigger || c.triggerName === effectiveTrigger),
@@ -142,19 +143,18 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
     if (!parsed.ok) return;
     let cancelled = false;
     setMapping_(true);
-    void triggerGrpc
-      .previewReplay(
-        projectId,
-        workflowRef,
-        {
-          triggerName: effectiveTrigger,
-          eventId: chosen?.event.id,
-          kind: chosen?.kind || kind,
-          occurredAt: chosen?.event.occurredAt,
-          payload: parsed.value,
-        },
-        chosen?.event.sender,
-      )
+    void previewReplay(
+      projectId,
+      workflowRef,
+      {
+        triggerName: effectiveTrigger,
+        eventId: chosen?.event.id,
+        kind: chosen?.kind || kind,
+        occurredAt: chosen?.event.occurredAt,
+        payload: parsed.value,
+      },
+      chosen?.event.sender,
+    )
       .then((result) => {
         if (cancelled) return;
         setMapping(result);
@@ -192,6 +192,10 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
   const title = `Run ${getWorkflowDisplayName(workflowRef, true)}`;
 
   const openChat = async (chatId: string, chatProjectId: string) => {
+    if (opensIn === "run") {
+      await navigate({ to: "/workflows/runs/$runId", params: { runId: chatId }, search: { project: chatProjectId } });
+      return;
+    }
     await loadRunContext(chatId);
     await navigate({ to: "/project/$projectId", params: { projectId: chatProjectId }, search: {} });
   };
@@ -213,7 +217,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
     const noMachine = value.daemonId === NO_MACHINE;
     setStarting(true);
     try {
-      const { chat } = await chatGrpc.runNow({
+      const { chat } = await chatActions.runNow({
         projectId,
         workflow: workflowRef,
         message: message.trim() || undefined,
@@ -247,7 +251,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
 
   return (
     <Modal
-      isOpen
+      open
       onClose={starting ? () => undefined : onClose}
       title={title}
       size="lg"
@@ -257,7 +261,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
             Cancel
           </Button>
           <Button type="submit" form={id("form")} variant="primary" loading={starting} disabled={blocked} className="max-sm:w-full">
-            Run now
+            Start run
           </Button>
         </div>
       }
@@ -280,7 +284,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
                   disabled={starting}
                   onClick={() => setReplaying(choice.replay)}
                   className={cn(
-                    "rounded px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                    "rounded px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     replaying === choice.replay ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )}
                 >
@@ -374,7 +378,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
               aria-expanded={payloadOpen || payloadInvalid}
               aria-controls={id("payload-panel")}
               onClick={() => setPayloadOpen((open) => !open)}
-              className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {payloadOpen || payloadInvalid ? "Hide the event payload" : "Edit the event payload"}
             </button>
@@ -439,7 +443,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
           <p id={id("message-hint")} className={hintClass}>
             {replaying
               ? "The event is added after this message, as it would be for a real fire."
-              : "Leave it blank to start the run from “Run now.” The run opens as a chat you can answer."}
+              : "Leave it blank to start the run with no prompt. The run opens as a chat you can answer."}
           </p>
         </div>
         </SetupSection>

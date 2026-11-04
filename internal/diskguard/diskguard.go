@@ -407,7 +407,7 @@ func refusalMessage(st *volume, cfg Config, reclaims bool) string {
 	v := st.last
 	u := usage(v)
 	var b strings.Builder
-	fmt.Fprintf(&b, "Refused: this machine's %q volume is %s full (%s free of %s), past the %s at which new heavy commands — builds, test suites, codegen — are not started, because they would fail mid-write with \"no space left on device\". Light commands, and work already running, are not affected.",
+	fmt.Fprintf(&b, "Refused: this machine's %q volume is %s full (%s free of %s), past the %s at which new heavy commands — builds, test suites, codegen — are not started, because they would fail mid-write with \"no space left on device\". Light commands, and work already running, are not affected — but a light command is not a way around this: deleting the shared build caches (`go clean -cache`, `rm -rf $GOCACHE`) and pruning the container engine are refused on this machine whatever the disk state, and a wiped cache breaks every build running on it.",
 		v.Label, percent(u.UsedFraction()), diskwatch.FormatBytes(u.FreeBytes), diskwatch.FormatBytes(u.TotalBytes), percent(cfg.RefuseAt))
 	if using := consumers(v); using != "" {
 		fmt.Fprintf(&b, "\nUsing it: %s.", using)
@@ -426,7 +426,7 @@ func refusalMessage(st *volume, cfg Config, reclaims bool) string {
 	// that cannot break someone else's work. An earlier "delete … build output
 	// in idle checkouts" was read as licence to `rm -rf /tmp/cp-ci-affected.*`
 	// mid-gate, deleting a running gate's state (2026-10-22).
-	fmt.Fprintf(&b, "\nTo free more, safely: load the `machine-disk` skill, which shows what is using the disk; archive the worktrees you are done with (the worktree tool's delete; the storage item in the Inbox removes archived ones that are safe to delete). The build caches are trimmed by the daemon itself, beside running builds: do not run `go clean -cache` or prune docker images or volumes yourself. %s Heavy commands start again once the volume is below %s; until then, light commands still run.",
+	fmt.Fprintf(&b, "\nTo free more, safely: load the `machine-disk` skill, which shows what is using the disk; archive the worktrees you are done with (the worktree tool's delete; the storage item in the Inbox removes archived ones that are safe to delete). The build caches are trimmed by the daemon and the machine's steward, beside running builds and keeping what they use, so you do not need to: do not run `go clean -cache` or prune docker images or volumes yourself. To free space on purpose, `reliant forge storage gc` previews what is eligible and `reliant forge storage gc --apply` removes only that. %s Heavy commands start again once the volume is below %s; until then, light commands still run.",
 		diskwatch.NeverDelete, percent(cfg.RefuseAt-cfg.ClearMargin))
 	return b.String()
 }

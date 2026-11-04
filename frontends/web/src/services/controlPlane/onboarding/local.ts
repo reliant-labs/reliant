@@ -1,6 +1,6 @@
 /**
  * Local-only fallback for the onboarding service. Used when no control plane
- * is configured (`VITE_CONTROL_PLANE_API_URL` unset). The onboarding gate is
+ * is configured (`CONTROL_PLANE_API_URL` unset). The onboarding gate is
  * tracked in localStorage so the OSS flow can complete without ever calling
  * the cloud admin server.
  */

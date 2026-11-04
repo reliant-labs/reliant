@@ -54,12 +54,9 @@
  *    Re-invoking with the same key returns the cached failure. Only
  *    {@link retryCommit}, wired to an explicit Retry button, clears it.
  */
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "@/api/grpc-client";
-import {
-  DaemonStatus,
-  ListDaemonsRequestSchema,
-} from "@/gen/reliant/v1/daemon_registry_pb";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { fetchDaemonList } from "@/hooks/daemon-registry-queries";
+import { queryClient } from "@/lib/query-client";
 import { ACCOUNT_REQUIRED_MACHINE_COPY } from "@/lib/accountRequired";
 import { isAnonymousSession } from "@/lib/anonymousSession";
 import { isCloudCompute } from "./types";
@@ -68,11 +65,12 @@ import type { LaunchPlan } from "./types";
 /**
  * The daemon name onboarding always uses.
  *
- * Load-bearing, not cosmetic: the control plane's `CreateDaemon` is idempotent
- * BY NAME (it refreshes the existing row rather than erroring), so a second
- * commit with the same name cannot mint a second machine. Any caller that
- * re-runs CreateDaemon for this user during onboarding must use this exact
- * name — `GitHubConnectStep` re-runs it to attach the picked repo.
+ * Load-bearing, not cosmetic: onboarding's `CreateDaemon` asks for
+ * refresh-by-name (`refreshExisting`), so a second commit with the same name
+ * refreshes the existing row rather than minting a second machine. Any caller
+ * that re-runs CreateDaemon for this user during onboarding must use this
+ * exact name AND set refreshExisting — `GitHubConnectStep` re-runs it to
+ * attach the picked repo. Without the flag the server refuses a repeated name.
  */
 export const ONBOARDING_DAEMON_NAME = "onboarding-daemon";
 
@@ -86,12 +84,15 @@ const DAEMON_TYPE_MANAGED = 1;
  * cheapest plan that runs it — so the plan id the user recorded is the size
  * they chose, and this is the map back.
  */
-const DAEMON_SIZE_SMALL = 1;
+const DAEMON_SIZE_M = 8;
 const DAEMON_SIZE_BY_NAME: Record<string, number> = {
-  small: DAEMON_SIZE_SMALL,
-  medium: 2,
-  large: 3,
-  xl: 4,
+  s1: 6,
+  s2: 7,
+  m: DAEMON_SIZE_M,
+  l: 9,
+  xl: 10,
+  "2xl": 11,
+  "3xl": 12,
 };
 
 /**
@@ -101,23 +102,51 @@ const DAEMON_SIZE_BY_NAME: Record<string, number> = {
  *
  * The size was HARDCODED to SMALL here. A user who picked "XL — $160.00/mo"
  * on the compute step was shown that price, charged that price at checkout,
- * and provisioned a 1-CPU machine: the tile moved the money and nothing else.
+ * and provisioned the smallest machine: the tile moved the money and nothing else.
  *
  * Reading it back out of the plan id keeps ONE field in the URL describing the
  * purchase. Carrying a second `daemonSize` field beside it would let the two
- * disagree — a plan id for XL next to a size of small is a state with no
+ * disagree — a plan id for XL next to a size of M is a state with no
  * correct interpretation, and the URL is user-editable.
  *
- * Unknown or absent falls back to SMALL: every compute plan allows it, so the
- * user still gets a working machine rather than a failed commit.
+ * Unknown or absent falls back to M, the coupon unit and the default size, so
+ * the user still gets a working machine rather than a failed commit.
  */
 export function daemonSizeForPlan(computePlanId: string | undefined): number {
-  if (!computePlanId) return DAEMON_SIZE_SMALL;
+  if (!computePlanId) return DAEMON_SIZE_M;
   // Plan ids are `plan_compute_<size>` in the catalog; match on the suffix
   // rather than the whole string so a renamed prefix does not silently
   // downgrade every machine.
   const suffix = computePlanId.split("_").pop()?.toLowerCase() ?? "";
-  return DAEMON_SIZE_BY_NAME[suffix] ?? DAEMON_SIZE_SMALL;
+  return DAEMON_SIZE_BY_NAME[suffix] ?? DAEMON_SIZE_M;
+}
+
+/**
+ * The machine size to provision: the recorded plan's size when the server
+ * admits it, otherwise the first size the server says this account may run.
+ *
+ * The recorded size can predate the entitlement that pays for the machine. A
+ * user who reaches checkout uncovered has the cheapest tile (S1) recorded;
+ * redeeming a compute coupon there settles the bill and commits that plan, but
+ * a coupon runs only its unit tier (M), so CreateDaemon refused the S1 with
+ * "your plan does not include daemon size s1" at the last step of onboarding
+ * (prod, 2026-11-04). The coupon paid for a machine; provisioning the machine
+ * it pays for is the honest reading of that plan. A subscriber's own size is
+ * always in their allowance, so a paid choice is never overridden.
+ *
+ * `allowedSizes` is the server's `allowed_daemon_sizes`, read at the commit
+ * point. Empty or absent (an older server, a failed read) changes nothing.
+ */
+export function daemonSizeForCommit(
+  computePlanId: string | undefined,
+  allowedSizes: readonly string[] | undefined,
+): number {
+  const recorded = daemonSizeForPlan(computePlanId);
+  const allowed = (allowedSizes ?? [])
+    .map((size) => DAEMON_SIZE_BY_NAME[size.toLowerCase()])
+    .filter((size): size is number => size !== undefined);
+  if (allowed.length === 0 || allowed.includes(recorded)) return recorded;
+  return allowed[0];
 }
 
 /**
@@ -181,6 +210,8 @@ export interface CommitDeps {
   getComputeEligibility: () => Promise<{
     eligible: boolean;
     reason?: string | null;
+    /** The sizes the daemon service will admit (`allowed_daemon_sizes`). */
+    allowedDaemonSizes?: string[];
   }>;
   listDaemons: () => Promise<
     { daemons: Array<{ daemonId: string; status: number }> }
@@ -191,6 +222,7 @@ export interface CommitDeps {
     size: number;
     gitRepo: string;
     gitBranch: string;
+    refreshExisting: boolean;
   }) => Promise<string>;
   resumeDaemon: (daemonId: string) => Promise<void>;
   /** Injected so tests do not sleep. */
@@ -228,6 +260,7 @@ function defaultDeps(): CommitDeps {
       const result = await getComputeEligibility();
       return {
         eligible: result.eligible,
+        allowedDaemonSizes: result.allowedDaemonSizes,
         // Rendered through the same table the compute step uses, so the user
         // is not told two different things about one server fact.
         reason: result.eligible ? null : computeIneligibleCopy(result.reason),
@@ -236,8 +269,9 @@ function defaultDeps(): CommitDeps {
     // The registry list: the one service that knows whether a machine has
     // actually attached, which is the question every branch below asks.
     // See docs/design/one-daemon-list.md.
-    listDaemons: async () =>
-      grpcClient.daemonRegistry().listDaemons(create(ListDaemonsRequestSchema)),
+    // Read through the shared daemon list, so the answer also refreshes
+    // every mounted reader of it.
+    listDaemons: async () => ({ daemons: await fetchDaemonList(queryClient) }),
     createDaemon: async (args) => {
       const { createDaemon } = await import("@/services/controlPlane/daemon");
       return createDaemon(args);
@@ -319,13 +353,15 @@ async function grantAiAccess(
  */
 async function awaitComputeEligibility(
   deps: CommitDeps,
-): Promise<{ eligible: boolean; reason: string }> {
+): Promise<{ eligible: boolean; reason: string; allowedDaemonSizes?: string[] }> {
   let reason = "";
   for (let attempt = 0; attempt < ELIGIBILITY_POLL_ATTEMPTS; attempt++) {
     if (attempt > 0) await deps.sleep(ELIGIBILITY_POLL_INTERVAL_MS);
     try {
       const result = await deps.getComputeEligibility();
-      if (result.eligible) return { eligible: true, reason: "" };
+      if (result.eligible) {
+        return { eligible: true, reason: "", allowedDaemonSizes: result.allowedDaemonSizes };
+      }
       reason = result.reason ?? "";
     } catch (err) {
       reason = messageOf(err, "");
@@ -367,7 +403,7 @@ async function provisionDaemon(
     };
   }
 
-  const { eligible, reason } = await awaitComputeEligibility(deps);
+  const { eligible, reason, allowedDaemonSizes } = await awaitComputeEligibility(deps);
   if (!eligible) {
     // PENDING, not failed. A webhook that has not landed yet is a wait, and
     // calling CreateDaemon into a denial would tell a paying user to upgrade.
@@ -439,9 +475,10 @@ async function provisionDaemon(
       name: ONBOARDING_DAEMON_NAME,
       daemonType: DAEMON_TYPE_MANAGED,
       // The size the user actually picked, not a hardcoded SMALL.
-      size: daemonSizeForPlan(plan.computePlanId),
+      size: daemonSizeForCommit(plan.computePlanId, allowedDaemonSizes),
       gitRepo: "",
       gitBranch: "main",
+      refreshExisting: true,
     });
     return {
       name: "provision_daemon",

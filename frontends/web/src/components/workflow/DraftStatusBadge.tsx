@@ -1,6 +1,6 @@
 import { PencilRuler } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 
 interface DraftStatusBadgeProps {
   /** Number of blocking problems the draft currently has. */

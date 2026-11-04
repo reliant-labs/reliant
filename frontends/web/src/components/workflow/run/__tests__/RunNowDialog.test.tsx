@@ -9,7 +9,11 @@
  * built and the PreviewReplay/ListReplayEvents calls it made.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import type { ReactNode } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -53,17 +57,30 @@ const previewReplay = vi.fn();
 const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
 
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: {
-    workflow: () => ({ listWorkflows, getWorkflow }),
-    preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
-    worktree: () => ({ listWorktrees }),
-    chat: () => ({ runNow, startChat }),
-    trigger: () => ({ listReplayEvents, previewReplay }),
-    daemonRegistry: () => ({ listDaemons }),
-    project: () => ({ listProjectDaemons }),
-  },
-}));
+// PresetService and TriggerService are reached through connectClient (the generated hooks), so
+// it is answered at the transport by the same fakes.
+beforeEach(() => {
+  setTransport(
+    mockTransport({
+      "ChatService.RunNow": (req: unknown) => runNow(req as never),
+      "ChatService.StartChat": (req: unknown) => startChat(req as never),
+      // The daemon list is read through connectClient(DaemonRegistryService).
+      ...serviceHandlers("DaemonRegistryService", { listDaemons }),
+      ...serviceHandlers("TriggerService", { listReplayEvents, previewReplay }),
+      ...serviceHandlers("WorkflowService", { listWorkflows, getWorkflow }),
+      ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+      ...serviceHandlers("ProjectService", { listProjectDaemons }),
+      // The run form lists workspaces through the generated WorktreeService hooks.
+      ...serviceHandlers("WorktreeService", { listWorktrees }),
+    }),
+  );
+});
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
+});
 
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({ currentProject: { id: "proj-1", name: "Forge" }, projects: [] });
@@ -177,7 +194,7 @@ describe("RunNowDialog", () => {
     expect(strictness.tagName).toBe("SELECT");
 
     // `label` has no default: Run now is refused with a reason, and nothing is sent.
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
     expect(await screen.findByText("Fill in the required input: Label.")).toBeInTheDocument();
     expect(runNow).not.toHaveBeenCalled();
 
@@ -187,7 +204,7 @@ describe("RunNowDialog", () => {
     const workspace = await screen.findByLabelText("Workspace");
     await screen.findByRole("option", { name: "feature (feat/x)" });
     await user.selectOptions(workspace, "wt-1");
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
 
     await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
     const request = runNow.mock.calls[0]![0];
@@ -204,7 +221,8 @@ describe("RunNowDialog", () => {
     await waitFor(() => expect(loadRunContext).toHaveBeenCalledWith("chat-new"));
     await waitFor(() => expect(router.state.location.pathname).toBe("/project/proj-1"));
     expect(onClose).toHaveBeenCalled();
-  });
+    // Ten user-event steps: ~0.6s idle, past the 5s default on a saturated merge-gate runner.
+  }, 20_000);
 
   it("runs a workflow whose Chat trigger is off: the message is optional and nothing blocks the button", async () => {
     listWorkflows.mockResolvedValue(listing({ automationOnly: true }));
@@ -214,7 +232,7 @@ describe("RunNowDialog", () => {
     fill(await screen.findByLabelText("Label"), "bug");
     const message = screen.getByLabelText("Message");
     expect(message).toHaveAttribute("placeholder", expect.stringMatching(/Optional/));
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
 
     await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
     expect(runNow.mock.calls[0]![0].workflow).toBe("triage");
@@ -225,7 +243,7 @@ describe("RunNowDialog", () => {
     renderDialog(<RunNowDialog open onClose={vi.fn()} projectId="proj-1" workflowRef="triage" />);
     fill(await screen.findByLabelText("Label"), "bug");
     fill(screen.getByLabelText("Message"), "  look at the backlog  ");
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
     await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
     expect(runNow.mock.calls[0]![0].message).toBe("look at the backlog");
   });
@@ -240,7 +258,7 @@ describe("RunNowDialog", () => {
     fill(await screen.findByLabelText("Label"), "bug");
 
     await user.selectOptions(machine, "daemon-1");
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
     await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
     expect(runNow.mock.calls[0]![0]).toMatchObject({ daemonId: "daemon-1", noMachine: false });
   });
@@ -256,7 +274,7 @@ describe("RunNowDialog", () => {
     expect(option).not.toBeDisabled();
     await user.selectOptions(machine, option);
     expect(screen.getByText(/nothing touches files/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
 
     await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
     const request = runNow.mock.calls[0]![0];
@@ -276,7 +294,7 @@ describe("RunNowDialog", () => {
     const onClose = vi.fn();
     renderDialog(<RunNowDialog open onClose={onClose} projectId="proj-1" workflowRef="triage" />);
     fill(await screen.findByLabelText("Label"), "bug");
-    await user.click(screen.getByRole("button", { name: "Run now" }));
+    await user.click(screen.getByRole("button", { name: "Start run" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("input 'label': model gpt-x is not available");
     expect(onClose).not.toHaveBeenCalled();
@@ -335,7 +353,7 @@ describe("RunNowDialog", () => {
         }),
       );
 
-      await user.click(screen.getByRole("button", { name: "Run now" }));
+      await user.click(screen.getByRole("button", { name: "Start run" }));
       await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
       const request = runNow.mock.calls[0]![0];
       expect(request.message).toBe("Triage #7.");
@@ -363,7 +381,7 @@ describe("RunNowDialog", () => {
       await waitFor(() => expect(previewReplay.mock.calls.length).toBeGreaterThan(before));
       await waitFor(() => expect(screen.getByLabelText("Label")).toHaveValue('n="set"'));
 
-      await user.click(screen.getByRole("button", { name: "Run now" }));
+      await user.click(screen.getByRole("button", { name: "Start run" }));
       await waitFor(() => expect(runNow).toHaveBeenCalledTimes(1));
       expect(runNow.mock.calls[0]![0].replay.payload).toEqual({ number: 99 });
       // A hand-written event has no recorded id.
@@ -379,7 +397,7 @@ describe("RunNowDialog", () => {
       fill(screen.getByLabelText("Event payload (JSON)"), "[1, 2");
       expect(await screen.findByText(/Not valid JSON/)).toBeInTheDocument();
       expect(screen.getByLabelText("Event payload (JSON)")).toHaveAttribute("aria-invalid", "true");
-      expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Start run" })).toBeDisabled();
       expect(runNow).not.toHaveBeenCalled();
 
       fill(screen.getByLabelText("Event payload (JSON)"), "[1, 2]");
@@ -394,7 +412,7 @@ describe("RunNowDialog", () => {
       await user.click(await screen.findByRole("radio", { name: "A recent event" }));
       await user.selectOptions(await screen.findByLabelText("Through trigger"), "new-issue");
       expect(await screen.findByText(/could not read its inputs from this event/)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Start run" })).toBeDisabled();
     });
 
     it("says so when the workflow has collected no events yet, and still lets one be written", async () => {

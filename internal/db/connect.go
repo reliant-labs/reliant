@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -115,6 +116,11 @@ type Pool struct {
 	// SchemaWait bounds how long a MigrateWait process waits for the schema;
 	// 0 is DefaultSchemaWait.
 	SchemaWait time.Duration
+
+	// KeepIdleWarm keeps MaxIdleConns connections open and idle (see
+	// keepIdleWarm). Servers set it; a one-shot CLI process does not, since
+	// it would only pay for connections it never uses.
+	KeepIdleWarm bool
 }
 
 // Pool defaults, for a zero Pool field.
@@ -174,6 +180,10 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to connect to postgres database: %w", err)
 	}
 
+	if cfg.Pool.KeepIdleWarm {
+		go keepIdleWarm(db, min(orDefault(cfg.Pool.MaxIdleConns, defaultMaxIdleConns), orDefault(cfg.Pool.MaxOpenConns, defaultMaxOpenConns)), idleWarmInterval)
+	}
+
 	// Register OTel for DB stats metrics
 	if _, regErr := otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(attribute.String("db.system", "postgresql"))); regErr != nil {
 		logging.Warn("Failed to register DB stats metrics", "error", regErr)
@@ -230,4 +240,71 @@ func openSessionPool(url string) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to connect to the direct (session) database URL: %w", err)
 	}
 	return pool, nil
+}
+
+// idleWarmInterval is how often keepIdleWarm tops the pool up.
+const idleWarmInterval = 10 * time.Second
+
+// keepIdleWarm holds the pool at n idle connections until db is closed.
+// TODO(forge pin bump): forge's serverkit now owns this as DBPoolTuning.SpareConns; set it in connectPostgres and delete keepIdleWarm/warmIdle.
+//
+// database/sql has no minimum-idle setting: it opens a connection when a
+// caller finds none idle, and that caller waits for the dial (TLS and auth,
+// through PgBouncer) — measured in prod as 85-336ms db.connect spans on chat
+// opens, whose snapshot fans out to ~10 concurrent reads at once. Connections
+// leave the idle set all the time without anyone asking for fewer:
+// ConnMaxLifetime retires them, a burst past MaxIdleConns closes the excess,
+// and a fresh process starts with none. So this tops the idle set back up,
+// off the request path, by checking out connections — the pool hands back its
+// idle ones first and dials the rest — and returning them, which leaves them
+// idle (n is at most MaxIdleConns). It never takes a connection a request
+// could need: it asks only for what fits beside the ones in use.
+func keepIdleWarm(db *sql.DB, n int, every time.Duration) {
+	if n <= 0 {
+		return
+	}
+	ticker := time.NewTicker(every)
+	defer ticker.Stop()
+	for {
+		if !warmIdle(db, n) {
+			return // closed
+		}
+		<-ticker.C
+	}
+}
+
+// warmIdle tops db up to n idle connections, best-effort. It reports false
+// once db is closed.
+func warmIdle(db *sql.DB, n int) bool {
+	st := db.Stats()
+	if st.Idle >= n {
+		return true
+	}
+	want := n
+	if st.MaxOpenConnections > 0 && st.InUse+want > st.MaxOpenConnections {
+		want = st.MaxOpenConnections - st.InUse
+	}
+	if want <= st.Idle {
+		return true
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conns := make([]*sql.Conn, 0, want)
+	defer func() {
+		for _, c := range conns {
+			_ = c.Close() // back to the pool, idle
+		}
+	}()
+	for range want {
+		c, err := db.Conn(ctx)
+		if errors.Is(err, sql.ErrConnDone) || (err != nil && strings.Contains(err.Error(), "database is closed")) {
+			return false
+		}
+		if err != nil {
+			logging.Debug("could not warm a database connection", "error", err)
+			return true
+		}
+		conns = append(conns, c)
+	}
+	return true
 }

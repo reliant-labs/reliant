@@ -1,0 +1,43 @@
+{
+  /*
+   * The tests, type-checked. tsconfig.app.json excludes them (Vite's template
+   * split), and vitest strips types without checking them, so without this
+   * project a test importing an export the app had removed still passed both
+   * `tsc -b` and the test run.
+   *
+   * It holds ONLY the tests: what tsconfig.app.json excludes, plus the global
+   * .d.ts files they need in scope. App and generated code come in through
+   * `references`, so `tsc -b` checks them once, in their own projects, and
+   * this one reads their emitted declarations (node_modules/.tmp/tsc/) instead
+   * of type-checking every app file a second time. That is why the app and gen
+   * projects are `composite` and emit declarations only. A test that imports an
+   * app module reads that module's .d.ts, so an app change that leaves its
+   * declarations alone does not re-check the tests.
+   *
+   * Same options as the app (`extends`), but a leaf: nothing references it, so
+   * it emits nothing. `incremental` because `composite: false` drops it, and
+   * without it `tsc -b` re-checks every test whenever any one is out of date
+   * (the build info then records only the root files). `types` adds the
+   * vitest globals the config enables (`test.globals`) and Node's, for the
+   * tests that read files.
+   */
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "composite": false,
+    "incremental": true,
+    "declaration": false,
+    "emitDeclarationOnly": false,
+    "noEmit": true,
+    "types": ["vitest/globals", "node"]
+  },
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.gen.json" }],
+  "include": [
+    "src/**/__tests__/**/*",
+    "src/**/*.test.*",
+    "src/**/*.spec.*",
+    "src/test/**/*",
+    "src/**/*.d.ts"
+  ],
+  "exclude": ["src/gen/**/*"]
+}

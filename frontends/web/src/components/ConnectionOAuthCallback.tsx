@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearch } from '@tanstack/react-router'
 
-import { connectionErrorMessage, connectionGrpc } from '@/api/connection-grpc'
-import { relayedErrorMessage } from '@/lib/connection-oauth'
+import { connectionErrorMessage } from '@/hooks/connection-queries'
+import { completeOAuth, relayedErrorMessage } from '@/lib/connection-oauth'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
 
@@ -37,8 +37,7 @@ export function ConnectionOAuthCallback() {
       setError('This sign-in link is incomplete.')
       return
     }
-    connectionGrpc
-      .completeOAuth({ state: search.state, code: search.code })
+    completeOAuth({ state: search.state, code: search.code })
       .then(({ connection, redirectAfter }) => {
         const landing = new URL(safeRelativePath(redirectAfter) ?? back, window.location.origin)
         landing.searchParams.set('connection', connection.id)

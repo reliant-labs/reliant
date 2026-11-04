@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -69,8 +68,13 @@ func TestStory13_NoMachineAutomationFiresEndToEnd(t *testing.T) {
 
 	// The production executor with no daemon transport at all: server- and
 	// any-placed tools run in-process, and nothing can reach a daemon.
+	//
+	// The "status page" is an httptest server on loopback, which a server
+	// role refuses to dial by default (netguard.ForDeployment(false)); the
+	// story's server is a self-hosted one that opts in, as
+	// ServerProcessConfig.network.allow_private_egress does.
 	executor := toolexec.NewRemoteExecutor(nil)
-	server := toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{}))
+	server := toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{AllowPrivateEgress: true}))
 	executor.SetServerExecutor(server)
 
 	// Counts every bind, so the story sees that a no-machine run never asked
@@ -113,14 +117,14 @@ func TestStory13_NoMachineAutomationFiresEndToEnd(t *testing.T) {
 
 	launched := core.TriggerEventLaunched
 	var event *core.TriggerEvent
-	require.Eventually(t, func() bool {
+	h.eventually("the fire to launch a run", func() (bool, string) {
 		ev, err := h.Stack.Repo.GetLatestTriggerEvent(h.Ctx, trigger.GetId(), &launched)
 		if err == nil && ev != nil && ev.ChatID != nil {
 			event = ev
-			return true
+			return true, ""
 		}
-		return false
-	}, 60*time.Second, 100*time.Millisecond, "the fire never launched a run")
+		return false, fmt.Sprintf("latest launched event: %v (err %v)", ev, err)
+	})
 
 	chat := h.Chat(*event.ChatID)
 	assert.True(t, chat.NoMachine, "the launched chat records that it has no machine")

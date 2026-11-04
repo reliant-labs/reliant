@@ -63,7 +63,7 @@ describe("NotForgeProject", () => {
   it("reads as information, not an error, and builds no structure from bg-muted", () => {
     render(<NotForgeProject projectName="acme-api" />);
     const panel = screen.getByTestId("forge-not-project");
-    expect(panel.className).not.toMatch(/destructive/);
+    expect(panel.className).not.toMatch(/danger|destructive/);
     expect(panel.outerHTML).not.toMatch(/bg-muted/);
   });
 });

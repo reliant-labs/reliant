@@ -48,7 +48,7 @@ import { useId, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import {
   confirmationTokenFor,
   describeToken,
@@ -101,7 +101,7 @@ export function PromoteConfirmStep({
             className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-primary"
             data-testid="promote-acknowledge"
           />
-          <span className="text-xs text-foreground">
+          <span className="text-xs text-ink">
             I have read the diff above, and {describeToken(token)}.
           </span>
         </label>
@@ -110,7 +110,7 @@ export function PromoteConfirmStep({
         // would be authorising a write against an unknown current state.
         <p
           data-testid="promote-no-token"
-          className="rounded-lg border border-dashed border-destructive/50 px-3 py-2 text-xs text-destructive-ink"
+          className="rounded-lg border border-dashed border-danger-border px-3 py-2 text-xs text-danger-ink"
         >
           This plan does not say what {env || "the environment"} is currently bound to, so a promote
           cannot be authorised from it. Re-plan to try again.
@@ -124,7 +124,7 @@ export function PromoteConfirmStep({
       {rollback && token && (
         <p
           data-testid="promote-rollback-warning"
-          className="flex items-center gap-1.5 rounded-lg border border-solid border-destructive/50 bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive-ink"
+          className="flex items-center gap-1.5 rounded-lg border border-solid border-danger-border bg-danger-surface px-3 py-2 text-xs font-medium text-danger-ink"
         >
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           This is a rollback. It moves {env} backwards.
@@ -133,7 +133,7 @@ export function PromoteConfirmStep({
 
       {/* The irreversibility, stated where the button is. A forge EnvBinding
           keeps no history: the previous release is overwritten in place. */}
-      <p className="text-2xs text-muted-foreground">
+      <p className="text-2xs text-ink-muted">
         Promoting overwrites {env || "this environment"}&apos;s binding in place. Forge keeps no
         history of the release it replaces.
       </p>
@@ -143,7 +143,7 @@ export function PromoteConfirmStep({
           Cancel
         </Button>
         <Button
-          variant={rollback ? "destructive" : "primary"}
+          variant={rollback ? "danger" : "primary"}
           size="sm"
           onClick={onConfirm}
           disabled={!canApply}

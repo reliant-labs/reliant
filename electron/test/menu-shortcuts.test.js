@@ -39,11 +39,12 @@ const CONTEXT_RESOLVED = [
   "nextRightSidebarTab",
   "prevRightSidebarTab",
   "clearTerminal",
+  "findInPage",
 ];
 
 // Shortcuts that act on what the user is looking at, so do nothing when no
 // Reliant window has focus.
-const NEEDS_FOCUSED_WINDOW = ["closeTab", "clearTerminal"];
+const NEEDS_FOCUSED_WINDOW = ["closeTab", "clearTerminal", "findInPage"];
 
 // A BrowserWindow stand-in. open = on screen, minimized = in the Dock,
 // hidden = closed to the tray. Its webContents records what it was sent.
@@ -134,6 +135,7 @@ test("menu items carry the resolved accelerators, and none for context-resolved 
     selectionLeftMonaco: "Cmd+Shift+Left",
     selectionRightMonaco: "Cmd+Shift+Right",
     connectSelectedSteps: "Shift+Cmd+L",
+    chatSearch: "Cmd+F",
   });
 
   for (const accelerators of [defaultAccelerators(), remapped]) {

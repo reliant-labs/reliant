@@ -5,7 +5,6 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import { file_forge_v1_forge } from "../../../forge/v1/forge_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -13,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/observability_config.proto.
  */
 export const file_reliant_config_v1_observability_config: GenFile = /*@__PURE__*/
-  fileDesc("CixyZWxpYW50L2NvbmZpZy92MS9vYnNlcnZhYmlsaXR5X2NvbmZpZy5wcm90bxIRcmVsaWFudC5jb25maWcudjEixQMKE09ic2VydmFiaWxpdHlDb25maWcScwoNb3RscF9lbmRwb2ludBgBIAEoCUJcgs4YWAobT1RFTF9FWFBPUlRFUl9PVExQX0VORFBPSU5UKjlPVExQIGNvbGxlY3RvciBiYXNlIFVSTCAoZXhwb3J0IGlzIG9uIHdoZW5ldmVyIGl0IGlzIHNldCkSagoMb3RlbF9lbmFibGVkGAIgASgIQlSCzhhQCgxPVEVMX0VOQUJMRUQqQFJlcXVpcmUgYW4gT1RMUCBjb2xsZWN0b3IgZW5kcG9pbnQgKE9URUxfRVhQT1JURVJfT1RMUF9FTkRQT0lOVCkSXgoScHJvbWV0aGV1c19lbmFibGVkGAMgASgIQkKCzhg+ChJQUk9NRVRIRVVTX0VOQUJMRUQaBHRydWUqIlNlcnZlIFJlbGlhbnQncyBQcm9tZXRoZXVzIG1ldHJpY3MSbQoLZW52aXJvbm1lbnQYBCABKAlCWILOGFQKElNFTlRSWV9FTlZJUk9OTUVOVCovRGVwbG95bWVudCBlbnZpcm9ubWVudCB0ZWxlbWV0cnkgaXMgZmlsZWQgdW5kZXJaDQoLRU5WSVJPTk1FTlQitgIKDFNlbnRyeUNvbmZpZxJyCgdlbmFibGVkGAEgASgIQmGCzhhdCg5TRU5UUllfRU5BQkxFRBoEdHJ1ZSpFUmVwb3J0IGVycm9ycyB0byBTZW50cnkgKHdoZW4gU0VOVFJZX0RTTiBpcyBzZXQgYW5kIHRoZSB0aWVyIGlzIHByb2QpEi0KA2RzbhgCIAEoCUIggs4YHAoKU0VOVFJZX0RTTioKU2VudHJ5IERTTjABUAESggEKEnRyYWNlc19zYW1wbGVfcmF0ZRgDIAEoAUJmukgUEhIZAAAAAAAA8D8pAAAAAAAAAACCzhhLChlTRU5UUllfVFJBQ0VTX1NBTVBMRV9SQVRFGgEwKitTaGFyZSBvZiB0cmFuc2FjdGlvbnMgU2VudHJ5IHRyYWNlcywgMCB0byAxQkBaPmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("CixyZWxpYW50L2NvbmZpZy92MS9vYnNlcnZhYmlsaXR5X2NvbmZpZy5wcm90bxIRcmVsaWFudC5jb25maWcudjEirwMKE09ic2VydmFiaWxpdHlDb25maWcScwoNb3RscF9lbmRwb2ludBgBIAEoCUJcgs4YWAobT1RFTF9FWFBPUlRFUl9PVExQX0VORFBPSU5UKjlPVExQIGNvbGxlY3RvciBiYXNlIFVSTCAoZXhwb3J0IGlzIG9uIHdoZW5ldmVyIGl0IGlzIHNldCkSagoMb3RlbF9lbmFibGVkGAIgASgIQlSCzhhQCgxPVEVMX0VOQUJMRUQqQFJlcXVpcmUgYW4gT1RMUCBjb2xsZWN0b3IgZW5kcG9pbnQgKE9URUxfRVhQT1JURVJfT1RMUF9FTkRQT0lOVCkSXgoScHJvbWV0aGV1c19lbmFibGVkGAMgASgIQkKCzhg+ChJQUk9NRVRIRVVTX0VOQUJMRUQaBHRydWUqIlNlcnZlIFJlbGlhbnQncyBQcm9tZXRoZXVzIG1ldHJpY3MSVwoLZW52aXJvbm1lbnQYBCABKAlCQoLOGD4KC0VOVklST05NRU5UKi9EZXBsb3ltZW50IGVudmlyb25tZW50IHRlbGVtZXRyeSBpcyBmaWxlZCB1bmRlckJAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_forge_v1_forge]);
 
 /**
  * ObservabilityConfig is how a server role reports what it is doing: OTLP
@@ -49,9 +48,9 @@ export type ObservabilityConfig = Message<"reliant.config.v1.ObservabilityConfig
   prometheusEnabled: boolean;
 
   /**
-   * The deployment environment telemetry and Sentry events are filed under:
-   * SENTRY_ENVIRONMENT, else the deploy layer's typed ENVIRONMENT. Unset: the
-   * process's tier (RELIANT_ENV), else development.
+   * The deployment environment telemetry is filed under: the deploy layer's
+   * typed ENVIRONMENT. Unset: the process's tier (RELIANT_ENV), else
+   * development.
    *
    * @generated from field: string environment = 4;
    */
@@ -64,40 +63,4 @@ export type ObservabilityConfig = Message<"reliant.config.v1.ObservabilityConfig
  */
 export const ObservabilityConfigSchema: GenMessage<ObservabilityConfig> = /*@__PURE__*/
   messageDesc(file_reliant_config_v1_observability_config, 0);
-
-/**
- * SentryConfig is where the API server and the worker report errors. Only a
- * prod-tier process reports at all (internal/runenv).
- *
- * @generated from message reliant.config.v1.SentryConfig
- */
-export type SentryConfig = Message<"reliant.config.v1.SentryConfig"> & {
-  /**
-   * A kill switch: unset is on.
-   *
-   * @generated from field: bool enabled = 1;
-   */
-  enabled: boolean;
-
-  /**
-   * Unset: nothing to report to.
-   *
-   * @generated from field: string dsn = 2;
-   */
-  dsn: string;
-
-  /**
-   * The share of transactions traced, 0 to 1.
-   *
-   * @generated from field: double traces_sample_rate = 3;
-   */
-  tracesSampleRate: number;
-};
-
-/**
- * Describes the message reliant.config.v1.SentryConfig.
- * Use `create(SentryConfigSchema)` to create a new message.
- */
-export const SentryConfigSchema: GenMessage<SentryConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_observability_config, 1);
 

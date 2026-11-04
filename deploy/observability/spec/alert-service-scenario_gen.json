@@ -1,0 +1,7 @@
+{
+  "version": "forge.dashboard-parts/v2",
+  "alert": {
+    "name": "scenario",
+    "rpc_service": "reliant.v1.ScenarioService"
+  }
+}

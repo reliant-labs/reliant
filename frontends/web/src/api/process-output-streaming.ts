@@ -2,9 +2,8 @@
 // gRPC streaming client for real-time process output
 // Replaces polling-based output fetching with server-streaming
 
-import { createClient } from "@connectrpc/connect";
+import { connectClient } from "../lib/connect";
 import { create } from "@bufbuild/protobuf";
-import { getTransport } from "./grpc-client";
 import { logger } from "../lib/logger";
 import {
   BackgroundService,
@@ -90,6 +89,7 @@ export interface ProcessOutputCallbacks {
  */
 export class ProcessOutputStreamingService {
   private processId: string;
+  private readonly daemonId: string | undefined;
   private callbacks: ProcessOutputCallbacks;
   private abortController: AbortController | null = null;
   private isIntentionallyClosed = false;
@@ -104,9 +104,14 @@ export class ProcessOutputStreamingService {
   private completed = false;
   private connectedAt = 0;
 
-  constructor(processId: string, callbacks: ProcessOutputCallbacks) {
+  /**
+   * @param daemonId The machine the process runs on (a package process's
+   *   daemon_id); unset streams from the default machine.
+   */
+  constructor(processId: string, callbacks: ProcessOutputCallbacks, daemonId?: string) {
     this.processId = processId;
     this.callbacks = callbacks;
+    this.daemonId = daemonId;
   }
 
   /**
@@ -138,11 +143,12 @@ export class ProcessOutputStreamingService {
     this.abortController = new AbortController();
 
     try {
-      const client = createClient(BackgroundService, getTransport());
+      const client = connectClient(BackgroundService);
 
       const request = create(StreamProcessOutputRequestSchema, {
         processId: this.processId,
         newOnly: this.newOnly,
+        daemonId: this.daemonId,
       });
 
       logger.info(`${LOG_PREFIX} Connecting to gRPC stream`, {
@@ -352,20 +358,6 @@ export class ProcessOutputStreamingService {
   getLastSequence(): number {
     return this.lastSequence;
   }
-}
-
-// ============================================================================
-// Factory Function
-// ============================================================================
-
-/**
- * Create a new process output streaming service
- */
-export function createProcessOutputStreamingService(
-  processId: string,
-  callbacks: ProcessOutputCallbacks
-): ProcessOutputStreamingService {
-  return new ProcessOutputStreamingService(processId, callbacks);
 }
 
 // Re-export types from generated code for convenience

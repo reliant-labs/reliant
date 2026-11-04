@@ -16,18 +16,14 @@ export { MarkdownRenderer } from "./Chat/MarkdownRenderer";
 export { PermissionsPanel } from "./Chat/PermissionsPanel";
 
 // Project components
-export { ProjectPicker } from "./Projects/ProjectPicker";
 export { InitializationModal } from "./Projects/InitializationModal";
 export { RescanModal } from "./Projects/RescanModal";
-export { ProjectPickerModal } from "./Projects/ProjectPickerModal";
 
 // Settings components
 export { SettingsNavigation } from "./Settings/SettingsNavigation";
 export { SettingsContent } from "./Settings/SettingsContent";
 export { SettingsHeader } from "./Settings/SettingsHeader";
 export { SettingsPage } from "./Settings/SettingsPage";
-export { CombinedGeneralSettings } from "./Settings/CombinedGeneralSettings";
-export { ProjectSettings } from "./Settings/ProjectSettings";
 
 // Worktree components
 export { WorktreesPanel } from "./Worktrees/WorktreesPanel";
@@ -39,10 +35,9 @@ export { Terminal } from "./Terminal/Terminal";
 // Note: FileBrowser component removed - use RightSidebar instead
 
 // UI components
-export { Modal } from "./ui/Modal";
 
 // Error Boundaries
-export { SentryErrorBoundary } from "./ErrorBoundary";
+export { default as ErrorBoundary } from "./ErrorBoundary";
 export { SectionErrorBoundary } from "./SectionErrorBoundary";
 
 // App components

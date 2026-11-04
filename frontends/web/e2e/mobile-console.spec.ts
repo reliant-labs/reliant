@@ -31,12 +31,15 @@ async function fitsTheScreen(page: Page) {
   expect(width).toBeLessThanOrEqual(390);
 }
 
-/** A stacked table: its header row is not on screen, its body cells carry labels. */
+/**
+ * A stacked table (forge-ui's DataTable with `stacked`, or a table drawn with
+ * its STACK classes; the test id may sit on a wrapper): labelled cells, and a
+ * header that takes no room.
+ */
 async function isStacked(page: Page, testId: string) {
   const table = page.getByTestId(testId).first();
-  await expect(table).toHaveClass(/stack-narrow/);
   await expect.poll(() => table.locator('[data-label]').count(), LOADED).toBeGreaterThan(0);
-  const headerHeight = await table.locator('thead').evaluate((el) => el.getBoundingClientRect().height);
+  const headerHeight = await table.locator('thead').first().evaluate((el) => el.getBoundingClientRect().height);
   expect(headerHeight).toBeLessThanOrEqual(1);
 }
 
@@ -47,14 +50,14 @@ test.describe('console on a phone', () => {
     const row = page.getByTestId('obs-trace-row').first();
     // The root operation leads the card even though Started is the first column.
     const [title, started] = await Promise.all([
-      row.locator('[data-stack-title]').boundingBox(),
+      row.locator('th[scope="row"]').boundingBox(),
       row.locator('[data-label="Started"]').boundingBox(),
     ]);
     expect(title!.y).toBeLessThan(started!.y);
     await fitsTheScreen(page);
 
     // The waterfall on a phone: two-line rows, tall enough to tap.
-    await row.locator('[data-stack-title] button').click();
+    await row.locator('th[scope="row"] button').click();
     await expect(page.getByTestId('trace-detail')).toBeVisible(LOADED);
     const span = page.getByTestId('trace-span-row').first();
     const box = await span.boundingBox();

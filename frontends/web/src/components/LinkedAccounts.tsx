@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useAuthStore } from '@/store/authStore'
-import { gitService } from '@/services/controlPlane/git'
-import { supabase } from '@/lib/supabase'
+import { connectGitHub } from '@/lib/github-connect'
 import { SocialProviderIcon, type SocialProvider } from './icons/SocialProviderIcon'
 
 type Provider = SocialProvider
@@ -24,17 +23,13 @@ export function LinkedAccounts() {
     try {
       switch (provider) {
         case 'github': {
-          // GitHub uses the control-plane custom OAuth flow rather than
-          // Supabase identity linking. The Supabase GitHub provider is
-          // sign-in only (0 scopes); the long-lived repo-scoped token comes
-          // from /auth/github/authorize, which writes to git_credentials.
-          const oauthURL = gitService.getOAuthURL()
-          if (!oauthURL) throw new Error('Control plane URL not configured')
-          const { data: { session } } = await supabase.auth.getSession()
-          if (!session?.access_token) throw new Error('Not signed in')
-          const returnTo = `${window.location.pathname}${window.location.search}`
-          const params = new URLSearchParams({ token: session.access_token, returnTo })
-          window.location.href = `${oauthURL}?${params.toString()}`
+          // GitHub uses the control-plane connect flow rather than Supabase
+          // identity linking: it writes git_credentials and, for a new user,
+          // routes through installing the GitHub App.
+          const outcome = await connectGitHub()
+          if (outcome.kind === 'error') throw new Error(outcome.message)
+          if (outcome.kind === 'redirecting') return
+          setLinkingProvider(null)
           return
         }
         case 'google':
@@ -153,7 +148,7 @@ export function LinkedAccounts() {
                     disabled={linkingProvider !== null}
                     className="px-4 py-2 text-sm font-medium rounded-md transition-all disabled:opacity-50 border-2 border-transparent hover:bg-accent/50 hover:border-border"
                     style={{
-                      color: 'hsl(var(--primary))'
+                      color: 'hsl(var(--primary-ink))'
                     }}
                   >
                     {linkingProvider === provider ? 'Connecting...' : 'Link'}
@@ -173,7 +168,7 @@ export function LinkedAccounts() {
             borderColor: 'hsl(var(--primary) / 0.2)'
           }}
         >
-          <p className="text-sm" style={{ color: 'hsl(var(--primary))' }}>
+          <p className="text-sm" style={{ color: 'hsl(var(--primary-ink))' }}>
             💡 You can sign in with any of your linked accounts. At least one account must remain linked.
           </p>
         </div>

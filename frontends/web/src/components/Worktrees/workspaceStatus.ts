@@ -1,9 +1,9 @@
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
-import type { WorktreeGitStatus } from "../../api/worktree-grpc";
-import type { Worktree } from "../../store/worktreeStore";
 import type { Chat } from "../../types/chat";
 import type { StatusTone } from "../forge-ui/status";
 import { formatBytes } from "../../lib/formatBytes";
+import { type Worktree } from "../../hooks/worktree-queries";
+import { type WorktreeGitStatus } from "../../hooks/worktree-git-queries";
 
 /** forge-ui Status tones. */
 export type StatusVariant = StatusTone;
@@ -178,7 +178,8 @@ export function cleanupSummary(worktree: Worktree): string {
   const meta = worktree.cleanup_metadata;
   if (!meta) return "Files kept";
   let files = "Files kept";
-  if (meta.directory_deleted) files = "Files removed";
+  if (meta.forgotten) files = "Files no longer tracked (forgotten; nothing was deleted)";
+  else if (meta.directory_deleted) files = "Files removed";
   else if (meta.held_reason) files = `Files kept (${heldReasonLabel(meta.held_reason)})`;
   const saved = meta.snapshot_refs?.length ? ", unsaved work kept in a git ref" : "";
   // Shed from kept files only; once the directory is gone it says nothing.
@@ -202,6 +203,8 @@ const HELD_LABEL: Record<string, string> = {
   "nested-repository": "contains another repository",
   "files-outside-checkout": "has files outside its repositories",
   "shared-with-live-workspace": "used by an open workspace",
+  "no-checkout-on-record": "its machine has no checkout of the project",
+  "no-machine-on-record": "no machine on record",
   unmanaged: "not managed by Reliant",
   quarantined: "parked in quarantine",
 };

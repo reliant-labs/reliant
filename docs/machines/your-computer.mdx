@@ -7,29 +7,32 @@ If you use the desktop app, you usually do nothing here: the app starts a daemon
 
 The daemon dials **out** to Reliant over a persistent gRPC stream, so the computer needs no open inbound port. Your repository stays on it. Whatever an agent reads or a command prints is sent to Reliant's servers, stored with the chat and sent to your model provider; see [Privacy & security](/help/privacy).
 
-## Register and start
+## Pair and start
 
-Register once. It opens your browser to sign in and approve a long-lived access token for this computer, and stores the token in `~/.reliant/daemon.json`. This is the daemon's own sign-in: a `reliant auth login` session is a separate credential and is not reused.
-
-```bash
-reliant daemon register
-```
-
-Then start the daemon:
+Start the daemon:
 
 ```bash
 reliant daemon start
 ```
 
-In practice you can skip `register`: if you run `start` without credentials it signs you in and registers on the spot. It runs in the foreground until you press Ctrl+C or run `reliant daemon stop`. To keep it running after you close the terminal, run it under your operating system's service manager (systemd, launchd), `tmux`, or `nohup`. When it connects, the computer shows up as a machine in the app, named `<instance-id>@<hostname>` unless you pass `--name`.
+The first time, it pairs the computer with your account. It prints a short code and a link:
+
+```text
+Pair this machine with your Reliant account.
+
+  Code:     BDFG-HJKL
+  Approve:  https://app.reliantlabs.io/oauth/device?user_code=BDFG-HJKL
+```
+
+Open the link, or type the code into **Add machine → Your own computer** in the app, and approve "this machine". Nothing has to reach back to the terminal, so this works the same over SSH on a headless server. The daemon stores its credential in `~/.reliant/daemon.json` and connects. This is the daemon's own credential: a `reliant auth login` session is separate and is not reused. `reliant daemon register` does only the pairing step, if you prefer to keep it separate. It runs in the foreground until you press Ctrl+C or run `reliant daemon stop`. To keep it running after you close the terminal, run it under your operating system's service manager (systemd, launchd), `tmux`, or `nohup`. When it connects, the computer shows up as a machine in the app, named `<instance-id>@<hostname>` unless you pass `--name`.
 
 <Tip>
 If the daemon loses its connection or is told its credential is no longer valid, it re-registers and reconnects by itself. You do not need to restart it for a network blip.
 </Tip>
 
-## Headless and CI machines
+## CI and unattended machines
 
-Where no browser is available, pipe an access token with the `daemon:connect` scope into `--token`. Create one under **Settings → Access Tokens**:
+Where nobody is around to approve a code (a CI runner, an image you bake once), pipe an access token with the `daemon:connect` scope into `--token`. Create one under **Settings → Access Tokens**:
 
 ```bash
 echo "rlat_..." | reliant daemon start --token
@@ -42,7 +45,7 @@ Use `--non-interactive` when something else owns sign-in (this is how the deskto
 | Flag | Default | What it does |
 |------|---------|--------------|
 | `--name` | `<instance-id>@<hostname>` | The friendly name shown in the app |
-| `--token` | off | Read an access token from stdin instead of using browser sign-in |
+| `--token` | off | Read an access token from stdin instead of pairing |
 | `--non-interactive` | off | Never open a browser or run login; wait for credentials on disk |
 | `--account` | | Which account this daemon runs as, when several accounts share one computer |
 | `--workspace` | git worktree root of the current directory | The workspace this daemon serves |

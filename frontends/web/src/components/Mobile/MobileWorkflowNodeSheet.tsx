@@ -55,7 +55,7 @@ function formatDuration(ms?: number): string {
 
 function ExecutionStatusRow({ execution }: { execution: StepExecution }) {
   const config = {
-    running: { icon: Loader2, className: "text-primary", iconClass: "animate-spin" },
+    running: { icon: Loader2, className: "text-primary-ink", iconClass: "animate-spin" },
     completed: { icon: CheckCircle2, className: "text-success-ink", iconClass: "" },
     failed: { icon: XCircle, className: "text-destructive-ink", iconClass: "" },
   } as const;

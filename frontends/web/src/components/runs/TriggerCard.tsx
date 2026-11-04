@@ -6,7 +6,7 @@
  * exists before they read it.
  *
  * The facts come from the run's launch event (TriggerService.GetLaunchEvent):
- * the slot a schedule fired for, whether it was a "Run now", and what the run
+ * the slot a schedule fired for, whether it was fired by hand, and what the run
  * was started with. Collapsed it is one line; expanded it shows the prompt as
  * sent and the workflow, presets and inputs, read-only.
  *
@@ -20,18 +20,22 @@ import { useId, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 
-import type { LaunchEvent } from "@/api/run-grpc";
+import type { LaunchEvent } from "@/hooks/run-queries";
 import { isUnattendedLaunchKind, launchKindDisplay } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
+import { automationHref } from "@/lib/workflowsArea";
 import { CardInset } from "../forge-ui/card";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { formatClock, launchContextOf } from "./launchContext";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { LaunchKindIcon } from "./LaunchKindIcon";
 
 interface TriggerCardProps {
   launchKind?: string | null;
   triggerId?: string;
+  /** The run's workflow and project: where its trigger is configured (automationHref). */
+  workflowName?: string;
+  projectId?: string;
   /** The automation's current name; unset when it has been deleted. */
   triggerName?: string;
   /** The automation's schedule timezone, when it still exists. */
@@ -45,7 +49,7 @@ interface TriggerCardProps {
 }
 
 const linkClass =
-  "font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40";
+  "font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * A scheduled slot, as "Tue 6 Oct, 09:00 (Europe/London)". Rendered in the
@@ -93,6 +97,8 @@ export function lateBy(scheduledFor?: string, firedAt?: string): string | undefi
 export function TriggerCard({
   launchKind,
   triggerId,
+  workflowName,
+  projectId,
   triggerName,
   timezone,
   parent,
@@ -112,9 +118,9 @@ export function TriggerCard({
   // The live automation links; one deleted since keeps the name it fired under.
   const automation =
     triggerId && triggerName ? (
-      <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={linkClass}>
+      <a href={automationHref({ id: triggerId, workflow: workflowName, projectId })} className={linkClass}>
         {triggerName}
-      </Link>
+      </a>
     ) : event?.triggerName ? (
       <span className="font-medium">{event.triggerName} (since deleted)</span>
     ) : (
@@ -138,7 +144,7 @@ export function TriggerCard({
           {kind === "schedule" ? (
             event?.manual ? (
               <>
-                Run now on {automation}
+                Fired by hand: {automation}
                 <span className="text-muted-foreground"> · by you at {formatClock(event.occurredAt)}</span>
               </>
             ) : event?.scheduledFor ? (
@@ -186,7 +192,7 @@ export function TriggerCard({
             onClick={() => setExpanded((open) => !open)}
             aria-expanded={expanded}
             aria-controls={detailsId}
-            className="ml-auto inline-flex items-center gap-1 rounded-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="ml-auto inline-flex items-center gap-1 rounded-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {expanded ? "Hide what it ran with" : "Show what it ran with"}
             <ChevronDown
@@ -219,6 +225,14 @@ export function TriggerCard({
           <dd className="text-foreground">
             <KeyValues entries={flattenInputs(start.params)} />
           </dd>
+          {event?.definition && (
+            <>
+              <dt>Definition</dt>
+              <dd className="break-words font-mono text-foreground" data-testid="trigger-card-definition">
+                {event.definition}
+              </dd>
+            </>
+          )}
         </dl>
       )}
     </CardInset>

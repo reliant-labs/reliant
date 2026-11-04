@@ -1,21 +1,24 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * OVERVIEW — the project home, merged with Workloads (research/console-v3
- * DECISIONS.md; PROPOSAL §4.1).
+ * OVERVIEW — the project home: workloads, health and telemetry in one place
+ * (there is no separate Observability home; its strip is this page's).
  *
- *   top, left    one cell per environment (its worst workload, the release
- *                live there, who put it there), the health KPIs with release
- *                markers, and what needs attention.
- *   top, right   recent releases and recent activity.
+ *   top, left    a deploy that is in flight or failed, when there is one; one
+ *                status cell per environment (its worst workload, the release
+ *                live there, who put it there), the health KPIs, and what
+ *                needs attention — each item with the release it followed and
+ *                the way back.
+ *   top, right   recent releases.
  *   below        the Services table (long-running workloads: health, ready,
  *                release, restarts and last exit, CPU and memory against their
  *                limits) and the Jobs table (migrations, provisioning,
  *                scheduled jobs: result, the release that ran it, duration).
  *
- * Every row opens the workload's page. The top-bar scope (D1) narrows the
- * tables, the KPIs and "Needs attention"; the environment strip always shows
- * every environment, because it is how the reader picks one.
+ * Every row opens the workload's page. The top-bar scope narrows the tables,
+ * the KPIs and "Needs attention"; the environment strip always shows every
+ * environment's STATUS. It is not a second selector — the top bar is the one
+ * — so each cell is a link to the Overview scoped to that environment.
  *
  * ONE READ FOR THE WORKLOADS. ListWorkloads is asked once for the whole
  * project, and the strip, the tables and "Needs attention" are cut from that
@@ -28,26 +31,35 @@
  */
 
 import { useMemo, type CSSProperties, type ReactNode } from "react";
-import { ArrowRight, Boxes, Search } from "lucide-react";
+import { ArrowRight, Boxes, RotateCcw, Search } from "lucide-react";
 
-import EmptyState from "@/components/forge-ui/empty_state";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
+import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { useAlerts, useObservabilityOrg, useReleases, useWorkloads } from "@/hooks/observability-queries";
+import { useAlerts, useObservabilityOrg, useWorkloads } from "@/hooks/observability-queries";
 import { useProjectReleases } from "@/hooks/release-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { ObsScope, Workload } from "@/services/controlPlane/observability/types";
+import type { DomainsState } from "@/hooks/forge-domain-queries";
+import { frontendsInScope } from "@/services/forge/frontends";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
+import { DeployStatusUnread, type DeployStatusUnreadState } from "../Console/DeployStatusUnread";
 import { ENV_ALL } from "../Console/envScope";
+import { consolePath, withSearch } from "../Console/paths";
+import { AskReliantMenu, DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
+import type { AskSubject } from "../Observability/AskReliant/askReliantPrompt";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores } from "../Observability/format";
+import { promotionIsSuspect, type RollbackTarget } from "../Promote/rollback";
 import { HealthStrip } from "../Observability/Home/HealthStrip";
-import { ObsError, ObsNotSetUp } from "../Observability/ObsStates";
+import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
 import { Ago, INK_BUTTON, INK_LINK, Panel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import {
@@ -56,6 +68,7 @@ import {
   KIND_LABEL,
   attentionItems,
   filterServices,
+  formatAge,
   formatSeconds,
   jobRows,
   kindsOf,
@@ -77,7 +90,8 @@ import {
 } from "./workloadModel";
 import { exitPhrase, jobFailurePhrase } from "./plainHealth";
 import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
-import { StackedTable } from "@/components/Forge/StackedTable";
+import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
+import { ProcessHealth } from "./ProcessHealth";
 
 export interface OverviewSearch {
   q?: string;
@@ -88,10 +102,21 @@ export interface OverviewSearch {
 
 export interface OverviewHrefs {
   workload: (name: string, env: string) => string;
-  release: (version: string) => string;
+  /** A release's page; `tab`/`env` open one of its tabs for one environment (its Health, after a bad promotion). */
+  release: (version: string, open?: { tab?: string; env?: string }) => string;
   releases: string;
   alerts: string;
-  activity: string;
+  /** The Overview scoped to one environment: what an environment cell links to. */
+  scoped: (env: string) => string;
+}
+
+/** Rolling an environment back from "Needs attention": the targets, and the confirm flow that carries one out. */
+export interface OverviewRollback {
+  /** By environment name: what it runs and what it ran before. */
+  targets: ReadonlyMap<string, RollbackTarget>;
+  onRollback: (target: RollbackTarget) => void;
+  /** Set when rolling back is impossible from here, with the reason. */
+  blockedReason: string | null;
 }
 
 export interface OverviewHomeProps {
@@ -101,11 +126,15 @@ export interface OverviewHomeProps {
   /** The recorded, deployed environments: long-lived first (prod leading), previews apart. */
   envs: StripEnv[];
   envsLoading: boolean;
+  /** The environment read failed: `envs` is empty because nothing was read (DeployStatusUnread). */
+  envsUnread?: DeployStatusUnreadState;
   search: OverviewSearch;
   onSearch: (next: Partial<OverviewSearch>) => void;
   hrefs: OverviewHrefs;
-  onSelectEnv: (env: string) => void;
   navigateTo: (href: string) => void;
+  rollback?: OverviewRollback;
+  /** Above the environment strip: a deploy in flight or failed (DeployAttemptsBanner), when there is one. */
+  deploys?: ReactNode;
   /**
    * What the platform observes of each HOSTED environment's workloads
    * (DeployService.GetStatus), by environment name then workload name: the
@@ -113,6 +142,12 @@ export interface OverviewHomeProps {
    * environment Reliant does not place.
    */
   hosted?: HostedByEnv;
+  /** GetStatus has not answered for every hosted environment yet. */
+  hostedLoading?: boolean;
+  /** The org's domains, to show which custom domains serve each frontend. Absent: not read (no domain column shown). */
+  domains?: DomainsState;
+  /** The Domains screen: where "Add a domain" lands. */
+  domainsHref?: string;
 }
 
 export type HostedByEnv = ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>>;
@@ -120,9 +155,24 @@ const NO_HOSTED: HostedByEnv = new Map();
 
 /** The Overview's window when the URL names none: a day, so "Restarts" reads as restarts today. */
 export const OVERVIEW_RANGE: RangePreset = "24h";
-const ACTIVITY_DAYS = 30;
 
-export function OverviewHome({ project, env, envs, envsLoading, search, onSearch, hrefs, onSelectEnv, navigateTo, hosted = NO_HOSTED }: OverviewHomeProps) {
+export function OverviewHome({
+  project,
+  env,
+  envs,
+  envsLoading,
+  envsUnread,
+  search,
+  onSearch,
+  hrefs,
+  navigateTo,
+  rollback,
+  deploys,
+  hosted = NO_HOSTED,
+  hostedLoading = false,
+  domains,
+  domainsHref = "",
+}: OverviewHomeProps) {
   const range = search.range ?? OVERVIEW_RANGE;
   const org = useObservabilityOrg();
   const orgId = org.orgId;
@@ -168,11 +218,18 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
   const where = all ? "all environments" : env;
   const unhealthy = services.filter(needsAttention).length;
 
+  // NOTHING DEPLOYED: the header states no counts. They would be drawn from
+  // telemetry about environments the page is about to say do not exist.
+  const empty = !envsLoading && envs.length === 0;
+  // An empty list from a failed read says nothing about what is deployed.
+  const unread = empty && !!envsUnread;
   const header = (
     <PageHeader
       title="Overview"
       meta={
-        loading ? (
+        unread ? undefined : empty ? (
+          <span data-testid="overview-counts">Not deployed</span>
+        ) : loading ? (
           <span className="inline-flex h-4 w-56 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading" />
         ) : (
           <>
@@ -196,15 +253,34 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
     />
   );
 
-  if (!envsLoading && envs.length === 0) {
+  if (empty) {
     return (
-      <div className="space-y-6" data-testid="overview" data-state="empty">
+      <div className="space-y-6" data-testid="overview" data-state={unread ? "unread" : "empty"}>
         {header}
-        <EmptyState
-          icon={<Boxes className="h-6 w-6" aria-hidden="true" />}
-          title="Nothing deployed yet"
-          description={`${project} has no deployed environment for Reliant to watch. Run forge env deploy <env> from your checkout: its services, jobs and their health appear here.`}
-        />
+        {deploys}
+        {envsUnread ? (
+          <DeployStatusUnread state={envsUnread} testId="overview-unread" />
+        ) : (
+          <GettingStarted
+            testId="overview-getting-started"
+            icon={<Boxes className="h-4 w-4" />}
+            title="Nothing deployed yet"
+            about="The overview shows every service, worker and job of each environment: whether it is healthy, its CPU and memory against its limits, restarts, and recent events."
+            agent={<DeployWithAgentButton env={null} forgeProject={project} />}
+            steps={[
+              {
+                text: "Deploy an environment through Reliant. Its workloads and their health appear here as soon as they start.",
+                command: "reliant forge env deploy <env>",
+              },
+            ]}
+            docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
+          >
+            <p>
+              {project} has no deployed environment for Reliant to watch yet. A local environment (reliant forge env up) runs on your machine and
+              reports nothing here.
+            </p>
+          </GettingStarted>
+        )}
       </div>
     );
   }
@@ -215,13 +291,25 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
   return (
     <div className="space-y-8" data-testid="overview" data-state={loading ? "loading" : listed.error ? "error" : "ready"}>
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">{header}</div>
+        <div className="min-w-0 flex-1">{header}{listed.data && <ObsAsOf updatedAt={listed.dataUpdatedAt} />}</div>
         <div className="pt-1">{rangeControl}</div>
       </div>
 
+      {!unrecorded && (
+        <FrontendsPanel
+          scope={env}
+          envs={envs}
+          hosted={hosted}
+          loading={envsLoading || hostedLoading}
+          domains={domains}
+          domainsHref={domainsHref}
+        />
+      )}
+
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
-          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error} onSelectEnv={onSelectEnv} />
+          {deploys}
+          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error && !keepsLastResult(listed.error, listed.data)} scopedHref={hrefs.scoped} />
           {unrecorded ? (
             <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-muted" data-testid="overview-unrecorded-env">
               Reliant has no record of <span className="font-medium text-ink">{env}</span>, so nothing it runs is reported here. Once it is deployed through Reliant, its
@@ -233,29 +321,31 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
               <NeedsAttention
                 items={attention}
                 loading={loading}
-                failed={!!listed.error}
+                failed={!!listed.error && !keepsLastResult(listed.error, listed.data)}
                 where={where}
                 showEnv={all}
                 hrefOf={(item) => (item.workload ? hrefs.workload(item.workload, item.envName) : hrefs.alerts)}
                 navigateTo={navigateTo}
+                envs={envs}
+                releaseHref={hrefs.release}
+                rollback={rollback}
               />
             </>
           )}
         </div>
         <aside className="space-y-4" aria-label="Recent changes">
           <RecentReleases project={project} envs={envs} hrefs={hrefs} />
-          <RecentActivity project={project} orgId={orgId} env={env} envs={envs} scopedEnvId={scopedEnv?.id ?? null} hrefs={hrefs} />
         </aside>
       </div>
 
       {notSetUp ? (
-        <ObsNotSetUp subject={project} />
-      ) : listed.error ? (
+        <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
+      ) : listed.error && !keepsLastResult(listed.error, listed.data) ? (
         <ObsError error={listed.error} subject={project} onRetry={() => void listed.refetch()} retrying={listed.isFetching} />
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2" data-testid="overview-toolbar">
-            <label className="flex h-8 min-w-64 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-accent">
+            <label className="flex h-8 min-w-64 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
               <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span className="sr-only">Filter services</span>
               <input
@@ -297,7 +387,6 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
               rows={visible}
               loading={loading}
               showEnv={all}
-              windowWords={windowWords}
               windowShort={range}
               hosted={hosted}
               hrefs={hrefs}
@@ -326,6 +415,16 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
             )}
           </Panel>
 
+          {!unrecorded && <ProcessHealth
+            scope={kpiScope}
+            range={range}
+            workloads={workloads}
+            alerts={(alerts.data ?? []).filter(alert => projectEnvIds.has(alert.envId))}
+            envNameOf={(id) => envs.find(candidate => candidate.id === id)?.name}
+            workloadHref={(name, processEnv) => hrefs.workload(name, processEnv ?? env)}
+            logsHref={(name) => withSearch(consolePath(project, { kind: "obs-view", view: "logs" }), { env, range, service: name, severity: "error,fatal" })}
+          />}
+
           <Panel title="Jobs" meta="Migrations, provisioning and scheduled jobs. The latest run of each." flush testId="overview-jobs">
             <JobsTable
               rows={jobs}
@@ -346,6 +445,47 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
   );
 }
 
+// ── Frontends ───────────────────────────────────────────────────────────────
+
+/**
+ * The scope's frontends beside its services: the sites people open, each with
+ * the address it is live at. Read from the GetStatus observations the page
+ * already holds (`hosted`), so it costs no request of its own; omitted while a
+ * scope that only self-managed environments covers has nothing Reliant hosts.
+ */
+function FrontendsPanel({
+  scope,
+  envs,
+  hosted,
+  loading,
+  domains,
+  domainsHref,
+}: {
+  scope: string;
+  envs: StripEnv[];
+  hosted: HostedByEnv;
+  loading: boolean;
+  domains: DomainsState | undefined;
+  domainsHref: string;
+}) {
+  const covered = envs.filter((candidate) => candidate.placed && (scope === ENV_ALL ? !candidate.preview : candidate.name === scope));
+  if (covered.length === 0) return null;
+  const frontends = frontendsInScope(scope, envs, hosted, domains?.availability === "available" ? domains.domains : null);
+  return (
+    <Panel title="Frontends" meta="Websites Reliant hosts, and the address each is live at." flush testId="overview-frontends">
+      {loading && frontends.length === 0 ? (
+        <FrontendsLoading />
+      ) : frontends.length === 0 ? (
+        <div className="px-4 pb-4">
+          <FrontendsEmpty env={scope === ENV_ALL ? undefined : scope} />
+        </div>
+      ) : (
+        <FrontendList frontends={frontends} showEnv={scope === ENV_ALL} domainsHref={domainsHref} />
+      )}
+    </Panel>
+  );
+}
+
 // ── Environment strip ───────────────────────────────────────────────────────
 
 function EnvStrip({
@@ -355,7 +495,7 @@ function EnvStrip({
   jobs,
   loading,
   failed,
-  onSelectEnv,
+  scopedHref,
 }: {
   envs: StripEnv[];
   env: string;
@@ -363,7 +503,7 @@ function EnvStrip({
   jobs: JobRow[];
   loading: boolean;
   failed: boolean;
-  onSelectEnv: (env: string) => void;
+  scopedHref: (env: string) => string;
 }) {
   const long = envs.filter((candidate) => !candidate.preview);
   const previews = envs.filter((candidate) => candidate.preview);
@@ -381,7 +521,7 @@ function EnvStrip({
       data-testid="overview-env-strip"
     >
       {cells.map((cell, index) => (
-        <EnvCell key={cell.env.name} cell={cell} first={index === 0} selected={cell.env.name === env} loading={loading} failed={failed} onSelect={() => onSelectEnv(cell.env.name)} />
+        <EnvCell key={cell.env.name} cell={cell} first={index === 0} selected={cell.env.name === env} loading={loading} failed={failed} href={scopedHref(cell.env.name)} />
       ))}
       {previewCell && (
         <div className={cn("relative min-w-0 px-4 py-3", cells.length > 0 && "border-l border-border")} data-testid="overview-env-previews" data-selected={previewSelected ? "true" : undefined}>
@@ -395,14 +535,13 @@ function EnvStrip({
             {previews.map((preview, index) => (
               <span key={preview.name}>
                 {index > 0 && <span aria-hidden="true">· </span>}
-                <button
-                  type="button"
-                  onClick={() => onSelectEnv(preview.name)}
-                  aria-pressed={preview.name === env}
-                  className={cn("rounded hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent", preview.name === env && "font-medium text-ink")}
+                <Link
+                  href={scopedHref(preview.name)}
+                  aria-current={preview.name === env ? "page" : undefined}
+                  className={cn("no-color rounded text-ink-muted hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", preview.name === env && "font-medium text-ink")}
                 >
                   {preview.name}
-                </button>
+                </Link>
               </span>
             ))}
           </div>
@@ -419,26 +558,25 @@ function EnvCell({
   selected,
   loading,
   failed,
-  onSelect,
+  href,
 }: {
   cell: StripCell;
   first: boolean;
   selected: boolean;
   loading: boolean;
   failed: boolean;
-  onSelect: () => void;
+  href: string;
 }) {
   const { env } = cell;
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      title={selected ? `The console is scoped to ${env.name}` : `Scope the console to ${env.name}`}
+    <Link
+      href={href}
+      aria-current={selected ? "page" : undefined}
+      title={selected ? `Showing ${env.name}` : `Show ${env.name}`}
       data-testid={`overview-env-${env.name}`}
       data-tone={loading || failed ? undefined : cell.tone}
       className={cn(
-        "relative min-w-0 px-4 py-3 text-left transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+        "no-color relative block min-w-0 px-4 py-3 text-left transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
         !first && "border-l border-border"
       )}
     >
@@ -469,7 +607,7 @@ function EnvCell({
         )}
       </div>
       {selected && <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-0.5 bg-ink" />}
-    </button>
+    </Link>
   );
 }
 
@@ -483,6 +621,9 @@ function NeedsAttention({
   showEnv,
   hrefOf,
   navigateTo,
+  envs,
+  releaseHref,
+  rollback,
 }: {
   items: AttentionItem[];
   loading: boolean;
@@ -491,6 +632,9 @@ function NeedsAttention({
   showEnv: boolean;
   hrefOf: (item: AttentionItem) => string;
   navigateTo: (href: string) => void;
+  envs: StripEnv[];
+  releaseHref: OverviewHrefs["release"];
+  rollback?: OverviewRollback;
 }) {
   return (
     <Panel title="Needs attention" flush testId="overview-attention">
@@ -500,17 +644,28 @@ function NeedsAttention({
             <SkeletonRows columns={3} rows={2} />
           </tbody>
         </table>
-      ) : failed ? (
-        <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">Workload health could not be read, so this cannot say what needs attention. Alerts still show on the Alerts page.</p>
+      ) : failed && items.length === 0 ? (
+        <p className="px-4 pb-4 pt-1 text-sm text-ink-muted" data-testid="overview-attention-unread">
+          Workload health could not be read, so this cannot say what needs attention. No alert is firing in {where}.
+        </p>
       ) : items.length === 0 ? (
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted" data-testid="overview-attention-none">
           Nothing needs attention in {where}.
         </p>
       ) : (
+        <>
+        {/* The alerts are their own read: a workload read that failed takes only its own rows away. */}
+        {failed && (
+          <p className="px-4 pb-2 pt-1 text-sm text-ink-muted" data-testid="overview-attention-unread">
+            Workload health could not be read, so only the firing alerts are listed.
+          </p>
+        )}
         <table className="w-full text-sm" aria-label="Needs attention">
           <tbody>
             {items.map((item) => {
               const href = hrefOf(item);
+              const suspect = suspectOf(item, envs);
+              const target = rollback?.targets.get(item.envName);
               return (
                 <tr
                   key={item.key}
@@ -537,15 +692,74 @@ function NeedsAttention({
                   )}
                   <td className="h-10 w-px max-w-64 truncate whitespace-nowrap px-4 text-right text-xs text-ink-muted" title={item.detail}>
                     {item.detail}
+                    {suspect && (
+                      <span className="block" data-testid={`attention-suspect-${item.key}`}>
+                        started {formatAge(suspect.afterMs)} after{" "}
+                        <Link href={releaseHref(suspect.release, { tab: "health", env: item.envName })} className={INK_LINK} title={`${suspect.release}: its health before and after`}>
+                          {shortVersion(suspect.release)}
+                        </Link>
+                      </span>
+                    )}
                   </td>
+                  <td className="h-10 w-px whitespace-nowrap pr-2 text-right" data-testid={`attention-ask-${item.key}`}>
+                    <AskReliantMenu subject={attentionSubject(item)} label={`Ask Reliant about ${item.subject}`} />
+                  </td>
+                  {rollback && (
+                    <td className="h-10 w-px whitespace-nowrap pr-4 text-right">
+                      {target && (
+                        <button
+                          type="button"
+                          onClick={() => rollback.onRollback(target)}
+                          disabled={!!rollback.blockedReason}
+                          title={rollback.blockedReason ?? `Plan a rollback of ${target.env} to ${target.previous}`}
+                          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-surface px-2 text-xs font-medium text-ink hover:bg-ink/5 disabled:cursor-not-allowed disabled:opacity-60"
+                          data-testid={`attention-rollback-${item.key}`}
+                        >
+                          <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                          Roll back {target.env} to {shortVersion(target.previous)}
+                        </button>
+                      )}
+                    </td>
+                  )}
                 </tr>
               );
             })}
           </tbody>
         </table>
+        </>
       )}
     </Panel>
   );
+}
+
+/** What "Ask Reliant" hands an agent about a row: references only (askReliantPrompt). */
+export function attentionSubject(item: AttentionItem): AskSubject {
+  if (item.kind === "alert") return { kind: "alert", rule: item.subject, fingerprint: "", env: item.envName || null, state: "firing" };
+  return {
+    kind: "workload",
+    name: item.workload ?? item.subject,
+    env: item.envName || null,
+    job: item.kind === "job",
+    state: item.what,
+    release: item.release || undefined,
+  };
+}
+
+/**
+ * The promotion an attention item followed, when it followed one closely
+ * enough to be the suspect: the environment's current release, promoted
+ * within SUSPECT_WINDOW_MS before the trouble was seen (its latest warning or
+ * failed run; now when nothing timestamps it), and the release the workload is
+ * on (or one it cannot name). Alerts name no release, so they get none.
+ */
+function suspectOf(item: AttentionItem, envs: readonly StripEnv[]): { release: string; afterMs: number } | null {
+  if (item.kind === "alert") return null;
+  const env = envs.find((candidate) => candidate.name === item.envName);
+  if (!env?.release || !env.promotedAt) return null;
+  if (item.release && item.release !== env.release) return null;
+  const troubleAt = item.troubleAtMs ?? Date.now();
+  if (!promotionIsSuspect(env.promotedAt, troubleAt)) return null;
+  return { release: env.release, afterMs: troubleAt - Date.parse(env.promotedAt) };
 }
 
 // ── The rail ────────────────────────────────────────────────────────────────
@@ -563,13 +777,13 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
   const releases = useProjectReleases(project);
   const recent = (releases.data ?? []).slice(0, 3);
   return (
-    <Panel title="Recent releases" actions={<RailLink href={hrefs.releases}>All</RailLink>} testId="overview-recent-releases">
+    <Panel title="Recent releases" meta="Latest builds and where they run now" actions={<RailLink href={hrefs.releases}>All</RailLink>} testId="overview-recent-releases">
       {releases.isLoading ? (
         <div className="h-24 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading releases" />
       ) : releases.error ? (
         <p className="text-xs text-ink-muted">Releases could not be read right now.</p>
       ) : recent.length === 0 ? (
-        <p className="text-xs text-ink-muted">No release has been cut yet. The first forge env deploy cuts one.</p>
+        <p className="text-xs text-ink-muted">No release has been cut yet. The first reliant forge env deploy cuts one.</p>
       ) : (
         <ol className="space-y-3.5">
           {recent.map((release, index) => {
@@ -590,7 +804,7 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
                   </span>
                 )}
                 <span className="block text-ink-muted">
-                  {live.length ? `live in ${live.join(", ")}` : "not live anywhere"}
+                  {live.length ? `live in ${live.join(", ")}` : "not live in these environments"}
                   {release.author ? ` · ${release.author}` : ""}
                   {release.createdAt ? " · " : ""}
                   <Ago at={release.createdAt} />
@@ -604,97 +818,18 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
   );
 }
 
-/**
- * Promotions and rollbacks into the scope, newest first — what the ledger
- * records today. The typed activity stream (D3) adds restarts, secret changes
- * and alerts; the Activity page is where it lands.
- */
-function RecentActivity({
-  project,
-  orgId,
-  env,
-  envs,
-  scopedEnvId,
-  hrefs,
-}: {
-  project: string;
-  orgId: string | null;
-  env: string;
-  envs: StripEnv[];
-  scopedEnvId: string | null;
-  hrefs: OverviewHrefs;
-}) {
-  const scope = useMemo(
-    () => (orgId && (env === ENV_ALL || scopedEnvId) ? { orgId, projectId: project, envIds: scopedEnvId ? [scopedEnvId] : envs.map((candidate) => candidate.id) } : null),
-    [orgId, project, env, scopedEnvId, envs]
-  );
-  const ledger = useReleases(scope, `days:${ACTIVITY_DAYS}`, () => ({ startMs: Date.now() - ACTIVITY_DAYS * 86_400_000, endMs: Date.now() }), { limit: 50 });
-  const recent = useMemo(() => [...(ledger.data?.promotions ?? [])].reverse().slice(0, 4), [ledger.data]);
-  return (
-    <Panel title="Recent activity" actions={<RailLink href={hrefs.activity}>All</RailLink>} testId="overview-recent-activity">
-      {!scope ? (
-        <p className="text-xs text-ink-muted">Nothing is recorded for {env}.</p>
-      ) : ledger.isLoading ? (
-        <div className="h-20 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading activity" />
-      ) : ledger.error ? (
-        <p className="text-xs text-ink-muted">Activity could not be read right now.</p>
-      ) : recent.length === 0 ? (
-        <p className="text-xs text-ink-muted">Nothing was promoted {env === ENV_ALL ? "" : `to ${env} `}in the last {ACTIVITY_DAYS} days.</p>
-      ) : (
-        <ul className="divide-y divide-border/70 text-xs">
-          {recent.map((p) => {
-            const who = p.promotedBy || "Someone";
-            const version = p.version || p.releaseId.slice(0, 12);
-            return (
-              <li key={p.promotionId} className="flex items-start gap-2 py-2 first:pt-0 last:pb-0">
-                <span aria-hidden="true" className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-border text-2xs font-medium text-ink-muted">
-                  {who.slice(0, 1).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-ink">
-                    <span className="font-medium">{who}</span>{" "}
-                    {p.kind === "rollback" ? (
-                      <>
-                        rolled back {p.envName} to{" "}
-                        <Link href={hrefs.release(p.version)} className={INK_LINK}>
-                          {shortVersion(version)}
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        promoted{" "}
-                        <Link href={hrefs.release(p.version)} className={INK_LINK}>
-                          {shortVersion(version)}
-                        </Link>{" "}
-                        to {p.envName}
-                      </>
-                    )}
-                  </span>
-                  <span className="block text-ink-muted">{formatAgo(p.promotedAtMs)}</span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </Panel>
-  );
-}
-
 // ── Tables ──────────────────────────────────────────────────────────────────
 
-const TH = "h-9 whitespace-nowrap px-4 text-left text-xs font-medium text-ink-muted";
-const TD = "h-10 whitespace-nowrap px-4 text-sm text-ink";
-const ROW = "relative border-t border-border/70 first:border-t-0 hover:bg-ink/5";
-/** The name cell's link covers the whole row: the row is the link (PROPOSAL §6, tables). */
-const ROW_LINK =
-  "no-color font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent";
+type ServiceTableRow = { key: string; w: ServiceRow };
+type JobTableRow = { key: string; row: JobRow };
+
+/** An unobserved workload has no figures: its cells say so with a dash. */
+const NONE = <span className="text-ink-muted">—</span>;
 
 function ServicesTable({
   rows,
   loading,
   showEnv,
-  windowWords,
   windowShort,
   hosted,
   hrefs,
@@ -703,233 +838,205 @@ function ServicesTable({
   rows: ServiceRow[];
   loading: boolean;
   showEnv: boolean;
-  windowWords: string;
   windowShort: string;
   hosted: HostedByEnv;
   hrefs: OverviewHrefs;
   empty: ReactNode;
 }) {
-  const columns = showEnv ? 8 : 7;
-  return (
-    <div className="overflow-x-auto">
-      <StackedTable className="min-w-full border-collapse" aria-label="Services" data-testid="overview-services-table">
-        <thead>
-          <tr className="border-b border-border">
-            <th scope="col" className={TH}>
-              Name
-            </th>
-            {showEnv && (
-              <th scope="col" className={TH}>
-                Environment
-              </th>
+  const columns: DataTableColumn<ServiceTableRow>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (_, { w }) => (
+        <>
+          <span className="font-medium">{w.workload}</span>
+          {!w.unobserved && KIND_LABEL[w.kind] && <span className="ml-2 text-xs text-ink-muted">{KIND_LABEL[w.kind]}</span>}
+        </>
+      ),
+    },
+    ...(showEnv ? [{ key: "env", header: "Environment", render: (_: unknown, { w }: ServiceTableRow) => <Tag>{w.envName}</Tag> }] : []),
+    {
+      key: "status",
+      header: "Status",
+      render: (_, { w }) =>
+        w.unobserved ? (
+          <span title={w.healthReason}>
+            <Status tone="neutral" label="Unobserved" />
+          </span>
+        ) : (
+          <HealthStatus workload={w} />
+        ),
+    },
+    {
+      key: "ready",
+      header: "Ready",
+      numeric: true,
+      render: (_, { w }) => (w.unobserved ? NONE : <span className={cn(replicasShort(w) && "text-warning-ink")}>{replicasText(w)}</span>),
+    },
+    {
+      key: "version",
+      header: "Version",
+      interactive: true,
+      render: (_, { w }) =>
+        w.unobserved ? NONE : <WorkloadRelease workload={w} releaseHref={hrefs.release} hosted={hosted.get(w.envName)?.get(w.workload) ?? null} />,
+    },
+    {
+      key: "restarts",
+      header: `Restarts ${windowShort}`,
+      numeric: true,
+      render: (_, { w }) => {
+        if (w.unobserved) return NONE;
+        if (!w.restartsInWindow) return <span className="text-ink-muted">0</span>;
+        const exit = lastExitOf(w);
+        const status = HEALTH_STATUS[w.health];
+        return (
+          <>
+            {w.restartsInWindow}
+            {exit && (
+              <span
+                className={cn("ml-1", status.tone === "danger" ? "text-danger-ink" : status.tone === "warning" ? "text-warning-ink" : "text-ink-muted")}
+                title={exit.atMs ? `Last exited ${new Date(exit.atMs).toLocaleString()}` : undefined}
+              >
+                · {exitPhrase(exit.reason)}
+              </span>
             )}
-            <th scope="col" className={TH}>
-              Status
-            </th>
-            <th scope="col" className={cn(TH, "text-right")}>
-              Ready
-            </th>
-            <th scope="col" className={TH}>
-              Version
-            </th>
-            <th scope="col" className={cn(TH, "text-right")} title={`Container restarts in the ${windowWords}, and the last exit reason`}>
-              Restarts {windowShort}
-            </th>
-            <th scope="col" className={TH}>
-              CPU
-            </th>
-            <th scope="col" className={TH}>
-              Memory
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <SkeletonRows columns={columns} />
-          ) : rows.length === 0 ? (
-            <tr>
-              <td colSpan={columns} className="px-4 py-10 text-center text-sm text-ink-muted" data-testid="overview-services-empty">
-                {empty}
-              </td>
-            </tr>
-          ) : (
-            rows.map((w) => {
-              if (w.unobserved) return <UnobservedRow key={`${w.envName}/${w.workload}`} row={w} showEnv={showEnv} />;
-              const exit = lastExitOf(w);
-              const status = HEALTH_STATUS[w.health];
-              return (
-                <tr key={`${w.envName}/${w.workload}`} className={ROW} data-testid={`overview-service-${w.workload}${showEnv ? `-${w.envName}` : ""}`} data-health={w.health}>
-                  <td className={TD}>
-                    <Link href={hrefs.workload(w.workload, w.envName)} className={ROW_LINK}>
-                      {w.workload}
-                    </Link>
-                    {KIND_LABEL[w.kind] && <span className="ml-2 text-xs text-ink-muted">{KIND_LABEL[w.kind]}</span>}
-                  </td>
-                  {showEnv && (
-                    <td className={TD}>
-                      <Tag>{w.envName}</Tag>
-                    </td>
-                  )}
-                  <td className={TD}>
-                    <HealthStatus workload={w} />
-                  </td>
-                  <td className={cn(TD, "text-right tabular-nums", replicasShort(w) && "text-warning-ink")}>{replicasText(w)}</td>
-                  <td className={TD}>
-                    <WorkloadRelease workload={w} releaseHref={hrefs.release} hosted={hosted.get(w.envName)?.get(w.workload) ?? null} />
-                  </td>
-                  <td className={cn(TD, "text-right tabular-nums")}>
-                    {w.restartsInWindow ? (
-                      <>
-                        {w.restartsInWindow}
-                        {exit && (
-                          <span
-                            className={cn("ml-1", status.tone === "danger" ? "text-danger-ink" : status.tone === "warning" ? "text-warning-ink" : "text-ink-muted")}
-                            title={exit.atMs ? `Last exited ${new Date(exit.atMs).toLocaleString()}` : undefined}
-                          >
-                            · {exitPhrase(exit.reason)}
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-ink-muted">0</span>
-                    )}
-                  </td>
-                  <td className={TD}>
-                    <UsageMeter usage={worstUsage(w, "cpu")} format={formatCores} what="CPU" />
-                  </td>
-                  <td className={TD}>
-                    <UsageMeter usage={worstUsage(w, "memory")} format={formatBytes} what="Memory" />
-                  </td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </StackedTable>
+          </>
+        );
+      },
+    },
+    {
+      key: "cpu",
+      header: "CPU",
+      render: (_, { w }) => (w.unobserved ? NONE : <UsageMeter usage={worstUsage(w, "cpu")} format={formatCores} what="CPU" />),
+    },
+    {
+      key: "memory",
+      header: "Memory",
+      render: (_, { w }) => (w.unobserved ? NONE : <UsageMeter usage={worstUsage(w, "memory")} format={formatBytes} what="Memory" />),
+    },
+  ];
+  return (
+    <div data-testid="overview-services-table">
+      <DataTable<ServiceTableRow>
+        flush
+        stacked
+        ariaLabel="Services"
+        columns={columns}
+        data={rows.map((w) => ({ key: `${w.envName}/${w.workload}`, w }))}
+        loading={loading}
+        pageSize={4}
+        emptyMessage={<span data-testid="overview-services-empty">{empty}</span>}
+        getRowKey={(r) => r.key}
+        // A workload a self-managed environment's render declares and nothing
+        // has observed has no page to open: there is nothing observed to show.
+        getRowHref={({ w }) => (w.unobserved ? undefined : hrefs.workload(w.workload, w.envName))}
+        getRowDetail={({ w }) =>
+          w.unobserved ? (
+            <span className="text-xs text-ink-muted">Declared by {w.envName}&apos;s last recorded render; nothing reports from it.</span>
+          ) : undefined
+        }
+        getRowProps={({ w }) => ({
+          "data-testid": `overview-service-${w.workload}${showEnv ? `-${w.envName}` : ""}`,
+          "data-health": w.unobserved ? "unobserved" : w.health,
+        })}
+      />
     </div>
   );
 }
 
-/**
- * A workload a self-managed environment's render declares and nothing has
- * observed: named, with no verdict and no figures, and no page to open (there
- * is nothing observed to show on one).
- */
-function UnobservedRow({ row, showEnv }: { row: ServiceRow; showEnv: boolean }) {
-  return (
-    <tr className="border-t border-border/70 first:border-t-0" data-testid={`overview-service-${row.workload}${showEnv ? `-${row.envName}` : ""}`} data-health="unobserved">
-      <td className={TD}>
-        <span className="font-medium text-ink">{row.workload}</span>
-      </td>
-      {showEnv && (
-        <td className={TD}>
-          <Tag>{row.envName}</Tag>
-        </td>
-      )}
-      <td className={TD} title={row.healthReason}>
-        <Status tone="neutral" label="Unobserved" />
-      </td>
-      <td colSpan={5} className={cn(TD, "text-xs text-ink-muted")}>
-        Declared by {row.envName}&apos;s last recorded render; nothing reports from it.
-      </td>
-    </tr>
-  );
-}
-
 function JobsTable({ rows, loading, showEnv, hrefs, empty }: { rows: JobRow[]; loading: boolean; showEnv: boolean; hrefs: OverviewHrefs; empty: ReactNode }) {
-  const columns = showEnv ? 6 : 5;
-  return (
-    <div className="overflow-x-auto">
-      <StackedTable className="min-w-full border-collapse" aria-label="Jobs" data-testid="overview-jobs-table">
-        <thead>
-          <tr className="border-b border-border">
-            <th scope="col" className={TH}>
-              Name
-            </th>
-            {showEnv && (
-              <th scope="col" className={TH}>
-                Environment
-              </th>
-            )}
-            <th scope="col" className={TH}>
-              Result
-            </th>
-            <th scope="col" className={TH}>
-              Ran in release
-            </th>
-            <th scope="col" className={cn(TH, "text-right")}>
-              Duration
-            </th>
-            <th scope="col" className={TH}>
-              Finished
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <SkeletonRows columns={columns} rows={2} />
-          ) : rows.length === 0 ? (
-            <tr>
-              <td colSpan={columns} className="px-4 py-10 text-center text-sm text-ink-muted" data-testid="overview-jobs-empty">
-                {empty}
-              </td>
-            </tr>
-          ) : (
-            rows.map((row) => {
-              const job = row.latest;
-              const status = JOB_STATUS[job.result];
-              return (
-                <tr key={row.key} className={ROW} data-testid={`overview-job-${row.workload}${showEnv ? `-${row.envName}` : ""}`} data-result={job.result}>
-                  <td className={TD}>
-                    <Link href={hrefs.workload(row.workload, row.envName)} className={ROW_LINK} title={job.name}>
-                      {row.workload}
-                    </Link>
-                    {row.runs > 1 && (
-                      <span className="ml-2 text-xs text-ink-muted">
-                        {row.runs} runs{row.failedRuns ? `, ${row.failedRuns} failed` : ""}
-                      </span>
-                    )}
-                  </td>
-                  {showEnv && (
-                    <td className={TD}>
-                      <Tag>{row.envName}</Tag>
-                    </td>
-                  )}
-                  <td className={TD}>
-                    <span className="inline-flex items-center gap-1.5">
-                      <Status tone={status.tone} label={status.label} />
-                      {job.result === "failed" && job.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(job.reason)}</span>}
-                    </span>
-                  </td>
-                  <td className={TD}>
-                    {job.releaseVersion ? (
-                      <Link href={hrefs.release(job.releaseVersion)} className={cn(INK_LINK, "relative z-10")} title={job.releaseVersion}>
-                        {shortVersion(job.releaseVersion)}
-                      </Link>
-                    ) : (
-                      <span className="text-ink-muted">unknown</span>
-                    )}
-                  </td>
-                  <td className={cn(TD, "text-right tabular-nums")}>
-                    {job.durationSeconds ? formatSeconds(job.durationSeconds) : <span className="text-ink-muted">{job.result === "running" ? "running" : "—"}</span>}
-                  </td>
-                  <td className={cn(TD, "text-ink-muted")}>
-                    {job.finishedAtMs ? (
-                      <time dateTime={new Date(job.finishedAtMs).toISOString()} title={new Date(job.finishedAtMs).toLocaleString()}>
-                        {formatAgo(job.finishedAtMs)}
-                      </time>
-                    ) : job.result === "running" ? (
-                      "not yet"
-                    ) : (
-                      "not observed"
-                    )}
-                  </td>
-                </tr>
-              );
-            })
+  const columns: DataTableColumn<JobTableRow>[] = [
+    {
+      key: "name",
+      header: "Name",
+      render: (_, { row }) => (
+        <>
+          <span className="font-medium" title={row.latest.name}>
+            {row.workload}
+          </span>
+          {row.runs > 1 && (
+            <span className="ml-2 text-xs text-ink-muted">
+              {row.runs} runs{row.failedRuns ? `, ${row.failedRuns} failed` : ""}
+            </span>
           )}
-        </tbody>
-      </StackedTable>
+        </>
+      ),
+    },
+    ...(showEnv ? [{ key: "env", header: "Environment", render: (_: unknown, { row }: JobTableRow) => <Tag>{row.envName}</Tag> }] : []),
+    {
+      key: "result",
+      header: "Result",
+      render: (_, { row }) => {
+        const job = row.latest;
+        const status = JOB_STATUS[job.result];
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <Status tone={status.tone} label={status.label} />
+            {job.result === "failed" && job.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(job.reason)}</span>}
+          </span>
+        );
+      },
+    },
+    {
+      key: "release",
+      header: "Ran in release",
+      interactive: true,
+      render: (_, { row }) =>
+        row.latest.releaseVersion ? (
+          <Link href={hrefs.release(row.latest.releaseVersion)} className={INK_LINK} title={row.latest.releaseVersion}>
+            {shortVersion(row.latest.releaseVersion)}
+          </Link>
+        ) : (
+          <span className="text-ink-muted">unknown</span>
+        ),
+    },
+    {
+      key: "duration",
+      header: "Duration",
+      numeric: true,
+      render: (_, { row }) =>
+        row.latest.durationSeconds ? (
+          formatSeconds(row.latest.durationSeconds)
+        ) : (
+          <span className="text-ink-muted">{row.latest.result === "running" ? "running" : "—"}</span>
+        ),
+    },
+    {
+      key: "finished",
+      header: "Finished",
+      className: "text-ink-muted",
+      render: (_, { row }) => {
+        const job = row.latest;
+        return job.finishedAtMs ? (
+          <time dateTime={new Date(job.finishedAtMs).toISOString()} title={new Date(job.finishedAtMs).toLocaleString()}>
+            {formatAgo(job.finishedAtMs)}
+          </time>
+        ) : job.result === "running" ? (
+          "not yet"
+        ) : (
+          "not observed"
+        );
+      },
+    },
+  ];
+  return (
+    <div data-testid="overview-jobs-table">
+      <DataTable<JobTableRow>
+        flush
+        stacked
+        ariaLabel="Jobs"
+        columns={columns}
+        data={rows.map((row) => ({ key: row.key, row }))}
+        loading={loading}
+        pageSize={2}
+        emptyMessage={<span data-testid="overview-jobs-empty">{empty}</span>}
+        getRowKey={(r) => r.key}
+        getRowHref={({ row }) => hrefs.workload(row.workload, row.envName)}
+        getRowProps={({ row }) => ({
+          "data-testid": `overview-job-${row.workload}${showEnv ? `-${row.envName}` : ""}`,
+          "data-result": row.latest.result,
+        })}
+      />
     </div>
   );
 }

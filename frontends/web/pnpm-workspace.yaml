@@ -1,0 +1,13 @@
+# pnpm settings for the web frontend. It is its own pnpm workspace root, so
+# these apply here and nowhere else (pnpm reads them from this file, never from
+# package.json or .npmrc).
+
+# Install scripts pnpm may run; an unlisted one fails the install
+# (ERR_PNPM_IGNORED_BUILDS) rather than being skipped silently.
+#   better-sqlite3: fetches (or compiles) its native addon.
+#   esbuild: verifies its platform binary.
+#   protobufjs: its postinstall only prints a version warning.
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  protobufjs: false

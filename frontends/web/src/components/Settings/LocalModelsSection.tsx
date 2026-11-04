@@ -1,11 +1,9 @@
 import { useState } from "react";
-import { create } from "@bufbuild/protobuf";
 import { Check, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { grpcClient } from "../../api/grpc-client";
 import {
-  RefreshLocalModelsRequestSchema,
-  SetLocalModelEndpointsRequestSchema,
-} from "../../gen/reliant/v1/daemon_registry_pb";
+  useRefreshLocalModels,
+  useSetLocalModelEndpoints,
+} from "../../hooks/daemon-registry-service-hooks_gen";
 import type { DaemonInfo } from "../../gen/reliant/v1/daemon_registry_pb";
 import type {
   LocalModelEndpoint,
@@ -112,7 +110,7 @@ function OllamaContextFix({ smallestContext }: { smallestContext: number }) {
         </li>
       </ul>
       <p className="mt-2 text-xs text-muted-foreground">
-        Then click Test connection — the daemon re-probes and reads the new context.
+        Then click Test connection — the machine re-probes and reads the new context.
       </p>
     </CardInset>
   );
@@ -273,13 +271,16 @@ export function LocalModelsMachineCard({ daemon }: { daemon: DaemonInfo }) {
   const endpoints = inventory?.endpoints ?? [];
   const hasEmbeddings = endpoints.some((e) => e.models.some((m) => !m.supportsChat));
 
+  // Generated writes: each also refetches the daemon list, which carries the
+  // inventory every other machine card and the model picker read.
+  const refreshRpc = useRefreshLocalModels();
+  const setEndpointsRpc = useSetLocalModelEndpoints();
+
   const refresh = async () => {
     setBusy("refresh");
     setRpcError(null);
     try {
-      const res = await grpcClient
-        .daemonRegistry()
-        .refreshLocalModels(create(RefreshLocalModelsRequestSchema, { daemonId: daemon.daemonId }));
+      const res = await refreshRpc.mutateAsync({ daemonId: daemon.daemonId });
       setFresh(res.localModels);
     } catch (e) {
       setRpcError(`Couldn't refresh: ${errorText(e)}`);
@@ -292,11 +293,7 @@ export function LocalModelsMachineCard({ daemon }: { daemon: DaemonInfo }) {
     setBusy("save");
     setRpcError(null);
     try {
-      const res = await grpcClient
-        .daemonRegistry()
-        .setLocalModelEndpoints(
-          create(SetLocalModelEndpointsRequestSchema, { daemonId: daemon.daemonId, baseUrls }),
-        );
+      const res = await setEndpointsRpc.mutateAsync({ daemonId: daemon.daemonId, baseUrls });
       setFresh(res.localModels);
     } catch (e) {
       setRpcError(`Couldn't save endpoints: ${errorText(e)}`);
@@ -394,10 +391,10 @@ export function LocalModelsSection() {
 
   return (
     <div className="space-y-4">
+      {/* The tab already names the page, so no heading repeats it here. */}
       <div>
-        <h2 className="text-base font-semibold text-foreground">Custom &amp; local models</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Run models like Ollama or LM Studio on your own hardware. Each machine's Reliant daemon finds
+        <p className="text-sm text-muted-foreground">
+          Run models like Ollama or LM Studio on your own hardware. Reliant on each machine finds
           the servers running on it and relays chats to them, so nothing about them is sent through
           Reliant's cloud. Servers it can't find, like a GPU cluster, can be added as custom endpoints.
         </p>
@@ -407,7 +404,7 @@ export function LocalModelsSection() {
           <p className="text-sm text-muted-foreground">
             {loading
               ? "Loading machines…"
-              : "Local models run on your machine through the Reliant daemon. Connect a machine in Settings → Machines, then come back here to see the model servers it can reach."}
+              : "Local models run on a machine of yours that Reliant is connected to. Connect a machine in Settings → Machines, then come back here to see the model servers it can reach."}
           </p>
         </Card>
       ) : (

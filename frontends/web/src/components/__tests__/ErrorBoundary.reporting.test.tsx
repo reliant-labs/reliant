@@ -1,23 +1,19 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setRuntimeConfig } from "@/test/runtimeConfig"
 
-// A boundary-caught error goes to every sink the build ships to. The runtime
-// skips an error its SDK already recorded, so dual reporting is one record.
+// A boundary-caught error goes to browser telemetry. The runtime skips an
+// error its SDK already recorded, so it is one record.
 
 const mocks = vi.hoisted(() => ({
-  captureException: vi.fn(),
   reportErrorToTelemetry: vi.fn(),
   crashReportingEnabled: true,
 }));
 
-vi.mock("@sentry/react", () => ({
-  captureException: mocks.captureException,
-  withErrorBoundary: (component: unknown) => component,
-}));
 vi.mock("../../lib/telemetry", () => ({
   reportErrorToTelemetry: mocks.reportErrorToTelemetry,
 }));
-vi.mock("../../store/privacyStore", () => ({
-  getPrivacySettings: () => ({
+vi.mock("../../hooks/privacy-queries", () => ({
+  privacyConsent: () => ({
     crashReportingEnabled: mocks.crashReportingEnabled,
     analyticsEnabled: true,
   }),
@@ -32,49 +28,29 @@ describe("reportCaughtError", () => {
     vi.clearAllMocks();
     mocks.crashReportingEnabled = true;
   });
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
 
-  it("reports to both sinks while they run in parallel", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry,clickstack");
+  it("hands the error and its component stack to telemetry", () => {
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT });
     const err = new Error("boom");
 
     reportCaughtError(err, "\n    at Foo");
 
-    expect(mocks.captureException).toHaveBeenCalledWith(err, {
-      contexts: { react: { componentStack: "\n    at Foo" } },
-    });
     expect(mocks.reportErrorToTelemetry).toHaveBeenCalledWith(err, "\n    at Foo");
   });
 
-  it("reports only to ClickStack once Sentry is out of the build", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
-
-    reportCaughtError(new Error("boom"));
-
-    expect(mocks.captureException).not.toHaveBeenCalled();
-    expect(mocks.reportErrorToTelemetry).toHaveBeenCalledTimes(1);
-  });
-
   it("reports nothing without crash-reporting consent", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry,clickstack");
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT });
     mocks.crashReportingEnabled = false;
 
     reportCaughtError(new Error("boom"));
 
-    expect(mocks.captureException).not.toHaveBeenCalled();
     expect(mocks.reportErrorToTelemetry).not.toHaveBeenCalled();
   });
 
-  it("leaves production's current behaviour alone when nothing new is configured", () => {
+  it("leaves the no-endpoint decision to the telemetry module", () => {
     reportCaughtError(new Error("boom"));
 
-    expect(mocks.captureException).toHaveBeenCalledTimes(1);
-    // The telemetry module no-ops itself with the sink off; the boundary still
+    // The telemetry module no-ops itself with no endpoint; the boundary still
     // hands it the error and lets it decide.
     expect(mocks.reportErrorToTelemetry).toHaveBeenCalledTimes(1);
   });

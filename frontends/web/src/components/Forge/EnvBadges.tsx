@@ -24,7 +24,7 @@
 import { CheckCircle2, CircleDashed, Loader2 } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   whereExplanation,
@@ -48,7 +48,7 @@ export function WhereBadge({ env, where }: { env: string; where: EnvWhere }) {
         {where === "unknown" ? (
           <span
             className={cn(
-              "inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium text-foreground",
+              "inline-flex items-center rounded-full px-2 py-0.5 text-2xs font-medium text-ink",
               CERTAINTY_STYLES.unknown.container
             )}
           >
@@ -71,7 +71,7 @@ function QuietChip({ label, detail, testId }: { label: string; detail: string; t
         data-testid={testId}
         data-certainty="unknown"
         className={cn(
-          "inline-flex shrink-0 items-center gap-1 rounded px-1.5 text-2xs font-medium leading-5 text-foreground",
+          "inline-flex shrink-0 items-center gap-1 rounded px-1.5 text-2xs font-medium leading-5 text-ink",
           style.container
         )}
       >
@@ -91,7 +91,7 @@ export function HealthChip({ env, health }: { env: string; health: EnvHealth }) 
           <span
             data-testid={testId}
             data-certainty="unknown"
-            className="inline-flex items-center gap-1 text-2xs text-muted-foreground"
+            className="inline-flex items-center gap-1 text-2xs text-ink-muted"
           >
             <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
             Asking the control plane…
@@ -118,7 +118,7 @@ export function HealthChip({ env, health }: { env: string; health: EnvHealth }) 
               data-testid={testId}
               data-certainty="known-bad"
               className={cn(
-                "inline-flex shrink-0 items-center gap-1 rounded px-1.5 text-2xs font-medium leading-5 text-foreground",
+                "inline-flex shrink-0 items-center gap-1 rounded px-1.5 text-2xs font-medium leading-5 text-ink",
                 style.container
               )}
             >
@@ -135,7 +135,7 @@ export function HealthChip({ env, health }: { env: string; health: EnvHealth }) 
               data-testid={testId}
               data-certainty="known-good"
               className={cn(
-                "inline-flex shrink-0 items-center gap-1 rounded px-1.5 text-2xs font-medium leading-5 text-foreground",
+                "inline-flex shrink-0 items-center gap-1 rounded px-1.5 text-2xs font-medium leading-5 text-ink",
                 style.container
               )}
             >
@@ -157,7 +157,7 @@ export function HealthChip({ env, health }: { env: string; health: EnvHealth }) 
     }
     default:
       return (
-        <span data-testid={testId} data-certainty="none" className="text-2xs text-muted-foreground">
+        <span data-testid={testId} data-certainty="none" className="text-2xs text-ink-muted">
           <span aria-hidden="true">—</span>
           <span className="sr-only">no health reported</span>
         </span>

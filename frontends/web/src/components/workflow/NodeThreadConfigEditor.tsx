@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import type { NodeThreadConfig, ThreadMode } from '../../types/workflow'
-import { HelpPopover } from '../ui/HelpPopover'
+import { HelpPopover } from './HelpPopover'
 import { ProtoFieldRenderer } from './ProtoFieldRenderer'
 import type { ProtoFieldSchema } from '../../types/workflowFieldSchema'
 import {
@@ -260,7 +260,7 @@ export function NodeThreadConfigEditor({
             }
           />
           {hasInjectConfig && (
-            <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">configured</span>
+            <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary-ink">configured</span>
           )}
         </button>
 
@@ -370,7 +370,7 @@ export function NodeThreadConfigEditor({
         )}
         <span>Thread Configuration</span>
         {badgeText && (
-          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+          <span className="ml-auto text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary-ink">
             {badgeText}
           </span>
         )}

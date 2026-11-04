@@ -37,8 +37,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
@@ -75,17 +73,6 @@ func GetThread(ctx context.Context, db orm.Context, id string) (*core.Thread, er
 	row, err := GetThreadByID(ctx, db, id)
 	if err != nil {
 		return nil, noRows("failed to get thread", "thread", err)
-	}
-	return threadFromRow(row), nil
-}
-
-// GetThreadByWorkflow returns the thread a workflow runs on; a miss is a
-// wrapped sql.ErrNoRows.
-func GetThreadByWorkflow(ctx context.Context, db orm.Context, workflowID string) (*core.Thread, error) {
-	row := new(Thread)
-	err := db.Bun().NewSelect().Model(row).Where("workflow_id = ?", workflowID).Limit(1).Scan(ctx)
-	if err != nil {
-		return nil, noRows("failed to get thread by workflow", "thread", err)
 	}
 	return threadFromRow(row), nil
 }
@@ -138,6 +125,19 @@ func ListThreadsByConversation(ctx context.Context, db orm.Context, chatID strin
 	return threadsFromRows(rows), nil
 }
 
+// ListThreadsByIDs returns the threads with the given ids, in no particular
+// order; an id that names no thread is simply absent.
+func ListThreadsByIDs(ctx context.Context, db orm.Context, ids []string) ([]*core.Thread, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	rows, err := ListThread(ctx, db, orm.WhereIn(ThreadFieldID, ids))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list threads by id: %w", err)
+	}
+	return threadsFromRows(rows), nil
+}
+
 // ListChildThreads returns the threads forked directly from parentThreadID,
 // oldest first.
 func ListChildThreads(ctx context.Context, db orm.Context, parentThreadID string) ([]*core.Thread, error) {
@@ -186,13 +186,6 @@ func UpdateThreadWorkflow(ctx context.Context, db orm.Context, threadID, workflo
 		row.WorkflowID = &workflowID
 	}
 	return updateThread(ctx, db, row, "failed to update thread workflow", ThreadFieldWorkflowID)
-}
-
-// UpdateThreadForkPoint moves the thread's fork point, when the fork's target
-// message changes (the parent compacts, say).
-func UpdateThreadForkPoint(ctx context.Context, db orm.Context, threadID string, forkAtMessageID *string) (*core.Thread, error) {
-	row := &Thread{ID: threadID, ForkAtMessageID: forkAtMessageID}
-	return updateThread(ctx, db, row, "failed to update thread fork point", ThreadFieldForkAtMessageID)
 }
 
 // UpdateThreadStatus records the thread's lifecycle. completedAt is only
@@ -321,20 +314,6 @@ func ReapOrphanedThreads(ctx context.Context, db orm.Context) ([]core.ReapedThre
 		reaped[i] = core.ReapedThread{ThreadID: row.ThreadID, ChatID: row.ChatID, WorkflowID: row.WorkflowID, Status: row.Status}
 	}
 	return reaped, nil
-}
-
-// RemoveThread deletes the thread; one that does not exist is already gone.
-func RemoveThread(ctx context.Context, db orm.Context, id string) error {
-	if err := DeleteThread(ctx, db, id); err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	return nil
-}
-
-// DeleteThreadsByConversation deletes every thread of the chat.
-func DeleteThreadsByConversation(ctx context.Context, db orm.Context, chatID string) error {
-	_, err := db.Bun().NewDelete().Model((*Thread)(nil)).Where("chat_id = ?", chatID).Exec(ctx)
-	return err
 }
 
 // threadToRow maps a core.Thread onto the row InsertThread writes.

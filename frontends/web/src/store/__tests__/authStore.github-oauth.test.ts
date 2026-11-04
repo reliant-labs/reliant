@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Provider sign-in is now ONE code path on both surfaces.
@@ -52,21 +52,28 @@ vi.mock('@/lib/constants', async (importOriginal) => ({
   getIsDev: () => false,
 }))
 
-vi.mock('@/lib/sentry', () => ({ setSentryUser: vi.fn() }))
 vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
 
 const LOOPBACK_URI = 'http://127.0.0.1:52111/auth/callback'
 
 const asDesktop = () => {
-  ;(window as Window & { electronAPI?: unknown }).electronAPI = {
+  ;(window as unknown as { electronAPI?: unknown }).electronAPI = {
     startOAuthRedirect: startOAuthRedirectMock,
   }
 }
 
+// Each test imports a FRESH authStore (vi.resetModules), but the first import
+// in a worker also transforms its whole module graph: ~4s alone, past the
+// test timeout under a loaded full run. Transform it once here, on the
+// hook's own budget, so every test's import is only an evaluation.
+beforeAll(async () => {
+  await import('@/store/authStore')
+}, 60_000)
+
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
-  delete (window as Window & { electronAPI?: unknown }).electronAPI
+  delete (window as unknown as { electronAPI?: unknown }).electronAPI
   startOAuthRedirectMock.mockResolvedValue({ redirectUri: LOOPBACK_URI })
   signInWithOAuthMock.mockResolvedValue({
     data: { url: 'https://accounts.google.com/o/oauth2/v2/auth?example=1' },
@@ -161,7 +168,7 @@ describe.each(['google', 'github', 'apple'] as const)('%s sign-in', (provider) =
   it('falls back to the hosted callback in builds with no desktop bridge', async () => {
     // Every build shipped before the loopback receiver existed: electronAPI is
     // present but startOAuthRedirect is undefined.
-    ;(window as Window & { electronAPI?: unknown }).electronAPI = {}
+    ;(window as unknown as { electronAPI?: unknown }).electronAPI = {}
 
     await call(provider)
 

@@ -4,28 +4,11 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Create mock store state
-let mockWorktreeState = {
-  worktrees: [] as unknown[],
-  currentWorktree: null as unknown,
-};
-
 let mockProjectState = {
   currentProject: null as unknown,
 };
 
 // Mock the stores before importing the module
-vi.mock('../../store/worktreeStore', () => ({
-  useWorktreeStore: Object.assign(
-    (selector?: (state: unknown) => unknown) => {
-      return selector ? selector(mockWorktreeState) : mockWorktreeState;
-    },
-    {
-      getState: () => mockWorktreeState,
-    }
-  ),
-}));
-
 vi.mock('../../store/projectStore', () => ({
   useProjectStore: Object.assign(
     (selector?: (state: unknown) => unknown) => {
@@ -45,18 +28,20 @@ vi.mock('../../store/viewerStore', () => ({
   },
 }));
 
-// Whether files outside the workspace can be opened depends on the runtime:
-// only the desktop backend will serve them. Default to the browser (the more
-// restrictive case) so a test must opt in to desktop behaviour.
-let mockIsElectron = false;
-
-vi.mock('../constants', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../constants')>()),
-  isElectron: () => mockIsElectron,
-}));
-
 // Import after mocks are set up
 import { classifyPath } from '../fileOpener';
+import { queryClient } from '../query-client';
+import { setWorktreesForTest } from '../../test/worktreeCache';
+import type { Worktree } from '../../hooks/worktree-queries';
+
+/** The workspaces the app holds, as the cache would (project proj-1). */
+function holdWorktrees(state: { worktrees: Partial<Worktree>[]; currentWorktree: Partial<Worktree> | null }) {
+  queryClient.clear();
+  setWorktreesForTest({
+    worktrees: state.worktrees.map((w) => ({ project_id: 'proj-1', ...w })),
+    currentWorktree: state.currentWorktree ? { project_id: 'proj-1', ...state.currentWorktree } : null,
+  });
+}
 import type { ParsedFilePath } from '../filePath';
 
 describe('classifyPath', () => {
@@ -95,13 +80,12 @@ describe('classifyPath', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockIsElectron = false;
     
     // Default mock state
-    mockWorktreeState = {
+    holdWorktrees({
       worktrees: [mainWorktree, featureWorktree, archivedWorktree],
       currentWorktree: mainWorktree,
-    };
+    });
     
     mockProjectState = {
       currentProject: {
@@ -166,9 +150,7 @@ describe('classifyPath', () => {
     });
 
     // An external path is still classified 'external' — that drives the muted
-    // styling. Whether it is CLICKABLE now depends on the runtime, because
-    // only the desktop backend will serve a file outside the workspace. Both
-    // cases are covered in the 'external paths' block below.
+    // styling. It is clickable: see the 'external paths' block below.
     it('should classify completely external path as "external"', () => {
       const parsed: ParsedFilePath = {
         fullPath: '/etc/passwd',
@@ -217,7 +199,6 @@ describe('classifyPath', () => {
 
   // The user-facing point of this change: a path the assistant mentioned that
   // lives outside the workspace should open rather than show a dead tooltip.
-  // It can only do that where the backend will serve it.
   describe('external paths', () => {
     const outsidePath: ParsedFilePath = {
       fullPath: '/home/user/notes/todo.md',
@@ -225,9 +206,7 @@ describe('classifyPath', () => {
       isAbsolute: true,
     };
 
-    it('is clickable in the desktop app, where the backend can read host files', () => {
-      mockIsElectron = true;
-
+    it('is clickable, read-only', () => {
       const result = classifyPath(outsidePath);
 
       expect(result.classification).toBe('external');
@@ -236,21 +215,8 @@ describe('classifyPath', () => {
       expect(result.tooltipMessage).toContain('read-only');
     });
 
-    it('is not clickable in the browser, and the tooltip says why and what to do', () => {
-      mockIsElectron = false;
-
-      const result = classifyPath(outsidePath);
-
-      expect(result.classification).toBe('external');
-      expect(result.isClickable).toBe(false);
-      // Not just "cannot be opened": name the reason and the way forward.
-      expect(result.tooltipMessage).toContain('outside this workspace');
-      expect(result.tooltipMessage).toContain('desktop app');
-    });
-
     it('explains an unresolvable relative path rather than calling it external', () => {
-      mockIsElectron = true;
-      mockWorktreeState = { worktrees: [], currentWorktree: null };
+      holdWorktrees({ worktrees: [], currentWorktree: null });
 
       const result = classifyPath({
         fullPath: 'src/index.ts',
@@ -281,10 +247,10 @@ describe('classifyPath', () => {
 
     it('should classify relative path with NO worktree context as external', () => {
       // No worktrees available
-      mockWorktreeState = {
+      holdWorktrees({
         worktrees: [],
         currentWorktree: null,
-      };
+      });
       
       const parsed: ParsedFilePath = {
         fullPath: './src/file.ts',
@@ -392,10 +358,10 @@ describe('classifyPath', () => {
         deleted_at: null,
       };
       
-      mockWorktreeState = {
+      holdWorktrees({
         worktrees: [mainWorktree, nestedWorktree],
         currentWorktree: mainWorktree,
-      };
+      });
       
       const parsed: ParsedFilePath = {
         fullPath: '/home/user/my-project/packages/sub-package/src/file.ts',

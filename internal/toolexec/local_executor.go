@@ -10,7 +10,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemon"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -22,6 +21,7 @@ type LocalToolExecutor struct {
 	toolsFactory *tools.ToolsFactory
 	daemon       daemon.Client
 	mcpBinder    MCPContextBinder
+	egress       EgressLimiter
 }
 
 // NewLocalToolExecutor creates a new local tool executor
@@ -36,6 +36,22 @@ func NewLocalToolExecutor(toolsFactory *tools.ToolsFactory) *LocalToolExecutor {
 func (e *LocalToolExecutor) SetDaemonClient(d daemon.Client) {
 	e.daemon = d
 }
+
+// DaemonEgressSubject is the one subject every egress call through a
+// LocalToolExecutor is keyed on. A daemon serves one user, so its rate and
+// in-flight budgets are the daemon's own; there is no second account to tell
+// apart from the first.
+const DaemonEgressSubject = "daemon"
+
+// SetEgressLimiter bounds the egress tools this executor runs (fetch,
+// websearch, sourcegraph, integration actions): the daemon's cap on what one
+// machine pushes at a third party, and out of the hub's shared NAT when it is a
+// managed daemon. Nil (the default) admits everything.
+//
+// An abuse brake for a well-behaved daemon, not a security boundary: the
+// daemon is user-controlled and can run without it. The server-side NAT
+// protections are the backstop.
+func (e *LocalToolExecutor) SetEgressLimiter(l EgressLimiter) { e.egress = l }
 
 // SetMCPContextBinder sets the execution-time MCP binder.
 func (e *LocalToolExecutor) SetMCPContextBinder(binder MCPContextBinder) {
@@ -116,17 +132,19 @@ func (e *LocalToolExecutor) executeTool(
 	chatID, _ := contextMap["chat_id"].(string)
 	thread, _ := contextMap["thread"].(string)
 
-	// Create minimal project info
-	var project *db.Project
+	// The project and its checkout on THIS machine: the request's project
+	// path is the dispatcher's projectcheckout resolution for the machine the
+	// call was pinned to, never projects.path.
+	var project *rctx.Project
 	if projectMap, ok := contextMap["project"].(map[string]interface{}); ok {
 		projectID, _ := projectMap["id"].(string)
 		projectPath, _ := projectMap["path"].(string)
 		projectName, _ := projectMap["name"].(string)
 
-		project = &db.Project{
-			ID:   projectID,
-			Path: projectPath,
-			Name: projectName,
+		project = &rctx.Project{
+			ID:       projectID,
+			Name:     projectName,
+			Checkout: projectPath,
 		}
 	}
 
@@ -147,6 +165,9 @@ func (e *LocalToolExecutor) executeTool(
 
 	// Create tool context with worktree info
 	toolContext := rctx.NewToolContext(ctx, chatID, thread, project, worktreeInfo)
+	// A workflow run step, marked by the server (ToolRequest.RunStep). Read
+	// from the context map only — never from toolInput, which a model writes.
+	toolContext.RunStep, _ = contextMap[RunStepContextKey].(bool)
 
 	// Decode the project's nested repos so tools with a `repo` param can
 	// resolve it to a workspace-relative path. Absent when single-repo.
@@ -213,6 +234,14 @@ func (e *LocalToolExecutor) executeTool(
 			ErrorCode:    "TOOL_NOT_FOUND",
 		}
 	}
+
+	// Admitted only once the tool is known to exist, so a daemon without it
+	// still answers TOOL_NOT_FOUND (which is how prefer-daemon falls back).
+	releaseEgress, refusal := e.admitEgress(ctx, toolName, toolInput)
+	if refusal != nil {
+		return refusal
+	}
+	defer releaseEgress()
 
 	// Apply timeout
 	if timeoutMs > 0 {

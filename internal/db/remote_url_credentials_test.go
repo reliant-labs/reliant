@@ -9,7 +9,6 @@ import (
 
 	forgedb "github.com/reliant-labs/reliant/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,10 +58,6 @@ func TestStoreNeverPersistsRemoteCredentials(t *testing.T) {
 	r := &core.Repo{ID: "rc-repo", ProjectID: p.ID, Name: "app", RelativePath: ".", RemoteURL: &leaked, CreatedAt: now, UpdatedAt: now}
 	require.NoError(t, repo.CreateRepo(ctx, r))
 	assert.Equal(t, cleanRemote, rawRemote(t, raw, "repos", r.ID).String, "CreateRepo")
-
-	r.RemoteURL = &other
-	require.NoError(t, store.ReplaceRepo(ctx, repo.ORM(), r))
-	assert.Equal(t, "https://gitlab.com/g/p.git", rawRemote(t, raw, "repos", r.ID).String, "ReplaceRepo")
 
 	// A lookup by the leaked form finds the clean row: a caller that still
 	// holds a token URL does not create a duplicate project.

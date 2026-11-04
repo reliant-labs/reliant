@@ -19,7 +19,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/observability"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -77,17 +76,17 @@ type apiOptions struct {
 	MaxUploadSize       int64
 	WorktreeAutoArchive worktreesweep.AutoArchiveMode
 
-	Log           logging.Settings
-	ControlPlane  controlplane.Endpoint
-	PublicURL     string
-	VaultKey      string
-	Webhooks      webhook.RegistryConfig
-	GitHubAppSlug string
-	GitHubBot     github.OurBot
-	Observability observability.Settings
-	Sentry        telemetry.SentryConfig
-	Analytics     analytics.Settings
-	LLM           drivers.Settings
+	Log                logging.Settings
+	ControlPlane       controlplane.Endpoint
+	AllowPrivateEgress bool
+	PublicURL          string
+	VaultKey           string
+	Webhooks           webhook.RegistryConfig
+	GitHubAppSlug      string
+	GitHubBot          github.OurBot
+	Observability      observability.Settings
+	Analytics          analytics.Settings
+	LLM                drivers.Settings
 
 	PayloadGCHorizon time.Duration
 	Preview          tools.PreviewSettings
@@ -128,7 +127,6 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *apiOptions) error {
 	opts.LLM = app.LLMSettings(process.GetLlm())
 	opts.Preview = app.PreviewSettings(process.GetPreview())
 	opts.DatabasePool = app.DatabasePool(database)
-	opts.Sentry = app.SentrySettings(process.GetSentry(), process.GetObservability())
 	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = app.TemporalEndpoint(process.GetTemporal())
 	opts.GRPCPort = int(api.GetGrpcPort())
 	opts.PprofPort = int(api.GetPprofPort())
@@ -158,6 +156,7 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *apiOptions) error {
 	opts.WorktreeAutoArchive = worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive())
 	opts.Log = logSettings(base)
 	opts.ControlPlane = app.ControlPlaneEndpoint(process.GetControlPlane())
+	opts.AllowPrivateEgress = app.AllowPrivateEgress(process.GetNetwork())
 	opts.PublicURL, opts.VaultKey, opts.Webhooks = in.PublicURL, in.VaultKey, in.Webhooks
 	opts.GitHubAppSlug, opts.GitHubBot = in.GitHubAppSlug, in.GitHubBot
 	opts.Observability = observabilitySettings(process.GetObservability(), base)

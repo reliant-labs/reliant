@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -18,16 +19,20 @@ import (
 
 // fakeExchanger answers per server and counts calls.
 type fakeExchanger struct {
-	now     func() time.Time
-	ttl     time.Duration
-	refuse  map[string]error
+	now    func() time.Time
+	ttl    time.Duration
+	refuse map[string]error
+	// grant, when set, is the most the server hands out (it omits the rest).
+	grant   []string
 	calls   []string
 	minted  int
 	lastAud string
+	orgs    []string
 }
 
-func (f *fakeExchanger) Exchange(_ context.Context, server, bearer, audience string, scopes []string) (Exchanged, error) {
+func (f *fakeExchanger) Exchange(_ context.Context, server, bearer, audience string, scopes []string, orgID string) (Exchanged, error) {
 	f.calls = append(f.calls, server)
+	f.orgs = append(f.orgs, orgID)
 	f.lastAud = audience
 	if err := f.refuse[server]; err != nil {
 		return Exchanged{}, err
@@ -36,14 +41,33 @@ func (f *fakeExchanger) Exchange(_ context.Context, server, bearer, audience str
 	return Exchanged{
 		Token:     "rlat_exchanged_" + strings.Repeat("x", f.minted) + "_from_" + bearer[len(bearer)-4:],
 		ExpiresAt: f.now().Add(f.ttl),
-		Scopes:    scopes,
+		Scopes:    f.narrow(scopes),
 	}, nil
+}
+
+func (f *fakeExchanger) narrow(asked []string) []string {
+	if f.grant == nil {
+		return asked
+	}
+	var out []string
+	for _, s := range asked {
+		if slices.Contains(f.grant, s) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func newTestHelper(t *testing.T, sessions []Session, ex *fakeExchanger, clock *time.Time) Service {
 	t.Helper()
+	return newOrgHelper(t, sessions, ex, clock, "")
+}
+
+func newOrgHelper(t *testing.T, sessions []Session, ex *fakeExchanger, clock *time.Time, org string) Service {
+	t.Helper()
 	ex.now = func() time.Time { return *clock }
 	return New(Deps{
+		Org:       org,
 		Sessions:  func() ([]Session, error) { return sessions, nil },
 		Exchanger: ex,
 		CachePath: filepath.Join(t.TempDir(), "forge-token-cache.json"),
@@ -218,5 +242,98 @@ func TestMint_DenialCarriesTheServersScopeMissing(t *testing.T) {
 	_, err = h.Mint(context.Background(), req)
 	if !errors.As(err, &he) || he.Reason != "" || he.Scopes != nil {
 		t.Fatalf("err = %+v, want a denial with no structured reason", he)
+	}
+}
+
+func TestMint_RequestedScopesPassThroughAndKeyTheCache(t *testing.T) {
+	clock := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+	ex := &fakeExchanger{ttl: time.Hour}
+	h := newTestHelper(t, []Session{{Server: "https://api.example.com", Token: "rlat_session_AAAA", Kind: "daemon"}}, ex, &clock)
+	ask := func(scopes ...string) cloudcred.Token {
+		t.Helper()
+		tok, err := h.Mint(context.Background(), cloudcred.Request{Endpoint: req.Endpoint, Scopes: scopes})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tok
+	}
+
+	deploy := ask("deploy:write")
+	obs := ask("obs:read", "db:query")
+	if strings.Join(obs.Scopes, ",") != "obs:read,db:query" {
+		t.Fatalf("requested scopes must reach the exchange unchanged, got %v", obs.Scopes)
+	}
+	if obs.Token == deploy.Token || ex.minted != 2 {
+		t.Fatalf("a deploy token answered an obs request (minted=%d)", ex.minted)
+	}
+	if again := ask("db:query", "obs:read"); again.Token != obs.Token || ex.minted != 2 {
+		t.Fatalf("the same scope set in another order must reuse the token (minted=%d)", ex.minted)
+	}
+	if again := ask("deploy:write"); again.Token != deploy.Token || ex.minted != 2 {
+		t.Fatalf("alternating requests must not evict each other (minted=%d)", ex.minted)
+	}
+}
+
+func TestMint_ANarrowerTokenThanAskedIsNotCached(t *testing.T) {
+	clock := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+	ex := &fakeExchanger{ttl: time.Hour, grant: []string{"obs:read"}}
+	h := newTestHelper(t, []Session{{Server: "https://api.example.com", Token: "rlat_session_AAAA", Kind: "daemon"}}, ex, &clock)
+	ask := cloudcred.Request{Endpoint: req.Endpoint, Scopes: []string{"obs:read", "db:query"}}
+
+	first, err := h.Mint(context.Background(), ask)
+	if err != nil || strings.Join(first.Scopes, ",") != "obs:read" {
+		t.Fatalf("first = %+v %v", first, err)
+	}
+	// The admin grants db:query a minute later: the next command must ask again.
+	ex.grant = []string{"obs:read", "db:query"}
+	clock = clock.Add(time.Minute)
+	second, err := h.Mint(context.Background(), ask)
+	if err != nil || strings.Join(second.Scopes, ",") != "obs:read,db:query" || ex.minted != 2 {
+		t.Fatalf("second = %+v %v minted=%d: the narrow token was served from the cache", second, err, ex.minted)
+	}
+	// A complete answer is cached as before.
+	if third, _ := h.Mint(context.Background(), ask); third.Token != second.Token || ex.minted != 2 {
+		t.Fatalf("a token that covered the ask must be reused (minted=%d)", ex.minted)
+	}
+}
+
+// The org a token acts in is part of what makes it reusable: a token minted
+// for org A must never be handed out when forge asked for org B, and the
+// exchange must name the org asked for (and none when none was).
+func TestMint_ExchangeNamesTheOrgAndTheCacheIsKeyedByIt(t *testing.T) {
+	clock := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+	sessions := []Session{{Server: "https://api.example.com", Token: "rlat_session_AAAA", Kind: "daemon"}}
+	path := filepath.Join(t.TempDir(), "forge-token-cache.json")
+	ex := &fakeExchanger{ttl: time.Hour, now: func() time.Time { return clock }}
+	helper := func(org string) Service {
+		return New(Deps{
+			Org: org, Sessions: func() ([]Session, error) { return sessions, nil },
+			Exchanger: ex, CachePath: path, Now: func() time.Time { return clock },
+		})
+	}
+
+	a1, err := helper("org-a").Mint(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b1, err := helper("org-b").Mint(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a1.Token == b1.Token || ex.minted != 2 {
+		t.Fatalf("org-b was served org-a's cached token (minted=%d)", ex.minted)
+	}
+	// Each org then reuses its own.
+	a2, _ := helper("org-a").Mint(context.Background(), req)
+	b2, _ := helper("org-b").Mint(context.Background(), req)
+	if a2.Token != a1.Token || b2.Token != b1.Token || ex.minted != 2 {
+		t.Fatalf("each org should reuse its own token: minted=%d", ex.minted)
+	}
+	// No org asked: a third identity, and the exchange names none.
+	if _, err := helper("").Mint(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(ex.orgs, ","); got != "org-a,org-b," {
+		t.Fatalf("exchange orgs = %q, want org-a,org-b,<none>", got)
 	}
 }

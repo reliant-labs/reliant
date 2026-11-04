@@ -108,6 +108,15 @@ const (
 	ToolGetCELRef              = "get_cel_reference"
 	ToolCELEval                = "cel_eval"
 
+	// Existing trigger inspection and manual firing; no activation writes.
+	ToolListTriggers            = "list_triggers"
+	ToolFireTrigger             = "fire_trigger"
+	ToolCreateTriggerActivation = "create_trigger_activation"
+	ToolUpdateTriggerActivation = "update_trigger_activation"
+	ToolEnableTrigger           = "enable_trigger"
+	ToolPauseTrigger            = "pause_trigger"
+	ToolListTriggerEvents       = "list_trigger_events"
+
 	// Integration discovery tools
 	ToolSearchIntegrations   = "search_integrations"
 	ToolGetIntegrationSchema = "get_integration_schema"
@@ -122,13 +131,16 @@ const (
 
 	// Machine tools
 	ToolWaitForMachine = "wait_for_machine"
+	// The user's own machines: list them; start, stop or resize one.
+	ToolListMachines  = "list_machines"
+	ToolManageMachine = "manage_machine"
 )
 
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
-	ToolWaitForMachine,
+	ToolWaitForMachine, ToolListMachines, ToolManageMachine,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,
@@ -153,6 +165,9 @@ var AllToolNames = []string{
 	ToolCreateWorkflow, ToolEditWorkflow, ToolWriteWorkflow,
 	// Workflow discovery
 	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef, ToolCELEval,
+	// Trigger tools
+	ToolListTriggers, ToolFireTrigger, ToolListTriggerEvents,
+	ToolCreateTriggerActivation, ToolUpdateTriggerActivation, ToolEnableTrigger, ToolPauseTrigger,
 	// Integration discovery
 	ToolSearchIntegrations, ToolGetIntegrationSchema,
 	// Integration manifests: every exposed action in internal/integrations/catalog.
@@ -164,7 +179,7 @@ var AllToolNames = []string{
 	"github__pr_update", "github__pr_review_create", "github__pr_reviews_list", "github__pr_review_comments_list",
 	"github__pr_review_comment_reply",
 	"github__repo_list_for_user", "github__repo_get", "github__branch_get", "github__repo_get_content", "github__repo_get_tree",
-	"github__code_search", "github__workflow_dispatch",
+	"github__code_search", "github__workflow_dispatch", "github__check_run_list",
 	"gmail__message_send", "gmail__message_list", "gmail__message_get", "gmail__label_list",
 	"slack__message_post", "slack__message_reply", "slack__message_update", "slack__reaction_add",
 	"slack__user_lookup_by_email", "slack__conversations_list", "slack__conversations_history",

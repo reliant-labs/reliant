@@ -34,6 +34,7 @@ const EDITOR_FREE_PREFIXES = [
   "/reset-password",
   "/verify-email",
   "/upgrade",
+  "/claim",
 ] as const;
 
 /** True when `pathname` is `prefix` or a path segment beneath it. */

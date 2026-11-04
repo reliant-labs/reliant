@@ -27,4 +27,10 @@ type Executor interface {
 
 	// ListProcesses lists all background processes, both running and completed.
 	ListProcesses(ctx context.Context) ([]*ProcessInfo, error)
+
+	// TouchProcesses records that an agent used these background processes,
+	// resetting their idle time for the daemon's idle reaper. Agent tools
+	// call it (shell_output, shell_wait, shell_list, shell_kill); a poll
+	// nobody asked for must not, or nothing would ever be idle.
+	TouchProcesses(ctx context.Context, processIDs []string) error
 }

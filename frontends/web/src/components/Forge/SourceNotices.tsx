@@ -33,10 +33,10 @@ function Strip({
   return (
     <div
       data-testid={testId}
-      className="flex items-start gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
+      className="flex items-start gap-2 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-ink-muted"
     >
       <Icon
-        className={tone === "problem" ? "mt-px h-3.5 w-3.5 shrink-0 text-warning" : "mt-px h-3.5 w-3.5 shrink-0"}
+        className={tone === "problem" ? "mt-px h-3.5 w-3.5 shrink-0 text-warning-ink" : "mt-px h-3.5 w-3.5 shrink-0"}
         aria-hidden="true"
       />
       <div className="min-w-0 space-y-0.5">{children}</div>
@@ -58,7 +58,7 @@ export function DaemonOfflineNotice({
   return (
     <Strip testId="forge-daemon-offline" tone="problem">
       <p>
-        <span className="font-medium text-foreground">Your daemon is offline.</span> {scope}
+        <span className="font-medium text-ink">Your daemon is offline.</span> {scope}
       </p>
       {detail && <p className="font-mono text-2xs">{detail}</p>}
     </Strip>
@@ -111,7 +111,7 @@ export function CloudNotice({
       return (
         <Strip testId="forge-cloud-unreachable" tone="problem">
           <p>
-            <span className="font-medium text-foreground">
+            <span className="font-medium text-ink">
               Couldn&apos;t load this project&apos;s environments.
             </span>{" "}
             They haven&apos;t gone anywhere — try again in a moment.

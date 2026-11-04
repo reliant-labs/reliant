@@ -106,6 +106,11 @@ vi.mock('@/hooks/observability-queries', async () => {
   }
 })
 
+vi.mock('@/hooks/observability-billing-queries', async () => {
+  const { ConnectError, Code } = await import('@connectrpc/connect')
+  return { useObsBillingUsage: () => ({ isPending: false, error: new ConnectError('Not deployed', Code.Unimplemented), refetch: vi.fn() }) }
+})
+
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
   // Real object, not a stub: `useRedeemCoupon` (from the OTHER hook module,
   // which is not mocked) dereferences these keys in its own onSuccess to
@@ -123,7 +128,9 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useComputeSubscription: () => query(undefined),
   useWalletOverview: () => query(undefined),
   useComputeUsage: () => query(usageState.current),
-  usePlans: () => query(undefined),
+  // No plans for sale, but the price list's weights: a coupon-only account
+  // counts its hours at the coupon unit (M), weight 1 here.
+  usePlans: () => query({ plans: [], daemonPricing: { pricingVersion: 'test-version', sizes: [{ size: 'm', costWeight: '1/1' }] } }),
   useCurrentUserInvoices: () => query(undefined),
   useBillingEmail: () => query(undefined),
   useSetComputeOverage: () => mutation(),
@@ -139,6 +146,14 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
 
 import { RedeemedCouponKind } from '@/gen/controlplane/services/billing/v1/billing_pb';
 import { BillingSection } from '@/components/Settings/cloud/billing'
+import { ObsQuotaBanner } from '@/components/Forge/Observability/ObsStates'
+import { ObsQuotaProvider, useObsQuota } from '@/services/controlPlane/observability/ObsQuotaContext'
+import { settingsSearchSchema } from '@/routeSchemas'
+
+function QuotaUsageLink() {
+  const { store } = useObsQuota()
+  return <><ObsQuotaBanner /><button onClick={() => store.report({ limit: 'queries', lane: 'interactive', resetsAtMs: Date.now() + 60_000, soft: false })}>Exhaust quota</button></>
+}
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -163,14 +178,36 @@ describe('BillingSection', () => {
       screen.getByRole('heading', { level: 1, name: /billing/i }),
     ).toBeInTheDocument()
 
-    // Exactly three, in order. An inclusion-only check would still pass if a
-    // fourth tab came back, and the whole point of the merge was that the
-    // strip stops being a filing cabinet.
+    // Exactly these, in order. An inclusion-only check would still pass if
+    // invoices came back as its own tab, and the whole point of that merge was
+    // that the strip stops being a filing cabinet. Reliant AI's keys and spend
+    // moved here from Settings → AI, where Reliant appeared three times.
     expect(screen.getAllByRole('tab').map((t) => t.textContent?.trim())).toEqual([
       'Overview',
       'Change plan',
       'Usage & invoices',
+      'Reliant AI',
     ])
+  })
+
+  it('mounts observability usage directly at the real quota banner destination', () => {
+    obsState.orgId = 'org-fixture'
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const banner = render(<QueryClientProvider client={client}><ObsQuotaProvider><QuotaUsageLink /></ObsQuotaProvider></QueryClientProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Exhaust quota' }))
+    const destination = new URL(screen.getByTestId('obs-quota-usage').getAttribute('href')!, 'https://app.example.test')
+    expect(destination.pathname).toBe('/settings/billing')
+    routerState.search = settingsSearchSchema.parse(Object.fromEntries(destination.searchParams))
+    banner.unmount()
+
+    renderSection()
+    expect(screen.getByRole('tab', { name: /usage & invoices/i })).toHaveAttribute('aria-selected', 'true')
+    const usageSection = screen.getByTestId('billing-observability-usage')
+    expect(usageSection.id).toBe('observability')
+    const hashTarget = document.getElementById(destination.hash.slice(1))
+    expect(hashTarget).not.toBeNull()
+    expect(usageSection).toContainElement(hashTarget)
+    expect(hashTarget).toHaveTextContent('Observability usage')
   })
 
   it('shows the plans empty state when no plans are configured', () => {
@@ -204,12 +241,12 @@ describe('BillingSection', () => {
     expect(section).toHaveTextContent('Customer metadata')
   })
 
-  it('shows no observability usage before an org exists', () => {
+  it('explains unavailable observability usage before an org exists', () => {
     renderSection()
 
     fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
-    expect(screen.queryByTestId('billing-observability-usage')).not.toBeInTheDocument()
+    expect(screen.getByTestId('billing-observability-usage')).toHaveTextContent('select an organization first')
   })
 
   it('shows the usage empty state on the merged tab', () => {
@@ -227,10 +264,12 @@ describe('BillingSection', () => {
   // billing period, a grant depletes once and does not renew.
   describe('coupon (granted) hours', () => {
     const usage = (grantedMinutes: number) => ({
-      includedSmallDaemonSeconds: 36000,
-      usedSmallDaemonSeconds: 3600,
-      remainingSmallDaemonSeconds: 32400 + grantedMinutes * 60,
-      runningMultiplier: 0,
+      pricingVersion: 'test-version',
+      allowanceWeightedSeconds: '36000/1',
+      consumedWeightedSeconds: '3600/1',
+      remainingWeightedSeconds: '32400/1',
+      grantRemainingWeightedSeconds: String(grantedMinutes * 60),
+      runningCostWeightSum: '0/1',
       estimatedOverageCostCents: 0,
       bySize: [],
       grantedSmallDaemonSecondsRemaining: grantedMinutes * 60,
@@ -242,7 +281,7 @@ describe('BillingSection', () => {
       renderSection()
 
       expect(screen.getByText(/coupon hours/i)).toBeInTheDocument()
-      expect(screen.getByText('2 h (Small)')).toBeInTheDocument()
+      expect(screen.getByText('2 hours')).toBeInTheDocument()
       // The distinction from included minutes has to be legible, not implied.
       expect(screen.getByText(/does not renew/i)).toBeInTheDocument()
     })
@@ -254,9 +293,10 @@ describe('BillingSection', () => {
       fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
       expect(screen.getByText(/coupon hours remaining/i)).toBeInTheDocument()
-      expect(screen.getByText('1.5 h (Small)')).toBeInTheDocument()
+      expect(screen.getByText('1.5 hours')).toBeInTheDocument()
       // Included stays the plan's own 600 min / 10 h — the grant is not folded in.
-      expect(screen.getByText('10 h')).toBeInTheDocument()
+      expect(screen.getByText('10 hours included')).toBeInTheDocument()
+      expect(screen.queryByText(/weighted|pricing version|display-only/i)).not.toBeInTheDocument()
     })
 
     it('omits the row entirely when no coupon has been redeemed', () => {
@@ -317,7 +357,7 @@ describe('BillingSection', () => {
       fireEvent.click(screen.getByRole('button', { name: /^redeem$/i }))
 
       expect(
-        await screen.findByText(/added \$25\.00 to your balance/i),
+        await screen.findByText(/added \$25 to your balance/i),
       ).toBeInTheDocument()
       expect(couponState.redeem).toHaveBeenCalledWith('welcome25')
     })
@@ -338,12 +378,10 @@ describe('BillingSection', () => {
       })
       fireEvent.click(screen.getByRole('button', { name: /^redeem$/i }))
 
-      expect(
-        await screen.findByText(/added 2 hours on a small machine/i),
-      ).toBeInTheDocument()
-      expect(
-        screen.getByText(/3 hours on a small machine available/i),
-      ).toBeInTheDocument()
+      expect(await screen.findByText(/Added 2 hours on an M machine/)).toBeInTheDocument()
+      // No reconciliation step exists, so the confirmation never claims one.
+      expect(screen.queryByText(/reconciliation/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/3 hours on a small machine available/i)).not.toBeInTheDocument()
     })
 
     it("surfaces the server's own message when a code is rejected", async () => {

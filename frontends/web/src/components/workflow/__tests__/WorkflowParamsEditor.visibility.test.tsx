@@ -16,14 +16,16 @@ import { createInput, getInputUI, type InputDef } from "../../../lib/inputHelper
 
 // The editor's type-specific inputs reach for presets, models and the project;
 // none of that is under test here.
-vi.mock("../../../api/preset-grpc", () => ({ presetGrpc: { listPresets: vi.fn(async () => []) } }));
+vi.mock("../../../hooks/preset-queries", () => ({
+  useProjectPresets: () => ({ presets: [], invalidPresets: [], loading: false, error: null }),
+}));
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector?: any) => {
     const state = { currentProject: null };
     return selector ? selector(state) : state;
   },
 }));
-vi.mock("../../../store/globalDataStore", () => ({ useModels: () => [] }));
+vi.mock("../../../store/globalDataStore", () => ({ useModels: () => ({ models: [], loading: false }) }));
 vi.mock("../ToolsSelector", () => ({ ToolsSelector: () => null }));
 
 import { WorkflowParamsEditorContent } from "../WorkflowParamsEditor";
@@ -36,8 +38,23 @@ function renderEditor(param: InputDef) {
       onUpdate,
     }),
   );
-  const select = screen.getByLabelText(/visibility in chat/i) as HTMLSelectElement;
+  const select = screen.getByLabelText(/visibility in chat/i);
   return { select, onUpdate };
+}
+
+/** Opens the Visibility picker and returns the placements it offers, in order. */
+async function offered(select: HTMLElement): Promise<string[]> {
+  await userEvent.click(select);
+  const values = within(screen.getByRole("listbox"))
+    .getAllByRole("option")
+    .map((o) => o.getAttribute("data-value") ?? "");
+  await userEvent.keyboard("{Escape}");
+  return values;
+}
+
+async function choose(select: HTMLElement, name: RegExp) {
+  await userEvent.click(select);
+  await userEvent.click(screen.getByRole("option", { name }));
 }
 
 /** The `ui` value of the `mode` param in the editor's latest onUpdate call. */
@@ -47,47 +64,51 @@ function lastUi(onUpdate: ReturnType<typeof vi.fn>): string | undefined {
 }
 
 describe("WorkflowParamsEditor visibility", () => {
-  it("shows a toolbar param as Toolbar, not as a generic 'visible' option", () => {
+  it("shows a toolbar param as Toolbar, not as a generic 'visible' option", async () => {
     const { select } = renderEditor(createInput("enum", { ui: "toolbar", enumValues: ["a", "b"] }));
-    expect(select.value).toBe("toolbar");
-    expect(within(select).getByRole("option", { name: /toolbar/i })).toBeInTheDocument();
+    expect(select).toHaveTextContent(/^Toolbar$/);
+    expect(await offered(select)).toContain("toolbar");
   });
 
-  it("offers exactly the three placements the composer understands", () => {
+  it("offers exactly the three placements the composer understands", async () => {
     const { select } = renderEditor(createInput("boolean"));
-    const values = within(select).getAllByRole("option").map((o) => (o as HTMLOptionElement).value);
-    expect(values).toEqual(["toolbar", "settings", "hidden"]);
+    expect(await offered(select)).toEqual(["toolbar", "settings", "hidden"]);
     // No value means "behind ⚙" — the composer's default.
-    expect(select.value).toBe("settings");
+    expect(select).toHaveTextContent(/^Settings$/);
   });
 
   it("writes ui: toolbar when promoted to the toolbar", async () => {
     const { select, onUpdate } = renderEditor(createInput("boolean"));
-    await userEvent.selectOptions(select, "toolbar");
+    await choose(select, /^Toolbar/);
     expect(lastUi(onUpdate)).toBe("toolbar");
   });
 
   it("clears ui when moved back to Settings, rather than writing a value", async () => {
     const { select, onUpdate } = renderEditor(createInput("enum", { ui: "toolbar", enumValues: ["a"] }));
-    await userEvent.selectOptions(select, "settings");
+    await choose(select, /^Settings/);
     expect(lastUi(onUpdate) ?? "").toBe("");
   });
 
   it("writes ui: hidden", async () => {
     const { select, onUpdate } = renderEditor(createInput("string"));
-    await userEvent.selectOptions(select, "hidden");
+    await choose(select, /^Hidden/);
     expect(lastUi(onUpdate)).toBe("hidden");
   });
 
-  it("does not offer Toolbar for a type the toolbar cannot render", () => {
+  it("does not offer Toolbar for a type the toolbar cannot render", async () => {
     const { select } = renderEditor(createInput("tools"));
-    const values = within(select).getAllByRole("option").map((o) => (o as HTMLOptionElement).value);
-    expect(values).toEqual(["settings", "hidden"]);
+    expect(await offered(select)).toEqual(["settings", "hidden"]);
+  });
+
+  // The composer renders a model param as a model picker pill (#624).
+  it("offers Toolbar for a model param", async () => {
+    const { select } = renderEditor(createInput("model"));
+    expect(await offered(select)).toEqual(["toolbar", "settings", "hidden"]);
   });
 
   it("leaves a renderer hint like textarea alone until the placement changes", () => {
     const { select, onUpdate } = renderEditor(createInput("string", { ui: "textarea" }));
-    expect(select.value).toBe("settings");
+    expect(select).toHaveTextContent(/^Settings$/);
     expect(onUpdate).not.toHaveBeenCalled();
   });
 });

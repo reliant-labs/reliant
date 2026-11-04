@@ -22,11 +22,7 @@
 
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { Code, ConnectError } from "@connectrpc/connect";
 
-import type { LiveEnv } from "@/services/forge/live";
-
-import { LiveReleases } from "../LiveReleases";
 import { CloudNotice } from "../../SourceNotices";
 
 /**
@@ -67,72 +63,6 @@ function expectNoInternalNouns(text: string) {
   }
 }
 
-function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
-  return {
-    id: "denv_01HZXABCDEF",
-    name: "prod",
-    project: "hounders",
-    kind: "persistent",
-    declaredShape: null,
-    declaredBy: null,
-    release: "",
-    releaseProvenance: null,
-    promotedByActor: "",
-    promotedByUserId: "",
-    phase: "unspecified",
-    observed: { state: "not-reported" },
-    drift: { state: "not-reported" },
-    driftDetail: "",
-    provenance: "",
-    holds: [],
-    ...overrides,
-  };
-}
-
-describe("the releases timeline", () => {
-  it("names nothing internal while loading, empty, or failing", () => {
-    const states = [
-      { promotions: undefined, isLoading: true, error: null },
-      { promotions: [], isLoading: false, error: null },
-      {
-        promotions: undefined,
-        isLoading: false,
-        error: new ConnectError("upstream connect error", Code.Unavailable) as unknown as Error,
-      },
-    ];
-
-    for (const state of states) {
-      const { container, unmount } = render(<LiveReleases env={liveEnv()} {...state} />);
-      expectNoInternalNouns(container.textContent ?? "");
-      unmount();
-    }
-  });
-
-  it("says what to do when it could not load, rather than why our side failed", () => {
-    render(
-      <LiveReleases
-        env={liveEnv()}
-        promotions={undefined}
-        isLoading={false}
-        error={new Error("rpc failed") as Error}
-      />
-    );
-    const text = screen.getByTestId("live-releases-error").textContent ?? "";
-    expect(text).toMatch(/couldn't load/i);
-    expect(text).toMatch(/try again/i);
-  });
-
-  it("no longer tells the reader to go and run git log themselves", () => {
-    // The retired copy. A history the screen refuses to show, with homework
-    // attached, is not a history.
-    const { container } = render(
-      <LiveReleases env={liveEnv()} promotions={[]} isLoading={false} error={null} />
-    );
-    expect(container.textContent ?? "").not.toMatch(/git log/i);
-    expect(container.textContent ?? "").not.toMatch(/\.forge\/promotions/);
-  });
-});
-
 describe("the unavailable notices", () => {
   it("say what the reader cannot see and what to do, naming nothing internal", () => {
     for (const availability of ["no-access", "not-configured", "unreachable"] as const) {
@@ -154,15 +84,3 @@ describe("the unavailable notices", () => {
   });
 });
 
-describe("a hosted environment's identity", () => {
-  it("never renders the id we file it under", () => {
-    // The row's id is a primary key. It appeared on screen once as an empty
-    // state ("none yet — this deploy creates it") that read as a fault the
-    // user had to fix.
-    const env = liveEnv({ id: "denv_01HZXABCDEF", release: "v12", provenance: "v12 · main@abc1234" });
-    const { container } = render(
-      <LiveReleases env={env} promotions={[]} isLoading={false} error={null} />
-    );
-    expect(container.textContent ?? "").not.toContain("denv_01HZXABCDEF");
-  });
-});

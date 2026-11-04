@@ -1,32 +1,10 @@
 import React from "react";
 import { create } from "zustand";
-import { api } from "../api/client";
-import { presetGrpc, type Preset } from "../api/preset-grpc";
+import { fetchModelList } from "../hooks/catalog-models";
 import { logger } from "../lib/logger";
 import { waitForConfig } from "../lib/configReady";
-import { useProjectStore } from "./projectStore";
-import {
-  invalidateWorkflowConfig,
-  usePresetsForWorkflowQuery,
-} from "../hooks/workflow-config-queries";
-
-// Re-export Preset type for consumers
-export type { Preset } from "../api/preset-grpc";
 
 // Type definitions
-export interface WorkflowDef {
-  name: string;
-  filename: string; // Filename/slug used for API calls
-  description: string;
-  step_count: number;
-  source: "builtin" | "user" | "project"; // Where the workflow comes from
-  updated_at?: string;
-  title?: string; // Definition-level display name
-  is_hidden?: boolean; // Whether the workflow is hidden from the workflow dropdown
-  status?: "draft" | "complete"; // Lifecycle: drafts are never runnable
-  automation_only?: boolean; // Chat trigger off: chat pickers must not offer it (isChatLaunchable)
-}
-
 interface Model {
   id: string;
   name: string;
@@ -64,18 +42,12 @@ interface GlobalDataState {
   // Data
   models: Model[];
   tiers: Record<string, TierResolution>;
-  workflows: WorkflowDef[];
-  presets: Preset[];
 
   // Loading states
   modelsLoading: boolean;
-  workflowsLoading: boolean;
-  presetsLoading: boolean;
 
   // Error states
   modelsError: string | null;
-  workflowsError: string | null;
-  presetsError: string | null;
 
   // Initialization
   isInitialized: boolean;
@@ -84,28 +56,16 @@ interface GlobalDataState {
   // Actions
   prefetch: () => Promise<void>;
   refetchModels: () => Promise<void>;
-  refetchWorkflows: (projectId: string) => Promise<void>;
-  refetchPresets: (projectId: string) => Promise<void>;
 }
-
-// In-flight dedup: collapse concurrent calls for the same projectId into one request
-let pendingWorkflowFetch: { projectId: string; promise: Promise<void> } | null = null;
-let pendingPresetFetch: { projectId: string; promise: Promise<void> } | null = null;
 
 export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   // Initial state
   models: [],
   tiers: {},
-  workflows: [],
-  presets: [],
 
   modelsLoading: false,
-  workflowsLoading: false,
-  presetsLoading: false,
 
   modelsError: null,
-  workflowsError: null,
-  presetsError: null,
 
   isInitialized: false,
   isPrefetching: false,
@@ -131,23 +91,15 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       }
 
       // Set all loading states
-      set({
-        modelsLoading: true,
-        workflowsLoading: true,
-        presetsLoading: true,
-      });
+      set({ modelsLoading: true });
 
-      // Fetch models only - workflows and presets require project context
       const [modelsResult] =
         await Promise.allSettled([
-        api.models.list().catch((error) => {
+        fetchModelList().catch((error) => {
           logger.error("[GlobalDataStore] Failed to fetch models:", error);
           throw error;
         }),
       ]);
-
-      // Workflows and presets are fetched per-project, not on prefetch
-      const workflowsResult = { status: "fulfilled" as const, value: { workflows: [] } };
 
     // Update store with results
     const newState = {
@@ -159,22 +111,12 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
         modelsResult.status === "fulfilled"
           ? modelsResult.value.tiers || {}
           : {},
-      workflows:
-        workflowsResult.status === "fulfilled"
-          ? workflowsResult.value.workflows || []
-          : [],
-      presets: [],
-
       modelsLoading: false,
-      workflowsLoading: false,
-      presetsLoading: false,
-
+    
       modelsError:
         modelsResult.status === "rejected"
           ? modelsResult.reason?.message || "Failed to fetch models"
           : null,
-      workflowsError: null, // Workflows are fetched per-project, not on prefetch
-      presetsError: null,
 
       isInitialized: true,
       isPrefetching: false,
@@ -187,8 +129,6 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
       set({ 
         isPrefetching: false,
         modelsLoading: false,
-        workflowsLoading: false,
-        presetsLoading: false,
       });
     }
   },
@@ -197,7 +137,7 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   refetchModels: async () => {
     set({ modelsLoading: true, modelsError: null });
     try {
-      const response = await api.models.list();
+      const response = await fetchModelList();
       set({
         models: response.models || [],
         tiers: response.tiers || {},
@@ -211,57 +151,6 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
     }
   },
 
-  refetchWorkflows: async (projectId: string) => {
-    // Every caller is a change (save, copy, delete, visibility) or a project
-    // switch; the cached definitions and preset lists go stale with it.
-    invalidateWorkflowConfig("workflows");
-    // Deduplicate concurrent calls for the same project
-    if (pendingWorkflowFetch && pendingWorkflowFetch.projectId === projectId) {
-      return pendingWorkflowFetch.promise;
-    }
-    set({ workflowsLoading: true, workflowsError: null });
-    const promise = (async () => {
-      try {
-        const response = await api.workflows.list(projectId);
-        set({ workflows: response.workflows || [], workflowsLoading: false });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to fetch workflows";
-        logger.error("[GlobalDataStore] Failed to refetch workflows:", error);
-        set({ workflowsError: errorMessage, workflowsLoading: false });
-      } finally {
-        pendingWorkflowFetch = null;
-      }
-    })();
-    pendingWorkflowFetch = { projectId, promise };
-    return promise;
-  },
-
-  refetchPresets: async (projectId: string) => {
-    // Every caller just saved, edited or deleted a preset (or switched
-    // project), so the cached per-workflow preset lists are stale.
-    invalidateWorkflowConfig("presets");
-    // Deduplicate concurrent calls for the same project
-    if (pendingPresetFetch && pendingPresetFetch.projectId === projectId) {
-      return pendingPresetFetch.promise;
-    }
-    set({ presetsLoading: true, presetsError: null });
-    const promise = (async () => {
-      try {
-        const presets = await presetGrpc.listPresets(projectId);
-        set({ presets, presetsLoading: false });
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to fetch presets";
-        logger.error("[GlobalDataStore] Failed to refetch presets:", error);
-        set({ presetsError: errorMessage, presetsLoading: false });
-      } finally {
-        pendingPresetFetch = null;
-      }
-    })();
-    pendingPresetFetch = { projectId, promise };
-    return promise;
-  },
 }));
 
 // React context for preloading - NOT CURRENTLY USED but keeping for future optimization
@@ -286,78 +175,6 @@ export const useModels = () => {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { models, tiers, loading: modelsLoading || isPrefetching, error: modelsError };
-};
-
-export const useWorkflows = () => {
-  const workflows = useGlobalDataStore((state) => state.workflows);
-  const workflowsLoading = useGlobalDataStore((state) => state.workflowsLoading);
-  const workflowsError = useGlobalDataStore((state) => state.workflowsError);
-  const isPrefetching = useGlobalDataStore((state) => state.isPrefetching);
-  const refetchWorkflows = useGlobalDataStore((state) => state.refetchWorkflows);
-  const projectId = useProjectStore((state) => state.currentProject?.id);
-
-  // Fetch on demand: if workflows are empty and nothing is already loading, trigger a fetch.
-  // This handles cases where the project store's refetchWorkflows call raced or failed.
-  React.useEffect(() => {
-    if (projectId && workflows.length === 0 && !workflowsLoading && !isPrefetching) {
-      refetchWorkflows(projectId);
-    }
-  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return { workflows, loading: workflowsLoading || isPrefetching, error: workflowsError };
-};
-
-export const usePresets = () => {
-  const presets = useGlobalDataStore((state) => state.presets);
-  const presetsLoading = useGlobalDataStore((state) => state.presetsLoading);
-  const presetsError = useGlobalDataStore((state) => state.presetsError);
-  return { presets, loading: presetsLoading, error: presetsError };
-};
-
-// Get presets filtered for a specific workflow, in the CURRENT project.
-// The chat composer's reading: its presets follow whichever project is open.
-export const usePresetsForWorkflow = (workflowName: string) => {
-  const projectId = useProjectStore((state) => state.currentProject?.id);
-  return useWorkflowPresets(projectId, workflowName);
-};
-
-const EMPTY_PRESETS: Preset[] = [];
-
-// Get presets filtered for a specific workflow in an explicit project.
-// This calls the ListPresetsForWorkflow gRPC endpoint which validates
-// that preset params exist in the workflow and match tags.
-//
-// Forms that are not bound to the open project (the Run… form, an
-// automation being edited for another project) must use this one: project
-// presets differ per project, so reading the current one would offer — and
-// store — presets the run's project does not have.
-//
-// Cached per (project, workflow) — see hooks/workflow-config-queries.ts. A
-// chat reopened within the stale window renders its presets on the first
-// frame instead of refetching them on every mount.
-export const useWorkflowPresets = (projectId: string | undefined, workflowName: string) => {
-  const query = usePresetsForWorkflowQuery(projectId, workflowName);
-  const enabled = !!projectId && !!workflowName;
-
-  React.useEffect(() => {
-    if (query.error) {
-      logger.error("[usePresetsForWorkflow] Failed to load presets", {
-        error: query.error,
-        workflowName,
-      });
-    }
-  }, [query.error, workflowName]);
-
-  return {
-    // Stable when empty: consumers list `presets` in effect dependencies.
-    presets: query.data ?? EMPTY_PRESETS,
-    loading: enabled && query.isPending,
-    error: query.error
-      ? query.error instanceof Error
-        ? query.error.message
-        : "Failed to load presets"
-      : null,
-  };
 };
 
 // Usage:

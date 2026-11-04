@@ -30,6 +30,19 @@ const getSecretVersions = vi.fn();
 const beginStepUp = vi.fn();
 const completeStepUp = vi.fn();
 
+// The env's declared shape, served per environment (GetEnvironmentShape).
+const SHAPE = {
+  kind: "self_managed",
+  workloads: [{ name: "api", runtime: "cluster", cluster: "gke" }],
+  secrets: [{ name: "STRIPE_KEY", provider: "hosted", declaredBy: ["api"] }],
+  domains: [],
+  clusters: [],
+};
+vi.mock("@/services/forge/live", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/forge/live")>()),
+  getEnvironmentShape: () => Promise.resolve(SHAPE),
+}));
+
 vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
   listSecrets: (...args: unknown[]) => listSecrets(...args),
@@ -54,13 +67,11 @@ const SELF_MANAGED: LiveEnv = {
   phase: "succeeded",
   provenance: "",
   holds: [],
-  declaredShape: {
-    kind: "self_managed",
-    workloads: [{ name: "api", runtime: "cluster", cluster: "gke" }],
-    secrets: [{ name: "STRIPE_KEY", provider: "hosted", declaredBy: ["api"] }],
-    domains: [],
-    clusters: [],
-  },
+  releaseProvenance: null,
+  observed: { state: "not-reported" },
+  drift: { state: "not-reported" },
+  driftDetail: "",
+  declared: true,
 } as LiveEnv;
 
 const SUMMARY = {

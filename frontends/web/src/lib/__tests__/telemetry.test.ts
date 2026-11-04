@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setRuntimeConfig } from "@/test/runtimeConfig";
 
 // The option matrix is pinned through the real initTelemetry(): what reaches
 // the runtime's initBrowserTelemetry is the privacy boundary, so the test
@@ -40,9 +41,9 @@ vi.mock("@reliantlabs/forge-web-runtime/telemetry", () => ({
 vi.mock("@hyperdx/browser", () => ({
   default: { setGlobalAttributes: runtime.setGlobalAttributes },
 }));
-vi.mock("../../store/privacyStore", () => ({
-  getPrivacySettings: () => privacy.state,
-  usePrivacyStore: { subscribe: privacy.subscribe },
+vi.mock("../../hooks/privacy-queries", () => ({
+  privacyConsent: () => privacy.state,
+  subscribePrivacyConsent: privacy.subscribe,
 }));
 vi.mock("../constants", () => ({ isDev: false }));
 vi.mock("../appBuild", () => ({
@@ -62,6 +63,7 @@ const ENDPOINT = "https://ingest.example.dev/k/rbk_x";
 
 type Config = {
   serviceName: string;
+  frontend?: string;
   serviceVersion?: string;
   environment?: string;
   endpoint?: string;
@@ -78,8 +80,9 @@ function lastConfig(): Config {
   return calls[calls.length - 1][0];
 }
 
-function stubEnv(env: Record<string, string>) {
-  for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v);
+/** Layer values over this test's runtime config document (config.js). */
+function stubConfig(values: Record<string, string>) {
+  setRuntimeConfig({ ...(window.__FORGE_CONFIG__ as Record<string, string>), ...values });
 }
 
 beforeEach(() => {
@@ -92,7 +95,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   delete (window as { electronAPI?: unknown }).electronAPI;
-  stubEnv({ VITE_OTEL_ENDPOINT: ENDPOINT, VITE_TELEMETRY_SINKS: "sentry,clickstack" });
+  setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT });
 });
 
 afterEach(() => {
@@ -100,26 +103,25 @@ afterEach(() => {
 });
 
 describe("initTelemetry: when it starts", () => {
+  it("reaches the runtime with a frontend name, never an anonymous page", async () => {
+    await initTelemetry();
+    expect(lastConfig().frontend).toBe("reliant-web");
+  });
+
   it("does not initialise when crash-reporting consent is off", async () => {
     privacy.state.crashReportingEnabled = false;
     expect(await initTelemetry()).toBe(false);
     expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
   });
 
-  it("does not initialise when the clickstack sink is off", async () => {
-    stubEnv({ VITE_TELEMETRY_SINKS: "sentry" });
+  it("does not initialise when the endpoint is `off`", async () => {
+    stubConfig({ OTEL_ENDPOINT: "off" });
     expect(await initTelemetry()).toBe(false);
     expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
   });
 
   it("does not initialise without an endpoint, so merging changes nothing by itself", async () => {
-    stubEnv({ VITE_OTEL_ENDPOINT: "" });
-    expect(await initTelemetry()).toBe(false);
-    expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
-  });
-
-  it("does not initialise with the flag unset and no endpoint (the default build)", async () => {
-    stubEnv({ VITE_OTEL_ENDPOINT: "", VITE_TELEMETRY_SINKS: "" });
+    stubConfig({ OTEL_ENDPOINT: "" });
     expect(await initTelemetry()).toBe(false);
     expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
   });
@@ -169,23 +171,21 @@ describe("initTelemetry: the options it passes", () => {
     expect(lastConfig().serviceVersion).toBe("1.8.1");
 
     resetTelemetryForTests();
-    stubEnv({ VITE_APP_VERSION: "build-42" });
+    vi.stubEnv("VITE_APP_VERSION", "build-42");
     await initTelemetry();
     expect(lastConfig().serviceVersion).toBe("build-42");
   });
 
   it("lists the app's backends so their requests carry a traceparent", async () => {
-    stubEnv({
-      VITE_API_URL: "https://api.example.dev",
-      VITE_GRPC_URL: "https://grpc.example.dev",
-      VITE_CONTROL_PLANE_API_URL: "https://cp.example.dev",
-      VITE_GATEWAY_URL: "https://gw.example.dev",
+    stubConfig({
+      API_URL: "https://api.example.dev",
+      CONTROL_PLANE_API_URL: "https://cp.example.dev",
+      GATEWAY_URL: "https://gw.example.dev",
     });
     await initTelemetry();
     expect(lastConfig().apiOrigins).toEqual(
       expect.arrayContaining([
         "https://api.example.dev",
-        "https://grpc.example.dev",
         "https://cp.example.dev",
         "https://gw.example.dev",
       ]),
@@ -196,7 +196,7 @@ describe("initTelemetry: the options it passes", () => {
     (window as { electronAPI?: unknown }).electronAPI = {
       getVersion: async () => "1.9.0-rc.2",
     };
-    stubEnv({ VITE_OTEL_REPLAY: "true", VITE_OTEL_REPLAY_SAMPLE_POLICY: "new-user-funnel" });
+    stubConfig({ OTEL_REPLAY: "true", OTEL_REPLAY_SAMPLE_POLICY: "new-user-funnel" });
     await initTelemetry();
     expect(lastConfig()).toMatchObject({ environment: "prerelease", replaySampleRate: 1 });
   });
@@ -220,24 +220,24 @@ describe("initTelemetry: the options it passes", () => {
 });
 
 describe("replay decision", () => {
-  it("keeps replay off unless VITE_OTEL_REPLAY is 'true'", async () => {
+  it("keeps replay off unless OTEL_REPLAY is 'true'", async () => {
     await initTelemetry();
     expect(lastConfig().replay).toBe(false);
 
     resetTelemetryForTests();
-    stubEnv({ VITE_OTEL_REPLAY: "true" });
+    stubConfig({ OTEL_REPLAY: "true" });
     await initTelemetry();
     expect(lastConfig().replay).toBe(true);
   });
 
   it("records a new user's sessions in full under the new-user-funnel policy", async () => {
-    stubEnv({ VITE_OTEL_REPLAY: "true", VITE_OTEL_REPLAY_SAMPLE_POLICY: "new-user-funnel" });
+    stubConfig({ OTEL_REPLAY: "true", OTEL_REPLAY_SAMPLE_POLICY: "new-user-funnel" });
     await initTelemetry();
     expect(lastConfig().replaySampleRate).toBe(1);
   });
 
   it("falls to 10% without the policy", async () => {
-    stubEnv({ VITE_OTEL_REPLAY: "true" });
+    stubConfig({ OTEL_REPLAY: "true" });
     await initTelemetry();
     expect(lastConfig().replaySampleRate).toBe(0.1);
   });
@@ -341,10 +341,18 @@ describe("user and error reporting", () => {
     expect(runtime.setTelemetryUser).toHaveBeenCalledWith(null);
   });
 
-  it("leaves the user alone when the clickstack sink is off", () => {
-    stubEnv({ VITE_TELEMETRY_SINKS: "sentry" });
+  it("leaves the user alone when no endpoint is configured", () => {
+    stubConfig({ OTEL_ENDPOINT: "" });
     setTelemetryUserId({ id: "u-1" });
     expect(runtime.setTelemetryUser).not.toHaveBeenCalled();
+  });
+
+  it("tells the Electron main process the user, whose own telemetry cannot see it", () => {
+    const setTelemetryUser = vi.fn(async () => {});
+    (window as { electronAPI?: unknown }).electronAPI = { setTelemetryUser };
+    setTelemetryUserId({ id: "u-1" });
+    setTelemetryUserId(null);
+    expect(setTelemetryUser.mock.calls).toEqual([["u-1"], [null]]);
   });
 
   it("reports a boundary-caught error with its component stack", () => {
@@ -363,20 +371,27 @@ describe("user and error reporting", () => {
     expect(attrs.componentStack.length).toBe(4000);
   });
 
-  it("does not report without consent or with the sink off", () => {
+  it("does not report without consent or without an endpoint", () => {
     privacy.state.crashReportingEnabled = false;
     reportErrorToTelemetry(new Error("boom"));
     privacy.state.crashReportingEnabled = true;
-    stubEnv({ VITE_TELEMETRY_SINKS: "sentry" });
+    stubConfig({ OTEL_ENDPOINT: "" });
     reportErrorToTelemetry(new Error("boom"));
     expect(runtime.reportException).not.toHaveBeenCalled();
   });
 });
 
 describe("buildTelemetryConfig", () => {
-  it("fixes the privacy options regardless of env", () => {
+  const base = { config: {}, prerelease: false, buildVersion: "1", replayRate: 1 };
+
+  it("names the forge frontend, so the SDK emits forge.frontend and the build's source maps can be found", () => {
+    expect(buildTelemetryConfig(base).frontend).toBe("reliant-web");
+    expect(buildTelemetryConfig({ ...base, desktop: true }).frontend).toBe("desktop");
+  });
+
+  it("fixes the privacy options regardless of config", () => {
     const config = buildTelemetryConfig({
-      env: { VITE_OTEL_REPLAY: "true" },
+      config: { OTEL_REPLAY: "true" },
       prerelease: false,
       buildVersion: "1",
       replayRate: 1,

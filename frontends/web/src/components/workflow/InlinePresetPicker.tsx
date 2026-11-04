@@ -1,12 +1,18 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { COMPOSER_CONTROL } from "../Chat/composerControl";
 import { useCallback, useState, useRef, useEffect } from "react";
 import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { ChevronDown, Check, Layers, Code2 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Tooltip } from "../ui/Tooltip";
-import type { Preset } from "../../store/globalDataStore";
+import Tooltip from "../forge-ui/tooltip";
+import type { Preset } from "../../hooks/preset-queries";
 import { isCelTemplate } from "../../lib/celTemplate";
+import type { ReactNode } from "react";
+
+function PresetPanel({ children }: { children: ReactNode }) {
+  return <div className="absolute bottom-full left-0 mb-1 min-w-48 rounded-lg border border-border bg-[var(--chat-dropdown-bg)] shadow-lg z-[1000] max-h-64 overflow-y-auto">{children}</div>;
+}
 
 interface InlinePresetPickerProps {
   // Available presets (filtered for the current workflow)
@@ -74,11 +80,6 @@ export function InlinePresetPicker({
   // Find the selected preset
   const selectedPreset = presets.find(p => p.name === value);
 
-  // Group presets by source
-  const userPresets = presets.filter(p => p.source === "user");
-  const builtinPresets = presets.filter(p => p.source === "builtin");
-  const projectPresets = presets.filter(p => p.source === "project");
-
   const handleSelect = (preset: Preset | null) => {
     onChange?.(preset);
     setIsOpen(false);
@@ -105,21 +106,22 @@ export function InlinePresetPicker({
               ? `${groupLabel ? groupLabel + ": " : ""}${selectedPreset.name}`
               : `Select ${groupLabel ? groupLabel + " preset" : "a preset"}`
         }
-        placement="top"
+        side="top"
       >
         <button
           type="button"
           onClick={handleTriggerClick}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1 rounded-full transition-colors text-xs font-medium h-6 px-2.5",
+            "flex items-center gap-1 rounded-full transition-colors text-xs font-medium px-2.5",
+            COMPOSER_CONTROL,
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
             valueIsTemplate
               ? "bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30"
               : isOpen
-                ? "bg-primary/20 text-primary"
+                ? "bg-primary/20 text-primary-ink"
                 : isStreaming
                   ? "bg-[var(--chat-button-bg-streaming)] text-[var(--chat-button-text-streaming)]"
                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]"
@@ -151,10 +153,9 @@ export function InlinePresetPicker({
       </Tooltip>
 
       {/* Replace confirmation for expression values */}
-      {showReplaceConfirm && (
-        <div
-          className="absolute bottom-full left-0 mb-1 z-[1001] rounded-md border border-border bg-[var(--chat-dropdown-bg)] shadow-lg p-3 w-64"
-        >
+      {showReplaceConfirm && canInteract && (
+        <PresetPanel>
+          <div className="p-3">
           <div className="text-xs font-medium text-foreground mb-1">
             Replace expression?
           </div>
@@ -184,94 +185,82 @@ export function InlinePresetPicker({
               Replace
             </button>
           </div>
-        </div>
+          </div>
+        </PresetPanel>
       )}
 
       {/* Dropdown */}
       {isOpen && canInteract && (
-        <div
-          {...escapeLayer}
-          className={cn(
-            "absolute bottom-full left-0 mb-1 min-w-48 rounded-lg border border-border bg-[var(--chat-dropdown-bg)] shadow-lg z-[1000]",
-            "max-h-64 overflow-y-auto"
-          )}
-        >
-          <div className="py-1">
-            {/* Header showing which group this preset applies to */}
-            {groupLabel && (
-              <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground border-b border-border/50">
-                {groupLabel} Preset
-              </div>
-            )}
-
-            {/* None Option */}
-            <button
-              type="button"
-              onClick={() => handleSelect(null)}
-              className={cn(
-                "w-full px-3 py-1.5 text-left text-xs transition-colors",
-                !value ? "bg-accent font-medium" : "hover:bg-accent/50"
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">None (use defaults)</span>
-                {!value && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
-              </div>
-            </button>
-
-            {/* User Presets */}
-            {userPresets.length > 0 && (
-              <>
-                <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
-                  User
-                </div>
-                {userPresets.map((preset) => (
-                  <PresetOption
-                    key={preset.name}
-                    preset={preset}
-                    isSelected={value === preset.name}
-                    onSelect={handleSelect}
-                  />
-                ))}
-              </>
-            )}
-
-            {/* Builtin Presets */}
-            {builtinPresets.length > 0 && (
-              <>
-                <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
-                  Built-in
-                </div>
-                {builtinPresets.map((preset) => (
-                  <PresetOption
-                    key={preset.name}
-                    preset={preset}
-                    isSelected={value === preset.name}
-                    onSelect={handleSelect}
-                  />
-                ))}
-              </>
-            )}
-
-            {/* Project Presets */}
-            {projectPresets.length > 0 && (
-              <>
-                <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
-                  Project
-                </div>
-                {projectPresets.map((preset) => (
-                  <PresetOption
-                    key={preset.name}
-                    preset={preset}
-                    isSelected={value === preset.name}
-                    onSelect={handleSelect}
-                  />
-                ))}
-              </>
-            )}
+        <PresetPanel>
+          <div {...escapeLayer}>
+            <PresetList presets={presets} value={value} onSelect={handleSelect} groupLabel={groupLabel} />
           </div>
+        </PresetPanel>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The preset choices for one target: "None", then the presets grouped by
+ * where they come from. The inline picker's dropdown and the composer's ⊕
+ * sheet page render this same list, so the two cannot drift.
+ */
+export function PresetList({
+  presets,
+  value,
+  onSelect,
+  groupLabel,
+}: {
+  presets: Preset[];
+  value?: string | null;
+  onSelect: (preset: Preset | null) => void;
+  groupLabel?: string;
+}) {
+  const groups: Array<[string, Preset[]]> = [
+    ["User", presets.filter(p => p.source === "user")],
+    ["Built-in", presets.filter(p => p.source === "builtin")],
+    ["Project", presets.filter(p => p.source === "project")],
+  ];
+  return (
+    <div className="py-1">
+      {/* Header showing which group this preset applies to */}
+      {groupLabel && (
+        <div className="px-3 py-1.5 text-xs font-semibold text-muted-foreground border-b border-border/50">
+          {groupLabel} Preset
         </div>
       )}
+
+      {/* None Option */}
+      <button
+        type="button"
+        onClick={() => onSelect(null)}
+        className={cn(
+          "w-full px-3 py-1.5 text-left text-xs transition-colors touch:min-h-[44px]",
+          !value ? "bg-accent font-medium" : "hover:bg-accent/50"
+        )}
+      >
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground">None (use defaults)</span>
+          {!value && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
+        </div>
+      </button>
+
+      {groups.map(([label, group]) => group.length > 0 && (
+        <div key={label}>
+          <div className="px-3 py-1 text-xs font-medium text-muted-foreground border-t border-border/30">
+            {label}
+          </div>
+          {group.map((preset) => (
+            <PresetOption
+              key={preset.name}
+              preset={preset}
+              isSelected={value === preset.name}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -288,7 +277,7 @@ function PresetOption({ preset, isSelected, onSelect }: PresetOptionProps) {
       type="button"
       onClick={() => onSelect(preset)}
       className={cn(
-        "w-full px-3 py-1.5 text-left text-xs transition-colors",
+        "w-full px-3 py-1.5 text-left text-xs transition-colors touch:min-h-[44px]",
         isSelected ? "bg-accent font-medium" : "hover:bg-accent/50"
       )}
     >
@@ -305,7 +294,7 @@ function PresetOption({ preset, isSelected, onSelect }: PresetOptionProps) {
           )}
         </div>
         {isSelected && (
-          <Check className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />
+          <Check className="w-3 h-3 text-primary-ink flex-shrink-0 mt-0.5" />
         )}
       </div>
     </button>

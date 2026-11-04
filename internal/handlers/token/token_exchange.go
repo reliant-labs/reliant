@@ -17,7 +17,9 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -41,8 +43,8 @@ import (
 // authority it does not hold (forge/pkg/accesstoken), so a credential issued
 // without deploy permission cannot become one that has it — and the scope list
 // Settings shows for a token stays the truth about what it can do, directly or
-// through here. The rest only ever narrows too: same acting user, same org,
-// same daemon binding, ephemeral if the caller is, and an expiry no later than
+// through here. The rest only ever narrows too: same acting user, the org asked for (the
+// caller's own when none is: see targetOrg), same daemon binding, ephemeral if the caller is, and an expiry no later than
 // the caller's own.
 //
 // ── THE AUDIENCE IS CHECKED BEFORE ANYTHING IS MINTED ────────────────
@@ -68,16 +70,23 @@ import (
 // this remains, so a command never starts on one about to lapse.
 const exchangeTTL = time.Hour
 
-// exchangeableScopes is the control-plane authority forge presents: deploy,
-// managed secrets, custom domains. Deliberately NOT cluster:manage or token:*
-// (org administration a deploy tool has no business holding), and never the
-// session scopes themselves (reliant:api, daemon:connect) — an exchanged token
-// that could connect a daemon would just be a second copy of the session.
-var exchangeableScopes = []fat.Scope{
-	fat.ScopeDeployRead, fat.ScopeDeployWrite,
-	fat.ScopeSecretRead, fat.ScopeSecretWrite,
-	fat.ScopeDomainRead, fat.ScopeDomainWrite,
-}
+// exchangeableScopes is what a helper may hold: the user's control-plane
+// capabilities (cliauth.ForgeScopes, derived from forge's catalog at this
+// binary's build), never session or specialized-resource authority. The child
+// is an explicit list of what the command asked for, intersected with what the
+// parent holds NOW — and a daemon's parent holds every scope its person holds
+// (the control plane resolves that wildcard at each introspection), so a scope
+// added to the catalog is exchangeable the release it ships in. Resource
+// validation remains authoritative: user-org capabilities may ride a
+// daemon-bound credential, preserving its lifecycle. Never drop that binding
+// to get a mint.
+var exchangeableScopes = func() []fat.Scope {
+	var scopes []fat.Scope
+	for _, scope := range cliauth.ForgeScopes() {
+		scopes = append(scopes, fat.Scope(scope))
+	}
+	return scopes
+}()
 
 // TokenControlPlane is what TokenService knows about the deployment's control
 // plane.
@@ -87,11 +96,6 @@ type TokenControlPlane struct {
 	// the only audience ExchangeToken mints for. Empty on a self-hosted server,
 	// which then issues no control-plane credentials at all.
 	Issuer string
-	// ClipsGrants reports that the authority clips an edited scope set to the
-	// acting user's org permissions — control-plane's UpdateForUser does, the
-	// self-hosted store does not. A DAEMON credential is given the user's
-	// control-plane authority only where that clipping exists.
-	ClipsGrants bool
 }
 
 // ExchangeToken trades the calling access token for a short-lived one carrying
@@ -148,10 +152,22 @@ func (s *Service) ExchangeToken(
 		// without parsing this sentence, which stays as it was.
 		return nil, svcerr.WithMetadata(svcerr.WithReason(svcerr.PermissionDenied(fmt.Sprintf(
 			"this Reliant credential cannot authorize %s: it holds %s. "+
-				"Sign in again with `reliant auth login` (it asks for deploy, secret and domain permission), "+
+				"Sign in again with `reliant auth login` (it asks for your control-plane permissions), "+
 				"or grant this credential those permissions in Reliant → Settings → Access Tokens",
 			fat.JoinScopes(requested), describeScopes(subject.Scopes))), fat.ReasonScopeMissing),
 			fat.ScopesHeader, fat.ScopesHeaderValue(requested))
+	}
+
+	// THE ORG IS THE ONE THING AN EXCHANGE MAY MOVE, and only to another org
+	// the same person belongs to. The request names it (the web's active org,
+	// forge's pinned org); unset, the token lands in the calling session's own
+	// org, exactly as before. The control plane judges membership and clips the
+	// scopes to the person's grants IN that org, so naming an org is never a
+	// way to hold more than the person does there; and the scopes are still
+	// capped by what the calling session holds, so it cannot widen either.
+	targetOrg := strings.TrimSpace(req.Msg.GetOrgId())
+	if targetOrg == "" {
+		targetOrg = subject.OrgID
 	}
 
 	expiresAt := time.Now().Add(exchangeTTL)
@@ -167,28 +183,35 @@ func (s *Service) ExchangeToken(
 		Resource:  subject.Resource,
 		Ephemeral: subject.Ephemeral,
 		ExpiresAt: &expiresAt,
+		OrgID:     targetOrg,
 		// Never rotate: replacing the previous exchange would revoke a token
 		// a long deploy in another process is still presenting.
 	})
 	if err != nil {
+		// Preserve the authority's membership refusal; it is not an outage.
+		var refused *accesstokenclient.RPCError
+		if errors.As(err, &refused) && refused.Code == "permission_denied" {
+			return nil, svcerr.WithReason(svcerr.PermissionDenied(refused.Message), refused.Reason)
+		}
 		return nil, authorityError("exchange", err)
 	}
 
-	// The org is the one dimension the mint does not take as input:
-	// MintForUser acts in the user's PRIMARY org, the caller's token in the
-	// org it was issued for. They agree unless the user's primary org changed
-	// in between, and an exchange must never move authority across orgs.
-	if err := s.confirmSameOrg(ctx, userID, minted, subject); err != nil {
+	// The token must have landed in the org that was asked for (the caller's
+	// own when none was): revoke it if a default that moved in between put it
+	// elsewhere.
+	if err := s.confirmOrg(ctx, userID, minted, targetOrg); err != nil {
 		return nil, err
 	}
 
 	logging.InfoContext(ctx, "access token exchanged", "user_id", userID, "subject_token_id", subject.TokenID,
-		"token_id", minted.TokenID, "scopes", fat.JoinScopes(granted), "expires_at", expiresAt.UTC().Format(time.RFC3339))
+		"token_id", minted.TokenID, "scopes", strings.Join(minted.Scopes, " "), "expires_at", expiresAt.UTC().Format(time.RFC3339))
 	out := &reliantv1.ExchangeTokenResponse{
 		Token:       minted.Plaintext,
 		TokenPrefix: minted.DisplayPrefix,
 		ExpiresAt:   formatTime(&expiresAt),
-		Scopes:      scopeStrings(granted),
+		// The authority may further narrow to the owner's CURRENT org grants.
+		Scopes: minted.Scopes,
+		OrgId:  targetOrg,
 	}
 	if minted.ExpiresAt != nil {
 		out.ExpiresAt = formatTime(minted.ExpiresAt)
@@ -221,11 +244,11 @@ func (s *Service) sessionCredential(ctx context.Context, header http.Header) (*f
 	return subject, nil
 }
 
-// confirmSameOrg introspects the freshly minted token and revokes it if it
-// landed in a different org from its parent.
-func (s *Service) confirmSameOrg(ctx context.Context, userID string, minted tokenauthority.Minted, subject *fat.Principal) error {
+// confirmOrg introspects the freshly minted token and revokes it if it landed
+// in a different org from the one asked for.
+func (s *Service) confirmOrg(ctx context.Context, userID string, minted tokenauthority.Minted, wantOrg string) error {
 	child, err := s.deps.Authority.Introspect(ctx, minted.Plaintext)
-	if err == nil && child.OrgID == subject.OrgID {
+	if err == nil && child.OrgID == wantOrg {
 		return nil
 	}
 	if revokeErr := s.deps.Authority.RevokeForUser(ctx, userID, minted.TokenID); revokeErr != nil {
@@ -235,9 +258,8 @@ func (s *Service) confirmSameOrg(ctx context.Context, userID string, minted toke
 	if err != nil {
 		return svcerr.WithCause(svcerr.Unavailable("token service unavailable"), err)
 	}
-	logging.WarnContext(ctx, "exchange refused: minted org differs from the calling token's", "user_id", userID,
-		"subject_token_id", subject.TokenID)
-	return svcerr.FailedPrecondition("your primary organization is not the one this credential was issued for; sign in to Reliant again")
+	logging.WarnContext(ctx, "exchange refused: minted org is not the requested one", "user_id", userID, "want_org", wantOrg)
+	return svcerr.FailedPrecondition("the credential landed in a different organization than the one requested; try again, or sign in to Reliant again")
 }
 
 // requestedExchangeScopes parses a request's scopes. Empty means every
@@ -270,14 +292,6 @@ func describeScopes(set fat.Set) string {
 		return "no permissions"
 	}
 	return set.String()
-}
-
-func scopeStrings(scopes []fat.Scope) []string {
-	out := make([]string, len(scopes))
-	for i, s := range scopes {
-		out[i] = string(s)
-	}
-	return out
 }
 
 // sameControlPlane reports whether audience names the control plane at issuer:

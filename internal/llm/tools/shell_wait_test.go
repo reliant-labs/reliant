@@ -27,6 +27,8 @@ type scriptedDaemon struct {
 	// listErrAfter injects a transient listing failure at step N (-1 = never),
 	// so the retry path can be exercised.
 	listErrAfter int
+	// touched records the process ids agent use was reported for.
+	touched []string
 }
 
 func (d *scriptedDaemon) ListProcesses(_ context.Context) ([]*daemon.ProcessInfo, error) {
@@ -51,6 +53,13 @@ func (d *scriptedDaemon) GetProcessOutput(_ context.Context, _ string, _ *daemon
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return &daemon.ProcessOutput{Output: d.output, TotalBytes: len(d.output)}, nil
+}
+
+func (d *scriptedDaemon) TouchProcesses(_ context.Context, ids []string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.touched = append(d.touched, ids...)
+	return nil
 }
 
 func (d *scriptedDaemon) listCalls() int {

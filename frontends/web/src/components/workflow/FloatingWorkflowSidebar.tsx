@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import {
   GitMerge,
   RefreshCw,
@@ -122,7 +122,7 @@ export function FloatingWorkflowSidebar({
               const Icon = getNodeIcon(node.id)
               const bgColor = getNodeBgColor(node.id)
               return (
-                <Tooltip key={node.id} content={node.description} placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip key={node.id} content={node.description} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   type="button"
                   onClick={() => onAddStep(node.id)}
@@ -180,7 +180,7 @@ export function FloatingWorkflowSidebar({
               ) : integrations.isError ? (
                 <div role="alert" className="flex items-center gap-2 px-2 py-1 text-xs">
                   <span className="text-muted-foreground">Couldn't load integrations.</span>
-                  <button type="button" onClick={integrations.refetch} className="font-medium text-primary hover:underline">
+                  <button type="button" onClick={integrations.refetch} className="font-medium text-primary-ink hover:underline">
                     Retry
                   </button>
                 </div>
@@ -204,7 +204,7 @@ export function FloatingWorkflowSidebar({
                     <button
                       type="button"
                       onClick={() => onOpenIntegration()}
-                      className="w-full rounded-md px-2 py-1 text-left text-xs font-medium text-primary transition-colors hover:bg-muted/60"
+                      className="w-full rounded-md px-2 py-1 text-left text-xs font-medium text-primary-ink transition-colors hover:bg-muted/60"
                     >
                       All {integrations.totalSize} integrations…
                     </button>

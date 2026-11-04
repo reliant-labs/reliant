@@ -5,6 +5,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 )
 
@@ -12,5 +13,6 @@ import (
 // heavy-slot wrapper, as cmd/reliant's main does (see local_exec_heavy_test.go).
 func TestMain(m *testing.M) {
 	heavyjob.Dispatch()
+	credsandbox.DispatchForTest()
 	os.Exit(m.Run())
 }

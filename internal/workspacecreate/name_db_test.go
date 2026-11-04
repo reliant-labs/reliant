@@ -61,7 +61,7 @@ func TestNameRule_FailedRowIsReplaced(t *testing.T) {
 	ctx := context.Background()
 	project := seedProject(t, repo)
 
-	req := Request{Project: project, Repos: []*core.Repo{{ID: "r", Name: "demo"}}, Name: "feat", Branch: "feat-1", OwnerDaemonID: "d1"}
+	req := Request{Project: project, Checkout: project.Path, Repos: []*core.Repo{{ID: "r", Name: "demo"}}, Name: "feat", Branch: "feat-1", OwnerDaemonID: "d1"}
 	failed, err := Insert(ctx, repo, req)
 	require.NoError(t, err)
 	failed.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)

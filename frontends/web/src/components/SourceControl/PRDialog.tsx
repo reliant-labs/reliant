@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
-import { Textarea } from "../ui/Textarea";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
+import Input from "../forge-ui/input";
+import Textarea from "../forge-ui/textarea";
+import Button from "@/components/forge-ui/button";
 import { GitPullRequest, Loader2, ExternalLink } from "lucide-react";
 import * as gitApi from "../../api/git";
 import { logger } from "../../lib/logger";
@@ -115,7 +116,8 @@ export function PRDialog({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={onClose}
       title="Create Pull Request"
       size="md"
@@ -175,7 +177,7 @@ export function PRDialog({
               }}
               onKeyDown={handleKeyDown}
               disabled={isCreating || !!prUrl}
-              className="text-sm"
+              className="forge-ui text-sm"
             />
           </div>
 
@@ -190,7 +192,8 @@ export function PRDialog({
               onChange={(e) => setBody(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isCreating || !!prUrl}
-              className="min-h-[120px] resize-none text-sm"
+              resize="none"
+              className="forge-ui min-h-[120px] text-sm"
             />
           </div>
 

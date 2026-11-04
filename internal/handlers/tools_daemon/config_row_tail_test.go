@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -72,12 +73,13 @@ func TestDaemonConfigSync_StalenessCheckReadsOnlyPushedAt(t *testing.T) {
 		ID: projectID, UserID: "test-user", Name: "tail", Path: projectPath, IsGitRepo: true,
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	require.NoError(t, repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+	_, err := repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
 		ProjectID: projectID, DaemonID: daemonID,
 		UserConfigYAML:    testStringPtr("user: existing"),
 		ProjectSkillsJSON: bigSkillsJSON(),
 		PushedAt:          time.UnixMilli(2000).UTC(),
-	}))
+	}, false)
+	require.NoError(t, err)
 
 	conn := &daemonConnection{
 		userID: "test-user", daemonID: daemonID,
@@ -126,4 +128,61 @@ func TestDaemonConfigSync_StalenessCheckReadsOnlyPushedAt(t *testing.T) {
 	require.Equal(t, int64(4000), record.PushedAt.UnixMilli())
 
 	require.Empty(t, spy.reads(), "the staleness check read the whole project config row")
+}
+
+// Two machines push snapshots of one project through the gateway: the newer
+// one, from a machine without control-plane's checkout, carries no workflows
+// or presets. The project's catalog keeps the first machine's files — the
+// incident where a new machine's snapshot made every trigger's workflow
+// vanish.
+func TestDaemonConfigSync_SecondMachineDoesNotEraseTheFirstsWorkflows(t *testing.T) {
+	repo := db.NewTestRepo(t)
+	svc := newTestService(repo)
+	defer svc.Close()
+	ctx := context.Background()
+
+	now := time.Now().UTC()
+	projectID := uuid.NewString()
+	projectPath := "/tmp/two-machines-" + uuid.NewString()
+	conns := map[string]*daemonConnection{}
+	for _, name := range []string{"default", "cicd"} {
+		id := uuid.NewString()
+		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: id, UserID: "test-user"}))
+		conns[name] = &daemonConnection{userID: "test-user", daemonID: id,
+			sendCh: make(chan *reliantv1.ServerMessage, 8), done: make(chan struct{})}
+	}
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID: projectID, UserID: "test-user", Name: "labs", Path: projectPath, IsGitRepo: true,
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+
+	require.NoError(t, svc.persistProjectConfigSnapshot(ctx, conns["default"], &reliantv1.ProjectConfigSnapshot{
+		ProjectPath: projectPath, DaemonTimestampUnixMs: 1000,
+		Workflows: []*reliantv1.IndexedWorkflow{{Slug: "release", Name: "release",
+			RelativePath: "control-plane/.reliant/workflows/release.yaml", YamlContent: []byte("name: release\n")}},
+		Presets: []*reliantv1.IndexedPreset{{Name: "implementer",
+			RelativePath: "control-plane/.reliant/presets/implementer.yaml", YamlContent: []byte("params: {}\n")}},
+	}, false))
+	require.NoError(t, svc.persistProjectConfigSnapshot(ctx, conns["cicd"], &reliantv1.ProjectConfigSnapshot{
+		ProjectPath: projectPath, DaemonTimestampUnixMs: 2000,
+	}, true))
+
+	workflowsJSON, err := repo.GetProjectWorkflowsJSON(ctx, projectID)
+	require.NoError(t, err)
+	workflows, err := cfgpkg.ParseStoredWorkflows(workflowsJSON)
+	require.NoError(t, err)
+	require.Len(t, workflows, 1)
+	require.Equal(t, "control-plane/.reliant/workflows/release.yaml", workflows[0].RelativePath)
+
+	presetsJSON, err := repo.GetProjectPresetsJSON(ctx, projectID)
+	require.NoError(t, err)
+	presets, err := cfgpkg.ParseStoredPresets(presetsJSON)
+	require.NoError(t, err)
+	require.Len(t, presets, 1)
+	require.Equal(t, "control-plane/.reliant/presets/implementer.yaml", presets[0].RelativePath, "a nested preset keeps its path")
+
+	cicd, synced, err := repo.GetProjectMachineWorkflowsJSON(ctx, projectID, conns["cicd"].daemonID)
+	require.NoError(t, err)
+	require.True(t, synced)
+	require.Nil(t, cicd, "cicd's own catalog is what it sent: nothing")
 }

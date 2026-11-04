@@ -42,7 +42,7 @@ func startBackground(t *testing.T, policy *reliantv1.ConnectorPolicy, root strin
 func skipBackgroundPortScanUnderShort(t *testing.T) {
 	t.Helper()
 	if testing.Short() {
-		t.Skip("each lookup of a live background process runs a real ps/lsof port scan (seconds on a loaded macOS box); runs in make test")
+		t.Skip("each lookup of a live background process runs a real ps/lsof port scan (seconds on a loaded macOS box); runs in task test")
 	}
 }
 

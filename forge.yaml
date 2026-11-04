@@ -21,7 +21,7 @@
 # contract mocks/decorators, the descriptor, the open-procedure set and the
 # ORM in internal/store (database.orm below), and runs generate.hooks below:
 # the compiled-code generators forge does not own. Taskfile.yml is the
-# entrypoint (`task --list`; the Makefile forwards to it for one merge). After
+# entrypoint (`task --list`). After
 # changing a proto, a contract.go interface, a migration or a hook's input,
 # run `task generate:check` (forge generate at forge_version below, which
 # must equal go.mod's) and commit what it writes: the generated mocks assert
@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v0.1.47-0.20261023173404-df09b730b6b6
+forge_version: v1.0.15-0.20261103112813-0dd8256deb65
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -40,11 +40,9 @@ config:
     enforce_typed_access: error
 lint:
     rules:
-        # forge's D3 rule ships hard-ERROR with no rollout default, and reliant
-        # has 189 mutating rpcs with no `(forge.v1.method).activity`
-        # declaration. Warn while the declarations are written; this goes back
-        # to error (delete the entry) once the D3 declarations land.
-        forgeconv-activity-declared: warn
+        # P7b Z: activity declarations are complete. Enforce them now rather
+        # than waiting for forge's v0.1.48 rollout default.
+        forgeconv-activity-declared: error
         # forge #993's tracing rules ship hard-ERROR, and reliant has 106
         # findings at the pin that introduced them (61 log-without-ctx, 18
         # raw-http-client, 18 contract-uninstrumented, 9 raw-sql-open). Warn
@@ -64,6 +62,26 @@ lint:
         # fails the build. Both ship at warn; reliant has no findings left.
         forgeconv-no-handler-error-mapping: error
         forgeconv-handler-connect-error: error
+        # P7b A4 (research/forge-migration/14-p7b-lint-adoption-plan.md §2.2):
+        # every handler file is under lint.handler_file_max_loc (1000), so a
+        # handler file that grows past it fails the build. Split it into
+        # rpc_<family>.go siblings rather than raising the limit.
+        forgeconv-handler-file-size: error
+        # access_tokens' scopes and resource-kind CHECKs are declared
+        # `forge:closed-set accesstoken.*`. The rule warns until v0.1.48, so a
+        # forge bump that grew AllScopes (billing:read, forge #1566) passed the
+        # merge gate and failed the release gate's DB test instead. At error,
+        # the bump's own PR fails `forge lint --closed-sets` and is fixed with
+        # `task db:migration` + `forge db migration new --closed-set <constraint>`.
+        forge-closed-set: error
+        # P7b A5 (research/forge-migration/14-p7b-lint-adoption-plan.md §2.3,
+        # §2.4): no component reads the process environment, no component's
+        # Deps carries a naked scalar (each takes its config block), and every
+        # optional dep is nil-checked where it is dereferenced. reliant has no
+        # findings left; at error a regression fails `forge lint`.
+        forgeconv-no-getenv: error
+        forge-config-deps: error
+        forge-optional-deps-guard: error
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them
@@ -134,6 +152,24 @@ generate:
             - internal/integrations/catalog/github/events
             - internal/integrations/catalog/github/schemas
             - internal/integrations/catalog/github/manifest.yaml
+upgrade:
+    # What `forge project upgrade` does beyond forge's own codemods. The proto
+    # vendored from control-plane (proto-vendor/controlplane/) is what a forge
+    # bump most often leaves stale. control-plane's check-vendored-proto.sh
+    # writes the lag report; it is control-plane's script and a control-plane
+    # checkout, so reliant has none until one is run:
+    #   CONTROL_PLANE_DIR=../control-plane ../control-plane/scripts/check-vendored-proto.sh \
+    #     --reliant . --report tmp/ci/reliant-vendored-proto.json
+    # (the pin bot does exactly that). The report names its own CONTROL_PLANE_DIR
+    # (revendor.env), which upgrade exports to the command; with no report there
+    # is nothing to re-vendor and upgrade says so.
+    vendored_contracts:
+        - name: controlplane
+          report: tmp/ci/reliant-vendored-proto.json
+          schema: reliant-vendored-proto/v1
+          env_path: revendor.env
+          commands:
+              - [task, "contract:controlplane:sync"]
 ci:
     gate:
         # `task ci` = forge's checks + these. Files no Go test reads.
@@ -174,7 +210,7 @@ ci:
               command: [scripts/check-pin-ancestry.sh]
               cache: false
             - name: npm-licenses
-              command: [scripts/check-npm-licenses.sh, web]
+              command: [scripts/check-npm-licenses.sh, frontends/web]
               requires: [npm]
             - name: release-config
               command: [node, .github/scripts/sync-release-config.mjs, --check]

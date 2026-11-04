@@ -7,7 +7,7 @@
  */
 
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
@@ -19,16 +19,19 @@ import {
 } from "@/gen/reliant/v1/inbox_pb";
 import { UserUpdateType } from "@/gen/reliant/v1/streaming_pb";
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { inboxServiceKeys } from "../inbox-service-hooks_gen";
+
+// InboxService is reached through its generated hooks, so it answers at the
+// transport.
 const listInbox = vi.fn();
 const dismissInboxItem = vi.fn();
 const restoreInboxItem = vi.fn();
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { inbox: () => ({ listInbox, dismissInboxItem, restoreInboxItem }) },
-}));
 
 import {
   inboxInvalidatingUpdate,
-  inboxKeys,
   useDismissInboxItems,
   useInbox,
   useInboxCounts,
@@ -57,7 +60,18 @@ beforeEach(() => {
   listInbox.mockReset();
   dismissInboxItem.mockReset();
   restoreInboxItem.mockReset();
+  setTransport(
+    mockTransport(
+      serviceHandlers("InboxService", {
+        listInbox: (req) => listInbox(req),
+        dismissInboxItem: (req) => dismissInboxItem(req),
+        restoreInboxItem: (req) => restoreInboxItem(req),
+      }),
+    ),
+  );
 });
+
+afterEach(() => setTransport(null));
 
 describe("useInboxCounts", () => {
   it("reads the counts from the list query, so the badge and the list are one request", async () => {
@@ -80,8 +94,8 @@ describe("useInboxCounts", () => {
     const { result } = renderHook(() => useInboxCounts("proj-1"), { wrapper: wrapperFor(queryClient) });
     await waitFor(() => expect(result.current.data?.blockingCount).toBe(1));
     expect(listInbox.mock.calls[0]![0]).toMatchObject({ projectId: "proj-1" });
-    expect(queryClient.getQueryData(inboxKeys.list("proj-1"))).toBeDefined();
-    expect(queryClient.getQueryData(inboxKeys.list())).toBeUndefined();
+    expect(queryClient.getQueryData(inboxServiceKeys.listInbox({ projectId: "proj-1" }))).toBeDefined();
+    expect(queryClient.getQueryData(inboxServiceKeys.listInbox({}))).toBeUndefined();
   });
 });
 
@@ -93,7 +107,7 @@ describe("useInbox", () => {
     await waitFor(() => expect(result.current.data?.items).toHaveLength(1));
     expect(listInbox.mock.calls[0]![0].limit).toBeUndefined();
 
-    const query = queryClient.getQueryCache().find({ queryKey: inboxKeys.list() });
+    const query = queryClient.getQueryCache().find({ queryKey: inboxServiceKeys.listInbox({}) });
     expect((query?.options as { refetchOnWindowFocus?: unknown }).refetchOnWindowFocus).toBe("always");
   });
 });
@@ -112,7 +126,7 @@ describe("useDismissInboxItems", () => {
     await waitFor(() => expect(scoped.result.current.data?.items).toHaveLength(1));
 
     const dismiss = renderHook(() => useDismissInboxItems(), { wrapper });
-    act(() => dismiss.result.current.mutate(["automation_launch_failed:evt-1"]));
+    act(() => dismiss.result.current.mutate({ itemIds: ["automation_launch_failed:evt-1"] }));
 
     await waitFor(() => expect(list.result.current.data?.items).toHaveLength(0));
     expect(scoped.result.current.data?.items).toHaveLength(0);
@@ -131,7 +145,7 @@ describe("useDismissInboxItems", () => {
     await waitFor(() => expect(list.result.current.data?.items).toHaveLength(1));
 
     const dismiss = renderHook(() => useDismissInboxItems(), { wrapper });
-    act(() => dismiss.result.current.mutate(["automation_launch_failed:evt-1"]));
+    act(() => dismiss.result.current.mutate({ itemIds: ["automation_launch_failed:evt-1"] }));
     await waitFor(() => expect(dismiss.result.current.isError).toBe(true));
     expect(list.result.current.data?.items).toHaveLength(1);
   });
@@ -141,12 +155,12 @@ describe("useRestoreInboxItems", () => {
   it("calls Restore with the ids and refetches", async () => {
     restoreInboxItem.mockResolvedValue({});
     const queryClient = newClient();
-    queryClient.setQueryData(inboxKeys.list(), create(ListInboxResponseSchema, {}));
+    queryClient.setQueryData(inboxServiceKeys.listInbox({}), create(ListInboxResponseSchema, {}));
     const restore = renderHook(() => useRestoreInboxItems(), { wrapper: wrapperFor(queryClient) });
-    act(() => restore.result.current.mutate(["approval:a-1"]));
+    act(() => restore.result.current.mutate({ itemIds: ["approval:a-1"] }));
     await waitFor(() => expect(restore.result.current.isSuccess).toBe(true));
     expect(restoreInboxItem.mock.calls[0]![0]).toMatchObject({ itemIds: ["approval:a-1"] });
-    expect(queryClient.getQueryState(inboxKeys.list())?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(inboxServiceKeys.listInbox({}))?.isInvalidated).toBe(true);
   });
 });
 

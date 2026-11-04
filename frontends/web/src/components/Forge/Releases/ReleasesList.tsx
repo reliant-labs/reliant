@@ -1,22 +1,22 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * RELEASES — the project's one list of releases (decision D2), with what is
+ * RELEASES — the project's one list of releases, with what is
  * where across environments at a glance.
  *
- *   header      the delivery figures for the scoped environment (D9: Delivery
+ *   header      the delivery figures for the scoped environment (Delivery
  *               folds in here as a strip of DORA facts, each with the server's
  *               own definition on hover).
  *   pipeline    one cell per long-lived environment: the release live there,
  *               how far it is from prod, who put it there and when, and any
  *               scoped deploy on top; the previews share one cell.
- *   table       one row per release: version (with scoped / rolled-back tags),
- *               sha + commit subject (D4), checks, ONE COLUMN PER LONG-LIVED
+ *   table       one row per release: commit subject, short version and tags,
+ *               sha, checks, ONE COLUMN PER LONG-LIVED
  *               ENVIRONMENT (● live · ◐ partly live · ○ ran before · · never),
  *               previews, author, and a row menu whose actions name their
- *               environment (D1).
+ *               environment.
  *
- * The top-bar scope (D1, default prod) highlights its column and, by default,
+ * The top-bar scope (default prod) highlights its column and, by default,
  * narrows the list to the releases that ran there; one click shows the rest.
  */
 
@@ -24,8 +24,9 @@ import { useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, Search, Tag as TagIcon } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
+import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import Mono from "@/components/forge-ui/mono";
 import PageHeader from "@/components/forge-ui/page_header";
 import { useDoraMetrics, useObservabilityOrg } from "@/hooks/observability-queries";
@@ -34,6 +35,7 @@ import { cn } from "@/lib/utils";
 
 import { formatPerDay, formatSpan } from "../Observability/deliveryScope";
 import { ENV_ALL } from "../Console/envScope";
+import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import {
   Ago,
   ChecksMark,
@@ -61,7 +63,6 @@ import {
   type StatusFilter,
 } from "./releaseModel";
 import { useReleaseData } from "./useReleaseData";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface ReleasesSearch {
   q?: string;
@@ -69,6 +70,8 @@ export interface ReleasesSearch {
   status?: StatusFilter;
   /** Show every release, not only those that ran in the scoped environment. */
   every?: boolean;
+  /** The deploy whose output is open in the Deploys section. */
+  deploy?: string;
 }
 
 export interface PromoteRequest {
@@ -93,8 +96,9 @@ export interface ReleasesListProps {
   search: ReleasesSearch;
   onSearch: (next: Partial<ReleasesSearch>) => void;
   releaseHref: (version: string, search?: Record<string, unknown>) => string;
-  onSelectEnv: (env: string) => void;
   promote: PromoteControl;
+  /** The scope names a local environment, which runs the working tree and has no releases by design. */
+  scopeIsLocal?: boolean;
 }
 
 /** The environment a mutating action targets when the scope is not one long-lived environment. */
@@ -103,7 +107,7 @@ function actionEnvOf(env: string, model: ReleaseModel): string | null {
   return referenceEnv(model.longEnvs)?.name ?? null;
 }
 
-export function ReleasesList({ project, env, envs, envsLoading, search, onSearch, releaseHref, onSelectEnv, promote }: ReleasesListProps) {
+export function ReleasesList({ project, env, envs, envsLoading, search, onSearch, releaseHref, promote, scopeIsLocal = false }: ReleasesListProps) {
   const data = useReleaseData(project, envs);
   const [promoting, setPromoting] = useState<string | null>(null);
   const model = data.model;
@@ -143,7 +147,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
           <button
             type="button"
             onClick={() => void data.releases.refetch()}
-            className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="inline-flex h-8 items-center rounded-md border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {data.releases.isFetching ? "Retrying…" : "Try again"}
           </button>
@@ -156,11 +160,29 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
     return (
       <div className="space-y-6" data-testid="releases" data-state="empty">
         {header}
-        <EmptyState
-          icon={<TagIcon className="h-6 w-6" aria-hidden="true" />}
+        <GettingStarted
+          testId="releases-getting-started"
+          icon={<TagIcon className="h-4 w-4" />}
           title="No releases yet"
-          description={`A release is cut the first time ${project} is deployed through Reliant. Run forge env deploy <env> from your checkout, and it appears here with what it changed and where it runs.`}
-        />
+          about={`Releases lists every build of ${project} Reliant has recorded: the commit it came from, what it changed, which environments run it, and how each promotion went.`}
+          agent={<DeployWithAgentButton env={env === ENV_ALL || !scopedEnv ? null : env} forgeProject={project} />}
+          steps={[
+            {
+              text: "Deploy from your checkout. It builds, cuts a release, deploys it, and the release appears here.",
+              command: `reliant forge env deploy ${env === ENV_ALL || !scopedEnv ? "<env>" : env}`,
+            },
+            {
+              text: "Promote that release to the next environment: exactly what staging runs, with nothing rebuilt.",
+              command: "reliant forge env deploy prod --from staging",
+            },
+          ]}
+          docs={{ href: DOCS.deploys, label: "How environments and deploys work" }}
+        >
+          <p>
+            A release is cut the first time {project} is deployed through Reliant. A local environment (reliant forge env up) runs your working tree
+            and never has releases.
+          </p>
+        </GettingStarted>
       </div>
     );
   }
@@ -172,7 +194,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
     <div className="space-y-6" data-testid="releases" data-state={loading ? "loading" : "ready"}>
       {header}
 
-      {loading || !model ? <PipelineSkeleton /> : <Pipeline model={model} env={env} releaseHref={releaseHref} onSelectEnv={onSelectEnv} />}
+      {loading || !model ? <PipelineSkeleton /> : <Pipeline model={model} env={env} releaseHref={releaseHref} />}
 
       {data.ledgerFailed.length > 0 && (
         <Note tone="warning" testId="releases-ledger-failed">
@@ -183,7 +205,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
 
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2" data-testid="releases-toolbar">
-          <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-accent">
+          <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
             <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span className="sr-only">Filter releases</span>
             <input
@@ -244,6 +266,13 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
                   Clear them
                 </button>
               </>
+            ) : scopeIsLocal ? (
+              <span data-testid="releases-local-env">
+                {env} runs locally from your working tree (forge env up), so it never has releases.{" "}
+                <button type="button" className={INK_BUTTON} onClick={() => onSearch({ every: true })}>
+                  Show every release
+                </button>
+              </span>
             ) : (
               <>
                 No release has run in {env} yet.{" "}
@@ -405,12 +434,10 @@ function Pipeline({
   model,
   env,
   releaseHref,
-  onSelectEnv,
 }: {
   model: ReleaseModel;
   env: string;
   releaseHref: ReleasesListProps["releaseHref"];
-  onSelectEnv: (env: string) => void;
 }) {
   if (model.pipeline.length === 0 && model.previews.length === 0) return null;
   const previewSelected = model.previews.some((candidate) => candidate.name === env);
@@ -425,7 +452,7 @@ function Pipeline({
         const selected = cell.env.name === env;
         return (
           <PipelineCellFrame key={cell.env.name} first={index === 0} selected={selected} testId={`pipeline-${cell.env.name}`}>
-            <EnvButton name={cell.env.name} selected={selected} onSelect={onSelectEnv} />
+            <div className={cn("text-xs", selected ? "font-medium text-ink" : "text-ink-muted")}>{cell.env.name}</div>
             <div className="mt-1 truncate text-sm font-medium text-ink">
               {cell.base ? (
                 <Link href={releaseHref(cell.base)} className={INK_LINK} title={cell.base}>
@@ -447,7 +474,7 @@ function Pipeline({
               {cell.followUps[0] && (
                 <span title={cell.followUps.map((f) => `${shortVersion(f.version)}: ${f.targets.join(", ")}`).join("\n")}>
                   {" "}
-                  · {scopedLabel(cell.followUps[0].targets)} rescoped <Ago at={cell.followUps[0].at} />
+                  · {scopedLabel(cell.followUps[0].targets)} on a scoped release
                 </span>
               )}
             </div>
@@ -464,14 +491,7 @@ function Pipeline({
             {model.previews.map((preview, index) => (
               <span key={preview.name}>
                 {index > 0 && <span aria-hidden="true">· </span>}
-                <button
-                  type="button"
-                  onClick={() => onSelectEnv(preview.name)}
-                  aria-pressed={preview.name === env}
-                  className={cn("hover:text-ink hover:underline", preview.name === env && "font-medium text-ink")}
-                >
-                  {preview.name}
-                </button>
+                <span className={cn(preview.name === env && "font-medium text-ink")}>{preview.name}</span>
               </span>
             ))}
           </div>
@@ -492,20 +512,6 @@ function PipelineCellFrame({ first, selected, testId, children }: { first: boole
   );
 }
 
-function EnvButton({ name, selected, onSelect }: { name: string; selected: boolean; onSelect: (env: string) => void }) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(name)}
-      aria-pressed={selected}
-      title={selected ? `The page is scoped to ${name}` : `Scope the console to ${name}`}
-      className={cn("rounded text-xs hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent", selected ? "font-medium text-ink" : "text-ink-muted")}
-    >
-      {name}
-    </button>
-  );
-}
-
 function PipelineSkeleton() {
   return (
     <div className="grid grid-cols-4 overflow-hidden rounded-lg border border-border bg-surface" aria-hidden="true" data-testid="releases-pipeline-loading">
@@ -523,7 +529,7 @@ function PipelineSkeleton() {
 // ── Toolbar chips ───────────────────────────────────────────────────────────
 
 const CHIP =
-  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 /** Solid border on the surface fill, as the mockup's chips; a set filter reads in ink with a stronger border. */
 const chipState = (on: boolean) => (on ? "border-ink-subtle text-ink" : "border-border text-ink-muted hover:border-ink-subtle hover:text-ink");
 
@@ -615,9 +621,9 @@ function ChipMenu({
 
 // ── Table ───────────────────────────────────────────────────────────────────
 
-const TH = "h-9 whitespace-nowrap px-4 text-left text-xs font-medium text-ink-muted";
-const TD = "h-10 whitespace-nowrap px-4 text-sm text-ink";
 const ENV_TD = "w-16 text-center";
+
+type ReleaseTableRow = { version: string; row: ReleaseRow };
 
 function ReleaseTable({
   model,
@@ -641,136 +647,96 @@ function ReleaseTable({
   const longEnvs = model?.longEnvs ?? [];
   const hasPreviews = (model?.previews.length ?? 0) > 0;
   const previewSelected = !!model?.previews.some((candidate) => candidate.name === env);
-  const columns = 5 + longEnvs.length + (hasPreviews ? 1 : 0);
   // The scoped environment's column is a SELECTION, the one structural use
-  // the web-styling contract allows `bg-muted` (interaction state): it lifts
+  // the web-styling contract allows `bg-surface-sunken` (interaction state): it lifts
   // the column in dark and tints it in light, as the mockup's muted-55% does.
   // `bg-surface-muted` (= --background) would recess it into a black stripe.
-  const sel = (on: boolean) => (on ? "bg-muted/60" : "");
-  // Scoped deploys that sit on top of a release, by version, for the follow-up line under its row.
-  const followUps = new Map<string, { env: string; targets: string[]; by: string; at?: string }[]>();
-  for (const cell of model?.pipeline ?? []) {
-    for (const followUp of cell.followUps) {
-      followUps.set(followUp.version, [...(followUps.get(followUp.version) ?? []), { env: cell.env.name, ...followUp }]);
-    }
-  }
-
+  const sel = (on: boolean) => (on ? "bg-surface-sunken" : "");
+  const columns: DataTableColumn<ReleaseTableRow>[] = [
+    {
+      key: "release",
+      header: "Release",
+      className: "w-full max-w-0",
+      render: (_, { row, version }) => (
+        <>
+          <span className="block truncate font-medium" title={version}>
+            {row.release.subject || "No commit subject recorded"}
+          </span>
+          <span className="mt-1 flex items-center gap-2 text-xs font-normal text-ink-muted">
+            <span title={version}>{shortVersion(version)}</span>
+            <ReleaseTags row={row} />
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "commit",
+      header: "Commit",
+      interactive: true,
+      render: (_, { row }) =>
+        row.release.gitCommit ? <Mono value={row.release.gitCommit} /> : <span className="text-ink-muted">No commit recorded</span>,
+    },
+    { key: "checks", header: "Checks", render: (_, { row }) => <ChecksMark checks={row.checks} /> },
+    ...longEnvs.map(
+      (candidate): DataTableColumn<ReleaseTableRow> => ({
+        key: `env:${candidate.name}`,
+        header: candidate.name,
+        className: cn(ENV_TD, sel(candidate.name === env)),
+        headerClassName: cn(ENV_TD, sel(candidate.name === env)),
+        render: (_, { row }) => <EnvMark env={candidate.name} cell={row.cells[candidate.name]!} />,
+      }),
+    ),
+    ...(hasPreviews
+      ? [
+          {
+            key: "previews",
+            header: "previews",
+            className: cn(ENV_TD, sel(previewSelected)),
+            headerClassName: cn(ENV_TD, sel(previewSelected)),
+            render: (_: unknown, { row }: ReleaseTableRow) => <PreviewsMark names={row.previewsLive} />,
+          },
+        ]
+      : []),
+    {
+      key: "author",
+      header: "Author",
+      render: (_, { row }) => (
+        <>
+          {row.release.author ? <span>{row.release.author}</span> : <span className="text-ink-muted">unknown</span>}
+          <span className="text-ink-muted">
+            {" · "}
+            <Ago at={row.release.createdAt} />
+          </span>
+        </>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      interactive: true,
+      width: "2.5rem",
+      className: "px-2",
+      render: (_, { row, version }) => <RowMenu label={`Actions for ${version}`} items={menuFor(row)} testId={`release-menu-${version}`} />,
+    },
+  ];
   return (
     <Card padding="none" className="overflow-hidden">
-      <div className="overflow-x-auto">
-        <StackedTable className="min-w-full border-collapse" aria-label="Releases" data-testid="releases-table">
-          <thead>
-            <tr className="border-b border-border">
-              <th scope="col" className={TH}>
-                Version
-              </th>
-              <th scope="col" className={TH}>
-                Commit
-              </th>
-              <th scope="col" className={TH}>
-                Checks
-              </th>
-              {longEnvs.map((candidate) => (
-                <th key={candidate.name} scope="col" className={cn(TH, ENV_TD, sel(candidate.name === env))} data-testid={`releases-col-${candidate.name}`}>
-                  {candidate.name}
-                </th>
-              ))}
-              {hasPreviews && (
-                <th scope="col" className={cn(TH, ENV_TD, sel(previewSelected))}>
-                  previews
-                </th>
-              )}
-              <th scope="col" className={TH}>
-                Author
-              </th>
-              <th scope="col" className={cn(TH, "w-10")}>
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              Array.from({ length: 6 }).map((_, i) => (
-                <tr key={i} className="border-t border-border/70 first:border-t-0">
-                  <td colSpan={columns} className="p-0">
-                    <span className="sr-only">Loading…</span>
-                    <div aria-hidden="true" className="flex h-10 items-center gap-4 px-4">
-                      <div className="h-3 w-48 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
-                      <div className="h-3 flex-1 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
-                      <div className="h-3 w-24 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
-                    </div>
-                  </td>
-                </tr>
-              ))
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={columns} className="px-4 py-12 text-center text-sm text-ink-muted" data-testid="releases-empty-filtered">
-                  {empty}
-                </td>
-              </tr>
-            ) : (
-              rows.flatMap((row) => {
-                const version = row.release.version;
-                const extra = followUps.get(version) ?? [];
-                return [
-                  <tr key={version} className="relative border-t border-border/70 first:border-t-0 hover:bg-ink/5" data-testid={`release-row-${version}`}>
-                    <td className={TD}>
-                      <span className="flex items-center gap-2">
-                        <Link
-                          href={releaseHref(version)}
-                          title={version}
-                          className="no-color shrink-0 font-medium text-ink after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-accent"
-                        >
-                          {version}
-                        </Link>
-                        <ReleaseTags row={row} />
-                      </span>
-                    </td>
-                    <td className={cn(TD, "w-full max-w-0")}>
-                      <span className="flex min-w-0 items-center gap-2">
-                        {row.release.gitCommit ? <span className="relative z-10 shrink-0"><Mono value={row.release.gitCommit} /></span> : null}
-                        <span className={cn("truncate", !row.release.subject && "text-ink-muted")} title={row.release.subject || undefined}>
-                          {row.release.subject || (row.release.gitCommit ? "No commit subject recorded" : "No commit recorded")}
-                        </span>
-                      </span>
-                    </td>
-                    <td className={TD}>
-                      <ChecksMark checks={row.checks} />
-                    </td>
-                    {longEnvs.map((candidate) => (
-                      <td key={candidate.name} className={cn(TD, ENV_TD, sel(candidate.name === env))}>
-                        <EnvMark env={candidate.name} cell={row.cells[candidate.name]!} />
-                      </td>
-                    ))}
-                    {hasPreviews && (
-                      <td className={cn(TD, ENV_TD, sel(previewSelected))}>
-                        <PreviewsMark names={row.previewsLive} />
-                      </td>
-                    )}
-                    <td className={TD}>
-                      {row.release.author ? <span>{row.release.author}</span> : <span className="text-ink-muted">unknown</span>}
-                      <span className="text-ink-muted">
-                        {" · "}
-                        <Ago at={row.release.createdAt} />
-                      </span>
-                    </td>
-                    <td className="relative z-10 h-10 w-10 px-2">
-                      <RowMenu label={`Actions for ${version}`} items={menuFor(row)} testId={`release-menu-${version}`} />
-                    </td>
-                  </tr>,
-                  ...extra.map((followUp) => (
-                    <tr key={`${version}-follow-${followUp.env}`} data-testid={`release-followup-${version}`}>
-                      <td colSpan={columns} className="h-8 whitespace-nowrap px-4 pl-8 text-xs text-ink-muted">
-                        ↳ Scoped deploy: {followUp.targets.join(", ")} shipped to {followUp.env}
-                        {followUp.by && ` by ${followUp.by}`} · <Ago at={followUp.at} />
-                      </td>
-                    </tr>
-                  )),
-                ];
-              })
-            )}
-          </tbody>
-        </StackedTable>
+      <div data-testid="releases-table">
+        <DataTable<ReleaseTableRow>
+          flush
+          stacked
+          ariaLabel="Releases"
+          columns={columns}
+          data={rows.map((row) => ({ version: row.release.version, row }))}
+          loading={loading}
+          pageSize={6}
+          emptyMessage={<span data-testid="releases-empty-filtered">{empty}</span>}
+          getRowKey={(r) => r.version}
+          getRowHref={(r) => releaseHref(r.version)}
+          getRowLabel={({ row, version }) => `${row.release.subject || "No commit subject recorded"} · ${version}`}
+          getRowProps={(r) => ({ "data-testid": `release-row-${r.version}` })}
+        />
       </div>
       <div className="border-t border-border px-4 py-2.5 text-xs text-ink-muted" data-testid="releases-footer">
         {footer}

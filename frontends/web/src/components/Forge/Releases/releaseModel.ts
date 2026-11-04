@@ -8,12 +8,12 @@
  *
  * ── LIVE, PARTLY LIVE, RAN BEFORE, NEVER ─────────────────────────────────────
  *
- * Per environment, a release is one of four (decision D2's column, plus D5):
+ * Per environment, a release is one of four (the release × environment column, plus scoped deploys):
  *
  *   live     the newest WHOLE-release promotion there is this release.
  *   partial  a scoped deploy moved some components to it after that, so the
  *            environment runs it for those components only. Never shown as
- *            plain live: that would overstate what is running (D5).
+ *            plain live: that would overstate what is running.
  *   ran      it was promoted there once, and something else is live now.
  *   never    no promotion of it there.
  *
@@ -38,7 +38,7 @@ import type { ReleaseGate, ReleasePromotion, ReleaseRecord } from "@/services/fo
 export interface ReleaseEnv {
   id: string;
   name: string;
-  /** Long-lived environments get a column; previews share one (D2). */
+  /** Long-lived environments get a column; previews share one. */
   kind: "long" | "preview";
   /** The release the control plane's live view says is bound now ("" when none). */
   current: string;
@@ -142,7 +142,7 @@ function envState(env: ReleaseEnv, promotions: ReleasePromotion[] | undefined): 
   }
   // Scoped deploys since the last whole-release promotion, newest first. A
   // component runs what its NEWEST scoped deploy put there, so a newer one
-  // masks the components it moved from every older one (D5): an older
+  // masks the components it moved from every older one: an older
   // follow-up keeps only its unmasked components, and one left with none runs
   // nowhere any more.
   const followUps: ReleasePromotion[] = [];
@@ -376,7 +376,7 @@ export function authorsOf(rows: readonly ReleaseRow[]): string[] {
 /**
  * "Live on prod, dev", "Live on prod, dev and 2 previews", "Live on prod for
  * admin-web", "Ran before on prod", "Not deployed". Previews are counted, not
- * named: there can be dozens, and D2 collapses them into one.
+ * named: there can be dozens, and the matrix collapses them into one.
  */
 export function releaseStatus(row: ReleaseRow): { tone: "success" | "neutral"; label: string; previews: string[] } {
   const live = Object.entries(row.cells).filter(([, cell]) => cell.state === "live").map(([env]) => env);
@@ -503,7 +503,9 @@ export function releaseTimeline(
       entries.push({
         key: `replaced-${next.id}`,
         title: older ? `Rolled back in ${env.name}` : `Superseded in ${env.name}`,
-        detail: [`by ${shortVersion(next.releaseVersion)}`, nextBy && `· ${nextBy}`].filter(Boolean).join(" "),
+        // "Rolled back in prod · to v1.4 by sean": the version is where it
+        // went, the name is who sent it there.
+        detail: [`${older ? "to" : "by"} ${shortVersion(next.releaseVersion)}`, nextBy && `by ${nextBy}`].filter(Boolean).join(" "),
         at: next.createdAt,
         tone: older ? "bad" : "neutral",
       });

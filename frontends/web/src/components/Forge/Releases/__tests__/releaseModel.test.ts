@@ -3,7 +3,7 @@
 /**
  * The Releases pages' rules, over the fixture ledger (releaseFixtures.ts):
  * live / partly live / ran before / never per environment, scoped deploys
- * never overstated as live (D5), rolled back worked out from cut order, the
+ * never overstated as live, rolled back worked out from cut order, the
  * pipeline's distance from prod, checks, filters, and what a release is
  * compared with by default.
  */
@@ -141,6 +141,9 @@ describe("one release", () => {
     const titles = releaseTimeline(RELEASES[2]!, RELEASE_ENVS, ledger, RELEASES, FIXTURE_NAMES).map((entry) => `${entry.title}|${entry.tone}`);
     // Prod's promotion is "bad": its smoke check failed. Then an older release replaced it there.
     expect(titles).toEqual(["Cut|ok", "Promoted to dev|ok", "Promoted to prod|bad", "Rolled back in prod|bad", "Superseded in dev|neutral"]);
+    const rollback = releaseTimeline(RELEASES[2]!, RELEASE_ENVS, ledger, RELEASES, FIXTURE_NAMES).find((entry) => entry.title === "Rolled back in prod")!;
+    expect(rollback.detail).toMatch(/^to \S+ by \S+/);
+    expect(rollback.detail).not.toMatch(/^by \d/);
   });
 
   it("measures lead time from the commit to the first promotion, and says nothing when the commit time is unknown", () => {
@@ -190,7 +193,7 @@ describe("rolled back, against dora.Classify", () => {
   });
 });
 
-describe("overlapping scoped deploys (D5)", () => {
+describe("overlapping scoped deploys", () => {
   it("counts only the newest scoped deploy per component as live", () => {
     const model = buildReleaseModel(NEWEST_FIRST, PROD_ONLY, ledgerOf([{ v: "v1" }, { v: "v2", targets: ["web"] }, { v: "v3", targets: ["web"] }]));
     const m = byVersion(model);

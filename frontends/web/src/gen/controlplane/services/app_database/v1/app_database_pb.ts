@@ -6,16 +6,18 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
+import type { PanelResultColumn, PanelResultRow, PanelResultSeries } from "../../../controlplane/v1/shared_pb";
+import { file_controlplane_v1_shared } from "../../../controlplane/v1/shared_pb";
 import { file_forge_v1_forge } from "../../../forge/v1/forge_pb";
-import type { Value } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
+import type { Timestamp, Value } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file services/app_database/v1/app_database.proto.
  */
 export const file_services_app_database_v1_app_database: GenFile = /*@__PURE__*/
-  fileDesc("CitzZXJ2aWNlcy9hcHBfZGF0YWJhc2UvdjEvYXBwX2RhdGFiYXNlLnByb3RvEg9jb250cm9scGxhbmUudjEikwIKFFF1ZXJ5RGF0YWJhc2VSZXF1ZXN0EiIKDmVudmlyb25tZW50X2lkGAEgASgJQgq6SAdyBRABGIABEhoKCGRhdGFiYXNlGAIgASgJQgi6SAVyAxiAARIYCgNzcWwYAyABKAlCC7pICHIGEAEogIABEhwKCG1heF9yb3dzGAQgASgFQgq6SAcaBRiQTigAEh8KCnRpbWVvdXRfbXMYBSABKAVCC7pICBoGGLDqASgAEiUKDmNvbmZpcm1fZW52X2lkGAYgASgJQgi6SAVyAxiAAUgAiAEBEh0KBnJlYXNvbhgHIAEoCUIIukgFcgMY9ANIAYgBAUIRCg9fY29uZmlybV9lbnZfaWRCCQoHX3JlYXNvbiL5AQoVUXVlcnlEYXRhYmFzZVJlc3BvbnNlEjAKB2NvbHVtbnMYASADKAsyHy5jb250cm9scGxhbmUudjEuRGF0YWJhc2VDb2x1bW4SKgoEcm93cxgCIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5EYXRhYmFzZVJvdxIRCglyb3dfY291bnQYAyABKAMSEQoJdHJ1bmNhdGVkGAQgASgIEhMKC2R1cmF0aW9uX21zGAUgASgDEg8KB3JlcGxpY2EYBiABKAkSEAoIYXVkaXRfaWQYByABKAkSEgoKc3FsX3NoYTI1NhgIIAEoCRIQCghkYXRhYmFzZRgJIAEoCSIvCg5EYXRhYmFzZUNvbHVtbhIMCgRuYW1lGAEgASgJEg8KB3BnX3R5cGUYAiABKAkiNQoLRGF0YWJhc2VSb3cSJgoGdmFsdWVzGAEgAygLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlMuYCChJBcHBEYXRhYmFzZVNlcnZpY2US8QEKDVF1ZXJ5RGF0YWJhc2USJS5jb250cm9scGxhbmUudjEuUXVlcnlEYXRhYmFzZVJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuUXVlcnlEYXRhYmFzZVJlc3BvbnNlIpABorsYiwEIATqGAQoOcXVlcnlfZGF0YWJhc2USHQoIZGF0YWJhc2USEXJlc3BvbnNlLmRhdGFiYXNlGg5lbnZpcm9ubWVudF9pZCoGcmVhc29uKhJyZXNwb25zZS5yb3dfY291bnQqFHJlc3BvbnNlLmR1cmF0aW9uX21zKhNyZXNwb25zZS5zcWxfc2hhMjU2GlyCtRhYChJBcHBEYXRhYmFzZVNlcnZpY2USBTEuMC4wGjtSZWFkLW9ubHkgU1FMIGFnYWluc3QgYW4gZW52aXJvbm1lbnQncyBhcHBsaWNhdGlvbiBkYXRhYmFzZULeAQoTY29tLmNvbnRyb2xwbGFuZS52MUIQQXBwRGF0YWJhc2VQcm90b1ABWlhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvYXBwX2RhdGFiYXNlL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_struct]);
+  fileDesc("CitzZXJ2aWNlcy9hcHBfZGF0YWJhc2UvdjEvYXBwX2RhdGFiYXNlLnByb3RvEg9jb250cm9scGxhbmUudjEikwIKFFF1ZXJ5RGF0YWJhc2VSZXF1ZXN0EiIKDmVudmlyb25tZW50X2lkGAEgASgJQgq6SAdyBRABGIABEhoKCGRhdGFiYXNlGAIgASgJQgi6SAVyAxiAARIYCgNzcWwYAyABKAlCC7pICHIGEAEogIABEhwKCG1heF9yb3dzGAQgASgFQgq6SAcaBRiQTigAEh8KCnRpbWVvdXRfbXMYBSABKAVCC7pICBoGGLDqASgAEiUKDmNvbmZpcm1fZW52X2lkGAYgASgJQgi6SAVyAxiAAUgAiAEBEh0KBnJlYXNvbhgHIAEoCUIIukgFcgMY9ANIAYgBAUIRCg9fY29uZmlybV9lbnZfaWRCCQoHX3JlYXNvbiL5AQoVUXVlcnlEYXRhYmFzZVJlc3BvbnNlEjAKB2NvbHVtbnMYASADKAsyHy5jb250cm9scGxhbmUudjEuRGF0YWJhc2VDb2x1bW4SKgoEcm93cxgCIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5EYXRhYmFzZVJvdxIRCglyb3dfY291bnQYAyABKAMSEQoJdHJ1bmNhdGVkGAQgASgIEhMKC2R1cmF0aW9uX21zGAUgASgDEg8KB3JlcGxpY2EYBiABKAkSEAoIYXVkaXRfaWQYByABKAkSEgoKc3FsX3NoYTI1NhgIIAEoCRIQCghkYXRhYmFzZRgJIAEoCSIvCg5EYXRhYmFzZUNvbHVtbhIMCgRuYW1lGAEgASgJEg8KB3BnX3R5cGUYAiABKAkiNQoLRGF0YWJhc2VSb3cSJgoGdmFsdWVzGAEgAygLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlIoMEChlRdWVyeURhdGFiYXNlUGFuZWxSZXF1ZXN0EiUKDmVudmlyb25tZW50X2lkGAEgASgJQg26SArIAQFyBRABGIABEhoKCGRhdGFiYXNlGAIgASgJQgi6SAVyAxiAARIYCgNzcWwYAyABKAlCC7pICHIGEAEogIABEhUKBGRyYXcYBCABKAlCB7pIBHICGBASHAoLdGltZV9jb2x1bW4YBSABKAlCB7pIBHICGD8SJQoNdmFsdWVfY29sdW1ucxgGIAMoCUIOukgLkgEIEAoiBHICGD8SJQoNZ3JvdXBfY29sdW1ucxgHIAMoCUIOukgLkgEIEAMiBHICGD8SMAoEZnJvbRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCBrpIA8gBARIuCgJ0bxgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCBrpIA8gBARIhCgxzdGVwX3NlY29uZHMYCiABKAVCC7pICBoGGICjBSgAEkIKDWRhc2hib2FyZF9yZWYYCyABKAlCK7pIKHImGIABMiFeKFtBLVphLXowLTldW0EtWmEtejAtOS5fOi8tXSopPyQSPQoIcGFuZWxfaWQYDCABKAlCK7pIKHImGIABMiFeKFtBLVphLXowLTldW0EtWmEtejAtOS5fOi8tXSopPyQihgQKGlF1ZXJ5RGF0YWJhc2VQYW5lbFJlc3BvbnNlEgwKBGRyYXcYASABKAkSNwoLc3FsX2NvbHVtbnMYAiADKAsyIi5jb250cm9scGxhbmUudjEuUGFuZWxSZXN1bHRDb2x1bW4SMgoGc2VyaWVzGAMgAygLMiIuY29udHJvbHBsYW5lLnYxLlBhbmVsUmVzdWx0U2VyaWVzEg8KB2NvbHVtbnMYBCADKAkSLQoEcm93cxgFIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5QYW5lbFJlc3VsdFJvdxIRCgl0cnVuY2F0ZWQYBiABKAgSFAoMdHJ1bmNhdGVkX2J5GAcgASgJEhQKDHN0ZXBfc2Vjb25kcxgIIAEoBRITCgtkdXJhdGlvbl9tcxgJIAEoAxIPCgdyZXBsaWNhGAogASgJEikKBWFzX29mGAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtzZXJ2ZWRfZnJvbRgMIAEoCRIQCghhdWRpdF9pZBgNIAEoCRISCgpzcWxfc2hhMjU2GA4gASgJEhAKCGRhdGFiYXNlGA8gASgJEigKBGZyb20YECABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiYKAnRvGBEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJGCh1MaXN0RGFzaGJvYXJkRGF0YWJhc2VzUmVxdWVzdBIlCg5lbnZpcm9ubWVudF9pZBgBIAEoCUINukgKyAEBcgUQARiAASJXCh5MaXN0RGFzaGJvYXJkRGF0YWJhc2VzUmVzcG9uc2USNQoJZGF0YWJhc2VzGAEgAygLMiIuY29udHJvbHBsYW5lLnYxLkRhc2hib2FyZERhdGFiYXNlIrcBChFEYXNoYm9hcmREYXRhYmFzZRIMCgRuYW1lGAEgASgJEg8KB3Jvd19jYXAYAiABKAUSEgoKdGltZW91dF9tcxgDIAEoBRIXCg9tYXhfY29uY3VycmVuY3kYBCABKAUSLwoGdGFibGVzGAUgAygLMh8uY29udHJvbHBsYW5lLnYxLkRhc2hib2FyZFRhYmxlEg8KB3JlcGxpY2EYBiABKAkSFAoMdGFibGVzX2Vycm9yGAcgASgJImEKDkRhc2hib2FyZFRhYmxlEg4KBnNjaGVtYRgBIAEoCRIMCgRuYW1lGAIgASgJEjEKB2NvbHVtbnMYAyADKAsyIC5jb250cm9scGxhbmUudjEuRGFzaGJvYXJkQ29sdW1uIjAKD0Rhc2hib2FyZENvbHVtbhIMCgRuYW1lGAEgASgJEg8KB3BnX3R5cGUYAiABKAky4QQKEkFwcERhdGFiYXNlU2VydmljZRLxAQoNUXVlcnlEYXRhYmFzZRIlLmNvbnRyb2xwbGFuZS52MS5RdWVyeURhdGFiYXNlUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5RdWVyeURhdGFiYXNlUmVzcG9uc2UikAGiuxiLAQgBOoYBCg5xdWVyeV9kYXRhYmFzZRIdCghkYXRhYmFzZRIRcmVzcG9uc2UuZGF0YWJhc2UaDmVudmlyb25tZW50X2lkKgZyZWFzb24qEnJlc3BvbnNlLnJvd19jb3VudCoUcmVzcG9uc2UuZHVyYXRpb25fbXMqE3Jlc3BvbnNlLnNxbF9zaGEyNTYSdQoSUXVlcnlEYXRhYmFzZVBhbmVsEiouY29udHJvbHBsYW5lLnYxLlF1ZXJ5RGF0YWJhc2VQYW5lbFJlcXVlc3QaKy5jb250cm9scGxhbmUudjEuUXVlcnlEYXRhYmFzZVBhbmVsUmVzcG9uc2UiBqK7GAIIARKBAQoWTGlzdERhc2hib2FyZERhdGFiYXNlcxIuLmNvbnRyb2xwbGFuZS52MS5MaXN0RGFzaGJvYXJkRGF0YWJhc2VzUmVxdWVzdBovLmNvbnRyb2xwbGFuZS52MS5MaXN0RGFzaGJvYXJkRGF0YWJhc2VzUmVzcG9uc2UiBqK7GAIIARpcgrUYWAoSQXBwRGF0YWJhc2VTZXJ2aWNlEgUxLjAuMBo7UmVhZC1vbmx5IFNRTCBhZ2FpbnN0IGFuIGVudmlyb25tZW50J3MgYXBwbGljYXRpb24gZGF0YWJhc2VC3gEKE2NvbS5jb250cm9scGxhbmUudjFCEEFwcERhdGFiYXNlUHJvdG9QAVpYZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2FwcF9kYXRhYmFzZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_buf_validate_validate, file_controlplane_v1_shared, file_forge_v1_forge, file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.QueryDatabaseRequest
@@ -197,6 +199,378 @@ export const DatabaseRowSchema: GenMessage<DatabaseRow> = /*@__PURE__*/
   messageDesc(file_services_app_database_v1_app_database, 3);
 
 /**
+ * @generated from message controlplane.v1.QueryDatabasePanelRequest
+ */
+export type QueryDatabasePanelRequest = Message<"controlplane.v1.QueryDatabasePanelRequest"> & {
+  /**
+   * The control-plane environment id (deploy_environments.id).
+   *
+   * @generated from field: string environment_id = 1;
+   */
+  environmentId: string;
+
+  /**
+   * Which database of the environment. Empty = the environment's only managed
+   * database.
+   *
+   * @generated from field: string database = 2;
+   */
+  database: string;
+
+  /**
+   * One read-only statement. It may reference $1 (from, timestamptz), $2 (to,
+   * timestamptz, exclusive) and $3 (step in seconds, int4), and no other
+   * parameter. SET, RESET and set_config are refused.
+   *
+   * @generated from field: string sql = 3;
+   */
+  sql: string;
+
+  /**
+   * How the result is folded: "auto" (or empty), "line", "number", "table" or
+   * "bar". "line" needs time_column. Anything but "line" folds to rows; "auto"
+   * is a time series when the first column is a time.
+   *
+   * @generated from field: string draw = 4;
+   */
+  draw: string;
+
+  /**
+   * The result column holding each row's timestamp. Empty = the first column
+   * when it is a time (auto) .
+   *
+   * @generated from field: string time_column = 5;
+   */
+  timeColumn: string;
+
+  /**
+   * The numeric result columns to plot. Empty = every numeric column that is
+   * not the time column or a group column.
+   *
+   * @generated from field: repeated string value_columns = 6;
+   */
+  valueColumns: string[];
+
+  /**
+   * The result columns that split rows into separate series. Empty = every
+   * non-numeric column that is not the time column.
+   *
+   * @generated from field: repeated string group_columns = 7;
+   */
+  groupColumns: string[];
+
+  /**
+   * The dashboard's time range: $1 = from (inclusive), $2 = to (exclusive).
+   * The server aligns both to step_seconds so one dashboard open in several
+   * tabs is one query. At most 400 days.
+   *
+   * @generated from field: google.protobuf.Timestamp from = 8;
+   */
+  from?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp to = 9;
+   */
+  to?: Timestamp | undefined;
+
+  /**
+   * $3, a bucket width in seconds. 0 = chosen from the range (about 120
+   * points).
+   *
+   * @generated from field: int32 step_seconds = 10;
+   */
+  stepSeconds: number;
+
+  /**
+   * The dashboard this panel belongs to and the panel itself, recorded in the
+   * audit row and the daily activity event.
+   * Identifiers, not free text: they are recorded in the audit row and shown in
+   * the activity feed. Letters, digits and . _ : / -, starting with a letter or
+   * digit.
+   *
+   * @generated from field: string dashboard_ref = 11;
+   */
+  dashboardRef: string;
+
+  /**
+   * @generated from field: string panel_id = 12;
+   */
+  panelId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.QueryDatabasePanelRequest.
+ * Use `create(QueryDatabasePanelRequestSchema)` to create a new message.
+ */
+export const QueryDatabasePanelRequestSchema: GenMessage<QueryDatabasePanelRequest> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 4);
+
+/**
+ * @generated from message controlplane.v1.QueryDatabasePanelResponse
+ */
+export type QueryDatabasePanelResponse = Message<"controlplane.v1.QueryDatabasePanelResponse"> & {
+  /**
+   * What the result was folded as: "line", "number", "table" or "bar".
+   *
+   * @generated from field: string draw = 1;
+   */
+  draw: string;
+
+  /**
+   * The result columns, in order, with how each is drawn.
+   *
+   * @generated from field: repeated controlplane.v1.PanelResultColumn sql_columns = 2;
+   */
+  sqlColumns: PanelResultColumn[];
+
+  /**
+   * draw = "line": one entry per (numeric column x group), with points.
+   *
+   * @generated from field: repeated controlplane.v1.PanelResultSeries series = 3;
+   */
+  series: PanelResultSeries[];
+
+  /**
+   * Otherwise: the numeric columns after the group columns, in result order,
+   * and one row per result row (group holds the other columns by name).
+   *
+   * @generated from field: repeated string columns = 4;
+   */
+  columns: string[];
+
+  /**
+   * @generated from field: repeated controlplane.v1.PanelResultRow rows = 5;
+   */
+  rows: PanelResultRow[];
+
+  /**
+   * A cap cut the result: truncated_by is "rows", "bytes", "series" or
+   * "points".
+   *
+   * @generated from field: bool truncated = 6;
+   */
+  truncated: boolean;
+
+  /**
+   * @generated from field: string truncated_by = 7;
+   */
+  truncatedBy: string;
+
+  /**
+   * The $3 that was bound.
+   *
+   * @generated from field: int32 step_seconds = 8;
+   */
+  stepSeconds: number;
+
+  /**
+   * @generated from field: int64 duration_ms = 9;
+   */
+  durationMs: bigint;
+
+  /**
+   * Which server answered: "ro" (a read replica) or "rw" (the primary).
+   *
+   * @generated from field: string replica = 10;
+   */
+  replica: string;
+
+  /**
+   * When the rows were read. Up to 30 seconds old when served_from is "cache".
+   *
+   * @generated from field: google.protobuf.Timestamp as_of = 11;
+   */
+  asOf?: Timestamp | undefined;
+
+  /**
+   * "db" or "cache".
+   *
+   * @generated from field: string served_from = 12;
+   */
+  servedFrom: string;
+
+  /**
+   * The audit_log row that recorded this request.
+   *
+   * @generated from field: string audit_id = 13;
+   */
+  auditId: string;
+
+  /**
+   * @generated from field: string sql_sha256 = 14;
+   */
+  sqlSha256: string;
+
+  /**
+   * The database that answered.
+   *
+   * @generated from field: string database = 15;
+   */
+  database: string;
+
+  /**
+   * The range actually bound to $1 and $2, aligned to step_seconds.
+   *
+   * @generated from field: google.protobuf.Timestamp from = 16;
+   */
+  from?: Timestamp | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp to = 17;
+   */
+  to?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.QueryDatabasePanelResponse.
+ * Use `create(QueryDatabasePanelResponseSchema)` to create a new message.
+ */
+export const QueryDatabasePanelResponseSchema: GenMessage<QueryDatabasePanelResponse> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 5);
+
+/**
+ * @generated from message controlplane.v1.ListDashboardDatabasesRequest
+ */
+export type ListDashboardDatabasesRequest = Message<"controlplane.v1.ListDashboardDatabasesRequest"> & {
+  /**
+   * @generated from field: string environment_id = 1;
+   */
+  environmentId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListDashboardDatabasesRequest.
+ * Use `create(ListDashboardDatabasesRequestSchema)` to create a new message.
+ */
+export const ListDashboardDatabasesRequestSchema: GenMessage<ListDashboardDatabasesRequest> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 6);
+
+/**
+ * @generated from message controlplane.v1.ListDashboardDatabasesResponse
+ */
+export type ListDashboardDatabasesResponse = Message<"controlplane.v1.ListDashboardDatabasesResponse"> & {
+  /**
+   * @generated from field: repeated controlplane.v1.DashboardDatabase databases = 1;
+   */
+  databases: DashboardDatabase[];
+};
+
+/**
+ * Describes the message controlplane.v1.ListDashboardDatabasesResponse.
+ * Use `create(ListDashboardDatabasesResponseSchema)` to create a new message.
+ */
+export const ListDashboardDatabasesResponseSchema: GenMessage<ListDashboardDatabasesResponse> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 7);
+
+/**
+ * DashboardDatabase is one database of the environment with dashboards enabled,
+ * the limits its panels run under (from the recorded release shape), and what
+ * the dashboard role may read.
+ *
+ * @generated from message controlplane.v1.DashboardDatabase
+ */
+export type DashboardDatabase = Message<"controlplane.v1.DashboardDatabase"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: int32 row_cap = 2;
+   */
+  rowCap: number;
+
+  /**
+   * @generated from field: int32 timeout_ms = 3;
+   */
+  timeoutMs: number;
+
+  /**
+   * @generated from field: int32 max_concurrency = 4;
+   */
+  maxConcurrency: number;
+
+  /**
+   * @generated from field: repeated controlplane.v1.DashboardTable tables = 5;
+   */
+  tables: DashboardTable[];
+
+  /**
+   * "ro" or "rw", as in QueryDatabasePanelResponse.
+   *
+   * @generated from field: string replica = 6;
+   */
+  replica: string;
+
+  /**
+   * Set when the tables could not be read (the dashboard role is not
+   * provisioned yet, the database is unreachable). The database is still
+   * listed: it is enabled.
+   *
+   * @generated from field: string tables_error = 7;
+   */
+  tablesError: string;
+};
+
+/**
+ * Describes the message controlplane.v1.DashboardDatabase.
+ * Use `create(DashboardDatabaseSchema)` to create a new message.
+ */
+export const DashboardDatabaseSchema: GenMessage<DashboardDatabase> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 8);
+
+/**
+ * @generated from message controlplane.v1.DashboardTable
+ */
+export type DashboardTable = Message<"controlplane.v1.DashboardTable"> & {
+  /**
+   * @generated from field: string schema = 1;
+   */
+  schema: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: repeated controlplane.v1.DashboardColumn columns = 3;
+   */
+  columns: DashboardColumn[];
+};
+
+/**
+ * Describes the message controlplane.v1.DashboardTable.
+ * Use `create(DashboardTableSchema)` to create a new message.
+ */
+export const DashboardTableSchema: GenMessage<DashboardTable> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 9);
+
+/**
+ * @generated from message controlplane.v1.DashboardColumn
+ */
+export type DashboardColumn = Message<"controlplane.v1.DashboardColumn"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * The Postgres type, e.g. "bigint", "timestamp with time zone".
+   *
+   * @generated from field: string pg_type = 2;
+   */
+  pgType: string;
+};
+
+/**
+ * Describes the message controlplane.v1.DashboardColumn.
+ * Use `create(DashboardColumnSchema)` to create a new message.
+ */
+export const DashboardColumnSchema: GenMessage<DashboardColumn> = /*@__PURE__*/
+  messageDesc(file_services_app_database_v1_app_database, 10);
+
+/**
  * === AppDatabaseService (controlplane.v1.AppDatabaseService) ===
  *
  * Read-only SQL against an environment's APPLICATION database (the Postgres a
@@ -239,6 +613,36 @@ export const DatabaseRowSchema: GenMessage<DatabaseRow> = /*@__PURE__*/
  *   - Unavailable: querying is not configured on this server, or the database
  *     is unreachable.
  *
+ * LIVE DASHBOARD PANELS (QueryDatabasePanel, ListDashboardDatabases) are a
+ * second, narrower door onto the same databases. A panel refreshes on a timer
+ * and is viewed by a whole team, so it cannot ask for a confirmation and a
+ * reason per call; what earns it that exemption is how little it can reach:
+ *   - the database must have opted in (ManagedDatabase.dashboards, recorded in
+ *     the release shape; absent = disabled);
+ *   - it connects as forge_dash, which can SELECT only the columns of tables
+ *     the schema marks for dashboards (a subset of what forge_ro reads), never
+ *     as forge_ro;
+ *   - the caller is a signed-in PERSON of the environment's org who holds the
+ *     db:query grant. An access token, of any kind, is refused.
+ * Each request is still audited. Admission order, each step's error:
+ *   1. unknown environment: NotFound.
+ *   2. not a member of its org: NotFound (existence is not revealed).
+ *   3. not a signed-in person with the db:query grant: PermissionDenied.
+ *   4. data_access policy deny (or unknown): PermissionDenied.
+ *   5. dashboards not enabled for the database: FailedPrecondition, reason
+ *      "dashboards_not_enabled".
+ *   6. no hosted placement (self-managed, local): FailedPrecondition, reason
+ *      "datasource_unreachable".
+ *   7. per-principal budget (shared with QueryDatabase): ResourceExhausted,
+ *      reason "rate_limited", with Retry-After.
+ *   8. too many panel queries in flight for this principal on this
+ *      environment: ResourceExhausted, reason "query_in_flight".
+ *   9. the database's panel concurrency is taken: ResourceExhausted, reason
+ *      "db_panel_busy".
+ *  10. at run time: DeadlineExceeded, reason "lock_timeout" (a migration holds a
+ *      lock; the panel gave up in 500ms instead of queueing behind it), then
+ *      "statement_timeout".
+ *
  * @generated from service controlplane.v1.AppDatabaseService
  */
 export const AppDatabaseService: GenService<{
@@ -252,6 +656,37 @@ export const AppDatabaseService: GenService<{
     methodKind: "unary";
     input: typeof QueryDatabaseRequestSchema;
     output: typeof QueryDatabaseResponseSchema;
+  },
+  /**
+   * QueryDatabasePanel runs one dashboard panel's read-only statement as the
+   * database's dashboard role and returns it folded for drawing: a time series
+   * when draw is "line" (or "auto" and the first column is a time), otherwise
+   * rows. $1 (from), $2 (to) and $3 (step_seconds) are bound, never spliced.
+   *
+   * Not declared as an activity: a panel refreshes every minute, so the handler
+   * records one dashboard_db_access event per person, dashboard, environment
+   * and day instead. The audit_log row is written for every request.
+   *
+   * @generated from rpc controlplane.v1.AppDatabaseService.QueryDatabasePanel
+   */
+  queryDatabasePanel: {
+    methodKind: "unary";
+    input: typeof QueryDatabasePanelRequestSchema;
+    output: typeof QueryDatabasePanelResponseSchema;
+  },
+  /**
+   * ListDashboardDatabases returns the environment's databases that have
+   * dashboards enabled, their limits, and the tables and columns the dashboard
+   * role may SELECT (the editor's schema browser). Same admission as
+   * QueryDatabasePanel, without the database/placement steps for databases that
+   * are not enabled: those are simply absent.
+   *
+   * @generated from rpc controlplane.v1.AppDatabaseService.ListDashboardDatabases
+   */
+  listDashboardDatabases: {
+    methodKind: "unary";
+    input: typeof ListDashboardDatabasesRequestSchema;
+    output: typeof ListDashboardDatabasesResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_services_app_database_v1_app_database, 0);

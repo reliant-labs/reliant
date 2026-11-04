@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
-import { ProjectInstallState, type ProjectDaemonInfo } from "@/api/project-grpc";
+import { ProjectInstallState, type ProjectDaemonInfo } from "@/hooks/project-queries";
 import { buildDaemonChoices, daemonLabel, defaultDaemonId, noMachineBlockerFor } from "../daemonChoices";
 
 describe("noMachineBlockerFor", () => {

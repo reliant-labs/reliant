@@ -14,7 +14,7 @@ import { renderRunsAt } from "./runTestUtils";
 
 function renderFilters(path = "/workflows/runs") {
   return renderRunsAt(
-    <RunFilters currentProjectName="Reliant" triggerName={undefined} />,
+    <RunFilters triggerName={undefined} />,
     path,
   );
 }
@@ -28,8 +28,9 @@ async function openFilter(user: ReturnType<typeof userEvent.setup>, label: strin
 describe("RunFilters", () => {
   it("is one row of menus, not rows of chips", async () => {
     renderFilters();
-    expect(await screen.findByRole("button", { name: "Project: Reliant" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Started: Last 24 hours" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Started: Last 24 hours" })).toBeInTheDocument();
+    // The project scope is the area header's, not a Runs filter.
+    expect(screen.queryByRole("button", { name: /^Project:/ })).toBeNull();
     expect(screen.getByRole("button", { name: "State: Any" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Started by: Anyone" })).toBeInTheDocument();
     // No option is a standalone button any more.
@@ -64,13 +65,16 @@ describe("RunFilters", () => {
     );
   });
 
-  it("defaults to the current project; All projects widens it", async () => {
+  it("Started by can pick the unattended kinds: webhook, app event, workflow event", async () => {
     const user = userEvent.setup();
     const { router } = renderFilters();
-    const menu = await openFilter(user, "Project");
-    expect(within(menu).getByRole("menuitemradio", { name: "Reliant" })).toHaveAttribute("aria-checked", "true");
-    await user.click(within(menu).getByRole("menuitemradio", { name: "All projects" }));
-    await waitFor(() => expect(router.state.location.search).toMatchObject({ allProjects: true }));
+    const menu = await openFilter(user, "Started by");
+    await user.click(within(menu).getByRole("menuitemcheckbox", { name: "Webhook" }));
+    await user.click(within(screen.getByRole("menu", { name: "Started by" })).getByRole("menuitemcheckbox", { name: "App event" }));
+    await user.click(within(screen.getByRole("menu", { name: "Started by" })).getByRole("menuitemcheckbox", { name: "Workflow event" }));
+    await waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ kind: ["webhook", "integration", "workflow_event"] }),
+    );
   });
 
   it("the Started menu writes the range; the default is absent from the URL", async () => {
@@ -82,13 +86,13 @@ describe("RunFilters", () => {
     await waitFor(() => expect((router.state.location.search as { range?: string }).range).toBeUndefined());
   });
 
-  it("an automation filter shows its name and can be removed", async () => {
+  it("a trigger filter shows its name and can be removed", async () => {
     const user = userEvent.setup();
     const { router } = renderRunsAt(
-      <RunFilters currentProjectName="Reliant" triggerName="Hourly sweep" />,
+      <RunFilters triggerName="Hourly sweep" />,
       "/workflows/runs?trigger=trig-1",
     );
-    await user.click(await screen.findByRole("button", { name: "Remove filter Automation: Hourly sweep" }));
+    await user.click(await screen.findByRole("button", { name: "Remove filter Trigger: Hourly sweep" }));
     await waitFor(() => expect((router.state.location.search as { trigger?: string }).trigger).toBeUndefined());
   });
 

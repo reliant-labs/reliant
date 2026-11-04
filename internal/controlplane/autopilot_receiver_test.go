@@ -9,6 +9,8 @@ import (
 	"sort"
 	"testing"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +42,7 @@ func TestAutopilotReceiver_SpeaksControlPlanesWireContract(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	c := New(Deps{BaseURL: srv.URL, Sign: signWith("s")})
+	c := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}, Sign: signWith("s")})
 	ctx := context.Background()
 
 	require.NoError(t, c.UpsertAutopilotReceiver(ctx, AutopilotReceiver{
@@ -88,7 +90,7 @@ func TestAutopilotReceiver_RefusalsAreTyped(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			srv := httptest.NewServer(tc.handler)
 			defer srv.Close()
-			err := New(Deps{BaseURL: srv.URL, Sign: signWith("s")}).UpsertAutopilotReceiver(context.Background(), AutopilotReceiver{ActivationID: "t"})
+			err := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}, Sign: signWith("s")}).UpsertAutopilotReceiver(context.Background(), AutopilotReceiver{ActivationID: "t"})
 			if tc.unsupported {
 				assert.ErrorIs(t, err, ErrAutopilotUnsupported)
 				return
@@ -107,6 +109,6 @@ func TestAutopilotReceiver_WithoutAnIdentityIsUnsupported(t *testing.T) {
 		t.Error("an unsigned call reached the control plane")
 	}))
 	defer srv.Close()
-	_, err := New(Deps{BaseURL: srv.URL}).ListAutopilotReceivers(context.Background())
+	_, err := New(Deps{ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL}}).ListAutopilotReceivers(context.Background())
 	assert.ErrorIs(t, err, ErrAutopilotUnsupported)
 }

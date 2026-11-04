@@ -1,18 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { create } from "@bufbuild/protobuf";
-import { createClient } from "@connectrpc/connect";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { getTransport } from "../../api/grpc-client";
+import { ModelEndpointRoute } from "../../gen/reliant/v1/model_endpoint_pb";
+import type { ListModelEndpointsResponse, ModelEndpoint } from "../../gen/reliant/v1/model_endpoint_pb";
 import {
-  CreateModelEndpointRequestSchema,
-  DeleteModelEndpointRequestSchema,
-  ListModelEndpointsRequestSchema,
-  ModelEndpointRoute,
-  ModelEndpointService,
-  TestModelEndpointRequestSchema,
-  UpdateModelEndpointRequestSchema,
-} from "../../gen/reliant/v1/model_endpoint_pb";
-import type { ModelEndpoint } from "../../gen/reliant/v1/model_endpoint_pb";
+  modelEndpointServiceQueries,
+  useCreateModelEndpoint,
+  useDeleteModelEndpoint,
+  useListModelEndpoints,
+  useTestModelEndpoint,
+  useUpdateModelEndpoint,
+} from "../../hooks/model-endpoint-service-hooks_gen";
 import type { LocalModelEndpoint } from "../../gen/reliant/v1/tools_daemon_pb";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import Card, { CardInset } from "../forge-ui/card";
@@ -30,7 +28,13 @@ import {
 } from "./modelEndpoints";
 import type { EndpointDraft, ModelDraft, Tri } from "./modelEndpoints";
 
-const client = () => createClient(ModelEndpointService, getTransport());
+// ModelEndpointService on forge's generated keys: every write (create,
+// update, delete, and a test, which records the probe on a saved endpoint)
+// refetches the list.
+
+function selectList(response: ListModelEndpointsResponse): { endpoints: ModelEndpoint[]; credentialsAvailable: boolean } {
+  return { endpoints: response.endpoints, credentialsAvailable: response.credentialsAvailable };
+}
 
 const inputClass =
   "w-full min-w-0 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-primary disabled:cursor-not-allowed disabled:opacity-60";
@@ -163,6 +167,10 @@ function EndpointForm({
   onCancel: () => void;
 }) {
   const { daemons } = useDaemonStatus();
+  const queryClient = useQueryClient();
+  const testEndpoint = useTestModelEndpoint();
+  const createEndpoint = useCreateModelEndpoint();
+  const updateEndpoint = useUpdateModelEndpoint();
   const [draft, setDraft] = useState<EndpointDraft>(initial);
   const [fieldError, setFieldError] = useState<{ field: string; message: string } | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -189,7 +197,7 @@ function EndpointForm({
       // Show what the server last reported without making the user re-test.
       void (async () => {
         try {
-          const list = await client().listModelEndpoints(create(ListModelEndpointsRequestSchema));
+          const list = await queryClient.fetchQuery(modelEndpointServiceQueries.listModelEndpoints({}));
           const own = list.endpoints.find((e) => e.id === editingId);
           if (own?.probe) {
             setProbe({ probe: own.probe });
@@ -215,7 +223,7 @@ function EndpointForm({
       const target = editingId
         ? ({ case: "id", value: editingId } as const)
         : ({ case: "draft", value: draftToInput(draft, { includeKey: credentialsAvailable }) } as const);
-      const resp = await client().testModelEndpoint(create(TestModelEndpointRequestSchema, { target }));
+      const resp = await testEndpoint.mutateAsync({ target });
       setProbe({ probe: resp.probe, latencyMs: resp.latencyMs });
       absorbProbe(resp.probe);
     } catch (e) {
@@ -238,9 +246,9 @@ function EndpointForm({
     try {
       const input = draftToInput(draft, { includeKey: credentialsAvailable });
       if (editingId) {
-        await client().updateModelEndpoint(create(UpdateModelEndpointRequestSchema, { id: editingId, endpoint: input }));
+        await updateEndpoint.mutateAsync({ id: editingId, endpoint: input });
       } else {
-        await client().createModelEndpoint(create(CreateModelEndpointRequestSchema, { endpoint: input }));
+        await createEndpoint.mutateAsync({ endpoint: input });
       }
       onSaved();
     } catch (err) {
@@ -300,21 +308,18 @@ function EndpointForm({
         )}
       </fieldset>
 
-      <div className="space-y-1">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="API key" htmlFor="ep-key">
-            <input id="ep-key" type="password" autoComplete="off" className={inputClass} placeholder="Optional" disabled={!credentialsAvailable} value={draft.apiKey} onChange={(e) => patch({ apiKey: e.target.value })} />
-          </Field>
-          <Field label="Custom headers" htmlFor="ep-headers">
-            <input id="ep-headers" className={inputClass} placeholder="Optional" disabled />
-          </Field>
-        </div>
-        {!credentialsAvailable && (
-          <p className="text-xs text-muted-foreground" data-testid="credential-note">
-            {CREDENTIAL_STORE_NOTE}
-          </p>
-        )}
-      </div>
+      {/* The server says whether it can seal an endpoint's key. When it
+          cannot, the field is left out rather than shown disabled behind a
+          permanent "coming soon": a key it would refuse is not a choice. */}
+      {credentialsAvailable ? (
+        <Field label="API key" htmlFor="ep-key">
+          <input id="ep-key" type="password" autoComplete="off" className={inputClass} placeholder="Optional" value={draft.apiKey} onChange={(e) => patch({ apiKey: e.target.value })} />
+        </Field>
+      ) : (
+        <p className="text-xs text-muted-foreground" data-testid="credential-note">
+          {CREDENTIAL_STORE_NOTE}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={test} disabled={testing || saving} className={buttonGhost}>
@@ -406,10 +411,14 @@ function EndpointRow({ endpoint, machine, onEdit, onDelete, deleting }: { endpoi
  * User-configured OpenAI-compatible endpoints: a GPU cluster, vLLM, a hosted
  * inference API. Auto-detected servers live in the per-machine cards above.
  */
-export function CustomEndpointsSection({ credentialsAvailable = false }: { credentialsAvailable?: boolean }) {
+export function CustomEndpointsSection() {
   const { daemons } = useDaemonStatus();
-  const [endpoints, setEndpoints] = useState<ModelEndpoint[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const list = useListModelEndpoints({}, { select: selectList });
+  const deleteEndpoint = useDeleteModelEndpoint();
+  // Null until the first answer; a failed first read shows the error over an empty list.
+  const endpoints = list.data?.endpoints ?? (list.isError ? [] : null);
+  const credentialsAvailable = list.data?.credentialsAvailable ?? false;
+  const loadError = list.error ? errorText(list.error) : null;
   const [mode, setMode] = useState<{ kind: "list" } | { kind: "add" } | { kind: "edit"; endpoint: ModelEndpoint }>({ kind: "list" });
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<ModelEndpoint | null>(null);
@@ -417,28 +426,12 @@ export function CustomEndpointsSection({ credentialsAvailable = false }: { crede
 
   const machines = useMemo(() => new Map(daemons.map((d) => [d.daemonId, machineLabel(d)])), [daemons]);
 
-  const load = useCallback(async () => {
-    try {
-      const resp = await client().listModelEndpoints(create(ListModelEndpointsRequestSchema));
-      setEndpoints(resp.endpoints);
-      setLoadError(null);
-    } catch (e) {
-      setLoadError(errorText(e));
-      setEndpoints((prev) => prev ?? []);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
   const remove = async (ep: ModelEndpoint) => {
     setDeleting(ep.id);
     setDeleteError(null);
     try {
-      await client().deleteModelEndpoint(create(DeleteModelEndpointRequestSchema, { id: ep.id }));
+      await deleteEndpoint.mutateAsync({ id: ep.id });
       setConfirmDelete(null);
-      await load();
     } catch (e) {
       setDeleteError(errorText(e));
     } finally {
@@ -469,10 +462,7 @@ export function CustomEndpointsSection({ credentialsAvailable = false }: { crede
             <EndpointForm
               initial={emptyDraft()}
               credentialsAvailable={credentialsAvailable}
-              onSaved={() => {
-                setMode({ kind: "list" });
-                void load();
-              }}
+              onSaved={() => setMode({ kind: "list" })}
               onCancel={() => setMode({ kind: "list" })}
             />
           </CardInset>
@@ -484,10 +474,7 @@ export function CustomEndpointsSection({ credentialsAvailable = false }: { crede
               initial={endpointToDraft(mode.endpoint)}
               editingId={mode.endpoint.id}
               credentialsAvailable={credentialsAvailable}
-              onSaved={() => {
-                setMode({ kind: "list" });
-                void load();
-              }}
+              onSaved={() => setMode({ kind: "list" })}
               onCancel={() => setMode({ kind: "list" })}
             />
           </CardInset>

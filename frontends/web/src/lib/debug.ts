@@ -7,10 +7,8 @@ import { isDev } from './constants';
 import { useChatStore } from '../store/chatStore';
 import { useThreadActivityStore } from '../store/threadActivityStore';
 import { useActivityStore, ChatActivity, isBusyActivity } from '../store/activityStore';
-import { queryClient } from './query-client';
-import { approvalKeys } from '../hooks/approval-queries';
+import { ApprovalStatus, approvalsFromCache } from '../hooks/approval-queries';
 import { getMessagesFromCache } from '../hooks/message-queries';
-import { ApprovalStatus, type ToolApprovalRequest } from '../api/approval-grpc';
 
 // This file used to carry a third console override — a DebugLogger that
 // pretty-printed every argument with JSON.stringify(arg, null, 2) and then did a
@@ -54,9 +52,7 @@ if (isDev && typeof window !== "undefined") {
       isActive: isBusyActivity(activityState.activities.get(chatId)),
       activity: activityState.activities.get(chatId) ?? ChatActivity.IDLE,
       pendingApprovals:
-        (queryClient
-          .getQueryData<ToolApprovalRequest[]>(approvalKeys.list(chatId))
-          ?.filter((a) => a.status === ApprovalStatus.PENDING).length) || 0,
+        approvalsFromCache(chatId).filter((a) => a.status === ApprovalStatus.PENDING).length,
       activeThreads: useThreadActivityStore.getState().threads[chatId]?.length || 0,
       toolCallStates: state.toolCallStates[chatId]?.size || 0,
       streamingMessages: getMessagesFromCache(chatId).filter(

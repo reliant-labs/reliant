@@ -82,7 +82,7 @@ func testStreaming(t *testing.T) testRoute {
 // testForge is the real ForgeService, with mount's options over the chain.
 func testForge(t *testing.T, mount ...mountkit.Option) testRoute {
 	t.Helper()
-	svc, err := forge.New(forge.Deps{Logger: slog.Default(), Config: &config.Config{}, Router: testRouter{}, Repo: &forge.MockRepository{}})
+	svc, err := forge.New(forge.Deps{Logger: slog.Default(), Config: &config.Config{}, Router: &forge.MockRouter{}, Repo: &forge.MockRepository{}})
 	require.NoError(t, err)
 	return mountService("reliant.v1.ForgeService", svc, mount...)
 }

@@ -118,14 +118,37 @@ describe('mobilePathFor', () => {
     // A run is a chat.
     expect(mobilePathFor('/workflows/runs/chat_123')).toBe('/m/chats/chat_123')
     expect(mobilePathFor('/workflows')).toBe('/m/workflows')
-    expect(mobilePathFor('/workflows/library/builtin%3A%2F%2Fagent')).toBe('/m/workflows')
+    expect(mobilePathFor('/workflows/library')).toBe('/m/workflows')
+    // A workflow's page — where an automation link lands — is its viewer.
+    expect(mobilePathFor('/workflows/library/builtin%3A%2F%2Fagent')).toBe('/m/workflows/builtin%3A%2F%2Fagent')
+    // The run log has a phone twin; an automation id is resolved to its workflow.
+    expect(mobilePathFor('/workflows/runs')).toBe('/m/runs')
+    expect(mobilePathFor('/workflows/automations/t1')).toBe('/m/automations/t1')
+    expect(mobilePathFor('/automations/t1')).toBe('/m/automations/t1')
+    expect(mobilePathFor('/workflows/automations')).toBe('/m/workflows')
     expect(mobilePathFor('/settings')).toBe('/m/settings')
-    expect(mobilePathFor('/settings/ai')).toBe('/m/settings')
+    // A section with a phone screen opens it; one without lands on the list.
+    expect(mobilePathFor('/settings/ai')).toBe('/m/settings?section=ai')
+    expect(mobilePathFor('/settings/notifications')).toBe('/m/settings?section=notifications')
+    expect(mobilePathFor('/settings/git-connections')).toBe('/m/settings?section=github')
+    expect(mobilePathFor('/settings/branches')).toBe('/m/settings?section=workspace')
+    expect(mobilePathFor('/settings/mcp')).toBe('/m/settings')
+    expect(mobilePathFor('/settings/machines/m_1')).toBe('/m/daemons')
     expect(mobilePathFor('/settings/environments/m_1')).toBe('/m/daemons')
   })
 
+  it('keeps the way back when a billing visit has one (the claim page sends people here to subscribe)', () => {
+    expect(mobilePathFor('/settings/billing', 'tab=plans&from=claim&returnTo=%2Fclaim')).toBe(
+      '/m/settings?section=billing&returnTo=%2Fclaim',
+    )
+    // No way back, or one that leaves the app: billing, with no way back.
+    expect(mobilePathFor('/settings/billing', 'tab=plans')).toBe('/m/settings?section=billing')
+    expect(mobilePathFor('/settings/billing', 'returnTo=%2F%2Fevil.example')).toBe('/m/settings?section=billing')
+    expect(mobilePathFor('/settings/billing', 'returnTo=https%3A%2F%2Fevil.example')).toBe('/m/settings?section=billing')
+  })
+
   it('lands everything without a twin on the chat list', () => {
-    for (const pathname of ['/', '/project/abc', '/workflows/runs', '/workflows/automations/t1', '/workflow/new']) {
+    for (const pathname of ['/', '/project/abc', '/workflow/new']) {
       expect(mobilePathFor(pathname), pathname).toBe('/m/chats')
     }
   })

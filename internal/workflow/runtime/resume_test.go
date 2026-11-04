@@ -7,6 +7,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -147,6 +148,39 @@ nodes:
 		assert.Equal(t, 0, iter, "fallback target must not inherit the checkpoint iteration")
 	})
 
+	t.Run("recovery-only executes graph entry despite checkpoint and resume override", func(t *testing.T) {
+		wf := resumeTestWorkflow(t, `
+name: setup-loop
+entry: [setup]
+resume_node: agent_loop
+nodes:
+  - id: setup
+    type: call_llm
+  - id: agent_loop
+    type: loop
+    inline:
+      entry: [work]
+      nodes:
+        - id: work
+          type: call_llm
+`)
+		node, iteration := resolveResumeTarget(wf, &ResumeInput{RecoveryOnly: true, NodeID: "agent_loop", LoopIteration: 7}, logger)
+		assert.Nil(t, node, "recovery must not bypass setup via override, checkpoint or loop heuristic")
+		assert.Zero(t, iteration)
+	})
+
+	t.Run("parallel-compete recovery preserves improve_prompt entry", func(t *testing.T) {
+		raw, err := builtin.BuiltinWorkflowsFS.ReadFile("parallel-compete.yaml")
+		require.NoError(t, err)
+		wf := resumeTestWorkflow(t, string(raw))
+		assert.Equal(t, []string{"improve_prompt"}, wf.GetEntry())
+		positional, _ := resolveResumeTarget(wf, &ResumeInput{}, logger)
+		require.NotNil(t, positional)
+		assert.Equal(t, "implementations", positional.GetId(), "pin the old positional behavior")
+		recovery, _ := resolveResumeTarget(wf, &ResumeInput{RecoveryOnly: true, ResumeAllStopped: true}, logger)
+		assert.Nil(t, recovery, "recovery must execute improve_prompt, not jump to implementations")
+	})
+
 	t.Run("empty resume falls back to single top-level loop", func(t *testing.T) {
 		node, _ := resolveResumeTarget(singleLoopWf, &ResumeInput{}, logger)
 		require.NotNil(t, node)
@@ -207,7 +241,7 @@ func setupResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, yamlSt
 	require.NoError(t, err)
 
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 			return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
@@ -220,13 +254,8 @@ func setupResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, yamlSt
 		activity.RegisterOptions{Name: "WorkflowStatus"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
-			nodeID, _ := input["node_id"].(string)
-			iter := 0
-			if f, ok := input["loop_iteration"].(float64); ok {
-				iter = int(f)
-			}
-			rec.checkpoints = append(rec.checkpoints, capturedCheckpoint{nodeID: nodeID, iteration: iter})
+		func(_ context.Context, input types.WorkflowCheckpointInput) (map[string]interface{}, error) {
+			rec.checkpoints = append(rec.checkpoints, capturedCheckpoint{nodeID: input.NodeID, iteration: int(input.LoopIteration)})
 			return map[string]interface{}{"success": true}, nil
 		},
 		activity.RegisterOptions{Name: "WorkflowCheckpoint"},

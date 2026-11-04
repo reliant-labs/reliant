@@ -177,7 +177,12 @@ func TestHealLeakedGitCredentials(t *testing.T) {
 	if testing.Short() {
 		t.Skip("-short: runs real git; skipped under -short")
 	}
-	setGitCloneTestEnv(t)
+	// In parallel: the heal is handed its projects and home directories, and
+	// it neither commits nor reads a global git config, so TestMain's
+	// isolated one serves — no t.Setenv, which kept this test (22s at load
+	// 75) in the package's serial phase, the part that ran it into the
+	// race-enabled release gate's 5-minute package timeout.
+	t.Parallel()
 	home := t.TempDir()
 	projects := t.TempDir()
 	mk := func(name string, remotes map[string]string) string {

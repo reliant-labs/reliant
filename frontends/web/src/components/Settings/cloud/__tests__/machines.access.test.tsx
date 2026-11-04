@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 /**
@@ -28,16 +28,19 @@ const mocks = vi.hoisted(() => ({
     hasActiveSubscription: true,
     grantedSmallDaemonSecondsRemaining: 0,
     planName: 'Compute Small',
-    allowedDaemonSizes: ['small'],
+    allowedDaemonSizes: ['m'],
   })),
-  listConnectors: vi.fn(async () => ({ connectors: [] as unknown[] })),
-  listAvailableTools: vi.fn(async () => ({ tools: [] as unknown[] })),
-  listConnectorActivity: vi.fn(async () => ({ activity: [] as unknown[] })),
+  listConnectors: vi.fn(async (_req?: unknown) => ({ connectors: [] as unknown[] })),
+  listAvailableTools: vi.fn(async (_req?: unknown) => ({ tools: [] as unknown[] })),
+  listConnectorActivity: vi.fn(async (_req?: unknown) => ({ activity: [] as unknown[] })),
   createConnector: vi.fn(),
-  revokeConnector: vi.fn(async () => ({ revoked: true })),
+  revokeConnector: vi.fn(async (_req?: unknown) => ({ revoked: true })),
   navigate: vi.fn(),
 }))
 
+// The Add machine sheet (billing checkout, catalog) is not under test here.
+vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
+vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
 vi.mock('@/services/controlPlane/billing', () => ({
   getComputeEligibility: mocks.getComputeEligibility,
 }))
@@ -81,24 +84,30 @@ vi.mock('@/services/controlPlane/environments', () => ({
   removePortAccess: vi.fn(),
 }))
 
-vi.mock('@/api/grpc-client', () => ({
-  grpcClient: {
-    daemonRegistry: () => ({
-      listDaemons: async () => mocks.listDaemons(),
-    }),
-    connector: () => ({
-      listConnectors: mocks.listConnectors,
-      listAvailableTools: mocks.listAvailableTools,
-      listConnectorActivity: mocks.listConnectorActivity,
-      createConnector: mocks.createConnector,
-      revokeConnector: mocks.revokeConnector,
-    }),
-  },
-}))
-
 import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { ConnectorExecMode } from '@/gen/reliant/v1/connector_pb'
+import { setTransport } from '@/lib/connect'
+import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { serviceHandlers } from '@/test/serviceTransport'
+
+// The daemon list and the grants are read through connectClient
+// (DaemonRegistryService, ConnectorService), so both answer at the transport.
+beforeEach(() =>
+  setTransport(
+    daemonRegistryTransport(
+      { listDaemons: () => mocks.listDaemons() },
+      serviceHandlers('ConnectorService', {
+        listConnectors: (req) => mocks.listConnectors(req),
+        listAvailableTools: (req) => mocks.listAvailableTools(req),
+        listConnectorActivity: (req) => mocks.listConnectorActivity(req),
+        createConnector: (req) => mocks.createConnector(req),
+        revokeConnector: (req) => mocks.revokeConnector(req),
+      }),
+    ),
+  ),
+)
+afterEach(() => setTransport(null))
 
 function machine(over: Record<string, unknown> = {}) {
   return {
@@ -108,7 +117,7 @@ function machine(over: Record<string, unknown> = {}) {
     status: DaemonStatus.ACTIVE,
     lifecyclePhase: DaemonLifecyclePhase.READY,
     platform: 'linux',
-    size: 'medium',
+    size: 'l',
     lastStatusMessage: '',
     projects: [],
     ...over,

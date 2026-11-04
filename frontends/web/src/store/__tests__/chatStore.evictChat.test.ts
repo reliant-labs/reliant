@@ -1,12 +1,14 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
+  GetWorkflowExecutionsResponseSchema,
   ContentBlockType,
   MessageRole,
   StreamingState,
   WorkflowExecutionView,
 } from "../../gen/reliant/v1/chat_pb";
 import { queryClient } from "../../lib/query-client";
-import { chatDetailKeys } from "../../hooks/chat-detail-keys";
+import { create } from "@bufbuild/protobuf";
+import { chatServiceKeys } from "../../hooks/chat-service-hooks_gen";
 import type { ChatUpdate } from "../../types/streaming";
 import { useChatStore } from "../chatStore";
 import { useThreadActivityStore } from "../threadActivityStore";
@@ -160,15 +162,18 @@ describe("evictChat", () => {
   // The execution tree is retained for as long as the messages are (gcTime:
   // Infinity), so eviction must release it too or an archived chat's tree
   // leaks until logout.
-  it("drops the evicted chat's execution tree and keeps other chats'", () => {
-    const evictedKey = chatDetailKeys.workflowExecutionsView(CHAT, WorkflowExecutionView.BASIC);
-    const keptKey = chatDetailKeys.workflowExecutionsView(OTHER, WorkflowExecutionView.BASIC);
-    queryClient.setQueryData(evictedKey, { latest: null, all: [] });
-    queryClient.setQueryData(keptKey, { latest: null, all: [] });
+  it("drops every view of the evicted chat's execution tree and keeps other chats'", () => {
+    const tree = (chatId: string, view: WorkflowExecutionView) =>
+      chatServiceKeys.getWorkflowExecutions({ chatId, view });
+    const evictedKeys = [tree(CHAT, WorkflowExecutionView.BASIC), tree(CHAT, WorkflowExecutionView.FULL)];
+    const keptKey = tree(OTHER, WorkflowExecutionView.BASIC);
+    for (const key of [...evictedKeys, keptKey]) {
+      queryClient.setQueryData(key, create(GetWorkflowExecutionsResponseSchema, {}));
+    }
 
     useChatStore.getState().evictChat(CHAT);
 
-    expect(queryClient.getQueryData(evictedKey)).toBeUndefined();
+    for (const key of evictedKeys) expect(queryClient.getQueryData(key)).toBeUndefined();
     expect(queryClient.getQueryData(keptKey)).toBeDefined();
     queryClient.removeQueries({ queryKey: keptKey });
   });

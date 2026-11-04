@@ -8,13 +8,14 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../buf/validate/validate_pb";
+import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file reliant/v1/approval.proto.
  */
 export const file_reliant_v1_approval: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL2FwcHJvdmFsLnByb3RvEgpyZWxpYW50LnYxIsEECghBcHByb3ZhbBIKCgJpZBgBIAEoCRIPCgdjaGF0X2lkGAIgASgJEi8KDWFwcHJvdmFsX3R5cGUYAyABKA4yGC5yZWxpYW50LnYxLkFwcHJvdmFsVHlwZRIRCgllbnRpdHlfaWQYBCABKAkSKgoGc3RhdHVzGAUgASgOMhoucmVsaWFudC52MS5BcHByb3ZhbFN0YXR1cxINCgV0aXRsZRgGIAEoCRIYCgtkZXNjcmlwdGlvbhgHIAEoCUgAiAEBEhoKDWRlbmlhbF9yZWFzb24YCCABKAlIAYgBARISCgpjcmVhdGVkX2F0GAsgASgJEhgKC3Jlc29sdmVkX2F0GAwgASgJSAKIAQESFwoKbWVzc2FnZV9pZBgPIAEoCUgDiAEBEhgKC3dvcmtmbG93X2lkGBAgASgJSASIAQESEwoGcnVuX2lkGBEgASgJSAWIAQESGQoMYWN0aW9uX3Rha2VuGBMgASgJSAaIAQFCDgoMX2Rlc2NyaXB0aW9uQhAKDl9kZW5pYWxfcmVhc29uQg4KDF9yZXNvbHZlZF9hdEINCgtfbWVzc2FnZV9pZEIOCgxfd29ya2Zsb3dfaWRCCQoHX3J1bl9pZEIPCg1fYWN0aW9uX3Rha2VuSgQIDRAOSgQIDhAPSgQIFBAVSgQIFRAWSgQIFhAXUgl0b29sX25hbWVSDHRvb2xfY2FsbF9pZFIKdG9vbF9pbnB1dFIQaW50ZWdyYXRpb25fbmFtZVIQaW50ZWdyYXRpb25faWNvbiI1ChpMaXN0QXBwcm92YWxzQnlDaGF0UmVxdWVzdBIXCgdjaGF0X2lkGAEgASgJQga6SAPIAQEiVQobTGlzdEFwcHJvdmFsc0J5Q2hhdFJlc3BvbnNlEicKCWFwcHJvdmFscxgBIAMoCzIULnJlbGlhbnQudjEuQXBwcm92YWwSDQoFdG90YWwYAiABKAUiUAoOQXBwcm92ZVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIZCgxhY3Rpb25fdGFrZW4YAiABKAlIAIgBAUIPCg1fYWN0aW9uX3Rha2VuIjMKD0FwcHJvdmVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkiewoLRGVueVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIaCg1kZW5pYWxfcmVhc29uGAIgASgJSACIAQESGQoMYWN0aW9uX3Rha2VuGAMgASgJSAGIAQFCEAoOX2RlbmlhbF9yZWFzb25CDwoNX2FjdGlvbl90YWtlbiIwCgxEZW55UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIlYKE0JhdGNoQXBwcm92ZVJlcXVlc3QSEwoLcmVxdWVzdF9pZHMYASADKAkSGQoMYWN0aW9uX3Rha2VuGAIgASgJSACIAQFCDwoNX2FjdGlvbl90YWtlbiJKChRCYXRjaEFwcHJvdmVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhAKCGFwcHJvdmVkGAIgASgFEg8KB21lc3NhZ2UYAyABKAkigQEKEEJhdGNoRGVueVJlcXVlc3QSEwoLcmVxdWVzdF9pZHMYASADKAkSGgoNZGVuaWFsX3JlYXNvbhgCIAEoCUgAiAEBEhkKDGFjdGlvbl90YWtlbhgDIAEoCUgBiAEBQhAKDl9kZW5pYWxfcmVhc29uQg8KDV9hY3Rpb25fdGFrZW4iRQoRQmF0Y2hEZW55UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIOCgZkZW5pZWQYAiABKAUSDwoHbWVzc2FnZRgDIAEoCSpoCgxBcHByb3ZhbFR5cGUSHQoZQVBQUk9WQUxfVFlQRV9VTlNQRUNJRklFRBAAEh8KG0FQUFJPVkFMX1RZUEVfV09SS0ZMT1dfU1RFUBACIgQIARABKhJBUFBST1ZBTF9UWVBFX1RPT0wqiAEKDkFwcHJvdmFsU3RhdHVzEh8KG0FQUFJPVkFMX1NUQVRVU19VTlNQRUNJRklFRBAAEhsKF0FQUFJPVkFMX1NUQVRVU19QRU5ESU5HEAESHAoYQVBQUk9WQUxfU1RBVFVTX0FQUFJPVkVEEAISGgoWQVBQUk9WQUxfU1RBVFVTX0RFTklFRBADMp8DCg9BcHByb3ZhbFNlcnZpY2USaAoTTGlzdEFwcHJvdmFsc0J5Q2hhdBImLnJlbGlhbnQudjEuTGlzdEFwcHJvdmFsc0J5Q2hhdFJlcXVlc3QaJy5yZWxpYW50LnYxLkxpc3RBcHByb3ZhbHNCeUNoYXRSZXNwb25zZSIAEkQKB0FwcHJvdmUSGi5yZWxpYW50LnYxLkFwcHJvdmVSZXF1ZXN0GhsucmVsaWFudC52MS5BcHByb3ZlUmVzcG9uc2UiABI7CgREZW55EhcucmVsaWFudC52MS5EZW55UmVxdWVzdBoYLnJlbGlhbnQudjEuRGVueVJlc3BvbnNlIgASUwoMQmF0Y2hBcHByb3ZlEh8ucmVsaWFudC52MS5CYXRjaEFwcHJvdmVSZXF1ZXN0GiAucmVsaWFudC52MS5CYXRjaEFwcHJvdmVSZXNwb25zZSIAEkoKCUJhdGNoRGVueRIcLnJlbGlhbnQudjEuQmF0Y2hEZW55UmVxdWVzdBodLnJlbGlhbnQudjEuQmF0Y2hEZW55UmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate]);
+  fileDesc("ChlyZWxpYW50L3YxL2FwcHJvdmFsLnByb3RvEgpyZWxpYW50LnYxIuUECghBcHByb3ZhbBIKCgJpZBgBIAEoCRIPCgdjaGF0X2lkGAIgASgJEi8KDWFwcHJvdmFsX3R5cGUYAyABKA4yGC5yZWxpYW50LnYxLkFwcHJvdmFsVHlwZRIRCgllbnRpdHlfaWQYBCABKAkSKgoGc3RhdHVzGAUgASgOMhoucmVsaWFudC52MS5BcHByb3ZhbFN0YXR1cxINCgV0aXRsZRgGIAEoCRIYCgtkZXNjcmlwdGlvbhgHIAEoCUgAiAEBEhoKDWRlbmlhbF9yZWFzb24YCCABKAlIAYgBARISCgpjcmVhdGVkX2F0GAsgASgJEhgKC3Jlc29sdmVkX2F0GAwgASgJSAKIAQESFwoKbWVzc2FnZV9pZBgPIAEoCUgDiAEBEhgKC3dvcmtmbG93X2lkGBAgASgJSASIAQESEwoGcnVuX2lkGBEgASgJSAWIAQESGQoMYWN0aW9uX3Rha2VuGBMgASgJSAaIAQESFQoIYmF0Y2hfaWQYFyABKAlIB4gBAUIOCgxfZGVzY3JpcHRpb25CEAoOX2RlbmlhbF9yZWFzb25CDgoMX3Jlc29sdmVkX2F0Qg0KC19tZXNzYWdlX2lkQg4KDF93b3JrZmxvd19pZEIJCgdfcnVuX2lkQg8KDV9hY3Rpb25fdGFrZW5CCwoJX2JhdGNoX2lkSgQIDRAOSgQIDhAPSgQIFBAVSgQIFRAWSgQIFhAXUgl0b29sX25hbWVSDHRvb2xfY2FsbF9pZFIKdG9vbF9pbnB1dFIQaW50ZWdyYXRpb25fbmFtZVIQaW50ZWdyYXRpb25faWNvbiI1ChpMaXN0QXBwcm92YWxzQnlDaGF0UmVxdWVzdBIXCgdjaGF0X2lkGAEgASgJQga6SAPIAQEiVQobTGlzdEFwcHJvdmFsc0J5Q2hhdFJlc3BvbnNlEicKCWFwcHJvdmFscxgBIAMoCzIULnJlbGlhbnQudjEuQXBwcm92YWwSDQoFdG90YWwYAiABKAUiUAoOQXBwcm92ZVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIZCgxhY3Rpb25fdGFrZW4YAiABKAlIAIgBAUIPCg1fYWN0aW9uX3Rha2VuIjMKD0FwcHJvdmVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkiewoLRGVueVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIaCg1kZW5pYWxfcmVhc29uGAIgASgJSACIAQESGQoMYWN0aW9uX3Rha2VuGAMgASgJSAGIAQFCEAoOX2RlbmlhbF9yZWFzb25CDwoNX2FjdGlvbl90YWtlbiIwCgxEZW55UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIlYKE0JhdGNoQXBwcm92ZVJlcXVlc3QSEwoLcmVxdWVzdF9pZHMYASADKAkSGQoMYWN0aW9uX3Rha2VuGAIgASgJSACIAQFCDwoNX2FjdGlvbl90YWtlbiJbChRCYXRjaEFwcHJvdmVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhAKCGFwcHJvdmVkGAIgASgFEg8KB21lc3NhZ2UYAyABKAkSDwoHY2hhdF9pZBgEIAEoCSKBAQoQQmF0Y2hEZW55UmVxdWVzdBITCgtyZXF1ZXN0X2lkcxgBIAMoCRIaCg1kZW5pYWxfcmVhc29uGAIgASgJSACIAQESGQoMYWN0aW9uX3Rha2VuGAMgASgJSAGIAQFCEAoOX2RlbmlhbF9yZWFzb25CDwoNX2FjdGlvbl90YWtlbiJWChFCYXRjaERlbnlSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg4KBmRlbmllZBgCIAEoBRIPCgdtZXNzYWdlGAMgASgJEg8KB2NoYXRfaWQYBCABKAkqhQEKDEFwcHJvdmFsVHlwZRIdChlBUFBST1ZBTF9UWVBFX1VOU1BFQ0lGSUVEEAASHwobQVBQUk9WQUxfVFlQRV9XT1JLRkxPV19TVEVQEAISGwoXQVBQUk9WQUxfVFlQRV9UT09MX0NBTEwQAyIECAEQASoSQVBQUk9WQUxfVFlQRV9UT09MKsQBCg5BcHByb3ZhbFN0YXR1cxIfChtBUFBST1ZBTF9TVEFUVVNfVU5TUEVDSUZJRUQQABIbChdBUFBST1ZBTF9TVEFUVVNfUEVORElORxABEhwKGEFQUFJPVkFMX1NUQVRVU19BUFBST1ZFRBACEhoKFkFQUFJPVkFMX1NUQVRVU19ERU5JRUQQAxIbChdBUFBST1ZBTF9TVEFUVVNfRVhQSVJFRBAEEh0KGUFQUFJPVkFMX1NUQVRVU19DQU5DRUxMRUQQBTKjBQoPQXBwcm92YWxTZXJ2aWNlEmgKE0xpc3RBcHByb3ZhbHNCeUNoYXQSJi5yZWxpYW50LnYxLkxpc3RBcHByb3ZhbHNCeUNoYXRSZXF1ZXN0GicucmVsaWFudC52MS5MaXN0QXBwcm92YWxzQnlDaGF0UmVzcG9uc2UiABJ5CgdBcHByb3ZlEhoucmVsaWFudC52MS5BcHByb3ZlUmVxdWVzdBobLnJlbGlhbnQudjEuQXBwcm92ZVJlc3BvbnNlIjWiuxgxOi8KB2FwcHJvdmUSFgoIYXBwcm92YWwSCnJlcXVlc3RfaWQqDGFjdGlvbl90YWtlbhJtCgREZW55EhcucmVsaWFudC52MS5EZW55UmVxdWVzdBoYLnJlbGlhbnQudjEuRGVueVJlc3BvbnNlIjKiuxguOiwKBGRlbnkSFgoIYXBwcm92YWwSCnJlcXVlc3RfaWQqDGFjdGlvbl90YWtlbhKjAQoMQmF0Y2hBcHByb3ZlEh8ucmVsaWFudC52MS5CYXRjaEFwcHJvdmVSZXF1ZXN0GiAucmVsaWFudC52MS5CYXRjaEFwcHJvdmVSZXNwb25zZSJQorsYTDpKCg1iYXRjaF9hcHByb3ZlEhgKBGNoYXQSEHJlc3BvbnNlLmNoYXRfaWQqEXJlc3BvbnNlLmFwcHJvdmVkKgxhY3Rpb25fdGFrZW4SlQEKCUJhdGNoRGVueRIcLnJlbGlhbnQudjEuQmF0Y2hEZW55UmVxdWVzdBodLnJlbGlhbnQudjEuQmF0Y2hEZW55UmVzcG9uc2UiS6K7GEc6RQoKYmF0Y2hfZGVueRIYCgRjaGF0EhByZXNwb25zZS5jaGF0X2lkKg9yZXNwb25zZS5kZW5pZWQqDGFjdGlvbl90YWtlbkI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * Approval represents a workflow approval request.
@@ -97,6 +98,16 @@ export type Approval = Message<"reliant.v1.Approval"> & {
    * @generated from field: optional string action_taken = 19;
    */
   actionTaken?: string | undefined;
+
+  /**
+   * Set when the run raised this approval together with others in one step
+   * (one turn's tool calls): every approval of the batch carries the same id,
+   * so they can be offered, and decided, together. Each stays its own row and
+   * can still be decided on its own.
+   *
+   * @generated from field: optional string batch_id = 23;
+   */
+  batchId?: string | undefined;
 };
 
 /**
@@ -300,6 +311,14 @@ export type BatchApproveResponse = Message<"reliant.v1.BatchApproveResponse"> & 
    * @generated from field: string message = 3;
    */
   message: string;
+
+  /**
+   * The chat every approval in the batch belongs to (the handler refuses a
+   * batch that spans chats). It is the target of the batch's activity event.
+   *
+   * @generated from field: string chat_id = 4;
+   */
+  chatId: string;
 };
 
 /**
@@ -360,6 +379,14 @@ export type BatchDenyResponse = Message<"reliant.v1.BatchDenyResponse"> & {
    * @generated from field: string message = 3;
    */
   message: string;
+
+  /**
+   * The chat every approval in the batch belongs to, as in
+   * BatchApproveResponse.chat_id.
+   *
+   * @generated from field: string chat_id = 4;
+   */
+  chatId: string;
 };
 
 /**
@@ -370,8 +397,7 @@ export const BatchDenyResponseSchema: GenMessage<BatchDenyResponse> = /*@__PURE_
   messageDesc(file_reliant_v1_approval, 10);
 
 /**
- * ApprovalType is the kind of approval request. Workflow step approvals are
- * the only kind left.
+ * ApprovalType is the kind of approval request.
  *
  * @generated from enum reliant.v1.ApprovalType
  */
@@ -382,9 +408,20 @@ export enum ApprovalType {
   UNSPECIFIED = 0,
 
   /**
+   * A workflow approval node is waiting on it.
+   *
    * @generated from enum value: APPROVAL_TYPE_WORKFLOW_STEP = 2;
    */
   WORKFLOW_STEP = 2,
+
+  /**
+   * One of the run's own tool calls is waiting on it: an activation change
+   * (create/update/enable_trigger) or a machine start. The run answers that
+   * call itself, approved or not, so a denial writes no denial message.
+   *
+   * @generated from enum value: APPROVAL_TYPE_TOOL_CALL = 3;
+   */
+  TOOL_CALL = 3,
 }
 
 /**
@@ -394,7 +431,11 @@ export const ApprovalTypeSchema: GenEnum<ApprovalType> = /*@__PURE__*/
   enumDesc(file_reliant_v1_approval, 0);
 
 /**
- * ApprovalStatus tracks the lifecycle of an approval request
+ * ApprovalStatus tracks the lifecycle of an approval request. Only PENDING is
+ * actionable. APPROVED and DENIED are a person's decision; EXPIRED and
+ * CANCELLED are the system closing a request nobody can answer any more (its
+ * wait timed out, or the run waiting on it ended or was interrupted), with the
+ * reason in denial_reason.
  *
  * @generated from enum reliant.v1.ApprovalStatus
  */
@@ -418,6 +459,16 @@ export enum ApprovalStatus {
    * @generated from enum value: APPROVAL_STATUS_DENIED = 3;
    */
   DENIED = 3,
+
+  /**
+   * @generated from enum value: APPROVAL_STATUS_EXPIRED = 4;
+   */
+  EXPIRED = 4,
+
+  /**
+   * @generated from enum value: APPROVAL_STATUS_CANCELLED = 5;
+   */
+  CANCELLED = 5,
 }
 
 /**
@@ -463,7 +514,10 @@ export const ApprovalService: GenService<{
     output: typeof DenyResponseSchema;
   },
   /**
-   * BatchApprove approves multiple pending approval requests at once
+   * BatchApprove approves several approvals of one chat at once: every
+   * listed approval that is still pending. One already decided (on another
+   * surface) is skipped and not counted; FAILED_PRECONDITION only when none
+   * of them was pending.
    *
    * @generated from rpc reliant.v1.ApprovalService.BatchApprove
    */
@@ -473,7 +527,8 @@ export const ApprovalService: GenService<{
     output: typeof BatchApproveResponseSchema;
   },
   /**
-   * BatchDeny denies multiple pending approval requests at once
+   * BatchDeny denies several approvals of one chat at once, with
+   * BatchApprove's rules for approvals already decided.
    *
    * @generated from rpc reliant.v1.ApprovalService.BatchDeny
    */

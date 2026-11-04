@@ -128,6 +128,10 @@ func (r *NATSDaemonRouter) WakeForRun(ctx context.Context, userID string, select
 	if nomachine.Is(ctx) {
 		return WakeResult{}, nomachine.ErrNoMachine
 	}
+	selector, err := r.routingSelector(ctx, userID, selector)
+	if err != nil {
+		return WakeResult{}, err
+	}
 	if r.resolver != nil {
 		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
 			return WakeResult{DaemonID: daemons[0].DaemonID}, nil

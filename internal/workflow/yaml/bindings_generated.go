@@ -52,6 +52,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
 			"connection": {},
+			"hosted_use": {},
 			"uses":       {},
 			"with":       {},
 		},
@@ -107,11 +108,15 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		oneofFieldName: "create_worktree",
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
-			"base_branch": {},
-			"branch":      {},
-			"copy_files":  {},
-			"force":       {},
-			"name":        {},
+			"base_branch":   {},
+			"base_branches": {},
+			"branch":        {},
+			"copy_files":    {},
+			"expected_head": {},
+			"fetch_branch":  {},
+			"force":         {},
+			"name":          {},
+			"target_repo":   {},
 		},
 	},
 	"execute_tools": {

@@ -52,9 +52,7 @@ func (f *fetchResultFixture) saveAssistant(t *testing.T, text *string, toolName 
 
 	contextWindowID := f.chatID + ":" + f.threadID + ":0"
 	msgID := uuid.New().String()
-	ordinal, err := f.h.Repo().GetNextOrdinal(ctx, f.threadID)
-	require.NoError(t, err)
-	seq, err := f.h.Repo().GetNextSeq(ctx, f.chatID, f.threadID)
+	ordinal, seq, err := f.h.Repo().AllocateMessageOrder(ctx, f.threadID, f.chatID)
 	require.NoError(t, err)
 
 	require.NoError(t, f.h.Repo().CreateMessage(ctx, &db.Message{

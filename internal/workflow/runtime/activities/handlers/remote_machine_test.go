@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -83,6 +84,7 @@ const offlineContent = "Failed to execute tool on daemon: unavailable: no daemon
 // A daemon-offline error gets the wait_for_machine hint appended — in what the
 // model reads and in the durable row — only when the turn was offered the tool.
 func TestExecuteTools_OfflineResultGetsWaitHintOnlyWhenOffered(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	offered := &reliantv1.ToolCapabilities{Offered: []string{tools.ShellToolName, tools.ToolWaitForMachine}, Permission: "mutating"}

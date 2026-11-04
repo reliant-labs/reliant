@@ -8,20 +8,19 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Modal } from '../../ui/Modal'
-import { Button } from '../../ui/Button'
-import type { Preset } from '../../../store/globalDataStore'
-import { presetGrpc } from '../../../api/preset-grpc'
-import { workflowGrpc } from '../../../api/workflow-grpc'
+import Modal from '../../forge-ui/modal'
+import Button from '@/components/forge-ui/button';
+import { fetchDefaultPresets, setDefaultPreset, type Preset } from '../../../hooks/preset-queries'
+import { fetchWorkflow } from '../../../hooks/workflow-queries'
 import { normalizeWorkflowRef } from '../useWorkflowInputs'
-import { usePreferencesStore } from '../../../store/preferencesStore'
 import type { InputDef } from '../../../lib/inputHelpers'
 import { getInputPresetConfig } from '../../../lib/inputHelpers'
 interface PresetConfigModalProps {
   workflowName: string
   projectId: string
   availablePresets: Preset[]
-  onSave: () => void
+  /** Called after saving. The defaults refetch on their own (hooks/preset-queries). */
+  onSave?: () => void
   onClose: () => void
 }
 
@@ -42,27 +41,13 @@ export function PresetConfigModal({
   const [selectedPresets, setSelectedPresets] = useState<Record<string, string>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
-  const { preferences, loadPreferences } = usePreferencesStore()
-
-  // Ensure preferences are loaded when modal opens
-  useEffect(() => {
-    if (!preferences) {
-      loadPreferences()
-    }
-  }, [preferences, loadPreferences])
-
   // Load workflow definition and current defaults
   useEffect(() => {
     const load = async () => {
       setIsLoading(true)
       try {
-        // Wait for preferences to be loaded if they're not already
-        if (!preferences) {
-          await loadPreferences()
-        }
-
         // Fetch workflow definition to get groups
-        const result = await workflowGrpc.getWorkflow(projectId, { name: workflowName })
+        const result = await fetchWorkflow(projectId, { name: workflowName })
         const workflow = result.workflow
         if (!workflow) {
           throw new Error('Workflow not found')
@@ -89,7 +74,7 @@ export function PresetConfigModal({
         setGroups(groupInfos)
 
         // Fetch current defaults
-        const defaults = await presetGrpc.getDefaultPresets(projectId, workflowName)
+        const defaults = await fetchDefaultPresets(projectId, workflowName)
         setSelectedPresets(defaults)
       } catch (error) {
         console.error('Failed to load workflow config:', error)
@@ -99,7 +84,7 @@ export function PresetConfigModal({
       }
     }
     load()
-  }, [projectId, workflowName, preferences, loadPreferences])
+  }, [projectId, workflowName])
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -107,9 +92,9 @@ export function PresetConfigModal({
       // Save each group's default
       for (const group of groups) {
         const presetName = selectedPresets[group.name] || null
-        await presetGrpc.setDefaultPreset(projectId, workflowName, group.name, presetName)
+        await setDefaultPreset(projectId, workflowName, group.name, presetName)
       }
-      onSave()
+      onSave?.()
       onClose()
       toast.success('Default presets saved')
     } catch {
@@ -129,7 +114,7 @@ export function PresetConfigModal({
 
   return (
     <Modal
-      isOpen={true}
+      open={true}
       onClose={onClose}
       title={`Default Presets: ${displayName}`}
       size="md"
@@ -167,7 +152,7 @@ export function PresetConfigModal({
                       ...prev,
                       [group.name]: e.target.value
                     }))}
-                    className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-ring"
+                    className="w-full px-3 py-2 text-sm border border-border rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring focus:border-ring"
                   >
                     <option value="">No default (use system default)</option>
                     {groupPresets.map(preset => (

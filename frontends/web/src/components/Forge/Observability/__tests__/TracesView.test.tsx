@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import { createFixtureApi, FIXTURE_TRACE_ID } from "../__fixtures__/fixtureApi";
+import { createFixtureApi, fixtureTrace, FIXTURE_TRACE_ID } from "../__fixtures__/fixtureApi";
 import { renderPanel } from "./obsTestUtils";
 
 vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
@@ -26,17 +26,20 @@ describe("trace list", () => {
 
   it("sends root operation, errors-only and minimum duration as ListTraces filters", async () => {
     const user = userEvent.setup();
-    const onCall = vi.fn();
-    const harness = renderPanel(createFixtureApi({ onCall }), { view: "traces" });
+    const api = createFixtureApi();
+    // GetServiceSignals retries independently of the trace filters. Assert the
+    // latest ListTraces request, not the latest RPC across the whole panel.
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces" });
     await screen.findAllByTestId("obs-trace-row");
     await user.type(screen.getByTestId("obs-trace-query"), "GetOrder{Enter}");
     await user.click(screen.getByTestId("obs-errors-only"));
     await user.selectOptions(screen.getByTestId("obs-min-duration"), "500ms");
     expect(harness.current()).toMatchObject({ q: "GetOrder", errors: true, minDuration: "500ms" });
     await waitFor(() =>
-      expect(onCall).toHaveBeenLastCalledWith(
-        "ListTraces",
-        expect.objectContaining({ rootSpanName: "GetOrder", errorsOnly: true, minDurationMs: 500 })
+      expect(listTraces).toHaveBeenLastCalledWith(
+        expect.objectContaining({ rootSpanName: "GetOrder", errorsOnly: true, minDurationMs: 500 }),
+        expect.objectContaining({ signal: expect.anything() })
       )
     );
   });
@@ -68,7 +71,143 @@ describe("trace list", () => {
   });
 });
 
+describe("trace title", () => {
+  // A fixed instant: the fixtures never depend on the wall clock.
+  const NOW = Date.parse("2026-10-27T21:30:00Z");
+  const browserFetch = (traceId: string, now: number) => {
+    const base = fixtureTrace(traceId, now);
+    const root = base.spans[0]!;
+    return {
+      ...base,
+      spans: [
+        {
+          ...root,
+          spanId: "w1",
+          parentSpanId: "",
+          name: "HTTP POST",
+          service: "reliant-web",
+          kind: "client",
+          attributes: { "http.method": "POST", "http.url": "https://api.reliantapi.com/reliant.v1.SettingsService/GetConfigHealth" },
+          resource: { "service.name": "reliant-web", "reliant.ingest.class": "browser", "process.runtime.name": "browser" },
+        },
+      ],
+    };
+  };
+
+  it("names a server-rooted trace Service.Method, keeping the raw name as its title", async () => {
+    renderPanel(createFixtureApi(), { view: "traces", trace: FIXTURE_TRACE_ID });
+    const title = await screen.findByTestId("trace-title");
+    expect(title).toHaveTextContent("api OrdersService.CreateOrder");
+    expect(title).toHaveAttribute("title", "orders.v1.OrdersService/CreateOrder");
+    expect(screen.queryByTestId("trace-browser-only")).not.toBeInTheDocument();
+  });
+
+  it("names a browser fetch by the RPC it called, and says its backend spans were sampled out", async () => {
+    const api = createFixtureApi();
+    vi.spyOn(api, "getTrace").mockImplementation(async (req) => browserFetch(req.traceId, NOW));
+    renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID });
+    expect(await screen.findByTestId("trace-title")).toHaveTextContent("reliant-web SettingsService.GetConfigHealth");
+    expect(screen.getByTestId("trace-browser-only")).toHaveTextContent(/Logs for this trace/);
+  });
+
+  it("names a browser-started trace by the server span it caused, from the browser", async () => {
+    const api = createFixtureApi();
+    vi.spyOn(api, "getTrace").mockImplementation(async (req) => {
+      const browser = browserFetch(req.traceId, NOW);
+      const server = { ...fixtureTrace(req.traceId, NOW).spans[0]!, spanId: "s1", parentSpanId: "w1", name: "reliant.v1.SettingsService/GetConfigHealth", service: "reliant-api-server", kind: "server" };
+      return { ...browser, spans: [...browser.spans, server] };
+    });
+    renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID });
+    expect(await screen.findByTestId("trace-title")).toHaveTextContent("reliant-api-server SettingsService.GetConfigHealth from reliant-web");
+    expect(screen.queryByTestId("trace-browser-only")).not.toBeInTheDocument();
+  });
+});
+
 describe("trace waterfall", () => {
+  it("sends the selected range to GetTrace and refetches when the range changes", async () => {
+    const now = Date.parse("2026-10-27T21:30:00Z");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const user = userEvent.setup();
+      const api = createFixtureApi();
+      const getTrace = vi.spyOn(api, "getTrace");
+      renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, range: "1h" });
+      await screen.findByTestId("trace-detail");
+      expect(getTrace).toHaveBeenLastCalledWith(expect.objectContaining({
+        envIds: ["env-prod"],
+        window: { startMs: now - 60 * 60_000, endMs: now },
+      }), expect.objectContaining({ signal: expect.anything() }));
+      await user.selectOptions(screen.getByTestId("obs-range"), "15m");
+      await waitFor(() => expect(getTrace).toHaveBeenLastCalledWith(expect.objectContaining({
+        window: { startMs: now - 15 * 60_000, endMs: now },
+      }), expect.objectContaining({ signal: expect.anything() })));
+      expect(getTrace).toHaveBeenCalledTimes(2);
+    } finally { clock.mockRestore(); }
+  });
+
+  it("finds late incoming links on stale revisit and on explicit Refresh without polling", async () => {
+    let now = Date.parse("2026-10-27T21:30:00Z");
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    try {
+      const user = userEvent.setup();
+      const api = createFixtureApi();
+      let arrived = false;
+      const getTrace = vi.spyOn(api, "getTrace").mockImplementation(async (req) => ({
+        ...fixtureTrace(req.traceId, now),
+        relatedTraces: arrived ? [{ traceId: "c".repeat(32), spanId: "d".repeat(16), linkedSpanId: "b0" }] : [],
+      }));
+      renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, range: "1h" });
+      expect(await screen.findByRole("region", { name: "Related traces" })).toHaveTextContent("No incoming links found");
+      await user.click(screen.getByTestId("trace-back"));
+      await screen.findAllByTestId("obs-trace-row");
+      arrived = true;
+      now += 16_000;
+      await user.click(within(screen.getAllByTestId("obs-trace-row")[0]).getByRole("button"));
+      await waitFor(() => expect(within(screen.getByRole("region", { name: "Related traces" })).getByRole("button")).toBeInTheDocument());
+      expect(getTrace).toHaveBeenCalledTimes(2);
+      arrived = false;
+      await user.click(screen.getByRole("button", { name: "Refresh" }));
+      await waitFor(() => expect(screen.getByRole("region", { name: "Related traces" })).toHaveTextContent("No incoming links found"));
+      expect(getTrace).toHaveBeenCalledTimes(3);
+    } finally { clock.mockRestore(); }
+  });
+
+  it("navigates outgoing span links without inventing a parent or losing scope/time", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const linkedTrace = "a".repeat(32);
+    api.getTrace = vi.fn(async (req) => {
+      const result = fixtureTrace(req.traceId, Date.now());
+      result.spans[0].links = [{ traceId: linkedTrace, spanId: "b".repeat(16) }];
+      return result;
+    });
+    const harness = renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, envs: ["prod"], apps: ["control-plane"], range: "1h" });
+    const tree = await screen.findByRole("tree");
+    await user.click(within(tree).getAllByRole("treeitem")[0]);
+    const links = screen.getByRole("region", { name: "Span links" });
+    expect(links).toHaveTextContent("not parent/child edges");
+    await user.click(within(links).getByRole("button"));
+    expect(harness.current()).toMatchObject({ trace: linkedTrace, span: "b".repeat(16), envs: ["prod"], apps: ["control-plane"], range: "1h" });
+  });
+
+  it("offers incoming related traces separately from the waterfall with bounded-result guidance", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const linkedTrace = "c".repeat(32);
+    api.getTrace = vi.fn(async (req) => ({
+      ...fixtureTrace(req.traceId, Date.now()),
+      relatedTraces: [{ traceId: linkedTrace, spanId: "d".repeat(16), linkedSpanId: "b0" }],
+      relatedTracesTruncated: true,
+    }));
+    const harness = renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID, envs: ["prod"], range: "1h" });
+    const related = await screen.findByRole("region", { name: "Related traces" });
+    expect(related).toHaveTextContent("not parent/child spans");
+    expect(related).toHaveTextContent("first 100");
+    expect(within(await screen.findByRole("tree")).getAllByRole("treeitem")).toHaveLength(9);
+    await user.click(within(related).getByRole("button"));
+    expect(harness.current()).toMatchObject({ trace: linkedTrace, span: "d".repeat(16), envs: ["prod"], range: "1h" });
+  });
+
   it("draws every span as a tree item, with the failed ones said aloud", async () => {
     renderPanel(createFixtureApi(), { view: "traces", trace: FIXTURE_TRACE_ID });
     const tree = await screen.findByRole("tree", { name: "Spans of this trace" });

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getGRPCBaseURLPublic } from '@/api/grpc-client'
+import { reliantApiBaseUrl } from '@/lib/connect'
 
 export type AuthMode = 'dev' | 'apikey' | 'supabase'
 
@@ -16,7 +16,7 @@ export function useAuthMode(): { authMode: AuthMode; loading: boolean } {
   useEffect(() => {
     if (cachedAuthMode !== null) return
 
-    const baseUrl = getGRPCBaseURLPublic()
+    const baseUrl = reliantApiBaseUrl()
     if (!baseUrl) {
       // Config not yet available (e.g. Electron loading), default to supabase
       cachedAuthMode = 'supabase'

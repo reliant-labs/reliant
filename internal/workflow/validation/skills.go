@@ -49,6 +49,10 @@ const skillsFieldName = "skills"
 // Only literals are checked. A templated value ("{{inputs.skills}}") names
 // nothing until the run binds it, so it is skipped rather than guessed at.
 //
+// Nodes inside inline bodies are walked too (see walkWorkflowNodes): a skill
+// named on a node in a loop body skips exactly as silently as one on the root
+// graph.
+//
 // The check is skipped entirely when no resolver is supplied — the same
 // optional-capability shape as WorkflowLoader. The guard against that
 // silently becoming a no-op is TestBuiltinWorkflowSkillsResolve, which
@@ -66,13 +70,11 @@ func validateSkillReferences(wf *reliantv1.Workflow, opts *ValidationOptions, re
 		}
 	}
 
-	for i, node := range wf.GetNodes() {
-		id := nodePathSegment(node, i)
-
+	walkWorkflowNodes(wf, nil, func(node *reliantv1.Node, nodePath []string) {
 		// call_llm.skills — the terminal consumer.
 		if llm := node.GetCallLlm(); llm != nil {
 			for _, s := range model.CelStringListValue(llm.GetSkills()) {
-				checkSkillName(opts.SkillResolver, s, []string{"nodes", id, model.NodeTypeCallLLM}, skillsFieldName, result)
+				checkSkillName(opts.SkillResolver, s, joinPath(nodePath, model.NodeTypeCallLLM), skillsFieldName, result)
 			}
 		}
 
@@ -87,10 +89,10 @@ func validateSkillReferences(wf *reliantv1.Workflow, opts *ValidationOptions, re
 			{model.NodeTypeLoop, node.GetLoop().GetArgs()},
 		} {
 			for _, s := range literalSkillsFromValue(carrier.args[skillsFieldName]) {
-				checkSkillName(opts.SkillResolver, s, []string{"nodes", id, carrier.kind, "args"}, skillsFieldName, result)
+				checkSkillName(opts.SkillResolver, s, joinPath(nodePath, carrier.kind, "args"), skillsFieldName, result)
 			}
 		}
-	}
+	})
 }
 
 // nodePathSegment identifies a node in an error path, falling back to the

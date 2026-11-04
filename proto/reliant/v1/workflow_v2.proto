@@ -728,6 +728,17 @@ message ActionArgs {
 
   // Field 4 is reserved for placement narrowing.
   reserved 4;
+
+  // HostedUse names an explicit owner-approved hosted HTTP use grant. The
+  // secret stays in the controller execution boundary; this is never a value
+  // or a saved connection. Only fixed http/request@1 action nodes accept it.
+  // Mutually exclusive with connection; unavailable to integration tools.
+  CelString hosted_use = 5 [(reliant) = {
+    description: "Hosted HTTP use-grant reference for this fixed action"
+    example: "grant_approved_trader_staging"
+    label: "Hosted use grant"
+    visibility_contexts: "basic"
+  }];
 }
 
 // GitPublishArgs configures a git_publish node: commit a worktree's changes and
@@ -1062,6 +1073,29 @@ message CreateWorktreeArgs {
   }];
   // Force deletes existing worktree/branch if they exist.
   CelBool force = 5 [(reliant) = {description: "Force creation by deleting existing worktree"}];
+  // TargetRepo is a registered repo's relative path within THIS chat's project.
+  // When set, base_branch applies only to that repo; siblings use their defaults.
+  CelString target_repo = 6 [(reliant) = {
+    description: "Registered repository relative path (for example control-plane); never an arbitrary filesystem path"
+    example: "control-plane"
+  }];
+  // Per-repository starting branches, keyed by registered relative path.
+  // A target_repo base_branch wins for its target; unknown keys are refused.
+  map<string, string> base_branches = 7 [(reliant) = {
+    description: "Per-repo base overrides keyed by registered relative path; omitted siblings use their defaults"
+    example: "{\"forge\": \"main\"}"
+  }];
+  // FetchBranch refreshes this ONE branch from origin in target_repo before
+  // choosing the start point. ExpectedHead is mandatory with it; the daemon
+  // refuses if the fetched branch moved since the caller read the PR.
+  CelString fetch_branch = 8 [(reliant) = {
+    description: "Target repo origin branch to fetch as data, not a shell command; requires target_repo and expected_head"
+    example: "feat/review-repair"
+  }];
+  CelString expected_head = 9 [(reliant) = {
+    description: "Exact SHA expected after fetching fetch_branch; drift refuses creation before any checkout"
+    example: "{{ nodes.pr.data.head.sha }}"
+  }];
 }
 
 // =============================================================================
@@ -2102,6 +2136,12 @@ message Workflow {
   // builder test run) start it. Unset, the default, means a chat can start it
   // like any other workflow.
   bool automation_only = 18;
+  // Concurrency optionally bounds trigger-launched runs across this owner's
+  // activations in one project. Excess firings wait durably in FIFO order
+  // (or, with waiting: latest, only the newest per key waits).
+  // Paused or uncertain runs retain capacity. Interactive starts are outside
+  // this trigger policy; manual trigger fires participate.
+  WorkflowConcurrency concurrency = 20;
   // OnFailure is a finally-style handler: an inline graph (nodes, edges, entry)
   // that runs ONCE when a run of this workflow FAILS: a node error nothing
   // handled, an agent that never produced its required response, a node that
@@ -2111,4 +2151,65 @@ message Workflow {
   // had produced. The run still ends FAILED: the handler cannot mask the
   // failure, and an error in it is logged, never recursive.
   Workflow on_failure = 19;
+  // Requires declares what a run needs from outside the definition: the
+  // executables its commands call, the integrations its actions and agents
+  // authenticate to, the checkouts it reads. A run checks them after its
+  // machine is up and before its first node (preflight), and fails at once,
+  // with every missing item named, instead of an hour in.
+  WorkflowRequirements requires = 21;
+}
+
+// WorkflowRequirements is what a run checks before its first node.
+message WorkflowRequirements {
+  // Tools are executables that must be on the run machine's PATH (git, gh,
+  // task, jq).
+  repeated string tools = 1;
+  // Integrations are integration ids (github, slack) whose connection must
+  // resolve, authorized, for the run's owner and acting identity.
+  repeated string integrations = 2;
+  // Repos are checkouts, relative to the project root ("." for the root
+  // itself), that must exist and reach their origin. Reaching origin is
+  // checked with git ls-remote, which writes nothing into the checkout.
+  repeated string repos = 3;
+}
+
+// WorkflowConcurrency is a trigger admission policy, not a worker task limit.
+//
+// At least one of the two is set. max_running alone is a fixed cap.
+// per_member scales the cap with the machines the trigger runs on: K runs per
+// member of its machine pool that can take work (eligible: installed, synced
+// with the pool's catalog, not failed or removed), so adding a member raises
+// throughput with no workflow edit. A trigger on one machine counts as a pool
+// of one; a no-machine trigger too. With both set, max_running is a ceiling
+// over the scaled cap.
+message WorkflowConcurrency {
+  // MaxRunning is how many trigger-launched runs may run at once; later
+  // firings wait. With per_member it is a ceiling over the scaled cap.
+  uint32 max_running = 1;
+  // Waiting is what happens to firings that wait: fifo (the default) keeps
+  // every one, in arrival order; latest keeps only the newest waiting firing
+  // per key, and each older one it replaces is recorded skipped with the
+  // detail "superseded", never failed. Running runs are never touched.
+  WorkflowConcurrencyWaiting waiting = 2;
+  // Key groups waiting firings for waiting: latest, a template over `trigger`
+  // like a webhook dedupe_key, e.g. '{{ trigger.payload.attributes.repository }}'.
+  // Unset: every firing of the workflow shares one key. It only decides which
+  // waiting firings replace each other; the cap still bounds the whole
+  // workflow. A firing whose key cannot be rendered waits and is never
+  // superseded.
+  string key = 3;
+  // PerMember scales the cap with the trigger's machine pool: this many runs
+  // per member that can take work (dev-docs/design/machine-pools.md).
+  uint32 per_member = 4;
+}
+
+// WorkflowConcurrencyWaiting is how a capacity-bound workflow treats waiting
+// firings. In YAML: fifo or latest.
+enum WorkflowConcurrencyWaiting {
+  // UNSPECIFIED is FIFO.
+  WORKFLOW_CONCURRENCY_WAITING_UNSPECIFIED = 0;
+  // FIFO: every waiting firing runs, oldest first.
+  WORKFLOW_CONCURRENCY_WAITING_FIFO = 1;
+  // LATEST: a new firing supersedes the older waiting firings of its key.
+  WORKFLOW_CONCURRENCY_WAITING_LATEST = 2;
 }

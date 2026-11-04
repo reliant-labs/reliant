@@ -33,7 +33,11 @@ type CreateDomainRequest struct {
 	// The hostname to claim: 'example.com', 'www.example.com'. Lowercased
 	// and trimmed of a trailing dot server-side, so a value pasted out of a
 	// DNS tool claims the same domain as one typed by hand.
-	Hostname      string `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Hostname string `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -71,6 +75,13 @@ func (*CreateDomainRequest) Descriptor() ([]byte, []int) {
 func (x *CreateDomainRequest) GetHostname() string {
 	if x != nil {
 		return x.Hostname
+	}
+	return ""
+}
+
+func (x *CreateDomainRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -123,8 +134,12 @@ type GetDomainRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Exactly one of the two. A hostname lookup exists because a UI that has
 	// just been told "this domain is taken" has the name and not the id.
-	DomainId      string `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
-	Hostname      string `protobuf:"bytes,2,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	DomainId string `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+	Hostname string `protobuf:"bytes,2,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -169,6 +184,13 @@ func (x *GetDomainRequest) GetDomainId() string {
 func (x *GetDomainRequest) GetHostname() string {
 	if x != nil {
 		return x.Hostname
+	}
+	return ""
+}
+
+func (x *GetDomainRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -228,7 +250,11 @@ func (x *GetDomainResponse) GetDomain() *v1.Domain {
 // Orgs hold a handful of domains, not thousands, so this deliberately has no
 // pagination either.
 type ListDomainsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -261,6 +287,13 @@ func (x *ListDomainsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ListDomainsRequest.ProtoReflect.Descriptor instead.
 func (*ListDomainsRequest) Descriptor() ([]byte, []int) {
 	return file_services_domain_v1_domain_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListDomainsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
 }
 
 type ListDomainsResponse struct {
@@ -308,8 +341,12 @@ func (x *ListDomainsResponse) GetDomains() []*v1.Domain {
 }
 
 type DeleteDomainRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DomainId      string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	DomainId string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -351,6 +388,13 @@ func (x *DeleteDomainRequest) GetDomainId() string {
 	return ""
 }
 
+func (x *DeleteDomainRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 type DeleteDomainResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -388,8 +432,12 @@ func (*DeleteDomainResponse) Descriptor() ([]byte, []int) {
 }
 
 type VerifyDomainRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DomainId      string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	DomainId string                 `protobuf:"bytes,1,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -427,6 +475,13 @@ func (*VerifyDomainRequest) Descriptor() ([]byte, []int) {
 func (x *VerifyDomainRequest) GetDomainId() string {
 	if x != nil {
 		return x.DomainId
+	}
+	return ""
+}
+
+func (x *VerifyDomainRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -486,7 +541,11 @@ type CreateDomainBindingRequest struct {
 	Target string `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
 	// Serve a 308 to this hostname instead of proxying to a target. Mutually
 	// exclusive with target.
-	RedirectTo    string `protobuf:"bytes,4,opt,name=redirect_to,json=redirectTo,proto3" json:"redirect_to,omitempty"`
+	RedirectTo string `protobuf:"bytes,4,opt,name=redirect_to,json=redirectTo,proto3" json:"redirect_to,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -549,6 +608,13 @@ func (x *CreateDomainBindingRequest) GetRedirectTo() string {
 	return ""
 }
 
+func (x *CreateDomainBindingRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 type CreateDomainBindingResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Binding       *v1.DomainBinding      `protobuf:"bytes,1,opt,name=binding,proto3" json:"binding,omitempty"`
@@ -597,8 +663,12 @@ type DeleteDomainBindingRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Either the binding's own id, or the domain it belongs to — a caller
 	// holding the domain should not need a second read to unbind it.
-	BindingId     string `protobuf:"bytes,1,opt,name=binding_id,json=bindingId,proto3" json:"binding_id,omitempty"`
-	DomainId      string `protobuf:"bytes,2,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+	BindingId string `protobuf:"bytes,1,opt,name=binding_id,json=bindingId,proto3" json:"binding_id,omitempty"`
+	DomainId  string `protobuf:"bytes,2,opt,name=domain_id,json=domainId,proto3" json:"domain_id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -647,6 +717,13 @@ func (x *DeleteDomainBindingRequest) GetDomainId() string {
 	return ""
 }
 
+func (x *DeleteDomainBindingRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
+	}
+	return ""
+}
+
 type DeleteDomainBindingResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -686,6 +763,10 @@ func (*DeleteDomainBindingResponse) Descriptor() ([]byte, []int) {
 type ListDomainBindingsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EnvironmentId *string                `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3,oneof" json:"environment_id,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,2,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -723,6 +804,13 @@ func (*ListDomainBindingsRequest) Descriptor() ([]byte, []int) {
 func (x *ListDomainBindingsRequest) GetEnvironmentId() string {
 	if x != nil && x.EnvironmentId != nil {
 		return *x.EnvironmentId
+	}
+	return ""
+}
+
+func (x *ListDomainBindingsRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -775,42 +863,58 @@ var File_services_domain_v1_domain_proto protoreflect.FileDescriptor
 
 const file_services_domain_v1_domain_proto_rawDesc = "" +
 	"\n" +
-	"\x1fservices/domain/v1/domain.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\"1\n" +
+	"\x1fservices/domain/v1/domain.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\"X\n" +
 	"\x13CreateDomainRequest\x12\x1a\n" +
-	"\bhostname\x18\x01 \x01(\tR\bhostname\"G\n" +
+	"\bhostname\x18\x01 \x01(\tR\bhostname\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"G\n" +
 	"\x14CreateDomainResponse\x12/\n" +
-	"\x06domain\x18\x01 \x01(\v2\x17.controlplane.v1.DomainR\x06domain\"K\n" +
+	"\x06domain\x18\x01 \x01(\v2\x17.controlplane.v1.DomainR\x06domain\"r\n" +
 	"\x10GetDomainRequest\x12\x1b\n" +
 	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12\x1a\n" +
-	"\bhostname\x18\x02 \x01(\tR\bhostname\"D\n" +
+	"\bhostname\x18\x02 \x01(\tR\bhostname\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"D\n" +
 	"\x11GetDomainResponse\x12/\n" +
-	"\x06domain\x18\x01 \x01(\v2\x17.controlplane.v1.DomainR\x06domain\"\x14\n" +
-	"\x12ListDomainsRequest\"H\n" +
+	"\x06domain\x18\x01 \x01(\v2\x17.controlplane.v1.DomainR\x06domain\";\n" +
+	"\x12ListDomainsRequest\x12\x1a\n" +
+	"\x06org_id\x18\x01 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"H\n" +
 	"\x13ListDomainsResponse\x121\n" +
-	"\adomains\x18\x01 \x03(\v2\x17.controlplane.v1.DomainR\adomains\"2\n" +
+	"\adomains\x18\x01 \x03(\v2\x17.controlplane.v1.DomainR\adomains\"Y\n" +
 	"\x13DeleteDomainRequest\x12\x1b\n" +
-	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\"\x16\n" +
-	"\x14DeleteDomainResponse\"2\n" +
+	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\x16\n" +
+	"\x14DeleteDomainResponse\"Y\n" +
 	"\x13VerifyDomainRequest\x12\x1b\n" +
-	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\"G\n" +
+	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"G\n" +
 	"\x14VerifyDomainResponse\x12/\n" +
-	"\x06domain\x18\x01 \x01(\v2\x17.controlplane.v1.DomainR\x06domain\"\x99\x01\n" +
+	"\x06domain\x18\x01 \x01(\v2\x17.controlplane.v1.DomainR\x06domain\"\xc0\x01\n" +
 	"\x1aCreateDomainBindingRequest\x12\x1b\n" +
 	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x16\n" +
 	"\x06target\x18\x03 \x01(\tR\x06target\x12\x1f\n" +
 	"\vredirect_to\x18\x04 \x01(\tR\n" +
-	"redirectTo\"W\n" +
+	"redirectTo\x12\x1a\n" +
+	"\x06org_id\x18\x05 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"W\n" +
 	"\x1bCreateDomainBindingResponse\x128\n" +
-	"\abinding\x18\x01 \x01(\v2\x1e.controlplane.v1.DomainBindingR\abinding\"X\n" +
+	"\abinding\x18\x01 \x01(\v2\x1e.controlplane.v1.DomainBindingR\abinding\"\x7f\n" +
 	"\x1aDeleteDomainBindingRequest\x12\x1d\n" +
 	"\n" +
 	"binding_id\x18\x01 \x01(\tR\tbindingId\x12\x1b\n" +
-	"\tdomain_id\x18\x02 \x01(\tR\bdomainId\"\x1d\n" +
-	"\x1bDeleteDomainBindingResponse\"Z\n" +
+	"\tdomain_id\x18\x02 \x01(\tR\bdomainId\x12\x1a\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"\x1d\n" +
+	"\x1bDeleteDomainBindingResponse\"\x81\x01\n" +
 	"\x19ListDomainBindingsRequest\x12*\n" +
-	"\x0eenvironment_id\x18\x01 \x01(\tH\x00R\renvironmentId\x88\x01\x01B\x11\n" +
-	"\x0f_environment_id\"X\n" +
+	"\x0eenvironment_id\x18\x01 \x01(\tH\x00R\renvironmentId\x88\x01\x01\x12\x1a\n" +
+	"\x06org_id\x18\x02 \x01(\tH\x01R\x05orgId\x88\x01\x01B\x11\n" +
+	"\x0f_environment_idB\t\n" +
+	"\a_org_id\"X\n" +
 	"\x1aListDomainBindingsResponse\x12:\n" +
 	"\bbindings\x18\x01 \x03(\v2\x1e.controlplane.v1.DomainBindingR\bbindings2\xa7\x06\n" +
 	"\rDomainService\x12[\n" +
@@ -892,6 +996,13 @@ func file_services_domain_v1_domain_proto_init() {
 	if File_services_domain_v1_domain_proto != nil {
 		return
 	}
+	file_services_domain_v1_domain_proto_msgTypes[0].OneofWrappers = []any{}
+	file_services_domain_v1_domain_proto_msgTypes[2].OneofWrappers = []any{}
+	file_services_domain_v1_domain_proto_msgTypes[4].OneofWrappers = []any{}
+	file_services_domain_v1_domain_proto_msgTypes[6].OneofWrappers = []any{}
+	file_services_domain_v1_domain_proto_msgTypes[8].OneofWrappers = []any{}
+	file_services_domain_v1_domain_proto_msgTypes[10].OneofWrappers = []any{}
+	file_services_domain_v1_domain_proto_msgTypes[12].OneofWrappers = []any{}
 	file_services_domain_v1_domain_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -17,8 +17,8 @@
  * survives styling churn in either component.
  */
 
-import { screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 
@@ -28,11 +28,6 @@ const HUMAN = 5;
 
 const { listQueuedAgentMessagesMock } = vi.hoisted(() => ({
   listQueuedAgentMessagesMock: vi.fn(),
-}));
-
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: { listQueuedAgentMessages: listQueuedAgentMessagesMock },
-  QUEUED_SENDER_KIND_HUMAN: 5,
 }));
 
 // chat.workflowId is the chat's main thread id — the mailbox the composer
@@ -56,11 +51,11 @@ vi.mock("../../../hooks/chat-queries", async () => {
 const { pendingQuestions } = vi.hoisted(() => ({
   pendingQuestions: { current: [] as unknown[] },
 }));
-vi.mock("../../../hooks/approval-queries", async () => {
+vi.mock("../../../hooks/question-queries", async () => {
   const actual = await vi.importActual<
-    typeof import("../../../hooks/approval-queries")
-  >("../../../hooks/approval-queries");
-  return { ...actual, usePendingQuestions: () => ({ data: pendingQuestions.current }) };
+    typeof import("../../../hooks/question-queries")
+  >("../../../hooks/question-queries");
+  return { ...actual, usePendingQuestions: () => ({ data: { questions: pendingQuestions.current } }) };
 });
 
 // While the agent works, ChatPresenter reads the machine registry to say
@@ -105,7 +100,19 @@ vi.mock("../../workflow/WorkflowViewerPanel", () => ({
 }));
 
 import { useThreadActivityStore } from "../../../store/threadActivityStore";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { ChatPresenter } from "../ChatPresenter";
+import { emptyChatPullReads, queuedAgentMessagesAnswer } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), ...queuedAgentMessagesAnswer(listQueuedAgentMessagesMock) })));
+afterEach(() => setTransport(null));
+
+// The background-work pill lists the daemon's processes (BackgroundService,
+// on its generated hooks); none are running here.
+setTransport(mockTransport({ "BackgroundService.ListProcesses": { response: {} } }));
 
 const baseProps = {
   messages: [],
@@ -221,6 +228,43 @@ describe.each(["desktop", "mobile"] as const)(
 );
 
 /**
+ * On a compact column the band collapses into the status slot's one line
+ * (mobile-chat-redesign.md §6). Keyed on the column's width, not the surface:
+ * a narrow desktop pane collapses too. The real strip and pill report into it.
+ */
+describe("the attention band on a compact column", () => {
+  let rectSpy: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+      width: 390, height: 0, top: 0, left: 0, right: 390, bottom: 0, x: 0, y: 0, toJSON: () => ({}),
+    } as DOMRect);
+  });
+  afterEach(() => rectSpy.mockRestore());
+
+  it.each(["desktop", "mobile"] as const)(
+    "shows queued and running as two chips, and the strip in full in the sheet (%s)",
+    async (surface) => {
+      seedRunningSpawn();
+      renderPresenter(surface);
+
+      const queued = await screen.findByTestId("status-slot-line-queued");
+      expect(queued).toHaveTextContent("1 queued");
+      expect(screen.getByTestId("status-slot-line-background")).toHaveTextContent("1 running");
+      // Mounted (it owns the queue's state) but folded away.
+      expect(screen.getByTestId("queued-messages")).not.toBeVisible();
+
+      fireEvent.click(queued);
+      const sheet = screen.getByTestId("status-slot-sheet");
+      expect(sheet).toContainElement(screen.getByTestId("queued-messages"));
+      expect(screen.getByText("check the migration file")).toBeVisible();
+      // Take-back and interrupt stay reachable in the sheet.
+      expect(screen.getByLabelText("Cancel queued message")).toBeVisible();
+      expect(screen.getByLabelText("Interrupt the agent and deliver queued messages now")).toBeVisible();
+    },
+  );
+});
+
+/**
  * `isChatBusy` is RUNNING *or* AWAITING_INPUT, so it stays true while a
  * question waits on the user — but the agent is parked, not working. The strip
  * must read "actually working", which is what the composer computed before the
@@ -245,7 +289,7 @@ describe("the interrupt affordance tracks work in flight, not chat busy-ness", (
   it("withholds interrupt while a question waits on the user, but still shows the queue", async () => {
     // A question on the thread in view (the main thread).
     pendingQuestions.current = [
-      { question_id: "q1", chat_id: CHAT_ID, workflow_id: "", thread_id: CHAT_ID, step_id: "ask", status: "pending", created_at: "" },
+      { questionId: "q1", chatId: CHAT_ID, workflowId: "", threadId: CHAT_ID, stepId: "ask", status: "pending", createdAt: "" },
     ];
     renderWithQuery(
       <SurfaceProvider surface="desktop">

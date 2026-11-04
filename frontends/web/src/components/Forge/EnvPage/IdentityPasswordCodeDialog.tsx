@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy, KeyRound, ShieldOff } from "lucide-react";
 
 import Modal from "@/components/forge-ui/modal";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { IdentityPasswordCode } from "@/services/controlPlane/identity/api";
 import { identityErrorKind, identityErrorMessage } from "@/services/controlPlane/identity/errors";
 
@@ -56,12 +56,12 @@ export function IdentityPasswordCodeDialog({ issued, onClose }: { issued: Issued
       <div className="space-y-3 text-sm" data-testid="identity-code-dialog">
         <SecretField label={link ? "Link" : "Code"} value={link || code.code} testId={link ? "identity-code-link" : "identity-code-value"} />
         {!link && (
-          <p className="text-xs text-muted-foreground" data-testid="identity-code-no-link">
+          <p className="text-xs text-ink-muted" data-testid="identity-code-no-link">
             This environment&apos;s identity has no sign-in address to build a link from, so here is the bare code. The page
-            that redeems it is <code className="font-mono text-foreground">/auth/reset</code> on your app.
+            that redeems it is <code className="font-mono text-ink">/auth/reset</code> on your app.
           </p>
         )}
-        <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+        <ul className="list-disc space-y-1 pl-4 text-xs text-ink-muted">
           <li>
             It works once{code.expiresAtMs ? <>, and expires {formatIn(code.expiresAtMs)}</> : null}. Their current password,
             if they have one, keeps working until they use it.
@@ -90,7 +90,7 @@ function SecretField({ label, value, testId }: { label: string; value: string; t
   };
   return (
     <div className="space-y-1">
-      <span className="text-xs font-medium text-foreground">{label}</span>
+      <span className="text-xs font-medium text-ink">{label}</span>
       <div className="flex items-stretch gap-2">
         <input
           readOnly
@@ -100,7 +100,7 @@ function SecretField({ label, value, testId }: { label: string; value: string; t
           spellCheck={false}
           autoComplete="off"
           onFocus={(event) => event.currentTarget.select()}
-          className="min-w-0 flex-1 rounded-md border border-border/60 bg-background px-2.5 py-1.5 font-mono text-xs text-foreground focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/20"
+          className="min-w-0 flex-1 rounded-md border border-border/60 bg-surface-sunken px-2.5 py-1.5 font-mono text-xs text-ink focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring"
         />
         <Button
           variant="outline"
@@ -112,7 +112,7 @@ function SecretField({ label, value, testId }: { label: string; value: string; t
         </Button>
       </div>
       {copy === "failed" && (
-        <p role="alert" className="text-xs text-destructive-ink">
+        <p role="alert" className="text-xs text-danger-ink">
           Couldn&apos;t reach the clipboard. Select the text and copy it by hand.
         </p>
       )}
@@ -136,12 +136,12 @@ function Refused({ issued, onClose }: { issued: Extract<IssuedCode, { error: unk
       }
     >
       <div className="flex items-start gap-3 text-sm" data-testid="identity-code-refused">
-        <span className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true">
+        <span className="mt-0.5 shrink-0 text-ink-muted" aria-hidden="true">
           {denied ? <ShieldOff className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />}
         </span>
-        <div className="min-w-0 space-y-2 text-xs text-muted-foreground">
+        <div className="min-w-0 space-y-2 text-xs text-ink-muted">
           {denied && (
-            <p className="text-foreground">
+            <p className="text-ink">
               A password link lets whoever holds it set someone&apos;s password, so it needs the{" "}
               <code className="font-mono">identity:manage</code> permission as well as the admin role. Ask an organization
               owner to grant it to you.

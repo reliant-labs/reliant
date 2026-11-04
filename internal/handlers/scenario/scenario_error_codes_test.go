@@ -78,7 +78,7 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 
 // failingSender fails every daemon command with err.
 func failingSender(err error) *scenario.MockSender {
-	return &scenario.MockSender{SendDaemonCommandFunc: func(context.Context, string, string, []byte, int32) ([]byte, error) {
+	return &scenario.MockSender{PlacementDaemonIDFunc: placeAsNamed, SendDaemonCommandToDaemonFunc: func(context.Context, string, string, string, []byte, int32) ([]byte, error) {
 		return nil, err
 	}}
 }

@@ -2,8 +2,14 @@ import { useState, useEffect } from "react";
 import { Check, Lightbulb } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
+import {
+  COLOR_SCHEME_ATTR,
+  DEFAULT_COLOR_SCHEME,
+  DEFAULT_COLOR_SCHEME_ATTR,
+  RETIRED_COLOR_SCHEME_IDS,
+} from "../../lib/forgeTokens";
 
-type ColorScheme = "purple" | "blue" | "neutral" | "teal" | "slate" | "forest" | "pink" | "orange" | "red" | "black";
+type ColorScheme = "reliant" | "purple" | "blue" | "neutral" | "teal" | "slate" | "pure-black";
 
 interface ColorSchemeOption {
   id: ColorScheme;
@@ -18,109 +24,79 @@ interface ColorSchemeOption {
 
 const COLOR_SCHEMES: ColorSchemeOption[] = [
   {
+    id: "reliant",
+    name: "Reliant",
+    description: "The brand: blue on blue-black",
+    preview: {
+      primary: "#0A70E0",
+      accent: "#6E39FF",
+      background: "#0A0A0F",
+    },
+  },
+  {
     id: "blue",
     name: "Professional Blue",
-    description: "Modern, refined",
+    description: "Crisp blue on cool neutrals",
     preview: {
-      primary: "#3E88F7",
-      accent: "#E5F0FF",
-      background: "#FAFAFA",
+      primary: "#1659E9",
+      accent: "#F2F3F5",
+      background: "#F9FAFB",
     },
   },
   {
     id: "neutral",
     name: "Refined Neutral",
-    description: "Warm mocha tones, timeless and calm",
+    description: "Warm stone, near-black actions",
     preview: {
-      primary: "#5C4A3D",
-      accent: "#F7F5F3",
-      background: "#FDFCFB",
+      primary: "#443931",
+      accent: "#F5F4F2",
+      background: "#FAFAF9",
     },
   },
   {
     id: "slate",
     name: "Moonlit Slate",
-    description: "Cool sophistication for dashboards",
+    description: "Cool slate for dense dashboards",
     preview: {
-      primary: "#4A5568",
-      accent: "#EDF2F7",
-      background: "#F8FAFC",
+      primary: "#374962",
+      accent: "#F1F3F6",
+      background: "#F9FAFB",
     },
   },
   {
     id: "teal",
-    name: "Modern Teal",
-    description: "Vibrant energy for creative tools",
+    name: "Teal",
+    description: "Deep teal on cool neutrals",
     preview: {
-      primary: "#14B8A6",
-      accent: "#E6FFFA",
-      background: "#F0FDFA",
-    },
-  },
-  {
-    id: "forest",
-    name: "Serene Forest",
-    description: "Focused productivity with calming greens",
-    preview: {
-      primary: "#2F9E6D",
-      accent: "#ECFDF5",
-      background: "#F0FDF4",
+      primary: "#0C7975",
+      accent: "#F2F4F5",
+      background: "#F9FAFB",
     },
   },
   {
     id: "purple",
-    name: "Purple (Classic)",
-    description: "Original creative theme",
+    name: "Violet",
+    description: "The original violet, made legible",
     preview: {
-      primary: "#A855F7",
-      accent: "#F3E8FF",
-      background: "#FAF5FF",
+      primary: "#773CDD",
+      accent: "#F3F2F5",
+      background: "#FAF9FB",
     },
   },
   {
-    id: "pink",
-    name: "Vibrant Pink",
-    description: "Energetic and creative magenta tones",
-    preview: {
-      primary: "#EC4899",
-      accent: "#FCE7F3",
-      background: "#FDF2F8",
-    },
-  },
-  {
-    id: "orange",
-    name: "Energetic Orange",
-    description: "Warm and vibrant for productivity",
-    preview: {
-      primary: "#F97316",
-      accent: "#FFEDD5",
-      background: "#FFF7ED",
-    },
-  },
-  {
-    id: "red",
-    name: "Bold Red",
-    description: "Confident and attention-grabbing",
-    preview: {
-      primary: "#EF4444",
-      accent: "#FEE2E2",
-      background: "#FEF2F2",
-    },
-  },
-  {
-    id: "black",
+    id: "pure-black",
     name: "Pure Black",
     description: "True black for OLED screens",
     preview: {
-      primary: "#FFFFFF",
-      accent: "#1A1A1A",
+      primary: "#FAFAFA",
+      accent: "#242424",
       background: "#000000",
     },
   },
 ];
 
 export function ColorSchemeSelector() {
-  const [selectedScheme, setSelectedScheme] = useState<ColorScheme>("black");
+  const [selectedScheme, setSelectedScheme] = useState<ColorScheme>(DEFAULT_COLOR_SCHEME);
   const [isLoaded, setIsLoaded] = useState(false);
 
   // Load settings from settingsSync on mount (wait for initialization)
@@ -134,8 +110,10 @@ export function ColorSchemeSelector() {
       }
       
       // Now read settings from settingsSync (which has loaded from database)
-      const stored = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, "black") as ColorScheme;
-      setSelectedScheme(stored || "black");
+      const raw = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, DEFAULT_COLOR_SCHEME) as string;
+      // A scheme retired since it was picked selects its replacement.
+      const stored = (RETIRED_COLOR_SCHEME_IDS[raw] ?? raw) as ColorScheme;
+      setSelectedScheme(stored || DEFAULT_COLOR_SCHEME);
       setIsLoaded(true);
     };
     
@@ -149,21 +127,7 @@ export function ColorSchemeSelector() {
     const applyScheme = (scheme: ColorScheme) => {
       const root = document.documentElement;
 
-      // Map scheme to data attribute
-      const schemeMap: Record<ColorScheme, string> = {
-        blue: "professional-blue",
-        neutral: "refined-neutral",
-        teal: "modern-teal",
-        slate: "slate",
-        forest: "forest",
-        purple: "purple-classic",
-        pink: "vibrant-pink",
-        orange: "energetic-orange",
-        red: "bold-red",
-        black: "pure-black",
-      };
-
-      root.setAttribute("data-color-scheme", schemeMap[scheme]);
+      root.setAttribute("data-color-scheme", COLOR_SCHEME_ATTR[scheme] ?? DEFAULT_COLOR_SCHEME_ATTR);
 
       // Sync to database
       settingsSync.setSetting(SETTINGS_KEYS.COLOR_SCHEME, scheme).catch((error) => {
@@ -185,40 +149,57 @@ export function ColorSchemeSelector() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-sm font-semibold mb-1">Color Scheme</h3>
+        <h3 className="text-sm font-semibold mb-1">Color scheme</h3>
         <p className="text-xs text-muted-foreground">
           Choose the accent color for your interface
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {COLOR_SCHEMES.map((scheme) => {
+      {/* A radiogroup: one tab stop (the chosen scheme), arrows move and
+          select, and the choice is aria-checked rather than only a border. */}
+      <div role="radiogroup" aria-label="Color scheme" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        {COLOR_SCHEMES.map((scheme, index) => {
           const isSelected = selectedScheme === scheme.id;
 
           return (
             <button
               key={scheme.id}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              tabIndex={isSelected ? 0 : -1}
               onClick={() => setSelectedScheme(scheme.id)}
+              onKeyDown={(event) => {
+                const step =
+                  event.key === "ArrowRight" || event.key === "ArrowDown"
+                    ? 1
+                    : event.key === "ArrowLeft" || event.key === "ArrowUp"
+                      ? -1
+                      : 0;
+                if (!step) return;
+                event.preventDefault();
+                const next = (index + step + COLOR_SCHEMES.length) % COLOR_SCHEMES.length;
+                setSelectedScheme(COLOR_SCHEMES[next].id);
+                const group = event.currentTarget.parentElement;
+                group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
+              }}
               className={cn(
-                "relative p-4 rounded-lg border-2 transition-all text-left",
-                "elevation-1 hover:elevation-2",
+                "relative p-4 rounded-lg border-2 transition-all text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                // Options are insets in their panel: no shadow, the border
+                // and an accent wash say which is chosen.
                 isSelected
-                  ? "shadow-lg"
-                  : "border-border/40 hover:border-primary/40 bg-background hover:bg-muted/30"
+                  ? "border-primary bg-primary/10"
+                  : "border-border/60 hover:border-primary/40 bg-background hover:bg-foreground/5"
               )}
-              style={isSelected ? {
-                borderColor: 'hsl(var(--primary))',
-                backgroundColor: 'hsl(var(--primary) / 0.1)'
-              } : undefined}
             >
               {/* Color Preview */}
               <div className="flex items-center gap-2 mb-3">
                 <div
-                  className="w-8 h-8 rounded-md elevation-1"
+                  className="w-8 h-8 rounded-md border border-border/40"
                   style={{ backgroundColor: scheme.preview.primary }}
                 />
                 <div
-                  className="w-6 h-6 rounded-md elevation-1"
+                  className="w-6 h-6 rounded-md border border-border/40"
                   style={{ backgroundColor: scheme.preview.accent }}
                 />
                 <div
@@ -234,7 +215,7 @@ export function ColorSchemeSelector() {
                   {isSelected && (
                     <Check 
                       className="w-4 h-4 flex-shrink-0" 
-                      style={{ color: 'hsl(var(--primary))' }}
+                      style={{ color: 'hsl(var(--primary-ink))' }}
                     />
                   )}
                 </div>
@@ -257,9 +238,9 @@ export function ColorSchemeSelector() {
         })}
       </div>
 
-      <div className="mt-4 p-3 elevation-1 rounded-lg border border-border/40 bg-muted/30">
+      <div className="mt-4 p-3 rounded-lg border border-border/60 bg-background">
         <p className="flex items-start gap-2 text-xs text-muted-foreground">
-          <Lightbulb className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary" aria-hidden />
+          <Lightbulb className="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-primary-ink" aria-hidden />
           <span><strong>Tip:</strong> The color scheme affects buttons, links, active states, and focus indicators throughout the app.</span>
         </p>
       </div>

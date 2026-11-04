@@ -55,7 +55,7 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     name: "cloud",
     project: "acme",
     kind: "persistent",
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: "v2.0.0",
     releaseProvenance: null,
@@ -64,6 +64,9 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     phase: "unspecified",
     provenance: "v2.0.0 · main@abc1234",
     holds: [],
+    observed: { state: "not-reported" },
+    drift: { state: "not-reported" },
+    driftDetail: "",
     ...overrides,
   };
 }
@@ -98,8 +101,8 @@ describe("where an environment runs", () => {
   });
 
   it("reads ONLY `destination` — forge's redundant `hosted` flag decides nothing", () => {
-    expect(whereOf({ hosted: true } as ForgeTopologyEnv, null)).toBe("unknown");
-    expect(whereOf({ hosted: true, destination: "cluster" } as ForgeTopologyEnv, null)).toBe("cluster");
+    expect(whereOf({ env: "cloud", hosted: true } as ForgeTopologyEnv, null)).toBe("unknown");
+    expect(whereOf({ env: "cloud", hosted: true, destination: "cluster" } as ForgeTopologyEnv, null)).toBe("cluster");
   });
 
   it("gives Reliant cloud a different treatment from unknown and from cluster", () => {
@@ -167,7 +170,7 @@ describe("a hosted row on the Overview", () => {
       liveEnv({
         release: "",
         provenance: "",
-        declaredShape: { kind: "persistent", workloads: [], secrets: [], domains: [], clusters: [] },
+        declared: true,
       }),
     ]);
     expect(screen.getByTestId("env-row-cloud").textContent).toMatch(/declared, not built/i);

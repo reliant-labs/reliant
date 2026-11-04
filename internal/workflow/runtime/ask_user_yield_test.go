@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
@@ -64,7 +66,7 @@ func newAskUserYieldRun(t *testing.T) *askUserYieldRun {
 		activity.RegisterOptions{Name: "QuestionResolve"},
 	)
 	r.env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]string) (LoadedWorkflow, error) {
+		func(_ context.Context, _ types.LoadWorkflowInput) (LoadedWorkflow, error) {
 			return LoadedWorkflow{WorkflowJSON: workflowBytes}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
@@ -74,7 +76,7 @@ func newAskUserYieldRun(t *testing.T) *askUserYieldRun {
 		activity.RegisterOptions{Name: "WorkflowStatus"},
 	)
 	r.env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+		func(_ context.Context, _ types.WorkflowCheckpointInput) (map[string]interface{}, error) {
 			return map[string]interface{}{"success": true}, nil
 		},
 		activity.RegisterOptions{Name: "WorkflowCheckpoint"},

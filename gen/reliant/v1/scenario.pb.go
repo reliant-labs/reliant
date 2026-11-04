@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1322,7 +1323,7 @@ var File_reliant_v1_scenario_proto protoreflect.FileDescriptor
 const file_reliant_v1_scenario_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/scenario.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"E\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"E\n" +
 	"\x0eSimulatedEvent\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x1f\n" +
 	"\voutput_json\x18\x02 \x01(\tR\n" +
@@ -1436,14 +1437,19 @@ const file_reliant_v1_scenario_proto_rawDesc = "" +
 	"scenarioId\"W\n" +
 	"\x16ExportScenarioResponse\x12!\n" +
 	"\fyaml_content\x18\x01 \x01(\tR\vyamlContent\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename2\xa7\x04\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename2\xa7\x06\n" +
 	"\x0fScenarioService\x12V\n" +
 	"\rListScenarios\x12 .reliant.v1.ListScenariosRequest\x1a!.reliant.v1.ListScenariosResponse\"\x00\x12Y\n" +
-	"\x0eCreateScenario\x12!.reliant.v1.CreateScenarioRequest\x1a\".reliant.v1.CreateScenarioResponse\"\x00\x12P\n" +
-	"\vRunScenario\x12\x1e.reliant.v1.RunScenarioRequest\x1a\x1f.reliant.v1.RunScenarioResponse\"\x00\x12Y\n" +
-	"\x0eDeleteScenario\x12!.reliant.v1.DeleteScenarioRequest\x1a\".reliant.v1.DeleteScenarioResponse\"\x00\x12Y\n" +
-	"\x0eUploadScenario\x12!.reliant.v1.UploadScenarioRequest\x1a\".reliant.v1.UploadScenarioResponse\"\x00\x12Y\n" +
-	"\x0eExportScenario\x12!.reliant.v1.ExportScenarioRequest\x1a\".reliant.v1.ExportScenarioResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x0eCreateScenario\x12!.reliant.v1.CreateScenarioRequest\x1a\".reliant.v1.CreateScenarioResponse\"\x00\x12\xc0\x01\n" +
+	"\vRunScenario\x12\x1e.reliant.v1.RunScenarioRequest\x1a\x1f.reliant.v1.RunScenarioResponse\"p\xa2\xbb\x18l:j:ha simulated test run of a workflow: nothing in the project changes beyond the scenario's own last result\x12\x8c\x01\n" +
+	"\x0eDeleteScenario\x12!.reliant.v1.DeleteScenarioRequest\x1a\".reliant.v1.DeleteScenarioResponse\"3\xa2\xbb\x18/:-\n" +
+	"\x06delete\x12\x17\n" +
+	"\bscenario\x12\vscenario_id*\n" +
+	"project_id\x12\xb0\x01\n" +
+	"\x0eUploadScenario\x12!.reliant.v1.UploadScenarioRequest\x1a\".reliant.v1.UploadScenarioResponse\"W\xa2\xbb\x18S:Q\n" +
+	"\x06upload\x128\n" +
+	"\bscenario\x12\x14response.scenario.id\x1a\x16response.scenario.name*\rworkflow_slug\x12\\\n" +
+	"\x0eExportScenario\x12!.reliant.v1.ExportScenarioRequest\x1a\".reliant.v1.ExportScenarioResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_scenario_proto_rawDescOnce sync.Once

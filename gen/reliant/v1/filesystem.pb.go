@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -2511,7 +2512,7 @@ var File_reliant_v1_filesystem_proto protoreflect.FileDescriptor
 const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/filesystem.proto\x12\n" +
-	"reliant.v1\"\x85\x02\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"\x85\x02\n" +
 	"\bFileNode\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12,\n" +
@@ -2772,21 +2773,21 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\"PROJECT_CHECKOUT_STATE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1ePROJECT_CHECKOUT_STATE_CLONING\x10\x01\x12'\n" +
 	"#PROJECT_CHECKOUT_STATE_CLONE_FAILED\x10\x02\x12!\n" +
-	"\x1dPROJECT_CHECKOUT_STATE_ABSENT\x10\x032\xb8\t\n" +
+	"\x1dPROJECT_CHECKOUT_STATE_ABSENT\x10\x032\xdd\r\n" +
 	"\x11FileSystemService\x12P\n" +
 	"\vGetFileTree\x12\x1e.reliant.v1.GetFileTreeRequest\x1a\x1f.reliant.v1.GetFileTreeResponse\"\x00\x12Y\n" +
-	"\x0eGetFileContent\x12!.reliant.v1.GetFileContentRequest\x1a\".reliant.v1.GetFileContentResponse\"\x00\x12\\\n" +
-	"\x0fSaveFileContent\x12\".reliant.v1.SaveFileContentRequest\x1a#.reliant.v1.SaveFileContentResponse\"\x00\x12\\\n" +
+	"\x0eGetFileContent\x12!.reliant.v1.GetFileContentRequest\x1a\".reliant.v1.GetFileContentResponse\"\x00\x12\xbc\x01\n" +
+	"\x0fSaveFileContent\x12\".reliant.v1.SaveFileContentRequest\x1a#.reliant.v1.SaveFileContentResponse\"`\xa2\xbb\x18\\:Z:Xfile edit through the daemon: git records file changes, and editor saves are high-volume\x12\\\n" +
 	"\x0fGetFileMetadata\x12\".reliant.v1.GetFileMetadataRequest\x1a#.reliant.v1.GetFileMetadataResponse\"\x00\x12e\n" +
 	"\x12GetFilePreviewInfo\x12%.reliant.v1.GetFilePreviewInfoRequest\x1a&.reliant.v1.GetFilePreviewInfoResponse\"\x00\x12Y\n" +
-	"\x0eGetFilePreview\x12!.reliant.v1.GetFilePreviewRequest\x1a\".reliant.v1.GetFilePreviewResponse\"\x00\x12e\n" +
-	"\x12CreateFileOrFolder\x12%.reliant.v1.CreateFileOrFolderRequest\x1a&.reliant.v1.CreateFileOrFolderResponse\"\x00\x12e\n" +
-	"\x12DeleteFileOrFolder\x12%.reliant.v1.DeleteFileOrFolderRequest\x1a&.reliant.v1.DeleteFileOrFolderResponse\"\x00\x12G\n" +
-	"\bCopyFile\x12\x1b.reliant.v1.CopyFileRequest\x1a\x1c.reliant.v1.CopyFileResponse\"\x00\x12P\n" +
-	"\vSearchFiles\x12\x1e.reliant.v1.SearchFilesRequest\x1a\x1f.reliant.v1.SearchFilesResponse\"\x00\x12Y\n" +
-	"\x0eReplaceInFiles\x12!.reliant.v1.ReplaceInFilesRequest\x1a\".reliant.v1.ReplaceInFilesResponse\"\x00\x12V\n" +
-	"\rListDirectory\x12 .reliant.v1.ListDirectoryRequest\x1a!.reliant.v1.ListDirectoryResponse\"\x00\x12\\\n" +
-	"\x0fCreateDirectory\x12\".reliant.v1.CreateDirectoryRequest\x1a#.reliant.v1.CreateDirectoryResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x0eGetFilePreview\x12!.reliant.v1.GetFilePreviewRequest\x1a\".reliant.v1.GetFilePreviewResponse\"\x00\x12\xba\x01\n" +
+	"\x12CreateFileOrFolder\x12%.reliant.v1.CreateFileOrFolderRequest\x1a&.reliant.v1.CreateFileOrFolderResponse\"U\xa2\xbb\x18Q:O:Mfilesystem edit through the daemon: git records the file once it is committed\x12\xbd\x01\n" +
+	"\x12DeleteFileOrFolder\x12%.reliant.v1.DeleteFileOrFolderRequest\x1a&.reliant.v1.DeleteFileOrFolderResponse\"X\xa2\xbb\x18T:R:Pfilesystem edit through the daemon: git records the removal once it is committed\x12\x9c\x01\n" +
+	"\bCopyFile\x12\x1b.reliant.v1.CopyFileRequest\x1a\x1c.reliant.v1.CopyFileResponse\"U\xa2\xbb\x18Q:O:Mfilesystem edit through the daemon: git records the copy once it is committed\x12P\n" +
+	"\vSearchFiles\x12\x1e.reliant.v1.SearchFilesRequest\x1a\x1f.reliant.v1.SearchFilesResponse\"\x00\x12\xb6\x01\n" +
+	"\x0eReplaceInFiles\x12!.reliant.v1.ReplaceInFilesRequest\x1a\".reliant.v1.ReplaceInFilesResponse\"]\xa2\xbb\x18Y:W:Ubulk file edit through the daemon: git records each changed file once it is committed\x12V\n" +
+	"\rListDirectory\x12 .reliant.v1.ListDirectoryRequest\x1a!.reliant.v1.ListDirectoryResponse\"\x00\x12\xbc\x01\n" +
+	"\x0fCreateDirectory\x12\".reliant.v1.CreateDirectoryRequest\x1a#.reliant.v1.CreateDirectoryResponse\"`\xa2\xbb\x18\\:Z:Xfilesystem edit through the daemon: an empty directory is not even something git recordsB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_filesystem_proto_rawDescOnce sync.Once

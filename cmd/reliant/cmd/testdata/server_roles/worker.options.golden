@@ -8,6 +8,7 @@
       MaxIdleConns: 17
       ConnectTimeout: 47s
       SchemaWait: 2m3s
+      KeepIdleWarm: true
     }
     DataDir: "/surface/data"
     TemporalHost: "temporal.surface.test"
@@ -35,6 +36,7 @@
       URL: "http://cp.surface.test:8080"
       InternalServiceSecret: "cp-secret"
     }
+    AllowPrivateEgress: true
     Log: logging.Settings {
       Level: "warn"
       Format: "json"
@@ -58,14 +60,6 @@
       OTLPEndpoint: "http://otel.surface.test:4318"
       OTLPEnabled: true
       PrometheusEnabled: false
-    }
-    Sentry: telemetry.SentryConfig {
-      DSN: "https://key@o0.ingest.sentry.io/42"
-      Environment: "surface"
-      Release: ""
-      Debug: false
-      Enabled: true
-      TracesSampleRate: 0.25
     }
     Analytics: analytics.Settings {
       Disabled: true
@@ -91,6 +85,14 @@
     }
     WorkflowTaskSlots: 7
     WorkflowTaskPollers: 3
+    Egress: egresslimit.Limits {
+      Replicas: 2
+      UserPerMinute: 11
+      UserBurst: 12
+      UserMaxConcurrent: 15
+      HostMaxConcurrent: 17
+      TurnMaxParallel: 18
+    }
   }
   {
     github: [

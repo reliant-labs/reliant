@@ -34,12 +34,7 @@ vi.mock("../../../store/chatStore", () => ({
 }));
 
 vi.mock("../../../api/client", () => ({
-  api: {
-    toolCalls: {
-      cancel: vi.fn(),
-      convertToBackground: vi.fn(),
-    },
-  },
+  api: {},
 }));
 
 vi.mock("../../../lib/logger", () => ({

@@ -72,11 +72,11 @@ vi.mock("../BackgroundWorkPill", () => ({
 
 // ChatPresenter reads the chat's pending questions to tell whether the thread
 // in view is waiting on the user; none is pending here.
-vi.mock("../../../hooks/approval-queries", async () => {
+vi.mock("../../../hooks/question-queries", async () => {
   const actual = await vi.importActual<
-    typeof import("../../../hooks/approval-queries")
-  >("../../../hooks/approval-queries");
-  return { ...actual, usePendingQuestions: () => ({ data: [] }) };
+    typeof import("../../../hooks/question-queries")
+  >("../../../hooks/question-queries");
+  return { ...actual, usePendingQuestions: () => ({ data: { questions: [] } }) };
 });
 // The presenter reads the chat row; this suite is about the surface gate.
 vi.mock("../../../hooks/chat-queries", async () => {
@@ -195,5 +195,22 @@ describe("ChatPresenter workflow viewer chrome across surfaces", () => {
     renderPresenter("desktop");
 
     expect(setSettingMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("ChatPresenter header slot", () => {
+  it("renders the ChatHeader row by default", () => {
+    renderPresenter("desktop");
+    expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+  });
+
+  it("renders no header row when the host owns the chrome (mobile top bar)", () => {
+    renderWithQuery(
+      <SurfaceProvider surface="mobile">
+        <ChatPresenter {...baseProps} hideHeader />
+      </SurfaceProvider>,
+    );
+    expect(screen.queryByTestId("chat-header")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-input")).toBeInTheDocument();
   });
 });

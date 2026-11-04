@@ -27,6 +27,8 @@ package controlplane
 import (
 	"context"
 	"net/http"
+
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 )
 
 // Service is every operation reliant performs against the control plane.
@@ -87,6 +89,29 @@ type Service interface {
 	// machine).
 	ResumeDaemon(ctx context.Context, token, daemonID string) error
 
+	// SuspendDaemon stops one of the caller's managed daemons, as Settings ->
+	// Machines does. jwt is the owner's session token: the control plane
+	// refuses a machine credential ("missing owner in context").
+	SuspendDaemon(ctx context.Context, jwt, daemonID string) error
+
+	// ResizeDaemon changes a SUSPENDED managed daemon's size (small, medium,
+	// large, xl, 2xl); it takes effect when the daemon next starts. A running
+	// daemon is FailedPrecondition. jwt is the owner's session token, as for
+	// SuspendDaemon.
+	ResizeDaemon(ctx context.Context, jwt, daemonID, size string) error
+
+	// SetDaemonIdleTimeout replaces how long one of the caller's managed
+	// daemons may sit idle before it suspends (a duration such as "10m", at
+	// most 4h). It applies to a running daemon at once. A machine pool sets
+	// its members' with it. jwt is the owner's session token.
+	SetDaemonIdleTimeout(ctx context.Context, jwt, daemonID, idleTimeout string) error
+
+	// RenameDaemon renames one of the caller's daemons (UpdateDaemon
+	// new_name). The control plane validates the name and refuses one
+	// another of the owner's live machines has (AlreadyExists); the id and
+	// the workspace never change. jwt is the owner's session token.
+	RenameDaemon(ctx context.Context, jwt, daemonID, name string) error
+
 	// ResumeDaemonForRun wakes a run owner's suspended machine for a run that
 	// resumes after a hold, with this process's internal-service identity
 	// (Deps.Sign) rather than the owner's session token, which may have
@@ -124,11 +149,12 @@ type Service interface {
 
 // Deps configures the adapter.
 type Deps struct {
-	// BaseURL is the control plane's origin. Empty dials the local default,
-	// for development against a control plane on this machine; a deployment
-	// that has no control plane does not build the adapter at all
-	// (Endpoint.Hosted).
-	BaseURL string
+	// ControlPlane is where the control plane is: its url
+	// (RELIANT_CONTROL_PLANE_URL) is the origin every call goes to. Nil, or
+	// an empty url, dials the local default, for development against a
+	// control plane on this machine; a deployment that has no control plane
+	// does not build the adapter at all (Endpoint.Hosted).
+	ControlPlane *configv1.ControlPlaneConfig
 	// Sign mints the internal-service bearer ResumeDaemonForRun presents.
 	// Nil — no INTERNAL_SERVICE_SECRET — leaves that one call unsupported;
 	// every other call presents the caller's own token.

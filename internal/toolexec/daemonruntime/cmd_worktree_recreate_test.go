@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
@@ -46,6 +47,7 @@ func recreate(t *testing.T, req worktreeRecreateRequest) worktreeRecreateRespons
 // F3: when the second repo fails, the first checkout is removed again, from its
 // own repository (its parent directory is not a git repo).
 func TestRecreate_PartialFailureRollsBackEarlierCheckouts(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	base := t.TempDir()
 	api, web := filepath.Join(base, "api"), filepath.Join(base, "web")
@@ -87,6 +89,7 @@ func TestRecreate_PartialFailureRollsBackEarlierCheckouts(t *testing.T) {
 // A checkout parked by an interrupted clean-up is moved back by recreate, which
 // would otherwise fail: its branch is still checked out in quarantine.
 func TestRecreate_MovesAParkedCheckoutBack(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	base := t.TempDir()
 	repo := filepath.Join(base, "repo")
@@ -133,6 +136,7 @@ func TestRecreate_MovesAParkedCheckoutBack(t *testing.T) {
 // checked out"), so recreate could never rebuild it. The stale registration of
 // a path that is gone is dropped first.
 func TestRecreate_RebuildsACheckoutDeletedOutFromUnderGit(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	base := t.TempDir()
 	repo := filepath.Join(base, "repo")
@@ -163,6 +167,7 @@ func TestRecreate_RebuildsACheckoutDeletedOutFromUnderGit(t *testing.T) {
 // into a local branch) is still recoverable: git creates the local branch
 // tracking it.
 func TestRecreate_UsesARemoteOnlyBranch(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	base := t.TempDir()
 	origin := filepath.Join(base, "origin")

@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, Layers, Plus, Server, X } from "lucide-react";
+import { Boxes, Check, ChevronDown, Layers, Plus, Server, X } from "lucide-react";
 
 import { useAttributeValues } from "@/hooks/observability-queries";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
@@ -46,6 +46,15 @@ export interface ObsScopeBarProps {
   range: RangePreset;
   /** Project area: every environment, for the picker. Env page: undefined. */
   environments?: ObsEnvironment[];
+  /**
+   * Org place: every app name, for the App picker. The
+   * environments are then already narrowed to the selected apps and named
+   * `app/env`. Present in both chrome modes.
+   */
+  apps?: string[];
+  /** Selected app names; empty = all. */
+  selectedApps?: string[];
+  onAppsChange?: (names: string[]) => void;
   /** Selected environment names; empty = all. */
   selectedEnvs: string[];
   onEnvsChange: (names: string[]) => void;
@@ -65,8 +74,19 @@ export interface ObsScopeBarProps {
   filterable?: boolean;
 }
 
+/**
+ * Every control in the bar is at least 32px tall (44px on a touch screen), and
+ * a chip's remove button fills the chip's height: 17 of the Logs page's 26
+ * controls measured under 32px before. The floor is in px on purpose
+ * (`min-h-[32px]`): the root font size is a user setting, and at 15px `h-8`
+ * alone is 30px.
+ */
 const CONTROL =
-  "inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-xs text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-8 min-h-[32px] touch:h-11 items-center gap-1.5 rounded-md border border-border bg-surface-sunken px-2 text-xs text-ink transition-colors hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+const CHIP = "inline-flex h-8 min-h-[32px] touch:h-11 items-center gap-1 rounded-md border border-border bg-surface pl-2 text-xs";
+const CHIP_REMOVE =
+  "inline-flex h-full w-7 touch:w-11 items-center justify-center rounded-r-md text-ink-muted hover:bg-ink/5 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function ObsScopeBar(props: ObsScopeBarProps) {
   const { filters, onFiltersChange, groupBy, onGroupByChange } = props;
@@ -74,18 +94,21 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="obs-scope-bar" role="group" aria-label="What to show">
+      {props.apps && (
+        <AppPicker apps={props.apps} selected={props.selectedApps ?? []} onChange={props.onAppsChange ?? (() => undefined)} />
+      )}
       {props.environments ? (
         <EnvPicker environments={props.environments} selected={props.selectedEnvs} onChange={props.onEnvsChange} />
       ) : props.pinnedEnv ? (
-        <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border/60 bg-background px-2 text-xs" data-testid="obs-pinned-env">
-          <Server className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-          <span className="text-muted-foreground">Environment</span>
-          <span className="font-mono text-foreground">{props.pinnedEnv}</span>
+        <span className="inline-flex h-8 min-h-[32px] touch:h-11 items-center gap-1.5 rounded-md border border-border/60 bg-surface-sunken px-2 text-xs" data-testid="obs-pinned-env">
+          <Server className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
+          <span className="text-ink-muted">Environment</span>
+          <span className="font-mono text-ink">{props.pinnedEnv}</span>
           {props.onWiden && (
             <button
               type="button"
               onClick={props.onWiden}
-              className="ml-1 rounded-sm text-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="ml-1 rounded-sm text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="obs-widen-envs"
             >
               Compare across environments
@@ -97,15 +120,15 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
       {props.filterable !== false && filters.map((filter, index) => (
         <span
           key={formatFilterToken(filter)}
-          className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card pl-2 pr-1 text-xs"
+          className={CHIP}
           data-testid="obs-filter-chip"
         >
-          <span className="text-muted-foreground">{attributeLabel(filter.key)}</span>{" "}
-          <span className="text-muted-foreground">{FILTER_OP_LABELS[filter.op]}</span>
+          <span className="text-ink-muted">{attributeLabel(filter.key)}</span>{" "}
+          <span className="text-ink-muted">{FILTER_OP_LABELS[filter.op]}</span>
           {filter.op !== "exists" && (
             <>
               {" "}
-              <span className="max-w-[16rem] truncate font-mono text-foreground" title={filter.value}>
+              <span className="max-w-[16rem] truncate font-mono text-ink" title={filter.value}>
                 {filter.value}
               </span>
             </>
@@ -114,7 +137,7 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
             type="button"
             onClick={() => removeFilter(index)}
             aria-label={`Remove filter ${attributeLabel(filter.key)} ${FILTER_OP_LABELS[filter.op]} ${filter.value}`}
-            className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={CHIP_REMOVE}
           >
             <X className="h-3 w-3" aria-hidden="true" />
           </button>
@@ -127,24 +150,24 @@ export function ObsScopeBar(props: ObsScopeBarProps) {
 
       {props.groupable && (
         <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto" data-testid="obs-group-by">
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1 text-xs text-ink-muted">
             <Layers className="h-3.5 w-3.5" aria-hidden="true" />
             Group by
           </span>
           {groupBy.map((key) => (
-            <span key={key} className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-card pl-2 pr-1 text-xs" data-testid="obs-group-chip">
-              <span className="text-foreground">{attributeLabel(key)}</span>
+            <span key={key} className={CHIP} data-testid="obs-group-chip">
+              <span className="text-ink">{attributeLabel(key)}</span>
               <button
                 type="button"
                 onClick={() => onGroupByChange(groupBy.filter((k) => k !== key))}
                 aria-label={`Stop grouping by ${attributeLabel(key)}`}
-                className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className={CHIP_REMOVE}
               >
                 <X className="h-3 w-3" aria-hidden="true" />
               </button>
             </span>
           ))}
-          {groupBy.length === 0 && <span className="text-xs text-muted-foreground">nothing</span>}
+          {groupBy.length === 0 && <span className="text-xs text-ink-muted">nothing</span>}
           {groupBy.length < MAX_GROUP_BY && <AddGroupBy used={groupBy} onAdd={(key) => onGroupByChange([...groupBy, key])} />}
         </div>
       )}
@@ -207,7 +230,7 @@ export function Popover({
           {...escapeLayer}
           role="dialog"
           aria-label={label}
-          className={cn("absolute top-full z-30 mt-1 rounded-lg border border-border bg-card p-2 shadow-lg", panelClassName ?? "left-0 w-72")}
+          className={cn("absolute top-full z-30 mt-1 rounded-lg border border-border bg-surface p-2 shadow-lg", panelClassName ?? "left-0 w-72")}
           data-testid={`${testId}-popover`}
         >
           {children}
@@ -218,6 +241,56 @@ export function Popover({
 }
 
 // ── Environments ─────────────────────────────────────────────────────────────
+
+function AppPicker({ apps, selected, onChange }: { apps: string[]; selected: string[]; onChange: (names: string[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const active = selected.filter((name) => apps.includes(name));
+  const summary =
+    active.length === 0 ? "All apps" : active.length <= 2 ? active.join(", ") : `${active.length} apps`;
+  const toggle = (name: string) => onChange(active.includes(name) ? active.filter((n) => n !== name) : [...active, name]);
+
+  return (
+    <Popover
+      label="Apps"
+      open={open}
+      onOpenChange={setOpen}
+      testId="obs-app-picker"
+      trigger={
+        <>
+          <Boxes className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
+          <span className="text-ink-muted">App</span>
+          <span className="font-medium">{summary}</span>
+          <ChevronDown className="h-3 w-3 text-ink-muted" aria-hidden="true" />
+        </>
+      }
+    >
+      <fieldset>
+        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Apps</legend>
+        <button
+          type="button"
+          onClick={() => onChange([])}
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          data-testid="obs-app-all"
+        >
+          <Check className={cn("h-3.5 w-3.5", active.length === 0 ? "text-primary-ink" : "invisible")} aria-hidden="true" />
+          Every app
+        </button>
+        {apps.map((app) => (
+          <label key={app} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-ink/5">
+            <input
+              type="checkbox"
+              checked={active.includes(app)}
+              onChange={() => toggle(app)}
+              className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
+              data-testid={`obs-app-option-${app}`}
+            />
+            <span className="font-mono">{app}</span>
+          </label>
+        ))}
+      </fieldset>
+    </Popover>
+  );
+}
 
 function EnvPicker({ environments, selected, onChange }: { environments: ObsEnvironment[]; selected: string[]; onChange: (names: string[]) => void }) {
   const [open, setOpen] = useState(false);
@@ -235,26 +308,26 @@ function EnvPicker({ environments, selected, onChange }: { environments: ObsEnvi
       testId="obs-env-picker"
       trigger={
         <>
-          <Server className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
-          <span className="text-muted-foreground">Environment</span>
+          <Server className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
+          <span className="text-ink-muted">Environment</span>
           <span className="font-medium">{summary}</span>
-          <ChevronDown className="h-3 w-3 text-muted-foreground" aria-hidden="true" />
+          <ChevronDown className="h-3 w-3 text-ink-muted" aria-hidden="true" />
         </>
       }
     >
       <fieldset>
-        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">Environments</legend>
+        <legend className="px-1 pb-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Environments</legend>
         <button
           type="button"
           onClick={() => onChange([])}
-          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-ink/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="obs-env-all"
         >
-          <Check className={cn("h-3.5 w-3.5", active.length === 0 ? "text-primary" : "invisible")} aria-hidden="true" />
+          <Check className={cn("h-3.5 w-3.5", active.length === 0 ? "text-primary-ink" : "invisible")} aria-hidden="true" />
           Every environment
         </button>
         {environments.map((env) => (
-          <label key={env.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted">
+          <label key={env.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-ink/5">
             <input
               type="checkbox"
               checked={active.includes(env.name)}
@@ -266,7 +339,7 @@ function EnvPicker({ environments, selected, onChange }: { environments: ObsEnvi
           </label>
         ))}
       </fieldset>
-      <p className="px-2 pt-2 text-2xs text-muted-foreground">
+      <p className="px-2 pt-2 text-2xs text-ink-muted">
         To compare environments side by side, group by Environment.
       </p>
     </Popover>
@@ -293,11 +366,11 @@ function KeyList({ query, used, onPick, suggestions }: { query: string; used?: s
       <button
         type="button"
         onClick={() => onPick(key)}
-        className="flex w-full items-baseline justify-between gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted focus:outline-none focus-visible:bg-muted"
+        className="flex w-full items-baseline justify-between gap-2 rounded px-2 py-1 text-left text-sm hover:bg-ink/5 focus:outline-none focus-visible:bg-ink/5"
         data-testid={`obs-key-${key}`}
       >
-        <span className="text-foreground">{label}</span>
-        <span className="truncate font-mono text-2xs text-muted-foreground">{key}</span>
+        <span className="text-ink">{label}</span>
+        <span className="truncate font-mono text-2xs text-ink-muted">{key}</span>
       </button>
     </li>
   );
@@ -307,18 +380,18 @@ function KeyList({ query, used, onPick, suggestions }: { query: string; used?: s
       {custom && <ul className="pb-1">{option(typed, `Use "${typed}"`)}</ul>}
       {first.length > 0 && (
         <section>
-          <h4 className="px-2 pb-0.5 pt-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">Common</h4>
+          <h4 className="px-2 pb-0.5 pt-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">Common</h4>
           <ul>{first.map((a) => option(a.key, a.label))}</ul>
         </section>
       )}
       {sections.map(({ cls, keys }) => (
         <section key={cls}>
-          <h4 className="px-2 pb-0.5 pt-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">{CLASS_LABELS[cls]}</h4>
+          <h4 className="px-2 pb-0.5 pt-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">{CLASS_LABELS[cls]}</h4>
           <ul>{keys.map((a) => option(a.key, a.label))}</ul>
         </section>
       ))}
       {!custom && first.length === 0 && sections.length === 0 && (
-        <p className="px-2 py-2 text-xs text-muted-foreground">No attribute matches. Type a full attribute key to use it.</p>
+        <p className="px-2 py-2 text-xs text-ink-muted">No attribute matches. Type a full attribute key to use it.</p>
       )}
     </div>
   );
@@ -359,7 +432,7 @@ function AddFilter({ scope, range, onAdd }: { scope: ObsScope; range: RangePrese
       open={open}
       onOpenChange={onOpenChange}
       testId="obs-add-filter"
-      triggerClassName={cn(CONTROL, "border-dashed text-muted-foreground")}
+      triggerClassName={cn(CONTROL, "border-dashed text-ink-muted")}
       trigger={
         <>
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -382,7 +455,7 @@ function AddFilter({ scope, range, onAdd }: { scope: ObsScope; range: RangePrese
               if (event.key === "Enter" && isAttributeKeyShaped(typed)) setKey(typed);
             }}
             placeholder="Filter by… (service, version, route)"
-            className="h-8 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-8 w-full rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             data-testid="obs-filter-key-input"
           />
           <KeyList query={keyQuery} onPick={setKey} />
@@ -445,12 +518,12 @@ function ValueStep({
       }}
     >
       <div className="flex items-center justify-between gap-2">
-        <button type="button" onClick={onBack} className="rounded-sm text-xs text-muted-foreground hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <button type="button" onClick={onBack} className="rounded-sm text-xs text-ink-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           ← Attributes
         </button>
-        <span className="truncate font-mono text-2xs text-muted-foreground">{attributeKey}</span>
+        <span className="truncate font-mono text-2xs text-ink-muted">{attributeKey}</span>
       </div>
-      <p className="text-sm font-medium text-foreground">{attributeLabel(attributeKey)}</p>
+      <p className="text-sm font-medium text-ink">{attributeLabel(attributeKey)}</p>
       <div className="flex gap-2">
         <label htmlFor={opId} className="sr-only">
           Operator
@@ -459,7 +532,7 @@ function ValueStep({
           id={opId}
           value={op}
           onChange={(event) => onOpChange(event.target.value as FilterTokenOp)}
-          className="h-8 rounded-md border border-border bg-background px-1.5 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-8 rounded-md border border-border bg-surface-sunken px-1.5 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="obs-filter-op"
         >
           {(Object.keys(FILTER_OP_LABELS) as FilterTokenOp[]).map((candidate) => (
@@ -479,7 +552,7 @@ function ValueStep({
               value={value}
               onChange={(event) => onValueChange(event.target.value)}
               placeholder={attributeKey === ENV_KEY ? "prod" : "value"}
-              className="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 font-mono text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-8 min-w-0 flex-1 rounded-md border border-border bg-surface-sunken px-2 font-mono text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="obs-filter-value-input"
             />
           </>
@@ -488,11 +561,11 @@ function ValueStep({
       {op !== "exists" && (
         <div className="max-h-48 overflow-y-auto" aria-live="polite">
           {values.isLoading ? (
-            <p className="px-2 py-1 text-xs text-muted-foreground">Looking up values…</p>
+            <p className="px-2 py-1 text-xs text-ink-muted">Looking up values…</p>
           ) : values.error ? (
-            <p className="px-2 py-1 text-xs text-muted-foreground">Values could not be listed; type one.</p>
+            <p className="px-2 py-1 text-xs text-ink-muted">Values could not be listed; type one.</p>
           ) : suggestions.length === 0 ? (
-            <p className="px-2 py-1 text-xs text-muted-foreground">No values seen in this window. Type one to filter anyway.</p>
+            <p className="px-2 py-1 text-xs text-ink-muted">No values seen in this window. Type one to filter anyway.</p>
           ) : (
             <ul aria-label={`Values of ${attributeLabel(attributeKey)}`}>
               {suggestions.map((v) => (
@@ -500,24 +573,24 @@ function ValueStep({
                   <button
                     type="button"
                     onClick={() => onApply(v.value)}
-                    className="flex w-full items-baseline justify-between gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted focus:outline-none focus-visible:bg-muted"
+                    className="flex w-full items-baseline justify-between gap-2 rounded px-2 py-1 text-left text-sm hover:bg-ink/5 focus:outline-none focus-visible:bg-ink/5"
                     data-testid={`obs-value-${v.value}`}
                   >
-                    <span className="truncate font-mono text-foreground">{v.value || "(empty)"}</span>
-                    <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">{formatCount(v.count)}</span>
+                    <span className="truncate font-mono text-ink">{v.value || "(empty)"}</span>
+                    <span className="shrink-0 text-2xs tabular-nums text-ink-muted">{formatCount(v.count)}</span>
                   </button>
                 </li>
               ))}
             </ul>
           )}
-          {values.data?.truncated && <p className="px-2 pt-1 text-2xs text-muted-foreground">Showing the most frequent; type to narrow.</p>}
+          {values.data?.truncated && <p className="px-2 pt-1 text-2xs text-ink-muted">Showing the most frequent; type to narrow.</p>}
         </div>
       )}
       <div className="flex justify-end">
         <button
           type="submit"
           disabled={op !== "exists" && !value.trim()}
-          className="h-7 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-8 min-h-[32px] touch:h-11 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           data-testid="obs-filter-apply"
         >
           Add filter
@@ -547,7 +620,7 @@ function AddGroupBy({ used, onAdd }: { used: string[]; onAdd: (key: string) => v
       open={open}
       onOpenChange={onOpenChange}
       testId="obs-add-group-by"
-      triggerClassName={cn(CONTROL, "border-dashed text-muted-foreground")}
+      triggerClassName={cn(CONTROL, "border-dashed text-ink-muted")}
       trigger={
         <>
           <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -568,7 +641,7 @@ function AddGroupBy({ used, onAdd }: { used: string[]; onAdd: (key: string) => v
           if (event.key === "Enter" && isAttributeKeyShaped(typed) && !used.includes(typed)) pick(typed);
         }}
         placeholder="Group by…"
-        className="mb-1 h-8 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="mb-1 h-8 w-full rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         data-testid="obs-group-by-input"
       />
       <KeyList query={query} used={used} onPick={pick} suggestions={GROUP_BY_SUGGESTIONS} />

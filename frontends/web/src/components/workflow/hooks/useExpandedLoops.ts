@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
-import { getWorkflow } from '../../../api/workflow-grpc'
+import { getWorkflow } from '../../../hooks/workflow-queries'
 import type { Workflow, LoopStep } from '../../../types/workflow'
 import { getStepRef, getStepInline } from '../../../types/workflow'
 import type { WorkflowExecution } from '../../Chat/ExecutionSidebar/types'

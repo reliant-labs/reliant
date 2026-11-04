@@ -110,7 +110,7 @@ func (s *Service) InterruptThread(ctx context.Context, opts InterruptThreadOpts)
 	// as SendAgentMessage and ClaimQueuedAgentMessages. Revealing that a thread
 	// exists but belongs to another chat is an enumeration leak. A store miss
 	// is already a NotFound; any other read failure is the server's.
-	chat, err := s.repo.GetChatWithUserCheck(ctx, opts.ChatID, opts.UserID)
+	chat, err := s.repo.GetChatRowWithUserCheck(ctx, opts.ChatID, opts.UserID)
 	if err != nil {
 		return InterruptThreadResult{}, fmt.Errorf("load chat: %w", err)
 	}
@@ -160,7 +160,7 @@ func (s *Service) InterruptThread(ctx context.Context, opts InterruptThreadOpts)
 	return result, nil
 }
 
-func (s *Service) signalThreadInterrupt(ctx context.Context, chat *db.Chat, threadID string) error {
+func (s *Service) signalThreadInterrupt(ctx context.Context, chat *db.ChatRow, threadID string) error {
 	if s.temporalSignaler == nil {
 		return nil
 	}
@@ -270,8 +270,15 @@ func (s *Service) inFlightToolCallsForThread(ctx context.Context, chatID, thread
 // inFlightToolCallsForThread for why both statuses count. This is the
 // chat-scoped sibling: pause's scope is the whole chat (all threads), where
 // interrupt's is one thread -- the only difference the spec calls for.
+//
+// It reads the chat's LIVE calls (pending, executing, backgrounded), never its
+// whole history. A long orchestrator chat holds tens of thousands of terminal
+// calls; reading all of them to find the few in flight took 5.5s of a 7.3s
+// interrupt on chat 2ee014da (2026-10-30), on the database instance Temporal's
+// own persistence shares. Backgrounded calls are dropped below: they have
+// handed off to a background process and are not work the turn waits on.
 func (s *Service) inFlightToolCallsForChat(ctx context.Context, chatID string) ([]*db.ToolCall, error) {
-	calls, err := s.repo.ListToolCallsByChat(ctx, chatID)
+	calls, err := s.repo.ListLiveToolCallsByChat(ctx, chatID)
 	if err != nil {
 		return nil, err
 	}

@@ -91,6 +91,11 @@ func (e *BranchHeldError) Error() string {
 // project's repos themselves and resolve the owner daemon.
 type Request struct {
 	Project *db.Project
+	// Checkout is the project's main checkout ON THE OWNER MACHINE
+	// (projectcheckout.On for OwnerDaemonID): every repo is checked out from
+	// Checkout/<repo.RelativePath>. projects.path is the creating machine's
+	// path and is never sent; Finish refuses an empty Checkout.
+	Checkout string
 	// Repos are the project's nested repos; one checkout is made for each.
 	Repos []*core.Repo
 	// Name is the human name, also the workspace directory's prefix.
@@ -101,13 +106,17 @@ type Request struct {
 	BaseBranch string
 	// BaseBranches overrides BaseBranch per repo ID.
 	BaseBranches map[string]string
+	// FetchRepoID selects the registered repo to refresh before checkout.
+	FetchRepoID  string
+	FetchBranch  string
+	ExpectedHead string
 	// Force cleans up a stale branch of the same name before each checkout.
 	Force bool
 	// CopyPaths are exact paths, relative to the workspace root, carried over
 	// from CopySource (gitignored files such as .env). Callers validate them
 	// with copypath.CleanAll.
 	CopyPaths []string
-	// CopySource is where CopyPaths come from; "" means Project.Path.
+	// CopySource is where CopyPaths come from; "" means Checkout.
 	CopySource string
 	// ChatID, when set, records the chat the workspace was created for.
 	ChatID *string
@@ -239,6 +248,7 @@ func claimName(ctx context.Context, store Store, projectID, name, branch string)
 // fail the workspace. The returned error is the reason for FAILED.
 func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Worktree) error {
 	project, repos := req.Project, req.Repos
+	checkout := req.Checkout
 	workspaceID := req.WorkspaceID
 	if workspaceID == "" {
 		workspaceID = worktreepath.WorkspaceDirName(project.Name, wt.Name)
@@ -272,7 +282,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 				Error   string `json:"error"`
 			}
 			err := m.Send(ctx, "worktree.adopt_restore", map[string]string{
-				"repo_path": filepath.Join(project.Path, repo.RelativePath),
+				"repo_path": filepath.Join(checkout, repo.RelativePath),
 				"src":       ex.OriginalPath,
 				"dest":      ex.Path,
 			}, &rr, commandTimeoutMs)
@@ -290,7 +300,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			if _, adopted := req.Existing[s.repo.ID]; adopted {
 				continue
 			}
-			repoPath := filepath.Join(project.Path, s.repo.RelativePath)
+			repoPath := filepath.Join(checkout, s.repo.RelativePath)
 			_ = m.Send(ctx, "worktree.delete_directory", map[string]string{
 				"project_path":  repoPath,
 				"worktree_path": s.worktreePath,
@@ -309,7 +319,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}
 		if workspaceRoot != "" && !restoreFailed && !inPlace {
 			_ = m.Send(ctx, "worktree.delete_directory", map[string]string{
-				"project_path":  project.Path,
+				"project_path":  checkout,
 				"worktree_path": workspaceRoot,
 			}, nil, commandTimeoutMs)
 		}
@@ -318,7 +328,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		wt.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 		// A create from the UI settles in the background, so the row is how
 		// the reason reaches the user. Only a reason that is theirs to fix
-		// is written: ours stays in the logs (and Sentry), and the UI says
+		// is written: ours stays in the logs (and its issue), and the UI says
 		// the create did not finish.
 		wt.FailureReason = ""
 		if svcerr.IsUserError(reason) {
@@ -335,11 +345,14 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}
 		return reason
 	}
+	if checkout == "" {
+		return fail(errors.New("workspacecreate: no checkout of the project on the owner machine (Request.Checkout)"))
+	}
 
 	// createRepo checks out ONE repo. It runs concurrently with its siblings,
 	// so it touches nothing shared.
 	createRepo := func(repo *core.Repo) (repoCreateResult, error) {
-		repoPath := filepath.Join(project.Path, repo.RelativePath)
+		repoPath := filepath.Join(checkout, repo.RelativePath)
 
 		// Per-repo override > global > daemon auto-detect (empty).
 		repoBase := globalBase
@@ -351,29 +364,26 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			return repoCreateResult{repo: repo, worktreePath: ex.Path, baseBranch: ex.Base}, nil
 		}
 
-		if req.Force && !adopting {
-			// Stale-branch cleanup; the workspace dir itself is fresh per create.
-			_ = m.Send(ctx, "worktree.force_cleanup", map[string]string{
-				"project_path":  repoPath,
-				"worktree_path": "",
-				"branch":        wt.Branch,
-			}, nil, commandTimeoutMs)
-		}
+		// Force is passed to the daemon's create operation, which validates
+		// the fetched head/start point before git worktree add -B. Never run
+		// a separate destructive cleanup before that validation.
 
 		type createReq struct {
-			ProjectPath string `json:"project_path"`
-			WorkspaceID string `json:"workspace_id"`
-			SubPath     string `json:"sub_path"`
-			Name        string `json:"name"`
-			Branch      string `json:"branch"`
-			BaseBranch  string `json:"base_branch"`
-			Force       bool   `json:"force"`
-			WorktreeID  string `json:"worktree_id"`
-			ReuseBranch bool   `json:"reuse_branch,omitempty"`
+			ProjectPath  string `json:"project_path"`
+			WorkspaceID  string `json:"workspace_id"`
+			SubPath      string `json:"sub_path"`
+			Name         string `json:"name"`
+			Branch       string `json:"branch"`
+			BaseBranch   string `json:"base_branch"`
+			FetchBranch  string `json:"fetch_branch,omitempty"`
+			ExpectedHead string `json:"expected_head,omitempty"`
+			Force        bool   `json:"force"`
+			WorktreeID   string `json:"worktree_id"`
+			ReuseBranch  bool   `json:"reuse_branch,omitempty"`
 		}
 		var createResp checkoutResponse
 
-		err := m.Send(ctx, "worktree.create", createReq{
+		payload := createReq{
 			WorktreeID:  wt.ID,
 			ProjectPath: repoPath,
 			WorkspaceID: workspaceID,
@@ -383,7 +393,11 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			BaseBranch:  repoBase,
 			Force:       req.Force && !adopting,
 			ReuseBranch: adopting,
-		}, &createResp, commandTimeoutMs)
+		}
+		if repo.ID == req.FetchRepoID {
+			payload.FetchBranch, payload.ExpectedHead = req.FetchBranch, req.ExpectedHead
+		}
+		err := m.Send(ctx, "worktree.create", payload, &createResp, commandTimeoutMs)
 		if err != nil {
 			logging.ErrorContext(ctx, "Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
 			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)
@@ -392,7 +406,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			err := checkoutError(createResp, repo.Name, wt.Branch, adopting)
 			// The error VALUE, not the daemon's text: the log policy
 			// classifies it, so a user's mistake is an INFO line and never
-			// reaches Sentry.
+			// becomes an issue.
 			logging.ErrorContext(ctx, "Failed to create git worktree", "error", err,
 				"git_output", strings.TrimSpace(createResp.Error), "repo", repo.ID)
 			return repoCreateResult{}, err
@@ -477,7 +491,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 	// A failed copy does not fail the workspace: the checkouts are complete
 	// and usable, and a missing .env is something the user can see and fix.
 	if len(req.CopyPaths) > 0 {
-		copySource := firstNonEmpty(req.CopySource, project.Path)
+		copySource := firstNonEmpty(req.CopySource, checkout)
 		var copyResp struct {
 			Copied  []string          `json:"copied"`
 			Missing []string          `json:"missing"`
@@ -554,7 +568,7 @@ type checkoutResponse struct {
 // A reason the daemon diagnosed (worktreeerr) is the caller's input — a base
 // branch that does not exist, a branch name git refuses — so it is a typed
 // client-fault kind: svcerr classifies it as a user error, it logs at INFO and
-// never reaches Sentry, the wire carries its code and this message, and the
+// never becomes an issue, the wire carries its code and this message, and the
 // message says what to change. Anything else is a server fault and keeps
 // git's output.
 func checkoutError(resp checkoutResponse, repoName, branch string, adopting bool) error {

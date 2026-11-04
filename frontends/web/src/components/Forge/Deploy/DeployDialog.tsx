@@ -24,7 +24,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
 import {
   useForgeDeployPlan,
   useForgeDeployStatus,
@@ -219,14 +219,14 @@ export function DeployDialog({
       // that could be mistaken for a finished deploy.
       <p
         data-testid="deploy-job-connecting"
-        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground"
+        className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-ink-muted"
       >
         A deploy is in flight. Reading its status…
       </p>
     ) : undefined;
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} size="xl" title={`Deploy ${env}`}>
+    <Modal open={isOpen} onClose={handleClose} size="xl" title={`Deploy ${env}`}>
       <DeployFlow
         planOutcome={plan.data}
         isPlanning={plan.isFetching}

@@ -43,9 +43,18 @@ export type OffWorkspace =
 export const OFF_WORKSPACE: Readonly<Record<string, OffWorkspace>> = {
   // ── App-level ────────────────────────────────────────────────────────────
   onCommandPalette: "here",
-  // Searches chat history off the workspace: there is no open conversation to
-  // search in, and a hit opens that chat in the workspace.
+  // Its key, Cmd+F, is bound in the `chat-view` context, which exists only
+  // while a workspace conversation is on screen — so off the workspace the
+  // key is the browser's find. The host still implements it everywhere for
+  // the slash menu, which there searches chat history.
   onChatSearch: "here",
+  // The desktop app's find bar, wherever Cmd+F means "find on the page". The
+  // host implements it only in the desktop app: in a browser tab the shortcut
+  // is unbound (desktop_only) and the browser's own find bar is the one.
+  onFindInPage: "here",
+  // Bound in `monaco`. With a selection in a file viewer it adds it to the
+  // chat; otherwise it focuses the chat, as onFocusChat does.
+  onAddSelectionToChat: "here",
   onSwitchChat: "here",
   onToggleSettings: "here",
   onOpenWorkflows: "here",

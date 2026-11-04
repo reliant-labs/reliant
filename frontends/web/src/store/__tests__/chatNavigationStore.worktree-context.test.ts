@@ -1,11 +1,14 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { useChatNavigationStore } from "../chatNavigationStore";
 import { useProjectStore } from "../projectStore";
+import { useWorkspaceStateStore } from "../workspaceStateStore";
 import { useWorktreeStore } from "../worktreeStore";
 import { chatKeys } from "../../hooks/chat-queries";
 import { queryClient } from "../../lib/query-client";
+import { setWorktreesForTest } from "../../test/worktreeCache";
 
 const selectChatMock = vi.fn();
+const persistActiveChatMock = vi.fn();
 const chatStoreGetStateMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../chatStore", () => ({
@@ -16,12 +19,16 @@ vi.mock("../chatStore", () => ({
 
 describe("chatNavigationStore worktree-aware navigation", () => {
   beforeEach(() => {
+    // Navigation walks the sidebar's scope; these seed one project's list.
+    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
     queryClient.clear();
     selectChatMock.mockReset();
+    persistActiveChatMock.mockReset();
     chatStoreGetStateMock.mockReset();
     chatStoreGetStateMock.mockReturnValue({
       activeChatId: null,
       selectChat: selectChatMock,
+      persistActiveChat: persistActiveChatMock,
       clearCurrentChat: vi.fn(),
     });
     useChatNavigationStore.setState({
@@ -36,14 +43,14 @@ describe("chatNavigationStore worktree-aware navigation", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         last_active: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       },
     });
 
-    useWorktreeStore.setState({
+    setWorktreesForTest({
       worktrees: [
         {
           id: "wt-1",
@@ -60,23 +67,9 @@ describe("chatNavigationStore worktree-aware navigation", () => {
         },
       ],
       currentWorktree: null,
-      discoveredWorktrees: [],
-      isLoading: false,
-      isDiscovering: false,
-      deletingId: null,
-      error: null,
-      loadWorktrees: vi.fn(),
-      selectWorktree: vi.fn(),
-      createWorktree: vi.fn(),
-      importWorktree: vi.fn(),
-      discoverWorktrees: vi.fn(),
-      archiveWorktree: vi.fn(),
-      deleteWorktree: vi.fn(),
-      unarchiveWorktree: vi.fn(),
-      updateWorktreeStatus: vi.fn(),
-      restoreLastWorktree: vi.fn(),
+    });
+    useWorktreeStore.setState({
       switchWorktreeContext: vi.fn().mockResolvedValue(undefined),
-      reset: vi.fn(),
     });
   });
 
@@ -84,7 +77,7 @@ describe("chatNavigationStore worktree-aware navigation", () => {
     queryClient.clear();
   });
 
-  it("switches worktree context before selecting the next chat", async () => {
+  it("selects the next chat without waiting for its worktree, then records it in that worktree", async () => {
     const nextChat = {
       id: "chat-2",
       title: "Next Chat",
@@ -97,17 +90,18 @@ describe("chatNavigationStore worktree-aware navigation", () => {
     };
 
     const switchWorktreeContextMock = vi.fn().mockResolvedValue(undefined);
-    useWorktreeStore.setState((state) => ({
-      ...state,
-      worktrees: [state.worktrees[0]],
-      switchWorktreeContext: switchWorktreeContextMock,
-    }));
+    useWorktreeStore.setState({ switchWorktreeContext: switchWorktreeContextMock });
 
-    chatStoreGetStateMock.mockReturnValue({
-      activeChatId: null,
-      selectChat: selectChatMock,
-      clearCurrentChat: vi.fn(),
+    const activeChatId = { current: null as string | null };
+    selectChatMock.mockImplementation((chat: { id: string }) => {
+      activeChatId.current = chat.id;
     });
+    chatStoreGetStateMock.mockImplementation(() => ({
+      activeChatId: activeChatId.current,
+      selectChat: selectChatMock,
+      persistActiveChat: persistActiveChatMock,
+      clearCurrentChat: vi.fn(),
+    }));
 
     // Chats are sourced from the React Query list cache (single source of truth).
     queryClient.setQueryData(chatKeys.list("project-1"), {
@@ -118,10 +112,20 @@ describe("chatNavigationStore worktree-aware navigation", () => {
 
     await useChatNavigationStore.getState().navigateNext();
 
-    expect(switchWorktreeContextMock).toHaveBeenCalledWith("project-1", expect.objectContaining({ id: "wt-1" }));
-    expect(selectChatMock).toHaveBeenCalledWith(nextChat);
+    // Selection (and so the stream subscribe) does not wait on the worktree...
+    expect(selectChatMock).toHaveBeenCalledWith(nextChat, { deferPersist: true });
+    expect(selectChatMock.mock.invocationCallOrder[0]).toBeLessThan(
+      switchWorktreeContextMock.mock.invocationCallOrder[0],
+    );
+    // ...but what is stored under a worktree is stored once that worktree is current.
+    expect(switchWorktreeContextMock).toHaveBeenCalledWith(
+      "project-1",
+      expect.objectContaining({ id: "wt-1" }),
+      { isCurrent: expect.any(Function) },
+    );
+    expect(persistActiveChatMock).toHaveBeenCalledWith("chat-2");
     expect(switchWorktreeContextMock.mock.invocationCallOrder[0]).toBeLessThan(
-      selectChatMock.mock.invocationCallOrder[0],
+      persistActiveChatMock.mock.invocationCallOrder[0],
     );
   });
 });

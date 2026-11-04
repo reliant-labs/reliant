@@ -41,10 +41,12 @@ type Activities struct {
 	// Optional: nil makes an action that names a connection fail rather than
 	// run unauthenticated.
 	Connections httpaction.CredentialSource
-	// ControlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted. It picks the dial policy for user-supplied model
-	// endpoint URLs (netguard.ForDeployment).
-	ControlPlaneURL string
+	// HostedActions dispatches only explicitly granted fixed HTTP action nodes.
+	// It is intentionally separate from generic integration-tool credentials.
+	HostedActions handlers.HostedActionExecutor
+	// AllowPrivateEgress picks the dial policy for user-supplied model
+	// endpoint URLs (netguard.ForDeployment); false refuses private targets.
+	AllowPrivateEgress bool
 	// WriteLedger records the action node's mutating integration calls.
 	// Optional: nil records nothing.
 	WriteLedger writeledger.Service

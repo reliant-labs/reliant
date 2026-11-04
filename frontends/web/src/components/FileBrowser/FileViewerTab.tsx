@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef, useCallback } from "react";
-import { Tooltip } from "../ui/Tooltip";
+import { useEffect, useLayoutEffect, useState, useRef, useCallback } from "react";
+import Tooltip from "../forge-ui/tooltip";
 import {
   Save,
   Loader2,
@@ -19,9 +19,8 @@ import {
   type FilePreviewInfo,
 } from "../../api/fileSystem";
 import { cn } from "../../lib/utils";
+import { rewriteTouches, subscribeFileRewrites } from "../../lib/fileRewrites";
 import { useEditorStore } from "../../store/editorStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
-import { useWorktreeById } from "../../hooks/useWorktreeById";
 import {
   getMonacoLanguage,
   configureMonacoTheme,
@@ -40,6 +39,9 @@ import { AddToChatPopup } from "./AddToChatPopup";
 import { ImagePreviewModal } from "../Chat/ImagePreviewModal";
 import { FileIcon } from "./FileIcon";
 import { toast } from "sonner";
+import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
+import { ADD_SELECTION_TO_CHAT } from "../../hooks/useShortcutHost";
+import { useShortcutLabel } from "../../store/shortcutsStore";
 
 interface FileViewerTabProps {
   file: FileNode;
@@ -69,7 +71,7 @@ function getPreviewKindLabel(viewerKind: FilePreviewInfo["viewerKind"]): string 
 
 export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded = false }: FileViewerTabProps) {
   const settings = useEditorStore((state) => state.settings);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
+  const currentWorktree = useCurrentWorktree();
 
   const effectiveWorktreeId = worktreeId || currentWorktree?.id;
   const listedWorktree = useWorktreeById(effectiveWorktreeId);
@@ -105,6 +107,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
   const loadRequestIdRef = useRef(0);
 
   const [showAddToChatPopup, setShowAddToChatPopup] = useState(false);
+  const addToChatShortcut = useShortcutLabel("addSelectionToChat");
   const [popupPosition, setPopupPosition] = useState({ x: 0, y: 0 });
   const [selectedRange, setSelectedRange] = useState<{
     startLine: number;
@@ -250,6 +253,45 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
       revokePreviewUrl();
     };
   }, [clearLoadingTimer, loadPreview, revokePreviewUrl]);
+
+  // Something other than this editor rewrote the file on disk (a Replace
+  // All, lib/fileRewrites). A clean text buffer reloads, so a later save
+  // cannot write the old text back over the change; a dirty one is left
+  // alone, since nothing may overwrite an unsaved edit.
+  //
+  // Both the buffer mirror and the subscription are layout effects, which run
+  // inside the commit: once a buffer is on screen, a rewrite sees it.
+  const bufferRef = useRef({ content, originalContent, isTextPreview });
+  useLayoutEffect(() => {
+    bufferRef.current = { content, originalContent, isTextPreview };
+  }, [content, originalContent, isTextPreview]);
+
+  useLayoutEffect(() => {
+    return subscribeFileRewrites((rewrite) => {
+      if (!rewriteTouches(rewrite, file.path, effectiveWorktreeId)) return;
+      const before = bufferRef.current;
+      if (!before.isTextPreview || before.content !== before.originalContent) return;
+      const requestId = loadRequestIdRef.current;
+      void (async () => {
+        try {
+          const fresh = await getFileContent(file.path, effectiveWorktreeId);
+          const now = bufferRef.current;
+          // Typed into, or reopened, while the read was in flight.
+          if (
+            loadRequestIdRef.current !== requestId ||
+            now.content !== now.originalContent ||
+            now.originalContent !== before.originalContent
+          ) {
+            return;
+          }
+          setContent(fresh);
+          setOriginalContent(fresh);
+        } catch (err) {
+          console.error("Failed to reload a rewritten file:", err);
+        }
+      })();
+    });
+  }, [effectiveWorktreeId, file.path]);
 
   // Re-open the file on the shared cadence while the machine comes up, so the
   // editor fills itself in rather than making the user close and reopen the tab.
@@ -544,41 +586,23 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
     return () => document.removeEventListener("keydown", handleKeyDown, true);
   }, [handleSave, hasChanges]);
 
+  // The addSelectionToChat shortcut (Cmd+L in the editor; Cmd+K L in a
+  // browser): taken by the viewer whose editor has focus and a selection. Any
+  // other viewer may be mounted too, so focus is what decides.
   useEffect(() => {
-    const handleCmdL = (e: Event) => {
-      if (!isTextPreview) {
-        return;
-      }
+    const handleAddSelection = (e: Event) => {
+      const editor = editorRef.current;
+      if (!isTextPreview || !editor?.hasTextFocus()) return;
 
-      const customEvent = e as CustomEvent<{ originalEvent: KeyboardEvent }>;
-      const originalEvent = customEvent.detail?.originalEvent;
-      if (!originalEvent || !editorRef.current) return;
+      const selection = editor.getSelection();
+      if (!selection || selection.isEmpty()) return;
 
-      const activeElement = document.activeElement;
-      const isMonacoFocused =
-        activeElement?.closest(".monaco-editor") !== null ||
-        activeElement?.classList.contains("inputarea") ||
-        activeElement?.closest(".monaco-editor .inputarea") !== null;
-
-      if (!isMonacoFocused) {
-        return;
-      }
-
-      const selection = editorRef.current.getSelection();
-      if (selection && !selection.isEmpty()) {
-        originalEvent.preventDefault();
-        originalEvent.stopPropagation();
-        originalEvent.stopImmediatePropagation();
-        e.preventDefault();
-        void handleAddToChat(selection);
-        setTimeout(() => {
-          window.dispatchEvent(new CustomEvent("focus-chat-input"));
-        }, 100);
-      }
+      e.preventDefault();
+      void handleAddToChat(selection);
     };
 
-    window.addEventListener("cmd-l-in-monaco", handleCmdL as EventListener);
-    return () => window.removeEventListener("cmd-l-in-monaco", handleCmdL as EventListener);
+    window.addEventListener(ADD_SELECTION_TO_CHAT, handleAddSelection);
+    return () => window.removeEventListener(ADD_SELECTION_TO_CHAT, handleAddSelection);
   }, [handleAddToChat, isTextPreview]);
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
@@ -947,7 +971,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
             <p className="text-sm text-muted-foreground whitespace-pre-line">{error}</p>
             <button
               onClick={() => void loadPreview()}
-              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs text-primary-ink hover:underline"
             >
               <RefreshCw className="w-3 h-3" />
               Try again
@@ -1094,7 +1118,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
           </div>
           <div className="flex items-center gap-2">
             {hasChanges && (
-              <Tooltip content="Undo all changes and revert to saved version" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Undo all changes and revert to saved version" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={handleRevert}
                 className="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground hover:bg-destructive/10 hover:text-destructive-ink"
@@ -1105,7 +1129,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
 </Tooltip>
             )}
             {!settings.autoSave && hasChanges && (
-              <Tooltip content="Save (Cmd+S / Ctrl+S)" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Save (Cmd+S / Ctrl+S)" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={() => void handleSave()}
                 disabled={isSaving}
@@ -1151,7 +1175,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
           x={popupPosition.x}
           y={popupPosition.y}
           onAdd={() => void handleAddToChat()}
-          shortcut={window.navigator.platform.includes("Mac") ? "⌘L" : "Ctrl+L"}
+          shortcut={addToChatShortcut}
           container={popupContainerRef.current}
         />
       )}

@@ -1,3 +1,5 @@
+import type { FindBarAPI, FindBarOpenRequest } from "../findBar/protocol";
+
 export interface BackendStatus {
   isRunning: boolean;
   port: number;
@@ -97,7 +99,7 @@ export interface ElectronAPI {
   onTrayGoToWorkflowHub: (callback: () => void) => void;
   onTrayOpenWorkflow: (callback: (payload: { workflowName?: string }) => void) => void;
   onTrayGoToSettings: (callback: () => void) => void;
-  onTrayGoToProjectPicker: (callback: () => void) => void;
+  onTrayAddProject: (callback: () => void) => void;
   onTraySwitchWorkspace: (callback: (payload: { workspaceId?: string }) => void) => void;
   onCloseAllTabs: (callback: () => void) => void;
   onNavigateTab: (callback: (direction: 'next' | 'previous') => void) => void;
@@ -195,6 +197,13 @@ export interface ElectronAPI {
    * so the native menu's accelerators match the user's remaps.
    */
   updateShortcutBindings?: (bindings: Record<string, string>) => Promise<{ success: boolean }>;
+  /**
+   * The desktop find bar (electron/src/find-bar.js): shown over the calling
+   * window, focused, searching that window's page. See src/findBar/protocol.ts.
+   */
+  findInPage?: {
+    open: (request: FindBarOpenRequest) => Promise<{ success: boolean }>;
+  };
   getPrivacySettings: () => Promise<{ crashReportingEnabled: boolean; analyticsEnabled: boolean }>;
 
   // Browser API
@@ -249,5 +258,7 @@ declare global {
   interface Window {
     electronAPI: ElectronAPI;
     RELIANT_CONFIG?: ReliantConfig;
+    /** Only on the desktop find bar's own page (electron/src/find-bar-preload.js). */
+    findBarAPI?: FindBarAPI;
   }
 }

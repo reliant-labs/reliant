@@ -56,7 +56,9 @@ describe("state vocabulary", () => {
     expect(runStateOf(w("running", "ready")).label).toBe("Running");
     const billing = runStateOf(w("running", "suspended", "no active compute plan"));
     expect(billing.label).toBe("Suspended — billing");
-    expect(billing.detail).toContain("Subscribe to a compute plan");
+    expect(billing.detail).toContain("Resolve app hosting billing in Settings → Billing");
+    expect(billing.detail).toContain("A machine subscription does not enable app hosting");
+    expect(billing.detail).not.toContain("Subscribe to a compute plan");
     expect(billing.detail).toContain("no active compute plan");
   });
 });
@@ -88,8 +90,9 @@ describe("environment controls", () => {
     await userEvent.click(screen.getByTestId("env-danger-menu"));
     await userEvent.click(await screen.findByTestId("env-action-delete"));
     const note = screen.getByTestId("delete-environment-data-note").textContent ?? "";
-    expect(note).toContain("retained");
-    expect(note).toContain("not reattach");
+    expect(note).toContain("deleted");
+    expect(note).toContain("cannot be undone");
+    expect(note).toContain("forge env delete prod --keep-data");
     expect(screen.getByTestId("delete-environment-dialog").textContent).toContain("forge env deploy prod");
 
     const confirm = screen.getByTestId("delete-environment-confirm") as HTMLButtonElement;

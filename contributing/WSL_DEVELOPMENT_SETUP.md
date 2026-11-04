@@ -63,10 +63,12 @@ export PATH="$HOME/go/bin:$PATH"
 From the repo root:
 
 ```bash
-npm install
-make generate
-npm run verify:dev
+task deps        # Go modules + the web, electron and protoc-gen-es npm packages
 ```
+
+Generated code is committed, so there is nothing to generate on a fresh clone.
+You also need [Task](https://taskfile.dev) 3.38+ and forge
+(`go install github.com/reliant-labs/forge/cmd/forge@latest`) on `PATH`.
 
 ## Run The App In WSL
 
@@ -74,18 +76,20 @@ From the repo root:
 
 ```bash
 export PATH="$HOME/go/bin:$PATH"
-npm run dev
+forge env up dev
 ```
 
-This starts:
+This starts, as host processes under this checkout's `.forge/`:
 
-- Backend (Air hot reload)
-- Embedded Temporal services
-- Temporal UI container
-- Vite dev server
-- Electron app
+- the api, worker and gateway server roles (air hot reload)
+- a `reliant db migrate up` job
+- forge host Postgres 16, NATS and the Temporal dev server
+- the `frontends/web` Vite dev server
 
-Stop with `Ctrl+C`.
+`./.reliant/tools/port-info.sh` prints where each one listens; the logs are in
+`.forge/logs/dev/`. Sign in with `grep AUTH_API_KEY secrets/dev.yaml`. Stop it
+with `forge env down dev`. The desktop app runs against control-plane's stack
+(`electron/README.md`).
 
 ## Common Issues
 

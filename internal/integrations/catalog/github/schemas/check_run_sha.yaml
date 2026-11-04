@@ -1,0 +1,5 @@
+type: string
+pattern: "^[0-9a-f]{40}$"
+title: Commit SHA
+description: The full 40-character SHA of the commit the check is about (a pull request's head.sha from pr.get).
+examples: ["6dcb09b5b57875f334f61aebed695e2e4193db5e"]

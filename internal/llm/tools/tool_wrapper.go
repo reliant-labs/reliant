@@ -18,6 +18,15 @@ import (
 // ErrInvalidParameters is returned when tool parameters cannot be parsed
 var ErrInvalidParameters = errors.New("invalid tool parameters")
 
+// normalizeModelInput undoes the encodings models put on tool arguments —
+// stringified values, OpenAI's key/value arrays for maps — against the
+// model-facing schema. Every path that decodes a call (running it, deciding
+// its permission, previewing its approval) normalizes first, so none refuses
+// an argument another would have accepted.
+func normalizeModelInput(input string, schema *jsonschema.Schema) string {
+	return coerceKVArrayMaps(unwrapStringifiedValues(input, schema))
+}
+
 // unwrapStringifiedValues fixes a Claude API bug where values are sometimes
 // sent as JSON strings instead of their actual types when using MCP-prefixed tool names.
 // Examples:
@@ -409,7 +418,7 @@ func (t *ToolWrapper[P, O]) RequiresPermission(rctx *rctxpkg.ToolContext, call T
 	// Permission is decided on the parameters the tool will actually run
 	// with, so bound values are merged in first. A binding that turns a
 	// dangerous call into a safe one (or the reverse) has to be visible here.
-	input := call.Input
+	input := normalizeModelInput(call.Input, t.ParamSchema())
 	if resolved, err := resolveBindings(t.bindings, t.resolver, rctx); err == nil {
 		checked, checkErr := checkBoundKeys(t.tool.Name(), input, resolved)
 		if checkErr != nil {
@@ -454,8 +463,7 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 	// 1) Fix Claude API bug with stringified values
 	// 2) Accept OpenAI-compatible encoding for maps (kv array) and convert back to objects
 	schema := t.ParamSchema()
-	normalizedInput := unwrapStringifiedValues(callInput, schema)
-	normalizedInput = coerceKVArrayMaps(normalizedInput)
+	normalizedInput := normalizeModelInput(callInput, schema)
 
 	// Validate input against JSON Schema. When validation fails because the
 	// model emitted an array/object value as a JSON-encoded string, the shared

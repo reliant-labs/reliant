@@ -17,7 +17,7 @@
  */
 
 import { fireEvent, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useAttachmentStore } from "../../../store/attachmentStore";
 
@@ -42,15 +42,6 @@ const {
   cancelQueuedAgentMessageMock: vi.fn(),
   toastErrorMock: vi.fn(),
   toastInfoMock: vi.fn(),
-}));
-
-vi.mock("../../../api/chat-grpc", () => ({
-  chatGrpc: {
-    sendAgentMessage: sendAgentMessageMock,
-    listQueuedAgentMessages: listQueuedAgentMessagesMock,
-    cancelQueuedAgentMessage: cancelQueuedAgentMessageMock,
-  },
-  QUEUED_SENDER_KIND_HUMAN: 5,
 }));
 
 vi.mock("../../../lib/toast-manager", () => ({
@@ -78,8 +69,8 @@ vi.mock("../../../hooks/chat-queries", async () => {
   };
 });
 
-vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestions: () => ({ data: [], isLoading: false }),
+vi.mock("../../../hooks/question-queries", () => ({
+  usePendingQuestions: () => ({ data: { questions: [] }, isLoading: false }),
 }));
 
 const NO_PRESETS = { presets: [] as never[], loading: false };
@@ -87,7 +78,6 @@ const NO_MODELS = { models: [] as never[] };
 const NO_SLASH_COMMANDS: never[] = [];
 
 vi.mock("../../../store/globalDataStore", () => ({
-  usePresetsForWorkflow: () => NO_PRESETS,
   useModels: () => NO_MODELS,
   useGlobalDataStore: Object.assign(() => undefined, {
     getState: () => ({ models: [] }),
@@ -102,15 +92,21 @@ vi.mock("../../../hooks/useSlashCommands", () => ({
   useSlashCommands: () => NO_SLASH_COMMANDS,
 }));
 
-vi.mock("../../../api/workflow-grpc", () => ({
-  workflowGrpc: { getWorkflow: vi.fn().mockResolvedValue({ workflow: null }) },
-}));
+// The selected workflow has no inputs. One stable result, as React Query
+// returns one: a fresh object per render re-derives the params every render.
+vi.mock("../../../hooks/workflow-queries", async (importActual) => {
+  const NO_DEFINITION = { data: { workflow: undefined, version: 0, status: "complete", validationErrors: [] } };
+  return {
+    ...(await importActual<typeof import("../../../hooks/workflow-queries")>()),
+    fetchWorkflow: vi.fn().mockResolvedValue(NO_DEFINITION.data),
+    useWorkflowDefinitionQuery: () => NO_DEFINITION,
+  };
+});
 
-vi.mock("../../../api/preset-grpc", () => ({
-  presetGrpc: {
-    getDefaultPresets: vi.fn().mockResolvedValue({}),
-    listPresets: vi.fn().mockResolvedValue([]),
-  },
+vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/preset-queries")>()),
+  usePresetsForWorkflow: () => NO_PRESETS,
+  fetchDefaultPresets: vi.fn().mockResolvedValue({}),
 }));
 
 vi.mock("../settings", () => ({
@@ -121,6 +117,14 @@ vi.mock("../WorkflowSelector", () => ({
 }));
 
 import { ChatInput } from "../ChatInput";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { emptyChatPullReads, queuedAgentMessagesAnswer } from "@/test/chatPullReads";
+
+// ChatService's pull reads are generated-key reads, so they are answered at
+// the transport.
+beforeEach(() => setTransport(mockTransport({ ...emptyChatPullReads(), ...queuedAgentMessagesAnswer(listQueuedAgentMessagesMock), "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessageMock(req), "ChatService.CancelQueuedAgentMessage": (req: unknown) => cancelQueuedAgentMessageMock(req) })));
+afterEach(() => setTransport(null));
 
 const HUMAN = 5;
 

@@ -29,7 +29,7 @@ interface RouterArgsShape {
   project?: unknown
 }
 
-interface RouterNodeProps {
+export interface RouterNodeProps {
   id: string
   data: {
     step: Step

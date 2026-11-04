@@ -5,14 +5,13 @@ const mocks = vi.hoisted(() => ({
   initializePrivacy: vi.fn(),
   settingsInitialize: vi.fn(),
   loadProjects: vi.fn(),
-  initSentry: vi.fn(),
+  initTelemetry: vi.fn(),
   isConfigReady: vi.fn(() => true),
   waitForConfig: vi.fn(),
 }))
 
-vi.mock('@/store/privacyStore', () => ({
-  usePrivacyStore: (selector: (state: { initialize: typeof mocks.initializePrivacy }) => unknown) =>
-    selector({ initialize: mocks.initializePrivacy }),
+vi.mock('@/hooks/privacy-queries', () => ({
+  loadPrivacySettings: mocks.initializePrivacy,
 }))
 
 vi.mock('@/services/settingsSync', () => ({
@@ -29,12 +28,8 @@ vi.mock('@/store/projectStore', () => ({
   },
 }))
 
-vi.mock('@/lib/sentry', () => ({
-  initSentry: mocks.initSentry,
-}))
-
 vi.mock('@/lib/telemetry', () => ({
-  initTelemetry: vi.fn(),
+  initTelemetry: mocks.initTelemetry,
 }))
 
 vi.mock('@/lib/configReady', () => ({
@@ -67,7 +62,7 @@ describe('Root startup gating', () => {
     expect(mocks.initializePrivacy).not.toHaveBeenCalled()
     expect(mocks.settingsInitialize).not.toHaveBeenCalled()
     expect(mocks.loadProjects).not.toHaveBeenCalled()
-    expect(mocks.initSentry).not.toHaveBeenCalled()
+    expect(mocks.initTelemetry).not.toHaveBeenCalled()
     expect(mocks.waitForConfig).not.toHaveBeenCalled()
   })
 })

@@ -46,6 +46,14 @@ type ApprovalCreateInput struct {
 	NodePath string `json:"node_path,omitempty" reliant:"-"`
 	Title    string `json:"title" reliant:"-"`
 	Timeout  string `json:"timeout,omitempty" reliant:"-"` // Duration string, e.g. "1h"
+	// ToolCallID is the run's own tool call this approval is about (an
+	// activation change, a machine start); empty for a workflow approval
+	// node. Its approval is APPROVAL_TYPE_TOOL_CALL: the run answers the call
+	// itself, approved or denied.
+	ToolCallID string `json:"tool_call_id,omitempty" reliant:"-"`
+	// BatchID is shared by the approvals one step raised together, so they
+	// can be decided together. Empty for an approval raised on its own.
+	BatchID string `json:"batch_id,omitempty" reliant:"-"`
 }
 
 // ApprovalCreateOutput is the output from the ApprovalCreate activity.
@@ -163,6 +171,15 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		metadata["workflow_id"] = workflowID
 		metadata["run_id"] = activityInfo.WorkflowExecution.RunID
 	}
+	approvalType := reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP
+	if input.ToolCallID != "" {
+		approvalType = reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL
+		metadata["tool_call_id"] = input.ToolCallID
+	}
+	var batchID *string
+	if input.BatchID != "" {
+		batchID = &input.BatchID
+	}
 	var metadataJSON *string
 	if len(metadata) > 0 {
 		metadataBytes, err := json.Marshal(metadata)
@@ -187,7 +204,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 	approval := &db.Approval{
 		ID:                 approvalID,
 		ChatID:             input.ChatID,
-		ApprovalType:       int32(reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP),
+		ApprovalType:       int32(approvalType),
 		EntityID:           entityID,
 		Status:             int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING),
 		Title:              title,
@@ -196,6 +213,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		CreatedAt:          time.Now().UTC(),
 		ResolvedAt:         nil,
 		ThreadID:           threadID,
+		BatchID:            batchID,
 	}
 
 	// Dual-write: create approval record + chat_update + mark chat unread atomically
@@ -215,8 +233,9 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		updateData := map[string]interface{}{
 			"update_type":   "approval",
 			"id":            approvalID,
-			"approval_type": "workflow_step",
+			"approval_type": approvalTypeName(approvalType),
 			"activity_id":   activityID,
+			"batch_id":      input.BatchID,
 			"status":        "pending",
 			"title":         title,
 			"created_at":    approval.CreatedAt.Format(time.RFC3339),
@@ -294,33 +313,44 @@ func (a *ApprovalResolveActivity) Category() schema.ActivityCategory {
 	return schema.CategoryAgentic
 }
 
-// Execute resolves the approval record with the given status.
+// Execute closes the approval the run stopped waiting on: "timeout" (its
+// timer fired) is EXPIRED, anything else ("interrupted") CANCELLED. The close
+// is announced on the chat feed, or clients keep showing it as pending. A
+// person's decision that landed first is kept.
 func (a *ApprovalResolveActivity) Execute(ctx context.Context, input ApprovalResolveInput) (ApprovalResolveOutput, error) {
 	logger := activity.GetLogger(ctx)
 	logger.Info("[ApprovalResolve] Resolving approval",
 		"approvalID", input.ApprovalID,
 		"status", input.Status)
 
-	// Map string status to proto enum
-	var statusEnum int32
-	switch input.Status {
-	case "timeout":
-		statusEnum = int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED)
-	default:
-		statusEnum = int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED)
-	}
-
-	actionTaken := input.Status
-	if err := a.repo.UpdateApprovalStatus(ctx, input.ApprovalID, statusEnum, nil, &actionTaken, nil); err != nil {
+	status, reason := approvalCloseFor(input.Status)
+	if _, err := a.repo.ResolvePendingApproval(ctx, input.ApprovalID, status, reason, input.Status); err != nil {
 		return ApprovalResolveOutput{}, fmt.Errorf("failed to resolve approval: %w", err)
 	}
 
 	return ApprovalResolveOutput{Success: true}, nil
 }
 
+// approvalCloseFor maps the reason a run stopped waiting on an approval to
+// the status it closes with and the reason recorded for the person.
+func approvalCloseFor(why string) (int32, string) {
+	if why == "timeout" {
+		return int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED), "No one answered before the request's time limit; nothing was approved."
+	}
+	return int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), "The run waiting on this request was interrupted; nothing was approved."
+}
+
 // ============================================================================
 // HELPERS
 // ============================================================================
+
+// approvalTypeName is an approval type as its chat_update names it.
+func approvalTypeName(t reliantv1.ApprovalType) string {
+	if t == reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL {
+		return "tool_call"
+	}
+	return "workflow_step"
+}
 
 // approvalStatusString converts a proto approval status to a string.
 func approvalStatusString(status int32) string {
@@ -329,6 +359,11 @@ func approvalStatusString(status int32) string {
 		return "approved"
 	case int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED):
 		return "denied"
+	case int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED):
+		// What the wait itself returns when its timer fires.
+		return "timeout"
+	case int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED):
+		return "cancelled"
 	case int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING):
 		return "pending"
 	default:

@@ -82,6 +82,9 @@ type RuntimeContext struct {
 	// carry it; a person's turn never does. call_llm resolves the turn's
 	// capability set with it, so it is set on call_llm nodes only.
 	Unattended bool `json:"unattended,omitempty"`
+	// Approved preview hashes and refusals are runtime-authored, never model inputs.
+	ActivationApprovals map[string]string `json:"activation_approvals,omitempty"`
+	ActivationRefusals  map[string]string `json:"activation_refusals,omitempty"`
 
 	// ProviderPreference is the run's runtime.ProviderPreference: the
 	// provider(s) the user chose for the run. call_llm hands it to a model
@@ -89,6 +92,21 @@ type RuntimeContext struct {
 	// resolves on the provider the user picked instead of whichever connected
 	// provider leads the tier. Set on call_llm nodes only.
 	ProviderPreference []string `json:"provider_preference,omitempty"`
+	// ChatProvider strictly binds the next model call to the provider the
+	// user selected chat-wide. Descendants keep their original semantic tags;
+	// PresetModelTags is provenance captured before an exact override.
+	ChatProvider      string   `json:"chat_provider,omitempty"`
+	ClearProviderPins bool     `json:"clear_provider_pins,omitempty"`
+	Descendant        bool     `json:"descendant,omitempty"`
+	PresetModelTags   []string `json:"preset_model_tags,omitempty"`
+	// ChatModel is the chat's own model selection (the root thread's model
+	// input) on a bound chat. A descendant whose own selector cannot run on
+	// ChatProvider runs on it instead of holding, unless the user chose the
+	// descendant's model themselves (ThreadModelChosen): a preset's, a spawn
+	// argument's or a workflow's model is a default, not a user choice, and a
+	// default that the chat's provider cannot serve must not park the thread.
+	ChatModel         *ModelChoice `json:"chat_model,omitempty"`
+	ThreadModelChosen bool         `json:"thread_model_chosen,omitempty"`
 
 	// Failover is what the run allows when a provider's accounts are all
 	// limited (see FailoverPolicy). Set on call_llm nodes only.
@@ -125,6 +143,12 @@ type RuntimeContext struct {
 	// means something upstream is wrong. Set on call_llm nodes only.
 	SpeculativeTurn bool `json:"speculative_turn,omitempty"`
 
+	// CatalogPin is the workflow catalog the run started with
+	// (db.Repo.PinProjectCatalog). call_llm reads the presets its spawn tool
+	// describes from it, so the model is offered the presets a spawn then
+	// loads. Set on call_llm nodes; empty for a run with no pin.
+	CatalogPin string `json:"catalog_pin,omitempty"`
+
 	// Project context
 	ProjectPath string `json:"project_path,omitempty"`
 
@@ -139,12 +163,25 @@ type RuntimeContext struct {
 	UserJWT string `json:"user_jwt,omitempty"`
 }
 
+// ModelChoice is a model selector as a workflow input holds it: an exact id
+// ("<model>" or "<model>@<driver>"), semantic tags, and preferred providers.
+type ModelChoice struct {
+	ID        string   `json:"id,omitempty"`
+	Tags      []string `json:"tags,omitempty"`
+	Providers []string `json:"providers,omitempty"`
+}
+
 // DaemonSelector specifies criteria for selecting which daemon executes tools.
 type DaemonSelector struct {
 	ID     string            `json:"id,omitempty"`
 	Name   string            `json:"name,omitempty"`
 	Type   string            `json:"type,omitempty"` // "local", "cloud", "any"
 	Labels map[string]string `json:"labels,omitempty"`
+	// Session marks the chat's pin (session_daemon_id, or the chat's
+	// active_daemon_id read at activity time) rather than a selector the
+	// workflow or node configures. Only a session pin yields to a branch
+	// workspace's owner (toolDaemonSelector).
+	Session bool `json:"session,omitempty"`
 }
 
 // SpawnConfig holds the configuration for spawning child workflows.

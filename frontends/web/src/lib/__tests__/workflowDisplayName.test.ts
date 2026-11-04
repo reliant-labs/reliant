@@ -1,10 +1,17 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   formatWorkflowSlug,
   getCachedWorkflowDisplayName,
   workflowDisplayName,
 } from "../workflowDisplayName";
-import { useGlobalDataStore } from "../../store/globalDataStore";
+import { workflowServiceKeys } from "../../hooks/workflow-service-hooks_gen";
+import { queryClient } from "../query-client";
+import { useProjectStore } from "../../store/projectStore";
+
+afterEach(() => {
+  queryClient.clear();
+  useProjectStore.setState({ currentProject: null });
+});
 
 describe("workflowDisplayName", () => {
   it("prefers the title", () => {
@@ -22,10 +29,12 @@ describe("workflowDisplayName", () => {
   });
 
   it("resolves a ref's title from the cached workflow list", () => {
-    const workflows = [
-      { name: "forge-one-shot", title: "Build an App" },
-    ] as ReturnType<typeof useGlobalDataStore.getState>["workflows"];
-    useGlobalDataStore.setState({ workflows });
+    // The current project's chat-safe list, as the generated ListWorkflows read caches it.
+    useProjectStore.setState({ currentProject: { id: "p1", name: "p1" } as never });
+    queryClient.setQueryData(workflowServiceKeys.listWorkflows({ projectId: "p1", includeHidden: false }), {
+      workflows: [{ name: "forge-one-shot", title: "Build an App" }],
+      invalidWorkflows: [],
+    });
     expect(getCachedWorkflowDisplayName("builtin://forge-one-shot")).toBe("Build an App");
     expect(getCachedWorkflowDisplayName("builtin://unknown-flow")).toBe("Unknown Flow");
   });

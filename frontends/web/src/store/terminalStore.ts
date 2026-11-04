@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { logger } from "../lib/logger";
-import { terminalApi } from "../api/terminal-grpc";
+import { TerminalService } from "../gen/reliant/v1/terminal_pb";
+import { terminalServiceKeys } from "../hooks/terminal-service-hooks_gen";
+import { connectClient } from "../lib/connect";
+import { queryClient } from "../lib/query-client";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 
 export interface TerminalSession {
@@ -30,6 +33,19 @@ export interface TerminalSession {
    * session that no longer exists (ELECTRON-97).
    */
   daemonSessionId?: string;
+  /**
+   * The machine the daemon session runs on, from the same "init" (absent when
+   * the server left it to default resolution). A session lives on one
+   * machine, so CloseSession is sent there. Connection-scoped like
+   * daemonSessionId.
+   */
+  daemonId?: string;
+  /**
+   * The chat open when the terminal was created. On the main checkout, which
+   * every machine with the project has, the terminal opens on that chat's
+   * machine — where its agent is changing the files.
+   */
+  chatId?: string;
 }
 
 /**
@@ -83,7 +99,7 @@ interface TerminalState {
     workingDir?: string,
     projectId?: string,
     worktreeId?: string,
-    options?: { focus?: boolean },
+    options?: { focus?: boolean; chatId?: string },
   ) => string;
   killSession: (id: string) => void; // Terminates the session process
   setActiveSession: (id: string) => void;
@@ -95,7 +111,7 @@ interface TerminalState {
   updateSessionTitle: (id: string, title: string) => void;
   updateSessionPID: (id: string, pid: number) => void;
   /** Bind the daemon's session id once "init" arrives. See TerminalSession.daemonSessionId. */
-  setDaemonSessionId: (id: string, daemonSessionId: string) => void;
+  setDaemonSessionId: (id: string, daemonSessionId: string, daemonId?: string) => void;
   /**
    * Drop the project's sessions whose workspace is gone (archived, deleted,
    * or no longer listed). See pruneSessionsForWorkspaces.
@@ -158,7 +174,7 @@ export function pruneSessionsForWorkspaces(
 
 /** Sessions as they are written to storage: no connection-scoped fields. */
 function persistableSessions(sessions: readonly TerminalSession[]): TerminalSession[] {
-  return sessions.map(({ daemonSessionId: _daemonSessionId, ...rest }) => rest);
+  return sessions.map(({ daemonSessionId: _daemonSessionId, daemonId: _daemonId, ...rest }) => rest);
 }
 
 function isInsideTerminalPanel(target: EventTarget | null): boolean {
@@ -252,7 +268,7 @@ export const useTerminalStore = create(
   isOpen: false,
   focusRequest: null,
 
-  createSession: (workingDir?: string, projectId?: string, worktreeId?: string, options?: { focus?: boolean }) => {
+  createSession: (workingDir?: string, projectId?: string, worktreeId?: string, options?: { focus?: boolean; chatId?: string }) => {
     const id = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const worktreeKey = worktreeId || MAIN_WORKSPACE_KEY;
     const session: TerminalSession = {
@@ -261,6 +277,7 @@ export const useTerminalStore = create(
       workingDir,
       projectId,
       worktreeId,
+      chatId: options?.chatId,
       createdAt: new Date(),
       isActive: true,
     };
@@ -284,13 +301,24 @@ export const useTerminalStore = create(
     // the daemon has never seen it. Sending it failed every close with
     // "session not found" and left the PTY running in the workspace until the
     // pod died. Fire-and-forget: the UI drops the tab immediately.
-    const daemonSessionId = get().sessions.find((s) => s.id === id)?.daemonSessionId;
+    const closing = get().sessions.find((s) => s.id === id);
+    const daemonSessionId = closing?.daemonSessionId;
     if (daemonSessionId) {
-      terminalApi.closeSession(daemonSessionId).catch((error) => {
-        // Still best-effort: the session may have exited on its own (the shell
-        // was exited, or the daemon restarted) and is genuinely gone already.
-        logger.warn("[TerminalStore] Failed to close session on server (may already be closed)", { id, daemonSessionId, error });
-      });
+      // A store action, not a component, so it calls the client the
+      // generated useCloseSession wraps and applies the same invalidation.
+      connectClient(TerminalService)
+        .closeSession({ sessionId: daemonSessionId, daemonId: closing?.daemonId })
+        .then((response) => {
+          void queryClient.invalidateQueries({ queryKey: terminalServiceKeys.all });
+          if (!response.success) {
+            logger.warn("[TerminalStore] Close session failed", { id, daemonSessionId, message: response.message });
+          }
+        })
+        .catch((error) => {
+          // Still best-effort: the session may have exited on its own (the shell
+          // was exited, or the daemon restarted) and is genuinely gone already.
+          logger.warn("[TerminalStore] Failed to close session on server (may already be closed)", { id, daemonSessionId, error });
+        });
     } else {
       // No daemon id means "init" never arrived, so no PTY was ever created
       // for this tab. There is nothing to close, and calling CloseSession with
@@ -375,13 +403,13 @@ export const useTerminalStore = create(
     }));
   },
 
-  setDaemonSessionId: (id: string, daemonSessionId: string) => {
+  setDaemonSessionId: (id: string, daemonSessionId: string, daemonId?: string) => {
     set((state) => ({
       sessions: state.sessions.map((s) =>
-        s.id === id ? { ...s, daemonSessionId } : s
+        s.id === id ? { ...s, daemonSessionId, daemonId } : s
       ),
     }));
-    logger.debug("[TerminalStore] Bound daemon session id", { id, daemonSessionId });
+    logger.debug("[TerminalStore] Bound daemon session id", { id, daemonSessionId, daemonId });
   },
 
   updateSessionPID: (id: string, pid: number) => {
@@ -422,7 +450,7 @@ export const useTerminalStore = create(
     import("./projectStore").then(({ useProjectStore }) => {
       import("./worktreeStore").then(({ useWorktreeStore }) => {
         const projectId = useProjectStore.getState().currentProject?.id;
-        const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+        const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
         if (projectId) {
           useWorkspaceStateStore.getState().setTerminalOpen(projectId, worktreeId, newIsOpen);
         }
@@ -438,7 +466,7 @@ export const useTerminalStore = create(
     import("./projectStore").then(({ useProjectStore }) => {
       import("./worktreeStore").then(({ useWorktreeStore }) => {
         const projectId = useProjectStore.getState().currentProject?.id;
-        const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+        const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
         if (projectId) {
           useWorkspaceStateStore.getState().setTerminalOpen(projectId, worktreeId, true);
         }
@@ -454,7 +482,7 @@ export const useTerminalStore = create(
     import("./projectStore").then(({ useProjectStore }) => {
       import("./worktreeStore").then(({ useWorktreeStore }) => {
         const projectId = useProjectStore.getState().currentProject?.id;
-        const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+        const worktreeId = useWorktreeStore.getState().currentWorktreeId ?? null;
         if (projectId) {
           useWorkspaceStateStore.getState().setTerminalOpen(projectId, worktreeId, false);
         }

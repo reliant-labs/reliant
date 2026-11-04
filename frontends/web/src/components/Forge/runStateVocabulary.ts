@@ -31,8 +31,8 @@ export interface RunStateView {
 }
 
 export const BILLING_FIX =
-  "Suspended — billing. Subscribe to a compute plan or settle the invoice in Billing, then start it again.";
-export const NO_COMPUTE_PLAN_FIX = "Subscribe to a compute plan, then start it again.";
+  "Suspended — billing. Resolve app hosting billing in Settings → Billing, then start it again. A machine subscription does not enable app hosting.";
+export const NO_COMPUTE_PLAN_FIX = "Enable independent app hosting billing, then start it again. No machine purchase is required.";
 export const BILLING_LAPSED_FIX = "Settle the invoice in Billing, then start it again.";
 
 const STOPPED_BY_OWNER: RunStateView = {
@@ -50,7 +50,7 @@ function viewForSuspendReason(reason: string | undefined, error: string): RunSta
     case "no_compute_plan":
       return {
         kind: "billing",
-        label: "Suspended — no compute plan",
+        label: "Suspended — app hosting billing required",
         detail: `${NO_COMPUTE_PLAN_FIX}${platform}`,
       };
     case "billing_lapsed":

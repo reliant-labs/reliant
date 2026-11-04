@@ -4,26 +4,37 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// ApprovalType is the kind of approval request. Workflow step approvals are
-// the only kind left.
+// ApprovalType is the kind of approval request.
 enum ApprovalType {
   // 1 was APPROVAL_TYPE_TOOL: the integration action approval prompt, removed.
   // Rows recorded with it can still exist and still carry 1.
   reserved 1;
   reserved "APPROVAL_TYPE_TOOL";
   APPROVAL_TYPE_UNSPECIFIED = 0;
+  // A workflow approval node is waiting on it.
   APPROVAL_TYPE_WORKFLOW_STEP = 2;
+  // One of the run's own tool calls is waiting on it: an activation change
+  // (create/update/enable_trigger) or a machine start. The run answers that
+  // call itself, approved or not, so a denial writes no denial message.
+  APPROVAL_TYPE_TOOL_CALL = 3;
 }
 
-// ApprovalStatus tracks the lifecycle of an approval request
+// ApprovalStatus tracks the lifecycle of an approval request. Only PENDING is
+// actionable. APPROVED and DENIED are a person's decision; EXPIRED and
+// CANCELLED are the system closing a request nobody can answer any more (its
+// wait timed out, or the run waiting on it ended or was interrupted), with the
+// reason in denial_reason.
 enum ApprovalStatus {
   APPROVAL_STATUS_UNSPECIFIED = 0;
   APPROVAL_STATUS_PENDING = 1;
   APPROVAL_STATUS_APPROVED = 2;
   APPROVAL_STATUS_DENIED = 3;
+  APPROVAL_STATUS_EXPIRED = 4;
+  APPROVAL_STATUS_CANCELLED = 5;
 }
 
 // ApprovalService handles workflow approval operations.
@@ -32,16 +43,70 @@ service ApprovalService {
   rpc ListApprovalsByChat(ListApprovalsByChatRequest) returns (ListApprovalsByChatResponse) {}
   
   // Approve approves a pending approval request (signals workflow to continue).
-  rpc Approve(ApproveRequest) returns (ApproveResponse) {}
+  rpc Approve(ApproveRequest) returns (ApproveResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "approve"
+        target: {
+          kind: "approval"
+          id: "request_id"
+        }
+        detail: ["action_taken"]
+      }
+    };
+  }
   
   // Deny denies a pending approval request (cancels workflow)
-  rpc Deny(DenyRequest) returns (DenyResponse) {}
+  rpc Deny(DenyRequest) returns (DenyResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "deny"
+        target: {
+          kind: "approval"
+          id: "request_id"
+        }
+        detail: ["action_taken"]
+      }
+    };
+  }
   
-  // BatchApprove approves multiple pending approval requests at once
-  rpc BatchApprove(BatchApproveRequest) returns (BatchApproveResponse) {}
+  // BatchApprove approves several approvals of one chat at once: every
+  // listed approval that is still pending. One already decided (on another
+  // surface) is skipped and not counted; FAILED_PRECONDITION only when none
+  // of them was pending.
+  rpc BatchApprove(BatchApproveRequest) returns (BatchApproveResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "batch_approve"
+        target: {
+          kind: "chat"
+          id: "response.chat_id"
+        }
+        detail: [
+          "response.approved",
+          "action_taken"
+        ]
+      }
+    };
+  }
   
-  // BatchDeny denies multiple pending approval requests at once
-  rpc BatchDeny(BatchDenyRequest) returns (BatchDenyResponse) {}
+  // BatchDeny denies several approvals of one chat at once, with
+  // BatchApprove's rules for approvals already decided.
+  rpc BatchDeny(BatchDenyRequest) returns (BatchDenyResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "batch_deny"
+        target: {
+          kind: "chat"
+          id: "response.chat_id"
+        }
+        detail: [
+          "response.denied",
+          "action_taken"
+        ]
+      }
+    };
+  }
 }
 
 // Approval represents a workflow approval request.
@@ -62,6 +127,12 @@ message Approval {
   optional string workflow_id = 16;
   optional string run_id = 17;
   optional string action_taken = 19;  // Which action button was clicked (e.g., "Deploy Now")
+
+  // Set when the run raised this approval together with others in one step
+  // (one turn's tool calls): every approval of the batch carries the same id,
+  // so they can be offered, and decided, together. Each stays its own row and
+  // can still be decided on its own.
+  optional string batch_id = 23;
 
   // Tool approvals (the removed APPROVAL_TYPE_TOOL) asked about one call to an
   // integration action, and described it with these.
@@ -116,6 +187,9 @@ message BatchApproveResponse {
   bool success = 1;
   int32 approved = 2;
   string message = 3;
+  // The chat every approval in the batch belongs to (the handler refuses a
+  // batch that spans chats). It is the target of the batch's activity event.
+  string chat_id = 4;
 }
 
 // BatchDenyRequest denies multiple approvals at once
@@ -130,4 +204,7 @@ message BatchDenyResponse {
   bool success = 1;
   int32 denied = 2;
   string message = 3;
+  // The chat every approval in the batch belongs to, as in
+  // BatchApproveResponse.chat_id.
+  string chat_id = 4;
 }

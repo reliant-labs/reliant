@@ -4,7 +4,7 @@
  * "Create alert from this panel": a dialog that turns a panel into the KCL
  * alert rule that watches the same number, to paste into the repo.
  *
- * Alerts stay declarative (decision DB): nothing is stored. The dialog prefills
+ * Alerts stay declarative: nothing is stored. The dialog prefills
  * the rule from the panel (its query, with threshold, comparator, look-back
  * window, hold time and severity as editable fields), shows the SQL it
  * produced and the KCL around it, and says where to paste it. A panel that is
@@ -49,7 +49,7 @@ export interface AlertFromPanelDialogProps {
 }
 
 const INPUT =
-  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent aria-[invalid=true]:border-danger-ink";
+  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-danger-ink";
 
 /** What an environment's recorded shape says about the rules it already declares. */
 export function declaredRulesOf(env: ObsEnvironment | undefined): DeclaredRules {
@@ -78,16 +78,21 @@ function Field({ label, htmlFor, problem, hint, children, className }: { label: 
 
 /**
  * Opened from the panel menu or from inside the panel drawer. In the drawer the
- * dialog must sit above it (the drawer is z-60, Modal z-50), and Escape must
+ * dialog must sit above it (the drawer is z-60, Modal z-50), so the Modal
+ * renders in place (`portal={false}`) inside this z-70 layer. Escape must
  * close only the dialog: the drawer's own Escape handler would otherwise close
- * it too and throw away the draft being edited.
+ * it too and throw away the draft being edited. So this layer takes the key —
+ * it closes the dialog and marks the event handled, which the drawer's
+ * handler (useEscapeLayer) and the Modal's both honour.
  */
 export function AlertFromPanelDialog(props: AlertFromPanelDialogProps) {
   return (
     <div
       className="relative z-[70]"
       onKeyDown={(event) => {
-        if (event.key === "Escape") event.nativeEvent.preventDefault();
+        if (event.key !== "Escape") return;
+        event.nativeEvent.preventDefault();
+        props.onClose();
       }}
     >
       <AlertFromPanelBody {...props} />
@@ -124,6 +129,7 @@ function AlertFromPanelBody({ panel, dashboardTitle, environments, env, services
     return (
       <Modal
         open
+        portal={false}
         onClose={onClose}
         size="lg"
         title={title}
@@ -143,7 +149,7 @@ function AlertFromPanelBody({ panel, dashboardTitle, environments, env, services
               {result.instead}
             </p>
           )}
-          <p className="text-xs text-ink-muted">Alerts stay in your repo as KCL, so this console does not store one for you; it writes the rule for panels that are a single number.</p>
+          <p className="text-xs text-ink-muted">Alerts stay in your repo as KCL, so Reliant does not store one for you; it writes the rule for panels that are a single number.</p>
         </div>
       </Modal>
     );
@@ -164,6 +170,7 @@ function AlertFromPanelBody({ panel, dashboardTitle, environments, env, services
   return (
     <Modal
       open
+      portal={false}
       onClose={onClose}
       size="xl"
       title={title}
@@ -308,7 +315,7 @@ function AlertFromPanelBody({ panel, dashboardTitle, environments, env, services
                       setCopied(false);
                     }}
                     className={cn(
-                      "h-6 rounded px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                      "h-6 rounded px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                       !showRuleOnly === option.value ? "bg-ink/8 font-medium text-ink" : "text-ink-muted hover:text-ink"
                     )}
                   >

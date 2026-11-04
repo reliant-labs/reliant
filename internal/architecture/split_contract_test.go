@@ -244,14 +244,6 @@ func TestDockerfiles_Exist(t *testing.T) {
 	}
 }
 
-// ─── docker-compose ────────────────────────────────────────────────────────
-
-func TestDockerCompose_Exists(t *testing.T) {
-	if !fileExists(t, filepath.Join(root(t), "docker-compose.yml")) {
-		t.Error("missing docker-compose.yml")
-	}
-}
-
 // ─── KCL overlays ──────────────────────────────────────────────────────────
 
 func TestKCLOverlays_Exist(t *testing.T) {

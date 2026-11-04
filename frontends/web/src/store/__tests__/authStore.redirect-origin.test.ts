@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * Regression cover for the loopback OAuth redirect.
@@ -57,12 +57,9 @@ vi.mock('@/lib/constants', async (importOriginal) => ({
   getIsDev: () => false,
 }))
 
-vi.mock('@/lib/sentry', () => ({
-  setSentryUser: vi.fn(),
-}))
 vi.mock('@/lib/telemetry', () => ({ setTelemetryUserId: vi.fn() }))
 
-type TestWindow = Window & { electronAPI?: unknown }
+type TestWindow = Omit<Window, 'electronAPI'> & { electronAPI?: unknown }
 
 /**
  * Repoint the jsdom document at `origin`. The packaged renderer is served from
@@ -86,6 +83,14 @@ const redirectTargetFrom = (mock: ReturnType<typeof vi.fn>): string => {
 }
 
 describe('OAuth redirect target in a packaged Electron build', () => {
+  // Each test imports a FRESH authStore (vi.resetModules), but the first import
+  // in a worker also transforms authStore's whole module graph: ~4s alone,
+  // past the 5s test timeout under a loaded full run. Transform it once here,
+  // on the hook's own budget, so every test's import is only an evaluation.
+  beforeAll(async () => {
+    await import('@/store/authStore')
+  }, 60_000)
+
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()

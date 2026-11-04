@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { worktreeGrpc, type GitCommit } from '../../api/worktree-grpc';
+import { useWorktreeCommits } from '../../hooks/worktree-git-queries';
 import { cn } from '../../lib/utils';
 import { toast } from '../../lib/toast-manager';
-import { Tooltip } from '../ui/Tooltip';
+import Tooltip from '../forge-ui/tooltip';
 
 interface CommitHistoryProps {
   worktreeId: string;
@@ -12,18 +12,6 @@ interface CommitHistoryProps {
   className?: string;
   limit?: number;
   initialDisplay?: number;
-}
-
-// Local interface matching what gRPC returns
-interface CommitHistoryData {
-  commits: GitCommit[];
-  total: number;
-  branch: string;
-  base_branch: string;
-  comparison_mode: boolean;
-  comparison_ref: string;
-  current_branch: string;
-  error?: string;
 }
 
 export function formatCommitDate(dateStr: string, now: Date = new Date()): string {
@@ -52,31 +40,12 @@ export function formatCommitDate(dateStr: string, now: Date = new Date()): strin
  * hash copies on click.
  */
 export function CommitHistory({ worktreeId, repoId, className = "", limit = 20, initialDisplay = 5 }: CommitHistoryProps) {
-  const [data, setData] = useState<CommitHistoryData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
-  const requestIdRef = useRef(0);
-
-  const fetchCommits = useCallback(async () => {
-    const requestId = ++requestIdRef.current;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const grpcData = await worktreeGrpc.getCommits(worktreeId, limit, repoId);
-      if (requestIdRef.current === requestId) setData(grpcData);
-    } catch (err) {
-      if (requestIdRef.current === requestId) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch commit history');
-      }
-    } finally {
-      if (requestIdRef.current === requestId) setIsLoading(false);
-    }
-  }, [worktreeId, limit, repoId]);
-
-  useEffect(() => {
-    if (worktreeId) void fetchCommits();
-  }, [worktreeId, fetchCommits]);
+  const query = useWorktreeCommits(worktreeId, { limit, repoId });
+  const data = query.data ?? null;
+  const isLoading = query.isFetching;
+  const error = query.error ? query.error.message || 'Failed to fetch commit history' : null;
+  const fetchCommits = () => query.refetch();
 
   const copyToClipboard = async (text: string, shortHash: string) => {
     try {
@@ -133,7 +102,7 @@ export function CommitHistory({ worktreeId, repoId, className = "", limit = 20, 
           {data.total === 1 ? "commit" : "commits"}
           {compareLabel && <span className="font-mono"> · {compareLabel}</span>}
         </p>
-        <Tooltip content="Refresh commits" delay={300} wrapperClassName="flex">
+        <Tooltip content="Refresh commits" delay={300} triggerClassName="flex">
           <button
             type="button"
             onClick={() => void fetchCommits()}
@@ -163,7 +132,7 @@ export function CommitHistory({ worktreeId, repoId, className = "", limit = 20, 
                 {commit.message}
               </p>
               <div className="flex min-w-0 items-center gap-2 text-2xs text-muted-foreground">
-                <Tooltip content="Copy full hash" delay={300} wrapperClassName="flex">
+                <Tooltip content="Copy full hash" delay={300} triggerClassName="flex">
                   <button
                     type="button"
                     onClick={() => void copyToClipboard(commit.hash, commit.short_hash)}

@@ -37,6 +37,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// DeployServiceResolveHostedProjectProcedure is the fully-qualified name of the DeployService's
+	// ResolveHostedProject RPC.
+	DeployServiceResolveHostedProjectProcedure = "/controlplane.v1.DeployService/ResolveHostedProject"
 	// DeployServiceGetCapabilitiesProcedure is the fully-qualified name of the DeployService's
 	// GetCapabilities RPC.
 	DeployServiceGetCapabilitiesProcedure = "/controlplane.v1.DeployService/GetCapabilities"
@@ -102,6 +105,9 @@ const (
 	// DeployServiceCutReleaseProcedure is the fully-qualified name of the DeployService's CutRelease
 	// RPC.
 	DeployServiceCutReleaseProcedure = "/controlplane.v1.DeployService/CutRelease"
+	// DeployServiceRecordReleaseMigrationsProcedure is the fully-qualified name of the DeployService's
+	// RecordReleaseMigrations RPC.
+	DeployServiceRecordReleaseMigrationsProcedure = "/controlplane.v1.DeployService/RecordReleaseMigrations"
 	// DeployServiceListReleasesProcedure is the fully-qualified name of the DeployService's
 	// ListReleases RPC.
 	DeployServiceListReleasesProcedure = "/controlplane.v1.DeployService/ListReleases"
@@ -134,9 +140,27 @@ const (
 	// DeployServiceListConvergencesProcedure is the fully-qualified name of the DeployService's
 	// ListConvergences RPC.
 	DeployServiceListConvergencesProcedure = "/controlplane.v1.DeployService/ListConvergences"
+	// DeployServiceOpenDeployAttemptProcedure is the fully-qualified name of the DeployService's
+	// OpenDeployAttempt RPC.
+	DeployServiceOpenDeployAttemptProcedure = "/controlplane.v1.DeployService/OpenDeployAttempt"
+	// DeployServiceReportDeployAttemptProcedure is the fully-qualified name of the DeployService's
+	// ReportDeployAttempt RPC.
+	DeployServiceReportDeployAttemptProcedure = "/controlplane.v1.DeployService/ReportDeployAttempt"
+	// DeployServiceCloseDeployAttemptProcedure is the fully-qualified name of the DeployService's
+	// CloseDeployAttempt RPC.
+	DeployServiceCloseDeployAttemptProcedure = "/controlplane.v1.DeployService/CloseDeployAttempt"
+	// DeployServiceListDeployAttemptsProcedure is the fully-qualified name of the DeployService's
+	// ListDeployAttempts RPC.
+	DeployServiceListDeployAttemptsProcedure = "/controlplane.v1.DeployService/ListDeployAttempts"
+	// DeployServiceGetDeployAttemptProcedure is the fully-qualified name of the DeployService's
+	// GetDeployAttempt RPC.
+	DeployServiceGetDeployAttemptProcedure = "/controlplane.v1.DeployService/GetDeployAttempt"
 	// DeployServiceGetLiveViewProcedure is the fully-qualified name of the DeployService's GetLiveView
 	// RPC.
 	DeployServiceGetLiveViewProcedure = "/controlplane.v1.DeployService/GetLiveView"
+	// DeployServiceGetEnvironmentShapeProcedure is the fully-qualified name of the DeployService's
+	// GetEnvironmentShape RPC.
+	DeployServiceGetEnvironmentShapeProcedure = "/controlplane.v1.DeployService/GetEnvironmentShape"
 	// DeployServicePlanDeployProcedure is the fully-qualified name of the DeployService's PlanDeploy
 	// RPC.
 	DeployServicePlanDeployProcedure = "/controlplane.v1.DeployService/PlanDeploy"
@@ -155,6 +179,8 @@ const (
 
 // DeployServiceClient is a client for the controlplane.v1.DeployService service.
 type DeployServiceClient interface {
+	// Resolve server-owned project identity. Creation never guesses between orgs.
+	ResolveHostedProject(context.Context, *connect.Request[v1.ResolveHostedProjectRequest]) (*connect.Response[v1.ResolveHostedProjectResponse], error)
 	// Feature negotiation is mandatory before sending immutable snapshot documents.
 	GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error)
 	// GetTenant returns the caller's organization as a deploy tenant. There is
@@ -169,14 +195,15 @@ type DeployServiceClient interface {
 	GetEnvironment(context.Context, *connect.Request[v1.GetDeployEnvironmentRequest]) (*connect.Response[v1.GetDeployEnvironmentResponse], error)
 	ListEnvironments(context.Context, *connect.Request[v1.ListDeployEnvironmentsRequest]) (*connect.Response[v1.ListDeployEnvironmentsResponse], error)
 	UpdateEnvironment(context.Context, *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error)
-	// DeleteEnvironment tears down the environment and its namespace. Refuses
-	// with FailedPrecondition while the environment still has deployments,
-	// unless force is set — deleting a namespace out from under running
-	// workloads is the kind of thing a user should have to say twice.
+	// DeleteEnvironment tears down the environment: its deployments, workloads,
+	// URLs, namespaces and (unless keep_data) its managed databases' data.
+	// Refuses with FailedPrecondition while the environment still has
+	// deployments, unless force is set — deleting a namespace out from under
+	// running workloads is the kind of thing a user should have to say twice.
 	DeleteEnvironment(context.Context, *connect.Request[v1.DeleteDeployEnvironmentRequest]) (*connect.Response[v1.DeleteDeployEnvironmentResponse], error)
 	// ListRetainedDatabases lists the caller's org's databases that outlived a
-	// deleted environment (DeleteEnvironment without delete_data). Their data
-	// still exists and still bills as storage.
+	// deleted environment (DeleteEnvironment with keep_data). Their data still
+	// exists and still bills as storage.
 	ListRetainedDatabases(context.Context, *connect.Request[v1.ListRetainedDatabasesRequest]) (*connect.Response[v1.ListRetainedDatabasesResponse], error)
 	// DeleteRetainedDatabase destroys one retained database's cluster, volumes
 	// and (when it was the last in its namespace) the namespace. ADMIN.
@@ -287,6 +314,13 @@ type DeployServiceClient interface {
 	// AlreadyExists, because a version label that meant two different digest
 	// sets would void every guarantee Promote rests on.
 	CutRelease(context.Context, *connect.Request[v1.CutReleaseRequest]) (*connect.Response[v1.CutReleaseResponse], error)
+	// RecordReleaseMigrations fills the migration manifest of a release cut
+	// before forge recorded one — the backfill that lets forge's release-time
+	// migration-order guard see what an environment already applied. It is NOT
+	// an update: the manifest is evidence in its own append-only child row, the
+	// release row is untouched, a release that already records an equal
+	// manifest answers recorded=false, and a DIFFERENT one is AlreadyExists.
+	RecordReleaseMigrations(context.Context, *connect.Request[v1.RecordReleaseMigrationsRequest]) (*connect.Response[v1.RecordReleaseMigrationsResponse], error)
 	// ListReleases feeds the promote picker. Releases are immutable, so there
 	// is deliberately no UpdateRelease anywhere in this service — a correction
 	// is a new release.
@@ -394,16 +428,60 @@ type DeployServiceClient interface {
 	//
 	// MEMBER. This is the deploy history of a team's own environment.
 	ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error)
-	// GetLiveView returns every environment of one forge project with its
-	// declaration, promotion, release, bundle, latest apply and sessions — the
-	// whole Live screen in ONE round trip.
+	// OpenDeployAttempt starts an attempt. Idempotent on the forge-minted id: a
+	// retried open returns the existing row unchanged.
+	OpenDeployAttempt(context.Context, *connect.Request[v1.OpenDeployAttemptRequest]) (*connect.Response[v1.OpenDeployAttemptResponse], error)
+	// ReportDeployAttempt is a heartbeat: the phase, what the attempt has
+	// learned (release, promotion), and the next chunk of its log. Refused for
+	// a closed attempt, so a late heartbeat cannot reopen one.
+	ReportDeployAttempt(context.Context, *connect.Request[v1.ReportDeployAttemptRequest]) (*connect.Response[v1.ReportDeployAttemptResponse], error)
+	// CloseDeployAttempt records how the invocation ended. Exactly once: a
+	// second close is refused, so the first outcome reported is the outcome.
+	CloseDeployAttempt(context.Context, *connect.Request[v1.CloseDeployAttemptRequest]) (*connect.Response[v1.CloseDeployAttemptResponse], error)
+	// ListDeployAttempts pages a project's attempts newest first, optionally
+	// one environment's. Without logs or reports — GetDeployAttempt has those.
 	//
-	// Folded for GetTenant's reason: the page cannot render until it has all of
-	// it, and N environments × six reads is both a slow page and a page assembled
-	// from six different instants. An environment list that comes back empty is
-	// an empty list, never an error: a project nobody has deployed yet is a
-	// normal state, not a failure.
+	// MEMBER, like the rest of the ledger reads.
+	//
+	// forge:custom — keyset-paged by (started_at, id) with a derived state, not
+	// the generated CRUD list.
+	ListDeployAttempts(context.Context, *connect.Request[v1.ListDeployAttemptsRequest]) (*connect.Response[v1.ListDeployAttemptsResponse], error)
+	// GetDeployAttempt returns one attempt with its log tail and report.
+	//
+	// forge:custom — returns the log and report beside the attempt, and derives
+	// its state.
+	GetDeployAttempt(context.Context, *connect.Request[v1.GetDeployAttemptRequest]) (*connect.Response[v1.GetDeployAttemptResponse], error)
+	// GetLiveView returns every environment of one forge project as a ROSTER:
+	// each row's identity, release binding, bundle identity, phase, drift,
+	// holds and tree-health counts — the environment list every console page
+	// draws, in ONE round trip.
+	//
+	// Folded for GetTenant's reason: N environments × several reads is both a
+	// slow page and a page assembled from different instants. Bounded per row
+	// (see DeployLiveEnvironment): the documents that grow with an environment
+	// — its declared shape, its bundle, its release — are fetched for one
+	// environment at a time. An environment list that comes back empty is an
+	// empty list, never an error: a project nobody has deployed yet is a normal
+	// state, not a failure.
 	GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error)
+	// GetEnvironmentShape returns one environment's DECLARATION: the
+	// release.Shape its last render recorded (workloads, secrets by name and
+	// provider, domains, clusters, resolved alert rules and routes, a hash per
+	// object), with where and when it was declared.
+	//
+	// SPLIT FROM THE ROSTER because it is a document, not a field: hundreds of
+	// KB for a real environment, read only by the pages that show one
+	// environment's secrets, workloads, alerts or dashboards. It used to ride
+	// on every DeployEnvironment, which made every environment list a megabyte.
+	//
+	// MEMBER, the same scoping as GetLiveView: an environment of another org is
+	// NotFound, indistinguishable from an absent one. It names no secret VALUE —
+	// a shape's secrets are names and providers only (F-13, enforced when the
+	// shape is written).
+	//
+	// A NEVER-DECLARED ENVIRONMENT IS NOT AN ERROR: the response comes back
+	// with no shape, which is the "never built" state, never an empty shape.
+	GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error)
 	// PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
 	//
 	// IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
@@ -487,6 +565,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	deployServiceMethods := v1.File_services_deploy_v1_deploy_proto.Services().ByName("DeployService").Methods()
 	return &deployServiceClient{
+		resolveHostedProject: connect.NewClient[v1.ResolveHostedProjectRequest, v1.ResolveHostedProjectResponse](
+			httpClient,
+			baseURL+DeployServiceResolveHostedProjectProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ResolveHostedProject")),
+			connect.WithClientOptions(opts...),
+		),
 		getCapabilities: connect.NewClient[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse](
 			httpClient,
 			baseURL+DeployServiceGetCapabilitiesProcedure,
@@ -625,6 +709,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("CutRelease")),
 			connect.WithClientOptions(opts...),
 		),
+		recordReleaseMigrations: connect.NewClient[v1.RecordReleaseMigrationsRequest, v1.RecordReleaseMigrationsResponse](
+			httpClient,
+			baseURL+DeployServiceRecordReleaseMigrationsProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("RecordReleaseMigrations")),
+			connect.WithClientOptions(opts...),
+		),
 		listReleases: connect.NewClient[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse](
 			httpClient,
 			baseURL+DeployServiceListReleasesProcedure,
@@ -697,10 +787,46 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("ListConvergences")),
 			connect.WithClientOptions(opts...),
 		),
+		openDeployAttempt: connect.NewClient[v1.OpenDeployAttemptRequest, v1.OpenDeployAttemptResponse](
+			httpClient,
+			baseURL+DeployServiceOpenDeployAttemptProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("OpenDeployAttempt")),
+			connect.WithClientOptions(opts...),
+		),
+		reportDeployAttempt: connect.NewClient[v1.ReportDeployAttemptRequest, v1.ReportDeployAttemptResponse](
+			httpClient,
+			baseURL+DeployServiceReportDeployAttemptProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ReportDeployAttempt")),
+			connect.WithClientOptions(opts...),
+		),
+		closeDeployAttempt: connect.NewClient[v1.CloseDeployAttemptRequest, v1.CloseDeployAttemptResponse](
+			httpClient,
+			baseURL+DeployServiceCloseDeployAttemptProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("CloseDeployAttempt")),
+			connect.WithClientOptions(opts...),
+		),
+		listDeployAttempts: connect.NewClient[v1.ListDeployAttemptsRequest, v1.ListDeployAttemptsResponse](
+			httpClient,
+			baseURL+DeployServiceListDeployAttemptsProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ListDeployAttempts")),
+			connect.WithClientOptions(opts...),
+		),
+		getDeployAttempt: connect.NewClient[v1.GetDeployAttemptRequest, v1.GetDeployAttemptResponse](
+			httpClient,
+			baseURL+DeployServiceGetDeployAttemptProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetDeployAttempt")),
+			connect.WithClientOptions(opts...),
+		),
 		getLiveView: connect.NewClient[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse](
 			httpClient,
 			baseURL+DeployServiceGetLiveViewProcedure,
 			connect.WithSchema(deployServiceMethods.ByName("GetLiveView")),
+			connect.WithClientOptions(opts...),
+		),
+		getEnvironmentShape: connect.NewClient[v1.GetDeployEnvironmentShapeRequest, v1.GetDeployEnvironmentShapeResponse](
+			httpClient,
+			baseURL+DeployServiceGetEnvironmentShapeProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetEnvironmentShape")),
 			connect.WithClientOptions(opts...),
 		),
 		planDeploy: connect.NewClient[v1.PlanDeployRequest, v1.PlanDeployResponse](
@@ -738,47 +864,60 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // deployServiceClient implements DeployServiceClient.
 type deployServiceClient struct {
-	getCapabilities        *connect.Client[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse]
-	getTenant              *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
-	createTenant           *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
-	createEnvironment      *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
-	getEnvironment         *connect.Client[v1.GetDeployEnvironmentRequest, v1.GetDeployEnvironmentResponse]
-	listEnvironments       *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
-	updateEnvironment      *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
-	deleteEnvironment      *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
-	listRetainedDatabases  *connect.Client[v1.ListRetainedDatabasesRequest, v1.ListRetainedDatabasesResponse]
-	deleteRetainedDatabase *connect.Client[v1.DeleteRetainedDatabaseRequest, v1.DeleteRetainedDatabaseResponse]
-	ensureEnvironment      *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
-	createDeployment       *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
-	getDeployment          *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
-	listDeployments        *connect.Client[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse]
-	updateDeployment       *connect.Client[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse]
-	deleteDeployment       *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
-	promote                *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
-	scale                  *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
-	setEnvironmentRunState *connect.Client[v1.SetEnvironmentRunStateRequest, v1.SetEnvironmentRunStateResponse]
-	restartWorkload        *connect.Client[v1.RestartWorkloadRequest, v1.RestartWorkloadResponse]
-	getStatus              *connect.Client[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse]
-	streamLogs             *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
-	cutRelease             *connect.Client[v1.CutReleaseRequest, v1.CutReleaseResponse]
-	listReleases           *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
-	getRelease             *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
-	listPromotions         *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
-	compareReleases        *connect.Client[v1.CompareDeployReleasesRequest, v1.CompareDeployReleasesResponse]
-	getRollout             *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
-	recordGate             *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
-	listGates              *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
-	getRun                 *connect.Client[v1.GetDeployRunRequest, v1.GetDeployRunResponse]
-	listUsage              *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
-	recordBundle           *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
-	getBundle              *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
-	listConvergences       *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
-	getLiveView            *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
-	planDeploy             *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
-	checkDeployCapacity    *connect.Client[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse]
-	reportLocalSession     *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
-	importLedger           *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
-	getDrift               *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
+	resolveHostedProject    *connect.Client[v1.ResolveHostedProjectRequest, v1.ResolveHostedProjectResponse]
+	getCapabilities         *connect.Client[v1.GetDeployCapabilitiesRequest, v1.GetDeployCapabilitiesResponse]
+	getTenant               *connect.Client[v1.GetDeployTenantRequest, v1.GetDeployTenantResponse]
+	createTenant            *connect.Client[v1.CreateDeployTenantRequest, v1.CreateDeployTenantResponse]
+	createEnvironment       *connect.Client[v1.CreateDeployEnvironmentRequest, v1.CreateDeployEnvironmentResponse]
+	getEnvironment          *connect.Client[v1.GetDeployEnvironmentRequest, v1.GetDeployEnvironmentResponse]
+	listEnvironments        *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
+	updateEnvironment       *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
+	deleteEnvironment       *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
+	listRetainedDatabases   *connect.Client[v1.ListRetainedDatabasesRequest, v1.ListRetainedDatabasesResponse]
+	deleteRetainedDatabase  *connect.Client[v1.DeleteRetainedDatabaseRequest, v1.DeleteRetainedDatabaseResponse]
+	ensureEnvironment       *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
+	createDeployment        *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
+	getDeployment           *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
+	listDeployments         *connect.Client[v1.ListDeploymentsRequest, v1.ListDeploymentsResponse]
+	updateDeployment        *connect.Client[v1.UpdateDeploymentRequest, v1.UpdateDeploymentResponse]
+	deleteDeployment        *connect.Client[v1.DeleteDeploymentRequest, v1.DeleteDeploymentResponse]
+	promote                 *connect.Client[v1.PromoteReleaseRequest, v1.PromoteReleaseResponse]
+	scale                   *connect.Client[v1.ScaleDeploymentRequest, v1.ScaleDeploymentResponse]
+	setEnvironmentRunState  *connect.Client[v1.SetEnvironmentRunStateRequest, v1.SetEnvironmentRunStateResponse]
+	restartWorkload         *connect.Client[v1.RestartWorkloadRequest, v1.RestartWorkloadResponse]
+	getStatus               *connect.Client[v1.GetDeploymentStatusRequest, v1.GetDeploymentStatusResponse]
+	streamLogs              *connect.Client[v1.StreamDeploymentLogsRequest, v1.StreamDeploymentLogsResponse]
+	cutRelease              *connect.Client[v1.CutReleaseRequest, v1.CutReleaseResponse]
+	recordReleaseMigrations *connect.Client[v1.RecordReleaseMigrationsRequest, v1.RecordReleaseMigrationsResponse]
+	listReleases            *connect.Client[v1.ListDeployReleasesRequest, v1.ListDeployReleasesResponse]
+	getRelease              *connect.Client[v1.GetDeployReleaseRequest, v1.GetDeployReleaseResponse]
+	listPromotions          *connect.Client[v1.ListDeployPromotionsRequest, v1.ListDeployPromotionsResponse]
+	compareReleases         *connect.Client[v1.CompareDeployReleasesRequest, v1.CompareDeployReleasesResponse]
+	getRollout              *connect.Client[v1.GetDeployRolloutRequest, v1.GetDeployRolloutResponse]
+	recordGate              *connect.Client[v1.RecordDeployGateRequest, v1.RecordDeployGateResponse]
+	listGates               *connect.Client[v1.ListDeployGatesRequest, v1.ListDeployGatesResponse]
+	getRun                  *connect.Client[v1.GetDeployRunRequest, v1.GetDeployRunResponse]
+	listUsage               *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
+	recordBundle            *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
+	getBundle               *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
+	listConvergences        *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
+	openDeployAttempt       *connect.Client[v1.OpenDeployAttemptRequest, v1.OpenDeployAttemptResponse]
+	reportDeployAttempt     *connect.Client[v1.ReportDeployAttemptRequest, v1.ReportDeployAttemptResponse]
+	closeDeployAttempt      *connect.Client[v1.CloseDeployAttemptRequest, v1.CloseDeployAttemptResponse]
+	listDeployAttempts      *connect.Client[v1.ListDeployAttemptsRequest, v1.ListDeployAttemptsResponse]
+	getDeployAttempt        *connect.Client[v1.GetDeployAttemptRequest, v1.GetDeployAttemptResponse]
+	getLiveView             *connect.Client[v1.GetDeployLiveViewRequest, v1.GetDeployLiveViewResponse]
+	getEnvironmentShape     *connect.Client[v1.GetDeployEnvironmentShapeRequest, v1.GetDeployEnvironmentShapeResponse]
+	planDeploy              *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
+	checkDeployCapacity     *connect.Client[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse]
+	reportLocalSession      *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
+	importLedger            *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
+	getDrift                *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
+}
+
+// ResolveHostedProject calls controlplane.v1.DeployService.ResolveHostedProject.
+func (c *deployServiceClient) ResolveHostedProject(ctx context.Context, req *connect.Request[v1.ResolveHostedProjectRequest]) (*connect.Response[v1.ResolveHostedProjectResponse], error) {
+	return c.resolveHostedProject.CallUnary(ctx, req)
 }
 
 // GetCapabilities calls controlplane.v1.DeployService.GetCapabilities.
@@ -896,6 +1035,11 @@ func (c *deployServiceClient) CutRelease(ctx context.Context, req *connect.Reque
 	return c.cutRelease.CallUnary(ctx, req)
 }
 
+// RecordReleaseMigrations calls controlplane.v1.DeployService.RecordReleaseMigrations.
+func (c *deployServiceClient) RecordReleaseMigrations(ctx context.Context, req *connect.Request[v1.RecordReleaseMigrationsRequest]) (*connect.Response[v1.RecordReleaseMigrationsResponse], error) {
+	return c.recordReleaseMigrations.CallUnary(ctx, req)
+}
+
 // ListReleases calls controlplane.v1.DeployService.ListReleases.
 func (c *deployServiceClient) ListReleases(ctx context.Context, req *connect.Request[v1.ListDeployReleasesRequest]) (*connect.Response[v1.ListDeployReleasesResponse], error) {
 	return c.listReleases.CallUnary(ctx, req)
@@ -956,9 +1100,39 @@ func (c *deployServiceClient) ListConvergences(ctx context.Context, req *connect
 	return c.listConvergences.CallUnary(ctx, req)
 }
 
+// OpenDeployAttempt calls controlplane.v1.DeployService.OpenDeployAttempt.
+func (c *deployServiceClient) OpenDeployAttempt(ctx context.Context, req *connect.Request[v1.OpenDeployAttemptRequest]) (*connect.Response[v1.OpenDeployAttemptResponse], error) {
+	return c.openDeployAttempt.CallUnary(ctx, req)
+}
+
+// ReportDeployAttempt calls controlplane.v1.DeployService.ReportDeployAttempt.
+func (c *deployServiceClient) ReportDeployAttempt(ctx context.Context, req *connect.Request[v1.ReportDeployAttemptRequest]) (*connect.Response[v1.ReportDeployAttemptResponse], error) {
+	return c.reportDeployAttempt.CallUnary(ctx, req)
+}
+
+// CloseDeployAttempt calls controlplane.v1.DeployService.CloseDeployAttempt.
+func (c *deployServiceClient) CloseDeployAttempt(ctx context.Context, req *connect.Request[v1.CloseDeployAttemptRequest]) (*connect.Response[v1.CloseDeployAttemptResponse], error) {
+	return c.closeDeployAttempt.CallUnary(ctx, req)
+}
+
+// ListDeployAttempts calls controlplane.v1.DeployService.ListDeployAttempts.
+func (c *deployServiceClient) ListDeployAttempts(ctx context.Context, req *connect.Request[v1.ListDeployAttemptsRequest]) (*connect.Response[v1.ListDeployAttemptsResponse], error) {
+	return c.listDeployAttempts.CallUnary(ctx, req)
+}
+
+// GetDeployAttempt calls controlplane.v1.DeployService.GetDeployAttempt.
+func (c *deployServiceClient) GetDeployAttempt(ctx context.Context, req *connect.Request[v1.GetDeployAttemptRequest]) (*connect.Response[v1.GetDeployAttemptResponse], error) {
+	return c.getDeployAttempt.CallUnary(ctx, req)
+}
+
 // GetLiveView calls controlplane.v1.DeployService.GetLiveView.
 func (c *deployServiceClient) GetLiveView(ctx context.Context, req *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error) {
 	return c.getLiveView.CallUnary(ctx, req)
+}
+
+// GetEnvironmentShape calls controlplane.v1.DeployService.GetEnvironmentShape.
+func (c *deployServiceClient) GetEnvironmentShape(ctx context.Context, req *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error) {
+	return c.getEnvironmentShape.CallUnary(ctx, req)
 }
 
 // PlanDeploy calls controlplane.v1.DeployService.PlanDeploy.
@@ -988,6 +1162,8 @@ func (c *deployServiceClient) GetDrift(ctx context.Context, req *connect.Request
 
 // DeployServiceHandler is an implementation of the controlplane.v1.DeployService service.
 type DeployServiceHandler interface {
+	// Resolve server-owned project identity. Creation never guesses between orgs.
+	ResolveHostedProject(context.Context, *connect.Request[v1.ResolveHostedProjectRequest]) (*connect.Response[v1.ResolveHostedProjectResponse], error)
 	// Feature negotiation is mandatory before sending immutable snapshot documents.
 	GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error)
 	// GetTenant returns the caller's organization as a deploy tenant. There is
@@ -1002,14 +1178,15 @@ type DeployServiceHandler interface {
 	GetEnvironment(context.Context, *connect.Request[v1.GetDeployEnvironmentRequest]) (*connect.Response[v1.GetDeployEnvironmentResponse], error)
 	ListEnvironments(context.Context, *connect.Request[v1.ListDeployEnvironmentsRequest]) (*connect.Response[v1.ListDeployEnvironmentsResponse], error)
 	UpdateEnvironment(context.Context, *connect.Request[v1.UpdateDeployEnvironmentRequest]) (*connect.Response[v1.UpdateDeployEnvironmentResponse], error)
-	// DeleteEnvironment tears down the environment and its namespace. Refuses
-	// with FailedPrecondition while the environment still has deployments,
-	// unless force is set — deleting a namespace out from under running
-	// workloads is the kind of thing a user should have to say twice.
+	// DeleteEnvironment tears down the environment: its deployments, workloads,
+	// URLs, namespaces and (unless keep_data) its managed databases' data.
+	// Refuses with FailedPrecondition while the environment still has
+	// deployments, unless force is set — deleting a namespace out from under
+	// running workloads is the kind of thing a user should have to say twice.
 	DeleteEnvironment(context.Context, *connect.Request[v1.DeleteDeployEnvironmentRequest]) (*connect.Response[v1.DeleteDeployEnvironmentResponse], error)
 	// ListRetainedDatabases lists the caller's org's databases that outlived a
-	// deleted environment (DeleteEnvironment without delete_data). Their data
-	// still exists and still bills as storage.
+	// deleted environment (DeleteEnvironment with keep_data). Their data still
+	// exists and still bills as storage.
 	ListRetainedDatabases(context.Context, *connect.Request[v1.ListRetainedDatabasesRequest]) (*connect.Response[v1.ListRetainedDatabasesResponse], error)
 	// DeleteRetainedDatabase destroys one retained database's cluster, volumes
 	// and (when it was the last in its namespace) the namespace. ADMIN.
@@ -1120,6 +1297,13 @@ type DeployServiceHandler interface {
 	// AlreadyExists, because a version label that meant two different digest
 	// sets would void every guarantee Promote rests on.
 	CutRelease(context.Context, *connect.Request[v1.CutReleaseRequest]) (*connect.Response[v1.CutReleaseResponse], error)
+	// RecordReleaseMigrations fills the migration manifest of a release cut
+	// before forge recorded one — the backfill that lets forge's release-time
+	// migration-order guard see what an environment already applied. It is NOT
+	// an update: the manifest is evidence in its own append-only child row, the
+	// release row is untouched, a release that already records an equal
+	// manifest answers recorded=false, and a DIFFERENT one is AlreadyExists.
+	RecordReleaseMigrations(context.Context, *connect.Request[v1.RecordReleaseMigrationsRequest]) (*connect.Response[v1.RecordReleaseMigrationsResponse], error)
 	// ListReleases feeds the promote picker. Releases are immutable, so there
 	// is deliberately no UpdateRelease anywhere in this service — a correction
 	// is a new release.
@@ -1227,16 +1411,60 @@ type DeployServiceHandler interface {
 	//
 	// MEMBER. This is the deploy history of a team's own environment.
 	ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error)
-	// GetLiveView returns every environment of one forge project with its
-	// declaration, promotion, release, bundle, latest apply and sessions — the
-	// whole Live screen in ONE round trip.
+	// OpenDeployAttempt starts an attempt. Idempotent on the forge-minted id: a
+	// retried open returns the existing row unchanged.
+	OpenDeployAttempt(context.Context, *connect.Request[v1.OpenDeployAttemptRequest]) (*connect.Response[v1.OpenDeployAttemptResponse], error)
+	// ReportDeployAttempt is a heartbeat: the phase, what the attempt has
+	// learned (release, promotion), and the next chunk of its log. Refused for
+	// a closed attempt, so a late heartbeat cannot reopen one.
+	ReportDeployAttempt(context.Context, *connect.Request[v1.ReportDeployAttemptRequest]) (*connect.Response[v1.ReportDeployAttemptResponse], error)
+	// CloseDeployAttempt records how the invocation ended. Exactly once: a
+	// second close is refused, so the first outcome reported is the outcome.
+	CloseDeployAttempt(context.Context, *connect.Request[v1.CloseDeployAttemptRequest]) (*connect.Response[v1.CloseDeployAttemptResponse], error)
+	// ListDeployAttempts pages a project's attempts newest first, optionally
+	// one environment's. Without logs or reports — GetDeployAttempt has those.
 	//
-	// Folded for GetTenant's reason: the page cannot render until it has all of
-	// it, and N environments × six reads is both a slow page and a page assembled
-	// from six different instants. An environment list that comes back empty is
-	// an empty list, never an error: a project nobody has deployed yet is a
-	// normal state, not a failure.
+	// MEMBER, like the rest of the ledger reads.
+	//
+	// forge:custom — keyset-paged by (started_at, id) with a derived state, not
+	// the generated CRUD list.
+	ListDeployAttempts(context.Context, *connect.Request[v1.ListDeployAttemptsRequest]) (*connect.Response[v1.ListDeployAttemptsResponse], error)
+	// GetDeployAttempt returns one attempt with its log tail and report.
+	//
+	// forge:custom — returns the log and report beside the attempt, and derives
+	// its state.
+	GetDeployAttempt(context.Context, *connect.Request[v1.GetDeployAttemptRequest]) (*connect.Response[v1.GetDeployAttemptResponse], error)
+	// GetLiveView returns every environment of one forge project as a ROSTER:
+	// each row's identity, release binding, bundle identity, phase, drift,
+	// holds and tree-health counts — the environment list every console page
+	// draws, in ONE round trip.
+	//
+	// Folded for GetTenant's reason: N environments × several reads is both a
+	// slow page and a page assembled from different instants. Bounded per row
+	// (see DeployLiveEnvironment): the documents that grow with an environment
+	// — its declared shape, its bundle, its release — are fetched for one
+	// environment at a time. An environment list that comes back empty is an
+	// empty list, never an error: a project nobody has deployed yet is a normal
+	// state, not a failure.
 	GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error)
+	// GetEnvironmentShape returns one environment's DECLARATION: the
+	// release.Shape its last render recorded (workloads, secrets by name and
+	// provider, domains, clusters, resolved alert rules and routes, a hash per
+	// object), with where and when it was declared.
+	//
+	// SPLIT FROM THE ROSTER because it is a document, not a field: hundreds of
+	// KB for a real environment, read only by the pages that show one
+	// environment's secrets, workloads, alerts or dashboards. It used to ride
+	// on every DeployEnvironment, which made every environment list a megabyte.
+	//
+	// MEMBER, the same scoping as GetLiveView: an environment of another org is
+	// NotFound, indistinguishable from an absent one. It names no secret VALUE —
+	// a shape's secrets are names and providers only (F-13, enforced when the
+	// shape is written).
+	//
+	// A NEVER-DECLARED ENVIRONMENT IS NOT AN ERROR: the response comes back
+	// with no shape, which is the "never built" state, never an empty shape.
+	GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error)
 	// PlanDeploy computes what deploying a bundle WOULD do, and writes nothing.
 	//
 	// IT IS A SEPARATE READ-ONLY RPC RATHER THAN A dry_run FLAG ON Promote, and
@@ -1316,6 +1544,12 @@ type DeployServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	deployServiceMethods := v1.File_services_deploy_v1_deploy_proto.Services().ByName("DeployService").Methods()
+	deployServiceResolveHostedProjectHandler := connect.NewUnaryHandler(
+		DeployServiceResolveHostedProjectProcedure,
+		svc.ResolveHostedProject,
+		connect.WithSchema(deployServiceMethods.ByName("ResolveHostedProject")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceGetCapabilitiesHandler := connect.NewUnaryHandler(
 		DeployServiceGetCapabilitiesProcedure,
 		svc.GetCapabilities,
@@ -1454,6 +1688,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("CutRelease")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceRecordReleaseMigrationsHandler := connect.NewUnaryHandler(
+		DeployServiceRecordReleaseMigrationsProcedure,
+		svc.RecordReleaseMigrations,
+		connect.WithSchema(deployServiceMethods.ByName("RecordReleaseMigrations")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceListReleasesHandler := connect.NewUnaryHandler(
 		DeployServiceListReleasesProcedure,
 		svc.ListReleases,
@@ -1526,10 +1766,46 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("ListConvergences")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceOpenDeployAttemptHandler := connect.NewUnaryHandler(
+		DeployServiceOpenDeployAttemptProcedure,
+		svc.OpenDeployAttempt,
+		connect.WithSchema(deployServiceMethods.ByName("OpenDeployAttempt")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceReportDeployAttemptHandler := connect.NewUnaryHandler(
+		DeployServiceReportDeployAttemptProcedure,
+		svc.ReportDeployAttempt,
+		connect.WithSchema(deployServiceMethods.ByName("ReportDeployAttempt")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceCloseDeployAttemptHandler := connect.NewUnaryHandler(
+		DeployServiceCloseDeployAttemptProcedure,
+		svc.CloseDeployAttempt,
+		connect.WithSchema(deployServiceMethods.ByName("CloseDeployAttempt")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceListDeployAttemptsHandler := connect.NewUnaryHandler(
+		DeployServiceListDeployAttemptsProcedure,
+		svc.ListDeployAttempts,
+		connect.WithSchema(deployServiceMethods.ByName("ListDeployAttempts")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetDeployAttemptHandler := connect.NewUnaryHandler(
+		DeployServiceGetDeployAttemptProcedure,
+		svc.GetDeployAttempt,
+		connect.WithSchema(deployServiceMethods.ByName("GetDeployAttempt")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceGetLiveViewHandler := connect.NewUnaryHandler(
 		DeployServiceGetLiveViewProcedure,
 		svc.GetLiveView,
 		connect.WithSchema(deployServiceMethods.ByName("GetLiveView")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceGetEnvironmentShapeHandler := connect.NewUnaryHandler(
+		DeployServiceGetEnvironmentShapeProcedure,
+		svc.GetEnvironmentShape,
+		connect.WithSchema(deployServiceMethods.ByName("GetEnvironmentShape")),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServicePlanDeployHandler := connect.NewUnaryHandler(
@@ -1564,6 +1840,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/controlplane.v1.DeployService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case DeployServiceResolveHostedProjectProcedure:
+			deployServiceResolveHostedProjectHandler.ServeHTTP(w, r)
 		case DeployServiceGetCapabilitiesProcedure:
 			deployServiceGetCapabilitiesHandler.ServeHTTP(w, r)
 		case DeployServiceGetTenantProcedure:
@@ -1610,6 +1888,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceStreamLogsHandler.ServeHTTP(w, r)
 		case DeployServiceCutReleaseProcedure:
 			deployServiceCutReleaseHandler.ServeHTTP(w, r)
+		case DeployServiceRecordReleaseMigrationsProcedure:
+			deployServiceRecordReleaseMigrationsHandler.ServeHTTP(w, r)
 		case DeployServiceListReleasesProcedure:
 			deployServiceListReleasesHandler.ServeHTTP(w, r)
 		case DeployServiceGetReleaseProcedure:
@@ -1634,8 +1914,20 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceGetBundleHandler.ServeHTTP(w, r)
 		case DeployServiceListConvergencesProcedure:
 			deployServiceListConvergencesHandler.ServeHTTP(w, r)
+		case DeployServiceOpenDeployAttemptProcedure:
+			deployServiceOpenDeployAttemptHandler.ServeHTTP(w, r)
+		case DeployServiceReportDeployAttemptProcedure:
+			deployServiceReportDeployAttemptHandler.ServeHTTP(w, r)
+		case DeployServiceCloseDeployAttemptProcedure:
+			deployServiceCloseDeployAttemptHandler.ServeHTTP(w, r)
+		case DeployServiceListDeployAttemptsProcedure:
+			deployServiceListDeployAttemptsHandler.ServeHTTP(w, r)
+		case DeployServiceGetDeployAttemptProcedure:
+			deployServiceGetDeployAttemptHandler.ServeHTTP(w, r)
 		case DeployServiceGetLiveViewProcedure:
 			deployServiceGetLiveViewHandler.ServeHTTP(w, r)
+		case DeployServiceGetEnvironmentShapeProcedure:
+			deployServiceGetEnvironmentShapeHandler.ServeHTTP(w, r)
 		case DeployServicePlanDeployProcedure:
 			deployServicePlanDeployHandler.ServeHTTP(w, r)
 		case DeployServiceCheckDeployCapacityProcedure:
@@ -1654,6 +1946,10 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 
 // UnimplementedDeployServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedDeployServiceHandler struct{}
+
+func (UnimplementedDeployServiceHandler) ResolveHostedProject(context.Context, *connect.Request[v1.ResolveHostedProjectRequest]) (*connect.Response[v1.ResolveHostedProjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ResolveHostedProject is not implemented"))
+}
 
 func (UnimplementedDeployServiceHandler) GetCapabilities(context.Context, *connect.Request[v1.GetDeployCapabilitiesRequest]) (*connect.Response[v1.GetDeployCapabilitiesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetCapabilities is not implemented"))
@@ -1747,6 +2043,10 @@ func (UnimplementedDeployServiceHandler) CutRelease(context.Context, *connect.Re
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.CutRelease is not implemented"))
 }
 
+func (UnimplementedDeployServiceHandler) RecordReleaseMigrations(context.Context, *connect.Request[v1.RecordReleaseMigrationsRequest]) (*connect.Response[v1.RecordReleaseMigrationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.RecordReleaseMigrations is not implemented"))
+}
+
 func (UnimplementedDeployServiceHandler) ListReleases(context.Context, *connect.Request[v1.ListDeployReleasesRequest]) (*connect.Response[v1.ListDeployReleasesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListReleases is not implemented"))
 }
@@ -1795,8 +2095,32 @@ func (UnimplementedDeployServiceHandler) ListConvergences(context.Context, *conn
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListConvergences is not implemented"))
 }
 
+func (UnimplementedDeployServiceHandler) OpenDeployAttempt(context.Context, *connect.Request[v1.OpenDeployAttemptRequest]) (*connect.Response[v1.OpenDeployAttemptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.OpenDeployAttempt is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ReportDeployAttempt(context.Context, *connect.Request[v1.ReportDeployAttemptRequest]) (*connect.Response[v1.ReportDeployAttemptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ReportDeployAttempt is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) CloseDeployAttempt(context.Context, *connect.Request[v1.CloseDeployAttemptRequest]) (*connect.Response[v1.CloseDeployAttemptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.CloseDeployAttempt is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ListDeployAttempts(context.Context, *connect.Request[v1.ListDeployAttemptsRequest]) (*connect.Response[v1.ListDeployAttemptsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListDeployAttempts is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetDeployAttempt(context.Context, *connect.Request[v1.GetDeployAttemptRequest]) (*connect.Response[v1.GetDeployAttemptResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetDeployAttempt is not implemented"))
+}
+
 func (UnimplementedDeployServiceHandler) GetLiveView(context.Context, *connect.Request[v1.GetDeployLiveViewRequest]) (*connect.Response[v1.GetDeployLiveViewResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetLiveView is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetEnvironmentShape(context.Context, *connect.Request[v1.GetDeployEnvironmentShapeRequest]) (*connect.Response[v1.GetDeployEnvironmentShapeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetEnvironmentShape is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) PlanDeploy(context.Context, *connect.Request[v1.PlanDeployRequest]) (*connect.Response[v1.PlanDeployResponse], error) {

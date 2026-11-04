@@ -14,13 +14,13 @@ export function StatusBadge({ status }: { status: IssueStatus | null }) {
 
 /** The hourly event counts as bars: the shape of an issue's last day at a glance. */
 export function Trend({ points, label }: { points: IssueTrendPoint[]; label: string }) {
-  if (points.length === 0) return <span className="text-muted-foreground">—</span>;
+  if (points.length === 0) return <span className="text-ink-muted">—</span>;
   const max = Math.max(1, ...points.map((p) => p.events));
   const width = 64;
   const height = 18;
   const bar = width / points.length;
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="text-destructive/70" role="img" aria-label={label}>
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="text-danger-ink/70" role="img" aria-label={label}>
       {points.map((p, index) => {
         const h = p.events > 0 ? Math.max(1.5, (p.events / max) * height) : 0;
         return <rect key={p.hourMs || index} x={index * bar} y={height - h} width={Math.max(1, bar - 1)} height={h} fill="currentColor" />;

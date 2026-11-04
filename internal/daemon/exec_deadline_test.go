@@ -4,6 +4,8 @@ package daemon
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -50,15 +52,27 @@ func simulateMachineSleep(t *testing.T) (sleep func(d time.Duration)) {
 // stopped within moments.
 func TestRunCommand_TimeoutHoldsAcrossMachineSleep(t *testing.T) {
 	sleep := simulateMachineSleep(t)
+	// The machine sleeps once the command is running, so after its deadline
+	// was armed. A fixed 300ms delay raced the start on a loaded host: when
+	// RunCommand had not reached StartExecDeadline by then, the deadline was
+	// read off the already-skewed clock, nothing slept past it, and the
+	// command ran its whole 20s.
+	dir := t.TempDir()
+	started := filepath.Join(dir, "started")
 	go func() {
-		time.Sleep(300 * time.Millisecond)
+		for {
+			if _, err := os.Stat(started); err == nil {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 		sleep(time.Hour)
 	}()
 
 	start := time.Now()
 	res, err := NewLocalClient().RunCommand(context.Background(), &RunCommandRequest{
-		Command:    "sleep 30; echo finished",
-		WorkingDir: t.TempDir(),
+		Command:    "touch started; sleep 30; echo finished",
+		WorkingDir: dir,
 		TimeoutMs:  20_000,
 	})
 	elapsed := time.Since(start)
@@ -179,6 +193,56 @@ func TestExecDeadline(t *testing.T) {
 			t.Errorf("Value = %v, want the caller's value", got)
 		}
 	})
+}
+
+// A command that was awake for its whole timeout timed out; it did not sleep
+// through it. The wall-clock check and the monotonic timer fall due together
+// at the deadline, and when the check won, every run step stopped at its
+// timeout was reported as "elapsed while this machine was asleep"
+// (reliant#2003).
+func TestWallClockCause(t *testing.T) {
+	const interval = time.Second
+	for _, tc := range []struct {
+		name    string
+		awake   time.Duration
+		timeout time.Duration
+		want    error
+	}{
+		{"awake the whole timeout", 10 * time.Minute, 10 * time.Minute, context.DeadlineExceeded},
+		{"check fired a tick before the timer", 10*time.Minute - interval, 10 * time.Minute, context.DeadlineExceeded},
+		{"slept for an hour", 3 * time.Minute, 10 * time.Minute, ErrWallClockDeadline},
+		{"awake for well under the timeout", 0, 20 * time.Second, ErrWallClockDeadline},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := wallClockCause(tc.awake, tc.timeout, interval)
+			if got != tc.want {
+				t.Errorf("wallClockCause(%v, %v) = %v, want %v", tc.awake, tc.timeout, got, tc.want)
+			}
+		})
+	}
+}
+
+// End to end: a wall clock a hair ahead of the monotonic one (less than one
+// check interval) makes the wall check fire first at the deadline. That is
+// the timeout, and must be reported as one.
+func TestExecDeadline_WallCheckAtTheDeadlineIsNotASleep(t *testing.T) {
+	sleep := simulateMachineSleep(t) // 20ms checks
+	d := StartExecDeadline(context.Background(), 200*time.Millisecond)
+	defer d.Release()
+	// The wall clock steps 15ms ahead, less than one check interval: the
+	// check at ~190ms then sees the deadline passed, before the 200ms timer.
+	sleep(15 * time.Millisecond)
+	select {
+	case <-d.Context().Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("context not done 5s after a 200ms timeout")
+	}
+	if errors.Is(d.Err(), ErrWallClockDeadline) {
+		t.Fatalf("Err() = %v: a command awake for its whole timeout was reported as having slept through it", d.Err())
+	}
+	if !errors.Is(d.Err(), context.DeadlineExceeded) {
+		t.Errorf("Err() = %v, want context.DeadlineExceeded", d.Err())
+	}
 }
 
 func TestClassifyExecOutcome_DeadlineStop(t *testing.T) {

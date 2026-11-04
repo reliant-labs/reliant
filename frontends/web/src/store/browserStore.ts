@@ -53,15 +53,13 @@ export const useBrowserStore = create(
         // If no URL provided, use the default page from settings
         let finalUrl = url;
         if (!finalUrl) {
+          const { readBrowserPreferences, FALLBACK_BROWSER_PAGE } = await import("../hooks/settings-queries");
           try {
-            const { api } = await import("../api/client");
-            const preferences = await api.settings.getPreferences();
-            logger.debug("[BrowserStore] Loaded preferences:", preferences);
-            finalUrl = ((preferences as unknown as Record<string, unknown>).browserDefaultPage as string) || "https://www.google.com";
+            finalUrl = (await readBrowserPreferences()).defaultPage || FALLBACK_BROWSER_PAGE;
             logger.debug("[BrowserStore] Using default page:", finalUrl);
           } catch (error) {
             logger.warn("[BrowserStore] Failed to load default page, using fallback", error);
-            finalUrl = "https://www.google.com";
+            finalUrl = FALLBACK_BROWSER_PAGE;
           }
         } else {
           logger.debug("[BrowserStore] URL provided, using:", finalUrl);

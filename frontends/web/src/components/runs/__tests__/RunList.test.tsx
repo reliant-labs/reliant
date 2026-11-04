@@ -11,7 +11,7 @@ import userEvent from "@testing-library/user-event";
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { groupRuns, sectionRuns } from "../runSections";
-import { RunList } from "../RunList";
+import { interleaveEvents, RunList } from "../RunList";
 import { buildRun, MINUTE, renderRunsAt } from "./runTestUtils";
 
 vi.mock("@/hooks/useDaemonStatus", () => ({ useDaemonStatus: () => ({ daemons: [] }) }));
@@ -125,5 +125,44 @@ describe("RunList", () => {
       <RunList runs={["a", "b", "c", "d"].map((id, i) => hourly(id, RunDisplayState.COMPLETED, i))} groupRepeats={false} />,
     );
     expect(await screen.findByText("Sweep d")).toBeInTheDocument();
+  });
+});
+
+describe("trigger events that started no run", () => {
+  const event = (id: string, ageMin: number, outcome: "skipped" | "failed" = "skipped") => ({
+    id,
+    triggerId: "trig-hourly",
+    triggerName: "Hourly sweep",
+    workflowName: "builtin://agent",
+    workflowTrigger: "",
+    projectId: "proj-1",
+    launchKind: "schedule",
+    occurredAt: Date.now() - ageMin * MINUTE,
+    outcome,
+    outcomeDetail: outcome === "failed" ? "no machine is connected" : "the previous run was still going",
+  });
+
+  it("interleaves them among finished runs, newest first, and around a repeat group", () => {
+    const groups = groupRuns([hourly("a", undefined, 10), hourly("b", undefined, 20), hourly("c", undefined, 30), hourly("d", undefined, 40)]);
+    const items = interleaveEvents(groups, [event("e-new", 5), event("e-old", 50)]);
+    expect(items.map((item) => item.kind)).toEqual(["event", "group", "event"]);
+  });
+
+  it("renders each as a muted row saying what happened and why, linked to its trigger", async () => {
+    renderRunsAt(
+      <RunList runs={[hourly("a", RunDisplayState.COMPLETED, 10)]} events={[event("e1", 5, "failed")]} groupRepeats={false} />,
+      "/workflows/runs",
+    );
+    const row = await screen.findByTestId("run-event-row-e1");
+    expect(row).toHaveAttribute("data-event-outcome", "failed");
+    expect(row).toHaveTextContent("Couldn't start: no machine is connected");
+    expect(row).toHaveTextContent("No run");
+    expect(within(row).getByRole("link", { name: "Hourly sweep" })).toHaveAttribute(
+      "href",
+      "/workflows/library/builtin%3A%2F%2Fagent?project=proj-1#trigger-trig-hourly",
+    );
+    // In the Finished section, before the older run.
+    const finished = screen.getByRole("list", { name: "Finished runs" });
+    expect(within(finished).getAllByRole("listitem")[0]).toBe(row);
   });
 });

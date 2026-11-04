@@ -17,9 +17,9 @@
  * updates the app's current project and is persisted for the next restore.
  */
 
-import { useEffect } from "react";
 
 import { useProjectStore, type Project } from "@/store/projectStore";
+import { useProjects } from "@/hooks/project-queries";
 
 export interface ForgeProjectPickerProps {
   /** Called after the store selection settles, so the layout can sync the URL. */
@@ -27,32 +27,25 @@ export interface ForgeProjectPickerProps {
 }
 
 export function ForgeProjectPicker({ onSelected }: ForgeProjectPickerProps) {
-  const projects = useProjectStore((state) => state.projects);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
+  // The list read fetches on mount when the layout never did (a cold load
+  // straight onto a /forge URL), so the picker never shows its empty state
+  // to a user who does have projects.
+  const { projects } = useProjects();
   const selectProject = useProjectStore((state) => state.selectProject);
-
-  // The layout only renders this once resolution has failed, which can mean the
-  // list was never fetched (a cold load straight onto a /forge URL). Asking
-  // again is cheap — loadProjects dedupes concurrent calls behind a shared
-  // promise — and without it the picker could render its own empty state while
-  // the user does have projects.
-  useEffect(() => {
-    if (projects.length === 0) void loadProjects();
-  }, [projects.length, loadProjects]);
 
   return (
     <div
       data-testid="forge-project-picker"
-      className="mx-auto max-w-md rounded-lg border border-border bg-card p-6"
+      className="mx-auto max-w-md rounded-lg border border-border bg-surface p-6"
     >
-      <h2 className="text-base font-semibold text-foreground">Choose a project</h2>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <h2 className="text-base font-semibold text-ink">Choose a project</h2>
+      <p className="mt-1 text-xs text-ink-muted">
         The forge screens report on one project at a time. Pick the one you want to
         look at.
       </p>
 
       {projects.length === 0 ? (
-        <p className="mt-4 text-sm text-muted-foreground">
+        <p className="mt-4 text-sm text-ink-muted">
           No projects yet. Create one from the main screen and it will show up here.
         </p>
       ) : (
@@ -68,11 +61,11 @@ export function ForgeProjectPicker({ onSelected }: ForgeProjectPickerProps) {
                     onSelected?.(project);
                   })();
                 }}
-                className="flex w-full flex-col items-start gap-0.5 rounded-md border border-border/60 bg-background px-3 py-2 text-left transition-colors hover:bg-muted/70"
+                className="flex w-full flex-col items-start gap-0.5 rounded-md border border-border/60 bg-surface-sunken px-3 py-2 text-left transition-colors hover:bg-ink/5"
               >
-                <span className="text-sm font-medium text-foreground">{project.name}</span>
+                <span className="text-sm font-medium text-ink">{project.name}</span>
                 {/* The path is an identifier, so it renders mono. */}
-                <span className="font-mono text-xs text-muted-foreground">
+                <span className="font-mono text-xs text-ink-muted">
                   {project.path}
                 </span>
               </button>

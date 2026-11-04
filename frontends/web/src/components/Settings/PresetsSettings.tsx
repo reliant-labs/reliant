@@ -7,11 +7,10 @@
  * Workflows Library.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { AlertTriangle } from "lucide-react";
 
-import { presetGrpc, type InvalidPreset } from "@/api/preset-grpc";
-import type { Preset } from "@/store/globalDataStore";
+import { useProjectPresets, type Preset } from "@/hooks/preset-queries";
 import { useProjectStore } from "@/store/projectStore";
 import { cn } from "@/lib/utils";
 import Card from "../forge-ui/card";
@@ -20,37 +19,19 @@ import { SettingsPageHeader } from "./SettingsPageHeader";
 
 export function PresetsSettings() {
   const projectId = useProjectStore((state) => state.currentProject?.id);
-  const [presets, setPresets] = useState<Preset[] | null>(null);
-  const [invalid, setInvalid] = useState<InvalidPreset[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    if (!projectId) return;
-    try {
-      const result = await presetGrpc.listPresetsWithErrors(projectId, true);
-      setPresets(result.presets);
-      setInvalid(result.invalidPresets);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }, [projectId]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // A management view: hidden presets included.
+  const { presets, invalidPresets: invalid, loading, error } = useProjectPresets(projectId, { includeHidden: true });
 
   const { mine, builtin } = useMemo(() => {
-    const all = presets ?? [];
     const byName = (a: Preset, b: Preset) => a.name.localeCompare(b.name);
     return {
-      mine: all.filter((p) => p.source !== "builtin").sort(byName),
-      builtin: all.filter((p) => p.source === "builtin").sort(byName),
+      mine: presets.filter((p) => p.source !== "builtin").sort(byName),
+      builtin: presets.filter((p) => p.source === "builtin").sort(byName),
     };
   }, [presets]);
 
   return (
-    <div className="space-y-6 px-8 py-8">
+    <div className="space-y-6">
       <SettingsPageHeader
         title="Presets"
         description="Saved input settings for a workflow, so you can start it the same way each time. Create one from the chat composer while configuring a workflow; a workflow's own presets and defaults are also on its page in Workflows."
@@ -66,7 +47,7 @@ export function PresetsSettings() {
           <p className="text-sm font-medium text-foreground">Presets could not be loaded.</p>
           <p className="mt-1 text-sm text-muted-foreground">{error}</p>
         </Card>
-      ) : presets === null ? (
+      ) : loading ? (
         <Card padding="lg" aria-busy="true">
           <p className="text-sm text-muted-foreground">Loading presets…</p>
         </Card>
@@ -76,12 +57,12 @@ export function PresetsSettings() {
             {mine.length === 0 ? (
               <p className="px-4 py-3 text-sm text-muted-foreground">No presets of your own yet.</p>
             ) : (
-              <PresetList projectId={projectId} presets={mine} availablePresets={presets} onChanged={() => void load()} label="Your presets" />
+              <PresetList projectId={projectId} presets={mine} availablePresets={presets} label="Your presets" />
             )}
           </PresetGroup>
           {builtin.length > 0 && (
             <PresetGroup label="Built-in" count={builtin.length}>
-              <PresetList projectId={projectId} presets={builtin} availablePresets={presets} onChanged={() => void load()} label="Built-in presets" />
+              <PresetList projectId={projectId} presets={builtin} availablePresets={presets} label="Built-in presets" />
             </PresetGroup>
           )}
           {invalid.length > 0 && (

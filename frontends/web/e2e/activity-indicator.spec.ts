@@ -19,6 +19,16 @@
  */
 
 import { test, expect, type Page } from '@playwright/test';
+import { create, toBinary } from '@bufbuild/protobuf';
+import { ChatStreamEventSchema, UserStreamEventSchema } from '../src/gen/reliant/v1/streaming_pb';
+import { DEPLOY_CHAT, mockAppsBackend } from './appsMocks';
+
+function frame(bytes: Uint8Array): Buffer {
+  const header = Buffer.alloc(5);
+  header.writeUInt32BE(bytes.length, 1);
+  return Buffer.concat([header, bytes]);
+}
+const endStream = Buffer.from([2, 0, 0, 0, 2, 123, 125]);
 
 // ChatActivity enum values (mirrors proto ChatActivity)
 const ChatActivity = {
@@ -74,9 +84,11 @@ async function getActivity(page: Page, chatId: string): Promise<number | null> {
 }
 
 test.describe('Activity Indicator Synchronization', () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForLoadState('networkidle');
+  test.beforeEach(async ({ page }, testInfo) => {
+    if (testInfo.title === 'child thread activity should propagate to main indicators') return;
+    await mockAppsBackend(page);
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('navigation', { name: 'Chat sidebar navigation' })).toBeVisible();
   });
 
   test('thinking indicator should not show when activity is IDLE', async ({ page }) => {
@@ -187,37 +199,38 @@ test.describe('Activity Indicator Synchronization', () => {
   });
 
   test('child thread activity should propagate to main indicators', async ({ page }) => {
-    const chatId = await getActiveChatId(page);
-    if (!chatId) {
-      test.skip(true, 'No active chat available');
-      return;
-    }
-
-    const childThreadId = `child-thread-${Date.now()}`;
-
-    // Set chat activity to RUNNING and add a running child thread
-    await setActivity(page, chatId, ChatActivity.RUNNING);
-    await setThreads(page, chatId, [{
-      thread: childThreadId,
-      status: 'running',
-      workflow_id: `workflow-${childThreadId}`,
-      workflow_name: 'builtin://agent',
-    }]);
-    await page.waitForTimeout(100);
-
-    // Main thinking indicator should show (child activity propagates up)
-    const thinkingIndicator = page.locator('[data-testid="thinking-indicator"]');
-    const thinkingVisible = await thinkingIndicator.isVisible().catch(() => false);
-    expect(thinkingVisible).toBe(true);
-
-    // Clear threads and set idle
-    await clearThreads(page, chatId);
-    await setActivity(page, chatId, ChatActivity.IDLE);
-    await page.waitForTimeout(100);
-
-    // Should no longer show thinking
-    const stillThinking = await thinkingIndicator.isVisible().catch(() => false);
-    expect(stillThinking).toBe(false);
+    await mockAppsBackend(page);
+    const chatId = DEPLOY_CHAT.id;
+    let activity = ChatActivity.RUNNING as number;
+    let sequence = 2n;
+    await page.route('**/reliant.v1.StreamingService/StreamUserUpdates', route => {
+      const event = create(UserStreamEventSchema, { event: { case: 'updates', value: { updates: [{
+        id: `activity-${sequence}`, sequenceNumber: sequence++, chatId,
+        projectId: DEPLOY_CHAT.projectId, updateType: 6, entityType: 1, entityId: chatId,
+        dataJson: JSON.stringify({ chat_id: chatId, activity, working_threads: activity === ChatActivity.RUNNING ? 1 : 0 }),
+      }] } } });
+      return route.fulfill({ contentType: 'application/connect+proto', body: Buffer.concat([frame(toBinary(UserStreamEventSchema, event)), endStream]) });
+    });
+    await page.route('**/reliant.v1.StreamingService/StreamChatUpdates', route => {
+      const snapshot = create(ChatStreamEventSchema, { event: { case: 'snapshot', value: {
+        messages: [{ id: 'activity-prompt', chatId, thread: chatId, seq: 1n, role: 1,
+          contentBlocks: [{ id: 'activity-text', index: 0, type: 1, content: 'Run the child agent' }] }],
+        latestSequence: 1n, otherUpdates: [{ updateType: 3, chatId, sequenceNumber: 1n, entityId: 'child-agent',
+          dataJson: JSON.stringify({ id: 'child-agent', thread: 'child-agent', status: 'running', workflow_id: 'child-run', workflow_name: 'builtin://agent' }) }],
+      } } });
+      return route.fulfill({ contentType: 'application/connect+proto', body: Buffer.concat([frame(toBinary(ChatStreamEventSchema, snapshot)), endStream]) });
+    });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.getByText('Ship the storefront to prod', { exact: true }).click();
+    const thinking = page.getByTestId('thinking-indicator');
+    const sidebar = page.getByTestId(`chat-activity-dot-${chatId}`);
+    await expect(thinking).toBeVisible();
+    await expect(sidebar).toHaveAttribute('data-activity-state', /thinking|streaming|background_running/);
+    // The next real stream connection reports the child has stopped. Retained
+    // thread metadata alone must not leave either parent indicator running.
+    activity = ChatActivity.IDLE;
+    await expect(thinking).toBeHidden();
+    await expect(sidebar).toBeHidden();
   });
 
   test('fork metadata workflows should not trigger thread activity indicators', async ({ page }) => {

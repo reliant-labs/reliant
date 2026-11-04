@@ -11,22 +11,35 @@ Electron app releases are built and published by the [control-plane](https://git
 
 To trigger a release manually, use the `release-electron` workflow dispatch in the control-plane repo.
 
+## Who cuts a release: rc-train
+
+**Nobody cuts reliant by hand.** control-plane's `rc-train` workflow
+(`.reliant/workflows/rc-train.yaml`) cuts a release candidate of forge, reliant and
+control-plane together when a main moved and 2h passed, or right after a PR labelled
+`release:asap` merges. It gates the candidate's exact commits, tags reliant's with
+`./scripts/release-tag.sh --commit <sha> --rc`, and promotes the set. Design and
+where to look: control-plane `docs/pr-pipeline.md`, "Release chain: rc-train".
+
+**To get a change released sooner, label its PR `release:asap`.** The commands below
+are documented for whoever fixes the train, or cuts by hand in a prod incident (and
+says so to the owner).
+
 ## Quick Release Commands
 
 ```bash
 # Release candidate (prerelease)
-make release-rc           # 0.2.3 → 0.2.4-rc1 (first RC)
+task release:rc           # 0.2.3 → 0.2.4-rc1 (first RC)
                           # 0.2.4-rc1 → 0.2.4-rc2 (next RC)
 
 # Patch release (removes RC suffix or increments patch)
-make release-patch        # 0.2.4-rc2 → 0.2.4 (stable from RC)
+task release:patch        # 0.2.4-rc2 → 0.2.4 (stable from RC)
                           # 0.2.4 → 0.2.5 (next patch)
 
 # Minor release
-make release-minor        # 0.2.4 → 0.3.0
+task release:minor        # 0.2.4 → 0.3.0
 
 # Major release
-make release-major        # 0.3.0 → 1.0.0
+task release:major        # 0.3.0 → 1.0.0
 ```
 
 ### A release is two steps
@@ -35,9 +48,17 @@ Those commands are **step 1 of 2**. They open a version-bump PR and create *no
 tag*. Once that PR has merged:
 
 ```bash
-make release-tag              # tags the merged commit on main, starts the builds
-make release-tag-dry-run      # preview which commit would be tagged; creates nothing
+task release:gate             # the release gate on origin/main (40-70 min; run it in the background)
+task release:tag              # tags the merged commit on main, starts the builds
+task release:tag:dry-run      # preview which commit would be tagged; creates nothing
 ```
+
+`task release:tag` refuses a commit the release gate has not recorded green
+(`scripts/release-gate.sh check`; a green on an ancestor carries over when
+every change since is release metadata, as a bump PR's is). CI's release gate on
+main records the same verdict, so a push's green counts. The design and the
+hotfix escape (`scripts/release-tag.sh --skip-release-gate`, said in the
+release notes): [dev-docs/merge-and-release-gates.md](../dev-docs/merge-and-release-gates.md).
 
 Step 1 (`./scripts/release.sh`):
 1. Validates `docs/data/releases/vX.Y.Z.yaml` and regenerates `docs/changelog.mdx`
@@ -78,7 +99,7 @@ committing the bump straight to main gives up review of the release notes.
 #### The guard
 
 ```bash
-make check-release-tags       # every release tag must be an ancestor of main
+task release:check-tags       # every release tag must be an ancestor of main
 ```
 
 This also runs in CI on every tag push (`.github/workflows/release-tag-guard.yml`),
@@ -94,22 +115,16 @@ raising the baseline.
 
 ## Changelog
 
-Before creating a published stable release tag, update the changelog:
-
-```bash
-# See PRs since last release, grouped by label
-make changelog
-
-# Generate a draft YAML entry for the next release
-make changelog-draft VERSION=vX.Y.Z
-```
-
-See [docs/CHANGELOG_GUIDE.md](docs/CHANGELOG_GUIDE.md) for full changelog documentation.
+Before creating a published stable release tag, the version's entry must exist in
+`docs/data/releases/vX.Y.Z.yaml`: step 1 (`scripts/release.sh`) validates it.
+`task generate:docs:changelog:draft VERSION=vX.Y.Z SINCE_TAG=vA.B.C` drafts it from
+the merged PR titles (`tools/releasenotes`), grouped under `sections`; it
+never replaces an existing file unless `FORCE=1`.
 
 The YAML files under `docs/data/releases/` are the source of truth for two
 separate consumers:
 
-1. `make generate-changelog` renders them into `docs/changelog.mdx`, which
+1. `task generate:docs:changelog` renders them into `docs/changelog.mdx`, which
    Mintlify publishes at <https://docs.reliantlabs.io/changelog>.
 2. The **release-notes email**, which is sent from the control-plane repo —
    `.github/workflows/release-notes.yml` there fetches the version's YAML from

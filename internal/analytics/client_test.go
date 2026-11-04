@@ -105,6 +105,7 @@ func TestOptOutRecordsNothing(t *testing.T) {
 	opted := c.ForUser(ctx, "opted-out")
 	opted.TrackSessionStart()
 	opted.TrackMessageSent(MessageSentMetrics{MessageID: "m"})
+	opted.TrackLLMCallCompleted(LLMCallMetrics{Provider: "anthropic"})
 	// A consent read that fails records nothing either: no event is written
 	// for a user whose consent was not confirmed.
 	c.ForUser(ctx, "unknown-user").TrackSessionStart()
@@ -170,4 +171,63 @@ func TestWorkflowEndedRetryIsOneEvent(t *testing.T) {
 	tr.TrackWorkflowEnded(WorkflowMetrics{WorkflowID: "wf", Success: true, Duration: 2 * time.Second})
 
 	assert.Len(t, records(t, buf), 1)
+}
+
+func TestLLMCallCompletedCarriesCountsAndMetadataOnly(t *testing.T) {
+	c, buf := jsonClient(t, consent{"user-1": true})
+
+	c.ForUser(context.Background(), "user-1").TrackLLMCallCompleted(LLMCallMetrics{
+		Provider:         "anthropic",
+		Model:            "claude-sonnet",
+		InputTokens:      1200,
+		OutputTokens:     340,
+		CacheReadTokens:  900,
+		CacheWriteTokens: 50,
+		LatencyMs:        2100,
+		Success:          false,
+		ErrorType:        "rate_limit",
+		IsStreaming:      true,
+		WorkflowID:       "wf-1",
+		ChatID:           "chat-1",
+		StepName:         "agent",
+	})
+
+	recs := records(t, buf)
+	require.Len(t, recs, 1)
+	rec := recs[0]
+	assert.Equal(t, "product.llm_call_completed", rec[AttrEventName])
+	assert.Equal(t, "user-1", rec[AttrUserID])
+	assert.Equal(t, "backend", rec[AttrAppClient])
+	assert.Equal(t, "anthropic", rec["product.provider"])
+	assert.Equal(t, "claude-sonnet", rec["product.model"])
+	assert.Equal(t, float64(1200), rec["product.input_tokens"])
+	assert.Equal(t, float64(340), rec["product.output_tokens"])
+	assert.Equal(t, float64(900), rec["product.cache_read_tokens"])
+	assert.Equal(t, float64(50), rec["product.cache_write_tokens"])
+	assert.Equal(t, float64(2100), rec["product.latency_ms"])
+	assert.Equal(t, false, rec["product.success"])
+	assert.Equal(t, "rate_limit", rec["product.error_type"])
+	assert.Equal(t, true, rec["product.is_streaming"])
+	assert.Equal(t, "wf-1", rec["product.workflow_id"])
+	assert.Equal(t, "chat-1", rec["product.chat_id"])
+	assert.Equal(t, "agent", rec["product.step_name"])
+
+	// The contract is counts and metadata: no field may carry text.
+	for key := range rec {
+		assert.NotContains(t, key, "content")
+		assert.NotContains(t, key, "prompt")
+		assert.NotContains(t, key, "message")
+	}
+}
+
+func TestLLMCallCompletedOmitsUnsetOptionalFields(t *testing.T) {
+	c, buf := jsonClient(t, consent{"user-1": true})
+
+	c.ForUser(context.Background(), "user-1").TrackLLMCallCompleted(LLMCallMetrics{Provider: "openai", Model: "m", Success: true})
+
+	rec := records(t, buf)[0]
+	for _, key := range []string{"error_type", "workflow_id", "chat_id", "step_name", "cache_read_tokens", "cache_write_tokens"} {
+		assert.NotContains(t, rec, "product."+key)
+	}
+	assert.Equal(t, true, rec["product.success"])
 }

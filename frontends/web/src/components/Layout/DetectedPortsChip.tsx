@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ExternalLink, Globe, Lock } from "lucide-react";
 import { type CSSProperties } from "react";
 
+import { daemonPreviewQuery } from "../../hooks/useActiveDaemonPreviewTemplate";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { previewUrlForPort } from "../../lib/dev-preview";
 import { openExternalLink } from "../../lib/open-link";
 import {
-  getDaemon,
   listPortAccessRules,
   portAccessRulesQueryKey,
   removePortAccess,
@@ -15,7 +16,7 @@ import {
   PortAccessMode,
 } from "../../services/controlPlane/environments";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
-import { Dropdown } from "../ui/Dropdown";
+import Popover from "../forge-ui/popover";
 
 /**
  * DetectedPortsChip — a small header affordance next to DaemonStatusDot that
@@ -50,13 +51,11 @@ export function DetectedPortsChip() {
   const ports = livePorts ?? activeDaemon?.detectedPorts?.map(Number) ?? [];
 
   const daemonId = activeDaemon?.daemonId ?? "";
-  const daemonPreviewQueryKey = ["controlPlane", "daemonPreview", daemonId] as const;
+  const previewQuery = daemonPreviewQuery(daemonId);
+  const daemonPreviewQueryKey = previewQuery.queryKey;
   const { data: daemonInfo } = useQuery({
-    queryKey: daemonPreviewQueryKey,
-    queryFn: () => getDaemon(daemonId),
+    ...previewQuery,
     enabled: Boolean(daemonId) && ports.length > 0,
-    staleTime: 5 * 60_000, // the URL shape is static per daemon
-    retry: 1,
   });
   const urlTemplate = daemonInfo?.workspaceBaseDomain;
 
@@ -98,7 +97,7 @@ export function DetectedPortsChip() {
   if (!activeDaemon || ports.length === 0) return null;
 
   const previewUrl = (port: number): string =>
-    urlTemplate ? urlTemplate.replace("{port}", String(port)) : `http://localhost:${port}`;
+    urlTemplate ? previewUrlForPort(urlTemplate, port) : `http://localhost:${port}`;
 
   const openPort = (port: number) => {
     void openExternalLink(previewUrl(port));
@@ -106,34 +105,40 @@ export function DetectedPortsChip() {
 
   return (
     <div style={{ WebkitAppRegion: "no-drag" } as CSSProperties}>
-      <Dropdown
-        tooltip={
-          ports.length === 1
-            ? `Port ${ports[0]} detected — open preview`
-            : `${ports.length} ports detected — open preview`
-        }
+      <Popover
         align="right"
-        trigger={
-          <button
-            type="button"
-            aria-label={ports.length === 1 ? `Port ${ports[0]} detected` : `${ports.length} ports detected`}
-            className="header-icon-btn relative flex h-7 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        label="Detected ports"
+        trigger={(props) => (
+          <Tooltip
+            content={
+              ports.length === 1
+                ? `Port ${ports[0]} detected — open preview`
+                : `${ports.length} ports detected — open preview`
+            }
+            side="top"
           >
-            <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
-            <span className="font-mono">
-              {ports.length === 1 ? ports[0] : ports.length}
-            </span>
-          </button>
-        }
+            <button
+              type="button"
+              {...props}
+              aria-label={ports.length === 1 ? `Port ${ports[0]} detected` : `${ports.length} ports detected`}
+              className="header-icon-btn relative flex h-7 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Globe className="h-4 w-4 text-primary-ink" aria-hidden="true" />
+              <span className="font-mono">
+                {ports.length === 1 ? ports[0] : ports.length}
+              </span>
+            </button>
+          </Tooltip>
+        )}
       >
         <div className="min-w-[16rem] py-1">
           {canManageAccess && (
             <div className="border-b border-border px-3 pb-2 pt-1">
-              <div className="mb-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="mb-1.5 text-xs font-medium text-muted-foreground">
                 Default access for new ports
               </div>
               <div className="flex overflow-hidden rounded border border-border">
-                <Tooltip content="Only you (and your org) can open a detected port unless you make it public." placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip content="Only you (and your org) can open a detected port unless you make it public." side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   type="button"
                   disabled={defaultMut.isPending}
@@ -143,7 +148,7 @@ export function DetectedPortsChip() {
                   className={
                     "flex flex-1 items-center justify-center gap-1 px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 " +
                     (!isPublicDefault
-                      ? "bg-primary/10 text-primary"
+                      ? "bg-primary/10 text-primary-ink"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground")
                   }
                 >
@@ -151,7 +156,7 @@ export function DetectedPortsChip() {
                   Only you
                 </button>
 </Tooltip>
-                <Tooltip content="Anyone with the link can open every detected port on this workspace." placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip content="Anyone with the link can open every detected port on this workspace." side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   type="button"
                   disabled={defaultMut.isPending}
@@ -161,7 +166,7 @@ export function DetectedPortsChip() {
                   className={
                     "flex flex-1 items-center justify-center gap-1 border-l border-border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 " +
                     (isPublicDefault
-                      ? "bg-primary/10 text-primary"
+                      ? "bg-primary/10 text-primary-ink"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground")
                   }
                 >
@@ -177,7 +182,7 @@ export function DetectedPortsChip() {
               )}
             </div>
           )}
-          <div className="px-3 py-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="px-3 py-1 text-xs font-medium text-muted-foreground">
             Detected ports
           </div>
           {ports.map((port) => {
@@ -188,7 +193,7 @@ export function DetectedPortsChip() {
                 key={port}
                 className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-xs hover:bg-accent"
               >
-                <Tooltip content={previewUrl(port)} placement="bottom" delay={300} wrapperClassName="inline-flex">
+                <Tooltip content={previewUrl(port)} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                   type="button"
                   onClick={() => openPort(port)}
@@ -203,7 +208,7 @@ export function DetectedPortsChip() {
                       isPublic
                         ? "Public — anyone with the link can open this port. Click to make private."
                         : "Only you can open this port. Click to make it public."
-                    } placement="bottom" delay={300} wrapperClassName="inline-flex">
+                    } side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                     type="button"
                     disabled={pending}
@@ -211,7 +216,7 @@ export function DetectedPortsChip() {
                     className={
                       "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium transition-colors disabled:opacity-50 " +
                       (isPublic
-                        ? "bg-primary/10 text-primary hover:bg-primary/20"
+                        ? "bg-primary/10 text-primary-ink hover:bg-primary/20"
                         : "text-muted-foreground hover:bg-accent hover:text-foreground")
                     }
                   >
@@ -233,7 +238,7 @@ export function DetectedPortsChip() {
             );
           })}
         </div>
-      </Dropdown>
+      </Popover>
     </div>
   );
 }

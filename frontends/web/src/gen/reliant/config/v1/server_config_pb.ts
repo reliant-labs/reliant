@@ -13,7 +13,7 @@ import type { IntegrationsConfig } from "./integrations_config_pb";
 import { file_reliant_config_v1_integrations_config } from "./integrations_config_pb";
 import type { LLMConfig } from "./llm_config_pb";
 import { file_reliant_config_v1_llm_config } from "./llm_config_pb";
-import type { ObservabilityConfig, SentryConfig } from "./observability_config_pb";
+import type { ObservabilityConfig } from "./observability_config_pb";
 import { file_reliant_config_v1_observability_config } from "./observability_config_pb";
 import type { PreviewConfig } from "./preview_config_pb";
 import { file_reliant_config_v1_preview_config } from "./preview_config_pb";
@@ -25,7 +25,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/server_config.proto.
  */
 export const file_reliant_config_v1_server_config: GenFile = /*@__PURE__*/
-  fileDesc("CiVyZWxpYW50L2NvbmZpZy92MS9zZXJ2ZXJfY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSKBBgoTU2VydmVyUHJvY2Vzc0NvbmZpZxI8Cg1jb250cm9sX3BsYW5lGAEgASgLMiUucmVsaWFudC5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnEisKBG5hdHMYAiABKAsyHS5yZWxpYW50LmNvbmZpZy52MS5OYXRzQ29uZmlnEjMKCHRlbXBvcmFsGAMgASgLMiEucmVsaWFudC5jb25maWcudjEuVGVtcG9yYWxDb25maWcSLwoDdGxzGAQgASgLMiIucmVsaWFudC5jb25maWcudjEuU2VydmVyVExTQ29uZmlnElUKCGRhdGFfZGlyGAUgASgJQkOCzhg/CghEQVRBX0RJUhIIZGF0YS1kaXIaBi4vZGF0YSohRGF0YSBkaXJlY3RvcnkgZm9yIGxvZ3MgYW5kIGNlcnRzEmcKEHN0cmVhbWluZ19kcml2ZXIYBiABKAlCTYLOGEkKEFNUUkVBTUlOR19EUklWRVISEHN0cmVhbWluZy1kcml2ZXIaBG5hdHMqF1N0cmVhbWluZyBkcml2ZXIgKG5hdHMpSgRuYXRzEjsKDGludGVncmF0aW9ucxgHIAEoCzIlLnJlbGlhbnQuY29uZmlnLnYxLkludGVncmF0aW9uc0NvbmZpZxI9Cg1vYnNlcnZhYmlsaXR5GAggASgLMiYucmVsaWFudC5jb25maWcudjEuT2JzZXJ2YWJpbGl0eUNvbmZpZxIvCgZzZW50cnkYCSABKAsyHy5yZWxpYW50LmNvbmZpZy52MS5TZW50cnlDb25maWcSNQoJYW5hbHl0aWNzGAogASgLMiIucmVsaWFudC5jb25maWcudjEuQW5hbHl0aWNzQ29uZmlnEikKA2xsbRgLIAEoCzIcLnJlbGlhbnQuY29uZmlnLnYxLkxMTUNvbmZpZxIxCgdwcmV2aWV3GAwgASgLMiAucmVsaWFudC5jb25maWcudjEuUHJldmlld0NvbmZpZzoXysEYEwoHcmVsaWFudBoICgZzZXJ2ZXIi1wEKCk5hdHNDb25maWcSMAoDdXJsGAEgASgJQiOCzhgfCghOQVRTX1VSTCABKg9OQVRTIHNlcnZlciBVUkwwARJHCgR1c2VyGAIgASgJQjmCzhg1CglOQVRTX1VTRVIqKE5BVFMgdXNlciBuYW1lICh1c2VkIHdpdGggTkFUU19QQVNTV09SRCkSTgoIcGFzc3dvcmQYAyABKAlCPILOGDgKDU5BVFNfUEFTU1dPUkQqI05BVFMgcGFzc3dvcmQgKHVzZWQgd2l0aCBOQVRTX1VTRVIpMAFQASKaAgoOVGVtcG9yYWxDb25maWcSUQoEaG9zdBgBIAEoCUJDgs4YPwoNVEVNUE9SQUxfSE9TVBINdGVtcG9yYWwtaG9zdBoJbG9jYWxob3N0KhRUZW1wb3JhbCBzZXJ2ZXIgaG9zdBJXCgRwb3J0GAIgASgFQkm6SAgaBhj//wMoAYLOGDoKDVRFTVBPUkFMX1BPUlQSDXRlbXBvcmFsLXBvcnQaBDcyMzMqFFRlbXBvcmFsIHNlcnZlciBwb3J0ElwKCW5hbWVzcGFjZRgDIAEoCUJJgs4YRQoSVEVNUE9SQUxfTkFNRVNQQUNFEhJ0ZW1wb3JhbC1uYW1lc3BhY2UaB3JlbGlhbnQqElRlbXBvcmFsIG5hbWVzcGFjZSLzAQoPU2VydmVyVExTQ29uZmlnEksKCWNlcnRfZmlsZRgBIAEoCUI4gs4YNAoNVExTX0NFUlRfRklMRRIIdGxzLWNlcnQqGVRMUyBjZXJ0aWZpY2F0ZSBmaWxlIHBhdGgSQAoIa2V5X2ZpbGUYAiABKAlCLoLOGCoKDFRMU19LRVlfRklMRRIHdGxzLWtleSoRVExTIGtleSBmaWxlIHBhdGgSUQoHZGlzYWJsZRgDIAEoCEJAgs4YPAoLRElTQUJMRV9UTFMSC2Rpc2FibGUtdGxzKiBEaXNhYmxlIFRMUyAodXNlIHBsYWludGV4dCBIVFRQKUJAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_reliant_config_v1_analytics_config, file_reliant_config_v1_control_plane_config, file_reliant_config_v1_integrations_config, file_reliant_config_v1_llm_config, file_reliant_config_v1_observability_config, file_reliant_config_v1_preview_config, file_buf_validate_validate, file_forge_v1_forge]);
+  fileDesc("CiVyZWxpYW50L2NvbmZpZy92MS9zZXJ2ZXJfY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSKRBgoTU2VydmVyUHJvY2Vzc0NvbmZpZxI8Cg1jb250cm9sX3BsYW5lGAEgASgLMiUucmVsaWFudC5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnEisKBG5hdHMYAiABKAsyHS5yZWxpYW50LmNvbmZpZy52MS5OYXRzQ29uZmlnEjMKCHRlbXBvcmFsGAMgASgLMiEucmVsaWFudC5jb25maWcudjEuVGVtcG9yYWxDb25maWcSLwoDdGxzGAQgASgLMiIucmVsaWFudC5jb25maWcudjEuU2VydmVyVExTQ29uZmlnElUKCGRhdGFfZGlyGAUgASgJQkOCzhg/CghEQVRBX0RJUhIIZGF0YS1kaXIaBi4vZGF0YSohRGF0YSBkaXJlY3RvcnkgZm9yIGxvZ3MgYW5kIGNlcnRzEmcKEHN0cmVhbWluZ19kcml2ZXIYBiABKAlCTYLOGEkKEFNUUkVBTUlOR19EUklWRVISEHN0cmVhbWluZy1kcml2ZXIaBG5hdHMqF1N0cmVhbWluZyBkcml2ZXIgKG5hdHMpSgRuYXRzEjsKDGludGVncmF0aW9ucxgHIAEoCzIlLnJlbGlhbnQuY29uZmlnLnYxLkludGVncmF0aW9uc0NvbmZpZxI9Cg1vYnNlcnZhYmlsaXR5GAggASgLMiYucmVsaWFudC5jb25maWcudjEuT2JzZXJ2YWJpbGl0eUNvbmZpZxI1CglhbmFseXRpY3MYCiABKAsyIi5yZWxpYW50LmNvbmZpZy52MS5BbmFseXRpY3NDb25maWcSKQoDbGxtGAsgASgLMhwucmVsaWFudC5jb25maWcudjEuTExNQ29uZmlnEjEKB3ByZXZpZXcYDCABKAsyIC5yZWxpYW50LmNvbmZpZy52MS5QcmV2aWV3Q29uZmlnEjEKB25ldHdvcmsYDSABKAsyIC5yZWxpYW50LmNvbmZpZy52MS5OZXR3b3JrQ29uZmlnOhfKwRgTCgdyZWxpYW50GggKBnNlcnZlckoECAkQClIGc2VudHJ5Iu8BCg1OZXR3b3JrQ29uZmlnEt0BChRhbGxvd19wcml2YXRlX2VncmVzcxgBIAEoCEK+AYLOGLkBChxSRUxJQU5UX0FMTE9XX1BSSVZBVEVfRUdSRVNTKpgBTGV0IHVzZXItc3RlZXJlZCBzZXJ2ZXItc2lkZSByZXF1ZXN0cyAoZmV0Y2gsIHdlYnNlYXJjaCwgbW9kZWwgZW5kcG9pbnRzKSByZWFjaCBwcml2YXRlLCBsb29wYmFjayBhbmQgbGluay1sb2NhbCBhZGRyZXNzZXM7IHNlbGYtaG9zdGVkIGRlcGxveW1lbnRzIG9ubHki1wEKCk5hdHNDb25maWcSMAoDdXJsGAEgASgJQiOCzhgfCghOQVRTX1VSTCABKg9OQVRTIHNlcnZlciBVUkwwARJHCgR1c2VyGAIgASgJQjmCzhg1CglOQVRTX1VTRVIqKE5BVFMgdXNlciBuYW1lICh1c2VkIHdpdGggTkFUU19QQVNTV09SRCkSTgoIcGFzc3dvcmQYAyABKAlCPILOGDgKDU5BVFNfUEFTU1dPUkQqI05BVFMgcGFzc3dvcmQgKHVzZWQgd2l0aCBOQVRTX1VTRVIpMAFQASKaAgoOVGVtcG9yYWxDb25maWcSUQoEaG9zdBgBIAEoCUJDgs4YPwoNVEVNUE9SQUxfSE9TVBINdGVtcG9yYWwtaG9zdBoJbG9jYWxob3N0KhRUZW1wb3JhbCBzZXJ2ZXIgaG9zdBJXCgRwb3J0GAIgASgFQkm6SAgaBhj//wMoAYLOGDoKDVRFTVBPUkFMX1BPUlQSDXRlbXBvcmFsLXBvcnQaBDcyMzMqFFRlbXBvcmFsIHNlcnZlciBwb3J0ElwKCW5hbWVzcGFjZRgDIAEoCUJJgs4YRQoSVEVNUE9SQUxfTkFNRVNQQUNFEhJ0ZW1wb3JhbC1uYW1lc3BhY2UaB3JlbGlhbnQqElRlbXBvcmFsIG5hbWVzcGFjZSLzAQoPU2VydmVyVExTQ29uZmlnEksKCWNlcnRfZmlsZRgBIAEoCUI4gs4YNAoNVExTX0NFUlRfRklMRRIIdGxzLWNlcnQqGVRMUyBjZXJ0aWZpY2F0ZSBmaWxlIHBhdGgSQAoIa2V5X2ZpbGUYAiABKAlCLoLOGCoKDFRMU19LRVlfRklMRRIHdGxzLWtleSoRVExTIGtleSBmaWxlIHBhdGgSUQoHZGlzYWJsZRgDIAEoCEJAgs4YPAoLRElTQUJMRV9UTFMSC2Rpc2FibGUtdGxzKiBEaXNhYmxlIFRMUyAodXNlIHBsYWludGV4dCBIVFRQKUJAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_reliant_config_v1_analytics_config, file_reliant_config_v1_control_plane_config, file_reliant_config_v1_integrations_config, file_reliant_config_v1_llm_config, file_reliant_config_v1_observability_config, file_reliant_config_v1_preview_config, file_buf_validate_validate, file_forge_v1_forge]);
 
 /**
  * ServerProcessConfig is what every server role (`reliant server
@@ -91,11 +91,6 @@ export type ServerProcessConfig = Message<"reliant.config.v1.ServerProcessConfig
   observability?: ObservabilityConfig | undefined;
 
   /**
-   * @generated from field: reliant.config.v1.SentryConfig sentry = 9;
-   */
-  sentry?: SentryConfig | undefined;
-
-  /**
    * @generated from field: reliant.config.v1.AnalyticsConfig analytics = 10;
    */
   analytics?: AnalyticsConfig | undefined;
@@ -109,6 +104,11 @@ export type ServerProcessConfig = Message<"reliant.config.v1.ServerProcessConfig
    * @generated from field: reliant.config.v1.PreviewConfig preview = 12;
    */
   preview?: PreviewConfig | undefined;
+
+  /**
+   * @generated from field: reliant.config.v1.NetworkConfig network = 13;
+   */
+  network?: NetworkConfig | undefined;
 };
 
 /**
@@ -117,6 +117,35 @@ export type ServerProcessConfig = Message<"reliant.config.v1.ServerProcessConfig
  */
 export const ServerProcessConfigSchema: GenMessage<ServerProcessConfig> = /*@__PURE__*/
   messageDesc(file_reliant_config_v1_server_config, 0);
+
+/**
+ * NetworkConfig is the network reach of the dials a user steers from a server
+ * role: fetch, websearch, sourcegraph, model-endpoint probes and local-model
+ * routes. The rules every config here follows are in config.proto's header.
+ *
+ * @generated from message reliant.config.v1.NetworkConfig
+ */
+export type NetworkConfig = Message<"reliant.config.v1.NetworkConfig"> & {
+  /**
+   * Off by default, and nothing else turns it on: not a missing control-plane
+   * URL, not a hosted or self-hosted guess. A server role is a shared process
+   * next to databases, brokers and a cloud metadata service, so a URL a user
+   * types must not reach loopback, RFC 1918, link-local, metadata or CGNAT
+   * addresses. Set it only for a self-hosted deployment whose users mean those
+   * addresses (an Ollama on the server's own LAN); the process logs a warning
+   * at startup when it is on.
+   *
+   * @generated from field: bool allow_private_egress = 1;
+   */
+  allowPrivateEgress: boolean;
+};
+
+/**
+ * Describes the message reliant.config.v1.NetworkConfig.
+ * Use `create(NetworkConfigSchema)` to create a new message.
+ */
+export const NetworkConfigSchema: GenMessage<NetworkConfig> = /*@__PURE__*/
+  messageDesc(file_reliant_config_v1_server_config, 1);
 
 /**
  * NatsConfig is the NATS server a server role connects to: daemon routing,
@@ -151,7 +180,7 @@ export type NatsConfig = Message<"reliant.config.v1.NatsConfig"> & {
  * Use `create(NatsConfigSchema)` to create a new message.
  */
 export const NatsConfigSchema: GenMessage<NatsConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 1);
+  messageDesc(file_reliant_config_v1_server_config, 2);
 
 /**
  * TemporalConfig is the Temporal frontend the API server and worker use.
@@ -180,7 +209,7 @@ export type TemporalConfig = Message<"reliant.config.v1.TemporalConfig"> & {
  * Use `create(TemporalConfigSchema)` to create a new message.
  */
 export const TemporalConfigSchema: GenMessage<TemporalConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 2);
+  messageDesc(file_reliant_config_v1_server_config, 3);
 
 /**
  * ServerTLSConfig is how a server role that terminates TLS itself (the API
@@ -214,5 +243,5 @@ export type ServerTLSConfig = Message<"reliant.config.v1.ServerTLSConfig"> & {
  * Use `create(ServerTLSConfigSchema)` to create a new message.
  */
 export const ServerTLSConfigSchema: GenMessage<ServerTLSConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 3);
+  messageDesc(file_reliant_config_v1_server_config, 4);
 

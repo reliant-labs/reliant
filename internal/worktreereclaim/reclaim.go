@@ -67,6 +67,11 @@ type Reclaimer struct {
 	// the locking that precedes it; zero means DefaultProbeBudget. A probe that
 	// runs out of it is OutcomeProbeInconclusive, not a "no".
 	ProbeBudget time.Duration
+	// Acquire excludes new runtime work through the final checks and shedding.
+	// Missing admission or process inspection fails closed: nothing is shed.
+	Acquire func(context.Context, []string) (RecoveryLease, error)
+	// ProcessUse checks executables, open and mapped files, not only cwd.
+	ProcessUse func(ctx context.Context, paths []string) error
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 	// PRMerged and FetchBase are the network checks behind "its work was merged"
@@ -100,7 +105,7 @@ type cachedSize struct {
 // NewReclaimer returns a Reclaimer rooted at root.
 func NewReclaimer(root string) *Reclaimer {
 	return &Reclaimer{Root: root, Cwds: ProcessCwds, IdleFloor: DefaultIdleFloor, Budget: DefaultBudget,
-		PRMerged: GitHubPRMerged, FetchBase: FetchBaseBranch}
+		PRMerged: GitHubPRMerged, FetchBase: FetchBaseBranch, ProcessUse: CheckProcessUse}
 }
 
 // DefaultRoot is where reliant creates worktrees on this machine.
@@ -454,44 +459,76 @@ func (r *Reclaimer) settle(ctx context.Context, w Worktree, confirmed bool) Resu
 
 // inUse reports whether a live process works inside the worktree. It fails
 // closed.
+//
+// A check that need not be fresh may answer "not in use" from the cached
+// listing, but never "in use": a cached hit is confirmed against a fresh one.
+// The cache lives cwdCacheTTL across requests, so a hit can be a process
+// that has long exited — a user's finished `git commit`, or this daemon's
+// own git in the checkout for an earlier request — and it held an idle
+// worktree as in use on that alone.
 func (r *Reclaimer) inUse(ctx context.Context, w Worktree, fresh bool) *Result {
+	if selfWithin(w.Path) {
+		res := held(w, ReasonInUse, "the daemon itself runs from here")
+		return &res
+	}
 	cwds, err := r.cwds(ctx, fresh)
+	if err == nil && !fresh && cwdWithin(cwds, w.Path) {
+		cwds, err = r.cwds(ctx, true)
+	}
 	if err != nil {
 		res := held(w, ReasonUnverified, "could not list running processes: "+err.Error())
 		return &res
 	}
-	for _, cwd := range cwds {
-		if samePath(cwd, w.Path) || within(w.Path, cwd) {
-			res := held(w, ReasonInUse, "a running process has its working directory here")
-			return &res
-		}
+	if cwdWithin(cwds, w.Path) {
+		res := held(w, ReasonInUse, "a running process has its working directory here")
+		return &res
 	}
 	return nil
 }
 
-// idle returns when the worktree was last touched: its directory, and the
-// index, HEAD and reflog of each checkout's git admin directory.
-func idleSince(path string, checkouts []string) time.Time {
-	newest := time.Time{}
-	if fi, err := os.Stat(path); err == nil {
-		newest = fi.ModTime()
-	}
-	bump := func(p string) {
-		if fi, err := os.Stat(p); err == nil && fi.ModTime().After(newest) {
-			newest = fi.ModTime()
+// cwdWithin reports whether any of cwds is path or under it.
+func cwdWithin(cwds []string, path string) bool {
+	for _, cwd := range cwds {
+		if samePath(cwd, path) || within(path, cwd) {
+			return true
 		}
 	}
+	return false
+}
+
+// idleSince combines directory and admin HEAD mtimes with actual reflog event
+// times. Index refreshes and reflog maintenance rewrites are not user activity.
+// An uncertain reflog must not make a checkout look ancient.
+func idleSince(ctx context.Context, path string, checkouts []string) (time.Time, error) {
+	newest := time.Time{}
+	bumpTime := func(t time.Time) {
+		if t.After(newest) {
+			newest = t
+		}
+	}
+	bump := func(p string) {
+		if fi, err := os.Stat(p); err == nil {
+			bumpTime(fi.ModTime())
+		}
+	}
+	bump(path)
 	for _, c := range checkouts {
+		if err := ctx.Err(); err != nil {
+			return time.Time{}, err
+		}
 		bump(c)
 		admin := adminDir(c)
 		if admin == "" {
 			continue
 		}
-		for _, name := range []string{"HEAD", filepath.Join("logs", "HEAD")} {
-			bump(filepath.Join(admin, name))
+		bump(filepath.Join(admin, "HEAD"))
+		event, err := reflogActivity(ctx, filepath.Join(admin, "logs", "HEAD"))
+		if err != nil {
+			return time.Time{}, err
 		}
+		bumpTime(event)
 	}
-	return newest
+	return newest, ctx.Err()
 }
 
 func adminDir(checkout string) string {
@@ -586,9 +623,9 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 	if w.Remove {
 		return r.autoRemove(ctx, w)
 	}
-	checkouts, sc, hold := r.structure(ctx, w, false)
+	checkouts, _, hold := r.structure(ctx, w, false)
 	if hold != nil {
-		r.shed(ctx, w, sc, hold)
+		r.shedHeld(ctx, w, hold)
 		r.measure(ctx, hold, w.Path)
 		return *hold
 	}
@@ -599,7 +636,11 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 		return held(w, ReasonUnverified, "no git checkout found under the workspace")
 	}
 	if r.IdleFloor > 0 {
-		if age := r.now().Sub(idleSince(w.Path, checkouts)); age < r.IdleFloor {
+		last, err := idleSince(ctx, w.Path, checkouts)
+		if err != nil {
+			return held(w, ReasonUnverified, "could not determine quiet time: "+err.Error())
+		}
+		if age := r.now().Sub(last); age < r.IdleFloor {
 			return held(w, ReasonRecentlyActive, fmt.Sprintf("touched %s ago", age.Round(time.Minute)))
 		}
 	}
@@ -608,22 +649,14 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 		return *hold
 	}
 	v := classifyAll(ctx, w, checkouts, r.probe())
-	// Commits only this worktree holds do not keep it: they are saved under
-	// refs first (unless the user keeps everything, which removes nothing).
+	// A local ref is not a durable receipt. Dirty/private-history work is held
+	// for the separate Git recovery protocol, never upgraded to safe by a local
+	// saveCommits call. Explicit manual snapshots retain their existing path.
 	var saved []string
-	if (v.Reason == ReasonUnpushed || v.Reason == ReasonUnreachable) && !w.KeepFiles {
-		refs, err := saveCommits(ctx, w, checkouts)
-		saved = refs
-		if err != nil {
-			v = verdict{ReasonUnverified, "could not save its local commits, nothing was removed: " + err.Error()}
-		} else {
-			v = classifyAll(ctx, w, checkouts, r.probe())
-		}
-	}
 	if !v.safe() {
 		res := held(w, v.Reason, v.Detail)
 		res.SnapshotRefs = saved
-		r.shed(ctx, w, sc, &res)
+		r.shedHeld(ctx, w, &res)
 		r.measure(ctx, &res, w.Path)
 		return res
 	}
@@ -652,7 +685,11 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 		return held(w, ReasonStale, "nothing is claimed for removal")
 	}
 	if r.IdleFloor > 0 {
-		if age := r.now().Sub(idleSince(w.Path, checkouts)); age < r.IdleFloor {
+		last, err := idleSince(ctx, w.Path, checkouts)
+		if err != nil {
+			return held(w, ReasonUnverified, "could not determine quiet time: "+err.Error())
+		}
+		if age := r.now().Sub(last); age < r.IdleFloor {
 			return held(w, ReasonRecentlyActive, fmt.Sprintf("touched %s ago", age.Round(time.Minute)))
 		}
 	}
@@ -663,7 +700,7 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	if v := classifyAll(ctx, w, checkouts, r.probe()); !v.safe() {
 		return held(w, v.Reason, v.Detail)
 	}
-	return r.removeWorkspace(ctx, w, checkouts, sc.Outside, false)
+	return r.retireWorkspace(ctx, w, checkouts, sc.Outside)
 }
 
 // classifyAll classifies every checkout of a workspace, concurrently: each is
@@ -884,9 +921,18 @@ func (r *Reclaimer) quarantined(id string) []string {
 		return nil
 	}
 	var out []string
+	seen := map[string]bool{}
 	for _, e := range entries {
-		if e.IsDir() {
-			out = append(out, filepath.Join(r.quarantineRoot(id), e.Name()))
+		name := e.Name()
+		if strings.HasSuffix(name, ".disposing") {
+			name = strings.TrimSuffix(name, ".disposing")
+		} else if !e.IsDir() {
+			continue
+		}
+		path := filepath.Join(r.quarantineRoot(id), name)
+		if !seen[path] {
+			out = append(out, path)
+			seen[path] = true
 		}
 	}
 	return out
@@ -1042,7 +1088,22 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 			res.Outcome, res.Error = OutcomeError, relDetail(w.Path, c, err.Error())
 		}
 	}
-	if res.Outcome == OutcomeLocked && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
+	if res.Outcome == OutcomeLocked && w.ProbeRecoverableAfterSeconds > 0 && w.Retire == "" && !w.KeepFiles && len(checkouts) > 0 {
+		if r.recoverableIdle(ctx, w, time.Duration(w.ProbeRecoverableAfterSeconds)*time.Second) {
+			res.RecoverableIdle = true
+		}
+	}
+	if res.Outcome == OutcomeLocked && w.ProbeLanded && w.Retire == "" && len(checkouts) > 0 {
+		r.probeLanded(ctx, w, &res)
+	}
+	// A landed or recoverable row is about to be retired whole; shedding it
+	// first would only spend the request.
+	if res.Outcome == OutcomeLocked && !res.Landed && !res.RecoverableIdle && w.ShedAfterSeconds > 0 && len(checkouts) > 0 {
+		r.shedRegenerable(ctx, w, time.Duration(w.ShedAfterSeconds)*time.Second, &res)
+	}
+	// A landed worktree is the server's to decide on by its own rule; asking
+	// whether it is also "finished" would repeat the same checks.
+	if res.Outcome == OutcomeLocked && !res.Landed && w.ProbeRecoverableAfterSeconds <= 0 && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
 		switch r.finished(ctx, w) {
 		case probeFinished:
 			res.Outcome = OutcomeIdleDone
@@ -1103,7 +1164,11 @@ func (r *Reclaimer) finished(ctx context.Context, w Worktree) probeAnswer {
 	if floor <= 0 {
 		floor = DefaultActiveIdleFloor
 	}
-	if r.now().Sub(idleSince(w.Path, checkouts)) < floor {
+	last, err := idleSince(ctx, w.Path, checkouts)
+	if err != nil {
+		return probeInconclusive
+	}
+	if r.now().Sub(last) < floor {
 		return probeUnfinished
 	}
 	if hold := r.inUse(ctx, w, true); hold != nil {
@@ -1208,6 +1273,12 @@ func (r *Reclaimer) rowLock(ctx context.Context, id string) (func(), error) {
 func (r *Reclaimer) recoverLocked(ctx context.Context, rowID string) (restored, parked []string) {
 	r.dropStrayMarkers(rowID)
 	for _, q := range r.quarantined(rowID) {
+		// A partially disposed checkout is evidence/recovery state, never a
+		// complete workspace that automatic revival may silently move home.
+		if _, err := os.Lstat(q + ".disposing"); err == nil || !os.IsNotExist(err) {
+			parked = append(parked, q)
+			continue
+		}
 		orig, err := os.ReadFile(originMarker(q))
 		if err != nil || len(orig) == 0 {
 			parked = append(parked, q)

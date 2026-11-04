@@ -191,7 +191,7 @@ export function AddDomainDialog({
   };
 
   const fieldClass =
-    "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring";
+    "w-full rounded-lg border border-border bg-surface-sunken px-3 py-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus:ring-1 focus:ring-ring";
 
   return (
     <Modal
@@ -209,7 +209,7 @@ export function AddDomainDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-border px-3 py-1.5 text-sm text-foreground transition hover:bg-muted"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-ink transition hover:bg-ink/5"
           >
             Cancel
           </button>
@@ -239,7 +239,7 @@ export function AddDomainDialog({
       >
         {!rebinding && (
           <div className="flex flex-col gap-1.5">
-            <label htmlFor={hostnameId} className="text-sm font-medium text-foreground">
+            <label htmlFor={hostnameId} className="text-sm font-medium text-ink">
               Hostname
             </label>
             <input
@@ -250,12 +250,12 @@ export function AddDomainDialog({
               placeholder="app.example.com"
               autoComplete="off"
               spellCheck={false}
-              className={cn(fieldClass, touched && hostnameProblem && "border-destructive")}
+              className={cn(fieldClass, touched && hostnameProblem && "border-danger")}
             />
             {touched && hostnameProblem ? (
-              <p className="text-xs text-destructive-ink">{hostnameProblem}</p>
+              <p className="text-xs text-danger-ink">{hostnameProblem}</p>
             ) : (
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-ink-muted">
                 An apex (example.com) and its www are two separate domains. Add both, and bind the
                 www one as a redirect.
               </p>
@@ -264,7 +264,7 @@ export function AddDomainDialog({
         )}
 
         <fieldset className="flex flex-col gap-3">
-          <legend className="text-sm font-medium text-foreground">What should it serve?</legend>
+          <legend className="text-sm font-medium text-ink">What should it serve?</legend>
           <div className="flex flex-wrap gap-4 text-sm">
             <ModeRadio
               checked={effectiveMode === "workload"}
@@ -288,7 +288,7 @@ export function AddDomainDialog({
           </div>
 
           {envs.length === 0 && (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-ink-muted">
               None of this project&apos;s environments are run by Reliant cloud, so there is nothing
               to bind to yet.
               {!rebinding && " You can still claim the domain and bind it after your first deploy."}
@@ -296,9 +296,9 @@ export function AddDomainDialog({
           )}
 
           {effectiveMode !== "none" && envs.length > 0 && (
-            <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-background p-3">
+            <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-surface-sunken p-3">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor={envId} className="text-xs font-medium text-foreground">
+                <label htmlFor={envId} className="text-xs font-medium text-ink">
                   Environment
                 </label>
                 <select
@@ -329,7 +329,7 @@ export function AddDomainDialog({
                 />
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor={redirectId} className="text-xs font-medium text-foreground">
+                  <label htmlFor={redirectId} className="text-xs font-medium text-ink">
                     Redirect to
                   </label>
                   <input
@@ -341,7 +341,7 @@ export function AddDomainDialog({
                     spellCheck={false}
                     className={fieldClass}
                   />
-                  <p className="text-2xs text-muted-foreground">
+                  <p className="text-2xs text-ink-muted">
                     Answers a 308 to this hostname, keeping the path and query. It never dials a
                     backend, so it keeps redirecting even while the app behind the other domain is
                     down.
@@ -354,7 +354,7 @@ export function AddDomainDialog({
 
         {error && (
           <div
-            className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive-ink"
+            className="flex items-start gap-2 rounded-lg border border-danger-border bg-danger-surface p-3 text-xs text-danger-ink"
             role="alert"
           >
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
@@ -391,9 +391,9 @@ function TargetPicker({
   if (targets.length === 0) {
     return (
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-foreground">Target</span>
+        <span className="text-xs font-medium text-ink">Target</span>
         {env?.targetsLoading ? (
-          <p className="text-xs text-muted-foreground" data-testid="domain-targets-loading">
+          <p className="text-xs text-ink-muted" data-testid="domain-targets-loading">
             Reading what {env.name} runs…
           </p>
         ) : (
@@ -401,10 +401,10 @@ function TargetPicker({
             className="rounded-lg border border-dashed border-border px-3 py-2.5"
             data-testid="domain-targets-empty"
           >
-            <p className="text-xs text-foreground">
+            <p className="text-xs text-ink">
               Nothing in {env?.name ?? "this environment"} serves HTTP yet.
             </p>
-            <p className="mt-1 text-2xs text-muted-foreground">
+            <p className="mt-1 text-2xs text-ink-muted">
               Deploy a workload with an exposed port or a static site, and it will be listed here.
               {canPark
                 ? " Until then you can redirect this domain, or choose “Nothing yet” and bind it later."
@@ -418,7 +418,7 @@ function TargetPicker({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-xs font-medium text-foreground">
+      <label htmlFor={id} className="text-xs font-medium text-ink">
         Target
       </label>
       <select
@@ -434,7 +434,7 @@ function TargetPicker({
           </option>
         ))}
       </select>
-      <p className="text-2xs text-muted-foreground">
+      <p className="text-2xs text-ink-muted">
         Services with an exposed port and static sites deployed to {env?.name}. A domain cannot
         point at a worker, a job or a database — none of them answer HTTP.
       </p>
@@ -457,7 +457,7 @@ function ModeRadio({
     <label
       className={cn(
         "inline-flex items-center gap-2",
-        disabled ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer text-foreground"
+        disabled ? "cursor-not-allowed text-ink-muted" : "cursor-pointer text-ink"
       )}
     >
       <input

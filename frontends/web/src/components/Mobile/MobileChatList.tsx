@@ -30,8 +30,8 @@
  * at without starting or opening a chat in it.
  */
 
-import { Suspense, lazy, useCallback, useMemo, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Suspense, lazy, memo, useCallback, useMemo, useState } from "react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import {
   AlertCircle,
   Archive,
@@ -43,6 +43,7 @@ import {
   Loader2,
   MessageCircleQuestion,
   MessageSquarePlus,
+  Search,
 } from "lucide-react";
 import { GroupedVirtuoso } from "react-virtuoso";
 import { useQueryClient } from "@tanstack/react-query";
@@ -54,7 +55,8 @@ import {
 } from "../../hooks/chat-queries";
 import { prefetchChatMessages } from "../../hooks/message-queries";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { useProjects } from "../../hooks/project-queries";
 import { cn } from "../../lib/utils";
 import { isChatBusy, needsUserAttention } from "../../lib/chatSendState";
 import { chatListIndicators, stillRunningPhrase } from "../../lib/runStatus";
@@ -88,17 +90,26 @@ import { ChatState } from "../../gen/reliant/v1/chat_pb";
 // The DOMAIN Chat (types/chat), not the raw protobuf one: it is
 // `Omit<ProtoChat, '$typeName'>` plus the client-side fields the API layer
 // flattens on (worktreeName / worktreeDeletedAt), and it is what
-// api.chatsV2.list — and therefore useChatListWithWorkspaces — actually returns. Importing
+// listChats (hooks/chat-actions) — and therefore useChatListWithWorkspaces — actually returns. Importing
 // the pb type here made every list value fail to assign for want of a
 // `$typeName` this component never reads.
 import type { Chat } from "../../types/chat";
 import type { WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";
 import { workspaceOfChat } from "../../lib/chatWorkspace";
+import { chatListRows } from "../../lib/sidebarChatList";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { useSortOrder, type ChatSortOption } from "../../store/chatListPreferencesStore";
+import { archiveWorktree } from "../../hooks/worktree-actions";
+
+// Explicit px, not `h-11 w-11`: rem sizing resolves against the root
+// font-size, and at the smallest Appearance step it measures under 44px.
+const HEADER_ACTION =
+  "flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-muted-foreground active:bg-muted";
 
 interface ChatGroup {
   worktreeId: string;
+  /** The project the workspace belongs to. */
+  projectId: string;
   worktreeName: string;
   worktreeBranch: string;
   isMain: boolean;
@@ -113,17 +124,26 @@ const chatNeedsAttention = (chat: Chat) =>
   needsUserAttention({ activity: chat.activity, needsRecovery: chat.needsRecovery });
 
 // Grouped from the chat list alone: each chat carries its workspace and the
-// list carries the project's main one, so no worktree list is involved.
+// list carries each project's main one, so no worktree list is involved.
+//
+// `scope` is the list's project filter (null: every project). Across projects
+// a group's name carries its project ("app · main"), and a project's empty
+// main workspace is not listed — that would be one empty group per project.
 export function buildGroups(
   chats: Chat[],
-  mainWorktree: WorktreeSummary | undefined,
+  mainWorktrees: readonly WorktreeSummary[] | undefined,
   sortOrder: ChatSortOption,
+  { scope, projectNames }: { scope: string | null; projectNames?: ReadonlyMap<string, string> } = { scope: null },
 ): ChatGroup[] {
   const groupsById = new Map<string, ChatGroup>();
+  const named = (projectId: string, name: string) => {
+    const projectName = scope === null ? projectNames?.get(projectId) : undefined;
+    return projectName ? `${projectName} · ${name}` : name;
+  };
 
   for (const chat of chats) {
     if (chat.state === ChatState.ARCHIVED) continue;
-    const worktree = workspaceOfChat(chat, mainWorktree);
+    const worktree = workspaceOfChat(chat, mainWorktrees);
     // A chat whose worktree was deleted out from under it (rather than
     // archived through the normal flow) still needs somewhere to render —
     // group it under its own id so it doesn't silently vanish from the list.
@@ -134,7 +154,8 @@ export function buildGroups(
     } else {
       groupsById.set(worktreeId, {
         worktreeId,
-        worktreeName: worktree?.name ?? "Unknown workspace",
+        projectId: chat.projectId,
+        worktreeName: named(chat.projectId, worktree?.name ?? "Unknown workspace"),
         worktreeBranch: worktree?.branch ?? "",
         isMain: worktree?.isMain ?? false,
         hasWorktree: !!worktree,
@@ -145,11 +166,13 @@ export function buildGroups(
     }
   }
 
-  // Main worktree is always shown, even with zero chats, so there's always a
-  // way to start a chat in the project's default workspace.
+  // In one project's list its main worktree is always shown, even with zero
+  // chats, so there's always a way to start a chat in its default workspace.
+  const mainWorktree = scope ? mainWorktrees?.find((w) => w.projectId === scope) : undefined;
   if (mainWorktree && !mainWorktree.deletedAt && !groupsById.has(mainWorktree.id)) {
     groupsById.set(mainWorktree.id, {
       worktreeId: mainWorktree.id,
+      projectId: mainWorktree.projectId,
       worktreeName: mainWorktree.name,
       worktreeBranch: mainWorktree.branch,
       isMain: true,
@@ -199,7 +222,21 @@ function primeChatOpen(chat: Chat): void {
   prefetchChatMessages(chat.id);
 }
 
-function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
+// Memoized: Virtuoso re-invokes `itemContent` for every visible row whenever
+// the list re-renders, and the list re-renders on every chat-list cache write
+// (an activity change, an unread flip, a new message's lastMessageAt on any
+// chat). React Query keeps an unchanged chat's object identity across those
+// writes, so only the row whose chat actually changed re-renders.
+const ChatRow = memo(function ChatRow({
+  chat,
+  isLast,
+  selected,
+}: {
+  chat: Chat;
+  isLast: boolean;
+  /** The chat routed beside the list (expanded `/m/*`). */
+  selected: boolean;
+}) {
   const state = { activity: chat.activity, needsRecovery: chat.needsRecovery };
   const attention = needsUserAttention(state);
   const busy = isChatBusy(state);
@@ -221,14 +258,20 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
         // Chat so the screen has it on the first frame (without it, a send in
         // that window had no chat and started a new one).
         onPointerDown={() => primeChatOpen(chat)}
+        aria-current={selected ? "page" : undefined}
         // 64px min touch target — comfortably above the 44px floor, and it
         // gives two lines of text room to breathe.
         className={cn(
-          "flex min-h-16 w-full items-center gap-3 border-b border-border py-3 pl-4 pr-4 elevation-1",
+          "relative flex min-h-16 w-full items-center gap-3 border-b border-border py-3 pl-4 pr-4 elevation-1",
           "active:bg-foreground/5",
           isLast && "rounded-b-lg border-b-0",
         )}
       >
+        {/* Beside the list pane the open chat needs an orientation cue. A
+            blue bar, not a blue row: selection is not an action (web-styling). */}
+        {selected && (
+          <span aria-hidden className="absolute inset-y-3 left-0 w-1 rounded-r-full bg-primary" />
+        )}
         {/* A fixed-width rail rather than a conditional dot: without it, a
             chat gaining an unread dot shifts its own title sideways while
             its neighbours stay put. */}
@@ -263,7 +306,7 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
                 </span>
                 {status && (
                   <span
-                    className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary"
+                    className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary-ink"
                     data-testid="mobile-chat-still-running"
                     aria-label={stillRunningPhrase(chat.workingThreads)}
                   >
@@ -278,7 +321,7 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
                 Needs you
               </span>
             ) : busy ? (
-              <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary">
+              <span className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary-ink">
                 <Loader2 className="h-3 w-3 animate-spin" />
                 Working
               </span>
@@ -291,7 +334,7 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
       </Link>
     </div>
   );
-}
+});
 
 interface GroupHeaderProps {
   group: ChatGroup;
@@ -359,7 +402,7 @@ function GroupHeader({ group, isCollapsed, onToggle, onArchive, onBrowse }: Grou
               "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
               group.hasActivity
                 ? "bg-destructive/10 text-destructive-ink"
-                : "bg-primary/10 text-primary",
+                : "bg-primary/10 text-primary-ink",
             )}
           >
             {group.chats.length}
@@ -397,11 +440,16 @@ function GroupHeader({ group, isCollapsed, onToggle, onArchive, onBrowse }: Grou
 
 export function MobileChatList() {
   const navigate = useNavigate();
+  // Set only when the list is a pane beside the routed chat (MobileSplitLayout).
+  const { chatId: selectedChatId } = useParams({ strict: false });
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
-  const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
-  const { data: chatList, isLoading } = useChatListWithWorkspaces(currentProjectId);
+  const currentProjectName = useProjectStore((s) => s.currentProject?.name);
+  // The list is the project filter's (/m/projects), every project by default.
+  const scope = useWorkspaceStateStore((s) => s.projectFilterId);
+  const { projects } = useProjects();
+  const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
+  const { data: chatList, isLoading } = useChatListWithWorkspaces(scope);
   const sortOrder = useSortOrder();
-  const archiveWorktree = useWorktreeStore((s) => s.archiveWorktree);
   const queryClient = useQueryClient();
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -411,32 +459,40 @@ export function MobileChatList() {
   const [browsing, setBrowsing] = useState<ChatGroup | null>(null);
   const canCreateWorkspace = useCapability("worktreeCreate");
 
-  const chats = chatList?.chats;
+  // The chat list's rule, applied to whatever reached the cache: a run lists
+  // only once adopted (lib/sidebarChatList).
+  const chats = useMemo(() => (chatList?.chats ? chatListRows(chatList.chats) : undefined), [chatList?.chats]);
   const groups = useMemo(
-    () => buildGroups(chats ?? [], chatList?.mainWorktree, sortOrder),
-    [chats, chatList?.mainWorktree, sortOrder],
+    () => buildGroups(chats ?? [], chatList?.mainWorktrees, sortOrder, { scope, projectNames }),
+    [chats, chatList?.mainWorktrees, sortOrder, scope, projectNames],
   );
 
   const toggleGroup = useCallback((worktreeId: string) => {
     setCollapsed((prev) => ({ ...prev, [worktreeId]: !prev[worktreeId] }));
   }, []);
 
-  const totalChats = groups.reduce((sum, g) => sum + g.chats.length, 0);
+  // Derived once per (groups, collapsed) change rather than on every render:
+  // a fresh `groupCounts` array hands Virtuoso a new prop each render.
+  const { totalChats, groupCounts, flatChats, groupEndIndices } = useMemo(() => {
+    const totalChats = groups.reduce((sum, g) => sum + g.chats.length, 0);
 
-  const groupCounts = groups.map((g) => (collapsed[g.worktreeId] ? 0 : g.chats.length));
-  // Flatten visible (expanded) chats in group order, so a Virtuoso item index
-  // maps directly to `flatChats[index]` regardless of which groups are
-  // collapsed.
-  const flatChats = groups.flatMap((g) => (collapsed[g.worktreeId] ? [] : g.chats));
+    const groupCounts = groups.map((g) => (collapsed[g.worktreeId] ? 0 : g.chats.length));
+    // Flatten visible (expanded) chats in group order, so a Virtuoso item index
+    // maps directly to `flatChats[index]` regardless of which groups are
+    // collapsed.
+    const flatChats = groups.flatMap((g) => (collapsed[g.worktreeId] ? [] : g.chats));
 
-  // Which flat indices end a group. `ChatRow` rounds its bottom corners there,
-  // finishing the card the group header opened — CSS `last:` can't express
-  // this because Virtuoso renders every row as a flat sibling of every other.
-  const groupEndIndices = new Set<number>();
-  groupCounts.reduce((offset, count) => {
-    if (count > 0) groupEndIndices.add(offset + count - 1);
-    return offset + count;
-  }, 0);
+    // Which flat indices end a group. `ChatRow` rounds its bottom corners there,
+    // finishing the card the group header opened — CSS `last:` can't express
+    // this because Virtuoso renders every row as a flat sibling of every other.
+    const groupEndIndices = new Set<number>();
+    groupCounts.reduce((offset, count) => {
+      if (count > 0) groupEndIndices.add(offset + count - 1);
+      return offset + count;
+    }, 0);
+
+    return { totalChats, groupCounts, flatChats, groupEndIndices };
+  }, [groups, collapsed]);
 
   // Archiving can take as long as waking the workspace's machine (the store
   // retries across a wake for up to two minutes). Before this state existed the
@@ -458,7 +514,7 @@ export function MobileChatList() {
       setIsArchiving(false);
       setConfirmingArchive(null);
     }
-  }, [confirmingArchive, isArchiving, archiveWorktree, queryClient]);
+  }, [confirmingArchive, isArchiving, queryClient]);
 
   // Memoized so Virtuoso gets a stable component type. An inline component
   // would remount the footer, and the button in it, on every render.
@@ -470,34 +526,38 @@ export function MobileChatList() {
             <button
               type="button"
               onClick={() => setCreatingWorkspace(true)}
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-primary active:bg-primary/10"
+              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-primary-ink active:bg-primary/10"
             >
               <GitBranchPlus className="h-4 w-4" />
-              New workspace
+              {/* Across projects, say which one it is made in. */}
+              {scope === null && currentProjectName ? `New workspace in ${currentProjectName}` : "New workspace"}
             </button>
           </div>
         ) : (
           <div className="h-8" />
         ),
     }),
-    [canCreateWorkspace],
+    [canCreateWorkspace, scope, currentProjectName],
   );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {/* `☰  Chats  🔍  ✎` (§9): search is a tap away instead of a
+          drawer-only destination, and new chat sits beside it. */}
       <MobileScreenHeader
         title="Chats"
         leading={<MobileMenuButton />}
         trailing={
-          <Link
-            to="/m/new"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground active:bg-muted"
-            aria-label="New chat"
-          >
-            {/* The same glyph the nav drawer uses for New chat, so the two
-                entry points read as one action. */}
-            <MessageSquarePlus className="h-5 w-5" />
-          </Link>
+          <>
+            <Link to="/m/search" className={HEADER_ACTION} aria-label="Search chats">
+              <Search className="h-5 w-5" />
+            </Link>
+            <Link to="/m/new" className={HEADER_ACTION} aria-label="New chat">
+              {/* The same glyph the nav drawer uses for New chat, so the two
+                  entry points read as one action. */}
+              <MessageSquarePlus className="h-5 w-5" />
+            </Link>
+          </>
         }
       />
 
@@ -509,7 +569,9 @@ export function MobileChatList() {
         <MobileEmptyState
           icon={MessageSquarePlus}
           title="No chats yet"
-          description="Start a chat to put an agent to work on this project."
+          description={
+            scope ? "Start a chat to put an agent to work on this project." : "Start a chat to put an agent to work."
+          }
           action={
             <Link to="/m/new" className={MOBILE_PRIMARY_ACTION}>
               <MessageSquarePlus className="h-4 w-4" />
@@ -538,7 +600,7 @@ export function MobileChatList() {
           itemContent={(index) => {
             const chat = flatChats[index];
             if (!chat) return null;
-            return <ChatRow chat={chat} isLast={groupEndIndices.has(index)} />;
+            return <ChatRow chat={chat} isLast={groupEndIndices.has(index)} selected={chat.id === selectedChatId} />;
           }}
           components={listComponents}
         />
@@ -550,7 +612,7 @@ export function MobileChatList() {
             isOpen
             onClose={() => setBrowsing(null)}
             worktreeId={browsing.worktreeId}
-            projectPath={currentProjectPath}
+            projectPath={projects.find((p) => p.id === browsing.projectId)?.path}
             title={browsing.worktreeName}
           />
         </Suspense>

@@ -6,6 +6,7 @@ package shell
 import (
 	"bufio"
 	"context"
+	"errors"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -14,32 +15,41 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// setProcessGroup sets up the command to run in its own process group.
-// This allows us to kill the entire process tree when terminating.
-func setProcessGroup(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+// killProcessGroup signals the process group a command leads.
+//
+// Every command the daemon starts runs in a process group of its own (proctree.Prepare), so its process
+// group id IS the command's pid, and the group keeps that id for as long as
+// any member is alive — including after the leader itself has exited and been
+// reaped. So the group is signalled by that id directly. This used to look
+// the group up with Getpgid(pid) and, when that failed, signal the pid alone;
+// Getpgid fails exactly when the leader is already gone (a killed `bash -c`
+// whose children trap SIGTERM, a shell that exited and left `task ci &`
+// running), and then the signal reached nothing while every child it should
+// have reached kept running, orphaned and untracked.
+//
+// The id cannot name an unrelated group while the members we mean are alive
+// (the kernel does not hand out a pid that is still in use as a group id),
+// and once they are all gone a reuse needs the pid space to wrap. An empty
+// group is ESRCH, reported as nil: there was nothing left to signal.
+func killProcessGroup(pgid int, signal syscall.Signal) error {
+	if pgid <= 0 {
+		return nil
+	}
+	logging.Debug("Signalling process group", "pgid", pgid, "signal", signal)
+	if err := syscall.Kill(-pgid, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
+		return err
+	}
+	return nil
 }
 
-// killProcessGroup sends a signal to the entire process group.
-// On Unix, we use negative PID to signal the process group.
-func killProcessGroup(pid int, signal syscall.Signal) error {
-	// Negative PID signals the entire process group
-	pgid, err := syscall.Getpgid(pid)
-	if err != nil {
-		// If we can't get the pgid, try killing just the process
-		logging.Warn("Failed to get process group ID, killing single process",
-			"pid", pid,
-			"error", err)
-		return syscall.Kill(pid, signal)
+// processGroupAlive reports whether any process of the group is still alive.
+// Zombies count until they are reaped; EPERM (a member that is not ours to
+// signal) counts as alive.
+func processGroupAlive(pgid int) bool {
+	if pgid <= 0 {
+		return false
 	}
-
-	logging.Debug("Killing process group",
-		"pid", pid,
-		"pgid", pgid,
-		"signal", signal)
-
-	// Kill the entire process group using negative pgid
-	return syscall.Kill(-pgid, signal)
+	return !errors.Is(syscall.Kill(-pgid, 0), syscall.ESRCH)
 }
 
 // terminateProcessGroup gracefully terminates a process group.

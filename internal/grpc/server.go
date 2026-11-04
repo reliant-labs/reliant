@@ -83,6 +83,9 @@ type APIHTTPRoutesDeps struct {
 	// ControlPlaneURL wakes a suspended workspace for a connector request;
 	// empty reports it as one that cannot be started.
 	ControlPlaneURL string
+	// HostedHTTPRedeem is the internally authenticated controller ticket route.
+	// Optional on deployments without hosted execution; no public auth fallback.
+	HostedHTTPRedeem http.Handler
 }
 
 // APIHTTPRoutesStore is what the routes read from the database. The routes
@@ -92,8 +95,10 @@ type APIHTTPRoutesDeps struct {
 type APIHTTPRoutesStore interface {
 	attachment.Repository
 	mcpserver.AttachmentReader
-	// The terminal websocket's checkouts (terminal.WithTerminalCheckouts).
+	// The terminal websocket's checkouts and machine (terminal.WithTerminalCheckouts).
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 }
 
@@ -121,6 +126,9 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 	// Inbound trigger receivers: authenticated by the trigger's own token or
 	// the provider's signature rather than a user's JWT.
 	deps.Inbound.Register(handle)
+	if deps.HostedHTTPRedeem != nil {
+		handle("/internal/hosted-http/redeem", deps.HostedHTTPRedeem)
+	}
 
 	// Connector MCP endpoint: third-party MCP clients (ChatGPT, Claude, and
 	// their mobile apps) driving a cloud daemon under a connector grant.
@@ -228,11 +236,10 @@ var corsExposedHeaders = []string{
 	// The scopes a scope_missing refusal names (errorReasons.ts errorScopes),
 	// so the deploy panel says which grant to ask for without parsing prose.
 	"X-Forge-Error-Scopes",
-	// The pre-svcerr reason header (forge_api_disabled here; the billing and
-	// daemon-gate reasons on the control plane). Read as a fallback until
-	// both servers send X-Forge-Error-Reason (P9 R3, expand/contract), then
-	// deleted with the web's fallback.
-	"X-Reliant-Reason",
+	// How long a refusal (resource_exhausted, unavailable) asks the caller to
+	// wait, when the typed RetryInfo detail is absent: the dashboard panel
+	// scheduler's fallback (services/controlPlane/observability/errors.ts).
+	"Retry-After",
 }
 
 // newCORSHandler builds the CORS middleware that wraps the entire mux. An
@@ -423,7 +430,7 @@ const maxConcurrentStreams = 1000
 // holds the connection open indefinitely.
 //
 // ReadTimeout is none: over HTTP/2 it is a deadline on each stream's request
-// body, so it would cut every bidi stream (StreamTerminal, ConnectDaemon) at
+// body, so it would cut every bidi stream (ConnectDaemon, the streaming rpcs) at
 // the same mark. There is no WriteTimeout either, for the same reason on the
 // response side; serverkit's write-stall guard bounds a write to a peer that
 // stopped reading instead.

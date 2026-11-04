@@ -4,9 +4,64 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 import "reliant/v1/common.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// Recovery metadata contains no credentials or file bytes. Remote branches
+// inherit repository visibility and remain until explicit deletion.
+message WorktreeRecovery {
+  string id = 1;
+  string source_worktree_id = 2;
+  string project_id = 3;
+  string daemon_id = 4;
+  string capture_id = 5;
+  string phase = 6;
+  string last_error = 7;
+  string created_at = 8;
+  string updated_at = 9;
+  repeated WorktreeRecoveryCheckout checkouts = 10;
+  // Durable retry identity; contains no credentials or file content.
+  string operation = 11;
+  string operation_key = 12;
+  string target_daemon_id = 13;
+}
+
+message WorktreeRecoveryCheckout {
+  string repo_id = 1;
+  string rel = 2;
+  string remote_url = 3;
+  string recovery_ref = 4;
+  string commit_oid = 5;
+  string manifest_digest = 6;
+  string phase = 7;
+  string last_error = 8;
+}
+
+message ListWorktreeRecoveriesRequest {
+  optional string project_id = 1;
+  optional string source_worktree_id = 2;
+}
+message ListWorktreeRecoveriesResponse {
+  repeated WorktreeRecovery recoveries = 1;
+}
+message RestoreWorktreeRecoveryRequest {
+  string recovery_id = 1 [(buf.validate.field).string.min_len = 1];
+  string target_daemon_id = 2 [(buf.validate.field).string.min_len = 1];
+  string idempotency_key = 3 [(buf.validate.field).string.min_len = 1];
+}
+message RestoreWorktreeRecoveryResponse {
+  WorktreeRecovery recovery = 1;
+  string worktree_id = 2;
+}
+message DeleteWorktreeRecoveryRequest {
+  string recovery_id = 1 [(buf.validate.field).string.min_len = 1];
+  string idempotency_key = 2 [(buf.validate.field).string.min_len = 1];
+}
+message DeleteWorktreeRecoveryResponse {
+  WorktreeRecovery recovery = 1;
+}
 
 // WorktreeStatus tracks the lifecycle of a worktree
 enum WorktreeStatus {
@@ -29,6 +84,36 @@ enum WorktreeStatus {
 
 // WorktreeService handles worktree-related operations
 service WorktreeService {
+  // Owner-scoped durable recovery catalog, independent of source row lifetime.
+  // forge:custom — owner authorization and retained catalog semantics.
+  rpc ListWorktreeRecoveries(ListWorktreeRecoveriesRequest) returns (ListWorktreeRecoveriesResponse) {}
+  // Restores into a separate worktree; never resets an existing branch.
+  rpc RestoreWorktreeRecovery(RestoreWorktreeRecoveryRequest) returns (RestoreWorktreeRecoveryResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "restore"
+        target: {
+          kind: "worktree_recovery"
+          id: "recovery_id"
+        }
+        detail: ["response.worktree_id", "target_daemon_id"]
+      }
+    };
+  }
+  // Explicit exact-ref deletion only; not called on source removal or restore.
+  // forge:custom — journals exact remote ref deletion; never CRUD row deletion.
+  rpc DeleteWorktreeRecovery(DeleteWorktreeRecoveryRequest) returns (DeleteWorktreeRecoveryResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "worktree_recovery"
+          id: "recovery_id"
+        }
+        detail: ["response.recovery.phase"]
+      }
+    };
+  }
   // CRUD Operations
   // CreateWorktree creates ONE workspace-level worktree for the project.
   // The daemon enumerates the project's nested repos and fans out N
@@ -36,7 +121,19 @@ service WorktreeService {
   // returned Worktree row spans the whole workspace; tools scope to a nested
   // repo via the per-call `repo` param, not via per-repo worktree rows.
   // forge:custom — places the workspace on a machine and creates its checkouts there after it returns
-  rpc CreateWorktree(CreateWorktreeRequest) returns (CreateWorktreeResponse) {}
+  rpc CreateWorktree(CreateWorktreeRequest) returns (CreateWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "create"
+        target: {
+          kind: "worktree"
+          id: "response.worktree.id"
+          label: "response.worktree.name"
+        }
+        detail: ["project_id", "response.worktree.branch"]
+      }
+    };
+  }
   // forge:custom — authorizes through the project, and creates its main worktree when none exists
   rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse) {}
   // ListArchivedWorktrees pages through the project's archived workspaces,
@@ -47,20 +144,101 @@ service WorktreeService {
   // forge:custom — authorizes through the worktree's project before it reads
   rpc GetWorktree(GetWorktreeRequest) returns (GetWorktreeResponse) {}
   // forge:custom — a partial update authorized through the worktree's project
-  rpc UpdateWorktree(UpdateWorktreeRequest) returns (UpdateWorktreeResponse) {}
+  rpc UpdateWorktree(UpdateWorktreeRequest) returns (UpdateWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+          label: "response.worktree.name"
+        }
+      }
+    };
+  }
   // forge:custom — archives a live worktree, and deletes an archived one only once its machine removed the directory
-  rpc DeleteWorktree(DeleteWorktreeRequest) returns (DeleteWorktreeResponse) {}
-  rpc ArchiveWorktree(ArchiveWorktreeRequest) returns (ArchiveWorktreeResponse) {}
-  rpc UnarchiveWorktree(UnarchiveWorktreeRequest) returns (UnarchiveWorktreeResponse) {}
+  rpc DeleteWorktree(DeleteWorktreeRequest) returns (DeleteWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+        detail: ["response.is_permanent_delete", "response.deleted_branch"]
+      }
+    };
+  }
+  rpc ArchiveWorktree(ArchiveWorktreeRequest) returns (ArchiveWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "archive"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+        detail: ["response.deleted_branch"]
+      }
+    };
+  }
+  rpc UnarchiveWorktree(UnarchiveWorktreeRequest) returns (UnarchiveWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "unarchive"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+      }
+    };
+  }
   
   // Import/Discovery Operations
-  rpc ImportWorktree(ImportWorktreeRequest) returns (ImportWorktreeResponse) {}
-  rpc DiscoverWorktrees(DiscoverWorktreesRequest) returns (DiscoverWorktreesResponse) {}
+  rpc ImportWorktree(ImportWorktreeRequest) returns (ImportWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "import"
+        target: {
+          kind: "worktree"
+          id: "response.worktree.id"
+          label: "response.worktree.name"
+        }
+        detail: ["project_id", "repo_id"]
+      }
+    };
+  }
+  // DiscoverWorktrees only reads (git worktree list in each repo), and says so
+  // with NO_SIDE_EFFECTS: forge then generates a useQuery for it, so the
+  // discovered list lives in the query cache under worktreeServiceKeys.
+  rpc DiscoverWorktrees(DiscoverWorktreesRequest) returns (DiscoverWorktreesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // PruneWorktrees runs `git worktree prune` in each repo of the project. It
   // only drops records whose directories are already gone; it never touches a
   // directory that exists. Explicit user action only, never automatic.
-  rpc PruneWorktrees(PruneWorktreesRequest) returns (PruneWorktreesResponse) {}
-  rpc RecreateWorktree(RecreateWorktreeRequest) returns (RecreateWorktreeResponse) {}
+  rpc PruneWorktrees(PruneWorktreesRequest) returns (PruneWorktreesResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "prune_worktrees"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+      }
+    };
+  }
+  rpc RecreateWorktree(RecreateWorktreeRequest) returns (RecreateWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "recreate"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+        detail: ["response.branch"]
+      }
+    };
+  }
   
   // Git Read Operations
   rpc GetWorktreeChanges(GetWorktreeChangesRequest) returns (GetWorktreeChangesResponse) {}
@@ -73,14 +251,77 @@ service WorktreeService {
   rpc ListWorktreeRepoStatuses(ListWorktreeRepoStatusesRequest) returns (ListWorktreeRepoStatusesResponse) {}
 
   // Git Write Operations
-  rpc StageFiles(StageFilesRequest) returns (StageFilesResponse) {}
-  rpc UnstageFiles(UnstageFilesRequest) returns (UnstageFilesResponse) {}
-  rpc RevertFiles(RevertFilesRequest) returns (RevertFilesResponse) {}
-  rpc CommitWorktree(CommitWorktreeRequest) returns (CommitWorktreeResponse) {}
-  rpc PushWorktree(PushWorktreeRequest) returns (PushWorktreeResponse) {}
-  rpc PullWorktree(PullWorktreeRequest) returns (PullWorktreeResponse) {}
+  rpc StageFiles(StageFilesRequest) returns (StageFilesResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "git index edit through the daemon: the commit that follows is the event, and git records it"}
+    };
+  }
+  rpc UnstageFiles(UnstageFilesRequest) returns (UnstageFilesResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "git index edit through the daemon: undoes a stage, and the repository's history never sees it"}
+    };
+  }
+  rpc RevertFiles(RevertFilesRequest) returns (RevertFilesResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "revert_files"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+        detail: ["repo_id"]
+      }
+    };
+  }
+  rpc CommitWorktree(CommitWorktreeRequest) returns (CommitWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "commit"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+        detail: ["repo_id"]
+      }
+    };
+  }
+  rpc PushWorktree(PushWorktreeRequest) returns (PushWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "push"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+        detail: ["repo_id"]
+      }
+    };
+  }
+  rpc PullWorktree(PullWorktreeRequest) returns (PullWorktreeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "pull"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+        detail: ["repo_id"]
+      }
+    };
+  }
   rpc GetWorktreePR(GetWorktreePRRequest) returns (GetWorktreePRResponse) {}
-  rpc CreateWorktreePR(CreateWorktreePRRequest) returns (CreateWorktreePRResponse) {}
+  rpc CreateWorktreePR(CreateWorktreePRRequest) returns (CreateWorktreePRResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "create_pr"
+        target: {
+          kind: "worktree"
+          id: "worktree_id"
+        }
+        detail: ["repo_id", "response.pr_url"]
+      }
+    };
+  }
 }
 
 // =============================================================================
@@ -110,6 +351,11 @@ message Worktree {
   // FAILED and the reason is the user's to fix; empty otherwise, including for
   // a failure on our side.
   string failure_reason = 15;
+  // The machine (daemon) whose disk holds this workspace's checkout. A
+  // branch workspace exists on exactly one machine, so a chat in it runs
+  // there and nowhere else. Unset for the main checkout, which every machine
+  // with the project has, and for rows from before ownership was recorded.
+  optional string daemon_id = 16;
 }
 
 // WorktreeSummary is the part of a worktree a chat list renders and groups by.
@@ -126,6 +372,9 @@ message WorktreeSummary {
   WorktreeStatus status = 6;
   // Archive timestamp; unset for a live workspace.
   optional string deleted_at = 7;
+  // The project the workspace belongs to, so a list spanning projects can
+  // group by it.
+  string project_id = 8;
 }
 
 // CleanupMetadata tracks what was cleaned up during archive
@@ -151,6 +400,10 @@ message CleanupMetadata {
   // workspace needs its install/generate step run again.
   repeated string stripped_paths = 7;
   int64 stripped_bytes = 8;
+  // The user forgot the folder (InboxService.ForgetStorageWorktree): no
+  // machine was on record for it and no connected machine had it.
+  // directory_deleted is set so nothing tracks it, but nothing was deleted.
+  bool forgotten = 9;
 }
 
 // DiscoveredWorktree is a linked git worktree of one of the project's repos
@@ -247,6 +500,13 @@ message CreateWorktreeRequest {
   // produces a second workspace. Repeat the same key to get the existing row
   // back instead.
   optional string idempotency_key = 10;
+  // daemon_id names the machine to create the workspace on (the new-chat
+  // composer's "Runs on"). Unset places it by the usual rule: the chat's
+  // machine, else the source workspace's, else the project's default. It must
+  // be one of the caller's machines the project is installed on, and it may
+  // not contradict chat_id's or source_worktree_id's machine: a checkout
+  // exists on one machine only.
+  optional string daemon_id = 11;
 }
 
 // CreateWorktreeResponse returns the created workspace-level worktree.
@@ -378,6 +638,9 @@ message ImportWorktreeRequest {
   // (DiscoveredWorktree.moves_on_import): the user has been told that
   // anything running inside it loses its working directory.
   bool confirm_move = 6;
+  // daemon_id names the machine the directory is on: the one
+  // DiscoverWorktrees was asked about. Unset places it as CreateWorktree does.
+  optional string daemon_id = 7;
 }
 
 // ImportWorktreeResponse returns the imported worktree
@@ -392,6 +655,10 @@ message DiscoverWorktreesRequest {
   // when true and the machine is asleep, the call fails with Unavailable and
   // nothing is woken. A user opening the discover dialog leaves it false.
   bool background = 2;
+  // daemon_id names the machine to look on. Unset asks the project's default
+  // machine. Each machine has its own checkouts, so the answer is about that
+  // machine only.
+  optional string daemon_id = 3;
 }
 
 // DiscoverWorktreesResponse returns the untracked worktrees of every repo of
@@ -411,6 +678,8 @@ message DiscoverWorktreesResponse {
 // whose directories no longer exist.
 message PruneWorktreesRequest {
   string project_id = 1;
+  // daemon_id names the machine to prune on, as DiscoverWorktrees'.
+  optional string daemon_id = 2;
 }
 
 // PruneWorktreesResponse lists the records that were removed.

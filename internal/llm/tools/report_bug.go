@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -22,11 +23,12 @@ import (
 // could not resume — could only tell the user, and nothing reached anyone who
 // could fix it.
 //
-// Each report becomes one Sentry event (telemetry.CaptureBugReport), grouped
-// by product and normalized title. The tool is server-placed: it needs no
-// filesystem, and the worker is where the DSN is. Where Sentry is off — dev,
-// tests, a server with no DSN — the report is written to the server log
-// instead and the result says so; it never fails for that reason.
+// Each report becomes one issue event in forge's ClickStack
+// (telemetry.FileBugReport): a structured log record with
+// issue.source=llm_bug_report, grouped into issues by product and normalized
+// title, and listed by `forge obs issues --source llm_bug_report`. The tool is
+// server-placed: it needs no filesystem, and the worker's log pipeline is
+// ours. Filing is a log write, so it cannot fail.
 
 const (
 	// ToolReportBug is in names.AllToolNames too, as the workflow validator's
@@ -40,8 +42,8 @@ const (
 	// window. A real session hits one or two defects; more is an agent
 	// cycling through titles.
 	reportBugPerChat = 5
-	// maxBugTitleRunes bounds the title. Sentry shows the first line of an
-	// event's message as the issue title, and ids belong in evidence.
+	// maxBugTitleRunes bounds the title. It is the issue's title, and ids
+	// belong in evidence.
 	maxBugTitleRunes = 200
 )
 
@@ -68,11 +70,10 @@ type ReportBugParams struct {
 
 // ReportBugMetadata is report_bug's structured result.
 type ReportBugMetadata struct {
-	// EventID is the Sentry event, empty when nothing was sent.
-	EventID string `json:"event_id,omitempty"`
-	// Delivered: Sentry accepted the report (this call's, or the earlier one
-	// a duplicate was answered with).
-	Delivered bool `json:"delivered"`
+	// ReportID is the filed report's bug_report.id (this call's, or the
+	// earlier one a duplicate was answered with); empty when nothing was
+	// filed.
+	ReportID string `json:"report_id,omitempty"`
 	// Duplicate: this chat already reported the defect within the window;
 	// nothing new was sent.
 	Duplicate bool `json:"duplicate,omitempty"`
@@ -88,20 +89,25 @@ type reportBugTool struct {
 	// lookup is nil where there is no database (the daemon runtime); the
 	// report is then described by the tool context alone.
 	lookup  bugReportLookup
-	capture func(telemetry.BugReport) (eventID string, live bool)
+	file    fileBugReport
 	limiter *bugReportLimiter
 	now     func() time.Time
 }
 
-// NewReportBugTool builds report_bug on the process's Sentry reporter.
+// fileBugReport files a report and returns its id.
+type fileBugReport func(ctx context.Context, report telemetry.BugReport) (reportID string)
+
+// NewReportBugTool builds report_bug on the process logger.
 func NewReportBugTool(lookup bugReportLookup) Tool {
-	return newReportBugTool(lookup, telemetry.CaptureBugReport, processBugReportLimiter, time.Now)
+	return newReportBugTool(lookup, func(ctx context.Context, report telemetry.BugReport) string {
+		return telemetry.FileBugReport(ctx, nil, report)
+	}, processBugReportLimiter, time.Now)
 }
 
-func newReportBugTool(lookup bugReportLookup, capture func(telemetry.BugReport) (string, bool), limiter *bugReportLimiter, now func() time.Time) Tool {
+func newReportBugTool(lookup bugReportLookup, file fileBugReport, limiter *bugReportLimiter, now func() time.Time) Tool {
 	return NewToolWrapper[ReportBugParams, ToolResponse](&reportBugTool{
 		lookup:  lookup,
-		capture: capture,
+		file:    file,
 		limiter: limiter,
 		now:     now,
 	})
@@ -122,16 +128,13 @@ func (t *reportBugTool) Execute(tc *rctx.ToolContext, params ReportBugParams) (T
 	t.describeCaller(tc, &report)
 
 	key := strings.Join(telemetry.BugReportFingerprint(report.Product, report.Title), "\x00")
-	outcome := t.limiter.file(report.ChatID, key, t.now(), func() (string, bool) {
-		return t.capture(report)
+	outcome := t.limiter.file(report.ChatID, key, t.now(), func() string {
+		return t.file(tc.Context, report)
 	})
 
-	switch {
-	case outcome.Limited:
+	if outcome.Limited {
 		logging.Info("LLM bug report not filed: chat reached its cap",
 			"chat_id", report.ChatID, "product", report.Product, "cap", t.limiter.perChat)
-	case !outcome.Duplicate:
-		logBugReport(report, outcome)
 	}
 	return outcome.response(t.limiter), nil
 }
@@ -261,45 +264,12 @@ func stringOrEmpty(s *string) string {
 	return *s
 }
 
-// logBugReport writes a filed report to the server log, redacted the way the
-// Sentry event is. WARN, not ERROR: the slog bridge forwards ERROR to Sentry,
-// and the report is already there. Where Sentry is off, this line IS the
-// report.
-func logBugReport(report telemetry.BugReport, outcome bugReportOutcome) {
-	r := report.Redacted()
-	logging.Warn("LLM bug report",
-		"product", r.Product,
-		"severity", r.Severity,
-		"title", r.Title,
-		"summary", r.Summary,
-		"expected", r.Expected,
-		"actual", r.Actual,
-		"evidence", r.Evidence,
-		"chat_id", r.ChatID,
-		"thread_id", r.ThreadID,
-		"tool_call_id", r.ToolCallID,
-		"project_id", r.ProjectID,
-		"user_id", r.UserID,
-		"worktree_id", r.WorktreeID,
-		"workflow", r.Workflow,
-		"model", r.Model,
-		"daemon_id", r.DaemonID,
-		"daemon_type", r.DaemonType,
-		"pod", r.Pod,
-		"reliant_version", r.ReliantVersion,
-		"forge_version", r.ForgeVersion,
-		"sentry_event_id", outcome.EventID,
-		"sentry_delivered", outcome.EventID != "",
-	)
-}
-
 // bugReportLimiter answers a repeat of a report a chat already filed with the
 // first report, and caps how many distinct reports a chat files per window, so
-// a looping agent cannot flood Sentry.
+// a looping agent cannot flood the issues.
 //
-// It is per process. The prod worker runs one replica today; with N, a defect
-// reported in a loop reaches Sentry at most N times per window, and Sentry's
-// fingerprint grouping folds those into the one issue regardless.
+// It is per process. With N worker replicas, a defect reported in a loop is
+// filed at most N times per window; each filed report is its own issue.
 type bugReportLimiter struct {
 	mu      sync.Mutex
 	window  time.Duration
@@ -308,17 +278,16 @@ type bugReportLimiter struct {
 }
 
 type filedBugReport struct {
-	key     string
-	at      time.Time
-	eventID string
-	live    bool
+	key      string
+	at       time.Time
+	reportID string
 }
 
 // bugReportOutcome is what became of one report_bug call.
 type bugReportOutcome struct {
-	EventID string
-	// Live: a Sentry reporter took the report (or the earlier one).
-	Live      bool
+	// ReportID is the report filed, or the earlier one a duplicate is
+	// answered with; empty when nothing was filed.
+	ReportID  string
 	Duplicate bool
 	Limited   bool
 	// FiledAt is when the report the outcome describes was filed.
@@ -331,9 +300,9 @@ func newBugReportLimiter(window time.Duration, perChat int) *bugReportLimiter {
 
 // file runs send unless chatID already filed key within the window, or has
 // reached its cap. The lock is held across send so two parallel calls in one
-// batch cannot both file the same defect; send only hands the event to the
-// SDK's queue, so it does not wait on the network.
-func (l *bugReportLimiter) file(chatID, key string, now time.Time, send func() (string, bool)) bugReportOutcome {
+// batch cannot both file the same defect; send is a log write, so it does not
+// wait on the network.
+func (l *bugReportLimiter) file(chatID, key string, now time.Time, send func() string) bugReportOutcome {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -341,16 +310,16 @@ func (l *bugReportLimiter) file(chatID, key string, now time.Time, send func() (
 	filed := l.filed[chatID]
 	for _, report := range filed {
 		if report.key == key {
-			return bugReportOutcome{EventID: report.eventID, Live: report.live, Duplicate: true, FiledAt: report.at}
+			return bugReportOutcome{ReportID: report.reportID, Duplicate: true, FiledAt: report.at}
 		}
 	}
 	if len(filed) >= l.perChat {
 		return bugReportOutcome{Limited: true}
 	}
 
-	eventID, live := send()
-	l.filed[chatID] = append(filed, filedBugReport{key: key, at: now, eventID: eventID, live: live})
-	return bugReportOutcome{EventID: eventID, Live: live, FiledAt: now}
+	reportID := send()
+	l.filed[chatID] = append(filed, filedBugReport{key: key, at: now, reportID: reportID})
+	return bugReportOutcome{ReportID: reportID, FiledAt: now}
 }
 
 func (l *bugReportLimiter) forgetBefore(cutoff time.Time) {
@@ -378,22 +347,14 @@ func (o bugReportOutcome) response(l *bugReportLimiter) ToolResponse {
 	case o.Limited:
 		text = fmt.Sprintf("Not filed: this chat has already filed %d bug reports in the last %d minutes, which is the limit. Do not retry; tell the user about this defect instead, and continue with your task.",
 			l.perChat, int(l.window.Minutes()))
-	case o.Duplicate && o.EventID != "":
-		text = fmt.Sprintf("Already reported from this chat at %s (Sentry event %s), so it was not filed again. %s",
-			o.FiledAt.UTC().Format("15:04 UTC"), o.EventID, carryOn)
 	case o.Duplicate:
-		text = fmt.Sprintf("Already reported from this chat at %s, so it was not filed again. %s",
-			o.FiledAt.UTC().Format("15:04 UTC"), carryOn)
-	case o.EventID != "":
-		text = fmt.Sprintf("Filed with Reliant engineering as Sentry event %s. Nothing more is needed from you. %s", o.EventID, carryOn)
-	case o.Live:
-		text = "Recorded in the server log only: Sentry did not accept the event, so there is no event id. " + carryOn
+		text = fmt.Sprintf("Already reported from this chat at %s (report %s), so it was not filed again. %s",
+			o.FiledAt.UTC().Format("15:04 UTC"), o.ReportID, carryOn)
 	default:
-		text = "Recorded in the server log only: Sentry is not configured on this server, so there is no event id. " + carryOn
+		text = fmt.Sprintf("Filed with Reliant engineering as report %s. Nothing more is needed from you. %s", o.ReportID, carryOn)
 	}
 	return WithResponseMetadata(NewTextResponse(text), ReportBugMetadata{
-		EventID:     o.EventID,
-		Delivered:   o.EventID != "",
+		ReportID:    o.ReportID,
 		Duplicate:   o.Duplicate,
 		RateLimited: o.Limited,
 	})

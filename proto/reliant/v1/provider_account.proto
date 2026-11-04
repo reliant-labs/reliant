@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "forge/v1/forge.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // ProviderAccountService manages the LLM accounts a user has connected: one
@@ -26,20 +28,62 @@ service ProviderAccountService {
   // UpdateProviderAccount renames an account and/or pauses it. Unset fields
   // are left alone. An empty label restores the default (the detected email).
   // forge:custom — only label and paused are client-writable; status is derived
-  rpc UpdateProviderAccount(UpdateProviderAccountRequest) returns (UpdateProviderAccountResponse) {}
+  rpc UpdateProviderAccount(UpdateProviderAccountRequest) returns (UpdateProviderAccountResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "update"
+        target: {
+          kind: "provider_account"
+          id: "account_id"
+          label: "response.account.label"
+        }
+        detail: ["paused"]
+      }
+    };
+  }
   // ReorderProviderAccounts sets the priority order of one provider's
   // accounts. account_ids must be exactly that provider's accounts.
-  rpc ReorderProviderAccounts(ReorderProviderAccountsRequest) returns (ReorderProviderAccountsResponse) {}
+  rpc ReorderProviderAccounts(ReorderProviderAccountsRequest) returns (ReorderProviderAccountsResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "routing preference: the priority order among one provider's accounts, which the Providers list shows directly"}
+    };
+  }
   // DeleteProviderAccount removes an account and its stored credential.
   // forge:custom — also revokes the sealed credential and reassigns threads pinned to it
-  rpc DeleteProviderAccount(DeleteProviderAccountRequest) returns (DeleteProviderAccountResponse) {}
+  rpc DeleteProviderAccount(DeleteProviderAccountRequest) returns (DeleteProviderAccountResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "provider_account"
+          id: "account_id"
+        }
+      }
+    };
+  }
   // AddProviderAPIKey adds an API-key account to a provider. A key that is
   // already stored for that provider is not added twice (created = false).
-  rpc AddProviderAPIKey(AddProviderAPIKeyRequest) returns (AddProviderAPIKeyResponse) {}
+  rpc AddProviderAPIKey(AddProviderAPIKeyRequest) returns (AddProviderAPIKeyResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "add"
+        target: {
+          kind: "provider_account"
+          id: "response.account.id"
+          label: "response.account.label"
+        }
+        detail: ["provider"]
+      }
+    };
+  }
   // RefreshProviderAccountUsage re-reads one account's usage from the
   // provider. The server throttles it: a refresh inside the throttle window
   // returns the stored state with throttled = true.
-  rpc RefreshProviderAccountUsage(RefreshProviderAccountUsageRequest) returns (RefreshProviderAccountUsageResponse) {}
+  rpc RefreshProviderAccountUsage(RefreshProviderAccountUsageRequest) returns (RefreshProviderAccountUsageResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "re-reads usage from the provider (throttled); changes only the cached usage windows"}
+    };
+  }
   // GetChatProviderAccount returns the account the chat's root thread is
   // currently using for its provider; unset when none is assigned yet.
   rpc GetChatProviderAccount(GetChatProviderAccountRequest) returns (GetChatProviderAccountResponse) {}

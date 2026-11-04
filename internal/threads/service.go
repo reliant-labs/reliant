@@ -17,8 +17,8 @@ import (
 // Repository defines the subset of *db.Repo needed by the threads service.
 // This allows for easier testing and decouples threads from the full repository.
 type Repository interface {
-	// Chat operations.
-	GetChatWithUserCheck(ctx context.Context, id string, userID string) (*db.Chat, error)
+	// Chat operations: ownership, from the chats row alone.
+	GetChatRowWithUserCheck(ctx context.Context, id string, userID string) (*db.ChatRow, error)
 
 	// Thread operations
 	CreateThread(ctx context.Context, thread *db.Thread) (*db.Thread, error)
@@ -49,15 +49,13 @@ type Repository interface {
 	// messages -- used by resolveForkPoint to fork a thread's latest state.
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*db.Message, error)
 
-	// Bounded message operations for LoadRecentMessagesBefore /
-	// LoadMessagesInSeqRange / CountCurrentMessages -- these bound the read
-	// or count in SQL for the common (unforked, uncompacted) case instead of
+	// Bounded message operations for the display walk
+	// (recentDisplayMessagesBeforeFromCW) and CountCurrentMessages -- these
+	// bound the read or count in SQL, one window at a time, instead of
 	// resolving a thread's whole history.
 	CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error)
 	CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error)
 	ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error)
-	HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error)
-	ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*db.Message, error)
 
 	// Message operations (for SaveMessage)
 	CreateMessage(ctx context.Context, msg *db.Message) error
@@ -65,10 +63,12 @@ type Repository interface {
 	GetMessageByActivityID(ctx context.Context, chatID, activityID string) (*db.Message, error)
 	GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, workflowID, activityID string) (*db.Message, error)
 	GetEffectiveMessageCount(ctx context.Context, chatID, threadID string) (int, error)
-	GetNextOrdinal(ctx context.Context, threadID string) (int64, error)
-	// GetNextSeq returns the next chat-global seq. See
-	// 20260802000000_add_message_seq.sql.
-	GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error)
+	// AllocateMessageOrder takes a message's ordinal and seq from their
+	// counters (db.Repo.AllocateMessageOrder).
+	AllocateMessageOrder(ctx context.Context, threadID, chatID string) (ordinal, seq int64, err error)
+	// AllocateContextWindowSequence takes the sequence of a thread's next
+	// context window from its counter.
+	AllocateContextWindowSequence(ctx context.Context, threadID string) (int, error)
 	GetContextUsage(ctx context.Context, chatID, threadID string) (*db.ContextUsage, error)
 
 	// Content block operations
@@ -78,7 +78,10 @@ type Repository interface {
 	// Tool call operations. A live message update carries each tool-call
 	// block's durable status and, for a spawn, the thread it started — see
 	// db.ContentBlockPayloadsWithToolCalls.
-	ListToolCallsByChat(ctx context.Context, chatID string) ([]*db.ToolCall, error)
+	// ListLiveToolCallsByChat is what interrupt and pause cancel: a chat's
+	// non-terminal calls only, read through the partial live-calls index
+	// rather than the chat's whole tool-call history.
+	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*db.ToolCall, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
 	// UpsertToolCall / UpsertToolCallResult let a cancel record its outcome
 	// durably at the moment the user asks for it -- see cancelToolCalls.
@@ -349,7 +352,7 @@ func (s *Service) resolveForkPoint(ctx context.Context, messageID, threadID *str
 		// Fork from specific message - extract thread and CW from message
 		msg, err := s.repo.GetMessage(ctx, *messageID)
 		if err != nil {
-			return nil, fmt.Errorf("fork message not found: %w", err)
+			return nil, lookupFailed(err, "fork message not found", "failed to load fork message")
 		}
 		return &forkOpts{
 			parentThreadID:        msg.ThreadID,

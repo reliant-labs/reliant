@@ -4,10 +4,10 @@
  * A step's Run tab reads the run's record (ListStepExecutions) and shows what
  * the step did: its resolved inputs, output, error and attempts; an agent's
  * tool calls; and, for an error that names a field, a way to that field. Only
- * the RPC is mocked.
+ * the RPC is faked, at the transport.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -21,14 +21,48 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import type { StepRecord } from "../../../../api/step-executions-grpc";
+import type { ListStepExecutionsRequest } from "@/gen/reliant/v1/chat_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import type { StepRecord } from "../stepRecord";
 import type { BuilderRun } from "../../hooks/useBuilderTestRun";
 import type { RunNodeState } from "../builderRun";
 
+/** The fake server: `listStepExecutions(chatId)` answers `{ records, truncated }`. */
 const listStepExecutions = vi.fn();
-vi.mock("../../../../api/step-executions-grpc", () => ({
-  listStepExecutions: (...args: unknown[]) => listStepExecutions(...args),
-}));
+
+/** A record as ListStepExecutions carries it on the wire. */
+function onTheWire(r: StepRecord) {
+  return {
+    id: r.id,
+    workflowId: r.workflowId,
+    stepId: r.stepId,
+    activityName: r.activityName,
+    nodePath: r.nodePath,
+    attempt: r.attempt,
+    loopNodeId: r.loopNodeId,
+    loopIteration: r.loopIteration,
+    createdAt: new Date(r.createdAtMs).toISOString(),
+    durationMs: r.durationMs === undefined ? undefined : BigInt(r.durationMs),
+    exitCode: r.exitCode,
+    success: r.success,
+    inputJson: r.input === undefined ? "" : JSON.stringify(r.input),
+    outputJson: r.output === undefined ? "" : JSON.stringify(r.output),
+    errorMessage: r.error ?? "",
+  };
+}
+
+beforeEach(() =>
+  setTransport(
+    mockTransport({
+      "ChatService.ListStepExecutions": async (request: unknown) => {
+        const { records, truncated } = await listStepExecutions((request as ListStepExecutionsRequest).chatId);
+        return { stepExecutions: (records as StepRecord[]).map(onTheWire), truncated };
+      },
+    }),
+  ),
+);
+afterEach(() => setTransport(null));
 
 import { BuilderRunProvider, RunSample, sampleValue } from "../BuilderRunContext";
 import { StepRunPanel } from "../StepRunPanel";

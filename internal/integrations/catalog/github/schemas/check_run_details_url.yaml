@@ -1,0 +1,6 @@
+type: string
+pattern: "^https://[^\\s]+$"
+maxLength: 2048
+title: Details URL
+description: Where the check's Details link goes (the run that produced it).
+examples: ["https://app.reliantlabs.io/workflows/runs/01JB8Z3Q4M2N5P6R7S8T9V0W1X"]

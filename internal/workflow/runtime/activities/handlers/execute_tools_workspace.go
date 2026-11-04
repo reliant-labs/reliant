@@ -35,6 +35,8 @@ type batchWorkspace struct {
 	// the machine (noteIndex); "" says nothing.
 	note      string
 	noteIndex int
+	// blocked refuses machine calls without failing the conversation activity.
+	blocked string
 }
 
 // ensureBatchWorkspace checks — and, when it is gone, recovers — the directory
@@ -95,26 +97,67 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 			worktree = wt
 		}
 	}
-	// A thread-bound workspace that cannot be loaded, or was archived, is
-	// refused call by call with the reason (loadWorktreeInfo); there is
+	// A chat that is working again in a worktree the sweep archived under it
+	// (its work had landed and it had gone quiet) gets it back: the row is
+	// made live before anything runs, and the repair below recreates the
+	// checkout from its branch if it was removed.
+	retire, revived := a.reviveWorktree(ctx, chat, project, worktree)
+	// A thread-bound workspace that cannot be loaded, or is still archived,
+	// is refused call by call with the reason (loadWorktreeInfo); there is
 	// nothing here to check.
-	if threadBound && (worktree == nil || worktree.DeletedAt != nil) {
+	if worktree != nil && worktree.DeletedAt != nil {
+		out.blocked = "This workspace is archived with preserved work. Restore it through the worktree recovery UI before running machine tools; branch-only recreation would omit saved dirty or untracked files."
 		return out
 	}
+	if threadBound && worktree == nil {
+		return out
+	}
+	// A thread bound to the project's MAIN worktree row (spawn(worktree:
+	// "main")) is bound to the main checkout, which is each machine's own:
+	// the row's path mirrors projects.path, the creating machine's. It runs,
+	// and is checked, where any main-checkout call is.
+	boundToMain := threadBound && worktree.IsMain
+	if boundToMain {
+		threadBound, worktree = false, nil
+	}
+
+	// The machine the calls are routed to (toolDaemonSelector, exactly as
+	// the calls it precedes) and the project's checkout THERE: the check must
+	// look at the disk they will run on, at that disk's path.
+	worktreeDaemon := ""
+	if worktree != nil && worktree.DaemonID != nil {
+		worktreeDaemon = *worktree.DaemonID
+	}
+	selector := toolDaemonSelector(worktreeDaemon, threadBoundExplicit(threadBound, worktreeDaemon, chatDaemonSelector(chat, rtx.DaemonSelector)))
+	inBranch := worktree != nil && !worktree.IsMain && worktree.Path != ""
+	checkout := resolveCallCheckout(ctx, a.repo, a.machines, project, selector, !inBranch)
+	if checkout.missing != nil {
+		// Not a stuck run: every machine call of the batch answers with the
+		// reason and the way out, and the next batch checks again.
+		out.blocked = missingRefusal(checkout.missing)
+		return out
+	}
+	selector = checkout.pin(selector)
+	mainPath := checkout.main.Path
 
 	// The directory the calls would run in: buildToolRequest's own priority,
 	// where a thread-bound worktree beats the run's path.
-	path := rtx.ProjectPath
-	if threadBound {
+	path := checkout.path(rtx.ProjectPath, branchPath(worktree))
+	switch {
+	case threadBound:
 		path = worktree.Path
-	} else if path == "" {
-		path = project.Path
-		if worktree != nil && worktree.Path != "" {
-			path = worktree.Path
-		}
+	case boundToMain:
+		// Not the path it inherited (the parent's, which may be a branch
+		// workspace): the main checkout on this machine.
+		path = mainPath
 	}
 	if path == "" {
 		return out
+	}
+	if !threadBound && (rtx.ProjectPath != "" || boundToMain) && !samePath(path, rtx.ProjectPath) {
+		// The run's path was rebased onto this machine's checkout (the chat
+		// changed machine since it was computed): every call runs there.
+		out.path = path
 	}
 
 	req := toolexec.WorkspaceEnsureRequest{Path: path, Audience: rtx.Thread}
@@ -123,35 +166,41 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	}
 	// A thread-bound workspace never falls back to the main checkout: the
 	// sub-agent's tools would write to the wrong branch there.
-	if !threadBound && !samePath(path, project.Path) {
-		req.FallbackPath = project.Path
+	if !threadBound && mainPath != "" && !samePath(path, mainPath) {
+		req.FallbackPath = mainPath
 	}
 	// Only the chat's own worktree is recreated — a directory reliant made for
-	// it, whose branch and repos are on record. The main checkout, and a run
-	// pointed somewhere else, only fall back.
+	// it, whose branch and repos are on record, from the owner's checkout.
+	// The main checkout, and a run pointed somewhere else, only fall back.
 	// A repo list that cannot be read leaves the request without a repair:
 	// rebuilding a workspace from a guess at its layout is worse than
 	// falling back.
-	if worktree != nil && !worktree.IsMain && worktree.DeletedAt == nil && worktree.Path != "" && samePath(path, worktree.Path) {
+	if inBranch && worktree.DeletedAt == nil && mainPath != "" && samePath(path, worktree.Path) {
 		if repos, err := a.repo.ListReposByProject(ctx, project.ID); err == nil {
 			req.Repair = true
 			req.WorktreeID = worktree.ID
 			req.Branch = worktree.Branch
-			req.Repos = toolexec.WorkspaceReposOf(project.Path, repos)
+			req.Repos = toolexec.WorkspaceReposOf(mainPath, repos)
+			req.Retire = retire
 		}
 	}
 
-	// Routed exactly as the calls it precedes (toolDaemonSelector): the check
-	// must look at the disk they will run on.
-	worktreeDaemon := ""
-	if worktree != nil && worktree.DaemonID != nil {
-		worktreeDaemon = *worktree.DaemonID
+	if retire != "" && req.Retire != retire {
+		out.blocked = "Workspace cleanup retirement requires its repository layout. Retry once the project repositories are available; no machine tools ran."
+		return out
 	}
-	selector := toolDaemonSelector(worktreeDaemon, threadBoundExplicit(threadBound, worktreeDaemon, rtx.DaemonSelector))
+
 	resp, err := ensureWorkspace(ctx, ensurer, project.UserID, selector, req)
 	if err != nil {
-		logging.WarnContext(ctx, "[ExecuteTools] Could not check the batch's working directory; running it as is",
+		logging.WarnContext(ctx, "[ExecuteTools] Could not check the batch's working directory",
 			"chatID", rtx.ChatID, "path", path, "error", err)
+		if retire != "" {
+			out.blocked = "Workspace cleanup retirement could not be confirmed. Retry this operation shortly; no machine tools ran."
+		}
+		return out
+	}
+	if resp.Status == toolexec.WorkspaceBlocked || (retire != "" && resp.Status != toolexec.WorkspacePresent && resp.Status != toolexec.WorkspaceRepaired) {
+		out.blocked = "Workspace cleanup is still retiring. Retry this operation shortly; no machine tools ran."
 		return out
 	}
 	if threadBound && resp.Status == toolexec.WorkspaceFallback {
@@ -166,12 +215,73 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	if resp.Path != "" && !samePath(resp.Path, path) {
 		out.path = resp.Path
 	}
-	out.note = workspaceNoticeText(resp.Notice, project)
+	out.note = workspaceNoticeText(resp.Notice, mainPath)
+	if revived && (resp.Status == toolexec.WorkspacePresent || resp.Status == toolexec.WorkspaceRepaired) {
+		out.note = revivedWorkspaceNote(worktree, resp.Status == toolexec.WorkspaceRepaired)
+	}
 	if resp.Status != toolexec.WorkspacePresent {
 		logging.InfoContext(ctx, "[ExecuteTools] Batch working directory was missing",
 			"chatID", rtx.ChatID, "status", resp.Status, "path", path, "runningIn", resp.Path, "detail", resp.Detail)
 	}
 	return out
+}
+
+// reviveWorktree makes the chat's archived worktree live again when the chat
+// is about to work in it, and returns the archive fence the daemon must
+// retire (see store.ReviveArchivedWorktree). It does so for a live chat's
+// own worktree (or its thread's) that reliant made, that has a directory and
+// branch on record and proven clean landed provenance, without saved work.
+// The store rechecks eligibility under the row lock, including the canonical
+// recovery catalog. Other archives require explicit recovery; machine calls
+// are refused without ending the conversation. worktree is updated in place.
+func (a *ExecuteToolsActivity) reviveWorktree(ctx context.Context, chat *db.Chat, project *db.Project, worktree *db.Worktree) (string, bool) {
+	if worktree == nil {
+		return "", false
+	}
+	// Retirement is durable across batches, not just the batch that revived
+	// the row. Only a positive daemon acknowledgement (the sweep) clears it.
+	if worktree.DeletedAt == nil {
+		if m := worktree.CleanupMetadata; m != nil {
+			return m.RetireFence, false
+		}
+		return "", false
+	}
+	if worktree.IsMain || worktree.Path == "" || worktree.Branch == "" || chat.State == db.ChatStateArchived {
+		return "", false
+	}
+	if m := worktree.CleanupMetadata; m == nil || (m.ArchivedBecause != db.ArchivedBecauseLanded && m.ArchivedBecause != db.ArchivedBecauseRecoverableIdle) || len(m.SnapshotRefs) > 0 {
+		return "", false
+	}
+	fence, err := a.repo.ReviveArchivedWorktree(ctx, worktree.ID)
+	if err != nil {
+		logging.WarnContext(ctx, "[ExecuteTools] Could not bring back the chat's archived worktree", "chatID", chat.ID, "worktreeID", worktree.ID, "error", err)
+		return "", false
+	}
+	worktree.DeletedAt = nil
+	logging.InfoContext(ctx, "[ExecuteTools] Brought back the chat's archived worktree", "chatID", chat.ID, "worktreeID", worktree.ID, "path", worktree.Path)
+	if err := a.repo.EmitUserRefetch(ctx, project.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &project.ID, WorktreeID: &worktree.ID}); err != nil {
+		logging.WarnContext(ctx, "[ExecuteTools] Could not announce the revived worktree", "worktreeID", worktree.ID, "error", err)
+	}
+	return fence, true
+}
+
+// revivedWorkspaceNote tells the model its workspace was reclaimed while it
+// sat idle and is back. recreated says the checkout had been removed and was
+// rebuilt from the branch.
+func revivedWorkspaceNote(worktree *db.Worktree, recreated bool) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "[Workspace restored] This chat's workspace %s (branch `%s`) was archived while it sat idle", worktree.Path, worktree.Branch)
+	if m := worktree.CleanupMetadata; m != nil && m.ArchivedBecause == db.ArchivedBecauseLanded {
+		b.WriteString(" after its work landed in its base branch")
+	}
+	if recreated {
+		fmt.Fprintf(&b, ", and its checkout was removed to free disk. It has been recreated from branch `%s`: committed work is intact.", worktree.Branch)
+	} else {
+		b.WriteString(". It is live again.")
+	}
+	b.WriteString(" Rebuildable files (node_modules, tool installs, build output, caches) may be gone: run the install or generate step before building." +
+		" If the branch's work has merged, its base has moved on since: fetch it and start new work from it rather than from this branch.\n\n")
+	return b.String()
 }
 
 // ensureWorkspace is one bounded ensure. The check is a pre-flight the batch
@@ -212,7 +322,8 @@ func threadWorkspaceMissingNote(worktree *db.Worktree, reason string) string {
 	return b.String()
 }
 
-func workspaceNoticeText(n *toolexec.WorkspaceNotice, project *db.Project) string {
+// mainPath is the project's checkout on the machine that ran the batch.
+func workspaceNoticeText(n *toolexec.WorkspaceNotice, mainPath string) string {
 	if n == nil {
 		return ""
 	}
@@ -234,19 +345,19 @@ func workspaceNoticeText(n *toolexec.WorkspaceNotice, project *db.Project) strin
 		if n.Reason != "" {
 			fmt.Fprintf(&b, ": %s", strings.TrimSpace(n.Reason))
 		}
-		fmt.Fprintf(&b, ". Instead, this call ran in %s.", describeFallback(n, project))
+		fmt.Fprintf(&b, ". Instead, this call ran in %s.", describeFallback(n, mainPath))
 		b.WriteString(" Uncommitted work that was in the missing directory is lost unless it comes back.")
-		inMainCheckout := project != nil && samePath(n.RunningIn, project.Path)
+		inMainCheckout := mainPath != "" && samePath(n.RunningIn, mainPath)
 		switch {
 		case n.Branch != "" && inMainCheckout:
 			fmt.Fprintf(&b, " To get the branch back: if `%s` was pushed, fetch it in the project's repositories; once it exists, "+
 				"the user can choose \"Recreate workspace\" in the chat's menu to rebuild the workspace from it, "+
 				"or \"Move to main checkout\" to keep working where this call ran.", n.Branch)
-		case project != nil && project.Path != "" && !samePath(n.WorkspacePath, project.Path):
+		case mainPath != "" && !samePath(n.WorkspacePath, mainPath):
 			fmt.Fprintf(&b, " The project's checkout has to be back on this machine (cloned again to %s if it does not reappear) "+
-				"before the branch can be checked out again; then the user can choose \"Recreate workspace\" in the chat's menu.", project.Path)
-		case project != nil && project.Path != "":
-			fmt.Fprintf(&b, " The project's checkout has to be back on this machine (cloned again to %s if it does not reappear).", project.Path)
+				"before the branch can be checked out again; then the user can choose \"Recreate workspace\" in the chat's menu.", mainPath)
+		case mainPath != "":
+			fmt.Fprintf(&b, " The project's checkout has to be back on this machine (cloned again to %s if it does not reappear).", mainPath)
 		}
 		fmt.Fprintf(&b, " Until then every call runs in %s.", n.RunningIn)
 	case toolexec.NoticeIncomplete:
@@ -267,23 +378,33 @@ func workspaceNoticeText(n *toolexec.WorkspaceNotice, project *db.Project) strin
 	return b.String()
 }
 
-// describeFallback says what the directory a call fell back to is.
-func describeFallback(n *toolexec.WorkspaceNotice, project *db.Project) string {
+// describeFallback says what the directory a call fell back to is; mainPath
+// is the project's checkout on the machine that ran it.
+func describeFallback(n *toolexec.WorkspaceNotice, mainPath string) string {
 	dir := n.RunningIn
-	if project == nil || project.Path == "" {
+	if mainPath == "" {
 		return dir
 	}
-	if samePath(dir, project.Path) {
+	if samePath(dir, mainPath) {
 		s := fmt.Sprintf("the project's main checkout, %s, which other chats share", dir)
 		if n.Branch != "" {
 			s += fmt.Sprintf(" and which is NOT on branch `%s` (check `git status` before changing anything there)", n.Branch)
 		}
 		return s
 	}
-	if samePath(n.WorkspacePath, project.Path) {
+	if samePath(n.WorkspacePath, mainPath) {
 		return dir
 	}
-	return fmt.Sprintf("%s, because the project's checkout %s is missing too", dir, project.Path)
+	return fmt.Sprintf("%s, because the project's checkout %s is missing too", dir, mainPath)
+}
+
+// branchPath is a branch worktree's directory, "" for none or the main one
+// (whose row mirrors projects.path and is resolved per machine instead).
+func branchPath(worktree *db.Worktree) string {
+	if worktree == nil || worktree.IsMain {
+		return ""
+	}
+	return worktree.Path
 }
 
 func checkoutList(rels []string) string {

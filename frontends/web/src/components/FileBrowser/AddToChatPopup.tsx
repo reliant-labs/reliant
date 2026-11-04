@@ -13,6 +13,7 @@ interface AddToChatPopupProps {
   x: number;
   y: number;
   onAdd: () => void;
+  /** The addSelectionToChat binding, formatted; omitted when it is unbound. */
   shortcut?: string;
   container?: HTMLElement | null;
 }
@@ -22,7 +23,7 @@ export function AddToChatPopup({
   x,
   y,
   onAdd,
-  shortcut = window.navigator.platform.includes("Mac") ? '⌘L' : 'Ctrl+L',
+  shortcut,
   container,
 }: AddToChatPopupProps) {
   if (!visible) return null;
@@ -89,9 +90,11 @@ export function AddToChatPopup({
         >
         <Plus className="w-3 h-3 shrink-0" strokeWidth={2.5} />
         <span className="font-medium">Add to Chat</span>
-        <span className="add-to-chat-shortcut text-2xs font-mono px-1.5 py-0.5 rounded">
-          {shortcut}
-        </span>
+        {shortcut && (
+          <span className="add-to-chat-shortcut text-2xs font-mono px-1.5 py-0.5 rounded">
+            {shortcut}
+          </span>
+        )}
       </button>
     </div>
     </>

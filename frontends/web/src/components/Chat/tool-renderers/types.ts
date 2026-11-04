@@ -26,6 +26,12 @@ export interface ToolRenderContext {
    */
   input: Record<string, unknown> | string;
   result?: ToolResultData;
+  /**
+   * Present when `result` is a preview of a larger output: resolves to the
+   * full content (cached per call). A copy action uses it so the clipboard
+   * gets the whole output, not the preview.
+   */
+  loadFullResult?: () => Promise<string>;
   worktreeId?: string;
   chatId?: string;
   isExpanded: boolean;
@@ -48,6 +54,13 @@ export interface ToolResultData {
    * IMAGE content block and the store folds it onto the result here.
    */
   attachments?: Attachment[];
+  /**
+   * The server sent a preview of a large result, not the whole thing (the
+   * transcript caps tool output; see ContentBlock.truncated). original_size is
+   * the full content's byte length; GetToolResult returns the content.
+   */
+  truncated?: boolean;
+  original_size?: number;
 }
 
 /**

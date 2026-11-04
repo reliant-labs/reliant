@@ -202,7 +202,7 @@ describe("a plan whose detail never loaded is distinguishable from a real one", 
   it("flags the stale signature: no sizes, no included hours", () => {
     expect(
       isPlanDetailUnavailable(
-        plan({ allowedDaemonSizes: [], includedSmallDaemonHours: 0n }),
+        plan({ allowedDaemonSizes: [], machineIncludedHours: 0n }),
       ),
     ).toBe(true);
   });
@@ -216,7 +216,7 @@ describe("a plan whose detail never loaded is distinguishable from a real one", 
   it("does not flag a real plan that includes zero hours but lists its sizes", () => {
     expect(
       isPlanDetailUnavailable(
-        plan({ allowedDaemonSizes: ["small"], includedSmallDaemonHours: 0n }),
+        plan({ allowedDaemonSizes: ["m"], machineIncludedHours: 0n }),
       ),
     ).toBe(false);
   });
@@ -225,10 +225,10 @@ describe("a plan whose detail never loaded is distinguishable from a real one", 
     // Both absent TOGETHER is the signature. Either one present means the row
     // was populated, so the reading is a real plan.
     expect(
-      isPlanDetailUnavailable(plan({ allowedDaemonSizes: ["medium"] })),
+      isPlanDetailUnavailable(plan({ allowedDaemonSizes: ["l"] })),
     ).toBe(false);
     expect(
-      isPlanDetailUnavailable(plan({ includedSmallDaemonHours: 40n })),
+      isPlanDetailUnavailable(plan({ machineIncludedHours: 40n })),
     ).toBe(false);
   });
 

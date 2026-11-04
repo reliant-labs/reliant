@@ -242,6 +242,8 @@ describe("waiting for a machine overrides the lifecycle row (G7)", () => {
       activity: ChatActivity.WAITING_FOR_USAGE_LIMIT,
     });
     expect(status).toMatchObject({ label: "Waiting for usage limit", dotVariant: "neutral", badgeVariant: "warning", pulse: false });
+    // Live: it retries by itself, so it can still be paused or stopped.
+    expect(isLiveRunStatus(status)).toBe(true);
   });
 
   it("the sidebar's activity view says the same", () => {
@@ -263,9 +265,9 @@ describe("waiting for a machine overrides the lifecycle row (G7)", () => {
 
 describe("triggerEventOutcomeDisplay: a firing, never a run result", () => {
   it.each([
-    ["launched", "Launched", "neutral"],
+    ["launched", "Started a run", "neutral"],
     ["skipped", "Skipped", "warning"],
-    ["failed", "Failed to launch", "error"],
+    ["failed", "Couldn't start", "error"],
     ["unknown", "Unknown", "neutral"],
   ] as const)("%s reads %s", (outcome, label, badge) => {
     expect(triggerEventOutcomeDisplay(outcome)).toEqual({ label, badgeVariant: badge });
@@ -292,8 +294,8 @@ describe("launchKindDisplay: the §0 launch-kind vocabulary", () => {
     [
       "schedule",
       { triggerName: "Nightly triage", manual: true },
-      "Run now",
-      "Started by Run now on Nightly triage",
+      "Fired by hand",
+      "Fired by hand: Nightly triage",
     ],
     [
       "agent.start_run",
@@ -303,8 +305,8 @@ describe("launchKindDisplay: the §0 launch-kind vocabulary", () => {
     ],
     ["agent.start_run", {}, "Agent", "Started by an agent"],
     ["builder.test", {}, "Test", "Test run from the builder"],
-    ["manual.run", {}, "Run now", "Started by you with Run now"],
-    ["manual.run", { replayedEvent: true }, "Run now", "Started by you with Run now, replaying a past event"],
+    ["manual.run", {}, "Run by hand", "Run by you"],
+    ["manual.run", { replayedEvent: true }, "Run by hand", "Run by you, replaying a past event"],
     [
       "webhook",
       { triggerName: "deploy-hook", at: "14:02" },
@@ -319,7 +321,7 @@ describe("launchKindDisplay: the §0 launch-kind vocabulary", () => {
       "Started by Triage new issues on github: issues.opened",
     ],
     ["integration", { providerName: "github", providerEvent: "issues.opened" }, "github", "Started by github: issues.opened"],
-    ["integration", {}, "Integration", "Started by an integration"],
+    ["integration", {}, "App event", "Started by an app event"],
     [
       "workflow_event",
       { triggerName: "After review", sourceWorkflow: "code-review", sourceOutcome: "finished" },

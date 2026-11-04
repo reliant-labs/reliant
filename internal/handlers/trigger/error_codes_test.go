@@ -4,6 +4,7 @@ package trigger
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -74,4 +75,14 @@ func TestTriggerErrorsOnTheWire(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	assert.Equal(t, "database error", svcerr.ToConnect(err).Message())
+}
+
+// A second trigger with a name the project already has is AlreadyExists with
+// a remedy, not Internal "database error" (prod obs issue 84a072c8: a
+// duplicate-key 23505 surfaced as an opaque 500).
+func TestCreateTriggerNameTakenIsAlreadyExists(t *testing.T) {
+	t.Parallel()
+	err := triggerDBError("create trigger", fmt.Errorf("%w: %q", core.ErrTriggerNameTaken, "tick"))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
+	assert.Contains(t, svcerr.ToConnect(err).Message(), "already exists")
 }

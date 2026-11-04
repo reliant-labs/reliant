@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,7 +109,7 @@ func TestAPIServerRouterWakesSuspendedDaemonThroughControlPlaneDaemonService(t *
 	repo := &recordedRegistry{daemons: []*db.Daemon{{
 		ID: "daemon-suspended", UserID: userID, LifecyclePhase: lifecycle("suspended"),
 	}}}
-	router := toolexec.NewNATSDaemonRouter(nil, daemonRouterOptions(repo, cpURL)...)
+	router := toolexec.NewNATSDaemonRouter(nil, daemonRouterOptions(repo, &configv1.ControlPlaneConfig{Url: cpURL})...)
 
 	id, err := router.EnsureAwake(context.Background(), userID, &toolexec.DaemonSelector{ID: "daemon-suspended"})
 	require.NoError(t, err)
@@ -125,7 +127,7 @@ func TestAPIServerRouterReportsProvisioningDaemonAsPendingFromItsOwnRecords(t *t
 	repo := &recordedRegistry{daemons: []*db.Daemon{{
 		ID: "daemon-provisioning", UserID: "user-pending-wiring", LifecyclePhase: lifecycle("provisioning"),
 	}}}
-	router := toolexec.NewNATSDaemonRouter(nil, daemonRouterOptions(repo, cpURL)...)
+	router := toolexec.NewNATSDaemonRouter(nil, daemonRouterOptions(repo, &configv1.ControlPlaneConfig{Url: cpURL})...)
 
 	_, err := router.ResolveDaemonID(context.Background(), "user-pending-wiring")
 	require.Error(t, err)
@@ -143,7 +145,7 @@ func TestAPIServerRouterResolvesAttachedDaemonWithoutDialingControlPlane(t *test
 		daemons:  []*db.Daemon{{ID: "daemon-live", UserID: "user-live-wiring"}},
 		attached: []string{"daemon-live"},
 	}
-	router := toolexec.NewNATSDaemonRouter(nil, daemonRouterOptions(repo, cpURL)...)
+	router := toolexec.NewNATSDaemonRouter(nil, daemonRouterOptions(repo, &configv1.ControlPlaneConfig{Url: cpURL})...)
 
 	id, err := router.ResolveDaemonID(context.Background(), "user-live-wiring")
 	require.NoError(t, err)
@@ -165,7 +167,7 @@ func TestAPIServerRouterTreatsAlreadyResumedDaemonAsAwake(t *testing.T) {
 	repo := &recordedRegistry{daemons: []*db.Daemon{{
 		ID: "daemon-lagging", UserID: userID, LifecyclePhase: lifecycle("suspended"),
 	}}}
-	router := toolexec.NewNATSDaemonRouter(nil, daemonRouterOptions(repo, cpURL)...)
+	router := toolexec.NewNATSDaemonRouter(nil, daemonRouterOptions(repo, &configv1.ControlPlaneConfig{Url: cpURL})...)
 
 	id, err := router.EnsureAwake(context.Background(), userID, nil)
 	require.NoError(t, err)

@@ -3,7 +3,11 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"strings"
 	"sync"
+	"time"
 )
 
 type contextKey string
@@ -31,12 +35,42 @@ func SetUserJWT(userID, token string) {
 	userJWTsMu.Unlock()
 }
 
-// GetUserJWT returns the latest JWT for the given user.
+// GetUserJWT returns the latest JWT for the given user, unless it has
+// expired. The cache outlives the session that filled it, and every caller
+// treats a present token as "the user is signed in": an expired one fails at
+// the receiver instead (control plane: "invalid token: token expired") and,
+// worse, wins over the fallback the caller would otherwise take, such as an
+// unattended run's stored automation token (automationcred.BearerFor).
 func GetUserJWT(userID string) (string, bool) {
 	userJWTsMu.RLock()
 	token, ok := userJWTs[userID]
 	userJWTsMu.RUnlock()
+	if ok && jwtExpired(token, time.Now()) {
+		return "", false
+	}
 	return token, ok
+}
+
+// jwtExpired reports whether token is a JWT whose exp claim has passed. It
+// reads the claim without verifying the signature: it only decides whether a
+// token already accepted by the interceptor is still worth presenting. A value
+// that is not a JWT, or carries no exp, is not judged expired.
+func jwtExpired(token string, now time.Time) bool {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return false
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if json.Unmarshal(payload, &claims) != nil || claims.Exp == 0 {
+		return false
+	}
+	return !now.Before(time.Unix(claims.Exp, 0))
 }
 
 // WithUser returns ctx carrying the authenticated caller under the keys the

@@ -3,6 +3,7 @@ export default {
   darkMode: 'class',
   content: [
     "./index.html",
+    "./find-bar.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
   theme: {
@@ -16,6 +17,17 @@ export default {
         primary: {
           DEFAULT: "hsl(var(--primary) / <alpha-value>)",
           foreground: "hsl(var(--primary-foreground) / <alpha-value>)",
+          // Accent TEXT. --primary is a fill, tuned for the label on it, and
+          // as text it can fail AA (brand blue on a dark panel is 3.9:1), so
+          // links, active labels and accent copy paint in --primary-ink,
+          // which every scheme holds at 4.5:1 on every surface
+          // (primaryInkContrast.test.ts). `text-primary` is not used.
+          ink: "hsl(var(--primary-ink) / <alpha-value>)",
+        },
+        // The brand's label hue (`text-brand-violet`): eyebrows only, never
+        // interactive. Blue is --primary / --primary-ink / --ring.
+        brand: {
+          violet: "hsl(var(--brand-violet) / <alpha-value>)",
         },
         secondary: {
           DEFAULT: "hsl(var(--secondary) / <alpha-value>)",

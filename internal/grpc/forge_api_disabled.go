@@ -12,8 +12,7 @@ import (
 )
 
 // forgeAPIDisabledReason is the reason a forgeAPIDisabled refusal carries, in
-// x-forge-error-reason and (until R3w2 drops it) the legacy X-Reliant-Reason.
-// The web app reads it (isForgeAPIDisabled) to say "turned off on this server"
+// x-forge-error-reason. The web app reads it (isForgeAPIDisabled) to say "turned off on this server"
 // rather than blame the user's daemon: FailedPrecondition alone is also what a
 // forge rpc answers when forge ran and failed, so the code cannot tell the two
 // apart.
@@ -39,11 +38,9 @@ func ForgeAPIDisabled() mountkit.Option {
 type forgeAPIDisabled struct{}
 
 func (forgeAPIDisabled) refusal() error {
-	err := svcerr.ToConnect(svcerr.WithReason(
+	return svcerr.ToConnect(svcerr.WithReason(
 		svcerr.FailedPrecondition("the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)"),
 		forgeAPIDisabledReason))
-	err.Meta().Set("X-Reliant-Reason", forgeAPIDisabledReason)
-	return err
 }
 
 func (d forgeAPIDisabled) WrapUnary(connect.UnaryFunc) connect.UnaryFunc {

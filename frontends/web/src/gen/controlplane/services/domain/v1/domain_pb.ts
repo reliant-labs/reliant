@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/domain/v1/domain.proto.
  */
 export const file_services_domain_v1_domain: GenFile = /*@__PURE__*/
-  fileDesc("Ch9zZXJ2aWNlcy9kb21haW4vdjEvZG9tYWluLnByb3RvEg9jb250cm9scGxhbmUudjEiJwoTQ3JlYXRlRG9tYWluUmVxdWVzdBIQCghob3N0bmFtZRgBIAEoCSI/ChRDcmVhdGVEb21haW5SZXNwb25zZRInCgZkb21haW4YASABKAsyFy5jb250cm9scGxhbmUudjEuRG9tYWluIjcKEEdldERvbWFpblJlcXVlc3QSEQoJZG9tYWluX2lkGAEgASgJEhAKCGhvc3RuYW1lGAIgASgJIjwKEUdldERvbWFpblJlc3BvbnNlEicKBmRvbWFpbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5Eb21haW4iFAoSTGlzdERvbWFpbnNSZXF1ZXN0Ij8KE0xpc3REb21haW5zUmVzcG9uc2USKAoHZG9tYWlucxgBIAMoCzIXLmNvbnRyb2xwbGFuZS52MS5Eb21haW4iKAoTRGVsZXRlRG9tYWluUmVxdWVzdBIRCglkb21haW5faWQYASABKAkiFgoURGVsZXRlRG9tYWluUmVzcG9uc2UiKAoTVmVyaWZ5RG9tYWluUmVxdWVzdBIRCglkb21haW5faWQYASABKAkiPwoUVmVyaWZ5RG9tYWluUmVzcG9uc2USJwoGZG9tYWluGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRvbWFpbiJsChpDcmVhdGVEb21haW5CaW5kaW5nUmVxdWVzdBIRCglkb21haW5faWQYASABKAkSFgoOZW52aXJvbm1lbnRfaWQYAiABKAkSDgoGdGFyZ2V0GAMgASgJEhMKC3JlZGlyZWN0X3RvGAQgASgJIk4KG0NyZWF0ZURvbWFpbkJpbmRpbmdSZXNwb25zZRIvCgdiaW5kaW5nGAEgASgLMh4uY29udHJvbHBsYW5lLnYxLkRvbWFpbkJpbmRpbmciQwoaRGVsZXRlRG9tYWluQmluZGluZ1JlcXVlc3QSEgoKYmluZGluZ19pZBgBIAEoCRIRCglkb21haW5faWQYAiABKAkiHQobRGVsZXRlRG9tYWluQmluZGluZ1Jlc3BvbnNlIksKGUxpc3REb21haW5CaW5kaW5nc1JlcXVlc3QSGwoOZW52aXJvbm1lbnRfaWQYASABKAlIAIgBAUIRCg9fZW52aXJvbm1lbnRfaWQiTgoaTGlzdERvbWFpbkJpbmRpbmdzUmVzcG9uc2USMAoIYmluZGluZ3MYASADKAsyHi5jb250cm9scGxhbmUudjEuRG9tYWluQmluZGluZzL1BwoNRG9tYWluU2VydmljZRJjCgxDcmVhdGVEb21haW4SJC5jb250cm9scGxhbmUudjEuQ3JlYXRlRG9tYWluUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEb21haW5SZXNwb25zZSIGorsYAggBEloKCUdldERvbWFpbhIhLmNvbnRyb2xwbGFuZS52MS5HZXREb21haW5SZXF1ZXN0GiIuY29udHJvbHBsYW5lLnYxLkdldERvbWFpblJlc3BvbnNlIgaiuxgCCAESYAoLTGlzdERvbWFpbnMSIy5jb250cm9scGxhbmUudjEuTGlzdERvbWFpbnNSZXF1ZXN0GiQuY29udHJvbHBsYW5lLnYxLkxpc3REb21haW5zUmVzcG9uc2UiBqK7GAIIARKCAQoMRGVsZXRlRG9tYWluEiQuY29udHJvbHBsYW5lLnYxLkRlbGV0ZURvbWFpblJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuRGVsZXRlRG9tYWluUmVzcG9uc2UiJaK7GCEIATodCgZkZWxldGUSEwoGZG9tYWluEglkb21haW5faWQSnAEKDFZlcmlmeURvbWFpbhIkLmNvbnRyb2xwbGFuZS52MS5WZXJpZnlEb21haW5SZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLlZlcmlmeURvbWFpblJlc3BvbnNlIj+iuxg7CAE6NwoGdmVyaWZ5Ei0KBmRvbWFpbhIJZG9tYWluX2lkGhhyZXNwb25zZS5kb21haW4uaG9zdG5hbWUSeAoTQ3JlYXRlRG9tYWluQmluZGluZxIrLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEb21haW5CaW5kaW5nUmVxdWVzdBosLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEb21haW5CaW5kaW5nUmVzcG9uc2UiBqK7GAIIARKrAQoTRGVsZXRlRG9tYWluQmluZGluZxIrLmNvbnRyb2xwbGFuZS52MS5EZWxldGVEb21haW5CaW5kaW5nUmVxdWVzdBosLmNvbnRyb2xwbGFuZS52MS5EZWxldGVEb21haW5CaW5kaW5nUmVzcG9uc2UiOaK7GDUIAToxCgZkZWxldGUSHAoOZG9tYWluX2JpbmRpbmcSCmJpbmRpbmdfaWQqCWRvbWFpbl9pZBJ1ChJMaXN0RG9tYWluQmluZGluZ3MSKi5jb250cm9scGxhbmUudjEuTGlzdERvbWFpbkJpbmRpbmdzUmVxdWVzdBorLmNvbnRyb2xwbGFuZS52MS5MaXN0RG9tYWluQmluZGluZ3NSZXNwb25zZSIGorsYAggBQtMBChNjb20uY29udHJvbHBsYW5lLnYxQgtEb21haW5Qcm90b1ABWlJnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvZG9tYWluL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_controlplane_v1_deploy, file_forge_v1_forge]);
+  fileDesc("Ch9zZXJ2aWNlcy9kb21haW4vdjEvZG9tYWluLnByb3RvEg9jb250cm9scGxhbmUudjEiRwoTQ3JlYXRlRG9tYWluUmVxdWVzdBIQCghob3N0bmFtZRgBIAEoCRITCgZvcmdfaWQYAiABKAlIAIgBAUIJCgdfb3JnX2lkIj8KFENyZWF0ZURvbWFpblJlc3BvbnNlEicKBmRvbWFpbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5Eb21haW4iVwoQR2V0RG9tYWluUmVxdWVzdBIRCglkb21haW5faWQYASABKAkSEAoIaG9zdG5hbWUYAiABKAkSEwoGb3JnX2lkGAMgASgJSACIAQFCCQoHX29yZ19pZCI8ChFHZXREb21haW5SZXNwb25zZRInCgZkb21haW4YASABKAsyFy5jb250cm9scGxhbmUudjEuRG9tYWluIjQKEkxpc3REb21haW5zUmVxdWVzdBITCgZvcmdfaWQYASABKAlIAIgBAUIJCgdfb3JnX2lkIj8KE0xpc3REb21haW5zUmVzcG9uc2USKAoHZG9tYWlucxgBIAMoCzIXLmNvbnRyb2xwbGFuZS52MS5Eb21haW4iSAoTRGVsZXRlRG9tYWluUmVxdWVzdBIRCglkb21haW5faWQYASABKAkSEwoGb3JnX2lkGAIgASgJSACIAQFCCQoHX29yZ19pZCIWChREZWxldGVEb21haW5SZXNwb25zZSJIChNWZXJpZnlEb21haW5SZXF1ZXN0EhEKCWRvbWFpbl9pZBgBIAEoCRITCgZvcmdfaWQYAiABKAlIAIgBAUIJCgdfb3JnX2lkIj8KFFZlcmlmeURvbWFpblJlc3BvbnNlEicKBmRvbWFpbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5Eb21haW4ijAEKGkNyZWF0ZURvbWFpbkJpbmRpbmdSZXF1ZXN0EhEKCWRvbWFpbl9pZBgBIAEoCRIWCg5lbnZpcm9ubWVudF9pZBgCIAEoCRIOCgZ0YXJnZXQYAyABKAkSEwoLcmVkaXJlY3RfdG8YBCABKAkSEwoGb3JnX2lkGAUgASgJSACIAQFCCQoHX29yZ19pZCJOChtDcmVhdGVEb21haW5CaW5kaW5nUmVzcG9uc2USLwoHYmluZGluZxgBIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5Eb21haW5CaW5kaW5nImMKGkRlbGV0ZURvbWFpbkJpbmRpbmdSZXF1ZXN0EhIKCmJpbmRpbmdfaWQYASABKAkSEQoJZG9tYWluX2lkGAIgASgJEhMKBm9yZ19pZBgDIAEoCUgAiAEBQgkKB19vcmdfaWQiHQobRGVsZXRlRG9tYWluQmluZGluZ1Jlc3BvbnNlImsKGUxpc3REb21haW5CaW5kaW5nc1JlcXVlc3QSGwoOZW52aXJvbm1lbnRfaWQYASABKAlIAIgBARITCgZvcmdfaWQYAiABKAlIAYgBAUIRCg9fZW52aXJvbm1lbnRfaWRCCQoHX29yZ19pZCJOChpMaXN0RG9tYWluQmluZGluZ3NSZXNwb25zZRIwCghiaW5kaW5ncxgBIAMoCzIeLmNvbnRyb2xwbGFuZS52MS5Eb21haW5CaW5kaW5nMvUHCg1Eb21haW5TZXJ2aWNlEmMKDENyZWF0ZURvbWFpbhIkLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEb21haW5SZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLkNyZWF0ZURvbWFpblJlc3BvbnNlIgaiuxgCCAESWgoJR2V0RG9tYWluEiEuY29udHJvbHBsYW5lLnYxLkdldERvbWFpblJlcXVlc3QaIi5jb250cm9scGxhbmUudjEuR2V0RG9tYWluUmVzcG9uc2UiBqK7GAIIARJgCgtMaXN0RG9tYWlucxIjLmNvbnRyb2xwbGFuZS52MS5MaXN0RG9tYWluc1JlcXVlc3QaJC5jb250cm9scGxhbmUudjEuTGlzdERvbWFpbnNSZXNwb25zZSIGorsYAggBEoIBCgxEZWxldGVEb21haW4SJC5jb250cm9scGxhbmUudjEuRGVsZXRlRG9tYWluUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5EZWxldGVEb21haW5SZXNwb25zZSIlorsYIQgBOh0KBmRlbGV0ZRITCgZkb21haW4SCWRvbWFpbl9pZBKcAQoMVmVyaWZ5RG9tYWluEiQuY29udHJvbHBsYW5lLnYxLlZlcmlmeURvbWFpblJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuVmVyaWZ5RG9tYWluUmVzcG9uc2UiP6K7GDsIATo3CgZ2ZXJpZnkSLQoGZG9tYWluEglkb21haW5faWQaGHJlc3BvbnNlLmRvbWFpbi5ob3N0bmFtZRJ4ChNDcmVhdGVEb21haW5CaW5kaW5nEisuY29udHJvbHBsYW5lLnYxLkNyZWF0ZURvbWFpbkJpbmRpbmdSZXF1ZXN0GiwuY29udHJvbHBsYW5lLnYxLkNyZWF0ZURvbWFpbkJpbmRpbmdSZXNwb25zZSIGorsYAggBEqsBChNEZWxldGVEb21haW5CaW5kaW5nEisuY29udHJvbHBsYW5lLnYxLkRlbGV0ZURvbWFpbkJpbmRpbmdSZXF1ZXN0GiwuY29udHJvbHBsYW5lLnYxLkRlbGV0ZURvbWFpbkJpbmRpbmdSZXNwb25zZSI5orsYNQgBOjEKBmRlbGV0ZRIcCg5kb21haW5fYmluZGluZxIKYmluZGluZ19pZCoJZG9tYWluX2lkEnUKEkxpc3REb21haW5CaW5kaW5ncxIqLmNvbnRyb2xwbGFuZS52MS5MaXN0RG9tYWluQmluZGluZ3NSZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLkxpc3REb21haW5CaW5kaW5nc1Jlc3BvbnNlIgaiuxgCCAFC0wEKE2NvbS5jb250cm9scGxhbmUudjFCC0RvbWFpblByb3RvUAFaUmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9kb21haW4vdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_controlplane_v1_deploy, file_forge_v1_forge]);
 
 /**
  * @generated from message controlplane.v1.CreateDomainRequest
@@ -34,6 +34,15 @@ export type CreateDomainRequest = Message<"controlplane.v1.CreateDomainRequest">
    * @generated from field: string hostname = 1;
    */
   hostname: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -76,6 +85,15 @@ export type GetDomainRequest = Message<"controlplane.v1.GetDomainRequest"> & {
    * @generated from field: string hostname = 2;
    */
   hostname: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 3;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -117,6 +135,14 @@ export const GetDomainResponseSchema: GenMessage<GetDomainResponse> = /*@__PURE_
  * @generated from message controlplane.v1.ListDomainsRequest
  */
 export type ListDomainsRequest = Message<"controlplane.v1.ListDomainsRequest"> & {
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 1;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -151,6 +177,15 @@ export type DeleteDomainRequest = Message<"controlplane.v1.DeleteDomainRequest">
    * @generated from field: string domain_id = 1;
    */
   domainId: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -181,6 +216,15 @@ export type VerifyDomainRequest = Message<"controlplane.v1.VerifyDomainRequest">
    * @generated from field: string domain_id = 1;
    */
   domainId: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -239,6 +283,15 @@ export type CreateDomainBindingRequest = Message<"controlplane.v1.CreateDomainBi
    * @generated from field: string redirect_to = 4;
    */
   redirectTo: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 5;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -281,6 +334,15 @@ export type DeleteDomainBindingRequest = Message<"controlplane.v1.DeleteDomainBi
    * @generated from field: string domain_id = 2;
    */
   domainId: string;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 3;
+   */
+  orgId?: string | undefined;
 };
 
 /**
@@ -311,6 +373,15 @@ export type ListDomainBindingsRequest = Message<"controlplane.v1.ListDomainBindi
    * @generated from field: optional string environment_id = 1;
    */
   environmentId?: string | undefined;
+
+  /**
+   * The org this request acts in (docs/orgs.md). Unset: the caller's default
+   * org. A person must be a member of it; a machine credential may name only
+   * its own org.
+   *
+   * @generated from field: optional string org_id = 2;
+   */
+  orgId?: string | undefined;
 };
 
 /**

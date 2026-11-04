@@ -32,7 +32,7 @@ lint:
     # StartDeployPlan and StartDeploy both start a detached forge job and
     # answer with the same handle GetDeployStatus polls, so they share
     # StartForgeDeployResponse by design: one client result type
-    # (frontends/web/src/api/forge-grpc.ts StartDeployResult) reads either.
+    # (frontends/web/src/hooks/forge-model.ts StartDeployResult) reads either.
     RPC_REQUEST_RESPONSE_UNIQUE:
       - proto/reliant/v1/tools_daemon.proto
       - proto/reliant/v1/forge.proto

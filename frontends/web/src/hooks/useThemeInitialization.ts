@@ -11,20 +11,11 @@ import { useEffect } from "react";
 import { settingsSync, SETTINGS_KEYS } from "../services/settingsSync";
 import { logger } from "../lib/logger";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
+import { COLOR_SCHEME_ATTR, DEFAULT_COLOR_SCHEME, DEFAULT_COLOR_SCHEME_ATTR } from "../lib/forgeTokens";
+import { applyThemeMode, followSystemTheme, parseThemeMode } from "../lib/themeMode";
 
 
-const COLOR_SCHEME_MAP: Record<string, string> = {
-  blue: "professional-blue",
-  neutral: "refined-neutral",
-  teal: "modern-teal",
-  slate: "slate",
-  forest: "forest",
-  purple: "purple-classic",
-  pink: "vibrant-pink",
-  orange: "energetic-orange",
-  red: "bold-red",
-  black: "pure-black",
-};
+const COLOR_SCHEME_MAP = COLOR_SCHEME_ATTR;
 
 export function useThemeInitialization() {
   useEffect(() => {
@@ -56,27 +47,19 @@ export function useThemeInitialization() {
 
       logger.info("[Theme] Settings sync initialized, applying database settings (fallback)");
 
-      // Apply theme mode (light/dark)
-      const theme = settingsSync.getSetting(SETTINGS_KEYS.THEME, "");
-      if (theme === "dark") {
-        document.documentElement.classList.add("dark");
-        logger.debug("[Theme] Applied dark theme from database");
-      } else if (theme === "light") {
-        document.documentElement.classList.remove("dark");
-        logger.debug("[Theme] Applied light theme from database");
-      }
-      // If no theme saved, keep whatever index.html set (system preference or default)
+      // Apply theme mode: light, dark, or the system's (also when unset).
+      applyThemeMode(parseThemeMode(settingsSync.getSetting(SETTINGS_KEYS.THEME, "")));
       
       // Apply color scheme
-      const colorScheme = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, "black");
+      const colorScheme = settingsSync.getSetting(SETTINGS_KEYS.COLOR_SCHEME, DEFAULT_COLOR_SCHEME);
       document.documentElement.setAttribute(
-        "data-color-scheme", 
-        COLOR_SCHEME_MAP[colorScheme] || "pure-black"
+        "data-color-scheme",
+        COLOR_SCHEME_MAP[colorScheme] || DEFAULT_COLOR_SCHEME_ATTR
       );
       logger.debug("[Theme] Applied color scheme from database:", colorScheme);
       
       // Apply font settings
-      // "default" (bundled Inter), matching every other read site — see the
+      // "default" (bundled Geist), matching every other read site — see the
       // note in lib/theme.ts.
       const font = settingsSync.getSetting(SETTINGS_KEYS.FONT, "default");
       const chatFont = settingsSync.getSetting(SETTINGS_KEYS.CHAT_FONT, "default");
@@ -101,4 +84,14 @@ export function useThemeInitialization() {
       cancelled = true;
     };
   }, []);
+
+  // "System" follows the OS while the app is open, not only at load.
+  useEffect(
+    () =>
+      followSystemTheme(
+        () => parseThemeMode(settingsSync.getSetting(SETTINGS_KEYS.THEME, "")),
+        () => window.dispatchEvent(new CustomEvent("theme-applied")),
+      ),
+    [],
+  );
 }

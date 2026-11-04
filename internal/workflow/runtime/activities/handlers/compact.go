@@ -4,7 +4,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -12,12 +14,12 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/accumulator"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -158,8 +160,15 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "Compact")
 
 	// Generate summary of messages to be compacted
-	summary, err := a.generateCompactionSummary(ctx, chat, thread, rtx.FallbackModel, rtx.Failover, currentContextMessages, summarizeWith)
+	summary, err := a.generateCompactionSummaryOnProvider(ctx, chat, thread, rtx.FallbackModel, rtx.Failover, currentContextMessages, summarizeWith, rtx)
 	if err != nil {
+		if errors.Is(err, errCompactionOverflow) {
+			// Reuse the existing non-destructive skip outcome. Do not create a
+			// new context window from an unusable or incomplete summary.
+			logging.WarnContext(ctx, "[COMPACTION] Retaining original context", "chatID", rtx.ChatID, "thread", thread, "error", err)
+			a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "")
+			return CompactOutput{SkippedReason: err.Error()}, nil
+		}
 		return CompactOutput{}, fmt.Errorf("failed to generate compaction summary: %w", err)
 	}
 
@@ -226,6 +235,19 @@ func (a *CompactActivity) saveCompactionMessage(ctx context.Context, chatID, thr
 type GenerateTitleActivity struct {
 	repo           GenerateTitleStore
 	driverResolver drivers.DriverResolver
+	// routing picks which account of the resolved provider titles the chat,
+	// and benches or retires one the provider refuses; nil routes nothing.
+	routing *AccountRouting
+}
+
+// WithAccountRouting wires multi-account routing into titling. Without it the
+// title request always goes to the provider's default account (its first by
+// priority), even while that account is limited or its key rejected and every
+// other account of the provider is healthy, and a refusal records nothing, so
+// the next chat's title meets the same account first again.
+func (a *GenerateTitleActivity) WithAccountRouting(r *AccountRouting) *GenerateTitleActivity {
+	a.routing = r
+	return a
 }
 
 // NewGenerateTitleActivity creates a new GenerateTitleActivity
@@ -288,7 +310,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 		logging.WarnContext(ctx, "[GenerateTitle] LLM generation exhausted, writing truncated first message",
 			"chatID", input.ChatID, "titleLen", len(generatedTitle))
 	} else {
-		generatedTitle, err = a.generateTitle(ctx, chat.UserID, input.FirstMessage)
+		generatedTitle, err = a.generateTitleForChat(ctx, chat.UserID, chat.ID, input.FirstMessage)
 		if err != nil {
 			attempt := int32(1)
 			func() {
@@ -369,12 +391,16 @@ var compactionModelTier = []models.ModelID{
 
 // generateCompactionSummary generates a summary of messages using the LLM.
 //
-// Only the model tier and the summarization prompt are compaction-specific.
-// The request envelope — thinking configuration, provider options, driver
-// selection, tool-less history sanitization — flows through the same
-// request-construction path as a normal CallLLM turn (resolveLLMCall +
-// prepareHistoryForLLM), so provider constraints are handled in one place.
+// The request envelope — thinking configuration, provider options and driver
+// selection — flows through resolveLLMCall as a normal CallLLM turn does.
+// Compaction uses its own lossless text projection instead of the normal
+// tool-result trim: anything not summarized must remain in the continuation.
 func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *db.Chat, thread, fallbackModel string, failover types.FailoverPolicy, messages []message.Message, summarizeWith *reliantv1.ModelSelector) (string, error) {
+	return a.generateCompactionSummaryOnProvider(ctx, chat, thread, fallbackModel, failover, messages, summarizeWith, types.RuntimeContext{})
+}
+
+func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Context, chat *db.Chat, thread, fallbackModel string, failover types.FailoverPolicy, messages []message.Message, summarizeWith *reliantv1.ModelSelector, rtx types.RuntimeContext) (string, error) {
+	provider := rtx.ChatProvider
 	if len(messages) == 0 {
 		return "", fmt.Errorf("no messages to summarize")
 	}
@@ -387,20 +413,36 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 		Temperature: &temperature,
 		// The summary is a request over this thread's own prefix, so it goes to
 		// the thread's account.
-		ThreadID: thread,
-		Routing:  a.routing,
-		Failover: failover,
+		ThreadID:          thread,
+		ChatProvider:      provider,
+		ClearProviderPins: rtx.ClearProviderPins,
+		Descendant:        rtx.Descendant,
+		PresetModelTags:   rtx.PresetModelTags,
+		ChatModel:         chatModelSelector(rtx.ChatModel),
+		ThreadModelChosen: rtx.ThreadModelChosen,
+		Routing:           a.routing,
+		Failover:          failover,
+		// The run's provider choice and the user's tag preferences, exactly as
+		// CallLLM passes them. Without them a tag selector ([moderate]) resolved
+		// to the catalog default (Claude on Anthropic) while the agent loop ran
+		// on gpt-6.1-sol on codex: a thread of ~740k codex
+		// tokens was sent to a 1M Claude window as 1.11M Claude tokens and
+		// refused, ending the agent (prod, 2026-10-26).
+		RunProviders: rtx.ProviderPreference,
+	}
+	if a.repo != nil {
+		spec.TagPrefsReader = a.repo
 	}
 
 	// Pick the summarization model. With an injected resolver (tests) the
 	// resolver supplies its own driver/model, mirroring CallLLM.
 	if a.driverResolver == nil {
-		selector, reason, err := resolveCompactionModel(ctx, chat.UserID, summarizeWith)
+		selector, reason, err := resolveCompactionModelForCall(ctx, chat.UserID, summarizeWith, spec)
 		if err != nil {
 			return "", err
 		}
 		spec.Selector = selector
-		if fallbackModel != "" {
+		if fallbackModel != "" && provider == "" {
 			// The thread is on another provider until its own resets.
 			spec.Selector = models.ModelSelector{ID: fallbackModel, RequireOutputModality: models.ModalityText}
 		}
@@ -418,41 +460,61 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 
 	compactionPrompts := []string{`You are a specialist at summarizing conversations.`}
 
-	// Add ephemeral user message at the end to trigger summarization.
-	// This message is not saved to the DB, only passed to the LLM.
-	history := append(messages, message.Message{
-		Role: "user",
-		Parts: []message.ContentPart{
-			message.TextContent{
-				Text: compactionMsg,
-			},
-		},
-	})
-
-	// Standard pre-request transforms. Summarization is a read-only pass that
-	// passes no tools, so this also flattens tool_use/tool_result blocks to
-	// text (providers reject tool-call blocks on tool-less requests). The trim
-	// backstop scales with the summarization model's prompt ceiling for the
-	// SELECTED provider, so the summarization request itself fits.
-	history = prepareHistoryForLLM(chat.ID, history, compactionPrompts, nil,
-		promptCeiling(resolved.Definition, resolved.ProviderDriver, resolved.Model))
-
-	// Call LLM to generate summary using streaming (required for long operations)
-	// We use streaming mode because Anthropic requires it for operations that may take >10 minutes
-	// The accumulator will collect all chunks and return the final response
-	response, err := accumulator.StreamAndAccumulate(a.routing.observe(ctx, chat.UserID, resolved.Account), resolved.Driver, compactionPrompts, history, []tools.Tool{})
-	if err != nil {
-		return "", a.routing.usageLimitFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{
+	// Build a read-only text transcript, not a trimmed request history: a new
+	// context boundary makes anything omitted here invisible to later turns.
+	// Prefix-only recovery retains the exact unprocessed suffix in the same
+	// persisted handoff, with no new state or retrieval contract.
+	transcript, boundaries := renderCompactionTranscript(messages)
+	prefixEnd := len(transcript)
+	overhead := len(compactionMsg)
+	for _, prompt := range compactionPrompts {
+		overhead += len(prompt)
+	}
+	// Each request below, including the smaller-prefix retries after an
+	// overflow, is a request the provider counted; the meter records each one.
+	meter := newUsageMeter(a.repo, chat.UserID, chat.ID, store.LLMPurposeCompaction)
+	for attempt := 1; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		history := []message.Message{
+			{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: transcript[:prefixEnd]}}},
+			{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: compactionMsg}}},
+		}
+		response, err := meter.streamAndAccumulate(a.routing.observe(ctx, chat.UserID, resolved.Account), resolved, compactionPrompts, history, []tools.Tool{})
+		if err == nil {
+			if strings.TrimSpace(response.Content) == "" {
+				return "", fmt.Errorf("empty summary generated")
+			}
+			if prefixEnd == len(transcript) {
+				return response.Content, nil
+			}
+			summary := response.Content + unprocessedContinuation + transcript[prefixEnd:]
+			// A non-shrinking handoff would just trigger another compaction.
+			// Keep the original context instead of replacing it with more text.
+			if len(summary) >= len(transcript) {
+				return "", fmt.Errorf("%w: summary did not reclaim space", errCompactionOverflow)
+			}
+			return summary, nil
+		}
+		if overflow, ok := parseContextOverflow(err); ok {
+			next := summaryPrefixEnd(boundaries, nextSummaryPrefixBudget(prefixEnd, overhead, overflow))
+			if next < minimumSummaryPrefixBytes {
+				// Never fracture a user instruction or tool call/result merely
+				// to fit. No useful complete prefix fits: keep the old window.
+				return "", fmt.Errorf("%w: no complete prefix fits: %v", errCompactionOverflow, err)
+			}
+			logging.WarnContext(ctx, "[COMPACTION] Summarizer overflow; retrying a smaller prefix and retaining the unprocessed continuation",
+				"chatID", chat.ID, "thread", thread, "attempt", attempt,
+				"prefixBytes", prefixEnd, "nextPrefixBytes", next)
+			prefixEnd = next
+			continue
+		}
+		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{
 			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: failover,
 		})
 	}
-
-	if response.Content == "" {
-		return "", fmt.Errorf("empty summary generated")
-	}
-
-	return response.Content, nil
 }
 
 // resolveCompactionModel picks the model that summarizes the conversation.
@@ -468,10 +530,16 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 //
 // The tier list remains the fallback for nodes that declare no model and for
 // an agent model that no longer resolves against the user's providers.
-func resolveCompactionModel(ctx context.Context, userID string, preferred *reliantv1.ModelSelector) (models.ModelSelector, string, error) {
+func resolveCompactionModelForCall(ctx context.Context, userID string, preferred *reliantv1.ModelSelector, spec llmCallSpec) (models.ModelSelector, string, error) {
 	availableDrivers := getAvailableDrivers(ctx, userID)
 	availableProviders := configuredProviderIDs(availableDrivers)
 	registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
+	if spec.ChatProvider != "" {
+		availableProviders = nil
+		if cfg, ok := availableDrivers.Drivers[models.DriverID(spec.ChatProvider)]; ok && cfg.IsConfigured() {
+			availableProviders = []string{spec.ChatProvider}
+		}
+	}
 
 	if preferred != nil && (preferred.GetId() != "" || len(preferred.GetTags()) > 0) {
 		selector := models.ModelSelector{
@@ -482,6 +550,24 @@ func resolveCompactionModel(ctx context.Context, userID string, preferred *relia
 			// preference and degrades gracefully, so this hard filter keeps it
 			// off an image-generation model.
 			RequireOutputModality: models.ModalityText,
+		}
+		if spec.ChatProvider != "" {
+			own := selector
+			spec.Selector = selector
+			selector = switchSelector(spec)
+			if _, err := registry.Resolve(selector, availableProviders); err != nil {
+				// The agent turn ran on the chat's model for the same reason
+				// (resolveLLMCall), so its window is the one that filled.
+				if fallback, ok := chatModelFallback(spec); ok {
+					chatSelector := switchSelector(fallback)
+					chatSelector.RequireOutputModality = models.ModalityText
+					if _, ferr := registry.Resolve(chatSelector, availableProviders); ferr == nil {
+						return chatSelector, "the chat's model: the agent's own cannot run on the selected chat provider", nil
+					}
+				}
+				return models.ModelSelector{}, "", providerSwitchHold(spec.ChatProvider, own, err)
+			}
+			return selector, "agent selector on the selected chat provider", nil
 		}
 		if _, err := registry.Resolve(selector, availableProviders); err == nil {
 			return selector, "agent model (summarizes in the window that filled)", nil
@@ -496,6 +582,9 @@ func resolveCompactionModel(ctx context.Context, userID string, preferred *relia
 		if _, err := registry.Resolve(selector, availableProviders); err == nil {
 			return selector, "best available from tier list", nil
 		}
+	}
+	if spec.ChatProvider != "" {
+		return models.ModelSelector{}, "", providerSwitchHold(spec.ChatProvider, models.ModelSelector{Tags: spec.PresetModelTags}, fmt.Errorf("no compaction model is available on the selected provider"))
 	}
 	return models.ModelSelector{}, "", fmt.Errorf("no available models for compaction (user has no API keys configured)")
 }
@@ -548,6 +637,12 @@ func titleModelFallbackSelector() models.ModelSelector {
 
 // generateTitle generates a concise, meaningful title using the LLM
 func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, firstMessage string) (string, error) {
+	return a.generateTitleForChat(ctx, userID, "", firstMessage)
+}
+
+// generateTitleForChat is generateTitle for a known chat, which the usage
+// ledger records the title request against.
+func (a *GenerateTitleActivity) generateTitleForChat(ctx context.Context, userID, chatID, firstMessage string) (string, error) {
 	if firstMessage == "" {
 		return "", fmt.Errorf("first message is empty")
 	}
@@ -574,13 +669,95 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 		spec.Selector = titleModelSelector()
 		spec.FallbackSelector = titleModelFallbackSelector()
 	}
+	// The account comes from the same router a chat turn's does, so a limited,
+	// benched or signed-out account is skipped before any request. ThreadID
+	// stays empty: a title belongs to no thread, so it reads and writes no
+	// sticky assignment (and never pins the chat's root thread to the account
+	// the title happened to use).
+	spec.Routing = a.routing
 
+	// A refusal benches the refused account or takes its key out of rotation
+	// (providerFailure), so re-resolving routes to another account of the
+	// provider. That is the retry a chat turn gets from its workflow; a title
+	// has no workflow-level failover (a usage-limit failure is not retryable,
+	// and the title workflow settles for the truncated message), so it makes the
+	// retry here.
+	//
+	// When no account of the provider can serve now, the title moves to
+	// another connected provider's fast model. A chat turn deliberately does
+	// not (cross-provider fallback is the chat's opt-in), but a title is a
+	// one-shot request with no conversation, prompt cache or reasoning state to
+	// keep on one provider, and a real title beats the truncated first message.
+	var raw string
+	var err error
+	var lastRefusal error
+	// The title makes up to titleAttempts requests (an account or provider
+	// that refuses is retried elsewhere); the meter records each.
+	meter := newUsageMeter(a.repo, userID, chatID, store.LLMPurposeTitle)
+	for range titleAttempts {
+		raw, err = a.requestTitle(ctx, meter, spec, firstMessage)
+		var refused *types.UsageLimitFailure
+		if err == nil || !errors.As(err, &refused) {
+			break
+		}
+		lastRefusal = err
+		if refused.Facts.AlternativeAccount {
+			logging.InfoContext(ctx, "[GenerateTitle] Account refused; retrying on another account of the provider",
+				"userID", userID, "provider", refused.Facts.Provider, "accountID", refused.Facts.AccountID)
+			continue
+		}
+		if refused.Facts.Provider == "" || slices.Contains(spec.ExcludeProviders, refused.Facts.Provider) {
+			break
+		}
+		logging.InfoContext(ctx, "[GenerateTitle] Every account of the provider is limited; titling on another provider",
+			"userID", userID, "provider", refused.Facts.Provider)
+		spec.ExcludeProviders = append(spec.ExcludeProviders, refused.Facts.Provider)
+	}
+	// Nothing left to move to: the limit is the failure worth reporting, not
+	// the resolution that found no other provider.
+	var unresolved *resolveFailure
+	if err != nil && lastRefusal != nil && errors.As(err, &unresolved) {
+		err = lastRefusal
+	}
+	if err != nil {
+		return "", err
+	}
+
+	// Clean up the title
+	title := strings.TrimSpace(raw)
+	// Remove quotes if present
+	title = strings.Trim(title, `"`)
+	title = strings.Trim(title, `'`)
+	// Remove newlines and collapse spaces
+	title = strings.ReplaceAll(title, "\n", " ")
+	title = strings.Join(strings.Fields(title), " ")
+
+	// Backstop only — the prompt and schema ask for 4 words. This clamps a
+	// runaway response without mangling a good 5- or 6-word title.
+	words := strings.Fields(title)
+	if len(words) > 8 {
+		title = strings.Join(words[:8], " ") + "..."
+	}
+
+	return truncateRunes(title, 60), nil
+}
+
+// titleAttempts bounds the accounts and providers one title tries. Each
+// refused attempt is a fast 4xx, and an account already known to be limited is
+// never called at all (the router skips it, and a provider with every account
+// limited is refused without a request), so this only caps how many limits a
+// single title can discover in one go.
+const titleAttempts = 4
+
+// requestTitle makes one title request: resolve the model and account, stream,
+// and return the set_title argument. A provider refusal is recorded against the
+// serving account before it is returned.
+func (a *GenerateTitleActivity) requestTitle(ctx context.Context, meter *usageMeter, spec llmCallSpec, firstMessage string) (string, error) {
 	titleTool := tools.NewSetTitleTool()
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, spec)
 	if err != nil {
 		return "", err
 	}
-	driver := resolved.Driver
 	logging.DebugContext(ctx, "[GenerateTitle] Selected model", "model", resolved.ModelID)
 
 	// Wrap the message in a delimiter and restate the instruction after it.
@@ -621,33 +798,18 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 	// reachable the moment model selection opened up to any "fast" model.
 	// Accumulating yields the same single response and preserves tool calls,
 	// which is all this path reads.
-	response, err := accumulator.StreamAndAccumulate(ctx, driver, prompt, messages, []tools.Tool{titleTool})
+	//
+	// The account's rate-limit observer rides on the request, so its headers
+	// update the account's limit state exactly as a chat turn's do.
+	response, err := meter.streamAndAccumulate(a.routing.observe(ctx, spec.UserID, resolved.Account), resolved, prompt, messages, []tools.Tool{titleTool})
 	if err != nil {
-		return "", fmt.Errorf("failed to generate title: %w", err)
+		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate title: %w", err), usageLimitContext{
+			UserID: spec.UserID, Driver: models.DriverID(resolved.ProviderDriver),
+			ModelID: definitionID(resolved.Definition), Account: resolved.Account,
+		})
 	}
 
-	raw, err := titleFromToolCalls(response.ToolCalls)
-	if err != nil {
-		return "", err
-	}
-
-	// Clean up the title
-	title := strings.TrimSpace(raw)
-	// Remove quotes if present
-	title = strings.Trim(title, `"`)
-	title = strings.Trim(title, `'`)
-	// Remove newlines and collapse spaces
-	title = strings.ReplaceAll(title, "\n", " ")
-	title = strings.Join(strings.Fields(title), " ")
-
-	// Backstop only — the prompt and schema ask for 4 words. This clamps a
-	// runaway response without mangling a good 5- or 6-word title.
-	words := strings.Fields(title)
-	if len(words) > 8 {
-		title = strings.Join(words[:8], " ") + "..."
-	}
-
-	return truncateRunes(title, 60), nil
+	return titleFromToolCalls(response.ToolCalls)
 }
 
 // truncateRunes shortens s to at most maxRunes runes, appending an ellipsis

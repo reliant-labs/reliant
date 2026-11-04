@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -35,7 +36,17 @@ func (r *runner) runSteps(ctx context.Context, steps []step) int {
 			cmd.Dir = s.dir
 			cmd.Env = append(os.Environ(), s.env...)
 			cmd.Stdout, cmd.Stderr = out, errOut
-			return cmd.Run()
+			if s.budget == nil {
+				return cmd.Run()
+			}
+			s.budget.out = out
+			cmd.Stdout = s.budget
+			err := cmd.Run()
+			_ = s.budget.Close()
+			if s.budget.verdict(out) && err == nil {
+				err = errors.New("a test this change wrote is over the per-test budget")
+			}
+			return err
 		}
 	}
 	run := func(s step) bool {

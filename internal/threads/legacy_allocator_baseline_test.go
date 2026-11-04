@@ -20,7 +20,8 @@ import (
 //
 // A regression test that passes is only meaningful if it would have FAILED
 // against the code it replaces. This test keeps the old write shape alive —
-// MAX()-scan allocation (GetNextOrdinal / GetNextSeq) plus the message insert,
+// MAX()-scan allocation (legacyMaxAllocation, the deleted GetNextOrdinal /
+// GetNextSeq) plus the message insert,
 // all inside one SERIALIZABLE transaction — and asserts that shape still
 // produces serialization failures under the same concurrency the new path
 // handles cleanly.
@@ -67,11 +68,7 @@ func TestLegacyAllocatorBaseline_StillConflicts(t *testing.T) {
 				// retry, and still exhausted the ladder 35 times in one
 				// session — so the raw rate is the honest number.
 				err := h.repo.RunTx(ctx, orm.Serializable.WithMaxAttempts(1), func(txCtx context.Context) error {
-					ordinal, err := h.repo.GetNextOrdinal(txCtx, threadID)
-					if err != nil {
-						return err
-					}
-					seq, err := h.repo.GetNextSeq(txCtx, h.chatID, threadID)
+					ordinal, seq, err := legacyMaxAllocation(txCtx, h.repo, threadID, h.chatID)
 					if err != nil {
 						return err
 					}
@@ -180,4 +177,15 @@ func runNewPathUnderContention(t *testing.T, h *testHelper, writers, messagesPer
 	wg.Wait()
 
 	return failures
+}
+
+// legacyMaxAllocation is the allocation production no longer has: one past
+// the highest ordinal of the thread and the highest seq of the chat, read
+// from messages. It lives on here only as this control's contention source.
+func legacyMaxAllocation(ctx context.Context, repo *db.Repo, threadID, chatID string) (ordinal, seq int64, err error) {
+	err = repo.ORM().QueryRow(ctx, `
+SELECT COALESCE((SELECT MAX(ordinal) FROM messages WHERE thread_id = $1), -1) + 1,
+       COALESCE((SELECT MAX(seq) FROM messages WHERE chat_id = $2), -1) + 1`,
+		threadID, chatID).Scan(&ordinal, &seq)
+	return ordinal, seq, err
 }

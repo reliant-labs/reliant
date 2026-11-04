@@ -33,7 +33,7 @@
 import { AlertTriangle, GitCommit, Package } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Tooltip } from "@/components/ui/Tooltip";
+import Tooltip from "@/components/forge-ui/tooltip";
 import {
   changeShapeOf,
   commitRangeKind,
@@ -81,11 +81,11 @@ export function PromotePlanView({ plan, showShipsNothing = true }: PromotePlanVi
         </div>
         {/* Forge's own sentence when it sent one — it names the releases and the
             gap. The vocabulary's blurb is the fallback, never a replacement. */}
-        <p className="mt-1 text-xs text-muted-foreground" data-testid="promote-direction-detail">
+        <p className="mt-1 text-xs text-ink-muted" data-testid="promote-direction-detail">
           {plan.direction_detail || style.blurb}
         </p>
         {typeof plan.releases_between === "number" && plan.releases_between > 0 && (
-          <p className="mt-1 text-2xs text-muted-foreground">
+          <p className="mt-1 text-2xs text-ink-muted">
             {plan.releases_between} release{plan.releases_between === 1 ? "" : "s"} separate them.
           </p>
         )}
@@ -96,7 +96,7 @@ export function PromotePlanView({ plan, showShipsNothing = true }: PromotePlanVi
       {/* IMAGES. */}
       <section className="space-y-2" data-testid="promote-images">
         <div className="flex items-baseline justify-between gap-3">
-          <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+          <h3 className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
             <Package className="h-3.5 w-3.5" aria-hidden="true" />
             Images
           </h3>
@@ -104,7 +104,7 @@ export function PromotePlanView({ plan, showShipsNothing = true }: PromotePlanVi
         </div>
 
         {images.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+          <p className="rounded-md border border-dashed border-border px-3 py-4 text-center text-xs text-ink-muted">
             This plan lists no images.
           </p>
         ) : (
@@ -140,26 +140,26 @@ function BindingSummary({ plan }: { plan: ForgePromotePlan }) {
       data-testid="promote-binding"
     >
       <div className="space-y-1">
-        <h4 className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        <h4 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
           Currently bound
         </h4>
         {unbound ? (
           <p
             data-testid="promote-current-unbound"
-            className="text-xs text-muted-foreground"
+            className="text-xs text-ink-muted"
           >
             Never promoted — this environment has no binding yet.
           </p>
         ) : (
           <>
-            <p className="font-mono text-sm text-foreground" data-testid="promote-current-release">
+            <p className="font-mono text-sm text-ink" data-testid="promote-current-release">
               {current?.release || "unknown"}
             </p>
             {current?.promoted_at && (
               // Promote time, labelled as such. It looks like a deploy timestamp
               // and is not one.
               <Tooltip content="When this environment was PROMOTED to its current release — not when it was deployed.">
-                <span className="text-2xs text-muted-foreground">
+                <span className="text-2xs text-ink-muted">
                   promoted {formatStamp(current.promoted_at)}
                 </span>
               </Tooltip>
@@ -167,7 +167,7 @@ function BindingSummary({ plan }: { plan: ForgePromotePlan }) {
             {current?.release_known === false && (
               // A real binding pointing at a ledger this checkout has never
               // seen. Not an error; provenance is simply unavailable.
-              <p className="text-2xs text-muted-foreground">
+              <p className="text-2xs text-ink-muted">
                 {current.note ||
                   "This release's ledger is not in this checkout, so its provenance cannot be shown."}
               </p>
@@ -178,17 +178,17 @@ function BindingSummary({ plan }: { plan: ForgePromotePlan }) {
       </div>
 
       <div className="space-y-1">
-        <h4 className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+        <h4 className="text-2xs font-medium uppercase tracking-wide text-ink-muted">
           Promoting to
         </h4>
-        <p className="font-mono text-sm text-foreground" data-testid="promote-target-release">
+        <p className="font-mono text-sm text-ink" data-testid="promote-target-release">
           {target?.release || plan.release || "unknown"}
         </p>
         {target?.created_at && (
-          <span className="text-2xs text-muted-foreground">cut {formatStamp(target.created_at)}</span>
+          <span className="text-2xs text-ink-muted">cut {formatStamp(target.created_at)}</span>
         )}
         {typeof target?.images === "number" && (
-          <p className="text-2xs text-muted-foreground">
+          <p className="text-2xs text-ink-muted">
             pins {target.images} image{target.images === 1 ? "" : "s"}
           </p>
         )}
@@ -208,7 +208,7 @@ function DirtyBadge({ testId }: { testId: string }) {
     <Tooltip content="This release was cut from a tree with uncommitted changes. The bytes it ships correspond to no reviewable commit, so what is in it cannot be established from git.">
       <span
         data-testid={testId}
-        className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-2xs text-destructive-ink"
+        className="inline-flex items-center gap-1 rounded-full bg-danger-surface px-2 py-0.5 text-2xs text-danger-ink"
       >
         <AlertTriangle className="h-3 w-3" aria-hidden="true" />
         dirty tree
@@ -247,7 +247,7 @@ function TallyStrip({ plan }: { plan: ForgePromotePlan }) {
                 "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs",
                 changeShapeOf(entry.change) === "structural"
                   ? cn("border border-solid", style.foreground)
-                  : "text-muted-foreground"
+                  : "text-ink-muted"
               )}
             >
               {style.sigil && <span aria-hidden="true">{style.sigil}</span>}
@@ -292,10 +292,10 @@ function ImageChangeRow({ image }: { image: ForgePromoteImageChange }) {
         {style.label}
       </span>
 
-      <span className="font-mono text-xs text-foreground">{image.image}</span>
+      <span className="font-mono text-xs text-ink">{image.image}</span>
 
       <Tooltip content={style.blurb}>
-        <span className="font-mono text-2xs text-muted-foreground">
+        <span className="font-mono text-2xs text-ink-muted">
           {shape === "structural" ? (
             // One side genuinely does not exist. No arrow, no empty half.
             <>{shortDigest(image.target_digest || image.current_digest)}</>
@@ -337,7 +337,7 @@ function CommitRange({ commits }: { commits: ForgePromoteCommitRange | undefined
       data-range-kind={kind}
       data-range-state={commits?.state ?? "unknown"}
     >
-      <h3 className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+      <h3 className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
         <GitCommit className="h-3.5 w-3.5" aria-hidden="true" />
         {reverts ? "Commits being taken away" : "Commits being promoted"}
       </h3>
@@ -346,34 +346,34 @@ function CommitRange({ commits }: { commits: ForgePromoteCommitRange | undefined
         // Forge's own explanation, and deliberately no number.
         <p
           data-testid="promote-commits-unavailable"
-          className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
+          className="rounded-md border border-dashed border-border px-3 py-2 text-xs text-ink-muted"
         >
           {commits?.detail ||
             "The commit range could not be established, so the source change being promoted is not known."}
         </p>
       ) : kind === "empty-by-definition" ? (
-        <p data-testid="promote-commits-none" className="text-xs text-muted-foreground">
+        <p data-testid="promote-commits-none" className="text-xs text-ink-muted">
           {commits?.detail || "There is no commit range for this promote."}
         </p>
       ) : (
         <>
-          <p data-testid="promote-commits-count" className="text-xs text-foreground">
+          <p data-testid="promote-commits-count" className="text-xs text-ink">
             {commits?.count ?? 0} commit{(commits?.count ?? 0) === 1 ? "" : "s"}
             {reverts && (
-              <span className="text-destructive-ink"> would be reverted by this rollback</span>
+              <span className="text-danger-ink"> would be reverted by this rollback</span>
             )}
           </p>
           {(commits?.commits?.length ?? 0) > 0 && (
             <ul className="space-y-0.5">
               {commits?.commits?.map((line) => (
-                <li key={line} className="truncate font-mono text-2xs text-muted-foreground">
+                <li key={line} className="truncate font-mono text-2xs text-ink-muted">
                   {line}
                 </li>
               ))}
             </ul>
           )}
           {commits?.truncated && (
-            <p className="text-2xs text-muted-foreground">
+            <p className="text-2xs text-ink-muted">
               Showing the most recent of {commits.count} commits.
             </p>
           )}
@@ -412,7 +412,7 @@ export function PlanWritesNothingNotice({ plan }: { plan: ForgePromotePlan }) {
       data-testid="promote-plan-writes-nothing"
       className="rounded-lg border border-dashed border-border px-4 py-3"
     >
-      <p className="text-xs text-foreground">
+      <p className="text-xs text-ink">
         {plan.note ||
           "This is a preview. Nothing has been written or deployed yet — confirming records " +
             "the release, applies it, and waits for it to become healthy."}

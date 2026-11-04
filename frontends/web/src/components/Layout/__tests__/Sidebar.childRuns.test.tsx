@@ -13,34 +13,30 @@
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 
 import { ChatState } from "../../../gen/reliant/v1/chat_pb";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
 import { useChatStore } from "../../../store/chatStore";
 import { useWorktreeStore } from "../../../store/worktreeStore";
-import { useProcessStore } from "../../../store/processStore";
 import { useProjectStore } from "../../../store/projectStore";
 
-vi.mock("../../ui/Tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+vi.mock("../../forge-ui/tooltip", () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
-vi.mock("../../ui/ContextMenu", () => ({ ContextMenu: () => null }));
+vi.mock("../../forge-ui/context_menu", () => ({ default: () => null }));
 vi.mock("../../../hooks/useDebounce", () => ({ useDebounce: <T,>(value: T) => value }));
 
-const listRuns = vi.fn(async () => ({ runs: [], nextPageToken: "" }));
-vi.mock("../../../api/grpc-client", async () => {
-  const actual = await vi.importActual<typeof import("../../../api/grpc-client")>("../../../api/grpc-client");
-  return {
-    ...actual,
-    grpcClient: new Proxy(actual.grpcClient, {
-      get(target, prop) {
-        if (prop === "run") return () => ({ listRuns });
-        return Reflect.get(target, prop);
-      },
-    }),
-  };
-});
+// RunService is reached through the generated hooks, so it is answered at
+// the transport.
+const listRuns = vi.fn(async (_request: { parentChatId?: string }) => ({ runs: [], nextPageToken: "" }));
+beforeEach(() =>
+  setTransport(mockTransport({ "RunService.ListRuns": (request) => listRuns(request as { parentChatId?: string }) })),
+);
+afterEach(() => setTransport(null));
 
 // What the server sends: each chat carries its workspace.
 const workspace = {
@@ -60,18 +56,23 @@ const chats: Array<Record<string, unknown>> = ["chat-1", "chat-2", "chat-3"].map
   updatedAt: "2024-01-01T00:00:00.000Z",
   lastMessageAt: "2024-01-01T00:00:00.000Z",
   unread: false,
-  state: ChatState.ACTIVE,
+  state: ChatState.IDLE,
   worktreeId: "worktree-1",
   projectId: "project-1",
 }));
 
+// Stable, as a query result is: a new array each render would re-run the
+// sidebar's effects on every render.
+const NO_MAIN_WORKTREES: never[] = [];
+
 vi.mock("../../../hooks/chat-queries", () => ({
   useChatListWithWorkspaces: () => ({
-    data: { chats, lastUserUpdateSequence: 0, mainWorktree: undefined },
+    data: { chats, lastUserUpdateSequence: 0, mainWorktrees: NO_MAIN_WORKTREES },
     isLoading: false,
   }),
   useArchivedChats: () => ({ data: [], isFetched: true }),
-  useDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn() }),
+  useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
   useChat: () => ({ data: undefined }),
@@ -90,6 +91,7 @@ vi.mock("../../../hooks/inbox-queries", async () => {
 vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutateAsync: vi.fn() }) }));
 
 import { Sidebar } from "../Sidebar";
+import { getCachedWorktrees } from "../../../hooks/worktree-queries";
 
 describe("Sidebar and child runs", () => {
   beforeEach(() => {
@@ -100,18 +102,17 @@ describe("Sidebar and child runs", () => {
     >);
     // Empty on purpose: the sidebar groups from the chat list alone.
     useWorktreeStore.setState({
-      worktrees: [],
-      currentWorktree: null,
+      currentWorktreeId: null,
+      currentWorktreeProjectId: null,
       switchWorktreeContext: vi.fn(async () => undefined),
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
-    useProcessStore.setState({ fetchProcesses: vi.fn() } as Partial<ReturnType<typeof useProcessStore.getState>>);
     useProjectStore.setState({
       currentProject: {
         id: "project-1",
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         created_at: "2024-01-01T00:00:00.000Z",
         updated_at: "2024-01-01T00:00:00.000Z",
         last_active: "2024-01-01T00:00:00.000Z",
@@ -136,7 +137,7 @@ describe("Sidebar and child runs", () => {
       expect(screen.getByText("agent/112")).toBeInTheDocument();
       expect(screen.getByText("feature/test")).toBeInTheDocument();
       expect(screen.queryByText("Unknown workspace")).not.toBeInTheDocument();
-      expect(useWorktreeStore.getState().worktrees).toEqual([]);
+      expect(getCachedWorktrees()).toEqual([]);
     } finally {
       chats.pop();
     }
@@ -165,7 +166,7 @@ describe("Sidebar and child runs", () => {
         <Sidebar />
       </QueryClientProvider>,
     );
-    for (const chat of chats) expect(await screen.findByText(chat.title)).toBeInTheDocument();
+    for (const chat of chats) expect(await screen.findByText(chat.title as string)).toBeInTheDocument();
     // Let any mounted queries fire.
     await new Promise((resolve) => setTimeout(resolve, 50));
 

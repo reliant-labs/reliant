@@ -1,12 +1,13 @@
 import { Loader2, RefreshCw } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import type { ProviderAccount } from "../../../api/provider-account-grpc";
+import type { ProviderAccount } from "../../../types/providerAccount";
 import {
   effectiveWindow,
   formatAgo,
   formatResetsIn,
   isUsageStale,
   usageTone,
+  windowShortLabel,
   type UsageTone,
 } from "./accountFormat";
 
@@ -21,6 +22,46 @@ const TEXT: Record<UsageTone, string> = {
   warn: "text-warning-ink",
   danger: "text-destructive-ink",
 };
+
+/**
+ * The one-line form of the bars, for a healthy account's collapsed row: a
+ * short window name, a small meter and the percentage, per window. Renders
+ * nothing for an account with no windows (an API key, Reliant credits) — the
+ * row says "Per-minute limits only" only when someone opens it.
+ */
+export function UsageMeters({ account, now }: { account: ProviderAccount; now: Date }) {
+  if (account.windows.length === 0) return null;
+  return (
+    <div className="hidden shrink-0 items-center gap-3 sm:flex" data-testid="usage-meters">
+      {account.windows.map((w) => {
+        const eff = effectiveWindow(w, account.usageObservedAt, now);
+        const tone = usageTone(eff.used, w, account);
+        const pct = eff.used === null ? null : Math.round(eff.used * 100);
+        const name = w.label || w.name;
+        return (
+          <span
+            key={w.name}
+            role="img"
+            aria-label={pct === null ? `${name} usage unknown` : `${name} ${pct}% used`}
+            data-tone={tone}
+            className="flex items-center gap-1.5 text-2xs"
+          >
+            <span className="text-muted-foreground">{windowShortLabel(w)}</span>
+            <span className="h-1 w-10 overflow-hidden rounded-full bg-foreground/10">
+              {pct !== null && (
+                <span
+                  className={cn("block h-full rounded-full", FILL[tone])}
+                  style={{ width: `${Math.max(pct, pct > 0 ? 4 : 0)}%` }}
+                />
+              )}
+            </span>
+            <span className={cn("w-7 tabular-nums", TEXT[tone])}>{pct === null ? "–" : `${pct}%`}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 interface UsageBarsProps {
   account: ProviderAccount;

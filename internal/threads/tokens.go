@@ -20,7 +20,7 @@ func (s *Service) GetContextUsage(ctx context.Context, threadID string) (*Contex
 	// Verify thread exists
 	_, _, err := s.repo.GetThreadWithParent(ctx, threadID)
 	if err != nil {
-		return nil, fmt.Errorf("thread not found: %w", err)
+		return nil, lookupFailed(err, "thread not found", "failed to load thread")
 	}
 
 	// Get current context sequence
@@ -101,7 +101,7 @@ func (s *Service) GetThreadTokenCount(ctx context.Context, threadID string, maxS
 	// Get thread to find chat ID and fork metadata
 	thread, _, err := s.repo.GetThreadWithParent(ctx, threadID)
 	if err != nil {
-		return 0, fmt.Errorf("thread not found: %w", err)
+		return 0, lookupFailed(err, "thread not found", "failed to load thread")
 	}
 
 	// Get current context sequence

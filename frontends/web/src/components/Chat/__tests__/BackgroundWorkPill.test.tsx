@@ -30,7 +30,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import type { ActiveThreadUpdate } from "../../../types/streaming";
 import type { WorkflowExecutionData } from "../../../types/chat";
-import type { QuestionInfo } from "../../../api/question-grpc";
+import type { QuestionInfo } from "../../../gen/reliant/v1/question_pb";
 
 const CHAT_ID = "chat-abc";
 const WORKTREE_ID = "wt-1";
@@ -40,7 +40,7 @@ const { usePendingQuestionsMock, useWorkflowExecutionsMock } = vi.hoisted(() => 
   useWorkflowExecutionsMock: vi.fn(),
 }));
 
-vi.mock("../../../hooks/approval-queries", () => ({
+vi.mock("../../../hooks/question-queries", () => ({
   usePendingQuestions: usePendingQuestionsMock,
 }));
 
@@ -49,13 +49,15 @@ vi.mock("../../../hooks/useWorkflowExecutions", () => ({
 }));
 
 import { useThreadActivityStore } from "../../../store/threadActivityStore";
-import { useProcessStore } from "../../../store/processStore";
 import { useActivityStore } from "../../../store/activityStore";
 import { useChatStore } from "../../../store/chatStore";
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
-import { BackgroundProcessStatus } from "../../../api/background-grpc";
+import { BackgroundProcessStatus } from "../../../hooks/background-queries";
+import type { MessageInitShape } from "@bufbuild/protobuf";
+import type { BackgroundProcessSchema } from "../../../gen/reliant/v1/background_pb";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { BackgroundWorkPill, DISMISSED_FAILED_AGENTS_KEY } from "../BackgroundWorkPill";
-import { chatGrpc } from "../../../api/chat-grpc";
 import { toast } from "../../../lib/toast-manager";
 
 const originalCancelToolCall = useChatStore.getState().cancelToolCall;
@@ -95,13 +97,16 @@ function workflow(overrides: Partial<WorkflowExecutionData> = {}): WorkflowExecu
 
 function question(overrides: Partial<QuestionInfo> = {}): QuestionInfo {
   return {
-    question_id: "q1",
-    chat_id: CHAT_ID,
-    workflow_id: "wf-1",
-    thread_id: "thread-1",
-    step_id: "s1",
+    $typeName: "reliant.v1.QuestionInfo",
+    questionId: "q1",
+    chatId: CHAT_ID,
+    workflowId: "wf-1",
+    threadId: "thread-1",
+    stepId: "s1",
     status: "pending",
-    created_at: "",
+    createdAt: "",
+    async: false,
+    toolCallId: "",
     ...overrides,
   };
 }
@@ -111,6 +116,11 @@ function setChatRunning(running: boolean) {
     .getState()
     .setActivity(CHAT_ID, running ? ChatActivity.RUNNING : ChatActivity.IDLE);
 }
+
+/** What BackgroundService.ListProcesses answers for the test that is running. */
+/** The fake ChatService.SendAgentMessage: what a Retry sends. */
+const sendAgentMessage = vi.fn();
+let daemonProcesses: MessageInitShape<typeof BackgroundProcessSchema>[] = [];
 
 function renderPill(props: Partial<React.ComponentProps<typeof BackgroundWorkPill>> = {}) {
   return renderWithQuery(
@@ -125,10 +135,18 @@ function renderPill(props: Partial<React.ComponentProps<typeof BackgroundWorkPil
 beforeEach(() => {
   vi.restoreAllMocks();
   localStorage.removeItem(DISMISSED_FAILED_AGENTS_KEY);
-  usePendingQuestionsMock.mockReturnValue({ data: [] });
+  usePendingQuestionsMock.mockReturnValue({ data: { questions: [] } });
   useWorkflowExecutionsMock.mockReturnValue({ allWorkflows: [] });
   useThreadActivityStore.getState().clearAll();
-  useProcessStore.getState().reset();
+  // BackgroundService is on its generated hooks: its process list is answered at the transport.
+  daemonProcesses = [];
+  sendAgentMessage.mockReset();
+  setTransport(
+    mockTransport({
+      "BackgroundService.ListProcesses": () => ({ processes: daemonProcesses }),
+      "ChatService.SendAgentMessage": (req: unknown) => sendAgentMessage(req),
+    }),
+  );
   useChatStore.setState({ cancelToolCall: originalCancelToolCall });
   setChatRunning(true);
 });
@@ -286,7 +304,7 @@ describe("BackgroundWorkPill", () => {
     ]);
     // The question names the thread that asked it; only that spawn is gated.
     usePendingQuestionsMock.mockReturnValue({
-      data: [question({ question_id: "q1", workflow_id: "wf-b", thread_id: "thread-b" })],
+      data: { questions: [question({ questionId: "q1", workflowId: "wf-b", threadId: "thread-b" })] },
     });
 
     renderPill();
@@ -304,10 +322,12 @@ describe("BackgroundWorkPill", () => {
       thread({ thread: "thread-b", workflow_id: "wf-b", thread_title: "implementer" }),
     ]);
     usePendingQuestionsMock.mockReturnValue({
-      data: [
-        question({ question_id: "qA", workflow_id: "wf-a", thread_id: "thread-a" }),
-        question({ question_id: "qB", workflow_id: "wf-b", thread_id: "thread-b" }),
-      ],
+      data: {
+        questions: [
+          question({ questionId: "qA", workflowId: "wf-a", threadId: "thread-a" }),
+          question({ questionId: "qB", workflowId: "wf-b", threadId: "thread-b" }),
+        ],
+      },
     });
     const onSelectThread = vi.fn();
 
@@ -322,7 +342,7 @@ describe("BackgroundWorkPill", () => {
 
   it("surfaces the main thread's question while a spawn is in view, and navigates back to it", () => {
     usePendingQuestionsMock.mockReturnValue({
-      data: [question({ question_id: "q-main", thread_id: CHAT_ID })],
+      data: { questions: [question({ questionId: "q-main", threadId: CHAT_ID })] },
     });
     const onSelectThread = vi.fn();
 
@@ -337,7 +357,7 @@ describe("BackgroundWorkPill", () => {
 
   it("does not repeat the question of the thread in view: the composer shows it", () => {
     usePendingQuestionsMock.mockReturnValue({
-      data: [question({ question_id: "q-main", thread_id: CHAT_ID })],
+      data: { questions: [question({ questionId: "q-main", threadId: CHAT_ID })] },
     });
 
     renderPill({ selectedThreadId: null });
@@ -357,7 +377,7 @@ describe("BackgroundWorkPill", () => {
       ],
     });
     usePendingQuestionsMock.mockReturnValue({
-      data: [question({ question_id: "q-r", thread_id: "thread-review", workflow_id: "wf-r" })],
+      data: { questions: [question({ questionId: "q-r", threadId: "thread-review", workflowId: "wf-r" })] },
     });
     const onSelectThread = vi.fn();
 
@@ -426,36 +446,34 @@ describe("BackgroundWorkPill", () => {
     expect(screen.queryByTestId("background-work-pill")).toBeNull();
   });
 
-  it("shows a running command for this chat and excludes another chat's", () => {
-    useProcessStore.setState({
-      processes: [
-        {
-          id: "proc-mine",
-          command: "npm run dev",
-          status: BackgroundProcessStatus.RUNNING,
-          start_time: new Date().toISOString(),
-          working_dir: "/tmp",
-          session_id: "s",
-          worktree_id: WORKTREE_ID,
-          chat_id: CHAT_ID,
-        },
-        {
-          id: "proc-other",
-          command: "npm run other",
-          status: BackgroundProcessStatus.RUNNING,
-          start_time: new Date().toISOString(),
-          working_dir: "/tmp",
-          session_id: "s",
-          worktree_id: WORKTREE_ID,
-          chat_id: "some-other-chat",
-        },
-      ],
-    });
+  it("shows a running command for this chat and excludes another chat's", async () => {
+    daemonProcesses = [
+      {
+        id: "proc-mine",
+        command: "npm run dev",
+        status: BackgroundProcessStatus.RUNNING,
+        startTime: new Date().toISOString(),
+        workingDir: "/tmp",
+        sessionId: "s",
+        worktreeId: WORKTREE_ID,
+        chatId: CHAT_ID,
+      },
+      {
+        id: "proc-other",
+        command: "npm run other",
+        status: BackgroundProcessStatus.RUNNING,
+        startTime: new Date().toISOString(),
+        workingDir: "/tmp",
+        sessionId: "s",
+        worktreeId: WORKTREE_ID,
+        chatId: "some-other-chat",
+      },
+    ];
 
     const onSelectCommand = vi.fn();
     renderPill({ onSelectCommand });
 
-    expect(screen.getByTestId("background-work-pill")).toHaveTextContent("1 command");
+    expect(await screen.findByTestId("background-work-pill")).toHaveTextContent("1 command");
 
     fireEvent.click(screen.getByTestId("background-work-pill"));
     expect(screen.getByTestId("background-work-command-proc-mine")).toBeTruthy();
@@ -491,9 +509,7 @@ describe("BackgroundWorkPill", () => {
 
     it("shows a failed agent on its own row, and Retry asks its parent to resume it", async () => {
       chatWithSpawns(failedSpawn());
-      const send = vi
-        .spyOn(chatGrpc, "sendAgentMessage")
-        .mockResolvedValue({ success: true, message: "Queued" });
+      const send = sendAgentMessage.mockResolvedValue({ success: true, message: "Queued" });
       const onSelectThread = vi.fn();
 
       renderPill({ onSelectThread });
@@ -509,8 +525,10 @@ describe("BackgroundWorkPill", () => {
 
       fireEvent.click(screen.getByLabelText("Retry failed agent implementer"));
 
-      expect(send).toHaveBeenCalledTimes(1);
-      const [chatId, toThread, message] = send.mock.calls[0];
+      await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+      const [{ chatId, threadId: toThread, message }] = send.mock.calls[0] as [
+        { chatId: string; threadId: string; message: string },
+      ];
       expect(chatId).toBe(CHAT_ID);
       expect(toThread).toBe("main-thread");
       expect(message).toContain('spawn(agent_id="thread-42"');
@@ -525,11 +543,11 @@ describe("BackgroundWorkPill", () => {
 
     it("surfaces a refused retry and lets the user try again", async () => {
       chatWithSpawns(failedSpawn());
-      vi.spyOn(chatGrpc, "sendAgentMessage").mockResolvedValue({
+      sendAgentMessage.mockResolvedValue({
         success: false,
         message: "This agent isn't currently running",
       });
-      const toastError = vi.spyOn(toast, "error").mockImplementation(() => "");
+      const toastError = vi.spyOn(toast, "error").mockImplementation(async () => {});
 
       renderPill();
       fireEvent.click(screen.getByTestId("background-work-pill"));

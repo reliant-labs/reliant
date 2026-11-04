@@ -4,25 +4,33 @@
  * The console's routes, end to end through the REAL route tree
  * (forgeConsoleRoutes) with probe pages:
  *
- *   - every way in that does not name a forge project — the bare /forge, the
- *     retired URLs a notification or bookmark carries — resolves one and lands
- *     on the page it means, scope included;
+ *   - the bare /forge and /forge/observability are the org's pages (stubbed
+ *     here), and name no project; every way in that does name or imply one —
+ *     `?project=`, `?forgeProject=`, the retired URLs a notification or
+ *     bookmark carries — resolves it and lands on the page it means, scope
+ *     included;
  *   - the console looks the Reliant project up from the forge project in its
  *     path, and a name no project here declares still opens (read from the
  *     control plane alone, no daemon);
- *   - the environment scope (D1) is defaulted, remembered per project and
+ *   - the environment scope is defaulted, remembered per project and
  *     reflected into `?env=` on list pages, and left alone on a page that pins
  *     its own;
  *   - Escape and the close button leave.
  *
- * The project store is mocked as a real, mutating store rather than a frozen
- * snapshot: resolution is async and reads back through getState() after
- * awaiting, so a mock that could not change would pass while the real thing
- * deadlocked.
+ * The project selection is mocked as a real, mutating store rather than a
+ * frozen snapshot: resolution is async and reads back through getState()
+ * after awaiting, so a mock that could not change would pass while the real
+ * thing deadlocked. The project LIST is the real one: ListProjects answered
+ * at the transport, read through the app's query client.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { setTransport } from "@/lib/connect";
+import { queryClient } from "@/lib/query-client";
+import { mockTransport } from "@/lib/test-utils";
+import { listProjectsResponse } from "@/test/projectList";
 import userEvent from "@testing-library/user-event";
 import {
   createMemoryHistory,
@@ -47,20 +55,16 @@ const PROJECTS: TestProject[] = [
   { id: "project-c", name: "Gamma", path: "/src/gamma" },
 ];
 
-const state: { projects: TestProject[]; currentProject: TestProject | null; lastProjectId: string | null } = {
-  projects: [],
+const state: { currentProject: TestProject | null; lastProjectId: string | null } = {
   currentProject: null,
   lastProjectId: null,
 };
 
-const loadProjects = vi.fn(async () => {
-  state.projects = PROJECTS;
-});
 const selectProject = vi.fn(async (project: TestProject) => {
   state.currentProject = project;
 });
 const restoreLastProject = vi.fn(async () => {
-  const match = state.projects.find((p) => p.id === state.lastProjectId);
+  const match = PROJECTS.find((p) => p.id === state.lastProjectId);
   if (!match) return false;
   state.currentProject = match;
   return true;
@@ -68,9 +72,7 @@ const restoreLastProject = vi.fn(async () => {
 
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({
-    projects: state.projects,
     currentProject: state.currentProject,
-    loadProjects,
     selectProject,
     restoreLastProject,
   });
@@ -82,7 +84,7 @@ vi.mock("@/store/projectStore", () => {
 });
 
 vi.mock("@/store/authStore", () => ({
-  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: { email: "ada@example.com", user_metadata: {} } }),
+  useAuthStore: (selector: (s: unknown) => unknown) => selector({ user: { email: "ada@example.com", user_metadata: {} }, session: { access_token: "t" } }),
 }));
 
 vi.mock("@/hooks/useTitleBarChrome", () => ({
@@ -126,7 +128,14 @@ vi.mock("@/hooks/forge-queries", () => ({
   }),
 }));
 
+// The app switcher's list (the Apps page's query) is covered on its own.
+vi.mock("@/hooks/apps-queries", () => ({
+  useApps: () => ({ apps: [], loading: false, availability: "available", detail: "" }),
+}));
+
+vi.mock("@/hooks/observability-session-queries", () => ({ useSessions: () => ({ isSuccess: false }) }));
 vi.mock("@/hooks/observability-queries", () => ({
+  useServiceSignals: () => ({ isSuccess: false }),
   useObservabilityOrg: () => ({ orgId: "org-1", isLoading: false, error: null }),
   useAlerts: () => ({
     data: [
@@ -140,6 +149,8 @@ vi.mock("@/hooks/observability-queries", () => ({
 
 // The index the nav reads its starred dashboards from (the Dashboards page shares it).
 vi.mock("@/hooks/dashboard-queries", () => ({
+  // The open dashboard's own document, which the layout reads for its scope.
+  useDashboard: () => ({ data: undefined }),
   useDashboardIndex: () => ({
     data: {
       canWrite: true,
@@ -151,6 +162,14 @@ vi.mock("@/hooks/dashboard-queries", () => ({
   }),
 }));
 
+// The org pages (slice D) are covered on their own; here they are stubs that
+// say which one rendered, so the routes' choices are what is under test.
+vi.mock("@/components/Forge/Org", async () => {
+  return {
+    OrgObservabilityPage: () => <div data-testid="org-page" data-page="org-observability" />,
+  };
+});
+
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 
 import { ConsoleLayout } from "../ConsoleLayout";
@@ -160,9 +179,18 @@ import {
   LegacyCommandRoute,
   LegacyDomainsRoute,
   LegacyEnvRoute,
-  LegacyObservabilityRoute,
+  OrgObservabilityRoute,
 } from "../ForgeEntryRoutes";
 import { ForgeLayout } from "../../ForgeLayout";
+
+/** Stands in for the org chrome around the org pages. */
+function OrgLayoutStub() {
+  return (
+    <div data-testid="org-layout">
+      <Outlet />
+    </div>
+  );
+}
 
 /** A page that says which page it is and what the console told it. */
 function probe(name: string): RouteComponent {
@@ -186,7 +214,6 @@ function renderAt(initialEntry: string) {
     workload: probe("workload"),
     releases: probe("releases"),
     release: probe("release"),
-    observability: probe("observability"),
     observabilityView: probe("observability-view"),
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
@@ -194,21 +221,25 @@ function renderAt(initialEntry: string) {
     environment: probe("environment"),
     secrets: probe("secrets"),
     domains: probe("domains"),
-    monitoring: probe("monitoring"),
-    settings: probe("settings"),
     activity: probe("activity"),
+    orgLayout: OrgLayoutStub,
+    orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
     legacyEnv: LegacyEnvRoute,
-    legacyObservability: LegacyObservabilityRoute,
     legacyDomains: LegacyDomainsRoute,
     legacyCommand: LegacyCommandRoute,
   });
   const home = createRoute({ getParentRoute: () => root, path: "/", component: () => <div data-testid="home">home</div> });
+  const apps = createRoute({ getParentRoute: () => root, path: "/apps", component: () => <div data-testid="apps">apps</div> });
   const router = createRouter({
-    routeTree: root.addChildren([authenticated.addChildren([forge]), home]),
+    routeTree: root.addChildren([authenticated.addChildren([forge]), home, apps]),
     history: createMemoryHistory({ initialEntries: [initialEntry] }),
   });
-  render(<RouterProvider router={router} />);
+  render(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  );
   return router;
 }
 
@@ -218,7 +249,7 @@ async function landsOn(router: ReturnType<typeof renderAt>, pathname: string, se
 }
 
 beforeEach(() => {
-  state.projects = [];
+  setTransport(mockTransport({ "ProjectService.ListProjects": () => listProjectsResponse(PROJECTS) }));
   state.currentProject = null;
   state.lastProjectId = null;
   roster.calls.length = 0;
@@ -227,14 +258,20 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+afterEach(() => {
+  queryClient.clear();
+  setTransport(null);
+});
+
 describe("the way in: /forge", () => {
-  it("resolves the persisted last project and opens its Overview, scoped to prod", async () => {
+  it("names no project, so lands on the Apps list rather than guessing one", async () => {
+    // The persisted last project used to be opened here; the list of every
+    // app replaced that guess (components/Apps/AppsPage.tsx).
     state.lastProjectId = "project-b";
     const router = renderAt("/forge");
-    await landsOn(router, "/forge/p/barkshop", { env: "prod" });
-    expect(restoreLastProject).toHaveBeenCalled();
-    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "overview");
-    expect(screen.getByTestId("page")).toHaveAttribute("data-project-id", "project-b");
+    await landsOn(router, "/apps");
+    expect(await screen.findByTestId("apps")).toBeInTheDocument();
+    expect(restoreLastProject).not.toHaveBeenCalled();
   });
 
   it("resolves a ?project= id (an old bookmark)", async () => {
@@ -247,13 +284,54 @@ describe("the way in: /forge", () => {
     await landsOn(router, "/forge/p/gamma");
   });
 
-  it("offers a picker — never a dead-end sentence — when nothing resolves", async () => {
+  it("opens the app a ?forgeProject= link names, with no lookup", async () => {
+    const router = renderAt("/forge?forgeProject=elsewhere");
+    await landsOn(router, "/forge/p/elsewhere");
+    expect(screen.queryByTestId("forge-project-picker")).toBeNull();
+  });
+
+  it("offers a picker — never a dead-end sentence — when a ?project= resolves to nothing", async () => {
     const user = userEvent.setup();
-    const router = renderAt("/forge");
+    const router = renderAt("/forge?project=gone");
     await screen.findByTestId("forge-project-picker");
     await user.click(await screen.findByTestId("forge-project-option-project-a"));
     expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-a" }));
     await landsOn(router, "/forge/p/alpha");
+  });
+});
+
+describe("the org's Observability: /forge/observability", () => {
+  it("is the org page — no project is resolved", async () => {
+    state.currentProject = PROJECTS[0]!;
+    const router = renderAt("/forge/observability");
+    expect(await screen.findByTestId("org-page")).toHaveAttribute("data-page", "org-observability");
+    expect(router.state.location.pathname).toBe("/forge/observability");
+  });
+
+  it("hosts a view at /forge/observability/<view>, keeping the filters", async () => {
+    const router = renderAt("/forge/observability/logs?apps=%5B%22shop%22%5D&q=timeout");
+    expect(await screen.findByTestId("org-page")).toHaveAttribute("data-page", "org-observability");
+    await landsOn(router, "/forge/observability/logs", { apps: ["shop"], q: "timeout" });
+  });
+
+  it("lands a view that is not a nav entry on the org overview, keeping the filters", async () => {
+    const router = renderAt("/forge/observability/heatmaps?apps=%5B%22shop%22%5D");
+    await landsOn(router, "/forge/observability", { apps: ["shop"] });
+  });
+
+  it("sends a bare ?view= (an old link) to that view's org page, keeping the filters", async () => {
+    const router = renderAt("/forge/observability?view=logs&envs=%5B%22shop%2Fprod%22%5D&apps=%5B%22shop%22%5D&q=timeout");
+    await landsOn(router, "/forge/observability/logs", { envs: ["shop/prod"], apps: ["shop"], q: "timeout" });
+  });
+
+  it("sends the retired ?view=usage to the org overview", async () => {
+    const router = renderAt("/forge/observability?view=usage");
+    await landsOn(router, "/forge/observability", {});
+  });
+
+  it("resolves ?forgeProject= to that app's page for the view", async () => {
+    const router = renderAt("/forge/observability?forgeProject=elsewhere&view=logs&q=timeout");
+    await landsOn(router, "/forge/p/elsewhere/observability/logs", { env: "all", q: "timeout" });
   });
 });
 
@@ -276,9 +354,8 @@ describe("redirects from the retired URLs", () => {
     expect(roster.calls.at(-1)).toEqual([null, "elsewhere"]);
   });
 
-  it("sends /forge/observability to the view's page with envs as the scope", async () => {
-    state.currentProject = PROJECTS[0]!;
-    const router = renderAt('/forge/observability?view=logs&envs=%5B%22e2e%22%5D&q=timeout');
+  it("sends /forge/observability?project= to the view's page with envs as the scope", async () => {
+    const router = renderAt('/forge/observability?project=project-a&view=logs&envs=%5B%22e2e%22%5D&q=timeout');
     await landsOn(router, "/forge/p/alpha/observability/logs", { env: "e2e", q: "timeout" });
   });
 
@@ -294,13 +371,23 @@ describe("redirects from the retired URLs", () => {
     await landsOn(router, "/forge/p/alpha/domains", { env: "prod" });
   });
 
-  it("lands a view that is not a nav entry on the Observability overview", async () => {
+  it("lands a view that is not a nav entry on the first view, Dashboards", async () => {
     const router = renderAt("/forge/p/alpha/observability/heatmaps?env=e2e");
-    await landsOn(router, "/forge/p/alpha/observability", { env: "e2e" });
+    await landsOn(router, "/forge/p/alpha/observability/dashboards", { env: "e2e" });
+  });
+
+  it("lands the retired Observability home on the Overview, which carries its strip", async () => {
+    const router = renderAt("/forge/p/alpha/observability?env=e2e");
+    await landsOn(router, "/forge/p/alpha", { env: "e2e" });
+  });
+
+  it("lands the retired Monitoring settings on Alerts, where routing and silences live", async () => {
+    const router = renderAt("/forge/p/alpha/monitoring?env=e2e");
+    await landsOn(router, "/forge/p/alpha/observability/alerts", { env: "e2e" });
   });
 });
 
-describe("the environment scope (D1)", () => {
+describe("the environment scope", () => {
   it("defaults to prod and reflects it into the URL on a list page", async () => {
     const router = renderAt("/forge/p/alpha/releases");
     await landsOn(router, "/forge/p/alpha/releases", { env: "prod" });
@@ -349,6 +436,16 @@ describe("the environment scope (D1)", () => {
 });
 
 describe("the nav", () => {
+  it("clears every graph-only search key when leaving Observability while preserving the environment scope", async () => {
+    const user = userEvent.setup();
+    const router = renderAt("/forge/p/alpha/observability/graph?env=e2e&declared=true&internal=true&rpcId=acme.v1.OrdersService%2FGetOrder&rpcService=acme.v1.OrdersService");
+    await screen.findByTestId("page");
+    expect(router.state.location.search).toMatchObject({ env: "e2e", declared: true, internal: true, rpcId: "acme.v1.OrdersService/GetOrder", rpcService: "acme.v1.OrdersService" });
+    await user.click(screen.getByRole("link", { name: "Secrets" }));
+    await landsOn(router, "/forge/p/alpha/secrets", { env: "e2e" });
+    expect(router.state.location.search).toEqual({ env: "e2e" });
+  });
+
   it("opens an environment's page from Configure › Environments", async () => {
     const user = userEvent.setup();
     const router = renderAt("/forge/p/alpha/environments?env=prod");

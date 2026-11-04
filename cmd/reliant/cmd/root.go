@@ -101,7 +101,8 @@ Reliant server components.`,
 
 	// Register subcommand groups. The end-user groups carry CLIConfig.
 	daemonCmd, authCmd, projectCmd, workflowCmd, triggerCmd := newDaemonCmd(), newAuthCmd(), newProjectCmd(), newWorkflowCmd(), newTriggerCmd()
-	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd)
+	machineCmd, githubCmd := newMachineCmd(), newGitHubCmd()
+	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd, machineCmd, githubCmd)
 	for _, c := range rootCommands(deps) {
 		root.AddCommand(c)
 	}
@@ -110,6 +111,8 @@ Reliant server components.`,
 	root.AddCommand(projectCmd)
 	root.AddCommand(workflowCmd)
 	root.AddCommand(triggerCmd)
+	root.AddCommand(machineCmd)
+	root.AddCommand(githubCmd)
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newForgeCmd())
 	root.AddCommand(newPreviewURLCmd())
@@ -126,8 +129,15 @@ Reliant server components.`,
 // status when it fails, having printed the error to stderr. The status is
 // forge's own resolution (forgecli.ExitCode): `reliant forge …` verbs print the
 // same number as their --json document's exit_code, and any other error is 1.
+//
+// `reliant forge …` in a project pinned to another forge is first handed to
+// that forge (handOffToPinnedForge); when it cannot be had, nothing runs.
 func Execute() {
 	root := NewRootCmd()
+	if err := handOffToPinnedForge(root, os.Args[1:], os.Stderr); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(forgecli.ExitCode(err))
+	}
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(forgecli.ExitCode(err))

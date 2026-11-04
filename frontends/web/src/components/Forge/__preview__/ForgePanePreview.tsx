@@ -43,15 +43,15 @@ import {
 import { createForgeConsoleRoutes } from "@/forgeConsoleRoutes";
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useProjectStore, type Project } from "@/store/projectStore";
+import { projectsKey } from "@/hooks/project-queries";
+import { ListProjectsResponseSchema } from "@/gen/reliant/v1/project_pb";
+import { create } from "@bufbuild/protobuf";
 
 import { ConsoleLayout } from "../Console/ConsoleLayout";
 import { DashboardPage, DashboardsPage } from "../Observability/Dashboards/DashboardsPages";
 import {
   ActivityPage,
-  MonitoringSettingsPage,
-  ObservabilityOverviewPage,
   ObservabilityViewPage,
-  ProjectSettingsPage,
   SecretsPage,
 } from "../Console/ConsolePages";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
@@ -61,8 +61,9 @@ import {
   LegacyCommandRoute,
   LegacyDomainsRoute,
   LegacyEnvRoute,
-  LegacyObservabilityRoute,
+  OrgObservabilityRoute,
 } from "../Console/ForgeEntryRoutes";
+import { OrgConsoleLayout } from "../Org";
 import { ForgeDomainsPage } from "../Domains/ForgeDomainsPage";
 import { ForgeEnvPage } from "../EnvPage/ForgeEnvPage";
 import { ForgeLayout } from "../ForgeLayout";
@@ -76,7 +77,6 @@ const PROJECT: Project = {
   name: "control-plane",
   path: "/src/control-plane",
   is_git_repo: true,
-  worktree_count: 0,
   last_active: "",
   created_at: "",
   updated_at: "",
@@ -188,6 +188,20 @@ function queuedHostedDeploy(scenario: Scenario) {
   };
 }
 
+/** env-prod's declared shape, served by GetEnvironmentShape (the roster carries only declaredAt). */
+const PROD_SHAPE = {
+  kind: "self_managed",
+  workloads: [
+    { name: "admin-server", runtime: "cluster", cluster: "gke-prod" },
+    { name: "control-plane-workers", runtime: "cluster", cluster: "gke-prod" },
+    { name: "daemon-gateway", runtime: "cluster", cluster: "gke-prod" },
+    { name: "reliant-api-server", runtime: "cluster", cluster: "gke-prod" },
+  ],
+  secrets: [{ name: "STRIPE_WEBHOOK_SECRET", provider: "hosted", declared_by: ["admin-server"] }],
+  domains: ["api.example.com"],
+  clusters: ["gke-prod"],
+};
+
 function liveEnvironments(scenario: Scenario) {
   if (scenario === "unregistered") return [];
   const queued = queuedHostedDeploy(scenario);
@@ -203,18 +217,6 @@ function liveEnvironments(scenario: Scenario) {
         kind: "DEPLOY_ENVIRONMENT_KIND_SELF_MANAGED",
         currentPromotionId: "promo-15",
         declaredAt: ts("2026-10-04T21:18:40Z"),
-        declaredShape: {
-          kind: "self_managed",
-          workloads: [
-            { name: "admin-server", runtime: "cluster", cluster: "gke-prod" },
-            { name: "control-plane-workers", runtime: "cluster", cluster: "gke-prod" },
-            { name: "daemon-gateway", runtime: "cluster", cluster: "gke-prod" },
-            { name: "reliant-api-server", runtime: "cluster", cluster: "gke-prod" },
-          ],
-          secrets: [{ name: "STRIPE_WEBHOOK_SECRET", provider: "hosted", declared_by: ["admin-server"] }],
-          domains: ["api.example.com"],
-          clusters: ["gke-prod"],
-        },
         declaredBy: { repo: "github.com/reliant-labs/control-plane", commit: "47d0d1525ccc", branch: "main", forgeVersion: "v0.1.44" },
       },
       currentPromotion: {
@@ -224,7 +226,6 @@ function liveEnvironments(scenario: Scenario) {
         createdAt: ts("2026-10-04T21:18:54Z"),
         releaseProvenance: { repo: "github.com/reliant-labs/control-plane", commit: "47d0d1525ccc", branch: "main" },
       },
-      currentRelease: { id: "rel-15", version: "v1.7.15", gitCommit: "47d0d1525ccc", provenance: { commit: "47d0d1525ccc", branch: "main" } },
       phase: "DEPLOY_ROLLOUT_PHASE_SUCCEEDED",
       drift: { state: "in_sync", observedAt: ts("2026-10-04T21:22:10Z") },
     },
@@ -353,6 +354,8 @@ function answer(scenario: Scenario, path: string, body: Record<string, unknown>)
         return { status: 200, json: { environments: liveEnvironments(scenario) } };
       case "ListEnvironments":
         return { status: 200, json: { environments: liveEnvironments(scenario).map((env) => env.environment) } };
+      case "GetEnvironmentShape":
+        return { status: 200, json: body.environmentId === "env-prod" ? { declaredShape: PROD_SHAPE } : {} };
       case "ListPromotions":
         return {
           status: 200,
@@ -432,7 +435,6 @@ function buildRouter(path: string) {
     workload: WorkloadPage,
     releases: ReleasesPage,
     release: ReleasePage,
-    observability: ObservabilityOverviewPage,
     observabilityView: ObservabilityViewPage,
     dashboards: DashboardsPage,
     dashboard: DashboardPage,
@@ -440,12 +442,11 @@ function buildRouter(path: string) {
     environment: ForgeEnvPage,
     secrets: SecretsPage,
     domains: ForgeDomainsPage,
-    monitoring: MonitoringSettingsPage,
-    settings: ProjectSettingsPage,
     activity: ActivityPage,
+    orgLayout: OrgConsoleLayout,
+    orgObservability: OrgObservabilityRoute,
     landing: ForgeLandingRoute,
     legacyEnv: LegacyEnvRoute,
-    legacyObservability: LegacyObservabilityRoute,
     legacyDomains: LegacyDomainsRoute,
     legacyCommand: LegacyCommandRoute,
   });
@@ -471,12 +472,30 @@ function ForgePanePreviewCase() {
 
   useEffect(() => {
     const restore = installFakeNetwork(scenario);
-    useProjectStore.setState({ projects: [PROJECT, OTHER], currentProject: PROJECT });
+    useProjectStore.setState({ currentProject: PROJECT });
     setReady(true);
     return restore;
   }, [scenario]);
 
-  const queryClient = useMemo(() => new QueryClient({ defaultOptions: { queries: { retry: false } } }), []);
+  const queryClient = useMemo(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // The project list the pane's pickers read, as ListProjects answers it.
+    client.setQueryData(
+      projectsKey(),
+      create(ListProjectsResponseSchema, {
+        projects: [PROJECT, OTHER].map((project) => ({
+          id: project.id,
+          name: project.name,
+          path: project.path,
+          isGitRepo: project.is_git_repo,
+          isForge: project.is_forge,
+          forgeProjectName: project.forge_project_name ?? "",
+        })),
+        total: 2,
+      }),
+    );
+    return client;
+  }, []);
   const router = useMemo(() => buildRouter(path), [path]);
   const obsApi = useMemo(() => createFixtureApi(), []);
 

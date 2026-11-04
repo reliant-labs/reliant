@@ -60,6 +60,15 @@ export function applyLogSlice<T>(
     sort?: (a: T, b: T) => number;
   },
 ): T[] {
+  // Nothing to fold: hand back the SAME array. Every stream batch runs every
+  // slice through here, and most batches (a streaming delta, a tool status)
+  // carry none of this slice's entries. A fresh array per batch changed the
+  // slice's identity on every network message, which re-rendered every
+  // subscriber (ChatContainer → ChatPresenter → the whole timeline, which
+  // re-sorts the transcript) for a list that did not change.
+  if (updates.length === 0 && (!isSnapshot || existing.length === 0)) {
+    return existing;
+  }
   const next = isSnapshot ? [] : [...existing];
   for (const update of updates) {
     const k = opts.key(update);
@@ -107,14 +116,17 @@ export const SETTLED_TOOL_STATUSES = new Set(["completed", "failed"]);
 /**
  * Fold tool-execution-state updates into the per-call status Map (keyed by
  * tool_call_id). Maps "denied" → "failed", and guards terminal statuses. Pure:
- * returns a new Map, leaving the input untouched. Not snapshot-aware — tool
- * call state is always merged incrementally.
+ * returns a new Map, leaving the input untouched — or the input itself when
+ * there is nothing to fold, so a batch with no tool updates keeps the Map's
+ * identity (every rendered message and tool card subscribes to it). Not
+ * snapshot-aware — tool call state is always merged incrementally.
  */
 export function applyToolCallStateUpdates(
   existing: Map<string, ToolCallState>,
   updates: ToolExecutionStateUpdate[],
   chatId: string,
 ): Map<string, ToolCallState> {
+  if (updates.length === 0) return existing;
   const next = new Map(existing);
   for (const update of updates) {
     const prev = next.get(update.tool_call_id);
@@ -432,7 +444,8 @@ export function mergeMessages(
   let next = [...existing];
 
   const hasRealUserMessage = incoming.some(
-    (m) => m.role === MessageRole.USER && !m.id.startsWith(OPTIMISTIC_USER_PREFIX),
+    (m) =>
+      m.role === MessageRole.USER && !m.sender && !m.id.startsWith(OPTIMISTIC_USER_PREFIX),
   );
   if (hasRealUserMessage) {
     next = next.filter((m) => !m.id.startsWith(OPTIMISTIC_USER_PREFIX));

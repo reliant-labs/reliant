@@ -21,6 +21,9 @@ func init() {
 // binary EMBEDS. A builder it can call without driving the whole handler is
 // what lets that test cover this command.
 type forgeEnvShapeArgs struct {
+	// OrgID is the org forge acts in for this request (the web's active org).
+	// See ForgeOrgEnv. Empty: the daemon session's own org.
+	OrgID       string `json:"org_id,omitempty"`
 	ProjectPath string `json:"project_path"`
 	Env         string `json:"env"`
 }
@@ -77,6 +80,10 @@ func handleForgeEnvShape(ctx context.Context, payload []byte) ([]byte, error) {
 	var req forgeEnvShapeArgs
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	ctx, err := bindForgeOrg(ctx, req.OrgID)
+	if err != nil {
+		return nil, err
 	}
 	if req.Env == "" {
 		return nil, fmt.Errorf("env is required")

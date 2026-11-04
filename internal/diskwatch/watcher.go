@@ -30,6 +30,8 @@ type Options struct {
 	mounts   func() []overlayMount
 	noDocker bool
 	reaper   reaperRunner
+	// worktreeReap reaps one repository's worktrees (worktreereap.go).
+	worktreeReap worktreeReapRunner
 }
 
 // Watcher samples the watched volumes, keeps a pressure bit per volume,
@@ -58,8 +60,12 @@ type Watcher struct {
 
 	// reaper is the scheduled storage-reaper routine (reaper.go).
 	reaper reaperState
+	// worktreeReap is the scheduled worktree reap (worktreereap.go).
+	worktreeReap worktreeReapState
 	// trim is the native cache trim (cachetrim.go), guarded by mu.
 	trim cacheTrimState
+	// wtSizes remembers each worktree's size across scans (worktreesizes.go).
+	wtSizes worktreeSizes
 	// systemEnv: the watcher reads the daemon's own environment, so its
 	// caches are this machine's real ones (never trimmed from a test).
 	systemEnv bool
@@ -95,22 +101,26 @@ func New(opts Options) *Watcher {
 	if opts.reaper == nil {
 		opts.reaper = execReaper
 	}
+	if opts.worktreeReap == nil {
+		opts.worktreeReap = execWorktreeReap
+	}
 	return &Watcher{
-		reaper:    reaperState{sem: make(chan struct{}, 1), run: opts.reaper, goCache: execGoCacheReaper},
-		trim:      cacheTrimState{cfg: DefaultCacheTrimConfig()},
-		systemEnv: systemEnv,
-		env:       opts.Env,
-		interval:  opts.Interval,
-		now:       opts.Now,
-		stat:      opts.stat,
-		docker:    opts.docker,
-		mounts:    opts.mounts,
-		pressure:  map[uint64]bool{},
-		scans:     map[uint64][]*reliantv1.DiskConsumer{},
-		scanAt:    map[uint64]time.Time{},
-		noSpaceAt: map[uint64]int64{},
-		clearing:  map[string]bool{},
-		changed:   make(chan struct{}, 1),
+		reaper:       reaperState{sem: make(chan struct{}, 1), run: opts.reaper, goCache: execGoCacheReaper},
+		worktreeReap: worktreeReapState{run: opts.worktreeReap},
+		trim:         cacheTrimState{cfg: DefaultCacheTrimConfig()},
+		systemEnv:    systemEnv,
+		env:          opts.Env,
+		interval:     opts.Interval,
+		now:          opts.Now,
+		stat:         opts.stat,
+		docker:       opts.docker,
+		mounts:       opts.mounts,
+		pressure:     map[uint64]bool{},
+		scans:        map[uint64][]*reliantv1.DiskConsumer{},
+		scanAt:       map[uint64]time.Time{},
+		noSpaceAt:    map[uint64]int64{},
+		clearing:     map[string]bool{},
+		changed:      make(chan struct{}, 1),
 	}
 }
 

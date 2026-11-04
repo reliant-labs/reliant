@@ -17,10 +17,13 @@ import (
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
@@ -39,9 +42,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
+	"github.com/reliant-labs/reliant/internal/readguard"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -87,11 +92,17 @@ type APISettings struct {
 	// OAuthProvider is the provider the desktop sign-in
 	// (SystemService.StartOAuthSignIn) logs in through.
 	OAuthProvider auth.Provider
-	// MaxUploadSize is the largest attachment accepted, in bytes.
-	MaxUploadSize int64
 	// WorktreeAutoArchive is what the worktree sweep does with finished
 	// worktrees (RELIANT_WORKTREE_AUTO_ARCHIVE); see worktreesweep.
 	WorktreeAutoArchive worktreesweep.AutoArchiveMode
+	// WorktreeLandedIdle is how long a landed worktree's chats must be quiet
+	// before the sweep archives it (RELIANT_WORKTREE_LANDED_IDLE); zero is
+	// off. See worktreesweep.WithLandedIdle.
+	WorktreeLandedIdle time.Duration
+	// WorktreeLiveShedIdle is the whole recoverable-worktree idle floor
+	// (configuration name retained); no live-file shedding is performed.
+	// auto-archive on is required; 0 disables idle retirement.
+	WorktreeLiveShedIdle time.Duration
 	// PayloadGCHorizon is how long an unreferenced Temporal payload blob is
 	// kept (RELIANT_PAYLOAD_BLOB_GC_HORIZON).
 	PayloadGCHorizon time.Duration
@@ -126,11 +137,12 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 			JWKSURL:                   api.GetJwksUrl(),
 			RequireEmailVerifiedClaim: api.GetRequireEmailVerifiedClaim(),
 		},
-		AuthorizationServer: strings.TrimSpace(api.GetAuthorizationServer()),
-		OAuthProvider:       auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
-		MaxUploadSize:       api.GetMaxUploadSize(),
-		WorktreeAutoArchive: worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive()),
-		PayloadGCHorizon:    api.GetPayloadBlobGcHorizon().AsDuration(),
+		AuthorizationServer:  strings.TrimSpace(api.GetAuthorizationServer()),
+		OAuthProvider:        auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()},
+		WorktreeAutoArchive:  worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive()),
+		WorktreeLandedIdle:   api.GetWorktreeLandedIdle().AsDuration(),
+		WorktreeLiveShedIdle: api.GetWorktreeLiveShedIdle().AsDuration(),
+		PayloadGCHorizon:     api.GetPayloadBlobGcHorizon().AsDuration(),
 	}
 	logging.Info("Starting Reliant API server (stateless)",
 		"grpc_port", api.GetGrpcPort(),
@@ -204,6 +216,7 @@ type HTTPRoutesDeps struct {
 //
 //forge:root-only api
 func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
+	cp := ControlPlaneEndpoint(d.ControlPlane)
 	return grpcserver.NewAPIHTTPRoutes(grpcserver.APIHTTPRoutesDeps{
 		Auth:                d.Auth,
 		Repo:                d.DB,
@@ -215,7 +228,8 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		PublicURL:           d.Integrations.PublicURL,
 		OAuthIssuers:        d.OAuthIssuers,
 		AuthorizationServer: d.Settings.AuthorizationServer,
-		ControlPlaneURL:     ControlPlaneEndpoint(d.ControlPlane).URL,
+		ControlPlaneURL:     cp.URL,
+		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
 	})
 }
 
@@ -292,7 +306,7 @@ type APIDaemonRouterDeps struct {
 //
 //forge:root-only api
 func NewAPIDaemonRouter(d APIDaemonRouterDeps) (*APIDaemonRouter, error) {
-	router := toolexec.NewNATSDaemonRouter(d.NATS.Conn, daemonRouterOptions(d.DB, ControlPlaneEndpoint(d.ControlPlane).URL)...)
+	router := toolexec.NewNATSDaemonRouter(d.NATS.Conn, daemonRouterOptions(d.DB, d.ControlPlane)...)
 	logging.Info("Using NATS daemon router — daemon services run in separate daemon-gateway process")
 	return &APIDaemonRouter{router}, nil
 }
@@ -311,21 +325,21 @@ func (r *APIDaemonRouter) Close(context.Context) error { return r.NATSDaemonRout
 //
 // The control plane is wired only for what it alone can do: resume a
 // suspended managed machine, via controlplane.v1.DaemonService/ResumeDaemon,
-// authenticated as the signed-in user. cpURL is empty when no control plane is
-// configured, and then a suspended daemon is reported pending, never woken.
-func daemonRouterOptions(repo toolexec.DaemonRecords, cpURL string) []toolexec.NATSRouterOption {
+// authenticated as the signed-in user. cp names no url when no control plane
+// is configured, and then a suspended daemon is reported pending, never woken.
+func daemonRouterOptions(repo toolexec.DaemonRecords, cp *configv1.ControlPlaneConfig) []toolexec.NATSRouterOption {
 	opts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
-	if cpURL != "" {
-		opts = append(opts, toolexec.WithDaemonResumer(controlplane.NewInstrumented(controlplane.Deps{BaseURL: cpURL})))
+	if ControlPlaneEndpoint(cp).Hosted() {
+		opts = append(opts, toolexec.WithDaemonResumer(controlplane.NewInstrumented(controlplane.Deps{ControlPlane: cp})))
 	}
 	return opts
 }
 
 // APIToolsFactoryDeps is what the catalog's tool metadata reads.
 type APIToolsFactoryDeps struct {
-	DB           *db.Repo
-	ControlPlane *configv1.ControlPlaneConfig
-	Temporal     *TemporalClient
+	DB       *db.Repo
+	Network  *configv1.NetworkConfig
+	Temporal *TemporalClient
 }
 
 // NewAPIToolsFactory is the tools factory CatalogService lists tools from:
@@ -335,8 +349,8 @@ type APIToolsFactoryDeps struct {
 func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	return tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo:            repo,
-		ControlPlaneURL: ControlPlaneEndpoint(d.ControlPlane).URL,
+		Repo:               repo,
+		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
 		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
@@ -477,7 +491,7 @@ func NewInputOptions(d InputOptionsDeps) (inputoptions.Service, error) {
 		return nil, fmt.Errorf("input options: %w", err)
 	}
 	repo := d.DB
-	creds, err := credwire.New(connections.NewResolver(repo, repo.Connections(), d.Connections.Tokens), ControlPlaneEndpoint(d.ControlPlane))
+	creds, err := credwire.New(connections.NewResolver(repo, repo.Connections(), d.Connections.Tokens), d.ControlPlane)
 	if err != nil {
 		return nil, err
 	}
@@ -564,7 +578,7 @@ type GitHubAccessDeps struct {
 //
 //forge:root-only api
 func NewGitHubAccess(d GitHubAccessDeps) (*ghaccess.Refresher, error) {
-	return wireGitHubAccess(d.DB, d.Vault, ControlPlaneEndpoint(d.ControlPlane), d.Integrations.Webhooks)
+	return wireGitHubAccess(d.DB, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
 }
 
 // gitHubAccess adapts *ghaccess.Refresher to trigger.IntegrationAccess.
@@ -591,7 +605,7 @@ type TriggerSendersDeps struct {
 //
 //forge:root-only api
 func NewTriggerSenders(d TriggerSendersDeps) (TriggerSenders, error) {
-	return wireGitHubSenders(d.DB, d.Vault, ControlPlaneEndpoint(d.ControlPlane), d.Integrations.Webhooks)
+	return wireGitHubSenders(d.DB, d.Vault, d.ControlPlane, d.Integrations.Webhooks)
 }
 
 // gitHubSenders adapts ghusers.Service to trigger.SenderDirectory. It
@@ -618,7 +632,7 @@ func (gitHubSenders) IsPermanent(err error) bool {
 func (gitHubSenders) IsInvalid(err error) bool { return errors.Is(err, ghusers.ErrTooManyQueries) }
 
 // wireGitHubSenders is NewTriggerSenders over its parts.
-func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, hooks webhook.RegistryConfig) (TriggerSenders, error) {
+func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp *configv1.ControlPlaneConfig, hooks webhook.RegistryConfig) (TriggerSenders, error) {
 	if strings.TrimSpace(hooks.GitHubWebhookSecret) == "" {
 		return nil, nil
 	}
@@ -632,7 +646,7 @@ func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp controlplane.Endpoi
 }
 
 // wireGitHubAccess is NewGitHubAccess over its parts.
-func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, hooks webhook.RegistryConfig) (*ghaccess.Refresher, error) {
+func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp *configv1.ControlPlaneConfig, hooks webhook.RegistryConfig) (*ghaccess.Refresher, error) {
 	if strings.TrimSpace(hooks.GitHubWebhookSecret) == "" {
 		return nil, nil
 	}
@@ -645,16 +659,16 @@ func wireGitHubAccess(repo *db.Repo, keys vault.Service, cp controlplane.Endpoin
 	}), nil
 }
 
-func gitHubTokenSource(repo *db.Repo, keys vault.Service, cp controlplane.Endpoint, clients connections.OAuthClients) (ghaccess.TokenSource, error) {
-	if cp.Hosted() {
+func gitHubTokenSource(repo *db.Repo, keys vault.Service, cfg *configv1.ControlPlaneConfig, clients connections.OAuthClients) (ghaccess.TokenSource, error) {
+	if cp := ControlPlaneEndpoint(cfg); cp.Hosted() {
 		secret := cp.InternalServiceSecret
 		if secret == "" {
 			return nil, errors.New("github triggers: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not; " +
 				"hosted GitHub tokens come from control-plane and cannot be fetched unauthenticated")
 		}
 		return ghaccess.NewDelegatedTokens(gitcredentialclient.NewInstrumented(gitcredentialclient.Deps{
-			BaseURL: cp.URL,
-			Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
+			ControlPlane: cfg,
+			Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 		})), nil
 	}
 	if repo == nil {
@@ -714,11 +728,12 @@ type TriggerAlertingDeps struct {
 //
 //forge:root-only api
 func NewTriggerAlerting(d TriggerAlertingDeps) (*triggers.Alerting, error) {
-	return wireTriggerAlerting(d.DB, ControlPlaneEndpoint(d.ControlPlane), d.Integrations.PublicURL), nil
+	return wireTriggerAlerting(d.DB, d.ControlPlane, d.Integrations.PublicURL), nil
 }
 
 // wireTriggerAlerting is NewTriggerAlerting over its parts.
-func wireTriggerAlerting(repo *db.Repo, cp controlplane.Endpoint, publicURL string) *triggers.Alerting {
+func wireTriggerAlerting(repo *db.Repo, cfg *configv1.ControlPlaneConfig, publicURL string) *triggers.Alerting {
+	cp := ControlPlaneEndpoint(cfg)
 	if !cp.Hosted() {
 		return nil
 	}
@@ -734,8 +749,8 @@ func wireTriggerAlerting(repo *db.Repo, cp controlplane.Endpoint, publicURL stri
 		return nil
 	}
 	receivers := controlplane.NewInstrumented(controlplane.Deps{
-		BaseURL: cp.URL,
-		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
+		ControlPlane: cfg,
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
 	return triggers.NewAlerting(receivers, repo, publicURL)
 }
@@ -767,6 +782,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 	in := webhook.NewInbound(repo,
 		triggers.NewIntake(repo, d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+			WithPoolCatalogs(machinepool.Catalogs{R: repo}).
 			WithEnrichers(triggers.NewOriginEnricher(repo.IntegrationWrites(), repo, d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
 		WithConnectionSecrets(d.Connections.Tokens)
@@ -881,32 +897,47 @@ func (c *DaemonEventsConsumer) Run(ctx context.Context) error {
 // WorktreeSweepDeps is the database, the router the daemons are asked
 // through, and what the sweep does with finished worktrees.
 type WorktreeSweepDeps struct {
-	DB       *db.Repo
-	Router   *APIDaemonRouter
-	Settings *APISettings
+	ControlPlane *configv1.ControlPlaneConfig
+	DB           *db.Repo
+	Router       *APIDaemonRouter
+	Settings     *APISettings
 }
 
 // NewWorktreeSweep settles archived worktrees' directories through their
 // daemons: WorktreeService and InboxService settle one at a time through it,
 // and the WorktreeSweeper loop sweeps them all.
 //
-// RELIANT_WORKTREE_AUTO_ARCHIVE: "dry-run" (default) logs the active
-// worktrees its daemon reports finished (clean, merged or pushed, idle over
-// 24h, not in use) and archives nothing; read the finished= count in the
-// "[WorktreeSweep] auto-archive" line, then set "on" to archive them so the
-// ordinary removal reaches them; "off" never asks.
+// RELIANT_WORKTREE_AUTO_ARCHIVE: "dry-run" (default) observes candidates but
+// does not enroll dirty/unpushed work in Git recovery; "on" admits the Git-only
+// preservation/finalization pipeline after seven days of complete inactivity
+// evidence. Every capture still requires its own eligibility/secret gates and
+// independent remote proof. "off" disables automatic enrollment.
+//
+// The same mode governs reclaim on merge (RELIANT_WORKTREE_LANDED_IDLE): a
+// live worktree whose work has landed has its rebuildable files shed ("on")
+// and is archived once its chats have been quiet that long, leaving the chats
+// live; dry-run only logs the candidates.
 //
 //forge:root-only api
 func NewWorktreeSweep(d WorktreeSweepDeps) (*worktreesweep.Sweeper, error) {
 	database := d.DB
+	credentials, err := gitTokens(d.ControlPlane)
+	if err != nil {
+		return nil, err
+	}
 	return worktreesweep.New(database, d.Router.NATSDaemonRouter).
+		// The existing explicit rollout setting gates Git recovery too. The
+		// gate does not bypass any per-workspace or remote verification check.
+		WithGitRecovery(database, recoveryCredentials{client: credentials}, d.Settings.WorktreeAutoArchive == worktreesweep.AutoArchiveOn).
 		WithKeepFiles(worktreesweep.KeepSetting{R: database}).
+		WithIdleRetirement(d.Settings.WorktreeLiveShedIdle, database).
 		WithAutoArchive(d.Settings.WorktreeAutoArchive, database,
 			func(ctx context.Context, userID, projectID, worktreeID string) {
 				if err := database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{ProjectID: &projectID, WorktreeID: &worktreeID}); err != nil {
 					logging.WarnContext(ctx, "worktree sweep: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
 				}
-			}), nil
+			}).
+		WithLandedIdle(d.Settings.WorktreeLandedIdle), nil
 }
 
 // worktreeSweepInterval is how often the server asks each daemon to settle its
@@ -1075,6 +1106,9 @@ type WorkflowReconcilerDeps struct {
 	ResetGuard *v2workflow.ResetAttemptGuard
 	Queued     queueddelivery.Service
 	Router     *APIDaemonRouter
+	// Activity is where a held run's still-running background work is
+	// published as machine activity, so a suspend does not kill it.
+	Activity *daemonstate.Publisher
 }
 
 // NewWorkflowReconciler builds the reconciler. Its namespace must match the
@@ -1091,6 +1125,9 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r.SetResetGuard(d.ResetGuard)
 	r.SetQueuedDelivery(d.Queued)
 	r.SetBackgroundProcessDaemons(backgroundProcessDaemons{router: d.Router.NATSDaemonRouter, repo: d.DB})
+	if d.Activity != nil {
+		r.SetHeldRunActivity(d.Activity)
+	}
 	return &WorkflowReconciler{r}, nil
 }
 
@@ -1159,6 +1196,48 @@ func (p *PayloadGC) Run(ctx context.Context) error {
 	return nil
 }
 
+// llmUsageRetentionInterval is how often the retention job runs. Each pass
+// deletes only what has aged out, so an hour keeps the backlog small.
+const llmUsageRetentionInterval = time.Hour
+
+// LLMUsageRetention deletes per-call LLM usage rows older than
+// db.LLMCallUsageRetention. The daily rollup is kept. Every replica runs it;
+// the delete is idempotent and skips rows another replica is deleting.
+type LLMUsageRetention struct{ repo *db.Repo }
+
+// LLMUsageRetentionDeps is the repository whose ledger is pruned.
+type LLMUsageRetentionDeps struct {
+	DB *db.Repo
+}
+
+// NewLLMUsageRetention is the retention loop.
+//
+//forge:root-only api
+func NewLLMUsageRetention(d LLMUsageRetentionDeps) (*LLMUsageRetention, error) {
+	return &LLMUsageRetention{repo: d.DB}, nil
+}
+
+// Run prunes until ctx ends.
+func (l *LLMUsageRetention) Run(ctx context.Context) error {
+	ticker := time.NewTicker(llmUsageRetentionInterval)
+	defer ticker.Stop()
+	for {
+		if n, err := l.repo.PruneLLMCallUsage(ctx, time.Now()); err != nil {
+			logging.WarnContext(ctx, "pruning LLM call usage failed", "deleted", n, "error", err)
+		} else if n > 0 {
+			logging.InfoContext(ctx, "pruned LLM call usage past retention", "deleted", n)
+		}
+		if _, err := l.repo.PruneLLMUsagePurgeFences(ctx, time.Now()); err != nil {
+			logging.WarnContext(ctx, "pruning LLM usage purge fences failed", "error", err)
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
+}
+
 // apiMountOptions is each user-audience service's mount options on top of the
 // user chain. The services whose requests wake an asleep machine
 // (machinewake: the worktree and filesystem services) report the wake as
@@ -1167,11 +1246,26 @@ func (p *PayloadGC) Run(ctx context.Context) error {
 // version skew — and when the operator turned the forge API off
 // (RELIANT_DISABLE_FORGE_API) it answers every rpc FailedPrecondition, after
 // auth, before the handler runs.
+//
+// The list reads the user-update stream makes a client refetch (the chat list,
+// the archived list, a chat's approvals) go through one readguard: one user's
+// identical concurrent reads share a read, and at most readguard.DefaultPerUser
+// distinct ones run at once, so a client that storms them (desktop builds
+// before #1865) cannot take the database pool from everyone else.
 func apiMountOptions(disableForgeAPI bool) MountOptions {
 	machineWake := mountkit.WithHandlerOptions(connect.WithInterceptors(machinewake.NewInterceptor()))
+	listReads := mountkit.WithHandlerOptions(connect.WithInterceptors(readguard.NewInstrumented(readguard.Deps{
+		Procedures: []readguard.Procedure{
+			readguard.Read[reliantv1.ListChatsResponse](reliantv1connect.ChatServiceListChatsProcedure),
+			readguard.Read[reliantv1.ListArchivedChatsResponse](reliantv1connect.ChatServiceListArchivedChatsProcedure),
+			readguard.Read[reliantv1.ListApprovalsByChatResponse](reliantv1connect.ApprovalServiceListApprovalsByChatProcedure),
+		},
+	})))
 	opts := MountOptions{
 		Worktree:   []mountkit.Option{machineWake},
 		FileSystem: []mountkit.Option{machineWake},
+		Chat:       []mountkit.Option{listReads},
+		Approval:   []mountkit.Option{listReads},
 	}
 	if disableForgeAPI {
 		logging.Info("forge API disabled in this deployment (RELIANT_DISABLE_FORGE_API): ForgeService answers FailedPrecondition")
@@ -1201,14 +1295,6 @@ func alertingProvisioner(a *triggers.Alerting) trigger.AlertingProvisioner {
 	return a
 }
 
-// modelEndpointControlPlane is the control-plane block in its config shape,
-// trimmed as ControlPlaneEndpoint trims it: its URL picks the dial policy for
-// user-supplied model endpoints.
-func modelEndpointControlPlane(cfg *configv1.ControlPlaneConfig) *configv1.ControlPlaneConfig {
-	cp := ControlPlaneEndpoint(cfg)
-	return &configv1.ControlPlaneConfig{Url: cp.URL, InternalServiceSecret: cp.InternalServiceSecret}
-}
-
 // hostedControlPlane is the control-plane client of a deployment a control
 // plane hosts, for the handlers that act on it only then (cloning from
 // GitHub, deleting the platform account, minting automation tokens). It is
@@ -1220,17 +1306,28 @@ func hostedControlPlane(cfg *configv1.ControlPlaneConfig) controlplane.Service {
 	if !cp.Hosted() {
 		return nil
 	}
-	return controlplane.NewInstrumented(controlplane.Deps{BaseURL: cp.URL})
+	return controlplane.NewInstrumented(controlplane.Deps{ControlPlane: cfg})
 }
 
 // controlPlaneClient is the control-plane client SettingsService mints LLM
 // keys through, authenticated as the signed-in user.
 func controlPlaneClient(cfg *configv1.ControlPlaneConfig) controlplane.Service {
-	return controlplane.NewInstrumented(controlplane.Deps{BaseURL: ControlPlaneEndpoint(cfg).URL})
+	return controlplane.NewInstrumented(controlplane.Deps{ControlPlane: cfg})
 }
 
 // gitTokens is where TokenService gets a hosted user's git tokens: the
 // control plane, as the internal service. nil self-hosted.
+// recoveryCredentials fails closed on self-hosted deployments without the
+// existing credential authority, without preventing ordinary worktree RPCs.
+type recoveryCredentials struct{ client gitcredentialclient.Service }
+
+func (c recoveryCredentials) UserAccessToken(ctx context.Context, userID, provider string) (gitcredentialclient.Token, error) {
+	if c.client == nil {
+		return gitcredentialclient.Token{}, gitcredentialclient.ErrNotConnected
+	}
+	return c.client.UserAccessToken(ctx, userID, provider)
+}
+
 func gitTokens(cfg *configv1.ControlPlaneConfig) (gitcredentialclient.Service, error) {
 	cp := ControlPlaneEndpoint(cfg)
 	if !cp.Hosted() {
@@ -1244,7 +1341,7 @@ func gitTokens(cfg *configv1.ControlPlaneConfig) (gitcredentialclient.Service, e
 		return nil, errors.New("git tokens: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
 	}
 	return gitcredentialclient.NewInstrumented(gitcredentialclient.Deps{
-		BaseURL: cp.URL,
-		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
+		ControlPlane: cfg,
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	}), nil
 }

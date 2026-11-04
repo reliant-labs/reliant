@@ -27,7 +27,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 
 import { DevStackPanel } from "../DevStackPanel";
 import { classifyForgeResponse, type ForgeOutcome } from "@/services/forge/topology";
@@ -133,12 +133,12 @@ describe("unknown renders distinctly from BOTH pass and fail", () => {
     expect(unknown.className).not.toBe(fail.className);
 
     expect(fail.className).toContain("border-solid");
-    expect(fail.className).toMatch(/bg-destructive/);
+    expect(fail.className).toMatch(/bg-danger/);
     expect(unknown.className).toContain("border-dashed");
 
     // A check that could not look must never be reported as a problem — that is
     // how a check earns itself being switched off in its first week.
-    expect(unknown.className).not.toMatch(/destructive/);
+    expect(unknown.className).not.toMatch(/danger|destructive/);
   });
 
   it("says in words that unknown is neither a pass nor a skip", () => {
@@ -165,7 +165,7 @@ describe("unknown renders distinctly from BOTH pass and fail", () => {
     expect(verdict.textContent).toContain("not a clean bill of health");
     // Not painted as success, and not painted as an error either.
     expect(verdict.className).not.toMatch(/success/);
-    expect(verdict.className).not.toMatch(/destructive/);
+    expect(verdict.className).not.toMatch(/danger|destructive/);
     expect(verdict.className).toContain("border-dashed");
   });
 });
@@ -229,7 +229,7 @@ describe("warn is its own level, between measured-good and measured-bad", () => 
   it("does not render warn as a failure", () => {
     renderPanel(reportOutcome(allFiveReport()));
     const warn = badgeFor("Prometheus");
-    expect(warn.className).not.toMatch(/destructive/);
+    expect(warn.className).not.toMatch(/danger|destructive/);
     // Measured, so it keeps the solid/continuous treatment — it is certain.
     expect(warn.className).toContain("border-solid");
     expect(warn.className).not.toBe(badgeFor("Cluster Workloads").className);
@@ -244,7 +244,8 @@ describe("no check is filtered out", () => {
     renderPanel(reportOutcome(allFiveReport()));
     expect(screen.getByTestId("forge-check-Cluster Workloads")).toBeTruthy();
     expect(screen.getByTestId("forge-check-App Health")).toBeTruthy();
-    expect(screen.getByTestId("forge-status-checks").children).toHaveLength(5);
+    // The header row, then one row per check.
+    expect(within(screen.getByTestId("forge-status-checks")).getAllByRole("row")).toHaveLength(1 + 5);
   });
 
   it("renders a check with no name rather than dropping it", () => {
@@ -315,7 +316,7 @@ describe("the non-report outcomes", () => {
     const panel = screen.getByTestId("forge-not-project");
     expect(panel.textContent).toContain("forge.yaml");
     expect(panel.textContent).toContain("Ship this project with forge");
-    expect(panel.className).not.toMatch(/destructive/);
+    expect(panel.className).not.toMatch(/danger|destructive/);
     expect(screen.queryByTestId("forge-env-status")).toBeNull();
   });
 
@@ -331,7 +332,7 @@ describe("the non-report outcomes", () => {
     expect(panel.textContent).toContain("too old");
     expect(panel.textContent).toContain("v0.4.2");
     expect(panel.textContent).toContain("unknown flag: --json");
-    expect(panel.className).not.toMatch(/destructive/);
+    expect(panel.className).not.toMatch(/danger|destructive/);
   });
 
   it("renders UNREACHABLE as unknown — neither a red banner nor a green screen", () => {
@@ -349,7 +350,7 @@ describe("the non-report outcomes", () => {
     const panel = screen.getByTestId("forge-unreachable");
     expect(panel.textContent).toContain("unknown");
     expect(panel.className).toContain("border-dashed");
-    expect(panel.className).not.toMatch(/destructive/);
+    expect(panel.className).not.toMatch(/danger|destructive/);
   });
 
   it("does not crash on a malformed report body", () => {

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * An automation's health, as automation-ux-spec.md §4.1 names it, from the
+ * An automation's health, in the one vocabulary every surface uses, from the
  * server's TriggerHealth plus client facts: whether the trigger is enabled,
  * whether it has ever fired and what kind of source it has. Every server
  * status is crossed with the first two; each state carries one call to action.
@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest";
 
 import { RunDisplayState } from "../../gen/reliant/v1/run_pb";
-import type { TriggerEvent, TriggerHealth, TriggerHealthStatusKey } from "../../api/trigger-grpc";
+import type { TriggerEvent, TriggerHealth, TriggerHealthStatusKey } from "@/hooks/trigger-model";
 import { automationHealth, type AutomationHealthKey } from "../automationHealth";
 
 const EVENT: TriggerEvent = {
@@ -69,7 +69,7 @@ describe("automationHealth: every server status × enabled × never fired", () =
     for (const enabled of [true, false]) {
       for (const fired of [true, false]) {
         const [key, label] = !enabled
-          ? (["paused", "Paused"] as const)
+          ? (["paused", "Off"] as const)
           : fired && s.firedOnly
             ? s.firedOnly
             : [s.key, s.label];
@@ -181,7 +181,7 @@ describe("automationHealth: broken activations", () => {
   it("stays Broken when paused: resuming would not fix it", () => {
     const display = automationHealth({ enabled: false, health: health("broken", { lastFailureDetail: reason }) });
     expect(display.key).toBe("broken");
-    expect(display.detail).toBe(`Paused. ${reason}`);
+    expect(display.detail).toBe(`Off. ${reason}`);
   });
 });
 
@@ -223,10 +223,10 @@ describe("automationHealth: setup and launch states", () => {
     expect(event.cta).toEqual({ kind: "try_now", label: "Try it now" });
   });
 
-  it("gives every state at most one call to action, and a broken built-in's is Remove trigger", () => {
-    const broken = (workflow: string) => automationHealth({ enabled: true, health: health("broken"), workflow }).cta;
-    expect(broken("builtin://autopilot-pr-review")).toEqual({ kind: "remove_trigger", label: "Remove trigger" });
-    expect(broken("my-flow")).toEqual({ kind: "open_workflow", label: "Open workflow" });
+  it("gives every state at most one call to action, and a broken one's is Remove trigger", () => {
+    const broken = automationHealth({ enabled: true, health: health("broken", { lastFailureDetail: "its workflow does not resolve" }) });
+    expect(broken.cta).toEqual({ kind: "remove_trigger", label: "Remove trigger" });
+    expect(broken.detail).toBe("its workflow does not resolve");
     expect(automationHealth({ enabled: false, health: health("healthy") }).cta).toEqual({ kind: "resume", label: "Resume" });
     expect(automationHealth({ enabled: true, health: health("failing", { consecutiveFailures: 2 }), lastEvent: EVENT }).cta?.label).toBe("Open last run");
     expect(automationHealth({ enabled: true, health: health("healthy"), lastEvent: EVENT }).cta).toBeUndefined();

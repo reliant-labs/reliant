@@ -44,7 +44,7 @@ describe("TakeOverRunBar", () => {
 describe("useAdoptOnSend", () => {
   it("adopts an un-adopted automation chat after the send succeeds", async () => {
     const order: string[] = [];
-    const send = vi.fn(async () => {
+    const send = vi.fn(async (_text: string) => {
       order.push("send");
     });
     adopt.mockImplementation(async () => {
@@ -55,12 +55,12 @@ describe("useAdoptOnSend", () => {
     await act(() => result.current("hello"));
 
     expect(send).toHaveBeenCalledWith("hello");
-    expect(adopt).toHaveBeenCalledWith("chat-1");
+    expect(adopt).toHaveBeenCalledWith({ chatId: "chat-1" });
     expect(order).toEqual(["send", "adopt"]);
   });
 
   it("does not adopt when the send fails", async () => {
-    const send = vi.fn(async () => {
+    const send = vi.fn(async (_text: string) => {
       throw new Error("daemon offline");
     });
     const { result } = renderHook(() => useAdoptOnSend(scheduled, send));
@@ -70,7 +70,7 @@ describe("useAdoptOnSend", () => {
   });
 
   it("leaves interactive and already-adopted chats alone", async () => {
-    const send = vi.fn(async () => {});
+    const send = vi.fn(async (_text: string) => {});
     const interactive = renderHook(() => useAdoptOnSend({ id: "c", launchKind: "chat.start" }, send));
     const adopted = renderHook(() =>
       useAdoptOnSend({ ...scheduled, adoptedAt: "2024-01-01T00:00:00Z" }, send),
@@ -85,11 +85,11 @@ describe("useAdoptOnSend", () => {
     adopt.mockImplementation(async () => {
       throw new Error("adopt failed");
     });
-    const send = vi.fn(async () => {});
+    const send = vi.fn(async (_text: string) => {});
     const { result } = renderHook(() => useAdoptOnSend(scheduled, send));
 
     await act(() => result.current("hello"));
-    expect(adopt).toHaveBeenCalledWith("chat-1");
+    expect(adopt).toHaveBeenCalledWith({ chatId: "chat-1" });
     expect(send).toHaveBeenCalled();
   });
 });

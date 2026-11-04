@@ -77,7 +77,7 @@ describe("sendOnExistingChat", () => {
   it("a stale ACTIVE chat the server says has not started is started once", async () => {
     const actions = makeActions();
     actions.sendMessage.mockRejectedValue(
-      new ConnectError("chat has not started; call StartChat", Code.FailedPrecondition),
+      new ConnectError("chat has not started; call StartChat", Code.FailedPrecondition, new Headers({ "x-forge-error-reason": "chat_not_started" })),
     );
     await sendOnExistingChat(
       { workflowState: WorkflowState.ACTIVE },

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // Each test builds a real repository with one kind of crash damage — the files
@@ -50,6 +52,7 @@ func emptyLoose(t *testing.T, commonDir, id string) {
 }
 
 func TestRepair_EmptyLooseObjectWithPackedCopyIsRemovedAndNothingIsLost(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	common := filepath.Join(f.project, ".git")
@@ -74,6 +77,7 @@ func TestRepair_EmptyLooseObjectWithPackedCopyIsRemovedAndNothingIsLost(t *testi
 }
 
 func TestRepair_EmptyLooseObjectStillReferencedIsReportedLost(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	common := filepath.Join(f.project, ".git")
@@ -184,6 +188,7 @@ func TestRepair_MainCheckoutIndexIsRebuilt(t *testing.T) {
 }
 
 func TestRepair_IntactIndexesAndFreshDamageAreLeftAlone(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w1", "feat/ok")
@@ -203,6 +208,7 @@ func TestRepair_IntactIndexesAndFreshDamageAreLeftAlone(t *testing.T) {
 }
 
 func TestRepair_EmptyHEADIsRestoredFromTheReflog(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w1", "feat/head")
@@ -248,6 +254,7 @@ func TestRepair_StaleTempPacksAndLocksAreRemoved(t *testing.T) {
 }
 
 func TestRepair_RegistrationsOfGoneCheckoutsArePrunedOnlyWhenReliantOwnsThem(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	gone := f.worktree("gone", "feat/gone")          // reliant lock, directory removed
@@ -313,6 +320,7 @@ func TestRepair_BusyCheckoutIsNotPruned(t *testing.T) {
 }
 
 func TestDiscoverCommonDirs(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.worktree("w1", "feat/a")

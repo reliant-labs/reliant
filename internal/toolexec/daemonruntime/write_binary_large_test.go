@@ -16,6 +16,7 @@ import (
 // handler is a json.Unmarshal failure, and a truncated or corrupted envelope
 // only shows up once the payload is large enough to be split in transit.
 func TestWriteBinaryFileHandlesMultiMBImageEnvelope(t *testing.T) {
+	t.Parallel() // its own temp dirs and servers; off the package's serial phase
 	dir := t.TempDir()
 	path := filepath.Join(dir, "generated.png")
 

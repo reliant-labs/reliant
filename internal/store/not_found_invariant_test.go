@@ -73,7 +73,6 @@ func TestByKeyMissIsClassifiedNotFound(t *testing.T) {
 		{name: "GetPreset", read: call(func() (any, error) { return store.GetPreset(ctx, db, missing) }), noRows: true},
 		{name: "GetPresetBySlug", read: call(func() (any, error) { return store.GetPresetBySlug(ctx, db, user, "no-such-slug") }), noRows: true},
 		{name: "LoadWorkflowDraft", read: call(func() (any, error) { return store.LoadWorkflowDraft(ctx, db, missing) }), noRows: true},
-		{name: "RemoveWorkflowDraft", read: call(func() (any, error) { return store.RemoveWorkflowDraft(ctx, db, missing) }), noRows: true},
 		{name: "GetItemDefault", read: call(func() (any, error) { return store.GetItemDefault(ctx, db, 1, "no-such-slug") }), noRows: true},
 		{name: "GetProjectConfigRecord", read: call(func() (any, error) { return store.GetProjectConfigRecord(ctx, db, project) }), noRows: true},
 		{name: "GetAPIKeySealed", read: call(func() (any, error) { return store.GetAPIKeySealed(ctx, db, user, "no-such-provider") }), noRows: true},

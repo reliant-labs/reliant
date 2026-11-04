@@ -1,4 +1,4 @@
-import type { InputMessage } from "../api/chat-grpc";
+import type { InputMessage } from "../hooks/chat-model";
 
 // Chat-related request types
 // NOTE: model, mode are passed via workflow_params

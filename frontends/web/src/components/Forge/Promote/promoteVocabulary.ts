@@ -71,16 +71,16 @@ export interface DirectionStyle {
 export const DIRECTION_STYLES: Record<PromoteDirection, DirectionStyle> = {
   // Moving forward. Solid border: this is a real move with a direction.
   ahead: {
-    container: "border border-solid border-border bg-muted/30",
-    foreground: "text-foreground",
+    container: "border border-solid border-border bg-surface-sunken",
+    foreground: "text-ink",
     label: "Forward promote",
     blurb: "The target release was cut after the one this environment runs now.",
     icon: ArrowUp,
   },
   // A ROLLBACK. Destructive treatment, its own icon, and the word in the label.
   behind: {
-    container: "border border-solid border-destructive/50 bg-destructive/10",
-    foreground: "text-destructive-ink",
+    container: "border border-solid border-danger-border bg-danger-surface",
+    foreground: "text-danger-ink",
     label: "Rollback — moves backwards",
     blurb:
       "The target release was cut BEFORE the one this environment runs now. This moves the environment backwards.",
@@ -89,21 +89,21 @@ export const DIRECTION_STYLES: Record<PromoteDirection, DirectionStyle> = {
   // Nothing would move. Dashed: not an action with a direction.
   same: {
     container: "border border-dashed border-border bg-transparent",
-    foreground: "text-muted-foreground",
+    foreground: "text-ink-muted",
     label: "Already on this release",
     blurb: "This environment is already bound to the target release.",
     icon: Equal,
   },
   initial: {
     container: "border border-dashed border-border bg-transparent",
-    foreground: "text-muted-foreground",
+    foreground: "text-ink-muted",
     label: "First promote",
     blurb: "This environment has never been promoted, so there is no release to move from.",
     icon: Sparkles,
   },
   unknown: {
     container: "border border-dashed border-border bg-transparent",
-    foreground: "text-muted-foreground",
+    foreground: "text-ink-muted",
     label: "Direction unknown",
     blurb:
       "The release ordering could not place both releases, so whether this moves forward or backwards is not known.",
@@ -138,7 +138,7 @@ export interface ChangeStyle {
 export const CHANGE_STYLES: Record<PromoteImageChange, ChangeStyle> = {
   // STRUCTURAL: the binding gains an image it did not declare.
   added: {
-    row: "border-l-2 border-solid border-success bg-success/10",
+    row: "border-l-2 border-solid border-success bg-success-surface",
     foreground: "text-success-ink",
     sigil: "+",
     label: "Added",
@@ -148,8 +148,8 @@ export const CHANGE_STYLES: Record<PromoteImageChange, ChangeStyle> = {
   // STRUCTURAL: the binding stops declaring an image. Note the careful scope —
   // nothing is deleted from a cluster by a promote.
   removed: {
-    row: "border-l-2 border-solid border-destructive bg-destructive/10",
-    foreground: "text-destructive-ink",
+    row: "border-l-2 border-solid border-danger bg-danger-surface",
+    foreground: "text-danger-ink",
     sigil: "−",
     label: "Removed",
     icon: Minus,
@@ -167,7 +167,7 @@ export const CHANGE_STYLES: Record<PromoteImageChange, ChangeStyle> = {
   },
   unchanged: {
     row: "border-l-2 border-transparent",
-    foreground: "text-muted-foreground",
+    foreground: "text-ink-muted",
     sigil: "",
     label: "Unchanged",
     icon: Equal,
@@ -175,7 +175,7 @@ export const CHANGE_STYLES: Record<PromoteImageChange, ChangeStyle> = {
   },
   unknown: {
     row: "border-l-2 border-dashed border-border",
-    foreground: "text-muted-foreground",
+    foreground: "text-ink-muted",
     sigil: "?",
     label: "Unclassified",
     icon: HelpCircle,

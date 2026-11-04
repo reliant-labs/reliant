@@ -16,13 +16,34 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const daemonState = vi.hoisted(() => ({
   current: {
-    activeDaemon: undefined as { daemonId: string; hostname: string; status: number } | undefined,
-    daemons: [] as Array<{ daemonId: string; hostname: string; status: number }>,
+    activeDaemon: undefined,
+    daemons: [],
     loading: false,
-    answered: undefined as boolean | undefined,
+  } as {
+    activeDaemon: { daemonId: string; hostname: string; status: number } | undefined;
+    daemons: Array<{ daemonId: string; hostname: string; status: number }>;
+    loading: boolean;
+    /** Set to pin the answer; otherwise it follows `loading`. */
+    answered?: boolean;
   },
 }));
 const startChat = vi.hoisted(() => vi.fn(async () => ({ id: "chat-new" })));
+// The app's current workspace (switching context moves it, as the real store
+// does) and the machine holding the "feature" checkout (undefined: none recorded).
+const workspace = vi.hoisted(() => {
+  const state = {
+    currentId: "w-feature",
+    machine: undefined as string | undefined,
+    rows: () => [
+      { id: "w-main", branch: "main", name: "main", is_main: true },
+      { id: "w-feature", branch: "feature", name: "feature", daemon_id: state.machine },
+    ],
+    switchTo: async (_projectId: string, worktree: { id: string }) => {
+      state.currentId = worktree.id;
+    },
+  };
+  return state;
+});
 
 function storeMock(state: () => any) {
   return Object.assign((selector?: any) => (selector ? selector(state()) : state()), {
@@ -32,6 +53,17 @@ function storeMock(state: () => any) {
   });
 }
 
+// Where the project is installed decides which machine a new chat names
+// (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+// "Make default" in the machine picker writes through the query client;
+// these tests render no provider and never click it.
+vi.mock("@/hooks/useMakeDefaultMachine", () => ({
+  useMakeDefaultMachine: () => ({ makeDefault: vi.fn(), isPending: false }),
+}));
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),
+}));
 vi.mock("../../../hooks/chat-queries", () => ({
   useChatList: () => ({ data: [], isSuccess: true }),
 }));
@@ -45,7 +77,18 @@ vi.mock("../../../store/worktreeStore", () => ({
       { id: "w-main", branch: "main", name: "main", is_main: true },
       { id: "w-feature", branch: "feature", name: "feature" },
     ],
-    switchWorktreeContext: vi.fn(),
+    switchWorktreeContext: workspace.switchTo,
+    loadWorktrees: vi.fn(),
+  })),
+}));
+// Workspace rows are read through hooks/worktree-queries; answer them from the
+// same fixture.
+vi.mock("../../../hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/worktree-queries")>()),
+  ...(await import("../../../test/worktreeQueriesMock")).worktreeQueriesMock(() => ({
+    currentWorktree: workspace.rows().find((w) => w.id === workspace.currentId),
+    worktrees: workspace.rows(),
+    switchWorktreeContext: workspace.switchTo,
     loadWorktrees: vi.fn(),
   })),
 }));
@@ -65,7 +108,11 @@ vi.mock("../../../store/chatParamsStore", () => ({
   useChatParamsStore: storeMock(() => ({ transferTempToChat: vi.fn() })),
 }));
 vi.mock("@/hooks/useDaemonStatus", () => ({
-  useDaemonStatus: () => ({ answered: !daemonState.current.loading, ...daemonState.current, refresh: vi.fn() }),
+  useDaemonStatus: () => ({
+    ...daemonState.current,
+    answered: daemonState.current.answered ?? !daemonState.current.loading,
+    refresh: vi.fn(),
+  }),
 }));
 vi.mock("@/hooks/useDaemonWait", () => ({
   useDaemonWait: ({ waiting }: { waiting: boolean }) => ({
@@ -89,10 +136,10 @@ vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
 vi.mock("../../DaemonWaitState", () => ({
   DaemonWaitState: ({ state }: { state: { title: string } }) => <div role="status">{state.title}</div>,
 }));
-vi.mock("../../Layout/ConnectDaemonModal", () => ({ ConnectDaemonModal: () => null }));
+vi.mock("../../Machines/AddMachineSheet", () => ({ AddMachineSheet: () => null }));
 vi.mock("../../Worktrees/CreateWorktreeModal", () => ({ CreateWorktreeModal: () => null }));
 vi.mock("../../Worktrees/DiscoverWorktreesModal", () => ({ DiscoverWorktreesModal: () => null }));
-vi.mock("../../ui/Tooltip", () => ({ Tooltip: ({ children }: any) => <>{children}</> }));
+vi.mock("../../forge-ui/tooltip", () => ({ default: ({ children }: any) => <>{children}</> }));
 vi.mock("../../icons/ReliantIcon", () => ({ ReliantIcon: () => null }));
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
@@ -106,6 +153,8 @@ const laptop = { daemonId: "d-laptop", hostname: "laptop", status: 1 };
 
 beforeEach(() => {
   startChat.mockClear();
+  workspace.currentId = "w-feature";
+  workspace.machine = undefined;
   daemonState.current = { activeDaemon: laptop, daemons: [laptop], loading: false };
 });
 
@@ -196,5 +245,48 @@ describe("NewChatView: where the chat runs", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(startChat).toHaveBeenCalled());
     expect(machineArg()).toEqual({ daemonId: "d-laptop", noMachine: undefined });
+  });
+
+  // The owner's report: with two machines, the page let a chat start in a
+  // workspace on one machine while running on the other, whose disk does not
+  // have it. Selecting a workspace selects its machine.
+  describe("a workspace that lives on one machine", () => {
+    const gpu = { daemonId: "d-gpu", hostname: "gpu-box", status: 1 };
+
+    beforeEach(() => {
+      workspace.machine = "d-gpu";
+      daemonState.current = { activeDaemon: laptop, daemons: [laptop, gpu], loading: false };
+    });
+
+    it("runs on the workspace's machine and says why", async () => {
+      render(<NewChatView tabId="t1" />);
+      expect(screen.getByTestId("machine-picker")).toHaveTextContent("gpu-box");
+      expect(screen.getByTestId("new-chat-workspace-machine-note")).toHaveTextContent(
+        "Runs on gpu-box, where this workspace lives.",
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(startChat).toHaveBeenCalled());
+      expect((startChat.mock.calls[0] as unknown[])[0]).toBe("w-feature");
+      // The server pins the chat to its workspace's machine.
+      expect(machineArg()).toEqual({ daemonId: undefined, noMachine: undefined });
+    });
+
+    it("moves to the main workspace, and offers only that machine's workspaces, when another machine is chosen", async () => {
+      render(<NewChatView tabId="t1" />);
+      fireEvent.click(screen.getByTestId("machine-picker"));
+      fireEvent.click(screen.getByRole("option", { name: /laptop/ }));
+      await waitFor(() => expect(screen.getByTestId("machine-picker")).toHaveTextContent("laptop"));
+      expect(screen.queryByTestId("new-chat-workspace-machine-note")).toBeNull();
+
+      // The gpu-box workspace is not offered on the laptop.
+      fireEvent.click(screen.getByRole("button", { name: /^main$/ }));
+      expect(screen.getByText("No other workspaces on laptop")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(startChat).toHaveBeenCalled());
+      expect((startChat.mock.calls[0] as unknown[])[0]).toBe("w-main");
+      expect(machineArg()).toEqual({ daemonId: "d-laptop", noMachine: undefined });
+    });
   });
 });

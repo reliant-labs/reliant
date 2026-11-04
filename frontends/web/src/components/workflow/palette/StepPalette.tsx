@@ -30,7 +30,7 @@ import { createPortal } from "react-dom";
 
 import Badge from "../../forge-ui/badge";
 import { IntegrationLogoTile } from "../../icons/IntegrationLogo";
-import { catalogSearchGrpc, type CatalogEntrySummary, type CatalogKind } from "../../../api/catalog-search-grpc";
+import { prefetchCatalogEntry, type CatalogEntrySummary, type CatalogKind } from "../../../hooks/catalog-queries";
 import { ensureNodesCached, getNodeBgColor, getNodeIcon } from "../../../lib/node-metadata";
 import { cn } from "../../../lib/utils";
 import {
@@ -44,7 +44,7 @@ import {
   type BuiltinTriggerPaletteItem,
   type PaletteItem,
 } from "./paletteItems";
-import { catalogSearchKeys, useCatalogIntegrations, useCatalogSearch } from "./useCatalogSearch";
+import { useCatalogIntegrations, useCatalogSearch } from "./useCatalogSearch";
 import { useUnavailableIntegrations } from "../../../hooks/connection-queries";
 
 export interface StepPaletteProps {
@@ -208,11 +208,7 @@ function StepPaletteBody({
   // choosing it inserts defaults and opens its form without a wait.
   useEffect(() => {
     if (!activeEntry) return;
-    void queryClient.prefetchQuery({
-      queryKey: catalogSearchKeys.entry(activeEntry.ref),
-      queryFn: () => catalogSearchGrpc.get(activeEntry.ref),
-      staleTime: 5 * 60_000,
-    });
+    void prefetchCatalogEntry(queryClient, activeEntry.ref);
   }, [activeEntry, queryClient]);
 
   useEffect(() => {
@@ -417,7 +413,7 @@ function StepPaletteBody({
         {unconnected && !notAvailable && (
           <span
             data-palette-connect
-            className="flex-shrink-0 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-primary hover:bg-background"
+            className="flex-shrink-0 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-primary-ink hover:bg-background"
           >
             Connect
           </span>
@@ -451,7 +447,7 @@ function StepPaletteBody({
             <button
               type="button"
               onClick={() => expanded.refetch()}
-              className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Retry
             </button>
@@ -601,7 +597,7 @@ function StepPaletteBody({
                   <button
                     type="button"
                     onClick={() => paged.refetch()}
-                    className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     Retry
                   </button>
@@ -637,7 +633,7 @@ function StepPaletteBody({
                 <button
                   type="button"
                   onClick={() => changeCategory("")}
-                  className="mt-3 text-xs font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="mt-3 text-xs font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Search all categories
                 </button>
@@ -656,7 +652,7 @@ function StepPaletteBody({
               <button
                 type="button"
                 onClick={() => onConnect(activeEntry)}
-                className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Why?
               </button>
@@ -667,7 +663,7 @@ function StepPaletteBody({
               <button
                 type="button"
                 onClick={() => onConnect(activeEntry)}
-                className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="font-medium text-primary-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Connect {activeEntry.integration.displayName}
               </button>

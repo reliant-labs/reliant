@@ -5,8 +5,8 @@
  * /forge/p/:project/workloads/:env/:name.
  *
  * This file only adapts the console to the pages: the project, the scope and
- * the environments from the console context, the URL's search state, and the
- * restart. OverviewHome and WorkloadDetail hold the pages themselves and know
+ * the environments from the console context, the URL's search state, the
+ * restart, and the rollback (through the shared plan flow). OverviewHome and WorkloadDetail hold the pages themselves and know
  * nothing about routing — which is what lets the preview and the tests mount
  * them on fixtures.
  */
@@ -15,24 +15,36 @@ import { useCallback, useMemo } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { useCloudEnvStatus, useCloudEnvStatuses, useSetWorkloadRunState } from "@/hooks/forge-queries";
+import { useForgeDomains } from "@/hooks/forge-domain-queries";
+import { useCloudEnvStatus, useCloudEnvStatuses, useEnvironmentShape, useEnvironmentShapes, useSetWorkloadRunState } from "@/hooks/forge-queries";
+import { useEnvPromotions } from "@/hooks/release-queries";
 import { isPlacedKind, type LiveEnvKind } from "@/services/forge/live";
 import { restartWorkload, type RestartedWorkload } from "@/services/forge/cloudEnvs";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { useForgeConsole } from "../Console/consoleContext";
+import { deployStatusUnread } from "../Console/DeployStatusUnread";
 import { consolePath, withSearch } from "../Console/paths";
 import { CloudNotice } from "../SourceNotices";
+import { DeployRunsBanner } from "../Deploy/DeployRuns";
+import { rollbackTargets, type RollbackTarget } from "../Promote/rollback";
+import { usePromoteFlow } from "../Promote/usePromoteFlow";
 import { usePromoterNames } from "../Releases/useReleaseData";
 import { promoterOf } from "../Releases/releaseModel";
-import { OverviewHome, type HostedByEnv, type OverviewHrefs, type OverviewSearch } from "./OverviewHome";
-import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch } from "./WorkloadDetail";
+import { OverviewHome, type HostedByEnv, type OverviewHrefs, type OverviewRollback, type OverviewSearch } from "./OverviewHome";
+import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch, type WorkloadRollback } from "./WorkloadDetail";
 import type { StripEnv } from "./workloadModel";
 
 /** The roster's recorded, deployed environments as the Overview's strip needs them: prod first, previews last. */
 function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
   const { roster, forgeProject } = useForgeConsole();
   const names = usePromoterNames(forgeProject);
+  // The declared workloads matter only where nothing is placed to observe
+  // (an unplaced env with declared services and no telemetry is "Unobserved"),
+  // so only those environments' shapes are fetched.
+  const shapes = useEnvironmentShapes(
+    roster.envs.map(({ live }) => (live && live.kind !== "local" && live.declared && !isPlacedKind(live.kind) ? live.id : ""))
+  );
   const envs = useMemo(
     () =>
       roster.envs
@@ -49,12 +61,12 @@ function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
               promotedBy: promoterOf(live, names),
               preview: live.kind === "preview",
               placed: isPlacedKind(live.kind),
-              declared: (live.declaredShape?.workloads ?? []).map((workload) => workload.name).filter(Boolean),
+              declared: (shapes.get(live.id)?.shape?.workloads ?? []).map((workload) => workload.name).filter(Boolean),
             },
           ];
         })
         .sort((a, b) => Number(a.preview) - Number(b.preview) || (a.name === "prod" ? -1 : b.name === "prod" ? 1 : a.name.localeCompare(b.name))),
-    [roster.envs, names]
+    [roster.envs, names, shapes]
   );
   return { envs, loading: roster.isLoading || roster.resolvingName };
 }
@@ -94,12 +106,43 @@ export function actionsUnavailableReason(kind: LiveEnvKind, envName: string): st
   }
 }
 
+/**
+ * What each environment would roll back to, and the plan flow that does it —
+ * the same targets the Overview's "Needs attention" and a workload's page
+ * offer. Previews are left out: a preview is replaced, not rolled back.
+ */
+function useRollback(envs: readonly { id: string; name: string; release: string; preview?: boolean }[]): {
+  rollback: OverviewRollback;
+  dialog: React.ReactNode;
+} {
+  const long = useMemo(() => envs.filter((candidate) => !candidate.preview && candidate.release), [envs]);
+  const ledgers = useEnvPromotions(long.map((candidate) => candidate.id));
+  const key = long.map((candidate) => `${candidate.id}:${ledgers.get(candidate.id)?.data?.[0]?.id ?? ""}`).join(",");
+  const targets = useMemo(
+    () => rollbackTargets(long, new Map(long.map((candidate) => [candidate.id, ledgers.get(candidate.id)?.data]))),
+    // `ledgers` is a fresh Map per render; `key` changes when a ledger's head moves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [long, key]
+  );
+  const { control, dialog } = usePromoteFlow();
+  const rollback = useMemo<OverviewRollback>(
+    () => ({
+      targets,
+      onRollback: (target: RollbackTarget) => control.onPromote({ version: target.previous, env: target.env, intent: "rollback" }),
+      blockedReason: control.blockedReason,
+    }),
+    [targets, control]
+  );
+  return { rollback, dialog };
+}
+
 /** Each hosted environment's GetStatus observation, by environment name then workload name. */
-function useHostedByEnv(envs: StripEnv[]): HostedByEnv {
+function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading: boolean } {
   const hostedEnvs = useMemo(() => envs.filter((candidate) => candidate.placed), [envs]);
   const statuses = useCloudEnvStatuses(hostedEnvs.map((candidate) => candidate.id));
   const key = hostedEnvs.map((candidate) => `${candidate.id}:${statuses.get(candidate.id)?.data ? "1" : "0"}`).join(",");
-  return useMemo(() => {
+  const loading = hostedEnvs.some((candidate) => statuses.get(candidate.id)?.isLoading);
+  const hosted = useMemo(() => {
     const out = new Map<string, Map<string, ForgeHostedWorkload>>();
     for (const candidate of hostedEnvs) {
       const workloads = statuses.get(candidate.id)?.data?.workloads ?? [];
@@ -109,25 +152,30 @@ function useHostedByEnv(envs: StripEnv[]): HostedByEnv {
     // `statuses` is a fresh Map per render; `key` changes when any status lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hostedEnvs, key]);
+  return { hosted, loading };
 }
 
 export function OverviewPage() {
-  const { forgeProject, env, setEnv, roster, href } = useForgeConsole();
+  const { forgeProject, env, roster, href } = useForgeConsole();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as OverviewSearch;
   const onSearch = useSearchUpdater<OverviewSearch>();
   const { envs, loading } = useStripEnvs();
-  const hosted = useHostedByEnv(envs);
+  const { hosted, loading: hostedLoading } = useHostedByEnv(envs);
+  // The org's domains show which custom domains serve each frontend. Only the
+  // frontends panel reads them, and a failed read just leaves that column out.
+  const domains = useForgeDomains();
+  const { rollback, dialog } = useRollback(envs);
   const hrefs = useMemo<OverviewHrefs>(
     () => ({
       // The workload page carries the window, so its charts open on the one the reader was looking at.
       workload: (name, envName) => href({ kind: "workload", env: envName, name }, { range: search.range }),
-      release: (version) => href({ kind: "release", version }),
+      release: (version, open) => href({ kind: "release", version }, open ?? {}),
       releases: href({ kind: "releases" }),
       alerts: href({ kind: "obs-view", view: "alerts" }),
-      activity: href({ kind: "activity" }),
+      scoped: (envName) => href({ kind: "overview" }, { env: envName, q: search.q, status: search.status, kind: search.kind, range: search.range }),
     }),
-    [href, search.range]
+    [href, search.range, search.q, search.status, search.kind]
   );
   return (
     <div className="space-y-4" data-testid="console-overview">
@@ -137,13 +185,19 @@ export function OverviewPage() {
         env={env}
         envs={envs}
         envsLoading={loading}
+        envsUnread={deployStatusUnread(roster.live)}
         search={search}
         onSearch={onSearch}
         hrefs={hrefs}
-        onSelectEnv={setEnv}
         navigateTo={(target) => void navigate({ href: target })}
+        rollback={rollback}
+        deploys={<DeployRunsBanner project={forgeProject} deployHref={(run) => href({ kind: "releases" }, { env: run.env, deploy: run.id })} />}
         hosted={hosted}
+        hostedLoading={hostedLoading}
+        domains={domains.data}
+        domainsHref={href({ kind: "domains" })}
       />
+      {dialog}
     </div>
   );
 }
@@ -185,9 +239,22 @@ export function WorkloadPage() {
     }),
     [restart, runState, live, envName]
   );
+  // Whether the render declares this workload, for an unplaced env only: the
+  // declared shape is fetched for this one environment.
+  const shape = useEnvironmentShape(live && !placed && live.declared ? live.id : null);
   const hosted = useMemo<HostedObservation | null>(
     () => (placed ? { workload: status.data?.workloads.find((w) => w.name === name) ?? null, loading: status.isLoading } : null),
     [placed, status.data, status.isLoading, name]
+  );
+
+  const rollbackEnvs = useMemo(
+    () => (live && live.kind !== "preview" ? [{ id: live.id, name: envName, release: live.release }] : []),
+    [live, envName]
+  );
+  const { rollback: envRollback, dialog } = useRollback(rollbackEnvs);
+  const rollback = useMemo<WorkloadRollback>(
+    () => ({ target: envRollback.targets.get(envName) ?? null, onRollback: envRollback.onRollback, blockedReason: envRollback.blockedReason }),
+    [envRollback, envName]
   );
 
   const hrefs = useMemo(
@@ -230,8 +297,10 @@ export function WorkloadPage() {
         hrefs={hrefs}
         actions={actions}
         hosted={hosted}
-        declaredInRender={!placed && (live.declaredShape?.workloads ?? []).some((workload) => workload.name === name)}
+        rollback={rollback}
+        declaredInRender={!placed && (shape.data?.workloads ?? []).some((workload) => workload.name === name)}
       />
+      {dialog}
     </div>
   );
 }

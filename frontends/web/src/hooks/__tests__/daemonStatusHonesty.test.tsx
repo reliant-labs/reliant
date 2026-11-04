@@ -34,20 +34,23 @@ vi.mock("@/services/controlPlane/capabilities", () => ({
 }));
 
 const listDaemons = vi.hoisted(() => vi.fn());
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { daemonRegistry: () => ({ listDaemons }) },
-}));
-
 import { useDaemonWait } from "../useDaemonWait";
 import {
   useDaemonStatus,
-  DAEMON_LIST_QUERY_KEY,
   HEARTBEAT_CONTRADICTION_REFETCH_MS,
   reconcileDaemonHeartbeat,
   resetDaemonHeartbeatReconcile,
 } from "../useDaemonStatus";
 import { CANT_REACH_RELIANT } from "@/lib/daemon-wait";
+import { DAEMON_LIST_QUERY_KEY } from "../daemon-registry-queries";
+import { daemonRegistryServiceKeys } from "../daemon-registry-service-hooks_gen";
 import { ComposerWakeStatus } from "@/components/Chat/ComposerWakeStatus";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport, seedDaemonList } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => listDaemons() })));
+afterEach(() => setTransport(null));
 
 function daemon(status: DaemonStatus, daemonId = "d1"): DaemonInfo {
   return create(DaemonInfoSchema, { daemonId, status, hostname: "ws-ws-2aab1465" });
@@ -77,7 +80,7 @@ afterEach(() => {
 describe("a daemon-list read that fails", () => {
   it("is 'can't reach Reliant', not the last machine status the list held", async () => {
     // Last good read: the machine was down (whatever the reason).
-    client.setQueryData(DAEMON_LIST_QUERY_KEY, [daemon(DaemonStatus.DISCONNECTED)]);
+    seedDaemonList(client, [daemon(DaemonStatus.DISCONNECTED)]);
     // The tab wakes; every re-read times out.
     listDaemons.mockRejectedValue(timeout);
 
@@ -108,7 +111,7 @@ describe("a daemon-list read that fails", () => {
   });
 
   it("does not tell the composer the chat's machine is offline", async () => {
-    client.setQueryData(DAEMON_LIST_QUERY_KEY, [daemon(DaemonStatus.DISCONNECTED)]);
+    seedDaemonList(client, [daemon(DaemonStatus.DISCONNECTED)]);
     listDaemons.mockRejectedValue(timeout);
     await act(async () => {
       await client.refetchQueries({ queryKey: DAEMON_LIST_QUERY_KEY }).catch(() => {});
@@ -149,19 +152,20 @@ describe("useDaemonStatus before the list has answered", () => {
 
 describe("a heartbeat from a machine the cached list calls down", () => {
   it("re-reads the list, so the UI recovers without a reload", async () => {
-    client.setQueryData(DAEMON_LIST_QUERY_KEY, [daemon(DaemonStatus.DISCONNECTED)]);
+    seedDaemonList(client, [daemon(DaemonStatus.DISCONNECTED)]);
     const invalidate = vi.spyOn(client, "invalidateQueries");
 
     reconcileDaemonHeartbeat(client, "d1", 1_000);
 
-    expect(invalidate).toHaveBeenCalledWith(expect.objectContaining({ queryKey: DAEMON_LIST_QUERY_KEY }));
+    expect(invalidate).toHaveBeenCalledWith(expect.objectContaining({ queryKey: daemonRegistryServiceKeys.all }));
+    expect(client.getQueryState(DAEMON_LIST_QUERY_KEY)?.isInvalidated).toBe(true);
   });
 
   it("re-reads at most once per window while the registry keeps disagreeing", () => {
-    client.setQueryData(DAEMON_LIST_QUERY_KEY, [daemon(DaemonStatus.DISCONNECTED)]);
+    seedDaemonList(client, [daemon(DaemonStatus.DISCONNECTED)]);
     const invalidate = vi.spyOn(client, "invalidateQueries");
     const listReads = () =>
-      invalidate.mock.calls.filter(([f]) => JSON.stringify(f?.queryKey) === JSON.stringify(DAEMON_LIST_QUERY_KEY)).length;
+      invalidate.mock.calls.filter(([f]) => JSON.stringify(f?.queryKey) === JSON.stringify(daemonRegistryServiceKeys.all)).length;
 
     reconcileDaemonHeartbeat(client, "d1", 1_000);
     reconcileDaemonHeartbeat(client, "d1", 16_000);
@@ -171,7 +175,7 @@ describe("a heartbeat from a machine the cached list calls down", () => {
   });
 
   it("leaves a list that already shows the machine connected alone", () => {
-    client.setQueryData(DAEMON_LIST_QUERY_KEY, [daemon(DaemonStatus.ACTIVE)]);
+    seedDaemonList(client, [daemon(DaemonStatus.ACTIVE)]);
     const invalidate = vi.spyOn(client, "invalidateQueries");
     reconcileDaemonHeartbeat(client, "d1", 1_000);
     expect(invalidate).not.toHaveBeenCalled();

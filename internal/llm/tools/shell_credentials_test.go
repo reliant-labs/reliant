@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -30,7 +29,7 @@ func (d *requestRecordingDaemon) StartBackground(_ context.Context, req *daemon.
 func runShellParams(t *testing.T, p ShellParams) (*requestRecordingDaemon, ToolResponse) {
 	t.Helper()
 	d := &requestRecordingDaemon{}
-	tc := &rctx.ToolContext{Context: context.Background(), ChatID: "chat-1", Project: &db.Project{ID: "p", Path: "/work/p"}, Daemon: d}
+	tc := &rctx.ToolContext{Context: context.Background(), ChatID: "chat-1", Project: &rctx.Project{ID: "p", Checkout: "/work/p"}, Daemon: d}
 	resp, err := (&shellTool{}).Execute(tc, p)
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -67,7 +66,8 @@ func TestShellTool_CredentialsNoneReachesTheDaemon(t *testing.T) {
 
 func TestShellTool_DefaultSendsNoCredentialsSetting(t *testing.T) {
 	d, _ := runShellParams(t, ShellParams{Command: "ls", Env: map[string]string{"A": "b"}})
-	if got := d.reqs[0]; got.Credentials != "" || len(got.Env) != 1 {
+	// The caller's env, plus the chat the command runs for (ChatIDEnv).
+	if got := d.reqs[0]; got.Credentials != "" || len(got.Env) != 2 || got.Env["A"] != "b" || got.Env[ChatIDEnv] == "" {
 		t.Fatalf("the default request changed: %+v", got)
 	}
 }

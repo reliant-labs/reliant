@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -114,6 +115,7 @@ func stoppedSpawnRun(t *testing.T, repo *db.Repo, ctx context.Context, fx sendAg
 // anything else, and its root waits on the agent's report before taking a
 // turn. (It used to be refused: "this chat's run has since ended".)
 func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -156,6 +158,7 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *
 	assert.Equal(t, fx.rootThreadID, run.input.ExecContext.Thread)
 	require.NotNil(t, run.input.Resume, "the chat's run is resumed, not started over at graph entry")
 	assert.True(t, run.input.Resume.AwaitSpawnsFirst, "its root waits on the resumed agent before taking a turn")
+	assert.True(t, run.input.Resume.ResumeAllStopped, "resuming one portion also resumes its unfinished siblings")
 	require.Len(t, run.input.Resume.ResumeStopped, 1)
 	resumed := run.input.Resume.ResumeStopped[0]
 	assert.Equal(t, "tc-stopped", resumed.ToolCallID)

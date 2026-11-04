@@ -29,7 +29,7 @@ import { AlertTriangle, Plus, Webhook, Zap } from "lucide-react";
 
 import { ConfigurationPanel } from "../ConfigurationPanel";
 import { ConfigPanelTabBar } from "./ConfigPanelTabBar";
-import { Toggle } from "../../ui/Toggle";
+import ToggleSwitch from "../../forge-ui/toggle_switch";
 import { useSetTriggerEnabled } from "../../../hooks/trigger-queries";
 import { CELInput } from "../CELInput";
 import { OnlyFromControl } from "./OnlyFromControl";
@@ -37,11 +37,10 @@ import { CELCompletionProvider, useCELCompletionContext } from "../CELCompletion
 import { useWorkflowMutations } from "../WorkflowMutationContext";
 import { IntegrationLogo } from "../../icons/IntegrationLogo";
 import { Section, SectionFields, SectionLabel } from "./primitives";
-import { ScheduleFields } from "../../Automations/AutomationFormDialog";
+import { ScheduleSentence } from "../../Automations/dialog/ScheduleSentence";
 import { formFromSchedule, scheduleFromForm, validateScheduleForm, type ScheduleFormState } from "../../Automations/scheduleForm";
-import { HealthIndicator } from "../../Automations/AutomationRow";
+import { HealthIndicator } from "../../workflows/automationStatus";
 import { automationHealth } from "../../../lib/automationHealth";
-import { describeSchedule } from "../../../lib/cronText";
 import {
   canFilter,
   findingFieldLabel,
@@ -60,9 +59,9 @@ import {
   type DeclaredTrigger,
   type TriggerFinding,
 } from "../../../lib/declaredTriggers";
-import type { Trigger } from "../../../api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import type { JsonSchema } from "../../../lib/jsonSchema";
-import { useCatalogEntry, useDeclaredTriggerRef } from "../../../hooks/connection-queries";
+import { useCatalogEntry, useDeclaredTriggerRef } from "../../../hooks/catalog-queries";
 import type { Workflow } from "../../../types/workflow";
 import { getInputDefault, getInputDescription, isInternalInput, type InputDef } from "../../../lib/inputHelpers";
 import { formatInputDefault } from "../../../lib/inputDefaultDisplay";
@@ -331,7 +330,11 @@ function ScheduleSection({ trigger, onChange, disabled, findings }: { trigger: D
   const ids = useId();
   const schedule = scheduleOf(trigger)!;
   const [form, setForm] = useState<ScheduleFormState>(() => formFromSchedule({ cron: schedule.cron, interval: schedule.interval }));
-  const [timezone, setTimezone] = useState(schedule.timezone ?? "");
+  // An unset zone is UTC on the server, so it reads as UTC here; a new
+  // declaration starts in the browser's zone (defaultSource), so "every
+  // weekday at 9" means the same wall-clock time here as in the automation
+  // dialog.
+  const [timezone, setTimezone] = useState(schedule.timezone || "UTC");
   const error = validateScheduleForm(form);
   const apply = (nextForm: ScheduleFormState, nextZone: string) => {
     if (validateScheduleForm(nextForm)) return;
@@ -342,32 +345,21 @@ function ScheduleSection({ trigger, onChange, disabled, findings }: { trigger: D
     <Section>
       <SectionLabel>Schedule</SectionLabel>
       <fieldset disabled={disabled} className="space-y-3">
-        <ScheduleFields
-          fieldId={(name) => `${ids}-${name}`}
-          schedule={form}
+        <ScheduleSentence
+          idPrefix={ids}
+          value={form}
+          timezone={timezone}
           error={error ?? undefined}
           onChange={(patch) => {
             const next = { ...form, ...patch };
             setForm(next);
             apply(next, timezone);
           }}
+          onTimezoneChange={(zone) => {
+            setTimezone(zone);
+            apply(form, zone);
+          }}
         />
-        <div>
-          <label htmlFor={`${ids}-tz`} className="cpv2-field-label">Time zone</label>
-          <input
-            id={`${ids}-tz`}
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
-            onBlur={() => apply(form, timezone)}
-            placeholder="UTC"
-            className="cpv2-field-input w-full"
-          />
-        </div>
-        {!error && (
-          <p className="cpv2-field-hint !mt-0">
-            {describeSchedule({ ...scheduleFromForm(form), timezone: timezone.trim() || "UTC" })}
-          </p>
-        )}
       </fieldset>
       <FindingList findings={findings} />
     </Section>
@@ -571,7 +563,7 @@ function InputsSection({ trigger, inputs, onChange, disabled, findings }: { trig
               type="button"
               onClick={() => setShowInternal((open) => !open)}
               aria-expanded={showInternal}
-              className="self-start text-xs font-medium text-primary hover:underline"
+              className="self-start text-xs font-medium text-primary-ink hover:underline"
             >
               {showInternal ? "Hide internal inputs" : `Show ${internal.length} internal input${internal.length === 1 ? "" : "s"}`}
             </button>
@@ -621,11 +613,12 @@ function ActivationsSection({ trigger, activations, canActivate, unsaved, onActi
                   <HealthIndicator health={automationHealth(activation)} />
                 </span>
               </button>
-              <Toggle
+              <ToggleSwitch
                 checked={activation.enabled}
                 onChange={(enabled) => setEnabled.mutate({ id: activation.id, enabled })}
-                srLabel={`${activation.name} enabled`}
-                className="h-5 w-9 flex-shrink-0 scale-90"
+                ariaLabel={`${activation.name} enabled`}
+                size="md"
+                className="forge-ui flex-shrink-0"
               />
             </li>
           ))}

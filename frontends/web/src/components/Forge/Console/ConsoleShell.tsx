@@ -8,22 +8,24 @@
  *
  * ── THE NAV IS THE PRODUCT'S NOUNS, NOT THE ENVIRONMENT ROSTER ─────────────
  *
- * (research/console-v3/DECISIONS.md, "Navigation and IA")
- *
- *   Overview                      project home, merged with workloads
- *   Releases
- *   Observability ›               Logs · Traces · Metrics · Profiles · Dashboards · Alerts
+ *   Overview                      project home: health, needs attention, workloads
+ *   Releases                      releases × environments, and the deploys
+ *   Observability ›               Errors · Logs · Traces · Metrics · Dashboards · Alerts
+ *                                 Sessions / Profiles when data is available (or unknown)
  *                                 (up to three starred dashboards nested under Dashboards)
  *   Configure
  *     Environments ›              one entry per long-lived environment, previews as one
- *     Secrets · Domains · Monitoring settings · Project settings
+ *     Secrets · Domains
  *   ─
- *   Activity                      pinned last, above the user row
+ *   Activity                      the audit log, pinned last above the user row
  *
- * The nav is the same ~16 rows however many environments a project has:
- * environment is the top bar's scope (D1), and an environment keeps a page
- * only as a configured object, under Configure. Every link carries the scope
- * (`?env=`) so moving between pages keeps it.
+ * The nav is the same rows however many environments a project has:
+ * environment is the top bar's scope — the ONE environment selector — and an
+ * environment keeps a page only as a configured object, under Configure.
+ * Every link carries the scope (`?env=`) so moving between pages keeps it.
+ *
+ * Observability has no home of its own: its health strip is the Overview's,
+ * so the parent row opens its first view.
  *
  * Every row is the same style (forge-ui SidebarLayout, the Cloudflare
  * pattern); a parent navigates to its own overview and expands its children
@@ -31,7 +33,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Activity, Gauge, Globe, Home, KeyRound, Layers, Settings, SlidersHorizontal, Tag as TagIcon } from "lucide-react";
+import { Activity, Gauge, Globe, Home, KeyRound, Layers, Tag as TagIcon } from "lucide-react";
 
 import SidebarLayout, { type SidebarNavItem, type SidebarUserInfo } from "@/components/forge-ui/sidebar_layout";
 import Link from "@/components/forge-ui/link";
@@ -68,6 +70,8 @@ export interface ConsoleNavInput {
   starred?: ConsoleNavDashboard[];
   /** The open dashboard's title, for the breadcrumb (its key until the index answers). */
   dashboardTitle?: string;
+  /** Omitted/unknown keeps useful views visible; false means a definite empty read. */
+  optionalViews?: { sessions: boolean; profiles: boolean };
 }
 
 export interface ConsoleNavDashboard {
@@ -82,7 +86,7 @@ export const NAV_STARRED_MAX = 3;
 const icon = (Icon: typeof Home) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
 /** The nav rows for `page` — pure, so the IA is testable without rendering. */
-export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [] }: ConsoleNavInput): {
+export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews }: ConsoleNavInput): {
   items: SidebarNavItem[];
   footer: SidebarNavItem[];
 } {
@@ -106,8 +110,11 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
     items: [
       row("Overview", { kind: "overview" }, icon(Home), { active: is("overview") || is("workload") }),
       row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("release") }),
-      row("Observability", { kind: "observability" }, icon(Gauge), {
-        children: OBS_NAV_VIEWS.map((view) => {
+      row("Observability", { kind: "obs-view", view: OBS_NAV_VIEWS[0] }, icon(Gauge), {
+        active: false,
+        children: OBS_NAV_VIEWS.filter((view) =>
+          (view !== "sessions" && view !== "profiles") || optionalViews?.[view] !== false || (page.kind === "obs-view" && page.view === view)
+        ).map((view) => {
           const nested = view === "dashboards" ? starred.slice(0, NAV_STARRED_MAX) : [];
           const openStar = (candidate: ConsoleNavDashboard) =>
             page.kind === "dashboard" && page.dashKind === candidate.dashKind && page.key === candidate.key;
@@ -156,8 +163,6 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       }),
       row("Secrets", { kind: "secrets" }, icon(KeyRound), { section: "Configure" }),
       row("Domains", { kind: "domains" }, icon(Globe), { section: "Configure" }),
-      row("Monitoring settings", { kind: "monitoring" }, icon(SlidersHorizontal), { section: "Configure" }),
-      row("Project settings", { kind: "settings" }, icon(Settings), { section: "Configure" }),
     ],
     footer: [row("Activity", { kind: "activity" }, icon(Activity))],
   };
@@ -176,13 +181,11 @@ export function consoleCrumbs(project: string, page: ConsolePage, env: string, d
       return [{ label: "Releases" }];
     case "release":
       return [{ label: "Releases", href: href({ kind: "releases" }) }, { label: shortVersion(page.version) }];
-    case "observability":
-      return [{ label: "Observability" }];
     case "obs-view":
-      return [{ label: "Observability", href: href({ kind: "observability" }) }, { label: OBS_NAV_LABELS[page.view] }];
+      return [{ label: "Observability", href: href({ kind: "obs-view", view: OBS_NAV_VIEWS[0] }) }, { label: OBS_NAV_LABELS[page.view] }];
     case "dashboard":
       return [
-        { label: "Observability", href: href({ kind: "observability" }) },
+        { label: "Observability", href: href({ kind: "obs-view", view: OBS_NAV_VIEWS[0] }) },
         { label: "Dashboards", href: href({ kind: "obs-view", view: "dashboards" }) },
         { label: dashboardTitle || page.key },
       ];
@@ -194,10 +197,6 @@ export function consoleCrumbs(project: string, page: ConsolePage, env: string, d
       return [{ label: "Secrets" }];
     case "domains":
       return [{ label: "Domains" }];
-    case "monitoring":
-      return [{ label: "Monitoring settings" }];
-    case "settings":
-      return [{ label: "Project settings" }];
     case "activity":
       return [{ label: "Activity" }];
   }
@@ -209,6 +208,8 @@ export interface ConsoleShellProps extends ConsoleNavInput {
   /** The brand row on the collapsed rail (a monogram). */
   brandCollapsed?: ReactNode;
   scope: { long: ScopeOption[]; previews: ScopeOption[] };
+  /** The open page reads platform telemetry, which belongs to no environment. */
+  platformWide?: boolean;
   onEnvChange: (env: string) => void;
   user?: SidebarUserInfo;
   collapsed: boolean;
@@ -218,6 +219,8 @@ export interface ConsoleShellProps extends ConsoleNavInput {
    * "padded": the forge-ui page gutter (px-8, pt-6).
    */
   contentLayout?: "padded" | "fill";
+  /** Product org switcher; injected to keep preview chrome free of queries. */
+  orgSwitcher?: ReactNode;
   children: ReactNode;
 }
 
@@ -225,11 +228,13 @@ export function ConsoleShell({
   brand,
   brandCollapsed,
   scope,
+  platformWide,
   onEnvChange,
   user,
   collapsed,
   onToggleCollapsed,
   contentLayout,
+  orgSwitcher,
   children,
   ...nav
 }: ConsoleShellProps) {
@@ -244,7 +249,7 @@ export function ConsoleShell({
      */
     <div className="forge-ui h-dvh w-full" data-testid="forge-shell">
       <SidebarLayout
-        navLabel={`${nav.project} console`}
+        navLabel={nav.project}
         brand={brand}
         brandCollapsed={brandCollapsed}
         navItems={items}
@@ -279,12 +284,14 @@ export function ConsoleShell({
                 </span>
               ))}
             </nav>
+            {orgSwitcher}
             <EnvScopeControl
               value={nav.env}
               long={scope.long}
               previews={scope.previews}
               onChange={onEnvChange}
               pinnedEnv={pinnedEnvOf(nav.page)}
+              platformWide={platformWide}
             />
           </>
         }
@@ -299,7 +306,7 @@ export function ConsoleShell({
 function QueuedMark({ env, on }: { env: string; on: string }) {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full border border-warning-ink/40 px-1.5 text-xs leading-4 text-warning-ink"
+      className="inline-flex items-center gap-1 rounded-full border border-warning-border px-1.5 text-xs leading-4 text-warning-ink"
       title={`A deploy to ${env} is queued, waiting on ${on}`}
       data-testid={`forge-nav-queued-${env}`}
     >

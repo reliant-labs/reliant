@@ -25,6 +25,17 @@ function storeMock(state: () => any) {
 
 const laptop = { daemonId: "d-laptop", hostname: "laptop", status: 1 };
 
+// Where the project is installed decides which machine a new chat names
+// (lib/chatMachine defaultMachineDaemon); these suites are not about that.
+// "Make default" in the machine picker writes through the query client;
+// these tests render no provider and never click it.
+vi.mock("@/hooks/useMakeDefaultMachine", () => ({
+  useMakeDefaultMachine: () => ({ makeDefault: vi.fn(), isPending: false }),
+}));
+vi.mock("@/hooks/project-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/project-queries")>()),
+  useProjectDaemonInstalls: () => ({ data: [], isLoading: false }),
+}));
 vi.mock("../../../hooks/chat-queries", () => ({
   useChatList: () => ({ data: [], isSuccess: true }),
 }));
@@ -33,6 +44,17 @@ vi.mock("../../../store/chatStore", () => ({
 }));
 vi.mock("../../../store/worktreeStore", () => ({
   useWorktreeStore: storeMock(() => ({
+    currentWorktree: { id: "w-main", branch: "main", name: "main", is_main: true },
+    worktrees: [{ id: "w-main", branch: "main", name: "main", is_main: true }],
+    switchWorktreeContext: vi.fn(),
+    loadWorktrees: vi.fn(),
+  })),
+}));
+// Workspace rows are read through hooks/worktree-queries; answer them from the
+// same fixture.
+vi.mock("../../../hooks/worktree-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/worktree-queries")>()),
+  ...(await import("../../../test/worktreeQueriesMock")).worktreeQueriesMock(() => ({
     currentWorktree: { id: "w-main", branch: "main", name: "main", is_main: true },
     worktrees: [{ id: "w-main", branch: "main", name: "main", is_main: true }],
     switchWorktreeContext: vi.fn(),
@@ -83,10 +105,10 @@ vi.mock("../ResumeDaemonPill", () => ({ ResumeDaemonPill: () => null }));
 vi.mock("../OomKillBanner", () => ({ OomKillBanner: () => null }));
 vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
 vi.mock("../../DaemonWaitState", () => ({ DaemonWaitState: () => null }));
-vi.mock("../../Layout/ConnectDaemonModal", () => ({ ConnectDaemonModal: () => null }));
+vi.mock("../../Machines/AddMachineSheet", () => ({ AddMachineSheet: () => null }));
 vi.mock("../../Worktrees/CreateWorktreeModal", () => ({ CreateWorktreeModal: () => null }));
 vi.mock("../../Worktrees/DiscoverWorktreesModal", () => ({ DiscoverWorktreesModal: () => null }));
-vi.mock("../../ui/Tooltip", () => ({ Tooltip: ({ children }: any) => <>{children}</> }));
+vi.mock("../../forge-ui/tooltip", () => ({ default: ({ children }: any) => <>{children}</> }));
 vi.mock("../../icons/ReliantIcon", () => ({ ReliantIcon: () => null }));
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));

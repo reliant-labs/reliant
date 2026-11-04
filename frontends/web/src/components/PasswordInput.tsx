@@ -57,7 +57,7 @@ export function PasswordInput({
           minLength={minLength}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="block w-full px-3 py-2.5 pr-10 border border-border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
+          className="block w-full px-3 py-2.5 pr-10 border border-border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors"
           placeholder={placeholder}
           disabled={disabled}
         />
@@ -172,7 +172,7 @@ export function ConfirmPasswordInput({
           required={required}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`block w-full px-3 py-2.5 pr-10 border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors ${
+          className={`block w-full px-3 py-2.5 pr-10 border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-ring focus:border-primary transition-colors ${
             value && !passwordsMatch ? 'border-red-500' : 'border-border'
           }`}
           placeholder={placeholder}

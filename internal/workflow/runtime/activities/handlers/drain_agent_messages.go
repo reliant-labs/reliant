@@ -209,13 +209,23 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 				continue
 			}
 
-			if _, err := a.threads.SaveMessage(txCtx, threads.SaveMessageOpts{
+			// Only the human's own message carries no sender. Everything else
+			// (a peer's spawn_send, say) stays role USER for the model but is
+			// attributed, so the transcript can show who wrote it instead of
+			// presenting it as the user's words.
+			opts := threads.SaveMessageOpts{
 				ChatID:      input.ChatID,
 				Thread:      input.Thread,
 				Role:        int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),
 				Content:     m.Body,
 				Attachments: m.Attachments,
-			}); err != nil {
+			}
+			if m.Kind != core.AgentMessageKindHumanMessage {
+				opts.SenderThreadID = m.FromThreadID
+				opts.SenderKind = m.Kind
+				opts.SenderSubject = m.Subject
+			}
+			if _, err := a.threads.SaveMessage(txCtx, opts); err != nil {
 				return fmt.Errorf("failed to save drained agent message %s: %w", m.ID, err)
 			}
 		}
@@ -304,7 +314,11 @@ func (a *DrainAgentMessagesActivity) buildEnvelope(ctx context.Context, queued [
 			fmt.Fprintf(&b, "\n%d. <message from=\"user\" queued_at=%q>", i+1, queuedAt)
 		default:
 			from := a.senderLabel(ctx, m.FromThreadID)
-			fmt.Fprintf(&b, "\n%d. <message from=%q queued_at=%q>", i+1, from, queuedAt)
+			if m.Subject != "" {
+				fmt.Fprintf(&b, "\n%d. <message from=%q subject=%q queued_at=%q>", i+1, from, m.Subject, queuedAt)
+			} else {
+				fmt.Fprintf(&b, "\n%d. <message from=%q queued_at=%q>", i+1, from, queuedAt)
+			}
 		}
 	}
 

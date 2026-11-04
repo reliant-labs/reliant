@@ -29,12 +29,6 @@ const (
 	// TemporalNamespace is the Temporal namespace used by all workflows.
 	TemporalNamespace = "reliant"
 
-	// WorkerBuildID is a stable identifier for all Temporal workers.
-	// This prevents Temporal from computing a binary checksum (which changes on every restart)
-	// and ensures workers can pick up tasks from previous instances.
-	// NOTE: This does NOT enable worker versioning dispatch - it just provides a stable ID.
-	WorkerBuildID = "reliant-worker"
-
 	// WorkflowTaskQueue is the shared queue used by DynamicWorkflow executions.
 	WorkflowTaskQueue = "chat-workflows"
 )
@@ -88,7 +82,9 @@ var RuntimeInjectedInputs = map[string]bool{
 	"spawned_by":         true, // Injected after validation
 	"__thread":           true, // Internal signal routing key for thread-scoped updates
 	"session_daemon_id":  true, // Session-level active daemon for tool execution
-	"__trigger":          true, // Launch event, exposed to CEL as `trigger`
+	// The machine pool that placed the run (launch.InputKeyMachinePool).
+	"machine_pool": true,
+	"__trigger":    true, // Launch event, exposed to CEL as `trigger`
 	// No human is watching (runtime.InputKeyUnattended). Injected by the
 	// launcher for trigger runs; the runtime's own input validation runs
 	// inside the workflow and rejected it as unknown, so every trigger fire of
@@ -100,6 +96,8 @@ var RuntimeInjectedInputs = map[string]bool{
 	// The provider(s) the user chose for the run, carried to every child
 	// (runtime.InputKeyProviderPreference). Injected by the runtime only.
 	"__provider_preference": true,
+	"__chat_provider":       true,
+	"__preset_model":        true,
 	// What the run does when its provider is rate-limited
 	// (runtime.InputKeyProviderPolicy). Injected by the launcher, a preset or a
 	// spawn call's `providers:`, never taken from a client.

@@ -114,26 +114,6 @@ func FindToolCallResultForMessage(ctx context.Context, db orm.Context, toolCallI
 	return toolCallResultFromRow(row), nil
 }
 
-// ListToolCallResultsByMessageIDs is every result whose message_id is in
-// messageIDs, ordered by message then creation time.
-func ListToolCallResultsByMessageIDs(ctx context.Context, db orm.Context, messageIDs []string) ([]*core.ToolCallResult, error) {
-	if len(messageIDs) == 0 {
-		return []*core.ToolCallResult{}, nil
-	}
-	rows, err := ListToolCallResult(ctx, db,
-		orm.WhereIn(ToolCallResultFieldMessageID, messageIDs),
-		orm.WithOrderBy(ToolCallResultFieldMessageID, orm.Asc),
-		orm.WithOrderBy(ToolCallResultFieldCreatedAt, orm.Asc))
-	if err != nil {
-		return nil, fmt.Errorf("failed to list tool call results for messages: %w", err)
-	}
-	results := make([]*core.ToolCallResult, len(rows))
-	for i, row := range rows {
-		results[i] = toolCallResultFromRow(row)
-	}
-	return results, nil
-}
-
 // listToolGrantsForChatSQL: every grant a tool call recorded in one chat, per
 // thread — what a load_tool result granted, written with that result
 // (UpsertToolCallResult). The coarse fresh restart rebuilds each thread's

@@ -1,13 +1,13 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * ONE RELEASE (PROPOSAL §4.4): what it is, where it runs, what it changed.
+ * ONE RELEASE: what it is, where it runs, what it changed.
  *
  *   header   the version, its status ("Live on prod, dev"; never plain "live"
- *            for a scoped deploy — D5), the scoped tag, one meta line (cut by,
+ *            for a scoped deploy), the scoped tag, one meta line (cut by,
  *            sha, checks, when) and the two actions, each naming its
  *            environment: "Roll back prod to this…" (only when prod runs a
- *            newer release) and "Promote…" (D1).
+ *            newer release) and "Promote…".
  *   tabs     Changes · Rollout · Checks · Artifacts · Health (ReleaseTabs).
  *   rail     the promotion timeline across environments, the details (branch,
  *            commit, forge version, bundle, lead time) and the way to its
@@ -48,6 +48,7 @@ import {
   type ReleaseEnv,
   type ReleaseTab,
 } from "./releaseModel";
+import { previousReleaseOf } from "../Promote/rollback";
 import type { PromoteControl } from "./ReleasesList";
 import { useReleaseData } from "./useReleaseData";
 
@@ -166,8 +167,20 @@ export function ReleaseDetail({
   const canRollBack =
     !!actionEnv && !!actionBase && actionBase !== version && rank(actionBase) >= 0 && rank(version) > rank(actionBase);
   const blocked = promote.blockedReason;
+  // THIS release is what the environment runs: offer the way back, named.
+  const rollbackTo =
+    actionEnv && actionBase === version ? previousReleaseOf(data.promotions.get(actionEnv.id), version) : null;
 
   const actions: PageHeaderAction[] = [
+    ...(rollbackTo && actionEnv
+      ? [
+          {
+            label: `Roll back ${actionEnv.name} to ${shortVersion(rollbackTo)}…`,
+            onClick: () => promote.onPromote({ version: rollbackTo, env: actionEnv.name, intent: "rollback" }),
+            disabled: !!blocked,
+          },
+        ]
+      : []),
     ...(canRollBack && actionEnv
       ? [
           {
@@ -246,7 +259,7 @@ export function ReleaseDetail({
         ariaLabel="Release"
       />
 
-      {/* The rail is 340px, PROPOSAL §3.4 and the mockup; its text is text-xs (the mockup's .8125rem). */}
+      {/* The rail is 340px; its text is text-xs (the mockup's .8125rem). */}
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4" role="tabpanel" aria-label={TAB_LABELS[tab]}>
           {envBound && (
@@ -271,7 +284,8 @@ export function ReleaseDetail({
         </div>
 
         <aside className="space-y-4" aria-label="About this release">
-          <Panel title="Promotion" testId="release-timeline">
+          <Panel title="Promotion history" testId="release-timeline">
+            <p className="mb-3 text-xs text-ink-muted">The canonical record of this release’s promotions, supersessions and rollbacks across environments.</p>
             <Chain entries={releaseTimeline(record, envs, data.promotions, data.ordered, data.names)} />
           </Panel>
           <Panel title="Details" testId="release-facts">
@@ -351,7 +365,7 @@ function DetailSkeleton({ crumbs, version }: { crumbs: { label: string; href?: s
     <div className="space-y-6" data-testid="release-detail" data-state="loading" aria-busy="true">
       <PageHeader breadcrumbs={crumbs} title={version} meta={<span className="inline-flex h-4 w-72 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />} className="mb-0" />
       <div className="h-8 border-b border-border" />
-      {/* The rail is 340px, PROPOSAL §3.4 and the mockup; its text is text-xs (the mockup's .8125rem). */}
+      {/* The rail is 340px; its text is text-xs (the mockup's .8125rem). */}
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
           {[0, 1].map((i) => (

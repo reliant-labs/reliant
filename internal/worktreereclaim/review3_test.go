@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // Regression tests ported from the third review of #574 (probes Q1-Q3, R1-R3, P9).
@@ -19,6 +21,7 @@ import (
 // put-back). Simulated by doing exactly what removeOne does up to the move,
 // then running the next ordinary pass.
 func TestReview3_Q1_CrashMidQuarantine(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -55,6 +58,7 @@ func TestReview3_Q1_CrashMidQuarantine(t *testing.T) {
 // Q2: the put-back move fails because the original path was re-created while
 // the checkout sat in quarantine. Is the stranded copy still locked?
 func TestReview3_Q2_PutBackFailureLeavesItUnlocked(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -121,8 +125,8 @@ func TestReview3_Q3_RootCheckoutWithNestedCheckout(t *testing.T) {
 	w := Worktree{ID: "q3", Path: ws, State: StateArchived, BaseBranch: "main", Fence: "9"}
 	got := f.one(w)
 	t.Logf("result: %+v; root exists=%v web exists=%v", got, exists(filepath.Join(ws, ".git")), exists(filepath.Join(ws, "web", ".git")))
-	if got.Outcome != OutcomeRemoved {
-		t.Errorf("a clean root+nested workspace is not removed: %s/%s %q (web removed=%v)", got.Outcome, got.Reason, got.Detail, !exists(filepath.Join(ws, "web", ".git")))
+	if got.Outcome != OutcomeHeld || got.Reason != ReasonNestedRepo || !exists(filepath.Join(ws, ".git")) || !exists(filepath.Join(ws, "web", ".git")) {
+		t.Errorf("nested choreography must retain every checkout: %+v", got)
 	}
 }
 
@@ -292,6 +296,7 @@ func errString(err error) string {
 }
 
 func TestRecoverQuarantined_PutsACrashedCheckoutBack(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()

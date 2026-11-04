@@ -26,6 +26,10 @@ github.com/hashicorp/go-version      # MPL-2.0, unmodified — version parsing
 github.com/hashicorp/go-cleanhttp    # MPL-2.0, unmodified — stdlib http client presets
 github.com/hashicorp/go-getter       # MPL-2.0, unmodified — artifact fetching
 github.com/hashicorp/aws-sdk-go-base/v2  # MPL-2.0, unmodified — transitive of go-getter
+# prometheus/common v0.73.0's expfmt imports pandatix/go-abnf, which imports
+# go-uuid (internal/logging -> client_golang/prometheus -> expfmt). forge and
+# control-plane allowlist it for the same reason.
+github.com/hashicorp/go-uuid         # MPL-2.0, unmodified — transitive of prometheus/common via go-abnf
 
 # filepath-securejoin is dual-licensed per FILE, declared
 # `SPDX-License-Identifier: BSD-3-Clause AND MPL-2.0` in its COPYING.md: the

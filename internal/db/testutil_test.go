@@ -15,19 +15,11 @@ func TestTestDatabaseIgnoresDatabaseURLAndIsPerTest(t *testing.T) {
 	// that read DATABASE_URL would fail here instead of handing out a database.
 	t.Setenv("DATABASE_URL", "postgres://nobody:nothing@127.0.0.1:1/real_data?sslmode=disable")
 
-	_, rawA, cleanupA := SetupTestDBWithRawDB(t)
+	_, rawA, dsnA, cleanupA := setupTestRepoWithDSN(t)
 	t.Cleanup(cleanupA)
-	_, rawB, cleanupB := SetupTestDBWithRawDB(t)
+	_, rawB, dsnB, cleanupB := setupTestRepoWithDSN(t)
 	t.Cleanup(cleanupB)
 
-	dsnA, err := testDSNOf(rawA)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dsnB, err := testDSNOf(rawB)
-	if err != nil {
-		t.Fatal(err)
-	}
 	if dsnA == dsnB {
 		t.Fatalf("two SetupTestDB calls shared database %s; each must get its own", dsnA)
 	}

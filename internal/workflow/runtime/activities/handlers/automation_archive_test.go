@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -65,6 +66,7 @@ func TestWorkflowStatus_ArchivesSucceededAutomationRuns(t *testing.T) {
 }
 
 func TestWorkflowStatus_KeepsAutomationRunsThatNeedAPerson(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	cases := []struct {
@@ -93,6 +95,7 @@ func TestWorkflowStatus_KeepsAutomationRunsThatNeedAPerson(t *testing.T) {
 }
 
 func TestWorkflowStatus_ArchiveLeavesPeoplesChatsAlone(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	t.Run("chats and builder tests a person started", func(t *testing.T) {

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The add / edit panel drawer (decision DB): a visual builder over forge's
+ * The add / edit panel drawer: a visual builder over forge's
  * panel spec, the spec itself as JSON, and a live preview of the panel over
  * the dashboard's scope, window and service — the same PanelBody the grid
  * draws, so what the preview shows is what the dashboard will.
@@ -32,6 +32,7 @@ import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { RANGE_LABELS } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
+import { ENV_ALL } from "../../Console/envScope";
 import { FIELD_SUGGESTIONS, METRIC_TYPES, OP_LABELS, OPS, panelProblems, UNITS } from "../obsdashSpec";
 import { GRID_SPANS, spanOf, widthOfSpan } from "./dashboardModel";
 import {
@@ -58,6 +59,7 @@ import {
   type AggPreset,
   type Visualization,
 } from "./panelBuilder";
+import { AskReliantButton } from "../AskReliant/AskReliant";
 import { AlertFromPanelDialog, CreateAlertButton } from "./AlertFromPanelDialog";
 import { unsupportedReason } from "./alertSnippet";
 import { PanelBody } from "./PanelBody";
@@ -79,7 +81,7 @@ export interface PanelDrawerProps {
   scopeLabel: string;
   /** The workspace version being edited (Save writes the next one). */
   version: number;
-  /** The environments the dashboard is about, in words (D1: a write names where it lands). */
+  /** The environments the dashboard is about, in words (a write names where it lands). */
   envScope: string;
   saving: boolean;
   error: ReactNode;
@@ -89,7 +91,7 @@ export interface PanelDrawerProps {
 
 const UNIT_LABELS: Record<Unit, string> = { "": "none", count: "count", ms: "milliseconds", bytes: "bytes", percent: "percent", s: "seconds" };
 const INPUT =
-  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60";
+  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
 
 function useDebounced<T>(value: T, ms: number): T {
   const [settled, setSettled] = useState(value);
@@ -146,7 +148,7 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
               aria-selected={tab === id}
               onClick={() => setTab(id)}
               className={cn(
-                "-mb-px h-9 border-b-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                "-mb-px h-9 border-b-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 tab === id ? "border-ink font-medium text-ink" : "border-transparent text-ink-muted hover:text-ink"
               )}
               data-testid={`panel-drawer-tab-${id}`}
@@ -162,11 +164,19 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
               <p className="text-xs text-ink-muted">
                 Live preview · {scopeLabel} · {RANGE_LABELS[range].toLowerCase()}
               </p>
-              <CreateAlertButton
-                onClick={() => setAlerting(true)}
-                disabled={incomplete}
-                title={incomplete ? "Finish the panel first: an alert is written from a complete panel." : "Write this panel's query as a KCL alert rule"}
-              />
+              <div className="flex items-center gap-2">
+                <AskReliantButton
+                  appearance="small"
+                  subject={{ kind: "panel", panel: draft, dashboard: dashboardTitle, window: range, env: env === ENV_ALL ? null : env }}
+                  disabled={incomplete}
+                  title={incomplete ? "Finish the panel first: Reliant is asked about a complete query." : undefined}
+                />
+                <CreateAlertButton
+                  onClick={() => setAlerting(true)}
+                  disabled={incomplete}
+                  title={incomplete ? "Finish the panel first: an alert is written from a complete panel." : "Write this panel's query as a KCL alert rule"}
+                />
+              </div>
             </div>
             <div className="rounded-lg border border-border/60 bg-surface-sunken p-3" data-testid="panel-drawer-preview">
               <p className="mb-2 truncate text-sm font-medium text-ink">{draft.title || "Untitled panel"}</p>
@@ -244,7 +254,7 @@ function Choice<T extends string>({ label, value, options, onChange, testId }: {
           onClick={() => onChange(option.value)}
           data-value={option.value}
           className={cn(
-            "h-7 rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+            "h-7 rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             value === option.value ? "border-ink/40 bg-ink/8 font-medium text-ink" : "border-border bg-surface text-ink-muted hover:text-ink"
           )}
         >
@@ -628,7 +638,7 @@ function SpecTab({ draft, setDraft, readOnly }: { draft: Panel; setDraft: (panel
           }
         }}
         rows={18}
-        className="block w-full resize-y rounded-md border border-border/60 bg-surface-sunken p-3 font-mono text-xs leading-relaxed text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="block w-full resize-y rounded-md border border-border/60 bg-surface-sunken p-3 font-mono text-xs leading-relaxed text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         data-testid="panel-spec-json"
       />
       {problem && (

@@ -3,54 +3,32 @@
 /**
  * WHICH TABS AN ENVIRONMENT PAGE HAS, and which one it opens on.
  *
- * The tabs follow the reader's question, not the data source. The old page had
- * two tabs, Live and Preview, which was the daemon boundary drawn on screen: to
- * find a release's history you had to know it lived on the control plane, and
- * to find the deploy button you had to know forge plans on your daemon.
+ * An environment page is the environment AS A CONFIGURED OBJECT: what it is,
+ * who can sign in to it, and (for a local one) what is running. Everything an
+ * environment HAS that the project also has — its releases, its secrets, its
+ * domains, its activity, its workloads and telemetry — is the project's own
+ * page, scoped to the environment by the top bar (`?env=`). One place for
+ * each, not a second copy per environment; the page links to those scoped
+ * pages instead of re-hosting them.
  *
- * The boundary still holds — per TAB:
- *
- *   overview  identity
- *   releases  activity
- *   secrets   domains               the control plane only. Render with the
+ *   overview  identity              the control plane only. Render with the
  *                                   daemon asleep, from any browser.
  *   running                         the dev stack `forge env up` runs on the
  *                                   daemon's machine. Local envs only.
  *
- * There is no per-branch Changes or Checks tab: a branch's diff and checks are
- * what the user's CI builds report, not something this page re-derives.
+ * IDENTITY sits beside Overview: "who can sign in to it?" is a question about
+ * the running environment, answered by the control plane's identity
+ * reconciler with no daemon. A local environment has the tab too, but its IdP
+ * is forge's dev IdP on the developer's machine, which reports nothing to the
+ * control plane — the tab says so rather than inventing a status.
  *
- * RELEASES AND ACTIVITY ARE TWO TABS ON PURPOSE. A release is a thing you
- * pick and compare ("what's on prod, what was before it"); activity is what
- * HAPPENED — promotions and what the platform observed after each. Interleaved
- * in one list, the observations pushed the releases apart and a burst of them
- * buried the history a reader opened the tab for.
- *
- * There is no Observability tab: an environment's workloads, their health and
- * its telemetry are the project's Overview and Observability pages, scoped to
- * it (decision D1) — one place for each, not a second copy per environment.
- *
- * IDENTITY sits beside Overview: "who can sign in to it?" is a
- * question about the running environment, answered by the control plane's
- * identity reconciler with no daemon. A local environment has the tab too, but
- * its IdP is forge's dev IdP on the developer's machine, which reports nothing
- * to the control plane — the tab says so rather than inventing a status.
- *
- * A LOCAL environment has no releases (it runs the working tree) and leads
- * with what is running. An environment the control plane has no record of
- * leads with Overview, which is where Register lives.
+ * A LOCAL environment leads with what is running. An environment the control
+ * plane has no record of leads with Overview, which is where Register lives.
  */
 
 import type { EnvLifecycle } from "@/services/forge/roster";
 
-export type EnvTab =
-  | "overview"
-  | "identity"
-  | "running"
-  | "releases"
-  | "activity"
-  | "secrets"
-  | "domains";
+export type EnvTab = "overview" | "identity" | "running";
 
 export interface EnvTabSpec {
   id: EnvTab;
@@ -63,17 +41,27 @@ const SPECS: Record<EnvTab, EnvTabSpec> = {
   overview: { id: "overview", label: "Overview", needsDaemon: false },
   identity: { id: "identity", label: "Identity", needsDaemon: false },
   running: { id: "running", label: "Running", needsDaemon: true },
-  releases: { id: "releases", label: "Releases", needsDaemon: false },
-  activity: { id: "activity", label: "Activity", needsDaemon: false },
-  secrets: { id: "secrets", label: "Secrets", needsDaemon: false },
-  domains: { id: "domains", label: "Domains", needsDaemon: false },
 };
 
+/**
+ * The tabs the page USED to have, and the project page each one became. A
+ * link to `?tab=releases` (a bookmark, a notification) lands on that page,
+ * scoped to the environment, rather than on a tab that no longer exists.
+ */
+export const RETIRED_TABS = {
+  releases: "releases",
+  activity: "activity",
+  secrets: "secrets",
+  domains: "domains",
+} as const;
+export type RetiredTab = keyof typeof RETIRED_TABS;
+
+export function retiredTabOf(param: string | undefined): RetiredTab | null {
+  return param && Object.prototype.hasOwnProperty.call(RETIRED_TABS, param) ? (param as RetiredTab) : null;
+}
+
 export function tabsFor(lifecycle: EnvLifecycle): EnvTabSpec[] {
-  const ids: EnvTab[] =
-    lifecycle === "local"
-      ? ["running", "identity", "secrets"]
-      : ["overview", "identity", "releases", "activity", "secrets", "domains"];
+  const ids: EnvTab[] = lifecycle === "local" ? ["running", "identity"] : ["overview", "identity"];
   return ids.map((id) => SPECS[id]);
 }
 

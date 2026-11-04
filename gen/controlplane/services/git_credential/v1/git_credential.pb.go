@@ -146,10 +146,17 @@ func (GitCredentialKind) EnumDescriptor() ([]byte, []int) {
 }
 
 type SaveGitCredentialRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"` // e.g. "github"
-	AccessToken   string                 `protobuf:"bytes,2,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
-	Scopes        string                 `protobuf:"bytes,3,opt,name=scopes,proto3" json:"scopes,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Provider    string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"` // e.g. "github"
+	AccessToken string                 `protobuf:"bytes,2,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	Scopes      string                 `protobuf:"bytes,3,opt,name=scopes,proto3" json:"scopes,omitempty"`
+	// The refresh token issued alongside access_token, when there is one. Set
+	// when the client hands over the GitHub App user token (`ghu_`) that sign-in
+	// returned: Supabase's GitHub provider runs on the same GitHub App, so the
+	// sign-in consent IS the repo-access consent. The server verifies such a
+	// token belongs to its configured App before storing it, because only that
+	// App's client can refresh it.
+	RefreshToken  string `protobuf:"bytes,4,opt,name=refresh_token,json=refreshToken,proto3" json:"refresh_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -201,6 +208,13 @@ func (x *SaveGitCredentialRequest) GetAccessToken() string {
 func (x *SaveGitCredentialRequest) GetScopes() string {
 	if x != nil {
 		return x.Scopes
+	}
+	return ""
+}
+
+func (x *SaveGitCredentialRequest) GetRefreshToken() string {
+	if x != nil {
+		return x.RefreshToken
 	}
 	return ""
 }
@@ -951,10 +965,18 @@ func (x *ExchangeGithubOAuthCodeRequest) GetState() string {
 }
 
 type ExchangeGithubOAuthCodeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Ok            bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`                            // true when the code was exchanged and the credential saved
-	ReturnTo      string                 `protobuf:"bytes,2,opt,name=return_to,json=returnTo,proto3" json:"return_to,omitempty"` // relative app path to navigate to (decoded from state)
-	Error         string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`                       // machine-readable error code when ok=false (empty on success)
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Ok       bool                   `protobuf:"varint,1,opt,name=ok,proto3" json:"ok,omitempty"`                            // true when the code was exchanged and the credential saved
+	ReturnTo string                 `protobuf:"bytes,2,opt,name=return_to,json=returnTo,proto3" json:"return_to,omitempty"` // relative app path to navigate to (decoded from state)
+	Error    string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`                       // machine-readable error code when ok=false (empty on success)
+	// True when the credential was saved but the GitHub App is installed on no
+	// account the user can reach, so it can see no repositories yet. Authorizing
+	// a GitHub App is not installing it; the client sends the user to
+	// install_url next. False when installations could not be determined — the
+	// server only makes this claim on positive evidence.
+	NeedsInstall bool `protobuf:"varint,4,opt,name=needs_install,json=needsInstall,proto3" json:"needs_install,omitempty"`
+	// Where to install the GitHub App. Set when needs_install is true.
+	InstallUrl    string `protobuf:"bytes,5,opt,name=install_url,json=installUrl,proto3" json:"install_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1010,15 +1032,30 @@ func (x *ExchangeGithubOAuthCodeResponse) GetError() string {
 	return ""
 }
 
+func (x *ExchangeGithubOAuthCodeResponse) GetNeedsInstall() bool {
+	if x != nil {
+		return x.NeedsInstall
+	}
+	return false
+}
+
+func (x *ExchangeGithubOAuthCodeResponse) GetInstallUrl() string {
+	if x != nil {
+		return x.InstallUrl
+	}
+	return ""
+}
+
 var File_services_git_credential_v1_git_credential_proto protoreflect.FileDescriptor
 
 const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\n" +
-	"/services/git_credential/v1/git_credential.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/shared.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"q\n" +
+	"/services/git_credential/v1/git_credential.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/shared.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x96\x01\n" +
 	"\x18SaveGitCredentialRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12!\n" +
 	"\faccess_token\x18\x02 \x01(\tR\vaccessToken\x12\x16\n" +
-	"\x06scopes\x18\x03 \x01(\tR\x06scopes\"\x1b\n" +
+	"\x06scopes\x18\x03 \x01(\tR\x06scopes\x12#\n" +
+	"\rrefresh_token\x18\x04 \x01(\tR\frefreshToken\"\x1b\n" +
 	"\x19SaveGitCredentialResponse\"5\n" +
 	"\x17GetGitCredentialRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"\xd3\x01\n" +
@@ -1080,11 +1117,14 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"J\n" +
 	"\x1eExchangeGithubOAuthCodeRequest\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x14\n" +
-	"\x05state\x18\x02 \x01(\tR\x05state\"d\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\"\xaa\x01\n" +
 	"\x1fExchangeGithubOAuthCodeResponse\x12\x0e\n" +
 	"\x02ok\x18\x01 \x01(\bR\x02ok\x12\x1b\n" +
 	"\treturn_to\x18\x02 \x01(\tR\breturnTo\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error*\xab\x01\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\x12#\n" +
+	"\rneeds_install\x18\x04 \x01(\bR\fneedsInstall\x12\x1f\n" +
+	"\vinstall_url\x18\x05 \x01(\tR\n" +
+	"installUrl*\xab\x01\n" +
 	"\x13GitCredentialHealth\x12%\n" +
 	"!GIT_CREDENTIAL_HEALTH_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bGIT_CREDENTIAL_HEALTH_VALID\x10\x01\x12!\n" +

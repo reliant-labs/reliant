@@ -3,8 +3,8 @@
 #
 # Renderer logs reach the file via Electron IPC (electronAPI.log →
 # ipcMain "log-from-renderer"), so they land in .reliant/logs/main.log
-# prefixed [Renderer] — NOT in data/logs/reliant.log, which is the Go
-# backend's sink and carries none of this.
+# prefixed [Renderer] — NOT in the Go backend's log, which carries none of
+# this.
 #
 # Usage:
 #   scripts/onboarding-trace.sh          # follow live

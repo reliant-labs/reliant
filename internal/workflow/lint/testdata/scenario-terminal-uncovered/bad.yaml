@@ -1,0 +1,21 @@
+name: fixture
+inputs:
+  ok: {type: boolean, default: true}
+entry: [decide]
+nodes:
+- id: decide
+  type: compute
+  outputs:
+    ok: '{{ inputs.ok }}'
+- id: passed
+  type: save_message
+  args: {role: assistant, content: passed}
+- id: failed
+  type: save_message
+  outcome: failure
+  args: {role: assistant, content: failed}
+edges:
+- from: decide
+  cases:
+  - {to: passed, condition: 'nodes.decide.ok == true'}
+  default: failed

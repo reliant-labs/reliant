@@ -48,7 +48,7 @@ export default function Link({ href, children, onClick, className, ...rest }: Li
   // with a higher specificity than a utility class, so without this a
   // breadcrumb's inherited muted ink, or a link's own `text-ink`, renders in
   // the accent — which marks the primary action, focus and selection only
-  // (console v3 D8). forge-ui components set their link colours themselves.
+  // . forge-ui components set their link colours themselves.
   const classes = className ? `no-color ${className}` : "no-color";
 
   if (isExternalHref(href)) {

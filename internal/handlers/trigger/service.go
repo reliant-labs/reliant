@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"go.temporal.io/sdk/client"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/controlplane"
@@ -52,9 +54,11 @@ type Deps struct {
 	// Each is optional; a kind whose dependency is missing is rejected with
 	// Unavailable at write time rather than stored unable to fire.
 	//
-	// PublicURL is this server's externally reachable base, used to render
-	// webhook URLs; empty renders a bare path.
-	PublicURL string
+	// Integrations is the shared integrations config: its public_url
+	// (PUBLIC_URL) is this server's externally reachable base, used to
+	// render webhook URLs. Nil, or an empty public_url, renders a bare path.
+	// forge:optional-dep
+	Integrations *configv1.IntegrationsConfig
 	// forge:optional-dep
 	Sealer WebhookSealer
 	// forge:optional-dep
@@ -88,6 +92,12 @@ type Deps struct {
 	// whose token Enable shows once.
 	// forge:optional-dep
 	Alerting AlertingProvisioner
+
+	// Drafter writes an automation draft from a description
+	// (DraftAutomation) on the worker, where the model drivers are. Without
+	// it DraftAutomation answers Unavailable and the dialog is filled by hand.
+	// forge:optional-dep
+	Drafter AutomationDrafter
 }
 
 // Syncer is the schedule backend the handlers converge onto. Declared here,
@@ -151,6 +161,9 @@ func (d Deps) validateDeps() error {
 type Service struct {
 	reliantv1connect.UnimplementedTriggerServiceHandler
 	deps Deps
+	// publicURL is Deps.Integrations' public_url, trimmed; empty when there
+	// is none.
+	publicURL string
 
 	// grants holds delegated automation credentials; nil (no control
 	// plane) makes it a no-op.
@@ -164,6 +177,9 @@ func New(deps Deps) (*Service, error) {
 		return nil, err
 	}
 	s := &Service{deps: deps}
+	if deps.Integrations != nil {
+		s.publicURL = strings.TrimSpace(deps.Integrations.GetPublicUrl())
+	}
 	if deps.ControlPlane != nil {
 		s.grants = &automationGrants{client: deps.ControlPlane, keys: deps.Repo, triggers: deps.Repo}
 	}

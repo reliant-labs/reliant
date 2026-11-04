@@ -5,7 +5,7 @@
 // Fixture generators: each test drives one representative workflow shape
 // end-to-end against a real (ephemeral) Temporal dev server through the
 // production worker registration path, then exports the resulting history to
-// fixtures/<name>.json. Run via `make replay-fixtures`.
+// fixtures/<name>.json. Run via `task replay-fixtures`.
 //
 // The scenarios deliberately mirror the e2e story suite's shapes
 // (e2e/stories/story_*.go) so the pinned histories correspond to flows that

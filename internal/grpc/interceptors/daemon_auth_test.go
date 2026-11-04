@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -80,19 +81,47 @@ func TestDaemonAuthInterceptorRejectsWrongScope(t *testing.T) {
 	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
-// principalIntrospector returns a fixed principal for any token — for shapes
-// the grant rules refuse to mint, which the interceptor must still refuse.
-type principalIntrospector struct{ p *fat.Principal }
+// principalIntrospector returns a fixed principal (and account email) for any
+// token — for shapes the grant rules refuse to mint, which the interceptor
+// must still refuse, and for an authority that names an email, which neither
+// self-hosted store does.
+type principalIntrospector struct {
+	p     *fat.Principal
+	email string
+}
 
-func (s principalIntrospector) Introspect(context.Context, string) (*fat.Principal, error) {
-	return s.p, nil
+func (s principalIntrospector) IntrospectAccount(context.Context, string) (auth.AccessTokenAccount, error) {
+	return auth.AccessTokenAccount{Principal: s.p, Email: s.email}, nil
+}
+
+// The account's email, when the authority names one, rides the context so the
+// gateway can tell the daemon which account it connected as (WhoAmI,
+// RegistrationAck). An authority that names none leaves it unset.
+func TestDaemonAuthInterceptorCarriesTheAccountEmail(t *testing.T) {
+	principal := &fat.Principal{TokenID: "t", ActingUserID: "user-123", Scopes: fat.SetOf(fat.ScopeDaemonConnect)}
+	minted, err := fat.Mint()
+	require.NoError(t, err)
+
+	interceptor, err := NewDaemonAuthInterceptor(principalIntrospector{p: principal, email: "alice@example.com"})
+	require.NoError(t, err)
+	ctx, err := interceptor.authenticate(context.Background(), bearer(minted.Plaintext))
+	require.NoError(t, err)
+	email, _ := auth.GetUserEmailFromContext(ctx)
+	require.Equal(t, "alice@example.com", email)
+
+	interceptor, err = NewDaemonAuthInterceptor(principalIntrospector{p: principal})
+	require.NoError(t, err)
+	ctx, err = interceptor.authenticate(context.Background(), bearer(minted.Plaintext))
+	require.NoError(t, err)
+	email, _ = auth.GetUserEmailFromContext(ctx)
+	require.Empty(t, email)
 }
 
 // forge/pkg/accesstoken refuses to mint daemon:connect bound to a non-daemon
 // resource, so this principal cannot come from either store today. The
 // interceptor still refuses it (defense in depth against a future authority).
 func TestDaemonAuthInterceptorRejectsNonDaemonBinding(t *testing.T) {
-	interceptor, err := NewDaemonAuthInterceptor(principalIntrospector{&fat.Principal{
+	interceptor, err := NewDaemonAuthInterceptor(principalIntrospector{p: &fat.Principal{
 		TokenID: "t", ActingUserID: "user-123", Scopes: fat.SetOf(fat.ScopeDaemonConnect),
 		Resource: &fat.Resource{Kind: fat.ResourceConnector, ID: "c1"},
 	}})
@@ -105,7 +134,7 @@ func TestDaemonAuthInterceptorRejectsNonDaemonBinding(t *testing.T) {
 }
 
 func TestDaemonAuthInterceptorRejectsTokenWithoutActingUser(t *testing.T) {
-	interceptor, err := NewDaemonAuthInterceptor(principalIntrospector{&fat.Principal{
+	interceptor, err := NewDaemonAuthInterceptor(principalIntrospector{p: &fat.Principal{
 		TokenID: "t", OrgID: "org-1", Scopes: fat.SetOf(fat.ScopeDaemonConnect),
 	}})
 	require.NoError(t, err)
@@ -155,6 +184,19 @@ func TestDaemonAuthInterceptorOutageIsUnavailable(t *testing.T) {
 
 	_, err = interceptor.authenticate(context.Background(), bearer(token))
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assertOutageWithheld(t, err, "daemon credential verification unavailable")
+}
+
+// assertOutageWithheld pins what an outage tells the caller: the fixed text,
+// and none of the dependency's own error, which stays server-side as the
+// cause the "rpc failed" record logs.
+func assertOutageWithheld(t *testing.T, err error, want string) {
+	t.Helper()
+	var ce *connect.Error
+	require.ErrorAs(t, err, &ce)
+	require.Equal(t, want, ce.Message())
+	require.NotContains(t, ce.Message(), tokenauthority.ErrMemoryUnavailable.Error())
+	require.ErrorIs(t, svcerr.Cause(err), tokenauthority.ErrMemoryUnavailable)
 }
 
 func TestDaemonAuthInterceptorRejectsRetiredPAT(t *testing.T) {

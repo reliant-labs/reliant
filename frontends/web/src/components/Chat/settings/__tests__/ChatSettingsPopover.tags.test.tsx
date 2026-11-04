@@ -40,6 +40,7 @@ const modelInput: InputDef = {
 function renderModelPage() {
   return render(
     <ChatSettingsPopover
+      embedded
       isOpen
       onClose={() => {}}
       initialPage="model"

@@ -166,19 +166,77 @@ function registerSchemePrivileges(protocol) {
   ]);
 }
 
+/** The runtime config document's path: index.html loads `%BASE_URL%config.js`. */
+const CONFIG_PATH = "/config.js";
+
+/**
+ * Whether a request is for the runtime config document. Only the exact path:
+ * `/config.js?x` is the same document, `/assets/config.js` is a file.
+ *
+ * @param {string} requestUrl
+ * @returns {boolean}
+ */
+function isConfigRequest(requestUrl) {
+  try {
+    const url = new URL(requestUrl);
+    return url.host === APP_HOST && url.pathname === CONFIG_PATH;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Answer one config.js request from the main process.
+ *
+ * The bundle has no endpoints of its own (it reads them from config.js), so
+ * this is the packaged app's ONLY source of them, and it is answered before
+ * the web root is consulted: a config.js left in the build output by a dev
+ * `forge generate` must never shadow it. A failure to build the document is a
+ * 500, which the renderer's checkWebConfig() reports as "config.js did not
+ * load", naming this file — never an empty 200 that would boot the
+ * self-hosted app silently.
+ *
+ * @param {() => string} configScript
+ * @param {{ error: Function }} log
+ * @returns {Response}
+ */
+function configResponse(configScript, log) {
+  try {
+    return new Response(configScript(), {
+      status: 200,
+      headers: { "content-type": "text/javascript", "cache-control": "no-store" },
+    });
+  } catch (err) {
+    log.error("[AppProtocol] could not build config.js:", err && err.message);
+    return new Response("config.js unavailable", {
+      status: 500,
+      headers: { "content-type": "text/plain" },
+    });
+  }
+}
+
 /**
  * Serve the packaged web directory over `app://`. Call after the app is ready.
  *
  * @param {import('electron').Protocol} protocol
  * @param {string} webRoot - Absolute path to the packaged web directory
  * @param {{ error: Function, warn: Function }} log
+ * @param {{ configScript: () => string }} options - configScript answers
+ *   `app://bundle/config.js` (runtime-config.js); called per request, so it
+ *   sees the main process's endpoints as they are when the renderer loads.
  */
-function registerAppProtocol(protocol, webRoot, log) {
+function registerAppProtocol(protocol, webRoot, log, { configScript }) {
+  if (typeof configScript !== "function") {
+    throw new Error("app-protocol: registerAppProtocol needs options.configScript — the packaged renderer has no other source of config.js");
+  }
   // The scheme is passed WITHOUT a trailing colon. `protocol.handle("app:")`
   // does not throw — it silently registers nothing, and every load then fails
   // with ERR_FAILED before the handler is consulted. Verified against Electron
   // 39 with protocol.isProtocolHandled(), which is asserted below.
   protocol.handle(APP_SCHEME, async (request) => {
+    if (isConfigRequest(request.url)) {
+      return configResponse(configScript, log);
+    }
     const resolved = resolveRequestPath(request.url, webRoot);
 
     if (!resolved) {
@@ -221,7 +279,9 @@ module.exports = {
   APP_SCHEME,
   APP_ORIGIN,
   APP_INDEX_URL,
+  configResponse,
   contentTypeFor,
+  isConfigRequest,
   registerAppProtocol,
   registerSchemePrivileges,
   resolveRequestPath,

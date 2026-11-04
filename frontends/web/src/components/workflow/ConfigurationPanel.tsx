@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { ExternalLink, Trash2, X } from 'lucide-react'
-import { Tooltip } from '../ui/Tooltip'
+import Tooltip from '../forge-ui/tooltip';
 import './config/config-panel.css'
 
 export type ConfigurationPanelAccent =
@@ -99,7 +99,7 @@ export function ConfigurationPanel({
 
         <div className="cpv2-header-actions">
           {onDelete && (
-            <Tooltip content={deleteLabel} placement="left" delay={300}>
+            <Tooltip content={deleteLabel} side="left" delay={300}>
               <button
                 type="button"
                 onClick={handleDelete}
@@ -110,7 +110,7 @@ export function ConfigurationPanel({
               </button>
             </Tooltip>
           )}
-          <Tooltip content="Close" placement="left" delay={300}>
+          <Tooltip content="Close" side="left" delay={300}>
             <button
               type="button"
               onClick={onClose}

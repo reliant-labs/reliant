@@ -4,7 +4,7 @@
 # blob ADDED by the range under review.
 #
 # The pre-commit hook is the fast feedback, but it is opt-in (it only runs after
-# `make setup-hooks`) and `git commit --no-verify` skips it outright. This runs
+# `scripts/setup-hooks.sh`) and `git commit --no-verify` skips it outright. This runs
 # where neither is true.
 #
 # Usage: check-binary-files-ci.sh <base-ref> <head-ref>

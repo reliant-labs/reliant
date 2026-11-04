@@ -51,7 +51,7 @@ echo "Checking required paths..."
 echo ""
 
 # Package lock files (must exist)
-check_path "frontends/web/package-lock.json" "Web package-lock.json exists" true
+check_path "frontends/web/pnpm-lock.yaml" "Web pnpm-lock.yaml exists" true
 check_path "electron/package-lock.json" "Electron package-lock.json exists" true
 check_path "go.sum" "Go.sum exists" true
 

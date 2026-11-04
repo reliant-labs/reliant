@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+// OrganizationService is the caller's view of the organizations they belong
+// to. Users and orgs are many-to-many: a person can be a member of several
+// orgs, and an org can have several members (controlplane.org_memberships).
+//
+// Every org-scoped operation acts in ONE org that the caller is a member of.
+// When a request names none, it acts in the caller's DEFAULT org: the one
+// SetDefaultOrganization stored, or their oldest membership until they choose.
+// There is no "first org of the user" anywhere else. docs/orgs.md is the full
+// contract, including how a request names its org.
+//
+// Callers are HUMANS (a Supabase/Zitadel session). A machine credential
+// (an `rlat_` token) is bound to exactly one org when it is minted, so it has
+// no orgs to list or choose between, and every rpc here refuses it.
+package controlplane.v1;
+
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/organization/v1;organizationv1";
+
+service OrganizationService {
+  // ListMyOrganizations lists every org the caller belongs to, with their role
+  // in each, oldest org first, and which one is their default. An org switcher
+  // and `forge login`'s org choice are built on it.
+  rpc ListMyOrganizations(ListMyOrganizationsRequest) returns (ListMyOrganizationsResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
+  // SetDefaultOrganization makes org_id the org the caller acts in when a
+  // request names none. It is a per-person preference stored server-side, so
+  // it follows them to every device and client. It is not a session: a client
+  // that wants to act in another org for a while names that org on its
+  // requests instead.
+  //
+  // PermissionDenied when the caller is not a member of org_id. That includes
+  // an org that does not exist, so the answer does not reveal which orgs exist.
+  rpc SetDefaultOrganization(SetDefaultOrganizationRequest) returns (SetDefaultOrganizationResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "a personal preference about which org requests default to; it changes nothing in any org"}
+    };
+  }
+}
+
+// MyOrganization is one org the caller belongs to, as they see it. It
+// deliberately carries no billing identifiers or settings: any member can
+// list it, while those belong to the billing surfaces.
+message MyOrganization {
+  string id = 1;
+  string name = 2;
+  string slug = 3;
+  // The caller's role in this org: "owner", "admin" or "member".
+  string role = 4;
+  // True for the org requests that name none act in.
+  bool is_default = 5;
+  // True when the caller is the org's owner (organizations.owner_id). An org
+  // has exactly one owner. Their membership role is normally "owner" too.
+  bool is_owner = 6;
+  google.protobuf.Timestamp created_at = 7;
+  // When the caller joined the org.
+  google.protobuf.Timestamp joined_at = 8;
+}
+
+message ListMyOrganizationsRequest {}
+
+message ListMyOrganizationsResponse {
+  // Oldest org first. Empty only for a signup still being provisioned.
+  repeated MyOrganization organizations = 1;
+  // The org requests that name none act in. "" when organizations is empty.
+  string default_org_id = 2;
+}
+
+message SetDefaultOrganizationRequest {
+  string org_id = 1;
+}
+
+message SetDefaultOrganizationResponse {
+  string default_org_id = 1;
+}

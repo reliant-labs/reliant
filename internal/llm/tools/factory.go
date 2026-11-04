@@ -21,11 +21,21 @@ type ToolsOptions struct {
 	// NewToolsFactory supplies one, and every factory cloned from this one
 	// shares it.
 	MCPToolCache *MCPToolCache
-	// ControlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted (the daemon, tests). It picks the dial policy of the web
-	// tools (netguard.ForDeployment): a hosted deployment's shared worker must
-	// not reach its own network; a self-hosted one is the user's machine.
-	ControlPlaneURL string
+	// AllowPrivateEgress lets the web tools (websearch, sourcegraph, and fetch
+	// when it runs on a server role) dial private, loopback and link-local
+	// addresses (netguard.ForDeployment). False, the zero value, is the server
+	// roles' setting: a shared process must not reach its own network. The
+	// daemon sets it, because a daemon IS the user's machine; a self-hosted
+	// server opts in with ServerProcessConfig.network.allow_private_egress.
+	//
+	// fetch on a daemon does NOT read it: see FetchNetwork.
+	AllowPrivateEgress bool
+	// FetchNetwork, when set, is where fetch may connect, instead of the
+	// policy derived from AllowPrivateEgress. The daemon sets it: fetch runs
+	// there (PlacementPreferDaemon) and is usually auto-approved, so its reach
+	// is its own decision, independent of the daemon-wide egress setting that
+	// also covers local model endpoints (see FetchNetwork).
+	FetchNetwork *FetchNetwork
 	// Repo is the database the tools read and write. The factory is
 	// composition: it hands Repo to each tool as the role that tool declares
 	// (deps.go), through store(). Optional: nil means every database-backed
@@ -72,6 +82,16 @@ type ToolsOptions struct {
 	// Optional: nil means the tool reports it is unavailable here (the daemon
 	// runtime has no trigger service).
 	TriggerLister TriggerLister
+	// TriggerFirer and TriggerEventLister operate on existing activations only.
+	// Optional, as above: nil reports an unavailable runtime.
+	TriggerFirer       TriggerFirer
+	TriggerEventLister TriggerEventLister
+	ActivationManager  ActivationManager
+	// MachineController lists, starts, stops and resizes the user's own
+	// machines for list_machines and manage_machine. Optional: nil means
+	// both report they are unavailable here (self-hosted, or the daemon
+	// runtime).
+	MachineController MachineController
 	// ShellPlatform is the shell family of the DAEMON that will execute shell
 	// commands, which is frequently not this process's own platform: the
 	// server and worker run Linux while the daemon may be Windows. The shell
@@ -359,6 +379,9 @@ func (f *ToolsFactory) ProveTest() Tool {
 
 // Network tools
 func (f *ToolsFactory) Fetch() Tool {
+	if f.opts.FetchNetwork != nil {
+		return NewFetchToolWithNetwork(*f.opts.FetchNetwork)
+	}
 	return NewFetchTool(f.netPolicy())
 }
 
@@ -369,7 +392,7 @@ func (f *ToolsFactory) WebSearch() Tool {
 // netPolicy is the dial policy for tools that reach the network from this
 // process: hosted deployments may not dial their own network.
 func (f *ToolsFactory) netPolicy() netguard.Policy {
-	return netguard.ForDeployment(f.opts.ControlPlaneURL)
+	return netguard.ForDeployment(f.opts.AllowPrivateEgress)
 }
 
 // Media tools
@@ -477,8 +500,41 @@ func (f *ToolsFactory) SendToRun() Tool {
 	return NewSendToRunTool(f.store(), f.opts.RunMessenger)
 }
 
+func (f *ToolsFactory) CreateTriggerActivation() Tool {
+	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolCreateTriggerActivation)
+}
+func (f *ToolsFactory) UpdateTriggerActivation() Tool {
+	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolUpdateTriggerActivation)
+}
+func (f *ToolsFactory) EnableTrigger() Tool {
+	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolEnableTrigger)
+}
+func (f *ToolsFactory) PauseTrigger() Tool {
+	return NewActivationTool(f.store(), f.opts.ActivationManager, ToolPauseTrigger)
+}
+
+func (f *ToolsFactory) ListMachines() Tool {
+	return NewListMachinesTool(f.store(), f.opts.MachineController)
+}
+
+func (f *ToolsFactory) ManageMachine() Tool {
+	return NewManageMachineTool(f.store(), f.opts.MachineController)
+}
+
 func (f *ToolsFactory) ListTriggers() Tool {
 	return NewListTriggersTool(f.store(), f.opts.TriggerLister)
+}
+
+func (f *ToolsFactory) FireTrigger() Tool {
+	return NewFireTriggerTool(f.store(), f.opts.TriggerFirer)
+}
+
+func (f *ToolsFactory) ListTriggerEvents() Tool {
+	return NewListTriggerEventsTool(f.store(), f.opts.TriggerEventLister)
+}
+
+func (f *ToolsFactory) DraftAutomation() Tool {
+	return NewDraftAutomationTool()
 }
 
 // Analysis tools
@@ -755,12 +811,13 @@ Usage notes:
 }
 
 // ListAvailableToolsForPlacement returns tool names that can run at the given location.
-// Tools with PlacementAny are included for all locations.
+// Tools with PlacementAny or PlacementPreferDaemon are included for all
+// locations (Placement.RunsAt).
 func (f *ToolsFactory) ListAvailableToolsForPlacement(location Placement) []string {
 	registry := GetToolRegistry()
 	var names []string
 	for _, def := range registry {
-		if def.Placement == location || def.Placement == PlacementAny || location == "" {
+		if location == "" || def.Placement.RunsAt(location) {
 			names = append(names, def.Name)
 		}
 	}

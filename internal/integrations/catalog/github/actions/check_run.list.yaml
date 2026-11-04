@@ -1,0 +1,99 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: check_run.list
+display_name: List check runs
+summary: The check runs on one commit, optionally only those with one name or from one App.
+description: >-
+  List the check runs on a commit, newest first, with name, status,
+  conclusion, the App that wrote each run (app_slug and app_id), and
+  output.title. Filter by check_name (exact) and app_id. Only the latest
+  run of each name is listed unless filter is all. Use it to find a run to
+  update, or to read whether a commit already passed a required check: a
+  ruleset counts only the named App's run, so match app_id (or app_slug) too.
+  Follows GitHub's pagination up to 1000 runs.
+keywords: [check, check run, status, ci, list, required check, commit]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, head_sha]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    head_sha: { $ref: ../schemas/check_run_sha.yaml }
+    check_name:
+      type: string
+      minLength: 1
+      maxLength: 255
+      title: Check name
+      description: Only runs with exactly this name.
+      examples: ["Reliant review"]
+    app_id:
+      type: integer
+      minimum: 1
+      title: App id
+      description: Only runs written by this GitHub App (its numeric id).
+      examples: [1041943]
+    status:
+      type: string
+      enum: [queued, in_progress, completed]
+      title: Status
+      description: Only runs in this status.
+    filter:
+      type: string
+      enum: [latest, all]
+      default: latest
+      title: Which runs
+      description: latest (the default) is the newest run of each name; all includes the runs it replaced.
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /repos/{{ params.owner }}/{{ params.repo }}/commits/{{ params.head_sha }}/check-runs
+  query:
+    per_page: "100"
+    filter: "{{ params.filter }}"
+  query_expr: >-
+    {?"check_name": params.?check_name,
+     ?"app_id": has(params.app_id) ? optional.of(string(params.app_id)) : optional.none(),
+     ?"status": params.?status}
+  pagination: { style: link_header, max_pages: 10 }
+  max_response_bytes: 5242880
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    response.check_runs.map(r, {"id": r.id,
+                                "name": r.name,
+                                "head_sha": r.head_sha,
+                                "status": r.status,
+                                "conclusion": r.?conclusion.orValue(null),
+                                "app_slug": r.?app.?slug.orValue(null),
+                                "app_id": r.?app.?id.orValue(null),
+                                "html_url": r.?html_url.orValue(null),
+                                "details_url": r.?details_url.orValue(null),
+                                "external_id": r.?external_id.orValue(null),
+                                "title": r.?output.?title.orValue(null),
+                                "started_at": r.?started_at.orValue(null),
+                                "completed_at": r.?completed_at.orValue(null)})
+  schema:
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
+            head_sha: { type: string }
+            status: { type: string, description: "queued, in_progress or completed." }
+            conclusion: { type: [string, "null"] }
+            app_slug: { type: [string, "null"], description: The slug of the App that wrote the run (github-actions for Actions). }
+            app_id: { type: [integer, "null"], description: The numeric id of the App that wrote the run. }
+            html_url: { type: [string, "null"] }
+            details_url: { type: [string, "null"] }
+            external_id: { type: [string, "null"] }
+            title: { type: [string, "null"], description: "The run's output.title." }
+            started_at: { type: [string, "null"] }
+            completed_at: { type: [string, "null"] }

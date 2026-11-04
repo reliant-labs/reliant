@@ -12,12 +12,13 @@ The authoritative version of this document, covering all three repos, is
 ## The commands
 
 ```sh
-make pin-forge                 # pin forge AND forge/pkg to forge@origin/main
-make pin-forge REF=v0.1.14     # pin to a specific tag, branch or sha
-make pin-drift                 # how far behind the pin is (warn-only)
+task pin:forge                 # pin forge AND forge/pkg to forge@origin/main
+task pin:forge -- v0.1.14      # pin to a specific tag, branch or sha
+task pin:drift                 # how far behind the pin is (warn-only)
+task pin:ancestry              # fail if the pin is not a commit on forge's main
 ```
 
-`make pin-forge` reads forge's `origin/main` from the **remote** rather than
+`task pin:forge` (`scripts/pin-forge.sh`) reads forge's `origin/main` from the **remote** rather than
 trusting the local `../forge` checkout, which on a dev box is routinely on
 another agent's branch or days stale. It pins **both** forge modules to one
 commit — they are tagged from a single commit, so a split pin compiles today
@@ -27,14 +28,30 @@ and skews later — then proves the result with `GOWORK=off go build ./...`.
 forge from `../forge` on disk, so a plain `go build` can pass while CI fails on
 the version `go.mod` actually pins.
 
-It then runs `make generate-all`, because a forge bump changes generated
-output — `generated/docs-source/reference/cli.md` embeds forge's whole command
-tree, and MVS can move the protobuf/connect versions the protoc plugins run
-at. CI's "Generated code is up to date" gate fails a pin bump without it.
+It then runs the NEW pin's `forge generate` (protos, ORM, mocks, descriptor and
+`forge.yaml`'s generate hooks, which also rewrites `forge_version`) and
+`task generate:docs`, because a forge bump changes generated output —
+`generated/docs-source/reference/cli.md` embeds forge's whole command tree, and
+MVS can move the protobuf/connect versions the protoc plugins run at. The merge
+gate's generate and docs checks fail a pin bump without it.
 
 It edits `go.mod`, `go.sum` and that generated output, and **stops**. It does
 not commit — this checkout is shared with other agents, and staging paths in a
 tree holding someone else's in-flight work is how that work gets lost.
+
+## reliant may bump forge without waiting for control-plane
+
+control-plane's pin gate used to FAIL unless its forge equalled the forge in the reliant
+it pins, which forced every forge bump through forge -> reliant -> control-plane in
+series. It no longer does, because a forge that is not a project's pin hands that
+project's KCL-reading commands, `lint` and the `ci` judges to the pinned forge
+(forge#908, #1189). control-plane being **ahead** of reliant's forge is now a warning;
+**behind**, or a `forge/pkg` API reliant uses no longer compiling against control-plane's
+forge (control-plane imports `pkg/daemonwire`, `pkg/llmcatalog`, `pkg/hostedhttp`,
+`pkg/config` and `gen/reliant/v1[/reliantv1connect]`, derived by an import scan so a new
+one is covered automatically), still fails there. So bump forge here whenever you like,
+and keep the `forge/pkg` APIs those packages use source-compatible across a forge bump
+you land (or land the adaptation here first). Detail: `control-plane/docs/pinning.md`, "Coherence".
 
 ## Why commits, pre-launch
 
@@ -43,7 +60,8 @@ appeared there. Shipping one forge fix the tagged way costs three tags, three
 CI cycles and three merges. Measured: a commit pin resolves in **2.065s**; a
 freshly pushed tag took **~20 minutes** to become usable because
 `proxy.golang.org` had not ingested it. `GOPRIVATE=github.com/reliant-labs/*`
-(already in `pr-ci.yml`) is what makes the fast number real.
+(set by `Taskfile.yml`, `scripts/merge-gate.sh` and `scripts/pin-forge.sh`) is
+what makes the fast number real.
 
 A pseudo-version is a real, resolvable, checksummed module version. It is **not**
 a `replace` — a `replace` applies in every build mode, `GOWORK=off` does not
@@ -54,7 +72,7 @@ passes on a pseudo-version as-is.
 ## Drift
 
 A commit pin has no version number to notice is stale — a pseudo-version looks
-equally current whether it is one commit old or ninety. `make pin-drift`
+equally current whether it is one commit old or ninety. `task pin:drift`
 reports how many commits behind `forge@main` each pin is. It **warns and never
 fails**: a deliberately older pin is legitimate, and a check that failed CI for
 it would be one whose only fix is to bypass it.
@@ -69,24 +87,25 @@ With `GOPRIVATE` it already fails (`unknown revision`). Without it, it builds
 only while proxy.golang.org still has it cached. reliant `main` pinned such a
 commit (forge `1b0f7f55`) on 2026-09-25.
 
-`make pin-ancestry` (`scripts/check-pin-ancestry.sh`) **fails** when the pinned
-commit, or a pinned tag's commit, is not an ancestor of forge's `main`. It runs
-in the `Pin Drift` workflow's `ancestry` job on every PR, on every push to
-`main`, and daily. `scripts/test-pin-ancestry.sh` is its hermetic self-test;
-add `--live` to also check the real forge.
+`task pin:ancestry` (`scripts/check-pin-ancestry.sh`, after its hermetic
+self-test `scripts/test-pin-ancestry.sh`; add `--live` to that to also check the
+real forge) **fails** when the pinned commit, or a pinned tag's commit, is not
+an ancestor of forge's `main`. It runs in the `Pin Drift` workflow's `ancestry`
+job on every PR that touches the pin, on every such push to `main`, and daily,
+and `task ci`'s `pin-ancestry` check runs it too.
 
 To land a change that needs an unmerged forge commit: pin the PR head so your
 PR's other jobs can build against it, merge forge, then re-pin with
-`make pin-forge` (which pins forge's `main`) before merging here. The
+`task pin:forge` (which pins forge's `main`) before merging here. The
 `ancestry` job stays red until you do. That is the reminder.
 
 ## Switching back to tags at launch
 
 ```sh
-make pin-forge REF=vX.Y.Z
+task pin:forge -- vX.Y.Z
 grep 'reliant-labs/forge' go.mod    # both lines must read vX.Y.Z
 GOWORK=off go build ./...
-go test -count=1 ./internal/buildmode/
+task test -- ./internal/buildmode/
 ```
 
 Then confirm nothing pseudo-versioned remains:
@@ -95,6 +114,6 @@ Then confirm nothing pseudo-versioned remains:
 grep -n 'reliant-labs/forge' go.mod | grep -- '-0\.[0-9]\{14\}-'   # expect no output
 ```
 
-Nothing needs to be un-built to switch: `pin-forge` takes a `REF` and the drift
+Nothing needs to be un-built to switch: `pin:forge` takes a ref and the drift
 check already understands both shapes. The full release procedure is in the
 `release` skill; this file only covers which SHAPE the pins take.

@@ -224,11 +224,15 @@ nodes:
             # always redirect into a file. The tier was removed rather than left
             # to imply a guarantee it never made; a real read-only mode needs OS
             # containment and will return on that footing.
+            # The user-directed general assistant may orchestrate standing work.
+            # A spawned child is still capped by its parent's tier, and unattended
+            # runs withhold run-control tools unless the step names them explicitly.
+            # Plan mode must not regain those tools through load_tool's wildcard.
             tools_config:
               preloaded_tools: "{{inputs.mode == 'plan' ? ['tag:coding:plan', 'tag:shell'] : inputs.tools}}"
-              loadable_tools: ["*"]
+              loadable_tools: "{{inputs.mode == 'plan' ? ['tag:coding:plan', 'tag:shell'] : ['*']}}"
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
-              permission: mutating
+              permission: orchestrator
 
         - id: approval
           type: approval

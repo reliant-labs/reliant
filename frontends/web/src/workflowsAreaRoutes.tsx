@@ -6,10 +6,12 @@
  * that mirrored the tree by hand would pass against the mirror while the real
  * tree drifted.
  *
- * One area, three tabs — Library (definitions), Runs (every execution) and
- * Automations (standing triggers) — inside one layout, which owns the tab
- * bar, the exit and project resolution (a `project` search param on every
- * page, so a hard refresh works: the area never mounts ModernApp).
+ * One area, two tabs — Workflows (every definition, with its triggers inline)
+ * and Runs (every execution) — inside one layout, which owns the tab bar,
+ * the exit, the project scope and project resolution (a `project` search
+ * param on every page, so a hard refresh works: the area never mounts
+ * ModernApp). An automation is a workflow's trigger, configured on the
+ * workflow's page; the Automations tab's paths are redirects.
  *
  * Under `_authenticated`, not the app shell: the area spans projects
  * (decision 10), and the app shell is scoped to one. Pathless like `_forge`,
@@ -18,7 +20,7 @@
 
 import { createRoute, redirect, type AnyRoute, type RouteComponent } from '@tanstack/react-router'
 
-import { legacyWorkflowsPath } from './lib/workflowsArea'
+import { ON_WORKFLOWS_HREF, legacyWorkflowsPath } from './lib/workflowsArea'
 import { librarySearchSchema, runsSearchSchema, workflowsAreaSearchSchema } from './routeSchemas'
 
 export interface WorkflowsAreaComponents {
@@ -27,8 +29,15 @@ export interface WorkflowsAreaComponents {
   workflowDetail: RouteComponent
   runs: RouteComponent
   runDetail: RouteComponent
-  automations: RouteComponent
-  automationDetail: RouteComponent
+  /** Resolves a retired automation link: looks the trigger up, opens its workflow's page. */
+  automationRedirect: RouteComponent
+}
+
+/** `target`, with the request's own search params added to any it already has. */
+function withSearch(target: string, searchStr: string): string {
+  if (!searchStr) return target
+  if (!target.includes('?')) return `${target}${searchStr}`
+  return `${target}&${searchStr.replace(/^\?/, '')}`
 }
 
 type LegacyPath = '/workflow' | '/runs' | '/runs/$runId' | '/automations' | '/automations/$triggerId'
@@ -86,26 +95,31 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
     component: components.runDetail,
   })
 
-  // Automations: standing triggers across every project (§7).
+  // Retired: the Automations tab. Its list was the Workflows tab narrowed to
+  // what is on, in every project; an automation's page is its trigger's row
+  // on the workflow page, which only the trigger can name, so that redirect
+  // is a component that looks it up.
   const automationsRoute = createRoute({
     getParentRoute: () => layoutRoute,
     path: '/workflows/automations',
-    validateSearch: workflowsAreaSearchSchema,
-    component: components.automations,
+    beforeLoad: ({ location }) => {
+      throw redirect({ href: withSearch(ON_WORKFLOWS_HREF, location.searchStr), replace: true })
+    },
   })
 
-  const automationDetailRoute = createRoute({
+  const automationRedirectRoute = createRoute({
     getParentRoute: () => layoutRoute,
     path: '/workflows/automations/$triggerId',
     validateSearch: workflowsAreaSearchSchema,
-    component: components.automationDetail,
+    component: components.automationRedirect,
   })
 
   // ── Retired paths: redirects, so bookmarks, notifications and old links land
   //
   //   /workflow              → /workflows/library   (the hub)
   //   /runs[/$runId]         → /workflows/runs[/$runId]
-  //   /automations[/$id]     → /workflows/automations[/$id]
+  //   /automations           → the Workflows tab, narrowed to what is on
+  //   /automations/$id       → /workflows/automations/$id (which resolves it)
   //
   // The search string is carried VERBATIM (a relative href, which the router
   // re-parses), so a filtered /runs?state=... link keeps every filter.
@@ -123,7 +137,7 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
         const target = legacyWorkflowsPath(location.pathname)
         if (!target) return
         const hash = location.hash ? `#${location.hash}` : ''
-        throw redirect({ href: `${target}${location.searchStr}${hash}`, replace: true })
+        throw redirect({ href: `${withSearch(target, location.searchStr)}${hash}`, replace: true })
       },
     })
 
@@ -135,7 +149,7 @@ export function createWorkflowsAreaRoutes<TParent extends AnyRoute>(
       runsRoute,
       runDetailRoute,
       automationsRoute,
-      automationDetailRoute,
+      automationRedirectRoute,
     ]),
     legacyRoute('/workflow'),
     legacyRoute('/runs'),

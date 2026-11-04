@@ -12,7 +12,7 @@
  * integration, which expands into its own actions or triggers.
  */
 
-import type { CatalogEntrySummary, CatalogIntegrationListing } from "../../../api/catalog-search-grpc";
+import type { CatalogEntrySummary, CatalogIntegrationListing } from "../../../hooks/catalog-queries";
 import { isAgentBuildingBlock } from "../../../lib/node-metadata";
 
 /** A core node type: added by type, configured by its own panel. */

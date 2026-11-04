@@ -37,9 +37,12 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -207,6 +210,24 @@ func ListWorktreesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*c
 	return worktreesToCore(rows), nil
 }
 
+// ListMainWorktreesForUser returns the live main workspace of each project
+// userID owns, or of the one project when projectID is set. Ownership is part
+// of the query: a project id that is not the caller's yields nothing.
+func ListMainWorktreesForUser(ctx context.Context, db orm.Context, userID string, projectID *string) ([]*core.Worktree, error) {
+	var rows []*Worktree
+	q := db.Bun().NewSelect().Model(&rows).
+		Where("is_main").
+		Where("deleted_at IS NULL").
+		Where("project_id IN (SELECT id FROM projects WHERE user_id = ?)", userID)
+	if projectID != nil {
+		q = q.Where("project_id = ?", *projectID)
+	}
+	if err := q.OrderExpr("project_id, id").Scan(ctx); err != nil {
+		return nil, fmt.Errorf("failed to list main worktrees: %w", err)
+	}
+	return worktreesToCore(rows), nil
+}
+
 // ReplaceWorktree rewrites a worktree's mutable columns, archived or not,
 // and stamps updated_at. Path is among them because asynchronous creation
 // only learns the on-disk location after the daemon reports it: the row is
@@ -220,7 +241,7 @@ func ReplaceWorktree(ctx context.Context, db orm.Context, w *core.Worktree) erro
 		Set("updated_at = NOW()").
 		Where("id = ?", w.ID).
 		Exec(ctx)
-	return err
+	return recoveryAdmissionError(err)
 }
 
 // SetWorktreeCleanupMetadata replaces a worktree's cleanup metadata (nil
@@ -274,11 +295,61 @@ func MergeWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string
 	})
 }
 
+// MergeUnownedWorktreeCleanupMetadata is MergeWorktreeCleanupMetadata for an
+// archived row with no machine on record, and only while it has none: the
+// row is selected FOR UPDATE with daemon_id IS NULL, the lock
+// AdoptWorktreeDaemon's UPDATE takes too, so a machine that claims the row
+// first leaves nothing to merge, and fn sees the stored value of a row nobody
+// can claim until it commits. It reports whether fn's change was written.
+func MergeUnownedWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, fn func(m *core.CleanupMetadata) bool) (bool, error) {
+	wrote := false
+	err := db.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
+		wrote = false
+		var rows []Worktree
+		err := db.Bun().NewSelect().Model(&rows).
+			Column(WorktreeFieldCleanupMetadata).
+			Where("id = ?", id).
+			Where("daemon_id IS NULL").
+			Where("deleted_at IS NOT NULL").
+			For("UPDATE").
+			Scan(ctx)
+		if err != nil || len(rows) == 0 {
+			return err
+		}
+		meta := core.CleanupMetadata{}
+		if rows[0].CleanupMetadata != nil && *rows[0].CleanupMetadata != "" {
+			_ = json.Unmarshal([]byte(*rows[0].CleanupMetadata), &meta)
+		}
+		if !fn(&meta) {
+			return nil
+		}
+		if err := SetWorktreeCleanupMetadata(ctx, db, id, &meta); err != nil {
+			return err
+		}
+		wrote = true
+		return nil
+	})
+	return wrote, err
+}
+
 // cleanupMetadataPending is true while a row's directory may still be on
 // disk: it has no cleanup metadata saying directory_deleted. The jsonb cast
 // sits inside a CASE so a hand-edited value cannot fail the whole listing.
 const cleanupMetadataPending = `(CASE WHEN worktrees.cleanup_metadata IS NULL OR worktrees.cleanup_metadata = '' THEN false
 	ELSE COALESCE((worktrees.cleanup_metadata::jsonb ->> 'directory_deleted')::boolean, false) END) = false`
+
+// ownerCheckoutPath is the project's INSTALLED checkout on the worktree's
+// owner — its project_daemons row — which is the repo a reclaim runs git in on
+// that machine. Nothing else answers: a row of a clone still landing or one
+// that failed is not a repository, projects.path is where the project was
+// created (another machine's path, possibly another clone), and a worktree
+// with no recorded owner has no machine to ask. Those get "", and the sweep
+// skips every step that needs a repository (reclaim, snapshot, git branch -D)
+// rather than guess one.
+const ownerCheckoutPath = "COALESCE(pd.path, '')"
+
+// ownerCheckoutJoin joins a worktree to its owner's installed checkout.
+const ownerCheckoutJoin = "LEFT JOIN project_daemons AS pd ON pd.project_id = worktrees.project_id AND pd.daemon_id = worktrees.daemon_id AND pd.install_state = 'installed'"
 
 // ListWorktreesForReclaim returns every workspace whose directory a daemon
 // may still hold: not main, has a path, and not already known to be
@@ -290,8 +361,9 @@ func ListWorktreesForReclaim(ctx context.Context, db orm.Context) ([]*core.Recla
 	err := db.Bun().NewSelect().Model(&rows).
 		ColumnExpr("?TableColumns").
 		ColumnExpr("p.user_id AS owner_user_id").
-		ColumnExpr("p.path AS project_path").
+		ColumnExpr(ownerCheckoutPath+" AS project_path").
 		Join("JOIN projects AS p ON p.id = worktrees.project_id").
+		Join(ownerCheckoutJoin).
 		Where("worktrees.is_main = false").
 		Where("worktrees.path <> ''").
 		Where("worktrees.status NOT IN (?, ?)",
@@ -321,8 +393,9 @@ func ListHeldWorktreesForUser(ctx context.Context, db orm.Context, userID string
 	err := db.Bun().NewSelect().Model(&rows).
 		ColumnExpr("?TableColumns").
 		ColumnExpr("p.name AS project_name").
-		ColumnExpr("p.path AS project_path").
+		ColumnExpr(ownerCheckoutPath+" AS project_path").
 		Join("JOIN projects AS p ON p.id = worktrees.project_id").
+		Join(ownerCheckoutJoin).
 		Where("p.user_id = ?", userID).
 		Where("worktrees.is_main = false").
 		Where("worktrees.deleted_at IS NOT NULL").
@@ -357,13 +430,38 @@ type worktreeWithProject struct {
 // AdoptWorktreeDaemon records the daemon that found a workspace's directory
 // on its disk, which proves it owns it. Only a row created before daemon_id
 // was recorded is filled in, once.
-func AdoptWorktreeDaemon(ctx context.Context, db orm.Context, id, daemonID string) error {
-	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).
+
+// It returns the owner the row records afterwards, which is daemonID only
+// when this call won: two resolvers (separate services or API replicas) can
+// nominate different machines for one row, and only the persisted one may be
+// routed to. The fallback read is its own statement, so under READ COMMITTED
+// it sees a concurrent winner that committed while the UPDATE waited on the
+// row. "" means the row is gone.
+func AdoptWorktreeDaemon(ctx context.Context, db orm.Context, id, daemonID string) (string, error) {
+	var adopted []string
+	err := db.Bun().NewUpdate().Model((*Worktree)(nil)).
 		Set("daemon_id = ?", daemonID).
 		Where("id = ?", id).
 		Where("daemon_id IS NULL").
-		Exec(ctx)
-	return err
+		Returning("daemon_id").
+		Scan(ctx, &adopted)
+	if err != nil {
+		return "", err
+	}
+	if len(adopted) == 1 {
+		return adopted[0], nil
+	}
+	var owner []*string
+	if err := db.Bun().NewSelect().Model((*Worktree)(nil)).
+		Column("daemon_id").
+		Where("id = ?", id).
+		Scan(ctx, &owner); err != nil {
+		return "", err
+	}
+	if len(owner) == 0 || owner[0] == nil {
+		return "", nil
+	}
+	return *owner[0], nil
 }
 
 // ListLiveWorktreePathsForUser returns every path one user's unarchived
@@ -395,7 +493,7 @@ func RemoveWorktree(ctx context.Context, db orm.Context, id string) error {
 	_, err := db.Bun().NewDelete().Model((*Worktree)(nil)).
 		Where("id = ?", id).
 		Exec(ctx)
-	return err
+	return recoveryAdmissionError(err)
 }
 
 // ArchiveWorktree stamps the worktree archived as of now.
@@ -405,7 +503,7 @@ func ArchiveWorktree(ctx context.Context, db orm.Context, id string) error {
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
 		Exec(ctx)
-	return err
+	return recoveryAdmissionError(err)
 }
 
 // UnarchiveWorktree makes the worktree live again; a live worktree that
@@ -416,7 +514,7 @@ func UnarchiveWorktree(ctx context.Context, db orm.Context, id string) error {
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
 		Exec(ctx)
-	return nameTakenOr(err)
+	return nameTakenOr(recoveryAdmissionError(err))
 }
 
 // firstWorktree returns the first worktree, archived or not, the filter
@@ -467,24 +565,26 @@ func worktreeToCore(row *Worktree) *core.Worktree {
 		status = int32(*row.Status)
 	}
 	return &core.Worktree{
-		ID:              row.ID,
-		Name:            row.Name,
-		Path:            row.Path,
-		Branch:          row.Branch,
-		BaseBranch:      row.BaseBranch,
-		BaseBranches:    decodeBaseBranches(row.BaseBranches),
-		ProjectID:       row.ProjectID,
-		ChatID:          row.ChatID,
-		DaemonID:        row.DaemonID,
-		Status:          status,
-		IdempotencyKey:  row.IdempotencyKey,
-		IsMain:          row.IsMain,
-		CreatedAt:       row.CreatedAt,
-		UpdatedAt:       row.UpdatedAt,
-		LastActive:      row.LastActive,
-		DeletedAt:       row.DeletedAt,
-		CleanupMetadata: cleanupMetadata,
-		FailureReason:   row.FailureReason,
+		ID:                   row.ID,
+		Name:                 row.Name,
+		Path:                 row.Path,
+		Branch:               row.Branch,
+		BaseBranch:           row.BaseBranch,
+		BaseBranches:         decodeBaseBranches(row.BaseBranches),
+		ProjectID:            row.ProjectID,
+		ChatID:               row.ChatID,
+		DaemonID:             row.DaemonID,
+		Status:               status,
+		IdempotencyKey:       row.IdempotencyKey,
+		IsMain:               row.IsMain,
+		CreatedAt:            row.CreatedAt,
+		UpdatedAt:            row.UpdatedAt,
+		LastActive:           row.LastActive,
+		DeletedAt:            row.DeletedAt,
+		CleanupMetadata:      cleanupMetadata,
+		FailureReason:        row.FailureReason,
+		ActivityGeneration:   row.ActivityGeneration,
+		RecoveryFinalizingID: row.RecoveryFinalizingID,
 	}
 }
 
@@ -529,4 +629,193 @@ func encodeCleanupMetadata(m *core.CleanupMetadata) (*string, error) {
 	}
 	s := string(encoded)
 	return &s, nil
+}
+
+// worktreeRunActivitySQL is what the chats working in each worktree say
+// about it (core.WorktreeRunActivity). A chat works in a worktree when it is
+// bound to it or one of its threads is (a sub-agent spawned into it). A run
+// counts while it is pending, active, or paused awaiting a resume — the same
+// "live" the recovery admission triggers use. The last activity is the
+// latest of the worktree's own stamps and, for each such chat, its
+// last_active and its runs' start and stop times. GREATEST skips NULLs.
+const worktreeRunActivitySQL = `
+WITH bound AS (
+    SELECT c.id AS chat_id, c.worktree_id FROM chats c WHERE c.worktree_id IN (?0)
+    UNION
+    SELECT t.chat_id, t.worktree_id FROM threads t WHERE t.worktree_id IN (?0)
+), per_chat AS (
+    SELECT b.worktree_id,
+        EXISTS (SELECT 1 FROM workflows f WHERE f.chat_id = b.chat_id
+            AND (f.state IN (1, 2) OR (f.state = 3 AND f.stop_reason = 3))) AS running,
+        GREATEST(c.last_active, (SELECT max(GREATEST(f.created_at, f.completed_at, f.worker_started_at, f.worker_stopped_at))
+            FROM workflows f WHERE f.chat_id = b.chat_id)) AS last_active
+    FROM bound b JOIN chats c ON c.id = b.chat_id
+)
+SELECT w.id AS worktree_id,
+    COALESCE(bool_or(p.running), false) AS running,
+    GREATEST(w.last_active, w.created_at, max(p.last_active)) AS last_active
+FROM worktrees w LEFT JOIN per_chat p ON p.worktree_id = w.id
+WHERE w.id IN (?0)
+GROUP BY w.id, w.last_active, w.created_at`
+
+// WorktreeRunActivities reports, for each of ids that exists, whether a chat
+// run is going in it and when anything last happened in it.
+func WorktreeRunActivities(ctx context.Context, db orm.Context, ids []string) (map[string]core.WorktreeRunActivity, error) {
+	out := make(map[string]core.WorktreeRunActivity, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		WorktreeID string    `bun:"worktree_id"`
+		Running    bool      `bun:"running"`
+		LastActive time.Time `bun:"last_active"`
+	}
+	if err := db.Bun().NewRaw(worktreeRunActivitySQL, bun.List(ids)).Scan(ctx, &rows); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("worktree run activity: %w", err)
+	}
+	for _, r := range rows {
+		out[r.WorktreeID] = core.WorktreeRunActivity{Running: r.Running, LastActive: r.LastActive}
+	}
+	return out, nil
+}
+
+// ArchiveLandedWorktree archives a live worktree whose work has landed, but
+// only if, under its row lock, nothing has happened in it since quietSince
+// and no chat run is going in it. Chat and run admission lock the same row
+// (store.withChatWorktreeAdmission and the recovery admission triggers), so a
+// run that starts concurrently either commits first and is seen, or waits
+// for this archive and then finds the worktree archived, which its first
+// tool batch undoes (ReviveArchivedWorktree). The chats are left as they
+// are. false, with no error, means it was not archived: main, already
+// archived, being finalized by a recovery, or not quiet.
+func ArchiveLandedWorktree(ctx context.Context, db orm.Context, id string, quietSince time.Time) (bool, error) {
+	return archiveRecoverableWorktree(ctx, db, id, quietSince, core.ArchivedBecauseLanded)
+}
+
+func ArchiveRecoverableIdleWorktree(ctx context.Context, db orm.Context, id string, quietSince time.Time) (bool, error) {
+	return archiveRecoverableWorktree(ctx, db, id, quietSince, core.ArchivedBecauseRecoverableIdle)
+}
+
+func archiveRecoverableWorktree(ctx context.Context, db orm.Context, id string, quietSince time.Time, reason string) (bool, error) {
+	archived := false
+	err := recoveryTx(ctx, db, func(ctx context.Context) error {
+		archived = false
+		var row struct {
+			IsMain          bool       `bun:"is_main"`
+			DeletedAt       *time.Time `bun:"deleted_at"`
+			Finalizing      *string    `bun:"recovery_finalizing_id"`
+			CleanupMetadata *string    `bun:"cleanup_metadata"`
+		}
+		err := db.Bun().NewRaw(`SELECT is_main, deleted_at, recovery_finalizing_id, cleanup_metadata FROM worktrees WHERE id = ? FOR UPDATE`, id).Scan(ctx, &row)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if row.IsMain || row.DeletedAt != nil || row.Finalizing != nil {
+			return nil
+		}
+		acts, err := WorktreeRunActivities(ctx, db, []string{id})
+		if err != nil {
+			return err
+		}
+		if a := acts[id]; a.Running || a.LastActive.After(quietSince) {
+			return nil
+		}
+		meta := core.CleanupMetadata{}
+		if row.CleanupMetadata != nil && *row.CleanupMetadata != "" {
+			if err := json.Unmarshal([]byte(*row.CleanupMetadata), &meta); err != nil {
+				return err
+			}
+		}
+		// Never stamp branch-only revival provenance over preserved recovery
+		// state, even when a stale daemon answer reports a clean checkout.
+		if len(meta.SnapshotRefs) != 0 || meta.RetireFence != "" {
+			return nil
+		}
+		var recoveries int
+		if err := db.Bun().NewRaw(`SELECT COUNT(*) FROM worktree_recoveries WHERE source_worktree_id = ?`, id).Scan(ctx, &recoveries); err != nil {
+			return err
+		}
+		if recoveries != 0 {
+			return nil
+		}
+		meta.ArchivedBecause = reason
+		encoded, err := encodeCleanupMetadata(&meta)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Bun().NewRaw(`UPDATE worktrees SET deleted_at = NOW(), updated_at = NOW(), cleanup_metadata = ? WHERE id = ?`, encoded, id).Exec(ctx); err != nil {
+			return err
+		}
+		archived = true
+		return nil
+	})
+	return archived && err == nil, err
+}
+
+// ReviveArchivedWorktree makes an archived worktree live again for a live
+// chat that is about to work in it, and returns the archive's fence (its
+// archive time in nanoseconds; "" when the row was not archived). The fence
+// is left in the metadata as RetireFence, so until the daemon has re-locked
+// the checkouts as restored the sweep treats the row as live and delivers
+// the retirement itself; the caller sends it along with its repair. What the
+// metadata said about the archived directory (removed, held, being cleaned)
+// no longer applies and is cleared; what was shed and saved is kept. A live
+// worktree that has since taken its name is core.ErrWorktreeNameTaken, and a
+// recovery finalizing it core.ErrWorktreeFinalizing.
+func ReviveArchivedWorktree(ctx context.Context, db orm.Context, id string) (string, error) {
+	fence := ""
+	err := recoveryTx(ctx, db, func(ctx context.Context) error {
+		fence = ""
+		var row struct {
+			DeletedAt       *time.Time `bun:"deleted_at"`
+			CleanupMetadata *string    `bun:"cleanup_metadata"`
+			IsMain          bool       `bun:"is_main"`
+			Finalizing      *string    `bun:"recovery_finalizing_id"`
+		}
+		if err := db.Bun().NewRaw(`SELECT deleted_at, cleanup_metadata, is_main, recovery_finalizing_id FROM worktrees WHERE id = ? FOR UPDATE`, id).Scan(ctx, &row); err != nil {
+			return err
+		}
+		meta := core.CleanupMetadata{}
+		if row.CleanupMetadata != nil && *row.CleanupMetadata != "" {
+			if err := json.Unmarshal([]byte(*row.CleanupMetadata), &meta); err != nil {
+				return err
+			}
+		}
+		if row.DeletedAt == nil {
+			fence = meta.RetireFence
+			return nil
+		}
+		// Branch-only recreation is valid ONLY for the proven clean landed
+		// lifecycle. Catalog recovery captures dirty/untracked state separately
+		// from legacy SnapshotRefs. Creation of a recovery also locks this row.
+		if row.IsMain || row.Finalizing != nil || (meta.ArchivedBecause != core.ArchivedBecauseLanded && meta.ArchivedBecause != core.ArchivedBecauseRecoverableIdle) || len(meta.SnapshotRefs) != 0 {
+			return fmt.Errorf("workspace requires explicit recovery; cannot revive from its branch alone")
+		}
+		var recoveries int
+		if err := db.Bun().NewRaw(`SELECT COUNT(*) FROM worktree_recoveries WHERE source_worktree_id = ?`, id).Scan(ctx, &recoveries); err != nil {
+			return err
+		}
+		if recoveries != 0 {
+			return fmt.Errorf("workspace has preserved recovery state; restore it through recovery")
+		}
+		f := strconv.FormatInt(row.DeletedAt.UnixNano(), 10)
+		meta.RetireFence = f
+		meta.DirectoryDeleted, meta.DeleteBranch = false, false
+		meta.HeldReason, meta.HeldDetail, meta.Transient, meta.Rechecks = "", "", "", 0
+		meta.Cleaning, meta.CleaningBy, meta.CleaningUntil = false, "", nil
+		meta.LockedAt, meta.CheckedAt, meta.ArchivedBecause = nil, nil, ""
+		encoded, err := encodeCleanupMetadata(&meta)
+		if err != nil {
+			return err
+		}
+		if _, err := db.Bun().NewRaw(`UPDATE worktrees SET deleted_at = NULL, updated_at = NOW(), cleanup_metadata = ? WHERE id = ?`, encoded, id).Exec(ctx); err != nil {
+			return nameTakenOr(err)
+		}
+		fence = f
+		return nil
+	})
+	return fence, err
 }

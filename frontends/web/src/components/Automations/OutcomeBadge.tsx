@@ -1,11 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 
 import Badge from "../forge-ui/badge";
-import type { TriggerOutcome } from "@/api/trigger-grpc";
+import type { TriggerOutcome } from "@/hooks/trigger-model";
 import { triggerEventOutcomeDisplay } from "@/lib/runStatus";
 
 /**
- * What one firing did: Launched, Skipped, or Failed to launch. This is the
+ * What one trigger event did: Started a run, Skipped, or Couldn't start. This is the
  * EVENT's outcome, never the run's result; a launched run's own status is a
  * RunStatusBadge. The label carries the meaning; color only reinforces it.
  */

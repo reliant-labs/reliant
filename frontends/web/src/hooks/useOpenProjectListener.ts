@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useProjectStore } from '../store/projectStore';
+import { useProjects } from "./project-queries";
 import { logger } from '../lib/logger';
 
 /**
@@ -10,13 +11,14 @@ import { logger } from '../lib/logger';
  * - Create a new project if one doesn't exist for that path
  */
 export function useOpenProjectListener() {
-  const projects = useProjectStore((state) => state.projects);
-  const isLoading = useProjectStore((state) => state.isLoading);
+  const { projects, isLoading } = useProjects();
   const selectProject = useProjectStore((state) => state.selectProject);
   const createProject = useProjectStore((state) => state.createProject);
 
   // Queue for paths received before projects are loaded
   const pendingPathRef = useRef<string | null>(null);
+  const isLoadingRef = useRef(isLoading);
+  isLoadingRef.current = isLoading;
 
   // Process a project path - find existing or create new
   const handleOpenProject = useCallback(async (projectPath: string) => {
@@ -76,7 +78,7 @@ export function useOpenProjectListener() {
 
     const unsubscribe = window.electronAPI.onOpenProject((projectPath: string) => {
       // If projects are still loading, queue the path
-      if (useProjectStore.getState().isLoading) {
+      if (isLoadingRef.current) {
         logger.info('[useOpenProjectListener] Projects still loading, queuing path', { projectPath });
         pendingPathRef.current = projectPath;
         return;

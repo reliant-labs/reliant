@@ -1,0 +1,8 @@
+{
+  "files": {
+    "frontends/web/src/hooks/index.ts": {
+      "reason": "hand-curated barrel of generated + hand hooks; P9 R4 owns it",
+      "disowned_at": "2026-10-24T17:22:05Z"
+    }
+  }
+}

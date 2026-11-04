@@ -92,8 +92,8 @@ describe('builder round-trip of an integration workflow', () => {
   it('saves exactly the proto it loaded: declared triggers and the action node intact', () => {
     const definition = loaded()
     const { nodes, edges } = canvas(definition)
-    const saved = save(definition, nodes, edges) as typeof canonical
-    const expected = structuredClone(toJson(WorkflowSchema, fromJson(WorkflowSchema, canonical as never))) as typeof canonical
+    const saved = save(definition, nodes, edges) as unknown as typeof canonical
+    const expected = structuredClone(toJson(WorkflowSchema, fromJson(WorkflowSchema, canonical as never))) as unknown as typeof canonical
     // The start node's on-canvas position is re-laid-out on load (pre-existing,
     // and UI-only); everything that is part of the definition is byte-equal.
     delete (saved.ui.positions as Record<string, unknown>).workflow
@@ -112,7 +112,7 @@ describe('builder round-trip of an integration workflow', () => {
       return { ...node, data: { ...node.data, step } }
     })
 
-    const saved = save(definition, edited, edges) as typeof canonical
+    const saved = save(definition, edited, edges) as unknown as typeof canonical
     const action = saved.nodes.find((n) => n.id === 'open_issue')!.action!
     expect(action.with).toEqual({
       owner: 'reliant-labs',
@@ -131,7 +131,7 @@ describe('builder round-trip of an integration workflow', () => {
     const step = newActionStep('post_message', 'slack/message.post@1', { unfurl_links: true })
     const added: Node = { id: 'post_message', type: 'actionNode', position: { x: 1000, y: 200 }, data: { step, label: 'post_message' } }
 
-    const saved = save(definition, [...nodes, added], edges) as typeof canonical
+    const saved = save(definition, [...nodes, added], edges) as unknown as typeof canonical
     expect(saved.nodes.find((n) => n.id === 'post_message')).toEqual({
       id: 'post_message',
       type: 'action',

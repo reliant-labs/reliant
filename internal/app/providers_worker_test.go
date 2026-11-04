@@ -3,10 +3,16 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/controlplane"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
+	"github.com/reliant-labs/reliant/internal/hosteduse"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
+	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,7 +27,7 @@ import (
 // Hosted (a control plane is configured): GitHub tokens come from
 // control-plane, through the delegated source.
 func TestIntegrationCredentials_HostedUsesControlPlane(t *testing.T) {
-	src, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"})
+	src, err := newWorkerIntegrationCredentials(nil, &configv1.ControlPlaneConfig{Url: "http://admin-server:8090", InternalServiceSecret: "s"})
 	require.NoError(t, err)
 	cs, ok := src.(connauth.Service)
 	require.True(t, ok)
@@ -33,14 +39,14 @@ func TestIntegrationCredentials_HostedUsesControlPlane(t *testing.T) {
 // reliant's own GitHub provider — which would tell every hosted user their
 // GitHub is not connected.
 func TestIntegrationCredentials_HostedWithoutSecretFailsBoot(t *testing.T) {
-	_, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090"})
+	_, err := newWorkerIntegrationCredentials(nil, &configv1.ControlPlaneConfig{Url: "http://admin-server:8090"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "INTERNAL_SERVICE_SECRET")
 }
 
 // Self-hosted: saved connections only; `github` is reliant's own provider.
 func TestIntegrationCredentials_SelfHostedIsSavedConnections(t *testing.T) {
-	src, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{})
+	src, err := newWorkerIntegrationCredentials(nil, &configv1.ControlPlaneConfig{})
 	require.NoError(t, err)
 	cs, ok := src.(connauth.Service)
 	require.True(t, ok)
@@ -51,7 +57,7 @@ func TestIntegrationCredentials_SelfHostedIsSavedConnections(t *testing.T) {
 // The poll activity is handed the same source integration actions use, so a
 // poll resolves a credential exactly as an action node would.
 func TestTriggerCredentialsIsTheIntegrationSource(t *testing.T) {
-	src, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{})
+	src, err := newWorkerIntegrationCredentials(nil, &configv1.ControlPlaneConfig{})
 	require.NoError(t, err)
 	got := triggerCredentials(src)
 	require.NotNil(t, got)
@@ -83,7 +89,7 @@ func TestCatalogSearch_DelegatedFollowsTheWorkersBrokers(t *testing.T) {
 	ctx := context.Background()
 	var noConnections catalogindex.ConnectionLister
 
-	hosted, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"})
+	hosted, err := newWorkerIntegrationCredentials(nil, &configv1.ControlPlaneConfig{Url: "http://admin-server:8090", InternalServiceSecret: "s"})
 	require.NoError(t, err)
 	svc, err := newWorkerCatalogSearch(noConnections, hosted)
 	require.NoError(t, err)
@@ -91,11 +97,42 @@ func TestCatalogSearch_DelegatedFollowsTheWorkersBrokers(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, usable["github"], "hosted: GitHub is served by the control-plane broker")
 
-	selfHosted, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{})
+	selfHosted, err := newWorkerIntegrationCredentials(nil, &configv1.ControlPlaneConfig{})
 	require.NoError(t, err)
 	svc, err = newWorkerCatalogSearch(noConnections, selfHosted)
 	require.NoError(t, err)
 	usable, err = svc.Usable(ctx, "")
 	require.NoError(t, err)
 	assert.False(t, usable["github"], "self-hosted: GitHub needs a saved connection")
+}
+
+// A refused dedicated hosted-action endpoint never stops the whole worker.
+// Cluster DNS does not waive HTTPS; the general API URL never enables actions.
+func TestHostedActionsDegradeInsteadOfFailingTheWorker(t *testing.T) {
+	store := &hosteduse.MockStore{}
+	var logged bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&logged, nil))
+
+	assert.Nil(t, HostedActions(log, store, &configv1.ControlPlaneConfig{}, &configv1.WorkerConfig{HostedActionsUrl: ""}), "self-hosted: no control plane, no hosted actions")
+	assert.Empty(t, logged.String(), "no control plane is not an error")
+
+	refused := HostedActions(log, store, &configv1.ControlPlaneConfig{Url: "http://admin-server.ns.svc.cluster.local:8090", InternalServiceSecret: "s"}, &configv1.WorkerConfig{HostedActionsUrl: "http://controller.ns.svc.cluster.local:9443"})
+	require.NotNil(t, refused)
+	assert.Contains(t, logged.String(), "level=WARN")
+	assert.Contains(t, logged.String(), "hosted HTTP actions are DISABLED")
+	assert.Contains(t, logged.String(), "requires HTTPS")
+	_, err := refused.ExecuteAction(context.Background(), "run", "node", "grant", hostedhttp.Request{URL: "https://example.com", Method: "POST"})
+	var disabled *handlers.HostedDisabledError
+	require.ErrorAs(t, err, &disabled)
+	assert.Contains(t, err.Error(), "requires HTTPS")
+	assert.Nil(t, HostedActions(log, store, &configv1.ControlPlaneConfig{Url: "http://admin-server.ns.svc.cluster.local:8090", InternalServiceSecret: "s"}, &configv1.WorkerConfig{HostedActionsUrl: ""}), "general control-plane URL must not enable hosted actions")
+
+	for _, u := range []string{"https://controller.ns.svc.cluster.local:9443", "http://127.0.0.1:8090"} {
+		logged.Reset()
+		enabled := HostedActions(log, store, &configv1.ControlPlaneConfig{InternalServiceSecret: "s"}, &configv1.WorkerConfig{HostedActionsUrl: u})
+		require.NotNil(t, enabled, u)
+		_, isDisabled := enabled.(disabledHostedActions)
+		assert.False(t, isDisabled, "%s gets the real client", u)
+		assert.Empty(t, logged.String(), u)
+	}
 }

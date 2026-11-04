@@ -7,7 +7,15 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
+
+// ClearOtherThreadAssignments clears incompatible provider pins before the
+// next assignment after a chat-wide provider switch, scoped to the thread's
+// owner. Repeated calls are harmless.
+func (r *Repo) ClearOtherThreadAssignments(ctx context.Context, userID, threadID, provider string) error {
+	return store.ClearOtherThreadAssignments(ctx, r.ORM(), userID, threadID, provider)
+}
 
 // Provider account persistence (design §1.5). The store owns its SQL and its own transactions.
 

@@ -124,7 +124,7 @@ export const browserAuthTokenProvider: AuthTokenProvider = {
 
 // Module-level rather than React context on purpose: interceptors are built at
 // transport-construction time, which happens outside React (and before the
-// first render) in `grpc-client.ts`. A context would invert that lifecycle.
+// first render) in `lib/connect.ts`. A context would invert that lifecycle.
 // `ReliantProvider` sets this during its initialization effect.
 let _provider: AuthTokenProvider = browserAuthTokenProvider;
 

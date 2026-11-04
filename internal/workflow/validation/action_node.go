@@ -28,6 +28,24 @@ func validateActionNode(node *reliantv1.Node, nodePath []string, result *Result)
 		result.AddError(CategoryStructure, nodePath, "uses", "required")
 		return
 	}
+	if args.GetHostedUse() != nil {
+		if !model.CelStringIsSet(args.GetHostedUse()) {
+			result.AddError(CategoryStructure, nodePath, "hosted_use", "hosted use grant must not be empty")
+		}
+		if model.CelStringIsExpr(args.GetUses()) || strings.TrimSpace(model.CelStringRaw(args.GetUses())) != "http/request@1" {
+			result.AddError(CategoryStructure, nodePath, "hosted_use", "hosted use requires a fixed http/request@1 action")
+		}
+		if model.CelStringIsSet(args.GetConnection()) {
+			result.AddError(CategoryStructure, nodePath, "hosted_use", "hosted_use and connection are mutually exclusive")
+		}
+		for name := range args.GetWith() {
+			switch name {
+			case "url", "method", "body":
+			default:
+				result.AddError(CategoryStructure, nodePath, "with."+name, "hosted HTTP actions accept only url, method and body")
+			}
+		}
+	}
 	if model.CelStringIsExpr(args.GetUses()) {
 		return
 	}

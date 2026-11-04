@@ -14,14 +14,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// setProcessGroup sets up the command to run in its own process group.
-// On Windows, we use CREATE_NEW_PROCESS_GROUP flag.
-func setProcessGroup(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
-	}
-}
-
 // killProcessGroup sends a termination signal to the process tree.
 // On Windows, we use taskkill with /T to kill the process tree.
 func killProcessGroup(pid int, signal syscall.Signal) error {
@@ -37,6 +29,13 @@ func killProcessGroup(pid int, signal syscall.Signal) error {
 		return err
 	}
 	return nil
+}
+
+// processGroupAlive reports whether the tree is still running. taskkill /T
+// takes the whole tree at once, so once the root is gone there is nothing
+// left to wait for here.
+func processGroupAlive(pid int) bool {
+	return false
 }
 
 // terminateProcessGroup gracefully terminates a process group.

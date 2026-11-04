@@ -1,16 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
 import userEvent from "@testing-library/user-event";
 
 const createWorktreeMock = vi.hoisted(() => vi.fn());
 const listReposMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: Object.assign(
-    (selector: (s: unknown) => unknown) =>
-      selector({ createWorktree: createWorktreeMock }),
-    { getState: () => ({ createWorktree: createWorktreeMock }) }
-  ),
+vi.mock("../../../hooks/worktree-actions", () => ({
+  createWorktree: createWorktreeMock,
 }));
 
 vi.mock("../../../store/projectStore", () => ({
@@ -21,9 +19,13 @@ vi.mock("../../../store/projectStore", () => ({
     }),
 }));
 
-vi.mock("../../../api/repo-grpc", () => ({
-  repoGrpc: { list: listReposMock },
-}));
+
+// RepoService answers through the real transport seam, so the component's
+// generated useListRepos hook is what is under test.
+const render = (ui: ReactElement) =>
+  renderWithTransport(ui, {
+    transport: mockTransport({ "RepoService.ListRepos": (req) => listReposMock(req) }),
+  });
 
 vi.mock("../../../hooks/useBranches", () => ({
   useBranches: () => ({
@@ -41,17 +43,17 @@ describe("CreateWorktreeModal in a multi-repo project", () => {
     vi.clearAllMocks();
     listReposMock.mockResolvedValue({
       repos: [
-        { id: "repo-a", name: "api", relative_path: "api" },
-        { id: "repo-b", name: "web", relative_path: "web" },
+        { id: "repo-a", name: "api", relativePath: "api" },
+        { id: "repo-b", name: "web", relativePath: "web" },
       ],
     });
     createWorktreeMock.mockResolvedValue({ id: "wt-new", name: "feature-x" });
   });
 
-  // Regression: this path used to call worktreeGrpc.batchCreate directly,
-  // which left the Zustand store unaware of the new workspace — so it did not
-  // appear in any picker until a page reload.
-  it("creates through the worktree store so the store learns about it", async () => {
+  // Regression: this path used to call the create RPC directly, which left
+  // the app unaware of the new workspace — so it did not appear in any picker
+  // until a page reload. createWorktree caches the row and refreshes the lists.
+  it("creates through createWorktree so every reader learns about it", async () => {
     const onWorktreeCreated = vi.fn();
     const user = userEvent.setup();
 

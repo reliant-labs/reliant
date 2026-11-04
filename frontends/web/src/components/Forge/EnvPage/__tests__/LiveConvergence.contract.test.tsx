@@ -40,10 +40,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { LiveConvergence, LiveEnv } from "@/services/forge/live";
+import type { LiveEnv } from "@/services/forge/live";
 
 import { LiveState } from "../LiveState";
-import { LiveActivity } from "../LiveActivity";
 import { OverviewTab, type OverviewTabProps } from "../EnvTabPanels";
 
 // ── Fixtures: one per state of the observed half ────────────────────────────
@@ -54,13 +53,7 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     name: "prod",
     project: "hounders",
     kind: "persistent",
-    declaredShape: {
-      kind: "persistent",
-      workloads: [{ name: "api", runtime: "hosted", cluster: "" }],
-      secrets: [],
-      domains: [],
-      clusters: [],
-    },
+    declared: true,
     declaredBy: null,
     release: "v12",
     releaseProvenance: null,
@@ -126,13 +119,7 @@ const SELF_MANAGED_CONVERGED = liveEnv({
   phase: "succeeded",
   observed: { state: "converged", observedAt: "2026-10-01T14:04:00.000Z" },
   drift: { state: "in_sync", observedAt: "2026-10-01T14:04:00.000Z" },
-  declaredShape: {
-    kind: "self_managed",
-    workloads: [{ name: "api", runtime: "cluster", cluster: "prod-gke" }],
-    secrets: [],
-    domains: [],
-    clusters: ["prod-gke"],
-  },
+  declared: true,
 });
 
 // ── The state line ──────────────────────────────────────────────────────────
@@ -193,7 +180,7 @@ describe("the observed half of the state line", () => {
    */
   it("renders an unobserved environment in the quiet register", () => {
     const { container } = render(<LiveState env={NOT_REPORTED} />);
-    expect(container.querySelector(".text-destructive-ink")).toBeNull();
+    expect(container.querySelector(".text-danger-ink")).toBeNull();
     expect(container.textContent ?? "").not.toMatch(/error|failed|problem|warning/i);
   });
 
@@ -243,143 +230,6 @@ describe("a self-managed environment renders through the same component", () => 
     expect(code).not.toMatch(/\.kind\b/);
     expect(code).not.toMatch(/isPlacedKind/);
     expect(code).not.toMatch(/self_managed/);
-  });
-});
-
-// ── The merged timeline ─────────────────────────────────────────────────────
-
-const PROMOTION = {
-  id: "promo-1",
-  releaseVersion: "v12",
-  kind: "promote" as const,
-  fromEnvironmentId: "",
-  promotedByUserId: "",
-  promotedByActor: "ci",
-  note: "",
-  createdAt: "2026-10-01T14:02:00.000Z",
-  artifacts: [{ name: "api", digest: "sha256:aaaaaaaaaaaa" }],
-};
-
-const OBSERVED_OK: LiveConvergence = {
-  id: "conv-1",
-  state: "converged",
-  reason: "ReconciliationSucceeded",
-  message: "",
-  cluster: "hosted-us-central1",
-  observedAt: "2026-10-01T14:04:00.000Z",
-};
-
-const OBSERVED_FAIL: LiveConvergence = {
-  id: "conv-2",
-  state: "failed",
-  reason: "HealthCheckFailed",
-  message: "deployment api not ready",
-  cluster: "hosted-us-central1",
-  observedAt: "2026-10-01T14:40:00.000Z",
-};
-
-describe("the activity timeline merges intent and observations", () => {
-  it("orders both kinds newest first in one list", () => {
-    render(
-      <LiveActivity
-        env={CONVERGED}
-        promotions={[PROMOTION]}
-        convergences={[OBSERVED_OK, OBSERVED_FAIL]}
-        isLoading={false}
-        error={null}
-      />
-    );
-    const entries = Array.from(
-      screen.getByTestId("live-activity").querySelectorAll("li")
-    ).map((li) => li.getAttribute("data-testid"));
-    // 14:40 failure, then 14:04 confirmation, then the 14:02 promotion.
-    expect(entries).toEqual(["convergence-conv-2", "convergence-conv-1", "activity-promotion-promo-1"]);
-  });
-
-  it("marks the two kinds distinctly, with observations as the secondary one", () => {
-    render(
-      <LiveActivity
-        env={CONVERGED}
-        promotions={[PROMOTION]}
-        convergences={[OBSERVED_OK]}
-        isLoading={false}
-        error={null}
-      />
-    );
-    expect(screen.getByTestId("activity-promotion-promo-1")).toHaveAttribute("data-entry", "promotion");
-
-    const observation = screen.getByTestId("convergence-conv-1");
-    expect(observation).toHaveAttribute("data-entry", "observation");
-    // Indented and one size down: a note attached to the decisions, not a peer.
-    expect(observation.className).toMatch(/pl-10/);
-    expect(observation.className).toMatch(/text-2xs|py-2/);
-  });
-
-  it("carries the platform's own words for a failed observation", () => {
-    render(
-      <LiveActivity
-        env={FAILED}
-        promotions={[PROMOTION]}
-        convergences={[OBSERVED_FAIL]}
-        isLoading={false}
-        error={null}
-      />
-    );
-    const row = screen.getByTestId("convergence-conv-2");
-    expect(row).toHaveAttribute("data-state", "failed");
-    expect(row).toHaveTextContent(/HealthCheckFailed/);
-    expect(row).toHaveTextContent(/deployment api not ready/);
-  });
-
-  /**
-   * The common case today: promotions exist, nothing has observed them. The
-   * timeline is just the promotions, with NO placeholder row per entry — a
-   * "not observed" line beside every promotion is noise that crowds out the
-   * entries that mean something.
-   */
-  it("shows only the promotions when nothing has been observed", () => {
-    render(
-      <LiveActivity
-        env={NOT_REPORTED}
-        promotions={[PROMOTION]}
-        convergences={[]}
-        isLoading={false}
-        error={null}
-      />
-    );
-    expect(screen.getByTestId("activity-promotion-promo-1")).toBeInTheDocument();
-    expect(screen.getByTestId("live-activity").querySelectorAll("li")).toHaveLength(1);
-  });
-
-  it("sorts an undated entry last rather than to the top", () => {
-    // An undated row claiming the newest position would displace the one entry
-    // a reader looks for first. "We don't know when" is not "just now".
-    render(
-      <LiveActivity
-        env={CONVERGED}
-        promotions={[PROMOTION]}
-        convergences={[{ ...OBSERVED_OK, observedAt: undefined }]}
-        isLoading={false}
-        error={null}
-      />
-    );
-    const entries = Array.from(
-      screen.getByTestId("live-activity").querySelectorAll("li")
-    ).map((li) => li.getAttribute("data-testid"));
-    expect(entries).toEqual(["activity-promotion-promo-1", "convergence-conv-1"]);
-  });
-
-  it("says nothing has happened when there is no history at all", () => {
-    render(
-      <LiveActivity
-        env={NEVER_PROMOTED}
-        promotions={[]}
-        convergences={[]}
-        isLoading={false}
-        error={null}
-      />
-    );
-    expect(screen.getByTestId("live-activity-empty")).toBeInTheDocument();
   });
 });
 

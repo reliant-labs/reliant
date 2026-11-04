@@ -21,7 +21,8 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { Check, ChevronRight, X } from "lucide-react";
+import { Check, ChevronRight } from "lucide-react";
+import { ComposerSheet } from "../Chat/ComposerSheet";
 import { cn } from "../../lib/utils";
 
 export interface MobileSettingOption {
@@ -203,28 +204,7 @@ export function MobileOptionSheet({
   paging?: MobileSheetPaging;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
-      <button
-        type="button"
-        aria-label="Dismiss"
-        onClick={onClose}
-        className="absolute inset-0 bg-black/40"
-      />
-      <div
-        className="relative flex max-h-[75vh] flex-col rounded-t-2xl border-t border-border bg-background shadow-lg"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <span className="text-sm font-semibold text-foreground">{title}</span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground active:bg-muted"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+    <ComposerSheet title={title} onClose={onClose}>
         <div className="min-h-0 flex-1 overflow-y-auto py-1">
           {options.map((option) => {
             const isSelected = option.value === value;
@@ -233,6 +213,7 @@ export function MobileOptionSheet({
                 key={option.value}
                 type="button"
                 onClick={() => onSelect(option.value)}
+                aria-pressed={isSelected}
                 className="flex min-h-[44px] w-full items-center justify-between gap-3 px-4 py-3 text-left active:bg-foreground/5"
               >
                 <div className="min-w-0">
@@ -250,7 +231,7 @@ export function MobileOptionSheet({
                     </p>
                   )}
                 </div>
-                {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                {isSelected && <Check className="h-4 w-4 shrink-0 text-primary-ink" />}
               </button>
             );
           })}
@@ -268,15 +249,14 @@ export function MobileOptionSheet({
             <button
               type="button"
               onClick={action.onSelect}
-              className="flex min-h-[44px] w-full items-center gap-2 border-t border-border px-4 py-3 text-left text-sm font-medium text-primary active:bg-primary/10"
+              className="flex min-h-[44px] w-full items-center gap-2 border-t border-border px-4 py-3 text-left text-sm font-medium text-primary-ink active:bg-primary/10"
             >
               {action.icon}
               {action.label}
             </button>
           )}
         </div>
-      </div>
-    </div>
+    </ComposerSheet>
   );
 }
 
@@ -332,7 +312,7 @@ export function MobileSettingsSectionTitle({
 }) {
   return (
     <div className="px-4 pt-4 pb-1">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+      <h3 className="text-xs font-medium text-muted-foreground">
         {title}
       </h3>
       {description && (

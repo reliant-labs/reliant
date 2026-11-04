@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -95,6 +96,7 @@ func newTestTriggerEvent(id, triggerID, userID, dedupeKey string, occurredAt tim
 }
 
 func TestTriggerCRUDRoundTrip(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)
@@ -334,6 +336,7 @@ func TestSetTriggerEnabled(t *testing.T) {
 // same (kind, dedupe_key) writes nothing and says so, rather than erroring or
 // creating a duplicate firing.
 func TestCreateTriggerEventDedupes(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup, rawDB := setupTriggerTestDB(t)

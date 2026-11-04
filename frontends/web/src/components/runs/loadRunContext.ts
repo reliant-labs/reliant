@@ -16,12 +16,10 @@
  * later lands on this chat rather than whatever was open before.
  */
 
-import { api, type Chat } from "@/api/client";
+import type { Chat } from "@/api/client";
 import { seedChatDetail } from "@/hooks/chat-queries";
-import { useChatStore } from "@/store/chatStore";
-import { useChatNavigationStore } from "@/store/chatNavigationStore";
-import { useProjectStore } from "@/store/projectStore";
-import { useWorktreeStore } from "@/store/worktreeStore";
+import { beginWorkspaceOpen, ChatProjectUnavailableError, openChatInWorkspace } from "@/lib/openChatInWorkspace";
+import * as chatActions from "../../hooks/chat-actions";
 
 export class RunProjectUnavailableError extends Error {
   constructor() {
@@ -30,26 +28,29 @@ export class RunProjectUnavailableError extends Error {
   }
 }
 
-/** Load a chat and make it the active chat in its project. Returns the chat. */
-export async function loadRunContext(chatId: string): Promise<Chat> {
-  const chat = await api.chatsV2.get(chatId);
-  // Seed the detail cache so the transcript does not flash "new chat" while
-  // it would otherwise be fetching the chat we already have.
+/** Load a chat under the same navigation fence as every other workspace open. */
+export async function loadRunContext(chatId: string, signal?: AbortSignal): Promise<Chat> {
+  // Start the intent BEFORE the lookup: a later chat open must supersede it
+  // even if that lookup is still pending. Unmount cancels this intent only.
+  const isLatest = beginWorkspaceOpen();
+  const isCurrent = () => isLatest() && !signal?.aborted;
+  const assertCurrent = () => {
+    if (!isCurrent()) throw new DOMException("Run navigation cancelled", "AbortError");
+  };
+  assertCurrent();
+  const chat = await chatActions.getChat(chatId);
+  assertCurrent();
   seedChatDetail(chat);
 
-  const projectStore = useProjectStore.getState();
-  if (projectStore.currentProject?.id !== chat.projectId) {
-    await projectStore.loadProjects();
-    const project = useProjectStore.getState().projects.find((p) => p.id === chat.projectId);
-    if (!project) throw new RunProjectUnavailableError();
-    await useProjectStore.getState().selectProject(project);
+  try {
+    // The shared opener fences project selection, workspace switching (also
+    // after its internal await), chat persistence and navigation together.
+    await openChatInWorkspace(chat, { navigate: true, isCurrent });
+  } catch (error) {
+    assertCurrent();
+    if (error instanceof ChatProjectUnavailableError) throw new RunProjectUnavailableError();
+    throw error;
   }
-
-  const worktreeStore = useWorktreeStore.getState();
-  const worktree = chat.worktreeId ? await worktreeStore.resolveWorktree(chat.worktreeId) : null;
-  await worktreeStore.switchWorktreeContext(chat.projectId, worktree);
-
-  useChatStore.getState().selectChat(chat);
-  useChatNavigationStore.getState().navigateToChat(chat.id);
+  assertCurrent();
   return chat;
 }

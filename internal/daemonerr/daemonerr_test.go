@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // The production report was:
@@ -83,5 +86,48 @@ func TestNonSkewDispatchErrorsKeepTheirCodes(t *testing.T) {
 	unavailable := DispatchConnectError("pkg.list_commands", errors.New("no daemon connected"))
 	if code := connect.CodeOf(unavailable); code != connect.CodeUnavailable {
 		t.Errorf("daemon pending: code = %v, want %v", code, connect.CodeUnavailable)
+	}
+}
+
+// A path the daemon reports missing on its own disk is NotFound and a user
+// error, whatever command asked: prod logged one user's forge.topology and
+// fs.get_tree polls for a folder only their laptop had as 70 ERROR issue
+// events in two days (2026-10-23..25), because only pkg's marker was known.
+func TestDaemonReportedMissingPathIsNotFoundAndUserClass(t *testing.T) {
+	for _, report := range []error{
+		toolexec.DaemonReportedFailure("forge.topology", "forge project dir does not exist: /Users/someone/src/app"),
+		toolexec.DaemonReportedFailure("fs.get_tree", "read dir /Users/someone/src/app: open /Users/someone/src/app: no such file or directory"),
+	} {
+		if c := svcerr.Classify(report); c != svcerr.ClassUser {
+			t.Errorf("%v: raw router error class = %v, want user", report, c)
+		}
+		cerr := DispatchConnectError("forge.topology", report)
+		if code := connect.CodeOf(cerr); code != connect.CodeNotFound {
+			t.Errorf("%v: DispatchConnectError code = %v, want NotFound", report, code)
+		}
+		if c := svcerr.Classify(cerr); c != svcerr.ClassUser {
+			t.Errorf("%v: DispatchConnectError class = %v, want user", report, c)
+		}
+		if code := svcerr.Code(Error("daemon command forge.topology", report)); code != connect.CodeNotFound {
+			t.Errorf("%v: Error code = %v, want NotFound", report, code)
+		}
+	}
+}
+
+// Every other daemon failure keeps its code-derived class: a daemon that
+// could not start a program (fork/exec ENOENT) is our install, not the
+// user's files, and an arbitrary failure says nothing about fault.
+func TestDaemonReportedOtherFailuresStayServerClass(t *testing.T) {
+	for _, report := range []error{
+		toolexec.DaemonReportedFailure("search.grep", "fork/exec /usr/bin/rg: no such file or directory"),
+		toolexec.DaemonReportedFailure("forge.topology", "forge command failed: exit status 1"),
+	} {
+		cerr := DispatchConnectError("x", report)
+		if code := connect.CodeOf(cerr); code != connect.CodeUnavailable {
+			t.Errorf("%v: code = %v, want Unavailable", report, code)
+		}
+		if c := svcerr.Classify(cerr); c != svcerr.ClassServer {
+			t.Errorf("%v: class = %v, want server", report, c)
+		}
 	}
 }

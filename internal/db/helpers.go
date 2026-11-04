@@ -13,3 +13,10 @@ import (
 func (r *Repo) GetToolResultBlock(ctx context.Context, toolCallID string) (*MessageContentBlock, error) {
 	return store.FindToolBlock(ctx, r.ORM(), toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
 }
+
+// ListToolResultBlocks returns every tool_result block carrying toolCallID,
+// across all chats: the id is the provider's and need not be unique. The
+// caller decides which one it may read by the block's message.
+func (r *Repo) ListToolResultBlocks(ctx context.Context, toolCallID string) ([]*MessageContentBlock, error) {
+	return store.ListToolBlocks(ctx, r.ORM(), toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
+}

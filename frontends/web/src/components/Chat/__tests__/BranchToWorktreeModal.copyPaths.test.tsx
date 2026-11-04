@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
 
 const getGitStatusMock = vi.hoisted(() => vi.fn());
 const listReposMock = vi.hoisted(() => vi.fn());
@@ -12,14 +14,26 @@ vi.mock("../../Worktrees/CreateWorktreeModal", () => ({
     return null;
   },
 }));
-vi.mock("../../../api/worktree-grpc", () => ({ worktreeGrpc: { getGitStatus: getGitStatusMock } }));
-vi.mock("../../../api/repo-grpc", () => ({ repoGrpc: { list: listReposMock } }));
+
+// RepoService answers through the real transport seam, so the component's
+// generated useListRepos hook is what is under test.
+const render = (ui: ReactElement) =>
+  renderWithTransport(ui, {
+    transport: mockTransport({ "RepoService.ListRepos": (req) => listReposMock(req) }),
+  });
 vi.mock("../../../store/worktreeStore", () => ({
-  useWorktreeStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      switchWorktreeContext: vi.fn(),
-      worktrees: [{ id: "wt-src", name: "src", is_main: false, project_id: "p1" }],
-    }),
+  useWorktreeStore: (selector: (s: unknown) => unknown) => selector({ switchWorktreeContext: vi.fn() }),
+}));
+// The source workspace is read by id; its git status per repo through the
+// GetWorktreeGitStatus entry.
+vi.mock("../../../hooks/worktree-queries", () => ({
+  useWorktreeById: (id?: string) =>
+    id === "wt-src" ? { id: "wt-src", name: "src", is_main: false, project_id: "p1" } : undefined,
+  useMainWorktree: () => undefined,
+  getCachedWorktree: () => undefined,
+}));
+vi.mock("../../../hooks/worktree-git-queries", () => ({
+  fetchWorktreeGitStatus: (...args: unknown[]) => getGitStatusMock(...args),
 }));
 vi.mock("../../../store/chatStore", () => ({ useChatStore: { getState: () => ({ selectChat: vi.fn() }) } }));
 vi.mock("../../../hooks/message-queries", () => ({ useBranchChat: () => ({ mutateAsync: vi.fn() }) }));
@@ -51,8 +65,8 @@ describe("BranchToWorktreeModal copy paths", () => {
   it("asks every repo and prefixes its paths with the repo's location", async () => {
     listReposMock.mockResolvedValue({
       repos: [
-        { id: "r-api", relative_path: "api" },
-        { id: "r-web", relative_path: "web" },
+        { id: "r-api", relativePath: "api" },
+        { id: "r-web", relativePath: "web" },
       ],
     });
     getGitStatusMock.mockImplementation((_wt: string, repoId?: string) =>
@@ -89,7 +103,7 @@ describe("BranchToWorktreeModal copy paths", () => {
   });
 
   it("passes a single root repo's paths through unchanged", async () => {
-    listReposMock.mockResolvedValue({ repos: [{ id: "r-root", relative_path: "" }] });
+    listReposMock.mockResolvedValue({ repos: [{ id: "r-root", relativePath: "" }] });
     getGitStatusMock.mockResolvedValue(status({ modified: ["src/a.ts"] }, "main"));
 
     render(<BranchToWorktreeModal isOpen onClose={vi.fn()} chatId="c1" messageId="m1" projectId="p1" sourceWorktreeId="wt-src" />);

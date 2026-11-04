@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
-import type { Worktree } from "../../store/worktreeStore";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
+import Button from "@/components/forge-ui/button";
 import { usePreferences } from "../../hooks/settings-queries";
+import { type Worktree } from "../../hooks/worktree-queries";
 
 interface DeleteWorktreeModalProps {
   isOpen: boolean;
@@ -43,7 +44,7 @@ export function DeleteWorktreeModal({
 
   if (worktree.is_main) {
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="The main checkout can't be archived" size="sm">
+      <Modal open={isOpen} fallbackFocus={focusChatInput} onClose={onClose} title="The main checkout can't be archived" size="sm">
         <div className="flex flex-col gap-4">
           <p className="text-pretty text-sm text-muted-foreground">
             <span className="font-mono text-foreground">{worktree.name}</span> is your project's own
@@ -75,7 +76,7 @@ export function DeleteWorktreeModal({
     onClose();
     // Let the dialog unmount before the route changes underneath it.
     setTimeout(() => {
-      navigate({ to: "/settings/$section", params: { section: "workspaces" } });
+      navigate({ to: "/settings/$section", params: { section: "branches" } });
     }, 100);
   };
 
@@ -83,7 +84,8 @@ export function DeleteWorktreeModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={onClose}
       title={isArchived ? "Delete workspace permanently?" : "Archive workspace?"}
       size="sm"
@@ -115,7 +117,7 @@ export function DeleteWorktreeModal({
               <button
                 type="button"
                 onClick={openCleanupSettings}
-                className="rounded-sm text-xs text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="rounded-sm text-xs text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Change defaults
               </button>
@@ -150,7 +152,7 @@ export function DeleteWorktreeModal({
             Cancel
           </Button>
           <Button
-            variant={isArchived ? "destructive" : "primary"}
+            variant={isArchived ? "danger" : "primary"}
             size="sm"
             onClick={handleConfirm}
             loading={isDeleting}

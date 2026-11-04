@@ -1,4 +1,4 @@
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { ChevronRight, Home } from "lucide-react";
 
 interface BreadcrumbsProps {
@@ -20,7 +20,7 @@ export function Breadcrumbs({ path, onPathChange }: BreadcrumbsProps) {
 
   return (
     <div className="flex items-center gap-1 text-sm overflow-x-auto">
-      <Tooltip content="Root" placement="bottom" delay={300} wrapperClassName="inline-flex">
+      <Tooltip content="Root" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
         onClick={() => handleSegmentClick(-1)}
         className="flex items-center gap-1 px-2 py-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground" aria-label="Root">

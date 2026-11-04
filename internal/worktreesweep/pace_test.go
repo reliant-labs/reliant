@@ -19,14 +19,20 @@ import (
 // fakeStore is an in-memory Store, so these tests exercise the sweep's
 // scheduling and bookkeeping without a database or a filesystem.
 type fakeStore struct {
-	mu       sync.Mutex
-	rows     map[string]*core.ReclaimCandidate
-	order    []string
-	chats    []*core.Chat
-	archived []string
-	daemon   string
+	mu         sync.Mutex
+	rows       map[string]*core.ReclaimCandidate
+	order      []string
+	chats      []*core.Chat
+	chatErr    error
+	archiveErr error
+	archived   []string
+	daemon     string
 	// disk is each daemon's stored disk report (diskwatch.Encode).
 	disk map[string]string
+	// activity is each worktree's chat runs (WorktreeRunActivities); a row
+	// with no entry has had nothing happen in it since the epoch.
+	activity    map[string]core.WorktreeRunActivity
+	activityErr error
 }
 
 func newFakeStore(daemon string) *fakeStore {
@@ -85,7 +91,9 @@ func (f *fakeStore) ListReposByProject(context.Context, string) ([]*core.Repo, e
 func (f *fakeStore) UpdateWorktreeCleanupMetadata(context.Context, string, *core.CleanupMetadata) error {
 	return nil
 }
-func (f *fakeStore) AdoptWorktreeDaemon(context.Context, string, string) error { return nil }
+func (f *fakeStore) AdoptWorktreeDaemon(_ context.Context, _ string, daemonID string) (string, error) {
+	return daemonID, nil
+}
 func (f *fakeStore) ListAttachedDaemonIDsForUser(context.Context, string, time.Duration) ([]string, error) {
 	return []string{f.daemon}, nil
 }
@@ -99,16 +107,61 @@ func (f *fakeStore) TryAdvisoryLock(context.Context, int64) (func(), bool, error
 }
 
 // AutoArchiveStore.
-func (f *fakeStore) ListChats(context.Context, core.ChatFilters) ([]*core.Chat, error) {
-	return f.chats, nil
+func (f *fakeStore) GetLiveChatIDForWorktree(_ context.Context, id string) (string, error) {
+	if f.chatErr != nil {
+		return "", f.chatErr
+	}
+	for _, c := range f.chats {
+		if c.WorktreeID != nil && *c.WorktreeID == id && c.State != core.ChatStateArchived {
+			return c.ID, nil
+		}
+	}
+	return "", nil
 }
 func (f *fakeStore) ArchiveWorktree(_ context.Context, id string) error {
+	if f.archiveErr != nil {
+		return f.archiveErr
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.archived = append(f.archived, id)
 	at := time.Now().UTC()
 	f.rows[id].Worktree.DeletedAt = &at
 	return nil
+}
+
+func (f *fakeStore) WorktreeRunActivities(_ context.Context, ids []string) (map[string]core.WorktreeRunActivity, error) {
+	if f.activityErr != nil {
+		return nil, f.activityErr
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := map[string]core.WorktreeRunActivity{}
+	for _, id := range ids {
+		out[id] = f.activity[id]
+	}
+	return out, nil
+}
+func (f *fakeStore) ArchiveLandedWorktree(_ context.Context, id string, quietSince time.Time) (bool, error) {
+	if f.archiveErr != nil {
+		return false, f.archiveErr
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	wt := f.rows[id].Worktree
+	if a := f.activity[id]; wt.DeletedAt != nil || wt.IsMain || a.Running || a.LastActive.After(quietSince) {
+		return false, nil
+	}
+	f.archived = append(f.archived, id)
+	at := time.Now().UTC()
+	wt.DeletedAt = &at
+	m := core.CleanupMetadata{}
+	if wt.CleanupMetadata != nil {
+		m = *wt.CleanupMetadata
+	}
+	m.ArchivedBecause = core.ArchivedBecauseLanded
+	wt.CleanupMetadata = &m
+	return true, nil
 }
 
 // scriptSender answers each worktree from a script and can fail any request
@@ -119,6 +172,8 @@ type scriptSender struct {
 	answer   func(w worktreereclaim.Worktree) worktreereclaim.Result
 	requests [][]string
 	probed   map[string]bool
+	// seen is the last description of each worktree the daemon was sent.
+	seen map[string]worktreereclaim.Worktree
 }
 
 func (s *scriptSender) SendDaemonCommandToDaemon(_ context.Context, _, _, _ string, payload []byte, _ int32) ([]byte, error) {
@@ -142,6 +197,9 @@ func (s *scriptSender) SendDaemonCommandToDaemon(_ context.Context, _, _, _ stri
 	for _, w := range req.Worktrees {
 		if s.probed != nil {
 			s.probed[w.ID] = w.ProbeIdle
+		}
+		if s.seen != nil {
+			s.seen[w.ID] = w
 		}
 		resp.Results = append(resp.Results, s.answer(w))
 	}
@@ -351,17 +409,35 @@ func TestAutoArchive_ALiveChatKeepsTheWorktree(t *testing.T) {
 	assert.Empty(t, store.archived, "a worktree a live chat is bound to is never archived")
 }
 
-func TestAutoArchive_AnUnsureChatListKeepsTheWorktree(t *testing.T) {
+func TestAutoArchive_MoreThan1000UnrelatedChatsDoNotBlock(t *testing.T) {
 	t.Parallel()
 
-	chats := make([]*core.Chat, liveChatScan)
+	chats := make([]*core.Chat, 1001)
 	for i := range chats {
 		other := "other"
 		chats[i] = &core.Chat{ID: "c", WorktreeID: &other}
 	}
 	store, _, s := autoEnv(t, AutoArchiveOn, chats)
 	require.NoError(t, s.Sweep(context.Background()))
-	assert.Empty(t, store.archived, "a chat list cut at the bound cannot prove no chat uses it")
+	assert.Equal(t, []string{"done"}, store.archived, "unrelated chats cannot hide an unused worktree")
+	assert.EqualValues(t, 1, s.idleDone.Load())
+	assert.EqualValues(t, 0, s.blockedByChat.Load())
+}
+
+func TestAutoArchive_StoreErrorsAreCounted(t *testing.T) {
+	t.Parallel()
+	for _, lookup := range []bool{true, false} {
+		store, _, s := autoEnv(t, AutoArchiveOn, nil)
+		if lookup {
+			store.chatErr = errors.New("lookup failed")
+		} else {
+			store.archiveErr = errors.New("archive failed")
+		}
+		require.NoError(t, s.Sweep(context.Background()))
+		assert.Empty(t, store.archived)
+		assert.EqualValues(t, 1, s.idleDone.Load())
+		assert.EqualValues(t, 1, s.archiveErrors.Load())
+	}
 }
 
 func TestAutoArchive_NeverArchivesTheMainCheckout(t *testing.T) {

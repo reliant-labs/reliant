@@ -11,6 +11,8 @@ import (
 
 	"github.com/google/uuid"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+
+	"github.com/reliant-labs/reliant/internal/auth"
 )
 
 // Memory is an in-process Authority for tests. It applies the SAME grant rules
@@ -78,10 +80,20 @@ func (m *Memory) Introspect(_ context.Context, token string) (*fat.Principal, er
 	}, nil
 }
 
+// IntrospectAccount implements Authority. Like LocalStore, Memory keeps no
+// user records, so it names no email.
+func (m *Memory) IntrospectAccount(ctx context.Context, token string) (auth.AccessTokenAccount, error) {
+	p, err := m.Introspect(ctx, token)
+	return auth.AccessTokenAccount{Principal: p}, err
+}
+
 // MintForUser implements Authority.
 func (m *Memory) MintForUser(_ context.Context, req MintRequest) (Minted, error) {
 	if strings.TrimSpace(req.UserID) == "" {
 		return Minted{}, fmt.Errorf("%w: user id is required", fat.ErrInvalidGrant)
+	}
+	if req.OrgID != "" && req.OrgID != req.UserID {
+		return Minted{}, fmt.Errorf("%w: a self-hosted server has no organizations to mint in", fat.ErrInvalidGrant)
 	}
 	scopes := fat.SetOf(req.Scopes...)
 	g := fat.Grant{OrgID: req.UserID, Name: strings.TrimSpace(req.Name), Scopes: scopes, ActingUserID: req.UserID,
@@ -112,7 +124,7 @@ func (m *Memory) MintForUser(_ context.Context, req MintRequest) (Minted, error)
 		actingID: req.UserID, hash: minted.Hash,
 	}
 	return Minted{TokenID: id, Plaintext: minted.Plaintext, DisplayPrefix: minted.DisplayPrefix,
-		ExpiresAt: req.ExpiresAt, Rotated: rotated}, nil
+		ExpiresAt: req.ExpiresAt, Rotated: rotated, Scopes: scopes.Strings()}, nil
 }
 
 // ListForUser implements Authority.

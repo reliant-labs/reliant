@@ -1,14 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * ONE WORKLOAD in one environment (PROPOSAL §4.2; breadcrumb "Overview ›
+ * ONE WORKLOAD in one environment (breadcrumb "Overview ›
  * <name>"). The environment is in the path, so the page is pinned to it.
  *
  *   header   status, environment, kind · ready, the release it runs (verified
  *            by digest, or declared by the promotion), the image, and the
- *            actions — every mutating one naming its environment (D1):
- *            "Restart in prod" for a hosted environment (D6); Scale is never a
- *            console mutation (D6): it shows the declared line and "Open PR".
+ *            actions — every mutating one naming its environment:
+ *            "Restart in prod" for a hosted environment; Scale is never a
+ *            console mutation: it shows the declared line and "Open PR".
  *   tabs     Overview (requests, errors, CPU and memory against their limits,
  *            each with release markers; pods), Logs / Traces / Profiles (the
  *            existing explorers, pre-filtered to this workload), Events,
@@ -24,9 +24,10 @@
  */
 
 import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
-import { AlertTriangle, ArrowRight, Copy, ExternalLink, GitPullRequest, Play, RotateCcw, ScrollText, SlidersHorizontal, Square } from "lucide-react";
+import { AlertTriangle, ArrowRight, Copy, ExternalLink, GitPullRequest, Play, RotateCcw, ScrollText, SlidersHorizontal, Square, Undo2 } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
 import Mono from "@/components/forge-ui/mono";
@@ -41,20 +42,26 @@ import { useEnvPromotions, useProjectRelease, useProjectReleases } from "@/hooks
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 import { cn } from "@/lib/utils";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
-import type { ObsScope, Workload, WorkloadDetail as WorkloadDetailData, WorkloadEvent, WorkloadJob, WorkloadSeries } from "@/services/controlPlane/observability/types";
+import { keepsLastResult } from "@/services/controlPlane/observability/quota";
+import type { ObsScope, ServiceSignal, Workload, WorkloadDetail as WorkloadDetailData, WorkloadEvent, WorkloadJob, WorkloadPod, WorkloadSeries } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cloudErrorDetail, type RestartedWorkload, type RunStateRequest } from "@/services/forge/cloudEnvs";
 import { useDefaultBranch } from "@/services/forge/RepoMetaContext";
-import { workloadLastError, workloadLink, type ForgeHostedWorkload } from "@/services/forge/topology";
+import { workloadLastError, workloadOpenUrl, type ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { UPlotChart, type ChartMarker } from "../Observability/charts/UPlotChart";
+import { ExploreLink } from "../Observability/Metrics/ExploreLink";
+import { workloadPivot, useExploreHref } from "../Observability/Metrics/pivots";
 import { unionTimestamps } from "../Observability/Dashboards/PanelBody";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores, formatCount, formatPercent } from "../Observability/format";
 import { ratioSeries, redPanel, seriesValues } from "../Observability/Home/homeModel";
-import { ObsError, ObsNotSetUp } from "../Observability/ObsStates";
+import type { RollbackTarget } from "../Promote/rollback";
+import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
+import { AskReliantActions } from "../Observability/AskReliant/AskReliant";
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
 import { useReleaseMarkers } from "../Observability/releaseMarkers";
+import { signalState, useSignalsIndex, type SignalState } from "../Observability/serviceSignals";
 import { Ago, BUTTON_PRIMARY, BUTTON_SECONDARY, Facts, INK_LINK, Note, Panel, RowMenu, type MenuItem } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import { usePromoterNames } from "../Releases/useReleaseData";
@@ -81,7 +88,6 @@ import {
 import { ActionDialog, DriftTag, HealthStatus, WorkloadRelease } from "./workloadParts";
 import { OVERVIEW_RANGE } from "./OverviewHome";
 import { eventHeadline, eventRawReason, exitPhrase, jobFailurePhrase, plainErrorText } from "./plainHealth";
-import { StackedTable } from "@/components/Forge/StackedTable";
 
 // Its own chunk, as on the Observability pages: the explorers load only when a tab shows them.
 const ObservabilityPanel = lazy(() =>
@@ -102,6 +108,8 @@ const TAB_LABELS: Record<WorkloadTab, string> = {
 };
 /** The tabs that host an existing explorer, and the panel view each one is. */
 const EXPLORER_TABS: Partial<Record<WorkloadTab, ObsView>> = { logs: "logs", traces: "traces", profiles: "profiles" };
+/** The explorer tabs read one signal of the workload's service (`service.name` = the workload name). */
+const SIGNAL_TABS: Partial<Record<WorkloadTab, ServiceSignal>> = { logs: "logs", traces: "traces", profiles: "profiles" };
 
 /** The URL's state: the tab, the window, and the explorer tabs' own keys (obsSearch.ts). */
 export type WorkloadDetailSearch = Omit<ObsSearch, "view" | "envs" | "service" | "workload"> & { tab?: WorkloadTab };
@@ -109,7 +117,7 @@ export type WorkloadDetailSearch = Omit<ObsSearch, "view" | "envs" | "service" |
 /**
  * What the page lets a reader do to the running workload, and why not.
  *
- * Restart and Stop/Start are HOSTED-ONLY (decision D6, hosted first): the
+ * Restart and Stop/Start are HOSTED-ONLY (hosted first): the
  * platform runs those pods. Stop/Start is the deployment's RUN STATE
  * (DeployService.Scale: running or suspended), not a replica count — replicas
  * are declared in KCL and the Scale button only points at the declaration.
@@ -125,6 +133,13 @@ export interface WorkloadActions {
 export interface HostedObservation {
   workload: ForgeHostedWorkload | null;
   loading: boolean;
+}
+
+/** Rolling the workload's environment back: what to, and the plan flow that does it. */
+export interface WorkloadRollback {
+  target: RollbackTarget | null;
+  onRollback: (target: RollbackTarget) => void;
+  blockedReason: string | null;
 }
 
 export interface WorkloadDetailHrefs {
@@ -144,11 +159,13 @@ export interface WorkloadDetailProps {
   hrefs: WorkloadDetailHrefs;
   actions: WorkloadActions;
   hosted: HostedObservation | null;
+  /** Roll the environment back to the release it ran before, when it ran one. */
+  rollback?: WorkloadRollback;
   /** The environment's last recorded render declares this workload (a self-managed environment, where nothing may report). */
   declaredInRender?: boolean;
 }
 
-export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, actions, hosted, declaredInRender = false }: WorkloadDetailProps) {
+export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, actions, hosted, rollback, declaredInRender = false }: WorkloadDetailProps) {
   const range = (search.range as RangePreset | undefined) ?? OVERVIEW_RANGE;
   const tab: WorkloadTab = search.tab ?? "overview";
   const org = useObservabilityOrg();
@@ -169,6 +186,15 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
   const releaseQuery = useProjectRelease(project, summary?.releaseVersion || null);
   const release = releaseQuery.data?.release ?? null;
   const history = useDeployHistory(project, env.id, name);
+  // What the workload sends and declares in this environment: a signal tab it
+  // neither sends nor declares is not offered, an idle one is muted.
+  const signals = useSignalsIndex(scope, range);
+  const tabSignal = (id: WorkloadTab): SignalState => {
+    const signal = SIGNAL_TABS[id];
+    return signal ? signalState(signals, name, signal) : { kind: "available" };
+  };
+  /** The shortcuts to a signal tab (the header's Logs, the rail's jumps) only where it has data. */
+  const canOpen = (id: WorkloadTab) => tabSignal(id).kind === "available";
 
   const crumbs = [{ label: "Overview", href: hrefs.overview }, { label: name }];
   const rangeControl = (
@@ -199,7 +225,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
     );
   }
 
-  const error = detail.error ?? (!detail.data ? listed.error : null);
+  const error = keepsLastResult(detail.error, detail.data) ? null : (detail.error ?? (!detail.data ? listed.error : null));
   if (error) {
     return (
       <div className="space-y-6" data-testid="workload-detail" data-state="error">
@@ -238,11 +264,13 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
     );
   }
 
-  const tabs = isJob ? WORKLOAD_TABS.filter((id) => id !== "profiles") : WORKLOAD_TABS;
+  // The tab in the URL is always offered, so a link never lands on a missing tab.
+  const tabs = (isJob ? WORKLOAD_TABS.filter((id) => id !== "profiles") : WORKLOAD_TABS).filter((id) => id === tab || tabSignal(id).kind !== "absent");
   const explorer = EXPLORER_TABS[tab];
 
   return (
     <div className="space-y-6" data-testid="workload-detail" data-state="ready" data-kind={summary?.kind ?? "job"}>
+      {detail.data && <ObsAsOf updatedAt={detail.dataUpdatedAt} />}
       <WorkloadHeader
         crumbs={crumbs}
         name={name}
@@ -254,13 +282,18 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
         lastDeploy={history.entries[0] ?? null}
         hrefs={hrefs}
         actions={actions}
+        rollback={rollback}
         // An explorer tab carries its own window control (the same `range` key): one on screen, not two.
         rangeControl={explorer ? null : rangeControl}
         onTab={(next) => onSearch({ tab: next === "overview" ? undefined : next, range: search.range })}
+        canOpen={canOpen}
       />
 
       <Tabs
-        tabs={tabs.map((id) => ({ id, label: TAB_LABELS[id] }))}
+        tabs={tabs.map((id) => {
+          const state = tabSignal(id);
+          return state.kind === "idle" && id !== tab ? { id, label: TAB_LABELS[id], badge: state.badge, disabled: true } : { id, label: TAB_LABELS[id] };
+        })}
         activeTab={tab}
         // Leaving an explorer drops its keys (a log query means nothing on Events); the window stays.
         onChange={(id) => onSearch({ tab: id === "overview" ? undefined : (id as WorkloadTab), range: search.range })}
@@ -295,6 +328,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
             hosted={hosted?.workload ?? null}
             hrefs={hrefs}
             onTab={(next) => onSearch({ tab: next, range: search.range })}
+            canOpen={canOpen}
           />
         </div>
       )}
@@ -336,8 +370,10 @@ function WorkloadHeader({
   lastDeploy,
   hrefs,
   actions,
+  rollback,
   rangeControl,
   onTab,
+  canOpen,
 }: {
   crumbs: { label: string; href?: string }[];
   name: string;
@@ -349,8 +385,10 @@ function WorkloadHeader({
   lastDeploy: DeployHistoryEntry | null;
   hrefs: WorkloadDetailHrefs;
   actions: WorkloadActions;
+  rollback?: WorkloadRollback;
   rangeControl: ReactNode;
   onTab: (tab: WorkloadTab) => void;
+  canOpen: (tab: WorkloadTab) => boolean;
 }) {
   const [confirming, setConfirming] = useState<null | "restart" | RunStateRequest>(null);
   const [pending, setPending] = useState<null | "restart" | RunStateRequest>(null);
@@ -386,8 +424,18 @@ function WorkloadHeader({
     { label: "Open in Activity", href: hrefs.activity, testId: "workload-menu-activity" },
     { label: "View declared spec", onSelect: () => onTab("config"), testId: "workload-menu-config" },
   ];
-  const link = observed ? workloadLink(observed) : "";
+  const link = observed ? workloadOpenUrl(observed) : "";
   const lastError = observed ? plainErrorText(workloadLastError(observed)) : "";
+  // Crash-looping, degraded, or a Job whose last run failed: the moment to hand it to an agent.
+  const trouble = isJob
+    ? latestRun?.result === "failed"
+      ? "failed"
+      : null
+    : summary?.health === "crash_looping"
+      ? "crash-looping"
+      : summary?.health === "degraded"
+        ? "degraded"
+        : null;
 
   return (
     <div className="space-y-3">
@@ -433,10 +481,12 @@ function WorkloadHeader({
         />
         <div className="flex shrink-0 flex-wrap items-center gap-2 pt-1" data-testid="workload-actions">
           {rangeControl}
-          <button type="button" className={BUTTON_SECONDARY} onClick={() => onTab("logs")}>
-            <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
-            Logs
-          </button>
+          {canOpen("logs") && (
+            <button type="button" className={BUTTON_SECONDARY} onClick={() => onTab("logs")}>
+              <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
+              Logs
+            </button>
+          )}
           {!isJob && (
             <>
               <button
@@ -464,6 +514,22 @@ function WorkloadHeader({
                 ))}
               <ScaleButton name={name} env={env.name} summary={summary} />
             </>
+          )}
+          {rollback?.target && (
+            // A rollback moves the whole ENVIRONMENT to the release it ran
+            // before — a release is one bundle — so the button says which
+            // environment and which release, and goes through the plan.
+            <button
+              type="button"
+              className={BUTTON_SECONDARY}
+              onClick={() => rollback.onRollback(rollback.target!)}
+              disabled={!!rollback.blockedReason}
+              title={rollback.blockedReason ?? `Plan a rollback of ${env.name} to ${rollback.target.previous}`}
+              data-testid="workload-rollback"
+            >
+              <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+              Roll back {env.name} to {shortVersion(rollback.target.previous)}
+            </button>
           )}
           <RowMenu label={`More actions for ${name}`} items={menu} testId="workload-menu" />
         </div>
@@ -494,6 +560,17 @@ function WorkloadHeader({
               </span>
             </span>
           )}
+        </div>
+      )}
+
+      {trouble && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="workload-ask">
+          <span className="text-xs text-ink-muted">
+            {isJob ? `${name}'s last run failed in ${env.name}.` : `${name} is ${trouble} in ${env.name}.`} An agent can find out why from its logs and restarts.
+          </span>
+          <AskReliantActions
+            subject={{ kind: "workload", name, env: env.name, job: isJob, state: trouble, release: summary?.releaseVersion || latestRun?.releaseVersion || undefined }}
+          />
         </div>
       )}
 
@@ -570,7 +647,7 @@ function WorkloadHeader({
 }
 
 /**
- * Scale (D6): replicas are declared in KCL, so the console never changes them.
+ * Scale: replicas are declared in KCL, so the console never changes them.
  * It shows where the declaration lives. "Open PR" edits the declaration on the
  * repository's DEFAULT branch only — where a change is proposed as a pull
  * request — and only when that branch is known; otherwise the file can be
@@ -622,7 +699,7 @@ function ScaleButton({ name, env, summary }: { name: string; env: string; summar
             Changing them here would drift from your repository. Edit the declaration instead; the next deploy converges {env}.
           </p>
           {declared || summary?.desiredReplicas !== null ? (
-            <pre className="mt-3 overflow-x-auto rounded-md border border-border/60 bg-background px-3 py-2 font-mono text-xs text-ink">
+            <pre className="mt-3 overflow-x-auto rounded-md border border-border/60 bg-surface-sunken px-3 py-2 font-mono text-xs text-ink">
               <span className="text-ink-muted">{path}</span>
               {"\n"}
               {`  ${name}: replicas = ${replicas ?? "not declared"}`}
@@ -727,7 +804,7 @@ function OverviewTab({
           loading={trend.isLoading}
           testId="workload-chart-requests"
         >
-          <UPlotChart height={140} timestamps={timestamps} series={[{ label: "requests", values: requests, tone: "primary" }]} unit="count" label={`Requests to ${name}`} markers={markers} legend={false} />
+          <UPlotChart height={140} timestamps={timestamps} series={[{ label: "requests", values: requests }]} unit="count" label={`Requests to ${name}`} markers={markers} legend={false} />
         </ChartPanel>
         <ChartPanel
           title="Error rate"
@@ -739,8 +816,8 @@ function OverviewTab({
         >
           <UPlotChart height={140} timestamps={timestamps} series={[{ label: "error rate", values: ratioSeries(errors, requests), tone: "destructive" }]} unit="percent" label={`Error rate of ${name}`} markers={markers} legend={false} />
         </ChartPanel>
-        <UsageChart title="CPU vs limit" series={cpu} now={cpuNow} format={formatCores} unit="cores" markers={markers} name={name} />
-        <UsageChart title="Memory vs limit" series={memory} now={memNow} format={formatBytes} unit="bytes" markers={markers} name={name} />
+        <UsageChart title="CPU vs limit" series={cpu} now={cpuNow} format={formatCores} unit="cores" markers={markers} name={name} envName={env.name} range={range} />
+        <UsageChart title="Memory vs limit" series={memory} now={memNow} format={formatBytes} unit="bytes" markers={markers} name={name} envName={env.name} range={range} />
       </div>
       <PodsPanel summary={summary} onLogs={onLogs} />
     </>
@@ -764,6 +841,7 @@ function ChartPanel({
   empty,
   loading,
   testId,
+  explore,
   children,
 }: {
   title: string;
@@ -772,12 +850,19 @@ function ChartPanel({
   empty: string | null;
   loading: boolean;
   testId: string;
+  /** The explorer link for this chart's metric, when it has one. */
+  explore?: string | null;
   children: ReactNode;
 }) {
   return (
     <Card padding="none" className="min-w-0" data-testid={testId}>
       <div className="flex items-baseline justify-between gap-3 px-4 pt-3">
         <h2 className="text-sm font-medium text-ink">{title}</h2>
+        {explore && (
+          <ExploreLink href={explore} testId={`${testId}-explore`} className="mr-auto">
+            Explore
+          </ExploreLink>
+        )}
         {figure === null ? (
           <span className="h-4 w-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label={`Loading ${title}`} />
         ) : (
@@ -805,6 +890,8 @@ function UsageChart({
   unit,
   markers,
   name,
+  envName,
+  range,
 }: {
   title: string;
   series: WorkloadSeries | null;
@@ -813,7 +900,11 @@ function UsageChart({
   unit: "cores" | "bytes";
   markers: readonly ChartMarker[];
   name: string;
+  envName: string;
+  range: RangePreset;
 }) {
+  const exploreHref = useExploreHref();
+  const explore = exploreHref?.(workloadPivot(name, unit === "cores" ? "cpu" : "memory"), { env: envName, range }) ?? null;
   const limit = now?.limit ?? null;
   const figure = now ? (
     <>
@@ -825,7 +916,7 @@ function UsageChart({
   );
   const lines = series
     ? [
-        { label: title.split(" ")[0]!.toLowerCase(), values: series.values, tone: "primary" as const },
+        { label: title.split(" ")[0]!.toLowerCase(), values: series.values },
         ...(limit !== null ? [{ label: "limit", values: series.values.map(() => limit), tone: "muted" as const, dashed: true }] : []),
       ]
     : [];
@@ -837,14 +928,177 @@ function UsageChart({
       empty={!series || series.timestamps.length < 2 ? `Reliant received no ${unit === "cores" ? "CPU" : "memory"} samples for ${name} in the window.` : null}
       loading={false}
       testId={`workload-chart-${unit === "cores" ? "cpu" : "memory"}`}
+      explore={explore}
     >
       {series && <UPlotChart height={140} timestamps={series.timestamps} series={lines} unit={unit} label={`${title} for ${name}`} markers={markers} legend={false} />}
     </ChartPanel>
   );
 }
 
-const TH = "h-9 whitespace-nowrap px-4 text-left text-xs font-medium text-ink-muted";
-const TD = "h-10 whitespace-nowrap px-4 text-sm text-ink";
+type PodRow = { key: string; pod: WorkloadPod; now: number };
+
+const POD_COLUMNS: DataTableColumn<PodRow>[] = [
+  { key: "name", header: "Name", render: (_, { pod }) => <Mono value={pod.name} length={48} /> },
+  {
+    key: "status",
+    header: "Status",
+    render: (_, { pod }) => {
+      const warning = pod.latestWarning;
+      const status =
+        pod.state === "gone"
+          ? { tone: "neutral" as const, label: "Gone" }
+          : warning
+            ? { tone: "warning" as const, label: eventHeadline(warning) }
+            : pod.state === "running"
+              ? { tone: "success" as const, label: "Running" }
+              : { tone: "neutral" as const, label: "Unknown" };
+      return (
+        <span title={warning ? plainErrorText(warning.message) : undefined}>
+          <Status tone={status.tone} label={status.label} />
+        </span>
+      );
+    },
+  },
+  {
+    key: "restarts",
+    header: "Restarts",
+    numeric: true,
+    render: (_, { pod }) => <span className={cn(pod.restarts === 0 && "text-ink-muted")}>{pod.restarts}</span>,
+  },
+  {
+    key: "lastExit",
+    header: "Last exit",
+    render: (_, { pod }) => (
+      <span
+        className={pod.lastExitReason ? "text-warning-ink" : "text-ink-muted"}
+        title={pod.lastExitAtMs ? new Date(pod.lastExitAtMs).toLocaleString() : undefined}
+      >
+        {pod.lastExitReason ? exitPhrase(pod.lastExitReason) : "·"}
+      </span>
+    ),
+  },
+  {
+    key: "age",
+    header: "Age",
+    numeric: true,
+    className: "text-ink-muted",
+    render: (_, { pod, now }) => {
+      const age = podAgeMs(pod, now);
+      return (
+        <span title={pod.ageIsLowerBound ? "Older than the window" : undefined}>
+          {age === null ? "—" : `${pod.ageIsLowerBound ? "≥" : ""}${formatAge(age)}`}
+        </span>
+      );
+    },
+  },
+];
+
+type RunRow = { key: string; run: WorkloadJob };
+
+function runColumns(hrefs: WorkloadDetailHrefs): DataTableColumn<RunRow>[] {
+  return [
+    { key: "run", header: "Run", render: (_, { run }) => <Mono value={run.name} length={48} /> },
+    {
+      key: "result",
+      header: "Result",
+      render: (_, { run }) => {
+        const status = JOB_STATUS[run.result];
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <Status tone={status.tone} label={status.label} />
+            {run.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(run.reason)}</span>}
+          </span>
+        );
+      },
+    },
+    {
+      key: "release",
+      header: "Release",
+      render: (_, { run }) =>
+        run.releaseVersion ? (
+          <Link href={hrefs.release(run.releaseVersion)} className={INK_LINK}>
+            {shortVersion(run.releaseVersion)}
+          </Link>
+        ) : (
+          <span className="text-ink-muted">unknown</span>
+        ),
+    },
+    {
+      key: "started",
+      header: "Started",
+      className: "text-ink-muted",
+      render: (_, { run }) => (run.startedAtMs ? formatAgo(run.startedAtMs) : "not observed"),
+    },
+    {
+      key: "duration",
+      header: "Duration",
+      numeric: true,
+      render: (_, { run }) => (run.durationSeconds ? formatSeconds(run.durationSeconds) : <span className="text-ink-muted">—</span>),
+    },
+  ];
+}
+
+type EventRow = { key: string; event: WorkloadEvent };
+
+const EVENT_COLUMNS: DataTableColumn<EventRow>[] = [
+  {
+    key: "when",
+    header: "When",
+    className: "text-ink-muted",
+    render: (_, { event }) => <span title={new Date(event.timeMs).toLocaleString()}>{formatAgo(event.timeMs)}</span>,
+  },
+  {
+    key: "reason",
+    header: "Reason",
+    render: (_, { event }) => (
+      <>
+        <Status tone={event.type === "Warning" ? "warning" : "neutral"} label={eventHeadline(event)} />
+        {eventRawReason(event) && (
+          <span className="ml-2 font-mono text-ink-muted" title="The technical name of this event" data-testid="event-raw-reason">
+            {eventRawReason(event)}
+          </span>
+        )}
+      </>
+    ),
+  },
+  {
+    key: "object",
+    header: "Object",
+    className: "text-ink-muted",
+    render: (_, { event }) => (event.objectName ? <Mono value={event.objectName} length={32} copy={false} /> : "—"),
+  },
+  {
+    key: "message",
+    header: "Message",
+    // The message takes what the other columns leave, wrapping to two lines.
+    className: "w-full max-w-0 whitespace-normal py-2",
+    render: (_, { event }) => (
+      <span className="line-clamp-2" title={plainErrorText(event.message)}>
+        {plainErrorText(event.message)}
+      </span>
+    ),
+  },
+  {
+    key: "count",
+    header: "Count",
+    numeric: true,
+    className: "text-ink-muted",
+    render: (_, { event }) => (event.count > 1 ? `×${event.count}` : ""),
+  },
+];
+
+type ImageRow = { key: string; c: WorkloadDetailData["imageChanges"][number] };
+
+const IMAGE_COLUMNS: DataTableColumn<ImageRow>[] = [
+  { key: "container", header: "Container", render: (_, { c }) => c.container },
+  {
+    key: "image",
+    header: "Image",
+    render: (_, { c }) => <Mono value={`${c.imageName}${c.imageTag ? `:${c.imageTag}` : ""}`} length={48} />,
+  },
+  { key: "firstSeen", header: "First seen", className: "text-ink-muted", render: (_, { c }) => formatAgo(c.firstSeenMs) },
+  { key: "lastSeen", header: "Last seen", className: "text-ink-muted", render: (_, { c }) => formatAgo(c.lastSeenMs) },
+];
 
 function PodsPanel({ summary, onLogs }: { summary: Workload | null; onLogs: () => void }) {
   const pods = summary?.pods ?? [];
@@ -865,60 +1119,15 @@ function PodsPanel({ summary, onLogs }: { summary: Workload | null; onLogs: () =
       {pods.length === 0 ? (
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No pod reported in the window. A workload scaled to zero, or one Reliant cannot see yet, looks like this.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <StackedTable className="min-w-full border-collapse" aria-label="Pods">
-            <thead>
-              <tr className="border-b border-border">
-                <th scope="col" className={TH}>
-                  Name
-                </th>
-                <th scope="col" className={TH}>
-                  Status
-                </th>
-                <th scope="col" className={cn(TH, "text-right")}>
-                  Restarts
-                </th>
-                <th scope="col" className={TH}>
-                  Last exit
-                </th>
-                <th scope="col" className={cn(TH, "text-right")}>
-                  Age
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {pods.map((pod) => {
-                const age = podAgeMs(pod, now);
-                const warning = pod.latestWarning;
-                const status =
-                  pod.state === "gone"
-                    ? { tone: "neutral" as const, label: "Gone" }
-                    : warning
-                      ? { tone: "warning" as const, label: eventHeadline(warning) }
-                      : pod.state === "running"
-                        ? { tone: "success" as const, label: "Running" }
-                        : { tone: "neutral" as const, label: "Unknown" };
-                return (
-                  <tr key={pod.uid || pod.name} className="border-t border-border/70 first:border-t-0" data-testid={`workload-pod-${pod.name}`} data-state={pod.state}>
-                    <td className={TD}>
-                      <Mono value={pod.name} length={48} />
-                    </td>
-                    <td className={TD} title={warning ? plainErrorText(warning.message) : undefined}>
-                      <Status tone={status.tone} label={status.label} />
-                    </td>
-                    <td className={cn(TD, "text-right tabular-nums", pod.restarts === 0 && "text-ink-muted")}>{pod.restarts}</td>
-                    <td className={cn(TD, pod.lastExitReason ? "text-warning-ink" : "text-ink-muted")} title={pod.lastExitAtMs ? new Date(pod.lastExitAtMs).toLocaleString() : undefined}>
-                      {pod.lastExitReason ? exitPhrase(pod.lastExitReason) : "·"}
-                    </td>
-                    <td className={cn(TD, "text-right tabular-nums text-ink-muted")} title={pod.ageIsLowerBound ? "Older than the window" : undefined}>
-                      {age === null ? "—" : `${pod.ageIsLowerBound ? "≥" : ""}${formatAge(age)}`}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </StackedTable>
-        </div>
+        <DataTable<PodRow>
+          flush
+          stacked
+          ariaLabel="Pods"
+          columns={POD_COLUMNS}
+          data={pods.map((pod) => ({ key: pod.uid || pod.name, pod, now }))}
+          getRowKey={(r) => r.key}
+          getRowProps={({ pod }) => ({ "data-testid": `workload-pod-${pod.name}`, "data-state": pod.state })}
+        />
       )}
     </Panel>
   );
@@ -930,58 +1139,15 @@ function RunsPanel({ runs, hrefs }: { runs: WorkloadJob[]; hrefs: WorkloadDetail
       {runs.length === 0 ? (
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No run of this job in the window.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <StackedTable className="min-w-full border-collapse" aria-label="Runs">
-            <thead>
-              <tr className="border-b border-border">
-                <th scope="col" className={TH}>
-                  Run
-                </th>
-                <th scope="col" className={TH}>
-                  Result
-                </th>
-                <th scope="col" className={TH}>
-                  Release
-                </th>
-                <th scope="col" className={TH}>
-                  Started
-                </th>
-                <th scope="col" className={cn(TH, "text-right")}>
-                  Duration
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.map((run) => {
-                const status = JOB_STATUS[run.result];
-                return (
-                  <tr key={run.name} className="border-t border-border/70 first:border-t-0" data-testid={`workload-run-${run.name}`}>
-                    <td className={TD}>
-                      <Mono value={run.name} length={48} />
-                    </td>
-                    <td className={TD}>
-                      <span className="inline-flex items-center gap-1.5">
-                        <Status tone={status.tone} label={status.label} />
-                        {run.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(run.reason)}</span>}
-                      </span>
-                    </td>
-                    <td className={TD}>
-                      {run.releaseVersion ? (
-                        <Link href={hrefs.release(run.releaseVersion)} className={INK_LINK}>
-                          {shortVersion(run.releaseVersion)}
-                        </Link>
-                      ) : (
-                        <span className="text-ink-muted">unknown</span>
-                      )}
-                    </td>
-                    <td className={cn(TD, "text-ink-muted")}>{run.startedAtMs ? formatAgo(run.startedAtMs) : "not observed"}</td>
-                    <td className={cn(TD, "text-right tabular-nums")}>{run.durationSeconds ? formatSeconds(run.durationSeconds) : <span className="text-ink-muted">—</span>}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </StackedTable>
-        </div>
+        <DataTable<RunRow>
+          flush
+          stacked
+          ariaLabel="Runs"
+          columns={runColumns(hrefs)}
+          data={runs.map((run) => ({ key: run.name, run }))}
+          getRowKey={(r) => r.key}
+          getRowProps={({ run }) => ({ "data-testid": `workload-run-${run.name}` })}
+        />
       )}
     </Panel>
   );
@@ -1001,53 +1167,15 @@ function EventsPanel({ events, range }: { events: WorkloadEvent[]; range: RangeP
       {ordered.length === 0 ? (
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No Kubernetes event in the {RANGE_LABELS[range].toLowerCase()}. A steady workload is quiet.</p>
       ) : (
-        <div className="overflow-x-auto">
-          <StackedTable className="min-w-full border-collapse" aria-label="Kubernetes events">
-            <thead>
-              <tr className="border-b border-border">
-                <th scope="col" className={TH}>
-                  When
-                </th>
-                <th scope="col" className={TH}>
-                  Reason
-                </th>
-                <th scope="col" className={TH}>
-                  Object
-                </th>
-                <th scope="col" className={cn(TH, "w-full")}>
-                  Message
-                </th>
-                <th scope="col" className={cn(TH, "text-right")}>
-                  Count
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {ordered.map((event, index) => (
-                <tr key={`${event.timeMs}-${event.reason}-${index}`} className="border-t border-border/70 first:border-t-0" data-type={event.type}>
-                  <td className={cn(TD, "text-ink-muted")} title={new Date(event.timeMs).toLocaleString()}>
-                    {formatAgo(event.timeMs)}
-                  </td>
-                  <td className={TD}>
-                    <Status tone={event.type === "Warning" ? "warning" : "neutral"} label={eventHeadline(event)} />
-                    {eventRawReason(event) && (
-                      <span className="ml-2 font-mono text-ink-muted" title="The technical name of this event" data-testid="event-raw-reason">
-                        {eventRawReason(event)}
-                      </span>
-                    )}
-                  </td>
-                  <td className={cn(TD, "text-ink-muted")}>{event.objectName ? <Mono value={event.objectName} length={32} copy={false} /> : "—"}</td>
-                  <td className="max-w-0 px-4 py-2 text-sm text-ink">
-                    <span className="line-clamp-2" title={plainErrorText(event.message)}>
-                      {plainErrorText(event.message)}
-                    </span>
-                  </td>
-                  <td className={cn(TD, "text-right tabular-nums text-ink-muted")}>{event.count > 1 ? `×${event.count}` : ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </StackedTable>
-        </div>
+        <DataTable<EventRow>
+          flush
+          stacked
+          ariaLabel="Kubernetes events"
+          columns={EVENT_COLUMNS}
+          data={ordered.map((event, index) => ({ key: `${event.timeMs}-${event.reason}-${index}`, event }))}
+          getRowKey={(r) => r.key}
+          getRowProps={({ event }) => ({ "data-type": event.type })}
+        />
       )}
     </Panel>
   );
@@ -1070,8 +1198,8 @@ function HistoryTab({
   const images = [...(detail?.imageChanges ?? [])].filter((c) => c.envId === envId).reverse();
   return (
     <>
-      <Panel title="Deploy history" meta="Every promotion that moved it, newest first" testId="workload-history-deploys">
-        <DeployHistoryList history={history} env="" hrefs={hrefs} />
+      <Panel title="Release history" meta="Promotion history lives with each release" testId="workload-history-deploys">
+        <ReleaseHistoryLinks history={history} hrefs={hrefs} />
       </Panel>
       <Panel title="Versions" meta="The service.version it reported, newest first" testId="workload-history-versions">
         {versions.length === 0 ? (
@@ -1095,36 +1223,14 @@ function HistoryTab({
         {images.length === 0 ? (
           <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">No image was observed in the window.</p>
         ) : (
-          <StackedTable className="min-w-full border-collapse" aria-label="Images">
-            <thead>
-              <tr className="border-b border-border">
-                <th scope="col" className={TH}>
-                  Container
-                </th>
-                <th scope="col" className={TH}>
-                  Image
-                </th>
-                <th scope="col" className={TH}>
-                  First seen
-                </th>
-                <th scope="col" className={TH}>
-                  Last seen
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {images.map((c) => (
-                <tr key={`${c.container}-${c.imageTag}-${c.firstSeenMs}`} className="border-t border-border/70 first:border-t-0">
-                  <td className={TD}>{c.container}</td>
-                  <td className={TD}>
-                    <Mono value={`${c.imageName}${c.imageTag ? `:${c.imageTag}` : ""}`} length={48} />
-                  </td>
-                  <td className={cn(TD, "text-ink-muted")}>{formatAgo(c.firstSeenMs)}</td>
-                  <td className={cn(TD, "text-ink-muted")}>{formatAgo(c.lastSeenMs)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </StackedTable>
+          <DataTable<ImageRow>
+            flush
+            stacked
+            ariaLabel="Images"
+            columns={IMAGE_COLUMNS}
+            data={images.map((c) => ({ key: `${c.container}-${c.imageTag}-${c.firstSeenMs}`, c }))}
+            getRowKey={(r) => r.key}
+          />
         )}
       </Panel>
       {runs.length > 0 && <RunsPanel runs={runs} hrefs={hrefs} />}
@@ -1240,6 +1346,7 @@ function Rail({
   hosted,
   hrefs,
   onTab,
+  canOpen,
 }: {
   name: string;
   env: { id: string; name: string };
@@ -1252,6 +1359,7 @@ function Rail({
   hosted: ForgeHostedWorkload | null;
   hrefs: WorkloadDetailHrefs;
   onTab: (tab: WorkloadTab) => void;
+  canOpen: (tab: WorkloadTab) => boolean;
 }) {
   const declared = summary?.declared ?? null;
   const exit = summary ? lastExitOf(summary) : null;
@@ -1325,20 +1433,6 @@ function Rail({
           ]}
         />
       </Panel>
-      {!latestRun && (
-        <Panel
-          title="Deploy history"
-          actions={
-            <button type="button" onClick={() => onTab("history")} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink">
-              History
-              <ArrowRight className="h-3 w-3" aria-hidden="true" />
-            </button>
-          }
-          testId="workload-deploy-history"
-        >
-          <DeployHistoryList history={history} env={env.name} hrefs={hrefs} limit={5} />
-        </Panel>
-      )}
       <Panel
         title="Recent events"
         actions={
@@ -1371,8 +1465,8 @@ function Rail({
         <nav className="-mx-2 flex flex-col" aria-label="Jump to">
           {(
             [
-              [`Traces for ${name}`, () => onTab("traces")],
-              ...(latestRun ? [] : ([["Profiles", () => onTab("profiles")]] as const)),
+              ...(canOpen("traces") ? ([[`Traces for ${name}`, () => onTab("traces")]] as const) : []),
+              ...(latestRun || !canOpen("profiles") ? [] : ([["Profiles", () => onTab("profiles")]] as const)),
             ] as const
           ).map(([label, go]) => (
             <button key={label} type="button" onClick={go} className="flex h-8 items-center justify-between rounded-md px-2 text-left text-sm text-ink hover:bg-ink/5">
@@ -1390,43 +1484,20 @@ function Rail({
   );
 }
 
-/**
- * Promotions that moved the workload, newest first: the release, who, and
- * when; a rollback in red, a scoped deploy said so. The ledger records no
- * "via" (CLI, console or CI), so none is shown.
- */
-function DeployHistoryList({ history, env, hrefs, limit }: { history: DeployHistory; env: string; hrefs: WorkloadDetailHrefs; limit?: number }) {
-  if (history.loading) return <div className="h-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading deploy history" />;
-  if (history.failed) return <p className="text-xs text-ink-muted">The deploy history could not be read right now.</p>;
-  if (history.entries.length === 0) return <p className="text-xs text-ink-muted">No promotion{env ? ` to ${env}` : ""} has moved it yet.</p>;
-  const entries = limit ? history.entries.slice(0, limit) : history.entries;
+/** Contextual, de-duplicated release links — not another promotion event feed. */
+function ReleaseHistoryLinks({ history, hrefs }: { history: DeployHistory; hrefs: WorkloadDetailHrefs }) {
+  if (history.loading) return <p className="text-xs text-ink-muted" aria-busy="true">Loading release links…</p>;
+  if (history.failed) return <p className="text-xs text-ink-muted">Release links could not be read right now.</p>;
+  const versions = [...new Set(history.entries.map((entry) => entry.version))];
+  if (!versions.length) return <p className="text-xs text-ink-muted">No recorded release has moved this workload yet.</p>;
   return (
-    <ol className="space-y-3.5" data-testid="deploy-history">
-      {entries.map((entry, index) => (
-        <li key={entry.id} className="relative pl-6 text-xs" data-rollback={entry.rollback ? "true" : undefined}>
-          <span
-            aria-hidden="true"
-            className={cn(
-              "absolute left-1 top-1.5 h-2 w-2 rounded-full border",
-              entry.rollback ? "border-danger bg-danger" : index === 0 ? "border-success bg-success" : "border-ink-muted bg-surface"
-            )}
-          />
-          {index < entries.length - 1 && <span aria-hidden="true" className="absolute -bottom-3.5 left-2 top-4 w-px bg-border" />}
-          <span className={cn("block", entry.rollback ? "text-danger-ink" : "text-ink")}>
-            {entry.rollback ? "Rolled back to " : ""}
-            <Link href={hrefs.release(entry.version)} className={INK_LINK} title={entry.version}>
-              {shortVersion(entry.version)}
-            </Link>
-            {entry.scoped && <span className="text-ink-muted"> · scoped</span>}
-          </span>
-          <span className="block text-ink-muted">
-            {entry.by || "unknown"}
-            {entry.at ? " · " : ""}
-            <Ago at={entry.at} />
-          </span>
-        </li>
-      ))}
-    </ol>
+    <ul className="flex flex-wrap gap-3" aria-label="Releases that moved this workload">
+      {versions.map((version) => <li key={version}>
+        <Link href={hrefs.release(version)} className={`${INK_LINK} text-xs`} title={version} aria-label={`Promotion history for ${version}`}>
+          {shortVersion(version)}
+        </Link>
+      </li>)}
+    </ul>
   );
 }
 
@@ -1472,7 +1543,7 @@ function ExplorerTab({
         </Card>
       }
     >
-      <ObservabilityPanel place={{ kind: "project", project, environments }} search={panelSearch} navigate={navigate} chrome="console" />
+      <ObservabilityPanel place={{ kind: "project", project, environments }} search={panelSearch} navigate={navigate} />
     </Suspense>
   );
 }

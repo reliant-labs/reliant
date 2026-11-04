@@ -4,7 +4,7 @@
  * The bodies of an environment page's tabs. See envTabs.ts for which
  * environment gets which, and which tabs read the daemon.
  *
- * Every panel is built from existing pieces — LiveState, LiveReleases,
+ * Every panel is built from existing pieces — LiveState,
  * LiveSecretsSection, DevStackPanel, RegisterEnvPanel —
  * re-grouped by the question they
  * answer. Sections are forge-ui Cards with a CardHeader, rather than three
@@ -17,22 +17,25 @@ import { Play, RefreshCw } from "lucide-react";
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
+import type { ProjectCheckoutMissing } from "@/gen/reliant/v1/filesystem_pb";
+import { projectCheckoutMissing } from "@/lib/daemon-errors";
 import { isForgeAPIDisabled } from "@/lib/forgeApiDisabled";
-import type { CloudPromotion } from "@/services/forge/cloudEnvs";
-import { declaredNotBuilt, isPlacedKind, neverBuilt, type LiveConvergence, type LiveEnv } from "@/services/forge/live";
+import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
+import { frontendsOf } from "@/services/forge/frontends";
+import { declaredNotBuilt, isPlacedKind, neverBuilt, type LiveEnv } from "@/services/forge/live";
 import { devStackRunsHere, type DaemonSide } from "@/services/forge/environments";
 import type { ForgeEnvStatusReport } from "@/services/forge/status";
 import type { ForgeOutcome, ForgeTopologyEnv } from "@/services/forge/topology";
 
+import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
 import { formatTimestamp } from "../Overview/EnvironmentTable";
 import { RegisterEnvPanel } from "../Preview/RegisterEnvPanel";
 import { DevStackPanel } from "../Status/DevStackPanel";
+import { CheckoutMissing } from "./CheckoutMissing";
 import { DaemonNeeded } from "./DaemonNeeded";
 import { EnvDomains } from "./EnvDomains";
-import { LiveActivity } from "./LiveActivity";
-import { LiveReleases } from "./LiveReleases";
 import { LiveSecretsSection } from "./LiveSecretsSection";
 import { LiveState } from "./LiveState";
 
@@ -91,6 +94,15 @@ export interface OverviewTabProps {
   onManageDomains: () => void;
   /** The Overview scoped to this environment: where its services and jobs are. */
   workloadsHref: string;
+  /** The control plane's GetStatus for this environment: where its frontends and their URLs come from. */
+  cloudStatus?: CloudEnvStatus;
+  cloudStatusLoading?: boolean;
+  /** The Domains screen, where "Add a domain" lands. */
+  domainsHref?: string;
+  /** Topology's ProjectCheckoutMissing, when that is why the daemon side failed. */
+  checkoutMissing?: ProjectCheckoutMissing | null;
+  /** The Reliant project's name, for the checkout-missing sentence. */
+  projectName?: string;
 }
 
 export function OverviewTab(props: OverviewTabProps) {
@@ -124,6 +136,12 @@ export function OverviewTab(props: OverviewTabProps) {
             />
           ) : props.daemon === "loading" ? (
             <SkeletonLoader variant="form-field" />
+          ) : props.daemon === "no-checkout" && props.checkoutMissing ? (
+            <CheckoutMissing
+              missing={props.checkoutMissing}
+              projectName={props.projectName}
+              what={`the shape forge renders for ${envName}, which registering records`}
+            />
           ) : (
             <DaemonNeeded
               what={`the shape forge renders for ${envName}, which registering records`}
@@ -139,7 +157,7 @@ export function OverviewTab(props: OverviewTabProps) {
   return (
     <div className="space-y-4" data-testid="live-section" data-kind={live.kind}>
       {registered && (
-        <p data-testid="register-done" className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground">
+        <p data-testid="register-done" className="rounded-lg border border-border bg-surface px-4 py-3 text-sm text-ink">
           Registered. <span className="font-mono">{envName}</span> is tracked in Reliant now — its secrets can be set
           from the Secrets tab, with your daemon offline.
         </p>
@@ -147,18 +165,18 @@ export function OverviewTab(props: OverviewTabProps) {
       <Panel title="State" testId="env-state">
         {declaredNotBuilt(live) ? (
           <div className="space-y-2">
-            <p data-testid="live-declared-not-built" className="text-sm text-muted-foreground">
+            <p data-testid="live-declared-not-built" className="text-sm text-ink-muted">
               Declared, not built yet. Its secrets can be set; a build records the first release.
             </p>
             {live.provenance !== "" && (
-              <p data-testid="live-provenance" className="font-mono text-xs text-muted-foreground">
+              <p data-testid="live-provenance" className="font-mono text-xs text-ink-muted">
                 {live.provenance}
               </p>
             )}
           </div>
         ) : neverBuilt(live) ? (
-          <p data-testid="live-row-blank" className="text-sm text-muted-foreground">
-            Registered, with nothing recorded yet. <code className="font-mono text-foreground">forge env build {live.name} --release</code>{" "}
+          <p data-testid="live-row-blank" className="text-sm text-ink-muted">
+            Registered, with nothing recorded yet. <code className="font-mono text-ink">forge env build {live.name} --release</code>{" "}
             records the first release.
           </p>
         ) : (
@@ -167,7 +185,7 @@ export function OverviewTab(props: OverviewTabProps) {
             {/* THE PROVENANCE LINE (§2.1): images from the release's source,
                 config from the render's. Descriptive, not approving. */}
             {live.provenance !== "" && (
-              <p data-testid="live-provenance" className="font-mono text-xs text-muted-foreground">
+              <p data-testid="live-provenance" className="font-mono text-xs text-ink-muted">
                 {live.provenance}
               </p>
             )}
@@ -175,12 +193,32 @@ export function OverviewTab(props: OverviewTabProps) {
         )}
       </Panel>
 
+      {/* Frontends: the sites people open. Each is live at its generated
+          address already; a custom domain only adds a second one. Omitted for
+          an env the platform does not run — it has no generated addresses. */}
+      {isPlacedKind(live.kind) && (
+        <Panel
+          title="Frontends"
+          description="Websites Reliant hosts for this environment, and the address each is live at."
+          testId="env-frontends"
+          flush
+        >
+          <EnvFrontends
+            env={live}
+            status={props.cloudStatus}
+            loading={props.cloudStatusLoading ?? false}
+            domains={props.domains}
+            domainsHref={props.domainsHref ?? props.workloadsHref}
+          />
+        </Panel>
+      )}
+
       {/* The workloads themselves — health, pods, releases, restarts — are the
           Overview's (one place, every environment), not a second copy here. */}
       <Panel title="Workloads" testId="section-workloads">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-ink-muted">
           {props.envName}&apos;s services and jobs, their health and their pods are on the{" "}
-          <Link href={props.workloadsHref} className="text-foreground underline underline-offset-2" data-testid="env-workloads-link">
+          <Link href={props.workloadsHref} className="text-ink underline underline-offset-2" data-testid="env-workloads-link">
             Overview, scoped to {props.envName}
           </Link>
           .
@@ -214,6 +252,43 @@ export function OverviewTab(props: OverviewTabProps) {
   );
 }
 
+function EnvFrontends({
+  env,
+  status,
+  loading,
+  domains,
+  domainsHref,
+}: {
+  env: LiveEnv;
+  status: CloudEnvStatus | undefined;
+  loading: boolean;
+  domains: DomainsState | undefined;
+  domainsHref: string;
+}) {
+  if (!status) {
+    return loading ? (
+      <FrontendsLoading />
+    ) : (
+      <p className="px-4 pb-4 text-sm text-ink-muted" data-testid="env-frontends-unavailable">
+        Reliant could not read this environment&apos;s deployments just now, so its frontends are not shown. They will appear when the next read succeeds.
+      </p>
+    );
+  }
+  const frontends = frontendsOf(
+    { id: env.id, name: env.name, release: env.release },
+    status.workloads,
+    domains?.availability === "available" ? domains.domains : null
+  );
+  if (frontends.length === 0) {
+    return (
+      <div className="px-4 pb-4">
+        <FrontendsEmpty env={env.name} />
+      </div>
+    );
+  }
+  return <FrontendList frontends={frontends} domainsHref={domainsHref} />;
+}
+
 /** What forge's own (file) ledger says, for an env Reliant has no record of. */
 function ForgeLedgerFacts({ env }: { env: ForgeTopologyEnv }) {
   return (
@@ -224,18 +299,18 @@ function ForgeLedgerFacts({ env }: { env: ForgeTopologyEnv }) {
     >
       {env.release ? (
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1.5 text-sm">
-          <dt className="text-muted-foreground">Release</dt>
-          <dd className="font-mono text-foreground">{env.release}</dd>
+          <dt className="text-ink-muted">Release</dt>
+          <dd className="font-mono text-ink">{env.release}</dd>
           {env.promoted_at && (
             <>
-              <dt className="text-muted-foreground">Promoted</dt>
-              <dd className="text-foreground">{formatTimestamp(env.promoted_at)}</dd>
+              <dt className="text-ink-muted">Promoted</dt>
+              <dd className="text-ink">{formatTimestamp(env.promoted_at)}</dd>
             </>
           )}
           {env.kube_context && (
             <>
-              <dt className="text-muted-foreground">Cluster</dt>
-              <dd className="font-mono text-foreground">
+              <dt className="text-ink-muted">Cluster</dt>
+              <dd className="font-mono text-ink">
                 {env.kube_context}
                 {env.namespace ? ` / ${env.namespace}` : ""}
               </dd>
@@ -243,115 +318,8 @@ function ForgeLedgerFacts({ env }: { env: ForgeTopologyEnv }) {
           )}
         </dl>
       ) : (
-        <p className="text-sm text-muted-foreground">Never promoted in forge&apos;s ledger.</p>
+        <p className="text-sm text-ink-muted">Never promoted in forge&apos;s ledger.</p>
       )}
-    </Panel>
-  );
-}
-
-// ── Releases ────────────────────────────────────────────────────────────────
-
-export function ReleasesTab({
-  live,
-  promotions,
-  isLoading,
-  error,
-  forgeEnv,
-}: {
-  live: LiveEnv | null;
-  promotions: CloudPromotion[] | undefined;
-  isLoading: boolean;
-  error: Error | null;
-  forgeEnv: ForgeTopologyEnv | null;
-}) {
-  if (!live) {
-    return forgeEnv ? (
-      <ForgeLedgerFacts env={forgeEnv} />
-    ) : (
-      <p className="text-sm text-muted-foreground" data-testid="releases-unregistered">
-        Reliant has no record of this environment, so it has no release history here. Register it from Overview.
-      </p>
-    );
-  }
-  return (
-    <Panel
-      title="Releases"
-      description="Every release promoted to this environment, newest first. Promotion writes a pointer; deploying moves bytes."
-      testId="section-releases"
-      flush
-    >
-      <LiveReleases env={live} promotions={promotions} isLoading={isLoading} error={error} />
-    </Panel>
-  );
-}
-
-// ── Activity ────────────────────────────────────────────────────────────────
-
-export function ActivityTab({
-  live,
-  promotions,
-  convergences,
-  isLoading,
-  error,
-}: {
-  live: LiveEnv | null;
-  promotions: CloudPromotion[] | undefined;
-  convergences: LiveConvergence[] | undefined;
-  isLoading: boolean;
-  error: Error | null;
-}) {
-  if (!live) {
-    return (
-      <p className="text-sm text-muted-foreground" data-testid="activity-unregistered">
-        Reliant has no record of this environment, so it has no activity here. Register it from Overview.
-      </p>
-    );
-  }
-  return (
-    <Panel
-      title="Activity"
-      description="What happened here, newest first: each promotion, and what Reliant observed on the cluster after it."
-      testId="section-activity"
-      flush
-    >
-      <LiveActivity env={live} promotions={promotions} convergences={convergences} isLoading={isLoading} error={error} />
-    </Panel>
-  );
-}
-
-// ── Domains ─────────────────────────────────────────────────────────────────
-
-export function DomainsTab({
-  live,
-  domains,
-  domainsLoading,
-  onManageDomains,
-}: {
-  live: LiveEnv | null;
-  domains: DomainsState | undefined;
-  domainsLoading: boolean;
-  onManageDomains: () => void;
-}) {
-  if (!live) {
-    return (
-      <p className="text-sm text-muted-foreground" data-testid="domains-unregistered">
-        Reliant has no record of this environment, so no domain can point at it yet. Register it from Overview.
-      </p>
-    );
-  }
-  return (
-    <Panel
-      title="Custom domains"
-      description="Hostnames that serve this environment. Domains belong to your organization and are added, moved and removed on the Domains screen."
-      testId="section-domains"
-    >
-      <EnvDomains
-        environmentId={live.id}
-        placed={isPlacedKind(live.kind)}
-        state={domains}
-        isLoading={domainsLoading}
-        onManage={onManageDomains}
-      />
     </Panel>
   );
 }
@@ -391,6 +359,7 @@ export function RunningTab({
   onRetry,
   retrying,
   projectName,
+  checkoutMissing,
 }: {
   envName: string;
   daemon: DaemonSide;
@@ -400,8 +369,24 @@ export function RunningTab({
   onRetry: () => void;
   retrying: boolean;
   projectName?: string;
+  /** Topology's ProjectCheckoutMissing, when that is why the daemon side failed. */
+  checkoutMissing?: ProjectCheckoutMissing | null;
 }) {
-  if (daemon === "offline" || daemon === "disabled" || (envStatusError && !envStatus)) {
+  // Not on a machine that could answer: say so, with the remedy — never
+  // "your daemon isn't answering", which a retry cannot fix.
+  const missing = projectCheckoutMissing(envStatusError) ?? (daemon === "no-checkout" ? checkoutMissing : null);
+  if (missing) {
+    return (
+      <CheckoutMissing
+        missing={missing}
+        projectName={projectName}
+        what={`what forge env up is running for ${envName}`}
+        onRetry={onRetry}
+        retrying={retrying}
+      />
+    );
+  }
+  if (daemon === "offline" || daemon === "no-checkout" || daemon === "disabled" || (envStatusError && !envStatus)) {
     return (
       <DaemonNeeded
         what={`what forge env up is running for ${envName} on your machine`}
@@ -423,15 +408,15 @@ export function RunningTab({
     return (
       <div
         data-testid="running-stopped"
-        className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-background px-4 py-4"
+        className="flex items-start gap-3 rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-4"
       >
-        <Play className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <Play className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
         <div className="space-y-1">
-          <p className="text-sm text-foreground">
+          <p className="text-sm text-ink">
             <span className="font-mono">{envName}</span> isn&apos;t running on this machine.
           </p>
-          <p className="text-xs text-muted-foreground">
-            Start it with <code className="font-mono text-foreground">forge env up {envName}</code>.
+          <p className="text-xs text-ink-muted">
+            Start it with <code className="font-mono text-ink">forge env up {envName}</code>.
           </p>
         </div>
       </div>

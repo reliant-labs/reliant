@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Wallet } from "lucide-react";
 
-import { Button } from "../ui";
+import Button from "@/components/forge-ui/button";
 import { TOPUP_PRESETS_CENTS, formatRunway } from "../billingUtils";
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
 import { cn } from "@/lib/utils";
@@ -117,7 +117,7 @@ export function CreditBand({
         </div>
 
         {balanceUnavailable ? (
-          <Button size="sm" variant="outline" onClick={onRetryBalance}>
+          <Button size="md" variant="outline" onClick={onRetryBalance}>
             Retry
           </Button>
         ) : (
@@ -183,7 +183,7 @@ export function CreditBand({
           {TOPUP_PRESETS_CENTS.map((cents) => (
             <Button
               key={cents}
-              size="sm"
+              size="md"
               // Pressed, not merely coloured. Once this is the only picker, the
               // selected amount is state a screen reader has to be able to
               // read back — `variant="primary"` alone announces nothing.

@@ -18,6 +18,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 import { renderWithQuery } from "@/test/renderWithQuery";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
 import { useChatStore } from "@/store/chatStore";
 import type { NodeExecutionUpdate } from "@/types/streaming";
 import {
@@ -28,12 +31,9 @@ import { ContentBlockType, MessageRole } from "@/gen/reliant/v1/chat_pb";
 import type { Workflow } from "@/types/workflow";
 import type { StepExecution, WorkflowExecution } from "../../Chat/ExecutionSidebar/types";
 
+// The saved message is read through MessageService's generated hook, so it
+// answers at the transport.
 const getMessage = vi.fn();
-
-vi.mock("@/api/grpc-client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/grpc-client")>()),
-  getMessageClient: () => ({ getMessage }),
-}));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-router")>()),
@@ -168,9 +168,11 @@ beforeEach(() => {
   uid = 0;
   seq = 0;
   getMessage.mockReset();
+  setTransport(mockTransport(serviceHandlers("MessageService", { getMessage: (req) => getMessage(req) })));
 });
 
 afterEach(() => {
+  setTransport(null);
   useChatStore.setState({ nodeExecutions: {} });
 });
 
@@ -225,7 +227,7 @@ describe("WorkflowViewer — a loop run", () => {
     fireEvent.click(container.querySelector('.react-flow__node[data-id="attempt:review"]')!);
 
     expect(await screen.findByText(/The cart total ignores discounts/)).toBeInTheDocument();
-    expect(getMessage).toHaveBeenCalledWith({ messageId: "msg-review-1" });
+    expect(getMessage).toHaveBeenCalledWith(expect.objectContaining({ messageId: "msg-review-1" }));
     expect(screen.queryByText("Not yet executed")).not.toBeInTheDocument();
   });
 });

@@ -8,7 +8,7 @@
  * - Simpler, cleaner UI with less visual noise
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useState, memo, useCallback, useMemo, useEffect } from "react";
 import {
   ChevronDown,
@@ -28,20 +28,23 @@ import {
 import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
+import { TruncatedOutputNotice } from "./tool-renderers/TruncatedOutputNotice";
+import { fetchFullToolResult, useFullToolResult } from "../../hooks/tool-result-queries";
 import { useChat, useChatMessages, useStreamingMessages, useToolCallStates } from "../../store/chatStoreHooks";
 import {
   useApproveToolRequest,
   useDenyToolRequest,
 } from "../../hooks/approval-queries";
-import type { ToolApprovalRequest } from "../../api/client";
 import { FileLink } from "./FileLink";
-import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool } from "../../lib/toolFormatters";
+import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool, isShellTool } from "../../lib/toolFormatters";
+import { formatToolDuration, toolActionVerb, toolDurationMs } from "../../lib/toolAction";
+import { DeployedAppCard, deployOfShellCall } from "../Apps/DeployedAppCard";
 import { parseFilePath } from "../../lib/filePath";
 import { openFile, classifyPath } from "../../lib/fileOpener";
 import { toast } from "../../lib/toast-manager";
 import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
-import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, type Approval } from "../../gen/reliant/v1/approval_pb";
 import {
   ContentBlockType,
   ToolCallStatus,
@@ -155,10 +158,7 @@ function findShellCallForProcess(messages: Message[], processId: string): Conten
       if (block.type !== ContentBlockType.TOOL_CALL || baseToolName(block.toolName || "") !== "shell") {
         continue;
       }
-      if (
-        (block.toolCallId && resultCallIds.has(block.toolCallId)) ||
-        block.matchedResult?.content?.includes(processId)
-      ) {
+      if (block.toolCallId && resultCallIds.has(block.toolCallId)) {
         lastMatch = block;
       }
     }
@@ -181,10 +181,7 @@ function findSpawnCallForAgent(messages: Message[], agentId: string): ContentBlo
         fallback = block;
         continue;
       }
-      if (
-        (block.toolCallId && resultCallIds.has(block.toolCallId)) ||
-        block.matchedResult?.content?.includes(agentId)
-      ) {
+      if (block.toolCallId && resultCallIds.has(block.toolCallId)) {
         fallback = block;
       }
     }
@@ -259,6 +256,9 @@ interface ToolExecutionProps {
     content_block_id?: string;
     /** Durable status from the tool_calls table, as of the last message load. */
     durableStatus?: ToolCallStatus;
+    /** When the server recorded the call starting and finishing (its row in tool_calls). */
+    durableStartedAt?: string;
+    durableCompletedAt?: string;
     /**
      * For a spawn call, the workflow it started (tool_calls.child_workflow_id).
      * A spawned sub-agent's thread id equals its workflow id, so this IS the
@@ -283,7 +283,7 @@ interface ToolExecutionProps {
     | "backgrounded"
     | "denied"
     | "failed";
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
@@ -345,6 +345,29 @@ function ToolExecutionComponent({
     }
   }, [isReadToolFlag, toolResult?.content, isExpanded, userHasToggled, toolCall.name, surface]);
 
+  // A large result arrives as a preview (truncated). The full output is
+  // fetched when the user asks for it, and then rendered in the preview's
+  // place by the same renderer; a copy fetches it too (loadFullResult).
+  const isTruncatedResult = !!toolResult?.truncated && !!chatId;
+  const [wantFullResult, setWantFullResult] = useState(false);
+  const fullResult = useFullToolResult(chatId, toolCall.id, isTruncatedResult && wantFullResult);
+  const fullResultContent = isTruncatedResult ? fullResult.data?.content : undefined;
+  const displayResult = useMemo<ToolResultData | undefined>(
+    () =>
+      toolResult && fullResultContent !== undefined
+        ? { ...toolResult, content: fullResultContent, truncated: false }
+        : toolResult,
+    [toolResult, fullResultContent],
+  );
+  const loadFullResult = useMemo(
+    () =>
+      isTruncatedResult && chatId
+        ? () => fetchFullToolResult(chatId, toolCall.id)
+        : undefined,
+    [isTruncatedResult, chatId, toolCall.id],
+  );
+  const showTruncatedNotice = isTruncatedResult && fullResultContent === undefined;
+
   const currentChat = useChat(chatId || "");
   const chatWorktreeId = currentChat?.worktreeId;
   const chatMessages = useChatMessages(chatId || undefined);
@@ -361,8 +384,8 @@ function ToolExecutionComponent({
   const toolCallStates = useToolCallStates(chatId || "");
   const liveToolCallState = toolCallStates.get(toolCall.id) || null;
 
-  const approveMutation = useApproveToolRequest();
-  const denyMutation = useDenyToolRequest();
+  const approveMutation = useApproveToolRequest(chatId || undefined);
+  const denyMutation = useDenyToolRequest(chatId || undefined);
 
   // Async spawn returns the tool result the moment the child agent is
   // dispatched, so the tool call's own status reads "completed" while the
@@ -431,6 +454,22 @@ function ToolExecutionComponent({
   // result.
   const isCompleted = currentStatus === "completed" || (!spawnChildWorkflowId && !!toolResult);
   const hasFailed = currentStatus === "failed" || (!spawnChildWorkflowId && (toolResult?.is_error ?? false));
+  // A permission block is an error result, but it is a policy stop, not a
+  // failure of the call: it keeps the warning treatment.
+  const isBlocked = !!toolResult?.is_error && !!toolResult.content?.includes("blocked");
+  // How long a finished call took, from the times the server recorded. A
+  // spawn's own call is only its dispatch, so it shows none.
+  const durationMs =
+    (isCompleted || hasFailed || isCancelled) && !spawnChildWorkflowId
+      ? toolDurationMs(toolCall.durableStartedAt, toolCall.durableCompletedAt)
+      : null;
+  const durationLabel = durationMs !== null ? formatToolDuration(durationMs) : null;
+  const actionVerb = toolActionVerb(toolCall.name, isCompleted || hasFailed || isCancelled ? "done" : "live");
+  // A shell call that deployed a forge app links to what it deployed (Apps/DeployedAppCard).
+  const shellDeploy = useMemo(
+    () => (isShellTool(toolNameLower) ? deployOfShellCall(toolCall.input, toolResult) : null),
+    [toolNameLower, toolCall.input, toolResult]
+  );
 
   // Approval logic - if backend created a pending approval, we need to show UI for it.
   const needsApproval = approval?.status === ApprovalStatus.PENDING;
@@ -507,7 +546,9 @@ function ToolExecutionComponent({
       };
     }
 
-    if (toolBaseName === "spawn_status") {
+    // spawn_status and spawn_send both name an agent by thread id: resolve
+    // its title for the row and make the thread openable.
+    if (toolBaseName === "spawn_status" || toolBaseName === "spawn_send") {
       const agentId = stringField(input.agent_id);
       if (!agentId) return { displayInput: toolCall.input, threadId: undefined as string | undefined };
 
@@ -533,14 +574,15 @@ function ToolExecutionComponent({
   }, [toolCall.input, toolBaseName, allDisplayMessages, activeThreads, allWorkflows]);
 
   // The thread this tool can open, as recorded by the code that created it or
-  // directly named by spawn_status. For spawn calls, tool_calls.child_workflow_id
-  // is the child thread. For spawn_status, agent_id already IS that thread id.
+  // directly named by spawn_status/spawn_send. For spawn calls,
+  // tool_calls.child_workflow_id is the child thread. For spawn_status and
+  // spawn_send, agent_id already IS that thread id.
   const spawnThreadId = isSpawnToolFlag ? toolCall.childWorkflowId : resolvedWaitTarget.threadId;
 
   // Handlers
   const handleApprove = useCallback(() => {
     if (approval && chatId) {
-      approveMutation.mutate({ chatId, requestId: approval.id });
+      approveMutation.mutate({ requestId: approval.id });
     } else if (onApprove) {
       onApprove(toolCall.id);
     }
@@ -548,7 +590,7 @@ function ToolExecutionComponent({
 
   const handleDeny = useCallback(() => {
     if (approval && chatId) {
-      denyMutation.mutate({ chatId, requestId: approval.id });
+      denyMutation.mutate({ requestId: approval.id });
     } else if (onDeny) {
       onDeny(toolCall.id);
     }
@@ -581,6 +623,12 @@ function ToolExecutionComponent({
     const name = rawName.startsWith('mcp__')
       ? rawName.split('__').pop() || rawName
       : rawName;
+    // A tool with a plain-words verb reads as an action ("Edited totals.ts"),
+    // not a function call; the name is in the tooltip and the inspector.
+    const verb = actionVerb;
+    const open = verb ? null : <span className="text-muted-foreground">(</span>;
+    const close = verb ? null : <span className="text-muted-foreground">)</span>;
+    const lead = <span className="text-foreground font-medium" title={verb ? name : undefined}>{verb ?? name}</span>;
 
     // Task tools show task title
     if (isTaskToolFlag && taskTitle) {
@@ -593,7 +641,7 @@ function ToolExecutionComponent({
     if (input === undefined) {
       return (
         <span className="inline-flex items-center gap-1">
-          <span className="text-foreground font-medium">{name}</span>
+          {lead}
           <span className="text-muted-foreground italic">preparing…</span>
         </span>
       );
@@ -607,19 +655,19 @@ function ToolExecutionComponent({
         if (isViewOnlyToolFlag && filePaths.length === 1) {
           return (
             <span className="inline-flex items-center gap-1">
-              <span className="text-foreground font-medium">{name}</span>
-              <span className="text-muted-foreground">(</span>
+              {lead}
+              {open}
               <FileLink path={filePaths[0]} inline showIcon={false} worktreeId={chatWorktreeId}>
                 {formatted.summary}
               </FileLink>
-              <span className="text-muted-foreground">)</span>
+              {close}
             </span>
           );
         }
         return (
           <span className="inline-flex items-center gap-1 flex-wrap">
-            <span className="text-foreground font-medium">{name}</span>
-            <span className="text-muted-foreground">(</span>
+            {lead}
+            {open}
             {filePaths.slice(0, 3).map((fp, idx) => (
               <span key={`${fp}-${idx}`} className="inline-flex items-center">
                 <FileLink path={fp} inline showIcon={false} worktreeId={chatWorktreeId} />
@@ -629,22 +677,32 @@ function ToolExecutionComponent({
             {filePaths.length > 3 && (
               <span className="text-muted-foreground">+{filePaths.length - 3} more</span>
             )}
-            <span className="text-muted-foreground">)</span>
+            {close}
           </span>
         );
       }
       return (
-        <span className="inline-flex items-center">
-          <span className="text-foreground font-medium">{name}</span>
-          <span className="text-muted-foreground">({formatted.summary})</span>
+        // A shell call's model-written description is already an action
+        // ("Run cart tests"): it leads on its own, without a second verb.
+        verb && typeof formatted.structured?.description === "string" ? (
+          <span className="text-foreground font-medium" title={name}>{formatted.summary}</span>
+        ) : (
+        <span className="inline-flex items-center gap-1">
+          {lead}
+          {verb ? (
+            formatted.summary && <span className="text-muted-foreground">{formatted.summary}</span>
+          ) : (
+            <span className="text-muted-foreground">({formatted.summary})</span>
+          )}
         </span>
+        )
       );
     }
 
     return (
       <span className="inline-flex items-center">
-        <span className="text-foreground font-medium">{name}</span>
-        <span className="text-muted-foreground">()</span>
+        {lead}
+        {!verb && <span className="text-muted-foreground">()</span>}
       </span>
     );
   };
@@ -656,8 +714,12 @@ function ToolExecutionComponent({
     }
     if (isCancelled) return <X className="w-3.5 h-3.5 text-destructive" />;
     if (isCancelling) return <Square className="w-3.5 h-3.5 text-warning-ink animate-pulse" />;
-    if (hasFailed) return <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />;
-    if (isBackgrounded) return <Play className="w-3.5 h-3.5 text-primary" />;
+    if (hasFailed) {
+      return spawnChildWorkflowId
+        ? <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />
+        : <XCircle className="w-3.5 h-3.5 text-destructive" />;
+    }
+    if (isBackgrounded) return <Play className="w-3.5 h-3.5 text-primary-ink" />;
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
         const statusIcons: Record<string, React.ReactNode> = {
@@ -672,7 +734,7 @@ function ToolExecutionComponent({
     }
     if (needsApproval) return <Shield className="w-3.5 h-3.5 text-info" />;
     if (isDenied) return <X className="w-3.5 h-3.5 text-destructive" />;
-    if (isExecuting) return <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />;
+    if (isExecuting) return <Loader2 className="w-3.5 h-3.5 text-primary-ink animate-spin" />;
     if (isPreparing) return <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />;
     if (isRequested) return <Clock className="w-3.5 h-3.5 text-info" />;
     return <Clock className="w-3.5 h-3.5 text-muted-foreground" />;
@@ -684,11 +746,13 @@ function ToolExecutionComponent({
     if (isCancelling) return "Cancelling...";
     if (toolResult?.is_error) {
       if (toolResult.content?.includes("blocked")) return "Blocked";
-      return "Warning";
+      // An error result is a failure (a test run that failed, a command that
+      // exited non-zero), not a warning.
+      return "Failed";
     }
     // A spawned agent whose run failed stopped on an error: a message to it
     // resumes it where it stopped, so it is not shown as a dead end.
-    if (hasFailed) return spawnChildWorkflowId ? "Stopped" : "Warning";
+    if (hasFailed) return spawnChildWorkflowId ? "Stopped" : "Failed";
     if (isBackgrounded) return "Background";
     if (isCompleted) {
       if (isTaskToolFlag && taskTargetStatus) {
@@ -717,8 +781,10 @@ function ToolExecutionComponent({
   // Warnings and in-flight work keep full strength.
   const leftBorderColor = isCancelled
     ? "border-l-2 border-l-muted-foreground/40"
-    : hasFailed || toolResult?.is_error
+    : isBlocked || (hasFailed && spawnChildWorkflowId)
     ? "border-l-2 border-l-warning"
+    : hasFailed || toolResult?.is_error
+    ? "border-l-2 border-l-destructive"
     : isCompleted || toolResult
     ? "border-l-2 border-l-success/30"
     : isExecuting
@@ -738,7 +804,8 @@ function ToolExecutionComponent({
     // in every renderer: ToolCallData.input is absent until the call's
     // arguments arrive, but a renderer's contract is that `input` is present.
     input: resolvedWaitTarget.displayInput ?? {},
-    result: toolResult,
+    result: displayResult,
+    loadFullResult,
     worktreeId: chatWorktreeId,
     chatId,
     isExpanded,
@@ -808,7 +875,7 @@ function ToolExecutionComponent({
 
     const statusStyles: Record<string, { icon: typeof CheckCircle; color: string }> = {
       pending: { icon: Clock, color: "text-muted-foreground" },
-      in_progress: { icon: Zap, color: "text-primary" },
+      in_progress: { icon: Zap, color: "text-primary-ink" },
       completed: { icon: CheckCircle, color: "text-success-ink" },
       failed: { icon: XCircle, color: "text-destructive-ink" },
       blocked: { icon: AlertCircle, color: "text-warning-ink" },
@@ -826,7 +893,7 @@ function ToolExecutionComponent({
             {isPreparing ? (
               <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
             ) : isExecuting ? (
-              <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 text-primary-ink animate-spin" />
             ) : hasFailed ? (
               <AlertCircle className="w-3.5 h-3.5 text-warning-ink" />
             ) : (
@@ -888,26 +955,38 @@ function ToolExecutionComponent({
             <span className="min-w-0 text-xs truncate">
               {formatToolCallDisplay(toolCall.name, resolvedWaitTarget.displayInput)}
             </span>
-            <span className={cn(
-              "px-1.5 py-0.5 rounded text-xs font-medium shrink-0",
-              toolResult?.is_error ? "bg-warning/10 text-warning-ink"
-                : hasFailed ? "bg-warning/10 text-warning-ink"
-                : isCancelled ? "bg-muted text-muted-foreground"
-                : isCompleted ? "bg-success/5 text-success-ink/70"
-                : needsApproval ? "bg-warning/10 text-warning-ink"
-                : isExecuting ? "bg-primary/10 text-primary"
-                : "bg-muted text-muted-foreground"
-            )}>
-              {getStatusText()}
-            </span>
+            {/* Success needs no word — the check carries it — so a long run
+                is not a column of identical "Completed" pills. Every other
+                state is named, and a finished call says how long it took. */}
+            {isCompleted && !hasFailed && !isTaskToolFlag ? (
+              <span className="sr-only">{getStatusText()}</span>
+            ) : (
+              <span className={cn(
+                "px-1.5 py-0.5 rounded text-xs font-medium shrink-0",
+                isBlocked || (hasFailed && spawnChildWorkflowId) ? "bg-warning/10 text-warning-ink"
+                  : hasFailed ? "bg-destructive/10 text-destructive-ink"
+                  : isCancelled ? "bg-muted text-muted-foreground"
+                  : isCompleted ? "bg-muted text-muted-foreground"
+                  : needsApproval ? "bg-warning/10 text-warning-ink"
+                  : isExecuting ? "bg-primary/10 text-primary-ink"
+                  : "bg-muted text-muted-foreground"
+              )}>
+                {getStatusText()}
+              </span>
+            )}
+            {durationLabel && (
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground" title={`Took ${durationLabel}`}>
+                {durationLabel}
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-1 shrink-0">
             {hasFileOpenAffordance && (
-              <Tooltip content="Open file" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Open file" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={openPrimaryFile}
-                className="touch-target inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                className="touch-target inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-medium text-primary-ink transition-colors hover:bg-primary/10"
                 aria-label="Open file"
                 type="button"
               >
@@ -915,8 +994,8 @@ function ToolExecutionComponent({
               </button>
 </Tooltip>
             )}
-            {(isSpawnToolFlag || toolBaseName === "spawn_status") && spawnThreadId && onSelectThread && (
-              <Tooltip content="Open full thread view" placement="bottom" delay={300} wrapperClassName="inline-flex">
+            {(isSpawnToolFlag || toolBaseName === "spawn_status" || toolBaseName === "spawn_send") && spawnThreadId && onSelectThread && (
+              <Tooltip content="Open full thread view" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
                 className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Open full thread view"
@@ -926,7 +1005,7 @@ function ToolExecutionComponent({
 </Tooltip>
             )}
             {isExecuting && !isCancelling && !isSpawnToolFlag && onConvertToBackground && (
-              <Tooltip content="Push to background" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Push to background" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onConvertToBackground(toolCall.id); }}
                 className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Push tool execution to background"
@@ -936,7 +1015,7 @@ function ToolExecutionComponent({
 </Tooltip>
             )}
             {(isExecuting || isCancelling) && onCancel && (
-              <Tooltip content="Cancel" placement="bottom" delay={300} wrapperClassName="inline-flex">
+              <Tooltip content="Cancel" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onCancel(toolCall.id); }}
                 className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Cancel tool execution"
@@ -985,9 +1064,9 @@ function ToolExecutionComponent({
         )}
 
         {/* Denial reason */}
-        {approval?.status === ApprovalStatus.DENIED && approval.denial_reason && (
+        {approval?.status === ApprovalStatus.DENIED && approval.denialReason && (
           <div className="px-2 py-1 border-t border-destructive/20 bg-destructive/5 text-xs text-destructive-ink">
-            Denied: {approval.denial_reason}
+            Denied: {approval.denialReason}
           </div>
         )}
 
@@ -995,8 +1074,22 @@ function ToolExecutionComponent({
         {isExpandable && !shouldShowApprovalUI && isExpanded && (
           <div className={contentClassName}>
             <ToolContentArea ctx={renderContext} />
+            {showTruncatedNotice && (
+              <TruncatedOutputNotice
+                originalSize={toolResult?.original_size}
+                isLoading={fullResult.isFetching}
+                error={fullResult.error ?? undefined}
+                onShowFull={() => {
+                  if (wantFullResult) void fullResult.refetch();
+                  else setWantFullResult(true);
+                }}
+              />
+            )}
           </div>
         )}
+
+        {/* The deploy's outcome stays visible collapsed: the live URL is what the user asked for. */}
+        {shellDeploy && !shouldShowApprovalUI && <DeployedAppCard deploy={shellDeploy} />}
       </div>
   );
 }

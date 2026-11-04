@@ -73,7 +73,7 @@ func TestTerminalWS_MachineNotReadyIsLoggedOnceBelowErrorWithContext(t *testing.
 	for i := 0; i < 3; i++ {
 		first := dialTerminalWSForProject(t, router, "proj-1")
 		require.Equal(t, "error", first["type"])
-		require.Contains(t, first["data"], "no daemon connected", "the browser keys its wait on this marker")
+		require.Equal(t, wsErrorDaemonUnavailable, first["code"], "the browser keys its wait on this code")
 	}
 
 	require.Empty(t, logRecords(logs, "[TerminalWS] Error"), "a machine that is not up is not an ERROR")
@@ -104,6 +104,7 @@ func TestTerminalWS_MachineNotAnsweringIsOneErrorPerWindowWithContext(t *testing
 	for i := 0; i < 4; i++ {
 		first := dialTerminalWSForProject(t, router, "proj-1")
 		require.Equal(t, "error", first["type"], "the browser is still told, and retries")
+		require.Nil(t, first["code"], "not a wait: the browser shows the error")
 	}
 
 	require.Empty(t, logRecords(logs, "[TerminalWS] Error"), "a machine's state is not a per-retry error")
@@ -117,6 +118,17 @@ func TestTerminalWS_MachineNotAnsweringIsOneErrorPerWindowWithContext(t *testing
 	require.Equal(t, terminalTestUserID, record["user_id"])
 	require.Equal(t, "proj-1", record["project_id"])
 	require.Equal(t, "test-daemon-id", record["daemon_id"])
+}
+
+// No machine at all is its own code: there is nothing to wait for, so the
+// browser must not spin on it as it does on daemon_unavailable.
+func TestTerminalWS_NoMachineHasItsOwnCode(t *testing.T) {
+	freshTerminalMachineStateLog(t)
+	router := &terminalCreateRouter{createErr: fmt.Errorf("resolving daemon for command: %w: no machine is connected to your account yet", toolexec.ErrNoDaemon)}
+
+	first := dialTerminalWSForProject(t, router, "proj-1")
+	require.Equal(t, "error", first["type"])
+	require.Equal(t, wsErrorNoMachine, first["code"])
 }
 
 // A real failure stays at ERROR, and now says whose terminal it was.

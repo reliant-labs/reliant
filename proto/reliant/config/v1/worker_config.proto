@@ -13,6 +13,19 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;confi
 // ServerProcessConfig and DatabaseConfig (config.proto, whose header has the
 // rules every config here follows).
 message WorkerConfig {
+  // Separate from the general control-plane API: only the private controller
+  // can redeem hosted action grants. Unset leaves these actions unavailable.
+  string hosted_actions_url = 30 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKER_HOSTED_ACTIONS_URL"
+    optional: true
+    description: "Private HTTPS workspace-controller endpoint for fixed hosted actions"
+  }];
+  string hosted_actions_ca_file = 31 [(forge.v1.config) = {
+    env_var: "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE"
+    optional: true
+    description: "PEM trust bundle for the private hosted-action controller; reloaded for each connection"
+  }];
+
   option (forge.v1.binary_config) = {
     binary: "reliant"
     command: ["server", "worker"]
@@ -98,5 +111,69 @@ message WorkerConfig {
       description: "Workflow-task pollers"
     },
     (buf.validate.field).int32 = {gte: 2}
+  ];
+
+  // Egress limits (internal/egresslimit): what one user, one destination host
+  // and one conversation turn may push through the worker's server-side
+  // egress tools (fetch, websearch, sourcegraph, integration actions such as
+  // http__request). Prod egress shares one NAT address, so an unbounded
+  // caller can get it banned or exhaust its ports for every tenant. A refused
+  // call is a non-fatal tool result ("rate limited, retry after Ns"), never a
+  // failed run.
+  //
+  // The per-minute and burst budgets are FLEET-wide quantities; state is in
+  // process, so each replica enforces 1/egress_replicas of them. Set
+  // egress_replicas to the worker's replica count; unset or 0 means 1 (the
+  // whole budget per replica), so a fleet that forgets it admits up to
+  // replicas times the budget. The worker logs the effective per-replica
+  // budget at startup. The max_concurrent / parallel values bound one process
+  // (and one node's NAT), so they are per replica and not divided.
+  int32 egress_replicas = 24 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKER_EGRESS_REPLICAS"
+      default_value: "1"
+      description: "Worker replicas sharing the egress rate budgets (0: 1)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+  int32 egress_user_per_minute = 25 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKER_EGRESS_USER_PER_MINUTE"
+      default_value: "60"
+      description: "Egress tool calls per minute per user, fleet-wide"
+    },
+    (buf.validate.field).int32 = {gte: 1}
+  ];
+  int32 egress_user_burst = 26 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKER_EGRESS_USER_BURST"
+      default_value: "20"
+      description: "Egress burst per user, fleet-wide"
+    },
+    (buf.validate.field).int32 = {gte: 1}
+  ];
+  int32 egress_user_max_concurrent = 27 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT"
+      default_value: "6"
+      description: "Egress calls in flight per user, per replica"
+    },
+    (buf.validate.field).int32 = {gte: 1}
+  ];
+  int32 egress_host_max_concurrent = 28 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT"
+      default_value: "16"
+      description: "Egress calls in flight to one destination host, per replica"
+    },
+    (buf.validate.field).int32 = {gte: 1}
+  ];
+  int32 egress_turn_max_parallel = 29 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL"
+      default_value: "4"
+      description: "Egress calls of one conversation turn run at once, per replica (the rest wait)"
+    },
+    (buf.validate.field).int32 = {gte: 1}
   ];
 }

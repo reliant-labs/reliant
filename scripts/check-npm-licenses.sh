@@ -145,11 +145,22 @@ if (!fs.existsSync(path.join(dir, "package.json"))) process.exit(0);
 // the tree transitively. npm ls exits non-zero on peer-dep warnings while
 // still emitting valid JSON, so the exit code is deliberately ignored and
 // only unparseable output is treated as failure.
+//
+// A pnpm project (pnpm-lock.yaml) asks pnpm instead: npm ls cannot read the
+// pnpm node_modules layout, and misfiles build tooling as production
+// dependencies. "pnpm list --prod" resolves the same tree (measured on
+// reliant/web: the production set of the npm lockfile it was imported from,
+// plus one optional peer pnpm resolves), with the same fields.
+const isPnpm = fs.existsSync(path.join(dir, "pnpm-lock.yaml"));
 let raw;
 try {
-  raw = execFileSync("npm", ["ls", "--omit=dev", "--all", "--json", "--long"], {
-    cwd: dir, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"],
-  });
+  raw = isPnpm
+    ? execFileSync("pnpm", ["list", "--prod", "--depth", "Infinity", "--json", "--long"], {
+        cwd: dir, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"],
+      })
+    : execFileSync("npm", ["ls", "--omit=dev", "--all", "--json", "--long"], {
+        cwd: dir, encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"],
+      });
 } catch (e) {
   raw = e.stdout;
 }
@@ -177,6 +188,8 @@ try { tree = JSON.parse(raw); } catch (e) {
   console.error(`check-npm-licenses: ${dir}: could not parse npm ls output: ${e.message}`);
   process.exit(2);
 }
+// pnpm lists one entry per workspace project; this directory is the first.
+if (Array.isArray(tree)) tree = tree[0] || {};
 
 // An SPDX expression is not a license: "(MPL-2.0 OR Apache-2.0)" is a CHOICE,
 // and we take the permissive side. Splitting on OR and accepting if ANY
@@ -226,7 +239,7 @@ function walk(node) {
     const version = info.version;
     const key = `${name}@${version}`;
     if (!seen.has(key)) {
-      seen.set(key, { name, version, license: info.license, optional: !!info.optional });
+      seen.set(key, { name, version, license: info.license, optional: !!info.optional, path: info.path });
       walk(info);
     }
   }
@@ -251,6 +264,17 @@ walk(tree);
 // unlicensed dependencies.
 const optionalWanted = new Set();
 (function collectOptional() {
+  if (isPnpm) {
+    // pnpm-lock.yaml does not mark dev entries, but the production tree just
+    // walked is exactly the set whose optionals ship.
+    for (const { path: p } of seen.values()) {
+      if (!p) continue;
+      let d;
+      try { d = JSON.parse(fs.readFileSync(path.join(p, "package.json"), "utf8")); } catch { continue; }
+      for (const n of Object.keys(d.optionalDependencies || {})) optionalWanted.add(n);
+    }
+    return;
+  }
   const lock = path.join(dir, "package-lock.json");
   if (!fs.existsSync(lock)) return;
   let d;

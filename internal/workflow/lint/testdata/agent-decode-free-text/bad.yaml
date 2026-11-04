@@ -1,0 +1,15 @@
+name: fixture
+entry: [triage]
+nodes:
+- id: triage
+  type: workflow
+  ref: builtin://autopilot-agent
+  args:
+    max_turns: 20
+    system_prompt: 'Reply with JSON: {"severity": "..."}'
+- id: route
+  type: compute
+  outputs:
+    severity: "{{ json.decode(nodes.triage.response.summary).?severity.orValue('unknown') }}"
+edges:
+- {from: triage, default: route}

@@ -1,7 +1,11 @@
 /**
  * The sidebar's half of the chat-list policy (WORKFLOW_UI.md §6.2, §6.3):
  *
- *  - The OPEN chat keeps its row even when ListChats({sidebarOnly}) omits it
+ *  - A run (origin other than USER: an automation's trigger, an agent, Run
+ *    now, a builder test) never renders as a chat row unless adopted, even
+ *    when one reaches the list cache: the PR pipeline alone starts tens an
+ *    hour, and they belong in Runs.
+ *  - The OPEN chat keeps its row even when ListChats omits it
  *    (rule 4, the L2 bug). An automation chat opened from Runs or the Inbox is
  *    never in the server list, and one that was listed only while awaiting
  *    input drops out of the next refetch once the user answers. Either way the
@@ -9,46 +13,23 @@
  *  - An adopted automation row carries an origin glyph naming its automation.
  *  - "Move back to Runs" un-adopts, and the row leaves — even while open.
  */
+import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { act, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
-import { ChatState } from "../../gen/reliant/v1/chat_pb";
-import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
+import { ChatOrigin, ChatState } from "../../gen/reliant/v1/chat_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
-import type { ContextMenuItem } from "../ui/ContextMenu";
 
-vi.mock("../ui/Tooltip", () => ({
-  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
-
-vi.mock("../ui/Button", () => ({
-  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
-}));
-
-// The menu renders its items as plain buttons so a test can pick one.
-vi.mock("../ui/ContextMenu", () => ({
-  ContextMenu: ({ items }: { items: ContextMenuItem[] }) => (
-    <div data-testid="context-menu">
-      {items
-        .filter((item) => !item.separator)
-        .map((item) => (
-          <button key={item.label} type="button" onClick={item.onClick}>
-            {item.label}
-          </button>
-        ))}
-    </div>
-  ),
+vi.mock("../forge-ui/tooltip", () => ({
+  default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("../../hooks/useDebounce", () => ({
@@ -69,20 +50,24 @@ vi.mock("../../hooks/chat-queries", () => ({
     data: {
       chats: fixtures.listed,
       lastUserUpdateSequence: 0,
-      mainWorktree: {
-        id: "worktree-main",
-        name: "main",
-        branch: "main",
-        path: "/tmp/project",
-        isMain: true,
-        status: 1,
-      },
+      mainWorktrees: [
+        {
+          id: "worktree-main",
+          name: "main",
+          branch: "main",
+          path: "/tmp/project",
+          isMain: true,
+          status: 1,
+          projectId: "project-1",
+        },
+      ],
     },
     isLoading: false,
   }),
   useChat: (chatId?: string) => ({ data: fixtures.detail?.id === chatId ? fixtures.detail : undefined }),
   useArchivedChats: () => ({ data: [], isFetched: true }),
-  useDeleteChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
+  usePermanentlyDeleteChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
+  useArchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn(), mutate: vi.fn() }),
 }));
@@ -91,7 +76,7 @@ vi.mock("../../hooks/run-queries", () => ({
   useAdoptRun: () => ({ mutate: fixtures.adopt }),
   useUnadoptRun: () => ({ mutate: fixtures.unadopt }),
   useLiveRuns: () => ({ data: undefined }),
-  summarizeLiveAutomations: () => ({ running: 0, needsYou: 0, truncated: false }),
+  summarizeLiveAutomations: () => ({ running: 0, truncated: false }),
 }));
 
 vi.mock("../../hooks/trigger-queries", () => ({
@@ -124,7 +109,7 @@ function chat(overrides: Partial<ChatFixture> & { id: string }): ChatFixture {
     updatedAt: "2024-01-01T00:00:00.000Z",
     lastMessageAt: "2024-01-01T00:00:00.000Z",
     unread: false,
-    state: ChatState.ACTIVE,
+    state: ChatState.IDLE,
     worktreeId: WORKTREE_ID,
     projectId: PROJECT_ID,
     ...overrides,
@@ -176,18 +161,17 @@ beforeEach(() => {
   useActivityStore.setState({ activities: new Map() } as Partial<ReturnType<typeof useActivityStore.getState>>);
   // Empty on purpose: the sidebar groups from the chat list alone.
   useWorktreeStore.setState({
-    worktrees: [],
-    currentWorktree: null,
+    currentWorktreeId: null,
+    currentWorktreeProjectId: null,
     switchWorktreeContext: vi.fn(async () => undefined),
   } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
-  useProcessStore.setState({ fetchProcesses: vi.fn() } as Partial<ReturnType<typeof useProcessStore.getState>>);
   useProjectStore.setState({
     currentProject: {
       id: PROJECT_ID,
       name: "Project",
       path: "/tmp/project",
       is_git_repo: true,
-      worktree_count: 1,
+      is_forge: false,
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-01T00:00:00.000Z",
       last_active: "2024-01-01T00:00:00.000Z",
@@ -243,12 +227,23 @@ describe("the open chat stays in the sidebar (L2)", () => {
     expect(rowFor(scheduledRun.id)).toBeNull();
   });
 
-  it("does not pin a chat from another project", () => {
+  it("does not pin a chat from another project into a one-project list", () => {
+    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
     fixtures.detail = { ...scheduledRun, projectId: "project-other" };
     openChat(scheduledRun.id);
     renderSidebar();
 
     expect(rowFor(scheduledRun.id)).toBeNull();
+    useWorkspaceStateStore.setState({ projectFilterId: null });
+  });
+
+  it("pins a chat from any project into the All projects list", () => {
+    useWorkspaceStateStore.setState({ projectFilterId: null });
+    fixtures.detail = { ...scheduledRun, projectId: "project-other" };
+    openChat(scheduledRun.id);
+    renderSidebar();
+
+    expect(rowFor(scheduledRun.id)).not.toBeNull();
   });
 });
 
@@ -277,7 +272,7 @@ describe("Move back to Runs", () => {
     act(() => {
       row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
     });
-    return screen.getByTestId("context-menu");
+    return screen.getByRole("menu", { name: "Chat actions" });
   }
 
   it("is offered on an adopted run and not on an interactive chat", () => {
@@ -296,7 +291,7 @@ describe("Move back to Runs", () => {
 
     const moveBack = within(openMenuFor(adoptedRun.id)).getByText("Move back to Runs");
     act(() => moveBack.click());
-    expect(fixtures.unadopt).toHaveBeenCalledWith(adoptedRun.id, expect.anything());
+    expect(fixtures.unadopt).toHaveBeenCalledWith({ chatId: adoptedRun.id }, expect.anything());
 
     // The server no longer lists it, and it is still the open chat: without
     // the release it would stay pinned and the action would look broken.
@@ -309,5 +304,55 @@ describe("Move back to Runs", () => {
     );
 
     expect(rowFor(adoptedRun.id)).toBeNull();
+  });
+});
+
+describe("runs stay out of the chat list", () => {
+  const prReview = chat({
+    id: "chat-pr-review",
+    title: "Review queued reliant-labs/reliant#1870.",
+    origin: ChatOrigin.AUTOMATION,
+    launchKind: "integration",
+    triggerId: "trg-nightly",
+  });
+  const agentRun = chat({ id: "chat-agent-run", title: "cicd-probe", origin: ChatOrigin.AGENT, launchKind: "agent.start_run" });
+  const builderTest = chat({ id: "chat-builder-test", title: "test run", origin: ChatOrigin.BUILDER_TEST, launchKind: "builder.test" });
+  const userChat = chat({ id: "chat-user", title: "Fix the sidebar", origin: ChatOrigin.USER, launchKind: "chat.start" });
+  const adoptedPrReview = {
+    ...prReview,
+    id: "chat-pr-review-adopted",
+    title: "Review I took over",
+    adoptedAt: "2024-01-02T00:00:00.000Z",
+  };
+
+  it("renders a person's chat and an adopted run, and no unadopted run", () => {
+    // A list that somehow holds runs (a stale cache, an upsert): the client
+    // applies the same rule as the server.
+    fixtures.listed = [userChat, prReview, agentRun, builderTest, adoptedPrReview];
+    renderSidebar();
+
+    expect(rowFor(userChat.id)).not.toBeNull();
+    expect(rowFor(adoptedPrReview.id)).not.toBeNull();
+    expect(rowFor(prReview.id)).toBeNull();
+    expect(rowFor(agentRun.id)).toBeNull();
+    expect(rowFor(builderTest.id)).toBeNull();
+    expect(screen.queryByText("Review queued reliant-labs/reliant#1870.")).toBeNull();
+  });
+
+  it("keys on origin, not on the launch kind", () => {
+    // An automation's run continued with a chat.start event is still a run.
+    fixtures.listed = [userChat, { ...prReview, launchKind: "chat.start" }];
+    renderSidebar();
+
+    expect(rowFor(prReview.id)).toBeNull();
+  });
+
+  it("still shows the run the user has open (deep link, Inbox, Runs)", () => {
+    fixtures.listed = [userChat, prReview];
+    fixtures.detail = prReview;
+    openChat(prReview.id);
+    renderSidebar();
+
+    expect(rowFor(prReview.id)).not.toBeNull();
   });
 });

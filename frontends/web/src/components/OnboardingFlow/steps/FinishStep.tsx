@@ -3,7 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { logger } from "@/lib/logger";
 import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { ensureProject, finalizeOnboardingSideEffects } from "../useOnboardingComplete";
 import { leaveOnboarding } from "../leaveOnboarding";
 import { markOnboardingFinalized } from "../analytics";

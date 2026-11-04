@@ -15,6 +15,109 @@ package worktreereclaim
 import (
 	"strconv"
 	"strings"
+	"time"
+)
+
+// RecoveryCapture identifies one immutable, locally pinned, publication-safe
+// capture. It contains neither credentials nor filesystem contents.
+type RecoveryCapture struct {
+	Version         int       `json:"version"`
+	CaptureID       string    `json:"capture_id"`
+	WorktreeID      string    `json:"worktree_id"`
+	RepoID          string    `json:"repo_id"`
+	Rel             string    `json:"rel"`
+	RemoteURL       string    `json:"remote_url"`
+	RecoveryRef     string    `json:"recovery_ref"`
+	CommitOID       string    `json:"commit_oid"`
+	ManifestDigest  string    `json:"manifest_digest"`
+	HeadOID         string    `json:"head_oid"`
+	IndexTreeOID    string    `json:"index_tree_oid"`
+	DiskTreeOID     string    `json:"disk_tree_oid"`
+	ObjectFormat    string    `json:"object_format"`
+	InventoryDigest string    `json:"inventory_digest"`
+	SecretPolicy    string    `json:"secret_policy"`
+	HistoryTips     []string  `json:"history_tips"`
+	UntrackedPaths  []string  `json:"untracked_paths"`
+	CapturedAt      time.Time `json:"captured_at"`
+}
+
+// RecoveryReceipt is issued only after an independent exact remote fetch,
+// complete object-closure validation, and manifest verification.
+type RecoveryReceipt struct {
+	Capture         RecoveryCapture `json:"capture"`
+	VerifiedAt      time.Time       `json:"verified_at"`
+	VerifierVersion string          `json:"verifier_version"`
+}
+
+// RecoveryActivity is complete daemon observation, not directory mtime.
+type RecoveryActivity struct {
+	Generation      int64     `json:"generation"`
+	ObservationID   string    `json:"observation_id"`
+	ObservedSince   time.Time `json:"observed_since"`
+	LastActivity    time.Time `json:"last_activity"`
+	ObservedThrough time.Time `json:"observed_through"`
+	Complete        bool      `json:"complete"`
+}
+
+// RecoveryAuthorization fences one short-lived finalization attempt.
+type RecoveryAuthorization struct {
+	RecoveryID         string    `json:"recovery_id"`
+	CaptureID          string    `json:"capture_id"`
+	WorktreeID         string    `json:"worktree_id"`
+	Fence              string    `json:"fence"`
+	ManifestDigest     string    `json:"manifest_digest"`
+	ObservationID      string    `json:"observation_id"`
+	ActivityGeneration int64     `json:"activity_generation"`
+	ExpiresAt          time.Time `json:"expires_at"`
+}
+
+// RecoveryRequest is the additive Git-only recovery protocol. Legacy Remove
+// and local Trees are not authorization for this protocol.
+type RecoveryRequest struct {
+	Worktree      Worktree               `json:"worktree"`
+	RecoveryID    string                 `json:"recovery_id"`
+	Captures      []RecoveryCapture      `json:"captures"`
+	Receipts      []RecoveryReceipt      `json:"receipts"`
+	Activity      RecoveryActivity       `json:"activity"`
+	Authorization *RecoveryAuthorization `json:"authorization,omitempty"`
+}
+
+type RecoveryResponse struct {
+	Outcome        Outcome           `json:"outcome"`
+	Reason         HeldReason        `json:"reason,omitempty"`
+	Detail         string            `json:"detail,omitempty"`
+	Captures       []RecoveryCapture `json:"captures,omitempty"`
+	Receipts       []RecoveryReceipt `json:"receipts,omitempty"`
+	Activity       RecoveryActivity  `json:"activity"`
+	RemovedRepoIDs []string          `json:"removed_repo_ids,omitempty"`
+}
+
+// RecoveryRestoreRequest always names a separate destination and branch.
+type RecoveryRestoreRequest struct {
+	RecoveryID      string            `json:"recovery_id"`
+	IdempotencyKey  string            `json:"idempotency_key"`
+	DestinationPath string            `json:"destination_path"`
+	Branch          string            `json:"branch"`
+	Captures        []RecoveryCapture `json:"captures"`
+}
+
+type RecoveryRestoreResponse struct {
+	Outcome         Outcome    `json:"outcome"`
+	Reason          HeldReason `json:"reason,omitempty"`
+	Detail          string     `json:"detail,omitempty"`
+	Path            string     `json:"path,omitempty"`
+	Branch          string     `json:"branch,omitempty"`
+	RestoredRepoIDs []string   `json:"restored_repo_ids,omitempty"`
+}
+
+const (
+	ReasonUnsupportedRecovery HeldReason = "unsupported_recovery"
+	ReasonSensitiveRecovery   HeldReason = "sensitive_recovery"
+	ReasonRemoteProof         HeldReason = "remote_proof_required"
+	ReasonObservationGap      HeldReason = "observation_gap"
+	OutcomeCaptured           Outcome    = "captured"
+	OutcomeVerified           Outcome    = "verified"
+	OutcomeRestored           Outcome    = "restored"
 )
 
 // HeldReason says why a worktree was not removed.
@@ -63,6 +166,17 @@ const (
 	// under this archived row's directory, so removing it would remove theirs.
 	// Decided by the server, which never sends such a row to the daemon.
 	ReasonSharedWithLive HeldReason = "shared-with-live-workspace"
+	// ReasonNoCheckout: the machine holding the workspace has no installed
+	// checkout of its project on record, so there is no repository to check
+	// its branch against, snapshot into or delete a branch from. Decided by
+	// the server, which never sends such a row to be removed: it never
+	// guesses a repository path (projects.path is another machine's).
+	ReasonNoCheckout HeldReason = "no-checkout-on-record"
+	// ReasonNoMachine: no machine is on record for the archived workspace (a
+	// legacy row, or its machine was removed). Decided by the server, which
+	// sends it only as a find; the connected machine that still has its
+	// folder claims it, and it is settled through that machine's checkout.
+	ReasonNoMachine HeldReason = "no-machine-on-record"
 	// ReasonRecentlyActive: touched within the idle floor.
 	ReasonRecentlyActive HeldReason = "recently_active"
 	// ReasonStale: the request's fence no longer matches the lock.
@@ -176,7 +290,23 @@ type Worktree struct {
 	KeepFiles bool `json:"keep_files,omitempty"`
 	// ProbeIdle (ACTIVE requests only) asks whether the worktree is finished
 	// with, in addition to locking it; see OutcomeIdleDone.
-	ProbeIdle  bool       `json:"probe_idle,omitempty"`
+	ProbeIdle bool `json:"probe_idle,omitempty"`
+	// ProbeRecoverableAfterSeconds asks for read-only whole-worktree idle
+	// eligibility. It never authorizes deleting files from a live checkout.
+	ProbeRecoverableAfterSeconds int64 `json:"probe_recoverable_after_s,omitempty"`
+	// ProbeLanded (ACTIVE requests only) asks whether the worktree's work has
+	// landed: every checkout clean and its HEAD merged into its base branch
+	// on the remote (see Result.Landed). Always read-only.
+	ProbeLanded bool `json:"probe_landed,omitempty"`
+	// ShedAfterSeconds asks the daemon to shed the worktree's regenerable
+	// output (node_modules, build output, tool caches) once nothing in it has
+	// changed for this long and no process uses it (shedRegenerable). The
+	// server sends it for a live row no chat is running in, and for an
+	// archived row held for its work; zero never sheds.
+	ShedAfterSeconds int64 `json:"shed_after_s,omitempty"`
+	// ShedLanded is ignored; complete worktree retirement requires archival.
+	// It cannot authorize deleting any file from a live checkout.
+	ShedLanded bool       `json:"shed_landed,omitempty"`
 	BaseBranch string     `json:"base_branch,omitempty"`
 	Checkouts  []Checkout `json:"checkouts,omitempty"`
 }
@@ -203,7 +333,19 @@ type Result struct {
 	// root (outside every checkout) were saved to before the workspace was
 	// removed; empty when there were none.
 	ReclaimedTo string `json:"reclaimed_to,omitempty"`
-	Error       string `json:"error,omitempty"`
+	// Landed (an ACTIVE worktree asked with ProbeLanded) says its work has
+	// landed and, once archived, the automatic removal would take it: every
+	// checkout is clean, holds nothing on no branch, and its HEAD is in its
+	// base branch on the remote (an ancestor, the same patches, one squash
+	// commit, or the head of a merged pull request), and the workspace holds
+	// no data, foreign checkout or other repository. A checkout with no
+	// commits beyond its base counts as landed. The daemon never removes an
+	// active worktree; whether to archive it is the server's call.
+	Landed bool `json:"landed,omitempty"`
+	// RecoverableIdle reports a complete clean, pushed/merged, unused checkout
+	// whose files (including caches) have all been quiet for the requested floor.
+	RecoverableIdle bool   `json:"recoverable_idle,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // Request is the payload of worktree.reconcile and worktree.snapshot_remove.

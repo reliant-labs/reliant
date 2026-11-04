@@ -229,7 +229,7 @@ describe('ProtoFieldRenderer says what a value looks like', () => {
     const hint = screen.getByText('The SM… id returned by Send message.')
     expect(input).toHaveAttribute('aria-describedby', hint.id)
     // The description is not repeated behind a ? when there is nothing more to say.
-    expect(screen.queryByRole('button', { name: 'Help' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Help/ })).toBeNull()
   })
 
   it('keeps the ? for what the description does not say, and shows the type beside the label', () => {
@@ -248,7 +248,7 @@ describe('ProtoFieldRenderer says what a value looks like', () => {
     )
     expect(screen.getByText('list of tool calls')).toBeInTheDocument()
     expect(screen.getByText('The tool calls a Call LLM step returned.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Help/ })).toBeInTheDocument()
   })
 
   it('shows the expression example in Expression mode, and the shape of one when the example is a literal', () => {

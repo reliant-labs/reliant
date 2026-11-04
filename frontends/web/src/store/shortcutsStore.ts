@@ -5,7 +5,7 @@
 // This store manages keyboard shortcuts state. The default shortcuts are
 // generated from the source of truth at: config/shortcuts.yaml
 //
-// To modify shortcuts, edit config/shortcuts.yaml and run: make generate-shortcuts
+// To modify shortcuts, edit config/shortcuts.yaml and run: task generate:docs:shortcuts
 //
 // Bindings are authored and persisted as STRINGS ("Cmd+Shift+P", "Cmd+K C").
 // The platform fold (Cmd -> Meta on macOS, Control elsewhere) happens here at
@@ -19,7 +19,11 @@ import { api } from "../api/client";
 import { logger } from "../lib/logger";
 import { isPackagedRendererOrigin } from "../lib/protocol";
 import { parseBinding } from "../lib/keyboard/chord";
-import { detectPlatform, type KeyboardPlatform } from "../lib/keyboard/platform";
+import {
+  detectPlatform,
+  formatBinding,
+  type KeyboardPlatform,
+} from "../lib/keyboard/platform";
 import { getReservation, type Reservation } from "../lib/keyboard/reserved";
 import { ShortcutRegistry, type ResolvedShortcut } from "../lib/keyboard/registry";
 import { defaultShortcuts } from "./shortcutsData.generated";
@@ -39,6 +43,11 @@ export interface ShortcutDefinition {
   handler: string;
   allowInInput?: boolean;
   passthrough?: boolean;
+  /**
+   * Exists only in the desktop app — what a browser tab provides itself, like
+   * find-in-page. Unbound in a browser, whatever the user remapped it to.
+   */
+  desktopOnly?: boolean;
 }
 
 interface ShortcutsState {
@@ -90,7 +99,10 @@ function overrideUnavailable(
  *
  * A user override wins wherever it can fire. Otherwise desktop takes the plain
  * default and the browser takes the web default, which is where chords the
- * browser reserves (Cmd+T, Cmd+W) are replaced by ones it releases.
+ * browser reserves (Cmd+T, Cmd+W) are replaced by ones it releases. A
+ * desktop-only shortcut is unbound in a browser, override or not: overrides
+ * follow the user between surfaces, and there the browser's own feature is
+ * the one the key should reach.
  *
  * Every surface that SHOWS a binding must use this, so what the UI says is
  * what the dispatcher actually matches.
@@ -98,10 +110,11 @@ function overrideUnavailable(
 export function effectiveBinding(
   shortcut: Pick<
     ShortcutDefinition,
-    "currentBinding" | "defaultBinding" | "defaultWebBinding"
+    "currentBinding" | "defaultBinding" | "defaultWebBinding" | "desktopOnly"
   >,
   platform: KeyboardPlatform = detectPlatform(),
 ): string {
+  if (shortcut.desktopOnly && !platform.isDesktop) return "";
   const surfaceDefault = platform.isDesktop
     ? shortcut.defaultBinding
     : shortcut.defaultWebBinding;
@@ -110,6 +123,43 @@ export function effectiveBinding(
     return surfaceDefault;
   }
   return override;
+}
+
+/**
+ * A shortcut's binding as the user should see it on this surface ("⌘⌥N" in a
+ * Mac browser, "⌘T" in the desktop app), or "" when it is unbound.
+ *
+ * The one way to put a binding in front of the user. A literal "Cmd+T" in a
+ * tooltip is the desktop chord, and in a browser it opens a browser tab instead
+ * (shortcutLabels.test.ts rejects them).
+ */
+export function shortcutLabel(
+  shortcut: Pick<
+    ShortcutDefinition,
+    "currentBinding" | "defaultBinding" | "defaultWebBinding" | "desktopOnly"
+  >,
+  platform: KeyboardPlatform = detectPlatform(),
+): string {
+  const authored = effectiveBinding(shortcut, platform);
+  if (!authored) return "";
+  return formatBinding(parseBinding(authored, platform.isMac), platform.isMac);
+}
+
+/**
+ * The live label for a shortcut id: follows remaps, and is "" until shortcuts
+ * load. Falls back to the generated default so a label never waits on the
+ * backend to say something true.
+ */
+export function useShortcutLabel(id: string): string {
+  const shortcut = useShortcutsStore((state) => state.shortcuts[id]);
+  if (shortcut) return shortcutLabel(shortcut);
+  const fallback = defaultShortcuts[id];
+  return fallback ? shortcutLabel({ ...fallback, currentBinding: null }) : "";
+}
+
+/** "Close tab (⌘K then X)" — a tooltip with its shortcut, when it has one. */
+export function withShortcut(text: string, label: string): string {
+  return label ? `${text} (${label})` : text;
 }
 
 /**

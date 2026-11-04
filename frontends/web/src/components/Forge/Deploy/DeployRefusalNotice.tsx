@@ -29,10 +29,10 @@
  *                           the cluster converging toward two manifest streams.
  *
  * The facts are read off the structured error detail, never parsed from the
- * message string. See deployRefusalOf in api/forge-grpc.ts.
+ * message string. See deployRefusalOf in hooks/forge-model.ts.
  */
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { describeActualBinding, type DeployRefusal } from "@/services/forge/deploy";
 
 import { HOSTED_REFUSAL_COPY, REFUSAL_COPY, REFUSAL_ICON } from "./deployVocabulary";
@@ -77,7 +77,7 @@ export function DeployRefusalNotice({
     <section
       data-testid="deploy-refusal"
       data-reason={refusal.reason}
-      className="space-y-3 rounded-lg border border-solid border-warning/50 bg-warning/10 px-4 py-3"
+      className="space-y-3 rounded-lg border border-solid border-warning-border bg-warning-surface px-4 py-3"
     >
       <div className="flex items-center gap-2 text-warning-ink">
         <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -87,7 +87,7 @@ export function DeployRefusalNotice({
       </div>
 
       {/* This build's own explanation of what to do about THIS reason. */}
-      <p className="text-xs text-foreground" data-testid="deploy-refusal-explanation">
+      <p className="text-xs text-ink" data-testid="deploy-refusal-explanation">
         {copy.explanation}
       </p>
 
@@ -95,7 +95,7 @@ export function DeployRefusalNotice({
           above so an improved server message never has to be parsed to be
           believed, and never replaces the actionable text. */}
       {refusal.detail && (
-        <p className="text-2xs text-muted-foreground" data-testid="deploy-refusal-detail">
+        <p className="text-2xs text-ink-muted" data-testid="deploy-refusal-detail">
           {refusal.detail}
         </p>
       )}
@@ -112,12 +112,12 @@ export function DeployRefusalNotice({
           className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]"
           data-testid="deploy-refusal-context-diff"
         >
-          <dt className="text-muted-foreground">You approved the cluster</dt>
-          <dd className="font-mono text-foreground" data-testid="deploy-refusal-expected-context">
+          <dt className="text-ink-muted">You approved the cluster</dt>
+          <dd className="font-mono text-ink" data-testid="deploy-refusal-expected-context">
             {refusal.expectedDeclaredContext || "an unnamed cluster"}
           </dd>
-          <dt className="text-muted-foreground">It now declares</dt>
-          <dd className="font-mono text-destructive-ink" data-testid="deploy-refusal-actual-context">
+          <dt className="text-ink-muted">It now declares</dt>
+          <dd className="font-mono text-danger-ink" data-testid="deploy-refusal-actual-context">
             {refusal.actualDeclaredContext || "no cluster at all"}
           </dd>
         </dl>
@@ -129,14 +129,14 @@ export function DeployRefusalNotice({
           className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]"
           data-testid="deploy-refusal-release-diff"
         >
-          <dt className="text-muted-foreground">You reviewed</dt>
-          <dd className="font-mono text-foreground" data-testid="deploy-refusal-expected-release">
+          <dt className="text-ink-muted">You reviewed</dt>
+          <dd className="font-mono text-ink" data-testid="deploy-refusal-expected-release">
             {refusal.expectedUnbound
               ? "no release binding"
               : refusal.expectedCurrentRelease || "an unnamed release"}
           </dd>
-          <dt className="text-muted-foreground">Actually bound to</dt>
-          <dd className="font-mono text-foreground" data-testid="deploy-refusal-actual-release">
+          <dt className="text-ink-muted">Actually bound to</dt>
+          <dd className="font-mono text-ink" data-testid="deploy-refusal-actual-release">
             {describeActualBinding(refusal)}
           </dd>
         </dl>
@@ -147,10 +147,10 @@ export function DeployRefusalNotice({
       {refusal.reason === "guard-refused" && (refusal.guardFix || refusal.guardReason) && (
         <div className="space-y-1" data-testid="deploy-refusal-guard">
           {refusal.guardReason && (
-            <p className="text-2xs text-muted-foreground">Reason: {refusal.guardReason}</p>
+            <p className="text-2xs text-ink-muted">Reason: {refusal.guardReason}</p>
           )}
           {refusal.guardFix && (
-            <p className="text-xs text-foreground" data-testid="deploy-refusal-guard-fix">
+            <p className="text-xs text-ink" data-testid="deploy-refusal-guard-fix">
               {refusal.guardFix}
             </p>
           )}
@@ -170,7 +170,7 @@ export function DeployRefusalNotice({
             >
               {copy.action}
             </Button>
-            <span className="font-mono text-2xs text-muted-foreground" data-testid="deploy-refusal-handle">
+            <span className="font-mono text-2xs text-ink-muted" data-testid="deploy-refusal-handle">
               {refusal.runningHandle}
             </span>
           </>
@@ -189,7 +189,7 @@ export function DeployRefusalNotice({
         {alreadyRunning && !canWatch && (
           // Refused as already-running but with no handle to follow: say so
           // rather than silently offering a re-plan as though it were the point.
-          <span className="text-2xs text-muted-foreground">
+          <span className="text-2xs text-ink-muted">
             The running deploy&apos;s handle was not reported, so it cannot be watched from here.
           </span>
         )}

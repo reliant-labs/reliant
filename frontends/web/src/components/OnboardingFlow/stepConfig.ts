@@ -210,7 +210,7 @@ export function deriveStep(
   if (!plan.intent) return 'project-choice';
   if (plan.intent === 'existing_codebase') return 'github-connect';
 
-  // Cloud + build_app — terminal step is project-choice (it owns the
+  // Cloud + build_app or chat — terminal step is project-choice (it owns the
   // completeOnboarding call). Until completion fires, leave the user there.
   return 'project-choice';
 }

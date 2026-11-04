@@ -153,7 +153,7 @@ func (e *wakingError) Error() string {
 func (e *wakingError) Unwrap() error { return e.cause }
 
 // ErrorClass: an asleep machine waking for a request is the system working,
-// not a fault — a user error that logs at INFO and never reaches Sentry.
+// not a fault — a user error that logs at INFO and never becomes an issue.
 func (e *wakingError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // connectError is the wire form: Unavailable, with a DaemonWaking detail naming

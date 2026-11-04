@@ -194,7 +194,11 @@ func TestGuard_RefusesPastTheThresholdAndRecoversWhenSpaceReturns(t *testing.T) 
 		"To free more, safely: load the `machine-disk` skill", // how to free more
 		"archive the worktrees you are done with",
 		"do not run `go clean -cache`",
-		"Never glob-delete under /tmp", // and what never to do
+		"a light command is not a way around this",            // a light command is no way out
+		"are refused on this machine whatever the disk state", // go clean / docker prune are refused too
+		"`reliant forge storage gc --apply`",                  // the safe remedy, by name
+		"the machine's steward",                               // who trims the caches
+		"Never glob-delete under /tmp",                        // and what never to do
 		"start again once the volume is below 93%",
 	} {
 		if !strings.Contains(why, want) {

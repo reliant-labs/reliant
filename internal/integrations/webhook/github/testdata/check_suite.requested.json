@@ -1,0 +1,57 @@
+{
+  "action": "requested",
+  "check_suite": {
+    "id": 7007,
+    "node_id": "CS_kwDOAB",
+    "head_branch": "gh-readonly-queue/main/pr-7-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "head_sha": "dddddddddddddddddddddddddddddddddddddddd",
+    "status": "queued",
+    "conclusion": null,
+    "url": "https://api.github.com/repos/acme/app/check-suites/7007",
+    "before": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "after": "dddddddddddddddddddddddddddddddddddddddd",
+    "pull_requests": [],
+    "app": {
+      "id": 1041943,
+      "slug": "reliant-labs",
+      "node_id": "A_kwHOAB",
+      "name": "Reliant",
+      "owner": {
+        "login": "reliant-labs",
+        "id": 1,
+        "type": "Organization"
+      }
+    },
+    "created_at": "2026-10-05T09:00:00Z",
+    "updated_at": "2026-10-05T09:00:00Z"
+  },
+  "repository": {
+    "id": 123456,
+    "node_id": "R_kgDOAB",
+    "name": "app",
+    "full_name": "acme/app",
+    "private": true,
+    "owner": {
+      "login": "acme",
+      "id": 9001,
+      "type": "Organization"
+    },
+    "html_url": "https://github.com/acme/app",
+    "default_branch": "main",
+    "description": "The app",
+    "fork": false
+  },
+  "sender": {
+    "login": "octocat",
+    "id": 1,
+    "node_id": "MDQ6VXNlcjE=",
+    "type": "User",
+    "site_admin": false,
+    "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4",
+    "html_url": "https://github.com/octocat"
+  },
+  "installation": {
+    "id": 98765,
+    "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uOTg3NjU="
+  }
+}

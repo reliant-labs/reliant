@@ -92,17 +92,17 @@ describe("tourStore — URL refactor contract", () => {
 
   describe("state shape", () => {
     it("does NOT expose currentStepId on the state", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect("currentStepId" in state).toBe(false);
     });
 
     it("does NOT expose isWizardActive on the state", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect("isWizardActive" in state).toBe(false);
     });
 
     it("exposes the persistence fields", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect("hasCompletedOnboarding" in state).toBe(true);
       expect("completedSteps" in state).toBe(true);
       expect("skippedSteps" in state).toBe(true);
@@ -116,32 +116,32 @@ describe("tourStore — URL refactor contract", () => {
 
   describe("methods removed", () => {
     it("does NOT expose startWizard", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect("startWizard" in state).toBe(false);
     });
 
     it("does NOT expose nextStep", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect("nextStep" in state).toBe(false);
     });
 
     it("does NOT expose previousStep", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect("previousStep" in state).toBe(false);
     });
 
     it("does NOT expose skipAll (skipAll lives on useTourNavigation now)", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect("skipAll" in state).toBe(false);
     });
 
     it("does NOT expose goToStep (navigation is URL-driven via useTourNavigation)", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect("goToStep" in state).toBe(false);
     });
 
     it("does NOT expose closeWizard / resumeWizard / restartWizard", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect("closeWizard" in state).toBe(false);
       expect("resumeWizard" in state).toBe(false);
       expect("restartWizard" in state).toBe(false);
@@ -152,7 +152,7 @@ describe("tourStore — URL refactor contract", () => {
 
   describe("methods retained", () => {
     it("exposes loadState, completeStep, skipStep, saveTourState", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect(typeof state.loadState).toBe("function");
       expect(typeof state.completeStep).toBe("function");
       expect(typeof state.skipStep).toBe("function");
@@ -160,17 +160,17 @@ describe("tourStore — URL refactor contract", () => {
     });
 
     it("exposes detectProjectCode", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect(typeof state.detectProjectCode).toBe("function");
     });
 
     it("exposes markTourCompleted", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect(typeof state.markTourCompleted).toBe("function");
     });
 
     it("exposes resetTourProgress", () => {
-      const state = useTourStore.getState() as Record<string, unknown>;
+      const state = useTourStore.getState() as unknown as Record<string, unknown>;
       expect(typeof state.resetTourProgress).toBe("function");
     });
   });

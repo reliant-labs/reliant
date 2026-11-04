@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import React from "react";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
-import type { Worktree } from "../../../store/worktreeStore";
 
 // ---------------------------------------------------------------------------
 // Opening the terminal on a just-created workspace started the shell in the
@@ -16,13 +17,11 @@ import type { Worktree } from "../../../store/worktreeStore";
 // in the workspace's own directory once it settles.
 // ---------------------------------------------------------------------------
 
-vi.mock("../../../api/worktree-grpc", () => ({
-  worktreeGrpc: { list: vi.fn(), listAll: vi.fn(), create: vi.fn() },
-}));
 
-vi.mock("../../../api/terminal-grpc", () => ({
-  terminalApi: { closeSession: vi.fn().mockResolvedValue({ success: true, message: "" }) },
-}));
+// Closing a tab calls TerminalService.CloseSession; answer it in memory.
+setTransport(
+  mockTransport({ "TerminalService.CloseSession": { response: { success: true, message: "" } } }),
+);
 
 // The xterm child is not what this is about; render a marker carrying the
 // working directory the session was created with.
@@ -35,6 +34,10 @@ import { TerminalPanel } from "../TerminalPanel";
 import { useWorktreeStore } from "../../../store/worktreeStore";
 import { useTerminalStore } from "../../../store/terminalStore";
 import { useProjectStore } from "../../../store/projectStore";
+import { type Worktree } from "../../../hooks/worktree-queries";
+import { setWorktreesForTest } from "../../../test/worktreeCache";
+import { withAppQueryClient } from "../../../test/withAppQueryClient";
+import { queryClient } from "../../../lib/query-client";
 
 const projectId = "project-1";
 const projectPath = "/home/u/src/proj";
@@ -84,20 +87,20 @@ beforeEach(() => {
   useProjectStore.setState({
     currentProject: { id: projectId, path: projectPath } as never,
   });
-  useWorktreeStore.setState({
+  setWorktreesForTest({
     worktrees: [mainWorktree, creatingWorktree],
     currentWorktree: creatingWorktree,
-    hasLoaded: true,
   });
 });
 
 afterEach(() => {
   cleanup();
+  queryClient.clear();
 });
 
 describe("TerminalPanel on a workspace that is still being created", () => {
   it("does not start a terminal in the project root", () => {
-    render(React.createElement(TerminalPanel));
+    render(withAppQueryClient(React.createElement(TerminalPanel)));
 
     expect(sessionsFor("wt-new")).toEqual([]);
     expect(useTerminalStore.getState().sessions.map((s) => s.workingDir)).not.toContain(projectPath);
@@ -105,12 +108,12 @@ describe("TerminalPanel on a workspace that is still being created", () => {
   });
 
   it("starts the terminal in the workspace directory once it settles", () => {
-    render(React.createElement(TerminalPanel));
+    render(withAppQueryClient(React.createElement(TerminalPanel)));
     expect(sessionsFor("wt-new")).toEqual([]);
 
     const settled = { ...creatingWorktree, path: workspacePath, status: WorktreeStatus.ACTIVE };
     act(() => {
-      useWorktreeStore.setState({
+      setWorktreesForTest({
         worktrees: [mainWorktree, settled],
         currentWorktree: settled,
       });
@@ -123,9 +126,9 @@ describe("TerminalPanel on a workspace that is still being created", () => {
 
   it("explains a failed workspace instead of opening a terminal anywhere", () => {
     const failed = { ...creatingWorktree, status: WorktreeStatus.FAILED };
-    useWorktreeStore.setState({ worktrees: [mainWorktree, failed], currentWorktree: failed });
+    setWorktreesForTest({ worktrees: [mainWorktree, failed], currentWorktree: failed });
 
-    render(React.createElement(TerminalPanel));
+    render(withAppQueryClient(React.createElement(TerminalPanel)));
 
     expect(useTerminalStore.getState().sessions).toEqual([]);
     expect(screen.getByText(/failed to set up/i)).toBeInTheDocument();
@@ -140,7 +143,7 @@ describe("TerminalPanel on a workspace that is still being created", () => {
       is_main: false,
       deleted_at: now,
     });
-    useWorktreeStore.setState({ worktrees: [mainWorktree, archived], currentWorktree: mainWorktree });
+    setWorktreesForTest({ worktrees: [mainWorktree, archived], currentWorktree: mainWorktree });
     useTerminalStore.setState({
       sessions: [{
         id: "terminal-archived",
@@ -156,15 +159,15 @@ describe("TerminalPanel on a workspace that is still being created", () => {
       isOpen: true,
     });
 
-    render(React.createElement(TerminalPanel));
+    render(withAppQueryClient(React.createElement(TerminalPanel)));
 
     expect(screen.queryByTestId("terminal-terminal-archived")).not.toBeInTheDocument();
   });
 
   it("still uses the project path for the main workspace", () => {
-    useWorktreeStore.setState({ currentWorktree: mainWorktree });
+    setWorktreesForTest({ currentWorktree: mainWorktree });
 
-    render(React.createElement(TerminalPanel));
+    render(withAppQueryClient(React.createElement(TerminalPanel)));
 
     const sessions = sessionsFor("wt-main");
     expect(sessions).toHaveLength(1);

@@ -98,10 +98,10 @@ func TestSnapshotHeads_AgreeWithRepository(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	ws := reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_STATUS
-	write(ws, "wf-1", `{"v":1}`)                                                               // 1
+	ap := reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL
+	write(ap, "ap-1", `{"v":1}`)                                                               // 1
 	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, "m-1", `{}`)                      // 2: excluded
-	write(ws, "wf-1", `{"v":2}`)                                                               // 3: wf-1's head
+	write(ap, "ap-1", `{"v":2}`)                                                               // 3: ap-1's head
 	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD, "wf-1", `{"thread":"th-a"}`)       // 4: th-a's head
 	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD, "wf-1", `{"thread":"th-b"}`)       // 5: th-b's head
 	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION, "question-q-1-100", `{"s":"p"}`) // 6
@@ -109,7 +109,8 @@ func TestSnapshotHeads_AgreeWithRepository(t *testing.T) {
 	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL, "tool-1", `{}`)                 // 8: excluded
 	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED, "m-1", `{}`)             // 9: excluded
 	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED, "drain-1", `{}`)   // 10: excluded
-	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION, "node-1", `{"n":1}`)       // 11
+	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION, "wf-1:node-1", `{"n":1}`)  // 11: excluded (workflow state)
+	write(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_STATUS, "wf-1", `{"v":3}`)        // 12: excluded (workflow state)
 
 	got, err := store.LatestNonMessageUpdatesPerEntity(ctx, f.env.ORM, f.chat)
 	if err != nil {
@@ -119,12 +120,12 @@ func TestSnapshotHeads_AgreeWithRepository(t *testing.T) {
 	for i, u := range got {
 		seqs[i] = u.SequenceNumber
 	}
-	if fmt.Sprint(seqs) != "[3 4 5 7 11]" {
-		t.Fatalf("snapshot heads = %v, want [3 4 5 7 11]", seqs)
+	if fmt.Sprint(seqs) != "[3 4 5 7]" {
+		t.Fatalf("snapshot heads = %v, want [3 4 5 7]", seqs)
 	}
 	var payload map[string]any
 	if err := json.Unmarshal(got[0].Data, &payload); err != nil || payload["v"] != float64(2) {
-		t.Fatalf("wf-1's head carries %s, want the newest", got[0].Data)
+		t.Fatalf("ap-1's head carries %s, want the newest", got[0].Data)
 	}
 	twin, err := f.env.Repo.GetLatestNonMessageUpdatesPerEntity(ctx, f.chat)
 	if err != nil || len(twin) != len(got) {

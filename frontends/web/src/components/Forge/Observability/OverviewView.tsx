@@ -15,12 +15,13 @@
  * the groups against each other: one line each, on the same axes.
  */
 
-import { ArrowLeft, FileText, GitBranch } from "lucide-react";
+import { ArrowLeft, FileText, Flame, GitBranch } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
+import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useServiceOverview } from "@/hooks/observability-queries";
-import type { ObsScope, ServiceHealth } from "@/services/controlPlane/observability/types";
+import type { ObsScope, ServiceHealth, ServiceSignal } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -29,8 +30,8 @@ import { attributeLabel } from "./attributes";
 import { formatCount, formatDuration, formatPercent, formatRate } from "./format";
 import { groupLabel } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
-import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
-import { StackedTable } from "@/components/Forge/StackedTable";
+import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { signalState, useSignalsIndex, type SignalsIndex } from "./serviceSignals";
 
 /** An error rate at or above this reads as a problem, and is drawn in the destructive tone. */
 export const ERROR_RATE_ALERT = 0.05;
@@ -67,81 +68,55 @@ export function OverviewView({
   const services = overview.data?.services ?? [];
   const selected = service ? services.filter((candidate) => candidate.name === service) : [];
   if (service && selected.length > 0) {
-    return <ServiceDetail rows={selected} groupBy={groupBy} navigate={navigate} />;
+    return <><ObsAsOf updatedAt={overview.dataUpdatedAt} /><ServiceDetail rows={selected} groupBy={groupBy} navigate={navigate} scope={scope} range={range} /></>;
   }
   if (services.length === 0) {
     return <ObsNoData what="telemetry" range={range} onWiden={() => navigate({ range: "7d" })} />;
   }
 
   return (
-    <Card padding="none" data-testid="obs-overview">
-      <StackedTable className="w-full text-sm">
-        <caption className="sr-only">
-          Services in {subject}: request rate, error rate and 95th-percentile latency over the selected window
-        </caption>
-        <thead>
-          <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <th scope="col" className="px-4 py-2 font-medium">
-              Service
-            </th>
-            {groupBy.length > 0 && (
-              <th scope="col" className="px-4 py-2 font-medium" data-testid="obs-overview-group-header">
-                {groupBy.map(attributeLabel).join(" · ")}
-              </th>
-            )}
-            <th scope="col" className="px-4 py-2 font-medium">
-              Requests
-            </th>
-            <th scope="col" className="px-4 py-2 font-medium">
-              Errors
-            </th>
-            <th scope="col" className="px-4 py-2 font-medium">
-              Latency
-            </th>
-            <th scope="col" className="px-4 py-2 font-medium">
-              Error logs
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {services.map((health) => (
-            <ServiceRow
-              key={`${health.name}|${groupLabel(health.group, groupBy)}`}
-              health={health}
-              groupBy={groupBy}
-              onOpen={() => navigate({ service: health.name })}
-            />
-          ))}
-        </tbody>
-      </StackedTable>
+    <Card padding="none" className="overflow-hidden" data-testid="obs-overview">
+      <ObsAsOf updatedAt={overview.dataUpdatedAt} />
+      <DataTable<ServiceRow>
+        flush
+        stacked
+        ariaLabel={`Services in ${subject}: request rate, error rate and 95th-percentile latency over the selected window`}
+        columns={serviceColumns(groupBy)}
+        data={services.map((health) => ({ health, group: groupBy.length ? groupLabel(health.group, groupBy) : "" }))}
+        getRowKey={({ health, group }) => `${health.name}|${group}`}
+        getRowAction={({ health }) => () => navigate({ service: health.name })}
+        getRowLabel={({ health }) => health.name}
+        getRowProps={({ health, group }) => ({ "data-testid": group ? `obs-service-${health.name}-${group}` : `obs-service-${health.name}` })}
+      />
     </Card>
   );
 }
 
-function ServiceRow({ health, groupBy, onOpen }: { health: ServiceHealth; groupBy: string[]; onOpen: () => void }) {
-  const erroring = health.errorRate >= ERROR_RATE_ALERT;
-  const served = health.requestCount > 0;
-  const group = groupBy.length ? groupLabel(health.group, groupBy) : "";
-  return (
-    <tr
-      className="border-b border-border/60 last:border-b-0 hover:bg-muted/50"
-      data-testid={group ? `obs-service-${health.name}-${group}` : `obs-service-${health.name}`}
-    >
-      <th scope="row" className="px-4 py-2 text-left font-normal">
+type ServiceRow = { health: ServiceHealth; group: string };
+
+/** A service that served no requests sent logs or metrics only: its request figures say so once. */
+const NO_REQUESTS = <span className="text-xs text-ink-muted">—</span>;
+
+function serviceColumns(groupBy: string[]): DataTableColumn<ServiceRow>[] {
+  return [
+    {
+      key: "service",
+      header: "Service",
+      render: (_, { health }) => (
         <span className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onOpen}
-            className="rounded-sm font-mono text-sm text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {health.name}
-          </button>
+          <span className="font-mono">{health.name}</span>
           <OperatorBadge provenance={health} />
         </span>
-      </th>
-      {groupBy.length > 0 && <td className="px-4 py-2 font-mono text-xs text-foreground">{group}</td>}
-      {served ? (
-        <>
+      ),
+    },
+    ...(groupBy.length > 0
+      ? [{ key: "group", header: groupBy.map(attributeLabel).join(" · "), render: (_: unknown, { group }: ServiceRow) => <span className="font-mono text-xs">{group}</span> }]
+      : []),
+    {
+      key: "requests",
+      header: "Requests",
+      render: (_, { health }) =>
+        health.requestCount > 0 ? (
           <MetricCell
             value={formatRate(health.requestRate)}
             timestamps={health.timestamps}
@@ -150,9 +125,20 @@ function ServiceRow({ health, groupBy, onOpen }: { health: ServiceHealth; groupB
             seriesLabel="Requests per second"
             unit="rate"
           />
+        ) : (
+          <span className="text-xs text-ink-muted">No requests served — this service sent logs or metrics only.</span>
+        ),
+    },
+    {
+      key: "errors",
+      header: "Errors",
+      render: (_, { health }) => {
+        if (health.requestCount === 0) return NO_REQUESTS;
+        const erroring = health.errorRate >= ERROR_RATE_ALERT;
+        return (
           <MetricCell
             value={formatPercent(health.errorRate)}
-            valueClassName={erroring ? "text-destructive" : undefined}
+            valueClassName={erroring ? "text-danger-ink" : undefined}
             timestamps={health.timestamps}
             values={health.errorRateSeries}
             label={`Error rate for ${health.name}`}
@@ -160,21 +146,30 @@ function ServiceRow({ health, groupBy, onOpen }: { health: ServiceHealth; groupB
             unit="percent"
             tone={erroring ? "destructive" : "muted"}
           />
-          <td className="px-4 py-2 tabular-nums">
-            <span className="text-foreground">{formatDuration(health.p95Ms)}</span>
-            <span className="ml-1.5 text-xs text-muted-foreground">p95 · {formatDuration(health.p99Ms)} p99</span>
-          </td>
-        </>
-      ) : (
-        <td colSpan={3} className="px-4 py-2 text-xs text-muted-foreground">
-          No requests served — this service sent logs or metrics only.
-        </td>
-      )}
-      <td className={cn("px-4 py-2 tabular-nums", health.errorLogCount > 0 ? "text-destructive" : "text-muted-foreground")}>
-        {formatCount(health.errorLogCount)}
-      </td>
-    </tr>
-  );
+        );
+      },
+    },
+    {
+      key: "latency",
+      header: "Latency",
+      render: (_, { health }) =>
+        health.requestCount > 0 ? (
+          <span className="tabular-nums">
+            {formatDuration(health.p95Ms)}
+            <span className="ml-1.5 text-xs text-ink-muted">p95 · {formatDuration(health.p99Ms)} p99</span>
+          </span>
+        ) : (
+          NO_REQUESTS
+        ),
+    },
+    {
+      key: "errorLogs",
+      header: "Error logs",
+      render: (_, { health }) => (
+        <span className={cn("tabular-nums", health.errorLogCount > 0 ? "text-danger-ink" : "text-ink-muted")}>{formatCount(health.errorLogCount)}</span>
+      ),
+    },
+  ];
 }
 
 function MetricCell({
@@ -185,7 +180,7 @@ function MetricCell({
   label,
   seriesLabel,
   unit,
-  tone = "primary",
+  tone,
 }: {
   value: string;
   valueClassName?: string;
@@ -194,28 +189,47 @@ function MetricCell({
   label: string;
   seriesLabel: string;
   unit?: "percent" | "ms" | "rate";
-  tone?: "primary" | "destructive" | "muted" | "secondary";
+  /** A status colour when the cell is one (errors); absent, the palette's first. */
+  tone?: "destructive" | "muted";
 }) {
   return (
-    <td className="px-4 py-2">
-      <div className="flex items-center gap-3">
-        <span className={cn("w-16 shrink-0 tabular-nums text-foreground", valueClassName)}>{value}</span>
-        <UPlotChart
-          compact
-          className="h-7 w-28 min-w-0"
-          height={28}
-          timestamps={timestamps}
-          series={[{ label: seriesLabel, values, tone }]}
-          unit={unit}
-          label={label}
-        />
-      </div>
-    </td>
+    <div className="flex items-center gap-3">
+      <span className={cn("w-16 shrink-0 tabular-nums text-ink", valueClassName)}>{value}</span>
+      <UPlotChart
+        compact
+        className="h-7 w-28 min-w-0"
+        height={28}
+        timestamps={timestamps}
+        series={[{ label: seriesLabel, values, tone }]}
+        unit={unit}
+        label={label}
+      />
+    </div>
   );
 }
 
-function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; groupBy: string[]; navigate: ObsNavigate }) {
+/** The service page's jumps to each signal view, in order. */
+const SIGNAL_JUMPS: { signal: ServiceSignal; label: string; icon: typeof FileText }[] = [
+  { signal: "logs", label: "Logs", icon: FileText },
+  { signal: "traces", label: "Traces", icon: GitBranch },
+  { signal: "profiles", label: "Profiles", icon: Flame },
+];
+
+function ServiceDetail({
+  rows,
+  groupBy,
+  navigate,
+  scope,
+  range,
+}: {
+  rows: ServiceHealth[];
+  groupBy: string[];
+  navigate: ObsNavigate;
+  scope: ObsScope;
+  range: RangePreset;
+}) {
   const health = rows[0];
+  const signals = useSignalsIndex(scope, range);
   const compared = groupBy.length > 0 && rows.length > 1;
   // Every group's trend on one shared axis.
   const timestamps = [...new Set(rows.flatMap((row) => row.timestamps))].sort((a, b) => a - b);
@@ -243,32 +257,15 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
           >
             All services
           </Button>
-          <h3 className="font-mono text-sm font-semibold text-foreground">{health.name}</h3>
+          <h3 className="font-mono text-sm font-semibold text-ink">{health.name}</h3>
           <OperatorBadge provenance={health} />
           {compared && (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-ink-muted">
               by {groupBy.map(attributeLabel).join(" · ")} · {rows.length} groups
             </span>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate({ view: "logs", service: health.name })}
-            leftIcon={<FileText className="h-3.5 w-3.5" />}
-          >
-            Logs
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate({ view: "traces", service: health.name })}
-            leftIcon={<GitBranch className="h-3.5 w-3.5" />}
-          >
-            Traces
-          </Button>
-        </div>
+        <SignalJumps service={health.name} signals={signals} navigate={navigate} />
       </div>
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
         <Card padding="md">
@@ -282,7 +279,7 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
             series={
               compared
                 ? rows.map((row) => ({ label: label(row), values: aligned(row, row.rateSeries) }))
-                : [{ label: "Requests per second", values: aligned(health, health.rateSeries), tone: "primary" }]
+                : [{ label: "Requests per second", values: aligned(health, health.rateSeries) }]
             }
             unit="rate"
             label={`Request rate for ${health.name}`}
@@ -309,31 +306,27 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
         <Card padding="md">
           <CardHeader title="Latency" description="Server spans, over the window" />
           {compared ? (
-            <StackedTable className="w-full text-xs" data-testid="obs-service-latency">
-              <caption className="sr-only">Latency of {health.name} per group</caption>
-              <thead>
-                <tr className="text-left text-muted-foreground">
-                  <th scope="col" className="pb-1 pr-2 font-medium">
-                    {groupBy.map(attributeLabel).join(" · ")}
-                  </th>
-                  <th scope="col" className="pb-1 pr-2 text-right font-medium">p50</th>
-                  <th scope="col" className="pb-1 pr-2 text-right font-medium">p95</th>
-                  <th scope="col" className="pb-1 text-right font-medium">p99</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={label(row)} className="border-t border-border/50">
-                    <th scope="row" className="max-w-[8rem] truncate py-1 pr-2 text-left font-mono font-normal text-foreground">
-                      {label(row)}
-                    </th>
-                    <td className="py-1 pr-2 text-right tabular-nums">{formatDuration(row.p50Ms)}</td>
-                    <td className="py-1 pr-2 text-right tabular-nums">{formatDuration(row.p95Ms)}</td>
-                    <td className="py-1 text-right tabular-nums">{formatDuration(row.p99Ms)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </StackedTable>
+            <div data-testid="obs-service-latency">
+              <DataTable<{ row: ServiceHealth }>
+                flush
+                stacked
+                compact
+                ariaLabel={`Latency of ${health.name} per group`}
+                columns={[
+                  {
+                    key: "group",
+                    header: groupBy.map(attributeLabel).join(" · "),
+                    className: "max-w-[8rem] truncate",
+                    render: (_, { row }) => <span className="font-mono text-xs">{label(row)}</span>,
+                  },
+                  { key: "p50", header: "p50", numeric: true, render: (_, { row }) => formatDuration(row.p50Ms) },
+                  { key: "p95", header: "p95", numeric: true, render: (_, { row }) => formatDuration(row.p95Ms) },
+                  { key: "p99", header: "p99", numeric: true, render: (_, { row }) => formatDuration(row.p99Ms) },
+                ]}
+                data={rows.map((row) => ({ row }))}
+                getRowKey={({ row }) => label(row)}
+              />
+            </div>
           ) : (
             <dl className="grid grid-cols-3 gap-2" data-testid="obs-service-latency">
               {[
@@ -342,17 +335,17 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
                 ["p99", health.p99Ms],
               ].map(([name, value]) => (
                 <div key={name as string}>
-                  <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{name}</dt>
-                  <dd className="text-lg font-semibold tabular-nums text-foreground">{formatDuration(value as number)}</dd>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-ink-muted">{name}</dt>
+                  <dd className="text-lg font-semibold tabular-nums text-ink">{formatDuration(value as number)}</dd>
                 </div>
               ))}
             </dl>
           )}
-          <p className="mt-4 text-xs text-muted-foreground">
+          <p className="mt-4 text-xs text-ink-muted">
             {errorLogCount > 0 ? (
               <button
                 type="button"
-                className="rounded-sm text-destructive underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="rounded-sm text-danger-ink underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => navigate({ view: "logs", service: health.name, severity: "error,fatal" })}
               >
                 {formatCount(errorLogCount)} error log{errorLogCount === 1 ? "" : "s"}
@@ -369,5 +362,37 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
 }
 
 function Headline({ value, destructive }: { value: string; destructive?: boolean }) {
-  return <span className={cn("text-sm font-semibold tabular-nums", destructive ? "text-destructive" : "text-foreground")}>{value}</span>;
+  return <span className={cn("text-sm font-semibold tabular-nums", destructive ? "text-danger-ink" : "text-ink")}>{value}</span>;
+}
+
+/**
+ * Logs, Traces and Profiles for one service: the ones it sends, the idle ones
+ * it declares muted with why, and none it neither sends nor declares
+ * (serviceSignals.ts).
+ */
+function SignalJumps({ service, signals, navigate }: { service: string; signals: SignalsIndex | null; navigate: ObsNavigate }) {
+  return (
+    <div className="flex flex-wrap gap-2" data-testid="obs-service-signals">
+      {SIGNAL_JUMPS.map(({ signal, label, icon: Icon }) => {
+        const state = signalState(signals, service, signal);
+        if (state.kind === "absent") return null;
+        const idle = state.kind === "idle" ? state : null;
+        return (
+          <Button
+            key={signal}
+            variant="outline"
+            size="sm"
+            disabled={!!idle}
+            title={idle?.hint}
+            onClick={() => navigate({ view: signal, service })}
+            leftIcon={<Icon className="h-3.5 w-3.5" />}
+            data-testid={`obs-service-${signal}`}
+          >
+            {label}
+            {idle && <span className="text-2xs text-ink-muted">{idle.badge}</span>}
+          </Button>
+        );
+      })}
+    </div>
+  );
 }

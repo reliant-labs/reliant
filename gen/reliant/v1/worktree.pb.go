@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -94,6 +95,553 @@ func (WorktreeStatus) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{0}
 }
 
+// Recovery metadata contains no credentials or file bytes. Remote branches
+// inherit repository visibility and remain until explicit deletion.
+type WorktreeRecovery struct {
+	state            protoimpl.MessageState      `protogen:"open.v1"`
+	Id               string                      `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	SourceWorktreeId string                      `protobuf:"bytes,2,opt,name=source_worktree_id,json=sourceWorktreeId,proto3" json:"source_worktree_id,omitempty"`
+	ProjectId        string                      `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	DaemonId         string                      `protobuf:"bytes,4,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	CaptureId        string                      `protobuf:"bytes,5,opt,name=capture_id,json=captureId,proto3" json:"capture_id,omitempty"`
+	Phase            string                      `protobuf:"bytes,6,opt,name=phase,proto3" json:"phase,omitempty"`
+	LastError        string                      `protobuf:"bytes,7,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	CreatedAt        string                      `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt        string                      `protobuf:"bytes,9,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Checkouts        []*WorktreeRecoveryCheckout `protobuf:"bytes,10,rep,name=checkouts,proto3" json:"checkouts,omitempty"`
+	// Durable retry identity; contains no credentials or file content.
+	Operation      string `protobuf:"bytes,11,opt,name=operation,proto3" json:"operation,omitempty"`
+	OperationKey   string `protobuf:"bytes,12,opt,name=operation_key,json=operationKey,proto3" json:"operation_key,omitempty"`
+	TargetDaemonId string `protobuf:"bytes,13,opt,name=target_daemon_id,json=targetDaemonId,proto3" json:"target_daemon_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *WorktreeRecovery) Reset() {
+	*x = WorktreeRecovery{}
+	mi := &file_reliant_v1_worktree_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorktreeRecovery) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorktreeRecovery) ProtoMessage() {}
+
+func (x *WorktreeRecovery) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_worktree_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorktreeRecovery.ProtoReflect.Descriptor instead.
+func (*WorktreeRecovery) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *WorktreeRecovery) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetSourceWorktreeId() string {
+	if x != nil {
+		return x.SourceWorktreeId
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetCaptureId() string {
+	if x != nil {
+		return x.CaptureId
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetPhase() string {
+	if x != nil {
+		return x.Phase
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetCreatedAt() string {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetUpdatedAt() string {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetCheckouts() []*WorktreeRecoveryCheckout {
+	if x != nil {
+		return x.Checkouts
+	}
+	return nil
+}
+
+func (x *WorktreeRecovery) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetOperationKey() string {
+	if x != nil {
+		return x.OperationKey
+	}
+	return ""
+}
+
+func (x *WorktreeRecovery) GetTargetDaemonId() string {
+	if x != nil {
+		return x.TargetDaemonId
+	}
+	return ""
+}
+
+type WorktreeRecoveryCheckout struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RepoId         string                 `protobuf:"bytes,1,opt,name=repo_id,json=repoId,proto3" json:"repo_id,omitempty"`
+	Rel            string                 `protobuf:"bytes,2,opt,name=rel,proto3" json:"rel,omitempty"`
+	RemoteUrl      string                 `protobuf:"bytes,3,opt,name=remote_url,json=remoteUrl,proto3" json:"remote_url,omitempty"`
+	RecoveryRef    string                 `protobuf:"bytes,4,opt,name=recovery_ref,json=recoveryRef,proto3" json:"recovery_ref,omitempty"`
+	CommitOid      string                 `protobuf:"bytes,5,opt,name=commit_oid,json=commitOid,proto3" json:"commit_oid,omitempty"`
+	ManifestDigest string                 `protobuf:"bytes,6,opt,name=manifest_digest,json=manifestDigest,proto3" json:"manifest_digest,omitempty"`
+	Phase          string                 `protobuf:"bytes,7,opt,name=phase,proto3" json:"phase,omitempty"`
+	LastError      string                 `protobuf:"bytes,8,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *WorktreeRecoveryCheckout) Reset() {
+	*x = WorktreeRecoveryCheckout{}
+	mi := &file_reliant_v1_worktree_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorktreeRecoveryCheckout) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorktreeRecoveryCheckout) ProtoMessage() {}
+
+func (x *WorktreeRecoveryCheckout) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_worktree_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorktreeRecoveryCheckout.ProtoReflect.Descriptor instead.
+func (*WorktreeRecoveryCheckout) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *WorktreeRecoveryCheckout) GetRepoId() string {
+	if x != nil {
+		return x.RepoId
+	}
+	return ""
+}
+
+func (x *WorktreeRecoveryCheckout) GetRel() string {
+	if x != nil {
+		return x.Rel
+	}
+	return ""
+}
+
+func (x *WorktreeRecoveryCheckout) GetRemoteUrl() string {
+	if x != nil {
+		return x.RemoteUrl
+	}
+	return ""
+}
+
+func (x *WorktreeRecoveryCheckout) GetRecoveryRef() string {
+	if x != nil {
+		return x.RecoveryRef
+	}
+	return ""
+}
+
+func (x *WorktreeRecoveryCheckout) GetCommitOid() string {
+	if x != nil {
+		return x.CommitOid
+	}
+	return ""
+}
+
+func (x *WorktreeRecoveryCheckout) GetManifestDigest() string {
+	if x != nil {
+		return x.ManifestDigest
+	}
+	return ""
+}
+
+func (x *WorktreeRecoveryCheckout) GetPhase() string {
+	if x != nil {
+		return x.Phase
+	}
+	return ""
+}
+
+func (x *WorktreeRecoveryCheckout) GetLastError() string {
+	if x != nil {
+		return x.LastError
+	}
+	return ""
+}
+
+type ListWorktreeRecoveriesRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId        *string                `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	SourceWorktreeId *string                `protobuf:"bytes,2,opt,name=source_worktree_id,json=sourceWorktreeId,proto3,oneof" json:"source_worktree_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ListWorktreeRecoveriesRequest) Reset() {
+	*x = ListWorktreeRecoveriesRequest{}
+	mi := &file_reliant_v1_worktree_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorktreeRecoveriesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorktreeRecoveriesRequest) ProtoMessage() {}
+
+func (x *ListWorktreeRecoveriesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_worktree_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorktreeRecoveriesRequest.ProtoReflect.Descriptor instead.
+func (*ListWorktreeRecoveriesRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ListWorktreeRecoveriesRequest) GetProjectId() string {
+	if x != nil && x.ProjectId != nil {
+		return *x.ProjectId
+	}
+	return ""
+}
+
+func (x *ListWorktreeRecoveriesRequest) GetSourceWorktreeId() string {
+	if x != nil && x.SourceWorktreeId != nil {
+		return *x.SourceWorktreeId
+	}
+	return ""
+}
+
+type ListWorktreeRecoveriesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Recoveries    []*WorktreeRecovery    `protobuf:"bytes,1,rep,name=recoveries,proto3" json:"recoveries,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWorktreeRecoveriesResponse) Reset() {
+	*x = ListWorktreeRecoveriesResponse{}
+	mi := &file_reliant_v1_worktree_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorktreeRecoveriesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorktreeRecoveriesResponse) ProtoMessage() {}
+
+func (x *ListWorktreeRecoveriesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_worktree_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorktreeRecoveriesResponse.ProtoReflect.Descriptor instead.
+func (*ListWorktreeRecoveriesResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ListWorktreeRecoveriesResponse) GetRecoveries() []*WorktreeRecovery {
+	if x != nil {
+		return x.Recoveries
+	}
+	return nil
+}
+
+type RestoreWorktreeRecoveryRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RecoveryId     string                 `protobuf:"bytes,1,opt,name=recovery_id,json=recoveryId,proto3" json:"recovery_id,omitempty"`
+	TargetDaemonId string                 `protobuf:"bytes,2,opt,name=target_daemon_id,json=targetDaemonId,proto3" json:"target_daemon_id,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,3,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RestoreWorktreeRecoveryRequest) Reset() {
+	*x = RestoreWorktreeRecoveryRequest{}
+	mi := &file_reliant_v1_worktree_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreWorktreeRecoveryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreWorktreeRecoveryRequest) ProtoMessage() {}
+
+func (x *RestoreWorktreeRecoveryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_worktree_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreWorktreeRecoveryRequest.ProtoReflect.Descriptor instead.
+func (*RestoreWorktreeRecoveryRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RestoreWorktreeRecoveryRequest) GetRecoveryId() string {
+	if x != nil {
+		return x.RecoveryId
+	}
+	return ""
+}
+
+func (x *RestoreWorktreeRecoveryRequest) GetTargetDaemonId() string {
+	if x != nil {
+		return x.TargetDaemonId
+	}
+	return ""
+}
+
+func (x *RestoreWorktreeRecoveryRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+type RestoreWorktreeRecoveryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Recovery      *WorktreeRecovery      `protobuf:"bytes,1,opt,name=recovery,proto3" json:"recovery,omitempty"`
+	WorktreeId    string                 `protobuf:"bytes,2,opt,name=worktree_id,json=worktreeId,proto3" json:"worktree_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestoreWorktreeRecoveryResponse) Reset() {
+	*x = RestoreWorktreeRecoveryResponse{}
+	mi := &file_reliant_v1_worktree_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreWorktreeRecoveryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreWorktreeRecoveryResponse) ProtoMessage() {}
+
+func (x *RestoreWorktreeRecoveryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_worktree_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreWorktreeRecoveryResponse.ProtoReflect.Descriptor instead.
+func (*RestoreWorktreeRecoveryResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RestoreWorktreeRecoveryResponse) GetRecovery() *WorktreeRecovery {
+	if x != nil {
+		return x.Recovery
+	}
+	return nil
+}
+
+func (x *RestoreWorktreeRecoveryResponse) GetWorktreeId() string {
+	if x != nil {
+		return x.WorktreeId
+	}
+	return ""
+}
+
+type DeleteWorktreeRecoveryRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	RecoveryId     string                 `protobuf:"bytes,1,opt,name=recovery_id,json=recoveryId,proto3" json:"recovery_id,omitempty"`
+	IdempotencyKey string                 `protobuf:"bytes,2,opt,name=idempotency_key,json=idempotencyKey,proto3" json:"idempotency_key,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *DeleteWorktreeRecoveryRequest) Reset() {
+	*x = DeleteWorktreeRecoveryRequest{}
+	mi := &file_reliant_v1_worktree_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteWorktreeRecoveryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteWorktreeRecoveryRequest) ProtoMessage() {}
+
+func (x *DeleteWorktreeRecoveryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_worktree_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteWorktreeRecoveryRequest.ProtoReflect.Descriptor instead.
+func (*DeleteWorktreeRecoveryRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DeleteWorktreeRecoveryRequest) GetRecoveryId() string {
+	if x != nil {
+		return x.RecoveryId
+	}
+	return ""
+}
+
+func (x *DeleteWorktreeRecoveryRequest) GetIdempotencyKey() string {
+	if x != nil {
+		return x.IdempotencyKey
+	}
+	return ""
+}
+
+type DeleteWorktreeRecoveryResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Recovery      *WorktreeRecovery      `protobuf:"bytes,1,opt,name=recovery,proto3" json:"recovery,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteWorktreeRecoveryResponse) Reset() {
+	*x = DeleteWorktreeRecoveryResponse{}
+	mi := &file_reliant_v1_worktree_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteWorktreeRecoveryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteWorktreeRecoveryResponse) ProtoMessage() {}
+
+func (x *DeleteWorktreeRecoveryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_worktree_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteWorktreeRecoveryResponse.ProtoReflect.Descriptor instead.
+func (*DeleteWorktreeRecoveryResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *DeleteWorktreeRecoveryResponse) GetRecovery() *WorktreeRecovery {
+	if x != nil {
+		return x.Recovery
+	}
+	return nil
+}
+
 // Worktree represents a workspace-level git worktree in the system. Path
 // points at a workspace dir containing N nested checkouts (one per Repo) at
 // <Path>/<repo.relative_path>/.
@@ -118,13 +666,18 @@ type Worktree struct {
 	// FAILED and the reason is the user's to fix; empty otherwise, including for
 	// a failure on our side.
 	FailureReason string `protobuf:"bytes,15,opt,name=failure_reason,json=failureReason,proto3" json:"failure_reason,omitempty"`
+	// The machine (daemon) whose disk holds this workspace's checkout. A
+	// branch workspace exists on exactly one machine, so a chat in it runs
+	// there and nowhere else. Unset for the main checkout, which every machine
+	// with the project has, and for rows from before ownership was recorded.
+	DaemonId      *string `protobuf:"bytes,16,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Worktree) Reset() {
 	*x = Worktree{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[0]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -136,7 +689,7 @@ func (x *Worktree) String() string {
 func (*Worktree) ProtoMessage() {}
 
 func (x *Worktree) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[0]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -149,7 +702,7 @@ func (x *Worktree) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Worktree.ProtoReflect.Descriptor instead.
 func (*Worktree) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{0}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Worktree) GetId() string {
@@ -257,6 +810,13 @@ func (x *Worktree) GetFailureReason() string {
 	return ""
 }
 
+func (x *Worktree) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
+}
+
 // WorktreeSummary is the part of a worktree a chat list renders and groups by.
 // ListChats carries one per chat so the sidebar never needs the project's full
 // worktree list: the cost of showing chats scales with the chats, not with the
@@ -271,14 +831,17 @@ type WorktreeSummary struct {
 	IsMain bool           `protobuf:"varint,5,opt,name=is_main,json=isMain,proto3" json:"is_main,omitempty"`
 	Status WorktreeStatus `protobuf:"varint,6,opt,name=status,proto3,enum=reliant.v1.WorktreeStatus" json:"status,omitempty"`
 	// Archive timestamp; unset for a live workspace.
-	DeletedAt     *string `protobuf:"bytes,7,opt,name=deleted_at,json=deletedAt,proto3,oneof" json:"deleted_at,omitempty"`
+	DeletedAt *string `protobuf:"bytes,7,opt,name=deleted_at,json=deletedAt,proto3,oneof" json:"deleted_at,omitempty"`
+	// The project the workspace belongs to, so a list spanning projects can
+	// group by it.
+	ProjectId     string `protobuf:"bytes,8,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorktreeSummary) Reset() {
 	*x = WorktreeSummary{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[1]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -290,7 +853,7 @@ func (x *WorktreeSummary) String() string {
 func (*WorktreeSummary) ProtoMessage() {}
 
 func (x *WorktreeSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[1]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -303,7 +866,7 @@ func (x *WorktreeSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorktreeSummary.ProtoReflect.Descriptor instead.
 func (*WorktreeSummary) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WorktreeSummary) GetId() string {
@@ -355,6 +918,13 @@ func (x *WorktreeSummary) GetDeletedAt() string {
 	return ""
 }
 
+func (x *WorktreeSummary) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
 // CleanupMetadata tracks what was cleaned up during archive
 type CleanupMetadata struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -379,13 +949,17 @@ type CleanupMetadata struct {
 	// workspace needs its install/generate step run again.
 	StrippedPaths []string `protobuf:"bytes,7,rep,name=stripped_paths,json=strippedPaths,proto3" json:"stripped_paths,omitempty"`
 	StrippedBytes int64    `protobuf:"varint,8,opt,name=stripped_bytes,json=strippedBytes,proto3" json:"stripped_bytes,omitempty"`
+	// The user forgot the folder (InboxService.ForgetStorageWorktree): no
+	// machine was on record for it and no connected machine had it.
+	// directory_deleted is set so nothing tracks it, but nothing was deleted.
+	Forgotten     bool `protobuf:"varint,9,opt,name=forgotten,proto3" json:"forgotten,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CleanupMetadata) Reset() {
 	*x = CleanupMetadata{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[2]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -397,7 +971,7 @@ func (x *CleanupMetadata) String() string {
 func (*CleanupMetadata) ProtoMessage() {}
 
 func (x *CleanupMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[2]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -410,7 +984,7 @@ func (x *CleanupMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CleanupMetadata.ProtoReflect.Descriptor instead.
 func (*CleanupMetadata) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CleanupMetadata) GetDirectoryDeleted() bool {
@@ -469,6 +1043,13 @@ func (x *CleanupMetadata) GetStrippedBytes() int64 {
 	return 0
 }
 
+func (x *CleanupMetadata) GetForgotten() bool {
+	if x != nil {
+		return x.Forgotten
+	}
+	return false
+}
+
 // DiscoveredWorktree is a linked git worktree of one of the project's repos
 // that Reliant did not make and does not track — typically a checkout made by
 // hand with `git worktree add`. Registered worktrees (archived ones included),
@@ -498,7 +1079,7 @@ type DiscoveredWorktree struct {
 
 func (x *DiscoveredWorktree) Reset() {
 	*x = DiscoveredWorktree{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[3]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -510,7 +1091,7 @@ func (x *DiscoveredWorktree) String() string {
 func (*DiscoveredWorktree) ProtoMessage() {}
 
 func (x *DiscoveredWorktree) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[3]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -523,7 +1104,7 @@ func (x *DiscoveredWorktree) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoveredWorktree.ProtoReflect.Descriptor instead.
 func (*DiscoveredWorktree) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DiscoveredWorktree) GetPath() string {
@@ -597,7 +1178,7 @@ type StaleWorktree struct {
 
 func (x *StaleWorktree) Reset() {
 	*x = StaleWorktree{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[4]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -609,7 +1190,7 @@ func (x *StaleWorktree) String() string {
 func (*StaleWorktree) ProtoMessage() {}
 
 func (x *StaleWorktree) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[4]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -622,7 +1203,7 @@ func (x *StaleWorktree) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StaleWorktree.ProtoReflect.Descriptor instead.
 func (*StaleWorktree) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *StaleWorktree) GetPath() string {
@@ -668,7 +1249,7 @@ type GitCommit struct {
 
 func (x *GitCommit) Reset() {
 	*x = GitCommit{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[5]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -680,7 +1261,7 @@ func (x *GitCommit) String() string {
 func (*GitCommit) ProtoMessage() {}
 
 func (x *GitCommit) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[5]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -693,7 +1274,7 @@ func (x *GitCommit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitCommit.ProtoReflect.Descriptor instead.
 func (*GitCommit) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GitCommit) GetHash() string {
@@ -752,7 +1333,7 @@ type WorktreeFileChange struct {
 
 func (x *WorktreeFileChange) Reset() {
 	*x = WorktreeFileChange{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[6]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -764,7 +1345,7 @@ func (x *WorktreeFileChange) String() string {
 func (*WorktreeFileChange) ProtoMessage() {}
 
 func (x *WorktreeFileChange) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[6]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -777,7 +1358,7 @@ func (x *WorktreeFileChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorktreeFileChange.ProtoReflect.Descriptor instead.
 func (*WorktreeFileChange) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *WorktreeFileChange) GetPath() string {
@@ -850,13 +1431,20 @@ type CreateWorktreeRequest struct {
 	// produces a second workspace. Repeat the same key to get the existing row
 	// back instead.
 	IdempotencyKey *string `protobuf:"bytes,10,opt,name=idempotency_key,json=idempotencyKey,proto3,oneof" json:"idempotency_key,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// daemon_id names the machine to create the workspace on (the new-chat
+	// composer's "Runs on"). Unset places it by the usual rule: the chat's
+	// machine, else the source workspace's, else the project's default. It must
+	// be one of the caller's machines the project is installed on, and it may
+	// not contradict chat_id's or source_worktree_id's machine: a checkout
+	// exists on one machine only.
+	DaemonId      *string `protobuf:"bytes,11,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateWorktreeRequest) Reset() {
 	*x = CreateWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[7]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -868,7 +1456,7 @@ func (x *CreateWorktreeRequest) String() string {
 func (*CreateWorktreeRequest) ProtoMessage() {}
 
 func (x *CreateWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[7]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -881,7 +1469,7 @@ func (x *CreateWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*CreateWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CreateWorktreeRequest) GetName() string {
@@ -954,6 +1542,13 @@ func (x *CreateWorktreeRequest) GetIdempotencyKey() string {
 	return ""
 }
 
+func (x *CreateWorktreeRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
+}
+
 // CreateWorktreeResponse returns the created workspace-level worktree.
 type CreateWorktreeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -964,7 +1559,7 @@ type CreateWorktreeResponse struct {
 
 func (x *CreateWorktreeResponse) Reset() {
 	*x = CreateWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[8]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -976,7 +1571,7 @@ func (x *CreateWorktreeResponse) String() string {
 func (*CreateWorktreeResponse) ProtoMessage() {}
 
 func (x *CreateWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[8]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -989,7 +1584,7 @@ func (x *CreateWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*CreateWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CreateWorktreeResponse) GetWorktree() *Worktree {
@@ -1018,7 +1613,7 @@ type ListWorktreesRequest struct {
 
 func (x *ListWorktreesRequest) Reset() {
 	*x = ListWorktreesRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[9]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1030,7 +1625,7 @@ func (x *ListWorktreesRequest) String() string {
 func (*ListWorktreesRequest) ProtoMessage() {}
 
 func (x *ListWorktreesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[9]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1043,7 +1638,7 @@ func (x *ListWorktreesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorktreesRequest.ProtoReflect.Descriptor instead.
 func (*ListWorktreesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListWorktreesRequest) GetProjectId() string {
@@ -1095,7 +1690,7 @@ type ListWorktreesResponse struct {
 
 func (x *ListWorktreesResponse) Reset() {
 	*x = ListWorktreesResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[10]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1107,7 +1702,7 @@ func (x *ListWorktreesResponse) String() string {
 func (*ListWorktreesResponse) ProtoMessage() {}
 
 func (x *ListWorktreesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[10]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1120,7 +1715,7 @@ func (x *ListWorktreesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorktreesResponse.ProtoReflect.Descriptor instead.
 func (*ListWorktreesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListWorktreesResponse) GetWorktrees() []*Worktree {
@@ -1159,7 +1754,7 @@ type ListArchivedWorktreesRequest struct {
 
 func (x *ListArchivedWorktreesRequest) Reset() {
 	*x = ListArchivedWorktreesRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[11]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1171,7 +1766,7 @@ func (x *ListArchivedWorktreesRequest) String() string {
 func (*ListArchivedWorktreesRequest) ProtoMessage() {}
 
 func (x *ListArchivedWorktreesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[11]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1184,7 +1779,7 @@ func (x *ListArchivedWorktreesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListArchivedWorktreesRequest.ProtoReflect.Descriptor instead.
 func (*ListArchivedWorktreesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListArchivedWorktreesRequest) GetProjectId() string {
@@ -1222,7 +1817,7 @@ type ListArchivedWorktreesResponse struct {
 
 func (x *ListArchivedWorktreesResponse) Reset() {
 	*x = ListArchivedWorktreesResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[12]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1234,7 +1829,7 @@ func (x *ListArchivedWorktreesResponse) String() string {
 func (*ListArchivedWorktreesResponse) ProtoMessage() {}
 
 func (x *ListArchivedWorktreesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[12]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1247,7 +1842,7 @@ func (x *ListArchivedWorktreesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListArchivedWorktreesResponse.ProtoReflect.Descriptor instead.
 func (*ListArchivedWorktreesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListArchivedWorktreesResponse) GetWorktrees() []*Worktree {
@@ -1281,7 +1876,7 @@ type GetWorktreeRequest struct {
 
 func (x *GetWorktreeRequest) Reset() {
 	*x = GetWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[13]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1293,7 +1888,7 @@ func (x *GetWorktreeRequest) String() string {
 func (*GetWorktreeRequest) ProtoMessage() {}
 
 func (x *GetWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[13]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1306,7 +1901,7 @@ func (x *GetWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*GetWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetWorktreeRequest) GetWorktreeId() string {
@@ -1326,7 +1921,7 @@ type GetWorktreeResponse struct {
 
 func (x *GetWorktreeResponse) Reset() {
 	*x = GetWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[14]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1338,7 +1933,7 @@ func (x *GetWorktreeResponse) String() string {
 func (*GetWorktreeResponse) ProtoMessage() {}
 
 func (x *GetWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[14]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1351,7 +1946,7 @@ func (x *GetWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*GetWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetWorktreeResponse) GetWorktree() *Worktree {
@@ -1374,7 +1969,7 @@ type UpdateWorktreeRequest struct {
 
 func (x *UpdateWorktreeRequest) Reset() {
 	*x = UpdateWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[15]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1386,7 +1981,7 @@ func (x *UpdateWorktreeRequest) String() string {
 func (*UpdateWorktreeRequest) ProtoMessage() {}
 
 func (x *UpdateWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[15]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1399,7 +1994,7 @@ func (x *UpdateWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*UpdateWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UpdateWorktreeRequest) GetWorktreeId() string {
@@ -1440,7 +2035,7 @@ type UpdateWorktreeResponse struct {
 
 func (x *UpdateWorktreeResponse) Reset() {
 	*x = UpdateWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[16]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1452,7 +2047,7 @@ func (x *UpdateWorktreeResponse) String() string {
 func (*UpdateWorktreeResponse) ProtoMessage() {}
 
 func (x *UpdateWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[16]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1465,7 +2060,7 @@ func (x *UpdateWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*UpdateWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *UpdateWorktreeResponse) GetWorktree() *Worktree {
@@ -1486,7 +2081,7 @@ type DeleteWorktreeRequest struct {
 
 func (x *DeleteWorktreeRequest) Reset() {
 	*x = DeleteWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[17]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1498,7 +2093,7 @@ func (x *DeleteWorktreeRequest) String() string {
 func (*DeleteWorktreeRequest) ProtoMessage() {}
 
 func (x *DeleteWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[17]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1511,7 +2106,7 @@ func (x *DeleteWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*DeleteWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DeleteWorktreeRequest) GetWorktreeId() string {
@@ -1540,7 +2135,7 @@ type DeleteWorktreeResponse struct {
 
 func (x *DeleteWorktreeResponse) Reset() {
 	*x = DeleteWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[18]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1552,7 +2147,7 @@ func (x *DeleteWorktreeResponse) String() string {
 func (*DeleteWorktreeResponse) ProtoMessage() {}
 
 func (x *DeleteWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[18]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1565,7 +2160,7 @@ func (x *DeleteWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*DeleteWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DeleteWorktreeResponse) GetMessage() string {
@@ -1600,7 +2195,7 @@ type ArchiveWorktreeRequest struct {
 
 func (x *ArchiveWorktreeRequest) Reset() {
 	*x = ArchiveWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[19]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1612,7 +2207,7 @@ func (x *ArchiveWorktreeRequest) String() string {
 func (*ArchiveWorktreeRequest) ProtoMessage() {}
 
 func (x *ArchiveWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[19]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1625,7 +2220,7 @@ func (x *ArchiveWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*ArchiveWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ArchiveWorktreeRequest) GetWorktreeId() string {
@@ -1653,7 +2248,7 @@ type ArchiveWorktreeResponse struct {
 
 func (x *ArchiveWorktreeResponse) Reset() {
 	*x = ArchiveWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[20]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1665,7 +2260,7 @@ func (x *ArchiveWorktreeResponse) String() string {
 func (*ArchiveWorktreeResponse) ProtoMessage() {}
 
 func (x *ArchiveWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[20]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1678,7 +2273,7 @@ func (x *ArchiveWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*ArchiveWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ArchiveWorktreeResponse) GetMessage() string {
@@ -1705,7 +2300,7 @@ type UnarchiveWorktreeRequest struct {
 
 func (x *UnarchiveWorktreeRequest) Reset() {
 	*x = UnarchiveWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[21]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1717,7 +2312,7 @@ func (x *UnarchiveWorktreeRequest) String() string {
 func (*UnarchiveWorktreeRequest) ProtoMessage() {}
 
 func (x *UnarchiveWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[21]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1730,7 +2325,7 @@ func (x *UnarchiveWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnarchiveWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*UnarchiveWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *UnarchiveWorktreeRequest) GetWorktreeId() string {
@@ -1750,7 +2345,7 @@ type UnarchiveWorktreeResponse struct {
 
 func (x *UnarchiveWorktreeResponse) Reset() {
 	*x = UnarchiveWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[22]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1762,7 +2357,7 @@ func (x *UnarchiveWorktreeResponse) String() string {
 func (*UnarchiveWorktreeResponse) ProtoMessage() {}
 
 func (x *UnarchiveWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[22]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1775,7 +2370,7 @@ func (x *UnarchiveWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnarchiveWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*UnarchiveWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *UnarchiveWorktreeResponse) GetMessage() string {
@@ -1802,14 +2397,17 @@ type ImportWorktreeRequest struct {
 	// Must be true when the import moves the directory
 	// (DiscoveredWorktree.moves_on_import): the user has been told that
 	// anything running inside it loses its working directory.
-	ConfirmMove   bool `protobuf:"varint,6,opt,name=confirm_move,json=confirmMove,proto3" json:"confirm_move,omitempty"`
+	ConfirmMove bool `protobuf:"varint,6,opt,name=confirm_move,json=confirmMove,proto3" json:"confirm_move,omitempty"`
+	// daemon_id names the machine the directory is on: the one
+	// DiscoverWorktrees was asked about. Unset places it as CreateWorktree does.
+	DaemonId      *string `protobuf:"bytes,7,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ImportWorktreeRequest) Reset() {
 	*x = ImportWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[23]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1821,7 +2419,7 @@ func (x *ImportWorktreeRequest) String() string {
 func (*ImportWorktreeRequest) ProtoMessage() {}
 
 func (x *ImportWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[23]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1834,7 +2432,7 @@ func (x *ImportWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*ImportWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ImportWorktreeRequest) GetPath() string {
@@ -1879,6 +2477,13 @@ func (x *ImportWorktreeRequest) GetConfirmMove() bool {
 	return false
 }
 
+func (x *ImportWorktreeRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
+}
+
 // ImportWorktreeResponse returns the imported worktree
 type ImportWorktreeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1889,7 +2494,7 @@ type ImportWorktreeResponse struct {
 
 func (x *ImportWorktreeResponse) Reset() {
 	*x = ImportWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[24]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1901,7 +2506,7 @@ func (x *ImportWorktreeResponse) String() string {
 func (*ImportWorktreeResponse) ProtoMessage() {}
 
 func (x *ImportWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[24]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1914,7 +2519,7 @@ func (x *ImportWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*ImportWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{24}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ImportWorktreeResponse) GetWorktree() *Worktree {
@@ -1931,14 +2536,18 @@ type DiscoverWorktreesRequest struct {
 	// A background caller (the sidebar hint) must not wake a sleeping machine:
 	// when true and the machine is asleep, the call fails with Unavailable and
 	// nothing is woken. A user opening the discover dialog leaves it false.
-	Background    bool `protobuf:"varint,2,opt,name=background,proto3" json:"background,omitempty"`
+	Background bool `protobuf:"varint,2,opt,name=background,proto3" json:"background,omitempty"`
+	// daemon_id names the machine to look on. Unset asks the project's default
+	// machine. Each machine has its own checkouts, so the answer is about that
+	// machine only.
+	DaemonId      *string `protobuf:"bytes,3,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DiscoverWorktreesRequest) Reset() {
 	*x = DiscoverWorktreesRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[25]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1950,7 +2559,7 @@ func (x *DiscoverWorktreesRequest) String() string {
 func (*DiscoverWorktreesRequest) ProtoMessage() {}
 
 func (x *DiscoverWorktreesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[25]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1963,7 +2572,7 @@ func (x *DiscoverWorktreesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverWorktreesRequest.ProtoReflect.Descriptor instead.
 func (*DiscoverWorktreesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{25}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *DiscoverWorktreesRequest) GetProjectId() string {
@@ -1978,6 +2587,13 @@ func (x *DiscoverWorktreesRequest) GetBackground() bool {
 		return x.Background
 	}
 	return false
+}
+
+func (x *DiscoverWorktreesRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
 }
 
 // DiscoverWorktreesResponse returns the untracked worktrees of every repo of
@@ -1995,7 +2611,7 @@ type DiscoverWorktreesResponse struct {
 
 func (x *DiscoverWorktreesResponse) Reset() {
 	*x = DiscoverWorktreesResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[26]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2007,7 +2623,7 @@ func (x *DiscoverWorktreesResponse) String() string {
 func (*DiscoverWorktreesResponse) ProtoMessage() {}
 
 func (x *DiscoverWorktreesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[26]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2020,7 +2636,7 @@ func (x *DiscoverWorktreesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoverWorktreesResponse.ProtoReflect.Descriptor instead.
 func (*DiscoverWorktreesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{26}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *DiscoverWorktreesResponse) GetDiscovered() []*DiscoveredWorktree {
@@ -2047,15 +2663,17 @@ func (x *DiscoverWorktreesResponse) GetWorkspacesRoot() string {
 // PruneWorktreesRequest removes git's records of the project's worktrees
 // whose directories no longer exist.
 type PruneWorktreesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// daemon_id names the machine to prune on, as DiscoverWorktrees'.
+	DaemonId      *string `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PruneWorktreesRequest) Reset() {
 	*x = PruneWorktreesRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[27]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2067,7 +2685,7 @@ func (x *PruneWorktreesRequest) String() string {
 func (*PruneWorktreesRequest) ProtoMessage() {}
 
 func (x *PruneWorktreesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[27]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2080,12 +2698,19 @@ func (x *PruneWorktreesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PruneWorktreesRequest.ProtoReflect.Descriptor instead.
 func (*PruneWorktreesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{27}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *PruneWorktreesRequest) GetProjectId() string {
 	if x != nil {
 		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *PruneWorktreesRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
 	}
 	return ""
 }
@@ -2100,7 +2725,7 @@ type PruneWorktreesResponse struct {
 
 func (x *PruneWorktreesResponse) Reset() {
 	*x = PruneWorktreesResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[28]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2112,7 +2737,7 @@ func (x *PruneWorktreesResponse) String() string {
 func (*PruneWorktreesResponse) ProtoMessage() {}
 
 func (x *PruneWorktreesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[28]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2125,7 +2750,7 @@ func (x *PruneWorktreesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PruneWorktreesResponse.ProtoReflect.Descriptor instead.
 func (*PruneWorktreesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{28}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *PruneWorktreesResponse) GetPruned() []*StaleWorktree {
@@ -2145,7 +2770,7 @@ type RecreateWorktreeRequest struct {
 
 func (x *RecreateWorktreeRequest) Reset() {
 	*x = RecreateWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[29]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2157,7 +2782,7 @@ func (x *RecreateWorktreeRequest) String() string {
 func (*RecreateWorktreeRequest) ProtoMessage() {}
 
 func (x *RecreateWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[29]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2170,7 +2795,7 @@ func (x *RecreateWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecreateWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*RecreateWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{29}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *RecreateWorktreeRequest) GetWorktreeId() string {
@@ -2197,7 +2822,7 @@ type RecreateWorktreeResponse struct {
 
 func (x *RecreateWorktreeResponse) Reset() {
 	*x = RecreateWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[30]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2209,7 +2834,7 @@ func (x *RecreateWorktreeResponse) String() string {
 func (*RecreateWorktreeResponse) ProtoMessage() {}
 
 func (x *RecreateWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[30]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2222,7 +2847,7 @@ func (x *RecreateWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecreateWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*RecreateWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{30}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *RecreateWorktreeResponse) GetMessage() string {
@@ -2273,7 +2898,7 @@ type GetWorktreeChangesRequest struct {
 
 func (x *GetWorktreeChangesRequest) Reset() {
 	*x = GetWorktreeChangesRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[31]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2285,7 +2910,7 @@ func (x *GetWorktreeChangesRequest) String() string {
 func (*GetWorktreeChangesRequest) ProtoMessage() {}
 
 func (x *GetWorktreeChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[31]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2298,7 +2923,7 @@ func (x *GetWorktreeChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorktreeChangesRequest.ProtoReflect.Descriptor instead.
 func (*GetWorktreeChangesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{31}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GetWorktreeChangesRequest) GetWorktreeId() string {
@@ -2330,7 +2955,7 @@ type GetWorktreeChangesResponse struct {
 
 func (x *GetWorktreeChangesResponse) Reset() {
 	*x = GetWorktreeChangesResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[32]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2342,7 +2967,7 @@ func (x *GetWorktreeChangesResponse) String() string {
 func (*GetWorktreeChangesResponse) ProtoMessage() {}
 
 func (x *GetWorktreeChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[32]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2355,7 +2980,7 @@ func (x *GetWorktreeChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorktreeChangesResponse.ProtoReflect.Descriptor instead.
 func (*GetWorktreeChangesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{32}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetWorktreeChangesResponse) GetBranch() string {
@@ -2413,7 +3038,7 @@ type GetWorktreeGitStatusRequest struct {
 
 func (x *GetWorktreeGitStatusRequest) Reset() {
 	*x = GetWorktreeGitStatusRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[33]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2425,7 +3050,7 @@ func (x *GetWorktreeGitStatusRequest) String() string {
 func (*GetWorktreeGitStatusRequest) ProtoMessage() {}
 
 func (x *GetWorktreeGitStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[33]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2438,7 +3063,7 @@ func (x *GetWorktreeGitStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorktreeGitStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetWorktreeGitStatusRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{33}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetWorktreeGitStatusRequest) GetWorktreeId() string {
@@ -2474,7 +3099,7 @@ type GetWorktreeGitStatusResponse struct {
 
 func (x *GetWorktreeGitStatusResponse) Reset() {
 	*x = GetWorktreeGitStatusResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[34]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2486,7 +3111,7 @@ func (x *GetWorktreeGitStatusResponse) String() string {
 func (*GetWorktreeGitStatusResponse) ProtoMessage() {}
 
 func (x *GetWorktreeGitStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[34]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2499,7 +3124,7 @@ func (x *GetWorktreeGitStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorktreeGitStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetWorktreeGitStatusResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{34}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *GetWorktreeGitStatusResponse) GetWorktreeId() string {
@@ -2586,7 +3211,7 @@ type GetWorktreeCommitsRequest struct {
 
 func (x *GetWorktreeCommitsRequest) Reset() {
 	*x = GetWorktreeCommitsRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[35]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2598,7 +3223,7 @@ func (x *GetWorktreeCommitsRequest) String() string {
 func (*GetWorktreeCommitsRequest) ProtoMessage() {}
 
 func (x *GetWorktreeCommitsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[35]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2611,7 +3236,7 @@ func (x *GetWorktreeCommitsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorktreeCommitsRequest.ProtoReflect.Descriptor instead.
 func (*GetWorktreeCommitsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{35}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GetWorktreeCommitsRequest) GetWorktreeId() string {
@@ -2646,7 +3271,7 @@ type ListWorktreeRepoStatusesRequest struct {
 
 func (x *ListWorktreeRepoStatusesRequest) Reset() {
 	*x = ListWorktreeRepoStatusesRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[36]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2658,7 +3283,7 @@ func (x *ListWorktreeRepoStatusesRequest) String() string {
 func (*ListWorktreeRepoStatusesRequest) ProtoMessage() {}
 
 func (x *ListWorktreeRepoStatusesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[36]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2671,7 +3296,7 @@ func (x *ListWorktreeRepoStatusesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorktreeRepoStatusesRequest.ProtoReflect.Descriptor instead.
 func (*ListWorktreeRepoStatusesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{36}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListWorktreeRepoStatusesRequest) GetWorktreeId() string {
@@ -2704,7 +3329,7 @@ type WorktreeRepoStatus struct {
 
 func (x *WorktreeRepoStatus) Reset() {
 	*x = WorktreeRepoStatus{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[37]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2716,7 +3341,7 @@ func (x *WorktreeRepoStatus) String() string {
 func (*WorktreeRepoStatus) ProtoMessage() {}
 
 func (x *WorktreeRepoStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[37]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2729,7 +3354,7 @@ func (x *WorktreeRepoStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorktreeRepoStatus.ProtoReflect.Descriptor instead.
 func (*WorktreeRepoStatus) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{37}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *WorktreeRepoStatus) GetRepoId() string {
@@ -2805,7 +3430,7 @@ type ListWorktreeRepoStatusesResponse struct {
 
 func (x *ListWorktreeRepoStatusesResponse) Reset() {
 	*x = ListWorktreeRepoStatusesResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[38]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2817,7 +3442,7 @@ func (x *ListWorktreeRepoStatusesResponse) String() string {
 func (*ListWorktreeRepoStatusesResponse) ProtoMessage() {}
 
 func (x *ListWorktreeRepoStatusesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[38]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2830,7 +3455,7 @@ func (x *ListWorktreeRepoStatusesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorktreeRepoStatusesResponse.ProtoReflect.Descriptor instead.
 func (*ListWorktreeRepoStatusesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{38}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ListWorktreeRepoStatusesResponse) GetStatuses() []*WorktreeRepoStatus {
@@ -2856,7 +3481,7 @@ type GetWorktreeCommitsResponse struct {
 
 func (x *GetWorktreeCommitsResponse) Reset() {
 	*x = GetWorktreeCommitsResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[39]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2868,7 +3493,7 @@ func (x *GetWorktreeCommitsResponse) String() string {
 func (*GetWorktreeCommitsResponse) ProtoMessage() {}
 
 func (x *GetWorktreeCommitsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[39]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2881,7 +3506,7 @@ func (x *GetWorktreeCommitsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorktreeCommitsResponse.ProtoReflect.Descriptor instead.
 func (*GetWorktreeCommitsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{39}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GetWorktreeCommitsResponse) GetCommits() []*GitCommit {
@@ -2947,7 +3572,7 @@ type StageFilesRequest struct {
 
 func (x *StageFilesRequest) Reset() {
 	*x = StageFilesRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[40]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2959,7 +3584,7 @@ func (x *StageFilesRequest) String() string {
 func (*StageFilesRequest) ProtoMessage() {}
 
 func (x *StageFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[40]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2972,7 +3597,7 @@ func (x *StageFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StageFilesRequest.ProtoReflect.Descriptor instead.
 func (*StageFilesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{40}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *StageFilesRequest) GetWorktreeId() string {
@@ -3007,7 +3632,7 @@ type StageFilesResponse struct {
 
 func (x *StageFilesResponse) Reset() {
 	*x = StageFilesResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[41]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3019,7 +3644,7 @@ func (x *StageFilesResponse) String() string {
 func (*StageFilesResponse) ProtoMessage() {}
 
 func (x *StageFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[41]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3032,7 +3657,7 @@ func (x *StageFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StageFilesResponse.ProtoReflect.Descriptor instead.
 func (*StageFilesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{41}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *StageFilesResponse) GetMessage() string {
@@ -3063,7 +3688,7 @@ type UnstageFilesRequest struct {
 
 func (x *UnstageFilesRequest) Reset() {
 	*x = UnstageFilesRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[42]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3075,7 +3700,7 @@ func (x *UnstageFilesRequest) String() string {
 func (*UnstageFilesRequest) ProtoMessage() {}
 
 func (x *UnstageFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[42]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3088,7 +3713,7 @@ func (x *UnstageFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnstageFilesRequest.ProtoReflect.Descriptor instead.
 func (*UnstageFilesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{42}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *UnstageFilesRequest) GetWorktreeId() string {
@@ -3123,7 +3748,7 @@ type UnstageFilesResponse struct {
 
 func (x *UnstageFilesResponse) Reset() {
 	*x = UnstageFilesResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[43]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3135,7 +3760,7 @@ func (x *UnstageFilesResponse) String() string {
 func (*UnstageFilesResponse) ProtoMessage() {}
 
 func (x *UnstageFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[43]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3148,7 +3773,7 @@ func (x *UnstageFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnstageFilesResponse.ProtoReflect.Descriptor instead.
 func (*UnstageFilesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{43}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *UnstageFilesResponse) GetMessage() string {
@@ -3180,7 +3805,7 @@ type RevertFilesRequest struct {
 
 func (x *RevertFilesRequest) Reset() {
 	*x = RevertFilesRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[44]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3192,7 +3817,7 @@ func (x *RevertFilesRequest) String() string {
 func (*RevertFilesRequest) ProtoMessage() {}
 
 func (x *RevertFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[44]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3205,7 +3830,7 @@ func (x *RevertFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevertFilesRequest.ProtoReflect.Descriptor instead.
 func (*RevertFilesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{44}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *RevertFilesRequest) GetWorktreeId() string {
@@ -3240,7 +3865,7 @@ type RevertFilesResponse struct {
 
 func (x *RevertFilesResponse) Reset() {
 	*x = RevertFilesResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[45]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3252,7 +3877,7 @@ func (x *RevertFilesResponse) String() string {
 func (*RevertFilesResponse) ProtoMessage() {}
 
 func (x *RevertFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[45]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3265,7 +3890,7 @@ func (x *RevertFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevertFilesResponse.ProtoReflect.Descriptor instead.
 func (*RevertFilesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{45}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *RevertFilesResponse) GetMessage() string {
@@ -3296,7 +3921,7 @@ type CommitWorktreeRequest struct {
 
 func (x *CommitWorktreeRequest) Reset() {
 	*x = CommitWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[46]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3308,7 +3933,7 @@ func (x *CommitWorktreeRequest) String() string {
 func (*CommitWorktreeRequest) ProtoMessage() {}
 
 func (x *CommitWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[46]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3321,7 +3946,7 @@ func (x *CommitWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*CommitWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{46}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *CommitWorktreeRequest) GetWorktreeId() string {
@@ -3356,7 +3981,7 @@ type CommitWorktreeResponse struct {
 
 func (x *CommitWorktreeResponse) Reset() {
 	*x = CommitWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[47]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3368,7 +3993,7 @@ func (x *CommitWorktreeResponse) String() string {
 func (*CommitWorktreeResponse) ProtoMessage() {}
 
 func (x *CommitWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[47]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3381,7 +4006,7 @@ func (x *CommitWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*CommitWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{47}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *CommitWorktreeResponse) GetMessage() string {
@@ -3411,7 +4036,7 @@ type PushWorktreeRequest struct {
 
 func (x *PushWorktreeRequest) Reset() {
 	*x = PushWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[48]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3423,7 +4048,7 @@ func (x *PushWorktreeRequest) String() string {
 func (*PushWorktreeRequest) ProtoMessage() {}
 
 func (x *PushWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[48]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3436,7 +4061,7 @@ func (x *PushWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*PushWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{48}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *PushWorktreeRequest) GetWorktreeId() string {
@@ -3464,7 +4089,7 @@ type PushWorktreeResponse struct {
 
 func (x *PushWorktreeResponse) Reset() {
 	*x = PushWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[49]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3476,7 +4101,7 @@ func (x *PushWorktreeResponse) String() string {
 func (*PushWorktreeResponse) ProtoMessage() {}
 
 func (x *PushWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[49]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3489,7 +4114,7 @@ func (x *PushWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PushWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*PushWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{49}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *PushWorktreeResponse) GetMessage() string {
@@ -3519,7 +4144,7 @@ type PullWorktreeRequest struct {
 
 func (x *PullWorktreeRequest) Reset() {
 	*x = PullWorktreeRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[50]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3531,7 +4156,7 @@ func (x *PullWorktreeRequest) String() string {
 func (*PullWorktreeRequest) ProtoMessage() {}
 
 func (x *PullWorktreeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[50]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3544,7 +4169,7 @@ func (x *PullWorktreeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullWorktreeRequest.ProtoReflect.Descriptor instead.
 func (*PullWorktreeRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{50}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *PullWorktreeRequest) GetWorktreeId() string {
@@ -3572,7 +4197,7 @@ type PullWorktreeResponse struct {
 
 func (x *PullWorktreeResponse) Reset() {
 	*x = PullWorktreeResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[51]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3584,7 +4209,7 @@ func (x *PullWorktreeResponse) String() string {
 func (*PullWorktreeResponse) ProtoMessage() {}
 
 func (x *PullWorktreeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[51]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3597,7 +4222,7 @@ func (x *PullWorktreeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PullWorktreeResponse.ProtoReflect.Descriptor instead.
 func (*PullWorktreeResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{51}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *PullWorktreeResponse) GetMessage() string {
@@ -3627,7 +4252,7 @@ type GetWorktreePRRequest struct {
 
 func (x *GetWorktreePRRequest) Reset() {
 	*x = GetWorktreePRRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[52]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3639,7 +4264,7 @@ func (x *GetWorktreePRRequest) String() string {
 func (*GetWorktreePRRequest) ProtoMessage() {}
 
 func (x *GetWorktreePRRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[52]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3652,7 +4277,7 @@ func (x *GetWorktreePRRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorktreePRRequest.ProtoReflect.Descriptor instead.
 func (*GetWorktreePRRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{52}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *GetWorktreePRRequest) GetWorktreeId() string {
@@ -3683,7 +4308,7 @@ type GetWorktreePRResponse struct {
 
 func (x *GetWorktreePRResponse) Reset() {
 	*x = GetWorktreePRResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[53]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3695,7 +4320,7 @@ func (x *GetWorktreePRResponse) String() string {
 func (*GetWorktreePRResponse) ProtoMessage() {}
 
 func (x *GetWorktreePRResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[53]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3708,7 +4333,7 @@ func (x *GetWorktreePRResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorktreePRResponse.ProtoReflect.Descriptor instead.
 func (*GetWorktreePRResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{53}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *GetWorktreePRResponse) GetExists() bool {
@@ -3761,7 +4386,7 @@ type CreateWorktreePRRequest struct {
 
 func (x *CreateWorktreePRRequest) Reset() {
 	*x = CreateWorktreePRRequest{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[54]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3773,7 +4398,7 @@ func (x *CreateWorktreePRRequest) String() string {
 func (*CreateWorktreePRRequest) ProtoMessage() {}
 
 func (x *CreateWorktreePRRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[54]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3786,7 +4411,7 @@ func (x *CreateWorktreePRRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWorktreePRRequest.ProtoReflect.Descriptor instead.
 func (*CreateWorktreePRRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{54}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *CreateWorktreePRRequest) GetWorktreeId() string {
@@ -3831,7 +4456,7 @@ type CreateWorktreePRResponse struct {
 
 func (x *CreateWorktreePRResponse) Reset() {
 	*x = CreateWorktreePRResponse{}
-	mi := &file_reliant_v1_worktree_proto_msgTypes[55]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3843,7 +4468,7 @@ func (x *CreateWorktreePRResponse) String() string {
 func (*CreateWorktreePRResponse) ProtoMessage() {}
 
 func (x *CreateWorktreePRResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_worktree_proto_msgTypes[55]
+	mi := &file_reliant_v1_worktree_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3856,7 +4481,7 @@ func (x *CreateWorktreePRResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWorktreePRResponse.ProtoReflect.Descriptor instead.
 func (*CreateWorktreePRResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{55}
+	return file_reliant_v1_worktree_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *CreateWorktreePRResponse) GetMessage() string {
@@ -3899,7 +4524,64 @@ var File_reliant_v1_worktree_proto protoreflect.FileDescriptor
 const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/worktree.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x17reliant/v1/common.proto\"\xac\x04\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\"\xcf\x03\n" +
+	"\x10WorktreeRecovery\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12,\n" +
+	"\x12source_worktree_id\x18\x02 \x01(\tR\x10sourceWorktreeId\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x03 \x01(\tR\tprojectId\x12\x1b\n" +
+	"\tdaemon_id\x18\x04 \x01(\tR\bdaemonId\x12\x1d\n" +
+	"\n" +
+	"capture_id\x18\x05 \x01(\tR\tcaptureId\x12\x14\n" +
+	"\x05phase\x18\x06 \x01(\tR\x05phase\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\a \x01(\tR\tlastError\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\b \x01(\tR\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\t \x01(\tR\tupdatedAt\x12B\n" +
+	"\tcheckouts\x18\n" +
+	" \x03(\v2$.reliant.v1.WorktreeRecoveryCheckoutR\tcheckouts\x12\x1c\n" +
+	"\toperation\x18\v \x01(\tR\toperation\x12#\n" +
+	"\roperation_key\x18\f \x01(\tR\foperationKey\x12(\n" +
+	"\x10target_daemon_id\x18\r \x01(\tR\x0etargetDaemonId\"\x84\x02\n" +
+	"\x18WorktreeRecoveryCheckout\x12\x17\n" +
+	"\arepo_id\x18\x01 \x01(\tR\x06repoId\x12\x10\n" +
+	"\x03rel\x18\x02 \x01(\tR\x03rel\x12\x1d\n" +
+	"\n" +
+	"remote_url\x18\x03 \x01(\tR\tremoteUrl\x12!\n" +
+	"\frecovery_ref\x18\x04 \x01(\tR\vrecoveryRef\x12\x1d\n" +
+	"\n" +
+	"commit_oid\x18\x05 \x01(\tR\tcommitOid\x12'\n" +
+	"\x0fmanifest_digest\x18\x06 \x01(\tR\x0emanifestDigest\x12\x14\n" +
+	"\x05phase\x18\a \x01(\tR\x05phase\x12\x1d\n" +
+	"\n" +
+	"last_error\x18\b \x01(\tR\tlastError\"\x9c\x01\n" +
+	"\x1dListWorktreeRecoveriesRequest\x12\"\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tH\x00R\tprojectId\x88\x01\x01\x121\n" +
+	"\x12source_worktree_id\x18\x02 \x01(\tH\x01R\x10sourceWorktreeId\x88\x01\x01B\r\n" +
+	"\v_project_idB\x15\n" +
+	"\x13_source_worktree_id\"^\n" +
+	"\x1eListWorktreeRecoveriesResponse\x12<\n" +
+	"\n" +
+	"recoveries\x18\x01 \x03(\v2\x1c.reliant.v1.WorktreeRecoveryR\n" +
+	"recoveries\"\xaf\x01\n" +
+	"\x1eRestoreWorktreeRecoveryRequest\x12(\n" +
+	"\vrecovery_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"recoveryId\x121\n" +
+	"\x10target_daemon_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0etargetDaemonId\x120\n" +
+	"\x0fidempotency_key\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\"|\n" +
+	"\x1fRestoreWorktreeRecoveryResponse\x128\n" +
+	"\brecovery\x18\x01 \x01(\v2\x1c.reliant.v1.WorktreeRecoveryR\brecovery\x12\x1f\n" +
+	"\vworktree_id\x18\x02 \x01(\tR\n" +
+	"worktreeId\"{\n" +
+	"\x1dDeleteWorktreeRecoveryRequest\x12(\n" +
+	"\vrecovery_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"recoveryId\x120\n" +
+	"\x0fidempotency_key\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x0eidempotencyKey\"Z\n" +
+	"\x1eDeleteWorktreeRecoveryResponse\x128\n" +
+	"\brecovery\x18\x01 \x01(\v2\x1c.reliant.v1.WorktreeRecoveryR\brecovery\"\xdc\x04\n" +
 	"\bWorktree\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -3922,11 +4604,14 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"deleted_at\x18\r \x01(\tH\x01R\tdeletedAt\x88\x01\x01\x12K\n" +
 	"\x10cleanup_metadata\x18\x0e \x01(\v2\x1b.reliant.v1.CleanupMetadataH\x02R\x0fcleanupMetadata\x88\x01\x01\x12%\n" +
-	"\x0efailure_reason\x18\x0f \x01(\tR\rfailureReasonB\n" +
+	"\x0efailure_reason\x18\x0f \x01(\tR\rfailureReason\x12 \n" +
+	"\tdaemon_id\x18\x10 \x01(\tH\x03R\bdaemonId\x88\x01\x01B\n" +
 	"\n" +
 	"\b_chat_idB\r\n" +
 	"\v_deleted_atB\x13\n" +
-	"\x11_cleanup_metadata\"\xe1\x01\n" +
+	"\x11_cleanup_metadataB\f\n" +
+	"\n" +
+	"_daemon_id\"\x80\x02\n" +
 	"\x0fWorktreeSummary\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -3935,8 +4620,10 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\ais_main\x18\x05 \x01(\bR\x06isMain\x122\n" +
 	"\x06status\x18\x06 \x01(\x0e2\x1a.reliant.v1.WorktreeStatusR\x06status\x12\"\n" +
 	"\n" +
-	"deleted_at\x18\a \x01(\tH\x00R\tdeletedAt\x88\x01\x01B\r\n" +
-	"\v_deleted_at\"\xb9\x02\n" +
+	"deleted_at\x18\a \x01(\tH\x00R\tdeletedAt\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\b \x01(\tR\tprojectIdB\r\n" +
+	"\v_deleted_at\"\xd7\x02\n" +
 	"\x0fCleanupMetadata\x12+\n" +
 	"\x11directory_deleted\x18\x01 \x01(\bR\x10directoryDeleted\x12%\n" +
 	"\x0ebranch_deleted\x18\x02 \x01(\bR\rbranchDeleted\x12\x1f\n" +
@@ -3948,7 +4635,8 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"size_bytes\x18\x05 \x01(\x03R\tsizeBytes\x12#\n" +
 	"\rsnapshot_refs\x18\x06 \x03(\tR\fsnapshotRefs\x12%\n" +
 	"\x0estripped_paths\x18\a \x03(\tR\rstrippedPaths\x12%\n" +
-	"\x0estripped_bytes\x18\b \x01(\x03R\rstrippedBytes\"\x97\x02\n" +
+	"\x0estripped_bytes\x18\b \x01(\x03R\rstrippedBytes\x12\x1c\n" +
+	"\tforgotten\x18\t \x01(\bR\tforgotten\"\x97\x02\n" +
 	"\x12DiscoveredWorktree\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -3977,7 +4665,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\x0e2\x1c.reliant.v1.FileChangeStatusR\x06status\x12\x15\n" +
 	"\x06is_new\x18\x03 \x01(\bR\x05isNew\x12\x12\n" +
 	"\x04diff\x18\x04 \x01(\tR\x04diff\x12\x1b\n" +
-	"\tis_binary\x18\x05 \x01(\bR\bisBinary\"\x9e\x04\n" +
+	"\tis_binary\x18\x05 \x01(\bR\bisBinary\"\xce\x04\n" +
 	"\x15CreateWorktreeRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1d\n" +
@@ -3992,7 +4680,8 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x12source_worktree_id\x18\b \x01(\tH\x02R\x10sourceWorktreeId\x88\x01\x01\x12X\n" +
 	"\rbase_branches\x18\t \x03(\v23.reliant.v1.CreateWorktreeRequest.BaseBranchesEntryR\fbaseBranches\x12,\n" +
 	"\x0fidempotency_key\x18\n" +
-	" \x01(\tH\x03R\x0eidempotencyKey\x88\x01\x01\x1a?\n" +
+	" \x01(\tH\x03R\x0eidempotencyKey\x88\x01\x01\x12 \n" +
+	"\tdaemon_id\x18\v \x01(\tH\x04R\bdaemonId\x88\x01\x01\x1a?\n" +
 	"\x11BaseBranchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +
@@ -4000,7 +4689,9 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"\b_chat_idB\x15\n" +
 	"\x13_source_worktree_idB\x12\n" +
-	"\x10_idempotency_key\"J\n" +
+	"\x10_idempotency_keyB\f\n" +
+	"\n" +
+	"_daemon_id\"J\n" +
 	"\x16CreateWorktreeResponse\x120\n" +
 	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\xe5\x01\n" +
 	"\x14ListWorktreesRequest\x12%\n" +
@@ -4065,7 +4756,7 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
 	"worktreeId\"5\n" +
 	"\x19UnarchiveWorktreeResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"\xd2\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"\x82\x02\n" +
 	"\x15ImportWorktreeRequest\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1d\n" +
 	"\n" +
@@ -4073,27 +4764,36 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x04name\x18\x03 \x01(\tH\x00R\x04name\x88\x01\x01\x12\x1c\n" +
 	"\achat_id\x18\x04 \x01(\tH\x01R\x06chatId\x88\x01\x01\x12\x17\n" +
 	"\arepo_id\x18\x05 \x01(\tR\x06repoId\x12!\n" +
-	"\fconfirm_move\x18\x06 \x01(\bR\vconfirmMoveB\a\n" +
+	"\fconfirm_move\x18\x06 \x01(\bR\vconfirmMove\x12 \n" +
+	"\tdaemon_id\x18\a \x01(\tH\x02R\bdaemonId\x88\x01\x01B\a\n" +
 	"\x05_nameB\n" +
 	"\n" +
-	"\b_chat_id\"J\n" +
+	"\b_chat_idB\f\n" +
+	"\n" +
+	"_daemon_id\"J\n" +
 	"\x16ImportWorktreeResponse\x120\n" +
-	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"Y\n" +
+	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\x89\x01\n" +
 	"\x18DiscoverWorktreesRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1e\n" +
 	"\n" +
 	"background\x18\x02 \x01(\bR\n" +
-	"background\"\xc2\x01\n" +
+	"background\x12 \n" +
+	"\tdaemon_id\x18\x03 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"\xc2\x01\n" +
 	"\x19DiscoverWorktreesResponse\x12>\n" +
 	"\n" +
 	"discovered\x18\x01 \x03(\v2\x1e.reliant.v1.DiscoveredWorktreeR\n" +
 	"discovered\x12/\n" +
 	"\x05stale\x18\x03 \x03(\v2\x19.reliant.v1.StaleWorktreeR\x05stale\x12'\n" +
-	"\x0fworkspaces_root\x18\x04 \x01(\tR\x0eworkspacesRootJ\x04\b\x02\x10\x03R\x05total\"6\n" +
+	"\x0fworkspaces_root\x18\x04 \x01(\tR\x0eworkspacesRootJ\x04\b\x02\x10\x03R\x05total\"f\n" +
 	"\x15PruneWorktreesRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\"K\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12 \n" +
+	"\tdaemon_id\x18\x02 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"K\n" +
 	"\x16PruneWorktreesResponse\x121\n" +
 	"\x06pruned\x18\x01 \x03(\v2\x19.reliant.v1.StaleWorktreeR\x06pruned\":\n" +
 	"\x17RecreateWorktreeRequest\x12\x1f\n" +
@@ -4246,33 +4946,69 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x19WORKTREE_STATUS_ABANDONED\x10\x03\x12\x1b\n" +
 	"\x17WORKTREE_STATUS_MERGING\x10\x04\x12\x1c\n" +
 	"\x18WORKTREE_STATUS_CREATING\x10\x05\x12\x1a\n" +
-	"\x16WORKTREE_STATUS_FAILED\x10\x062\xe1\x11\n" +
-	"\x0fWorktreeService\x12Y\n" +
-	"\x0eCreateWorktree\x12!.reliant.v1.CreateWorktreeRequest\x1a\".reliant.v1.CreateWorktreeResponse\"\x00\x12V\n" +
+	"\x16WORKTREE_STATUS_FAILED\x10\x062\xfc\x1d\n" +
+	"\x0fWorktreeService\x12q\n" +
+	"\x16ListWorktreeRecoveries\x12).reliant.v1.ListWorktreeRecoveriesRequest\x1a*.reliant.v1.ListWorktreeRecoveriesResponse\"\x00\x12\xcd\x01\n" +
+	"\x17RestoreWorktreeRecovery\x12*.reliant.v1.RestoreWorktreeRecoveryRequest\x1a+.reliant.v1.RestoreWorktreeRecoveryResponse\"Y\xa2\xbb\x18U:S\n" +
+	"\arestore\x12 \n" +
+	"\x11worktree_recovery\x12\vrecovery_id*\x14response.worktree_id*\x10target_daemon_id\x12\xba\x01\n" +
+	"\x16DeleteWorktreeRecovery\x12).reliant.v1.DeleteWorktreeRecoveryRequest\x1a*.reliant.v1.DeleteWorktreeRecoveryResponse\"I\xa2\xbb\x18E:C\n" +
+	"\x06delete\x12 \n" +
+	"\x11worktree_recovery\x12\vrecovery_id*\x17response.recovery.phase\x12\xc7\x01\n" +
+	"\x0eCreateWorktree\x12!.reliant.v1.CreateWorktreeRequest\x1a\".reliant.v1.CreateWorktreeResponse\"n\xa2\xbb\x18j:h\n" +
+	"\x06create\x128\n" +
+	"\bworktree\x12\x14response.worktree.id\x1a\x16response.worktree.name*\n" +
+	"project_id*\x18response.worktree.branch\x12V\n" +
 	"\rListWorktrees\x12 .reliant.v1.ListWorktreesRequest\x1a!.reliant.v1.ListWorktreesResponse\"\x00\x12n\n" +
 	"\x15ListArchivedWorktrees\x12(.reliant.v1.ListArchivedWorktreesRequest\x1a).reliant.v1.ListArchivedWorktreesResponse\"\x00\x12P\n" +
-	"\vGetWorktree\x12\x1e.reliant.v1.GetWorktreeRequest\x1a\x1f.reliant.v1.GetWorktreeResponse\"\x00\x12Y\n" +
-	"\x0eUpdateWorktree\x12!.reliant.v1.UpdateWorktreeRequest\x1a\".reliant.v1.UpdateWorktreeResponse\"\x00\x12Y\n" +
-	"\x0eDeleteWorktree\x12!.reliant.v1.DeleteWorktreeRequest\x1a\".reliant.v1.DeleteWorktreeResponse\"\x00\x12\\\n" +
-	"\x0fArchiveWorktree\x12\".reliant.v1.ArchiveWorktreeRequest\x1a#.reliant.v1.ArchiveWorktreeResponse\"\x00\x12b\n" +
-	"\x11UnarchiveWorktree\x12$.reliant.v1.UnarchiveWorktreeRequest\x1a%.reliant.v1.UnarchiveWorktreeResponse\"\x00\x12Y\n" +
-	"\x0eImportWorktree\x12!.reliant.v1.ImportWorktreeRequest\x1a\".reliant.v1.ImportWorktreeResponse\"\x00\x12b\n" +
-	"\x11DiscoverWorktrees\x12$.reliant.v1.DiscoverWorktreesRequest\x1a%.reliant.v1.DiscoverWorktreesResponse\"\x00\x12Y\n" +
-	"\x0ePruneWorktrees\x12!.reliant.v1.PruneWorktreesRequest\x1a\".reliant.v1.PruneWorktreesResponse\"\x00\x12_\n" +
-	"\x10RecreateWorktree\x12#.reliant.v1.RecreateWorktreeRequest\x1a$.reliant.v1.RecreateWorktreeResponse\"\x00\x12e\n" +
+	"\vGetWorktree\x12\x1e.reliant.v1.GetWorktreeRequest\x1a\x1f.reliant.v1.GetWorktreeResponse\"\x00\x12\x98\x01\n" +
+	"\x0eUpdateWorktree\x12!.reliant.v1.UpdateWorktreeRequest\x1a\".reliant.v1.UpdateWorktreeResponse\"?\xa2\xbb\x18;:9\n" +
+	"\x06update\x12/\n" +
+	"\bworktree\x12\vworktree_id\x1a\x16response.worktree.name\x12\xb7\x01\n" +
+	"\x0eDeleteWorktree\x12!.reliant.v1.DeleteWorktreeRequest\x1a\".reliant.v1.DeleteWorktreeResponse\"^\xa2\xbb\x18Z:X\n" +
+	"\x06delete\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\x1cresponse.is_permanent_delete*\x17response.deleted_branch\x12\x9d\x01\n" +
+	"\x0fArchiveWorktree\x12\".reliant.v1.ArchiveWorktreeRequest\x1a#.reliant.v1.ArchiveWorktreeResponse\"A\xa2\xbb\x18=:;\n" +
+	"\aarchive\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\x17response.deleted_branch\x12\x8c\x01\n" +
+	"\x11UnarchiveWorktree\x12$.reliant.v1.UnarchiveWorktreeRequest\x1a%.reliant.v1.UnarchiveWorktreeResponse\"*\xa2\xbb\x18&:$\n" +
+	"\tunarchive\x12\x17\n" +
+	"\bworktree\x12\vworktree_id\x12\xb6\x01\n" +
+	"\x0eImportWorktree\x12!.reliant.v1.ImportWorktreeRequest\x1a\".reliant.v1.ImportWorktreeResponse\"]\xa2\xbb\x18Y:W\n" +
+	"\x06import\x128\n" +
+	"\bworktree\x12\x14response.worktree.id\x1a\x16response.worktree.name*\n" +
+	"project_id*\arepo_id\x12e\n" +
+	"\x11DiscoverWorktrees\x12$.reliant.v1.DiscoverWorktreesRequest\x1a%.reliant.v1.DiscoverWorktreesResponse\"\x03\x90\x02\x01\x12\x87\x01\n" +
+	"\x0ePruneWorktrees\x12!.reliant.v1.PruneWorktreesRequest\x1a\".reliant.v1.PruneWorktreesResponse\".\xa2\xbb\x18*:(\n" +
+	"\x0fprune_worktrees\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id\x12\x99\x01\n" +
+	"\x10RecreateWorktree\x12#.reliant.v1.RecreateWorktreeRequest\x1a$.reliant.v1.RecreateWorktreeResponse\":\xa2\xbb\x186:4\n" +
+	"\brecreate\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\x0fresponse.branch\x12e\n" +
 	"\x12GetWorktreeChanges\x12%.reliant.v1.GetWorktreeChangesRequest\x1a&.reliant.v1.GetWorktreeChangesResponse\"\x00\x12k\n" +
 	"\x14GetWorktreeGitStatus\x12'.reliant.v1.GetWorktreeGitStatusRequest\x1a(.reliant.v1.GetWorktreeGitStatusResponse\"\x00\x12e\n" +
 	"\x12GetWorktreeCommits\x12%.reliant.v1.GetWorktreeCommitsRequest\x1a&.reliant.v1.GetWorktreeCommitsResponse\"\x00\x12w\n" +
-	"\x18ListWorktreeRepoStatuses\x12+.reliant.v1.ListWorktreeRepoStatusesRequest\x1a,.reliant.v1.ListWorktreeRepoStatusesResponse\"\x00\x12M\n" +
+	"\x18ListWorktreeRepoStatuses\x12+.reliant.v1.ListWorktreeRepoStatusesRequest\x1a,.reliant.v1.ListWorktreeRepoStatusesResponse\"\x00\x12\xb0\x01\n" +
 	"\n" +
-	"StageFiles\x12\x1d.reliant.v1.StageFilesRequest\x1a\x1e.reliant.v1.StageFilesResponse\"\x00\x12S\n" +
-	"\fUnstageFiles\x12\x1f.reliant.v1.UnstageFilesRequest\x1a .reliant.v1.UnstageFilesResponse\"\x00\x12P\n" +
-	"\vRevertFiles\x12\x1e.reliant.v1.RevertFilesRequest\x1a\x1f.reliant.v1.RevertFilesResponse\"\x00\x12Y\n" +
-	"\x0eCommitWorktree\x12!.reliant.v1.CommitWorktreeRequest\x1a\".reliant.v1.CommitWorktreeResponse\"\x00\x12S\n" +
-	"\fPushWorktree\x12\x1f.reliant.v1.PushWorktreeRequest\x1a .reliant.v1.PushWorktreeResponse\"\x00\x12S\n" +
-	"\fPullWorktree\x12\x1f.reliant.v1.PullWorktreeRequest\x1a .reliant.v1.PullWorktreeResponse\"\x00\x12V\n" +
-	"\rGetWorktreePR\x12 .reliant.v1.GetWorktreePRRequest\x1a!.reliant.v1.GetWorktreePRResponse\"\x00\x12_\n" +
-	"\x10CreateWorktreePR\x12#.reliant.v1.CreateWorktreePRRequest\x1a$.reliant.v1.CreateWorktreePRResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"StageFiles\x12\x1d.reliant.v1.StageFilesRequest\x1a\x1e.reliant.v1.StageFilesResponse\"c\xa2\xbb\x18_:]:[git index edit through the daemon: the commit that follows is the event, and git records it\x12\xb8\x01\n" +
+	"\fUnstageFiles\x12\x1f.reliant.v1.UnstageFilesRequest\x1a .reliant.v1.UnstageFilesResponse\"e\xa2\xbb\x18a:_:]git index edit through the daemon: undoes a stage, and the repository's history never sees it\x12\x86\x01\n" +
+	"\vRevertFiles\x12\x1e.reliant.v1.RevertFilesRequest\x1a\x1f.reliant.v1.RevertFilesResponse\"6\xa2\xbb\x182:0\n" +
+	"\frevert_files\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id\x12\x89\x01\n" +
+	"\x0eCommitWorktree\x12!.reliant.v1.CommitWorktreeRequest\x1a\".reliant.v1.CommitWorktreeResponse\"0\xa2\xbb\x18,:*\n" +
+	"\x06commit\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id\x12\x81\x01\n" +
+	"\fPushWorktree\x12\x1f.reliant.v1.PushWorktreeRequest\x1a .reliant.v1.PushWorktreeResponse\".\xa2\xbb\x18*:(\n" +
+	"\x04push\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id\x12\x81\x01\n" +
+	"\fPullWorktree\x12\x1f.reliant.v1.PullWorktreeRequest\x1a .reliant.v1.PullWorktreeResponse\".\xa2\xbb\x18*:(\n" +
+	"\x04pull\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id\x12V\n" +
+	"\rGetWorktreePR\x12 .reliant.v1.GetWorktreePRRequest\x1a!.reliant.v1.GetWorktreePRResponse\"\x00\x12\xa3\x01\n" +
+	"\x10CreateWorktreePR\x12#.reliant.v1.CreateWorktreePRRequest\x1a$.reliant.v1.CreateWorktreePRResponse\"D\xa2\xbb\x18@:>\n" +
+	"\tcreate_pr\x12\x17\n" +
+	"\bworktree\x12\vworktree_id*\arepo_id*\x0fresponse.pr_urlB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_worktree_proto_rawDescOnce sync.Once
@@ -4287,140 +5023,158 @@ func file_reliant_v1_worktree_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_worktree_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_worktree_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
+var file_reliant_v1_worktree_proto_msgTypes = make([]protoimpl.MessageInfo, 65)
 var file_reliant_v1_worktree_proto_goTypes = []any{
 	(WorktreeStatus)(0),                      // 0: reliant.v1.WorktreeStatus
-	(*Worktree)(nil),                         // 1: reliant.v1.Worktree
-	(*WorktreeSummary)(nil),                  // 2: reliant.v1.WorktreeSummary
-	(*CleanupMetadata)(nil),                  // 3: reliant.v1.CleanupMetadata
-	(*DiscoveredWorktree)(nil),               // 4: reliant.v1.DiscoveredWorktree
-	(*StaleWorktree)(nil),                    // 5: reliant.v1.StaleWorktree
-	(*GitCommit)(nil),                        // 6: reliant.v1.GitCommit
-	(*WorktreeFileChange)(nil),               // 7: reliant.v1.WorktreeFileChange
-	(*CreateWorktreeRequest)(nil),            // 8: reliant.v1.CreateWorktreeRequest
-	(*CreateWorktreeResponse)(nil),           // 9: reliant.v1.CreateWorktreeResponse
-	(*ListWorktreesRequest)(nil),             // 10: reliant.v1.ListWorktreesRequest
-	(*ListWorktreesResponse)(nil),            // 11: reliant.v1.ListWorktreesResponse
-	(*ListArchivedWorktreesRequest)(nil),     // 12: reliant.v1.ListArchivedWorktreesRequest
-	(*ListArchivedWorktreesResponse)(nil),    // 13: reliant.v1.ListArchivedWorktreesResponse
-	(*GetWorktreeRequest)(nil),               // 14: reliant.v1.GetWorktreeRequest
-	(*GetWorktreeResponse)(nil),              // 15: reliant.v1.GetWorktreeResponse
-	(*UpdateWorktreeRequest)(nil),            // 16: reliant.v1.UpdateWorktreeRequest
-	(*UpdateWorktreeResponse)(nil),           // 17: reliant.v1.UpdateWorktreeResponse
-	(*DeleteWorktreeRequest)(nil),            // 18: reliant.v1.DeleteWorktreeRequest
-	(*DeleteWorktreeResponse)(nil),           // 19: reliant.v1.DeleteWorktreeResponse
-	(*ArchiveWorktreeRequest)(nil),           // 20: reliant.v1.ArchiveWorktreeRequest
-	(*ArchiveWorktreeResponse)(nil),          // 21: reliant.v1.ArchiveWorktreeResponse
-	(*UnarchiveWorktreeRequest)(nil),         // 22: reliant.v1.UnarchiveWorktreeRequest
-	(*UnarchiveWorktreeResponse)(nil),        // 23: reliant.v1.UnarchiveWorktreeResponse
-	(*ImportWorktreeRequest)(nil),            // 24: reliant.v1.ImportWorktreeRequest
-	(*ImportWorktreeResponse)(nil),           // 25: reliant.v1.ImportWorktreeResponse
-	(*DiscoverWorktreesRequest)(nil),         // 26: reliant.v1.DiscoverWorktreesRequest
-	(*DiscoverWorktreesResponse)(nil),        // 27: reliant.v1.DiscoverWorktreesResponse
-	(*PruneWorktreesRequest)(nil),            // 28: reliant.v1.PruneWorktreesRequest
-	(*PruneWorktreesResponse)(nil),           // 29: reliant.v1.PruneWorktreesResponse
-	(*RecreateWorktreeRequest)(nil),          // 30: reliant.v1.RecreateWorktreeRequest
-	(*RecreateWorktreeResponse)(nil),         // 31: reliant.v1.RecreateWorktreeResponse
-	(*GetWorktreeChangesRequest)(nil),        // 32: reliant.v1.GetWorktreeChangesRequest
-	(*GetWorktreeChangesResponse)(nil),       // 33: reliant.v1.GetWorktreeChangesResponse
-	(*GetWorktreeGitStatusRequest)(nil),      // 34: reliant.v1.GetWorktreeGitStatusRequest
-	(*GetWorktreeGitStatusResponse)(nil),     // 35: reliant.v1.GetWorktreeGitStatusResponse
-	(*GetWorktreeCommitsRequest)(nil),        // 36: reliant.v1.GetWorktreeCommitsRequest
-	(*ListWorktreeRepoStatusesRequest)(nil),  // 37: reliant.v1.ListWorktreeRepoStatusesRequest
-	(*WorktreeRepoStatus)(nil),               // 38: reliant.v1.WorktreeRepoStatus
-	(*ListWorktreeRepoStatusesResponse)(nil), // 39: reliant.v1.ListWorktreeRepoStatusesResponse
-	(*GetWorktreeCommitsResponse)(nil),       // 40: reliant.v1.GetWorktreeCommitsResponse
-	(*StageFilesRequest)(nil),                // 41: reliant.v1.StageFilesRequest
-	(*StageFilesResponse)(nil),               // 42: reliant.v1.StageFilesResponse
-	(*UnstageFilesRequest)(nil),              // 43: reliant.v1.UnstageFilesRequest
-	(*UnstageFilesResponse)(nil),             // 44: reliant.v1.UnstageFilesResponse
-	(*RevertFilesRequest)(nil),               // 45: reliant.v1.RevertFilesRequest
-	(*RevertFilesResponse)(nil),              // 46: reliant.v1.RevertFilesResponse
-	(*CommitWorktreeRequest)(nil),            // 47: reliant.v1.CommitWorktreeRequest
-	(*CommitWorktreeResponse)(nil),           // 48: reliant.v1.CommitWorktreeResponse
-	(*PushWorktreeRequest)(nil),              // 49: reliant.v1.PushWorktreeRequest
-	(*PushWorktreeResponse)(nil),             // 50: reliant.v1.PushWorktreeResponse
-	(*PullWorktreeRequest)(nil),              // 51: reliant.v1.PullWorktreeRequest
-	(*PullWorktreeResponse)(nil),             // 52: reliant.v1.PullWorktreeResponse
-	(*GetWorktreePRRequest)(nil),             // 53: reliant.v1.GetWorktreePRRequest
-	(*GetWorktreePRResponse)(nil),            // 54: reliant.v1.GetWorktreePRResponse
-	(*CreateWorktreePRRequest)(nil),          // 55: reliant.v1.CreateWorktreePRRequest
-	(*CreateWorktreePRResponse)(nil),         // 56: reliant.v1.CreateWorktreePRResponse
-	nil,                                      // 57: reliant.v1.CreateWorktreeRequest.BaseBranchesEntry
-	(FileChangeStatus)(0),                    // 58: reliant.v1.FileChangeStatus
+	(*WorktreeRecovery)(nil),                 // 1: reliant.v1.WorktreeRecovery
+	(*WorktreeRecoveryCheckout)(nil),         // 2: reliant.v1.WorktreeRecoveryCheckout
+	(*ListWorktreeRecoveriesRequest)(nil),    // 3: reliant.v1.ListWorktreeRecoveriesRequest
+	(*ListWorktreeRecoveriesResponse)(nil),   // 4: reliant.v1.ListWorktreeRecoveriesResponse
+	(*RestoreWorktreeRecoveryRequest)(nil),   // 5: reliant.v1.RestoreWorktreeRecoveryRequest
+	(*RestoreWorktreeRecoveryResponse)(nil),  // 6: reliant.v1.RestoreWorktreeRecoveryResponse
+	(*DeleteWorktreeRecoveryRequest)(nil),    // 7: reliant.v1.DeleteWorktreeRecoveryRequest
+	(*DeleteWorktreeRecoveryResponse)(nil),   // 8: reliant.v1.DeleteWorktreeRecoveryResponse
+	(*Worktree)(nil),                         // 9: reliant.v1.Worktree
+	(*WorktreeSummary)(nil),                  // 10: reliant.v1.WorktreeSummary
+	(*CleanupMetadata)(nil),                  // 11: reliant.v1.CleanupMetadata
+	(*DiscoveredWorktree)(nil),               // 12: reliant.v1.DiscoveredWorktree
+	(*StaleWorktree)(nil),                    // 13: reliant.v1.StaleWorktree
+	(*GitCommit)(nil),                        // 14: reliant.v1.GitCommit
+	(*WorktreeFileChange)(nil),               // 15: reliant.v1.WorktreeFileChange
+	(*CreateWorktreeRequest)(nil),            // 16: reliant.v1.CreateWorktreeRequest
+	(*CreateWorktreeResponse)(nil),           // 17: reliant.v1.CreateWorktreeResponse
+	(*ListWorktreesRequest)(nil),             // 18: reliant.v1.ListWorktreesRequest
+	(*ListWorktreesResponse)(nil),            // 19: reliant.v1.ListWorktreesResponse
+	(*ListArchivedWorktreesRequest)(nil),     // 20: reliant.v1.ListArchivedWorktreesRequest
+	(*ListArchivedWorktreesResponse)(nil),    // 21: reliant.v1.ListArchivedWorktreesResponse
+	(*GetWorktreeRequest)(nil),               // 22: reliant.v1.GetWorktreeRequest
+	(*GetWorktreeResponse)(nil),              // 23: reliant.v1.GetWorktreeResponse
+	(*UpdateWorktreeRequest)(nil),            // 24: reliant.v1.UpdateWorktreeRequest
+	(*UpdateWorktreeResponse)(nil),           // 25: reliant.v1.UpdateWorktreeResponse
+	(*DeleteWorktreeRequest)(nil),            // 26: reliant.v1.DeleteWorktreeRequest
+	(*DeleteWorktreeResponse)(nil),           // 27: reliant.v1.DeleteWorktreeResponse
+	(*ArchiveWorktreeRequest)(nil),           // 28: reliant.v1.ArchiveWorktreeRequest
+	(*ArchiveWorktreeResponse)(nil),          // 29: reliant.v1.ArchiveWorktreeResponse
+	(*UnarchiveWorktreeRequest)(nil),         // 30: reliant.v1.UnarchiveWorktreeRequest
+	(*UnarchiveWorktreeResponse)(nil),        // 31: reliant.v1.UnarchiveWorktreeResponse
+	(*ImportWorktreeRequest)(nil),            // 32: reliant.v1.ImportWorktreeRequest
+	(*ImportWorktreeResponse)(nil),           // 33: reliant.v1.ImportWorktreeResponse
+	(*DiscoverWorktreesRequest)(nil),         // 34: reliant.v1.DiscoverWorktreesRequest
+	(*DiscoverWorktreesResponse)(nil),        // 35: reliant.v1.DiscoverWorktreesResponse
+	(*PruneWorktreesRequest)(nil),            // 36: reliant.v1.PruneWorktreesRequest
+	(*PruneWorktreesResponse)(nil),           // 37: reliant.v1.PruneWorktreesResponse
+	(*RecreateWorktreeRequest)(nil),          // 38: reliant.v1.RecreateWorktreeRequest
+	(*RecreateWorktreeResponse)(nil),         // 39: reliant.v1.RecreateWorktreeResponse
+	(*GetWorktreeChangesRequest)(nil),        // 40: reliant.v1.GetWorktreeChangesRequest
+	(*GetWorktreeChangesResponse)(nil),       // 41: reliant.v1.GetWorktreeChangesResponse
+	(*GetWorktreeGitStatusRequest)(nil),      // 42: reliant.v1.GetWorktreeGitStatusRequest
+	(*GetWorktreeGitStatusResponse)(nil),     // 43: reliant.v1.GetWorktreeGitStatusResponse
+	(*GetWorktreeCommitsRequest)(nil),        // 44: reliant.v1.GetWorktreeCommitsRequest
+	(*ListWorktreeRepoStatusesRequest)(nil),  // 45: reliant.v1.ListWorktreeRepoStatusesRequest
+	(*WorktreeRepoStatus)(nil),               // 46: reliant.v1.WorktreeRepoStatus
+	(*ListWorktreeRepoStatusesResponse)(nil), // 47: reliant.v1.ListWorktreeRepoStatusesResponse
+	(*GetWorktreeCommitsResponse)(nil),       // 48: reliant.v1.GetWorktreeCommitsResponse
+	(*StageFilesRequest)(nil),                // 49: reliant.v1.StageFilesRequest
+	(*StageFilesResponse)(nil),               // 50: reliant.v1.StageFilesResponse
+	(*UnstageFilesRequest)(nil),              // 51: reliant.v1.UnstageFilesRequest
+	(*UnstageFilesResponse)(nil),             // 52: reliant.v1.UnstageFilesResponse
+	(*RevertFilesRequest)(nil),               // 53: reliant.v1.RevertFilesRequest
+	(*RevertFilesResponse)(nil),              // 54: reliant.v1.RevertFilesResponse
+	(*CommitWorktreeRequest)(nil),            // 55: reliant.v1.CommitWorktreeRequest
+	(*CommitWorktreeResponse)(nil),           // 56: reliant.v1.CommitWorktreeResponse
+	(*PushWorktreeRequest)(nil),              // 57: reliant.v1.PushWorktreeRequest
+	(*PushWorktreeResponse)(nil),             // 58: reliant.v1.PushWorktreeResponse
+	(*PullWorktreeRequest)(nil),              // 59: reliant.v1.PullWorktreeRequest
+	(*PullWorktreeResponse)(nil),             // 60: reliant.v1.PullWorktreeResponse
+	(*GetWorktreePRRequest)(nil),             // 61: reliant.v1.GetWorktreePRRequest
+	(*GetWorktreePRResponse)(nil),            // 62: reliant.v1.GetWorktreePRResponse
+	(*CreateWorktreePRRequest)(nil),          // 63: reliant.v1.CreateWorktreePRRequest
+	(*CreateWorktreePRResponse)(nil),         // 64: reliant.v1.CreateWorktreePRResponse
+	nil,                                      // 65: reliant.v1.CreateWorktreeRequest.BaseBranchesEntry
+	(FileChangeStatus)(0),                    // 66: reliant.v1.FileChangeStatus
 }
 var file_reliant_v1_worktree_proto_depIdxs = []int32{
-	0,  // 0: reliant.v1.Worktree.status:type_name -> reliant.v1.WorktreeStatus
-	3,  // 1: reliant.v1.Worktree.cleanup_metadata:type_name -> reliant.v1.CleanupMetadata
-	0,  // 2: reliant.v1.WorktreeSummary.status:type_name -> reliant.v1.WorktreeStatus
-	58, // 3: reliant.v1.WorktreeFileChange.status:type_name -> reliant.v1.FileChangeStatus
-	57, // 4: reliant.v1.CreateWorktreeRequest.base_branches:type_name -> reliant.v1.CreateWorktreeRequest.BaseBranchesEntry
-	1,  // 5: reliant.v1.CreateWorktreeResponse.worktree:type_name -> reliant.v1.Worktree
-	1,  // 6: reliant.v1.ListWorktreesResponse.worktrees:type_name -> reliant.v1.Worktree
-	1,  // 7: reliant.v1.ListArchivedWorktreesResponse.worktrees:type_name -> reliant.v1.Worktree
-	1,  // 8: reliant.v1.GetWorktreeResponse.worktree:type_name -> reliant.v1.Worktree
-	0,  // 9: reliant.v1.UpdateWorktreeRequest.status:type_name -> reliant.v1.WorktreeStatus
-	1,  // 10: reliant.v1.UpdateWorktreeResponse.worktree:type_name -> reliant.v1.Worktree
-	1,  // 11: reliant.v1.ImportWorktreeResponse.worktree:type_name -> reliant.v1.Worktree
-	4,  // 12: reliant.v1.DiscoverWorktreesResponse.discovered:type_name -> reliant.v1.DiscoveredWorktree
-	5,  // 13: reliant.v1.DiscoverWorktreesResponse.stale:type_name -> reliant.v1.StaleWorktree
-	5,  // 14: reliant.v1.PruneWorktreesResponse.pruned:type_name -> reliant.v1.StaleWorktree
-	7,  // 15: reliant.v1.GetWorktreeChangesResponse.files:type_name -> reliant.v1.WorktreeFileChange
-	38, // 16: reliant.v1.ListWorktreeRepoStatusesResponse.statuses:type_name -> reliant.v1.WorktreeRepoStatus
-	6,  // 17: reliant.v1.GetWorktreeCommitsResponse.commits:type_name -> reliant.v1.GitCommit
-	8,  // 18: reliant.v1.WorktreeService.CreateWorktree:input_type -> reliant.v1.CreateWorktreeRequest
-	10, // 19: reliant.v1.WorktreeService.ListWorktrees:input_type -> reliant.v1.ListWorktreesRequest
-	12, // 20: reliant.v1.WorktreeService.ListArchivedWorktrees:input_type -> reliant.v1.ListArchivedWorktreesRequest
-	14, // 21: reliant.v1.WorktreeService.GetWorktree:input_type -> reliant.v1.GetWorktreeRequest
-	16, // 22: reliant.v1.WorktreeService.UpdateWorktree:input_type -> reliant.v1.UpdateWorktreeRequest
-	18, // 23: reliant.v1.WorktreeService.DeleteWorktree:input_type -> reliant.v1.DeleteWorktreeRequest
-	20, // 24: reliant.v1.WorktreeService.ArchiveWorktree:input_type -> reliant.v1.ArchiveWorktreeRequest
-	22, // 25: reliant.v1.WorktreeService.UnarchiveWorktree:input_type -> reliant.v1.UnarchiveWorktreeRequest
-	24, // 26: reliant.v1.WorktreeService.ImportWorktree:input_type -> reliant.v1.ImportWorktreeRequest
-	26, // 27: reliant.v1.WorktreeService.DiscoverWorktrees:input_type -> reliant.v1.DiscoverWorktreesRequest
-	28, // 28: reliant.v1.WorktreeService.PruneWorktrees:input_type -> reliant.v1.PruneWorktreesRequest
-	30, // 29: reliant.v1.WorktreeService.RecreateWorktree:input_type -> reliant.v1.RecreateWorktreeRequest
-	32, // 30: reliant.v1.WorktreeService.GetWorktreeChanges:input_type -> reliant.v1.GetWorktreeChangesRequest
-	34, // 31: reliant.v1.WorktreeService.GetWorktreeGitStatus:input_type -> reliant.v1.GetWorktreeGitStatusRequest
-	36, // 32: reliant.v1.WorktreeService.GetWorktreeCommits:input_type -> reliant.v1.GetWorktreeCommitsRequest
-	37, // 33: reliant.v1.WorktreeService.ListWorktreeRepoStatuses:input_type -> reliant.v1.ListWorktreeRepoStatusesRequest
-	41, // 34: reliant.v1.WorktreeService.StageFiles:input_type -> reliant.v1.StageFilesRequest
-	43, // 35: reliant.v1.WorktreeService.UnstageFiles:input_type -> reliant.v1.UnstageFilesRequest
-	45, // 36: reliant.v1.WorktreeService.RevertFiles:input_type -> reliant.v1.RevertFilesRequest
-	47, // 37: reliant.v1.WorktreeService.CommitWorktree:input_type -> reliant.v1.CommitWorktreeRequest
-	49, // 38: reliant.v1.WorktreeService.PushWorktree:input_type -> reliant.v1.PushWorktreeRequest
-	51, // 39: reliant.v1.WorktreeService.PullWorktree:input_type -> reliant.v1.PullWorktreeRequest
-	53, // 40: reliant.v1.WorktreeService.GetWorktreePR:input_type -> reliant.v1.GetWorktreePRRequest
-	55, // 41: reliant.v1.WorktreeService.CreateWorktreePR:input_type -> reliant.v1.CreateWorktreePRRequest
-	9,  // 42: reliant.v1.WorktreeService.CreateWorktree:output_type -> reliant.v1.CreateWorktreeResponse
-	11, // 43: reliant.v1.WorktreeService.ListWorktrees:output_type -> reliant.v1.ListWorktreesResponse
-	13, // 44: reliant.v1.WorktreeService.ListArchivedWorktrees:output_type -> reliant.v1.ListArchivedWorktreesResponse
-	15, // 45: reliant.v1.WorktreeService.GetWorktree:output_type -> reliant.v1.GetWorktreeResponse
-	17, // 46: reliant.v1.WorktreeService.UpdateWorktree:output_type -> reliant.v1.UpdateWorktreeResponse
-	19, // 47: reliant.v1.WorktreeService.DeleteWorktree:output_type -> reliant.v1.DeleteWorktreeResponse
-	21, // 48: reliant.v1.WorktreeService.ArchiveWorktree:output_type -> reliant.v1.ArchiveWorktreeResponse
-	23, // 49: reliant.v1.WorktreeService.UnarchiveWorktree:output_type -> reliant.v1.UnarchiveWorktreeResponse
-	25, // 50: reliant.v1.WorktreeService.ImportWorktree:output_type -> reliant.v1.ImportWorktreeResponse
-	27, // 51: reliant.v1.WorktreeService.DiscoverWorktrees:output_type -> reliant.v1.DiscoverWorktreesResponse
-	29, // 52: reliant.v1.WorktreeService.PruneWorktrees:output_type -> reliant.v1.PruneWorktreesResponse
-	31, // 53: reliant.v1.WorktreeService.RecreateWorktree:output_type -> reliant.v1.RecreateWorktreeResponse
-	33, // 54: reliant.v1.WorktreeService.GetWorktreeChanges:output_type -> reliant.v1.GetWorktreeChangesResponse
-	35, // 55: reliant.v1.WorktreeService.GetWorktreeGitStatus:output_type -> reliant.v1.GetWorktreeGitStatusResponse
-	40, // 56: reliant.v1.WorktreeService.GetWorktreeCommits:output_type -> reliant.v1.GetWorktreeCommitsResponse
-	39, // 57: reliant.v1.WorktreeService.ListWorktreeRepoStatuses:output_type -> reliant.v1.ListWorktreeRepoStatusesResponse
-	42, // 58: reliant.v1.WorktreeService.StageFiles:output_type -> reliant.v1.StageFilesResponse
-	44, // 59: reliant.v1.WorktreeService.UnstageFiles:output_type -> reliant.v1.UnstageFilesResponse
-	46, // 60: reliant.v1.WorktreeService.RevertFiles:output_type -> reliant.v1.RevertFilesResponse
-	48, // 61: reliant.v1.WorktreeService.CommitWorktree:output_type -> reliant.v1.CommitWorktreeResponse
-	50, // 62: reliant.v1.WorktreeService.PushWorktree:output_type -> reliant.v1.PushWorktreeResponse
-	52, // 63: reliant.v1.WorktreeService.PullWorktree:output_type -> reliant.v1.PullWorktreeResponse
-	54, // 64: reliant.v1.WorktreeService.GetWorktreePR:output_type -> reliant.v1.GetWorktreePRResponse
-	56, // 65: reliant.v1.WorktreeService.CreateWorktreePR:output_type -> reliant.v1.CreateWorktreePRResponse
-	42, // [42:66] is the sub-list for method output_type
-	18, // [18:42] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	2,  // 0: reliant.v1.WorktreeRecovery.checkouts:type_name -> reliant.v1.WorktreeRecoveryCheckout
+	1,  // 1: reliant.v1.ListWorktreeRecoveriesResponse.recoveries:type_name -> reliant.v1.WorktreeRecovery
+	1,  // 2: reliant.v1.RestoreWorktreeRecoveryResponse.recovery:type_name -> reliant.v1.WorktreeRecovery
+	1,  // 3: reliant.v1.DeleteWorktreeRecoveryResponse.recovery:type_name -> reliant.v1.WorktreeRecovery
+	0,  // 4: reliant.v1.Worktree.status:type_name -> reliant.v1.WorktreeStatus
+	11, // 5: reliant.v1.Worktree.cleanup_metadata:type_name -> reliant.v1.CleanupMetadata
+	0,  // 6: reliant.v1.WorktreeSummary.status:type_name -> reliant.v1.WorktreeStatus
+	66, // 7: reliant.v1.WorktreeFileChange.status:type_name -> reliant.v1.FileChangeStatus
+	65, // 8: reliant.v1.CreateWorktreeRequest.base_branches:type_name -> reliant.v1.CreateWorktreeRequest.BaseBranchesEntry
+	9,  // 9: reliant.v1.CreateWorktreeResponse.worktree:type_name -> reliant.v1.Worktree
+	9,  // 10: reliant.v1.ListWorktreesResponse.worktrees:type_name -> reliant.v1.Worktree
+	9,  // 11: reliant.v1.ListArchivedWorktreesResponse.worktrees:type_name -> reliant.v1.Worktree
+	9,  // 12: reliant.v1.GetWorktreeResponse.worktree:type_name -> reliant.v1.Worktree
+	0,  // 13: reliant.v1.UpdateWorktreeRequest.status:type_name -> reliant.v1.WorktreeStatus
+	9,  // 14: reliant.v1.UpdateWorktreeResponse.worktree:type_name -> reliant.v1.Worktree
+	9,  // 15: reliant.v1.ImportWorktreeResponse.worktree:type_name -> reliant.v1.Worktree
+	12, // 16: reliant.v1.DiscoverWorktreesResponse.discovered:type_name -> reliant.v1.DiscoveredWorktree
+	13, // 17: reliant.v1.DiscoverWorktreesResponse.stale:type_name -> reliant.v1.StaleWorktree
+	13, // 18: reliant.v1.PruneWorktreesResponse.pruned:type_name -> reliant.v1.StaleWorktree
+	15, // 19: reliant.v1.GetWorktreeChangesResponse.files:type_name -> reliant.v1.WorktreeFileChange
+	46, // 20: reliant.v1.ListWorktreeRepoStatusesResponse.statuses:type_name -> reliant.v1.WorktreeRepoStatus
+	14, // 21: reliant.v1.GetWorktreeCommitsResponse.commits:type_name -> reliant.v1.GitCommit
+	3,  // 22: reliant.v1.WorktreeService.ListWorktreeRecoveries:input_type -> reliant.v1.ListWorktreeRecoveriesRequest
+	5,  // 23: reliant.v1.WorktreeService.RestoreWorktreeRecovery:input_type -> reliant.v1.RestoreWorktreeRecoveryRequest
+	7,  // 24: reliant.v1.WorktreeService.DeleteWorktreeRecovery:input_type -> reliant.v1.DeleteWorktreeRecoveryRequest
+	16, // 25: reliant.v1.WorktreeService.CreateWorktree:input_type -> reliant.v1.CreateWorktreeRequest
+	18, // 26: reliant.v1.WorktreeService.ListWorktrees:input_type -> reliant.v1.ListWorktreesRequest
+	20, // 27: reliant.v1.WorktreeService.ListArchivedWorktrees:input_type -> reliant.v1.ListArchivedWorktreesRequest
+	22, // 28: reliant.v1.WorktreeService.GetWorktree:input_type -> reliant.v1.GetWorktreeRequest
+	24, // 29: reliant.v1.WorktreeService.UpdateWorktree:input_type -> reliant.v1.UpdateWorktreeRequest
+	26, // 30: reliant.v1.WorktreeService.DeleteWorktree:input_type -> reliant.v1.DeleteWorktreeRequest
+	28, // 31: reliant.v1.WorktreeService.ArchiveWorktree:input_type -> reliant.v1.ArchiveWorktreeRequest
+	30, // 32: reliant.v1.WorktreeService.UnarchiveWorktree:input_type -> reliant.v1.UnarchiveWorktreeRequest
+	32, // 33: reliant.v1.WorktreeService.ImportWorktree:input_type -> reliant.v1.ImportWorktreeRequest
+	34, // 34: reliant.v1.WorktreeService.DiscoverWorktrees:input_type -> reliant.v1.DiscoverWorktreesRequest
+	36, // 35: reliant.v1.WorktreeService.PruneWorktrees:input_type -> reliant.v1.PruneWorktreesRequest
+	38, // 36: reliant.v1.WorktreeService.RecreateWorktree:input_type -> reliant.v1.RecreateWorktreeRequest
+	40, // 37: reliant.v1.WorktreeService.GetWorktreeChanges:input_type -> reliant.v1.GetWorktreeChangesRequest
+	42, // 38: reliant.v1.WorktreeService.GetWorktreeGitStatus:input_type -> reliant.v1.GetWorktreeGitStatusRequest
+	44, // 39: reliant.v1.WorktreeService.GetWorktreeCommits:input_type -> reliant.v1.GetWorktreeCommitsRequest
+	45, // 40: reliant.v1.WorktreeService.ListWorktreeRepoStatuses:input_type -> reliant.v1.ListWorktreeRepoStatusesRequest
+	49, // 41: reliant.v1.WorktreeService.StageFiles:input_type -> reliant.v1.StageFilesRequest
+	51, // 42: reliant.v1.WorktreeService.UnstageFiles:input_type -> reliant.v1.UnstageFilesRequest
+	53, // 43: reliant.v1.WorktreeService.RevertFiles:input_type -> reliant.v1.RevertFilesRequest
+	55, // 44: reliant.v1.WorktreeService.CommitWorktree:input_type -> reliant.v1.CommitWorktreeRequest
+	57, // 45: reliant.v1.WorktreeService.PushWorktree:input_type -> reliant.v1.PushWorktreeRequest
+	59, // 46: reliant.v1.WorktreeService.PullWorktree:input_type -> reliant.v1.PullWorktreeRequest
+	61, // 47: reliant.v1.WorktreeService.GetWorktreePR:input_type -> reliant.v1.GetWorktreePRRequest
+	63, // 48: reliant.v1.WorktreeService.CreateWorktreePR:input_type -> reliant.v1.CreateWorktreePRRequest
+	4,  // 49: reliant.v1.WorktreeService.ListWorktreeRecoveries:output_type -> reliant.v1.ListWorktreeRecoveriesResponse
+	6,  // 50: reliant.v1.WorktreeService.RestoreWorktreeRecovery:output_type -> reliant.v1.RestoreWorktreeRecoveryResponse
+	8,  // 51: reliant.v1.WorktreeService.DeleteWorktreeRecovery:output_type -> reliant.v1.DeleteWorktreeRecoveryResponse
+	17, // 52: reliant.v1.WorktreeService.CreateWorktree:output_type -> reliant.v1.CreateWorktreeResponse
+	19, // 53: reliant.v1.WorktreeService.ListWorktrees:output_type -> reliant.v1.ListWorktreesResponse
+	21, // 54: reliant.v1.WorktreeService.ListArchivedWorktrees:output_type -> reliant.v1.ListArchivedWorktreesResponse
+	23, // 55: reliant.v1.WorktreeService.GetWorktree:output_type -> reliant.v1.GetWorktreeResponse
+	25, // 56: reliant.v1.WorktreeService.UpdateWorktree:output_type -> reliant.v1.UpdateWorktreeResponse
+	27, // 57: reliant.v1.WorktreeService.DeleteWorktree:output_type -> reliant.v1.DeleteWorktreeResponse
+	29, // 58: reliant.v1.WorktreeService.ArchiveWorktree:output_type -> reliant.v1.ArchiveWorktreeResponse
+	31, // 59: reliant.v1.WorktreeService.UnarchiveWorktree:output_type -> reliant.v1.UnarchiveWorktreeResponse
+	33, // 60: reliant.v1.WorktreeService.ImportWorktree:output_type -> reliant.v1.ImportWorktreeResponse
+	35, // 61: reliant.v1.WorktreeService.DiscoverWorktrees:output_type -> reliant.v1.DiscoverWorktreesResponse
+	37, // 62: reliant.v1.WorktreeService.PruneWorktrees:output_type -> reliant.v1.PruneWorktreesResponse
+	39, // 63: reliant.v1.WorktreeService.RecreateWorktree:output_type -> reliant.v1.RecreateWorktreeResponse
+	41, // 64: reliant.v1.WorktreeService.GetWorktreeChanges:output_type -> reliant.v1.GetWorktreeChangesResponse
+	43, // 65: reliant.v1.WorktreeService.GetWorktreeGitStatus:output_type -> reliant.v1.GetWorktreeGitStatusResponse
+	48, // 66: reliant.v1.WorktreeService.GetWorktreeCommits:output_type -> reliant.v1.GetWorktreeCommitsResponse
+	47, // 67: reliant.v1.WorktreeService.ListWorktreeRepoStatuses:output_type -> reliant.v1.ListWorktreeRepoStatusesResponse
+	50, // 68: reliant.v1.WorktreeService.StageFiles:output_type -> reliant.v1.StageFilesResponse
+	52, // 69: reliant.v1.WorktreeService.UnstageFiles:output_type -> reliant.v1.UnstageFilesResponse
+	54, // 70: reliant.v1.WorktreeService.RevertFiles:output_type -> reliant.v1.RevertFilesResponse
+	56, // 71: reliant.v1.WorktreeService.CommitWorktree:output_type -> reliant.v1.CommitWorktreeResponse
+	58, // 72: reliant.v1.WorktreeService.PushWorktree:output_type -> reliant.v1.PushWorktreeResponse
+	60, // 73: reliant.v1.WorktreeService.PullWorktree:output_type -> reliant.v1.PullWorktreeResponse
+	62, // 74: reliant.v1.WorktreeService.GetWorktreePR:output_type -> reliant.v1.GetWorktreePRResponse
+	64, // 75: reliant.v1.WorktreeService.CreateWorktreePR:output_type -> reliant.v1.CreateWorktreePRResponse
+	49, // [49:76] is the sub-list for method output_type
+	22, // [22:49] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_worktree_proto_init() }
@@ -4429,22 +5183,25 @@ func file_reliant_v1_worktree_proto_init() {
 		return
 	}
 	file_reliant_v1_common_proto_init()
-	file_reliant_v1_worktree_proto_msgTypes[0].OneofWrappers = []any{}
-	file_reliant_v1_worktree_proto_msgTypes[1].OneofWrappers = []any{}
-	file_reliant_v1_worktree_proto_msgTypes[7].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[2].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[8].OneofWrappers = []any{}
 	file_reliant_v1_worktree_proto_msgTypes[9].OneofWrappers = []any{}
-	file_reliant_v1_worktree_proto_msgTypes[11].OneofWrappers = []any{}
 	file_reliant_v1_worktree_proto_msgTypes[15].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[17].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[19].OneofWrappers = []any{}
 	file_reliant_v1_worktree_proto_msgTypes[23].OneofWrappers = []any{}
-	file_reliant_v1_worktree_proto_msgTypes[53].OneofWrappers = []any{}
-	file_reliant_v1_worktree_proto_msgTypes[54].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[31].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[33].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[35].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[61].OneofWrappers = []any{}
+	file_reliant_v1_worktree_proto_msgTypes[62].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_worktree_proto_rawDesc), len(file_reliant_v1_worktree_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   57,
+			NumMessages:   65,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

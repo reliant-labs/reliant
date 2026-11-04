@@ -17,16 +17,18 @@ vi.mock("@/services/controlPlane/capabilities", () => ({
 }));
 
 const listDaemons = vi.fn();
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { daemonRegistry: () => ({ listDaemons }) },
-}));
-
 const resumeDaemon = vi.fn();
 vi.mock("@/services/controlPlane/daemon", () => ({
   resumeDaemon: (id: string) => resumeDaemon(id),
 }));
 
 import { useDaemonWait } from "../useDaemonWait";
+import { setTransport } from "@/lib/connect";
+import { daemonRegistryTransport } from "@/test/daemonRegistry";
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => listDaemons() })));
+afterEach(() => setTransport(null));
 
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={createTestQueryClient()}>{children}</QueryClientProvider>;

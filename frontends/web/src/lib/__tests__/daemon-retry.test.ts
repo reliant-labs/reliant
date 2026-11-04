@@ -14,7 +14,7 @@ import { sendWithDaemonWait, DAEMON_ACTION_RETRY_MS } from "../daemon-retry";
 
 /** The shape the gateway actually returns while no machine is attached. */
 function noDaemonError(): ConnectError {
-  return new ConnectError("unavailable: no daemon connected for user", Code.Internal);
+  return new ConnectError("unavailable: no daemon connected for user", Code.Internal, new Headers({ "x-forge-error-reason": "daemon_not_connected" }));
 }
 
 describe("sendWithDaemonWait", () => {

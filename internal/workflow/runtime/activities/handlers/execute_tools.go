@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/actingidentity"
+	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -69,12 +70,18 @@ type toolExecutionContext struct {
 	dispatchInput string
 
 	// projectPathOverride allows sub-workflows to specify a different working directory
-	// When set, this path is used instead of project.Path or worktree.Path
+	// When set, this path is used (rebased onto the call machine's checkout)
+	// instead of the branch worktree's or the checkout itself
 	projectPathOverride string
 
 	// daemonSelector specifies which daemon should execute tools.
 	// Set from the workflow or node daemon field. nil means use default resolution.
 	daemonSelector *toolexec.DaemonSelector
+
+	// checkout is the machine the call runs on and the project's checkout
+	// there (resolveCallCheckout): the request's project root, and the main
+	// checkout a run path is rebased onto.
+	checkout callCheckout
 }
 
 // loadToolExecutionContext loads all required context for tool execution
@@ -131,20 +138,23 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 	return tec, ""
 }
 
-// loadWorktreeInfo loads worktree information, defaulting to project path.
+// loadWorktreeInfo loads the call's branch worktree, if it runs in one.
 //
 // The worktree is the thread's when the thread has its own (a sub-agent
-// spawned with a `worktree`), else the chat's. A chat's worktree that cannot be
-// loaded degrades to the project path, as it always has; a thread's does not,
-// because that thread was sent to a specific workspace and running its tools in
-// the project checkout instead would write to the wrong branch.
+// spawned with a `worktree`), else the chat's. A result with no Path means the
+// main checkout, which is resolved on the call's machine (buildToolRequest):
+// the main worktree row mirrors projects.path, the creating machine's. A
+// chat's worktree that cannot be loaded degrades to the main checkout, as it
+// always has; a thread's does not, because that thread was sent to a specific
+// workspace and running its tools in the main checkout instead would write to
+// the wrong branch.
 func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Chat, project *db.Project, thread string) (*rctx.WorktreeInfo, bool, error) {
 	worktreeID, threadBound, err := effectiveWorktreeID(ctx, a.repo, chat, thread)
 	if err != nil {
 		return nil, false, err
 	}
 	if worktreeID == nil || *worktreeID == "" {
-		return &rctx.WorktreeInfo{ID: "", Path: project.Path}, false, nil
+		return &rctx.WorktreeInfo{}, false, nil
 	}
 
 	worktree, err := a.repo.GetWorktree(ctx, *worktreeID)
@@ -152,13 +162,19 @@ func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Ch
 		if threadBound {
 			return nil, true, fmt.Errorf("this agent's workspace %s could not be loaded: %w", *worktreeID, err)
 		}
-		// Worktree not found, fall back to project path
-		return &rctx.WorktreeInfo{ID: "", Path: project.Path}, false, nil
+		// Worktree not found: the main checkout.
+		return &rctx.WorktreeInfo{}, false, nil
 	}
 	if threadBound && worktree.DeletedAt != nil {
 		return nil, true, fmt.Errorf("this agent's workspace %q was archived, so its tools cannot run there", worktree.Name)
 	}
 
+	// The main row mirrors projects.path: no path here. A thread bound to
+	// it (threadBound with an empty Path) runs in the main checkout on the
+	// call's machine (buildToolRequest).
+	if worktree.IsMain {
+		return &rctx.WorktreeInfo{ID: worktree.ID}, threadBound, nil
+	}
 	daemonID := ""
 	if worktree.DaemonID != nil {
 		daemonID = *worktree.DaemonID
@@ -168,11 +184,17 @@ func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Ch
 
 // buildToolRequest creates a ToolRequest from the loaded context
 func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
-	// Determine effective working directory path
-	// Priority: thread-bound worktree > projectPathOverride > worktree.Path > project.Path
-	effectiveWorktreePath := tec.worktree.Path
-	if tec.projectPathOverride != "" && !tec.worktreeThreadBound {
-		effectiveWorktreePath = tec.projectPathOverride
+	// Determine effective working directory path. Priority: thread-bound
+	// worktree > projectPathOverride (rebased onto this machine's checkout) >
+	// branch worktree > this machine's checkout.
+	effectiveWorktreePath := tec.checkout.path(tec.projectPathOverride, tec.worktree.Path)
+	switch {
+	case tec.worktreeThreadBound && tec.worktree.Path != "":
+		effectiveWorktreePath = tec.worktree.Path
+	case tec.worktreeThreadBound:
+		// Bound to the main worktree row: the main checkout on this
+		// machine, never the path the thread inherited.
+		effectiveWorktreePath = tec.checkout.main.Path
 	}
 
 	return &toolexec.ToolRequest{
@@ -186,8 +208,8 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 		WorktreeID:       tec.worktree.ID,
 		WorktreeDaemonID: tec.worktree.DaemonID,
 		Thread:           tec.thread,
-		MessageID:        "", // Not required - tool calls can be ephemeral
-		ProjectPath:      tec.project.Path,
+		MessageID:        "",                     // Not required - tool calls can be ephemeral
+		ProjectPath:      tec.checkout.main.Path, // the project's checkout on the machine running the call
 		ProjectName:      tec.project.Name,
 		WorktreePath:     effectiveWorktreePath, // Uses override if set
 		Timeout:          toolexec.DefaultToolTimeout,
@@ -240,6 +262,10 @@ type ExecuteToolsActivity struct {
 	// configProvider resolves the project's skills for the skill tool. Set by
 	// WithConfigProvider; nil means the skill tool sees none.
 	configProvider cfgpkg.ConfigProvider
+	// machines resolves a call's selector to the machine whose synced config
+	// it reads (configMachine). Set by WithDaemonRouter; nil reads the
+	// project's union for any selector that names no id.
+	machines toolexec.DaemonRouter
 }
 
 // NewExecuteToolsActivity creates a new ExecuteToolsActivity
@@ -286,6 +312,7 @@ func (a *ExecuteToolsActivity) Category() schema.ActivityCategory {
 // Execute contains PURE BUSINESS LOGIC only
 func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput) (*reliantv1.ExecuteToolsOutput, error) {
 	rtx := input.Runtime
+	ctx = automationpolicy.WithExecution(ctx, automationpolicy.Execution{Unattended: rtx.Unattended, Approvals: rtx.ActivationApprovals})
 	protoArgs := model.GetExecuteToolsArgs(input.Node)
 	if protoArgs == nil {
 		return nil, fmt.Errorf("expected execute_tools node, got %s", model.NodeType(input.Node))
@@ -312,7 +339,17 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	// Only a run that recorded the removed integration action approval prompt
 	// sends any: a call the person attending did not approve
 	// (runtime/action_approval_legacy.go).
-	refusedByWorkflow := protoArgs.GetRefusedToolCalls() //nolint:staticcheck // SA1019: sent only by the legacy approval gate
+	refusedByWorkflow := protoArgs.GetRefusedToolCalls() //nolint:staticcheck // SA1019: legacy approval gate
+	if len(rtx.ActivationRefusals) > 0 {
+		merged := make(map[string]string, len(refusedByWorkflow)+len(rtx.ActivationRefusals))
+		for k, v := range refusedByWorkflow {
+			merged[k] = v
+		}
+		for k, v := range rtx.ActivationRefusals {
+			merged[k] = v
+		}
+		refusedByWorkflow = merged
+	}
 
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))
@@ -458,6 +495,11 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 							index:  job.index,
 							result: result,
 						}
+						return
+					}
+
+					if workspace.blocked != "" && tools.NeedsMachine(toolName) {
+						resultsChan <- toolCallResult{index: job.index, result: a.refuseToolCall(ctx, rtx, toolCall, workspace.blocked)}
 						return
 					}
 
@@ -701,18 +743,11 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	}
 	tec.dispatchInput = dispatchInput
 
-	// The skill tool reads the project's skills, which live on the project's
-	// config row. Read here, per call, rather than carried from call_llm: the
-	// executor's factory has none of its own, and a worker-local copy is what
-	// a restart used to lose.
-	if toolName == tools.ToolSkill && tec.project != nil {
-		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID))
-	}
-
-	// Daemon routing priority: explicit node/workflow selector > the worktree's
-	// owning daemon > default resolution. A worktree-bound (e.g. branch) chat
-	// must run on the daemon that has its checkout on disk; a nil worktree
-	// DaemonID (main checkout / legacy rows) leaves routing at the default.
+	// Daemon routing priority: explicit node/workflow selector > durable chat
+	// pin > the worktree's owner > default resolution, except that a chat pin
+	// naming a machine other than a branch workspace's owner yields to the
+	// owner (toolDaemonSelector). Read the pin even when this live run's input
+	// snapshot predates launch-time pinning.
 	// ensureBatchWorkspace routes with the same functions, so the directory it
 	// checked is on the disk these calls run on. A thread-bound worktree
 	// exists on its owner alone, so an inherited selector (the parent's pin,
@@ -721,7 +756,34 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	if tec.worktree != nil {
 		worktreeDaemon = tec.worktree.DaemonID
 	}
-	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, threadBoundExplicit(tec.worktreeThreadBound, worktreeDaemon, daemonSel))
+	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, threadBoundExplicit(tec.worktreeThreadBound, worktreeDaemon, chatDaemonSelector(tec.chat, daemonSel)))
+
+	// The machine that selector reaches and the project's checkout on it:
+	// the directory the call runs in is resolved there, and the call is
+	// pinned to it. A machine call to a machine with no checkout is refused
+	// with the reason and the way out — the conversation carries on, and
+	// the next call re-resolves (cloning or switching machine unblocks it).
+	// A call in a branch worktree (Path set) runs without the main checkout.
+	tec.checkout = resolveCallCheckout(ctx, a.repo, a.machines, tec.project, tec.daemonSelector, tec.worktree.Path == "")
+	if tec.checkout.missing != nil && tools.NeedsMachine(toolName) {
+		refusal := missingRefusal(tec.checkout.missing)
+		result := a.buildToolResult(toolCallID, toolName, refusal, "", true, nil, nil)
+		completedAt := time.Now()
+		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
+			completedAt:  &completedAt,
+			errorMessage: refusal,
+		}, &toolCallResultWrite{content: result.Content, isError: true})
+		return result
+	}
+	tec.daemonSelector = tec.checkout.pin(tec.daemonSelector)
+
+	// The skill tool reads the project's skills as the machine this call runs
+	// on synced them (tec.daemonSelector). Read here, per call, rather than
+	// carried from call_llm: the executor's factory has none of its own, and
+	// a worker-local copy is what a restart used to lose.
+	if toolName == tools.ToolSkill && tec.project != nil {
+		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID, configMachine(ctx, a.machines, tec.project.UserID, tec.daemonSelector)))
+	}
 
 	// The call is about to enter real execution -- record it durably as
 	// PENDING before dispatch so a reload mid-execution sees at least this

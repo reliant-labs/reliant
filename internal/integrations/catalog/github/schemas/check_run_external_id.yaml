@@ -1,0 +1,5 @@
+type: string
+maxLength: 255
+title: External id
+description: Your own reference for the check (a run id), returned by check_run.list.
+examples: ["01JB8Z3Q4M2N5P6R7S8T9V0W1X"]

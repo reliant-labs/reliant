@@ -49,7 +49,7 @@ export const SidebarInput = forwardRef<HTMLInputElement, SidebarInputProps>(
         {hasLeftIcon && (
           <div className="absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
             {isLoading ? (
-              <Loader2 className="w-3.5 h-3.5 text-primary animate-spin" />
+              <Loader2 className="w-3.5 h-3.5 text-primary-ink animate-spin" />
             ) : (
               <span className="text-muted-foreground">{leftIcon}</span>
             )}
@@ -67,7 +67,7 @@ export const SidebarInput = forwardRef<HTMLInputElement, SidebarInputProps>(
           className={cn(
             "w-full py-1.5 text-xs",
             "rounded-md border border-border bg-background/80 shadow-inner",
-            "focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary/50",
+            "focus:outline-none focus:ring-1 focus:ring-ring focus:border-primary/50",
             "placeholder:text-muted-foreground/50",
             "disabled:opacity-50 disabled:cursor-not-allowed",
             "transition-all",

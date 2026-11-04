@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -30,9 +31,12 @@ func enqueueDrainTestMessage(t *testing.T, repo *db.Repo, chatID, fromThreadID, 
 		FromThreadID: fromThreadID,
 		ToThreadID:   toThreadID,
 		Kind:         core.AgentMessageKindMessage,
-		Body:         body,
-		Status:       core.AgentMessageStatusQueued,
-		CreatedAt:    createdAt,
+		// Derived from the body but never containing it, so a test can tell
+		// the subject's appearance from the body's.
+		Subject:   "about " + strings.ReplaceAll(body, " ", "_"),
+		Body:      body,
+		Status:    core.AgentMessageStatusQueued,
+		CreatedAt: createdAt,
 	}))
 }
 
@@ -136,6 +140,10 @@ func TestDrainAgentMessages_DeliversEnvelopeThenOrderedBodies(t *testing.T) {
 	// twice.
 	assert.NotContains(t, envelopeContent, "first message")
 	assert.NotContains(t, envelopeContent, "second message")
+	// It does name each message's subject, so the model reads what each one
+	// is about alongside who sent it.
+	assert.Contains(t, envelopeContent, `subject="about first_message"`)
+	assert.Contains(t, envelopeContent, `subject="about second_message"`)
 
 	// The bodies follow in send order, visible, and carry only what the
 	// sender wrote — no <system> preamble, no <message> wrapper.
@@ -144,6 +152,20 @@ func TestDrainAgentMessages_DeliversEnvelopeThenOrderedBodies(t *testing.T) {
 	assert.Nil(t, secondBody.DisplayStyle, "a delivered body is an ordinary visible message")
 	assert.Equal(t, "first message", contentOf(firstBody))
 	assert.Equal(t, "second message", contentOf(secondBody))
+
+	// A peer's spawn_send is role USER for the model but attributed to the
+	// thread that sent it, so the transcript cannot mistake it for the human.
+	for _, body := range []*db.Message{firstBody, secondBody} {
+		assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_USER, body.Role)
+		require.NotNil(t, body.SenderThreadID, "a spawn_send message must record its sender")
+		assert.Equal(t, fromThreadID, *body.SenderThreadID)
+		require.NotNil(t, body.SenderKind)
+		assert.Equal(t, core.AgentMessageKindMessage, *body.SenderKind)
+		require.NotNil(t, body.SenderSubject, "a spawn_send message carries its subject into history")
+	}
+	assert.Equal(t, "about first_message", *firstBody.SenderSubject)
+	assert.Equal(t, "about second_message", *secondBody.SenderSubject)
+	assert.Nil(t, envelope.SenderThreadID, "the envelope is framing, not a message from the sender")
 	assert.Less(t, firstBody.Ordinal, secondBody.Ordinal,
 		"messages must be delivered in send order, oldest first")
 	assert.Less(t, envelope.Ordinal, firstBody.Ordinal,
@@ -649,6 +671,8 @@ func TestDrainAgentMessages_CompletionHiddenBodyPlusVisibleNotification(t *testi
 	assert.Equal(t, reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN, *body.DisplayStyle,
 		"a completion report must not render as a plain visible message")
 	assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_USER, body.Role)
+	assert.Nil(t, body.SenderThreadID, "the human has no sender")
+	assert.Nil(t, body.SenderKind, "the human has no sender")
 	bodyBlocks, err := h.Repo().ListContentBlocks(ctx, body.ID)
 	require.NoError(t, err)
 	require.Len(t, bodyBlocks, 1)
@@ -701,6 +725,7 @@ func TestDrainAgentMessages_CompletionHiddenBodyPlusVisibleNotification(t *testi
 // TestDrainAgentMessages_CancelledAndFailedNotificationText pins the exact
 // wording for the other two terminal kinds.
 func TestDrainAgentMessages_CancelledAndFailedNotificationText(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	tests := []struct {

@@ -44,7 +44,7 @@ vi.mock("@/store/notificationStore", () => ({
   getNotificationSoundOptions: () => ({ enabled: true }),
 }));
 
-import { forgeKeys } from "@/hooks/forge-queries";
+import { forgeCloudKeys } from "@/hooks/forge-queries";
 import { useQueuedDeployStore } from "@/store/queuedDeployStore";
 
 import { QueuedDeployNotifier } from "../QueuedDeployNotifier";
@@ -55,7 +55,7 @@ function prod(args: { queued?: boolean; observed?: LiveConvergenceState }): Live
     name: "prod",
     project: "hounders",
     kind: "persistent",
-    declaredShape: null,
+    declared: false,
     declaredBy: null,
     release: "v13",
     releaseProvenance: null,
@@ -81,7 +81,7 @@ function setup() {
   );
   const reading = (env: LiveEnv) =>
     act(() => {
-      client.setQueryData(forgeKeys.liveView("hounders"), { availability: "available", envs: [env], detail: "" });
+      client.setQueryData(forgeCloudKeys.liveView("hounders"), { availability: "available", envs: [env], detail: "" });
     });
   return { client, reading };
 }
@@ -150,7 +150,7 @@ describe("QueuedDeployNotifier", () => {
     const { client, reading } = setup();
     reading(prod({ queued: true }));
     act(() => {
-      client.setQueryData(forgeKeys.liveView("hounders"), { availability: "unreachable", envs: [], detail: "" });
+      client.setQueryData(forgeCloudKeys.liveView("hounders"), { availability: "unreachable", envs: [], detail: "" });
     });
     expect(useQueuedDeployStore.getState().watched).toHaveProperty("cp-prod");
   });

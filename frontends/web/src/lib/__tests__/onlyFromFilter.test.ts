@@ -25,10 +25,10 @@ describe('Only from: the sender clause of a trigger filter', () => {
   })
 
   it('removing every sender removes the clause and restores the filter', () => {
-    const written = withOnlyFrom('trigger.kind == "integration"', ['U1', 'U2'])
+    const written = withOnlyFrom('trigger.kind == "integration"', ['U1', 'U2'])!
     expect(withOnlyFrom(written, ['U2'])).toBe('(trigger.kind == "integration") && trigger.sender.verified && trigger.sender.id in ["U2"]')
     expect(withOnlyFrom(written, [])).toBe('trigger.kind == "integration"')
-    expect(withOnlyFrom(withOnlyFrom('', ['U1']), [])).toBe('')
+    expect(withOnlyFrom(withOnlyFrom('', ['U1'])!, [])).toBe('')
   })
 
   it('drops duplicates and blanks', () => {

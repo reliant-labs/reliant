@@ -33,6 +33,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -40,6 +41,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/netports"
+	"github.com/reliant-labs/reliant/internal/procguard"
+	"github.com/reliant-labs/reliant/internal/proctree"
+	"github.com/reliant-labs/reliant/internal/shellaudit"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -55,16 +59,19 @@ const (
 )
 
 type daemonClient struct {
-	// identityMu guards daemonID and userID: a registration ack on a new
-	// stream writes them while calls still running from a draining stream
-	// read them (gateway_session.go).
+	// identityMu guards daemonID, userID and accountEmail: a registration
+	// ack on a new stream writes them while calls still running from a
+	// draining stream read them (gateway_session.go).
 	identityMu sync.RWMutex
 	daemonID   string
 	daemonName string
 	userID     string
-	hostname   string
-	platform   string
-	cwd        string
+	// accountEmail is userID's email as the gateway last named it
+	// (RegistrationAck.account_email); "" when it named none.
+	accountEmail string
+	hostname     string
+	platform     string
+	cwd          string
 	// serverURL is the API server origin these credentials belong to. Used
 	// as the per-origin key into ~/.reliant/daemon.json when persisting the
 	// server-assigned daemonID after registration. Empty in server mode.
@@ -138,6 +145,11 @@ type daemonClient struct {
 	// (internal/diskguard). Its state rides on the heartbeat's disk report.
 	diskGuard *diskguard.Guard
 
+	// procGuard counts the machine's processes against its limit and refuses
+	// new background heavy commands near it (internal/procguard). Its count
+	// and the largest process trees ride on the heartbeat's disk report.
+	procGuard *procguard.Guard
+
 	// portWatcher scans /proc/net/tcp{,6} for loopback/wildcard LISTEN
 	// sockets so heartbeats can carry the detected ports (the preview
 	// affordance in the UI). Only set for pod-hosted daemons — nil for
@@ -155,8 +167,9 @@ type daemonClient struct {
 	buildSnapshot func(projectPath string) (*reliantv1.ProjectConfigSnapshot, error)
 
 	// foreignIDSetAside records that this process already moved a saved
-	// daemon id aside because the gateway said another user owns it. The
-	// recovery runs at most once per process; see setAsideForeignDaemonID.
+	// daemon id aside because the gateway refused it (another user owns it,
+	// or it is reserved for daemon-bound credentials). The recovery runs at
+	// most once per process; see setAsideRefusedDaemonID.
 	foreignIDSetAside bool
 
 	// Log policy state: see log_policy.go. Zero values are ready to use, so a
@@ -185,12 +198,35 @@ func (d *daemonClient) currentUserID() string {
 	return d.userID
 }
 
+// recordAccount takes the account a registration ack names. The email is
+// replaced along with the id, never kept from an earlier ack: a stale email
+// beside a new account would name the wrong person. An ack naming no account
+// changes nothing.
+func (d *daemonClient) recordAccount(ack *reliantv1.RegistrationAck) {
+	if ack.GetUserId() == "" {
+		return
+	}
+	d.identityMu.Lock()
+	d.userID = ack.GetUserId()
+	d.accountEmail = strings.TrimSpace(ack.GetAccountEmail())
+	d.identityMu.Unlock()
+}
+
+// currentAccount is the account the gateway last said this daemon serves, as
+// the connected banner names it: its email when the gateway named one, else
+// its user id.
+func (d *daemonClient) currentAccount() (userID, email string) {
+	d.identityMu.RLock()
+	defer d.identityMu.RUnlock()
+	return d.userID, d.accountEmail
+}
+
 // projectSnapshot builds the config snapshot for projectPath.
-func (d *daemonClient) projectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
+func (d *daemonClient) projectSnapshot(ctx context.Context, projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
 	if d.buildSnapshot != nil {
 		return d.buildSnapshot(projectPath)
 	}
-	return buildProjectSnapshot(projectPath)
+	return buildProjectSnapshotContext(ctx, projectPath)
 }
 
 type StartOptions struct {
@@ -212,14 +248,37 @@ type StartOptions struct {
 	OAuthHelperOrigins []string
 }
 
-// Guards is the daemon's policy for heavy commands (internal/heavyjob) and a
-// filling disk (internal/diskguard).
+// Guards is the daemon's policy for heavy commands (internal/heavyjob), a
+// filling disk (internal/diskguard) and each command's threads
+// (internal/proctree).
 type Guards struct {
 	// Disk is the disk guard's thresholds; zero fields take the defaults.
 	Disk diskguard.Config
 	// HeavyCommands are the heavy-command patterns. Nil is
 	// heavyjob.DefaultCommands; empty declares nothing heavy by pattern.
 	HeavyCommands []string
+	// HeavyShare is the CPUs each slotted command may use; zero derives
+	// it from the slot pool (heavyjob.DefaultShare).
+	HeavyShare int
+	// CommandThreads is each command's thread limit; zero derives it from
+	// the machine (proctree.Size).
+	CommandThreads int
+	// BackgroundIdleReap is how long a background process an agent started
+	// may sit idle, once its chat has no run in progress, before the daemon
+	// stops it. Zero is shell.DefaultIdleReap; negative turns it off.
+	BackgroundIdleReap time.Duration
+}
+
+// IdleReapWindow is the idle reaper's window; zero is off.
+func (g Guards) IdleReapWindow() time.Duration {
+	switch {
+	case g.BackgroundIdleReap < 0:
+		return 0
+	case g.BackgroundIdleReap == 0:
+		return shell.DefaultIdleReap
+	default:
+		return g.BackgroundIdleReap
+	}
 }
 
 func Start(ctx context.Context, opts StartOptions) error {
@@ -227,6 +286,20 @@ func Start(ctx context.Context, opts StartOptions) error {
 		return fmt.Errorf("daemon runtime bootstrap config invalid: %w", err)
 	}
 	setOAuthHelperOrigins(opts.OAuthHelperOrigins)
+	// The data directory holds the daemon's identity and state; a command run
+	// with `credentials: none` does not see it (see daemonpolicy.ProtectedCredentials).
+	daemonpolicy.SetDaemonDataDir(opts.BootstrapConfig.DataDir)
+
+	// Every shell command the tool is asked to run is recorded beside the
+	// daemon's other logs, for investigations of shared-state damage. A log
+	// that cannot be opened is reported and skipped: auditing never stops work.
+	if auditLog, err := shellaudit.Open(filepath.Join(opts.BootstrapConfig.DataDir, "logs", shellaudit.FileName), shellaudit.Options{}); err != nil {
+		logging.WarnContext(ctx, logPrefix+" Shell audit log unavailable; shell commands are not being recorded", "error", err)
+	} else {
+		defer auditLog.Close() //nolint:errcheck
+		previous := shellaudit.SetDefault(auditLog)
+		defer shellaudit.SetDefault(previous)
+	}
 
 	// Claim the data directory before anything else, so a second daemon fails
 	// here rather than at the gateway. Two daemons on one host resolve to one
@@ -258,6 +331,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	ctx, stopRuntime := context.WithCancel(ctx)
 	defer stopRuntime()
 	client.armWorkspaceGuard(ctx, stopRuntime)
+	initializeWorktreeActivity(ctx, opts.BootstrapConfig.DataDir)
 
 	// Publish the runtime record before the first dial. Until the gateway acks
 	// registration the record says so, which is what makes `reliant daemon
@@ -305,6 +379,19 @@ func Start(ctx context.Context, opts StartOptions) error {
 		client.diskGuard.Register(client.diskWatcher)
 	}
 	go client.diskGuard.Run(ctx)
+	go client.procGuard.Run(ctx)
+	// A managed machine logs a load/pressure/disk/heavy-slot sample a minute,
+	// which control-plane's machine-health dashboard and alerts read from
+	// tenant zero's logs (internal/machinehealth). A person's own machine
+	// ships no logs to us, so it does not sample.
+	if opts.Host.Managed() {
+		go newMachineHealthSampler(client.diskWatcher).Run(ctx)
+	}
+	// Stop the background processes finished chats left behind, once idle
+	// for the window (shell/background_reaper.go).
+	idleReap := opts.Guards.IdleReapWindow()
+	logging.InfoContext(ctx, logPrefix+" Background process idle reaper", "idle_after", idleReap.String())
+	go shell.GetBackgroundManager().RunReaper(ctx, shell.ReaperConfig{IdleAfter: idleReap})
 
 	// Repair what a crash left in the shared clones (empty objects, torn
 	// indexes, stale gc.log, dead registrations) before agents run git there.
@@ -438,9 +525,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// This process IS the machine that runs shell commands, so its own GOOS is
 	// the right answer here — unlike on the server, where reading runtime.GOOS
 	// would describe the wrong machine entirely.
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		ShellPlatform: tools.ShellPlatformFromGOOS(runtime.GOOS),
-	})
+	toolsFactory := newDaemonToolsFactory(host)
 
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
 	sort.Strings(caps)
@@ -461,13 +546,20 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// and refused on a nearly full disk. A gate that cannot queue (slots
 	// switched off, own binary not found) runs them unqueued: a broken
 	// limiter must never stop work.
+	// The capacity guard refuses new background heavy commands once the
+	// machine passes 70% of its process limit (2026-10-30: a machine ran out
+	// of processes and every agent's work died with it).
+	procGuard := procguard.New(procguard.Config{})
+
 	heavyGate, err := heavyjob.New(heavyjob.Config{
 		Commands: guards.HeavyCommands,
+		Share:    guards.HeavyShare,
 		// The slot pool is forge's, read from forge's own variables
 		// (FORGE_SLOTS_DIR, FORGE_HEAVY_SLOTS) exactly as forge's lanes
 		// read them, so both draw on one machine-wide budget.
-		Env:       os.Environ(), //nolint:forbidigo // forge's FORGE_* slot settings, passed through to forge/pkg/hostslot; not this daemon's config
-		Admission: diskGuard,
+		Env:                 os.Environ(), //nolint:forbidigo // forge's FORGE_* slot settings, passed through to forge/pkg/hostslot; not this daemon's config
+		Admission:           diskGuard,
+		BackgroundAdmission: procGuard,
 	})
 	if err != nil {
 		logging.Warn(logPrefix+" Heavy commands run unqueued and unguarded", "error", err)
@@ -476,7 +568,21 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	}
 	SetHeavyGate(heavyGate)
 
+	// Every command an agent runs gets a thread limit of its own where the
+	// machine allows (a delegated cgroup: pids.max per command, sized to the
+	// CPU count), and all of them together leave the daemon a reserve of the
+	// user's limit, so one runaway command fails alone instead of exhausting
+	// it for every agent and the daemon (2026-10-30). See internal/proctree.
+	limiter := proctree.New(proctree.Config{CommandThreads: guards.CommandThreads})
+	proctree.SetDefault(limiter)
+	logging.Info(logPrefix + " " + limiter.String())
+
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
+	egressLimiter, err := egresslimit.NewInstrumented(egresslimit.Deps{Limits: daemonEgressLimits(host)})
+	if err != nil {
+		return nil, fmt.Errorf("creating egress limiter: %w", err)
+	}
+	localExec.SetEgressLimiter(egressLimiter)
 	localExec.SetMCPContextBinder(toolexec.NewLocalMCPContextBinder(mcpManager))
 	// The daemon runtime IS the local machine, so give the executor a
 	// LocalClient so filesystem tools (glob, view, etc.) can operate.
@@ -519,7 +625,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		return nil, fmt.Errorf("creating daemon HTTP client: %w", err)
 	}
 
-	return &daemonClient{
+	client := &daemonClient{
 		daemonID:   bootCfg.DaemonID,
 		daemonName: daemonName,
 		// userID is set later from RegistrationAck (gateway-derived from PAT).
@@ -544,7 +650,28 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 		memWatcher:        cgroupmem.NewWatcher(memReader, cgroupmem.DefaultPollInterval),
 		diskWatcher:       diskWatcher,
 		diskGuard:         diskGuard,
-	}, nil
+		procGuard:         procGuard,
+	}
+	client.restoreResultOutbox()
+	return client, nil
+}
+
+// restoreResultOutbox gives the result outbox its home in the instance's data
+// directory and reloads what the previous process left there, so a tool
+// result survives a daemon restart. A daemon with no data directory (an
+// embedded runtime), or one whose outbox directory cannot be used, runs with
+// the in-memory outbox: it never fails to start over this.
+func (d *daemonClient) restoreResultOutbox() {
+	dataDir := strings.TrimSpace(d.bootCfg.DataDir)
+	if dataDir == "" {
+		return
+	}
+	store, err := openOutboxStore(filepath.Join(dataDir, outboxDirName))
+	if err != nil {
+		logging.Warn(logPrefix+" Tool results will not survive a daemon restart", "error", err)
+		return
+	}
+	d.results.restore(store)
 }
 
 // persistDaemonID writes the server-assigned daemon id into THIS INSTANCE's
@@ -585,25 +712,31 @@ func (d *daemonClient) persistDaemonID(daemonID string) {
 		"daemonID", daemonID, "dataDir", dataDir, "serverURL", d.serverURL)
 }
 
-// setAsideForeignDaemonID recovers from the one refusal a daemon can fix by
-// itself: the gateway saying the id it asserted belongs to another user. It
-// reports whether it did, in which case the caller redials.
+// setAsideRefusedDaemonID recovers from the two refusals a daemon can fix by
+// itself, both of the id it asserted rather than of its credential: the id
+// belongs to another user (bootstrap.IsForeignDaemonIDError), or it is
+// reserved for daemon-bound credentials and this daemon presented a login
+// token (bootstrap.IsReservedDaemonIDError). It reports whether it recovered,
+// in which case the caller redials.
 //
-// The usual cause is one laptop serving two accounts. The instance directory
-// still held the id the gateway minted for the FIRST account, and this
-// daemon, running as the second, asserted it — so every start was refused,
-// forever, until someone found the file by hand. The server mints ids and
-// never gives one to two owners, so the fix is to stop asserting this one:
-// move the file aside (renamed, never deleted — it is the other account's
-// machine identity) and register with no id, which the gateway answers with
-// this account's own. The other owner's record is untouched.
+// The usual foreign cause is one laptop serving two accounts. The instance
+// directory still held the id the gateway minted for the FIRST account, and
+// this daemon, running as the second, asserted it — so every start was
+// refused, forever, until someone found the file by hand. The reserved cause
+// is an instance that once ran with a daemon token (or holds a managed
+// machine's id) now running with a login token. Either way the server mints
+// ids, so the fix is to stop asserting this one: move the file aside
+// (renamed, never deleted — it is another machine's identity) and register
+// with no id, which the gateway answers with an id of this credential's own.
+// The machine the id belongs to is untouched.
 //
 // Only an id read from this instance's daemon-id file is moved: one a launcher
 // passed in explicitly is not this daemon's to rewrite. And only once per
 // process: if registering with no id is refused too, the credential itself
 // names a daemon another account owns, and redialing cannot change that.
-func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
-	if d.foreignIDSetAside || !bootstrap.IsForeignDaemonIDError(err) {
+func (d *daemonClient) setAsideRefusedDaemonID(err error) bool {
+	reserved := bootstrap.IsReservedDaemonIDError(err)
+	if d.foreignIDSetAside || (!reserved && !bootstrap.IsForeignDaemonIDError(err)) {
 		return false
 	}
 	asserted := strings.TrimSpace(d.currentDaemonID())
@@ -612,9 +745,19 @@ func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
 		return false
 	}
 
-	setAsideTo, mvErr := bootstrap.SetAsideDaemonID(dataDir)
+	why, notice := "belongs to another account",
+		"  ! The machine identity saved for this workspace belongs to a different Reliant account.\n"+
+			"    Moved it aside (%s) and registering this machine with your account.\n"
+	setAside := bootstrap.SetAsideDaemonID
+	if reserved {
+		why, notice = "is reserved for a daemon token and this daemon signed in with a login",
+			"  ! The machine identity saved for this workspace can only be used with its own daemon token,\n"+
+				"    and this daemon is signed in with your login. Moved it aside (%s) and registering this machine as new.\n"
+		setAside = bootstrap.SetAsideReservedDaemonID
+	}
+	setAsideTo, mvErr := setAside(dataDir)
 	if mvErr != nil {
-		logging.Error(logPrefix+" Saved daemon id belongs to another account, and moving it aside failed",
+		logging.Error(logPrefix+" Saved daemon id "+why+", and moving it aside failed",
 			"error", mvErr, "daemonID", asserted, "dataDir", dataDir)
 		return false
 	}
@@ -626,17 +769,29 @@ func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
 	SetDaemonIdentity("")
 	logging.SetDaemonID("")
 
-	logging.Warn(logPrefix+" Saved daemon id belongs to another account — set it aside; registering as a new machine",
+	logging.Warn(logPrefix+" Saved daemon id "+why+" — set it aside; registering as a new machine",
 		"daemonID", asserted, "setAsideTo", setAsideTo, "dataDir", dataDir)
 	if !d.bootCfg.Verbose {
-		fmt.Fprintf(logging.Notices(), "  ! The machine identity saved for this workspace belongs to a different Reliant account.\n"+
-			"    Moved it aside (%s) and registering this machine with your account.\n", setAsideTo)
+		fmt.Fprintf(logging.Notices(), notice, setAsideTo)
 	}
 	return true
 }
 
+// reservedDaemonIDFailure is the error a daemon stops with when the gateway
+// refuses its id as reserved for daemon-bound credentials and
+// setAsideRefusedDaemonID could not help: the id was not read from this
+// instance's file. It never calls this a credential problem: the credential
+// was accepted.
+func (d *daemonClient) reservedDaemonIDFailure(err error) error {
+	return fmt.Errorf("the gateway refused this daemon's id because it is reserved for that machine's own daemon "+
+		"token (a managed cloud machine, or a daemon that connected with a daemon token), and a login token cannot "+
+		"connect as it; the id was not read from %s, so it was left in place — start the daemon with that "+
+		"machine's daemon token, or without that id to register a new machine: %w",
+		bootstrap.DaemonIDPath(d.bootCfg.DataDir), err)
+}
+
 // foreignDaemonIDFailure is the error a daemon stops with when the gateway
-// refuses its id as another user's and setAsideForeignDaemonID could not help.
+// refuses its id as another user's and setAsideRefusedDaemonID could not help.
 // It never calls this a credential problem: the credential was accepted.
 func (d *daemonClient) foreignDaemonIDFailure(err error) error {
 	if d.foreignIDSetAside {
@@ -732,8 +887,7 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 
 	switch s {
 	case daemonstate.StreamConnected:
-		fmt.Fprintf(logging.Notices(), "\n  ✓ Daemon connected — you can head back to Reliant and start working.\n\n")
-		fmt.Fprintf(logging.Notices(), "    Press Ctrl+C to disconnect.\n\n")
+		fmt.Fprint(logging.Notices(), connectedNotice(d.currentAccount()))
 	case daemonstate.StreamAwaitingCredentials:
 		fmt.Fprintf(logging.Notices(), "  … Waiting for sign-in to finish.\n")
 	case daemonstate.StreamDisconnected:
@@ -751,6 +905,24 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 			fmt.Fprintf(logging.Notices(), "  ! Disconnected: %s\n", detail)
 		}
 	}
+}
+
+// connectedNotice is the connected banner. It names the account the gateway
+// says the credential acts as, so a daemon that connected as someone other
+// than the person at the keyboard does not look like a success for them: by
+// email (RegistrationAck.account_email, which the gateway reads from the token
+// authority at connect) when the gateway named one, else by user id
+// (RegistrationAck.user_id; a self-hosted gateway or an older control plane
+// names no email). No account named, no account claimed.
+func connectedNotice(userID, email string) string {
+	headline := "Daemon connected — you can head back to Reliant and start working."
+	switch {
+	case email != "":
+		headline = "Connected as " + email + " — head back to Reliant to start working."
+	case userID != "":
+		headline = "Connected as account " + userID + " — head back to Reliant to start working."
+	}
+	return "\n  ✓ " + headline + "\n\n    Press Ctrl+C to disconnect.\n\n"
 }
 
 // isFatalError returns true for errors that should not be retried (e.g. auth failures).
@@ -801,7 +973,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 			continue
 		}
 		if err != nil && !errors.Is(err, context.Canceled) {
-			if d.setAsideForeignDaemonID(err) {
+			if d.setAsideRefusedDaemonID(err) {
 				// Redial at once: nothing on the gateway has to change, this
 				// daemon just stops asserting an id that is not its own.
 				continue
@@ -816,6 +988,9 @@ func (d *daemonClient) run(ctx context.Context) error {
 				d.stopAllStreams()
 				if bootstrap.IsForeignDaemonIDError(err) {
 					return d.foreignDaemonIDFailure(err)
+				}
+				if bootstrap.IsReservedDaemonIDError(err) {
+					return d.reservedDaemonIDFailure(err)
 				}
 				if connect.CodeOf(err) == connect.CodeAborted {
 					// Name the condition rather than calling it a connection
@@ -996,6 +1171,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			MovesOnDrain: true,
 		}},
 	}
+	stampBuildIdentity(register.GetRegister())
 	if err := sendRegistration(stream, register); err != nil {
 		close(sessionOver)
 		return fmt.Errorf("sending daemon registration to %s: %w", baseURL, err)
@@ -1177,6 +1353,9 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			if s != nil {
 				d.activateSession(s)
 			}
+			// The account first: the connected notice names it, so a daemon
+			// running on another person's saved credential says so.
+			d.recordAccount(m.RegistrationAck)
 			d.recordStream(daemonstate.StreamConnected, "")
 			d.rejections.reset()
 			if failures, outage := d.reconnects.recovered(); failures > 0 {
@@ -1201,11 +1380,6 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 				// hostname changes; next reconnect re-asserts it in Register.
 				d.persistDaemonID(m.RegistrationAck.DaemonId)
 			}
-			if m.RegistrationAck.UserId != "" {
-				d.identityMu.Lock()
-				d.userID = m.RegistrationAck.UserId
-				d.identityMu.Unlock()
-			}
 			// Watchers start here, in stream order, so a later
 			// Watch/UnwatchProjectConfigs for the same path cannot be
 			// overtaken. Starting one is cheap: its first snapshot is built
@@ -1229,7 +1403,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 						if ctx.Err() != nil {
 							return // session over; the next ack asks again
 						}
-						if err := d.sendLoadProjectConfigResponse(projectPath, uuid.New().String()); err != nil {
+						if err := d.sendLoadProjectConfigResponse(ctx, projectPath, uuid.New().String()); err != nil {
 							logging.WarnContext(ctx, logPrefix+" Failed responding to registration requested project load", "projectPath", projectPath, "error", err)
 						}
 					}
@@ -1252,7 +1426,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 		// LoadProjectConfigs on reconnect — a self-sustaining outage loop
 		// (2026-07-09 incident).
 		go func(req *reliantv1.LoadProjectConfigsRequest) {
-			if err := d.sendLoadProjectConfigResponse(req.ProjectPath, req.RequestId); err != nil {
+			if err := d.sendLoadProjectConfigResponse(ctx, req.ProjectPath, req.RequestId); err != nil {
 				logSendFailure(logPrefix+" Failed to send project config response", err, "project_path", req.ProjectPath, "request_id", req.RequestId)
 			}
 		}(m.LoadProjectConfigs)
@@ -1376,9 +1550,13 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 	// After the response is queued (the deferred sends below run first):
 	// a draining stream is held open until then.
 	defer d.requestDone(s)
-	ctx, cancel := context.WithCancel(context.Background())
+	// Continue the gateway span that forwarded the command, so every log line
+	// written for it carries the dispatching request's trace_id.
+	root := commandDispatchContext(req)
+	ctx, cancel := context.WithCancel(root)
 	if req.TimeoutMs > 0 {
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(req.TimeoutMs)*time.Millisecond)
+		cancel()
+		ctx, cancel = context.WithTimeout(root, time.Duration(req.TimeoutMs)*time.Millisecond)
 	}
 	defer cancel()
 	if strings.TrimSpace(req.RequestId) != "" {
@@ -1403,6 +1581,13 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 		return
 	}
 	ctx = daemonpolicy.NewContext(ctx, policy)
+
+	releaseRecovery, admissionErr := beginRecoveryCommand(req.CommandType, req.Payload)
+	if admissionErr != nil {
+		d.sendCommandFailure(s, req, admissionErr)
+		return
+	}
+	defer releaseRecovery()
 
 	// What became of a tool call is the daemon's own bookkeeping, not the
 	// disk's, so it is answered even while the guard below refuses work.
@@ -1460,7 +1645,7 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 	}
 
 	watchdog.Stop()
-	logDaemonCommandHandled(req, time.Since(start), err, d.sendBacklog())
+	logDaemonCommandHandled(ctx, req, time.Since(start), err, d.sendBacklog())
 
 	resp := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_DaemonCommandResponse{
@@ -1469,6 +1654,9 @@ func (d *daemonClient) handleDaemonCommand(s *gatewaySession, req *reliantv1.Dae
 				CommandType: req.CommandType,
 				Success:     err == nil,
 				Payload:     resultPayload,
+				// The gateway's span splits the round trip with it: the
+				// daemon exports no spans of its own.
+				HandlerElapsedMs: time.Since(start).Milliseconds(),
 			},
 		},
 	}
@@ -1504,7 +1692,7 @@ const slowDaemonCommandThreshold = 10 * time.Second
 // with a large backlog means the reply waited on the wire, not on the work.
 //
 // Payloads are never logged — they carry file contents and credentials.
-func logDaemonCommandHandled(req *reliantv1.DaemonCommandRequest, elapsed time.Duration, err error, sendBacklog int) {
+func logDaemonCommandHandled(ctx context.Context, req *reliantv1.DaemonCommandRequest, elapsed time.Duration, err error, sendBacklog int) {
 	outcome := "ok"
 	if err != nil {
 		outcome = "error"
@@ -1519,7 +1707,7 @@ func logDaemonCommandHandled(req *reliantv1.DaemonCommandRequest, elapsed time.D
 	if err != nil {
 		args = append(args, "error", err)
 	}
-	logging.Log(daemonCommandLogLevel(elapsed, err != nil), logPrefix+" daemon command handled", args...)
+	logging.LogContext(ctx, daemonCommandLogLevel(elapsed, err != nil), logPrefix+" daemon command handled", args...)
 }
 
 // filesystemMutatingCommands are daemon commands that create or remove a
@@ -1664,6 +1852,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 		// false until the first sample).
 		if rep, ok := d.diskWatcher.Report(); ok {
 			d.diskGuard.Annotate(rep)
+			rep.Processes = d.procGuard.Report()
 			hb.Disk = rep
 		}
 		hb.ToolCallsInFlight = uint32(d.results.runningCount())
@@ -1708,6 +1897,13 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 				logSendFailure(logPrefix+" Failed to send disk-guard heartbeat", err)
 				return
 			}
+		case <-d.procGuard.Changed():
+			// The machine crossed its process-limit line: heavy background
+			// commands are refused, or accepted again.
+			if err := sendHeartbeat(time.Now()); err != nil {
+				logSendFailure(logPrefix+" Failed to send process-guard heartbeat", err)
+				return
+			}
 		case <-d.portWatcher.Changed():
 			// Listener set changed — surface the new port (or its
 			// disappearance) immediately so the UI preview affordance tracks
@@ -1731,10 +1927,29 @@ func dispatchContext(req *reliantv1.ToolRequest) context.Context {
 	return otel.GetTextMapPropagator().Extract(context.Background(), propagation.MapCarrier(req.GetTraceContext()))
 }
 
+// commandDispatchContext is dispatchContext for a daemon command: it continues
+// the gateway's `gateway.daemon.command` span (DaemonCommandRequest.trace_context).
+func commandDispatchContext(req *reliantv1.DaemonCommandRequest) context.Context {
+	return otel.GetTextMapPropagator().Extract(context.Background(), propagation.MapCarrier(req.GetTraceContext()))
+}
+
 func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest) {
 	if req == nil {
 		return
 	}
+
+	// Before the tool can do anything a restart would cut short.
+	d.results.persistRunning(req.RequestId)
+
+	releaseRecovery, admissionErr := beginRecoveryWork()
+	if admissionErr != nil {
+		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
+			Success: false, IsError: true, Content: admissionErr.Error(),
+			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
+		})
+		return
+	}
+	defer releaseRecovery()
 
 	execCtx, cancel := context.WithCancel(dispatchContext(req))
 	// Registered under both ids. request_id is the transport's correlation key
@@ -2088,8 +2303,8 @@ func pathLooksLikeGitRepo(projectPath string) bool {
 	return false
 }
 
-func (d *daemonClient) sendLoadProjectConfigResponse(projectPath, requestID string) error {
-	snapshot, err := d.projectSnapshot(projectPath)
+func (d *daemonClient) sendLoadProjectConfigResponse(ctx context.Context, projectPath, requestID string) error {
+	snapshot, err := d.projectSnapshot(ctx, projectPath)
 	resp := &reliantv1.LoadProjectConfigsResponse{
 		RequestId: requestID,
 		Snapshot:  snapshot,
@@ -2195,16 +2410,15 @@ func (d *daemonClient) stopAllFileTreeWatchers() {
 func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string, includeInitial bool) {
 	var lastVersion string
 
-	sendSnapshotDelta := func() {
-		snapshot, err := d.projectSnapshot(projectPath)
-		if err != nil || snapshot == nil {
-			if err != nil {
-				logging.WarnContext(ctx, logPrefix+" Failed to build project snapshot for watcher", "projectPath", projectPath, "error", err)
-			}
-			return
+	// sendSnapshotDelta returns why the snapshot could not be built, if it
+	// could not.
+	sendSnapshotDelta := func() error {
+		snapshot, err := d.projectSnapshot(ctx, projectPath)
+		if err != nil {
+			return err
 		}
-		if snapshot.ConfigVersion == lastVersion {
-			return
+		if snapshot == nil || snapshot.ConfigVersion == lastVersion {
+			return nil
 		}
 		lastVersion = snapshot.ConfigVersion
 
@@ -2219,26 +2433,51 @@ func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string
 		if err := d.send(msg); err != nil {
 			logSendFailure(logPrefix+" Failed to send project config delta", err, "project_path", projectPath)
 		}
+		return nil
 	}
 
+	// A path that cannot be snapshotted (most often one deleted from disk
+	// while the server still lists it) backs off and is logged once per
+	// failure streak; see watchFailureBackoffMax.
+	backoff := newWatchBackoff(transport.WatchPollInterval)
+	poll := func() time.Duration {
+		err := sendSnapshotDelta()
+		if ctx.Err() != nil {
+			return transport.WatchPollInterval // shutting down; the loop returns
+		}
+		wait, changed := backoff.next(err != nil)
+		switch {
+		case changed && err != nil:
+			logging.WarnContext(ctx, logPrefix+" Failed to build project snapshot for watcher; backing off until it recovers",
+				"projectPath", projectPath, "error", err, "retryIn", wait, "maxRetryIn", watchFailureBackoffMax)
+		case changed:
+			logging.InfoContext(ctx, logPrefix+" Project snapshot for watcher recovered", "projectPath", projectPath)
+		}
+		return wait
+	}
+
+	wait := transport.WatchPollInterval
 	if includeInitial {
-		sendSnapshotDelta()
+		wait = poll()
 	}
-
-	ticker := time.NewTicker(transport.WatchPollInterval)
-	defer ticker.Stop()
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			sendSnapshotDelta()
+		case <-timer.C:
+			timer.Reset(poll())
 		}
 	}
 }
 
 func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
+	return buildProjectSnapshotContext(context.Background(), projectPath)
+}
+
+func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
 	projectPath = normalizePath(projectPath)
 	if projectPath == "" {
 		return nil, fmt.Errorf("project path is empty")
@@ -2262,12 +2501,17 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	globalMemory, _ := readOptionalFile(globalMemoryPath)
 	projectMemory := readProjectMemory(projectPath)
 
-	layout, workflowsDir := readWorkflowLayout(projectPath)
-	workflows, workflowBytes := indexWorkflows(layout, workflowsDir)
-	presets, presetBytes := indexPresets(projectPath)
-	scenarios, scenarioBytes := indexScenarios(layout, workflowsDir)
+	workflowSources, err := readWorkflowSources(ctx, projectPath)
+	if err != nil {
+		return nil, err
+	}
+	workflows, workflowBytes := indexWorkflows(workflowSources)
+	presets, presetBytes := indexPresets(projectPath, workflowSources)
+	scenarios, scenarioBytes := indexScenarios(workflowSources)
 	skills, skillBytes := indexSkills(projectPath)
 	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
+	heads := readRepoHeads(projectPath, discoverRepoSources(ctx, projectPath))
+	states := repoStates(ctx, projectPath, heads)
 
 	version := hashBytes(
 		userConfigYAML,
@@ -2283,6 +2527,8 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 		scenarioBytes,
 		skillBytes,
 		repoMemoriesBytes,
+		headsVersion(heads),
+		statesVersion(states),
 	)
 
 	return &reliantv1.ProjectConfigSnapshot{
@@ -2304,6 +2550,7 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 		GlobalMemoryMd:  globalMemory,
 		ProjectMemoryMd: projectMemory,
 		RepoMemoriesMd:  repoMemories,
+		RepoStates:      states,
 	}, nil
 }
 
@@ -2350,15 +2597,19 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 	result := make(map[string][]byte, len(sorted))
 	acc := strings.Builder{}
 
-	// The Forge framework guide is ~18KB and identical across forge repos,
-	// so it is carried once per snapshot: by the project root's memory when
-	// the root is a forge project, otherwise by the first forge repo in
-	// sorted order (the order the server emits entries in).
-	frameworkCarrier := ""
+	// The Forge framework guide is ~18KB and the same for every repo one
+	// forge renders it for, so it is carried once per forge per snapshot: by
+	// the project root's memory when the root's forge renders it, otherwise
+	// by the first forge repo in sorted order (the order the server emits
+	// entries in). Repos pinned to different forges get different guides
+	// (forgeFrameworkMemoryFrom asks each repo's pinned forge), and pointing
+	// one at another's would hand it the wrong version's rules — so a repo
+	// points only at a guide from the forge that renders its own.
+	carriers := map[string]string{} // forge identity -> repo carrying its guide
 	// Ask the same question buildProjectSnapshot does (rendered, not merely
 	// forge.yaml present): a root forge.yaml that fails to render carries no
 	// guide, and a pointer to it would name something the model never sees.
-	_, rootCarriesFramework := forgeFrameworkMemory(projectPath)
+	_, rootForge, rootCarriesFramework := forgeFrameworkMemoryFrom(projectPath)
 	// Byte-identical repo memories (e.g. two clones of one repo) collapse
 	// to a pointer at the first repo carrying that content.
 	seen := map[string]string{}
@@ -2370,15 +2621,15 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 		repoDir := filepath.Join(projectPath, rel)
 		md, _ := readOptionalFile(filepath.Join(repoDir, "reliant.md"))
 		if hasForgeYAML(repoDir) {
-			switch {
-			case rootCarriesFramework:
-				md = prependMemory([]byte("This repo is also a Forge project: the Forge framework guide in the project memory applies here too."), md)
-			case frameworkCarrier != "":
-				md = prependMemory([]byte(fmt.Sprintf("This repo is also a Forge project: the Forge framework guide included with the `%s` repo's memory applies here too.", frameworkCarrier)), md)
-			default:
-				if framework, ok := forgeFrameworkMemory(repoDir); ok {
+			if framework, forge, ok := forgeFrameworkMemoryFrom(repoDir); ok {
+				switch carrier, carried := carriers[forge]; {
+				case rootCarriesFramework && forge == rootForge:
+					md = prependMemory([]byte("This repo is also a Forge project: the Forge framework guide in the project memory applies here too."), md)
+				case carried:
+					md = prependMemory([]byte(fmt.Sprintf("This repo is also a Forge project: the Forge framework guide included with the `%s` repo's memory applies here too.", carrier)), md)
+				default:
 					md = prependMemory(framework, md)
-					frameworkCarrier = rel
+					carriers[forge] = rel
 				}
 			}
 		}
@@ -2571,96 +2822,151 @@ func buildSkillsIndex(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
 	return results, []byte(acc.String())
 }
 
-// readWorkflowLayout reads the project's .reliant/workflows with the one
-// locator the CLI uses too (workflowref.ReadLayout), so the server indexes
-// exactly the workflows and scenarios `reliant workflow` sees on disk.
-func readWorkflowLayout(projectPath string) (*workflowref.Layout, string) {
-	baseDir := filepath.Join(projectPath, filepath.FromSlash(workflowref.Dir))
-	layout, err := workflowref.ReadLayout(os.DirFS(baseDir))
+// workflowSource is one workflows directory a project syncs: the project
+// root's .reliant/workflows, or one nested repo's.
+type workflowSource struct {
+	// repo is the nested repo's slash-separated path relative to the project
+	// root, "" for the project root itself.
+	repo    string
+	layout  *workflowref.Layout
+	baseDir string
+}
+
+// readWorkflowSources reads the project's workflows directories — the project
+// root's .reliant/workflows, then each nested repo's (the same repos
+// reliant.md and skills are discovered in) — with the one locator the CLI
+// uses too (workflowref.ReadLayout), so the server indexes exactly the
+// workflows and scenarios `reliant workflow` sees on disk. The project root's
+// source is always first; nested repos follow in path order. Which of them a
+// bare name resolves to is the server's to decide (workflowref.Index).
+func readWorkflowSources(ctx context.Context, projectPath string) ([]workflowSource, error) {
+	root, err := readWorkflowSource(ctx, projectPath, "")
 	if err != nil {
-		logging.Warn("Failed to read project workflows", "dir", baseDir, "error", err)
-		return workflowref.NewLayout(nil), baseDir
+		return nil, err
 	}
-	// Misplaced scenarios are reported by the surfaces that read them
-	// (`reliant workflow scenario`), not here: this runs on every 2s poll.
-	return layout, baseDir
-}
-
-// indexWorkflows syncs every project workflow file with its path and
-// content. Problems (no name:, a name two files share) are not resolved here:
-// the server indexes the files with workflowref, as the CLI does, and reports
-// them where a ref or the workflow list meets them.
-func indexWorkflows(layout *workflowref.Layout, baseDir string) ([]*reliantv1.IndexedWorkflow, []byte) {
-	entries := layout.Workflows.Entries()
-	results := make([]*reliantv1.IndexedWorkflow, 0, len(entries))
-	acc := strings.Builder{}
-
-	for _, e := range entries {
-		rel := filepath.ToSlash(filepath.Join(workflowref.Dir, e.Path))
-		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(e.Path)))
-		if err != nil {
+	sources := []workflowSource{root}
+	repos := append([]string(nil), discoverRepoSources(ctx, projectPath)...)
+	sort.Strings(repos)
+	for _, rel := range repos {
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == "" || rel == "." {
 			continue
 		}
-		h := hashBytes(e.Content)
-		results = append(results, &reliantv1.IndexedWorkflow{
-			Slug:         e.Slug,
-			Name:         e.Name,
-			RelativePath: rel,
-			ContentHash:  h,
-			MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
-			YamlContent:  e.Content,
-		})
-		acc.WriteString(rel)
-		acc.WriteString(":")
-		acc.WriteString(h)
-		acc.WriteString(";")
+		source, err := readWorkflowSource(ctx, projectPath, rel)
+		if err != nil {
+			return nil, err
+		}
+		sources = append(sources, source)
+	}
+	return sources, nil
+}
+
+func readWorkflowSource(ctx context.Context, projectPath, repo string) (workflowSource, error) {
+	sourceDir := filepath.Join(projectPath, filepath.FromSlash(repo))
+	baseDir := filepath.Join(sourceDir, filepath.FromSlash(workflowref.Dir))
+	layout, err := workflowref.ReadSourceLayout(ctx, sourceDir)
+	if err != nil {
+		return workflowSource{}, fmt.Errorf("read workflows in %s: %w", sourceDir, err)
+	}
+	return workflowSource{repo: repo, layout: layout, baseDir: baseDir}, nil
+}
+
+// indexWorkflows syncs every project workflow file of every source with its
+// project-relative path and content. Problems (no name:, a name two files
+// share, a name two repos share) are not resolved here: the server indexes the
+// files with workflowref, as the CLI does, and reports them where a ref or the
+// workflow list meets them.
+func indexWorkflows(sources []workflowSource) ([]*reliantv1.IndexedWorkflow, []byte) {
+	var results []*reliantv1.IndexedWorkflow
+	acc := strings.Builder{}
+
+	for _, src := range sources {
+		for _, e := range src.layout.Workflows.Entries() {
+			rel := workflowref.RelativePath(src.repo, e.Path)
+			st, err := os.Stat(filepath.Join(src.baseDir, filepath.FromSlash(e.Path)))
+			if err != nil {
+				continue
+			}
+			h := hashBytes(e.Content)
+			results = append(results, &reliantv1.IndexedWorkflow{
+				Slug:         e.Slug,
+				Name:         e.Name,
+				RelativePath: rel,
+				ContentHash:  h,
+				MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
+				YamlContent:  e.Content,
+			})
+			acc.WriteString(rel)
+			acc.WriteString(":")
+			acc.WriteString(h)
+			acc.WriteString(";")
+		}
 	}
 	return results, []byte(acc.String())
 }
 
-func indexPresets(projectPath string) ([]*reliantv1.IndexedPreset, []byte) {
-	baseDir := filepath.Join(projectPath, ".reliant", "presets")
-	files := listYAMLFiles(baseDir)
-	results := make([]*reliantv1.IndexedPreset, 0, len(files))
+// indexPresets syncs the presets of the project root's .reliant/presets and of
+// every nested repository's, as workflows are (readWorkflowSources), each with
+// its project-relative path. A name two repos share is not resolved here: the
+// server addresses a nested preset as "<repo>/<name>" and lets the root shadow
+// the repos (config.FindStoredPresetByName).
+func indexPresets(projectPath string, sources []workflowSource) ([]*reliantv1.IndexedPreset, []byte) {
+	var results []*reliantv1.IndexedPreset
 	acc := strings.Builder{}
 
-	for _, path := range files {
-		rel, err := filepath.Rel(projectPath, path)
-		if err != nil {
-			continue
+	repos := []string{""}
+	for _, src := range sources {
+		if src.repo != "" {
+			repos = append(repos, src.repo)
 		}
-		st, err := os.Stat(path)
-		if err != nil {
-			continue
+	}
+	for _, repo := range repos {
+		baseDir := filepath.Join(projectPath, filepath.FromSlash(repo), ".reliant", "presets")
+		for _, path := range listYAMLFiles(baseDir) {
+			rel, err := filepath.Rel(projectPath, path)
+			if err != nil {
+				continue
+			}
+			st, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			blob, _ := os.ReadFile(path)
+			name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+			h := hashBytes(blob)
+			results = append(results, &reliantv1.IndexedPreset{
+				Name:         name,
+				RelativePath: filepath.ToSlash(rel),
+				ContentHash:  h,
+				MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
+				YamlContent:  blob,
+			})
+			acc.WriteString(filepath.ToSlash(rel))
+			acc.WriteString(":")
+			acc.WriteString(h)
+			acc.WriteString(";")
 		}
-		blob, _ := os.ReadFile(path)
-		name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		h := hashBytes(blob)
-		results = append(results, &reliantv1.IndexedPreset{
-			Name:         name,
-			RelativePath: filepath.ToSlash(rel),
-			ContentHash:  h,
-			MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
-			YamlContent:  blob,
-		})
-		acc.WriteString(filepath.ToSlash(rel))
-		acc.WriteString(":")
-		acc.WriteString(h)
-		acc.WriteString(";")
 	}
 
 	return results, []byte(acc.String())
 }
 
-// indexScenarios syncs the scenarios in .reliant/workflows/<slug>/scenarios/,
-// located by workflowref — the locator `reliant workflow scenario` uses.
-func indexScenarios(layout *workflowref.Layout, baseDir string) ([]*reliantv1.IndexedScenario, []byte) {
+// indexScenarios syncs scenarios under the same address as their workflow.
+// A cross-repo collision must not attach one repo's scenarios to another's.
+func indexScenarios(sources []workflowSource) ([]*reliantv1.IndexedScenario, []byte) {
+	root := sources[0]
+	repos := map[string]*workflowref.Layout{}
+	for _, src := range sources[1:] {
+		repos[src.repo] = src.layout
+	}
+	layout := workflowref.MergeLayouts(root.layout, repos)
+	baseDir := root.baseDir
 	results := make([]*reliantv1.IndexedScenario, 0, len(layout.Scenarios))
 	acc := strings.Builder{}
 
 	for _, sc := range layout.Scenarios {
-		rel := filepath.ToSlash(filepath.Join(workflowref.Dir, sc.Path))
-		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(sc.Path)))
+		rel := workflowref.RelativePath(sc.Repo, sc.Path)
+		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(workflowref.FilePath(sc.Repo, sc.Path))))
 		if err != nil {
 			continue
 		}

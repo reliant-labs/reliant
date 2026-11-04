@@ -15,6 +15,13 @@ import (
 // ProjectRef identifies a project for configuration lookups.
 type ProjectRef struct {
 	ProjectID string
+	// DaemonID is the machine the reader runs on (a run's machine). Its
+	// skills, memories, MCP servers and config are that machine's own
+	// snapshot, not the project record's, whose single-valued parts are the
+	// last pusher's: a skill or an MCP server lives on the machine that runs
+	// it. Empty, or a machine that has never synced the whole snapshot,
+	// reads the project record.
+	DaemonID string
 }
 
 // ConfigProvider abstracts project configuration loading.
@@ -55,6 +62,13 @@ type StoredConfigStore interface {
 	GetProjectConfigRecord(ctx context.Context, projectID string) (*StoredProjectConfigRecord, error)
 }
 
+// MachineConfigStore is a StoredConfigStore that can also read one machine's
+// own snapshot of a project (ProjectRef.DaemonID). synced is false when that
+// machine has never synced a whole snapshot of the project.
+type MachineConfigStore interface {
+	GetProjectMachineConfigRecord(ctx context.Context, projectID, daemonID string) (record *StoredProjectConfigRecord, synced bool, err error)
+}
+
 // StoredConfigProvider loads project config from persisted records.
 type StoredConfigProvider struct {
 	store StoredConfigStore
@@ -79,11 +93,16 @@ func (p *StoredConfigProvider) GetProjectConfig(ctx context.Context, ref Project
 		return nil, fmt.Errorf("project ID is required for StoredConfigProvider")
 	}
 
+	load := func(ctx context.Context) (*Config, int64, error) { return p.load(ctx, ref) }
 	if p.cache != nil {
-		return p.cache.get(ctx, ref.ProjectID, p.load)
+		key := ref.ProjectID
+		if p.machineScoped(ref) {
+			key += "\x00" + ref.DaemonID
+		}
+		return p.cache.get(ctx, ref.ProjectID, key, load)
 	}
 
-	cfg, _, err := p.load(ctx, ref.ProjectID)
+	cfg, _, err := load(ctx)
 	if errors.Is(err, sql.ErrNoRows) {
 		return notSyncedConfig(ref.ProjectID), nil
 	}
@@ -105,8 +124,9 @@ func notSyncedConfig(projectID string) *Config {
 // load reads the project's stored record and parses it into a Config. size is
 // the record's payload in bytes, the cache's estimate of what the parsed
 // Config retains. A project with no record returns sql.ErrNoRows unwrapped.
-func (p *StoredConfigProvider) load(ctx context.Context, projectID string) (cfg *Config, size int64, err error) {
-	record, err := p.store.GetProjectConfigRecord(ctx, projectID)
+func (p *StoredConfigProvider) load(ctx context.Context, ref ProjectRef) (cfg *Config, size int64, err error) {
+	projectID := ref.ProjectID
+	record, err := p.readRecord(ctx, ref)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, 0, err
@@ -124,6 +144,29 @@ func (p *StoredConfigProvider) load(ctx context.Context, projectID string) (cfg 
 	}
 
 	return cfg, storedRecordBytes(record), nil
+}
+
+// machineScoped reports whether ref reads one machine's snapshot.
+func (p *StoredConfigProvider) machineScoped(ref ProjectRef) bool {
+	_, ok := p.store.(MachineConfigStore)
+	return ok && ref.DaemonID != ""
+}
+
+// readRecord reads ref's machine's own snapshot when it names one that has
+// synced the whole snapshot, else the project's record, saying so.
+func (p *StoredConfigProvider) readRecord(ctx context.Context, ref ProjectRef) (*StoredProjectConfigRecord, error) {
+	if p.machineScoped(ref) {
+		record, synced, err := p.store.(MachineConfigStore).GetProjectMachineConfigRecord(ctx, ref.ProjectID, ref.DaemonID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load machine %s's stored config for project %s: %w", ref.DaemonID, ref.ProjectID, err)
+		}
+		if synced {
+			return record, nil
+		}
+		logging.WarnContext(ctx, "[config] machine has never synced this project's config; reading the project's record (skills, memories and MCP from every machine's)",
+			"projectID", ref.ProjectID, "daemonID", ref.DaemonID)
+	}
+	return p.store.GetProjectConfigRecord(ctx, ref.ProjectID)
 }
 
 // storedRecordBytes sums the record's payload columns.

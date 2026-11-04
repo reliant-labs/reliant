@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { toast } from '../lib/toast-manager';
-import { attachmentGrpc, type Attachment } from '../api/attachment-grpc';
+import { deleteAttachment, uploadAttachment, type Attachment } from '../hooks/attachment-queries';
 import { logger } from '../lib/logger';
 import { getAttachmentType, isFileTypeSupported, getUnsupportedFileMessage } from '../lib/filetypes';
 
@@ -42,11 +42,11 @@ export const useAttachmentStore = create<AttachmentStore>()(
         if (attachmentType === 'image') {
           // For images, upload binary and create blob URL for preview
           blobUrl = URL.createObjectURL(file);
-          attachment = await attachmentGrpc.uploadAttachment(file);
+          attachment = await uploadAttachment(file);
         } else {
           // For text files, also upload the content (same as images)
           // The backend will store it and read it at send time
-          attachment = await attachmentGrpc.uploadAttachment(file);
+          attachment = await uploadAttachment(file);
           // No blob URL for text files - we'll show an icon instead
         }
 
@@ -103,7 +103,7 @@ export const useAttachmentStore = create<AttachmentStore>()(
       set({ attachments: newAttachments, blobUrls: newBlobUrls });
       
       // Delete from server in background (fire-and-forget)
-      attachmentGrpc.deleteAttachment(attachmentId).catch((error) => {
+      deleteAttachment(attachmentId).catch((error) => {
         logger.warn('Failed to delete attachment from server:', attachmentId, error);
       });
     },

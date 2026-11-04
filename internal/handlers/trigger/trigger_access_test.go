@@ -8,8 +8,11 @@ import (
 	"sync"
 	"testing"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -47,7 +50,7 @@ func setupAccessTriggerTest(t *testing.T) (*triggerTestEnv, *fakeAccess) {
 	env, _ := setupInboundTriggerTest(t)
 	access := &fakeAccess{}
 	env.configure(t, func(d *Deps) {
-		d.PublicURL = "https://api.example.com/"
+		d.Integrations = &configv1.IntegrationsConfig{PublicUrl: "https://api.example.com/"}
 		d.Sealer = fakeSealer{}
 		d.Catalog = fakeCatalog{"test": true, "gh": true}
 		d.Intake = &fakeIntake{}
@@ -87,6 +90,7 @@ func TestAccessGatedTriggerNeedsNoConnectionAndRefreshesAccess(t *testing.T) {
 // With a saved connection the trigger still binds it (self-hosted), and an
 // explicitly named one must be the caller's.
 func TestAccessGatedTriggerBindsASavedConnectionWhenThereIsOne(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupAccessTriggerTest(t)

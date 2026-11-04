@@ -61,7 +61,7 @@ export function LiveState({ env }: { env: LiveEnv }) {
 
   return (
     <div
-      className="space-y-1.5 rounded-lg border border-border/60 bg-background px-4 py-3"
+      className="space-y-1.5 rounded-lg border border-border/60 bg-surface-sunken px-4 py-3"
       data-testid="live-state"
       data-observed={env.observed.state}
       data-drift={env.drift.state}
@@ -69,7 +69,7 @@ export function LiveState({ env }: { env: LiveEnv }) {
       {/* INTENT. Absent only when nothing has ever been promoted, which the
           header already explains in better words than this line could. */}
       {intent !== "" && (
-        <p data-testid="live-state-intent" className="text-sm text-foreground">
+        <p data-testid="live-state-intent" className="text-sm text-ink">
           {intent}
         </p>
       )}
@@ -78,9 +78,9 @@ export function LiveState({ env }: { env: LiveEnv }) {
           about the decision above is not itself a decision. */}
       <p
         data-testid="live-state-observed"
-        className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground"
+        className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted"
       >
-        <span className={failed ? "text-destructive-ink" : undefined}>{observed}</span>
+        <span className={failed ? "text-danger-ink" : undefined}>{observed}</span>
         {env.observed.observedAt && <span>{formatTimestamp(env.observed.observedAt)}</span>}
         {drift !== "" && <Badge label={drift} variant="neutral" size="sm" />}
       </p>
@@ -90,7 +90,7 @@ export function LiveState({ env }: { env: LiveEnv }) {
           paraphrase would be worse. Suppressed otherwise: for the states that
           mean "fine" or "nothing yet" it only restates the line above it. */}
       {failed && env.driftDetail !== "" && (
-        <p data-testid="live-state-detail" className="font-mono text-2xs text-muted-foreground">
+        <p data-testid="live-state-detail" className="font-mono text-2xs text-ink-muted">
           {env.driftDetail}
         </p>
       )}

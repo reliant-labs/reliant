@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Code, ConnectError } from '@connectrpc/connect'
 
@@ -35,10 +35,13 @@ const eligibility = (maxDaemonStorageGib: number) => ({
   hasActiveSubscription: true,
   grantedSmallDaemonSecondsRemaining: 0,
   planName: 'Compute XL',
-  allowedDaemonSizes: ['small', 'medium', 'large', 'xl'],
+  allowedDaemonSizes: ['m', 'l', 'xl', '2xl'],
   maxDaemonStorageGib,
 })
 
+// The Add machine sheet (billing checkout, catalog) is not under test here.
+vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
+vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
 vi.mock('@/services/controlPlane/billing', () => ({
   getComputeEligibility: mocks.getComputeEligibility,
 }))
@@ -48,7 +51,7 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   usePlans: () => ({
     data: {
       plans: [],
-      daemonPricing: { sizes: [{ size: 'xl', multiplier: 8n, hourlyPriceCents: '104', storageGib: 260n }], storageCentsPerGibMonth: '25.0000', placeholder: false },
+      daemonPricing: { sizes: [{ size: '2xl', multiplier: 8n, hourlyPriceCents: '104', storageGib: 260n }], storageCentsPerGibMonth: '25.0000', placeholder: false },
     },
   }),
 }))
@@ -75,11 +78,11 @@ vi.mock('@/services/controlPlane/environments', () => ({
   DaemonStatus: { UNSPECIFIED: 0, PENDING: 1, ACTIVE: 2, SUSPENDED: 3, FAILED: 5, DISCONNECTED: 4 },
   DaemonSize: {
     DAEMON_SIZE_UNSPECIFIED: 0,
-    DAEMON_SIZE_SMALL: 1,
-    DAEMON_SIZE_MEDIUM: 2,
-    DAEMON_SIZE_LARGE: 3,
-    DAEMON_SIZE_XL: 4,
-    DAEMON_SIZE_2XL: 5,
+    DAEMON_SIZE_M: 8,
+    DAEMON_SIZE_L: 9,
+    DAEMON_SIZE_XL: 10,
+    DAEMON_SIZE_2XL: 11,
+    DAEMON_SIZE_3XL: 12,
   },
   DaemonType: { UNSPECIFIED: 0, MANAGED: 1, EXTERNAL: 2 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
@@ -97,17 +100,17 @@ vi.mock('@/services/controlPlane/environments', () => ({
   removePortAccess: vi.fn(),
 }))
 
-vi.mock('@/api/grpc-client', () => ({
-  grpcClient: {
-    daemonRegistry: () => ({ listDaemons: async () => mocks.listDaemons() }),
-  },
-}))
-
 import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { DaemonDiskState } from '@/gen/controlplane/controlplane/v1/shared_pb'
 import { DiskReportSchema } from '@/gen/reliant/v1/tools_daemon_pb'
 import { create } from '@bufbuild/protobuf'
+import { setTransport } from '@/lib/connect'
+import { daemonRegistryTransport } from '@/test/daemonRegistry'
+
+// The daemon list is read through connectClient(DaemonRegistryService).
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+afterEach(() => setTransport(null))
 
 function machine(over: Record<string, unknown> = {}) {
   return {
@@ -117,7 +120,7 @@ function machine(over: Record<string, unknown> = {}) {
     status: DaemonStatus.ACTIVE,
     lifecyclePhase: DaemonLifecyclePhase.READY,
     platform: '',
-    size: 'xl',
+    size: '2xl',
     lastStatusMessage: '',
     ...over,
   }
@@ -177,7 +180,7 @@ describe('machine detail — grow disk', () => {
     showMachine(machine())
     renderDetail()
 
-    expect(await screen.findByText('260 GB disk')).toBeInTheDocument()
+    expect((await screen.findAllByText('260 GB disk'))[0]).toBeInTheDocument()
     await waitFor(() => expect(mocks.getComputeEligibility).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: /^grow$/i })).not.toBeInTheDocument()
   })
@@ -265,7 +268,7 @@ describe('machine detail — grow disk', () => {
     const user = userEvent.setup()
     mocks.growDaemonDisk.mockRejectedValueOnce(
       new ConnectError('520 GB is more than your plan allows', Code.PermissionDenied, {
-        'x-reliant-reason': 'daemon_storage_denied',
+        'x-forge-error-reason': 'daemon_storage_denied',
       }),
     )
     showMachine(machine())

@@ -240,6 +240,9 @@ type listRunsStore interface {
 type getRunStore interface {
 	threads.Repository
 	runCallerStore
+	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
+	// GetWorkflow reads the run's root workflow, which carries why it failed.
+	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 }
 
 // bugReportLookup is what report_bug reads to say where a report came from.
@@ -330,8 +333,9 @@ type runScenarioStore interface {
 type worktreeStore interface {
 	workspacecreate.Store
 	repopkg.AdoptStore
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
-	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
+	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)

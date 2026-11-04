@@ -81,7 +81,7 @@ else
   # GOPRIVATE: a fresh pseudo-version is not on proxy.golang.org yet
   # (scripts/pin-forge.sh). GOFLAGS is reset to just -trimpath because `go run
   # pkg@version` refuses a repo-level -mod setting, and an empty one would drop
-  # -trimpath under a toolchain switched by go.mod (see the Makefile's GOFLAGS).
+  # -trimpath under a toolchain switched by go.mod (see Taskfile.yml's GOFLAGS).
   forge=(env GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}" GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@${pin}")
 fi
 

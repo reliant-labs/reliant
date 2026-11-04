@@ -28,14 +28,14 @@ import * as machineWake from "../machineWake";
 
 /** The error the server returns after waking daemonId for a request. */
 function wakingError(daemonId: string): ConnectError {
-  return new ConnectError("your machine is waking up: no daemon connected yet", Code.Unavailable, undefined, [
+  return new ConnectError("your machine is waking up: no daemon connected yet", Code.Unavailable, new Headers({ "x-forge-error-reason": "daemon_waking" }), [
     { desc: DaemonWakingSchema, value: { daemonId } },
   ]);
 }
 
 /** A machine that is not connected and that nothing woke (offline laptop). */
 function offlineError(): ConnectError {
-  return new ConnectError("unavailable: no daemon connected for user", Code.Internal);
+  return new ConnectError("unavailable: no daemon connected for user", Code.Internal, new Headers({ "x-forge-error-reason": "daemon_not_connected" }));
 }
 
 function daemon(partial: Partial<Daemon>): Daemon {

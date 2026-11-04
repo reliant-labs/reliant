@@ -29,7 +29,8 @@
  * walks away believing someone has authority they do not have.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useActiveOrgStore } from "@/store/activeOrgStore";
 import { Loader2 } from "lucide-react";
 
 import {
@@ -71,6 +72,19 @@ const ORG_PERMISSIONS = [
 const ADMIN_PERMISSION = "token:write";
 
 export function MemberPermissions() {
+  const orgId = useActiveOrgStore((s) => s.effectiveId);
+  // Separate lifetimes also protect A → B → A: A's first request must not
+  // overwrite a newer roster merely because the selected id matches again.
+  return <OrgMemberPermissions key={orgId ?? ""} orgId={orgId} />;
+}
+
+function OrgMemberPermissions({ orgId }: { orgId: string | null }) {
+  const live = useRef(true);
+  const isCurrent = useCallback(() => live.current && useActiveOrgStore.getState().effectiveId === orgId, [orgId]);
+  useEffect(() => {
+    live.current = true;
+    return () => { live.current = false; };
+  }, []);
   const [members, setMembers] = useState<Member[]>([]);
   const [grantable, setGrantable] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,24 +93,35 @@ export function MemberPermissions() {
   const fetchMembers = useCallback(async () => {
     try {
       setError(null);
-      const res = await listMemberPermissions();
+      if (!orgId) return;
+      const res = await listMemberPermissions(orgId);
+      if (!isCurrent()) return;
       setMembers(res.members);
       setGrantable(res.grantable);
     } catch (err) {
+      if (!isCurrent()) return;
       console.error("Failed to load member permissions:", err);
       setError("Could not load member permissions.");
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
-  }, []);
+  }, [isCurrent, orgId]);
 
   useEffect(() => {
-    fetchMembers();
+    setMembers([]);
+    setGrantable([]);
+    setLoading(true);
+    void fetchMembers();
   }, [fetchMembers]);
 
   const canAdminister = grantable.includes(ADMIN_PERMISSION);
 
+  const operations = useRef(new Map<string, number>());
   const toggle = async (member: Member, permission: string) => {
+    if (!orgId || !isCurrent()) return;
+    const operation = (operations.current.get(member.userId) ?? 0) + 1;
+    operations.current.set(member.userId, operation);
+    const isLatest = () => isCurrent() && operations.current.get(member.userId) === operation;
     const has = member.scopes.includes(permission);
     const next = has
       ? member.scopes.filter((s) => s !== permission)
@@ -109,13 +134,15 @@ export function MemberPermissions() {
     );
     setError(null);
     try {
-      const updated = await updateMemberPermissions(member.userId, next);
+      const updated = await updateMemberPermissions(member.userId, next, orgId);
+      if (!isLatest()) return;
       setMembers((current) =>
         current.map((m) =>
           m.userId === member.userId ? { ...m, scopes: updated.scopes } : m
         )
       );
     } catch (err) {
+      if (!isLatest()) return;
       console.error("Failed to update member permissions:", err);
       setMembers((current) =>
         current.map((m) =>
@@ -129,7 +156,7 @@ export function MemberPermissions() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="Member Permissions"
+        title="Members"
         description="Control what each member of your organization is allowed to do. A token acting on someone's behalf can never carry more permissions than that person holds."
       />
 
@@ -147,7 +174,7 @@ export function MemberPermissions() {
         </p>
       )}
 
-      <div className="border border-border/40 rounded-lg p-6 space-y-4">
+      <div className="rounded-lg border border-border bg-card p-6 space-y-4">
         {loading ? (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="w-4 h-4 animate-spin" />

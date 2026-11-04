@@ -100,6 +100,9 @@ func ownedToolCallRepo() *tool_call.MockRepository {
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			return &db.Chat{ID: id, UserID: "test-user"}, nil
 		},
+		GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
+			return &db.ChatRow{ID: id, UserID: "test-user"}, nil
+		},
 	}
 }
 

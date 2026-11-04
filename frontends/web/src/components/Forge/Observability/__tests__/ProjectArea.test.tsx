@@ -19,23 +19,12 @@ vi.mock("@tanstack/react-virtual", async () => (await import("./obsMocks")).obsM
 const callsOf = (onCall: ReturnType<typeof vi.fn>, rpc: string) => onCall.mock.calls.filter(([name]) => name === rpc).map(([, req]) => req);
 
 describe("environment is a filter", () => {
-  it("reads every environment of the project by default, and the picked ones once chosen", async () => {
-    const user = userEvent.setup();
+  it("reads every environment of the project by default, with no picker of its own (the top bar scopes it)", async () => {
     const onCall = vi.fn();
-    const harness = renderPanel(createFixtureApi({ onCall }), {}, PROJECT_PLACE);
+    renderPanel(createFixtureApi({ onCall }), {}, PROJECT_PLACE);
     await screen.findByTestId("obs-overview");
     expect(callsOf(onCall, "GetServiceOverview")[0]).toMatchObject({ projectId: "shop", envIds: [], filters: [] });
-    expect(screen.getByTestId("obs-env-picker")).toHaveTextContent("All environments");
-
-    await user.click(screen.getByTestId("obs-env-picker"));
-    await user.click(screen.getByTestId("obs-env-option-prod"));
-    await user.click(screen.getByTestId("obs-env-option-staging"));
-    expect(harness.current().envs).toEqual(["prod", "staging"]);
-    await waitFor(() => expect(callsOf(onCall, "GetServiceOverview").at(-1)).toMatchObject({ envIds: ["env-prod", "env-staging"] }));
-    expect(screen.getByTestId("obs-env-picker")).toHaveTextContent("prod, staging");
-
-    await user.click(screen.getByTestId("obs-env-all"));
-    expect(harness.current().envs).toBeUndefined();
+    expect(screen.queryByTestId("obs-env-picker")).not.toBeInTheDocument();
   });
 
   it("pins the env page to its environment, with a way to the same view across all of them", async () => {
@@ -60,7 +49,7 @@ describe("group-by", () => {
     expect(harness.current().groupBy).toEqual(["deployment.environment.name"]);
     await screen.findByTestId("obs-service-api-prod");
     expect(screen.getByTestId("obs-service-api-staging")).toBeInTheDocument();
-    expect(screen.getByTestId("obs-overview-group-header")).toHaveTextContent("Environment");
+    expect(screen.getByRole("columnheader", { name: "Environment" })).toBeInTheDocument();
     expect(callsOf(onCall, "GetServiceOverview").at(-1)).toMatchObject({ groupBy: ["deployment.environment.name"] });
 
     await user.click(within(screen.getByTestId("obs-service-api-prod")).getByRole("button", { name: "api" }));

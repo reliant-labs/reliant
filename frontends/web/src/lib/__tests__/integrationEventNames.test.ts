@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { create } from '@bufbuild/protobuf'
 
 import { IntegrationSourceSchema } from '@/gen/reliant/v1/trigger_pb'
-import type { CatalogEntrySummary } from '@/api/catalog-search-grpc'
+import type { CatalogEntrySummary } from '@/hooks/catalog-queries'
 import { describeTriggerSource } from '../cronText'
 import { describeDeclaredSource, type DeclaredTrigger } from '../declaredTriggers'
 import { describeIntegrationEvents, integrationEventNaming, RAW_EVENT_NAMING } from '../integrationEventNames'

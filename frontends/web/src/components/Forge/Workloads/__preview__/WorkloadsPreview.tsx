@@ -15,6 +15,7 @@
  *   /forge-workloads-preview?workload=reliant-temporal-worker  a workload (in the scoped env)
  *   …&tab=logs|traces|profiles|events|history|config
  *   …&case=empty|loading|error|not-set-up|self-managed|local|no-default-branch|action-fails
+ *   …&case=no-frontends|frontends-loading|domains-unreadable      the Frontends panel's other states
  *   …&dark=1&scheme=pure-black
  */
 
@@ -30,10 +31,11 @@ import { RepoMetaProvider } from "@/services/forge/RepoMetaContext";
 import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
 import { withSearch } from "../../Console/paths";
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
-import { OverviewHome, type OverviewSearch } from "../OverviewHome";
+import { OverviewHome, type HostedByEnv, type OverviewSearch } from "../OverviewHome";
 import { WorkloadDetail, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
 import { actionsUnavailableReason } from "../WorkloadPages";
 import {
+  FIXTURE_DOMAINS,
   FIXTURE_HOSTED,
   STRIP_ENVS,
   WORKLOADS_PROJECT,
@@ -50,10 +52,6 @@ const SCHEMES = [
   "refined-neutral",
   "modern-teal",
   "slate",
-  "forest",
-  "vibrant-pink",
-  "energetic-orange",
-  "bold-red",
   "purple-classic",
   "pure-black",
 ] as const;
@@ -69,10 +67,18 @@ const CASES: { id: string; label: string; state: WorkloadsFixtureState }[] = [
   { id: "no-default-branch", label: "repo default branch unknown", state: "data" },
   { id: "action-fails", label: "restart / stop refused", state: "data" },
   { id: "no-envs", label: "nothing deployed", state: "data" },
+  { id: "no-frontends", label: "no frontend deployed", state: "data" },
+  { id: "frontends-loading", label: "frontends loading", state: "data" },
+  { id: "domains-unreadable", label: "domains unreadable (no custom-domain column)", state: "data" },
 ];
 
 type PreviewSearch = OverviewSearch &
   WorkloadDetailSearch & { workload?: string; env?: string; case?: string; dark?: boolean | string | number; scheme?: string };
+
+/** Every hosted env with its static sites removed: backends only. */
+const WITHOUT_FRONTENDS: HostedByEnv = new Map(
+  [...FIXTURE_HOSTED].map(([envName, workloads]) => [envName, new Map([...workloads].filter(([, workload]) => workload.tier !== "static"))])
+);
 
 const CONTROL = "rounded-md border border-border bg-surface px-2 py-1 text-sm text-ink";
 
@@ -182,11 +188,13 @@ export default function WorkloadsPreview() {
                   release: (version) => withSearch("/forge-releases-preview", { version, dark: search.dark, scheme: search.scheme }),
                   releases: withSearch("/forge-releases-preview", { dark: search.dark, scheme: search.scheme }),
                   alerts: href({}),
-                  activity: href({}),
+                  scoped: (envName) => href({ env: envName }),
                 }}
-                onSelectEnv={(next) => go({ env: next })}
                 navigateTo={(target) => void navigate({ href: target })}
-                hosted={FIXTURE_HOSTED}
+                hosted={active.id === "no-frontends" ? WITHOUT_FRONTENDS : FIXTURE_HOSTED}
+                hostedLoading={active.id === "frontends-loading"}
+                domains={{ availability: active.id === "domains-unreadable" ? "unreachable" : "available", domains: FIXTURE_DOMAINS, detail: "" }}
+                domainsHref={href({})}
               />
             )}
             </RepoMetaProvider>

@@ -26,13 +26,13 @@
  * the asking thread, where the composer answers it.
  */
 
-import { Tooltip } from "../ui/Tooltip";
+import Tooltip from "../forge-ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bot, ChevronDown, Terminal, HelpCircle, RotateCw, Square, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
-import { chatGrpc } from "../../api/chat-grpc";
+import { invalidateQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { useChatStore } from "../../store/chatStore";
 import {
   useBackgroundWork,
@@ -42,6 +42,8 @@ import {
   type FailedSpawn,
   type WaitingQuestion,
 } from "./useBackgroundWork";
+import * as chatActions from "../../hooks/chat-actions";
+import { statusBannerFrame, useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
 
 interface BackgroundWorkPillProps {
   chatId?: string;
@@ -128,7 +130,7 @@ function SpawnRow({
       data-testid={`background-work-spawn-${spawn.threadId}`}
     >
       {spawn.isBlocked ? (
-        <HelpCircle className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+        <HelpCircle className="h-3.5 w-3.5 flex-shrink-0 text-warning-ink" />
       ) : (
         <Bot className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
       )}
@@ -136,7 +138,7 @@ function SpawnRow({
       <span
         className={cn(
           "truncate",
-          spawn.isBlocked ? "text-amber-500" : "text-muted-foreground",
+          spawn.isBlocked ? "text-warning-ink" : "text-muted-foreground",
         )}
       >
         {spawn.isBlocked ? spawn.blockReason : spawn.activity}
@@ -155,7 +157,7 @@ function SpawnRow({
             spawn.toolCallId
               ? "Cancel background agent"
               : "This agent cannot be cancelled from here — it is still starting up, or its originating tool call is not yet recorded"
-          } placement="bottom" delay={300} wrapperClassName="inline-flex">
+          } side="bottom" delay={300} triggerClassName="inline-flex">
 <button
           type="button"
           onClick={handleCancel}
@@ -186,9 +188,9 @@ function WaitingQuestionRow({
       className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
       data-testid={`background-work-question-${waiting.threadId}`}
     >
-      <HelpCircle className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+      <HelpCircle className="h-3.5 w-3.5 flex-shrink-0 text-warning-ink" />
       <span className="truncate font-medium text-foreground">{waiting.title}</span>
-      <span className="truncate text-amber-500">Waiting on your answer</span>
+      <span className="truncate text-warning-ink">Waiting on your answer</span>
     </button>
   );
 }
@@ -240,7 +242,7 @@ function FailedSpawnRow({
     try {
       // To the PARENT, not the agent: the parent was told this agent failed
       // and owns the plan it belongs to, so it is the one that resumes it.
-      const response = await chatGrpc.sendAgentMessage(
+      const response = await chatActions.sendAgentMessage(
         chatId,
         spawn.parentThreadId,
         failedAgentRetryMessage(spawn),
@@ -251,6 +253,7 @@ function FailedSpawnRow({
         return;
       }
       setRetry("requested");
+      void invalidateQueuedAgentMessages();
     } catch (error) {
       logger.error("[BackgroundWorkPill] Failed to ask the parent to retry a failed agent", {
         chatId,
@@ -294,9 +297,9 @@ function FailedSpawnRow({
               ? "Ask its parent to resume this agent where it stopped"
               : "This agent's parent is not known, so it cannot be asked to retry it"
           }
-          placement="bottom"
+          side="bottom"
           delay={300}
-          wrapperClassName="inline-flex"
+          triggerClassName="inline-flex"
         >
           <button
             type="button"
@@ -308,7 +311,7 @@ function FailedSpawnRow({
             <RotateCw className={cn("h-3.5 w-3.5 text-foreground", retry === "sending" && "animate-spin")} />
           </button>
         </Tooltip>
-        <Tooltip content="Dismiss" placement="bottom" delay={300} wrapperClassName="inline-flex">
+        <Tooltip content="Dismiss" side="bottom" delay={300} triggerClassName="inline-flex">
           <button
             type="button"
             onClick={handleDismiss}
@@ -394,8 +397,6 @@ export function BackgroundWorkPill({
     if (!hasAnything) setIsExpanded(false);
   }, [hasAnything]);
 
-  if (!hasAnything) return null;
-
   // Everything waiting on the user: spawn rows marked blocked, plus threads
   // with a question that no spawn row shows.
   const waitingTitles = [
@@ -404,9 +405,25 @@ export function BackgroundWorkPill({
   ];
   const isBlocked = waitingTitles.length > 0;
   const failedLabel = `${visibleFailed.length === 1 ? visibleFailed[0].title : `${visibleFailed.length} agents`} stopped`;
+  const waitingLabel = `${waitingTitles.length === 1 ? waitingTitles[0] : `${waitingTitles.length} agents`} waiting on you`;
+  const runningCount = spawns.length + commands.length;
+
+  // The status slot's one line: what needs the user first, else "3 running".
+  useStatusSlotSummary(
+    !hasAnything
+      ? null
+      : isBlocked
+        ? { label: waitingLabel, tone: "warning" }
+        : hasFailed
+          ? { label: failedLabel, tone: "warning" }
+          : { label: `${runningCount} running`, tone: "info" },
+  );
+  const inSheet = useStatusSlotCollapsed();
+
+  if (!hasAnything) return null;
 
   return (
-    <div className="flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5">
+    <div className={statusBannerFrame(inSheet, "flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5")}>
       <button
         type="button"
         onClick={() => setIsExpanded((v) => !v)}
@@ -416,8 +433,8 @@ export function BackgroundWorkPill({
       >
         {isBlocked ? (
           <span className="relative flex h-2 w-2 flex-shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-warning" />
           </span>
         ) : hasFailed ? (
           <span className="relative inline-flex h-2 w-2 flex-shrink-0 rounded-full bg-warning" />
@@ -431,11 +448,11 @@ export function BackgroundWorkPill({
         <span
           className={cn(
             "font-medium",
-            isBlocked ? "text-amber-500" : hasFailed ? "text-warning-ink" : "text-foreground",
+            isBlocked ? "text-warning-ink" : hasFailed ? "text-warning-ink" : "text-foreground",
           )}
         >
           {isBlocked
-            ? `${waitingTitles.length === 1 ? waitingTitles[0] : `${waitingTitles.length} agents`} waiting on you`
+            ? waitingLabel
             : hasFailed
               ? failedLabel
               : summary}

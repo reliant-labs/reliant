@@ -37,9 +37,9 @@ import { useProjectStore } from "@/store/projectStore";
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
 import SkeletonLoader from "../forge-ui/skeleton_loader";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { AreaShell } from "../Layout/AreaShell";
-import { InboxItem, subjectName } from "./InboxItem";
+import { InboxApprovalBatch, InboxItem, subjectName } from "./InboxItem";
 
 export function InboxPage() {
   return (
@@ -62,11 +62,13 @@ const SECTION_TITLE: Record<InboxItemKind, string> = {
   [InboxItemKind.APPROVAL]: "Approvals",
   [InboxItemKind.QUESTION]: "Questions",
   [InboxItemKind.WAITING_FOR_MACHINE]: "Waiting for a machine",
-  [InboxItemKind.AUTOMATION_FAILING]: "Failing automations",
+  [InboxItemKind.AUTOMATION_FAILING]: "Failing or broken automations",
   [InboxItemKind.AUTOMATION_LAUNCH_FAILED]: "Automations that could not start",
-  [InboxItemKind.RUN_FINISHED]: "Finished runs",
   [InboxItemKind.STORAGE]: "Storage",
+  [InboxItemKind.RECOVERY]: "Saved workspace recoveries",
   [InboxItemKind.AUTOMATION_NEEDS_SETUP]: "Automations that need setup",
+  [InboxItemKind.AUTOMATION_RUN_PAUSED]: "Paused automation runs",
+  [InboxItemKind.AUTOMATION_DEFINITION_BROKEN]: "Broken workflow definitions",
 };
 
 /** Section the items by kind, in kind (priority) order, keeping each kind's server order. */
@@ -80,6 +82,43 @@ export function sectionInboxItems(items: InboxItemData[]): InboxSection[] {
   return [...byKind.entries()]
     .sort(([a], [b]) => a - b)
     .map(([kind, sectionItems]) => ({ kind, title: SECTION_TITLE[kind] ?? "Other", items: sectionItems }));
+}
+
+/** One row of a section: an item, or approvals a run asked for together. */
+export type InboxRow =
+  | { kind: "item"; item: InboxItemData }
+  | { kind: "batch"; batchId: string; items: InboxItemData[] };
+
+/**
+ * Gather the approvals one run asked for together (the same batch id) into
+ * one row, where the first of them stands; every other item is its own row.
+ * A batch of one is just an item.
+ */
+export function groupApprovalBatches(items: InboxItemData[]): InboxRow[] {
+  const batchOf = (item: InboxItemData) => (item.payload.case === "approval" ? item.payload.value.batchId : "");
+  const sizes = new Map<string, number>();
+  for (const item of items) {
+    const batch = batchOf(item);
+    if (batch) sizes.set(batch, (sizes.get(batch) ?? 0) + 1);
+  }
+  const rows: InboxRow[] = [];
+  const batches = new Map<string, InboxItemData[]>();
+  for (const item of items) {
+    const batch = batchOf(item);
+    if (!batch || (sizes.get(batch) ?? 0) < 2) {
+      rows.push({ kind: "item", item });
+      continue;
+    }
+    const members = batches.get(batch);
+    if (members) {
+      members.push(item);
+      continue;
+    }
+    const first = [item];
+    batches.set(batch, first);
+    rows.push({ kind: "batch", batchId: batch, items: first });
+  }
+  return rows;
 }
 
 /** A finger-sized target on a touch screen; explicit px because rem renders at 87.5% here. */
@@ -100,12 +139,12 @@ export function InboxView({ titled = true }: { titled?: boolean } = {}) {
 
   const onDismiss = (dismissed: InboxItemData[], what: string) => {
     const ids = dismissed.map((item) => item.itemId);
-    dismiss.mutate(ids, {
+    dismiss.mutate({ itemIds: ids }, {
       onSuccess: () =>
         toast.notify(`Dismissed ${what}`, {
           // Long enough to notice and reach for Undo; the default 4s is not.
           duration: 8000,
-          action: { label: "Undo", onClick: () => restore.mutate(ids) },
+          action: { label: "Undo", onClick: () => restore.mutate({ itemIds: ids }) },
         }),
       onError: (error) => void toast.error(error),
     });
@@ -167,6 +206,7 @@ export function InboxView({ titled = true }: { titled?: boolean } = {}) {
             section={section}
             showProject={!scoped}
             onDismissRow={(item) => onDismiss([item], `“${subjectName(item)}”`)}
+            onDismissBatch={(batch) => onDismiss(batch, `${batch.length} approvals for “${subjectName(batch[0]!)}”`)}
             onDismissAll={() =>
               onDismiss(section.items, `${section.items.length} ${section.title.toLowerCase()}`)
             }
@@ -180,7 +220,7 @@ export function InboxView({ titled = true }: { titled?: boolean } = {}) {
                 type="button"
                 onClick={() => setScope("all")}
                 className={cn(
-                  "font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                  "font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   TOUCH_TARGET,
                 )}
               >
@@ -221,7 +261,7 @@ function ScopeToggle({
       onClick={() => onChange(value)}
       title={title}
       className={cn(
-        "h-7 max-w-48 truncate rounded px-2.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        "h-7 max-w-48 truncate rounded px-2.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         "[@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:px-3.5 [@media(pointer:coarse)]:text-sm",
         scope === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
       )}
@@ -241,14 +281,17 @@ function SectionCard({
   section,
   showProject,
   onDismissRow,
+  onDismissBatch,
   onDismissAll,
 }: {
   section: InboxSection;
   showProject: boolean;
   onDismissRow: (item: InboxItemData) => void;
+  onDismissBatch: (items: InboxItemData[]) => void;
   onDismissAll: () => void;
 }) {
   const headingId = `inbox-section-${section.kind}`;
+  const rows = useMemo(() => groupApprovalBatches(section.items), [section.items]);
   return (
     <section aria-labelledby={headingId} data-testid={`inbox-section-${section.kind}`}>
       <div className="mb-1.5 flex items-center justify-between gap-3 px-1">
@@ -261,7 +304,7 @@ function SectionCard({
             type="button"
             onClick={onDismissAll}
             className={cn(
-              "rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+              "rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               TOUCH_TARGET,
             )}
           >
@@ -271,9 +314,19 @@ function SectionCard({
       </div>
       <Card padding="none" className="overflow-hidden">
         <ul aria-labelledby={headingId} className="divide-y divide-border/60">
-          {section.items.map((item) => (
-            <InboxItem key={item.itemId} item={item} showProject={showProject} onDismiss={onDismissRow} />
-          ))}
+          {rows.map((row) =>
+            row.kind === "batch" ? (
+              <InboxApprovalBatch
+                key={row.batchId}
+                items={row.items}
+                showProject={showProject}
+                onDismissRow={onDismissRow}
+                onDismissAll={onDismissBatch}
+              />
+            ) : (
+              <InboxItem key={row.item.itemId} item={row.item} showProject={showProject} onDismiss={onDismissRow} />
+            ),
+          )}
         </ul>
       </Card>
     </section>

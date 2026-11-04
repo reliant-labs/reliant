@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { externalWorktreesKey } from "./useExternalWorktrees";
 import {
   AlertCircle,
   Archive,
@@ -13,7 +12,7 @@ import {
   Search,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatList } from "../../hooks/chat-queries";
 import { CreateWorktreeModal } from "./CreateWorktreeModal";
@@ -22,11 +21,12 @@ import { WorktreesDiscoverHint } from "./WorktreesDiscoverHint";
 import { DeleteWorktreeModal } from "./DeleteWorktreeModal";
 import { AddRepoModal } from "./AddRepoModal";
 import { InitializeGitModal } from "../Git/InitializeGitModal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import EmptyState from "../forge-ui/empty_state";
 import SkeletonLoader from "../forge-ui/skeleton_loader";
 import { chatsForWorkspace, sortActiveWorkspaces } from "./workspaceStatus";
 import { useArchiveWorkspace, useOpenWorkspace } from "./useWorkspaceActions";
+import DataTable, { type DataTableColumn } from "../forge-ui/data_table";
 import { workspaceColumn, workspaceTable } from "./workspaceStyles";
 import {
   BranchCell,
@@ -36,6 +36,14 @@ import {
   WorkspaceNameCell,
 } from "./WorkspaceTableParts";
 import type { Chat } from "../../types/chat";
+import {
+  invalidateDiscoveredWorktrees,
+  invalidateWorktreeLists,
+  useCurrentWorktree,
+  useWorktreeList,
+  type Worktree,
+} from "../../hooks/worktree-queries";
+type WorkspaceRow = { id: string; worktree: Worktree };
 
 interface WorktreesPanelProps {
   /** Padding around the panel. The viewer tab relies on the default. */
@@ -59,6 +67,10 @@ interface WorktreesPanelProps {
  * Rendered by Settings → Workspaces and by the Workspaces viewer tab, whose
  * sidebar is narrow — the table is a container query, so columns drop out by
  * the width it actually gets rather than by viewport.
+ *
+ * forge-ui's DataTable, flush in a frame that also holds "Load more". The
+ * whole row selects the workspace (getRowAction); the chat and action cells
+ * keep their own buttons.
  */
 export function WorktreesPanel({
   paddingClass = "p-3",
@@ -67,19 +79,23 @@ export function WorktreesPanel({
   selectedId,
   onOpened,
 }: WorktreesPanelProps) {
-  const allWorktrees = useWorktreeStore((state) => state.worktrees);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const refreshWorktreeList = useWorktreeStore((state) => state.refreshWorktrees);
-  const loadMoreWorktrees = useWorktreeStore((state) => state.loadMoreWorktrees);
-  const hasMore = useWorktreeStore((state) => state.nextPageToken !== "");
-  const isLoadingMore = useWorktreeStore((state) => state.isLoadingMore);
-  const isLoading = useWorktreeStore((state) => state.isLoading);
+  const currentWorktree = useCurrentWorktree();
   const deletingId = useWorktreeStore((state) => state.deletingId);
-  const error = useWorktreeStore((state) => state.error);
 
   const currentProject = useProjectStore((state) => state.currentProject);
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
+  // First page on open; further pages on request. The panel is the one place
+  // that lists workspaces for their own sake, so it is where paging lives.
+  const {
+    worktrees: allWorktrees,
+    hasMore,
+    isLoading,
+    isLoadingMore,
+    error: listError,
+    loadMore: loadMoreWorktrees,
+  } = useWorktreeList(currentProject?.id);
+  const error = listError ? listError.message || "Failed to load worktrees" : null;
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDiscoverModal, setShowDiscoverModal] = useState(false);
@@ -96,21 +112,7 @@ export function WorktreesPanel({
   );
   const highlightedId = selectedId === undefined ? currentWorktree?.id : selectedId;
 
-  const refreshWorktrees = () => {
-    if (currentProject) {
-      return refreshWorktreeList(currentProject.id);
-    }
-    return Promise.resolve();
-  };
-
-  // First page on open; further pages on request. The panel is the one place
-  // that lists workspaces for their own sake, so it is where paging lives.
-  const loadWorktrees = useWorktreeStore((state) => state.loadWorktrees);
-  useEffect(() => {
-    if (currentProject) {
-      void loadWorktrees(currentProject.id);
-    }
-  }, [currentProject, loadWorktrees]);
+  const refreshWorktrees = () => invalidateWorktreeLists(queryClient);
 
   const handleSelect = (worktree: Worktree) => {
     if (onSelect) onSelect(worktree);
@@ -123,7 +125,7 @@ export function WorktreesPanel({
         <EmptyState
           icon={<FolderGit2 className="h-6 w-6" />}
           title="No project open"
-          description="Workspaces belong to a project. Open a project to see the workspaces its chats are using."
+          description="Branches belong to a project. Pick a project to see the branches its chats work in."
         />
       </div>
     );
@@ -134,8 +136,8 @@ export function WorktreesPanel({
       <div className={cn("forge-ui", paddingClass)}>
         <EmptyState
           icon={<AlertCircle className="h-6 w-6" />}
-          title="Workspaces need a git repository"
-          description={`Each workspace is a git worktree on its own branch, so ${currentProject.name} has to be a git repository first. Initializing git doesn't change your files.`}
+          title="Branches need a git repository"
+          description={`Each branched chat works in a git worktree on its own branch, so ${currentProject.name} has to be a git repository first. Initializing git doesn't change your files.`}
           actionLabel="Initialize git"
           onAction={() => setShowInitGitModal(true)}
         />
@@ -152,6 +154,84 @@ export function WorktreesPanel({
       </div>
     );
   }
+
+  const columns: DataTableColumn<WorkspaceRow>[] = [
+    {
+      key: "name",
+      header: "Workspace",
+      className: "max-w-0 w-full @xl:w-auto @xl:max-w-xs",
+      render: (_, { worktree }) => (
+        <WorkspaceNameCell worktree={worktree} isCurrent={currentWorktree?.id === worktree.id} />
+      ),
+    },
+    {
+      key: "branch",
+      header: "Branch",
+      className: cn(workspaceColumn.branch, "max-w-[14rem]"),
+      headerClassName: workspaceColumn.branch,
+      render: (_, { worktree }) => <BranchCell worktree={worktree} />,
+    },
+    {
+      key: "git",
+      header: "Git",
+      render: (_, { worktree }) => <GitStateCell worktree={worktree} />,
+    },
+    {
+      key: "chat",
+      header: "Chat",
+      interactive: true,
+      className: cn(workspaceColumn.chat, "max-w-[16rem]"),
+      headerClassName: workspaceColumn.chat,
+      render: (_, { worktree }) => (
+        <LinkedChatCell
+          chats={chatsForWorkspace(chats, worktree.id)}
+          onOpen={(chat) => void openChat(chat)}
+        />
+      ),
+    },
+    {
+      key: "lastActive",
+      header: "Last active",
+      className: workspaceColumn.time,
+      headerClassName: workspaceColumn.time,
+      render: (_, { worktree }) => <TimeCell value={worktree.last_active} />,
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      srHeader: true,
+      interactive: true,
+      className: "text-right",
+      render: (_, { worktree }) => {
+        const isArchiving = deletingId === worktree.id;
+        return (
+          <div className="inline-flex items-center gap-0.5">
+            <IconAction
+              label={`Open ${worktree.name}`}
+              hint="Open workspace"
+              icon={<FolderOpen className="h-3.5 w-3.5" />}
+              onClick={() => void openWorkspace(worktree)}
+              testId={`open-workspace-${worktree.id}`}
+            />
+            <IconAction
+              label={`Archive ${worktree.name}`}
+              hint={worktree.is_main ? "The main checkout can't be archived" : "Archive workspace"}
+              icon={
+                isArchiving ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Archive className="h-3.5 w-3.5" />
+                )
+              }
+              onClick={() => archive.requestArchive(worktree)}
+              disabled={worktree.is_main || isArchiving}
+              testId={`archive-workspace-${worktree.id}`}
+            />
+          </div>
+        );
+      },
+    },
+  ];
 
   const onlyMain = worktrees.length > 0 && worktrees.every((worktree) => worktree.is_main);
 
@@ -224,111 +304,30 @@ export function WorktreesPanel({
           onAction={() => setShowCreateModal(true)}
         />
       ) : (
-        <div className={workspaceTable.wrapper}>
-          <table className={workspaceTable.table}>
-            <caption className="sr-only">
-              Active workspaces in {currentProject.name}: branch, git state, linked chat, and when
-              each was last used.
-            </caption>
-            <thead>
-              <tr className={workspaceTable.headRow}>
-                <th scope="col" className={workspaceTable.headCell}>
-                  Workspace
-                </th>
-                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.branch)}>
-                  Branch
-                </th>
-                <th scope="col" className={workspaceTable.headCell}>
-                  <span className="sr-only @lg:not-sr-only">Git</span>
-                </th>
-                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.chat)}>
-                  Chat
-                </th>
-                <th scope="col" className={cn(workspaceTable.headCell, workspaceColumn.time)}>
-                  Last active
-                </th>
-                <th scope="col" className={cn(workspaceTable.headCell, "text-right")}>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {worktrees.map((worktree) => {
-                const isArchiving = deletingId === worktree.id;
-                return (
-                  <tr
-                    key={worktree.id}
-                    data-testid={`workspace-row-${worktree.id}`}
-                    data-selected={highlightedId === worktree.id || undefined}
-                    className={cn(
-                      workspaceTable.row,
-                      highlightedId === worktree.id && "bg-primary/5",
-                      isArchiving && "opacity-60",
-                    )}
-                  >
-                    <td className={cn(workspaceTable.cell, "max-w-0 w-full @xl:w-auto @xl:max-w-xs")}>
-                      <WorkspaceNameCell
-                        worktree={worktree}
-                        isCurrent={currentWorktree?.id === worktree.id}
-                        onSelect={() => handleSelect(worktree)}
-                      />
-                    </td>
-                    <td className={cn(workspaceTable.cell, workspaceColumn.branch, "max-w-[14rem]")}>
-                      <BranchCell worktree={worktree} />
-                    </td>
-                    <td className={workspaceTable.cell}>
-                      <GitStateCell worktree={worktree} />
-                    </td>
-                    <td className={cn(workspaceTable.cell, workspaceColumn.chat, "max-w-[16rem]")}>
-                      <LinkedChatCell
-                        chats={chatsForWorkspace(chats, worktree.id)}
-                        onOpen={(chat) => void openChat(chat)}
-                      />
-                    </td>
-                    <td className={cn(workspaceTable.cell, workspaceColumn.time)}>
-                      <TimeCell value={worktree.last_active} />
-                    </td>
-                    <td className={cn(workspaceTable.cell, "whitespace-nowrap text-right")}>
-                      <div className="inline-flex items-center gap-0.5">
-                        <IconAction
-                          label={`Open ${worktree.name}`}
-                          hint="Open workspace"
-                          icon={<FolderOpen className="h-3.5 w-3.5" />}
-                          onClick={() => void openWorkspace(worktree)}
-                          testId={`open-workspace-${worktree.id}`}
-                        />
-                        <IconAction
-                          label={`Archive ${worktree.name}`}
-                          hint={
-                            worktree.is_main
-                              ? "The main checkout can't be archived"
-                              : "Archive workspace"
-                          }
-                          icon={
-                            isArchiving ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <Archive className="h-3.5 w-3.5" />
-                            )
-                          }
-                          onClick={() => archive.requestArchive(worktree)}
-                          disabled={worktree.is_main || isArchiving}
-                          testId={`archive-workspace-${worktree.id}`}
-                        />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className={workspaceTable.frame}>
+          <DataTable<WorkspaceRow>
+            flush
+            ariaLabel={`Active workspaces in ${currentProject.name}`}
+            columns={columns}
+            data={worktrees.map((worktree) => ({ id: worktree.id, worktree }))}
+            getRowKey={(row) => row.id}
+            getRowAction={({ worktree }) => () => handleSelect(worktree)}
+            getRowProps={({ worktree }) => ({
+              "data-testid": `workspace-row-${worktree.id}`,
+              "data-selected": highlightedId === worktree.id ? "true" : undefined,
+              className: cn(
+                highlightedId === worktree.id && "bg-primary/5",
+                deletingId === worktree.id && "opacity-60",
+              ),
+            })}
+          />
           {hasMore && (
             <div className="flex justify-center border-t border-border p-2">
               <button
                 type="button"
-                className="text-xs text-primary hover:underline disabled:opacity-60"
+                className="text-xs text-primary-ink hover:underline disabled:opacity-60"
                 disabled={isLoadingMore}
-                onClick={() => void loadMoreWorktrees(currentProject.id)}
+                onClick={loadMoreWorktrees}
                 data-testid="load-more-workspaces"
               >
                 {isLoadingMore ? "Loading…" : "Load more workspaces"}
@@ -358,7 +357,7 @@ export function WorktreesPanel({
         isOpen={showDiscoverModal}
         onClose={() => {
           setShowDiscoverModal(false);
-          void queryClient.invalidateQueries({ queryKey: externalWorktreesKey(currentProject.id) });
+          void invalidateDiscoveredWorktrees(queryClient, currentProject.id);
         }}
         onWorktreesImported={() => refreshWorktrees()}
         projectId={currentProject.id}
@@ -395,7 +394,7 @@ function LinkedChatCell({ chats, onOpen }: { chats: Chat[]; onOpen: (chat: Chat)
         type="button"
         onClick={() => onOpen(latest)}
         aria-label={`Open chat ${title}`}
-        className="min-w-0 truncate rounded-sm text-left text-xs text-foreground hover:text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="min-w-0 truncate rounded-sm text-left text-xs text-foreground hover:text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {title}
       </button>

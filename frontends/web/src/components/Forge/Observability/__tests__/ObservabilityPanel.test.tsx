@@ -7,9 +7,11 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code } from "@connectrpc/connect";
+
+import { formatClock, quotaPausedError } from "@/services/controlPlane/observability/quota";
 
 import { createFixtureApi, FIXTURE_ORG } from "../__fixtures__/fixtureApi";
 import { renderPanel } from "./obsTestUtils";
@@ -18,6 +20,19 @@ vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("./obsMocks")).obsMocks.virtual());
 
 describe("ObservabilityPanel", () => {
+  it("Refresh advances a relative RPC catalog window to now", async () => {
+    let now = Date.UTC(2026, 9, 27, 12);
+    const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const onCall = vi.fn();
+    try {
+      renderPanel(createFixtureApi({ onCall }), { view: "rpc", range: "15m" });
+      await screen.findByTestId("rpc-explorer");
+      const first = onCall.mock.calls.find(([rpc]) => rpc === "GetServiceGraphCatalog")![1].window;
+      now += 60000;
+      fireEvent.click(screen.getByTestId("obs-refresh"));
+      await waitFor(() => expect(onCall.mock.calls.some(([rpc, req]) => rpc === "GetServiceGraphCatalog" && req.window.endMs > first.endMs)).toBe(true));
+    } finally { clock.mockRestore(); }
+  });
   it("scopes every request to the caller's org and this environment", async () => {
     const onCall = vi.fn();
     renderPanel(createFixtureApi({ onCall }));
@@ -47,25 +62,109 @@ describe("ObservabilityPanel", () => {
   });
 
   it("opens a service in place, with ways into its logs, traces and dashboard", async () => {
-    const user = userEvent.setup();
     const harness = renderPanel(createFixtureApi());
-    await user.click(await screen.findByRole("button", { name: "api" }));
-    expect(await screen.findByTestId("obs-service-detail")).toBeInTheDocument();
-    expect(screen.getByTestId("obs-service-latency")).toHaveTextContent(/p50.*p95.*p99/);
-    await user.click(screen.getByRole("button", { name: "Traces" }));
+    const service = await screen.findByTestId("obs-service-api");
+    // This tests navigation, not pointer sequencing. Dispatch clicks directly:
+    // user-event's synthetic timer gaps consumed the whole test budget when
+    // the shared host was busy, despite the fixture API resolving immediately.
+    fireEvent.click(within(service).getByRole("button", { name: "api" }));
+    const detail = await screen.findByTestId("obs-service-detail");
+    expect(detail).toBeInTheDocument();
+    expect(harness.current()).toMatchObject({ service: "api" });
+    expect(within(detail).getByTestId("obs-service-latency")).toHaveTextContent(/p50.*p95.*p99/);
+    expect(within(detail).getByRole("button", { name: "Logs" })).toBeInTheDocument();
+    fireEvent.click(within(detail).getByRole("button", { name: "Traces" }));
     expect(harness.current()).toMatchObject({ view: "traces", service: "api" });
   });
 
   it("says ONCE that observability is not set up, in place of every view", async () => {
-    const user = userEvent.setup();
     renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }));
     expect(await screen.findByTestId("obs-not-set-up")).toHaveTextContent("isn't set up for this organization yet");
     // Not presented as an error, and nothing to retry.
     expect(screen.getByTestId("obs-not-set-up")).toHaveAttribute("role", "status");
     expect(screen.queryByTestId("obs-retry")).not.toBeInTheDocument();
-    await user.click(screen.getByTestId("obs-view-logs"));
+  });
+
+  it("says it once on another view too, in place of the view rather than beside it", async () => {
+    renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }), { view: "logs" });
+    expect(await screen.findByTestId("obs-not-set-up")).toBeInTheDocument();
     expect(screen.getAllByTestId("obs-not-set-up")).toHaveLength(1);
     expect(screen.queryByTestId("obs-logs")).not.toBeInTheDocument();
+  });
+
+  it("leads the not-set-up answer with what the view shows, then how to get started", async () => {
+    renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }));
+    const state = await screen.findByTestId("obs-not-set-up");
+    expect(within(state).getByTestId("obs-not-set-up-about")).toHaveTextContent("requests, error rate and latency");
+    // The pinned environment names itself in the command to copy.
+    expect(within(state).getByText("reliant forge env deploy prod")).toBeInTheDocument();
+    expect(within(state).getByTestId("obs-not-set-up-docs")).toHaveAttribute("href", "https://docs.reliantlabs.io/forge/observability");
+  });
+
+  it("leads the not-set-up answer with what THAT view shows on another view", async () => {
+    // The console nav picks the view (the panel draws no tabs): open it by URL.
+    renderPanel(createFixtureApi({ failWith: Code.FailedPrecondition }), { view: "traces" });
+    expect(await screen.findByTestId("obs-not-set-up-about")).toHaveTextContent("Traces follows every request");
+  });
+
+  it("says once that nothing has arrived yet, with the commands that deploy and check", async () => {
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: false } }));
+    const state = await screen.findByTestId("obs-nothing-yet");
+    expect(state).toHaveAttribute("role", "status");
+    expect(state).toHaveTextContent("Nothing has arrived from prod yet");
+    expect(state).toHaveTextContent("set up, but nothing in prod has sent telemetry in the last 7 days");
+    expect(within(state).getByText("reliant forge env deploy prod")).toBeInTheDocument();
+    expect(within(state).getByText("reliant forge obs status prod")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-no-data")).not.toBeInTheDocument();
+  });
+
+  it("says how a view's own data arrives when nothing has: Sessions' replay is opt-in, in two places, and masked", async () => {
+    // The console nav picks the view (the panel draws no tabs): open it by URL.
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: false } }), { view: "sessions" });
+    const sessions = await screen.findByTestId("obs-nothing-yet");
+    expect(within(sessions).getByTestId("obs-nothing-yet-about")).toHaveTextContent("real users' browser sessions");
+    expect(sessions).toHaveTextContent("VITE_OTEL_REPLAY=true");
+    expect(sessions).toHaveTextContent("signals = forge.ObservabilitySignals {replay = True}");
+    expect(within(sessions).getByTestId("obs-nothing-yet-docs")).toHaveAttribute("href", expect.stringContaining("#session-replay"));
+    expect(screen.getAllByTestId("obs-nothing-yet")).toHaveLength(1);
+  });
+
+  it("keeps Alerts its own page when nothing has arrived", async () => {
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: false } }), { view: "alerts" });
+    await screen.findByTestId("obs-alerts");
+    expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
+  });
+
+  it("asks about the week only when the window is empty", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall, signals: { services: [], truncated: false } }));
+    await screen.findByTestId("obs-overview");
+    expect(onCall).not.toHaveBeenCalledWith("GetServiceSignals", expect.anything());
+    expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
+  });
+
+  it("calls an empty window an empty window when the week has data", async () => {
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [{ service: "api", emitting: ["logs"], declared: [], declarationKnown: false }], truncated: false } }));
+    expect(await screen.findByTestId("obs-no-data")).toHaveTextContent("No telemetry in the last hour");
+    expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
+  });
+
+  it("never calls an app empty on a service that only declares signals, or a truncated answer", async () => {
+    // A declared-only service sent nothing: still nothing-yet.
+    const declared = renderPanel(createFixtureApi({ empty: true, signals: { services: [{ service: "api", emitting: [], declared: ["logs"], declarationKnown: true }], truncated: false } }));
+    expect(await screen.findByTestId("obs-nothing-yet")).toBeInTheDocument();
+    declared.unmount();
+    // A truncated list is not "none": the window-empty state stays.
+    renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: true } }));
+    expect(await screen.findByTestId("obs-no-data")).toBeInTheDocument();
+  });
+
+  it("still opens a deep link when nothing has arrived this week", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall, empty: true, signals: { services: [], truncated: false } }), { view: "traces", trace: "abc123" });
+    await waitFor(() => expect(onCall).toHaveBeenCalledWith("GetServiceSignals", expect.anything()));
+    expect(await screen.findByTestId("trace-detail")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
   });
 
   it("has a designed empty state that offers a wider window", async () => {
@@ -76,25 +175,23 @@ describe("ObservabilityPanel", () => {
     expect(harness.current().range).toBe("7d");
   });
 
-  it("explains a quota hit and offers to retry it", async () => {
+  it("says when the hourly allowance refills, neutrally, where a view has no result yet", async () => {
+    const resetsAtMs = Date.now() + 5 * 60_000;
+    renderPanel(createFixtureApi({ failError: quotaPausedError({ limit: "queries", lane: "interactive", resetsAtMs, soft: false }) }));
+    const state = await screen.findByTestId("obs-error-over-quota");
+    // Not the red error: nothing is broken and there is nothing to retry before the reset.
+    expect(state).toHaveAttribute("role", "status");
+    expect(state).toHaveTextContent(`Will load at ${formatClock(resetsAtMs)}`);
+    expect(state).toHaveTextContent("nothing is lost");
+    expect(within(state).queryByTestId("obs-retry")).not.toBeInTheDocument();
+  });
+
+  it("explains any other refusal and offers to retry it", async () => {
     renderPanel(createFixtureApi({ failWith: Code.ResourceExhausted }));
-    const error = await screen.findByTestId("obs-error-over-quota");
+    const error = await screen.findByTestId("obs-error-busy");
     expect(error).toHaveAttribute("role", "alert");
     expect(error).toHaveTextContent("shorter time range");
     expect(within(error).getByTestId("obs-retry")).toBeInTheDocument();
-  });
-
-  it("moves between views with the arrow keys and clears the previous view's filters", async () => {
-    const user = userEvent.setup();
-    const harness = renderPanel(createFixtureApi(), { view: "logs", q: "timeout", service: "api" });
-    await screen.findByTestId("obs-logs");
-    screen.getByTestId("obs-view-logs").focus();
-    await user.keyboard("{ArrowRight}");
-    await waitFor(() => expect(screen.getByTestId("obs-panel")).toHaveAttribute("data-view", "traces"));
-    expect(screen.getByTestId("obs-view-traces")).toHaveFocus();
-    // The window and the service travel; the log query does not.
-    expect(harness.current()).toMatchObject({ view: "traces", service: "api" });
-    expect(harness.current().q).toBeUndefined();
   });
 
   it("re-reads the window on Refresh", async () => {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -98,6 +99,7 @@ func TestDisplayCrossesCompactionIntoInheritedHistory(t *testing.T) {
 // reported chat the transcript bottomed out at the newest compaction summary
 // with ~2,200 older messages unreachable, no matter how far the user scrolled.
 func TestDisplayCrossingCompactionKeepsParentWindowMessages(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	h := newTestHelper(t)

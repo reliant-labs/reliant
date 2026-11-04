@@ -5,6 +5,7 @@
  */
 
 import type {
+  BuildOAuthURLArgs,
   CloneRepoArgs,
   GitAccount,
   GitCredentialStatus,
@@ -27,6 +28,7 @@ export async function saveCredential(
   _provider: string,
   _accessToken: string,
   _scopes: string,
+  _refreshToken = "",
 ): Promise<void> {
   throw new Error("Git credential storage requires a Reliant Cloud account");
 }
@@ -41,7 +43,7 @@ export async function listCredentials(
   return { accounts: [] };
 }
 
-export function getOAuthURL(): string | null {
+export function buildOAuthURL(_args: BuildOAuthURLArgs): string | null {
   return null;
 }
 

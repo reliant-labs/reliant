@@ -10,17 +10,15 @@
  * dials the same hosts the web frontend is using.
  */
 
+import { loadConfig } from "./config_gen";
+
 // ---------------------------------------------------------------------------
 // Environment detection
 // ---------------------------------------------------------------------------
 
-/** The API URL the web frontend was built against. */
+/** The API origin this deployment's runtime config names. */
 function getServerURL(): string {
-  return (
-    import.meta.env.VITE_API_URL ||
-    import.meta.env.VITE_GRPC_URL ||
-    ""
-  );
+  return loadConfig().API_URL;
 }
 
 /**
@@ -31,14 +29,14 @@ function getServerURL(): string {
  *
  * Runtime wins over build time. Electron's preload publishes the gateway URL
  * BackendManager actually spawned its daemon with, which is authoritative and
- * tracks dynamically-allocated dev ports; VITE_GATEWAY_URL is a build-time
- * constant that can't. In the browser only the build-time value exists.
+ * tracks dynamically-allocated dev ports; the runtime config's GATEWAY_URL is
+ * per environment, not per launch. In the browser only the config value exists.
  */
 function getGatewayURL(): string {
   if (typeof window !== "undefined" && window.RELIANT_CONFIG?.gatewayUrl) {
     return window.RELIANT_CONFIG.gatewayUrl;
   }
-  return import.meta.env.VITE_GATEWAY_URL || "";
+  return loadConfig().GATEWAY_URL;
 }
 
 /**
@@ -68,9 +66,9 @@ export const GATEWAY_URL_PLACEHOLDER = "<your-daemon-gateway-url>";
  * True when the daemon needs explicit env-var overrides to dial the same
  * backend the web frontend uses.
  *
- * VITE_CLI_DEFAULTS_BAKED IS THE ONLY INPUT, and it comes from exactly one
- * place: control-plane's deploy/kcl/lib/env.k (reliant_web_vite_env), which
- * sets it for prod and withholds it from every other environment. It means the
+ * CLI_DEFAULTS_BAKED IS THE ONLY INPUT, and it comes from exactly one place:
+ * the runtime config control-plane's KCL renders for this frontend, which sets
+ * it for prod and withholds it from every other environment. It means the
  * `reliant` binary shipped alongside this build was compiled with matching
  * server / gateway / auth defaults baked in (pkg/config.BuildDefaults, via
  * -X ldflags), so the command needs no overrides.
@@ -89,7 +87,7 @@ export const GATEWAY_URL_PLACEHOLDER = "<your-daemon-gateway-url>";
  * not observable from the renderer's build mode.
  */
 function isNonProd(): boolean {
-  return import.meta.env.VITE_CLI_DEFAULTS_BAKED !== "true";
+  return loadConfig().CLI_DEFAULTS_BAKED !== "true";
 }
 
 // ---------------------------------------------------------------------------
@@ -105,8 +103,8 @@ function isNonProd(): boolean {
  *
  * THESE ARE THE ONLY TWO VARIABLES THE DAEMON READS:
  *
- *   RELIANT_SERVER_URL   ← VITE_API_URL || VITE_GRPC_URL
- *   RELIANT_GATEWAY_URL  ← RELIANT_CONFIG.gatewayUrl || VITE_GATEWAY_URL
+ *   RELIANT_SERVER_URL   ← API_URL
+ *   RELIANT_GATEWAY_URL  ← RELIANT_CONFIG.gatewayUrl || GATEWAY_URL
  *
  * both via cmd/reliant/cmd/connection.go, and they are the same two
  * electron/src/backend-manager.js puts in the daemon's environment when it
@@ -154,9 +152,26 @@ function envPrefix(): string {
 // Public API
 // ---------------------------------------------------------------------------
 
-/** `reliant daemon start --token` with env overrides when needed. */
+/**
+ * `reliant daemon start` with env overrides when needed. With no stored
+ * credential it pairs the machine: it prints a code the person approves in the
+ * app (components/Machines/PairMachinePanel), so nothing is pasted into it.
+ */
 export function daemonStartCommand(): string {
-  return `${envPrefix()}reliant daemon start --token`;
+  return `${envPrefix()}reliant daemon start`;
+}
+
+/**
+ * `reliant auth logout` for the server this deployment uses. The CLI keeps
+ * one sign-in per server and logs out of the one it resolves, so outside a
+ * baked build the command names RELIANT_SERVER_URL — a bare one would sign
+ * out of the build's default server and leave this one's sign-in in place.
+ */
+export function authLogoutCommand(): string {
+  const server = isNonProd() ? getServerURL() : "";
+  return server
+    ? `RELIANT_SERVER_URL=${server} reliant auth logout`
+    : "reliant auth logout";
 }
 
 /**
@@ -199,7 +214,7 @@ export function authServeCommand(): string {
 
   // The web app's own origin, so the helper's CORS allowlist accepts it. Read
   // from the live location rather than a build constant: the dev port is
-  // allocated per worktree (.dev-ports.sh) and is not knowable at build time.
+  // allocated per worktree (by the dev stack) and is not knowable at build time.
   if (typeof window !== "undefined" && window.location?.origin) {
     parts.push(`RELIANT_WEB_ORIGIN=${window.location.origin}`);
   }

@@ -187,27 +187,6 @@ func RemovePreset(ctx context.Context, db orm.Context, id string) error {
 	return nil
 }
 
-// DeletePresetBySlug deletes the user's global preset with that slug, if any.
-func DeletePresetBySlug(ctx context.Context, db orm.Context, userID, slug string) error {
-	_, err := db.Bun().NewDelete().Model((*Preset)(nil)).
-		Where("user_id = ?", userID).
-		Where("slug = ?", slug).
-		Where("project_id IS NULL").
-		Exec(ctx)
-	return err
-}
-
-// DeletePresetBySlugAndProject deletes the user's preset with that slug scoped
-// to the project, if any. A global preset of that slug is kept.
-func DeletePresetBySlugAndProject(ctx context.Context, db orm.Context, userID, slug, projectID string) error {
-	_, err := db.Bun().NewDelete().Model((*Preset)(nil)).
-		Where("user_id = ?", userID).
-		Where("slug = ?", slug).
-		Where("project_id = ?", projectID).
-		Exec(ctx)
-	return err
-}
-
 func firstPreset(rows []*Preset, err error) (*core.Preset, error) {
 	if err != nil {
 		return nil, err

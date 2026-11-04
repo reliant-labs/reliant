@@ -1,44 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ChatUpdateType, UserStreamingService } from "../streaming-grpc";
+import { UserStreamingService } from "../streaming-grpc";
 import type { UserStreamEvent } from "../streaming-grpc";
-import type { ChatUpdate, UserUpdate } from "../../types/streaming";
+import type { UserUpdate } from "../../types/streaming";
 
-// The backend assigns chat_updates sequence numbers per chat, contiguously
-// (MAX+1 inside a transaction — internal/db/repo.go CreateChatUpdate), and
-// supports replay from any sequence via chat_since_seq / since_seq
-// (internal/grpc/services/streaming.go). The NATS hub can drop events under
-// load ("slow consumer"), so the client MUST detect chat sequence gaps and
-// resync by reconnecting from its last contiguous cursor — otherwise a dropped
-// finalization/tool-call event leaves the chat stale until a page refresh.
-//
-// User sequences are different: they are per-user, but the stream is
+// User sequences are per-user, but the stream is
 // project-filtered, so the sequences the client receives skip BY DESIGN. Only
 // the server sees every sequence, so the server owns user gap detection (it
 // backfills hub drops from the DB) and reports its cursor as each batch's
 // latest_sequence. The client adopts it and never resyncs on a skip.
 //
 // These tests drive the private handleEvent() directly and stub the network
-// (establishConnection) to observe resync behavior.
+// (establishConnection) to observe that nothing reconnects. Chat sequence
+// gaps are the chat stream's (chat-streaming-grpc.gap-resync.test.ts).
 
 type ServiceInternals = {
   handleEvent(event: UserStreamEvent): void;
   lastSequence: bigint;
-  lastChatSequence: bigint;
-  subscribedChatId: string | undefined;
   isConnected_: boolean;
   establishConnection(): Promise<void>;
 };
 
 function makeService() {
   const onUpdate = vi.fn<(updates: UserUpdate[]) => void>();
-  const onChatUpdate = vi.fn<(updates: ChatUpdate[]) => void>();
   const onSync = vi.fn<(seq: number) => void>();
   const service = new UserStreamingService({
     onUpdate,
     onStatusChange: vi.fn(),
     onSync,
     onError: vi.fn(),
-    onChatUpdate,
   });
   const internals = service as unknown as ServiceInternals;
   const reconnectSpy = vi
@@ -47,58 +36,7 @@ function makeService() {
       "establishConnection",
     )
     .mockResolvedValue(undefined);
-  return { service, internals, onUpdate, onChatUpdate, onSync, reconnectSpy };
-}
-
-function chatToolCallUpdate(seq: number) {
-  return {
-    updateType: ChatUpdateType.TOOL_CALL,
-    entityId: `cb-${seq}`,
-    sequenceNumber: BigInt(seq),
-    dataJson: JSON.stringify({
-      tool_call_id: `cb-${seq}`,
-      tool_name: "view",
-      status: "completed",
-    }),
-  };
-}
-
-function chatUpdatesEvent(
-  seqs: number[],
-  latestSequence: bigint,
-): UserStreamEvent {
-  return {
-    event: {
-      case: "chatUpdates",
-      value: {
-        updates: seqs.map(chatToolCallUpdate),
-        latestSequence,
-      },
-    },
-  } as unknown as UserStreamEvent;
-}
-
-function chatDeltaEvent(latestSequence: bigint): UserStreamEvent {
-  return {
-    event: {
-      case: "chatUpdates",
-      value: {
-        updates: [
-          {
-            updateType: ChatUpdateType.STREAMING_DELTA,
-            entityId: "",
-            sequenceNumber: 0n, // ephemeral — never persisted
-            dataJson: JSON.stringify({
-              delta_type: "content_block_delta",
-              block_index: 0,
-              delta: "chunk",
-            }),
-          },
-        ],
-        latestSequence,
-      },
-    },
-  } as unknown as UserStreamEvent;
+  return { service, internals, onUpdate, onSync, reconnectSpy };
 }
 
 function userUpdatesEvent(seqs: number[], latestSequence: bigint): UserStreamEvent {
@@ -136,80 +74,6 @@ function syncEvent(lastSequence: bigint): UserStreamEvent {
 
 beforeEach(() => {
   vi.restoreAllMocks();
-});
-
-describe("chat detail stream gap detection", () => {
-  it("applies contiguous chat updates and advances the chat cursor", () => {
-    const { internals, onChatUpdate, reconnectSpy } = makeService();
-    internals.subscribedChatId = "c1";
-    internals.lastChatSequence = 5n;
-
-    internals.handleEvent(chatUpdatesEvent([6, 7], 7n));
-
-    expect(onChatUpdate).toHaveBeenCalledTimes(1);
-    expect(onChatUpdate.mock.calls[0][0]).toHaveLength(2);
-    expect(internals.lastChatSequence).toBe(7n);
-    expect(reconnectSpy).not.toHaveBeenCalled();
-  });
-
-  it("drops post-gap chat updates and resyncs from the last contiguous sequence", () => {
-    const { internals, onChatUpdate, reconnectSpy } = makeService();
-    internals.subscribedChatId = "c1";
-    internals.lastChatSequence = 5n;
-
-    // seq 6 and 7 were dropped upstream (hub slow consumer) — seq 8 arrives.
-    internals.handleEvent(chatUpdatesEvent([8], 8n));
-
-    // The out-of-order update must NOT be applied; the reconnect replays
-    // 6..8 from the DB in order instead.
-    const applied = onChatUpdate.mock.calls.flatMap((c) => c[0]);
-    expect(applied).toHaveLength(0);
-    expect(internals.lastChatSequence).toBe(5n);
-    expect(reconnectSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it("processes the contiguous prefix before resyncing on a mid-batch gap", () => {
-    const { internals, onChatUpdate, reconnectSpy } = makeService();
-    internals.subscribedChatId = "c1";
-    internals.lastChatSequence = 5n;
-
-    internals.handleEvent(chatUpdatesEvent([6, 9], 9n));
-
-    const applied = onChatUpdate.mock.calls.flatMap((c) => c[0]);
-    expect(applied).toHaveLength(1);
-    expect(
-      (applied[0] as unknown as { tool_call_id: string }).tool_call_id,
-    ).toBe("cb-6");
-    expect(internals.lastChatSequence).toBe(6n);
-    expect(reconnectSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it("ephemeral deltas (seq 0) pass through without gap checks or cursor movement", () => {
-    const { internals, onChatUpdate, reconnectSpy } = makeService();
-    internals.subscribedChatId = "c1";
-    internals.lastChatSequence = 5n;
-
-    // Delta batches echo the server's latestSequence; it must not be able to
-    // advance the client cursor past updates the client never received.
-    internals.handleEvent(chatDeltaEvent(7n));
-
-    expect(onChatUpdate).toHaveBeenCalledTimes(1);
-    expect(onChatUpdate.mock.calls[0][0]).toHaveLength(1);
-    expect(internals.lastChatSequence).toBe(5n);
-    expect(reconnectSpy).not.toHaveBeenCalled();
-  });
-
-  it("does not treat the first update after a fresh subscribe as a gap", () => {
-    const { internals, onChatUpdate, reconnectSpy } = makeService();
-    internals.subscribedChatId = "c1";
-    internals.lastChatSequence = 0n; // fresh subscribe, snapshot not yet applied
-
-    internals.handleEvent(chatUpdatesEvent([42], 42n));
-
-    expect(onChatUpdate).toHaveBeenCalledTimes(1);
-    expect(internals.lastChatSequence).toBe(42n);
-    expect(reconnectSpy).not.toHaveBeenCalled();
-  });
 });
 
 describe("user stream cursor", () => {

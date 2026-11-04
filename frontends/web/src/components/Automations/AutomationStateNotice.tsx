@@ -2,7 +2,7 @@
 
 /**
  * A callout for an automation that needs the user: what is wrong, in one
- * line, and the one thing to do about it (automation-ux-spec.md §4). It
+ * line, and the one thing to do about it. It
  * replaces BrokenActivationNotice and covers every attention state — Broken,
  * Needs setup, Can't start, Failing, Waiting for machine, Skipping — with the
  * same words the Automations list and the Inbox use.
@@ -10,7 +10,7 @@
 
 import { AlertOctagon, AlertTriangle } from "lucide-react";
 
-import type { Trigger } from "@/api/trigger-grpc";
+import type { Trigger } from "@/hooks/trigger-model";
 import type { AutomationHealthDisplay } from "@/lib/automationHealth";
 import { cn } from "@/lib/utils";
 import { AutomationCta } from "./AutomationCta";
@@ -26,7 +26,7 @@ export interface AutomationStateNoticeProps {
 }
 
 const HEADLINE: Partial<Record<AutomationHealthDisplay["key"], string>> = {
-  broken: "can't run: its workflow no longer declares this trigger.",
+  broken: "is broken: nothing it receives can start a run.",
   needs_setup: "is not running yet: it needs a setting.",
   cant_start: "can't start its runs.",
   failing: "keeps failing.",

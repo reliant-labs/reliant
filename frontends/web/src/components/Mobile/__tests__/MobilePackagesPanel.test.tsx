@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MobilePackagesPanel } from "../MobilePackagesPanel";
-import { BackgroundProcessStatus } from "../../../api/background-grpc";
+import { BackgroundProcessStatus } from "../../../hooks/background-queries";
 
 const usePackageCommands = vi.fn();
 const usePackageProcesses = vi.fn();

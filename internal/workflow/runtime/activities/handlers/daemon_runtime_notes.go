@@ -4,9 +4,8 @@ package handlers
 import "strings"
 
 // daemonRuntimeProfile describes what a given daemon runtime/sandbox type can
-// and cannot do. Only the Cannot lines are surfaced to the model today (as a
-// limitation heads-up), but Can is kept so the map stays a single, honest
-// source of truth as runtimes evolve.
+// and cannot do. Both lists are surfaced to the model as a heads-up; Can
+// entries may carry a short usage hint.
 type daemonRuntimeProfile struct {
 	Can    []string
 	Cannot []string
@@ -16,15 +15,21 @@ type daemonRuntimeProfile struct {
 //
 // Extending it is deliberately trivial:
 //   - add a new runtime by adding a map entry;
-//   - relax a limitation (e.g. kata gaining k3d) by dropping a Cannot line.
+//   - relax a limitation by moving its line from Cannot to Can.
 //
 // Runtime types absent from this map produce no note.
 var daemonRuntimeProfiles = map[string]daemonRuntimeProfile{
 	"kata": {
-		Can: []string{"docker build", "docker run", "docker compose"},
+		Can: []string{
+			"docker build", "docker run", "docker compose",
+			"k3d (single- and multi-node clusters; networking and NetworkPolicy work). " +
+				"On a workspace without /dev/kmsg, kubelet dies and `k3d cluster create` hangs: " +
+				"run `sudo mknod /tmp/kmsg c 1 11` first and add " +
+				"`--volume '/tmp/kmsg:/dev/kmsg@server:*'` (`@all` for agents too) to `k3d cluster create`. " +
+				"Clusters created by forge handle this automatically",
+		},
 		Cannot: []string{
-			"k3d / kind / nested Kubernetes",
-			"nested VMs / KVM",
+			"nested VMs / KVM (no /dev/kvm)",
 		},
 	},
 	"gvisor": {
@@ -35,9 +40,9 @@ var daemonRuntimeProfiles = map[string]daemonRuntimeProfile{
 }
 
 // daemonRuntimeLimitationNote returns a short heads-up describing what the
-// model cannot do on a daemon of the given runtime type. It returns "" for
-// empty, unknown, or unconstrained runtime types so callers can inject
-// unconditionally without emitting noise.
+// model can and cannot do on a daemon of the given runtime type. It returns ""
+// for empty, unknown, or unconstrained runtime types (no Cannot entries) so
+// callers can inject unconditionally without emitting noise.
 func daemonRuntimeLimitationNote(runtimeType string) string {
 	rt := strings.ToLower(strings.TrimSpace(runtimeType))
 	if rt == "" {
@@ -47,6 +52,9 @@ func daemonRuntimeLimitationNote(runtimeType string) string {
 	if !ok || len(profile.Cannot) == 0 {
 		return ""
 	}
-	return "NOTE: this daemon runs in a " + rt + " sandbox; you cannot: " +
-		strings.Join(profile.Cannot, "; ") + "."
+	note := "NOTE: this daemon runs in a " + rt + " sandbox;"
+	if len(profile.Can) > 0 {
+		note += " you can: " + strings.Join(profile.Can, "; ") + ";"
+	}
+	return note + " you cannot: " + strings.Join(profile.Cannot, "; ") + "."
 }

@@ -56,7 +56,7 @@ export function ReleaseVersion({
           tail, the tail is CLIPPED here rather than painted under whatever
           sits beside this component. */}
       <span
-        className="flex min-w-0 overflow-hidden whitespace-nowrap font-mono text-foreground"
+        className="flex min-w-0 overflow-hidden whitespace-nowrap font-mono text-ink"
         title={version}
         data-release-version={version}
       >
@@ -74,7 +74,7 @@ export function ReleaseVersion({
           }}
           aria-label={copied ? "Copied release version" : `Copy release version ${version}`}
           title={copied ? "Copied" : "Copy version"}
-          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-ink-muted transition-colors hover:bg-ink/5 hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {copied ? <Check className="h-3 w-3" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}
         </button>

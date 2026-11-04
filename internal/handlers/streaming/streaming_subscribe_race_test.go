@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -14,11 +13,8 @@ import (
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/natsutil"
@@ -63,8 +59,8 @@ func (r *snapshotGateRepo) GetLatestUserUpdateSequence(context.Context, string) 
 	return 0, nil
 }
 
-func (r *snapshotGateRepo) GetChat(context.Context, string) (*db.Chat, error) {
-	return &db.Chat{ID: raceTestChatID, UserID: raceTestUserID}, nil
+func (r *snapshotGateRepo) GetChatRow(context.Context, string) (*db.ChatRow, error) {
+	return &db.ChatRow{ID: raceTestChatID, UserID: raceTestUserID}, nil
 }
 
 // GetLatestUpdateSequence stands in for the whole snapshot build. It reports
@@ -120,12 +116,6 @@ func (r *snapshotGateRepo) GetContextUsage(context.Context, string, string) (*db
 	return nil, nil
 }
 
-// The snapshot enriches tool-call blocks with their durable rows (status and,
-// for a spawn, the thread it owns) via messageproto.AssembleForDisplay.
-func (r *snapshotGateRepo) ListToolCallsByMessageIDs(context.Context, []string) ([]*db.ToolCall, error) {
-	return nil, nil
-}
-
 func (r *snapshotGateRepo) GetUpdatesSince(context.Context, string, int64, int) ([]db.ChatUpdate, error) {
 	return nil, nil
 }
@@ -134,6 +124,11 @@ func (r *snapshotGateRepo) GetUpdatesSince(context.Context, string, int64, int) 
 // window chain. sql.ErrNoRows is how the store reports a thread with no
 // context window yet — an empty thread, which is what this chat is.
 func (r *snapshotGateRepo) GetLatestContextWindow(context.Context, string) (*db.ContextWindow, error) {
+	return nil, sql.ErrNoRows
+}
+
+// The main thread's row is read alongside its context-window walk.
+func (r *snapshotGateRepo) GetThread(context.Context, string) (*db.Thread, error) {
 	return nil, sql.ErrNoRows
 }
 
@@ -171,7 +166,7 @@ func authInjector(next http.Handler) http.Handler {
 	})
 }
 
-func TestStreamUserUpdates_ChatUpdatePublishedDuringSnapshotIsNotLost(t *testing.T) {
+func TestStreamChatUpdates_ChatUpdatePublishedDuringSnapshotIsNotLost(t *testing.T) {
 	repo := &snapshotGateRepo{
 		snapshotEntered: make(chan struct{}),
 		released:        make(chan struct{}),
@@ -188,35 +183,26 @@ func TestStreamUserUpdates_ChatUpdatePublishedDuringSnapshotIsNotLost(t *testing
 
 	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: deltaHub, UserUpdates: userHub, ChatUpdates: chatHub}))
 
-	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewStreamingServiceHandler(svc)
-	mux.Handle(path, authInjector(handler))
-
-	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
-	srv.EnableHTTP2 = true
-	srv.Start()
-	t.Cleanup(srv.Close)
-
-	client := reliantv1connect.NewStreamingServiceClient(srv.Client(), srv.URL)
+	client := streamingTestClient(t, svc)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	subscribeChatID := raceTestChatID
-	stream, err := client.StreamUserUpdates(ctx, connect.NewRequest(&reliantv1.StreamUserUpdatesRequest{
-		SubscribeChatId: &subscribeChatID,
-		SinceSeq:        0,
-		ChatSinceSeq:    0,
-	}))
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = stream.Close() })
-
-	// Drive Receive on a goroutine: the handler does not start work until the
-	// client reads, and we need to observe events after releasing the snapshot.
+	// Open and drive the stream on a goroutine: the chat stream's first frame
+	// is the snapshot, so the call itself does not return until the snapshot
+	// the test is holding open has been sent.
 	received := make(chan int64, 1)
 	go func() {
+		stream, err := client.StreamChatUpdates(ctx, connect.NewRequest(&reliantv1.StreamChatUpdatesRequest{
+			ChatId:   raceTestChatID,
+			SinceSeq: 0,
+		}))
+		if err != nil {
+			return
+		}
+		defer func() { _ = stream.Close() }()
 		for stream.Receive() {
-			if batch := stream.Msg().GetChatUpdates(); batch != nil {
+			if batch := stream.Msg().GetUpdates(); batch != nil {
 				for _, u := range batch.Updates {
 					if u.GetEntityId() == "msg-race" {
 						received <- batch.LatestSequence
@@ -226,6 +212,15 @@ func TestStreamUserUpdates_ChatUpdatePublishedDuringSnapshotIsNotLost(t *testing
 			}
 		}
 	}()
+	// Whatever happens below, release the snapshot before the server is torn
+	// down, or its Close waits forever on the blocked handler.
+	t.Cleanup(func() {
+		select {
+		case <-repo.released:
+		default:
+			close(repo.released)
+		}
+	})
 
 	// Wait until the server is inside the snapshot, then publish. This is
 	// exactly the window in which the old ordering dropped the event.

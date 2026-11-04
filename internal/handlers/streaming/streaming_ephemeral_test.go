@@ -154,7 +154,7 @@ func (chanChatSub) Unsubscribe()                                          {}
 // the mailbox hook re-reads ListQueuedAgentMessages when it mounts — and since
 // every drain has its own entity_id, carrying them there shipped the chat's
 // entire drain history on every open.
-func TestStreamUserUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testing.T) {
+func TestStreamChatUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.Background()
@@ -171,12 +171,12 @@ func TestStreamUserUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testi
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeApproval, "approval-1", `{"k":"v"}`))
 
 	chatHub := &chanChatHub{subscribed: make(chan struct{}), events: make(chan streaming.UpdateEvent[db.ChatUpdate], 4)}
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, ChatUpdates: chatHub})),
-		&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID})
+	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}, ChatUpdates: chatHub})),
+		&reliantv1.StreamChatUpdatesRequest{ChatId: chatID})
 
-	snapshot := nextEvent(t, events, "the chat snapshot", func(ev *reliantv1.UserStreamEvent) bool {
-		return ev.GetChatSyncSnapshot() != nil
-	}).GetChatSyncSnapshot()
+	snapshot := nextEvent(t, events, "the chat snapshot", func(ev *reliantv1.ChatStreamEvent) bool {
+		return ev.GetSnapshot() != nil
+	}).GetSnapshot()
 	var snapshotTypes []reliantv1.ChatUpdateType
 	for _, u := range snapshot.GetOtherUpdates() {
 		snapshotTypes = append(snapshotTypes, u.GetUpdateType())
@@ -185,7 +185,7 @@ func TestStreamUserUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testi
 		"the snapshot must not carry historical drain announcements")
 	require.Contains(t, snapshotTypes, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL,
 		"other non-message state must still be in the snapshot")
-	nextEvent(t, events, "chat_caught_up", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetChatCaughtUp() != nil })
+	nextEvent(t, events, "caught_up", func(ev *reliantv1.ChatStreamEvent) bool { return ev.GetCaughtUp() != nil })
 	<-chatHub.subscribed
 
 	// A drain that happens now must still be delivered live, unchanged.
@@ -197,9 +197,9 @@ func TestStreamUserUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testi
 	require.Len(t, latest, 1)
 	chatHub.events <- streaming.UpdateEvent[db.ChatUpdate]{Key: chatID, SequenceNumber: latest[0].SequenceNumber, Payload: latest[0]}
 
-	live := nextEvent(t, events, "the live drain announcement", func(ev *reliantv1.UserStreamEvent) bool {
-		return ev.GetChatUpdates() != nil
-	}).GetChatUpdates()
+	live := nextEvent(t, events, "the live drain announcement", func(ev *reliantv1.ChatStreamEvent) bool {
+		return ev.GetUpdates() != nil
+	}).GetUpdates()
 	require.Len(t, live.GetUpdates(), 1)
 	require.Equal(t, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED, live.GetUpdates()[0].GetUpdateType())
 	require.Contains(t, live.GetUpdates()[0].GetDataJson(), "live-agent-msg")
@@ -208,7 +208,7 @@ func TestStreamUserUpdates_DrainedAnnouncementsAreLiveOnlyNotInSnapshot(t *testi
 // A reconnect inside the replay window replays from the cursor, and a drain the
 // client missed while disconnected is part of that replay: the client may
 // still be showing the strip that drain retires.
-func TestStreamUserUpdates_DrainedAnnouncementsAreReplayed(t *testing.T) {
+func TestStreamChatUpdates_DrainedAnnouncementsAreReplayed(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.Background()
@@ -226,12 +226,12 @@ func TestStreamUserUpdates_DrainedAnnouncementsAreReplayed(t *testing.T) {
 		Thread: chatID, MessageIDs: []string{"missed-agent-msg"},
 	}))
 
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
-		&reliantv1.StreamUserUpdatesRequest{SubscribeChatId: &chatID, ChatSinceSeq: seen})
+	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}})),
+		&reliantv1.StreamChatUpdatesRequest{ChatId: chatID, SinceSeq: seen})
 
-	replay := nextEvent(t, events, "the replay batch", func(ev *reliantv1.UserStreamEvent) bool {
-		return ev.GetChatUpdates() != nil || ev.GetChatSyncSnapshot() != nil
-	}).GetChatUpdates()
+	replay := nextEvent(t, events, "the replay batch", func(ev *reliantv1.ChatStreamEvent) bool {
+		return ev.GetUpdates() != nil || ev.GetSnapshot() != nil
+	}).GetUpdates()
 	require.NotNil(t, replay, "a one-update gap must replay, not snapshot")
 	require.Len(t, replay.GetUpdates(), 1)
 	require.Equal(t, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED, replay.GetUpdates()[0].GetUpdateType())

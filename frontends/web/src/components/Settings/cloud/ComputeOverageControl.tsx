@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
-import { Button } from "./ui";
-import { formatCentsAsDollars } from "./billingUtils";
-import { centsDecimalToDollars, hourlyPriceShort, MACHINE_BILLING_POLICY, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
+import Button from "@/components/forge-ui/button";
+import { formatCentsAsDollars, formatSizeLabel } from "./billingUtils";
+import { centsDecimalToDollars, hourlyPriceShort, storageCostLabel, MACHINE_BILLING_POLICY, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
 import { cn } from "@/lib/utils";
 
 /**
@@ -41,6 +41,8 @@ export interface ComputeOverageControlProps {
   budgetCents?: bigint;
   /** Plan's overage rate, server-supplied. 0 means the plan has no overage. */
   pricing?: DaemonPricingLike;
+  /** Sizes the plan can run; the rate list names only these. Absent lists every priced size. */
+  allowedSizes?: string[];
   /**
    * Overage spend so far this period, in cents, or null when the server did
    * not measure usage.
@@ -94,16 +96,32 @@ export function suggestedLimitCents(monthlyPriceCents: number | null): number {
 
 function parseDollarsToCents(input: string): number | null {
   const trimmed = input.trim();
-  if (trimmed === "") return null;
-  const dollars = Number(trimmed);
-  if (!Number.isFinite(dollars) || dollars < 0) return null;
-  return Math.round(dollars * 100);
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(trimmed);
+  if (!match) return null;
+  const cents = BigInt(match[1]) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"));
+  return cents <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(cents) : null;
+}
+
+/**
+ * "S1 $0.20/hr · S2 $0.25/hr · M $0.30/hr": each size the plan can run, by
+ * its tier name, at the server's hourly price. A size the plan cannot run is
+ * not a price this customer can be charged, so it is not listed.
+ */
+export function overageRateLabel(pricing: DaemonPricingLike | undefined, allowedSizes?: string[]): string {
+  const rows = (pricing?.sizes ?? [])
+    .filter((s) => !allowedSizes || allowedSizes.includes(s.size))
+    .map((s) => {
+      const hourly = hourlyPriceShort(pricing, s.size);
+      return hourly ? `${formatSizeLabel(s.size)} ${hourly}` : null;
+    });
+  return rows.length > 0 && rows.every(Boolean) ? rows.join(" · ") : "prices unavailable";
 }
 
 export function ComputeOverageControl({
   enabled,
   budgetCents,
   pricing,
+  allowedSizes,
   overageSpentCents,
   monthlyPriceCents,
   storage,
@@ -132,7 +150,7 @@ export function ComputeOverageControl({
   }, [storedChoice, budgetCents]);
 
   const parsedLimitCents = parseDollarsToCents(limitInput);
-  const rateLabel = pricing?.sizes.map((s) => `${s.size}: ${hourlyPriceShort(pricing, s.size)}`).join(" · ") || "prices unavailable";
+  const rateLabel = overageRateLabel(pricing, allowedSizes);
 
   // A capped choice needs a real ceiling. 0 is rejected HERE, in the form,
   // rather than sent: the server would store it and read it back as uncapped,
@@ -299,7 +317,7 @@ export function ComputeOverageControl({
 
       <div>
         <Button
-          size="sm"
+          size="md"
           onClick={handleSave}
           disabled={disabled || saving || !dirty || limitInvalid}
         >
@@ -364,12 +382,12 @@ export function StorageLine({
   pricing?: DaemonPricingLike;
   storage?: { includedGib: number; extraGib: number };
 }) {
-  const perGib = Number(pricing?.storageCentsPerGibMonth);
-  if (!storage || !Number.isFinite(perGib)) return null;
-  const rate = centsDecimalToDollars(String(perGib));
+  if (!storage || !pricing) return null;
+  const rate = centsDecimalToDollars(pricing.storageCentsPerGibMonth);
+  const extra = storageCostLabel(pricing, storage.extraGib);
   const text =
     storage.extraGib > 0
-      ? `Storage: ${centsDecimalToDollars(String(perGib * storage.extraGib))}/mo for ${storage.extraGib} GB beyond your included ${storage.includedGib} GB`
+      ? `Storage: ${extra ?? "price unavailable"} for ${storage.extraGib} GB beyond your included ${storage.includedGib} GB`
       : `Storage: ${storage.includedGib} GB included, then ${rate}/GB-month`;
   return (
     <p className="text-xs text-muted-foreground" data-testid="overage-storage-line">

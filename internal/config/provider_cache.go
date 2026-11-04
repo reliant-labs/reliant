@@ -95,32 +95,36 @@ type parsedConfigEntry struct {
 	size      int64
 }
 
-type loadFunc func(ctx context.Context, projectID string) (*Config, int64, error)
+type loadFunc func(ctx context.Context) (*Config, int64, error)
 
-func (c *parsedConfigCache) get(ctx context.Context, projectID string, load loadFunc) (*Config, error) {
+// get serves the parsed config cached under key (the project, or the project
+// on one machine: see StoredConfigProvider.GetProjectConfig), validated by the project record's version
+// token: every push of any machine rewrites the record, so the token moves
+// for every machine's config at once.
+func (c *parsedConfigCache) get(ctx context.Context, projectID, key string, load loadFunc) (*Config, error) {
 	version, err := c.versions.GetProjectConfigVersion(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			c.evict(projectID)
+			c.evict(key)
 			return notSyncedConfig(projectID), nil
 		}
 		return nil, fmt.Errorf("failed to load stored config version for project %s: %w", projectID, err)
 	}
 
-	if cfg, ok := c.lookup(projectID, version); ok {
+	if cfg, ok := c.lookup(key, version); ok {
 		return cfg.shareableCopy(), nil
 	}
 
 	// The fill is shared by every caller that missed on this version, so it
 	// must not die with whichever caller happened to start it. Each caller
 	// still stops waiting when its own context ends.
-	ch := c.flight.DoChan(projectID+"\x00"+version, func() (any, error) {
-		if cfg, ok := c.lookup(projectID, version); ok {
+	ch := c.flight.DoChan(key+"\x00"+version, func() (any, error) {
+		if cfg, ok := c.lookup(key, version); ok {
 			return cfg, nil
 		}
 		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), parsedConfigLoadTimeout)
 		defer cancel()
-		cfg, size, err := load(loadCtx, projectID)
+		cfg, size, err := load(loadCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -128,7 +132,7 @@ func (c *parsedConfigCache) get(ctx context.Context, projectID string, load load
 		// in between, the record is newer than its label, so the next call
 		// sees a different version and re-reads: an extra read, never stale
 		// content served under a newer label.
-		c.store(projectID, version, cfg, size)
+		c.store(key, version, cfg, size)
 		return cfg, nil
 	})
 
@@ -139,7 +143,7 @@ func (c *parsedConfigCache) get(ctx context.Context, projectID string, load load
 		if res.Err != nil {
 			if errors.Is(res.Err, sql.ErrNoRows) {
 				// Deleted between the version read and the record read.
-				c.evict(projectID)
+				c.evict(key)
 				return notSyncedConfig(projectID), nil
 			}
 			return nil, res.Err

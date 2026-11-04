@@ -13,7 +13,7 @@
  * its own meaning (reliant's primary action color) without disturbing the
  * ~159 existing `bg-accent` call sites elsewhere in the app.
  *
- * e2e/color-schemes.spec.ts screenshots three regions of it in all ten
+ * e2e/color-schemes.spec.ts screenshots its regions in every
  * schemes, light and dark:
  *
  *   forge-library  every forge-ui component the app used before R5 S1 (the
@@ -25,19 +25,30 @@
  *                  onto forge (card, badge/tag, alert_banner, progress_bar),
  *                  rendered with the props those sites pass — real components
  *                  where they are pure, the site's own markup where not
+ *   buttons        forge's Button, every variant at every size and in every
+ *                  state the app uses (icons, icon-only, loading, disabled,
+ *                  expanded), on a card and on the page background. Outside
+ *                  .forge-ui, as almost every Button in the app is: the
+ *                  button scopes the accent family itself (index.css)
  *   ?view=overlays the components that cover the viewport (sidebar_layout,
  *                  modal, confirmation_dialog), each pinned inside its own
  *                  box so all three fit one screenshot
+ *   s2-sites,      the R5 S2 primitives (Toggle, Input/Textarea, Dropdown,
+ *   ?view=s2-menus Modal) as their call sites render them — S2Sandbox.tsx
+ *   ?view=s2-modal
+ *   ?view=r5-tooltips, the R5 overlays (Tooltip, ContextMenu, HelpPopover,
+ *   ?view=r5-menus,    the searchable pickers) as their call sites render
+ *   ?view=r5-pickers   them — R5Sandbox.tsx
  *
  * A change to anything here moves those baselines, so it shows up in review
  * as a picture rather than as a diff nobody can read.
  */
 import { useState } from "react";
 import { useSearch } from "@tanstack/react-router";
-import { Database, Layers, Settings as SettingsIcon } from "lucide-react";
+import { ChevronRight, Database, Layers, Plus, Settings as SettingsIcon, X } from "lucide-react";
 
-import { ConfigScope } from "../../api/mcp-grpc";
-import { CheckRow } from "../Forge/Status/CheckRow";
+import { ConfigScope } from "../../hooks/mcp-queries";
+import { CheckTable } from "../Forge/Status/CheckTable";
 import { DispositionLegend } from "../Forge/Status/DispositionLegend";
 import { MCPServerListItem } from "../Settings/MCPServerListItem";
 import { ErrorSummary } from "../Automations/ErrorSummary";
@@ -46,6 +57,7 @@ import { checksOf, type ForgeEnvStatusReport } from "../../services/forge/status
 
 import AlertBanner from "./alert_banner";
 import Badge from "./badge";
+import Button, { type ButtonSize, type ButtonVariant } from "./button";
 import Card, { CardBody, CardFooter, CardHeader, CardInset } from "./card";
 import ConfirmationDialog from "./confirmation_dialog";
 import DataTable from "./data_table";
@@ -62,6 +74,8 @@ import StatGrid from "./stat_grid";
 import Status from "./status";
 import Tabs from "./tabs";
 import Tag from "./tag";
+import { S2Menus, S2Modal, S2Sites } from "./S2Sandbox";
+import { R5Menus, R5Pickers, R5Tooltips } from "./R5Sandbox";
 
 const SCHEMES = COLOR_SCHEMES;
 
@@ -254,6 +268,50 @@ function ForgeLibrary() {
   );
 }
 
+const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "outline", "ghost", "danger"];
+const BUTTON_SIZES: ButtonSize[] = ["xs", "sm", "md", "lg", "xl"];
+
+/** forge's Button in every variant, size and state, on both page surfaces. */
+function ButtonSites() {
+  return (
+    <div className="space-y-6" data-testid="buttons">
+      {(["bg-card", "bg-background"] as const).map((surface) => (
+        <div key={surface} className={`space-y-3 rounded-lg border border-border p-4 ${surface}`}>
+          <SectionTitle>Button on {surface}</SectionTitle>
+          {BUTTON_VARIANTS.map((variant) => (
+            <div key={variant} className="flex flex-wrap items-center gap-2">
+              {BUTTON_SIZES.map((size) => (
+                <Button key={size} variant={variant} size={size}>
+                  {variant} {size}
+                </Button>
+              ))}
+              <Button variant={variant} size="sm" leftIcon={<Plus />}>
+                New
+              </Button>
+              <Button variant={variant} size="sm" rightIcon={<ChevronRight />}>
+                Next
+              </Button>
+              <Button variant={variant} size="sm" icon={<X />} aria-label="Close" />
+              <Button variant={variant} size="sm" loading>
+                Save
+              </Button>
+              <Button variant={variant} size="sm" loading leftIcon={<Plus />}>
+                Creating
+              </Button>
+              <Button variant={variant} size="sm" disabled>
+                Disabled
+              </Button>
+              <Button variant={variant} size="sm" aria-expanded>
+                Open
+              </Button>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
  * The call sites the R5 S1 wave migrated, with the props they pass.
  * Pure components render for real; the rest reproduce their site's markup.
@@ -309,13 +367,7 @@ function S1Sites() {
         <SectionTitle>Badge — forge status legend and check rows</SectionTitle>
         <DispositionLegend report={REPORT} />
         <Card padding="none" className="mt-3 overflow-hidden">
-          <table className="w-full border-collapse text-left">
-            <tbody>
-              {checksOf(REPORT).map((check) => (
-                <CheckRow key={check.name} check={check} />
-              ))}
-            </tbody>
-          </table>
+          <CheckTable checks={checksOf(REPORT)} />
         </Card>
       </div>
 
@@ -343,7 +395,7 @@ function S1Sites() {
       </div>
 
       <div>
-        <SectionTitle>ErrorSummary (on alert_banner) — WorkflowSetupDialog</SectionTitle>
+        <SectionTitle>ErrorSummary (on alert_banner) — the automation dialog</SectionTitle>
         <div className="max-w-xl">
           <ErrorSummary
             title="Fix these to continue"
@@ -404,7 +456,7 @@ function Overlays() {
         </SidebarLayout>
       </div>
       <div className={box} style={pin}>
-        <Modal open onClose={noop} title="Rename environment" description="Names are unique per project." footer={<Tag>footer</Tag>}>
+        <Modal open portal={false} onClose={noop} title="Rename environment" description="Names are unique per project." footer={<Tag>footer</Tag>}>
           <p className="text-sm text-ink">Modal body.</p>
         </Modal>
       </div>
@@ -473,17 +525,32 @@ export default function ForgeTokenSandbox() {
 
       {/* Everything forge renders lives under .forge-ui. */}
       <div className="forge-ui" data-testid="forge-scope">
-        {view === "overlays" ? <Overlays /> : <ForgeLibrary />}
+        {view === "overlays" ? <Overlays /> : view?.startsWith("s2-") || view?.startsWith("r5-") ? null : <ForgeLibrary />}
       </div>
 
-      {/* The S1 sites sit OUTSIDE the scope, as they do in the app: a site
-          that needs forge's accent wraps itself in .forge-ui, and this is
-          where a missing wrap would show. */}
-      {view !== "overlays" && (
-        <div className="mt-12">
-          <S1Sites />
-        </div>
+      {/* The S1 and S2 sites sit OUTSIDE the scope, as they do in the app: a
+          site that needs forge's accent wraps itself in .forge-ui, and this
+          is where a missing wrap would show. The S2 sites come last, so the
+          regions above them keep the page offsets their baselines were
+          captured at (a region moved by a fraction of a pixel re-rasterizes). */}
+      {view === undefined && (
+        <>
+          <div className="mt-12">
+            <S1Sites />
+          </div>
+          <div className="mt-12">
+            <ButtonSites />
+          </div>
+          <div className="mt-12">
+            <S2Sites />
+          </div>
+        </>
       )}
+      {view === "s2-menus" && <S2Menus />}
+      {view === "s2-modal" && <S2Modal />}
+      {view === "r5-tooltips" && <R5Tooltips />}
+      {view === "r5-menus" && <R5Menus />}
+      {view === "r5-pickers" && <R5Pickers />}
     </div>
   );
 }

@@ -1,11 +1,9 @@
 import React, { Component } from 'react';
 import type { ReactNode } from 'react';
-import * as Sentry from '@sentry/react';
 import { AlertTriangle, Copy, RefreshCw } from 'lucide-react';
-import { getPrivacySettings } from '../store/privacyStore';
-import { Button } from './ui/Button';
+import { privacyConsent } from '../hooks/privacy-queries';
+import Button from '@/components/forge-ui/button';
 import { isDev } from '../lib/constants';
-import { sentryEnabled } from '../lib/telemetrySinks';
 import { reportErrorToTelemetry } from '../lib/telemetry';
 import { recordClientError } from '../lib/clientDiagnostics';
 import { StaleBuildError } from '../lib/lazyRoute';
@@ -194,28 +192,18 @@ export function ErrorFallbackUI(props: {
 }
 
 /**
- * Report an error an error boundary caught. A caught error never reaches
- * Sentry's global handlers, so a boundary that does not report it hides it.
- *
- * It goes to every sink the build ships to. The telemetry runtime skips an
- * error its SDK already recorded, so ClickStack counts it once.
+ * Report an error an error boundary caught. A caught error never reaches the
+ * telemetry SDK's global handlers, so a boundary that does not report it hides
+ * it. The runtime skips an error its SDK already recorded, so ClickStack
+ * counts it once.
  */
 export function reportCaughtError(error: unknown, componentStack?: string | null) {
   // The device's own record (Settings → Diagnostics) is local, so it is kept
   // whether or not crash reporting is on.
   recordClientError('boundary', error);
   // Only report if user has crash reporting enabled
-  const { crashReportingEnabled } = getPrivacySettings();
+  const { crashReportingEnabled } = privacyConsent();
   if (!crashReportingEnabled) return;
-  if (sentryEnabled()) {
-    Sentry.captureException(error, {
-      contexts: {
-        react: {
-          componentStack,
-        },
-      },
-    });
-  }
   reportErrorToTelemetry(error, componentStack);
 }
 
@@ -283,24 +271,5 @@ class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
-
-export const SentryErrorBoundary = Sentry.withErrorBoundary(
-  ({ children }: { children: ReactNode }) => <>{children}</>,
-  {
-    fallback: ({ error }) => (
-      <ErrorFallbackUI
-        error={error}
-        onReload={() => window.location.reload()}
-        // Note: Sentry boundary fallback doesn't provide React component stack.
-        // We still provide a rich diagnostic report (message/stack/url/user agent).
-        errorId={createErrorId()}
-        occurredAt={new Date().toISOString()}
-      />
-    ),
-    showDialog: isDev,
-    // Sentry's boundary reports to Sentry itself; this is the other sink.
-    onError: (error, componentStack) => reportErrorToTelemetry(error, componentStack),
-  }
-);
 
 export default ErrorBoundary;

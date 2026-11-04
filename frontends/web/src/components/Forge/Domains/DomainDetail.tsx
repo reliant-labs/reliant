@@ -77,14 +77,14 @@ export function DomainDetail({
   return (
     <div className="flex flex-col gap-5" data-testid={`domain-detail-${domain.hostname}`}>
       <section className="flex flex-col gap-2">
-        <p className="text-sm text-foreground">{DOMAIN_STATE_EXPLANATIONS[domain.state]}</p>
+        <p className="text-sm text-ink">{DOMAIN_STATE_EXPLANATIONS[domain.state]}</p>
         {nextStep && (
-          <p className="text-sm text-muted-foreground" data-testid="domain-next-step">
+          <p className="text-sm text-ink-muted" data-testid="domain-next-step">
             {nextStep}
           </p>
         )}
         {(liveSince || verifiedAt) && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-ink-muted">
             {liveSince && <>Live since {liveSince}. </>}
             {verifiedAt && <>Ownership last proven {verifiedAt}.</>}
           </p>
@@ -93,35 +93,35 @@ export function DomainDetail({
 
       {domain.lastError && (
         <section
-          className="flex flex-col gap-1 rounded-lg border border-destructive/40 bg-destructive/10 p-3"
+          className="flex flex-col gap-1 rounded-lg border border-danger-border bg-danger-surface p-3"
           role="alert"
           data-testid="domain-last-error"
         >
-          <span className="flex items-center gap-1.5 text-xs font-medium text-destructive-ink">
+          <span className="flex items-center gap-1.5 text-xs font-medium text-danger-ink">
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
             What went wrong
           </span>
           {/* The checker's own words. See the header comment. */}
-          <p className="break-words text-xs text-destructive-ink">{domain.lastError}</p>
+          <p className="break-words text-xs text-danger-ink">{domain.lastError}</p>
         </section>
       )}
 
       <section className="flex flex-col gap-2">
-        <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
           DNS records
         </h4>
         <DnsRecordsTable records={domain.requiredRecords} />
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-2xs text-ink-muted">
           Reliant cannot publish these for you — they live in a zone we do not control. After you
           save them, propagation usually takes a few minutes and can take up to an hour.
         </p>
       </section>
 
       <section className="flex flex-col gap-2">
-        <h4 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <h4 className="text-xs font-medium uppercase tracking-wide text-ink-muted">
           Serving
         </h4>
-        <p className="text-sm text-foreground" data-testid="domain-binding">
+        <p className="text-sm text-ink" data-testid="domain-binding">
           {domain.binding
             ? domain.binding.redirectTo
               ? bindingSummary(domain.binding)
@@ -131,7 +131,7 @@ export function DomainDetail({
       </section>
 
       {actionError && (
-        <p className="text-xs text-destructive-ink" role="alert">
+        <p className="text-xs text-danger-ink" role="alert">
           {actionError}
         </p>
       )}
@@ -141,7 +141,7 @@ export function DomainDetail({
           type="button"
           onClick={onVerify}
           disabled={isVerifying}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-foreground transition hover:bg-muted disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink transition hover:bg-ink/5 disabled:opacity-50"
         >
           {isVerifying ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -153,7 +153,7 @@ export function DomainDetail({
         <button
           type="button"
           onClick={onRebind}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs text-foreground transition hover:bg-muted"
+          className="rounded-lg border border-border px-3 py-1.5 text-xs text-ink transition hover:bg-ink/5"
         >
           {domain.binding ? "Change target" : "Choose a target"}
         </button>
@@ -161,7 +161,7 @@ export function DomainDetail({
           <button
             type="button"
             onClick={onUnbind}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-foreground transition hover:bg-muted"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink transition hover:bg-ink/5"
           >
             <Unlink className="h-3.5 w-3.5" aria-hidden="true" />
             Stop serving
@@ -170,13 +170,13 @@ export function DomainDetail({
         <button
           type="button"
           onClick={onRemove}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-destructive/40 px-3 py-1.5 text-xs text-destructive-ink transition hover:bg-destructive/10"
+          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-danger-border px-3 py-1.5 text-xs text-danger-ink transition hover:bg-danger-surface"
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           Remove domain
         </button>
       </div>
-      <p className="text-2xs text-muted-foreground">
+      <p className="text-2xs text-ink-muted">
         Stopping serving keeps the domain and its verification, so re-binding later needs no DNS
         work and no new certificate. Removing it releases the hostname for anyone to claim.
       </p>

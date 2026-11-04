@@ -19,7 +19,7 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "Docs",
+        "tab": "Reliant",
         "groups": [
           {
             "group": "Get started",
@@ -70,7 +70,6 @@
               "cli/sign-in",
               "cli/run-a-machine",
               "cli/workflows",
-              "cli/forge",
               "cli/previews",
               "cli/scripting"
             ]
@@ -104,6 +103,7 @@
               "workflows/patterns",
               "workflows/routing",
               "workflows/testing",
+              "workflows/lint",
               "examples/workflow-snippets",
               "guides/self-improvement"
             ]
@@ -119,9 +119,54 @@
             ]
           },
           {
-            "group": "Build & host with Forge",
+            "group": "Account & billing",
+            "pages": [
+              "account/billing",
+              "account/observability-billing",
+              "help/privacy"
+            ]
+          },
+          {
+            "group": "Reference",
+            "pages": [
+              "reference/nodes",
+              "reference/types",
+              "reference/workflow-schema",
+              "reference/cel-expressions",
+              "reference/models",
+              "reference/tools",
+              "reference/scenario-schema",
+              "reference/llm-guide",
+              "reference/cli"
+            ]
+          },
+          {
+            "group": "Help",
+            "pages": [
+              "help/faq",
+              "help/troubleshooting",
+              "help/feedback",
+              "architecture/overview",
+              "architecture/distributed",
+              "changelog",
+              "license-faq"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Forge",
+        "groups": [
+          {
+            "group": "Get started",
             "pages": [
               "forge/overview",
+              "forge/quick-start"
+            ]
+          },
+          {
+            "group": "Build",
+            "pages": [
               "forge/project-anatomy",
               "forge/adding-features",
               {
@@ -133,7 +178,12 @@
                   "forge/concepts/config-system",
                   "forge/concepts/generated-vs-yours"
                 ]
-              },
+              }
+            ]
+          },
+          {
+            "group": "Deploy & host",
+            "pages": [
               {
                 "group": "Deploy",
                 "pages": [
@@ -148,7 +198,12 @@
               "forge/hosting",
               "forge/secrets",
               "forge/custom-domains",
-              "forge/sign-in",
+              "forge/sign-in"
+            ]
+          },
+          {
+            "group": "Operate",
+            "pages": [
               {
                 "group": "Observability",
                 "pages": [
@@ -178,36 +233,9 @@
             ]
           },
           {
-            "group": "Account & billing",
+            "group": "Forge CLI",
             "pages": [
-              "account/billing",
-              "help/privacy"
-            ]
-          },
-          {
-            "group": "Reference",
-            "pages": [
-              "reference/nodes",
-              "reference/types",
-              "reference/workflow-schema",
-              "reference/cel-expressions",
-              "reference/models",
-              "reference/tools",
-              "reference/scenario-schema",
-              "reference/llm-guide",
-              "reference/cli"
-            ]
-          },
-          {
-            "group": "Help",
-            "pages": [
-              "help/faq",
-              "help/troubleshooting",
-              "help/feedback",
-              "architecture/overview",
-              "architecture/distributed",
-              "changelog",
-              "license-faq"
+              "cli/forge"
             ]
           }
         ]

@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * One Observability view, hosted as a console page (decision D9).
+ * One Observability view, hosted as a console page.
  *
  * The views (ObservabilityPanel) still speak their own URL vocabulary
  * (obsSearch.ts) — "open Logs for this service", "narrow to these
@@ -21,17 +21,17 @@
 
 import { lazy, Suspense, useCallback, useMemo } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { Activity } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import EmptyState from "@/components/forge-ui/empty_state";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 
 import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch";
+import { useDeclaredEnvironments } from "../Observability/useDeclaredEnvironments";
 import { CloudNotice } from "../SourceNotices";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL } from "./envScope";
+import { NoEnvironmentsState } from "./NoEnvironmentsState";
 import { carriedObsSearch, consolePath, envScopeOfEnvs, pageOfObsView, withSearch } from "./paths";
 
 // Its own chunk: uPlot and the views load only on a page that shows them.
@@ -56,13 +56,13 @@ export function ObservabilityHost({ view, needsEnvironments = true }: Observabil
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as Record<string, unknown>;
 
-  const environments = useMemo(
-    () =>
-      roster.envs.flatMap((candidate) =>
-        candidate.live ? [{ id: candidate.live.id, name: candidate.name, declared: candidate.live.declaredShape }] : []
-      ),
+  const recorded = useMemo(
+    () => roster.envs.flatMap((candidate) => (candidate.live ? [{ id: candidate.live.id, name: candidate.name }] : [])),
     [roster.envs]
   );
+  // Only the Alerts view reads what each environment declares; every other
+  // view leaves the per-environment shapes unfetched.
+  const environments = useDeclaredEnvironments(recorded, { enabled: view === "alerts" });
 
   const obsSearch = useMemo<ObsSearch>(
     () => ({ ...(carriedObsSearch(search) as ObsSearch), view, envs: env === ENV_ALL ? undefined : [env] }),
@@ -114,20 +114,14 @@ export function ObservabilityHost({ view, needsEnvironments = true }: Observabil
           it. Once it is deployed through Reliant, its logs, traces and metrics appear here.
         </p>
       ) : needsEnvironments && environments.length === 0 ? (
-        <div data-testid="forge-observability-no-envs">
-          <EmptyState
-            icon={<Activity className="h-6 w-6" aria-hidden="true" />}
-            title="No environments to observe yet"
-            description="Telemetry is filed under the environments Reliant records. Deploy one through Reliant (forge env deploy <env>) and its logs, traces, metrics and workloads appear here."
-          />
-        </div>
+        <NoEnvironmentsState topic={view} testId="forge-observability-no-envs" />
       ) : (
         <Suspense fallback={loading}>
           <ObservabilityPanel
             place={{ kind: "project", project: forgeProject, environments }}
             search={obsSearch}
             navigate={navigateObs}
-            chrome="console"
+           
           />
         </Suspense>
       )}

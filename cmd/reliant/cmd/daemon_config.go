@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/diskguard"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -51,6 +52,14 @@ func daemonHost(cfg *config.DaemonConfig) daemonruntime.Host {
 		RuntimeType:  cfg.GetRuntimeType(),
 		FrontendPort: int(cfg.GetFrontendPort()),
 		ProjectPath:  cfg.GetProjectPath(),
+
+		AllowPrivateFetch: cfg.GetFetchAllowPrivateNetwork(),
+		Egress: egresslimit.Limits{
+			UserPerMinute:     int(cfg.GetEgressUserPerMinute()),
+			UserBurst:         int(cfg.GetEgressUserBurst()),
+			UserMaxConcurrent: int(cfg.GetEgressUserMaxConcurrent()),
+			HostMaxConcurrent: int(cfg.GetEgressHostMaxConcurrent()),
+		},
 	}
 }
 
@@ -70,5 +79,17 @@ func daemonGuards(cfg *config.DaemonConfig) daemonruntime.Guards {
 	if commands == nil {
 		commands = []string{}
 	}
-	return daemonruntime.Guards{Disk: disk, HeavyCommands: commands}
+	// background_idle_reap defaults to 4h, so a zero after loading was set
+	// on purpose: off. The runtime reads zero as its default, negative as off.
+	idleReap := cfg.GetBackgroundIdleReap().AsDuration()
+	if idleReap == 0 {
+		idleReap = -1
+	}
+	return daemonruntime.Guards{
+		Disk:               disk,
+		HeavyCommands:      commands,
+		HeavyShare:         int(cfg.GetHeavyShare()),
+		CommandThreads:     int(cfg.GetCommandThreads()),
+		BackgroundIdleReap: idleReap,
+	}
 }

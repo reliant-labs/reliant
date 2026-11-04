@@ -1,21 +1,23 @@
 import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { FileText, Cloud, FolderGit2, AlertCircle, GitCommitHorizontal, ChevronDown, ChevronRight } from "lucide-react";
-import { Modal } from "../ui/Modal";
-import { SearchableDropdown, type DropdownOption } from "../ui/SearchableDropdown";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
+import Combobox, { type ComboboxOption } from "../forge-ui/combobox";
 import { useProjectStore } from "../../store/projectStore";
 import { useBranches } from "../../hooks/useBranches";
 import { InitializeGitModal } from "../Git/InitializeGitModal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { cn } from "../../lib/utils";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
-import { repoGrpc, type Repo } from "../../api/repo-grpc";
+import { useListRepos } from "../../hooks/repo-service-hooks_gen";
 import { logger } from "../../lib/logger";
 import { copyPathError, DEFAULT_COPY_PATHS, parseCopyPathsInput } from "../../lib/worktreeCopyPaths";
 import {
   defaultBaseBranch as currentBranchAsBase,
   normalizeWorkspaceName,
 } from "../../lib/workspaceNaming";
+
+import { createWorktree } from "../../hooks/worktree-actions";
 
 interface CreateWorktreeModalProps {
   isOpen: boolean;
@@ -25,6 +27,7 @@ interface CreateWorktreeModalProps {
   title?: string; // Optional custom title
   sourceWorktreeId?: string; // Source worktree to copy files from (for branch to workspace)
   chatId?: string; // Chat the workspace is created for; the server places it on that chat's machine
+  daemonId?: string; // Machine to create it on (the new-chat composer's "Runs on"); unset lets the server place it
   sourceWorktreeBranch?: string; // Branch of source worktree to use as default base branch
   additionalCopyFiles?: string[]; // Additional files to copy (e.g., modified/untracked files from source)
   lockBaseBranch?: boolean; // If true, prevent changing the base branch (used when branching to workspace)
@@ -39,12 +42,12 @@ export function CreateWorktreeModal({
   title = "Create New Workspace", // Default title
   sourceWorktreeId,
   chatId,
+  daemonId,
   sourceWorktreeBranch,
   additionalCopyFiles = [],
   lockBaseBranch = false,
   extraContent,
 }: CreateWorktreeModalProps) {
-  const createWorktree = useWorktreeStore((state) => state.createWorktree);
   const currentProject = useProjectStore((state) => state.currentProject);
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
   const [showInitGitModal, setShowInitGitModal] = useState(false);
@@ -52,8 +55,15 @@ export function CreateWorktreeModal({
   // Discovered nested repos. The new worktree always spans ALL of them;
   // there's no per-repo selection. We still load the list so we can show
   // per-repo base-branch overrides when there are 2+ repos.
-  const [repos, setRepos] = useState<Repo[]>([]);
-  const [reposLoaded, setReposLoaded] = useState(false);
+  // A failed list is non-fatal: it falls back to the single-repo path.
+  const reposQuery = useListRepos({ projectId }, { enabled: isOpen && !!projectId });
+  const repos = useMemo(() => reposQuery.data?.repos ?? [], [reposQuery.data]);
+  const reposLoaded = reposQuery.isSuccess || reposQuery.isError;
+  useEffect(() => {
+    if (reposQuery.error) {
+      logger.warn("[CreateWorktreeModal] Failed to list repos", { err: reposQuery.error });
+    }
+  }, [reposQuery.error]);
 
   const isMultiRepo = repos.length > 1;
 
@@ -119,35 +129,12 @@ export function CreateWorktreeModal({
   const [normalizedName, setNormalizedName] = useState<string | null>(null);
   const [normalizedBranch, setNormalizedBranch] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isOpen || !projectId) return;
-    let cancelled = false;
-    setReposLoaded(false);
-    repoGrpc
-      .list(projectId)
-      .then(({ repos: loaded }) => {
-        if (cancelled) return;
-        setRepos(loaded);
-        setReposLoaded(true);
-      })
-      .catch((err) => {
-        // Non-fatal: fall back to single-repo path if RepoService is unavailable.
-        if (cancelled) return;
-        logger.warn("[CreateWorktreeModal] Failed to list repos", { err });
-        setRepos([]);
-        setReposLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, projectId]);
-
   // Shared with the mobile create sheet so both surfaces derive the same
   // branch from the same typed name.
   const normalizeName = normalizeWorkspaceName;
 
   // Transform branches into dropdown options with main/current at top
-  const branchOptions = useMemo<DropdownOption[]>(() => {
+  const branchOptions = useMemo<ComboboxOption[]>(() => {
     const localBranches = branches
       .filter((b) => !b.is_remote)
       .map((b) => {
@@ -264,6 +251,7 @@ export function CreateWorktreeModal({
         force: formData.force,
         source_worktree_id: sourceWorktreeId,
         chat_id: chatId,
+        daemon_id: daemonId,
       });
 
       await onWorktreeCreated(worktree.id);
@@ -295,7 +283,8 @@ export function CreateWorktreeModal({
     return (
       <>
         <Modal
-          isOpen={isOpen && !showInitGitModal}
+          open={isOpen && !showInitGitModal}
+          fallbackFocus={focusChatInput}
           onClose={onClose}
           title="Git repository required"
           size="md"
@@ -349,7 +338,8 @@ export function CreateWorktreeModal({
   return (
     <>
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={onClose}
       title={title}
       size="lg"
@@ -384,7 +374,7 @@ export function CreateWorktreeModal({
                     setNormalizedName(null);
                   }
                 }}
-                className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                 placeholder="awesome-feature"
                 required
                 autoFocus
@@ -433,7 +423,7 @@ export function CreateWorktreeModal({
                           setNormalizedBranch(null);
                         }
                       }}
-                      className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                      className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                       placeholder={formData.name ? normalizeName(formData.name) : "Defaults to name"}
                     />
                   </div>
@@ -460,8 +450,8 @@ export function CreateWorktreeModal({
                         <div key={r.id} className="flex items-center gap-3 p-3">
                           <div className="w-1/3 min-w-0">
                             <div className="text-sm font-medium text-foreground truncate">{r.name}</div>
-                            {r.relative_path && (
-                              <div className="text-xs text-muted-foreground font-mono truncate">{r.relative_path}</div>
+                            {r.relativePath && (
+                              <div className="text-xs text-muted-foreground font-mono truncate">{r.relativePath}</div>
                             )}
                           </div>
                           <input
@@ -474,7 +464,7 @@ export function CreateWorktreeModal({
                                 base_branches: { ...prev.base_branches, [r.id]: v },
                               }));
                             }}
-                            className="flex-1 px-3 py-2 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+                            className="flex-1 px-3 py-2 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
                             placeholder="Auto-detect (e.g. main, master, develop)"
                           />
                         </div>
@@ -487,20 +477,21 @@ export function CreateWorktreeModal({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-foreground">
+                    <label htmlFor="create-worktree-base-branch" className="block text-sm font-semibold text-foreground">
                       Base Branch
                     </label>
-                    <SearchableDropdown
+                    <Combobox
+                      id="create-worktree-base-branch"
                       options={branchOptions}
-                      value={formData.base_branch}
+                      value={formData.base_branch || null}
                       placeholder={isBranchesLoading ? "Loading branches..." : "Select base branch"}
+                      searchPlaceholder="Search branches"
                       emptyMessage={branchesError ? "Failed to load branches" : "No branches found"}
-                      onSelect={(value) =>
+                      onChange={(value) =>
                         setFormData((prev) => ({ ...prev, base_branch: value || "" }))
                       }
+                      loading={isBranchesLoading}
                       disabled={isBranchesLoading || lockBaseBranch}
-                      groupBy={true}
-                      variant="form"
                       className="w-full"
                     />
                     {branchesError ? (
@@ -533,8 +524,8 @@ export function CreateWorktreeModal({
                         const files = parseCopyPathsInput(e.target.value);
                         setFormData((prev) => ({ ...prev, copy_files: files }));
                       }}
-                      className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                      placeholder={isMultiRepo ? `.env, ${repos[0]?.relative_path || "repo"}/.env, ${repos[0]?.relative_path || "repo"}/node_modules` : ".env, .env.local, node_modules"}
+                      className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                      placeholder={isMultiRepo ? `.env, ${repos[0]?.relativePath || "repo"}/.env, ${repos[0]?.relativePath || "repo"}/node_modules` : ".env, .env.local, node_modules"}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">

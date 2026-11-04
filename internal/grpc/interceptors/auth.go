@@ -204,8 +204,11 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 			logging.ErrorContext(ctx, "[gRPC Auth] Token verification unavailable",
 				"error", err,
 				"procedure", procedure)
-			return nil, nil, connect.NewError(connect.CodeUnavailable,
-				fmt.Errorf("token verification unavailable: %w", err))
+			// The client reads only the fixed text; the store's or JWKS's
+			// own error (driver messages, URLs) stays server-side as the
+			// cause, which the "rpc failed" record logs.
+			return nil, nil, svcerr.ToConnect(svcerr.WithCause(
+				svcerr.Unavailable("token verification unavailable"), err))
 		}
 		logging.DebugContext(ctx, "[gRPC Auth] Invalid token",
 			"error", err,

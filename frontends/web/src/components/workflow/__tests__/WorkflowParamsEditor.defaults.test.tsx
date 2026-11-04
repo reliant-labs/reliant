@@ -11,12 +11,12 @@
  * object" — and a toolbar number could never get a default: its pill always
  * read "required".
  *
- * This drives the real path: the editor's control → onUpdate → workflowGrpc.
+ * This drives the real path: the editor's control → onUpdate → saveWorkflow.
  * saveWorkflow (toWorkflowInit + create), encoded to JSON the way the Connect
  * transport encodes it → decoded back, as GetWorkflow returns it → the editor
  * again, and the chat toolbar pill.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -29,13 +29,13 @@ import type { Param, Workflow } from "../../../types/workflow";
 
 const rpc = vi.hoisted(() => ({ saveWorkflow: vi.fn() }));
 
-vi.mock("../../../api/grpc-client", () => ({
-  grpcClient: { workflow: () => ({ saveWorkflow: rpc.saveWorkflow }) },
-}));
-vi.mock("../../../api/preset-grpc", () => ({
-  presetGrpc: {
-    listPresets: vi.fn(async () => [{ name: "careful", description: "", params: {}, source: "project" }]),
-  },
+vi.mock("../../../hooks/preset-queries", () => ({
+  useProjectPresets: () => ({
+    presets: [{ name: "careful", description: "", params: {}, source: "project" }],
+    invalidPresets: [],
+    loading: false,
+    error: null,
+  }),
 }));
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector?: any) => {
@@ -61,7 +61,13 @@ vi.mock("../ToolsSelector", async () => {
 
 import { WorkflowParamsEditorContent } from "../WorkflowParamsEditor";
 import { InlineParamInput } from "../InlineParamInput";
-import { workflowGrpc } from "../../../api/workflow-grpc";
+import { saveWorkflow } from "../../../hooks/workflow-queries";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
+
+// SaveWorkflow is reached through connectClient, so it is answered at the transport.
+beforeEach(() => setTransport(mockTransport({ "WorkflowService.SaveWorkflow": (req) => rpc.saveWorkflow(req) })));
+afterEach(() => setTransport(null));
 
 const NAME = "knob";
 
@@ -83,7 +89,7 @@ function lastParams(onUpdate: ReturnType<typeof vi.fn>): Record<string, Param> {
 }
 
 /**
- * Save through workflowGrpc, encoding the request to JSON exactly as the
+ * Save through saveWorkflow, encoding the request to JSON exactly as the
  * Connect transport does (useBinaryFormat: false), then decode the stored
  * workflow back the way GetWorkflow hands it to the builder and the composer.
  */
@@ -93,7 +99,7 @@ async function saveAndReload(inputs: Record<string, Param>): Promise<{ workflow:
     wire = toJson(SaveWorkflowRequestSchema, request) as JsonObject;
     return { success: true, message: "", validationErrors: [], version: 1n };
   });
-  await workflowGrpc.saveWorkflow("p1", { name: "wf", inputs, nodes: [], edges: [] } as Workflow);
+  await saveWorkflow("p1", { name: "wf", inputs, nodes: [], edges: [] } as Workflow);
   const workflow = fromJson(WorkflowSchema, wire!.workflow as JsonObject) as Workflow;
   return { workflow, wire: wire! };
 }
@@ -101,7 +107,7 @@ async function saveAndReload(inputs: Record<string, Param>): Promise<{ workflow:
 interface DefaultCase {
   type: string;
   /** Set the default through the editor's own control. */
-  set: () => Promise<void> | void;
+  set: () => unknown;
   /** getInputDefault after reload. */
   expected: unknown;
   /** Show the default again, as the reloaded editor does. */
@@ -153,6 +159,7 @@ const cases: DefaultCase[] = [
     set: () => userEvent.selectOptions(defaultSelect(), "claude-sonnet-5"),
     expected: expect.objectContaining({ id: "claude-sonnet-5" }),
     shownInEditor: () => expect(defaultSelect()).toHaveValue("claude-sonnet-5"),
+    toolbar: "Sonnet 5",
   },
   {
     type: "object",

@@ -1,32 +1,26 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+
 const mocks = vi.hoisted(() => ({
-  filesystemGrpc: {
-    getFilePreviewInfo: vi.fn(),
-    getFilePreview: vi.fn(),
-  },
   useProjectStore: {
     getState: vi.fn(),
   },
-  useWorktreeStore: {
-    getState: vi.fn(),
-  },
+  resolveWorktree: vi.fn(),
   useChatStore: {
     getState: vi.fn(),
   },
   triggerGitStatusRefresh: vi.fn(),
 }));
 
-vi.mock("../filesystem-grpc", () => ({
-  filesystemGrpc: mocks.filesystemGrpc,
-}));
-
 vi.mock("../../store/projectStore", () => ({
   useProjectStore: mocks.useProjectStore,
 }));
 
-vi.mock("../../store/worktreeStore", () => ({
-  useWorktreeStore: mocks.useWorktreeStore,
+vi.mock("../../hooks/worktree-queries", () => ({
+  resolveWorktree: mocks.resolveWorktree,
 }));
 
 vi.mock("../../store/chatStore", () => ({
@@ -39,6 +33,8 @@ vi.mock("../../store/gitStatusStore", () => ({
 
 import { getFilePreviewBlob } from "../fileSystem";
 
+const getFilePreview = vi.fn();
+
 describe("fileSystem preview transport", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -47,32 +43,32 @@ describe("fileSystem preview transport", () => {
       currentProject: { id: "project-1" },
     });
     const worktrees = [{ id: "wt-1", path: "/workspace", name: "main" }];
-    mocks.useWorktreeStore.getState.mockReturnValue({
-      worktrees,
-      resolveWorktree: async (id: string) => worktrees.find((w) => w.id === id) ?? null,
-    });
+    mocks.resolveWorktree.mockImplementation(async (id: string) => worktrees.find((w) => w.id === id) ?? null);
     mocks.useChatStore.getState.mockReturnValue({ activeChatId: "chat-1" });
-    mocks.filesystemGrpc.getFilePreview.mockResolvedValue({
+    getFilePreview.mockResolvedValue({
       content: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
       contentType: "image/png",
       filename: "photo.png",
       size: BigInt(4),
     });
+    setTransport(mockTransport(serviceHandlers("FileSystemService", { getFilePreview })));
   });
 
   afterEach(() => {
+    setTransport(null);
     vi.unstubAllGlobals();
   });
 
-  it("calls filesystemGrpc.getFilePreview with normalized path and returns a Blob", async () => {
+  it("asks for the preview by its worktree-relative path and returns a Blob", async () => {
     const blob = await getFilePreviewBlob("/workspace/photo.png", "wt-1");
 
-    expect(mocks.filesystemGrpc.getFilePreview).toHaveBeenCalledWith(
-      "project-1",
-      "photo.png",
-      "wt-1",
-      "chat-1",
-    );
+    expect(getFilePreview).toHaveBeenCalledTimes(1);
+    expect(getFilePreview.mock.calls[0][0]).toMatchObject({
+      projectId: "project-1",
+      path: "photo.png",
+      worktreeId: "wt-1",
+      chatId: "chat-1",
+    });
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe("image/png");
     expect(blob.size).toBe(4);
@@ -81,12 +77,12 @@ describe("fileSystem preview transport", () => {
   it("works without a worktree ID", async () => {
     const blob = await getFilePreviewBlob("photo.png");
 
-    expect(mocks.filesystemGrpc.getFilePreview).toHaveBeenCalledWith(
-      "project-1",
-      "photo.png",
-      undefined,
-      "chat-1",
-    );
+    expect(getFilePreview.mock.calls[0][0]).toMatchObject({
+      projectId: "project-1",
+      path: "photo.png",
+      chatId: "chat-1",
+    });
+    expect(getFilePreview.mock.calls[0][0].worktreeId).toBeUndefined();
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe("image/png");
   });

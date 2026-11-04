@@ -2,9 +2,11 @@ package controlplane
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
+	controlplanev1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
 	daemonv1 "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1"
 )
 
@@ -24,4 +26,52 @@ func (c *client) ResumeDaemon(ctx context.Context, token, daemonID string) error
 	}
 	_, err := c.daemons.ResumeDaemon(ctx, req)
 	return err
+}
+
+// SuspendDaemon implements Service; see its contract.
+func (c *client) SuspendDaemon(ctx context.Context, jwt, daemonID string) error {
+	req := connect.NewRequest(&daemonv1.SuspendDaemonRequest{DaemonId: daemonID})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	_, err := c.daemons.SuspendDaemon(ctx, req)
+	return err
+}
+
+// ResizeDaemon implements Service; see its contract.
+func (c *client) ResizeDaemon(ctx context.Context, jwt, daemonID, size string) error {
+	pbSize, ok := daemonSizes[strings.ToLower(strings.TrimSpace(size))]
+	if !ok {
+		return fmt.Errorf("unknown machine size %q: want one of s1, s2, m, l, xl, 2xl, 3xl", size)
+	}
+	req := connect.NewRequest(&daemonv1.ResizeDaemonRequest{DaemonId: daemonID, Size: pbSize})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	_, err := c.daemons.ResizeDaemon(ctx, req)
+	return err
+}
+
+// SetDaemonIdleTimeout implements Service; see its contract.
+func (c *client) SetDaemonIdleTimeout(ctx context.Context, jwt, daemonID, idleTimeout string) error {
+	req := connect.NewRequest(&daemonv1.UpdateDaemonRequest{DaemonId: daemonID, IdleTimeout: &idleTimeout})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	_, err := c.daemons.UpdateDaemon(ctx, req)
+	return err
+}
+
+// RenameDaemon implements Service; see its contract.
+func (c *client) RenameDaemon(ctx context.Context, jwt, daemonID, name string) error {
+	req := connect.NewRequest(&daemonv1.UpdateDaemonRequest{DaemonId: daemonID, NewName: name})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	_, err := c.daemons.UpdateDaemon(ctx, req)
+	return err
+}
+
+// daemonSizes are the size names reliant's daemon registry stores (the
+// control plane's lifecycle mirror), mapped to the control plane's enum.
+var daemonSizes = map[string]controlplanev1.DaemonSize{
+	"s1":  controlplanev1.DaemonSize_DAEMON_SIZE_S1,
+	"s2":  controlplanev1.DaemonSize_DAEMON_SIZE_S2,
+	"m":   controlplanev1.DaemonSize_DAEMON_SIZE_M,
+	"l":   controlplanev1.DaemonSize_DAEMON_SIZE_L,
+	"xl":  controlplanev1.DaemonSize_DAEMON_SIZE_XL,
+	"2xl": controlplanev1.DaemonSize_DAEMON_SIZE_2XL,
+	"3xl": controlplanev1.DaemonSize_DAEMON_SIZE_3XL,
 }

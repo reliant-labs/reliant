@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -83,7 +84,7 @@ func (e *testEnv) createChat(title string) (chatID, threadID, cwID string) {
 // addMessage adds a message to a thread/CW at the given ordinal
 func (e *testEnv) addMessage(chatID, threadID, cwID string, ordinal int64, role reliantv1.MessageRole) *db.Message {
 	e.t.Helper()
-	seq, err := e.repo.GetNextSeq(e.ctx, chatID, threadID)
+	_, seq, err := e.repo.AllocateMessageOrder(e.ctx, threadID, chatID)
 	require.NoError(e.t, err)
 	msg := &db.Message{
 		ID:              uuid.New().String(),
@@ -262,6 +263,7 @@ func (e *testEnv) verifyMessages(msgs []*db.Message, expectedOrdinals []int64, e
 
 // TestBranchingScenarios tests various message resolution scenarios with branching
 func TestBranchingScenarios(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	t.Run("simple_branch_inherits_parent_messages", func(t *testing.T) {

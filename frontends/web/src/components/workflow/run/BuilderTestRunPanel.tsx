@@ -20,18 +20,19 @@ import { Link } from "@tanstack/react-router";
 import { ConnectError } from "@connectrpc/connect";
 import { FlaskConical } from "lucide-react";
 
-import { chatGrpc, MessageRole } from "@/api/chat-grpc";
+import { MessageRole } from "@/hooks/chat-model";
 import { useChat } from "@/hooks/chat-queries";
 import { isLiveRunStatus, runStatus } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
 import { RunStatusBadge } from "../../runs/RunStatusIndicator";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { ConfigurationPanel } from "../ConfigurationPanel";
 import { RunFormError } from "./RunFormError";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";
 import { errorTextClass, hintClass, labelClass, textareaClass } from "./runFormStyles";
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
 import "../config/config-panel.css";
+import * as chatActions from "@/hooks/chat-actions";
 
 /** What a test run was started with; "Run again" starts the next one with the same. */
 export interface TestRunRequest {
@@ -138,14 +139,14 @@ export function BuilderTestRunPanel({
       if (!slug) return;
       setSavedEpoch((epoch) => epoch + 1);
 
-      const { chat: started } = await chatGrpc.start({
+      const started = await chatActions.startChat({
         project_id: projectId,
         worktree_id: value.worktreeId,
         daemon_id: value.daemonId,
         workflow: slug,
         messages: [{ role: MessageRole.USER, content: prompt.trim() }],
         workflow_params: value.params,
-        selected_presets: value.presets,
+        selectedPresets: value.presets,
         builder_test: true,
       });
       onStarted(started.id, { prompt: prompt.trim(), value });
@@ -179,7 +180,7 @@ export function BuilderTestRunPanel({
                 <Link
                   to="/workflows/runs/$runId"
                   params={{ runId: testChatId }}
-                  className="text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   Watch full run
                 </Link>
@@ -187,7 +188,7 @@ export function BuilderTestRunPanel({
                   <button
                     type="button"
                     onClick={onClear}
-                    className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                    className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     Clear from canvas
                   </button>

@@ -25,6 +25,40 @@ func AppendUserUpdate(ctx context.Context, db orm.Context, update *core.UserUpda
 	if err != nil {
 		return fmt.Errorf("failed to get next user sequence number: %w", err)
 	}
+	return insertUserUpdateAt(ctx, db, update, seq, callerChoseID)
+}
+
+// AppendUserUpdateBuiltUnderLock allocates userID's next update sequence
+// FIRST, then asks build for the update and writes it under that number, in
+// the transaction ctx carries. Allocating takes the user's counter row lock
+// until commit, so whatever build reads it reads after every earlier holder
+// of the lock committed: a higher sequence number never carries an older
+// reading. Use it for an update that reports current state (activity), where
+// AppendUserUpdate's read-then-allocate order could let a stale reading land
+// at the newer number. A build error is returned as is, and the caller's
+// transaction must roll back with it: committing the allocation alone would
+// leave a gap in the user's sequence.
+func AppendUserUpdateBuiltUnderLock(ctx context.Context, db orm.Context, userID string, build func(ctx context.Context) (*core.UserUpdate, error)) (*core.UserUpdate, error) {
+	seq, err := AllocateUpdateSequence(ctx, db, UpdateStreamUser, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get next user sequence number: %w", err)
+	}
+	update, err := build(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if update == nil {
+		return nil, fmt.Errorf("user update for %s: build returned none", userID)
+	}
+	update.UserID = userID
+	if err := insertUserUpdateAt(ctx, db, update, seq, false); err != nil {
+		return nil, err
+	}
+	return update, nil
+}
+
+// insertUserUpdateAt writes update as the user's update number seq.
+func insertUserUpdateAt(ctx context.Context, db orm.Context, update *core.UserUpdate, seq int64, callerChoseID bool) error {
 	update.SequenceNumber = seq
 	if !callerChoseID {
 		update.ID = fmt.Sprintf("%s-%d", update.UserID, seq)

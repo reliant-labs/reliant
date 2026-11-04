@@ -10,10 +10,12 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { useChatNavigationStore } from "../chatNavigationStore";
 import { useProjectStore } from "../projectStore";
+import { useWorkspaceStateStore } from "../workspaceStateStore";
 import { useWorktreeStore } from "../worktreeStore";
 import { useActivityStore, ChatActivity } from "../activityStore";
 import { chatKeys } from "../../hooks/chat-queries";
 import { queryClient } from "../../lib/query-client";
+import { setWorktreesForTest } from "../../test/worktreeCache";
 
 const selectChatMock = vi.fn();
 const chatStoreGetStateMock = vi.hoisted(() => vi.fn());
@@ -51,12 +53,15 @@ function setActive(chatId: string | null) {
   chatStoreGetStateMock.mockReturnValue({
     activeChatId: chatId,
     selectChat: selectChatMock,
+    persistActiveChat: vi.fn(),
     clearCurrentChat: vi.fn(),
   });
 }
 
 describe("navigateToNextAttention", () => {
   beforeEach(() => {
+    // Navigation walks the sidebar's scope; these seed one project's list.
+    useWorkspaceStateStore.setState({ projectFilterId: "project-1" });
     queryClient.clear();
     selectChatMock.mockReset();
     chatStoreGetStateMock.mockReset();
@@ -76,15 +81,14 @@ describe("navigateToNextAttention", () => {
         name: "Project",
         path: "/tmp/project",
         is_git_repo: true,
-        worktree_count: 1,
+        is_forge: false,
         last_active: TIMESTAMP,
         created_at: TIMESTAMP,
         updated_at: TIMESTAMP,
       },
     });
 
-    useWorktreeStore.setState((state) => ({
-      ...state,
+    setWorktreesForTest({
       worktrees: [
         {
           id: "wt-1",
@@ -101,8 +105,8 @@ describe("navigateToNextAttention", () => {
         },
       ],
       currentWorktree: null,
-      switchWorktreeContext: vi.fn().mockResolvedValue(undefined),
-    }));
+    });
+    useWorktreeStore.setState({ switchWorktreeContext: vi.fn().mockResolvedValue(undefined) });
   });
 
   afterEach(() => {
@@ -126,6 +130,7 @@ describe("navigateToNextAttention", () => {
     expect(found).toBe(true);
     expect(selectChatMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-3" }),
+      { deferPersist: true },
     );
   });
 
@@ -139,6 +144,7 @@ describe("navigateToNextAttention", () => {
     await useChatNavigationStore.getState().navigateToNextAttention();
     expect(selectChatMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-2" }),
+      { deferPersist: true },
     );
 
     selectChatMock.mockReset();
@@ -153,6 +159,7 @@ describe("navigateToNextAttention", () => {
     await useChatNavigationStore.getState().navigateToNextAttention();
     expect(selectChatMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-2" }),
+      { deferPersist: true },
     );
   });
 
@@ -169,6 +176,7 @@ describe("navigateToNextAttention", () => {
 
     expect(selectChatMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-2" }),
+      { deferPersist: true },
     );
   });
 
@@ -184,6 +192,7 @@ describe("navigateToNextAttention", () => {
 
     expect(selectChatMock).toHaveBeenCalledWith(
       expect.objectContaining({ id: "chat-1" }),
+      { deferPersist: true },
     );
   });
 

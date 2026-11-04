@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1813,7 +1814,7 @@ var File_reliant_v1_connection_proto protoreflect.FileDescriptor
 const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/connection.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\x9b\x05\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x9b\x05\n" +
 	"\n" +
 	"Connection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
@@ -1967,18 +1968,30 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\x14ApiKeyConnectionKind\x12'\n" +
 	"#API_KEY_CONNECTION_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fAPI_KEY_CONNECTION_KIND_API_KEY\x10\x01\x12!\n" +
-	"\x1dAPI_KEY_CONNECTION_KIND_BASIC\x10\x022\xbb\b\n" +
+	"\x1dAPI_KEY_CONNECTION_KIND_BASIC\x10\x022\xf0\f\n" +
 	"\x11ConnectionService\x12_\n" +
 	"\x10ListIntegrations\x12#.reliant.v1.ListIntegrationsRequest\x1a$.reliant.v1.ListIntegrationsResponse\"\x00\x12\\\n" +
 	"\x0fListConnections\x12\".reliant.v1.ListConnectionsRequest\x1a#.reliant.v1.ListConnectionsResponse\"\x00\x12V\n" +
-	"\rGetConnection\x12 .reliant.v1.GetConnectionRequest\x1a!.reliant.v1.GetConnectionResponse\"\x00\x12q\n" +
-	"\x16CreateApiKeyConnection\x12).reliant.v1.CreateApiKeyConnectionRequest\x1a*.reliant.v1.CreateApiKeyConnectionResponse\"\x00\x12M\n" +
+	"\rGetConnection\x12 .reliant.v1.GetConnectionRequest\x1a!.reliant.v1.GetConnectionResponse\"\x00\x12\xcf\x01\n" +
+	"\x16CreateApiKeyConnection\x12).reliant.v1.CreateApiKeyConnectionRequest\x1a*.reliant.v1.CreateApiKeyConnectionResponse\"^\xa2\xbb\x18Z:X\n" +
+	"\x06create\x12>\n" +
 	"\n" +
-	"StartOAuth\x12\x1d.reliant.v1.StartOAuthRequest\x1a\x1e.reliant.v1.StartOAuthResponse\"\x00\x12V\n" +
-	"\rCompleteOAuth\x12 .reliant.v1.CompleteOAuthRequest\x1a!.reliant.v1.CompleteOAuthResponse\"\x00\x12Y\n" +
-	"\x0eTestConnection\x12!.reliant.v1.TestConnectionRequest\x1a\".reliant.v1.TestConnectionResponse\"\x00\x12_\n" +
-	"\x10RenameConnection\x12#.reliant.v1.RenameConnectionRequest\x1a$.reliant.v1.RenameConnectionResponse\"\x00\x12k\n" +
-	"\x14SetDefaultConnection\x12'.reliant.v1.SetDefaultConnectionRequest\x1a(.reliant.v1.SetDefaultConnectionResponse\"\x00\x12_\n" +
+	"connection\x12\x16response.connection.id\x1a\x18response.connection.name*\x0eintegration_id\x12\xac\x01\n" +
+	"\n" +
+	"StartOAuth\x12\x1d.reliant.v1.StartOAuthRequest\x1a\x1e.reliant.v1.StartOAuthResponse\"_\xa2\xbb\x18[:Y:WOAuth handshake in flight: nothing is stored until CompleteOAuth records the connection\x12\xc9\x01\n" +
+	"\rCompleteOAuth\x12 .reliant.v1.CompleteOAuthRequest\x1a!.reliant.v1.CompleteOAuthResponse\"s\xa2\xbb\x18o:m\n" +
+	"\aconnect\x12>\n" +
+	"\n" +
+	"connection\x12\x16response.connection.id\x1a\x18response.connection.name*\"response.connection.integration_id\x12\xcf\x01\n" +
+	"\x0eTestConnection\x12!.reliant.v1.TestConnectionRequest\x1a\".reliant.v1.TestConnectionResponse\"v\xa2\xbb\x18r:p:nprobes the live credential; refreshing the account label it detects is bookkeeping, not a change a person made\x12\x85\x01\n" +
+	"\x10RenameConnection\x12#.reliant.v1.RenameConnectionRequest\x1a$.reliant.v1.RenameConnectionResponse\"&\xa2\xbb\x18\": \n" +
+	"\x06rename\x12\x16\n" +
+	"\n" +
+	"connection\x12\x02id\x1a\x04name\x12\xce\x01\n" +
+	"\x14SetDefaultConnection\x12'.reliant.v1.SetDefaultConnectionRequest\x1a(.reliant.v1.SetDefaultConnectionResponse\"c\xa2\xbb\x18_:]\n" +
+	"\vset_default\x12*\n" +
+	"\n" +
+	"connection\x12\x02id\x1a\x18response.connection.name*\"response.connection.integration_id\x12_\n" +
 	"\x10DeleteConnection\x12#.reliant.v1.DeleteConnectionRequest\x1a$.reliant.v1.DeleteConnectionResponse\"\x00\x12k\n" +
 	"\x14ListConnectionEvents\x12'.reliant.v1.ListConnectionEventsRequest\x1a(.reliant.v1.ListConnectionEventsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 

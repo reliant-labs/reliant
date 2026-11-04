@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/osutil"
 )
 
@@ -103,6 +104,7 @@ func probeSays(answers ...osutil.FileHoldState) holderProbe {
 // by a process that no longer exists must be cleared, and the next write must
 // succeed. Without recovery this repository is permanently unwritable.
 func TestEnsureIndexWritable_RecoversStrandedLock(t *testing.T) {
+	testkit.Slow(t, "runs real git commands against a repository on disk")
 	repo := initRepo(t)
 	lock := lockPath(t, repo)
 
@@ -155,7 +157,7 @@ func TestEnsureIndexWritable_RecoversStrandedLock(t *testing.T) {
 // the lock exactly as Held does.
 func TestEnsureIndexWritable_LeavesLiveLockAlone(t *testing.T) {
 	if testing.Short() {
-		t.Skip("runs real git plus the real lsof holder probe (up to its 10s timeout on a loaded host); runs in make test")
+		t.Skip("runs real git plus the real lsof holder probe (up to its 10s timeout on a loaded host); runs in task test")
 	}
 	repo := initRepo(t)
 
@@ -316,6 +318,7 @@ func TestClearStrandedIndexLock_HonoursGuards(t *testing.T) {
 // this wrong makes recovery silently inert in the setup this product creates
 // most.
 func TestResolveGitDir_LinkedWorktree(t *testing.T) {
+	testkit.Slow(t, "runs real git commands against a repository on disk")
 	main := initRepo(t)
 	linked := filepath.Join(t.TempDir(), "linked")
 
@@ -339,6 +342,7 @@ func TestResolveGitDir_LinkedWorktree(t *testing.T) {
 }
 
 func TestResolveGitDir_FromSubdirectory(t *testing.T) {
+	testkit.Slow(t, "runs real git commands against a repository on disk")
 	repo := initRepo(t)
 	sub := filepath.Join(repo, "a", "b")
 	if err := os.MkdirAll(sub, 0o755); err != nil {

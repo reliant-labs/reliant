@@ -22,7 +22,10 @@
  */
 
 import { renderHook, waitFor } from "@testing-library/react";
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "../../../lib/connect";
+import { queryClient } from "../../../lib/query-client";
+import { mockTransport } from "../../../lib/test-utils";
 import { useAttachmentBlobUrls } from "../useAttachmentBlobUrls";
 
 // jsdom implements neither of these, and the hook's whole job is creating and
@@ -35,14 +38,10 @@ beforeAll(() => {
   URL.revokeObjectURL = vi.fn();
 });
 
-const getAttachmentAsBlob = vi.fn(
-  async () => new Blob(["png-bytes"], { type: "image/png" }),
-);
-
-vi.mock("../../../api/attachment-grpc", () => ({
-  attachmentGrpc: {
-    getAttachmentAsBlob: (id: string) => getAttachmentAsBlob(id),
-  },
+// Answered at the transport, so the hook's real GetAttachment path runs.
+const getAttachmentAsBlob = vi.fn((attachmentId: string) => ({
+  attachment: { id: attachmentId, mimeType: "image/png" },
+  content: new TextEncoder().encode("png-bytes"),
 }));
 
 /** Mirrors the call sites: a fresh array of equal attachments every render. */
@@ -54,6 +53,17 @@ const freshAttachments = () => [
 describe("useAttachmentBlobUrls with an unstable attachments array", () => {
   beforeEach(() => {
     getAttachmentAsBlob.mockClear();
+    setTransport(
+      mockTransport({
+        "AttachmentService.GetAttachment": (req) =>
+          getAttachmentAsBlob((req as { attachmentId: string }).attachmentId),
+      }),
+    );
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+    setTransport(null);
   });
 
   it("fetches each attachment once across many re-renders", async () => {

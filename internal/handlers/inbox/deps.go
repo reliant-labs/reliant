@@ -17,6 +17,7 @@ import (
 // includes worktreesweep.StorageStore because the storage view and the
 // clean-up read through the same store.
 type Repository interface {
+	ListWorktreeRecoveries(context.Context, string, string) ([]*core.WorktreeRecovery, error)
 	worktreesweep.StorageStore
 	// WorkflowResolver reads an activation's workflow, to tell which
 	// automations still need setting up.
@@ -36,6 +37,9 @@ type Repository interface {
 
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
+	// GetChat names the agents whose processes fill a machine near its
+	// process limit.
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
 // Sweeper starts a storage clean-up on one of the caller's machines.

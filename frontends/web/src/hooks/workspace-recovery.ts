@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api/client";
-import { worktreeGrpc } from "../api/worktree-grpc";
+import { recreateWorktree } from "./worktree-actions";
 import { chatKeys } from "./chat-queries";
+import * as chatActions from "./chat-actions";
 
 /**
  * Rebuild a chat's workspace directory from its branch when it has gone
@@ -10,7 +10,7 @@ import { chatKeys } from "./chat-queries";
  */
 export function useRecreateWorkspace() {
   return useMutation({
-    mutationFn: (worktreeId: string) => worktreeGrpc.recreate(worktreeId),
+    mutationFn: (worktreeId: string) => recreateWorktree(worktreeId),
   });
 }
 
@@ -24,7 +24,7 @@ export function useMoveChatToMainCheckout() {
     // "" asks the server for the project's main worktree when the caller does
     // not know its id (ResolveChatWorktreeID).
     mutationFn: ({ chatId, mainWorktreeId }: { chatId: string; mainWorktreeId?: string }) =>
-      api.chatsV2.update(chatId, { worktree_id: mainWorktreeId ?? "" }),
+      chatActions.updateChat(chatId, { worktree_id: mainWorktreeId ?? "" }),
     onSuccess: (_data, { chatId }) => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
       queryClient.invalidateQueries({ queryKey: chatKeys.detail(chatId) });

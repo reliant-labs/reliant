@@ -207,7 +207,7 @@ export function SetSecretModal({
          * the explanation.
          *
          * An INSET on the modal surface, in the ordinary quiet register:
-         * bg-background + border-border/60 per the elevation rules. NOT
+         * bg-surface-sunken + border-border/60 per the elevation rules. NOT
          * destructive styling — nothing has failed, and nothing is broken. The
          * environment simply has not been built yet, which is the normal state
          * of a new environment.
@@ -215,13 +215,13 @@ export function SetSecretModal({
         {disabled && (
           <div
             data-testid="set-secret-disabled"
-            className="flex gap-2.5 rounded-md border border-border/60 bg-background px-3 py-2.5"
+            className="flex gap-2.5 rounded-md border border-border/60 bg-surface-sunken px-3 py-2.5"
           >
             <AlertTriangle
-              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-muted"
               aria-hidden="true"
             />
-            <p className="text-xs leading-relaxed text-muted-foreground">{disabledReason}</p>
+            <p className="text-xs leading-relaxed text-ink-muted">{disabledReason}</p>
           </div>
         )}
 
@@ -230,14 +230,14 @@ export function SetSecretModal({
          * into dev (or the reverse) is the expensive mistake this form can
          * cause, and the only defence is saying which one is selected.
          */}
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-ink-muted">
           Writing to{" "}
-          <span className="font-mono text-foreground">{env}</span>
+          <span className="font-mono text-ink">{env}</span>
           {isUpdate ? (
             <>
               {" "}
               — this creates version{" "}
-              <span className="font-mono text-foreground">{existing.currentVersion + 1}</span> and
+              <span className="font-mono text-ink">{existing.currentVersion + 1}</span> and
               leaves the previous versions in history.
             </>
           ) : (
@@ -246,7 +246,7 @@ export function SetSecretModal({
         </p>
 
         <div className="space-y-2">
-          <label htmlFor={nameId} className="block text-sm font-medium text-foreground">
+          <label htmlFor={nameId} className="block text-sm font-medium text-ink">
             Name
           </label>
           <input
@@ -262,30 +262,30 @@ export function SetSecretModal({
             aria-describedby={nameError ? `${nameId}-error` : undefined}
             /* Mono: this is an identifier, and it becomes an env var name. */
             className={cn(
-              "w-full rounded-md border bg-background px-3 py-2 font-mono text-sm text-foreground",
-              "placeholder:text-muted-foreground/60",
-              "focus:outline-none focus:ring-2 focus:ring-primary/40",
-              "disabled:cursor-not-allowed disabled:text-muted-foreground",
-              nameError ? "border-destructive/60" : "border-border"
+              "w-full rounded-md border bg-surface-sunken px-3 py-2 font-mono text-sm text-ink",
+              "placeholder:text-ink-subtle",
+              "focus:outline-none focus:ring-2 focus:ring-ring",
+              "disabled:cursor-not-allowed disabled:text-ink-muted",
+              nameError ? "border-danger-border" : "border-border"
             )}
           />
           {isUpdate ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-ink-muted">
               A secret&apos;s name is its identity in the store and cannot be changed.
             </p>
           ) : nameError && touched ? (
-            <p id={`${nameId}-error`} className="text-xs text-destructive-ink">
+            <p id={`${nameId}-error`} className="text-xs text-danger-ink">
               {nameError}
             </p>
           ) : (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-ink-muted">
               This is the name a workload references, and the environment variable it becomes.
             </p>
           )}
         </div>
 
         <div className="space-y-2">
-          <label htmlFor={valueId} className="block text-sm font-medium text-foreground">
+          <label htmlFor={valueId} className="block text-sm font-medium text-ink">
             Value
           </label>
           <input
@@ -300,16 +300,16 @@ export function SetSecretModal({
             spellCheck={false}
             aria-describedby={`${valueId}-writeonly`}
             className={cn(
-              "w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-sm text-foreground",
-              "focus:outline-none focus:ring-2 focus:ring-primary/40",
-              "disabled:cursor-not-allowed disabled:text-muted-foreground"
+              "w-full rounded-md border border-border bg-surface-sunken px-3 py-2 font-mono text-sm text-ink",
+              "focus:outline-none focus:ring-2 focus:ring-ring",
+              "disabled:cursor-not-allowed disabled:text-ink-muted"
             )}
           />
 
           {/*
            * The write-only explanation. An INSET on the modal surface —
-           * bg-background + border-border/60 per the elevation rules, never
-           * bg-muted, which inverts direction between light and dark.
+           * bg-surface-sunken + border-border/60 per the elevation rules, never
+           * bg-surface-sunken, which inverts direction between light and dark.
            *
            * One calm paragraph attached to the field it describes, rather than
            * a banner at the top of the page.
@@ -317,14 +317,14 @@ export function SetSecretModal({
           <div
             id={`${valueId}-writeonly`}
             data-testid="write-only-notice"
-            className="flex gap-2.5 rounded-md border border-border/60 bg-background px-3 py-2.5"
+            className="flex gap-2.5 rounded-md border border-border/60 bg-surface-sunken px-3 py-2.5"
           >
             <EyeOff
-              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground"
+              className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-muted"
               aria-hidden="true"
             />
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              <span className="text-foreground">You will not be able to read this back.</span> The
+            <p className="text-xs leading-relaxed text-ink-muted">
+              <span className="text-ink">You will not be able to read this back.</span> The
               store hands out values only to the workloads that declare them at deploy time — the
               credential reliant holds can write a version and list its history, but the store
               refuses it read access to the contents. There is no reveal to enable. Keep your own
@@ -334,8 +334,8 @@ export function SetSecretModal({
         </div>
 
         {isProtected && !error && (
-          <p className="text-xs text-muted-foreground" data-testid="set-secret-protected">
-            <span className="font-mono text-foreground">{env}</span> is protected: saving asks for a
+          <p className="text-xs text-ink-muted" data-testid="set-secret-protected">
+            <span className="font-mono text-ink">{env}</span> is protected: saving asks for a
             one-time code from your email unless you confirmed in the last 15 minutes.
           </p>
         )}
@@ -346,7 +346,7 @@ export function SetSecretModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
+            className="rounded-md px-3 py-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
           >
             Cancel
           </button>
@@ -388,10 +388,10 @@ function SubmitError({ error, isUpdate }: { error: Error; isUpdate: boolean }) {
       <div
         role="status"
         data-testid="set-secret-step-up-needed"
-        className="flex gap-2.5 rounded-md border border-border/60 bg-background px-3 py-2.5"
+        className="flex gap-2.5 rounded-md border border-border/60 bg-surface-sunken px-3 py-2.5"
       >
-        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <p className="text-xs leading-relaxed text-muted-foreground">
+        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
+        <p className="text-xs leading-relaxed text-ink-muted">
           Nothing was saved: this environment is protected, and the change was not confirmed with a
           code. Save again to get one.
         </p>
@@ -410,10 +410,10 @@ function SubmitError({ error, isUpdate }: { error: Error; isUpdate: boolean }) {
     <div
       role="alert"
       data-testid="set-secret-error"
-      className="flex gap-2.5 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2.5"
+      className="flex gap-2.5 rounded-md border border-danger-border bg-danger-surface px-3 py-2.5"
     >
-      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive-ink" aria-hidden="true" />
-      <p className="text-xs leading-relaxed text-destructive-ink">
+      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-danger-ink" aria-hidden="true" />
+      <p className="text-xs leading-relaxed text-danger-ink">
         {isCas
           ? isUpdate
             ? "Someone else wrote a new version of this secret while this form was open, so nothing was saved. Close this, re-read the current version, and try again."

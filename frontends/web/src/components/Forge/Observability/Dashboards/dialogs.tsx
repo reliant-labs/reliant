@@ -6,7 +6,7 @@
  * and promote to code.
  *
  * Each one that writes says which environments the result is about, in its
- * confirm button (decision D1: every mutating action names its environment):
+ * confirm button (every mutating action names its environment):
  * a workspace dashboard is scoped to one environment or to all of them, and
  * the console's current scope is the default.
  */
@@ -60,7 +60,7 @@ function Field({ label, hint, children, htmlFor }: { label: string; hint?: React
 }
 
 const INPUT =
-  "h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function EnvChoice({ env, value, onChange }: { env: string; value: "scope" | "all"; onChange: (value: "scope" | "all") => void }) {
   const name = useId();
@@ -254,7 +254,7 @@ export function NewDashboardDialog({
       title={mode === "blank" ? "New dashboard" : "Import a dashboard"}
       description={
         mode === "blank"
-          ? "A workspace dashboard, saved in the console and versioned. It starts with one panel — requests per service — for you to change."
+          ? "A workspace dashboard, saved in Reliant and versioned. It starts with one panel — requests per service — for you to change."
           : "A forge dashboard file (deploy/observability/dashboards/<name>.json). It is saved as a workspace dashboard; the file itself is not changed."
       }
       footer={

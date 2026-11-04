@@ -156,3 +156,32 @@ func forgePinFromGoMod(t *testing.T) string {
 		dir = parent
 	}
 }
+
+func TestCommitTimeUnix(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		stamp string
+		dirty string
+		want  int64
+	}{
+		{"stamped", "1792805271", DirtyFalse, 1792805271},
+		{"stamped, vcs state unknown (release builds pass -buildvcs=false)", "1792805271", DirtyUnknown, 1792805271},
+		{"unstamped", "unknown", DirtyUnknown, 0},
+		{"zero is unordered", "0", DirtyFalse, 0},
+		{"malformed", "yesterday", DirtyFalse, 0},
+		{"negative", "-5", DirtyFalse, 0},
+		{"dirty tree is unordered even if stamped", "1792805271", DirtyTrue, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			oldCT, oldD := CommitTime, dirty
+			t.Cleanup(func() { CommitTime, dirty = oldCT, oldD })
+			CommitTime, dirty = tc.stamp, tc.dirty
+			if got := CommitTimeUnix(); got != tc.want {
+				t.Errorf("CommitTimeUnix() = %d, want %d", got, tc.want)
+			}
+			if got := Get().CommitTimeUnix; got != tc.want {
+				t.Errorf("Get().CommitTimeUnix = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}

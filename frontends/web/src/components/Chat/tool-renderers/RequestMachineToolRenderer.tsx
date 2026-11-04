@@ -14,7 +14,7 @@
 import { memo, useState } from "react";
 import { CheckCircle, Monitor } from "lucide-react";
 import { useChat } from "@/hooks/chat-queries";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { ConnectMachineDialog } from "../ConnectMachineDialog";
 import type { ToolContentProps } from "./types";
 

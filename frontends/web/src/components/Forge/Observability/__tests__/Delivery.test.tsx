@@ -2,7 +2,7 @@
 
 /**
  * Release markers and the before/after comparison (the DORA figures moved to
- * the console's Releases page, D9), against the fixture ledger
+ * the console's Releases page), against the fixture ledger
  * (fixtureDelivery.ts): prod got v1.8.3 forty
  * minutes ago, staging three hours ago; prod rolled v1.8.1 back to v1.8.0
  * three hours after promoting it nine days ago; nothing records a commit time.
