@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -112,9 +113,30 @@ func startCANProbeServer(t *testing.T) *canProbeServer {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	server, err := testsuite.StartDevServer(ctx, testsuite.DevServerOptions{LogLevel: "never"})
+	if devServerDownloadFailed(err) {
+		// The host, not the code: the SDK downloads the Temporal CLI from
+		// temporal.download on a cold machine, and a reset connection there
+		// is no verdict on continue-as-new (reliant#2105).
+		t.Skipf("the Temporal CLI download (temporal.download) failed, so no dev server: %v", err)
+	}
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = server.Stop() })
 	return &canProbeServer{t: t, client: server.Client()}
+}
+
+// devServerDownloadFailed reports whether StartDevServer failed on the
+// network: the SDK returns the download's own net error unwrapped.
+func devServerDownloadFailed(err error) bool {
+	var netErr net.Error
+	return errors.As(err, &netErr)
+}
+
+func TestDevServerDownloadFailedIsOnlyTheNetwork(t *testing.T) {
+	reset := &net.OpError{Op: "read", Net: "tcp", Err: errors.New("connection reset by peer")}
+	require.True(t, devServerDownloadFailed(reset))
+	require.True(t, devServerDownloadFailed(fmt.Errorf("download: %w", reset)))
+	require.False(t, devServerDownloadFailed(nil))
+	require.False(t, devServerDownloadFailed(errors.New("dev server exited: exit status 1")))
 }
 
 // worker runs the probe registered as pressure's version of the code. A
