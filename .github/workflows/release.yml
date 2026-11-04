@@ -69,7 +69,10 @@ jobs:
       # soon as its release gate passes, so the ~45m Electron build overlaps the
       # control-plane gate, the build and the deploy instead of starting at finalize.
       # A prebuild publishes nothing: it must be a dry run. Its marker artifact
-      # names the version and commit it built; the tag push finds it by both.
+      # (written after the renderer build, below) names the version, the commit
+      # and the renderer's identity; the tag push reuses it only when all three
+      # match. The decisions live in scripts/release-prebuild.sh, proven by
+      # scripts/test-release-prebuild.sh.
       - name: Prebuild preconditions
         if: inputs.prebuild_version != ''
         env:
@@ -81,15 +84,6 @@ jobs:
           [ "$DRY" = true ] || { echo "::error::a prebuild publishes nothing: dispatch it with dry_run=true"; exit 1; }
           want="$(jq -r .version electron/package.json)"
           [ "v$want" = "$V" ] || { echo "::error::electron/package.json at this commit is v$want, not $V"; exit 1; }
-          mkdir -p prebuild && printf '{"version":"%s","sha":"%s"}\n' "$V" "$GITHUB_SHA" > prebuild/prebuild.json
-
-      - name: Upload the prebuild marker
-        if: inputs.prebuild_version != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: prebuild-${{ inputs.prebuild_version }}
-          path: prebuild/prebuild.json
-          retention-days: 7
 
       - name: Find a prebuild of this tag
         id: prebuilt
@@ -98,16 +92,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          set -uo pipefail
-          for id in $(gh run list -R "$GITHUB_REPOSITORY" --workflow release.yml --event workflow_dispatch \
-              --commit "$GITHUB_SHA" --status success --limit 20 --json databaseId --jq '.[].databaseId' 2>/dev/null); do
-            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts?per_page=100" \
-                --jq '.artifacts[] | select(.expired | not) | .name' 2>/dev/null | grep -qx "prebuild-$TAG"; then
-              echo "Publishing prebuild run $id of $TAG ($GITHUB_SHA) instead of building"
-              echo "run=$id" >> "$GITHUB_OUTPUT"; exit 0
-            fi
-          done
-          echo "No prebuild of $TAG on $GITHUB_SHA: building"
+          set -euo pipefail
+          run="$(bash scripts/release-prebuild.sh find "$GITHUB_REPOSITORY" "$TAG" "$GITHUB_SHA")"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
 
       - name: Record job start
         id: timing-start
@@ -275,7 +262,37 @@ jobs:
         #
         # Never set on `npm ci`/`npm install`: npm reads the same variable and
         # skips devDependencies, removing vite and typescript themselves.
+        #
+        # RELEASE_VERSION names the release to the renderer's identity resolver
+        # (vite-plugin-version-json.ts -> scripts/release-identity.sh --tag). A
+        # prebuild runs on the RC commit before its tag exists, so without it the
+        # renderer would embed a dev identity and ship it inside the release.
+        env:
+          RELEASE_VERSION: ${{ startsWith(steps.version.outputs.version, 'v') && steps.version.outputs.version || '' }}
         run: NODE_ENV=production npm run build
+
+      # A release's renderer reports exactly the release (version.json); for a
+      # prebuild the marker records it, and the tag push reuses only a match.
+      - name: Verify the renderer's release identity
+        if: startsWith(steps.version.outputs.version, 'v')
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          got="$(jq -r .version frontends/web/dist/version.json)"
+          [ "$got" = "${VERSION#v}" ] || { echo "::error::the renderer reports version '$got', not ${VERSION#v}"; exit 1; }
+
+      - name: Write the prebuild marker
+        if: inputs.prebuild_version != ''
+        run: bash scripts/release-prebuild.sh marker "${{ inputs.prebuild_version }}" "$GITHUB_SHA" frontends/web/dist prebuild/prebuild.json
+
+      - name: Upload the prebuild marker
+        if: inputs.prebuild_version != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: prebuild-${{ inputs.prebuild_version }}
+          path: prebuild/prebuild.json
+          retention-days: 7
 
       # ── The artifact gate. Asserts on the BUILT BUNDLE, not the source. ────
       #
@@ -734,23 +751,17 @@ jobs:
       - name: Upload the prebuild to R2
         if: needs.prepare.outputs.prebuilt_run != ''
         shell: bash
-        working-directory: electron/dist
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          files=(*.dmg *.zip *.blockmap)
-          feeds=(*-mac.yml)
-          [ ${#files[@]} -gt 0 ] && [ ${#feeds[@]} -gt 0 ] || { echo "::error::the prebuild has no artifacts or no update feed"; exit 1; }
-          for f in "${files[@]}" "${feeds[@]}"; do
-            echo "publish $f"
-            [ "$DRY_RUN" = true ] || aws s3 cp "$f" "s3://downloads/$f" --endpoint-url "$R2_ENDPOINT" --acl public-read --only-show-errors
-          done
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        # Refuses, uploading nothing, unless every update feed mac clients poll is
+        # present and names VERSION; feeds go last.
+        run: bash scripts/release-prebuild.sh publish mac "$CHANNEL" "$VERSION" electron/dist
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
@@ -934,23 +945,17 @@ jobs:
       - name: Upload the prebuild to R2
         if: needs.prepare.outputs.prebuilt_run != ''
         shell: bash
-        working-directory: electron/dist
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          files=(*.AppImage *.deb *.blockmap)
-          feeds=(*-linux.yml)
-          [ ${#files[@]} -gt 0 ] && [ ${#feeds[@]} -gt 0 ] || { echo "::error::the prebuild has no artifacts or no update feed"; exit 1; }
-          for f in "${files[@]}" "${feeds[@]}"; do
-            echo "publish $f"
-            [ "$DRY_RUN" = true ] || aws s3 cp "$f" "s3://downloads/$f" --endpoint-url "$R2_ENDPOINT" --acl public-read --only-show-errors
-          done
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        # Refuses, uploading nothing, unless every update feed linux clients poll is
+        # present and names VERSION; feeds go last.
+        run: bash scripts/release-prebuild.sh publish linux "$CHANNEL" "$VERSION" electron/dist
 
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
@@ -960,6 +965,7 @@ jobs:
             electron/dist/*.AppImage
             electron/dist/*.deb
             electron/dist/*-linux.yml
+            electron/dist/*-linux-arm64.yml
             electron/dist/*.blockmap
           retention-days: 90
 
@@ -1145,31 +1151,28 @@ jobs:
       - name: Upload the prebuild to R2
         if: needs.prepare.outputs.prebuilt_run != ''
         shell: bash
-        working-directory: electron/dist
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: auto
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
-        run: |
-          set -euo pipefail
-          shopt -s nullglob
-          files=(*.exe *.blockmap)
-          feeds=(*-win.yml)
-          [ ${#files[@]} -gt 0 ] && [ ${#feeds[@]} -gt 0 ] || { echo "::error::the prebuild has no artifacts or no update feed"; exit 1; }
-          for f in "${files[@]}" "${feeds[@]}"; do
-            echo "publish $f"
-            [ "$DRY_RUN" = true ] || aws s3 cp "$f" "s3://downloads/$f" --endpoint-url "$R2_ENDPOINT" --acl public-read --only-show-errors
-          done
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        # Refuses, uploading nothing, unless every update feed win clients poll is
+        # present and names VERSION; feeds go last.
+        run: bash scripts/release-prebuild.sh publish win "$CHANNEL" "$VERSION" electron/dist
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
+          # The Windows update feed is <channel>.yml (latest.yml / alpha.yml), not
+          # *-win.yml: publishing a prebuild needs it (scripts/release-prebuild.sh).
           path: |
             electron/dist/*.exe
-            electron/dist/*-win.yml
+            electron/dist/latest.yml
+            electron/dist/alpha.yml
             electron/dist/*.blockmap
           retention-days: 90
 
