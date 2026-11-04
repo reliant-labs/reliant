@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { beforeEach, expect, it, vi } from "vitest";
 import { MachinePlanChange } from "../MachinePlanChange";
 
@@ -97,6 +98,35 @@ it("an answer lost in transit says the change settles on its own, never to pay a
   expect(await screen.findByText(/you won't be charged twice/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Done" }));
   expect(done).toHaveBeenCalled();
+});
+
+it("a confirmed change stays reported when the refreshed quote then fails", async () => {
+  const { done } = mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Upgrade and pay $15.00" }));
+  // The confirmation invalidates the quote; the plan is now L, so the server refuses to quote it.
+  mock.preview.mockRejectedValue(Object.assign(new Error("[failed_precondition]"), { rawMessage: "You are already on this plan." }));
+  expect(await screen.findByText(/You're on L now\. \$15\.00 was charged\./)).toBeInTheDocument();
+  await waitFor(() => expect(mock.preview).toHaveBeenCalledTimes(2));
+  expect(screen.queryByText("You are already on this plan.")).not.toBeInTheDocument();
+  expect(screen.getByText(/You're on L now/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  expect(done).toHaveBeenCalled();
+});
+
+it("a transport failure after the server may have charged never claims nothing was charged, and retries the same quote", async () => {
+  mock.change.mockRejectedValueOnce(new ConnectError("fetch failed", Code.Unavailable));
+  mount();
+  fireEvent.click(await screen.findByRole("button", { name: "Upgrade and pay $15.00" }));
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent(/may or may not have gone through/);
+  expect(alert).not.toHaveTextContent(/Nothing was charged/i);
+  expect(screen.queryByRole("button", { name: /Upgrade and pay/ })).not.toBeInTheDocument();
+  // The server's quote moves on meanwhile; the retry still sends the confirmed one.
+  mock.preview.mockResolvedValue({ ...upgrade, termsSha256: "b".repeat(64), amountDueTodayCents: 1600n });
+  fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+  expect(await screen.findByText(/You're on L now\. \$15\.00 was charged\./)).toBeInTheDocument();
+  expect(mock.change).toHaveBeenCalledTimes(2);
+  expect(mock.change).toHaveBeenLastCalledWith(expect.objectContaining({ termsSha256: upgrade.termsSha256 }));
 });
 
 it("a declined payment keeps the panel open with the server's message", async () => {

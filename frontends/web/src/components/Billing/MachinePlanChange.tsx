@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 import {
   BillingService,
   type ChangeMachinePlanResponse,
@@ -80,10 +80,32 @@ const dayLabel = (seconds?: bigint) =>
 
 // The server's refusals are written for the customer (svcerr keeps the
 // message of a code it chose), so show them; anything else gets a safe line.
-function messageOf(err: unknown): string {
+function messageOf(err: unknown, fallback: string): string {
   const raw = err instanceof ConnectError ? err.rawMessage : (err as { rawMessage?: unknown } | null)?.rawMessage;
   if (typeof raw === "string" && raw) return raw;
-  return "The plan change could not be completed. Nothing was charged.";
+  return fallback;
+}
+
+// Codes that do not say whether the server acted: the request may have
+// reached it and been paid for while the answer was lost or the server failed
+// after charging. Every other code is a refusal the server chose.
+const UNKNOWN_OUTCOME_CODES = new Set([
+  Code.Unknown,
+  Code.Unavailable,
+  Code.DeadlineExceeded,
+  Code.Canceled,
+  Code.Internal,
+  Code.DataLoss,
+]);
+
+// Whether a failed confirmation is a definitive refusal (nothing changed) or
+// an unknown outcome (the change may have been made and charged). Only a
+// refusal carrying the server's own message counts as definitive.
+function isDefinitiveRefusal(err: unknown): boolean {
+  if (err instanceof ConnectError) return !UNKNOWN_OUTCOME_CODES.has(err.code) && !!err.rawMessage;
+  const e = err as { code?: unknown; rawMessage?: unknown } | null;
+  if (typeof e?.code === "number" && UNKNOWN_OUTCOME_CODES.has(e.code)) return false;
+  return typeof e?.rawMessage === "string" && !!e.rawMessage;
 }
 
 function OrgMachinePlanChange({
@@ -123,10 +145,51 @@ function OrgMachinePlanChange({
       void queryClient.invalidateQueries({ queryKey: ["machine-plan-change", orgId] });
     },
     onError: (err) => {
+      if (!isDefinitiveRefusal(err)) {
+        // The change may have been made: let the billing views catch up.
+        void queryClient.invalidateQueries({ queryKey: cloudBillingKeys.computeSubscription });
+        void queryClient.invalidateQueries({ queryKey: ["cloud-billing"] });
+        return;
+      }
       const reason = errorReason(err);
       if (reason === "quote_changed" || reason === "quote_expired") void quote.refetch();
     },
   });
+
+  // The quote the customer confirmed. A result is reported against it, never
+  // against the quote refreshed afterwards: once the plan has changed, the
+  // refreshed preview may fail or describe a different change.
+  const confirmed = change.variables;
+  if (change.data && confirmed) {
+    return <ChangeResult result={change.data} quote={confirmed} onDone={onDone} />;
+  }
+  if (change.error && confirmed && !isDefinitiveRefusal(change.error)) {
+    return (
+      <div role="alert" className="space-y-3 rounded-xl border border-border bg-card p-5">
+        <p className="text-sm text-foreground">
+          We couldn't get a confirmation of your plan change, so it may or may not have gone through. Checking
+          again sends the same confirmation; it never charges you twice.
+        </p>
+        <div className="flex gap-2">
+          <Button disabled={change.isPending} onClick={() => change.mutate(confirmed)}>
+            Check again
+          </Button>
+          {onDone && (
+            <Button variant="ghost" onClick={onDone}>
+              Done
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (change.isPending && confirmed) {
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Confirming your plan change…
+      </p>
+    );
+  }
 
   if (quote.isPending) {
     return (
@@ -138,7 +201,7 @@ function OrgMachinePlanChange({
   if (quote.error || !quote.data) {
     return (
       <div role="alert" className="space-y-3 rounded-xl border border-border bg-card p-5">
-        <p className="text-sm text-foreground">{messageOf(quote.error)}</p>
+        <p className="text-sm text-foreground">{messageOf(quote.error, "The price of this change could not be worked out. Nothing has changed.")}</p>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => void quote.refetch()}>
             Try again
@@ -151,9 +214,6 @@ function OrgMachinePlanChange({
         </div>
       </div>
     );
-  }
-  if (change.data) {
-    return <ChangeResult result={change.data} quote={quote.data} onDone={onDone} />;
   }
   const q = quote.data;
   const reason = change.error ? errorReason(change.error) : null;
@@ -168,7 +228,7 @@ function OrgMachinePlanChange({
       )}
       {change.error && (
         <div role="alert" className="space-y-1 text-sm">
-          <p className="text-foreground">{messageOf(change.error)}</p>
+          <p className="text-foreground">{messageOf(change.error, "The plan change was refused.")}</p>
           {(reason === "quote_changed" || reason === "quote_expired") && (
             <p className="text-muted-foreground">The price above has been refreshed.</p>
           )}
