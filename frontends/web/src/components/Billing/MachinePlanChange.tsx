@@ -343,7 +343,7 @@ function Blocked({ q }: { q: PreviewMachinePlanChangeResponse }) {
         </ul>
       )}
       {q.blockingMachines.length > 0 && (
-        <a className="text-sm font-medium text-primary underline-offset-4 hover:underline" href="/settings/machines">
+        <a className="text-sm font-medium text-primary-ink underline-offset-4 hover:underline" href="/settings/machines">
           Resize machines
         </a>
       )}
