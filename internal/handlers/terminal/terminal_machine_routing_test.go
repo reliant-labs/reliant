@@ -318,8 +318,10 @@ func TestTerminalWS_CreateIsBoundedAndNamesTheMachineThatDidNotAnswer(t *testing
 	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(srv.URL, "http")+"/?"+query.Encode(), nil)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close() })
-	// No read deadline of its own: the reply arrives once the handler's 50ms
-	// create bound fires, and the test binary's timeout is the hang guard.
+	// The reply arrives once the handler's 50ms create bound fires; the read
+	// deadline is only a hang guard, so a regression fails here rather than
+	// blocking the package until the suite-wide timeout.
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	var reply map[string]any
 	require.NoError(t, conn.ReadJSON(&reply))
 
