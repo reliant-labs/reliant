@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -26,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/osutil"
+	"github.com/reliant-labs/reliant/internal/stopcause"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
@@ -770,8 +772,18 @@ const daemonShutdownGrace = 10 * time.Second
 // forever is exactly what makes "signal it and assume" look acceptable in the
 // tools that drive it. Bounding the whole path is cheaper and more durable than
 // proving every step inside it terminates.
-func watchShutdownSignals(sigCh <-chan os.Signal, w io.Writer, cancel context.CancelFunc, grace time.Duration, exit func(int)) {
-	<-sigCh
+//
+// describe, when set, explains the first signal before anything shuts down
+// (stopcause): a clean exit nobody asked for is otherwise indistinguishable
+// from one somebody did, and the commands in flight — often including the one
+// that sent the signal — are gone a moment later.
+func watchShutdownSignals(sigCh <-chan os.Signal, w io.Writer, cancel context.CancelFunc, grace time.Duration, exit func(int), describe func(os.Signal) string) {
+	sig := <-sigCh
+	if describe != nil {
+		report := describe(sig)
+		fmt.Fprint(w, "\n"+report)
+		slog.Warn("tools-daemon received a stop signal", "signal", sig.String(), "report", report)
+	}
 	fmt.Fprintln(w, "\nShutting down — press Ctrl+C again to force-exit")
 	cancel()
 
@@ -881,7 +893,10 @@ To switch back to an account whose token is already stored:
 			sigCh := make(chan os.Signal, 2)
 			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 			defer signal.Stop(sigCh)
-			go watchShutdownSignals(sigCh, cmd.ErrOrStderr(), cancel, daemonShutdownGrace, os.Exit)
+			started := time.Now()
+			go watchShutdownSignals(sigCh, cmd.ErrOrStderr(), cancel, daemonShutdownGrace, os.Exit, func(sig os.Signal) string {
+				return stopcause.Capture(sig, "/proc", os.Getpid(), started, time.Now()).String()
+			})
 
 			// The instance account is the account this daemon's credential
 			// belongs to, and it has to be settled before the data directory
