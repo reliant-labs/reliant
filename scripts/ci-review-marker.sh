@@ -6,8 +6,11 @@
 # for that exact sha (`<!-- review-passed sha=<head> -->` in a review whose
 # commit_id is the head), posted by the pipeline's reviewer. pr-disarm reacts to
 # a push after the fact; this is checked by the merge itself, so a head pushed
-# after a pass cannot ride an armed auto-merge in. A later blocker on the same
-# sha wins. A pull request whose head is in a fork (or whose fork was deleted)
+# after a pass cannot ride an armed auto-merge in. The head's verdict is its
+# FIRST review-passed or review-changes marker, and it is immutable: a later
+# marker on the same sha, whichever way it went, never changes it; only a push
+# (a new sha) starts a new verdict (control-plane docs/pr-pipeline.md, "One
+# verdict per head"). A pull request whose head is in a fork (or whose fork was deleted)
 # never passes, whatever marker it carries: the repository is public, and the
 # pipeline merges only its own branches (control-plane security finding CPI-1).
 #
@@ -23,10 +26,10 @@ set -euo pipefail
 repo=${GITHUB_REPOSITORY:?}
 reviewers=${REVIEW_MARKER_REVIEWERS:-186876276,225976313}
 
-verdict() { # <pr> <sha>: the latest marker a reviewer posted for that sha, or none
+verdict() { # <pr> <sha>: the first marker a reviewer posted for that sha (its verdict), or none
   gh api --paginate "repos/$repo/pulls/$1/reviews?per_page=100" | jq -rs --arg sha "$2" --arg ids "$reviewers" '
     [.[][] | select(.commit_id == $sha and ((.user.id | tostring) as $i | $ids | split(",") | index($i)))
-     | (.body // "") | capture("<!-- (?<v>review-(passed|changes)) sha=" + $sha + " -->")? | .v] | last // "none"'
+     | (.body // "") | capture("<!-- (?<v>review-(passed|changes)) sha=" + $sha + " -->")? | .v] | first // "none"'
 }
 
 case $1 in
