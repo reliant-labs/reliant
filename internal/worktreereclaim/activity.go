@@ -30,6 +30,7 @@ const RecoveryIdlePeriod = 7 * 24 * time.Hour
 const activityPoll = 30 * time.Second
 const activityMaxGap = 2 * time.Minute
 const activityMaxEntries = 100000
+const activityMaxBytes int64 = 1 << 30
 
 // activityReconcile is the longest a quiet observation goes between full
 // inventories. Between them, a poll that finds no watcher event since the last
@@ -563,8 +564,8 @@ func (o *ActivityObserver) events(ctx context.Context, key string, w *activityWa
 	}
 }
 
-// Observe reconciles modes and file metadata (size, mtime, inode, ctime), not
-// porcelain status or directory age. It returns incomplete evidence on every
+// Observe reconciles exact content, modes and file metadata (size, mtime,
+// inode, ctime), not porcelain status or directory age. It returns incomplete evidence on every
 // uncertain inventory. All ignored files
 // participate except dependency trees (activityUnobservedDir); no secret bytes
 // are persisted. It always inventories and persists before returning, so the
@@ -714,6 +715,7 @@ func RecoveryInactive(e RecoveryActivity, now time.Time) bool {
 
 func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activityWatch) (string, error) {
 	h := sha256.New()
+	var total int64
 	count := 0
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -761,12 +763,10 @@ func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activi
 			}
 			return nil // Directory timestamps are deliberately not activity evidence.
 		}
-		// Size, mtime, inode and ctime identify every completed write without
-		// reading a byte: ctime is set by the kernel and cannot be set from
-		// userspace, so even an edit that restores bytes and mtime moves it. A
-		// write racing this stat within one timestamp tick is an inotify event,
-		// drained below, which keeps this inventory from certifying. Hashing
-		// file bytes too cost a re-read of every observed worktree each poll.
+		// File bytes stay in the digest: metadata alone is not proof of
+		// unchanged content (coarse timestamp resolution, a missed or
+		// coalesced event). The cost is paced by activityReconcile instead:
+		// a quiet observation heartbeats rather than re-reading every poll.
 		fmt.Fprintf(h, "%d:%d:%s:", info.Size(), info.ModTime().UnixNano(), activityFileMetadata(info))
 		if info.Mode()&os.ModeSymlink != 0 {
 			target, err := os.Readlink(path)
@@ -774,7 +774,42 @@ func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activi
 				return err
 			}
 			fmt.Fprintf(h, "%d:%s", len(target), target)
-		} else if !info.Mode().IsRegular() {
+		} else if info.Mode().IsRegular() {
+			total += info.Size()
+			if total > activityMaxBytes {
+				return fmt.Errorf("%w: more than %d bytes", errActivityBudget, activityMaxBytes)
+			}
+			f, err := activityOpenRegular(path)
+			if err != nil {
+				return err
+			}
+			opened, err := f.Stat()
+			if err == nil && !sameReflog(info, opened) {
+				err = errors.New("activity file changed while opening")
+			}
+			var n int64
+			if err == nil {
+				n, err = io.Copy(h, io.LimitReader(f, info.Size()+1))
+			}
+			after, statErr := f.Stat()
+			closeErr := f.Close()
+			if err != nil {
+				return err
+			}
+			if statErr != nil {
+				return statErr
+			}
+			if closeErr != nil {
+				return closeErr
+			}
+			current, err := os.Lstat(path)
+			if err != nil {
+				return err
+			}
+			if n != info.Size() || !sameReflog(info, after) || !sameReflog(info, current) {
+				return errors.New("activity file changed while reading")
+			}
+		} else {
 			return errors.New("unsupported activity file type")
 		}
 		return nil
