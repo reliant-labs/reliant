@@ -5,19 +5,19 @@ description: "The rules that check forge: markers in SQL, proto and Go, and the 
 
 Forge reads a handful of markers out of your SQL comments, proto comments and Go source: `forge:read-only`, `forge:computed`, `forge:guards`, `forge:closed-set` and so on. They change what gets generated, who may write a column and what the read-only database role may see. Two things go wrong with them, and both fail silently. A marker that is misspelled does nothing, and compiles and runs as if you had never written it. A marker that is right can still describe a column that no code ever fills.
 
-These rules catch both. Read the [overview](/forge/linting/overview) for flags and silencing, and use `forge project annotations` for the live vocabulary of markers. Rollout cells follow the [rollout page](/forge/linting/rollout).
+These rules catch both. Read the [overview](/forge/linting/overview) for flags and silencing, and use `forge project annotations` for the live vocabulary of markers.
 
 ## Misspelled and unread markers
 
 A marker is read by an exact-match recognizer. `forge:server-set` was the old spelling of `forge:read-only`; today it reads as an ordinary comment, the field stays writable by clients, and nothing warns. The four rules below put each marker location under a registry check: the same registry the scanners read from, so the lint and the generator cannot disagree about what a marker is.
 
-| Rule | Severity | Rollout | Where it looks |
-|------|----------|---------|----------------|
-| `forge-proto-markers` | warning | v0.1.40 | `//` comments in `.proto` files (`--proto-markers`) |
-| `forge-proto-options` | warning | v0.1.40 | `(forge.v1.*)` option fields (`--proto-options`) |
-| `forge-column-markers` | error | v1.0.0 -> v1.0.1 | `COMMENT ON TABLE/VIEW/COLUMN/CONSTRAINT` in migrations |
-| `forge-go-markers` | error | v1.0.0 -> v1.0.1 | `//forge:` comments in `.go` files |
-| `forge-vendored-proto-drift` | error for `forge.proto`, warning for `validate.proto` | v0.1.40 | `proto/forge/v1/forge.proto` against the copy in this forge (`--vendored-protos`) |
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forge-proto-markers` | warning | A misspelled or removed `forge:*` marker in a `.proto` comment, which compiles and silently does nothing |
+| `forge-proto-options` | warning | A `(forge.v1.*)` option the compiled descriptors do not define, which is read by nothing and enforces nothing |
+| `forge-column-markers` | error | A misspelled or unknown `forge:*` marker in a `COMMENT ON` statement, which silently opts the column into nothing |
+| `forge-go-markers` | error | A `//forge:` directive in Go that forge cannot read, such as an em-dash where it wants a colon or a mistyped name |
+| `forge-vendored-proto-drift` | error for `forge.proto`, warning for `validate.proto` | A vendored `proto/forge/v1/forge.proto` or `validate.proto` that differs from the copy in this forge |
 
 ### `forge-proto-markers`
 
@@ -73,11 +73,11 @@ The Go-source twin, and it gates. A `//forge:exclude-contract — <why>` with an
 
 ## Closed sets and credential columns
 
-| Rule | Severity | Rollout | What it catches |
-|------|----------|---------|-----------------|
-| `forge-closed-set` | error | v1.0.0 -> v1.0.1 | a SQL `CHECK` that does not list exactly the Go set it mirrors |
-| `forge-db-grants-undecided` | error | v1.0.0 -> v1.0.1 | a credential-shaped column with no `forge:secret` or `forge:readable` |
-| `forge-db-grants-unverified` | error | v1.0.0 -> v1.0.1 | the db-grants lane could not read the schema |
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forge-closed-set` | error | A SQL `CHECK` that does not list exactly the Go set it mirrors, so writes of a missing value fail or the `CHECK` admits rows Go cannot read |
+| `forge-db-grants-undecided` | error | A credential-shaped column with neither `forge:secret` nor `forge:readable`, so nobody decided whether `forge_ro` may read it |
+| `forge-db-grants-unverified` | error | A db-grants run that could not read the schema, so no column was judged |
 
 ### `forge-closed-set`
 
@@ -109,12 +109,12 @@ For a column with a wire field, `// forge:secret` on the proto field works too. 
 
 A column a client must not set can be marked `forge:read-only`, `forge:computed`, `forge:generated`, `forge:guards` or `forge:immutable`. The generated Create and Update then omit it. These rules check the other half: that something really does fill the column.
 
-| Rule | Severity | Rollout | What it catches |
-|------|----------|---------|-----------------|
-| `forgeconv-read-only-field-unwritten` | error (warning while stubs remain) | v0.1.40 | a `forge:read-only` column nothing populates |
-| `forgeconv-computed-field-unwritten` | error (warning while stubs remain) | v0.1.40 | a `forge:computed` field no Go file assigns |
-| `forgeconv-create-request-nullability` | error, or warning for a hand-written create | v0.1.40 | `optional` disagrees between an entity and its Create request |
-| `forgeconv-guarded-field-written` | warning | v0.1.40 | a scaffolded edit page that writes a `forge:guards` column |
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forgeconv-read-only-field-unwritten` | error (warning while stubs remain) | A `forge:read-only` column that nothing populates, so every row ships as the type's zero value |
+| `forgeconv-computed-field-unwritten` | error (warning while stubs remain) | A `forge:computed` field that no Go file assigns, so the promised derivation never happens |
+| `forgeconv-create-request-nullability` | error, or warning for a hand-written create | An `optional` field that disagrees between an entity and its Create request, which collapses absent and empty into one value |
+| `forgeconv-guarded-field-written` | warning | A scaffolded edit page that writes a `forge:guards` column raw, bypassing the rpc that owns its writes |
 
 ### `forgeconv-read-only-field-unwritten`
 
@@ -164,11 +164,11 @@ Severity follows who writes the create. If forge generates the op, both directio
 
 ## SQL that is correct and wrong
 
-| Rule | Severity | Rollout | What it catches |
-|------|----------|---------|-----------------|
-| `forge-time-bucket-session-tz` | warning | v0.1.40 | two-argument `date_trunc` over a `TIMESTAMPTZ` |
-| `forge-fixture-rejected` | warning | v0.1.44 | a scaffolded test fixture statement Postgres now rejects |
-| `forge-fixture-unverified` | warning | v0.1.44 | the fixture lane could not run |
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forge-time-bucket-session-tz` | warning | A two-argument `date_trunc` over a `TIMESTAMPTZ`, which buckets by the session's time zone |
+| `forge-fixture-rejected` | warning | A scaffolded test fixture statement that Postgres now rejects, such as a write to a `GENERATED` column |
+| `forge-fixture-unverified` | warning | A fixture check that could not reach a scratch Postgres, so no fixture was judged |
 
 ### `forge-time-bucket-session-tz`
 

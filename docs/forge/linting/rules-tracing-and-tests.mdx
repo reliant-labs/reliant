@@ -3,20 +3,20 @@ title: "Lint rules: tracing, tests, generated files and ownership"
 description: "The rules that keep a request in one trace, keep slow tests out of the fast tier, stop hand-edits to generated files, and check lockfiles and scaffold markers"
 ---
 
-These are the rules about how the code is built and observed rather than what it does: that logs and clients carry the request's trace, that a slow test says so, that generated files stay generated, and that the lockfile matches `package.json`. The [overview](/forge/linting/overview) covers flags and silencing. Rollout cells follow the [rollout page](/forge/linting/rollout).
+These are the rules about how the code is built and observed rather than what it does: that logs and clients carry the request's trace, that a slow test says so, that generated files stay generated, and that the lockfile matches `package.json`. The [overview](/forge/linting/overview) covers flags and silencing.
 
 ## Tracing
 
 `forge lint --tracing` keeps one request's work inside one trace. The audit that produced it found production traces that were mostly a single span. Forge ships the pieces for a whole trace (`otelconnect`, `dbtrace`, `observe.NewHTTPClient`, the generated component decorators), but the application's own code stepped around them: a hand-built `*http.Client`, a `sql.Open`, a contract constructed without its decorator, and above all a log line written without the request's context, which carried no `trace_id` and could not be joined to anything. Each of those is invisible at review time.
 
-All four rules are `v1.0.0 -> v1.0.1`, error severity, and are pure syntax passes over your own Go source. Tests, generated files and vendored trees are out of scope, and every rule leans toward silence where the code may already be right, because a false positive costs trust in the gate.
+All four rules are error severity and are pure syntax passes over your own Go source. Tests, generated files and vendored trees are out of scope, and every rule leans toward silence where the code may already be right, because a false positive costs trust in the gate.
 
-| Rule | Rollout | What it catches |
-|------|---------|-----------------|
-| `forge-tracing-log-without-ctx` | v1.0.0 -> v1.0.1 | `slog.Info(…)` or a logger call where a `context.Context` (or `*http.Request`) is in scope |
-| `forge-tracing-raw-http-client` | v1.0.0 -> v1.0.1 | `http.DefaultClient`, `http.Get`, or an `*http.Client` with no transport |
-| `forge-tracing-raw-sql-open` | v1.0.0 -> v1.0.1 | `sql.Open`, `sqlx.Connect`, `pgxpool.New` instead of `dbtrace` |
-| `forge-tracing-contract-uninstrumented` | v1.0.0 -> v1.0.1 | a contract package's `New(…)` used without its generated decorator |
+| Rule | What it catches |
+|------|-----------------|
+| `forge-tracing-log-without-ctx` | A log call that does not pass the `context.Context` in scope, so the line carries no `trace_id` |
+| `forge-tracing-raw-http-client` | A `http.DefaultClient`, `http.Get` or `*http.Client` with no tracing transport, so the callee is missing from the caller's trace |
+| `forge-tracing-raw-sql-open` | A `sql.Open`, `sqlx.Connect` or `pgxpool.New` instead of `dbtrace`, so a request's SQL is missing from its trace |
+| `forge-tracing-contract-uninstrumented` | A contract package's `New(…)` used without its generated `NewInstrumented` decorator, so its work is parentless in the trace |
 
 ### `forge-tracing-log-without-ctx`
 
@@ -79,12 +79,12 @@ See [Observability](/forge/observability) for what the traces and logs look like
 
 ## Tests
 
-| Rule | Severity | Rollout | What it catches |
-|------|----------|---------|-----------------|
-| `forge-slow-test-unmarked` | error | v1.0.0 -> v1.0.1 | a Go test that does slow work without being marked slow |
-| `forge-slow-test-inputs` | error | v1.0.0 -> v1.0.1 | a `testkit.Inputs` argument the analyzer cannot read |
-| `forgeconv-handler-tests-use-tdd` | warning | v0.1.40 | a hand-rolled table in a handler test (see [conventions](/forge/linting/rules-conventions)) |
-| `forgeconv-frontend-hook-tests` | warning | v0.1.40 | a generated hooks file with no test (see [conventions](/forge/linting/rules-conventions)) |
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forge-slow-test-unmarked` | error | A Go test that does slow work, such as exec'ing `go` or `docker` or dialing a host, without being marked slow |
+| `forge-slow-test-inputs` | error | A `testkit.Inputs` argument that is not a string literal, so the analyzer cannot read which files the test depends on |
+| `forgeconv-handler-tests-use-tdd` | warning | A hand-rolled `tests := []struct{name, call}` loop in a handler test instead of `forge/pkg/tdd` |
+| `forgeconv-frontend-hook-tests` | warning | A generated `*-hooks.ts` file with no sibling test, so a broken hook is found only at run time |
 
 ### `forge-slow-test-unmarked`
 
@@ -122,15 +122,15 @@ testkit.Slow(t, "renders", testkit.Inputs("deploy/**"))
 
 Forge generates files it owns, scaffolds files you own, and tells the two apart with banners and a content hash. These rules check that boundary.
 
-| Rule | Severity | Rollout | What it catches |
-|------|----------|---------|-----------------|
-| `forge-generated-file-edited` | error | v0.1.40 | a forge-generated file edited after forge wrote it (`--generated-drift`) |
-| `forge-generated-file-unverified` | warning | v0.1.40 | a generated file whose provenance forge could not establish |
-| `gen-missing-header` | error | v0.1.40 | a `_gen` file without the `Code generated … DO NOT EDIT.` header |
-| `gen-missing-source` | warning | v0.1.40 | a `_gen` file without a `// Source:` line |
-| `scaffold-not-customized` | warning | v0.1.40 | a file that still carries `FORGE_SCAFFOLD` markers |
-| `cross-tier-derived-symbol` | error | v0.1.40 | a regenerated file referencing a symbol only a scaffold-once file can define |
-| `forge-frontend-lock-drift` | error | v1.0.0 -> v1.0.1 | `package.json` ranges the lockfile does not record |
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forge-generated-file-edited` | error | A forge-generated file edited by hand, which the next `forge generate` overwrites |
+| `forge-generated-file-unverified` | warning | A generated file whose provenance forge could not establish after the move off the legacy checksums manifest |
+| `gen-missing-header` | error | A `_gen` file without the `Code generated … DO NOT EDIT.` header, so tools and reviewers do not treat it as generated |
+| `gen-missing-source` | warning | A `_gen` file without a `// Source:` line, so a reader cannot tell which input drives its regeneration |
+| `scaffold-not-customized` | warning | A file that still carries `FORGE_SCAFFOLD` placeholder markers, which is unfinished scaffold output |
+| `cross-tier-derived-symbol` | error | A regenerated forge template that references a symbol only a scaffold-once file can define (forge repo only) |
+| `forge-frontend-lock-drift` | error | `package.json` ranges the lockfile does not record, which fails a frozen install in CI but passes locally |
 
 ### `forge-generated-file-edited`
 
@@ -170,16 +170,16 @@ The hint prints the refresh command for the package manager that owns the lockfi
 
 These rules do not belong to a family of their own.
 
-| Rule | Severity | Rollout | What it catches |
-|------|----------|---------|-----------------|
-| `typed-config-guardrail` | warning | v0.1.40 | `os.Getenv` is not forbidden by your golangci-lint config |
-| `forge-config-unreachable` | warning | v0.1.40 | a config field that no binary and no frontend loads (`--config-reach`) |
-| `workaround-testing-extras` | warning | v0.1.40 | a hand-rolled `pkg/app/testing_extras.go` (`--check-workarounds`) |
-| `workaround-cmd-not-in-binaries` | warning | v0.1.40 | a `cmd/<name>.go` binary not declared in `forge.yaml` (`--check-workarounds`) |
-| `golangci-build-tags` | error | v1.0.0 -> v1.0.1 | golangci-lint findings in files behind a project build tag |
-| `banner-tier1-missing-generated-header` | warning | v0.1.40 | a forge template regenerated every run without the `Code generated by forge` banner (forge repo only) |
-| `banner-tier2-missing-scaffold-header` | warning | v0.1.40 | a scaffold-once forge template without the "yours: scaffolded once" banner (forge repo only) |
-| `banner-unclassified` | warning | v0.1.40 | a forge template whose name matches no known lifecycle tier (forge repo only) |
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `typed-config-guardrail` | warning | A golangci-lint config that does not forbid `os.Getenv`, so the typed-config guardrail has nothing to enforce |
+| `forge-config-unreachable` | warning | A config field that no binary and no frontend loads, which is dead weight |
+| `workaround-testing-extras` | warning | A hand-rolled `pkg/app/testing_extras.go`, which forge's generated `With<Svc>Deps(...)` now covers |
+| `workaround-cmd-not-in-binaries` | warning | A `cmd/<name>.go` binary not declared in `forge.yaml`, which `forge scaffold binary` now covers |
+| `golangci-build-tags` | error | golangci-lint findings in files behind a project build tag, which plain `forge lint` used not to see |
+| `banner-tier1-missing-generated-header` | warning | A forge template regenerated on every run without the `Code generated by forge` banner (forge repo only) |
+| `banner-tier2-missing-scaffold-header` | warning | A scaffold-once forge template without the "yours: scaffolded once" banner (forge repo only) |
+| `banner-unclassified` | warning | A forge template whose name matches no known lifecycle tier (forge repo only) |
 
 `typed-config-guardrail` checks that your `.golangci.yml` tells `forbidigo` to forbid `os.Getenv`. When none of the forbid patterns cover it, the lane reports that it could not run, names the file and the patterns to add, and does not pretend it passed. `forge-config-unreachable` is a warning because an unreachable field is dead weight, not a defect, and the remedy is a deletion that is your judgment to make. It stays silent when `cmd/` cannot be enumerated: "I could not tell" must never read as "it is dead".
 
