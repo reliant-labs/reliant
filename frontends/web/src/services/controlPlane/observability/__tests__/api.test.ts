@@ -235,6 +235,17 @@ describe("traces and panels", () => {
     expect(result.series[0]).toMatchObject({ label: "ratio", group: { "service.name": "api" }, timestamps: [window.startMs / 1000], values: [0.02] });
     expect(result.rows[0]).toEqual({ group: { "span.name": "a/B" }, values: [12] });
     expect(result.columns).toEqual(["requests"]);
+    // no dashboard named: no Forge-Panel label
+    expect(client.queryPanel.mock.calls[0][1]?.headers?.["Forge-Panel"]).toBeUndefined();
+  });
+
+  it("names a dashboard panel's read with Forge-Panel", async () => {
+    client.queryPanel.mockResolvedValue({ panelId: "fleet-now", kind: "sql", unit: "", stepSeconds: 0, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [] });
+    await queryPanel({ ...env, window, panel: { id: "fleet-now", title: "Fleet now", kind: "sql", signal: "traces", series: [], sql: "SELECT 1" }, services: [], stepSeconds: 0, dashboardId: "devboxes" });
+    const options = client.queryPanel.mock.calls[0][1];
+    expect(options.headers).toEqual({ "Forge-Panel": "devboxes/fleet-now" });
+    // the read scheduler's abort signal still rides along
+    expect(options.signal).toBeInstanceOf(AbortSignal);
   });
 
   it("preserves SQL numeric column metadata separately from string group attributes", async () => {

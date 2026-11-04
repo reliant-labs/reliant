@@ -299,6 +299,8 @@ export interface PanelQueryOptions {
   /** Auto-refresh: re-read the panel this often (ms). */
   refetchInterval?: number | false;
   enabled?: boolean;
+  /** The dashboard the panel belongs to: labels the read in control-plane's query_log (Forge-Panel). */
+  dashboardId?: string;
 }
 
 /**
@@ -328,7 +330,7 @@ export function usePanelQuery(
     queryKey,
     queryFn: ({ signal }) => {
       const offset = options.offsetMs?.() ?? 0;
-      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy }, { signal });
+      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy, dashboardId: options.dashboardId }, { signal });
     },
     enabled,
     staleTime: 30_000,
