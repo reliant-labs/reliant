@@ -10,6 +10,8 @@
  * A postgres panel's answer is mapped onto the same PanelResult a sql panel's
  * QueryPanel answer is, so PanelBody draws both the same way: a time series,
  * rows, or one figure.
+ *
+ * Its post-deploy check and rollback: dev-docs/dashboard-postgres-panels.md.
  */
 
 import { create } from "@bufbuild/protobuf";
