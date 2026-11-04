@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // cpuPeriod is the cpu.max period, cgroup v2's default: 100ms.
@@ -52,13 +53,19 @@ func limitCPUAt(selfCgroup, fsRoot string, share int) string {
 			own = p
 		}
 	}
-	if !strings.HasPrefix(filepath.Base(own), commandCgroupPrefix) {
+	// The kernel writes an absolute, clean path; anything else (a relative
+	// path, a ".." that would leave fsRoot) is not a cgroup to write to.
+	rel, ok := strings.CutPrefix(own, "/")
+	if !ok || !filepath.IsLocal(rel) || filepath.Clean(own) != own {
 		return "not in a daemon command cgroup"
 	}
-	f := filepath.Join(fsRoot, own, "cpu.max")
+	if !isCommandCgroupName(filepath.Base(own)) {
+		return "not in a daemon command cgroup"
+	}
+	f := filepath.Join(fsRoot, rel, "cpu.max")
 	// Never created: a cgroup without the cpu controller has no cpu.max, and
 	// that means no cap, not a file to make.
-	fh, err := os.OpenFile(f, os.O_WRONLY|os.O_TRUNC, 0)
+	fh, err := os.OpenFile(f, os.O_WRONLY|os.O_TRUNC|syscall.O_NOFOLLOW, 0)
 	if err != nil {
 		return err.Error()
 	}
@@ -70,4 +77,27 @@ func limitCPUAt(selfCgroup, fsRoot string, share int) string {
 		return werr.Error()
 	}
 	return ""
+}
+
+// isCommandCgroupName reports whether name is internal/proctree's command
+// cgroup name: cmd-<daemon pid>-<seq>.
+func isCommandCgroupName(name string) bool {
+	rest, ok := strings.CutPrefix(name, commandCgroupPrefix)
+	if !ok {
+		return false
+	}
+	pid, seq, ok := strings.Cut(rest, "-")
+	return ok && allDigits(pid) && allDigits(seq)
+}
+
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

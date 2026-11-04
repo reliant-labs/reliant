@@ -20,6 +20,7 @@ func TestLimitCPU_CapsOnlyTheDaemonsCommandCgroup(t *testing.T) {
 		{"/daemon/commands/cmd-268-7", true},
 		{"/daemon/self", false},
 		{"/user.slice/session-1.scope", false},
+		{"/daemon/commands/cmd-x", false},
 	} {
 		dir := filepath.Join(root, tc.cgroup)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -47,5 +48,33 @@ func TestLimitCPU_CapsOnlyTheDaemonsCommandCgroup(t *testing.T) {
 	_ = os.WriteFile(self, []byte("0::/daemon/commands/cmd-268-8\n"), 0o644)
 	if why := limitCPUAt(self, root, 5); why == "" {
 		t.Error("reported a cap where there is no cpu.max")
+	}
+}
+
+// A cgroup path that would leave the cgroup root is never written to.
+func TestLimitCPU_RefusesAPathOutsideTheCgroupRoot(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "cgroup")
+	outside := filepath.Join(base, "cmd-1-1")
+	for _, dir := range []string{root, outside} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cpuMax := filepath.Join(outside, "cpu.max")
+	if err := os.WriteFile(cpuMax, []byte("max 100000"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	self := filepath.Join(t.TempDir(), "cgroup")
+	for _, cg := range []string{"/../cmd-1-1", "../cmd-1-1", "/a/../../cmd-1-1"} {
+		if err := os.WriteFile(self, []byte("0::"+cg+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if why := limitCPUAt(self, root, 5); why == "" {
+			t.Errorf("%s: reported a cap", cg)
+		}
+		if got, _ := os.ReadFile(cpuMax); string(got) != "max 100000" {
+			t.Errorf("%s: cpu.max outside the root set to %q", cg, got)
+		}
 	}
 }
