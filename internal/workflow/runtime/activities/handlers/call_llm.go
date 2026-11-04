@@ -1752,6 +1752,17 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// the total time to the first output token (see ErrStreamFirstTokenTimeout).
 	firstToken := newFirstTokenGuard(llm.StreamFirstTokenTimeout())
 	defer firstToken.stop()
+	cutForFirstToken := func() {
+		activity.GetLogger(ctx).Warn("[CallLLM] Stream produced no output token; cutting the turn for retry",
+			"chatID", chat.ID,
+			"thread", thread,
+			"provider", resolved.ProviderDriver,
+			"model", resolvedModelID,
+			"firstTokenTimeout", firstToken.timeout,
+			"elapsed", time.Since(llmCallStart))
+		streamErr = llm.ErrStreamFirstTokenTimeout
+		cancelStream()
+	}
 
 streamLoop:
 	for {
@@ -1766,6 +1777,13 @@ streamLoop:
 			if ok {
 				resetProgressTimer()
 				firstToken.observe(event)
+				// A continuously ready channel never reaches the select
+				// below, so the deadline is checked here too: framing
+				// events alone must not hold the stream open past it.
+				if firstToken.due(liveness) {
+					cutForFirstToken()
+					break streamLoop
+				}
 				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
 					streamErr = err
 					driverErrored = true
@@ -1841,15 +1859,7 @@ streamLoop:
 			if !firstToken.expired(liveness) {
 				continue
 			}
-			activity.GetLogger(ctx).Warn("[CallLLM] Stream produced no output token; cutting the turn for retry",
-				"chatID", chat.ID,
-				"thread", thread,
-				"provider", resolved.ProviderDriver,
-				"model", resolvedModelID,
-				"firstTokenTimeout", firstToken.timeout,
-				"elapsed", time.Since(llmCallStart))
-			streamErr = llm.ErrStreamFirstTokenTimeout
-			cancelStream()
+			cutForFirstToken()
 			break streamLoop
 
 		case event, ok := <-eventChan:
@@ -1874,6 +1884,12 @@ streamLoop:
 			// arrive through this branch would trip the progress timer.
 			resetProgressTimer()
 			firstToken.observe(event)
+			// Select picks at random among ready cases, so a busy event
+			// channel can keep winning over a fired first-token timer.
+			if firstToken.due(liveness) {
+				cutForFirstToken()
+				break streamLoop
+			}
 
 			// CRITICAL: Check for cancellation before processing each event
 			// This is necessary because Go's select is non-deterministic, and when

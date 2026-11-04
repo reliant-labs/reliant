@@ -26,16 +26,31 @@ type tricklingDriver struct {
 	// keepaliveOnce marks the stream live once, as a transport does for a
 	// keepalive read inside an open block, and then never again.
 	keepaliveOnce bool
+	// prefill > 0 hands CallLLM a channel already holding that many framing
+	// events and then sends nothing more: until they are consumed, the drain
+	// loop always has an event to take and never reaches its select.
+	prefill int
+	events  chan llm.DriverEvent
 }
 
 func (d *tricklingDriver) StreamResponse(ctx context.Context, _ []string, _ []message.Message, _ []tools.Tool) <-chan llm.DriverEvent {
-	events := make(chan llm.DriverEvent)
+	events := make(chan llm.DriverEvent, d.prefill)
+	for range d.prefill {
+		events <- llm.DriverEvent{Type: llm.EventThinkingStart}
+	}
+	d.events = events
 	go func() {
 		defer close(d.stopped)
-		defer close(events)
 		if d.keepaliveOnce {
 			llm.StreamLivenessFrom(ctx).Touch()
 		}
+		if d.prefill > 0 {
+			// Left open, not closed: a close would end the stream before
+			// the guard is tested.
+			<-ctx.Done()
+			return
+		}
+		defer close(events)
 		for {
 			select {
 			case <-ctx.Done():
@@ -54,20 +69,33 @@ func (d *tricklingDriver) StreamResponse(ctx context.Context, _ []string, _ []me
 
 func TestCallLLM_NoFirstTokenFailsForRetry(t *testing.T) {
 	t.Run("no keepalive", func(t *testing.T) {
-		testCallLLMNoFirstTokenFailsForRetry(t, false)
+		testCallLLMNoFirstTokenFailsForRetry(t, &tricklingDriver{every: 10 * time.Millisecond})
 	})
 	t.Run("a keepalive that went stale", func(t *testing.T) {
 		// One liveness mark at the start must not disarm the guard for the
 		// rest of the stream.
-		testCallLLMNoFirstTokenFailsForRetry(t, true)
+		testCallLLMNoFirstTokenFailsForRetry(t, &tricklingDriver{every: 10 * time.Millisecond, keepaliveOnce: true})
+	})
+	t.Run("a continuously ready event channel", func(t *testing.T) {
+		// Framing events that are always ready must not starve the
+		// first-token timer: the deadline is checked per event, so the
+		// stream is cut with most of the backlog still unread. Draining
+		// 65536 events takes far longer than the 10ms deadline.
+		driver := &tricklingDriver{prefill: 1 << 16}
+		testCallLLMNoFirstTokenFailsForRetry(t, driver, 10*time.Millisecond)
+		assert.NotZero(t, len(driver.events), "the deadline fired only after the ready backlog was drained")
 	})
 }
 
-func testCallLLMNoFirstTokenFailsForRetry(t *testing.T, keepaliveOnce bool) {
+func testCallLLMNoFirstTokenFailsForRetry(t *testing.T, driver *tricklingDriver, firstTokenTimeout ...time.Duration) {
 	// The progress guard is far away and keeps being reset: only the
 	// first-token deadline can end this stream.
-	llm.SetStreamTimeoutsForTest(t, llm.StreamTimeouts{Progress: time.Minute, FirstToken: 150 * time.Millisecond})
-	driver := &tricklingDriver{every: 10 * time.Millisecond, stopped: make(chan struct{}), keepaliveOnce: keepaliveOnce}
+	timeout := 150 * time.Millisecond
+	if len(firstTokenTimeout) > 0 {
+		timeout = firstTokenTimeout[0]
+	}
+	llm.SetStreamTimeoutsForTest(t, llm.StreamTimeouts{Progress: time.Minute, FirstToken: timeout})
+	driver.stopped = make(chan struct{})
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
 	})
@@ -128,6 +156,19 @@ func TestFirstTokenGuard(t *testing.T) {
 			t.Fatal("deferred guard never fired")
 		}
 		assert.True(t, g.expired(liveness), "a stale keepalive must not exempt the stream")
+	})
+
+	t.Run("due reports a fired deadline without blocking", func(t *testing.T) {
+		t.Parallel()
+		g := newFirstTokenGuard(20 * time.Millisecond)
+		defer g.stop()
+		liveness := llm.NewStreamLiveness()
+		assert.False(t, g.due(liveness), "not yet fired")
+		time.Sleep(60 * time.Millisecond)
+		assert.True(t, g.due(liveness), "a fired deadline with no keepalive cuts the stream")
+
+		g.observe(llm.DriverEvent{Type: llm.EventContentDelta, Content: "hi"})
+		assert.False(t, g.due(liveness), "a disarmed guard is never due")
 	})
 
 	t.Run("fires when nothing arrives", func(t *testing.T) {

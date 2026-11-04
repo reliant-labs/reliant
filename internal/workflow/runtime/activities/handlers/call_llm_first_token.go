@@ -73,6 +73,19 @@ func (g *firstTokenGuard) expired(liveness *llm.StreamLiveness) bool {
 	return true
 }
 
+// due reports, without blocking, whether the deadline has fired and the
+// stream must be cut (as expired decides). CallLLM calls it after every event,
+// because a channel that is always ready would otherwise starve the select
+// case on C.
+func (g *firstTokenGuard) due(liveness *llm.StreamLiveness) bool {
+	select {
+	case <-g.C():
+		return g.expired(liveness)
+	default:
+		return false
+	}
+}
+
 func (g *firstTokenGuard) rearm(d time.Duration) {
 	if !g.timer.Stop() {
 		select {
