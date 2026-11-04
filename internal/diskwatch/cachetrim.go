@@ -292,6 +292,24 @@ func (w *Watcher) trimNativeCaches(ctx context.Context, urgent, measureMod bool,
 	return out
 }
 
+// goWorkDirTick runs the go_work_dirs pass alone, between full passes, on the
+// Go-cache pass's cadence (reaperTick). The caller holds the storage
+// single-flight.
+func (w *Watcher) goWorkDirTick(ctx context.Context, trigger string) {
+	defer func() {
+		if r := recover(); r != nil {
+			logging.WarnContext(ctx, "[diskwatch] Go work dir pass panicked", "trigger", trigger, "panic", fmt.Sprint(r))
+		}
+	}()
+	if w.systemEnv && testing.Testing() {
+		return
+	}
+	cfg := w.cacheTrimConfig()
+	ctx, cancel := context.WithTimeout(ctx, cfg.PassBudget)
+	defer cancel()
+	w.goWorkDirPass(ctx, cfg, trigger == "pressure", trigger, w.newPacer(cfg.RatePerSec))
+}
+
 // goWorkDirPass runs the go_work_dirs pass (gowork.go), logs it and records it
 // in the trim audit log.
 func (w *Watcher) goWorkDirPass(ctx context.Context, cfg CacheTrimConfig, urgent bool, trigger string, p *pacer) *CacheTrimResult {
