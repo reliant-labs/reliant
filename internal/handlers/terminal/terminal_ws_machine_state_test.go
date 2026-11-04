@@ -103,8 +103,9 @@ func TestTerminalWS_MachineNotAnsweringIsOneErrorPerWindowWithContext(t *testing
 
 	for i := 0; i < 4; i++ {
 		first := dialTerminalWSForProject(t, router, "proj-1")
-		require.Equal(t, "error", first["type"], "the browser is still told, and retries")
-		require.Nil(t, first["code"], "not a wait: the browser shows the error")
+		require.Equal(t, "error", first["type"], "the browser is still told")
+		require.Equal(t, wsErrorMachineNotAnswering, first["code"], "the browser names the machine and offers a retry")
+		require.Equal(t, "test-daemon-id", first["daemon_id"], "the browser says which machine did not answer")
 	}
 
 	require.Empty(t, logRecords(logs, "[TerminalWS] Error"), "a machine's state is not a per-retry error")
