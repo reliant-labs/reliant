@@ -870,6 +870,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       // An error older than every loaded message happened somewhere in the
       // history not loaded yet. Its place is among those messages, not stacked
       // above the first one loaded: every such error used to pile up there.
+      // It stays in the store (errors are stream-only; scroll-back pages do
+      // not re-send them) and takes its place once that history is loaded.
       if (insertIdx === 0 && hasOlderMessages && items.length > 0) continue;
 
       items.splice(insertIdx, 0, {

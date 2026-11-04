@@ -594,9 +594,6 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow) (snap
 	if !mainReadOK {
 		hasMore = totalMessages > len(messages)
 	}
-	if hasMore {
-		otherUpdates = errorsInWindow(otherUpdates, messages)
-	}
 
 	if messagesSkipped > 0 {
 		logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Snapshot built",
@@ -657,37 +654,6 @@ func (s *Service) contentBlocks(ctx context.Context, chatID string, messageIDs [
 // below the high-water mark), leaving a finished spawn running forever. Read
 // in this order the row is at least as new as every head. The spawn links are
 // written once at dispatch and never change, so that read overlaps the chain.
-// errorsInWindow drops the error updates raised before the oldest message in
-// the snapshot's window; every other update is kept.
-//
-// An error renders at its place in the timeline, between the messages either
-// side of it. One older than the window has no place among the messages sent,
-// and every error a chat ever logged used to ride along anyway: 216 of them,
-// about 247KB, on one prod chat whose window held a fraction of its history.
-// The client also stacked them all above the first message. Called only when
-// the chat has older history: with none, every error is in range.
-func errorsInWindow(updates []*reliantv1.ChatUpdateData, window []*db.Message) []*reliantv1.ChatUpdateData {
-	if len(window) == 0 {
-		return updates
-	}
-	from := window[0].CreatedAt
-	for _, msg := range window[1:] {
-		if msg.CreatedAt.Before(from) {
-			from = msg.CreatedAt
-		}
-	}
-	kept := updates[:0:0]
-	for _, u := range updates {
-		if u.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_ERROR {
-			if at, err := time.Parse(time.RFC3339Nano, u.CreatedAt); err == nil && at.Before(from) {
-				continue
-			}
-		}
-		kept = append(kept, u)
-	}
-	return kept
-}
-
 func (s *Service) getNonMessageUpdates(ctx context.Context, chatID string) []*reliantv1.ChatUpdateData {
 	var (
 		updates     []db.ChatUpdate
