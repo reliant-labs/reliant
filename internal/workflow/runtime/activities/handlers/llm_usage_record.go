@@ -310,7 +310,7 @@ func llmUsageErrorClass(err error) string {
 		return ""
 	case errors.As(err, &usageLimit):
 		return "usage_limit"
-	case errors.As(err, &stall), errors.Is(err, llm.ErrStreamProgressTimeout):
+	case errors.As(err, &stall), errors.Is(err, llm.ErrStreamProgressTimeout), errors.Is(err, llm.ErrStreamFirstTokenTimeout):
 		return "stalled"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "timeout"

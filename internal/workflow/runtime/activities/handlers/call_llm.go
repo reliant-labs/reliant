@@ -1747,6 +1747,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		progressTimer.Reset(progressTimeout)
 	}
 
+	// First-token guard: the progress guard measures the gap between events,
+	// so a stream trickling non-output events never trips it. This one bounds
+	// the total time to the first output token (see ErrStreamFirstTokenTimeout).
+	firstToken := newFirstTokenGuard(llm.StreamFirstTokenTimeout())
+	defer firstToken.stop()
+
 streamLoop:
 	for {
 		// Events the provider has already handed us are part of this turn, even
@@ -1759,6 +1765,7 @@ streamLoop:
 		case event, ok := <-eventChan:
 			if ok {
 				resetProgressTimer()
+				firstToken.observe(event)
 				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
 					streamErr = err
 					driverErrored = true
@@ -1828,6 +1835,26 @@ streamLoop:
 			cancelStream()
 			break streamLoop
 
+		case <-firstToken.C():
+			// A provider that opened a block and keeps it alive with
+			// keepalives is generating (a redacted thinking block emits no
+			// token until it closes); the transport's mid-block deadline owns
+			// that case, exactly as it does for the progress guard above.
+			if _, ok := liveness.Since(); ok {
+				firstToken.disarm()
+				continue
+			}
+			activity.GetLogger(ctx).Warn("[CallLLM] Stream produced no output token; cutting the turn for retry",
+				"chatID", chat.ID,
+				"thread", thread,
+				"provider", resolved.ProviderDriver,
+				"model", resolvedModelID,
+				"firstTokenTimeout", firstToken.timeout,
+				"elapsed", time.Since(llmCallStart))
+			streamErr = llm.ErrStreamFirstTokenTimeout
+			cancelStream()
+			break streamLoop
+
 		case event, ok := <-eventChan:
 			if !ok {
 				if streamCtx.Err() != nil {
@@ -1849,6 +1876,7 @@ streamLoop:
 			// as in the drain above, or a healthy stream whose events all
 			// arrive through this branch would trip the progress timer.
 			resetProgressTimer()
+			firstToken.observe(event)
 
 			// CRITICAL: Check for cancellation before processing each event
 			// This is necessary because Go's select is non-deterministic, and when

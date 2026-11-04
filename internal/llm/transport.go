@@ -278,6 +278,9 @@ type StreamTimeouts struct {
 	ContentStall time.Duration
 	Progress     time.Duration
 	MidBlock     time.Duration
+	// FirstToken has no RELIANT_LLM_STREAM_* variable yet: a zero takes
+	// DefaultStreamFirstTokenTimeout.
+	FirstToken time.Duration
 }
 
 // streamTimeouts is the process's configured deadlines; nil is every default.
@@ -388,6 +391,41 @@ const DefaultStreamProgressTimeout = 10 * time.Minute
 // StreamProgressTimeout returns the configured stream-progress timeout.
 func StreamProgressTimeout() time.Duration {
 	return configuredStreamTimeout(func(t StreamTimeouts) time.Duration { return t.Progress }, DefaultStreamProgressTimeout)
+}
+
+// ErrStreamFirstTokenTimeout is returned when a stream produced no model
+// output — no text, thinking or tool-call token — within
+// StreamFirstTokenTimeout of the request being sent.
+//
+// The three guards above all measure the gap BETWEEN signs of life, so a
+// stream that trickles anything at all resets every one of them: a byte resets
+// the idle timer, any non-ping SSE event resets the content-stall timer (for an
+// OpenAI-dialect stream that includes response.created, response.in_progress
+// and codex.rate_limits, none of which is output), and any driver event resets
+// the progress timer. Observed 2026-11-04 on two gpt-6-luna turns: each held
+// its stream open for exactly 15 minutes with zero tokens, until the provider
+// reset it (HTTP/2 INTERNAL_ERROR), while healthy calls of the same model took
+// 2-17s. None of the three fired. This one measures the stream's total time to
+// its FIRST token, which no trickle can reset.
+//
+// Phrased to read as transient so the turn is retried, like its siblings.
+var ErrStreamFirstTokenTimeout = errors.New("llm stream first-token timeout: no output token before the first-token deadline")
+
+// DefaultStreamFirstTokenTimeout bounds how long a request may run before its
+// first output token.
+//
+// Sized against the latency of whole calls, not first tokens: in the same 6h of
+// prod logs the slowest SUCCESSFUL call (Claude Opus, 16k output tokens) took
+// 181s end to end and the Codex p99 was 15s. Three minutes therefore cuts only
+// a stream that has produced nothing for longer than any healthy stream took
+// to finish. A provider that opened a content block and keeps it alive with
+// keepalives (a redacted thinking block) is exempt: CallLLM sees that on the
+// request's StreamLiveness and leaves it to the transport's mid-block deadline.
+const DefaultStreamFirstTokenTimeout = 3 * time.Minute
+
+// StreamFirstTokenTimeout returns the configured first-token timeout.
+func StreamFirstTokenTimeout() time.Duration {
+	return configuredStreamTimeout(func(t StreamTimeouts) time.Duration { return t.FirstToken }, DefaultStreamFirstTokenTimeout)
 }
 
 // StreamContentStallTimeout returns the configured content-stall timeout.
