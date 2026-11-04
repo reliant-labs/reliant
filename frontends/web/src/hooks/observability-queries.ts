@@ -16,12 +16,12 @@ import { useEffect, useMemo } from "react";
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { hashKey, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
-import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";
+import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
 import { alertingRetry, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
 import type {
   AddIssueCommentRequest,
@@ -695,6 +695,40 @@ export function useReleaseHealth(scope: DeliveryScope | null, promotionId: strin
   });
   usePolled(queryKey, query.data && !query.data.afterComplete ? 60_000 : false, enabled);
   return query;
+}
+
+/**
+ * GetReleaseHealth for several environments' current promotions at once, by
+ * environment id: the Environments page's obs-check column. The same cache
+ * entries as useReleaseHealth, so a release's Health tab and this page share
+ * one read. Not polled: the page is a summary, and a release's own page polls.
+ */
+export function useReleaseHealths(
+  orgId: string | null,
+  projectId: string,
+  items: readonly { envId: string; promotionId: string }[],
+  windowMs: number
+): Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }> {
+  const api = useObsReadApi();
+  const results = useQueries({
+    queries: items.map(({ envId, promotionId }) => {
+      const scope: DeliveryScope = { orgId: orgId ?? "", projectId, envIds: [envId] };
+      return {
+        queryKey: [...deliveryKeys.all(scope), "health", promotionId, windowMs] as const,
+        queryFn: ({ signal }: { signal: AbortSignal }) => api.getReleaseHealth({ ...scope, promotionId, windowMs }, { signal }),
+        enabled: !!orgId && !!promotionId,
+        staleTime: 30_000,
+        retry: releaseHealthRetry,
+        retryDelay: obsRetryDelay,
+      };
+    }),
+  });
+  const byEnv = new Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }>();
+  items.forEach(({ envId }, index) => {
+    const result = results[index];
+    byEnv.set(envId, { data: result?.data, isLoading: !!result?.isLoading, error: result?.error ?? null });
+  });
+  return byEnv;
 }
 
 // ── Issues (IssuesService) ────────────────────────────────────────────────────

@@ -9,16 +9,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	forgecli "github.com/reliant-labs/forge/cli"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func fakeSource(t *testing.T, key string, runs *[]string) *Source {
+func fakeSource(t *testing.T, key string, runs *[]string) *source {
 	t.Helper()
 	cache := t.TempDir()
-	return &Source{
+	return &source{Deps: Deps{
 		Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
 			return forgecli.PinnedForge{Path: "/pinned/forge", Key: key, Want: "forge_version v1.0.4"}, true, nil
 		},
@@ -30,7 +31,7 @@ func fakeSource(t *testing.T, key string, runs *[]string) *Source {
 			return []byte("out of " + strings.Join(args, " ")), nil
 		},
 		CacheDir: func() string { return cache },
-	}
+	}}
 }
 
 // The first command line the pinned forge accepts answers; the answer is kept
@@ -46,7 +47,7 @@ func TestOutput_FirstAcceptedTryIsCachedPerVersion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "out of a", string(out))
 	_, _ = s.Output(pf, "", "x.json", []string{"a"})
-	next := &Source{Run: s.Run, CacheDir: s.CacheDir}
+	next := &source{Deps: Deps{Run: s.Run, CacheDir: s.CacheDir}}
 	again, err := next.Output(pf, "", "x.json", []string{"a"})
 	require.NoError(t, err)
 	assert.Equal(t, "out of a", string(again))
@@ -67,10 +68,10 @@ func TestOutput_ACheckoutIsNotCachedOnDisk(t *testing.T) {
 // One resolution per project and command is reused while forge.yaml stays.
 func TestPinned_IsReusedWhileForgeYAMLIsUnchanged(t *testing.T) {
 	calls := 0
-	s := &Source{Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
+	s := &source{Deps: Deps{Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
 		calls++
 		return forgecli.PinnedForge{}, false, errors.New("no such host")
-	}}
+	}}}
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte("forge_version: v1.0.4\n"), 0o644))
 	for range 3 {
@@ -81,6 +82,32 @@ func TestPinned_IsReusedWhileForgeYAMLIsUnchanged(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte("forge_version: v1.0.5\n"), 0o644))
 	_, _, _ = s.Pinned(dir, "project memory")
 	assert.Equal(t, 2, calls, "a moved pin was not resolved again")
+}
+
+// A failure is reused for longer than a success: obtaining the pin may mean a
+// build, and a failing build retried every minute per project kept a loaded
+// machine failing.
+func TestPinned_BacksOffAFailure(t *testing.T) {
+	s := &source{Deps: Deps{Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
+		return forgecli.PinnedForge{}, false, errors.New("signal: killed")
+	}}}
+	dir := t.TempDir()
+	yaml := "forge_version: v1.0.4\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte(yaml), 0o644))
+	key := dir + "\x00project memory"
+	for _, tc := range []struct {
+		age    time.Duration
+		err    error
+		reused bool
+	}{
+		{2 * resolutionTTL, errors.New("signal: killed"), true},
+		{failedResolutionTTL + time.Second, errors.New("signal: killed"), false},
+		{2 * resolutionTTL, nil, false},
+	} {
+		s.resolutions.Store(key, resolution{yaml: yaml, at: time.Now().Add(-tc.age), err: tc.err, pf: forgecli.PinnedForge{Want: "cached"}})
+		pf, _, _ := s.Pinned(dir, "project memory")
+		assert.Equal(t, tc.reused, pf.Want == "cached", "age %s, err %v", tc.age, tc.err)
+	}
 }
 
 // The pinned forge names itself as an agent types it, so what it prints says

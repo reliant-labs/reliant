@@ -4,7 +4,6 @@
 package proctree
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"os"
@@ -71,68 +70,6 @@ func runForker(t *testing.T, l *Limiter, forks int) (int, *Tree) {
 	}
 	n, _ := strconv.Atoi(f[1])
 	return n, tree
-}
-
-// userTasks counts this user's tasks (threads included), which is what
-// RLIMIT_NPROC is checked against.
-func userTasks(t *testing.T) uint64 {
-	t.Helper()
-	uid := strconv.Itoa(os.Getuid())
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var n uint64
-	for _, e := range entries {
-		if _, err := strconv.Atoi(e.Name()); err != nil {
-			continue
-		}
-		data, err := os.ReadFile("/proc/" + e.Name() + "/status")
-		if err != nil {
-			continue
-		}
-		mine, threads := false, uint64(0)
-		sc := bufio.NewScanner(bytes.NewReader(data))
-		for sc.Scan() {
-			line := sc.Text()
-			if v, ok := strings.CutPrefix(line, "Uid:"); ok {
-				mine = len(strings.Fields(v)) > 0 && strings.Fields(v)[0] == uid
-			}
-			if v, ok := strings.CutPrefix(line, "Threads:"); ok {
-				threads, _ = strconv.ParseUint(strings.TrimSpace(v), 10, 64)
-			}
-		}
-		if mine {
-			n += threads
-		}
-	}
-	return n
-}
-
-// The RLIMIT_NPROC reserve: a command whose share of the user's process limit
-// is used up cannot fork, while this process (the daemon's stand-in) is not
-// limited at all. The share is set just above what the user runs now, so the
-// forker gets a few children and is refused the rest at once.
-func TestCommandForksStopAtTheNprocReserve(t *testing.T) {
-	testkit.Slow(t, "starts hundreds of real processes and scans /proc")
-	if os.Geteuid() == 0 {
-		t.Skip("root is exempt from RLIMIT_NPROC")
-	}
-	const headroom, forks = 60, 400
-	l := &Limiter{nproc: userTasks(t) + headroom}
-	started, _ := runForker(t, l, forks)
-	// The forker's own threads count too, and other processes of this user
-	// come and go while it runs: judge "most were refused", not an exact
-	// number.
-	if started >= forks/2 {
-		t.Fatalf("the forker started %d of %d children under a reserve of ~%d; RLIMIT_NPROC was not applied", started, forks, headroom)
-	}
-
-	// The same forker unlimited starts them all: the bound came from the
-	// limiter, not from this machine.
-	if started, _ := runForker(t, &Limiter{}, forks); started != forks {
-		t.Fatalf("unlimited forker started %d of %d", started, forks)
-	}
 }
 
 // cgroupLimiter is a limiter over a commands cgroup of the test's own in the

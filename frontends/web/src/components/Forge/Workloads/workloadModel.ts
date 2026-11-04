@@ -26,6 +26,7 @@ import type {
 } from "@/services/controlPlane/observability/types";
 
 import type { ReleasePromotion } from "@/services/forge/releases";
+import type { RangePreset } from "@/services/controlPlane/observability/window";
 
 import { ENV_ALL } from "../Console/envScope";
 import { alertService } from "../Observability/Home/homeModel";
@@ -525,3 +526,6 @@ export function deployHistory(
     };
   });
 }
+
+/** The Overview's window when the URL names none: a day, so "Restarts" reads as restarts today. Here, not in OverviewHome, so a page that reads the same workloads need not load its charts. */
+export const OVERVIEW_RANGE: RangePreset = "24h";

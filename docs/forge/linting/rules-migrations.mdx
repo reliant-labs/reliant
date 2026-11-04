@@ -1,0 +1,217 @@
+---
+title: "Lint rules: migrations"
+description: "The migration-safety rules: what each one prevents, a bad migration and its fix, severity and rollout"
+---
+
+`forge lint --migration-safety` reads every `*.up.sql` file under `db/migrations/` and flags SQL that is fine on an empty test database and wrong on a populated one, plus the version-numbering mistakes that make a migration silently never run. It is also what `forge ci migration-safety` and the `migration-safety` row of `task ci` run. Forge migrations only roll forward, so the cost of a bad one is a new forward migration written in a hurry.
+
+Read the [overview](/forge/linting/overview) first for the flags, the output and how to silence a rule. The Severity column is the default; the first four rules have a dial in `forge.yaml`:
+
+```yaml
+database:
+  migration_safety:
+    enabled: true                  # false turns the whole lane off
+    unsafe_add_column: error       # error | warn | off  (also governs set-not-null-without-backfill)
+    destructive_change: error      # error | warn | off
+    volatile_default: warn         # error | warn | off
+    require_compat_declaration: false   # true makes the two migration-compat rules below apply
+```
+
+Rollout cells follow the [rollout page](/forge/linting/rollout): `v0.1.40` means the rule has gated since that release or earlier; `v1.0.0 -> v1.0.1` means it warned in the first and gates from the second.
+
+## Rules
+
+| Rule | Severity | Rollout | What it catches |
+|------|----------|---------|-----------------|
+| `destructive-change` | error | v0.1.40 | `DROP TABLE`, `DROP SCHEMA`, `DROP COLUMN`, `TRUNCATE TABLE`, `ALTER COLUMN … TYPE`, `RENAME COLUMN`, `RENAME TO` |
+| `unsafe-add-not-null-column` | error | v0.1.40 | `ADD COLUMN … NOT NULL` with no `DEFAULT`, which fails on a populated table |
+| `set-not-null-without-backfill` | error | v0.1.40 | `SET NOT NULL` on a column with no earlier `UPDATE` in the same file |
+| `volatile-default` | warning | v0.1.40 | `ADD COLUMN … DEFAULT now()` and other volatile defaults, which rewrite the table |
+| `no-down-migration` | error | v0.1.40 | a `*.down.sql` file; forge never runs down SQL |
+| `duplicate-migration-version` | error | v0.1.40 | two files claiming one version number |
+| `non-timestamp-migration-version` | error | v0.1.40 | a new migration versioned `0007_x` instead of a UTC timestamp |
+| `migration-version-below-merged-head` | error | v0.1.44 | a new migration numbered below what the default branch already has |
+| `non-transactional-statement` | error | v0.1.45 | `CREATE INDEX CONCURRENTLY` and similar sharing a file with other statements |
+| `enum-value-used-before-commit` | error | v0.1.45 | an enum value used in the same file that adds it |
+| `invalid-adopts-directive` | error | v0.1.45 | an unreadable or misplaced `forge:adopts` squash declaration |
+| `migration-compat-undeclared` | error | v0.1.46 | no `forge:backward-compatible` or `forge:breaks-rollback` (only with `require_compat_declaration`) |
+| `migration-compat-reason` | error | v0.1.46 | a compatibility declaration with no reason |
+| `migration-compat-conflict` | error | v0.1.46 | both compatibility declarations in one file |
+
+## Data-safety rules
+
+### `destructive-change`
+
+A migration that drops or rewrites data cannot be undone by running another migration: the data is gone. The rule asks you to say so on purpose, and the fix is usually to spread the change over two releases.
+
+```sql
+-- bad
+ALTER TABLE orders DROP COLUMN notes;
+
+-- fix: stop reading the column in one release, drop it in a later migration.
+-- If the loss is intended, say so in the file:
+-- forge:allow-destructive
+ALTER TABLE orders DROP COLUMN notes;
+```
+
+### `unsafe-add-not-null-column`
+
+Postgres refuses `ADD COLUMN … NOT NULL` with no default on a table that already has rows. It works on the empty database your tests use and fails in production. This is the real finding from a scratch project:
+
+```text
+✗ db/migrations/20261103000100_add_orders_status.up.sql:2 [unsafe-add-not-null-column] ADD COLUMN ... NOT NULL without a DEFAULT fails on populated tables; add nullable column, backfill, then SET NOT NULL
+```
+
+```sql
+-- bad
+ALTER TABLE orders ADD COLUMN status TEXT NOT NULL;
+
+-- fix: nullable, backfill, then tighten, all in one migration
+ALTER TABLE orders ADD COLUMN status TEXT;
+UPDATE orders SET status = 'open' WHERE status IS NULL;
+ALTER TABLE orders ALTER COLUMN status SET NOT NULL;
+```
+
+For a derived column, let the database compute it: `ADD COLUMN total BIGINT GENERATED ALWAYS AS (qty * price) STORED NOT NULL` is accepted. If you know the table is empty, put `-- forge:allow-unsafe-not-null` in the file. That pragma is separate from `forge:allow-destructive` on purpose, so one does not exempt the other.
+
+### `set-not-null-without-backfill`
+
+The second half of the same hazard: tightening an existing column to `NOT NULL` fails if any row is null.
+
+```sql
+-- bad
+ALTER TABLE orders ALTER COLUMN status SET NOT NULL;
+
+-- fix: backfill first, in the same file (a generated column added in the file is also accepted)
+UPDATE orders SET status = 'open' WHERE status IS NULL;
+ALTER TABLE orders ALTER COLUMN status SET NOT NULL;
+```
+
+### `volatile-default`
+
+`ADD COLUMN … DEFAULT now()` (also `current_timestamp`, `clock_timestamp()`, `gen_random_uuid()`, `random()`) is evaluated once per existing row and rewrites the table under an `ACCESS EXCLUSIVE` lock. It does not apply to `CREATE TABLE`, which has no rows yet.
+
+```sql
+-- bad
+ALTER TABLE orders ADD COLUMN opened_at TIMESTAMPTZ DEFAULT clock_timestamp();
+
+-- fix: add it nullable, backfill, then set the default for new rows
+ALTER TABLE orders ADD COLUMN opened_at TIMESTAMPTZ;
+UPDATE orders SET opened_at = created_at WHERE opened_at IS NULL;
+ALTER TABLE orders ALTER COLUMN opened_at SET DEFAULT now();
+```
+
+## Version rules
+
+Forge records one integer per applied migration and applies only what is above it. That makes version mistakes the worst kind: nothing errors, and the schema reports current.
+
+### `no-down-migration`
+
+Forge rolls forward only and never runs down SQL, so a `.down.sql` is dead code that looks like a safety net.
+
+```text
+db/migrations/20261103000000_create_orders.down.sql   # bad: delete it
+```
+
+Recover from a bad migration with a new forward migration.
+
+### `duplicate-migration-version`
+
+Two files with the same version leave the schema unable to say which one ran. Whichever reaches a shared database first leaves the other permanently unapplied.
+
+```text
+# bad
+db/migrations/20261103000000_add_status.up.sql
+db/migrations/20261103000000_add_note.up.sql
+
+# fix: re-version the newer file
+forge db migration new add_note
+```
+
+### `non-timestamp-migration-version`
+
+Sequential numbers collide: every branch cut from one commit reads the same highest number and picks the same next one. A UTC timestamp cannot collide unless two branches allocate in the same second.
+
+```text
+# bad
+db/migrations/0007_add_note.up.sql
+# fix: create the file with forge, which stamps a fresh UTC version
+forge db migration new add_note
+```
+
+### `migration-version-below-merged-head`
+
+A new migration numbered at or below the highest version already on the default branch is invisible: databases that ran the newer migration never apply it. CI passes because a fresh test database applies everything in version order. The rule compares against the branch point, which is why a reviewer cannot spot it in a diff.
+
+```text
+# main already has 20261103120000_x.up.sql
+db/migrations/20261103090000_y.up.sql      # bad: below the head
+# fix: re-version it above the head
+forge db migration new y
+```
+
+## Transaction rules
+
+A migration file reaches Postgres as one query, which Postgres runs as one implicit transaction. Two kinds of statement break that.
+
+### `non-transactional-statement`
+
+`CREATE INDEX CONCURRENTLY`, `DROP INDEX CONCURRENTLY`, `REINDEX … CONCURRENTLY`, `VACUUM` and similar cannot run inside a transaction block, and a file with several statements runs as one.
+
+```sql
+-- bad: two statements in one file
+CREATE INDEX CONCURRENTLY orders_customer_idx ON orders (customer);
+ALTER TABLE orders ADD COLUMN note TEXT;
+
+-- fix: each such statement gets a migration file of its own, holding only that statement
+-- 20261103000200_orders_customer_idx.up.sql
+CREATE INDEX CONCURRENTLY orders_customer_idx ON orders (customer);
+```
+
+If Postgres really does run your file outside a transaction, mark it `-- forge:allow-in-transaction: <why>`.
+
+### `enum-value-used-before-commit`
+
+A value added with `ALTER TYPE … ADD VALUE` cannot be used until the transaction that added it commits.
+
+```sql
+-- bad
+ALTER TYPE order_status ADD VALUE 'refunded';
+UPDATE orders SET status = 'refunded' WHERE refunded_at IS NOT NULL;
+
+-- fix: add the value in one migration, use it in the next
+```
+
+## Declarations
+
+### `invalid-adopts-directive`
+
+`-- forge:adopts <tool> <version> <version> …` on a squashed baseline tells the migrator which history the baseline replaces. The migrator refuses every database while a malformed or misplaced declaration exists, and a baseline whose adoption does not take effect would run its SQL against a database another tool already migrated.
+
+```sql
+-- bad: on a migration that is not the first, or a declaration the migrator cannot read
+-- fix: declare the replaced history on the FIRST migration only (the tool is goose or forge)
+-- forge:adopts forge 20260101000001 20260101000002
+```
+
+### `migration-compat-undeclared`, `migration-compat-reason`, `migration-compat-conflict`
+
+With `require_compat_declaration: true`, every migration after the baseline says whether the previous release keeps working on the schema it leaves. That is what rolling back or running two versions side by side depends on. Without the setting, only the conflict rule applies.
+
+```sql
+-- bad: no declaration (undeclared)
+ALTER TABLE orders ADD COLUMN note TEXT;
+
+-- bad: a declaration with no reason
+-- forge:backward-compatible
+
+-- bad: both declarations (conflict; the migrator reads it as NOT compatible)
+-- forge:backward-compatible — old code ignores the column
+-- forge:breaks-rollback old code reads the dropped column
+
+-- fix: one declaration, with the reason on the same line
+-- forge:backward-compatible — new nullable column, the running release never reads it
+ALTER TABLE orders ADD COLUMN note TEXT;
+```
+
+Use `-- forge:breaks-rollback <why>` for a dropped or renamed column old code reads, or a `NOT NULL` column old code does not write.

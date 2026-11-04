@@ -1,0 +1,245 @@
+---
+title: "Linting: what forge lint checks"
+description: "What forge lint runs, how to read its output, where it runs, how to silence a rule, and why it matters more when an agent writes the code"
+---
+
+`forge lint` is the part of forge that says no. Everything else in forge makes the right thing easy to write; lint makes the wrong thing fail loudly, at the moment it is written, with the file, the line and the fix. It runs the linters you would expect for Go, protobuf and TypeScript (golangci-lint, buf, eslint, `tsc`), and around them about a hundred and twenty rules of forge's own. Those rules exist because each one is a bug that compiled, passed its tests and then did the wrong thing in production: a filter that silently never filters, a migration that locks a table, a log line with no trace id, a hand-edit to a file the next `generate` overwrites.
+
+This page is the map. [Reading the output](#reading-the-output) explains the report and the verdict line, [Where it runs](#where-lint-runs) covers your terminal, `task ci` and CI, and [Silencing a rule](#silencing-a-rule) covers the escape hatches. [The warn-before-gate rollout](/forge/linting/rollout) explains why a forge upgrade does not turn your build red. The [rule reference](/forge/linting/rules-index) lists every rule, with the bug it prevents and a bad-then-fixed example.
+
+## Running it
+
+```bash
+forge lint                       # every lane that applies to this project
+forge lint --quiet               # only what failed, then the verdict as the last line
+forge lint --scope internal/handlers/jobs --scope proto/services/jobs
+forge lint --migration-safety    # one lane
+forge lint --conventions --contract   # several lanes, one verdict
+forge lint --json                # machine-readable findings
+forge lint --fix                 # apply the mechanical fixes, then gate
+```
+
+`forge lint` is report-only. It writes nothing unless you pass `--fix`, and when a formatter would have changed a file it prints the diff and fails. That is deliberate: a lint that rewrote files used to reformat files that another pull request owned, in shared checkouts. `--fix` formats your Go (never generated files), rewrites untraced log calls and constructors (see [tracing](/forge/linting/rules-tracing-and-tests)), and runs prettier and `eslint --fix` on your frontends. Every Go rewrite is type-checked afterwards, and a fix that leaves its package failing is put back and reported. It never applies golangci-lint's own fixes, because those are code changes and stay findings for you to make.
+
+Lint is heavy, so it queues for one of the machine's heavy slots. A `waiting for a heavy slot` line is a queue, not a hang.
+
+### The lanes
+
+A bare `forge lint` runs a fixed list of lanes in order and skips the ones that do not apply to your project (no `db/migrations/`, no frontends, a feature turned off in `forge.yaml`). A lane is one linter with one verdict line. Naming a lane with its flag runs just that lane, and naming several runs each under one verdict.
+
+| Flag | Lane | Gates by default |
+|------|------|------------------|
+| (none) | `golangci-lint`, with your `.golangci.yml`, including a pass over files behind your build tags | yes |
+| (none) | typed-config guardrail: `os.Getenv` is forbidden outside config loading | no (advisory) |
+| `--contract` | contract linter: `contract.go` rules, `//forge:exclude-contract`, exported package vars | yes |
+| (none) | `buf lint` | yes |
+| (none) | frontend lint, TypeScript typecheck, frontend lockfile | yes |
+| `--migration-safety` | SQL migration safety | yes |
+| `--conventions` | proto, Go tree and frontend conventions | yes |
+| `--scaffolds` | scaffold ownership headers | yes |
+| `--generated-drift` | hand-edited generated files | yes |
+| `--tests` | handler and hook test conventions | no |
+| `--optional-deps-guard`, `--config-deps` | `Deps` shape | no |
+| `--graph` | composition graph | yes |
+| (none) | component drift, hosted image base, PodDisruptionBudgets | no |
+| (none) | Flux-safe objects, identity sharing, ShellBuild tokens, `.env` files, commit policy | yes |
+| `--secrets` | platform secrets model | yes |
+| `--column-markers`, `--closed-sets`, `--db-grants` | schema markers in migrations | yes |
+| `--proto-markers`, `--go-markers` | misspelled `forge:` markers | proto: no, Go: yes |
+| `--create-nullability`, `--computed-fields`, `--read-only-fields` | write-policy rules | yes |
+| `--fixture-drift`, `--time-bucketing`, `--guarded-fields` | fixtures, SQL and scaffolded pages | no |
+| `--static-export` | Next.js static-export rules | yes |
+| `--tracing` | where a request's trace is cut | yes |
+| `--check-workarounds`, `--banners` | forge-internal smells; `--banners` only does anything inside the forge repo | no |
+
+Five lanes run only when you name them, because they are whole-project questions or slow: `--frontend-stores`, `--proto-options`, `--vendored-protos`, `--config-reach` and `--slow-tests`. `--exported-vars` is part of `--contract`. `forge project capabilities` prints the live flag list for the forge you are running, including the ones `--help` hides.
+
+A lane that gates fails the run when it reports an error. An advisory lane reports warnings, which never fail the run unless you raise a rule with [`lint.rules`](#silencing-a-rule) or run with `--strict`, which escalates advisory findings to errors.
+
+### Flags worth knowing
+
+| Flag | What it does |
+|------|--------------|
+| `--quiet`, `-q` | Prints a one-line summary per failing lane, its error findings, and the verdict as the last line. A clean run is one line. Safe to pipe through `tail`. Never pipe lint through `head`: the verdict is the last line. |
+| `--scope PATH` | Reports only findings under `PATH` (repeatable, project-relative). Go linters run on that path's packages only, which also makes a scoped run fast. Whole-project lanes (frontend lint, graph, component drift, config-reach) cannot be scoped; they are skipped and named in the verdict. Run an unscoped lint before you merge. |
+| `--json` | Findings as JSON, with the same exit code as text mode. Each finding carries `rule`, `severity`, `file`, `line`, `message` and `fix_hint`. A softened new-rule finding also carries a `grace` object. |
+| `--gate-json FILE` | Also writes the run as a gate document, for `forge gate record` or `forge env deploy --gate`. The human output and the exit code do not change. |
+| `--strict` | Escalates advisory findings to errors, including a lane that could not run. |
+| `--skip-frontends` | Skips the whole frontend lane, for a backend-only gate that needs no Node toolchain. |
+| `--allow-skip LANE=REASON` | Accepts, by name and with a reason, that a gating lane may not run here. `lint.allow_skip` in `forge.yaml` is the project-level form. |
+| `--show-suppressed` | Lists every suppression the project declares, with file, line and stated reason. Runs no linter. |
+| `--fix`, `--check` | Apply fixes in place; or report only (the default). |
+
+A gating lane that could not run, such as a missing `golangci-lint` or a frontend with no `node_modules`, fails the run. A check that did not run is not a check that passed. `forge tools install golangci-lint buf` installs the missing tools.
+
+<Note>
+`forge lint` runs under the forge version your `forge.yaml` pins in `forge_version`. If the binary on your path is a different version it says so and tells you how to run the pinned one with `go run github.com/reliant-labs/forge/cmd/forge@<pin> lint`. `--allow-version-skew` (or `FORGE_ALLOW_VERSION_SKEW=1`) proceeds anyway. Inside Reliant, `reliant forge` is the embedded forge, so use the `go run` form when your pin differs.
+</Note>
+
+## Reading the output
+
+Every lane prints one header line and then its findings. This run came from a scratch project with a deliberately unsafe migration and a misspelled proto marker:
+
+```text
+▸ --migration-safety
+▸ --proto-markers
+❌ migration-safety — 1 error, 1 warning
+   ✗ db/migrations/20261103000100_add_orders_status.up.sql:2 [unsafe-add-not-null-column] ADD COLUMN ... NOT NULL without a DEFAULT fails on populated tables; add nullable column, backfill, then SET NOT NULL
+      → add the column nullable, backfill it with an UPDATE, then SET NOT NULL in the same migration; for a derived column prefer making the database compute it (ADD COLUMN ... GENERATED ALWAYS AS (<expr>) STORED NOT NULL, which this rule accepts); or — if you know the table is empty — mark the migration file with a "-- forge:allow-unsafe-not-null" comment
+   ⚠ db/migrations/20261103000100_add_orders_status.up.sql:3 [volatile-default] volatile DEFAULT in ADD COLUMN can rewrite/lock populated tables; prefer nullable column plus explicit backfill
+      → add the column nullable, backfill it with an explicit UPDATE, then set the default for new rows — a volatile DEFAULT is evaluated per existing row and rewrites the whole table under an ACCESS EXCLUSIVE lock
+⚠️  proto-markers — 1 warning
+   ⚠ proto/services/order/v1/order.proto:26 [forge-proto-markers] removed forge:* proto marker "forge:server-set" (renamed to "forge:read-only")
+      → "forge:server-set" was renamed to "forge:read-only" and is no longer recognized — this comment currently does NOTHING (the field stays client-writable). Rewrite it as "forge:read-only".
+forge lint: 1 gating linter(s) failed: migration-safety. Fix: address the findings above under each ❌ lane; re-run 'forge lint' to confirm.
+```
+
+A finding is `marker file:line [rule] message`, with the fix on the next line after an arrow. `✗` is an error and `⚠` is a warning. The bracketed rule ID is the name you use everywhere else: in the [reference](/forge/linting/rules-index), in `lint.rules`, and in a `forge:lint-disable` comment. The lane header says whether the lane failed (❌), passed with warnings (⚠️) or passed (✓).
+
+Lint exits 1 when any gating lane reports an error, and 0 otherwise. The last line of the report is the verdict. Read it first:
+
+| Verdict line | Meaning |
+|--------------|---------|
+| `✅ All N gating linters passed.` | Every gating lane ran and found no error. |
+| `forge lint: N gating linter(s) failed: LANES` | Those lanes reported errors. The fix is under each ❌ lane above. |
+| `✅ N gating linter(s) passed; … new-rule finding(s) warn until they gate (…)` | Green, but a pin bump would turn it red. See [the rollout](/forge/linting/rollout). |
+| `… N lane(s) could NOT run: …` | A tool is missing or a directory is not set up. This fails the run for a gating lane. |
+| `no gating linter ran — this run proved nothing` | Nothing applicable ran. Lint refuses to call that a pass. |
+| `… SKIPPED (allowed): …` | A lane was skipped on purpose with `--allow-skip` or `lint.allow_skip`, with its reason. |
+| `… — scope PATH only; not scoped, so not run: …` | A `--scope` run. Whole-project lanes were skipped and named. |
+
+`--quiet` hides advisory findings and says how many it hid: the same run above prints `2 advisory findings not shown (--quiet)` in its verdict. Here is `--quiet` on a project with an untraced log call:
+
+```text
+❌ tracing — 1 error
+   ✗ internal/handlers/order/rpc_list.go:9 [forge-tracing-log-without-ctx] slog.Info logs without the context in scope, so the line carries no trace_id and cannot be joined to its request; use slog.InfoContext(ctx, …)
+      → `forge lint --tracing --fix` rewrites every such call to its …Context form
+forge lint: 1 gating linter(s) failed: tracing. Fix: address the findings above under each ❌ lane; re-run 'forge lint' to confirm.
+```
+
+And here is `--conventions --quiet` catching a list request whose filter has no field presence. `customer` is a plain `string`, so an unset filter and an empty filter are the same value on the wire and the generated filter never applies:
+
+```text
+❌ conventions — 1 error
+   ✗ proto/services/order/v1/order.proto:25 [forgeconv-list-filter-optional] ListOrdersRequest.customer has no field presence: unset and "" are the same value on the wire, so the proto does not say whether it is a filter or a required parameter (as a filter its zero value can never be filtered on)
+      → a filter: mark it `optional` — `optional string customer = 1;` — so unset means "no filter" end to end (Go pointer, TS `?:`, generated nil-guard). A required parameter (a parent or org id the handler insists on): declare it with `[(buf.validate.field).required = true]`
+forge lint: 1 gating linter(s) failed: conventions. Fix: address the findings above under each ❌ lane; re-run 'forge lint' to confirm.
+```
+
+For an agent or a script, `--json` gives the same findings in a stable shape:
+
+```json
+{
+  "findings": [
+    {
+      "file": "internal/handlers/order/rpc_list.go",
+      "line": 9,
+      "severity": "warning",
+      "rule": "forge-tracing-log-without-ctx",
+      "message": "slog.Info logs without the context in scope, so the line carries no trace_id and cannot be joined to its request; use slog.InfoContext(ctx, …)",
+      "fix_hint": "`forge lint --tracing --fix` rewrites every such call to its …Context form",
+      "grace": {
+        "introduced_in": "v1.0.0",
+        "gates_from": "v1.0.1",
+        "fix": "forge lint --tracing --fix"
+      }
+    }
+  ],
+  "summary": { "errors": 0, "warnings": 1, "infos": 0, "total": 1 },
+  "ok": true
+}
+```
+
+`ok` is false exactly when the text run would exit non-zero. A lane that could not run appears as a finding too, with a rule ID ending in `-unavailable`, so a consumer can tell "clean" from "did not run". The `grace` object is explained in [the rollout](/forge/linting/rollout).
+
+<Note>
+These captures come from a scratch project made with `forge project new shop --service order`, on forge v1.0.14. Progress lines (`⏳ waiting for a heavy slot`, `still running`) are trimmed.
+</Note>
+
+## Where lint runs
+
+Lint is the same code in every place; the difference is who runs it and what it blocks.
+
+**On your machine, and in your agent's loop.** `forge lint` directly, or `task lint`, which delegates to the pinned forge. The documented loop is `forge generate && forge lint && go build ./... && task test`. Iterate with `forge lint --quiet --scope <the paths you touched>`; it is the fast version.
+
+**In `task ci`.** `task ci` runs `task ci:checks`, then the tests, then the integration tests, and prints one summary table. The scaffolded `ci.yml` calls the same tasks, so CI and your terminal give the same verdict. The `checks` lane runs these lint-shaped rows by name: `golangci-lint`, `buf-lint`, `migration-safety` (which is `forge lint --migration-safety`), and for each frontend `lint-<name>`, `typecheck-<name>` and `css-health-<name>`. `verify-generated` runs `forge generate` and fails if anything changed, which is the other half of the generated-file rules. `forge ci gate --list` prints the exact rows for your project.
+
+<Warning>
+The PR gate's rows are the tool lanes listed above. They do not run the whole `forge lint` sweep, so the forge-owned rules (conventions, write policy, tracing, secrets, graph and the rest) are not in `task ci` unless you add them. To put every rule in the PR gate, add `forge lint` as an extra check in `forge.yaml`:
+
+```yaml
+ci:
+  gate:
+    extra_checks:
+      - name: forge-lint
+        command: [forge, lint]
+        heavy: true
+```
+</Warning>
+
+**In the release workflow.** The scaffolded `release.yml` runs `forge lint --gate-json gates/lint.json` as its lint step. The gate document records what the run proved: how many gating lanes ran, which could not, which were skipped. A run where nothing could execute records as `skipped`, never `passed`. `forge env deploy --gate` reads that evidence. In CI, `CI=true` keeps lint report-only, so the release is cut from the commit that was reviewed and not from a checkout lint repaired.
+
+## Silencing a rule
+
+A rule you disagree with has three off-switches, from coarsest to most local. Reach for the most local one: a repo-wide setting silently swallows every future finding for that rule, including the one you would have wanted to see.
+
+<Steps>
+  <Step title="Repo-wide: lint.rules in forge.yaml">
+    Maps a rule ID to `error`, `warn` or `off`. The key `"*"` applies to every forge rule, and an exact rule ID beats it.
+
+    ```yaml
+    lint:
+      rules:
+        forgeconv-handler-file-size: warn
+        forge-tracing-log-without-ctx: error
+    ```
+
+    Only forge's own rules are addressable. golangci-lint, buf and eslint keep their own config files. A key that names no gradable rule is itself an error, so a typo cannot silently turn a rule off. This is real output for `forge-tracing-log-without-context` (a misspelling of `…-without-ctx`):
+
+    ```text
+    ❌ lint.rules — 1 error
+       ✗ [forge-lint-rules] forge.yaml lint.rules["forge-tracing-log-without-context"]: no forge lint rule has this ID, so the entry does nothing
+          → did you mean "forge-tracing-log-without-ctx"? lint.rules grades forge's own rules — the [rule] each finding prints. Another tool's linters are configured in that tool's config (.golangci.yml, buf.yaml, eslint)
+    ```
+  </Step>
+  <Step title="One file: forge:lint-disable-file">
+    A comment in the file, in that file's comment syntax (`//`, `--` or `#`):
+
+    ```go
+    // forge:lint-disable-file forgeconv-no-getenv: this is the config loader
+    ```
+  </Step>
+  <Step title="One line: forge:lint-disable-next-line">
+    ```go
+    // forge:lint-disable-next-line forgeconv-tx-lock-under-serializable: the lock is a hint, retries are fine here
+    tx, err := s.deps.DB.RunTx(ctx, orm.Serializable, fn)
+    ```
+
+    `forge:lint-disable` on the same line works too, and `//nolint:<rule>` is honored for forge rules with golangci's own positional meaning.
+  </Step>
+</Steps>
+
+A suppression of an error-severity rule must carry a reason after a colon. A bare one is itself a finding. The reason is the point: it turns a shrug into a decision a reviewer can read. `forge lint --show-suppressed` lists every suppression in the project with its file, line and reason.
+
+Some rules have their own in-file escape hatch, named in the rule's fix text and in the [reference](/forge/linting/rules-index): `-- forge:allow-destructive` and `-- forge:allow-unsafe-not-null` in a migration, `-- forge:allow-in-transaction: <why>`, `//forge:exclude-contract: <why>`, `//forge:not-a-component: <why>`, and `// forge:optional-checked` on an optional-dependency dereference. Rules that read your config have a dial there instead: `lint.handler_file_max_loc`, `lint.frontend.typecheck` (`error`, `warn` or `off`), and `database.migration_safety` with `unsafe_add_column`, `destructive_change` and `volatile_default`.
+
+## Why this matters more when an agent writes the code
+
+A person who writes a bad query usually feels it: the test fails, they read the error, they learn. An agent does not carry that memory to the next session, and it has no instinct that a `string` filter field is wrong or that `slog.Info` loses the trace. What it has is a loop: edit, run a command, read the result, edit again. Lint is the command in that loop whose output is built to be read by something that does not already know the rule.
+
+Every forge finding names the rule, the file and line, what is wrong, and the exact change to make, and many name a command that makes it (`forge lint --tracing --fix`, `forge fix connect-errors`, `forge fix narrow-deps`). That turns "the build is red" into one more turn of the loop instead of an investigation. A large share of the rules cover failures that give no signal at all. A misspelled `forge:` marker compiles and does nothing. A filter without `optional` runs and never filters. A migration numbered below the merged head applies nowhere and reports the schema current. A model reading its own diff will not find these, and tests rarely do, so a mechanical check has to.
+
+Two properties make this work for unattended agents. The check is deterministic, so the same tree gives the same answer. And it fails closed: a lane that cannot run fails the run instead of passing silently, and `--gate-json` records exactly what was proved. See [observability](/forge/observability) for the production half, where the same idea applies to a running system.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="The rollout" icon="calendar" href="/forge/linting/rollout">
+    Why a new rule warns for one release, and how to gate early or stay in the grace period.
+  </Card>
+  <Card title="Every rule" icon="list-check" href="/forge/linting/rules-index">
+    The full index, then one reference page per family with bad-and-fixed examples.
+  </Card>
+</CardGroup>
+
+For the day-to-day loop around lint, see [Adding features](/forge/adding-features) and [Troubleshooting](/forge/troubleshooting#forge-lint-fails).

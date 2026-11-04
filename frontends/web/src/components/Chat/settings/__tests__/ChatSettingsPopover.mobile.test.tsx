@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ChatSettingsPopover } from "../ChatSettingsPopover";
+import type { PopoverTriggerProps } from "../../../forge-ui/popover";
 import { type InputDef, setInputMulti, setInputEnumValues } from "../../../../lib/inputHelpers";
 
 import { SurfaceProvider } from "../../../../lib/surfaceContext";
@@ -21,11 +22,57 @@ const inputs = {
   hidden: { type: "string", config: { case: "stringInput", value: { base: { ui: "hidden" }, default: "Secret prompt" } } },
 } as unknown as Record<string, InputDef>;
 
+// Anchored, the panel is placed against a trigger the host renders.
+const shell = (embedded: boolean) =>
+  embedded ? {} : { trigger: (props: PopoverTriggerProps) => <button {...props}>Chat settings trigger</button> };
+
+describe("anchored placement", () => {
+  // jsdom lays nothing out; give the trigger and panel the geometry of an
+  // iPad in portrait, with the ⚙ button right of centre (the reported bug:
+  // a fixed 360px panel left-aligned to it ran off the right edge).
+  it("keeps the panel inside the viewport when the trigger is near the right edge", () => {
+    const width = 820;
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(width);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(1180);
+    const rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const box = this.getAttribute("role") === "dialog"
+        ? { left: 0, top: 0, width: 360, height: 300 }
+        : { left: 520, top: 1100, width: 44, height: 44 };
+      return { ...box, right: box.left + box.width, bottom: box.top + box.height, x: box.left, y: box.top, toJSON: () => box } as DOMRect;
+    });
+    try {
+      render(<ChatSettingsPopover {...shell(false)} isOpen onClose={vi.fn()} inputs={inputs} values={{}} onChange={vi.fn()} />);
+      const panel = screen.getByRole("dialog", { name: "Chat settings" });
+      const left = parseFloat(panel.style.left);
+      expect(left + 360).toBeLessThanOrEqual(width - 8);
+      expect(left).toBeGreaterThanOrEqual(8);
+      // Above the composer, not over it.
+      expect(parseFloat(panel.style.top) + 300).toBeLessThanOrEqual(1100);
+    } finally {
+      rect.mockRestore();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it("asks to open from its trigger and closes on Escape", async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    const onClose = vi.fn();
+    const { rerender } = render(<ChatSettingsPopover {...shell(false)} isOpen={false} onOpen={onOpen} onClose={onClose} inputs={inputs} values={{}} onChange={vi.fn()} />);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Chat settings trigger" }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    rerender(<ChatSettingsPopover {...shell(false)} isOpen onOpen={onOpen} onClose={onClose} inputs={inputs} values={{}} onChange={vi.fn()} />);
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
  describe.each([false, true])("shared settings (embedded=%s)", (embedded) => {
   it("reaches the same model policy, execution mode, required and grouped inputs", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<ChatSettingsPopover embedded={embedded} isOpen onClose={vi.fn()} inputs={inputs} values={{}} onChange={onChange} />);
+    render(<ChatSettingsPopover {...shell(embedded)} embedded={embedded} isOpen onClose={vi.fn()} inputs={inputs} values={{}} onChange={onChange} />);
     // The popover is its own dialog; embedded, the host sheet is.
     if (!embedded) expect(screen.getByRole("dialog", { name: "Chat settings" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "plan" }));
@@ -43,7 +90,7 @@ const inputs = {
 
   it("keeps multi-enum mode-like inputs in More Settings and writes arrays", async () => {
     const onChange = vi.fn();
-    render(<ChatSettingsPopover embedded={embedded} isOpen onClose={vi.fn()} inputs={{ modes: setInputMulti(inputs.mode, true) }} values={{ modes: ["auto"] }} onChange={onChange} />);
+    render(<ChatSettingsPopover {...shell(embedded)} embedded={embedded} isOpen onClose={vi.fn()} inputs={{ modes: setInputMulti(inputs.mode, true) }} values={{ modes: ["auto"] }} onChange={onChange} />);
     expect(screen.queryByText("Execution Mode")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /More Settings/ }));
     await userEvent.click(screen.getByRole("button", { name: "1 of 3 selected" }));
@@ -55,18 +102,18 @@ const inputs = {
     const onChange = vi.fn();
     const thinking = setInputEnumValues(inputs.mode, ["low", "high"]);
     const props = { embedded, isOpen: true, initialPage: "params" as const, onClose: vi.fn(), inputs: { model: inputs.model, thinking_level: thinking }, values: { model: { id: "claude-sonnet@anthropic" }, thinking_level: "high" }, onChange };
-    const { rerender } = render(<ChatSettingsPopover {...props} />);
+    const { rerender } = render(<ChatSettingsPopover {...shell(embedded)} {...props} />);
     expect(onChange).not.toHaveBeenCalled();
     // Same effect as a catalog/model capability update: high is no longer valid.
     const restricted = { ...props, values: { ...props.values, model: { id: "unavailable-model" } } };
-    rerender(<ChatSettingsPopover {...restricted} disabled />);
+    rerender(<ChatSettingsPopover {...shell(embedded)} {...restricted} disabled />);
     expect(onChange).not.toHaveBeenCalled();
-    rerender(<ChatSettingsPopover {...restricted} />);
+    rerender(<ChatSettingsPopover {...shell(embedded)} {...restricted} />);
     expect(onChange).toHaveBeenCalledWith({ ...restricted.values, thinking_level: "" });
   });
 
   it("opens model preferences on the matching surface", async () => {
-    render(<SurfaceProvider surface={embedded ? "mobile" : "desktop"}><ChatSettingsPopover embedded={embedded} isOpen initialPage="model" onClose={vi.fn()} inputs={inputs} values={{}} onChange={vi.fn()} /></SurfaceProvider>);
+    render(<SurfaceProvider surface={embedded ? "mobile" : "desktop"}><ChatSettingsPopover {...shell(embedded)} embedded={embedded} isOpen initialPage="model" onClose={vi.fn()} inputs={inputs} values={{}} onChange={vi.fn()} /></SurfaceProvider>);
     await userEvent.click(screen.getByRole("button", { name: "Model preferences" }));
     expect(navigate).toHaveBeenLastCalledWith(embedded ? { to: "/m/settings", search: { section: "ai" } } : { to: "/settings/$section", params: { section: "ai" } });
   });
@@ -74,18 +121,18 @@ const inputs = {
   it("shows catalog loading and failure rather than silently claiming no models", () => {
     modelState.loading = true;
     const props = { embedded, isOpen: true, initialPage: "model" as const, onClose: vi.fn(), inputs, values: {}, onChange: vi.fn() };
-    const { rerender } = render(<ChatSettingsPopover {...props} />);
+    const { rerender } = render(<ChatSettingsPopover {...shell(embedded)} {...props} />);
     expect(screen.getByRole("status")).toHaveTextContent("Loading models");
     modelState.loading = false;
     modelState.error = "Offline";
-    rerender(<ChatSettingsPopover {...props} />);
+    rerender(<ChatSettingsPopover {...shell(embedded)} {...props} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Could not load models");
     modelState.error = null;
   });
 
   it("disables mutation when permission changes while open", async () => {
     const onChange = vi.fn();
-    render(<ChatSettingsPopover embedded={embedded} disabled isOpen onClose={vi.fn()} inputs={inputs} values={{}} onChange={onChange} />);
+    render(<ChatSettingsPopover {...shell(embedded)} embedded={embedded} disabled isOpen onClose={vi.fn()} inputs={inputs} values={{}} onChange={onChange} />);
     expect(screen.getByRole("button", { name: "plan" })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "plan" }));
     expect(onChange).not.toHaveBeenCalled();

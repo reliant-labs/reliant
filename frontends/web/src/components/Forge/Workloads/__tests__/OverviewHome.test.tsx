@@ -10,6 +10,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import { createWorkloadsFixtureApi } from "../__fixtures__/workloadFixtures";
 import { renderOverview } from "./workloadsTestUtils";
@@ -211,6 +212,26 @@ describe("its states", () => {
     expect(screen.getByTestId("overview-env-prod")).toHaveTextContent("health unavailable");
     expect(screen.getByTestId("overview-attention")).toHaveTextContent("Workload health could not be read");
     expect(screen.getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
+  });
+
+  it("still lists the firing alerts when the workload read times out", async () => {
+    // 2026-11-03: ListWorkloads timed out and "Needs attention" showed only an
+    // apology, though the alerts had been read and were firing.
+    const base = createWorkloadsFixtureApi();
+    renderOverview({
+      obs: {
+        ...base,
+        listWorkloads: async () => {
+          throw new ConnectError("ListWorkloads timed out after 10000ms", Code.DeadlineExceeded);
+        },
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "error"));
+    const attention = screen.getByTestId("overview-attention");
+    await waitFor(() => expect(within(attention).getAllByRole("row").length).toBeGreaterThan(0));
+    const rows = within(attention).getAllByRole("row");
+    expect(rows.every((row) => row.getAttribute("data-testid")?.startsWith("attention-alert/"))).toBe(true);
+    expect(within(attention).getByTestId("overview-attention-unread")).toHaveTextContent("only the firing alerts are listed");
   });
 
   it("says when the jobs list was cut short", async () => {

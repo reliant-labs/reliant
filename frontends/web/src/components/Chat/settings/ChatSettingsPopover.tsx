@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactElement } from "react";
+import Popover, { type PopoverTriggerProps } from "../../forge-ui/popover";
 import {
   X,
   ChevronRight,
@@ -29,6 +30,14 @@ export type PageId = "main" | "model" | "preset" | "params";
 interface ChatSettingsPopoverProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Anchored (not embedded): the control that opens the panel. Spread the
+   * props onto your own button; the panel is placed against it, flipped and
+   * clamped so it never leaves the viewport on any screen.
+   */
+  trigger?: (props: PopoverTriggerProps) => ReactElement;
+  /** Anchored: the trigger asked to open the panel. */
+  onOpen?: () => void;
   initialPage?: PageId;
   /**
    * Render as a page inside a host sheet (the composer's ⊕ sheet) instead of
@@ -148,6 +157,8 @@ function countExtraParams(
 export function ChatSettingsPopover({
   isOpen,
   onClose,
+  trigger,
+  onOpen,
   initialPage = "main",
   embedded = false,
   onExit,
@@ -161,7 +172,6 @@ export function ChatSettingsPopover({
   chatId,
 }: ChatSettingsPopoverProps) {
   const [currentPage, setCurrentPage] = useState<PageId>(initialPage);
-  const popoverRef = useRef<HTMLDivElement>(null);
 
   // A fieldset blocks user input, not child effects (e.g. thinking-level
   // reconciliation after a catalog refresh). Gate every mutation at the boundary.
@@ -178,27 +188,6 @@ export function ChatSettingsPopover({
       setCurrentPage(initialPage);
     }
   }, [isOpen, initialPage]);
-
-  // Close on click outside (but not when clicking the trigger button itself)
-  useEffect(() => {
-    if (!isOpen || embedded) return;
-    const handleClick = (e: MouseEvent) => {
-      // The popover is rendered inside a relative wrapper alongside its trigger button.
-      // Check the wrapper (parentElement) so clicks on the trigger are ignored here —
-      // the trigger's own onClick toggle handles open/close.
-      const wrapper = popoverRef.current?.parentElement;
-      if (wrapper && !wrapper.contains(e.target as Node)) {
-        onClose();
-      }
-    };
-    const raf = requestAnimationFrame(() => {
-      document.addEventListener("mousedown", handleClick);
-    });
-    return () => {
-      cancelAnimationFrame(raf);
-      document.removeEventListener("mousedown", handleClick);
-    };
-  }, [isOpen, onClose, embedded]);
 
   // Find special param keys
   const modelKey = findModelParamKey(inputs);
@@ -251,10 +240,10 @@ export function ChatSettingsPopover({
     [onPresetChange, back],
   );
 
-  if (!isOpen) return null;
-
-  // One page tree owns all settings and policy; only the surrounding shell varies.
-  const content = (
+  // One page tree owns all settings and policy; only the surrounding shell
+  // varies. `closePanel` is the shell's close: anchored, it is the Popover's,
+  // which also hands focus back to the trigger.
+  const renderContent = (closePanel: () => void) => (
       <fieldset disabled={disabled} className="min-w-0 border-0 p-0 m-0">
         {/* Main page */}
         {currentPage === "main" && (
@@ -275,7 +264,7 @@ export function ChatSettingsPopover({
               </h3>
               {!embedded && (
                 <button
-                  onClick={onClose}
+                  onClick={closePanel}
                   aria-label="Close settings"
                   className="touch-target w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
                 >
@@ -392,7 +381,7 @@ export function ChatSettingsPopover({
             value={modelValue}
             onChange={handleModelChange}
             onBack={back}
-            onClose={onClose}
+            onClose={closePanel}
             hideClose={embedded}
             chatId={chatId}
           />
@@ -405,7 +394,7 @@ export function ChatSettingsPopover({
             selectedPreset={selectedPreset ?? null}
             onPresetChange={handlePresetSelect}
             onBack={back}
-            onClose={onClose}
+            onClose={closePanel}
             hideClose={embedded}
           />
         )}
@@ -417,7 +406,7 @@ export function ChatSettingsPopover({
             values={values}
             onChange={onChange}
             onBack={back}
-            onClose={onClose}
+            onClose={closePanel}
             hideClose={embedded}
             excludeParams={[
               ...(modelKey ? [modelKey] : []),
@@ -428,11 +417,21 @@ export function ChatSettingsPopover({
       </fieldset>
   );
 
-  if (embedded) return content;
+  if (embedded) return isOpen ? renderContent(onClose) : null;
+  // Anchored: the shared Popover places the panel (above the composer when it
+  // fits, flipped and clamped to the viewport otherwise), caps its width at
+  // the viewport's and dismisses it. The height cap scrolls a tall page
+  // inside the panel instead of pushing it off a short screen.
   return (
-    <div ref={popoverRef} role="dialog" aria-label="Chat settings"
-      className="absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[360px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden">
-      {content}
-    </div>
+    <Popover
+      trigger={trigger}
+      open={isOpen}
+      onOpenChange={(next) => (next ? onOpen?.() : onClose())}
+      side="top"
+      label="Chat settings"
+      panelClassName="w-[360px] max-h-[calc(100dvh-16px)] overflow-y-auto overscroll-contain"
+    >
+      {({ close }) => renderContent(close)}
+    </Popover>
   );
 }

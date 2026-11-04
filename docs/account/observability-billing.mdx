@@ -81,7 +81,7 @@ The meter implements configurable percentage thresholds of the **included allowa
 
 Notices are sent by **email to organization owners and admins**, using each person's confirmed billing email when available, otherwise their account email. They are evaluated from metered usage, not live ingestion. Crossed thresholds are processed in order, with a claim for each threshold and cap notice per organization per UTC month to avoid repeat sends. A failed delivery attempt releases its claim for retry; email is a courtesy, not what enforces the cap.
 
-This email path is connected in the hosted application through its transactional email sender. The current UI's note that threshold delivery is not connected is stale. Choosing a Slack channel, webhook or other recipient for these threshold notices is **not implemented**. The separate `ObservabilityQuotaOver100` and `ObservabilityQuotaOver150` alert rules use [observability alert receivers](/forge/observability#alerts); they are not configurable threshold-notice routing.
+This email path is connected in the hosted application through its transactional email sender. The current UI's note that threshold delivery is not connected is stale. Choosing a Slack channel, webhook or other recipient for these threshold notices is **not implemented**. The separate `ObservabilityQuotaOver100` and `ObservabilityQuotaOver150` alert rules use [observability alert receivers](/forge/observability/dashboards-and-alerts#alerts); they are not configurable threshold-notice routing.
 
 ## Retention is included
 
@@ -97,7 +97,7 @@ You pay once at ingestion, not again for each day of retention. Hosted defaults 
 | Session replay | 14 days |
 | Product events | Up to 90 days without a paid compute subscription; up to 400 days with one, bounded by the environment's declaration |
 
-Expiration is handled by database TTL processing, not an instantaneous deletion at the exact retention boundary. The billing editor shows retention read-only; changing your spend cap does not change it. To control collection, change the environment's [observability signal settings](/forge/observability#opting-out) and deploy.
+Expiration is handled by database TTL processing, not an instantaneous deletion at the exact retention boundary. The billing editor shows retention read-only; changing your spend cap does not change it. To control collection, change the environment's [observability signal settings](/forge/observability/where-it-goes#opting-out) and deploy.
 
 ## Queries are free, with separate fair-use lanes
 

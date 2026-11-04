@@ -35,3 +35,9 @@ check 1 "a branch of this repository without a marker fails" '{"full_name":"acme
 check 1 "a fork's head fails even with the reviewer's marker" '{"full_name":"stranger/app"}' "$pass"
 grep -q 'a fork' "$fx/out" || fail "the fork refusal does not say why: $(cat "$fx/out")"
 check 1 "a deleted fork's head (null repo) fails even with the reviewer's marker" 'null' "$pass"
+changes="{\"user\":{\"id\":186876276},\"commit_id\":\"$head\",\"body\":\"<!-- review-changes sha=$head -->\"}"
+passed="{\"user\":{\"id\":186876276},\"commit_id\":\"$head\",\"body\":\"<!-- review-passed sha=$head -->\"}"
+# One verdict per head: the FIRST marker on the sha decides, and it is immutable
+# (forge #1683 got three review-changes and then a review-passed for one head).
+check 1 "a pass posted after a review-changes on the same head does not pass" '{"full_name":"acme/app"}' "[$changes,$passed]"
+check 0 "a review-changes posted after the head's pass does not fail it" '{"full_name":"acme/app"}' "[$passed,$changes]"

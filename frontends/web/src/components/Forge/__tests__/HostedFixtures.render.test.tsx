@@ -11,7 +11,7 @@ import { render, screen, within } from "@testing-library/react";
 import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
 import type { LiveEnv } from "@/services/forge/live";
 
-import { EnvironmentTable } from "../Overview/EnvironmentTable";
+import { EnvironmentList } from "../Overview/EnvironmentList";
 
 /**
  * The Overview's single row.
@@ -21,7 +21,7 @@ import { EnvironmentTable } from "../Overview/EnvironmentTable";
  */
 function renderOverviewRow(env: LiveEnv, status?: CloudEnvStatus) {
   return render(
-    <EnvironmentTable
+    <EnvironmentList
       rows={[{ env, status, statusLoading: false }]}
       onOpen={vi.fn()}
     />

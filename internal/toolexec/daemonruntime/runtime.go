@@ -380,6 +380,13 @@ func Start(ctx context.Context, opts StartOptions) error {
 	}
 	go client.diskGuard.Run(ctx)
 	go client.procGuard.Run(ctx)
+	// A managed machine logs a load/pressure/disk/heavy-slot sample a minute,
+	// which control-plane's machine-health dashboard and alerts read from
+	// tenant zero's logs (internal/machinehealth). A person's own machine
+	// ships no logs to us, so it does not sample.
+	if opts.Host.Managed() {
+		go newMachineHealthSampler(client.diskWatcher).Run(ctx)
+	}
 	// Stop the background processes finished chats left behind, once idle
 	// for the window (shell/background_reaper.go).
 	idleReap := opts.Guards.IdleReapWindow()
@@ -2403,16 +2410,15 @@ func (d *daemonClient) stopAllFileTreeWatchers() {
 func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string, includeInitial bool) {
 	var lastVersion string
 
-	sendSnapshotDelta := func() {
+	// sendSnapshotDelta returns why the snapshot could not be built, if it
+	// could not.
+	sendSnapshotDelta := func() error {
 		snapshot, err := d.projectSnapshot(ctx, projectPath)
-		if err != nil || snapshot == nil {
-			if err != nil {
-				logging.WarnContext(ctx, logPrefix+" Failed to build project snapshot for watcher", "projectPath", projectPath, "error", err)
-			}
-			return
+		if err != nil {
+			return err
 		}
-		if snapshot.ConfigVersion == lastVersion {
-			return
+		if snapshot == nil || snapshot.ConfigVersion == lastVersion {
+			return nil
 		}
 		lastVersion = snapshot.ConfigVersion
 
@@ -2427,21 +2433,42 @@ func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string
 		if err := d.send(msg); err != nil {
 			logSendFailure(logPrefix+" Failed to send project config delta", err, "project_path", projectPath)
 		}
+		return nil
 	}
 
+	// A path that cannot be snapshotted (most often one deleted from disk
+	// while the server still lists it) backs off and is logged once per
+	// failure streak; see watchFailureBackoffMax.
+	backoff := newWatchBackoff(transport.WatchPollInterval)
+	poll := func() time.Duration {
+		err := sendSnapshotDelta()
+		if ctx.Err() != nil {
+			return transport.WatchPollInterval // shutting down; the loop returns
+		}
+		wait, changed := backoff.next(err != nil)
+		switch {
+		case changed && err != nil:
+			logging.WarnContext(ctx, logPrefix+" Failed to build project snapshot for watcher; backing off until it recovers",
+				"projectPath", projectPath, "error", err, "retryIn", wait, "maxRetryIn", watchFailureBackoffMax)
+		case changed:
+			logging.InfoContext(ctx, logPrefix+" Project snapshot for watcher recovered", "projectPath", projectPath)
+		}
+		return wait
+	}
+
+	wait := transport.WatchPollInterval
 	if includeInitial {
-		sendSnapshotDelta()
+		wait = poll()
 	}
-
-	ticker := time.NewTicker(transport.WatchPollInterval)
-	defer ticker.Stop()
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
-			sendSnapshotDelta()
+		case <-timer.C:
+			timer.Reset(poll())
 		}
 	}
 }

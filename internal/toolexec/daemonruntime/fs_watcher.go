@@ -20,14 +20,21 @@ const fileTreePollInterval = 5 * time.Second
 
 // runFileTreeWatcher polls the filesystem and sends a FileSystemChanged
 // message when the file tree hash changes. Sleeps between polls (not
-// fixed interval) so a slow poll doesn't cause overlap.
+// fixed interval) so a slow poll doesn't cause overlap. A tree that cannot be
+// hashed — usually a project path deleted from disk — is polled with back-off
+// (watchBackoff), not every five seconds for as long as the server lists it.
 func (d *daemonClient) runFileTreeWatcher(ctx context.Context, projectPath string) {
 	var lastHash string
+	backoff := newWatchBackoff(fileTreePollInterval)
 
 	for {
 		hash, err := hashFileTree(ctx, projectPath)
+		wait, changed := backoff.next(err != nil)
 		if err != nil {
-			logging.DebugContext(ctx, logPrefix+" File tree hash error", "projectPath", projectPath, "error", err)
+			if changed && ctx.Err() == nil {
+				logging.DebugContext(ctx, logPrefix+" File tree hash error; backing off until it recovers",
+					"projectPath", projectPath, "error", err, "retryIn", wait)
+			}
 		} else {
 			if lastHash != "" && hash != lastHash {
 				msg := &reliantv1.DaemonMessage{
@@ -49,7 +56,7 @@ func (d *daemonClient) runFileTreeWatcher(ctx context.Context, projectPath strin
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(fileTreePollInterval):
+		case <-time.After(wait):
 		}
 	}
 }

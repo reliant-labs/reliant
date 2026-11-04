@@ -21,7 +21,9 @@ import { createPortal } from "react-dom";
  *     app-level shortcut bound to Escape, does not also act. Stacked
  *     popovers close one per press, newest first.
  *   - A pointer press outside the trigger and panel closes it, and so does
- *     focus leaving both (Tab out of the panel).
+ *     focus leaving both (Tab out of the panel). The panel's React tree
+ *     counts as inside: a layer a control in it portals elsewhere (a nested
+ *     popover, a full-screen picker sheet) does not dismiss it.
  *   - Opening moves focus into the panel: its first focusable element when
  *     opened from the keyboard (Enter, Space, ArrowDown), the panel itself
  *     when opened with the pointer. `onOpenFocus` overrides that.
@@ -268,13 +270,24 @@ export default function Popover({
     (first ?? panel).focus({ preventScroll: true });
   }, [open, position, onOpenFocus, anchor, openVia]);
 
+  // "Inside" means inside the panel's REACT tree, not only its DOM: a control
+  // in the panel may portal its own layer to <body> (a full-screen picker
+  // sheet on touch), and a press or focus there must not dismiss the panel
+  // that owns it. React events bubble through portals, so the panel's capture
+  // handlers see those and record them; the native listeners below, which
+  // run after React's, read the record.
+  const pressInTree = useRef(false);
+  const focusInTree = useRef(false);
+
   // A press outside both the trigger and the panel dismisses, leaving focus
   // where the press put it.
   useEffect(() => {
     if (!open) return;
     function onPointerDown(e: PointerEvent) {
+      const inTree = pressInTree.current;
+      pressInTree.current = false;
       const target = e.target as Node;
-      if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      if (inTree || triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
       close(false);
     }
     document.addEventListener("pointerdown", onPointerDown);
@@ -291,18 +304,35 @@ export default function Popover({
     function onKeyDown(e: KeyboardEvent) {
       panelKeyDown.current?.(e);
     }
+    // Whether focus left the panel's DOM for somewhere that may still be its
+    // React tree; the focusin that follows settles it.
+    let focusLeft = false;
     function onFocusOut(e: FocusEvent) {
       const next = e.relatedTarget as Node | null;
       // null: focus went to the page itself (a click on nothing), which the
       // pointerdown handler above already decided.
       if (!next || panel?.contains(next) || triggerRef.current?.contains(next)) return;
-      close(false);
+      // Focus reaching a portalled descendant is reported by focusin, which
+      // fires after this focusout: the panel's React capture handler marks
+      // it, and the document listener below, which runs after React's root
+      // and portal listeners, reads the mark.
+      focusInTree.current = false;
+      focusLeft = true;
+    }
+    function onFocusIn() {
+      if (!focusLeft) return;
+      focusLeft = false;
+      const inTree = focusInTree.current;
+      focusInTree.current = false;
+      if (!inTree && !triggerRef.current?.contains(document.activeElement)) close(false);
     }
     panel.addEventListener("keydown", onKeyDown);
     panel.addEventListener("focusout", onFocusOut);
+    document.addEventListener("focusin", onFocusIn);
     return () => {
       panel.removeEventListener("keydown", onKeyDown);
       panel.removeEventListener("focusout", onFocusOut);
+      document.removeEventListener("focusin", onFocusIn);
     };
   }, [open, close]);
 
@@ -367,6 +397,12 @@ export default function Popover({
             tabIndex={-1}
             aria-label={label}
             aria-labelledby={label || trigger === undefined ? undefined : triggerId}
+            onPointerDownCapture={() => {
+              pressInTree.current = true;
+            }}
+            onFocusCapture={() => {
+              focusInTree.current = true;
+            }}
             className={`fixed z-50 rounded-lg border border-border bg-surface shadow-lg focus:outline-none ${panelClassName ?? ""}`}
             style={{
               top: position?.top ?? 0,

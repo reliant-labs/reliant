@@ -87,9 +87,14 @@ func RunWrapper(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "▶ reliant: running `%s` in %s after %s waiting\n", opt.Label, slot, slot.Waited().Round(time.Second))
 	}
 
+	share := shareOf(slot, w.share)
+	// A hard cap, not only GOMAXPROCS: it binds what GOMAXPROCS does not
+	// reach (cpumax_linux.go). Set before the child starts, so nothing of
+	// the command runs uncapped.
+	_ = limitCPU(share)
 	c := exec.Command(argv[0], argv[1:]...)
 	c.Env = append(childEnv(os.Environ(), w.childGOMAXPROCS), slot.Env()...) //nolint:forbidigo // passes this process environment to a child process; not configuration
-	c.Env = append(c.Env, shareEnv(c.Env, shareOf(slot, w.share))...)
+	c.Env = append(c.Env, shareEnv(c.Env, share)...)
 	c.Stdin, c.Stdout, c.Stderr = stdin, stdout, stderr
 	if err := c.Start(); err != nil {
 		fmt.Fprintf(stderr, "reliant: %v\n", err)
