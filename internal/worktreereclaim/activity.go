@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -29,7 +30,40 @@ const RecoveryIdlePeriod = 7 * 24 * time.Hour
 const activityPoll = 30 * time.Second
 const activityMaxGap = 2 * time.Minute
 const activityMaxEntries = 100000
-const activityMaxBytes int64 = 1 << 30
+
+// activityReconcile is the longest a quiet observation goes between full
+// inventories. Between them, a poll that finds no watcher event since the last
+// complete inventory only extends coverage (heartbeat). Evidence reaches the
+// server through Observe alone, which always inventories, so a heartbeat never
+// certifies anything: it keeps the epoch continuous while the inotify watch,
+// not a re-read of every file every 30 seconds, carries the observation.
+// Inventorying every observed worktree each poll is what made one daemon with
+// ~850 observed worktrees burn several cores and read ~670 MB/s.
+const activityReconcile = 10 * time.Minute
+
+// activityWatchBudgetShare is the share of the user's inotify watch budget
+// (fs.inotify.max_user_watches) the observer may hold. The rest belongs to
+// the user's own dev servers, IDEs and test runs, which fail with ENOSPC when
+// it is gone. An observation that does not fit ends and releases what it took;
+// it fails closed (never certified), and the next sweep tries again.
+const activityWatchBudgetShare = 4
+
+// activityDefaultWatchBudget applies when the kernel limit is unreadable.
+const activityDefaultWatchBudget = 1 << 16
+
+// errActivityBudget marks an inventory that cannot fit its budgets. Retrying
+// it every poll cannot succeed, so the observation ends instead of re-walking
+// (and re-holding watches over) a tree it can never certify.
+var errActivityBudget = errors.New("activity observation budget exceeded")
+
+// activityUnobservedDir names dependency install trees left out of
+// observation, watches included. They are regenerated from a lockfile that IS
+// observed, and they are where the directories are: one node_modules can hold
+// tens of thousands, past activityMaxEntries, so a JS worktree could never be
+// observed at all while every poll re-walked it and re-held its watches.
+func activityUnobservedDir(name string) bool {
+	return name == "node_modules"
+}
 
 // ActivityObserver persists hashes and times, never file contents or file names.
 // Its state directory MUST be outside the observed workspace. An observer is
@@ -54,6 +88,8 @@ type ActivityObserver struct {
 	// workspace releasing a path never removes another's watch on it.
 	watcher   *fsnotify.Watcher
 	watchRefs map[string]int
+	// watchBudget caps len(watchRefs); see activityWatchBudgetShare.
+	watchBudget int
 	// routes is a snapshot of running for the dispatcher, which must never
 	// wait on mu: mu is held across state fsyncs, and a stalled dispatcher
 	// lets the shared kernel queue overflow for every workspace.
@@ -76,6 +112,8 @@ type activityWatch struct {
 	root           string
 	gitDir         string
 	stopped        bool                // teardown has fenced out new watches; guarded by ActivityObserver.mu
+	scannedSeq     uint64              // seq at the last complete inventory; guarded by ActivityObserver.mu
+	scannedAt      time.Time           // when that inventory completed (zero: none yet); guarded by ActivityObserver.mu
 	gone           bool                // workspace deleted or moved away; guarded by ActivityObserver.mu
 	events         chan fsnotify.Event // this workspace's share of the shared watcher's events
 	errors         chan error          // coverage loss; one pending error is enough
@@ -205,6 +243,9 @@ func (o *ActivityObserver) addWatch(w *activityWatch, path string) error {
 		return errors.New("activity watcher closed")
 	}
 	if o.watchRefs[path] == 0 {
+		if len(o.watchRefs) >= o.watchBudget {
+			return fmt.Errorf("%w: %d inotify watches held", errActivityBudget, len(o.watchRefs))
+		}
 		if err := o.watcher.Add(path); err != nil {
 			return err
 		}
@@ -255,7 +296,7 @@ func NewActivityObserver(statePath string, now func() time.Time) (*ActivityObser
 	if now == nil {
 		now = time.Now
 	}
-	o := &ActivityObserver{statePath: statePath, now: now, records: map[string]*recoveryActivityRecord{}, running: map[string]*activityWatch{}}
+	o := &ActivityObserver{statePath: statePath, now: now, records: map[string]*recoveryActivityRecord{}, running: map[string]*activityWatch{}, watchBudget: activityWatchBudget()}
 	data, err := os.ReadFile(statePath)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
@@ -282,6 +323,20 @@ func NewActivityObserver(statePath string, now func() time.Time) (*ActivityObser
 		return nil, err
 	}
 	return o, nil
+}
+
+// activityWatchBudget is this observer's cap on inotify watches: a share of
+// fs.inotify.max_user_watches (activityWatchBudgetShare).
+func activityWatchBudget() int {
+	data, err := os.ReadFile("/proc/sys/fs/inotify/max_user_watches")
+	if err != nil {
+		return activityDefaultWatchBudget
+	}
+	limit, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || limit <= 0 {
+		return activityDefaultWatchBudget
+	}
+	return max(limit/activityWatchBudgetShare, 1)
 }
 
 func activityKey(root string) (string, string, error) {
@@ -368,8 +423,9 @@ func (o *ActivityObserver) Invalidate(root string) error {
 }
 
 // Start establishes recursive event coverage before the first inventory, then
-// reconciles content periodically. Call once per workspace. Cancellation and
-// every watcher error invalidate evidence; there is no polling-only fallback.
+// reconciles periodically (a heartbeat while quiet; see activityReconcile).
+// Call once per workspace. Cancellation and every watcher error invalidate
+// evidence; there is no polling-only fallback.
 func (o *ActivityObserver) Start(ctx context.Context, root string) error {
 	if runtime.GOOS != "linux" {
 		return errors.New("recovery activity observation unsupported on this platform")
@@ -486,15 +542,18 @@ func (o *ActivityObserver) events(ctx context.Context, key string, w *activityWa
 				// Newly created directory trees were not watched before this event.
 				o.resetLocked(r)
 			}
+			// Not persisted here: a restart never inherits evidence, and
+			// every Observe persists before evidence leaves the process. An
+			// fsync of the whole state file per event made a busy build in
+			// one worktree cost every observed worktree's state on disk.
 			r.Evidence.Complete = false
-			err := o.saveLocked()
 			o.mu.Unlock()
-			if err != nil {
-				return
-			}
 		case <-ticker.C:
-			if _, err := o.Observe(ctx, w.root); err != nil {
-				// An error already reset/persisted the epoch. Keep listening, but a later
+			if o.heartbeat(key, w) {
+				continue
+			}
+			if _, err := o.observe(ctx, w.root, false); err != nil {
+				// An error already reset the epoch. Keep listening, but a later
 				// successful full coverage pass must begin the new seven-day period.
 				if ctx.Err() != nil {
 					return
@@ -504,10 +563,40 @@ func (o *ActivityObserver) events(ctx context.Context, key string, w *activityWa
 	}
 }
 
-// Observe reconciles exact content, modes and file metadata, not porcelain
-// status or directory age. It returns incomplete evidence on every uncertain
-// inventory. All ignored files participate; no secret bytes are persisted.
+// Observe reconciles modes and file metadata (size, mtime, inode, ctime), not
+// porcelain status or directory age. It returns incomplete evidence on every
+// uncertain inventory. All ignored files
+// participate except dependency trees (activityUnobservedDir); no secret bytes
+// are persisted. It always inventories and persists before returning, so the
+// evidence it hands out is durable and fresh.
 func (o *ActivityObserver) Observe(ctx context.Context, root string) (RecoveryActivity, error) {
+	return o.observe(ctx, root, true)
+}
+
+// heartbeat extends a quiet observation's coverage without an inventory, and
+// reports whether it did. It applies only while the last inventory was
+// complete, younger than activityReconcile, nothing has arrived from the
+// watcher since, and the epoch is continuous; anything else needs the
+// inventory. See activityReconcile.
+func (o *ActivityObserver) heartbeat(key string, w *activityWatch) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	r := o.records[key]
+	if o.running[key] != w || r == nil || !r.Evidence.Complete || w.scannedAt.IsZero() || w.seq != w.scannedSeq || len(w.events) > 0 || len(w.errors) > 0 {
+		return false
+	}
+	now := o.now()
+	gap := now.Sub(r.Evidence.ObservedThrough)
+	if gap < 0 || gap > activityMaxGap || now.Sub(w.scannedAt) >= activityReconcile {
+		return false
+	}
+	r.Evidence.ObservedThrough = now
+	return true
+}
+
+// observe is Observe; persist=false is the event loop's own reconciliation,
+// whose result never leaves the process (see the event loop).
+func (o *ActivityObserver) observe(ctx context.Context, root string, persist bool) (RecoveryActivity, error) {
 	root, key, err := activityKey(root)
 	if err != nil {
 		return RecoveryActivity{}, err
@@ -529,6 +618,11 @@ func (o *ActivityObserver) Observe(ctx context.Context, root string) (RecoveryAc
 	seq := w.seq
 	o.mu.Unlock()
 	digest, scanErr := o.inventory(ctx, root, w)
+	if errors.Is(scanErr, errActivityBudget) {
+		// It will not fit next poll either: end the observation and release
+		// its watches rather than re-walking it every 30 seconds.
+		w.cancel()
+	}
 	// Drain queued watcher errors before issuing any complete evidence. A later
 	// overflow still invalidates the epoch in the event loop.
 	select {
@@ -583,6 +677,12 @@ func (o *ActivityObserver) Observe(ctx context.Context, root string) (RecoveryAc
 		}
 		r.Evidence.ObservedThrough = now
 		r.Evidence.Complete = seq == w.seq
+		if r.Evidence.Complete {
+			w.scannedSeq, w.scannedAt = w.seq, now
+		}
+	}
+	if !persist {
+		return r.Evidence, scanErr
 	}
 	if err := o.saveLocked(); err != nil {
 		o.resetLocked(r)
@@ -614,7 +714,6 @@ func RecoveryInactive(e RecoveryActivity, now time.Time) bool {
 
 func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activityWatch) (string, error) {
 	h := sha256.New()
-	var total int64
 	count := 0
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -636,7 +735,7 @@ func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activi
 		}
 		count++
 		if count > activityMaxEntries {
-			return errors.New("activity inventory entry budget exceeded")
+			return fmt.Errorf("%w: more than %d entries", errActivityBudget, activityMaxEntries)
 		}
 		info, err := d.Info()
 		if err != nil {
@@ -647,6 +746,10 @@ func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activi
 			return err
 		}
 		fmt.Fprintf(h, "%d:%s:%d:", len(rel), rel, info.Mode())
+		if d.IsDir() && path != root && activityUnobservedDir(d.Name()) {
+			// Its existence is evidence like any entry's; its contents are not.
+			return filepath.SkipDir
+		}
 		if d.IsDir() {
 			o.mu.Lock()
 			watched := w.watched[path]
@@ -658,6 +761,12 @@ func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activi
 			}
 			return nil // Directory timestamps are deliberately not activity evidence.
 		}
+		// Size, mtime, inode and ctime identify every completed write without
+		// reading a byte: ctime is set by the kernel and cannot be set from
+		// userspace, so even an edit that restores bytes and mtime moves it. A
+		// write racing this stat within one timestamp tick is an inotify event,
+		// drained below, which keeps this inventory from certifying. Hashing
+		// file bytes too cost a re-read of every observed worktree each poll.
 		fmt.Fprintf(h, "%d:%d:%s:", info.Size(), info.ModTime().UnixNano(), activityFileMetadata(info))
 		if info.Mode()&os.ModeSymlink != 0 {
 			target, err := os.Readlink(path)
@@ -665,42 +774,7 @@ func (o *ActivityObserver) inventory(ctx context.Context, root string, w *activi
 				return err
 			}
 			fmt.Fprintf(h, "%d:%s", len(target), target)
-		} else if info.Mode().IsRegular() {
-			total += info.Size()
-			if total > activityMaxBytes {
-				return errors.New("activity inventory byte budget exceeded")
-			}
-			f, err := activityOpenRegular(path)
-			if err != nil {
-				return err
-			}
-			opened, err := f.Stat()
-			if err == nil && !sameReflog(info, opened) {
-				err = errors.New("activity file changed while opening")
-			}
-			var n int64
-			if err == nil {
-				n, err = io.Copy(h, io.LimitReader(f, info.Size()+1))
-			}
-			after, statErr := f.Stat()
-			closeErr := f.Close()
-			if err != nil {
-				return err
-			}
-			if statErr != nil {
-				return statErr
-			}
-			if closeErr != nil {
-				return closeErr
-			}
-			current, err := os.Lstat(path)
-			if err != nil {
-				return err
-			}
-			if n != info.Size() || !sameReflog(info, after) || !sameReflog(info, current) {
-				return errors.New("activity file changed while reading")
-			}
-		} else {
+		} else if !info.Mode().IsRegular() {
 			return errors.New("unsupported activity file type")
 		}
 		return nil
