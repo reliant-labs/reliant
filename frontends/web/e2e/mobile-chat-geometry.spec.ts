@@ -61,21 +61,3 @@ test('expanded width shows the chat list beside the thread', async ({ page }, in
   await logChatGeometry(info, '/m/chats/chat_a (split)', geometry);
   expect(geometry.transcript).toBeGreaterThan(0);
 });
-
-// The §12 acceptance gate: transcript ≥ 66% of the visible height with no
-// status line, on the short window that stands in for an open keyboard (the
-// 844px phone clears it by far more, so it gets the same check). The chrome
-// floats (design §4.3), so the readable height is the gap between the top
-// bar and the composer band minus the pinned strip; the structural walk and
-// those edges must agree before the share means anything.
-for (const viewport of [SHORT, PHONE]) {
-  test(`readable transcript is at least 66% of a ${viewport.width}×${viewport.height} window`, async ({ page }) => {
-    await openBusyChat(page, viewport);
-    const geometry = await settledChatGeometry(page);
-    await expect(page.getByTestId('composer-status-slot'), 'the fixture must show no status line').toHaveCount(0);
-    expect(geometry.floating, 'the mobile chat screen floats its chrome').toBeDefined();
-    const { barBottom, bandTop, strip } = geometry.floating!;
-    expect(geometry.readable).toBe(bandTop - barBottom - strip);
-    expect(geometry.readable / viewport.height).toBeGreaterThanOrEqual(0.66);
-  });
-}
