@@ -12,7 +12,7 @@ import {
   MessageRole,
   StreamingState,
 } from "../gen/reliant/v1/chat_pb";
-import type { ActiveThreadUpdate } from "../types/streaming";
+import type { ActiveThreadUpdate, ErrorUpdate } from "../types/streaming";
 import type {
   ToolCallState,
   ToolExecutionStateUpdate,
@@ -89,6 +89,27 @@ export const bySequenceNumber = (
   a: { sequence_number?: number },
   b: { sequence_number?: number },
 ) => (a.sequence_number || 0) - (b.sequence_number || 0);
+
+/**
+ * Folds a scroll-back page's errors (ListMessagesResponse.errors) into the
+ * chat's errors, by id like live ones, but never backward. A page carries each
+ * error's newest attempt INSIDE the stretch of history it loads, so an error
+ * whose retries run past the page's upper edge arrives as an older attempt
+ * than the one the snapshot or the stream already delivered: replacing that
+ * would show a finished error as retrying again. An existing entry is replaced
+ * only by a strictly newer sequence number; one with no sequence number came
+ * from the stream, which is newer than any history, and is kept.
+ */
+export function applyHistoricalErrors(
+  existing: ErrorUpdate[],
+  page: ErrorUpdate[],
+): ErrorUpdate[] {
+  return applyLogSlice(existing, page, false, {
+    key: (e) => e.id,
+    merge: (prev, next) =>
+      prev.sequence_number && (next.sequence_number || 0) > prev.sequence_number ? next : prev,
+  });
+}
 
 // Tool-call statuses that must not be clobbered by a late "completed": once a
 // user cancels a tool, a completion racing in right after must not resurrect

@@ -426,8 +426,11 @@ type ListIssuesRequest struct {
 	// How close in first-seen time issues of one cause must be to share an
 	// incident (Issue.incident_key). Default 600 (ten minutes); max 3600.
 	IncidentWindowSeconds int32 `protobuf:"varint,11,opt,name=incident_window_seconds,json=incidentWindowSeconds,proto3" json:"incident_window_seconds,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Only the issues with an event of this user id in the range (IssueEvent.
+	// user_id). At most 500 matching issues are considered.
+	UserId        *string `protobuf:"bytes,15,opt,name=user_id,json=userId,proto3,oneof" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListIssuesRequest) Reset() {
@@ -556,6 +559,13 @@ func (x *ListIssuesRequest) GetIncidentWindowSeconds() int32 {
 		return x.IncidentWindowSeconds
 	}
 	return 0
+}
+
+func (x *ListIssuesRequest) GetUserId() string {
+	if x != nil && x.UserId != nil {
+		return *x.UserId
+	}
+	return ""
 }
 
 type ListIssuesResponse struct {
@@ -787,8 +797,17 @@ type IssueEvent struct {
 	// An allowlisted, bounded subset of the event's attributes. Never a secret.
 	Attributes map[string]string `protobuf:"bytes,6,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Browser issues only.
-	SessionId     string `protobuf:"bytes,7,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	UrlPath       string `protobuf:"bytes,8,opt,name=url_path,json=urlPath,proto3" json:"url_path,omitempty"`
+	SessionId string `protobuf:"bytes,7,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	UrlPath   string `protobuf:"bytes,8,opt,name=url_path,json=urlPath,proto3" json:"url_path,omitempty"`
+	// Who hit it: a server event's user.id (the authenticated caller the record
+	// was logged for), a browser event's userId (the id the page reported).
+	// Empty when the event names none.
+	UserId string `protobuf:"bytes,9,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Browser issues only: where the browser was, derived by the platform from
+	// its address at ingest (RumService SessionSummary.country/region/city).
+	Country       string `protobuf:"bytes,10,opt,name=country,proto3" json:"country,omitempty"`
+	Region        string `protobuf:"bytes,11,opt,name=region,proto3" json:"region,omitempty"`
+	City          string `protobuf:"bytes,12,opt,name=city,proto3" json:"city,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -875,6 +894,34 @@ func (x *IssueEvent) GetSessionId() string {
 func (x *IssueEvent) GetUrlPath() string {
 	if x != nil {
 		return x.UrlPath
+	}
+	return ""
+}
+
+func (x *IssueEvent) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *IssueEvent) GetCountry() string {
+	if x != nil {
+		return x.Country
+	}
+	return ""
+}
+
+func (x *IssueEvent) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *IssueEvent) GetCity() string {
+	if x != nil {
+		return x.City
 	}
 	return ""
 }
@@ -1121,8 +1168,10 @@ type ListIssueEventsRequest struct {
 	// Default: from the issue's first to its last event. Max 7 days.
 	TimeRange *IssueTimeRange `protobuf:"bytes,2,opt,name=time_range,json=timeRange,proto3" json:"time_range,omitempty"`
 	// Rows per page. Default 50, max 100.
-	PageSize      int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
-	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	PageSize  int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	// Only the events of this user id (IssueEvent.user_id).
+	UserId        *string `protobuf:"bytes,5,opt,name=user_id,json=userId,proto3,oneof" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1181,6 +1230,13 @@ func (x *ListIssueEventsRequest) GetPageSize() int32 {
 func (x *ListIssueEventsRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
+	}
+	return ""
+}
+
+func (x *ListIssueEventsRequest) GetUserId() string {
+	if x != nil && x.UserId != nil {
+		return *x.UserId
 	}
 	return ""
 }
@@ -2805,7 +2861,7 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
 	"\aenv_ids\x18\x06 \x03(\tR\x06envIdsB\r\n" +
-	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\xeb\x05\n" +
+	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\x95\x06\n" +
 	"\x11ListIssuesRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.IssueScopeR\x05scope\x128\n" +
 	"\bstatuses\x18\x02 \x03(\x0e2\x1c.controlplane.v1.IssueStatusR\bstatuses\x12?\n" +
@@ -2824,7 +2880,8 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\tpage_size\x18\b \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\t \x01(\tR\tpageToken\x126\n" +
-	"\x17incident_window_seconds\x18\v \x01(\x05R\x15incidentWindowSecondsB\v\n" +
+	"\x17incident_window_seconds\x18\v \x01(\x05R\x15incidentWindowSeconds\x12\x1c\n" +
+	"\auser_id\x18\x0f \x01(\tH\bR\x06userId\x88\x01\x01B\v\n" +
 	"\t_platformB\x15\n" +
 	"\x13_first_seen_releaseB\x15\n" +
 	"\x13_since_promotion_idB\a\n" +
@@ -2832,7 +2889,9 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"\a_sourceB\v\n" +
 	"\t_assigneeB\r\n" +
 	"\v_unassignedB\x0f\n" +
-	"\r_incident_key\"l\n" +
+	"\r_incident_keyB\n" +
+	"\n" +
+	"\b_user_id\"l\n" +
 	"\x12ListIssuesResponse\x12.\n" +
 	"\x06issues\x18\x01 \x03(\v2\x16.controlplane.v1.IssueR\x06issues\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa4\x01\n" +
@@ -2849,7 +2908,7 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"by_version\x18\x04 \x03(\v2&.controlplane.v1.IssueVersionBreakdownR\tbyVersion\x123\n" +
 	"\x16co_occurring_issue_ids\x18\x05 \x03(\tR\x13coOccurringIssueIds\x12E\n" +
 	"\rfirst_release\x18\x06 \x01(\v2 .controlplane.v1.IssueReleaseRefR\ffirstRelease\x12,\n" +
-	"\x12incident_issue_ids\x18\a \x03(\tR\x10incidentIssueIds\"\x83\x03\n" +
+	"\x12incident_issue_ids\x18\a \x03(\tR\x10incidentIssueIds\"\xe2\x03\n" +
 	"\n" +
 	"IssueEvent\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12\x19\n" +
@@ -2862,7 +2921,12 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"attributes\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\a \x01(\tR\tsessionId\x12\x19\n" +
-	"\burl_path\x18\b \x01(\tR\aurlPath\x1a=\n" +
+	"\burl_path\x18\b \x01(\tR\aurlPath\x12\x17\n" +
+	"\auser_id\x18\t \x01(\tR\x06userId\x12\x18\n" +
+	"\acountry\x18\n" +
+	" \x01(\tR\acountry\x12\x16\n" +
+	"\x06region\x18\v \x01(\tR\x06region\x12\x12\n" +
+	"\x04city\x18\f \x01(\tR\x04city\x1a=\n" +
 	"\x0fAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x7f\n" +
@@ -2887,14 +2951,17 @@ const file_services_issues_v1_issues_proto_rawDesc = "" +
 	"git_commit\x18\x02 \x01(\tR\tgitCommit\x12!\n" +
 	"\fcommit_range\x18\x03 \x01(\tR\vcommitRange\x12;\n" +
 	"\vpromoted_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"promotedAt\"\xaf\x01\n" +
+	"promotedAt\"\xd9\x01\n" +
 	"\x16ListIssueEventsRequest\x12\x19\n" +
 	"\bissue_id\x18\x01 \x01(\tR\aissueId\x12>\n" +
 	"\n" +
 	"time_range\x18\x02 \x01(\v2\x1f.controlplane.v1.IssueTimeRangeR\ttimeRange\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x04 \x01(\tR\tpageToken\"v\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\x12\x1c\n" +
+	"\auser_id\x18\x05 \x01(\tH\x00R\x06userId\x88\x01\x01B\n" +
+	"\n" +
+	"\b_user_id\"v\n" +
 	"\x17ListIssueEventsResponse\x123\n" +
 	"\x06events\x18\x01 \x03(\v2\x1b.controlplane.v1.IssueEventR\x06events\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"a\n" +
@@ -3196,6 +3263,7 @@ func file_services_issues_v1_issues_proto_init() {
 	}
 	file_services_issues_v1_issues_proto_msgTypes[1].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[2].OneofWrappers = []any{}
+	file_services_issues_v1_issues_proto_msgTypes[10].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[13].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[28].OneofWrappers = []any{}
 	file_services_issues_v1_issues_proto_msgTypes[35].OneofWrappers = []any{

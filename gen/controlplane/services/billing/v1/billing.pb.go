@@ -2962,13 +2962,17 @@ func (x *UsageBillingAgreement) GetBillingStartAt() *timestamppb.Timestamp {
 
 // Exact decimal cents per displayed unit, derived from the canonical catalog.
 type HostedUsageRate struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ResourceKind  string                 `protobuf:"bytes,1,opt,name=resource_kind,json=resourceKind,proto3" json:"resource_kind,omitempty"`
-	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	Unit          string                 `protobuf:"bytes,3,opt,name=unit,proto3" json:"unit,omitempty"`
-	PriceCents    string                 `protobuf:"bytes,4,opt,name=price_cents,json=priceCents,proto3" json:"price_cents,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ResourceKind string                 `protobuf:"bytes,1,opt,name=resource_kind,json=resourceKind,proto3" json:"resource_kind,omitempty"`
+	DisplayName  string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Unit         string                 `protobuf:"bytes,3,opt,name=unit,proto3" json:"unit,omitempty"`
+	PriceCents   string                 `protobuf:"bytes,4,opt,name=price_cents,json=priceCents,proto3" json:"price_cents,omitempty"`
+	// Exact decimal quantity of `unit` included free each UTC month per org
+	// before price_cents applies ("10" GiB of egress); empty when the kind has
+	// no free allowance. Disclosed beside the rate; never restated by a client.
+	IncludedMonthly string `protobuf:"bytes,5,opt,name=included_monthly,json=includedMonthly,proto3" json:"included_monthly,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *HostedUsageRate) Reset() {
@@ -3029,15 +3033,25 @@ func (x *HostedUsageRate) GetPriceCents() string {
 	return ""
 }
 
+func (x *HostedUsageRate) GetIncludedMonthly() string {
+	if x != nil {
+		return x.IncludedMonthly
+	}
+	return ""
+}
+
 type GetCurrentUserUsageBillingResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	PolicyVersion string                 `protobuf:"bytes,2,opt,name=policy_version,json=policyVersion,proto3" json:"policy_version,omitempty"`
 	Agreement     *UsageBillingAgreement `protobuf:"bytes,3,opt,name=agreement,proto3" json:"agreement,omitempty"`
 	// Present before enrollment; never hardcode rates in a checkout page.
-	Rates         []*HostedUsageRate `protobuf:"bytes,4,rep,name=rates,proto3" json:"rates,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Rates []*HostedUsageRate `protobuf:"bytes,4,rep,name=rates,proto3" json:"rates,omitempty"`
+	// The monthly hosting minimum: a period whose hosting charges total more
+	// than zero and less than this is billed this. 0 when there is none.
+	MinimumMonthlyCents int64 `protobuf:"varint,5,opt,name=minimum_monthly_cents,json=minimumMonthlyCents,proto3" json:"minimum_monthly_cents,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetCurrentUserUsageBillingResponse) Reset() {
@@ -3096,6 +3110,13 @@ func (x *GetCurrentUserUsageBillingResponse) GetRates() []*HostedUsageRate {
 		return x.Rates
 	}
 	return nil
+}
+
+func (x *GetCurrentUserUsageBillingResponse) GetMinimumMonthlyCents() int64 {
+	if x != nil {
+		return x.MinimumMonthlyCents
+	}
+	return 0
 }
 
 type CreateCurrentUserUsageBillingCheckoutRequest struct {
@@ -7442,18 +7463,20 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12,\n" +
 	"\x12infra_budget_cents\x18\x03 \x01(\x03R\x10infraBudgetCents\x12%\n" +
 	"\x0epolicy_version\x18\x04 \x01(\tR\rpolicyVersion\x12D\n" +
-	"\x10billing_start_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0ebillingStartAt\"\x8e\x01\n" +
+	"\x10billing_start_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0ebillingStartAt\"\xb9\x01\n" +
 	"\x0fHostedUsageRate\x12#\n" +
 	"\rresource_kind\x18\x01 \x01(\tR\fresourceKind\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x12\n" +
 	"\x04unit\x18\x03 \x01(\tR\x04unit\x12\x1f\n" +
 	"\vprice_cents\x18\x04 \x01(\tR\n" +
-	"priceCents\"\xe3\x01\n" +
+	"priceCents\x12)\n" +
+	"\x10included_monthly\x18\x05 \x01(\tR\x0fincludedMonthly\"\x97\x02\n" +
 	"\"GetCurrentUserUsageBillingResponse\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12%\n" +
 	"\x0epolicy_version\x18\x02 \x01(\tR\rpolicyVersion\x12D\n" +
 	"\tagreement\x18\x03 \x01(\v2&.controlplane.v1.UsageBillingAgreementR\tagreement\x126\n" +
-	"\x05rates\x18\x04 \x03(\v2 .controlplane.v1.HostedUsageRateR\x05rates\"\xea\x01\n" +
+	"\x05rates\x18\x04 \x03(\v2 .controlplane.v1.HostedUsageRateR\x05rates\x122\n" +
+	"\x15minimum_monthly_cents\x18\x05 \x01(\x03R\x13minimumMonthlyCents\"\xea\x01\n" +
 	",CreateCurrentUserUsageBillingCheckoutRequest\x12%\n" +
 	"\x0epolicy_version\x18\x01 \x01(\tR\rpolicyVersion\x12,\n" +
 	"\x12infra_budget_cents\x18\x02 \x01(\x03R\x10infraBudgetCents\x12\x1f\n" +

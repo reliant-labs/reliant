@@ -567,6 +567,13 @@ const (
 	// both from one figure funds it twice. If SSD becomes a premium
 	// option later it is a PLAN attribute, not a second meter kind.
 	DeployResourceKind_DEPLOY_RESOURCE_KIND_STORAGE_GIB DeployResourceKind = 10
+	// KiB served from hosted static sites in the hour (an hourly flow per
+	// environment, no deployment). Billed past the monthly static-egress
+	// allowance.
+	DeployResourceKind_DEPLOY_RESOURCE_KIND_STATIC_EGRESS_KIB DeployResourceKind = 11
+	// Static sites live beyond the free one, per hour (an hourly flow per org,
+	// no environment or deployment): site-hours.
+	DeployResourceKind_DEPLOY_RESOURCE_KIND_STATIC_SITE DeployResourceKind = 12
 )
 
 // Enum value maps for DeployResourceKind.
@@ -579,15 +586,19 @@ var (
 		7:  "DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB",
 		8:  "DEPLOY_RESOURCE_KIND_CDN_REQUESTS",
 		10: "DEPLOY_RESOURCE_KIND_STORAGE_GIB",
+		11: "DEPLOY_RESOURCE_KIND_STATIC_EGRESS_KIB",
+		12: "DEPLOY_RESOURCE_KIND_STATIC_SITE",
 	}
 	DeployResourceKind_value = map[string]int32{
-		"DEPLOY_RESOURCE_KIND_UNSPECIFIED":    0,
-		"DEPLOY_RESOURCE_KIND_CPU_MILLI":      1,
-		"DEPLOY_RESOURCE_KIND_MEM_MIB":        2,
-		"DEPLOY_RESOURCE_KIND_EGRESS_GIB":     6,
-		"DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB": 7,
-		"DEPLOY_RESOURCE_KIND_CDN_REQUESTS":   8,
-		"DEPLOY_RESOURCE_KIND_STORAGE_GIB":    10,
+		"DEPLOY_RESOURCE_KIND_UNSPECIFIED":       0,
+		"DEPLOY_RESOURCE_KIND_CPU_MILLI":         1,
+		"DEPLOY_RESOURCE_KIND_MEM_MIB":           2,
+		"DEPLOY_RESOURCE_KIND_EGRESS_GIB":        6,
+		"DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB":    7,
+		"DEPLOY_RESOURCE_KIND_CDN_REQUESTS":      8,
+		"DEPLOY_RESOURCE_KIND_STORAGE_GIB":       10,
+		"DEPLOY_RESOURCE_KIND_STATIC_EGRESS_KIB": 11,
+		"DEPLOY_RESOURCE_KIND_STATIC_SITE":       12,
 	}
 )
 
@@ -2575,11 +2586,16 @@ type DomainBinding struct {
 	Target string `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
 	// Serve a 308 to this hostname instead of proxying. The apex/www pair is
 	// the case: 'www.example.com' redirects to 'example.com'.
-	RedirectTo    string                 `protobuf:"bytes,5,opt,name=redirect_to,json=redirectTo,proto3" json:"redirect_to,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RedirectTo string                 `protobuf:"bytes,5,opt,name=redirect_to,json=redirectTo,proto3" json:"redirect_to,omitempty"`
+	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Add includeSubDomains to the hostname's Strict-Transport-Security, so a
+	// browser that has seen it uses HTTPS for every name under it. Off by
+	// default: it breaks any subdomain still served over plain HTTP. Honoured
+	// where the platform sends HSTS: static sites and their redirects.
+	HstsIncludeSubdomains bool `protobuf:"varint,8,opt,name=hsts_include_subdomains,json=hstsIncludeSubdomains,proto3" json:"hsts_include_subdomains,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *DomainBinding) Reset() {
@@ -2659,6 +2675,13 @@ func (x *DomainBinding) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *DomainBinding) GetHstsIncludeSubdomains() bool {
+	if x != nil {
+		return x.HstsIncludeSubdomains
+	}
+	return false
 }
 
 // Deployment is one deployable unit inside an environment.
@@ -7575,7 +7598,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"updated_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x128\n" +
 	"\abinding\x18\v \x01(\v2\x1e.controlplane.v1.DomainBindingR\abinding\x12E\n" +
-	"\fserving_path\x18\f \x01(\x0e2\".controlplane.v1.DeployServingPathR\vservingPath\"\x92\x02\n" +
+	"\fserving_path\x18\f \x01(\x0e2\".controlplane.v1.DeployServingPathR\vservingPath\"\xca\x02\n" +
 	"\rDomainBinding\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\tR\bdomainId\x12%\n" +
@@ -7586,7 +7609,8 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc2\x04\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x126\n" +
+	"\x17hsts_include_subdomains\x18\b \x01(\bR\x15hstsIncludeSubdomains\"\xc2\x04\n" +
 	"\n" +
 	"Deployment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
@@ -8063,7 +8087,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x1eDEPLOY_RECONCILE_POLICY_PINNED\x10\x03*_\n" +
 	"\x13DeployPromotionKind\x12%\n" +
 	"!DEPLOY_PROMOTION_KIND_UNSPECIFIED\x10\x00\x12!\n" +
-	"\x1dDEPLOY_PROMOTION_KIND_PROMOTE\x10\x01*\x9b\x02\n" +
+	"\x1dDEPLOY_PROMOTION_KIND_PROMOTE\x10\x01*\xed\x02\n" +
 	"\x12DeployResourceKind\x12$\n" +
 	" DEPLOY_RESOURCE_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eDEPLOY_RESOURCE_KIND_CPU_MILLI\x10\x01\x12 \n" +
@@ -8072,7 +8096,9 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"#DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB\x10\a\x12%\n" +
 	"!DEPLOY_RESOURCE_KIND_CDN_REQUESTS\x10\b\x12$\n" +
 	" DEPLOY_RESOURCE_KIND_STORAGE_GIB\x10\n" +
-	"*p\n" +
+	"\x12*\n" +
+	"&DEPLOY_RESOURCE_KIND_STATIC_EGRESS_KIB\x10\v\x12$\n" +
+	" DEPLOY_RESOURCE_KIND_STATIC_SITE\x10\f*p\n" +
 	"\x0fDeployLogStream\x12!\n" +
 	"\x1dDEPLOY_LOG_STREAM_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOY_LOG_STREAM_BUILD\x10\x01\x12\x1d\n" +

@@ -249,7 +249,17 @@ type SessionSummary struct {
 	// Browser errors raised in the session.
 	Errors int64 `protobuf:"varint,12,opt,name=errors,proto3" json:"errors,omitempty"`
 	// Whether a replay was recorded. GetSessionReplay serves it.
-	HasReplay     bool `protobuf:"varint,13,opt,name=has_replay,json=hasReplay,proto3" json:"has_replay,omitempty"`
+	HasReplay bool `protobuf:"varint,13,opt,name=has_replay,json=hasReplay,proto3" json:"has_replay,omitempty"`
+	// Where the browser was: derived by the platform at ingest from the address
+	// it connected from (DB-IP City Lite), never reported by the page. An ISO
+	// 3166-1 alpha-2 country, and the English names of the region and city.
+	// Empty when unknown.
+	Country string `protobuf:"bytes,14,opt,name=country,proto3" json:"country,omitempty"`
+	Region  string `protobuf:"bytes,15,opt,name=region,proto3" json:"region,omitempty"`
+	City    string `protobuf:"bytes,16,opt,name=city,proto3" json:"city,omitempty"`
+	// The browser's IP address. Empty unless the platform is configured to keep
+	// it; by default it derives the location above and drops the address.
+	ClientAddress string `protobuf:"bytes,17,opt,name=client_address,json=clientAddress,proto3" json:"client_address,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -373,6 +383,34 @@ func (x *SessionSummary) GetHasReplay() bool {
 		return x.HasReplay
 	}
 	return false
+}
+
+func (x *SessionSummary) GetCountry() string {
+	if x != nil {
+		return x.Country
+	}
+	return ""
+}
+
+func (x *SessionSummary) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *SessionSummary) GetCity() string {
+	if x != nil {
+		return x.City
+	}
+	return ""
+}
+
+func (x *SessionSummary) GetClientAddress() string {
+	if x != nil {
+		return x.ClientAddress
+	}
+	return ""
 }
 
 type ListSessionsRequest struct {
@@ -1166,7 +1204,7 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
 	"\aenv_ids\x18\x06 \x03(\tR\x06envIdsB\r\n" +
-	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\xc8\x03\n" +
+	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\xb5\x04\n" +
 	"\x0eSessionSummary\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x18\n" +
@@ -1186,7 +1224,11 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"\finteractions\x18\v \x01(\x03R\finteractions\x12\x16\n" +
 	"\x06errors\x18\f \x01(\x03R\x06errors\x12\x1d\n" +
 	"\n" +
-	"has_replay\x18\r \x01(\bR\thasReplay\"\xfc\x01\n" +
+	"has_replay\x18\r \x01(\bR\thasReplay\x12\x18\n" +
+	"\acountry\x18\x0e \x01(\tR\acountry\x12\x16\n" +
+	"\x06region\x18\x0f \x01(\tR\x06region\x12\x12\n" +
+	"\x04city\x18\x10 \x01(\tR\x04city\x12%\n" +
+	"\x0eclient_address\x18\x11 \x01(\tR\rclientAddress\"\xfc\x01\n" +
 	"\x13ListSessionsRequest\x12/\n" +
 	"\x05scope\x18\x01 \x01(\v2\x19.controlplane.v1.RumScopeR\x05scope\x12\x1b\n" +
 	"\thas_error\x18\x02 \x01(\bR\bhasError\x12\x1d\n" +

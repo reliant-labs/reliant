@@ -828,9 +828,9 @@ export const ChatPresenter = memo(function ChatPresenter({
           }
         >
           {/* Everything between the transcript and the composer goes through
-              the status slot: in full on a wide column, one line (three at
-              medium width) plus a sheet on a narrow one. Approvals are never
-              collapsed. */}
+              the status slot: in full on desktop and on a wide phone column,
+              one line (three at medium width) plus a sheet on a narrow phone
+              column. Approvals are never collapsed. */}
           <ComposerStatusSlot
             upper={
               <>

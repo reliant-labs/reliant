@@ -44,7 +44,7 @@ export function workflowExecutionsAnswer(
     "ChatService.GetWorkflowExecutions": async (request: unknown) => {
       const { chatId, view } = request as GetWorkflowExecutionsRequest;
       const answer = await fake(chatId, view);
-      return { rootWorkflow: answer?.latest ?? undefined, allRootWorkflows: answer?.all ?? [] };
+      return { allRootWorkflows: answer?.all ?? (answer?.latest ? [answer.latest] : []) };
     },
   };
 }

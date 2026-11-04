@@ -7,8 +7,15 @@
  * could eat the conversation, so there the slot shows ONE line — the highest
  * priority active item, with a `+N` count — and tapping it opens a sheet
  * listing every active item in full, with its existing actions. A medium column
- * gets up to three lines; a wide column (the desktop shell) renders every band
- * in full, exactly as before.
+ * gets up to three lines; a wide column renders every band in full, exactly as
+ * before.
+ *
+ * Collapsing is for phones only: the mobile shell (`/m/*`), or any viewport
+ * below the mobile breakpoint (`useNarrowViewport`, Tailwind's `md`). The
+ * desktop shell renders every band in full at any column width (§6: "The
+ * desktop shell is unchanged"), so a chat column narrowed by its sidebars keeps
+ * the queued strip's interrupt and cancel buttons and the background-work
+ * pill's inline expand, instead of a one-line summary that opens a sheet.
  *
  * Pending approvals are never collapsed: they are passed in as `approvals` and
  * always render in full above the composer. ask_user questions and the
@@ -64,6 +71,8 @@ import { createPortal } from "react-dom";
 import { AlertTriangle, ChevronRight } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useComposeMode } from "../../lib/composeMode";
+import { useSurface } from "../../lib/surfaceContext";
+import { useNarrowViewport } from "../../hooks/useNarrowViewport";
 import { ComposerSheet } from "./ComposerSheet";
 
 // ---------------------------------------------------------------------------
@@ -108,7 +117,8 @@ interface Entry extends Required<StatusSummary> {
 }
 
 // ---------------------------------------------------------------------------
-// Width classes (§4.1). Layout follows the column, never useSurface().
+// Width classes (§4.1). On a phone the class follows the column; the desktop
+// shell is always wide (see ComposerStatusSlot).
 // ---------------------------------------------------------------------------
 
 export type StatusSlotLayout = "compact" | "medium" | "wide";
@@ -269,7 +279,7 @@ interface ComposerStatusSlotProps {
   approvals: ReactNode;
   /** Banners below the approvals on a wide column. Each a `StatusSlotItem`. */
   lower: ReactNode;
-  /** Test seam: skip measuring and use this layout. */
+  /** Test seam: skip measuring (and the phone check) and use this layout. */
   layout?: StatusSlotLayout;
 }
 
@@ -286,7 +296,10 @@ function usePortalNode(name: string): HTMLDivElement {
 export function ComposerStatusSlot({ upper, approvals, lower, layout: layoutOverride }: ComposerStatusSlotProps) {
   const measureRef = useRef<HTMLDivElement>(null);
   const measured = useColumnLayout(measureRef);
-  const layout = layoutOverride ?? measured;
+  // Only a phone collapses; the desktop shell is always wide (module comment).
+  const mobileSurface = useSurface() === "mobile";
+  const narrowViewport = useNarrowViewport();
+  const layout = layoutOverride ?? (mobileSurface || narrowViewport ? measured : "wide");
   const composeMode = useComposeMode();
   // With the keyboard up the transcript is down to a few lines, so the slot
   // collapses to one line whatever the width.

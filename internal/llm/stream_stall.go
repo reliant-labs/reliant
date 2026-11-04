@@ -159,14 +159,24 @@ func (l *StreamLiveness) Touch() {
 // Since reports how long ago the last touch was, and false if there never was
 // one.
 func (l *StreamLiveness) Since() (time.Duration, bool) {
-	if l == nil {
+	last, ok := l.Last()
+	if !ok {
 		return 0, false
+	}
+	return time.Since(last), true
+}
+
+// Last reports when the last touch was, and false if there never was one.
+// Safe on a nil receiver.
+func (l *StreamLiveness) Last() (time.Time, bool) {
+	if l == nil {
+		return time.Time{}, false
 	}
 	last := l.lastNanos.Load()
 	if last == 0 {
-		return 0, false
+		return time.Time{}, false
 	}
-	return time.Since(time.Unix(0, last)), true
+	return time.Unix(0, last), true
 }
 
 type streamLivenessKey struct{}

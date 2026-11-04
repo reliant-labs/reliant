@@ -229,7 +229,7 @@ func rttProxy(tb testing.TB, target string, oneWay time.Duration) string {
 }
 
 // perfRepo opens a Repo on dsn through an rttProxy, with production's pool
-// settings (internal/db/connect.go: 25 open, 10 idle).
+// settings (internal/db/connect.go: 25 open, 20 idle).
 func perfRepo(tb testing.TB, dsn string, oneWay time.Duration) *db.Repo {
 	tb.Helper()
 	u, err := url.Parse(dsn)

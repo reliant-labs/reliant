@@ -169,6 +169,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       session: undefined,
       t: undefined,
       user: undefined,
+      rsession: undefined,
       cursor: undefined,
     });
   };
@@ -328,6 +329,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             platform={issuePlatformOf(search.platform)}
             sort={issueSortOf(search.isort)}
             assignee={search.assignee}
+            user={search.user ?? ""}
             issueId={search.issue}
             navigate={navigate}
           />
@@ -373,6 +375,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             spanId={search.span}
             groupBy={groupBy}
             filters={filterTokens}
+            user={search.user ?? ""}
+            sessionId={search.rsession}
             navigate={navigate}
           />
         ) : (

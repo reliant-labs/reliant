@@ -363,20 +363,7 @@ func (c *CodexClient) convertMessages(messages []message.Message) responses.Resp
 
 		case message.Tool:
 			for _, result := range msg.ToolResults() {
-				// Built as a struct rather than via
-				// ResponseInputItemParamOfFunctionCallOutput: openai-go v3.55
-				// narrowed that helper to take only the output, so it cannot
-				// set CallID. CallID is what pairs this output with the
-				// function_call item above, and the API rejects an output that
-				// references no call.
-				items = append(items, responses.ResponseInputItemUnionParam{
-					OfFunctionCallOutput: &responses.ResponseInputItemFunctionCallOutputParam{
-						CallID: param.NewOpt(result.ToolCallID),
-						Output: responses.ResponseInputItemFunctionCallOutputOutputUnionParam{
-							OfString: param.NewOpt(result.Content),
-						},
-					},
-				})
+				items = append(items, responseswire.FunctionCallOutputItem(result))
 			}
 
 		case message.System:

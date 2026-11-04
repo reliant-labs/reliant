@@ -867,6 +867,13 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         if (i === 0) insertIdx = 0;
       }
 
+      // An error older than every loaded message happened somewhere in the
+      // history not loaded yet. Its place is among those messages, not stacked
+      // above the first one loaded: every such error used to pile up there.
+      // It stays in the store and takes its place once the scroll-back page
+      // holding that history loads (ListMessagesResponse.errors).
+      if (insertIdx === 0 && hasOlderMessages && items.length > 0) continue;
+
       items.splice(insertIdx, 0, {
         type: "error",
         error,
@@ -923,7 +930,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     }
 
     return items;
-  }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads]);
+  }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads, hasOlderMessages]);
 
   // `timelineItems` IS the list the virtualizer renders. There is deliberately
   // no per-row wrapper carrying `key`/`isLast`: both are derivable from the

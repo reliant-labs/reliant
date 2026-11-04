@@ -225,6 +225,99 @@ describe("loadOlderMessages", () => {
     expect(index["call-old"]?.content).toBe("result-for-call-old");
   });
 
+  describe("the page's errors", () => {
+    const ERR = "activity-error-a";
+
+    function pageError(id: string, seq: number, attempt: number, retrying: boolean) {
+      return {
+        entityId: id,
+        sequenceNumber: BigInt(seq),
+        dataJson: JSON.stringify({
+          id,
+          chat_id: CHAT,
+          error_message: "boom",
+          attempt_number: attempt,
+          is_retrying: retrying,
+          timestamp: "2026-01-01T00:00:00.000Z",
+        }),
+        createdAt: "2026-01-01T00:00:00.000Z",
+      };
+    }
+
+    function seedErrors(errors: unknown[]) {
+      setMessagesInCache(CHAT, [msg("m300", 300)], {
+        total: 400,
+        hasMore: true,
+        oldestSeq: 300,
+      });
+      useChatStore.setState({ errorEvents: { [CHAT]: errors } } as never);
+    }
+
+    const errors = () => useChatStore.getState().errorEvents[CHAT] ?? [];
+
+    it("adds an error the snapshot did not carry", async () => {
+      seedErrors([]);
+      listMessages.mockResolvedValue({
+        ...page([msg("m200", 200)], 400),
+        errors: [pageError("older-error", 40, 1, false)],
+      });
+
+      await useChatStore.getState().loadOlderMessages(CHAT);
+
+      expect(errors().map((e) => [e.id, e.sequence_number])).toEqual([["older-error", 40]]);
+    });
+
+    it("never replaces a newer attempt with the page's older one", async () => {
+      // One error's retries straddle the page's upper edge: the page holds
+      // attempt 1 (seq 50), the snapshot already delivered the final attempt 3
+      // (seq 90). Scrolling back must not make it look like it is retrying.
+      seedErrors([
+        {
+          update_type: "error",
+          id: ERR,
+          chat_id: CHAT,
+          error_message: "boom",
+          attempt_number: 3,
+          is_retrying: false,
+          timestamp: "2026-01-01T00:01:00.000Z",
+          sequence_number: 90,
+        },
+      ]);
+      listMessages.mockResolvedValue({
+        ...page([msg("m200", 200)], 400),
+        errors: [pageError(ERR, 50, 1, true)],
+      });
+
+      await useChatStore.getState().loadOlderMessages(CHAT);
+
+      expect(errors()).toHaveLength(1);
+      expect(errors()[0]).toMatchObject({ attempt_number: 3, is_retrying: false, sequence_number: 90 });
+    });
+
+    it("replaces an older attempt with the page's newer one", async () => {
+      seedErrors([
+        {
+          update_type: "error",
+          id: ERR,
+          chat_id: CHAT,
+          error_message: "boom",
+          attempt_number: 1,
+          is_retrying: true,
+          timestamp: "2026-01-01T00:00:00.000Z",
+          sequence_number: 50,
+        },
+      ]);
+      listMessages.mockResolvedValue({
+        ...page([msg("m200", 200)], 400),
+        errors: [pageError(ERR, 60, 2, false)],
+      });
+
+      await useChatStore.getState().loadOlderMessages(CHAT);
+
+      expect(errors()[0]).toMatchObject({ attempt_number: 2, sequence_number: 60 });
+    });
+  });
+
   describe("olderLoadingByChat", () => {
     const loading = () => useChatStore.getState().olderLoadingByChat[CHAT] === true;
 

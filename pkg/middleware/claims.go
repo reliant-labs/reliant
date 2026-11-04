@@ -19,9 +19,16 @@ import (
 // serving path moves onto forge's auth middleware (P3c in
 // research/forge-migration/PLAN.md), this is the bridge that makes those
 // principals mean the same thing to reliant's handlers as a real request.
+//
+// The principal stands for a person signed in to the app, so it carries
+// auth.CredentialSession; a test of a machine credential sets its own with
+// auth.WithCredential. It is for tests alone: on a serving path it would
+// upgrade any principal to a session, so TestContextWithClaimsIsTestOnly
+// (internal/architecture) fails a non-test file that references it.
 func ContextWithClaims(ctx context.Context, claims *forgeauth.Claims) context.Context {
 	if claims == nil {
 		return ctx
 	}
-	return auth.WithUser(ctx, claims.UserID, claims.Role, claims.Email)
+	ctx = auth.WithUser(ctx, claims.UserID, claims.Role, claims.Email)
+	return auth.WithCredential(ctx, auth.CredentialSession)
 }
