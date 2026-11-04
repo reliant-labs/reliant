@@ -107,9 +107,9 @@ The console also shows which **device and client** a session, error or trace cam
 
 - **Device and client:** browser and version (or, for an Electron app, the Electron and Chromium versions), OS and version, and device type (desktop, mobile, tablet or bot). The platform derives them when your browser telemetry arrives, from the request's own `User-Agent` and client-hint headers, which page script cannot set; a page cannot claim a different device.
 - **What your frontend reports:** its build (`service.version`), the viewport and screen size, the low-entropy client hints of `navigator.userAgentData`, and, in an Electron app whose preload exposes `window.forgeDesktop = { appVersion, electronVersion, chromiumVersion }`, the desktop app's version (`@reliantlabs/forge-web-runtime` 0.13.1 or later).
-- **Builds per trace:** the frontend build that made the call, and the version of each backend service that served it (your services' `service.version`, from the build).
+- **Versions:** every service of a trace with its own `service.version` (your services ship separately), and on a session the forge release its frontend build shipped in, with the build id beneath. A frontend deployed outside a release has no release to name, so its sessions show the build id.
 
-Sessions list device, client and app version; traces list client, frontend build and backend builds; each error event names its client, OS and build. Sessions, traces and errors filter by browser and OS, and by frontend and backend build. These are attributes on stored telemetry, never metric labels.
+Sessions list device, client and version; traces list the client and each service's version; each error event names its client, OS and build. Sessions, traces and errors filter by browser and OS, and by frontend and backend build. These are attributes on stored telemetry, never metric labels.
 
 All of it is browser telemetry, so `signals = forge.ObservabilitySignals {browser = False}` (or `enabled = False`) turns it off with the rest. If your privacy notice must say what you collect: an approximate location derived from the IP address, not the address, and the browser, OS, device type and app version derived from the User-Agent.
 

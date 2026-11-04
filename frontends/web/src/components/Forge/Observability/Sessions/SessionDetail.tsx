@@ -165,9 +165,14 @@ function SessionBody({
           <span>
             entered on <span className="font-mono text-ink">{session.entryPath || "/"}</span>
           </span>
+          {session.release && (
+            <span className="font-mono text-ink" title="The release this frontend build shipped in" data-testid="session-release">
+              {session.release}
+            </span>
+          )}
           {session.serviceVersion && (
-            <span className="font-mono" title="Frontend build">
-              {session.serviceVersion}
+            <span className="font-mono" title="The frontend's build id, which its source maps are keyed by">
+              {session.release ? `build ${session.serviceVersion}` : session.serviceVersion}
             </span>
           )}
           {session.envName && <span>in {session.envName}</span>}

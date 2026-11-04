@@ -85,6 +85,7 @@ describe("sessions", () => {
       city: "",
       clientAddress: "",
       client: NO_CLIENT,
+      release: "",
     });
     const fromBinary = mapSessionSummary(create(SessionSummarySchema, { sessionId: "s", pageViews: 4n, errors: 0n }));
     expect(fromBinary).toMatchObject({ pageViews: 4, errors: 0, startedMs: 0, hasReplay: false });

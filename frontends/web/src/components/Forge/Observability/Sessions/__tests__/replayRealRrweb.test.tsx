@@ -66,6 +66,7 @@ const SESSION: SessionSummary = {
   city: "",
   clientAddress: "",
   client: NO_CLIENT,
+  release: "",
 };
 
 // rrweb's serialized node kinds and incremental sources (rrweb-snapshot / @rrweb/types).

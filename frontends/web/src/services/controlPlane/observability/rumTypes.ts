@@ -57,6 +57,12 @@ export interface SessionSummary {
   clientAddress: string;
   /** Which client the session ran in (client.ts). NO_CLIENT for one stored before the platform recorded it. */
   client: ClientInfo;
+  /**
+   * The forge release the frontend build shipped in (v1.7.92-rc.1), from the
+   * deploy ledger: the release that first carried serviceVersion. Empty when no
+   * release carries the build (a frontend built outside the release, a desktop app).
+   */
+  release: string;
 }
 
 export interface ListSessionsRequest extends RumScope {

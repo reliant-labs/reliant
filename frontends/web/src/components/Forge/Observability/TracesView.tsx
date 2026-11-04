@@ -58,7 +58,7 @@ import { UserIdFilter } from "./UserIdFilter";
 import { useRovingFocus } from "./useRovingFocus";
 import DataTable, { STACK, type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
-import { hasClient } from "@/services/controlPlane/observability/client";
+import { hasClient, type ServiceBuild } from "@/services/controlPlane/observability/client";
 import { clientLabel, ClientSummary } from "./Client";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "./ClientFilters";
 
@@ -277,6 +277,16 @@ function TraceList({
 const NO_KEYS: string[] = [];
 const NO_TOKENS: FilterToken[] = [];
 const NO_FILTER_VALUES: ClientFilterValues = {};
+
+/**
+ * Every service of a trace with its own build: the frontend that made the call
+ * (the browser root's service and its build id) first, then each backend
+ * service that served it.
+ */
+function serviceBuildsOf(t: TraceSummary): ServiceBuild[] {
+  const frontend = t.frontendVersion ? [{ service: t.rootService || "frontend", version: t.frontendVersion }] : [];
+  return [...frontend, ...t.backendBuilds];
+}
 const TRACE_CLIENT_FIELDS = ["browser", "os", "fe", "be"] as const;
 
 /** What the brushed region is, how many loaded traces it keeps, and the way out of it. */
@@ -580,37 +590,28 @@ function TraceTable({
             );
           },
         }),
-        // Which client made the call and which builds ran it: the frontend
-        // build under the client, the backend builds in their own column, so a
-        // regression reads as a release.
+        // Which client made the call, and each service's own build: the
+        // services ship separately, so a regression reads as one service's
+        // version, not one app-wide value.
         column.accessor((t) => clientLabel(t.client), {
           id: "client",
           header: "Client",
           sortFn: "alphanumeric",
           cell: (info) => {
             const trace = info.row.original;
-            if (!hasClient(trace.client) && !trace.frontendVersion) return <span className="text-xs text-ink-muted">—</span>;
-            return (
-              <span className="flex min-w-0 flex-col leading-tight">
-                <ClientSummary client={trace.client} className="text-xs text-ink" testId="obs-trace-client" />
-                {trace.frontendVersion && (
-                  <span className="truncate font-mono text-2xs text-ink-muted" title={`Frontend build ${trace.frontendVersion}`} data-testid="obs-trace-frontend-version">
-                    {trace.frontendVersion}
-                  </span>
-                )}
-              </span>
-            );
+            if (!hasClient(trace.client)) return <span className="text-xs text-ink-muted">—</span>;
+            return <ClientSummary client={trace.client} className="text-xs text-ink" testId="obs-trace-client" />;
           },
         }),
-        column.accessor((t) => t.backendBuilds.map((b) => b.version).join(" "), {
-          id: "backend",
-          header: "Backend",
+        column.accessor((t) => serviceBuildsOf(t).map((b) => b.version).join(" "), {
+          id: "versions",
+          header: "Versions",
           sortFn: "alphanumeric",
           cell: (info) => {
-            const builds = info.row.original.backendBuilds;
+            const builds = serviceBuildsOf(info.row.original);
             if (builds.length === 0) return <span className="text-xs text-ink-muted">—</span>;
             return (
-              <span className="flex min-w-0 flex-col leading-tight" data-testid="obs-trace-backend">
+              <span className="flex min-w-0 flex-col leading-tight" data-testid="obs-trace-versions">
                 {builds.slice(0, 2).map((b) => (
                   <span key={`${b.service}@${b.version}`} className="truncate text-2xs" title={`${b.service} ${b.version}`}>
                     <span className="text-ink-muted">{b.service}</span> <span className="font-mono text-ink">{b.version}</span>

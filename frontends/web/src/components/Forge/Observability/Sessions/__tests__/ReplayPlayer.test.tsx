@@ -47,6 +47,7 @@ const SESSION: SessionSummary = {
   city: "",
   clientAddress: "",
   client: NO_CLIENT,
+  release: "",
 };
 
 const meta = (at: number): RrwebEvent => ({ type: 4, timestamp: T + at, data: { href: "https://shop.example/", width: 1280, height: 720 } });

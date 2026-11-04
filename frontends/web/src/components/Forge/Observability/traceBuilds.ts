@@ -16,6 +16,8 @@ import { isBrowserSpan } from "./traceTitle";
 
 export interface TraceBuilds {
   client: ClientInfo;
+  /** The browser's service and its build id (service.version). */
+  frontendService: string;
   frontendVersion: string;
   backendBuilds: ServiceBuild[];
 }
@@ -25,12 +27,16 @@ const DEVICE_TYPES = new Set<string>(["desktop", "mobile", "tablet", "bot"]);
 export function traceBuildsOf(spans: readonly Pick<Span, "resource" | "service">[]): TraceBuilds {
   let client: ClientInfo = NO_CLIENT;
   let frontendVersion = "";
+  let frontendService = "";
   const backends = new Map<string, ServiceBuild>();
   for (const span of spans) {
     const r = span.resource;
     const version = r["service.version"] ?? "";
     if (isBrowserSpan(span)) {
-      if (!frontendVersion && version) frontendVersion = version;
+      if (!frontendVersion && version) {
+        frontendVersion = version;
+        frontendService = span.service || r["service.name"] || "";
+      }
       if (client === NO_CLIENT && (r["user_agent.name"] || r["app.desktop.version"])) {
         const device = r["reliant.device.type"] ?? "";
         client = {
@@ -51,5 +57,5 @@ export function traceBuildsOf(spans: readonly Pick<Span, "resource" | "service">
     }
   }
   const backendBuilds = [...backends.values()].sort((a, b) => a.service.localeCompare(b.service) || a.version.localeCompare(b.version));
-  return { client, frontendVersion, backendBuilds };
+  return { client, frontendService, frontendVersion, backendBuilds };
 }

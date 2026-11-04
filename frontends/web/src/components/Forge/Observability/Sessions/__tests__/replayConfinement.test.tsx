@@ -48,6 +48,7 @@ const SESSION: SessionSummary = {
   city: "",
   clientAddress: "",
   client: NO_CLIENT,
+  release: "",
 };
 
 const ATTACKER = "https://attacker.example";

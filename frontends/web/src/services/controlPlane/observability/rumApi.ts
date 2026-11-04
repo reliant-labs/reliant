@@ -99,6 +99,7 @@ export function mapSessionSummary(s: WireSummary): SessionSummary {
     city: s.city,
     clientAddress: s.clientAddress,
     client: mapClient(s.client),
+    release: s.release,
   };
 }
 

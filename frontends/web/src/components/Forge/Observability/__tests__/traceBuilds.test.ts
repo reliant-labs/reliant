@@ -24,6 +24,7 @@ describe("traceBuildsOf", () => {
       server("reliant-api-server", "v1.7.92"),
     ]);
     expect(builds.frontendVersion).toBe("1.8.16-dev+7d787d80");
+    expect(builds.frontendService).toBe("reliant-web");
     expect(builds.client).toMatchObject({ browserName: "Electron", electronVersion: "41.10.7", osName: "macOS", deviceType: "desktop", desktopVersion: "1.8.16" });
     expect(builds.backendBuilds).toEqual([
       { service: "reliant-api-server", version: "v1.7.92" },
@@ -32,7 +33,7 @@ describe("traceBuildsOf", () => {
   });
 
   it("has no client or frontend for a trace no browser started, and ignores an unknown device type", () => {
-    expect(traceBuildsOf([server("api", "v1")])).toEqual({ client: NO_CLIENT, frontendVersion: "", backendBuilds: [{ service: "api", version: "v1" }] });
+    expect(traceBuildsOf([server("api", "v1")])).toEqual({ client: NO_CLIENT, frontendService: "", frontendVersion: "", backendBuilds: [{ service: "api", version: "v1" }] });
     expect(traceBuildsOf([browser({ "user_agent.name": "Chrome", "reliant.device.type": "toaster" })]).client.deviceType).toBe("");
   });
 });

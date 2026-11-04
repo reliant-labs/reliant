@@ -16,7 +16,7 @@ import userEvent from "@testing-library/user-event";
 import type { PanelResult } from "@/services/controlPlane/observability/types";
 
 import { createFixtureApi, fixtureTrace } from "../../__fixtures__/fixtureApi";
-import { FIXTURE_LIVE_SESSION, FIXTURE_STORY_SESSION } from "../../__fixtures__/fixtureSessions";
+import { FIXTURE_LIVE_SESSION, FIXTURE_RELEASE, FIXTURE_STORY_SESSION } from "../../__fixtures__/fixtureSessions";
 import { ENV_PLACE, PROJECT_PLACE, renderPanel } from "../../__tests__/obsTestUtils";
 import { PanelBody } from "../../Dashboards/PanelBody";
 import { FakeReplayer } from "./fakeReplayer";
@@ -134,7 +134,13 @@ describe("the session list", () => {
     expect(device).toHaveTextContent("desktop · 1440×900");
     expect(device).toHaveAttribute("title", expect.stringContaining("derived by the platform from the request's User-Agent"));
     expect(screen.getByTestId(`obs-session-client-${FIXTURE_STORY_SESSION}`)).toHaveTextContent("Chrome 156");
-    expect(screen.getByTestId(`obs-session-version-${FIXTURE_STORY_SESSION}`)).toHaveTextContent("v1.8.3");
+    // The release the build shipped in first, the build id (what source maps are keyed by) beneath.
+    const version = screen.getByTestId(`obs-session-version-${FIXTURE_STORY_SESSION}`);
+    expect(within(version).getByTestId("obs-session-release")).toHaveTextContent(FIXTURE_RELEASE);
+    expect(version).toHaveTextContent("build v1.8.3");
+    // A build no release carries is shown by its build id alone.
+    const unreleased = screen.getAllByTestId(/^obs-session-version-/).find((cell) => cell.textContent === "v1.8.2");
+    expect(unreleased).toBeDefined();
     // A desktop session: the app's own version under the build, and its Electron.
     const desktop = screen.getAllByTestId(/^obs-session-client-/).find((cell) => cell.textContent?.startsWith("Desktop app"));
     expect(desktop).toHaveTextContent("Desktop app 1.8.16Electron 41.10.7");

@@ -362,17 +362,30 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
 }
 
 /**
- * The build the session ran: its frontend's service.version and, in the
- * desktop app, the app's own version when it differs.
+ * The version the session ran: the forge release its frontend shipped in
+ * (which names every service of that bundle), with the frontend's build id —
+ * what its source maps are keyed by — beneath; the build id alone when no
+ * release carries it. In the desktop app, the app's own version when it differs.
  */
 function AppVersion({ session: s }: { session: SessionSummary }) {
   const desktop = s.client.desktopVersion && s.client.desktopVersion !== s.serviceVersion ? s.client.desktopVersion : "";
-  if (!s.serviceVersion && !desktop) return <span className="text-xs text-ink-muted">—</span>;
+  if (!s.release && !s.serviceVersion && !desktop) return <span className="text-xs text-ink-muted">—</span>;
   return (
     <span className="flex min-w-0 flex-col leading-tight" data-testid={`obs-session-version-${s.sessionId}`}>
-      {s.serviceVersion && (
-        <span className="truncate font-mono text-xs text-ink" title={`Frontend build ${s.serviceVersion}`}>
-          {s.serviceVersion}
+      {s.release ? (
+        <span className="truncate font-mono text-xs text-ink" title={`Release ${s.release}: the bundle this frontend build shipped in`} data-testid="obs-session-release">
+          {s.release}
+        </span>
+      ) : (
+        s.serviceVersion && (
+          <span className="truncate font-mono text-xs text-ink" title={`Frontend build ${s.serviceVersion} (no release carries it)`}>
+            {s.serviceVersion}
+          </span>
+        )
+      )}
+      {s.release && s.serviceVersion && (
+        <span className="truncate font-mono text-2xs text-ink-muted" title="The frontend's build id, which its source maps are keyed by">
+          build {s.serviceVersion}
         </span>
       )}
       {desktop && <span className="truncate text-2xs text-ink-muted">desktop {desktop}</span>}

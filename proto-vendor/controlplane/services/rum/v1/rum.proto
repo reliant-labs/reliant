@@ -216,6 +216,13 @@ message SessionSummary {
   // Which client the session ran in (browser, OS, device type, desktop app,
   // viewport). Empty for a session stored before the platform recorded it.
   ClientContext client = 18;
+  // The forge release the session's frontend build shipped in (e.g.
+  // v1.7.92-rc.1): the release that first carried service_version, from the
+  // deploy ledger. A build id is content-derived, so a later release that
+  // re-binds the same build serves the same bytes. Empty when no release
+  // carries the build: a frontend built outside the release (a bucket or
+  // Firebase site, a desktop app) has none.
+  string release = 19;
 }
 
 message ListSessionsRequest {

@@ -65,6 +65,9 @@ export const FIXTURE_CLIENTS: readonly ClientInfo[] = [
   { ...NO_CLIENT, browserName: "Firefox", browserVersion: "133.0", osName: "Windows", osVersion: "11", deviceType: "desktop", viewportWidth: 1920, viewportHeight: 969, screenWidth: 1920, screenHeight: 1080 },
 ];
 
+/** The forge release the fixture's newer frontend build (v1.8.3) shipped in. */
+export const FIXTURE_RELEASE = "v1.7.92-rc.1";
+
 export function fixtureSessionSummaries(t0: number): SessionSummary[] {
   const base = (n: number, over: Partial<SessionSummary>): SessionSummary => {
     const startedMs = t0 - (6 + n * 23) * MIN;
@@ -86,6 +89,8 @@ export function fixtureSessionSummaries(t0: number): SessionSummary[] {
       ...FIXTURE_PLACES[n % FIXTURE_PLACES.length],
       clientAddress: "",
       client: FIXTURE_CLIENTS[n % FIXTURE_CLIENTS.length],
+      // The ledger knows the release that shipped the newer build only.
+      release: n < 6 ? FIXTURE_RELEASE : "",
       ...over,
     };
   };
@@ -134,6 +139,7 @@ function synthesized(sessionId: string, t0: number): SessionSummary {
     ...FIXTURE_PLACES[0],
     clientAddress: "",
     client: FIXTURE_CLIENTS[0],
+    release: FIXTURE_RELEASE,
   };
 }
 

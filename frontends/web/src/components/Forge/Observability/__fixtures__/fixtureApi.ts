@@ -195,7 +195,8 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
     const root = Math.round((rpc === "ListOrders" ? 180 : 40) * (0.5 + random() * 2) * 100) / 100;
     return {
       traceId: i === 0 ? FIXTURE_TRACE_ID : `${(i * 40503).toString(16).padStart(6, "0")}77b34da6a3ce929d0e0e47${(i % 100).toString().padStart(2, "0")}`.slice(0, 32),
-      rootService: "api",
+      // A browser started every other trace: its root is the browser's span.
+      rootService: i % 2 === 0 ? "shop-web" : "api",
       rootOperation: PROCEDURE(rpc),
       startMs: window.endMs - (i + 1) * 9_000,
       durationMs: root + (i % 5 === 0 ? 120 : 0),

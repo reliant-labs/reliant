@@ -263,7 +263,14 @@ type SessionSummary struct {
 	ClientAddress string `protobuf:"bytes,17,opt,name=client_address,json=clientAddress,proto3" json:"client_address,omitempty"`
 	// Which client the session ran in (browser, OS, device type, desktop app,
 	// viewport). Empty for a session stored before the platform recorded it.
-	Client        *v1.ClientContext `protobuf:"bytes,18,opt,name=client,proto3" json:"client,omitempty"`
+	Client *v1.ClientContext `protobuf:"bytes,18,opt,name=client,proto3" json:"client,omitempty"`
+	// The forge release the session's frontend build shipped in (e.g.
+	// v1.7.92-rc.1): the release that first carried service_version, from the
+	// deploy ledger. A build id is content-derived, so a later release that
+	// re-binds the same build serves the same bytes. Empty when no release
+	// carries the build: a frontend built outside the release (a bucket or
+	// Firebase site, a desktop app) has none.
+	Release       string `protobuf:"bytes,19,opt,name=release,proto3" json:"release,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -422,6 +429,13 @@ func (x *SessionSummary) GetClient() *v1.ClientContext {
 		return x.Client
 	}
 	return nil
+}
+
+func (x *SessionSummary) GetRelease() string {
+	if x != nil {
+		return x.Release
+	}
+	return ""
 }
 
 type ListSessionsRequest struct {
@@ -1251,7 +1265,7 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x05 \x01(\tH\x00R\tprojectId\x88\x01\x01\x12\x17\n" +
 	"\aenv_ids\x18\x06 \x03(\tR\x06envIdsB\r\n" +
-	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\xed\x04\n" +
+	"\v_project_idJ\x04\b\x02\x10\x03J\x04\b\a\x10\bR\x06env_idR\afilters\"\x87\x05\n" +
 	"\x0eSessionSummary\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x18\n" +
@@ -1276,7 +1290,8 @@ const file_services_rum_v1_rum_proto_rawDesc = "" +
 	"\x06region\x18\x0f \x01(\tR\x06region\x12\x12\n" +
 	"\x04city\x18\x10 \x01(\tR\x04city\x12%\n" +
 	"\x0eclient_address\x18\x11 \x01(\tR\rclientAddress\x126\n" +
-	"\x06client\x18\x12 \x01(\v2\x1e.controlplane.v1.ClientContextR\x06client\"\xbe\x03\n" +
+	"\x06client\x18\x12 \x01(\v2\x1e.controlplane.v1.ClientContextR\x06client\x12\x18\n" +
+	"\arelease\x18\x13 \x01(\tR\arelease\"\xbe\x03\n" +
 	"\x13ListSessionsRequest\x12/\n" +
 	"\x05scope\x18\x01 \x01(\v2\x19.controlplane.v1.RumScopeR\x05scope\x12\x1b\n" +
 	"\thas_error\x18\x02 \x01(\bR\bhasError\x12\x1d\n" +

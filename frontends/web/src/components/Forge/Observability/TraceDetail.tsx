@@ -362,15 +362,15 @@ function Fact({ label, value, tone, mono }: { label: string; value: string; tone
   );
 }
 
-/** Which client called and which builds served: the release a regression in this trace belongs to. */
+/** Which client called, and each service's own build: the version a regression in this trace belongs to. */
 function TraceBuildsLine({ builds }: { builds: TraceBuilds }) {
   if (!hasClient(builds.client) && !builds.frontendVersion && builds.backendBuilds.length === 0) return null;
   return (
     <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted" data-testid="trace-builds">
       <ClientSummary client={builds.client} testId="trace-client" />
       {builds.frontendVersion && (
-        <span>
-          frontend <span className="font-mono text-ink">{builds.frontendVersion}</span>
+        <span title="The frontend's build id, which its source maps are keyed by">
+          {builds.frontendService || "frontend"} <span className="font-mono text-ink">{builds.frontendVersion}</span>
         </span>
       )}
       {builds.backendBuilds.map((b) => (
