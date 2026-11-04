@@ -35,6 +35,10 @@ import (
 // A per-command GOTMPDIR root the daemon made (proctree; gotmp-*) needs only
 // the first: every process of its command has it in its environment.
 //
+// The scan is a proof only when it read everything this user's processes
+// hold: one whose working directory, descriptors, mappings or environment
+// could not be read fails it (scanProcRoot), as if there were no /proc.
+//
 // Where there is no /proc (macOS) nothing can be proven, and a go-build*
 // directory is removed by age alone, GoWorkDirAge, as before.
 
