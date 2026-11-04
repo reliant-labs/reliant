@@ -80,6 +80,7 @@ import {
   serviceRows,
   stripCell,
   worstUsage,
+  OVERVIEW_RANGE,
   type AttentionItem,
   type JobRow,
   type KindFilter,
@@ -153,8 +154,7 @@ export interface OverviewHomeProps {
 export type HostedByEnv = ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>>;
 const NO_HOSTED: HostedByEnv = new Map();
 
-/** The Overview's window when the URL names none: a day, so "Restarts" reads as restarts today. */
-export const OVERVIEW_RANGE: RangePreset = "24h";
+export { OVERVIEW_RANGE } from "./workloadModel";
 
 export function OverviewHome({
   project,
