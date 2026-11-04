@@ -71,6 +71,56 @@ describe("trace list", () => {
   });
 });
 
+describe("trace title", () => {
+  const browserFetch = (traceId: string, now: number) => {
+    const base = fixtureTrace(traceId, now);
+    const root = base.spans[0]!;
+    return {
+      ...base,
+      spans: [
+        {
+          ...root,
+          spanId: "w1",
+          parentSpanId: "",
+          name: "HTTP POST",
+          service: "reliant-web",
+          kind: "client",
+          attributes: { "http.method": "POST", "http.url": "https://api.reliantapi.com/reliant.v1.SettingsService/GetConfigHealth" },
+          resource: { "service.name": "reliant-web", "reliant.ingest.class": "browser", "process.runtime.name": "browser" },
+        },
+      ],
+    };
+  };
+
+  it("names a server-rooted trace Service.Method, keeping the raw name as its title", async () => {
+    renderPanel(createFixtureApi(), { view: "traces", trace: FIXTURE_TRACE_ID });
+    const title = await screen.findByTestId("trace-title");
+    expect(title).toHaveTextContent("api OrdersService.CreateOrder");
+    expect(title).toHaveAttribute("title", "orders.v1.OrdersService/CreateOrder");
+    expect(screen.queryByTestId("trace-browser-only")).not.toBeInTheDocument();
+  });
+
+  it("names a browser fetch by the RPC it called, and says its backend spans were sampled out", async () => {
+    const api = createFixtureApi();
+    vi.spyOn(api, "getTrace").mockImplementation(async (req) => browserFetch(req.traceId, Date.now()));
+    renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID });
+    expect(await screen.findByTestId("trace-title")).toHaveTextContent("reliant-web SettingsService.GetConfigHealth");
+    expect(screen.getByTestId("trace-browser-only")).toHaveTextContent(/Logs for this trace/);
+  });
+
+  it("names a browser-started trace by the server span it caused, from the browser", async () => {
+    const api = createFixtureApi();
+    vi.spyOn(api, "getTrace").mockImplementation(async (req) => {
+      const browser = browserFetch(req.traceId, Date.now());
+      const server = { ...fixtureTrace(req.traceId, Date.now()).spans[0]!, spanId: "s1", parentSpanId: "w1", name: "reliant.v1.SettingsService/GetConfigHealth", service: "reliant-api-server", kind: "server" };
+      return { ...browser, spans: [...browser.spans, server] };
+    });
+    renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID });
+    expect(await screen.findByTestId("trace-title")).toHaveTextContent("reliant-api-server SettingsService.GetConfigHealth from reliant-web");
+    expect(screen.queryByTestId("trace-browser-only")).not.toBeInTheDocument();
+  });
+});
+
 describe("trace waterfall", () => {
   it("sends the selected range to GetTrace and refetches when the range changes", async () => {
     const now = Date.parse("2026-10-27T21:30:00Z");
