@@ -100,6 +100,7 @@ type APIHTTPRoutesStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 }
 
 // NewAPIHTTPRoutes builds the routes; nothing is mounted until Register.
@@ -240,6 +241,11 @@ var corsExposedHeaders = []string{
 	// wait, when the typed RetryInfo detail is absent: the dashboard panel
 	// scheduler's fallback (services/controlPlane/observability/errors.ts).
 	"Retry-After",
+	// The W3C trace context of the server's span (otelhttp's traceresponse):
+	// the chat stream's "snapshot applied" RUM event carries its trace id, so
+	// the browser's time to a visible transcript joins the server spans of the
+	// same open (api/chat-streaming-grpc.ts).
+	"Traceresponse",
 }
 
 // newCORSHandler builds the CORS middleware that wraps the entire mux. An

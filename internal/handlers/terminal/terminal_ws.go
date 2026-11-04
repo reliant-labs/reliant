@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/projectcheckout"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -51,16 +53,18 @@ var wsUpgrader = websocket.Upgrader{
 // broken session. See wsErrorWorkingDirUnavailable.
 //
 // DaemonID names the machine the terminal went to, on "init" and on every
-// machine-specific error, when the workspace decides it (an owned worktree, or
-// a chat's machine). The browser closes the session there, and names that
-// machine when it is not up or the folder is not on it.
+// machine-specific error, and MachineName is what to call it. The browser
+// shows it on every terminal, closes the session there, and names that machine
+// when it is not up, not answering, or the folder is not on it. Both are empty
+// only when no machine resolved at all.
 type wsMessage struct {
-	Type      string `json:"type"`
-	Data      string `json:"data,omitempty"`
-	Code      string `json:"code,omitempty"`
-	PID       int32  `json:"pid,omitempty"`
-	SessionID string `json:"session_id,omitempty"`
-	DaemonID  string `json:"daemon_id,omitempty"`
+	Type        string `json:"type"`
+	Data        string `json:"data,omitempty"`
+	Code        string `json:"code,omitempty"`
+	PID         int32  `json:"pid,omitempty"`
+	SessionID   string `json:"session_id,omitempty"`
+	DaemonID    string `json:"daemon_id,omitempty"`
+	MachineName string `json:"machine_name,omitempty"`
 }
 
 // Codes of an "error" sent when the daemon refused the requested working
@@ -92,7 +96,23 @@ const (
 	// wsErrorDaemonUnavailable: the machine is starting, asleep or not
 	// connected. The browser shows the wait and retries.
 	wsErrorDaemonUnavailable = "daemon_unavailable"
+	// wsErrorMachineNotAnswering: the machine is connected but did not open
+	// the shell within terminalCreateTimeout — saturated or wedged. The
+	// browser says so, naming the machine, and offers a retry instead of
+	// spinning: asking a machine at load 220 again every few seconds only
+	// adds to its load.
+	wsErrorMachineNotAnswering = "machine_not_answering"
+	// wsErrorCheckoutMissing: the terminal's machine has no checkout of the
+	// project. Retrying cannot create one; the message names the machine and
+	// the way out (switch to a machine that has it, or clone it there).
+	wsErrorCheckoutMissing = "checkout_missing"
 )
+
+// terminalCreateTimeout bounds terminal.create, the part of the browser's
+// wait for "init" or "error" that depends on the machine. The browser's own
+// bound (TERMINAL_CONNECT_TIMEOUT_MS in Terminal.tsx) sits above it. Tests
+// shrink it per handler with withTerminalCreateTimeout.
+const terminalCreateTimeout = 30 * time.Second
 
 // terminalCheckouts is what TerminalWSHandler reads to tell a working
 // directory that may still appear from one that will not. The api-server
@@ -105,13 +125,23 @@ type terminalCheckouts interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
+	// GetDaemon names the terminal's machine, and confirms a checkout's
+	// machine is the caller's (projectcheckout).
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 }
 
 // TerminalWSOption configures TerminalWSHandler.
 type TerminalWSOption func(*terminalWSConfig)
 
 type terminalWSConfig struct {
-	checkouts terminalCheckouts
+	checkouts     terminalCheckouts
+	createTimeout time.Duration
+}
+
+// withTerminalCreateTimeout replaces terminalCreateTimeout for one handler,
+// so a test can shrink the bound without touching any other handler.
+func withTerminalCreateTimeout(d time.Duration) TerminalWSOption {
+	return func(c *terminalWSConfig) { c.createTimeout = d }
 }
 
 // WithTerminalCheckouts lets the handler open the terminal on the machine that
@@ -167,21 +197,144 @@ func (c terminalWSConfig) workingDirMayAppear(ctx context.Context, router toolex
 	return state == reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING
 }
 
-// terminalMachine is the machine a terminal for this workspace opens on, ""
-// for default resolution: the same rule the Files tab reads by
-// (daemonplacement.WorkspaceDaemon) — an owned worktree's owner, else the
-// chat's machine. A branch workspace exists on one machine's disk; opening its
-// terminal on the default machine reported the workspace as archived or
-// removed.
-func (c terminalWSConfig) terminalMachine(ctx context.Context, userID, projectID, worktreeID, chatID string) (string, error) {
-	if c.checkouts == nil {
-		return "", nil
+// terminalPlacement is where a terminal opens: the machine every command of
+// the connection goes to, and the directory ON THAT MACHINE its shell starts
+// in.
+type terminalPlacement struct {
+	daemonID   string
+	workingDir string
+}
+
+// placementRefusal is a terminal that cannot open on its machine for a reason
+// the user can act on: the project is not checked out there. It is said to
+// the browser with its code and the machine, and is not a server fault.
+type placementRefusal struct {
+	code     string
+	message  string
+	daemonID string
+}
+
+func (r *placementRefusal) Error() string { return r.message }
+
+// terminalCheckoutPurpose finishes projectcheckout's refusal sentence ("clone
+// it onto <machine> to <purpose>").
+const terminalCheckoutPurpose = "open a terminal in it"
+
+// place picks the terminal's machine and working directory.
+//
+// The machine is the rule the Files tab reads by
+// (daemonplacement.WorkspaceDaemon): an owned worktree's owner, else the
+// chat's machine — where the chat's agent runs, so the terminal sees the same
+// disk. A branch workspace exists on one machine's disk; opening its terminal
+// on the default machine reported the workspace as archived or removed.
+//
+// The project's main checkout is on every machine that holds the project, at
+// a path of THAT machine's (projects.path, which the browser sends, is the
+// path on the machine that created it). So for the main checkout the machine
+// and the directory come from that machine's project_daemons row
+// (projectcheckout.ForMachine), and a machine without a checkout is refused by
+// name rather than opened in a directory that is not there. With no chat, the
+// machine is the one the project's work is placed on, never the account's
+// arbitrary default: a terminal opened with no chat used to land on whichever
+// of the user's machines answered first.
+//
+// Whatever decides it, the machine is resolved here and pinned, so the
+// browser is told which machine the terminal is on and every later command
+// goes to the same one.
+func (c terminalWSConfig) place(ctx context.Context, router toolexec.DaemonRouter, userID, projectID, worktreeID, chatID, workingDir string) (terminalPlacement, error) {
+	p := terminalPlacement{workingDir: workingDir}
+	if c.checkouts != nil {
+		ws, err := daemonplacement.WorkspaceDaemon(ctx, c.checkouts, userID, projectID, worktreeID, chatID)
+		if err != nil {
+			return terminalPlacement{}, err
+		}
+		p.daemonID = ws.DaemonID
+		if projectID != "" && c.isMainCheckout(ctx, worktreeID) {
+			if err := c.placeOnCheckout(ctx, router, userID, projectID, &p); err != nil {
+				return terminalPlacement{}, err
+			}
+		}
 	}
-	ws, err := daemonplacement.WorkspaceDaemon(ctx, c.checkouts, userID, projectID, worktreeID, chatID)
+	if p.daemonID == "" {
+		// Pinned to what default resolution names now. When nothing
+		// resolves, the create below reports the machine's state.
+		if resolved, err := router.ResolveDaemonID(ctx, userID); err == nil {
+			p.daemonID = resolved
+		}
+	}
+	return p, nil
+}
+
+// isMainCheckout reports whether worktreeID names the project's main checkout
+// ("" is the main checkout too). A branch workspace, or one whose row cannot
+// be read, is not.
+func (c terminalWSConfig) isMainCheckout(ctx context.Context, worktreeID string) bool {
+	if worktreeID == "" {
+		return true
+	}
+	wt, err := c.checkouts.GetWorktree(ctx, worktreeID)
+	return err == nil && wt != nil && wt.IsMain
+}
+
+// placeOnCheckout moves p onto the project's main checkout on p.daemonID ("":
+// the machine the project's work is placed on), or refuses with the machine
+// named.
+func (c terminalWSConfig) placeOnCheckout(ctx context.Context, router toolexec.DaemonRouter, userID, projectID string, p *terminalPlacement) error {
+	project, err := c.checkouts.GetProject(ctx, projectID)
+	if err != nil || project == nil || project.UserID != userID {
+		return daemonplacement.ErrForeignWorkspace
+	}
+	machines, _ := router.(daemonplacement.Machines)
+	target, err := projectcheckout.ForMachine(ctx, c.checkouts, machines, userID, project, p.daemonID, terminalCheckoutPurpose)
 	if err != nil {
-		return "", err
+		if !projectcheckout.IsMissing(err) {
+			return err
+		}
+		code := wsErrorCheckoutMissing
+		if rows, rowsErr := c.checkouts.ListProjectDaemonsForProject(ctx, projectID); rowsErr == nil {
+			if state, _ := checkoutstate.On(rows, p.daemonID); state == reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING {
+				// A clone landing will create it: the browser waits.
+				code = wsErrorWorkingDirUnavailable
+			}
+		}
+		return &placementRefusal{code: code, message: err.Error(), daemonID: p.daemonID}
 	}
-	return ws.DaemonID, nil
+	p.daemonID = target.DaemonID
+	p.workingDir = target.Rebase(p.workingDir)
+	return nil
+}
+
+// machineName is what the browser calls the terminal's machine, by the rule
+// every server-side sentence uses (daemonplacement.MachineName), as a label
+// rather than inside a sentence: a name the owner gave is unquoted. Only the
+// caller's own machines are named; anything else is its short id.
+func (c terminalWSConfig) machineName(ctx context.Context, userID, daemonID string) string {
+	if daemonID == "" {
+		return ""
+	}
+	var names daemonplacement.DaemonReader
+	if c.checkouts != nil {
+		names = ownMachines{r: c.checkouts, userID: userID}
+	}
+	name := daemonplacement.MachineName(ctx, names, daemonID)
+	if label, err := strconv.Unquote(name); err == nil {
+		return label
+	}
+	return name
+}
+
+// ownMachines reads only userID's machine records.
+type ownMachines struct {
+	r      daemonplacement.DaemonReader
+	userID string
+}
+
+func (o ownMachines) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	d, err := o.r.GetDaemon(ctx, id)
+	if err != nil || d == nil || d.UserID != o.userID {
+		return nil, err
+	}
+	return d, nil
 }
 
 // wsMessagePong answers a browser "ping". The browser cannot see protocol-level
@@ -210,12 +363,12 @@ type wsResizeMessage struct {
 //   - worktreeId: (optional) worktree identifier
 //   - projectId:  (optional) the project the terminal belongs to
 //   - chatId:     (optional) the chat the terminal was opened beside; on the
-//     main checkout its machine is the terminal's (see terminalMachine)
+//     main checkout its machine is the terminal's (see place)
 //
 // The handler works identically with NATSDaemonRouter (daemon-gateway) and
 // LocalDaemonRouter.
 func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidator, opts ...TerminalWSOption) http.HandlerFunc {
-	var cfg terminalWSConfig
+	cfg := terminalWSConfig{createTimeout: terminalCreateTimeout}
 	for _, opt := range opts {
 		opt(&cfg)
 	}
@@ -277,19 +430,28 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		// --- Pick the machine ---
 		// Every command of this connection — create, input, resize, output,
 		// close — goes to the one machine holding the workspace.
-		daemonID, err := cfg.terminalMachine(ctx, userID, projectID, worktreeID, chatID)
-		if err != nil {
-			if errors.Is(err, daemonplacement.ErrForeignChat) {
-				writeWSError(conn, "chat not found", logFields...)
-				return
-			}
-			if errors.Is(err, daemonplacement.ErrForeignWorkspace) {
-				writeWSError(conn, "worktree not found", logFields...)
-				return
-			}
+		placement, err := cfg.place(ctx, router, userID, projectID, worktreeID, chatID, workingDir)
+		var refusal *placementRefusal
+		switch {
+		case errors.As(err, &refusal):
+			// The user's state, said with the machine: INFO, not an error.
+			logging.InfoContext(r.Context(), "[TerminalWS] Project not checked out on the terminal's machine",
+				append([]any{"code", refusal.code, "machine", refusal.daemonID, "error", err}, logFields...)...)
+			writeWSJSON(conn, wsMessage{Type: "error", Code: refusal.code, Data: refusal.message,
+				DaemonID: refusal.daemonID, MachineName: cfg.machineName(ctx, userID, refusal.daemonID)})
+			return
+		case errors.Is(err, daemonplacement.ErrForeignChat):
+			writeWSError(conn, "chat not found", logFields...)
+			return
+		case errors.Is(err, daemonplacement.ErrForeignWorkspace):
+			writeWSError(conn, "worktree not found", logFields...)
+			return
+		case err != nil:
 			writeWSError(conn, "resolve the workspace's machine", append([]any{"error", err}, logFields...)...)
 			return
 		}
+		daemonID := placement.daemonID
+		machineName := cfg.machineName(ctx, userID, daemonID)
 		if daemonID != "" {
 			logFields = append(logFields, "daemon_id", daemonID)
 			ctx = toolexec.WithDaemonSelector(ctx, &toolexec.DaemonSelector{ID: daemonID})
@@ -297,7 +459,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 
 		// --- Create terminal session via daemon ---
 		createReq := map[string]any{
-			"working_dir": workingDir,
+			"working_dir": placement.workingDir,
 		}
 		if worktreeID != "" {
 			createReq["worktree_id"] = worktreeID
@@ -308,7 +470,11 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			return
 		}
 
-		respBytes, err := sendToMachine(ctx, router, userID, daemonID, "terminal.create", payload, 30000)
+		// Bounded as a whole: a saturated machine must end in an answer the
+		// browser can show, not a spinner (see terminalCreateTimeout).
+		createCtx, cancelCreate := context.WithTimeout(ctx, cfg.createTimeout)
+		respBytes, err := sendToMachine(createCtx, router, userID, daemonID, "terminal.create", payload, int32(cfg.createTimeout/time.Millisecond))
+		cancelCreate()
 		if err != nil {
 			if terminal.IsWorkingDirUnavailable(err) {
 				// The user's own state — a directory that is not there — so
@@ -319,17 +485,17 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 					code = wsErrorWorkingDirUnavailable
 				}
 				logging.InfoContext(r.Context(), "[TerminalWS] Working directory unavailable",
-					append([]any{"requested_working_dir", workingDir, "may_appear", mayAppear, "error", err}, logFields...)...)
-				writeWSJSON(conn, wsMessage{Type: "error", Code: code, Data: err.Error(), DaemonID: daemonID})
+					append([]any{"requested_working_dir", workingDir, "working_dir", placement.workingDir, "may_appear", mayAppear, "error", err}, logFields...)...)
+				writeWSJSON(conn, wsMessage{Type: "error", Code: code, Data: err.Error(), DaemonID: daemonID, MachineName: machineName})
 				return
 			}
 			message := fmt.Sprintf("create terminal session: %v", err)
 			// No machine, one that is not up yet, or one that is up but not
-			// answering is the machine's state: the browser shows it and
-			// retries. Said once per window (see logTerminalMachineState).
+			// answering is the machine's state: the browser shows it, naming
+			// the machine. Said once per window (see logTerminalMachineState).
 			if state, ok := terminalMachineState(err); ok {
 				logTerminalMachineState(ctx, router, userID, daemonID, state, err, logFields)
-				writeWSJSON(conn, wsMessage{Type: "error", Code: terminalMachineStateCode(state), Data: message, DaemonID: daemonID})
+				writeWSJSON(conn, wsMessage{Type: "error", Code: terminalMachineStateCode(state), Data: message, DaemonID: daemonID, MachineName: machineName})
 				return
 			}
 			writeWSError(conn, message, append([]any{"error", err}, logFields...)...)
@@ -364,7 +530,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 
 		// Send init message to browser, carrying the daemon's session id so the
 		// browser can address this session on close. See wsMessage.SessionID.
-		writeWSJSON(conn, wsMessage{Type: "init", PID: createResp.PID, SessionID: sessionID, DaemonID: daemonID})
+		writeWSJSON(conn, wsMessage{Type: "init", PID: createResp.PID, SessionID: sessionID, DaemonID: daemonID, MachineName: machineName})
 
 		// --- Subscribe to terminal output ---
 		outputCh, unsub, err := router.SubscribeTerminalOutput(ctx, userID, sessionID)
@@ -561,7 +727,9 @@ func terminalMachineState(err error) (state string, ok bool) {
 		return "starting_or_asleep", true
 	case daemonerr.Unreachable(err):
 		return "not_connected", true
-	case toolexec.IsDaemonTimeout(err):
+	case toolexec.IsDaemonTimeout(err), errors.Is(err, context.DeadlineExceeded):
+		// The second: terminalCreateTimeout ended the wait somewhere the
+		// router does not wrap as its own timeout.
 		return terminalMachineNotAnswering, true
 	default:
 		return "", false
@@ -569,14 +737,15 @@ func terminalMachineState(err error) (state string, ok bool) {
 }
 
 // terminalMachineStateCode is the wsMessage code the browser reads for a
-// machine state. not_answering has none: a connected daemon that cannot open
-// a shell is shown as the error it is.
+// machine state.
 func terminalMachineStateCode(state string) string {
 	switch state {
 	case "no_machine":
 		return wsErrorNoMachine
 	case "starting_or_asleep", "not_connected":
 		return wsErrorDaemonUnavailable
+	case terminalMachineNotAnswering:
+		return wsErrorMachineNotAnswering
 	default:
 		return ""
 	}

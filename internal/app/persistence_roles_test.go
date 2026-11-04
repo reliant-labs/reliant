@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -199,6 +200,11 @@ func typeCheckApp(t *testing.T) (*types.Package, []*ast.File, *types.Info, *toke
 	cmd := exec.Command("go", "list", "-export", "-deps", "-json=ImportPath,Dir,Export,GoFiles,DepOnly", ".")
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
+	if err != nil && hostOutOfDisk(stderr.String()) {
+		// The host, not the code: go list -export builds every dependency,
+		// and a full disk or exhausted quota fails that build (reliant#2103).
+		t.Skipf("the disk is full (go list -export could not write its build output): %s", firstLine(stderr.String()))
+	}
 	require.NoError(t, err, "go list -export: %s", stderr.String())
 
 	exports := map[string]string{}
@@ -240,4 +246,23 @@ func typeCheckApp(t *testing.T) (*types.Package, []*ast.File, *types.Info, *toke
 	pkg, err := conf.Check(self.ImportPath, fset, files, info)
 	require.NoError(t, err, "type-checking %s", self.ImportPath)
 	return pkg, files, info, fset
+}
+
+// hostOutOfDisk reports whether a build's stderr says the disk (or the
+// user's quota on it) is full.
+func hostOutOfDisk(stderr string) bool {
+	low := strings.ToLower(stderr)
+	return strings.Contains(low, "disk quota exceeded") || strings.Contains(low, "no space left on device")
+}
+
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return line
+}
+
+func TestHostOutOfDiskNamesOnlyAFullDisk(t *testing.T) {
+	require.True(t, hostOutOfDisk("cgo: write /tmp/cgo-gcc-input-1.c: disk quota exceeded"))
+	require.True(t, hostOutOfDisk("compile: writing output: write $WORK/b1/_pkg_.a: no space left on device"))
+	require.False(t, hostOutOfDisk("internal/app/compose.go:12:2: undefined: Foo"))
+	require.False(t, hostOutOfDisk(""))
 }

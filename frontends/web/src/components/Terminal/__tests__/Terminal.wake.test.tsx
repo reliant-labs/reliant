@@ -133,6 +133,7 @@ vi.mock("@/lib/connect", async (importOriginal) => ({
 const terminalStoreState = vi.hoisted(() => ({
   updateSessionPID: () => {},
   setDaemonSessionId: () => {},
+  setSessionMachine: () => {},
   killSession: vi.fn(),
   activeSessionId: "session-1",
 }));

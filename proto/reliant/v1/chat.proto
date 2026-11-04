@@ -1179,6 +1179,19 @@ message ListMessagesResponse {
   int32 count = 3;
   bool has_more = 4;
   int64 oldest_seq = 5;
+  // On a scroll-back page (before_seq set, no thread_id): the errors raised in
+  // the stretch of history this page loads, each at its place in the
+  // timeline. The chat snapshot carries only the errors of its own window.
+  repeated ChatErrorUpdate errors = 6;
+}
+
+// ChatErrorUpdate is one error's newest ERROR chat update: the payload the
+// chat stream carries as a ChatUpdateData of type ERROR, delivered outside it.
+message ChatErrorUpdate {
+  string entity_id = 1;
+  int64 sequence_number = 2;
+  string data_json = 3;
+  string created_at = 4;
 }
 
 // GetToolResultRequest names a tool call in a chat the caller owns. A
@@ -1573,9 +1586,12 @@ message GetWorkflowExecutionsRequest {
 
 // GetWorkflowExecutionsResponse returns the execution tree
 message GetWorkflowExecutionsResponse {
-  // The most recent/active root workflow (for backwards compat)
-  optional WorkflowExecution root_workflow = 1;
-  // All root workflows for this chat, sorted by created_at descending (newest first)
+  // root_workflow was all_root_workflows[0] a second time: the newest root's
+  // whole tree sent twice on every chat open.
+  reserved 1;
+  reserved "root_workflow";
+  // All root workflows for this chat, sorted by created_at descending (newest
+  // first). The latest run is the first.
   repeated WorkflowExecution all_root_workflows = 2;
 }
 

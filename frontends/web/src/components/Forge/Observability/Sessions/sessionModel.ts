@@ -54,19 +54,6 @@ export function recordingStart(events: readonly RrwebEvent[]): number {
 }
 
 /**
- * Why a session has no replay, as far as its summary can tell. A session with
- * no page view and no interaction saw only background requests: nothing was on
- * screen for the recorder (which captures nothing in a hidden window). Anything
- * else could be any of the recorder's reasons, so they are named together.
- */
-export function noReplayReason(session: Pick<SessionSummary, "pageViews" | "interactions">): string {
-  if (session.pageViews === 0 && session.interactions === 0) {
-    return "Nothing was on screen to record: the session saw no page view or interaction, only background requests, as a window in the background does.";
-  }
-  return "The recorder didn't capture it: the session was outside the app's replay sample, replay is off for this app, or its window stayed in the background.";
-}
-
-/**
  * Sessions whose replay this tab has opened and found unplayable (no full
  * snapshot, or a snapshot with nothing after it). The list only knows that a
  * session has replay events, not whether they can be played, so it marks these
@@ -211,10 +198,17 @@ export function sessionTitle(app: string | undefined, startedMs: number, options
 /** The attribute every browser span and replay record carries (forge-web-runtime / the OTel web SDK). */
 export const RUM_SESSION_ATTRIBUTE = "rum.sessionId";
 
+/**
+ * The attribute a BACKEND span carries the browser session in: forge servers
+ * copy the web runtime's `session.id` baggage onto their server span, so a
+ * trace with no browser span of its own still names the session that caused it.
+ */
+export const SESSION_ID_ATTRIBUTE = "session.id";
+
 /** The browser session a trace ran in, from any of its spans' attributes or resource. */
 export function rumSessionIdOf(spans: readonly { attributes: Record<string, string>; resource: Record<string, string> }[]): string | undefined {
   for (const span of spans) {
-    const id = span.attributes[RUM_SESSION_ATTRIBUTE] || span.resource[RUM_SESSION_ATTRIBUTE];
+    const id = span.attributes[RUM_SESSION_ATTRIBUTE] || span.resource[RUM_SESSION_ATTRIBUTE] || span.attributes[SESSION_ID_ATTRIBUTE];
     if (id) return id;
   }
   return undefined;
@@ -241,15 +235,16 @@ export function sessionLink(sessionId: string, atMs?: number): ObsSearch {
     live: undefined,
     severity: undefined,
     minDuration: undefined,
+    rsession: undefined,
     cursor: undefined,
   };
 }
 
 /** The keys Sessions owns, dropped when one of its links leaves for another view. */
 export const LEAVE_SESSIONS: ObsSearch = {
+  rsession: undefined,
   session: undefined,
   t: undefined,
-  replay: undefined,
   user: undefined,
   cursor: undefined,
   errors: undefined,

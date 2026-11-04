@@ -163,7 +163,7 @@ func (c *ReliantClient) ConvertMessages(prompts []string, messages []message.Mes
 			}
 			for _, binaryContent := range msg.BinaryContent() {
 				if isImageMimeType(binaryContent.MIMEType) {
-					imageURL := openai.ChatCompletionContentPartImageImageURLParam{URL: binaryContent.String(Family)}
+					imageURL := openai.ChatCompletionContentPartImageImageURLParam{URL: binaryContent.DataURL()}
 					imageBlock := openai.ChatCompletionContentPartImageParam{ImageURL: imageURL}
 					content = append(content, openai.ChatCompletionContentPartUnionParam{OfImageURL: &imageBlock})
 				} else {
@@ -221,15 +221,57 @@ func (c *ReliantClient) ConvertMessages(prompts []string, messages []message.Mes
 			})
 
 		case message.Tool:
-			for _, result := range msg.ToolResults() {
+			results := msg.ToolResults()
+			for _, result := range results {
 				openaiMessages = append(openaiMessages,
 					openai.ToolMessage(result.Content, result.ToolCallID),
 				)
+			}
+			if attachments, ok := toolResultAttachmentsMessage(results); ok {
+				openaiMessages = append(openaiMessages, attachments)
 			}
 		}
 	}
 
 	return openaiMessages
+}
+
+// toolResultAttachmentsMessage carries the turn's tool-result images as one
+// user message after its tool messages. A chat-completions tool message holds
+// text only, and the tool messages answering one assistant turn must stay
+// contiguous, so the user message goes after the last of them, never between.
+// Non-images are described rather than sent, as on the user path.
+func toolResultAttachmentsMessage(results []message.ToolResult) (openai.ChatCompletionMessageParamUnion, bool) {
+	var content []openai.ChatCompletionContentPartUnionParam
+	for _, result := range results {
+		for _, bp := range result.BinaryParts {
+			if len(content) == 0 {
+				content = append(content, openai.ChatCompletionContentPartUnionParam{
+					OfText: &openai.ChatCompletionContentPartTextParam{Text: "Tool result attachments:"},
+				})
+			}
+			content = append(content, openai.ChatCompletionContentPartUnionParam{
+				OfText: &openai.ChatCompletionContentPartTextParam{Text: fmt.Sprintf("From tool call %s:", result.ToolCallID)},
+			})
+			if isImageMimeType(bp.MIMEType) {
+				content = append(content, openai.ChatCompletionContentPartUnionParam{
+					OfImageURL: &openai.ChatCompletionContentPartImageParam{
+						ImageURL: openai.ChatCompletionContentPartImageImageURLParam{URL: bp.DataURL()},
+					},
+				})
+				continue
+			}
+			content = append(content, openai.ChatCompletionContentPartUnionParam{
+				OfText: &openai.ChatCompletionContentPartTextParam{
+					Text: fmt.Sprintf("[Attachment: %s (type: %s)]", extractFilenameFromPath(bp.Path), bp.MIMEType),
+				},
+			})
+		}
+	}
+	if len(content) == 0 {
+		return openai.ChatCompletionMessageParamUnion{}, false
+	}
+	return openai.UserMessage(content), true
 }
 
 // ConvertTools converts internal tools to OpenAI chat completion format.

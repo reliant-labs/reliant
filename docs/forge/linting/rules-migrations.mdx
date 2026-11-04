@@ -1,6 +1,6 @@
 ---
 title: "Lint rules: migrations"
-description: "The migration-safety rules: what each one prevents, a bad migration and its fix, severity and rollout"
+description: "The migration-safety rules: what each one prevents, a bad migration and its fix, and severity"
 ---
 
 `forge lint --migration-safety` reads every `*.up.sql` file under `db/migrations/` and flags SQL that is fine on an empty test database and wrong on a populated one, plus the version-numbering mistakes that make a migration silently never run. It is also what `forge ci migration-safety` and the `migration-safety` row of `task ci` run. Forge migrations only roll forward, so the cost of a bad one is a new forward migration written in a hurry.
@@ -17,26 +17,24 @@ database:
     require_compat_declaration: false   # true makes the two migration-compat rules below apply
 ```
 
-Rollout cells follow the [rollout page](/forge/linting/rollout): `v0.1.40` means the rule has gated since that release or earlier; `v1.0.0 -> v1.0.1` means it warned in the first and gates from the second.
-
 ## Rules
 
-| Rule | Severity | Rollout | What it catches |
-|------|----------|---------|-----------------|
-| `destructive-change` | error | v0.1.40 | `DROP TABLE`, `DROP SCHEMA`, `DROP COLUMN`, `TRUNCATE TABLE`, `ALTER COLUMN … TYPE`, `RENAME COLUMN`, `RENAME TO` |
-| `unsafe-add-not-null-column` | error | v0.1.40 | `ADD COLUMN … NOT NULL` with no `DEFAULT`, which fails on a populated table |
-| `set-not-null-without-backfill` | error | v0.1.40 | `SET NOT NULL` on a column with no earlier `UPDATE` in the same file |
-| `volatile-default` | warning | v0.1.40 | `ADD COLUMN … DEFAULT now()` and other volatile defaults, which rewrite the table |
-| `no-down-migration` | error | v0.1.40 | a `*.down.sql` file; forge never runs down SQL |
-| `duplicate-migration-version` | error | v0.1.40 | two files claiming one version number |
-| `non-timestamp-migration-version` | error | v0.1.40 | a new migration versioned `0007_x` instead of a UTC timestamp |
-| `migration-version-below-merged-head` | error | v0.1.44 | a new migration numbered below what the default branch already has |
-| `non-transactional-statement` | error | v0.1.45 | `CREATE INDEX CONCURRENTLY` and similar sharing a file with other statements |
-| `enum-value-used-before-commit` | error | v0.1.45 | an enum value used in the same file that adds it |
-| `invalid-adopts-directive` | error | v0.1.45 | an unreadable or misplaced `forge:adopts` squash declaration |
-| `migration-compat-undeclared` | error | v0.1.46 | no `forge:backward-compatible` or `forge:breaks-rollback` (only with `require_compat_declaration`) |
-| `migration-compat-reason` | error | v0.1.46 | a compatibility declaration with no reason |
-| `migration-compat-conflict` | error | v0.1.46 | both compatibility declarations in one file |
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `destructive-change` | error | A migration that drops or rewrites data (`DROP`, `TRUNCATE`, a column type change or a rename), which another migration cannot undo |
+| `unsafe-add-not-null-column` | error | Adding a `NOT NULL` column without a `DEFAULT`, which fails on a table with rows |
+| `set-not-null-without-backfill` | error | A `SET NOT NULL` on a column with no earlier `UPDATE` in the same file, which fails if any row is null |
+| `volatile-default` | warning | A volatile `DEFAULT` such as `now()` in `ADD COLUMN`, which rewrites the whole table under a lock |
+| `no-down-migration` | error | A `*.down.sql` file, which forge never runs and which only looks like a safety net |
+| `duplicate-migration-version` | error | Two migration files that claim the same version number |
+| `non-timestamp-migration-version` | error | A new migration versioned `0007_x` instead of a UTC timestamp, which can sort below the applied version and be skipped |
+| `migration-version-below-merged-head` | error | A new migration numbered below what the default branch already has, which is never applied on a database already past it |
+| `non-transactional-statement` | error | A statement that cannot run in a transaction, such as `CREATE INDEX CONCURRENTLY`, sharing a file with other statements |
+| `enum-value-used-before-commit` | error | An enum value used in the same file that adds it, which Postgres refuses until the adding transaction commits |
+| `invalid-adopts-directive` | error | An unreadable or misplaced `forge:adopts` squash declaration, which makes the migrator refuse every database |
+| `migration-compat-undeclared` | error | A migration with neither `forge:backward-compatible` nor `forge:breaks-rollback` (only with `require_compat_declaration`) |
+| `migration-compat-reason` | error | A compatibility declaration with no reason, so a reader cannot tell why the previous release survives |
+| `migration-compat-conflict` | error | Both compatibility declarations in one migration, which the migrator reads as not compatible |
 
 ## Data-safety rules
 

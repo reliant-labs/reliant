@@ -45,11 +45,11 @@ describe("the session list", () => {
     const ids = rowIds();
     expect(ids.slice(0, 2)).toEqual([FIXTURE_LIVE_SESSION, FIXTURE_STORY_SESSION]);
     expect(ids).toHaveLength(25);
-    expect(listCalls(onCall)[0]).toMatchObject({ hasError: false, hasReplay: false, userId: "", pathContains: "" });
+    expect(listCalls(onCall)[0]).toMatchObject({ hasError: false, hasReplay: true, userId: "", pathContains: "" });
     expect(within(screen.getByTestId(`obs-session-${FIXTURE_STORY_SESSION}`)).getByText("replay")).toBeInTheDocument();
   });
 
-  it("dims sessions without a playable replay and says why each has none", async () => {
+  it("lists only sessions with a replay, and dims one the player found unplayable", async () => {
     const api = createFixtureApi();
     const all = (await api.listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: false, userId: "", pathContains: "", pageSize: 25 })).sessions;
     const unrecorded = all.find((s) => !s.hasReplay)!;
@@ -63,10 +63,9 @@ describe("the session list", () => {
     expect(story).toHaveAttribute("data-replay", "playable");
     expect(story.className).not.toMatch(/opacity-60/);
 
-    const none = screen.getByTestId(`obs-session-${unrecorded.sessionId}`);
-    expect(none).toHaveAttribute("data-replay", "none");
-    expect(none.className).toMatch(/opacity-60/);
-    expect(screen.getByTestId(`obs-session-no-replay-${unrecorded.sessionId}`)).toHaveAttribute("title", expect.stringMatching(/recorder didn't capture it/));
+    // A session with nothing to replay is not a session: it is never listed.
+    expect(screen.queryByTestId(`obs-session-${unrecorded.sessionId}`)).not.toBeInTheDocument();
+    expect(rowIds().every((id) => all.find((s) => s.sessionId === id)?.hasReplay !== false)).toBe(true);
 
     const incomplete = screen.getByTestId(`obs-session-${opened.sessionId}`);
     expect(incomplete).toHaveAttribute("data-replay", "unplayable");
@@ -96,7 +95,7 @@ describe("the session list", () => {
     await user.click(screen.getByTestId("obs-sessions-next"));
     expect(harness.current().cursor).toEqual(["s:25"]);
     await waitFor(() => expect(screen.getByTestId("obs-sessions-page")).toHaveTextContent("Page 2"));
-    await waitFor(() => expect(rowIds()).toHaveLength(7));
+    await waitFor(() => expect(rowIds()).toHaveLength(3));
     expect(listCalls(onCall).at(-1)?.pageToken).toBe("s:25");
     expect(screen.getByTestId("obs-sessions-next")).toBeDisabled();
 
@@ -105,7 +104,7 @@ describe("the session list", () => {
     await waitFor(() => expect(rowIds()).toHaveLength(25));
   });
 
-  it("narrows by errors, replay, entry path and user — each in the URL, each back to page one", async () => {
+  it("narrows by errors, entry path and user — each in the URL, each back to page one", async () => {
     const onCall = vi.fn();
     const harness = renderPanel(createFixtureApi({ onCall }), { view: "sessions", range: "24h", cursor: ["s:25"] }, PROJECT_PLACE);
     await screen.findByTestId("obs-sessions-list");
@@ -116,8 +115,7 @@ describe("the session list", () => {
     expect(harness.current().cursor).toBeUndefined();
     await waitFor(() => expect(listCalls(onCall).at(-1)).toMatchObject({ hasError: true, pageToken: undefined }));
 
-    await user.click(screen.getByTestId("obs-sessions-with-replay"));
-    expect(harness.current().replay).toBe(true);
+    expect(screen.queryByTestId("obs-sessions-with-replay")).not.toBeInTheDocument();
 
     await user.type(screen.getByTestId("obs-sessions-path"), "/checkout");
     await user.type(screen.getByTestId("obs-sessions-user"), "u_8812");
@@ -174,6 +172,20 @@ describe("one session", () => {
     expect(within(timeline).getByTestId("session-entry-request_failed")).toHaveTextContent("500");
   });
 
+  it("says where the browser was, and opens every trace of the session", async () => {
+    // Opened from a list narrowed to its frontend: the traces must not stay
+    // narrowed to it, or the backend work the session caused is excluded.
+    const harness = renderPanel(createFixtureApi(), { view: "sessions", session: FIXTURE_STORY_SESSION, service: "shop-web" }, PROJECT_PLACE);
+    const place = await screen.findByTestId("session-place");
+    expect(place).toHaveTextContent(/Berlin/);
+    expect(place.getAttribute("title")).toContain("DB-IP");
+    await userEvent.setup().click(screen.getByTestId("session-traces"));
+    expect(harness.current()).toMatchObject({ view: "traces", rsession: FIXTURE_STORY_SESSION });
+    expect(harness.current().service).toBeUndefined();
+    expect(harness.current().session).toBeUndefined();
+    expect(harness.current().trace).toBeUndefined();
+  });
+
   it("links an error to its issue and a failed request to its trace", async () => {
     const harness = renderPanel(createFixtureApi(), { view: "sessions", session: FIXTURE_STORY_SESSION }, PROJECT_PLACE);
     const user = userEvent.setup();
@@ -199,14 +211,13 @@ describe("one session", () => {
     await waitFor(() => expect(FakeReplayer.last().calls).toContain("pause:8000"));
   });
 
-  it("says a session was not recorded, and still shows its timeline", async () => {
+  it("opens a session without a replay (by id, from a trace) as its timeline alone", async () => {
     const api = createFixtureApi();
     const unrecorded = (await api.listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: false, userId: "", pathContains: "", pageSize: 100 })).sessions.find((s) => !s.hasReplay)!;
     renderPanel(api, { view: "sessions", session: unrecorded.sessionId }, PROJECT_PLACE);
-    expect(await screen.findByTestId("session-no-replay")).toHaveTextContent("No replay was recorded for this session.");
-    // With page views, the summary cannot say which of the recorder's reasons it was: all are named.
-    expect(screen.getByTestId("session-no-replay")).toHaveTextContent(/replay sample, replay is off for this app, or its window stayed in the background/);
     expect(await screen.findByTestId("session-timeline")).toBeInTheDocument();
+    expect(screen.queryByTestId("session-no-replay")).not.toBeInTheDocument();
+    expect(screen.queryByText(/No replay was recorded/)).not.toBeInTheDocument();
     // No empty replay panel beside it: the timeline takes the width.
     expect(screen.queryByTestId("session-replay")).not.toBeInTheDocument();
   });
@@ -244,10 +255,26 @@ describe("links into a session", () => {
     };
     const harness = renderPanel(api, { view: "traces", trace: "4bf92f3577b34da6a3ce929d0e0e4736" }, ENV_PLACE);
     const button = await screen.findByTestId("trace-session");
-    await waitFor(() => expect(button.textContent).toMatch(/^shop-web · (Today|Yesterday) \d{2}:\d{2}$/));
+    // The story session has a recording, so the link says it opens a replay.
+    await waitFor(() => expect(button.textContent).toMatch(/^Replay · shop-web · (Today|Yesterday) \d{2}:\d{2}$/));
     await userEvent.setup().click(button);
     expect(harness.current()).toMatchObject({ view: "sessions", session: FIXTURE_STORY_SESSION });
     expect(harness.current().trace).toBeUndefined();
+  });
+
+  it("from a backend-only trace whose server span carries the session.id baggage", async () => {
+    const base = createFixtureApi();
+    const api = {
+      ...base,
+      getTrace: async (req: Parameters<typeof base.getTrace>[0]) => {
+        const trace = fixtureTrace(req.traceId, req.window.endMs);
+        trace.spans[0] = { ...trace.spans[0], attributes: { ...trace.spans[0].attributes, "session.id": FIXTURE_STORY_SESSION } };
+        return trace;
+      },
+    };
+    const harness = renderPanel(api, { view: "traces", trace: "4bf92f3577b34da6a3ce929d0e0e4736" }, ENV_PLACE);
+    await userEvent.setup().click(await screen.findByTestId("trace-session"));
+    expect(harness.current()).toMatchObject({ view: "sessions", session: FIXTURE_STORY_SESSION });
   });
 
   it("not from a trace with no browser session", async () => {

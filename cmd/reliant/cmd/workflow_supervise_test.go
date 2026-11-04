@@ -66,8 +66,16 @@ type superviseChatService struct {
 	terminatedChatID string
 }
 
+// rootsOf is a chat's root list holding root, or none when root is nil.
+func rootsOf(root *reliantv1.WorkflowExecution) []*reliantv1.WorkflowExecution {
+	if root == nil {
+		return nil
+	}
+	return []*reliantv1.WorkflowExecution{root}
+}
+
 func (f *superviseChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Request[reliantv1.GetWorkflowExecutionsRequest]) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
-	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{RootWorkflow: f.root}), nil
+	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{AllRootWorkflows: rootsOf(f.root)}), nil
 }
 
 func (f *superviseChatService) ListMessages(_ context.Context, _ *connect.Request[reliantv1.ListMessagesRequest]) (*connect.Response[reliantv1.ListMessagesResponse], error) {
@@ -633,7 +641,7 @@ func (f *watchChatService) GetChatUpdates(_ context.Context, req *connect.Reques
 
 func (f *watchChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Request[reliantv1.GetWorkflowExecutionsRequest]) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
 	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{
-		RootWorkflow: &reliantv1.WorkflowExecution{Id: "wf-1", State: f.rootState, StopReason: f.rootReason},
+		AllRootWorkflows: []*reliantv1.WorkflowExecution{{Id: "wf-1", State: f.rootState, StopReason: f.rootReason}},
 	}), nil
 }
 

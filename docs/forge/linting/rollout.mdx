@@ -14,7 +14,7 @@ Every rule that `lint.rules` can grade has a row in forge's rollout table (`inte
 | `introduced_in` | The release that shipped the rule, or tightened it. |
 | `gates_from` | The release where it starts to fail the gate. Always a later release than `introduced_in`. Empty for a rule that has always gated. |
 
-Rules that shipped at or before v0.1.46 have no `gates_from`: they gate from the first release you can pin. Every rule introduced after that declares both. A rule currently in its grace period reads `v1.0.0 -> v1.0.1` in the [rule reference](/forge/linting/rules-index); an older rule reads just its release.
+Rules that shipped at or before v0.1.46 have no `gates_from`: they gate from the first release you can pin. Every rule introduced after that declares both. A rule in its grace period reports its findings as warnings with a "new in vX; gates from vY" note, and the [rule reference](/forge/linting/rules-index) describes what each rule catches.
 
 Your `forge.yaml` carries `forge_version`. Lint compares it with `gates_from`:
 

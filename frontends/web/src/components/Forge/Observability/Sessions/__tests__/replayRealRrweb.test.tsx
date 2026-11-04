@@ -60,6 +60,10 @@ const SESSION: SessionSummary = {
   interactions: 0,
   errors: 0,
   hasReplay: true,
+  country: "",
+  region: "",
+  city: "",
+  clientAddress: "",
 };
 
 // rrweb's serialized node kinds and incremental sources (rrweb-snapshot / @rrweb/types).

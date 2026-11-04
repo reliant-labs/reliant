@@ -33,9 +33,10 @@ import { formatAgo, formatCount, formatDuration } from "../format";
 import { ServiceSelect } from "../LogsView";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
+import { Place } from "../Place";
 import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
-import { isReplayKnownUnplayable, noReplayReason, rumScopeOf, sessionTitle } from "./sessionModel";
+import { isReplayKnownUnplayable, rumScopeOf, sessionTitle } from "./sessionModel";
 import { SessionsNotConfigured } from "./SessionStates";
 
 export interface SessionsViewProps {
@@ -46,7 +47,6 @@ export interface SessionsViewProps {
   /** Entry path contains (the URL's `q`). */
   text: string;
   hasError: boolean;
-  hasReplay: boolean;
   user: string;
   /** The page-token trail (the URL's `cursor`). */
   cursor: readonly string[];
@@ -81,20 +81,20 @@ export function SessionsView(props: SessionsViewProps) {
   return <SessionList {...props} rumScope={rumScope} service={service} />;
 }
 
-function SessionList({ scope, rumScope, subject, range, service, text, hasError, hasReplay, user, cursor, navigate }: SessionsViewProps & { rumScope: RumScope }) {
+function SessionList({ scope, rumScope, subject, range, service, text, hasError, user, cursor, navigate }: SessionsViewProps & { rumScope: RumScope }) {
   const pageToken = cursor.length ? cursor[cursor.length - 1] : undefined;
   const filters: SessionFilters = useMemo(
-    () => ({ range, hasError, hasReplay, userId: user, pathContains: text, service, pageToken }),
-    [range, hasError, hasReplay, user, text, service, pageToken]
+    () => ({ range, hasError, userId: user, pathContains: text, service, pageToken }),
+    [range, hasError, user, text, service, pageToken]
   );
   const sessions = useSessions(rumScope, filters);
   const rows = sessions.data?.sessions ?? [];
-  const filtered = hasError || hasReplay || !!user || !!text || !!service;
+  const filtered = hasError || !!user || !!text || !!service;
   const page = cursor.length + 1;
 
   return (
     <div className="space-y-3" data-testid="obs-sessions">
-      <SessionToolbar scope={scope} range={range} service={service} text={text} hasError={hasError} hasReplay={hasReplay} user={user} navigate={navigate} />
+      <SessionToolbar scope={scope} range={range} service={service} text={text} hasError={hasError} user={user} navigate={navigate} />
       {sessions.data && <ObsAsOf updatedAt={sessions.dataUpdatedAt} />}
       {sessions.isLoading ? (
         <Card padding="none">
@@ -113,7 +113,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
           filtered={filtered}
           topic="sessions"
           onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })}
-          onClearFilters={() => navigate({ errors: undefined, replay: undefined, user: undefined, q: undefined, service: undefined, ...FIRST_PAGE })}
+          onClearFilters={() => navigate({ errors: undefined, user: undefined, q: undefined, service: undefined, ...FIRST_PAGE })}
         />
       ) : (
         <Card padding="none" data-testid="obs-sessions-list" aria-busy={sessions.isFetching || undefined}>
@@ -158,7 +158,6 @@ function SessionToolbar({
   service,
   text,
   hasError,
-  hasReplay,
   user,
   navigate,
 }: {
@@ -167,7 +166,6 @@ function SessionToolbar({
   service: string | undefined;
   text: string;
   hasError: boolean;
-  hasReplay: boolean;
   user: string;
   navigate: ObsNavigate;
 }) {
@@ -191,15 +189,6 @@ function SessionToolbar({
             data-testid="obs-sessions-with-errors"
           >
             With errors
-          </button>
-          <button
-            type="button"
-            aria-pressed={hasReplay}
-            onClick={() => navigate({ replay: hasReplay ? undefined : true, ...FIRST_PAGE }, { replace: true })}
-            className={chip(hasReplay)}
-            data-testid="obs-sessions-with-replay"
-          >
-            With replay
           </button>
         </div>
         <ServiceSelect scope={scope} range={range} value={service} onChange={(next) => navigate({ service: next, ...FIRST_PAGE }, { replace: true })} id="obs-sessions-service" />
@@ -284,6 +273,12 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
       ),
     },
     {
+      key: "location",
+      header: "Location",
+      className: "max-w-[12rem]",
+      render: (_, { session: s }) => <Place geo={s} className="text-xs text-ink-muted" testId={`obs-session-place-${s.sessionId}`} />,
+    },
+    {
       key: "entry",
       header: "Entry",
       className: "max-w-[16rem] truncate",
@@ -329,7 +324,7 @@ function replayPlayable(session: SessionSummary): boolean {
   return session.hasReplay && !isReplayKnownUnplayable(session.sessionId);
 }
 
-/** The row's replay mark: a replay, a replay this tab found unplayable, or none and why. */
+/** The row's replay mark: a replay, or a replay this tab found unplayable. */
 function ReplayMark({ session }: { session: SessionSummary }) {
   if (session.hasReplay && !isReplayKnownUnplayable(session.sessionId)) {
     return <Tag title="This session's replay was recorded">replay</Tag>;
@@ -341,9 +336,5 @@ function ReplayMark({ session }: { session: SessionSummary }) {
       </span>
     );
   }
-  return (
-    <span title={noReplayReason(session)} data-testid={`obs-session-no-replay-${session.sessionId}`}>
-      no replay
-    </span>
-  );
+  return null;
 }

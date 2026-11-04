@@ -130,6 +130,18 @@ export interface TraceSummary extends Provenance {
   spanCount: number;
   errorCount: number;
   services: string[];
+  /** The user the trace served: a backend span's authenticated user.id, else the id the page reported. Empty: none. */
+  userId: string;
+  /** The browser session the trace belongs to. Empty: no browser started it. */
+  sessionId: string;
+  /**
+   * Where the browser was: derived by the platform at ingest from the address it
+   * connected from, never reported by the page. ISO 3166-1 alpha-2 country and
+   * English region/city names; empty when unknown.
+   */
+  country: string;
+  region: string;
+  city: string;
 }
 
 /** Rate, errors and duration over every trace the filters matched in the window — not just one page. */
@@ -151,6 +163,10 @@ export interface ListTracesRequest extends ObsScope {
   services: string[];
   errorsOnly: boolean;
   minDurationMs: number;
+  /** Only traces of this user id. Empty: every trace. */
+  userId?: string;
+  /** Only traces of this browser session. Empty: every trace. */
+  sessionId?: string;
   limit: number;
   cursor?: string;
   /** Up to 3 keys: the response gains one RED summary per group. */

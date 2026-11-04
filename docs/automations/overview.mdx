@@ -329,6 +329,12 @@ A run that completed successfully is never in the Inbox, whatever its automation
 
 Approvals (**Approve** / **Deny**) and questions (**Answer**) can be dealt with from the Inbox itself; the rest **Open** the run, automation or machine. Every item, or a whole section, can be dismissed, with Undo. It shows the current project by default, with every project one click away. A run started by an automation is unattended and never waits on you, so the approvals and questions here come from chats and runs someone started by hand.
 
+#### Who can decide an approval
+
+An approval means a person said yes, so only someone signed in to the Reliant app, on the web or desktop, can approve or deny one. The server refuses a decision sent with any credential software can hold: the CLI login (`reliant auth login`, which every agent shell inherits), an access token from `reliant auth token create`, a daemon's credential, or the token of an OAuth client you connected (such as an MCP client). The refusal names the credential and says to open the approval in the app. Questions are not approvals; an agent or the CLI can still answer those.
+
+One deployment cannot tell a person from an agent: a self-hosted server running with `AUTH_MODE=apikey`. There, every client presents the same shared key, including the web app, the CLI and an agent's shell. Refusing that key would make approvals impossible rather than human-only, so the key is accepted, and **anything holding the key can approve**. Treat such a deployment as having a single trusted operator. If approvals there must provably come from a person, run the server with an identity provider instead of a shared key.
+
 ## From the command line
 
 `reliant trigger` manages **schedule** automations: `create`, `list`, `get`, `update`, `enable`, `disable`, `fire`, `events` and `delete`. Webhook, integration and workflow-event automations are enabled from the app. An agent can write and test a workflow but cannot enable one, so `create`, `update` and `enable` refuse to run from an agent's shell; only you turn an automation on. See [Schedules](/automations/schedules) for the commands.

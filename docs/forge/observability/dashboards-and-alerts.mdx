@@ -91,6 +91,18 @@ telemetry = forge.BrowserTelemetry {
 
 An error matching `ignore` still reaches the store but is never raised as an issue. `sourcemaps = "public"` serves the maps instead of filing them, and `"off"` drops them. A **funnel** names events your frontend records with `track("signup_started")` from `@reliantlabs/forge-web-runtime`; forge draws each declared funnel as a panel on the frontend dashboard.
 
+## Who and where
+
+The console shows, for each browser session, error and trace, **who** it was and **where** they were:
+
+- **User:** the id your frontend passes to `setTelemetryUser(id)`, shown as given (pass an internal id, never an email). Backend spans carry the id of the caller your forge service authenticated, so a trace shows its user even when the browser never named one. Sessions, errors and traces can be filtered by user id.
+- **Location:** country, region and city, derived by the platform when your browser telemetry arrives, from the address it came from (a local DB-IP City Lite lookup, CC BY 4.0). **The IP address itself is dropped**: it is not stored and your app never sees it. A page cannot set its own location.
+- **Session links:** every request your frontend makes carries its session id, which your forge services record on their side of the request. A session's page lists its traces, and a trace opens its session, and its replay when it has one.
+
+The backend half (the authenticated user and the session id on your services' spans) needs a forge release with `observe.IdentitySpanInterceptor` and a `@reliantlabs/forge-web-runtime` that sends the session as baggage; until your project pins both, users and session links come from browser spans only. The console's user and session filters also need a control plane that applies them: on one that does not, it says so instead of showing unfiltered results.
+
+All of it is browser telemetry, so `signals = forge.ObservabilitySignals {browser = False}` (or `enabled = False`) turns it off with the rest. If your privacy notice must say what you collect: an approximate location derived from the IP address, not the address.
+
 ## Session replay
 
 Session replay records what a user's browser displayed, so it is off unless you turn it on in two places: build the frontend with `VITE_OTEL_REPLAY=true` (Vite) or `NEXT_PUBLIC_OTEL_REPLAY=true` (Next.js), and opt the environment in with `signals = forge.ObservabilitySignals {replay = True}`. Until both are set, the platform drops replay data rather than storing it. When replay is on, all text and every input is masked and canvases are not recorded, and there is no setting that records unmasked. `replay_sample_rate` in `forge.BrowserTelemetry` records only a share of sessions. The `sessions` panel marks the sessions that have a recording.
