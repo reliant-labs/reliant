@@ -545,3 +545,13 @@ func killTree(cmd *exec.Cmd) {
 	}
 	walk(cmd.Process.Pid)
 }
+
+func TestAnnounceNamesStopSignalsOnly(t *testing.T) {
+	var b strings.Builder
+	announce(&b, syscall.SIGTERM, 7)
+	announce(&b, syscall.SIGWINCH, 7)
+	announce(&b, syscall.SIGUSR1, 7)
+	if want := "reliant init: terminated was sent to PID 1; relaying it to pid 7\n"; b.String() != want {
+		t.Fatalf("announce wrote %q, want %q", b.String(), want)
+	}
+}
