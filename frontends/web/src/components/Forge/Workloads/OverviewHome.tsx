@@ -644,13 +644,22 @@ function NeedsAttention({
             <SkeletonRows columns={3} rows={2} />
           </tbody>
         </table>
-      ) : failed ? (
-        <p className="px-4 pb-4 pt-1 text-sm text-ink-muted">Workload health could not be read, so this cannot say what needs attention. Alerts still show on the Alerts page.</p>
+      ) : failed && items.length === 0 ? (
+        <p className="px-4 pb-4 pt-1 text-sm text-ink-muted" data-testid="overview-attention-unread">
+          Workload health could not be read, so this cannot say what needs attention. No alert is firing in {where}.
+        </p>
       ) : items.length === 0 ? (
         <p className="px-4 pb-4 pt-1 text-sm text-ink-muted" data-testid="overview-attention-none">
           Nothing needs attention in {where}.
         </p>
       ) : (
+        <>
+        {/* The alerts are their own read: a workload read that failed takes only its own rows away. */}
+        {failed && (
+          <p className="px-4 pb-2 pt-1 text-sm text-ink-muted" data-testid="overview-attention-unread">
+            Workload health could not be read, so only the firing alerts are listed.
+          </p>
+        )}
         <table className="w-full text-sm" aria-label="Needs attention">
           <tbody>
             {items.map((item) => {
@@ -717,6 +726,7 @@ function NeedsAttention({
             })}
           </tbody>
         </table>
+        </>
       )}
     </Panel>
   );

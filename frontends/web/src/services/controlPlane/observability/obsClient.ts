@@ -24,57 +24,9 @@ import type { Client } from "@connectrpc/connect";
 import { getControlPlaneClient } from "../client";
 import { obsReadScheduler } from "./readScheduler";
 import { callOptions, isPollRead } from "./quotaStore";
+import { READ_SLOT_RPCS } from "./readSlots";
 
-/**
- * The RPCs that take a server read slot (obsread.Open on the console surface).
- * Mutations, the usage read and the Postgres-only issue reads do not: they
- * must never wait behind a queue of ClickHouse reads. obsClient.test.ts fails
- * when a method of these services is in neither this set nor NO_READ_SLOT_RPCS,
- * so a new RPC must be classified.
- */
-export const READ_SLOT_RPCS: ReadonlySet<string> = new Set([
-  // ObservabilityService
-  "searchLogs",
-  "listTraces",
-  "getTrace",
-  "listMetrics",
-  "queryMetric",
-  "getMetric",
-  "listMetricExemplars",
-  "getServiceGraph",
-  "getServiceGraphCatalog",
-  "getServiceOverview",
-  "getFlamegraph",
-  "queryPanel",
-  "listAttributeValues",
-  "getServiceSignals",
-  "listWorkloads",
-  "getWorkload",
-  "getDashboards",
-  "getReleaseHealth",
-  // IssuesService
-  "listIssues",
-  "getIssue",
-  "listIssueEvents",
-  // RumService
-  "listSessions",
-  "getSession",
-  "getSessionTimeline",
-  "getSessionReplay",
-]);
-
-/** The methods of the services above that take no read slot. */
-export const NO_READ_SLOT_RPCS: ReadonlySet<string> = new Set([
-  "getObservabilityUsage",
-  "updateIssueStatus",
-  "addIssueComment",
-  "updateIssueComment",
-  "deleteIssueComment",
-  "assignIssue",
-  "linkIssueChat",
-  "listAssignableUsers",
-  "listIssueTimeline",
-]);
+export { NO_READ_SLOT_RPCS, READ_SLOT_RPCS } from "./readSlots";
 
 type Options = { headers?: Record<string, string>; signal?: AbortSignal };
 

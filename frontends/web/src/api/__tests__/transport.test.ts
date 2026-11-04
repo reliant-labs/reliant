@@ -190,6 +190,23 @@ describe('per-procedure timeouts', () => {
     expect(timeoutForProcedure('reliant.v1.ForgeService', 'PlanDeploy')).toBeGreaterThan(100_000)
     expect(timeoutForProcedure('controlplane.v1.DeployService', 'PlanDeploy')).toBe(10_000)
   })
+
+  it('lets a console ClickHouse read run to just under the gateway, not the 10s default', async () => {
+    // 2026-11-03: the Overview's ListWorkloads was cut at 10.0s while the
+    // server answered in 9.4-11.0s; the gateway ends a request at 15s.
+    const { timeoutForProcedure, OBS_READ_TIMEOUT_MS } = await import('../transport')
+    const { ObservabilityService } = await import('../../gen/controlplane/services/observability/v1/observability_pb')
+    expect(OBS_READ_TIMEOUT_MS).toBeGreaterThan(10_000)
+    expect(OBS_READ_TIMEOUT_MS).toBeLessThan(15_000)
+    expect(timeoutForProcedure(ObservabilityService.typeName, 'ListWorkloads')).toBe(OBS_READ_TIMEOUT_MS)
+    expect(timeoutForProcedure(ObservabilityService.typeName, 'QueryPanel')).toBe(OBS_READ_TIMEOUT_MS)
+    expect(timeoutForProcedure('controlplane.v1.IssuesService', 'ListIssues')).toBe(OBS_READ_TIMEOUT_MS)
+    // A replay page keeps its own, longer, budget; a mutation keeps the default.
+    expect(timeoutForProcedure('controlplane.v1.RumService', 'GetSessionReplay')).toBe(60_000)
+    expect(timeoutForProcedure('controlplane.v1.IssuesService', 'UpdateIssueStatus')).toBe(10_000)
+    // Only those services: another service's ListWorkloads-named read is not one.
+    expect(timeoutForProcedure('reliant.v1.SomeService', 'ListWorkloads')).toBe(10_000)
+  })
 })
 
 describe('in-flight starvation diagnostics', () => {
