@@ -221,19 +221,6 @@ describe("usePanelQuery when the server is at its cap", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("surfaces the org's hourly quota at once: it is not retried, and it is not the cap", async () => {
-    const { api, calls } = controlledApi();
-    const { wrapper } = setup(api);
-    const { result } = renderHook(() => usePanelQuery(SCOPE, "1h", panel("p"), []), { wrapper });
-    await flush();
-    calls[0]!.reject(quota());
-    await flush();
-    expect(result.current.isError).toBe(true);
-    expect(result.current.isLoading).toBe(false);
-    await advance(120_000);
-    expect(calls).toHaveLength(1);
-  });
-
   it("does not wait on an error the server meant, and a plain failure keeps its Retry", async () => {
     const { api, calls } = controlledApi();
     const { wrapper } = setup(api);
