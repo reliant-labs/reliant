@@ -96,6 +96,17 @@ install record in `userData/install.json` and marks the launch reported only
 after the renderer says the event went out, so a first launch made offline or
 before consent is sent on a later launch, dated by `installed_at`.
 
+`user_identified` is the forge web runtime's, once per user per browser, at the
+first `setTelemetryUser`: it carries `visitor_id` and the captured `utm_*`, and it
+is the only join from a landing visitor (`Client = 'landing'`) to a user. The
+landing site hands the visitor over as `?rid=<visitor id>&utm_*` on links to the
+app. This app starts telemetry only after sign-in, by which time the router and the
+sign-in have replaced that URL, so `lib/attributionBoot.ts` holds the handoff at
+boot (localStorage `reliant.landing_attribution`, 7 days, until telemetry starts;
+`lib/landingAttribution.ts`) and `initTelemetry` gives it to the runtime
+(`enableAttribution({search})`), only with analytics consent.
+`lib/__tests__/landingAttributionHandoff.test.ts` pins it through the real runtime.
+
 ## Who a failure belongs to
 
 A server's errors name the user of the request that failed, not the last user
