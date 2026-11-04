@@ -356,6 +356,8 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 	}
 	claims.Email = verifiedEmailClaim(claims.Email, raw, v.requireEmailVerifiedClaim)
 
+	// The real provider's tokens are checked against this split after every
+	// deploy that changes it: dev-docs/human-only-approvals-verification.md.
 	claims.Credential = CredentialSession
 	if claims.ClientID != "" {
 		claims.Credential = CredentialOAuthClient
