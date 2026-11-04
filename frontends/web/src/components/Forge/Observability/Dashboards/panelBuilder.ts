@@ -12,21 +12,109 @@
  * the console never writes a query.
  */
 
-import type { Dashboard, Panel, Predicate, SeriesIntent, Unit } from "@/services/controlPlane/observability/types";
+import type { Dashboard, Panel, PanelDisplay, Predicate, SeriesIntent, Unit } from "@/services/controlPlane/observability/types";
 
+import { DISPLAY_STYLES, displayOptions, fieldOnSignal, MAX_TOP_N } from "../obsdashSpec";
 import { newPanelId } from "./dashboardModel";
 
+/**
+ * Every kind forge's spec has, as the builder offers it: what it draws, in a
+ * line, and where it reads from. The order is the picker's: the charts over
+ * series, then the hand-written queries, then prose, then the kinds the
+ * console draws from its own services.
+ */
 export const VISUALIZATIONS = [
-  { kind: "line", label: "Time series" },
-  { kind: "number", label: "Stat" },
-  { kind: "table", label: "Table" },
-  { kind: "funnel", label: "Funnel" },
-  { kind: "issues", label: "Issues" },
-  { kind: "sessions", label: "Sessions" },
-  { kind: "search", label: "Rows" },
+  { kind: "line", label: "Time series", description: "Values over time: one line, area or bar series per series or group." },
+  { kind: "number", label: "Stat", description: "One headline figure for the range, or a gauge between a min and a max." },
+  { kind: "bar", label: "Bar", description: "The top groups side by side, or as the slices of a pie or donut." },
+  { kind: "table", label: "Table", description: "One row per group, one column per series." },
+  { kind: "heatmap", label: "Heatmap", description: "How one numeric value, such as latency, is spread over time." },
+  { kind: "search", label: "Rows", description: "The matching spans or log lines themselves, as a way into search." },
+  { kind: "sql", label: "ClickHouse SQL", description: "One read-only SELECT over your telemetry tables, drawn from its rows." },
+  { kind: "postgres", label: "Postgres", description: "A live read-only query of one of your environment's databases." },
+  { kind: "text", label: "Text", description: "Markdown with no query: a heading, a note, a runbook link." },
+  { kind: "funnel", label: "Funnel", description: "How many journeys reach each product event, in order." },
+  { kind: "issues", label: "Issues", description: "Errors grouped by stack, new and regressed first." },
+  { kind: "sessions", label: "Sessions", description: "Browser sessions, newest first, with their replays." },
 ] as const;
 
 export type Visualization = (typeof VISUALIZATIONS)[number]["kind"];
+
+/** The kinds whose query is a statement the author writes, not series the builder composes. */
+export const STATEMENT_KINDS: readonly string[] = ["sql", "postgres"];
+
+// ── Display: one query, several pictures (forge dashspec Display) ────────────
+
+export { DISPLAY_STYLES, displayOptions, MAX_TOP_N };
+
+export const STYLE_LABELS: Record<string, string> = {
+  line: "Line",
+  area: "Area",
+  bars: "Bars over time",
+  bar: "Bars",
+  pie: "Pie",
+  donut: "Donut",
+  stat: "Stat",
+  gauge: "Gauge",
+  funnel: "Funnel",
+};
+
+/** The style `panel` is drawn in: its own when its kind takes it, else the kind's default (empty for a kind drawn one way). */
+export function styleOf(panel: Pick<Panel, "kind" | "display">): string {
+  const styles = DISPLAY_STYLES[panel.kind] ?? [];
+  const style = panel.display?.style;
+  return style && styles.includes(style) ? style : (styles[0] ?? "");
+}
+
+/**
+ * `panel` with `patch` applied to how it is drawn, normalized: the default
+ * style is left unsaid, an option the style does not use is dropped (forge
+ * refuses one a renderer would ignore), and a display with nothing left is
+ * removed. It never touches the query.
+ */
+export function withDisplay(panel: Panel, patch: Partial<PanelDisplay>): Panel {
+  return { ...panel, display: normalizedDisplay(panel.kind, { ...panel.display, ...patch }) };
+}
+
+function normalizedDisplay(kind: string, display: PanelDisplay | undefined): PanelDisplay | undefined {
+  const styles = DISPLAY_STYLES[kind];
+  if (!styles || !display) return undefined;
+  const style = display.style && styles.includes(display.style) ? display.style : styles[0];
+  const options = displayOptions(kind, style);
+  const out: PanelDisplay = {};
+  if (style !== styles[0]) out.style = style;
+  if (options.stack && display.stack) out.stack = true;
+  if (options.horizontal && display.horizontal) out.horizontal = true;
+  if (options.gauge) {
+    if (Number.isFinite(display.min)) out.min = display.min;
+    if (Number.isFinite(display.max)) out.max = display.max;
+  }
+  if (options.topN && display.topN !== undefined && Number.isInteger(display.topN) && display.topN >= 1 && display.topN <= MAX_TOP_N) out.topN = display.topN;
+  return Object.keys(out).length ? out : undefined;
+}
+
+// ── Statements and prose: what a new sql, postgres or text panel starts as ───
+
+/** A ClickHouse statement over the scope's own parameters: requests over time, as the builder's starter panel draws them. */
+export const STARTER_SQL = [
+  "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t,",
+  "       count() AS requests",
+  "FROM otel_traces",
+  "WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}",
+  "  AND SpanKind IN ('Server', 'SPAN_KIND_SERVER')",
+  "  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))",
+  "  AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))",
+  "GROUP BY t",
+  "ORDER BY t",
+].join("\n");
+
+/** A Postgres statement every database answers (the catalog is readable by any role), until the author picks a table. */
+export const STARTER_POSTGRES_SQL = ["SELECT count(*) AS tables", "FROM information_schema.tables", "WHERE table_schema = 'public'"].join("\n");
+
+export const STARTER_MARKDOWN = "## About this dashboard\n\nWhat it is for, and where to look when it turns red.";
+
+/** The ways a postgres panel's result is drawn (dashspec PostgresDraw*). */
+export const POSTGRES_DRAWS = ["auto", "line", "number", "table", "bar"] as const;
 
 /** The aggregation presets of the builder: the agg, its quantile, and the field it needs. */
 export const AGG_PRESETS = ["count", "p50", "p95", "p99", "avg", "max", "sum", "count_distinct"] as const;
@@ -134,8 +222,23 @@ export function withRatio(panel: Panel, on: boolean): Panel {
  * the switch never leaves a panel forge would reject for leftovers.
  */
 export function withKind(panel: Panel, kind: Visualization): Panel {
-  const base: Panel = { id: panel.id, title: panel.title, description: panel.description, kind, signal: panel.signal || "traces", series: [], width: panel.width, height: panel.height, where: panel.where };
+  const layout = { id: panel.id, section: panel.section, title: panel.title, description: panel.description, width: panel.width, height: panel.height };
+  const base: Panel = { ...layout, kind, signal: panel.signal || "traces", series: [], where: panel.where };
+  // A statement or prose panel reads no signal and takes no filters: they are its statement's, or nobody's.
+  const bare: Panel = { ...layout, kind, signal: "", series: [] };
+  const display = normalizedDisplay(kind, panel.display);
   switch (kind) {
+    case "sql":
+      return { ...bare, sql: panel.sql ?? STARTER_SQL, minStep: panel.minStep, display, unit: panel.unit };
+    case "postgres":
+      return { ...bare, postgres: panel.postgres ?? { database: "", sql: STARTER_POSTGRES_SQL }, unit: panel.unit };
+    case "text":
+      return { ...bare, markdown: panel.markdown ?? STARTER_MARKDOWN };
+    case "heatmap": {
+      const signal = panel.signal === "logs" ? "logs" : "traces";
+      const field = panel.series.find((s) => s.field && s.agg !== "count")?.field ?? defaultField(signal);
+      return { ...base, signal, series: [{ label: "events", agg: "count", field }], unit: signal === "traces" ? "ms" : panel.unit };
+    }
     case "funnel":
       return { ...base, signal: "traces", funnel: panel.funnel ?? { steps: ["", ""], window: "1h", by: "session" }, where: browserWhere(panel.where) };
     case "issues":
@@ -145,13 +248,19 @@ export function withKind(panel: Panel, kind: Visualization): Panel {
     case "search":
       return { ...base, signal: panel.signal === "logs" ? "logs" : "traces", columns: panel.columns?.length ? panel.columns : defaultColumns(panel.signal) };
     default: {
-      const series = panel.series.length ? panel.series : [{ label: "requests", agg: "count" }];
+      // A heatmap's one series counts events by a field: as a series to aggregate, it is a count.
+      const kept = panel.kind === "heatmap" ? [] : panel.series;
+      const series = kept.length ? kept : [{ label: "requests", agg: "count" }];
+      const groupBy = kind === "bar" && !panel.groupBy?.length ? ["service.name"] : panel.groupBy;
       return {
         ...base,
         signal: panel.signal === "logs" || panel.signal === "metrics" ? panel.signal : "traces",
         series,
-        groupBy: panel.groupBy,
+        groupBy,
         ratio: kind === "line" && panel.ratio && series.length === 2 ? true : undefined,
+        formula: (kind === "line" || kind === "number") && !panel.ratio ? panel.formula : undefined,
+        limit: kind === "table" || kind === "bar" ? panel.limit : undefined,
+        display,
         unit: panel.unit,
       };
     }
@@ -171,10 +280,21 @@ function defaultColumns(signal: string): string[] {
 }
 
 /** The signal switched: series fields that belong to the old signal are cleared. */
-export function withSignal(panel: Panel, signal: string): Panel {
-  if (signal === panel.signal) return panel;
+export function withSignal(next: Panel, signal: string): Panel {
+  if (signal === next.signal) return next;
+  // Filters and group-by fields of the old signal's own (span.kind on logs) mean nothing on the new one, and forge refuses them.
+  const fits = (field: string) => !field || fieldOnSignal(field, signal);
+  const where = (next.where ?? []).filter((p) => fits(p.field));
+  const groupBy = (next.groupBy ?? []).filter(fits);
+  const panel: Panel = { ...next, where: where.length ? where : undefined, groupBy: groupBy.length ? groupBy : undefined };
+  if (panel.kind === "heatmap") {
+    // A heatmap's one series counts events by a numeric field of the signal: the old signal's field means nothing on the new one.
+    const label = panel.series[0]?.label || "events";
+    return { ...panel, signal, series: [{ label, agg: "count", field: defaultField(signal) }], unit: signal === "traces" ? "ms" : undefined };
+  }
   const series = panel.series.map((s): SeriesIntent => {
-    const cleared = { ...s, metricType: signal === "metrics" ? (s.metricType ?? "gauge") : undefined, where: (s.where ?? []).filter((p) => !isErrorPredicate(p)) };
+    const kept = (s.where ?? []).filter((p) => !isErrorPredicate(p) && fits(p.field));
+    const cleared = { ...s, metricType: signal === "metrics" ? (s.metricType ?? "gauge") : undefined, where: kept.length ? kept : undefined };
     if (signal === "metrics") return { ...cleared, agg: s.agg === "count" || s.agg === "count_distinct" ? "avg" : s.agg, field: "" };
     if (s.agg === "last") return { ...cleared, agg: "max", field: defaultField(signal) };
     return { ...cleared, field: s.agg === "count" ? undefined : defaultField(signal) };
