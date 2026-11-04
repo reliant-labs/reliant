@@ -1,0 +1,348 @@
+// internal/app/providers.go — YOURS. forge writes it once and never again.
+//
+// Every func here shaped `func New<X>(<X>Deps) (T, error)` is a PROVIDER: a
+// node of the composition graph, exactly like every handler, package, worker
+// and operator. forge discovers it, resolves each <X>Deps field BY TYPE —
+// another node's value, one of the graph's inputs (Ctx, Cfg, Log, ServerCfg,
+// Probes), a config block, or a scalar config field of the same name —
+// writes its constructor newX in compose.go, and generates the memoized
+// accessor g.X() in graph_gen.go. Add a dependency — a NATS connection, a
+// third-party client, an adapter — by adding a provider; its consumers'
+// fields resolve to it on the next `forge generate`.
+//
+// Nothing is opened eagerly. A process builds only what its root reaches, so
+// a provider nothing reaches is never constructed and never dialled.
+//
+// Instance identity is the Go type. Two listeners are two types (type
+// DaemonListener struct{ *serverkit.Listener }), and that is what keeps
+// resolution unambiguous without names. A provider whose value has Run,
+// Drain, Close or Ready methods (func(context.Context) error) is supervised:
+// started after everything it depends on, drained and closed before it.
+package app
+
+import (
+	"context"
+{{- if .HasDatabase}}
+	"database/sql"
+{{- end}}
+	"fmt"
+	"log/slog"
+	"net/http"
+
+	"connectrpc.com/connect"
+{{if .NoProjectAuthInterceptor}}
+	"github.com/reliant-labs/forge/pkg/authn"
+{{- end}}
+	fmw "github.com/reliant-labs/forge/pkg/middleware"
+	"github.com/reliant-labs/forge/pkg/observe"
+{{- if .HasDatabase}}
+	"github.com/reliant-labs/forge/pkg/orm"
+{{- end}}
+	"github.com/reliant-labs/forge/pkg/serverkit"
+
+	"{{.Module}}/pkg/config"
+	"{{.Module}}/pkg/middleware"
+{{- if .HasDatabase}}
+
+	// Blank import registers the "pgx" database/sql driver NewDB opens by
+	// name.
+	_ "github.com/jackc/pgx/v5/stdlib"
+{{- end}}
+)
+
+// keep context imported for providers that take the boot context.
+var _ context.Context
+{{- if .HasDatabase}}
+
+// DB is the serving Postgres pool. Its own type, so a Deps field resolves to it
+// by type; *sql.DB is embedded, so every *sql.DB method is a DB method.
+type DB struct{ *sql.DB }
+
+// DBDeps is what the pool needs: the boot context (the connect retry reports
+// into the boot probes, so /healthz passes while /readyz names the database
+// being waited on) and the serverkit config's DB knobs.
+type DBDeps struct {
+	Ctx       context.Context
+	ServerCfg serverkit.Config
+	Logger    *slog.Logger
+}
+
+// NewDB opens the serving pool and waits for the database to answer, retrying
+// with capped exponential backoff for up to DB_CONNECT_TIMEOUT
+// (serverkit.OpenDB) — a database merely not up YET is a wait, not a crash.
+// An unset DATABASE_URL is a pool with no database: nothing to open, nothing
+// to be unready about.
+func NewDB(d DBDeps) (*DB, error) {
+	if d.ServerCfg.DatabaseURL == "" {
+		d.Logger.Warn("DATABASE_URL is not set, skipping database setup")
+		return &DB{}, nil
+	}
+	db, err := serverkit.OpenDB(d.Ctx, "pgx", d.ServerCfg.DatabaseURL, d.ServerCfg.DBPoolTuning, d.ServerCfg.ConnectPolicy(d.Logger))
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+	return &DB{DB: db}, nil
+}
+
+// Ready pings the pool: /readyz is what a rolling deploy believes, and this is
+// the check that fails when the database is unreachable or the pool exhausted.
+func (d *DB) Ready(ctx context.Context) error {
+	if d.DB == nil {
+		return nil
+	}
+	return d.PingContext(ctx)
+}
+
+// Close closes the pool. It runs after every node that reads it has stopped.
+func (d *DB) Close(context.Context) error {
+	if d.DB == nil {
+		return nil
+	}
+	return d.DB.Close()
+}
+
+// ORMDeps is the pool the ORM client runs on.
+type ORMDeps struct {
+	DB *DB
+}
+
+// NewORM is the ORM client over the serving pool — what a handler's
+// `DB orm.Context` Deps field resolves to. No database, no client.
+//
+// The standby directive keeps it ready before any handler takes the ORM:
+// `forge lint --graph` does not require a root to reach it.
+//
+//forge:standby
+func NewORM(d ORMDeps) (*orm.Client, error) {
+	if d.DB.DB == nil {
+		return nil, nil
+	}
+	return orm.NewClientWithDB(d.DB.DB, "postgres")
+}
+{{- end}}
+
+// HTTPClientDeps is empty: the client needs nothing from the graph.
+type HTTPClientDeps struct{}
+
+// NewHTTPClient is the outbound *http.Client an adapter's Deps field resolves
+// to: one instrumented transport for the process — one connection pool, an
+// OTel client span and W3C trace-context propagation on every request, and
+// X-Request-Id forwarding so a third-party call's logs stitch onto the
+// request that caused it. A consumer that wants a different timeout copies it
+// (`c := *d.HTTPClient; c.Timeout = …`) rather than editing the shared one.
+//
+//forge:standby
+func NewHTTPClient(HTTPClientDeps) (*http.Client, error) {
+	return observe.NewHTTPClient(observe.HTTPClientOptions{}), nil
+}
+
+// UserAuth authenticates the user audience — your product's signed-in users:
+// SetupAuth's bearer-token validator (auth.go){{if .HasDatabase}}, API keys checked by
+// APIKeyValidator on the serving pool,{{end}} behind the fail-closed interceptor.
+type UserAuth struct{ serverkit.Authenticator }
+
+// UserAuthDeps is what the authenticator reads.
+type UserAuthDeps struct {
+	Config *config.{{or .AuthConfigType "Config"}}
+{{- if .HasDatabase}}
+	DB     *DB
+{{- end}}
+}
+
+// NewUserAuth builds the user audience's authenticator. AnonymousOK: false is
+// FAIL-CLOSED: a request must present a valid token unless the rpc it names
+// declared `auth_required: false` in its proto. A server with no validator is
+// a boot error (NewAuthInterceptor refuses), never a running process.
+//
+// The audience directive names the trust domain it authenticates, so
+// `forge lint --graph` can prove every service a listener serves through a
+// chain over it declares the same audience.
+//
+//forge:audience user
+func NewUserAuth(d UserAuthDeps) (*UserAuth, error) {
+{{- if .NoProjectAuthInterceptor}}
+	// pkg/middleware declares no NewAuthInterceptor of its own, so this is
+	// forge's (authn) over the generated allow-list: the bearer token (or
+	// API key) is the credential, and no claims enrichment runs.
+	policy := authn.Policy{Unauthenticated: middleware.UnauthenticatedProcedures}
+{{- else}}
+	authDeps := middleware.AuthDeps{AnonymousOK: false}
+{{- end}}
+	authenticator, err := SetupAuth(d.Config)
+	if err != nil {
+		return nil, fmt.Errorf("auth setup: %w", err)
+	}
+	if authenticator != nil {
+{{- if .NoProjectAuthInterceptor}}
+		policy.ValidatorConfigured, policy.ValidateContext = true, authenticator.Authenticate
+{{- else}}
+		authDeps.Validate = authenticator.Authenticate
+{{- end}}
+{{- if .HasDatabase}}
+		authenticator.UseKeyValidator(APIKeyValidator(d.DB))
+{{- else}}
+		authenticator.UseKeyValidator(APIKeyValidator())
+{{- end}}
+	}
+{{- if .NoProjectAuthInterceptor}}
+	interceptor, err := authn.NewInterceptor(policy)
+{{- else}}
+	interceptor, err := middleware.NewAuthInterceptor(authDeps)
+{{- end}}
+	if err != nil {
+		return nil, fmt.Errorf("auth configuration: %w", err)
+	}
+	return &UserAuth{serverkit.AuthFor(serverkit.AudienceUser, interceptor)}, nil
+}
+
+// UserChain is the interceptor chain the API listener builds every user
+// route with (serverkit.NewChain): trace → recovery → request-id → logging →
+// metrics → deadline → auth → audit → rate-limit → activity → stream-drain →
+// protovalidate, plus the payload caps. Every slot has forge's default except
+// Auth; a field you set replaces that slot, and serverkit.NoAudit, NoTrace,
+// NoDeadline, NoActivity, NoStreamDrain and NoValidate drop one.
+type UserChain struct{ *serverkit.Chain }
+
+// UserChainDeps is the chain's authenticator and settings.
+type UserChainDeps struct {
+	Auth      *UserAuth
+	Config    *config.Config
+	ServerCfg serverkit.Config
+	Logger    *slog.Logger
+}
+
+// NewUserChain builds the user audience's chain.
+func NewUserChain(d UserChainDeps) (*UserChain, error) {
+	chain, err := serverkit.NewChain(serverkit.ChainDeps{
+		Auth:   d.Auth,
+		Logger: d.Logger,
+		// Each rpc's `(forge.v1.method).timeout`; the rest get the slot's
+		// default (30s unary, streams unbounded). It runs ahead of Auth, so
+		// the budget bounds the credential lookup too.
+		Deadline: serverkit.Deadline{Procedures: middleware.ProcedureDeadlines},
+{{- if and (index .ConfigFields "RateLimitRps") (index .ConfigFields "RateLimitBurst")}}
+		RateLimit: fmw.RateLimitInterceptor(fmw.RateLimitOptions{Rps: int(d.Config.RateLimitRps), Burst: int(d.Config.RateLimitBurst)}, {{if .NoProjectAuthInterceptor}}authn{{else}}middleware{{end}}.ClaimsFromContext),
+{{- end}}
+{{- if index .ConfigFields "LogSuccessSampleWindow"}}
+		// Success-log sampling (0s, the default, logs every successful rpc).
+		LogOptions: []observe.LogOption{observe.WithSuccessSampling(d.Config.LogSuccessSampleWindow.AsDuration())},
+{{- end}}
+		// connect-go decodes a whole body before any interceptor can reject
+		// it, so an uncapped handler turns one anonymous request into an
+		// OOMKill. Zero is 4 MiB.
+		ReadMaxBytes: d.ServerCfg.ReadMaxBytes,
+		SendMaxBytes: d.ServerCfg.SendMaxBytes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("interceptor chain: %w", err)
+	}
+	return &UserChain{chain}, nil
+}
+
+// APIListener is the process's public HTTP listener: the user routes behind
+// the user chain, the probes in front of the edge, on ServerCfg's address.
+// Its Drain stops accepting, ends long-lived streams soft-then-hard and drains
+// unary requests inside the shutdown budget.
+type APIListener struct{ *serverkit.Listener }
+
+// APIListenerDeps is what the listener serves and how.
+type APIListenerDeps struct {
+	Config    *config.Config
+	ServerCfg serverkit.Config
+	Logger    *slog.Logger
+	Chain     *UserChain
+	Routes    *UserRoutes
+	Probes    *serverkit.Probes
+{{- if .BrokerConfigType}}
+	// Broker is the config login_broker.go reads its idp_* / oidc_*
+	// settings from.
+	Broker *config.{{.BrokerConfigType}}
+{{- end}}
+}
+
+// NewAPIListener mounts the user routes with the user chain — refusing to
+// boot when a mounted service declares another audience — and puts the
+// probes and /metrics in front of the edge (CORS, security headers, request
+// id), where a kubelet or scraper reaches them without credentials.
+func NewAPIListener(d APIListenerDeps) (*APIListener, error) {
+	if d.Probes == nil {
+		return nil, fmt.Errorf("APIListener: Deps.Probes is required: the API listener serves the process's probes")
+	}
+	edge, err := serverkit.Edge{
+{{- if or (index .ConfigFields "CorsOrigins") (index .ConfigFields "Environment")}}
+		CORS: func(origins []string, allowCredentials bool) func(http.Handler) http.Handler {
+			// The project's own request/response headers, on top of forge's
+			// defaults. A header a browser client sends has to be declared
+			// here (cors_allow_headers), or the preflight refuses every rpc.
+			corsOpts := []fmw.CORSOption{
+{{- if index .ConfigFields "CorsAllowHeaders"}}
+				fmw.WithAllowHeaders(fmw.HeaderList(d.Config.CorsAllowHeaders)...),
+{{- end}}
+{{- if index .ConfigFields "CorsExposeHeaders"}}
+				fmw.WithExposeHeaders(fmw.HeaderList(d.Config.CorsExposeHeaders)...),
+{{- end}}
+			}
+{{- if index .ConfigFields "Environment"}}
+			// DEV ONLY: reflect any request Origin (credential-safe: the
+			// concrete Origin, never "*"). Never outside dev.
+			if d.Config.Environment == serverkit.EnvDevelopment {
+				return fmw.DevCORSMiddleware(allowCredentials, corsOpts...)
+			}
+{{- end}}
+			return fmw.CORSMiddleware(origins, allowCredentials, corsOpts...)
+		},
+{{- end}}
+{{- if index .ConfigFields "SecurityHeadersEnabled"}}
+		SecurityHeaders: func(production bool) func(http.Handler) http.Handler {
+			secCfg := fmw.DefaultSecurityHeadersConfig()
+			secCfg.Enabled = true
+			secCfg.Production = production
+			return fmw.SecurityHeadersMiddleware(secCfg)
+		},
+{{- end}}
+		RequestID: fmw.RequestIDMiddleware,
+	}.Wrap(d.ServerCfg)
+	if err != nil {
+		return nil, err
+	}
+	l, err := serverkit.NewListener(serverkit.ListenerDeps{
+		Config: d.ServerCfg.Listener(),
+		Chain:  d.Chain.Chain,
+		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
+			mounted := d.Routes.Register(mux, opts...)
+{{- if not .NoBrokerConfig}}
+			// NATIVE SIGN-IN: /auth/login, /auth/register, /auth/session and
+			// /auth/logout, gated on configuration (login_broker.go, yours).
+			if err := LoginBrokerConfigured(d.{{if .BrokerConfigType}}Broker{{else}}Config{{end}}); err == nil {
+				RegisterLoginBroker(mux, d.{{if .BrokerConfigType}}Broker{{else}}Config{{end}}, d.Logger)
+				d.Logger.Info("native sign-in enabled", "routes", "/auth/login /auth/register /auth/session /auth/logout")
+			} else {
+				d.Logger.Debug("native sign-in not configured", "reason", err)
+			}
+{{- end}}
+			return mounted
+		}),
+		Logger: d.Logger,
+		Edge:   edge,
+		Front:  d.Probes.Front(),
+		REST:   {{.RESTEnabled}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &APIListener{l}, nil
+}
+
+// PprofDeps is the pprof endpoint's address.
+type PprofDeps struct {
+	ServerCfg serverkit.Config
+	Logger    *slog.Logger
+}
+
+// NewPprof is pprof on its own loopback listener (PPROF_ADDR, default
+// 127.0.0.1:6060) — never the app port. Always on, because "what is holding
+// the memory" can only be answered while the process is alive; a bind failure
+// is logged and skipped, never fatal.
+func NewPprof(d PprofDeps) (*serverkit.Pprof, error) {
+	return serverkit.NewPprof(d.ServerCfg, d.Logger), nil
+}

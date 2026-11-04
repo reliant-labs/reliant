@@ -1,0 +1,68 @@
+# dependencies
+node_modules/
+
+# next.js (.next = dev server, .next-prod = production builds — split so
+# `npm run build` can't clobber a live dev server's cache)
+.next/
+.next-prod/
+out/
+
+# production
+build/
+
+# ── Generated code is COMMITTED ──
+# src/gen/ (buf's TypeScript client code), src/hooks/*_gen.ts and
+# src/lib/*_gen.ts are checked in, like the Go side's gen/: a checkout
+# must build as-cloned, and `forge ci verify-generated` cannot see an
+# ignored file. See the project root .gitignore for the full rationale.
+#
+# ── Machine-local runtime config (NEVER committed) ──
+# public/config.js is the DEV runtime config document. `forge generate`
+# renders it from deploy/kcl/dev/config.k, which resolves machine-local
+# ports (a SITE_URL of http://localhost:3003 on one machine is :3001 on a
+# fresh clone), so a committed copy drifts on every machine that
+# regenerates. `forge generate`, `forge build` and `forge env up`
+# materialize it; a deploy writes each environment's own copy beside the
+# bundle.
+public/config.js
+# Pre-`_gen` per-service React Query hooks, from a tree generated before
+# forge renamed the emitter's output. Nothing writes these names anymore;
+# the rule stays so an un-upgraded checkout still ignores its leftovers.
+#
+# The CURRENT output — src/hooks/<svc>-hooks_gen.ts — and the src/hooks/
+# index.ts barrel that re-exports it are deliberately NOT ignored. They
+# are Tier-1 files exactly like src/lib/apiurl_gen.ts and src/mocks/
+# *_gen.ts, which this project commits, and `forge ci verify-generated`
+# compares a fresh `forge generate` against the checkout with `git status
+# --porcelain`: an ignored generated file is invisible to that gate, so
+# codegen drift in it passes CI silently. Ignoring them also broke a real
+# upgrade — all 28 renamed hook files landed untracked, and a fresh clone
+# had no hooks for the pages that import them.
+#
+# Do NOT collapse this into `src/hooks/*_gen.ts` or `src/lib/*_gen.ts`:
+# apiurl_gen.ts, basepath_gen.ts and config_gen.ts are forge-emitted and
+# ARE committed, so a blanket glob silently untracks them.
+src/hooks/*-hooks.ts
+
+# test coverage
+coverage/
+
+# misc
+.DS_Store
+*.pem
+
+# logs
+*.log
+
+# env files
+.env*.local
+
+# vercel
+.vercel
+
+# turbo
+.turbo/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

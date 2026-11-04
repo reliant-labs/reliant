@@ -1,0 +1,919 @@
+{
+  "output": {
+    "applier": "flux",
+    "cluster_target": {
+      "cluster": "gke_acme_prod",
+      "connected_cluster": null,
+      "domain": null,
+      "image_pull_secrets": [],
+      "namespace": "acme-prod",
+      "platform": "amd64"
+    },
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "databases": [],
+    "env": "prod",
+    "external_secrets_operators": [],
+    "flux_delivery": {
+      "apply_identities": true,
+      "chart": "flux-delivery",
+      "cluster": "gke_acme_prod",
+      "delivery_scope": "namespace",
+      "env": "prod",
+      "flux_verify": {
+        "effective": "off",
+        "requested": "off"
+      },
+      "namespace": "forge-delivery-acme-prod",
+      "pull_secret": "forge-delivery-pull",
+      "pull_secret_from": "acme-prod/ghcr-pull",
+      "registry": "",
+      "resourceset": "delivery.prod",
+      "signing": {
+        "effective": "off",
+        "requested": "off"
+      }
+    },
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [
+      {
+        "chart": null,
+        "cluster": null,
+        "cluster_target": null,
+        "crds": null,
+        "manifests": [
+          {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "ClusterRole",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "crd-controller"
+            },
+            "rules": [
+              {
+                "apiGroups": [
+                  "source.toolkit.fluxcd.io"
+                ],
+                "resources": [
+                  "*"
+                ],
+                "verbs": [
+                  "*"
+                ]
+              },
+              {
+                "apiGroups": [
+                  "source.extensions.fluxcd.io"
+                ],
+                "resources": [
+                  "*"
+                ],
+                "verbs": [
+                  "*"
+                ]
+              },
+              {
+                "apiGroups": [
+                  "kustomize.toolkit.fluxcd.io"
+                ],
+                "resources": [
+                  "*"
+                ],
+                "verbs": [
+                  "*"
+                ]
+              },
+              {
+                "apiGroups": [
+                  ""
+                ],
+                "resources": [
+                  "namespaces",
+                  "serviceaccounts"
+                ],
+                "verbs": [
+                  "get",
+                  "list",
+                  "watch"
+                ]
+              },
+              {
+                "apiGroups": [
+                  ""
+                ],
+                "resources": [
+                  "events"
+                ],
+                "verbs": [
+                  "create",
+                  "patch"
+                ]
+              }
+            ]
+          },
+          {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "ClusterRoleBinding",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "crd-controller"
+            },
+            "roleRef": {
+              "apiGroup": "rbac.authorization.k8s.io",
+              "kind": "ClusterRole",
+              "name": "crd-controller"
+            },
+            "subjects": [
+              {
+                "kind": "ServiceAccount",
+                "name": "kustomize-controller",
+                "namespace": "flux-system"
+              },
+              {
+                "kind": "ServiceAccount",
+                "name": "source-controller",
+                "namespace": "flux-system"
+              }
+            ]
+          },
+          {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "Role",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "flux-leader-election",
+              "namespace": "flux-system"
+            },
+            "rules": [
+              {
+                "apiGroups": [
+                  ""
+                ],
+                "resources": [
+                  "configmaps"
+                ],
+                "verbs": [
+                  "get",
+                  "list",
+                  "watch",
+                  "create",
+                  "update",
+                  "patch",
+                  "delete"
+                ]
+              },
+              {
+                "apiGroups": [
+                  ""
+                ],
+                "resources": [
+                  "configmaps/status"
+                ],
+                "verbs": [
+                  "get",
+                  "update",
+                  "patch"
+                ]
+              },
+              {
+                "apiGroups": [
+                  "coordination.k8s.io"
+                ],
+                "resources": [
+                  "leases"
+                ],
+                "verbs": [
+                  "get",
+                  "list",
+                  "watch",
+                  "create",
+                  "update",
+                  "patch",
+                  "delete"
+                ]
+              }
+            ]
+          },
+          {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "RoleBinding",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "flux-leader-election",
+              "namespace": "flux-system"
+            },
+            "roleRef": {
+              "apiGroup": "rbac.authorization.k8s.io",
+              "kind": "Role",
+              "name": "flux-leader-election"
+            },
+            "subjects": [
+              {
+                "kind": "ServiceAccount",
+                "name": "kustomize-controller",
+                "namespace": "flux-system"
+              },
+              {
+                "kind": "ServiceAccount",
+                "name": "source-controller",
+                "namespace": "flux-system"
+              }
+            ]
+          },
+          {
+            "apiVersion": "admissionregistration.k8s.io/v1",
+            "kind": "ValidatingAdmissionPolicy",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "flux-controller-bindings"
+            },
+            "spec": {
+              "failurePolicy": "Fail",
+              "matchConstraints": {
+                "resourceRules": [
+                  {
+                    "apiGroups": [
+                      "rbac.authorization.k8s.io"
+                    ],
+                    "apiVersions": [
+                      "*"
+                    ],
+                    "operations": [
+                      "CREATE",
+                      "UPDATE"
+                    ],
+                    "resources": [
+                      "rolebindings",
+                      "clusterrolebindings"
+                    ]
+                  }
+                ]
+              },
+              "validations": [
+                {
+                  "expression": "!variables.namesFlux || (object.roleRef.kind + '/' + object.roleRef.name) in ['ClusterRole/crd-controller', 'Role/flux-leader-election', 'ClusterRole/flux-tenant-reconciler', 'ClusterRole/flux-tenant-source', 'ClusterRole/flux-connected-controller', 'ClusterRole/flux-connected-reconciler', 'ClusterRole/cluster-reconciler-impersonator']",
+                  "messageExpression": "'a Flux controller ServiceAccount may be bound only to ClusterRole/crd-controller, Role/flux-leader-election, ClusterRole/flux-tenant-reconciler, ClusterRole/flux-tenant-source, ClusterRole/flux-connected-controller, ClusterRole/flux-connected-reconciler, ClusterRole/cluster-reconciler-impersonator; refusing ' + object.roleRef.kind + '/' + object.roleRef.name",
+                  "reason": "Forbidden"
+                }
+              ],
+              "variables": [
+                {
+                  "expression": "has(object.subjects) \u0026\u0026 object.subjects.exists(s, (s.kind == 'ServiceAccount' \u0026\u0026 s.name in ['kustomize-controller', 'source-controller', 'kustomize-controller-connected'] \u0026\u0026 (has(s.namespace) ? s.namespace : request.namespace) == 'flux-system') || (s.kind == 'Group' \u0026\u0026 s.name in ['system:serviceaccounts', 'system:serviceaccounts:flux-system']))",
+                  "name": "namesFlux"
+                }
+              ]
+            }
+          },
+          {
+            "apiVersion": "admissionregistration.k8s.io/v1",
+            "kind": "ValidatingAdmissionPolicyBinding",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "flux-controller-bindings"
+            },
+            "spec": {
+              "policyName": "flux-controller-bindings",
+              "validationActions": [
+                "Deny"
+              ]
+            }
+          },
+          {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "ClusterRole",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "flux-tenant-reconciler"
+            },
+            "rules": [
+              {
+                "apiGroups": [
+                  ""
+                ],
+                "resourceNames": [
+                  "forge-delivery-none",
+                  "forge-delivery-pre",
+                  "forge-delivery-apply"
+                ],
+                "resources": [
+                  "serviceaccounts"
+                ],
+                "verbs": [
+                  "impersonate"
+                ]
+              },
+              {
+                "apiGroups": [
+                  ""
+                ],
+                "resources": [
+                  "secrets",
+                  "configmaps"
+                ],
+                "verbs": [
+                  "get",
+                  "list",
+                  "watch"
+                ]
+              }
+            ]
+          },
+          {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "ClusterRole",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "flux-tenant-source"
+            },
+            "rules": [
+              {
+                "apiGroups": [
+                  ""
+                ],
+                "resources": [
+                  "secrets",
+                  "configmaps"
+                ],
+                "verbs": [
+                  "get",
+                  "list",
+                  "watch"
+                ]
+              }
+            ]
+          },
+          {
+            "apiVersion": "networking.k8s.io/v1",
+            "kind": "NetworkPolicy",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "allow-egress",
+              "namespace": "flux-system"
+            },
+            "spec": {
+              "egress": [
+                {}
+              ],
+              "ingress": [
+                {
+                  "from": [
+                    {
+                      "podSelector": {}
+                    }
+                  ]
+                }
+              ],
+              "podSelector": {},
+              "policyTypes": [
+                "Ingress",
+                "Egress"
+              ]
+            }
+          },
+          {
+            "apiVersion": "scheduling.k8s.io/v1",
+            "description": "Flux source-controller and kustomize-controller: the delivery path other workloads are rolled out through.",
+            "globalDefault": false,
+            "kind": "PriorityClass",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "forge-delivery"
+            },
+            "value": 1000000
+          },
+          {
+            "apiVersion": "fluxcd.controlplane.io/v1",
+            "kind": "FluxInstance",
+            "metadata": {
+              "annotations": {
+                "fluxcd.controlplane.io/reconcileEvery": "1h",
+                "fluxcd.controlplane.io/reconcileTimeout": "5m",
+                "kustomize.toolkit.fluxcd.io/prune": "disabled"
+              },
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "flux",
+              "namespace": "flux-system"
+            },
+            "spec": {
+              "cluster": {
+                "domain": "cluster.local",
+                "multitenant": true,
+                "networkPolicy": false,
+                "tenantDefaultServiceAccount": "forge-delivery-none",
+                "type": "kubernetes"
+              },
+              "components": [
+                "source-controller",
+                "kustomize-controller"
+              ],
+              "distribution": {
+                "registry": "ghcr.io/fluxcd",
+                "version": "2.9.x"
+              },
+              "kustomize": {
+                "patches": [
+                  {
+                    "patch": "apiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata:\n  name: all\n  annotations:\n    fluxcd.controlplane.io/prune: disabled\n",
+                    "target": {
+                      "kind": "CustomResourceDefinition"
+                    }
+                  },
+                  {
+                    "patch": "apiVersion: v1\nkind: Namespace\nmetadata:\n  name: flux-system\n  labels:\n    pod-security.kubernetes.io/enforce: restricted\n    pod-security.kubernetes.io/enforce-version: latest\n    pod-security.kubernetes.io/warn: restricted\n    pod-security.kubernetes.io/audit: restricted\n",
+                    "target": {
+                      "kind": "Namespace",
+                      "name": "^flux-system$"
+                    }
+                  },
+                  {
+                    "patch": "- op: replace\n  path: /spec/template/spec/containers/0/args\n  value:\n  - '--watch-all-namespaces=true'\n  - '--log-level=info'\n  - '--log-encoding=json'\n  - '--enable-leader-election'\n  - '--no-remote-bases=true'\n  - '--no-cross-namespace-refs=true'\n  - '--default-service-account=forge-delivery-none'\n  - '--concurrent=16'\n  - '--concurrent-ssa=8'\n  - '--requeue-dependency=10s'\n  - '--feature-gates=CancelHealthCheckOnNewRevision=true,DisableConfigWatchers=true'\n",
+                    "target": {
+                      "kind": "Deployment",
+                      "name": "^kustomize-controller$"
+                    }
+                  },
+                  {
+                    "patch": "- op: replace\n  path: /spec/template/spec/containers/0/args\n  value:\n  - '--watch-all-namespaces=true'\n  - '--log-level=info'\n  - '--log-encoding=json'\n  - '--enable-leader-election'\n  - '--storage-path=/data'\n  - '--storage-adv-addr=source-controller.$(RUNTIME_NAMESPACE).svc.cluster.local.'\n  - '--concurrent=8'\n",
+                    "target": {
+                      "kind": "Deployment",
+                      "name": "^source-controller$"
+                    }
+                  },
+                  {
+                    "patch": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: kustomize-controller\nspec:\n  template:\n    spec:\n      enableServiceLinks: false\n      containers:\n      - name: manager\n        resources:\n          requests:\n            cpu: '500m'\n            memory: '512Mi'\n          limits:\n            cpu: '2'\n            memory: '2Gi'\n      priorityClassName: forge-delivery\n",
+                    "target": {
+                      "kind": "Deployment",
+                      "name": "^kustomize-controller$"
+                    }
+                  },
+                  {
+                    "patch": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: source-controller\nspec:\n  template:\n    spec:\n      enableServiceLinks: false\n      containers:\n      - name: manager\n        resources:\n          requests:\n            cpu: '250m'\n            memory: '256Mi'\n          limits:\n            cpu: '1'\n            memory: '1Gi'\n      priorityClassName: forge-delivery\n",
+                    "target": {
+                      "kind": "Deployment",
+                      "name": "^source-controller$"
+                    }
+                  },
+                  {
+                    "patch": "$patch: delete\napiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRoleBinding\nmetadata:\n  name: all\n",
+                    "target": {
+                      "kind": "ClusterRoleBinding",
+                      "name": "^(cluster-reconciler|crd-controller)-flux-system$"
+                    }
+                  },
+                  {
+                    "patch": "$patch: delete\napiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata:\n  name: all\n",
+                    "target": {
+                      "kind": "ClusterRole",
+                      "name": "^(cluster-reconciler|crd-controller)-flux-system$"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "Namespace",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "app.kubernetes.io/name": "flux-delivery",
+                "forge.dev/delivery-env": "prod"
+              },
+              "name": "forge-delivery-acme-prod"
+            }
+          },
+          {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "RoleBinding",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "flux-tenant-reconciler",
+              "namespace": "forge-delivery-acme-prod"
+            },
+            "roleRef": {
+              "apiGroup": "rbac.authorization.k8s.io",
+              "kind": "ClusterRole",
+              "name": "flux-tenant-reconciler"
+            },
+            "subjects": [
+              {
+                "kind": "ServiceAccount",
+                "name": "kustomize-controller",
+                "namespace": "flux-system"
+              }
+            ]
+          },
+          {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "RoleBinding",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/part-of": "flux"
+              },
+              "name": "flux-tenant-source",
+              "namespace": "forge-delivery-acme-prod"
+            },
+            "roleRef": {
+              "apiGroup": "rbac.authorization.k8s.io",
+              "kind": "ClusterRole",
+              "name": "flux-tenant-source"
+            },
+            "subjects": [
+              {
+                "kind": "ServiceAccount",
+                "name": "source-controller",
+                "namespace": "flux-system"
+              }
+            ]
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "ServiceAccount",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "app.kubernetes.io/name": "flux-delivery"
+              },
+              "name": "flux-delivery",
+              "namespace": "forge-delivery-acme-prod"
+            }
+          },
+          {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "Role",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "app.kubernetes.io/name": "flux-delivery"
+              },
+              "name": "flux-delivery",
+              "namespace": "forge-delivery-acme-prod"
+            },
+            "rules": [
+              {
+                "apiGroups": [
+                  "source.toolkit.fluxcd.io"
+                ],
+                "resources": [
+                  "ocirepositories"
+                ],
+                "verbs": [
+                  "get",
+                  "list",
+                  "watch",
+                  "create",
+                  "update",
+                  "patch",
+                  "delete"
+                ]
+              },
+              {
+                "apiGroups": [
+                  "kustomize.toolkit.fluxcd.io"
+                ],
+                "resources": [
+                  "kustomizations"
+                ],
+                "verbs": [
+                  "get",
+                  "list",
+                  "watch",
+                  "create",
+                  "update",
+                  "patch",
+                  "delete"
+                ]
+              }
+            ]
+          },
+          {
+            "apiVersion": "rbac.authorization.k8s.io/v1",
+            "kind": "RoleBinding",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "app.kubernetes.io/name": "flux-delivery"
+              },
+              "name": "flux-delivery",
+              "namespace": "forge-delivery-acme-prod"
+            },
+            "roleRef": {
+              "apiGroup": "rbac.authorization.k8s.io",
+              "kind": "Role",
+              "name": "flux-delivery"
+            },
+            "subjects": [
+              {
+                "kind": "ServiceAccount",
+                "name": "flux-delivery",
+                "namespace": "forge-delivery-acme-prod"
+              }
+            ]
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "ServiceAccount",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "app.kubernetes.io/name": "flux-delivery",
+                "forge.dev/delivery-env": "prod"
+              },
+              "name": "forge-delivery-pre",
+              "namespace": "forge-delivery-acme-prod"
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "ServiceAccount",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "app.kubernetes.io/name": "flux-delivery",
+                "forge.dev/delivery-env": "prod"
+              },
+              "name": "forge-delivery-apply",
+              "namespace": "forge-delivery-acme-prod"
+            }
+          },
+          {
+            "apiVersion": "v1",
+            "kind": "ServiceAccount",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "app.kubernetes.io/name": "flux-delivery",
+                "forge.dev/delivery-env": "prod"
+              },
+              "name": "forge-delivery-none",
+              "namespace": "forge-delivery-acme-prod"
+            }
+          },
+          {
+            "apiVersion": "fluxcd.controlplane.io/v1",
+            "kind": "ResourceSet",
+            "metadata": {
+              "labels": {
+                "app.kubernetes.io/managed-by": "forge",
+                "app.kubernetes.io/name": "flux-delivery"
+              },
+              "name": "delivery.prod",
+              "namespace": "forge-delivery-acme-prod"
+            },
+            "spec": {
+              "inputsFrom": [
+                {
+                  "apiVersion": "fluxcd.controlplane.io/v1",
+                  "kind": "ResourceSetInputProvider",
+                  "selector": {
+                    "matchLabels": {
+                      "forge.dev/delivery": "true"
+                    }
+                  }
+                }
+              ],
+              "resourcesTemplate": "\u003c\u003c- /* forge fluxdelivery template (kcl/lib/flux_delivery.k). One input renders one ledger binding. */ -\u003e\u003e\n\u003c\u003c- $in := inputs \u003e\u003e\n\u003c\u003c- if ne $in.schema \"forge.dev/flux-delivery/v1\" \u003e\u003e\u003c\u003c fail (printf \"fluxdelivery: input schema %q is not forge.dev/flux-delivery/v1, the only one this template renders\" $in.schema) \u003e\u003e\u003c\u003c end \u003e\u003e\n\u003c\u003c- $src := $in.source \u003e\u003e\n\u003c\u003c- $keep := eq $in.retire \"\" \u003e\u003e\n---\napiVersion: source.toolkit.fluxcd.io/v1\nkind: OCIRepository\nmetadata:\n  name: \u003c\u003c toJson $src.name \u003e\u003e\n  namespace: \u003c\u003c toJson $in.namespace \u003e\u003e\n  labels:\n\u003c\u003c- range $k, $v := $in.labels \u003e\u003e\n    \u003c\u003c toJson $k \u003e\u003e: \u003c\u003c toJson $v \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n    \"sharding.fluxcd.io/key\": \"shard0\"\n  annotations:\n    \"deploy.reliant.dev/generation\": \u003c\u003c toJson $in.fence \u003e\u003e\n\u003c\u003c- if $keep \u003e\u003e\n    \"fluxcd.controlplane.io/prune\": \"disabled\"\n\u003c\u003c- end \u003e\u003e\nspec:\n  url: \u003c\u003c toJson $src.url \u003e\u003e\n  interval: \u003c\u003c toJson $src.interval \u003e\u003e\n  ref:\n    digest: \u003c\u003c toJson $src.digest \u003e\u003e\n\u003c\u003c- if $src.pullSecret \u003e\u003e\n  secretRef:\n    name: \u003c\u003c toJson $src.pullSecret \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- if $src.insecure \u003e\u003e\n  insecure: true\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- if $src.provider \u003e\u003e\n  provider: \u003c\u003c toJson $src.provider \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n  layerSelector:\n    mediaType: \"application/vnd.forge.bundle.manifests.v1.tar+gzip\"\n    operation: \"extract\"\n\u003c\u003c- if eq $src.verify.mode \"enforce\" \u003e\u003e\n  verify:\n    provider: \u003c\u003c toJson $src.verify.provider \u003e\u003e\n\u003c\u003c- if $src.verify.secretRef \u003e\u003e\n    secretRef:\n      name: \u003c\u003c toJson $src.verify.secretRef \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- if $src.verify.oidc \u003e\u003e\n    matchOIDCIdentity: \u003c\u003c toJson $src.verify.oidc \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- range $a := $in.appliers \u003e\u003e\n\u003c\u003c- $retire := or $in.retire $a.retire \u003e\u003e\n---\napiVersion: kustomize.toolkit.fluxcd.io/v1\nkind: Kustomization\nmetadata:\n  name: \u003c\u003c toJson $a.name \u003e\u003e\n  namespace: \u003c\u003c toJson $in.namespace \u003e\u003e\n  labels:\n\u003c\u003c- range $k, $v := $in.labels \u003e\u003e\n    \u003c\u003c toJson $k \u003e\u003e: \u003c\u003c toJson $v \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- range $k, $v := $a.labels \u003e\u003e\n    \u003c\u003c toJson $k \u003e\u003e: \u003c\u003c toJson $v \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n    \"sharding.fluxcd.io/key\": \u003c\u003c if $a.kubeConfigSecret \u003e\u003e\"connected\"\u003c\u003c else \u003e\u003e\"shard0\"\u003c\u003c end \u003e\u003e\n\u003c\u003c- if not $retire \u003e\u003e\n  annotations:\n    \"fluxcd.controlplane.io/prune\": \"disabled\"\n\u003c\u003c- end \u003e\u003e\nspec:\n  interval: \u003c\u003c toJson $src.interval \u003e\u003e\n  prune: true\n  deletionPolicy: \u003c\u003c if eq $retire \"teardown\" \u003e\u003e\"Delete\"\u003c\u003c else \u003e\u003e\"Orphan\"\u003c\u003c end \u003e\u003e\n  sourceRef:\n    apiVersion: \"source.toolkit.fluxcd.io/v1\"\n    kind: \"OCIRepository\"\n    name: \u003c\u003c toJson $a.source \u003e\u003e\n  path: \u003c\u003c toJson $a.path \u003e\u003e\n\u003c\u003c- if $a.targetNamespace \u003e\u003e\n  targetNamespace: \u003c\u003c toJson $a.targetNamespace \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n  serviceAccountName: \u003c\u003c toJson $a.serviceAccountName \u003e\u003e\n\u003c\u003c- if $a.kubeConfigSecret \u003e\u003e\n  kubeConfig:\n    secretRef:\n      name: \u003c\u003c toJson $a.kubeConfigSecret \u003e\u003e\n      key: \"value\"\n\u003c\u003c- end \u003e\u003e\n  wait: \u003c\u003c toJson $a.wait \u003e\u003e\n  timeout: \u003c\u003c toJson $a.timeout \u003e\u003e\n\u003c\u003c- if $a.retryInterval \u003e\u003e\n  retryInterval: \u003c\u003c toJson $a.retryInterval \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- if or (eq $retire \"orphan\") (and (eq $retire \"\") $a.suspended) \u003e\u003e\n  suspend: true\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- if $a.commonLabels \u003e\u003e\n  commonMetadata:\n    labels: \u003c\u003c toJson $a.commonLabels \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- if $a.patches \u003e\u003e\n  patches: \u003c\u003c toJson $a.patches \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- if or $a.dependsOn $a.externalDependsOn \u003e\u003e\n  dependsOn:\n\u003c\u003c- range $d := $a.dependsOn \u003e\u003e\n  - name: \u003c\u003c toJson $d \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- range $d := $a.externalDependsOn \u003e\u003e\n  - name: \u003c\u003c toJson $d \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- if $a.health \u003e\u003e\n  healthChecks: \u003c\u003c toJson $a.health \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- if $a.healthExprs \u003e\u003e\n  healthCheckExprs: \u003c\u003c toJson $a.healthExprs \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n\u003c\u003c- end \u003e\u003e\n",
+              "serviceAccountName": "flux-delivery"
+            }
+          }
+        ],
+        "name": "flux-delivery",
+        "namespace": "flux-system",
+        "namespace_annotations": null,
+        "namespace_labels": {
+          "pod-security.kubernetes.io/audit": "restricted",
+          "pod-security.kubernetes.io/enforce": "restricted",
+          "pod-security.kubernetes.io/enforce-version": "latest",
+          "pod-security.kubernetes.io/warn": "restricted"
+        },
+        "oci": "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator",
+        "patches": {
+          "Deployment/flux-operator": {
+            "spec": {
+              "template": {
+                "spec": {
+                  "enableServiceLinks": false
+                }
+              }
+            }
+          }
+        },
+        "prune": true,
+        "repo": null,
+        "values": {
+          "fullnameOverride": "flux-operator",
+          "image": {
+            "repository": "ghcr.io/controlplaneio-fluxcd/flux-operator",
+            "tag": "v0.62.1@sha256:1d09a3f96524d0895fb11e8072d84a3dd029cecdec0f869efa371be6b001469c"
+          },
+          "installCRDs": true,
+          "multitenancy": {
+            "defaultServiceAccount": "flux-delivery",
+            "enabled": true
+          },
+          "priorityClassName": "forge-delivery",
+          "rbac": {
+            "createAggregation": false
+          },
+          "web": {
+            "enabled": false
+          }
+        },
+        "version": "0.62.1"
+      }
+    ],
+    "http_routes": [],
+    "image_tag": "stable",
+    "infra": [],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifests": [
+      {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.dev/cluster": "gke_acme_prod",
+            "forge.dev/env": "prod",
+            "pod-security.kubernetes.io/audit": "restricted",
+            "pod-security.kubernetes.io/enforce": "restricted",
+            "pod-security.kubernetes.io/warn": "restricted"
+          },
+          "name": "acme-prod"
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "api",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "gke_acme_prod",
+            "forge.dev/env": "prod"
+          },
+          "name": "api",
+          "namespace": "acme-prod"
+        },
+        "spec": {
+          "args": [
+            "api"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "ghcr.io/acme/acme:stable",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "ghcr.io/acme/acme",
+        "image": "ghcr.io/acme/acme",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "gke_acme_prod",
+          "connected_cluster": null,
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-prod",
+          "platform": "amd64",
+          "type": "cluster"
+        },
+        "spec": {
+          "args": [
+            "api"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "ghcr.io/acme/acme:stable",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

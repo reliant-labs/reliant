@@ -1,0 +1,60 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: OCIRepository
+metadata:
+  annotations:
+    deploy.reliant.dev/generation: "42"
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/binding: web
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod.web
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: shard0
+  name: acme.env.env-prod.b.web
+  namespace: flux-acme
+spec:
+  interval: 5m0s
+  layerSelector:
+    mediaType: application/vnd.forge.bundle.manifests.v1.tar+gzip
+    operation: extract
+  ref:
+    digest: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  secretRef:
+    name: registry-pull
+  url: oci://registry.example.com/orgs/acme/bundle.v1/prod
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  annotations:
+    fluxcd.controlplane.io/prune: disabled
+  labels:
+    app.kubernetes.io/managed-by: reliant-control-plane
+    reliant.dev/binding: web
+    reliant.dev/cluster: vke-staging
+    reliant.dev/environment: env-prod
+    reliant.dev/org: acme
+    resourceset.fluxcd.controlplane.io/name: delivery.env-prod.web
+    resourceset.fluxcd.controlplane.io/namespace: flux-acme
+    sharding.fluxcd.io/key: connected
+  name: acme.env.env-prod.b.web-vke-staging
+  namespace: flux-acme
+spec:
+  deletionPolicy: Orphan
+  interval: 5m0s
+  kubeConfig:
+    secretRef:
+      key: value
+      name: cluster-b-kubeconfig
+  path: manifests/vke-staging
+  prune: true
+  serviceAccountName: ""
+  sourceRef:
+    apiVersion: source.toolkit.fluxcd.io/v1
+    kind: OCIRepository
+    name: acme.env.env-prod.b.web
+  timeout: 5m0s
+  wait: true

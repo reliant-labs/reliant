@@ -1,0 +1,108 @@
+{
+  "output": {
+    "applier": null,
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "databases": [],
+    "env": "dev",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "latest",
+    "infra": [],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifests": [],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./cmd/acme-cli",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme-cli",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "acme-cli",
+        "image": "acme-cli",
+        "kind": "tool",
+        "name": "cli",
+        "release_inputs": {},
+        "runtime": {
+          "build_variants": [
+            {
+              "goarch": "amd64",
+              "goos": "linux",
+              "ldflags": [
+                "-s",
+                "-w"
+              ],
+              "name": "acme-cli-linux",
+              "tags": []
+            }
+          ],
+          "type": "build-only"
+        },
+        "spec": {
+          "image": "",
+          "kind": "tool",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "build_args": {},
+          "build_contexts": {},
+          "context": null,
+          "dockerfile": "images/base/Dockerfile",
+          "inputs_file": null,
+          "output_name": null,
+          "platform": null,
+          "target": null,
+          "type": "docker",
+          "unit": null
+        },
+        "build_image": "workspace-base",
+        "image": "workspace-base",
+        "kind": "tool",
+        "name": "workspace-base",
+        "release_inputs": {},
+        "runtime": {
+          "build_variants": [],
+          "type": "build-only"
+        },
+        "spec": {
+          "image": "",
+          "kind": "tool",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

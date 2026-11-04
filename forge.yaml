@@ -1,0 +1,110 @@
+# Forge project manifest — see https://github.com/reliant-labs/forge.
+# Features, the database and the frontends are DERIVED from the repo, not
+# configured here: forge is a CLI project (cmd/forge/main.go, no service
+# sources, no db/migrations), so codegen/orm/migrations/deploy/observability
+# derive off and ci/build derive on.
+
+name: forge
+module_path: github.com/reliant-labs/forge
+# kind is DERIVED, not declared: forge resolves to `cli` because the tree
+# carries a cmd/forge/main.go binary and none of the service sources.
+# forge.yaml is project-global only.
+# The pin records which forge templates this tree was last reconciled
+# against; `forge project upgrade` bumps it, `forge generate` only reads it.
+#
+# It sat at 0.0.0 to keep the v0.x→contractkit migration skill surfacing.
+# That migration is done, and a permanent 0.0.0 made every upgrade report
+# the whole template history as "behind", which is noise rather than a
+# signal. Note the pin is WEAK in this repo specifically: forge builds
+# forge, so the templates on disk ARE the templates being compared
+# against. Treat it as a reconciliation marker, not a dependency
+# version — for a downstream project the pin is meaningful; here it only
+# says "the four config files below were last merged at this vintage".
+#
+# It then sat at a stale `+dirty` pseudo-version long enough that every
+# `forge generate` in this repo warned about it. A pseudo-version is the
+# wrong thing to record here whatever its vintage: no module proxy can
+# serve one, so it names a forge nobody but its builder can obtain. Keep
+# this at the last RELEASED tag, and bump it when you cut the next one.
+forge_version: v0.1.27
+ci:
+  provider: github
+  lint:
+    golangci: true
+    buf: false
+    buf_breaking: false
+    frontend: false
+    migration_safety: false
+  test:
+    race: true
+    coverage: false
+  vuln_scan:
+    go: true
+    docker: false
+    npm: false
+    # Two Moby advisories with NO fixed version for github.com/docker/docker.
+    # Upstream fixed them only in github.com/moby/moby/v2 >= 2.0.0-beta.8, a
+    # different module path; the docker/docker advisories are open-ended
+    # ("introduced: 0", no fix), so there is nothing to upgrade to.
+    #
+    # Both are UNREVIEWED, so they carry no vulnerable-symbol list and
+    # govulncheck must flag ANY linkage into the module. What forge actually
+    # links is one package, github.com/docker/docker/api/types/versions —
+    # compare.go, which is string version comparison (LessThan/GreaterThan/
+    # Equal) and nothing else. The reported trace is init-only and reaches it
+    # through the embedded KCL renderer:
+    #   internal/kclrender -> kcl-lang.io/kpm/pkg/client -> kpm/pkg/oci
+    #     -> containers/image/v5/docker -> .../manifest -> types/versions
+    # forge ships no Docker daemon, no AuthZ plugin, and no plugin-privilege
+    # path, so neither advisory's code is present in the binary, let alone
+    # callable. Dropping the edge would mean dropping kpm, which IS forge's
+    # KCL evaluation seam.
+    #
+    # Scoped to these two IDs: a new docker/docker CVE still fails this gate.
+    # Re-review at expiry — by then moby/moby/v2 may be reachable through an
+    # upgraded kpm, which would let both entries be deleted outright.
+    exemptions:
+      - id: GO-2026-4887
+        reason: >-
+          Moby AuthZ plugin bypass. No fixed version exists for
+          github.com/docker/docker. Only api/types/versions (string version
+          comparison) is linked, via the kpm/containers-image init chain;
+          forge runs no Docker daemon and no authz plugin, so the vulnerable
+          code is not in the binary.
+        expires: "2026-12-31"
+      - id: GO-2026-4883
+        reason: >-
+          Moby plugin-privilege off-by-one. No fixed version exists for
+          github.com/docker/docker. Same init-only linkage through
+          api/types/versions; forge never performs plugin privilege
+          validation.
+        expires: "2026-12-31"
+k8s:
+  kcl_dir: ""
+lint:
+  frontend:
+    no_important: warn
+    no_inline_styles: warn
+contracts:
+  exclude:
+    - "internal/naming" # Pure stateless string-case utilities; mocking adds no value.
+    - "internal/repowalk" # Concrete filesystem traversal for repository guards, not a substitutable service.
+    - "internal/buildinfo" # Linker-set version metadata; no test seam.
+    - "internal/assets" # Embed wrapper; the file IS the data.
+    - "internal/linter/contract" # Go analysis framework requires Analyzer as a package var.
+    - "internal/linter/migrationlint" # Same — analyzer-style sub-package, vars by convention.
+    - "internal/linter/forgeconv" # Same — convention analyzer over proto files; entry point is exported func.
+    - "internal/linter/scaffolds" # Same — scaffold-ownership analyzer; entry point is exported funcs (LintRoot/Result).
+    - "internal/cli" # Cobra command boundary; CLI is the seam, not internals.
+    - "internal/database" # Multi-interface contract.go (SchemaIntrospector + MigrationService + ProtoGenerator); used by the forge CLI, not bootstrap codegen.
+    - "internal/cigate" # Concrete gate runner; its seams (Exec, Resolver.Probe/Install) are injectable fields, so a one-implementation interface would add indirection and no substitution point.
+    - "internal/checksums" # Pure data-record + I/O helpers (FileChecksums struct + Load/Save/Hash); the file-state itself is the API. No behavioural seam to mock.
+    - "cmd/forge" # Linker-set version metadata; -X flags require exported package vars.
+    - "cmd/contractlint" # Tool entry point; main package, no test seam.
+    - "internal/bundle" # Immutable-OCI-bundle value type + builders/parsers; the registry seam is already two consumer-side one-method interfaces (Pusher, Resolver), and the local layout is a concrete on-disk format. A contract.go over Build/Parse would restate them.
+    - "internal/forgecompat" # Pure version/skew decisions over go.mod/go.work text plus a read of the checkout's git state; Bridge/BridgeReport are data records whose exported methods are renderers (Line/Undo), not a swappable service.
+    - "internal/hostedimage" # Pure and offline by design (the package doc forbids a call): the push-base rule and Finding's wording, so there is no I/O boundary to mock.
+    - "internal/ledgerfile" # The machine-scoped file store of pkg/release's records. Its consumers (internal/cli) already hold it behind their own narrow bindingStore/releaseLedger interfaces; a second, package-side contract would be one-implementation indirection.
+    - "internal/forgedelegate" # Concrete resolver for the pinned forge: its seams (Version, Same, Install, Build) are injectable func fields the cli tests already fake, and Exec replaces the process, so a one-implementation interface would add indirection and no substitution point.
+    - "internal/toolpin" # One resolution (which buf a project pins) as a value type; Buf's exported methods are spellings of its version, not a service, and the go.mod lookup is a package seam the tests already stub.
+    - "internal/procguard" # Structural lineage rule over the kernel process table; Lineage is an immutable value and the table read is the package's own OS-specific lookup, not an injected collaborator.
