@@ -397,11 +397,19 @@ function predicateInit(p: Predicate) {
 }
 
 /**
+ * The request header naming the dashboard panel a read draws, `<dashboard>/<panel>`:
+ * control-plane (obsread.PanelHeader) stamps it on the read's ClickHouse statements
+ * as log_comment, and allows it cross-origin.
+ */
+export const PANEL_HEADER = "Forge-Panel";
+
+/**
  * Runs one dashboard panel server-side: line, number and table panels over a
  * signal, and the browser kinds (funnel, issues, sessions) over the tenant's
  * browser tables. Search panels are not run here.
  */
 export async function queryPanel(req: QueryPanelRequest, options: { signal?: AbortSignal } = {}): Promise<PanelResult> {
+  const headers = req.dashboardId ? { [PANEL_HEADER]: `${req.dashboardId}/${req.panel.id}` } : undefined;
   const res = await client().queryPanel(
     {
       scope: scope(req, req.window, req.services),
@@ -410,7 +418,7 @@ export async function queryPanel(req: QueryPanelRequest, options: { signal?: Abo
       groupBy: req.groupBy ?? [],
       explain: req.explain ?? false,
     },
-    options.signal ? { signal: options.signal } : undefined
+    options.signal || headers ? { ...(options.signal ? { signal: options.signal } : {}), ...(headers ? { headers } : {}) } : undefined
   );
   return {
     kind: res.kind,
