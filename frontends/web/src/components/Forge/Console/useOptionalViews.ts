@@ -16,7 +16,7 @@ export function optionalViews(signals: ServiceSignalsResult | undefined, session
 
 export function useOptionalViews(scope: ObsScope | null) {
   const profiles = useServiceSignals(scope, "7d");
-  const sessions = useSessions(scope, { range: "7d", hasError: false, hasReplay: false, userId: "", pathContains: "" });
+  const sessions = useSessions(scope, { range: "7d", hasError: false, userId: "", pathContains: "" });
   return optionalViews(
     scope && profiles.isSuccess && !profiles.isFetching ? profiles.data : undefined,
     scope && sessions.isSuccess && !sessions.isFetching && !sessions.isPlaceholderData ? sessions.data : undefined
