@@ -13,6 +13,70 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.17" description="November 4, 2026">
+### Mobile and tablet chat, batch approvals, the Reliant color scheme
+
+Chat is redesigned for mobile and tablet; a turn's approval cards arrive together and are decided at once; the Reliant color scheme becomes the default; the Environments tab summarizes each environment; and daemon, MCP, workflow and disk-reclaim paths get a round of reliability and security fixes.
+
+#### Added
+
+- **web: the Reliant color scheme, the default for everyone** [#2065](https://github.com/reliant-labs/reliant/pull/2065)
+- **approvals: batch approval — a turn's cards arrive together and are decided at once** [#1988](https://github.com/reliant-labs/reliant/pull/1988)
+- **web: responsive mobile, tablet and Duo chat UI with desktop settings parity** [#2094](https://github.com/reliant-labs/reliant/pull/2094)
+- **daemon: stop a finished chat's background processes after 4 idle hours** [#2102](https://github.com/reliant-labs/reliant/pull/2102)
+- **mobile: mobile and tablet chat redesign** [#2121](https://github.com/reliant-labs/reliant/pull/2121)
+- **heavyjob: cap each heavy-slot command at its CPU share with cgroup cpu.max** [#2134](https://github.com/reliant-labs/reliant/pull/2134)
+- **daemon: log a machine-health sample a minute on managed machines** [#2139](https://github.com/reliant-labs/reliant/pull/2139)
+- **web: the Environments tab summarizes each environment: health, workloads, last deploy, obs check, drift, links** [#2146](https://github.com/reliant-labs/reliant/pull/2146)
+
+#### Changed
+
+- **gateway: a disconnect reaches listeners only after the status source drops the daemon** [#2104](https://github.com/reliant-labs/reliant/pull/2104)
+- **remove the worktree ssh-agent test and the two package-timeout tests (flaky, #2113)** [#2114](https://github.com/reliant-labs/reliant/pull/2114)
+- **worktreereclaim: drop waitListening, unused once the ssh-agent test was removed (#2113)** [#2117](https://github.com/reliant-labs/reliant/pull/2117)
+- **deps: pin forge a88d3c30 (placement owners for every forge.Manifests group, forge#1679)** [#2116](https://github.com/reliant-labs/reliant/pull/2116)
+- **remove flaky and package-timeout tests found by rc.7's release gate (#2113)** [#2118](https://github.com/reliant-labs/reliant/pull/2118)
+- **deps: pin forge 02954132 (forge#1683 hosted-tier Secrets per tier, forge#1684 namespaces before RBAC)** [#2120](https://github.com/reliant-labs/reliant/pull/2120)
+- **deps: pin forge 0dd8256d (deploy orchestration tests for the hosted-tier Secret gate and namespace-first writes)** [#2122](https://github.com/reliant-labs/reliant/pull/2122)
+- **shell: drop the flaky kill-notice assertion of TestReaper_ArchivedWorkspaceStopsItsProcessesAtOnce (#2128)** [#2129](https://github.com/reliant-labs/reliant/pull/2129)
+- **privacy: analytics kept up to 90 days, logs by severity, and desktop-window replay is on** [#2131](https://github.com/reliant-labs/reliant/pull/2131)
+- **forge: how forge works, deploys, monitoring and every lint rule** [#2142](https://github.com/reliant-labs/reliant/pull/2142)
+- **worktreereclaim: metadata-only, heartbeat-paced activity observation within an inotify budget** [#2143](https://github.com/reliant-labs/reliant/pull/2143)
+- **web: delete two flaky tests found by v1.8.16-rc.9's release gate** [#2157](https://github.com/reliant-labs/reliant/pull/2157)
+- **deps: pin forge to fe9fb2df0f25 (backend traces join browser sessions; schema-aware session reads)** [#2153](https://github.com/reliant-labs/reliant/pull/2153)
+- **electron: drop the wall-clock assertion of waitForReady's awaiting-credentials test** [#2159](https://github.com/reliant-labs/reliant/pull/2159)
+
+#### Fixed
+
+- **web: observability reads share one queue across every console tab** [#2020](https://github.com/reliant-labs/reliant/pull/2020)
+- **approvals: activation cards say what they grant, in plain words, before Approve** [#2072](https://github.com/reliant-labs/reliant/pull/2072)
+- **forge: reliant forge runs the forge the project pins, decided before parsing; an unobtainable pin fails** [#1871](https://github.com/reliant-labs/reliant/pull/1871)
+- **web: a bad dashboard panel stays in its cell; org Metrics is the real explorer; Logs controls reach 32px** [#2067](https://github.com/reliant-labs/reliant/pull/2067)
+- **lint: clear main's two golangci-lint findings (ineffassign, QF1001)** [#2095](https://github.com/reliant-labs/reliant/pull/2095)
+- **shell: process listers read Status, ExitCode, EndTime and Ports under the process lock** [#2107](https://github.com/reliant-labs/reliant/pull/2107)
+- **release: release-tag.sh --rc and the tag guard accept an RC set fixed in place** [#2106](https://github.com/reliant-labs/reliant/pull/2106)
+- **workflow: a database outage never permanently fails a run** [#2109](https://github.com/reliant-labs/reliant/pull/2109)
+- **web: serve security.txt on app.reliantlabs.io naming security@ and abuse@** [#2111](https://github.com/reliant-labs/reliant/pull/2111)
+- **diskwatch: the go-build work-dir trim removes only this user's dirs, by file descriptor** [#2112](https://github.com/reliant-labs/reliant/pull/2112)
+- **security: credentials-none env is an allowlist; the file viewer refuses credential stores** [#2110](https://github.com/reliant-labs/reliant/pull/2110)
+- **release-gate: clear main's lint reds and remove 4 load-sensitive tests (rc v1.7.89-rc.3)** [#2125](https://github.com/reliant-labs/reliant/pull/2125)
+- **cli: reliant github token|gh ask only with daemon sessions, within a 60s budget** [#2127](https://github.com/reliant-labs/reliant/pull/2127)
+- **web: keep Chat Settings on-screen on touch; uniform 44px composer controls** [#2130](https://github.com/reliant-labs/reliant/pull/2130)
+- **web: a running chat shows a small spinner, not a chip** [#2126](https://github.com/reliant-labs/reliant/pull/2126)
+- **web: console ClickHouse reads wait to just under the gateway; Needs attention keeps its alerts** [#2135](https://github.com/reliant-labs/reliant/pull/2135)
+- **web: replay seeks land past the full snapshot, so restarting a replay redraws its page** [#2136](https://github.com/reliant-labs/reliant/pull/2136)
+- **ci: Reliant review reads a head's FIRST review marker, its one verdict** [#2137](https://github.com/reliant-labs/reliant/pull/2137)
+- **web: title traces by what they did, not "HTTP POST"** [#2138](https://github.com/reliant-labs/reliant/pull/2138)
+- **onboarding: provision the machine size the server admits, so a coupon redeemed at checkout gets its M** [#2140](https://github.com/reliant-labs/reliant/pull/2140)
+- **daemon: back off project watchers whose path is gone instead of retrying every 2s** [#2141](https://github.com/reliant-labs/reliant/pull/2141)
+- **mcp: never hold a turn more than 3s on a machine's MCP loading** [#2144](https://github.com/reliant-labs/reliant/pull/2144)
+- **diskwatch: reclaim killed builds' Go work dirs once proven dead; give each command its own GOTMPDIR** [#2132](https://github.com/reliant-labs/reliant/pull/2132)
+- **diskwatch: reclaim killed builds' Go work dirs every 10m, on the Go-cache cadence, not only with the hourly full pass** [#2148](https://github.com/reliant-labs/reliant/pull/2148)
+- **mcp: a machine that was offline gets its MCP servers as soon as it reconnects** [#2154](https://github.com/reliant-labs/reliant/pull/2154)
+- **observability: Sessions lists only sessions with a replay; drop the "no replay was recorded" state** [#2133](https://github.com/reliant-labs/reliant/pull/2133)
+
+</Update>
+
 <Update label="v1.8.16" description="November 2, 2026">
 ### Observability dashboards, Integrations settings, project commands on the right machine
 
