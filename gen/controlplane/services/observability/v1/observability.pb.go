@@ -3034,7 +3034,15 @@ type ListTracesRequest struct {
 	// spans matches; on resource keys they select the spans counted.
 	GroupBy []string `protobuf:"bytes,8,rep,name=group_by,json=groupBy,proto3" json:"group_by,omitempty"`
 	// Row order. Default newest first.
-	Order         *TraceOrder `protobuf:"varint,9,opt,name=order,proto3,enum=controlplane.v1.TraceOrder,oneof" json:"order,omitempty"`
+	Order *TraceOrder `protobuf:"varint,9,opt,name=order,proto3,enum=controlplane.v1.TraceOrder,oneof" json:"order,omitempty"`
+	// Only traces with a span of this user: a backend span's user.id (the
+	// authenticated caller) or a browser span's userId (the id the page
+	// reported). Part of the page token's filters.
+	UserId *string `protobuf:"bytes,10,opt,name=user_id,json=userId,proto3,oneof" json:"user_id,omitempty"`
+	// Only traces with a span of this browser session: a backend span's
+	// session.id (propagated from the browser as W3C baggage) or a browser
+	// span's rum.sessionId. Part of the page token's filters.
+	SessionId     *string `protobuf:"bytes,11,opt,name=session_id,json=sessionId,proto3,oneof" json:"session_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3123,6 +3131,20 @@ func (x *ListTracesRequest) GetOrder() TraceOrder {
 		return *x.Order
 	}
 	return TraceOrder_TRACE_ORDER_UNSPECIFIED
+}
+
+func (x *ListTracesRequest) GetUserId() string {
+	if x != nil && x.UserId != nil {
+		return *x.UserId
+	}
+	return ""
+}
+
+func (x *ListTracesRequest) GetSessionId() string {
+	if x != nil && x.SessionId != nil {
+		return *x.SessionId
+	}
+	return ""
 }
 
 type ListTracesResponse struct {
@@ -3264,8 +3286,19 @@ type TraceSummary struct {
 	OperatorData bool                   `protobuf:"varint,10,opt,name=operator_data,json=operatorData,proto3" json:"operator_data,omitempty"`
 	// Duration of the root span alone (duration_ms spans the whole trace).
 	RootDurationMs float64 `protobuf:"fixed64,11,opt,name=root_duration_ms,json=rootDurationMs,proto3" json:"root_duration_ms,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Who the trace served: the first user id any of its spans carries (see
+	// ListTracesRequest.user_id). Empty when none does.
+	UserId string `protobuf:"bytes,12,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// The browser session the trace belongs to, when one of its spans names it.
+	// RumService.GetSession opens it (and its replay, when it has one).
+	SessionId string `protobuf:"bytes,13,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	// Where its browser was (RumService SessionSummary.country/region/city),
+	// from its browser spans. Empty for a trace no browser started.
+	Country       string `protobuf:"bytes,14,opt,name=country,proto3" json:"country,omitempty"`
+	Region        string `protobuf:"bytes,15,opt,name=region,proto3" json:"region,omitempty"`
+	City          string `protobuf:"bytes,16,opt,name=city,proto3" json:"city,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TraceSummary) Reset() {
@@ -3373,6 +3406,41 @@ func (x *TraceSummary) GetRootDurationMs() float64 {
 		return x.RootDurationMs
 	}
 	return 0
+}
+
+func (x *TraceSummary) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *TraceSummary) GetSessionId() string {
+	if x != nil {
+		return x.SessionId
+	}
+	return ""
+}
+
+func (x *TraceSummary) GetCountry() string {
+	if x != nil {
+		return x.Country
+	}
+	return ""
+}
+
+func (x *TraceSummary) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *TraceSummary) GetCity() string {
+	if x != nil {
+		return x.City
+	}
+	return ""
 }
 
 // TraceRedSummary: Rate, Errors, Duration over the matched traces.
@@ -10934,7 +11002,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aE\n" +
 	"\x17ResourceAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xab\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x88\x04\n" +
 	"\x11ListTracesRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12$\n" +
 	"\verrors_only\x18\x02 \x01(\bH\x00R\n" +
@@ -10945,11 +11013,18 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\n" +
 	"page_token\x18\a \x01(\tR\tpageToken\x12\x19\n" +
 	"\bgroup_by\x18\b \x03(\tR\agroupBy\x126\n" +
-	"\x05order\x18\t \x01(\x0e2\x1b.controlplane.v1.TraceOrderH\x03R\x05order\x88\x01\x01B\x0e\n" +
+	"\x05order\x18\t \x01(\x0e2\x1b.controlplane.v1.TraceOrderH\x03R\x05order\x88\x01\x01\x12\x1c\n" +
+	"\auser_id\x18\n" +
+	" \x01(\tH\x04R\x06userId\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"session_id\x18\v \x01(\tH\x05R\tsessionId\x88\x01\x01B\x0e\n" +
 	"\f_errors_onlyB\x12\n" +
 	"\x10_min_duration_msB\x11\n" +
 	"\x0f_root_span_nameB\b\n" +
-	"\x06_orderJ\x04\b\x05\x10\x06R\x0fspan_attributes\"\xe6\x01\n" +
+	"\x06_orderB\n" +
+	"\n" +
+	"\b_user_idB\r\n" +
+	"\v_session_idJ\x04\b\x05\x10\x06R\x0fspan_attributes\"\xe6\x01\n" +
 	"\x12ListTracesResponse\x125\n" +
 	"\x06traces\x18\x01 \x03(\v2\x1d.controlplane.v1.TraceSummaryR\x06traces\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x122\n" +
@@ -10962,7 +11037,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\n" +
 	"GroupEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x91\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8f\x04\n" +
 	"\fTraceSummary\x12\x19\n" +
 	"\btrace_id\x18\x01 \x01(\tR\atraceId\x129\n" +
 	"\n" +
@@ -10979,7 +11054,13 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x06source\x18\t \x01(\tR\x06source\x12#\n" +
 	"\roperator_data\x18\n" +
 	" \x01(\bR\foperatorData\x12(\n" +
-	"\x10root_duration_ms\x18\v \x01(\x01R\x0erootDurationMs\"\xea\x01\n" +
+	"\x10root_duration_ms\x18\v \x01(\x01R\x0erootDurationMs\x12\x17\n" +
+	"\auser_id\x18\f \x01(\tR\x06userId\x12\x1d\n" +
+	"\n" +
+	"session_id\x18\r \x01(\tR\tsessionId\x12\x18\n" +
+	"\acountry\x18\x0e \x01(\tR\acountry\x12\x16\n" +
+	"\x06region\x18\x0f \x01(\tR\x06region\x12\x12\n" +
+	"\x04city\x18\x10 \x01(\tR\x04city\"\xea\x01\n" +
 	"\x0fTraceRedSummary\x12\x1f\n" +
 	"\vtrace_count\x18\x01 \x01(\x03R\n" +
 	"traceCount\x12*\n" +

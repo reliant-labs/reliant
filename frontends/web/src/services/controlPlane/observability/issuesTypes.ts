@@ -91,6 +91,12 @@ export interface IssueEvent {
   /** Browser issues only. */
   sessionId: string;
   urlPath: string;
+  /** Who hit it: a server record's authenticated user.id, a browser event's page-reported userId. Empty: none. */
+  userId: string;
+  /** Browser issues only: where the browser was, derived by the platform from its address. */
+  country: string;
+  region: string;
+  city: string;
 }
 
 export interface IssueFrame {
@@ -163,6 +169,8 @@ export interface ListIssuesRequest extends IssueScope {
   text?: string;
   /** Only the issues assigned to this user id. Unset: every issue (the server has no "unassigned" filter). */
   assignee?: string;
+  /** Only the issues with an event of this user id in the window. Unset: every issue. */
+  userId?: string;
   sort: IssueSort;
   pageSize?: number;
   pageToken?: string;

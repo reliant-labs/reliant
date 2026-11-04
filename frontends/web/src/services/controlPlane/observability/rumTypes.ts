@@ -43,6 +43,16 @@ export interface SessionSummary {
   errors: number;
   /** Whether a replay was recorded. */
   hasReplay: boolean;
+  /**
+   * Where the browser was: derived by the platform at ingest from the address it
+   * connected from, never reported by the page. ISO 3166-1 alpha-2 country and
+   * English region/city names; empty when unknown.
+   */
+  country: string;
+  region: string;
+  city: string;
+  /** The browser's IP address. Empty unless the platform keeps it (off by default). */
+  clientAddress: string;
 }
 
 export interface ListSessionsRequest extends RumScope {

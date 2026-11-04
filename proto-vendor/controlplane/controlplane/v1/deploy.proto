@@ -225,6 +225,14 @@ enum DeployResourceKind {
   // both from one figure funds it twice. If SSD becomes a premium
   // option later it is a PLAN attribute, not a second meter kind.
   DEPLOY_RESOURCE_KIND_STORAGE_GIB = 10;
+
+  // KiB served from hosted static sites in the hour (an hourly flow per
+  // environment, no deployment). Billed past the monthly static-egress
+  // allowance.
+  DEPLOY_RESOURCE_KIND_STATIC_EGRESS_KIB = 11;
+  // Static sites live beyond the free one, per hour (an hourly flow per org,
+  // no environment or deployment): site-hours.
+  DEPLOY_RESOURCE_KIND_STATIC_SITE = 12;
 }
 
 // DeployLogStream selects which of a deployment's log streams to read. Build

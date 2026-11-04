@@ -567,6 +567,13 @@ const (
 	// both from one figure funds it twice. If SSD becomes a premium
 	// option later it is a PLAN attribute, not a second meter kind.
 	DeployResourceKind_DEPLOY_RESOURCE_KIND_STORAGE_GIB DeployResourceKind = 10
+	// KiB served from hosted static sites in the hour (an hourly flow per
+	// environment, no deployment). Billed past the monthly static-egress
+	// allowance.
+	DeployResourceKind_DEPLOY_RESOURCE_KIND_STATIC_EGRESS_KIB DeployResourceKind = 11
+	// Static sites live beyond the free one, per hour (an hourly flow per org,
+	// no environment or deployment): site-hours.
+	DeployResourceKind_DEPLOY_RESOURCE_KIND_STATIC_SITE DeployResourceKind = 12
 )
 
 // Enum value maps for DeployResourceKind.
@@ -579,15 +586,19 @@ var (
 		7:  "DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB",
 		8:  "DEPLOY_RESOURCE_KIND_CDN_REQUESTS",
 		10: "DEPLOY_RESOURCE_KIND_STORAGE_GIB",
+		11: "DEPLOY_RESOURCE_KIND_STATIC_EGRESS_KIB",
+		12: "DEPLOY_RESOURCE_KIND_STATIC_SITE",
 	}
 	DeployResourceKind_value = map[string]int32{
-		"DEPLOY_RESOURCE_KIND_UNSPECIFIED":    0,
-		"DEPLOY_RESOURCE_KIND_CPU_MILLI":      1,
-		"DEPLOY_RESOURCE_KIND_MEM_MIB":        2,
-		"DEPLOY_RESOURCE_KIND_EGRESS_GIB":     6,
-		"DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB": 7,
-		"DEPLOY_RESOURCE_KIND_CDN_REQUESTS":   8,
-		"DEPLOY_RESOURCE_KIND_STORAGE_GIB":    10,
+		"DEPLOY_RESOURCE_KIND_UNSPECIFIED":       0,
+		"DEPLOY_RESOURCE_KIND_CPU_MILLI":         1,
+		"DEPLOY_RESOURCE_KIND_MEM_MIB":           2,
+		"DEPLOY_RESOURCE_KIND_EGRESS_GIB":        6,
+		"DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB":    7,
+		"DEPLOY_RESOURCE_KIND_CDN_REQUESTS":      8,
+		"DEPLOY_RESOURCE_KIND_STORAGE_GIB":       10,
+		"DEPLOY_RESOURCE_KIND_STATIC_EGRESS_KIB": 11,
+		"DEPLOY_RESOURCE_KIND_STATIC_SITE":       12,
 	}
 )
 
@@ -8063,7 +8074,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x1eDEPLOY_RECONCILE_POLICY_PINNED\x10\x03*_\n" +
 	"\x13DeployPromotionKind\x12%\n" +
 	"!DEPLOY_PROMOTION_KIND_UNSPECIFIED\x10\x00\x12!\n" +
-	"\x1dDEPLOY_PROMOTION_KIND_PROMOTE\x10\x01*\x9b\x02\n" +
+	"\x1dDEPLOY_PROMOTION_KIND_PROMOTE\x10\x01*\xed\x02\n" +
 	"\x12DeployResourceKind\x12$\n" +
 	" DEPLOY_RESOURCE_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eDEPLOY_RESOURCE_KIND_CPU_MILLI\x10\x01\x12 \n" +
@@ -8072,7 +8083,9 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"#DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB\x10\a\x12%\n" +
 	"!DEPLOY_RESOURCE_KIND_CDN_REQUESTS\x10\b\x12$\n" +
 	" DEPLOY_RESOURCE_KIND_STORAGE_GIB\x10\n" +
-	"*p\n" +
+	"\x12*\n" +
+	"&DEPLOY_RESOURCE_KIND_STATIC_EGRESS_KIB\x10\v\x12$\n" +
+	" DEPLOY_RESOURCE_KIND_STATIC_SITE\x10\f*p\n" +
 	"\x0fDeployLogStream\x12!\n" +
 	"\x1dDEPLOY_LOG_STREAM_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOY_LOG_STREAM_BUILD\x10\x01\x12\x1d\n" +

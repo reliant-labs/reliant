@@ -233,6 +233,10 @@ export interface TraceFilters {
   errorsOnly: boolean;
   minDurationMs: number;
   groupBy?: string[];
+  /** Only traces of this user id. */
+  userId?: string;
+  /** Only traces of this browser session. */
+  sessionId?: string;
 }
 
 export const TRACE_PAGE_SIZE = 100;
@@ -251,6 +255,8 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
         errorsOnly: filters.errorsOnly,
         minDurationMs: filters.minDurationMs,
         groupBy: filters.groupBy,
+        userId: filters.userId,
+        sessionId: filters.sessionId,
         limit: TRACE_PAGE_SIZE,
         cursor: pageParam?.cursor,
       }, { signal });
@@ -741,6 +747,8 @@ export interface IssueFilters {
   service?: string;
   /** Only the issues assigned to this user id (the server filters). */
   assignee?: string;
+  /** Only the issues with an event of this user id in the window (the server filters). */
+  userId?: string;
   sort: IssueSort;
   text: string;
 }
@@ -811,6 +819,7 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
         statuses: filters.statuses,
         platform: filters.platform,
         assignee: filters.assignee,
+        userId: filters.userId,
         sort: filters.sort,
         text: filters.text,
         pageSize: ISSUE_PAGE_SIZE,

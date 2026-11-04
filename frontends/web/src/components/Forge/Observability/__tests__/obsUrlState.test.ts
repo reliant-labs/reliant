@@ -156,7 +156,7 @@ describe("the URL round trip", () => {
         "alerts", "apps", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
         "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
         "issue", "istatus", "platform", "isort", "assignee",
-        "session", "t", "user", "cursor",
+        "session", "t", "user", "rsession", "cursor",
         "declared", "internal", "rpcId", "rpcService",
       ].sort()
     );

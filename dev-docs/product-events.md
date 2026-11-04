@@ -145,6 +145,22 @@ Web events (`otel_traces`): `SpanName LIKE 'product.%'`, user in
 carries that request's `TraceId`, which joins it to the browser span (and so
 the browser session) that made the call.
 
+### Who and where (every browser span, not only product events)
+
+Collected with **Crash and Error Reporting**, not analytics, and stopped with it:
+
+| attribute | on | where it comes from |
+| --- | --- | --- |
+| `userId` | every browser span | the page (`setTelemetryUserId`): display only, never trusted for access |
+| `user.id` | the backend's server span | the AUTHENTICATED caller (forge `observe.IdentitySpanInterceptor`) |
+| `session.id` | browser fetch/XHR spans; the backend's server span | the RUM session, sent by forge-web-runtime as W3C baggage on every Connect call; shape-checked, never propagated further |
+| `geo.country.iso_code`, `geo.region.name`, `geo.locality.name` | browser resource | derived at ingest by control-plane's workspace-proxy from the request's IP (DB-IP City Lite, CC BY 4.0, local); the page's own values are deleted |
+| `client.address` | browser resource | **not collected.** One proxy flag (`PROXY_OTEL_INGEST_FORWARD_CLIENT_IP`) would keep it; turning it on requires updating `docs/help/privacy.mdx` first |
+
+Never an email, and never on a metric: these are row attributes only, so no
+series is keyed by a person or a place. Design and the GeoIP refresh:
+control-plane `docs/observability/geoip.md`.
+
 ## Claim funnel (the `/claim` page)
 
 A claimable deploy is handed to a human as `…/claim#rcl_<token>`

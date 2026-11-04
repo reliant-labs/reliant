@@ -326,6 +326,12 @@ message ListIssuesRequest {
     (buf.validate.field).int32.gte = 0,
     (buf.validate.field).int32.lte = 3600
   ];
+  // Only the issues with an event of this user id in the range (IssueEvent.
+  // user_id). At most 500 matching issues are considered.
+  optional string user_id = 15 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
 }
 
 message ListIssuesResponse {
@@ -378,6 +384,15 @@ message IssueEvent {
   // Browser issues only.
   string session_id = 7;
   string url_path = 8;
+  // Who hit it: a server event's user.id (the authenticated caller the record
+  // was logged for), a browser event's userId (the id the page reported).
+  // Empty when the event names none.
+  string user_id = 9;
+  // Browser issues only: where the browser was, derived by the platform from
+  // its address at ingest (RumService SessionSummary.country/region/city).
+  string country = 10;
+  string region = 11;
+  string city = 12;
 }
 
 // IssueFrame is one stack frame. For a browser issue, symbolicated frames are
@@ -422,6 +437,11 @@ message ListIssueEventsRequest {
     (buf.validate.field).int32.lte = 100
   ];
   string page_token = 4 [(buf.validate.field).string.max_len = 512];
+  // Only the events of this user id (IssueEvent.user_id).
+  optional string user_id = 5 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
 }
 
 message ListIssueEventsResponse {

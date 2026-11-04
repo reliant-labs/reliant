@@ -282,6 +282,8 @@ function eventOf(seed: Seed, atMs: number, index: number): IssueEvent {
     attributes: seed.platform === "browser" ? { "browser.name": "Chrome", "url.path": "/checkout" } : { "rpc.method": "CreateOrder", "http.response.status_code": "504" },
     sessionId: seed.platform === "browser" ? `sess-${(index * 7919).toString(16).padStart(8, "0")}` : "",
     urlPath: seed.platform === "browser" ? "/checkout" : "",
+    userId: index % 3 === 2 ? "" : `u_${8812 + (index % 2)}`,
+    ...(seed.platform === "browser" ? { country: "US", region: "California", city: "San Francisco" } : { country: "", region: "", city: "" }),
   };
 }
 

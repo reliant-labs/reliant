@@ -45,6 +45,16 @@ export interface SessionsFixtureOptions {
 const PATHS = ["/checkout/payment", "/", "/cart", "/products/espresso-grinder", "/orders", "/account", "/products/milk-jug", "/search"];
 const USERS = ["u_8812", "", "u_1093", "u_5530", "", "u_2207", "u_8812", ""];
 
+
+/** Where fixture browsers were, as the platform derives it (country, region, city). */
+export const FIXTURE_PLACES = [
+  { country: "DE", region: "Land Berlin", city: "Berlin" },
+  { country: "US", region: "California", city: "San Francisco" },
+  { country: "", region: "", city: "" },
+  { country: "JP", region: "Tokyo", city: "Tokyo" },
+  { country: "BR", region: "São Paulo", city: "São Paulo" },
+] as const;
+
 export function fixtureSessionSummaries(t0: number): SessionSummary[] {
   const base = (n: number, over: Partial<SessionSummary>): SessionSummary => {
     const startedMs = t0 - (6 + n * 23) * MIN;
@@ -63,6 +73,8 @@ export function fixtureSessionSummaries(t0: number): SessionSummary[] {
       errors: n % 4 === 0 ? 1 + (n % 3) : 0,
       // A few are unrecorded: the list never shows them, a trace or an error still links one by id.
       hasReplay: n % 9 !== 1,
+      ...FIXTURE_PLACES[n % FIXTURE_PLACES.length],
+      clientAddress: "",
       ...over,
     };
   };
@@ -108,6 +120,8 @@ function synthesized(sessionId: string, t0: number): SessionSummary {
     interactions: 5,
     errors: 1,
     hasReplay: true,
+    ...FIXTURE_PLACES[0],
+    clientAddress: "",
   };
 }
 

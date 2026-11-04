@@ -93,6 +93,10 @@ export function mapSessionSummary(s: WireSummary): SessionSummary {
     interactions: countOf(s.interactions),
     errors: countOf(s.errors),
     hasReplay: s.hasReplay,
+    country: s.country,
+    region: s.region,
+    city: s.city,
+    clientAddress: s.clientAddress,
   };
 }
 

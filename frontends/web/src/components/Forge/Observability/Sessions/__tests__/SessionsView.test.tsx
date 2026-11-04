@@ -172,6 +172,17 @@ describe("one session", () => {
     expect(within(timeline).getByTestId("session-entry-request_failed")).toHaveTextContent("500");
   });
 
+  it("says where the browser was, and opens every trace of the session", async () => {
+    const harness = renderPanel(createFixtureApi(), { view: "sessions", session: FIXTURE_STORY_SESSION }, PROJECT_PLACE);
+    const place = await screen.findByTestId("session-place");
+    expect(place).toHaveTextContent(/Berlin/);
+    expect(place.getAttribute("title")).toContain("DB-IP");
+    await userEvent.setup().click(screen.getByTestId("session-traces"));
+    expect(harness.current()).toMatchObject({ view: "traces", rsession: FIXTURE_STORY_SESSION });
+    expect(harness.current().session).toBeUndefined();
+    expect(harness.current().trace).toBeUndefined();
+  });
+
   it("links an error to its issue and a failed request to its trace", async () => {
     const harness = renderPanel(createFixtureApi(), { view: "sessions", session: FIXTURE_STORY_SESSION }, PROJECT_PLACE);
     const user = userEvent.setup();
@@ -241,10 +252,26 @@ describe("links into a session", () => {
     };
     const harness = renderPanel(api, { view: "traces", trace: "4bf92f3577b34da6a3ce929d0e0e4736" }, ENV_PLACE);
     const button = await screen.findByTestId("trace-session");
-    await waitFor(() => expect(button.textContent).toMatch(/^shop-web · (Today|Yesterday) \d{2}:\d{2}$/));
+    // The story session has a recording, so the link says it opens a replay.
+    await waitFor(() => expect(button.textContent).toMatch(/^Replay · shop-web · (Today|Yesterday) \d{2}:\d{2}$/));
     await userEvent.setup().click(button);
     expect(harness.current()).toMatchObject({ view: "sessions", session: FIXTURE_STORY_SESSION });
     expect(harness.current().trace).toBeUndefined();
+  });
+
+  it("from a backend-only trace whose server span carries the session.id baggage", async () => {
+    const base = createFixtureApi();
+    const api = {
+      ...base,
+      getTrace: async (req: Parameters<typeof base.getTrace>[0]) => {
+        const trace = fixtureTrace(req.traceId, req.window.endMs);
+        trace.spans[0] = { ...trace.spans[0], attributes: { ...trace.spans[0].attributes, "session.id": FIXTURE_STORY_SESSION } };
+        return trace;
+      },
+    };
+    const harness = renderPanel(api, { view: "traces", trace: "4bf92f3577b34da6a3ce929d0e0e4736" }, ENV_PLACE);
+    await userEvent.setup().click(await screen.findByTestId("trace-session"));
+    expect(harness.current()).toMatchObject({ view: "sessions", session: FIXTURE_STORY_SESSION });
   });
 
   it("not from a trace with no browser session", async () => {

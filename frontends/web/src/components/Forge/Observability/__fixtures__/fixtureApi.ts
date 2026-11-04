@@ -201,6 +201,9 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
       spanCount: 4 + (i % 5),
       errorCount: failed ? 1 : 0,
       services: ["api", "worker"],
+      userId: i % 4 === 3 ? "" : `u_${8812 + (i % 3)}`,
+      sessionId: i % 2 === 0 ? `sess-${(i * 7919 + 4099).toString(16).padStart(6, "0")}` : "",
+      ...(i % 2 === 0 ? { country: "DE", region: "Land Berlin", city: "Berlin" } : { country: "", region: "", city: "" }),
       source: "",
       operatorData: false,
     };
