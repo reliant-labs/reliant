@@ -272,6 +272,9 @@ function framesOf(seed: Seed) {
   ];
 }
 
+/** The users eventOf's events name (every issue has at least three events, so both). */
+const FIXTURE_EVENT_USERS = ["u_8812", "u_8813"];
+
 function eventOf(seed: Seed, atMs: number, index: number): IssueEvent {
   return {
     timeMs: atMs,
@@ -496,6 +499,8 @@ export function createIssuesFixture(
           .filter((s) => !req.platform || s.platform === req.platform)
           .filter((s) => !req.services?.length || req.services.includes(s.service))
           .filter((s) => !req.assignee || s.assignee?.id === req.assignee)
+          // Every fixture issue has events of both of eventOf's users, and of no one else.
+          .filter(() => !req.userId || FIXTURE_EVENT_USERS.includes(req.userId))
           .filter((s) => !text || s.title.toLowerCase().includes(text) || s.culprit.toLowerCase().includes(text))
           .map((s) => build(s, req.window, versions.get(s.id) ?? 1));
         const order: Record<typeof req.sort, (a: Issue, b: Issue) => number> = {

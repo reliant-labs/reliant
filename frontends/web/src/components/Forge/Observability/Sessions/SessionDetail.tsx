@@ -117,8 +117,21 @@ function SessionBody({
   const openTrace = (traceId: string, spanId?: string) => navigate({ ...LEAVE_SESSIONS, view: "traces", trace: traceId, span: spanId });
   // Every trace of the session — the browser's own spans and the backend work
   // its requests caused (they carry its id as session.id) — over the window it ran in.
+  // Every other narrowing is dropped: a service kept from the sessions list (its
+  // frontend) would exclude the backend traces this promises.
   const openTraces = () =>
-    navigate({ ...LEAVE_SESSIONS, view: "traces", trace: undefined, span: undefined, rsession: session.sessionId, range: presetCovering(Math.max(0, now - session.startedMs) + 60_000) });
+    navigate({
+      ...LEAVE_SESSIONS,
+      view: "traces",
+      trace: undefined,
+      span: undefined,
+      service: undefined,
+      minDuration: undefined,
+      groupBy: undefined,
+      f: undefined,
+      rsession: session.sessionId,
+      range: presetCovering(Math.max(0, now - session.startedMs) + 60_000),
+    });
 
   return (
     <div className="space-y-4" data-testid="session-detail" data-state="ready" data-session={session.sessionId}>

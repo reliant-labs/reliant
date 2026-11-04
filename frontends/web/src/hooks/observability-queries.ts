@@ -22,7 +22,7 @@ import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPl
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
-import { alertingRetry, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
+import { alertingRetry, FilterUnsupportedError, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
 import type {
   AddIssueCommentRequest,
   AssignIssueRequest,
@@ -50,6 +50,7 @@ import type {
   SearchLogsResult,
   Severity,
   TimeWindow,
+  TraceSummary,
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -241,6 +242,18 @@ export interface TraceFilters {
 
 export const TRACE_PAGE_SIZE = 100;
 
+/**
+ * Refuse rows a control plane older than the user/session filters answered
+ * without them (it ignores the unknown fields). A server that applies a filter
+ * returns only traces with a span carrying the id, so every summary names one;
+ * an older one never fills either field, so rows with none are its signature.
+ */
+function assertTraceFiltersApplied(filters: TraceFilters, traces: TraceSummary[]) {
+  if (traces.length === 0) return;
+  if (filters.userId && traces.every((t) => !t.userId)) throw new FilterUnsupportedError("user", "traces");
+  if (filters.sessionId && traces.every((t) => !t.sessionId)) throw new FilterUnsupportedError("browser session", "traces");
+}
+
 export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
   const api = useObsReadApi();
   return useInfiniteQuery({
@@ -260,6 +273,7 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
         limit: TRACE_PAGE_SIZE,
         cursor: pageParam?.cursor,
       }, { signal });
+      assertTraceFiltersApplied(filters, result.traces);
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
@@ -755,6 +769,9 @@ export interface IssueFilters {
 
 export const ISSUE_PAGE_SIZE = 50;
 
+/** A user id no one has (useIssues asks for its issues to learn whether user_id is applied). */
+export const ISSUE_USER_FILTER_PROBE = "reliant-console-filter-probe";
+
 /**
  * One root for every issue read, so a triage (which can move an issue between
  * lists, change its detail and add to its history) re-reads all of them, and
@@ -812,7 +829,7 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
     queryKey: issueKeys.list(scope, filters),
     queryFn: async ({ pageParam, signal }): Promise<IssueList & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
-      const result = await api.listIssues({
+      const request = {
         ...(scope as IssueScope),
         services: filters.service ? [filters.service] : [],
         window,
@@ -824,7 +841,16 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
         text: filters.text,
         pageSize: ISSUE_PAGE_SIZE,
         pageToken: pageParam?.cursor,
-      }, { signal });
+      };
+      // An issue row names no user, so whether the server applied user_id is
+      // asked, not inferred: the same first page for a user nobody is. A server
+      // that knows the filter answers it with nothing; one that ignores it
+      // answers with exactly the unfiltered rows the real read would get.
+      const [result, probe] = await Promise.all([
+        api.listIssues(request, { signal }),
+        filters.userId && !pageParam ? api.listIssues({ ...request, userId: ISSUE_USER_FILTER_PROBE, pageSize: 1 }, { signal }) : null,
+      ]);
+      if (probe && probe.issues.length > 0) throw new FilterUnsupportedError("user", "issues");
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,

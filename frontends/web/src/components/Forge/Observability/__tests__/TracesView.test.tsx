@@ -76,6 +76,22 @@ describe("trace list", () => {
     expect(harness.current()).toMatchObject({ view: "sessions", session: "sess-001003" });
   });
 
+  it.each([
+    ["user", { user: "u_8812" }, "can't filter traces by user"],
+    ["browser session", { rsession: "sess-001003" }, "can't filter traces by browser session"],
+  ])("never shows an older control plane's unfiltered traces as one %s's", async (_, search, copy) => {
+    const api = createFixtureApi();
+    const listTraces = api.listTraces;
+    // A control plane from before user_id/session_id: it ignores both fields, and fills neither.
+    api.listTraces = async (req, options) => {
+      const result = await listTraces({ ...req, userId: undefined, sessionId: undefined }, options);
+      return { ...result, traces: result.traces.map((t) => ({ ...t, userId: "", sessionId: "" })) };
+    };
+    renderPanel(api, { view: "traces", ...search });
+    expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent(copy);
+    expect(screen.queryAllByTestId("obs-trace-row")).toHaveLength(0);
+  });
+
   it("shows the root span's duration, and the whole trace's when work outlived it", async () => {
     renderPanel(createFixtureApi(), { view: "traces" });
     const [first] = await screen.findAllByTestId("obs-trace-row");

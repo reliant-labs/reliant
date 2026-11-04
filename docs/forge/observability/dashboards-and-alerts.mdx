@@ -99,6 +99,8 @@ The console shows, for each browser session, error and trace, **who** it was and
 - **Location:** country, region and city, derived by the platform when your browser telemetry arrives, from the address it came from (a local DB-IP City Lite lookup, CC BY 4.0). **The IP address itself is dropped**: it is not stored and your app never sees it. A page cannot set its own location.
 - **Session links:** every request your frontend makes carries its session id, which your forge services record on their side of the request. A session's page lists its traces, and a trace opens its session, and its replay when it has one.
 
+The backend half (the authenticated user and the session id on your services' spans) needs a forge release with `observe.IdentitySpanInterceptor` and a `@reliantlabs/forge-web-runtime` that sends the session as baggage; until your project pins both, users and session links come from browser spans only. The console's user and session filters also need a control plane that applies them: on one that does not, it says so instead of showing unfiltered results.
+
 All of it is browser telemetry, so `signals = forge.ObservabilitySignals {browser = False}` (or `enabled = False`) turns it off with the rest. If your privacy notice must say what you collect: an approximate location derived from the IP address, not the address.
 
 ## Session replay

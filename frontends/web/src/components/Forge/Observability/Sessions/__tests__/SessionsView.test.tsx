@@ -173,12 +173,15 @@ describe("one session", () => {
   });
 
   it("says where the browser was, and opens every trace of the session", async () => {
-    const harness = renderPanel(createFixtureApi(), { view: "sessions", session: FIXTURE_STORY_SESSION }, PROJECT_PLACE);
+    // Opened from a list narrowed to its frontend: the traces must not stay
+    // narrowed to it, or the backend work the session caused is excluded.
+    const harness = renderPanel(createFixtureApi(), { view: "sessions", session: FIXTURE_STORY_SESSION, service: "shop-web" }, PROJECT_PLACE);
     const place = await screen.findByTestId("session-place");
     expect(place).toHaveTextContent(/Berlin/);
     expect(place.getAttribute("title")).toContain("DB-IP");
     await userEvent.setup().click(screen.getByTestId("session-traces"));
     expect(harness.current()).toMatchObject({ view: "traces", rsession: FIXTURE_STORY_SESSION });
+    expect(harness.current().service).toBeUndefined();
     expect(harness.current().session).toBeUndefined();
     expect(harness.current().trace).toBeUndefined();
   });

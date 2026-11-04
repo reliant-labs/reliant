@@ -152,8 +152,8 @@ Collected with **Crash and Error Reporting**, not analytics, and stopped with it
 | attribute | on | where it comes from |
 | --- | --- | --- |
 | `userId` | every browser span | the page (`setTelemetryUserId`): display only, never trusted for access |
-| `user.id` | the backend's server span | the AUTHENTICATED caller (forge `observe.IdentitySpanInterceptor`) |
-| `session.id` | browser fetch/XHR spans; the backend's server span | the RUM session, sent by forge-web-runtime as W3C baggage on every Connect call; shape-checked, never propagated further |
+| `user.id` | the backend's server span | the AUTHENTICATED caller (forge `observe.IdentitySpanInterceptor`). **Pending:** the forge this repo pins (`go.mod`) predates the interceptor, so server spans carry no `user.id` until that pin moves |
+| `session.id` | browser fetch/XHR spans; the backend's server span | the RUM session, sent by forge-web-runtime as W3C baggage on every Connect call; shape-checked, never propagated further. **Pending:** neither the pinned forge nor the installed `@reliantlabs/forge-web-runtime` (0.12) does this yet, so until both move only browser spans name the session, and a session's traces are its browser-started ones |
 | `geo.country.iso_code`, `geo.region.name`, `geo.locality.name` | browser resource | derived at ingest by control-plane's workspace-proxy from the request's IP (DB-IP City Lite, CC BY 4.0, local); the page's own values are deleted |
 | `client.address` | browser resource | **not collected.** One proxy flag (`PROXY_OTEL_INGEST_FORWARD_CLIENT_IP`) would keep it; turning it on requires updating `docs/help/privacy.mdx` first |
 

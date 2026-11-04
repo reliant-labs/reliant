@@ -70,6 +70,24 @@ describe("the issue list", () => {
     expect(listCalls(onCall).at(-1)!.text).toBe("pool.go");
   });
 
+  it("narrows to the issues one user hit", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall }), { view: "errors", user: "u_8812" }, ENV_PLACE);
+    await screen.findByTestId("obs-errors-list");
+    expect(rowIds()).toEqual(["iss-orders-deadline", "iss-checkout-total", "iss-worker-conns"]);
+    expect(listCalls(onCall).some((req) => (req as ListReq & { userId?: string }).userId === "u_8812")).toBe(true);
+  });
+
+  it("never shows an older control plane's unfiltered issues as one user's", async () => {
+    const api = createFixtureApi();
+    const listIssues = api.listIssues;
+    // A control plane from before ListIssuesRequest.user_id ignores the field.
+    api.listIssues = (req, options) => listIssues({ ...req, userId: undefined }, options);
+    renderPanel(api, { view: "errors", user: "u_8812" }, ENV_PLACE);
+    expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent("can't filter issues by user");
+    expect(screen.queryAllByTestId(/^obs-issue-iss-/)).toHaveLength(0);
+  });
+
   it("pages through next_page_token", async () => {
     const user = userEvent.setup();
     const onCall = vi.fn();
