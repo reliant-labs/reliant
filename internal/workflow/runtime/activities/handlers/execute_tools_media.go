@@ -70,9 +70,11 @@ var modelImageMIMETypes = map[string]bool{
 // The attachment ids a tool reports in its metadata (generate_image's own
 // row, save_attachment's source) are not trusted: each joins the result only
 // if it exists and the chat's user owns it, so a tool cannot attach — and the
-// replay cannot hand the model — another user's attachment. A part whose
-// bytes are already one of those owned attachments is not stored twice;
-// every other part is persisted, whatever ids the tool reported.
+// replay cannot hand the model — another user's attachment. A part is not
+// stored twice only when an attachment this result carries already replays
+// to the model as the same bytes: an owned image or document the tool
+// reported, or a part stored earlier in this result. Every other part is
+// persisted, whatever ids the tool reported.
 //
 // A part a provider would refuse — too large, too many pixels, a type no
 // provider takes — is not persisted, and the result's text says why, so the
@@ -88,7 +90,12 @@ func (a *ExecuteToolsActivity) persistToolMedia(ctx context.Context, tec *toolEx
 	}
 
 	ids := make([]string, 0, len(attachmentIDs)+len(parts))
-	stored := make(map[string]bool, len(attachmentIDs))
+	// shown maps a content hash to the id of an attachment in ids that the
+	// replay hands the model as those exact bytes. A part is skipped only when
+	// it is found here, so the attachment standing for it is always one this
+	// result carries. Parts stored below join it, so a repeated part is stored
+	// once.
+	shown := make(map[string]string, len(attachmentIDs)+len(parts))
 	for _, id := range attachmentIDs {
 		att, err := a.repo.GetAttachment(ctx, id)
 		if err != nil || att == nil || userID == "" || att.UserID != userID {
@@ -98,17 +105,30 @@ func (a *ExecuteToolsActivity) persistToolMedia(ctx context.Context, tec *toolEx
 			continue
 		}
 		ids = append(ids, id)
-		stored[contentHash(att.Content)] = true
+		// Only an image or a document replays to the model as its bytes
+		// (threads.buildToolAttachmentBlock, messageconv.foldToolResultMedia);
+		// a video or a reference with the same bytes does not stand for a part.
+		if replaysToModel(att.AttachmentType) && len(att.Content) > 0 {
+			hash := contentHash(att.Content)
+			if _, ok := shown[hash]; !ok {
+				shown[hash] = id
+			}
+		}
 	}
 
 	var notes []string
 	for i, part := range parts {
-		if stored[contentHash(part.Data)] {
+		if _, ok := shown[contentHash(part.Data)]; ok {
 			continue
 		}
 		normalized, attType, reason := normalizeToolMedia(part)
 		if reason != "" {
 			notes = append(notes, fmt.Sprintf("%s is not shown: %s", toolMediaName(part, i), reason))
+			continue
+		}
+		// A BMP is compared again as the PNG it became.
+		hash := contentHash(normalized.Data)
+		if _, ok := shown[hash]; ok {
 			continue
 		}
 		id, err := a.storeToolMedia(ctx, userID, tec.toolName, i, normalized, attType)
@@ -120,6 +140,8 @@ func (a *ExecuteToolsActivity) persistToolMedia(ctx context.Context, tec *toolEx
 			continue
 		}
 		ids = append(ids, id)
+		shown[hash] = id
+		shown[contentHash(part.Data)] = id
 	}
 	if len(notes) > 0 {
 		content += "\n\n" + strings.Join(notes, "\n")
@@ -177,6 +199,12 @@ func normalizeToolMedia(part message.BinaryContent) (message.BinaryContent, atta
 			cfg.Width, cfg.Height, maxModelImageDimension)
 	}
 	return part, attachment.TypeImage, ""
+}
+
+// replaysToModel reports whether an attachment of this type reaches the model
+// as its bytes when it rides on a tool result.
+func replaysToModel(attType string) bool {
+	return attType == string(attachment.TypeImage) || attType == string(attachment.TypeDocument)
 }
 
 func contentHash(data []byte) string {

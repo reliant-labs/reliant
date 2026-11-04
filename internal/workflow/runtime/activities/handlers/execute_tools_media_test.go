@@ -105,12 +105,39 @@ func TestPersistToolMedia(t *testing.T) {
 		created = nil
 		owned := &ExecuteToolsActivity{repo: &MockExecuteToolsStore{
 			GetAttachmentFunc: func(_ context.Context, id string) (*db.Attachment, error) {
-				return &db.Attachment{ID: id, UserID: "user-1", Content: shot}, nil
+				return &db.Attachment{ID: id, UserID: "user-1", AttachmentType: string(attachment.TypeImage), Content: shot}, nil
 			},
 		}}
 		content, ids := owned.persistToolMedia(context.Background(), tec, "Generated.", []message.BinaryContent{{MIMEType: "image/png", Data: shot}}, []string{"att-own"})
 		assert.Equal(t, []string{"att-own"}, ids)
 		assert.Equal(t, "Generated.", content)
+	})
+
+	t.Run("a reported attachment the model never replays does not stand for a part", func(t *testing.T) {
+		created = nil
+		store.GetAttachmentFunc = func(_ context.Context, id string) (*db.Attachment, error) {
+			return &db.Attachment{ID: id, UserID: "user-1", AttachmentType: string(attachment.TypeVideo), Content: shot}, nil
+		}
+		defer func() { store.GetAttachmentFunc = nil }()
+		_, ids := a.persistToolMedia(context.Background(), tec, "", []message.BinaryContent{{Path: "/w/shot.png", MIMEType: "image/png", Data: shot}}, []string{"att-video"})
+		require.Len(t, ids, 2)
+		assert.Equal(t, "att-video", ids[0])
+		require.Len(t, created, 1)
+		assert.Equal(t, ids[1], created[0].ID)
+	})
+
+	t.Run("a repeated part is stored once", func(t *testing.T) {
+		created = nil
+		other := encodedPNG(t, 32, 32)
+		_, ids := a.persistToolMedia(context.Background(), tec, "", []message.BinaryContent{
+			{MIMEType: "image/png", Data: shot},
+			{MIMEType: "image/png", Data: shot},
+			{MIMEType: "image/png", Data: other},
+		}, nil)
+		require.Len(t, created, 2)
+		assert.Equal(t, []string{created[0].ID, created[1].ID}, ids)
+		assert.Equal(t, shot, created[0].Content)
+		assert.Equal(t, other, created[1].Content)
 	})
 
 	t.Run("media beside a reported id is still persisted", func(t *testing.T) {
