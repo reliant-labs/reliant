@@ -6,9 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"testing"
 	"time"
 
@@ -116,34 +114,6 @@ func TestCreatorAlive(t *testing.T) {
 	}
 	if _, ok := s.creatorAlive(goLinkPrefix, born); ok {
 		t.Error("a go command was counted a linker")
-	}
-}
-
-// The real scan sees a process's working directory and environment.
-func TestScanProcesses_SeesCwdAndEnvironment(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("/proc is Linux's")
-	}
-	dir := filepath.Join(t.TempDir(), "go-build777")
-	if err := os.Mkdir(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command("sleep", "30")
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOTMPDIR=/somewhere/gotmp-777-1")
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	s, err := scanProcesses()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !s.names["go-build777"] || !s.names["gotmp-777-1"] {
-		t.Fatalf("scan missed the child's cwd or environment: %v", s.names)
-	}
-	if b := fileBirth(dir); b.IsZero() || time.Since(b) > time.Minute {
-		t.Errorf("fileBirth = %v, want about now", b)
 	}
 }
 

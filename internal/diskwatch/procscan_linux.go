@@ -62,13 +62,23 @@ func scanProcRoot(root string, euid int, boot time.Time) (procSnapshot, error) {
 		// not the process: a non-dumpable process of this user's (a sandbox,
 		// ssh-agent) has root's, and is withheld from its own user too.
 		info, err := os.Lstat(filepath.Join(dir, "fd"))
-		if err != nil {
+		if gone(err) {
 			continue // exited
 		}
+		if err != nil {
+			// Any other failure (EACCES under hidepid, an I/O error) hides
+			// whose process this is: a /proc we cannot trust.
+			return procSnapshot{}, fmt.Errorf("pid %d: reading fd: %w", pid, err)
+		}
 		own := euid == 0 || ownerUID(info) == euid
-		comm, start, ok := readStat(dir)
-		if !ok {
+		comm, start, err := readStat(dir)
+		if gone(err) {
 			continue // exited
+		}
+		if err != nil {
+			// stat is readable by everyone: an unreadable or malformed one
+			// may be a go command or linker we would otherwise not see.
+			return procSnapshot{}, fmt.Errorf("pid %d: %w", pid, err)
 		}
 		scanned++
 		cmdline, err := os.ReadFile(filepath.Join(dir, "cmdline"))
@@ -139,7 +149,14 @@ func readRefs(s *procSnapshot, dir string) (exe string, err error) {
 // error but the process (or one descriptor of it) having gone, which holds
 // nothing.
 func incomplete(err error) bool {
-	return err != nil && !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, unix.ESRCH)
+	return err != nil && !gone(err)
+}
+
+// gone reports whether err positively establishes that a process (or one
+// descriptor of it) no longer exists: its /proc entry vanished (ENOENT) or the
+// kernel reports no such process (ESRCH). Nothing else proves an exit.
+func gone(err error) bool {
+	return err != nil && (errors.Is(err, fs.ErrNotExist) || errors.Is(err, unix.ESRCH))
 }
 
 // creatorKinds reports whether a process could be a go command or a Go
@@ -170,26 +187,27 @@ func creatorKinds(comm, exe string, cmdline []byte) (isGo, isLink bool) {
 }
 
 // readStat reads a process's command name and start time (clock ticks since
-// boot) from /proc/<pid>/stat.
-func readStat(dir string) (comm string, start uint64, ok bool) {
+// boot) from /proc/<pid>/stat. A read error is returned as is (gone tells an
+// exit from the rest); a malformed stat is an error that is not gone.
+func readStat(dir string) (comm string, start uint64, err error) {
 	b, err := os.ReadFile(filepath.Join(dir, "stat"))
 	if err != nil {
-		return "", 0, false
+		return "", 0, fmt.Errorf("reading stat: %w", err)
 	}
 	open, end := bytes.IndexByte(b, '('), bytes.LastIndexByte(b, ')')
 	if open < 0 || end < open {
-		return "", 0, false
+		return "", 0, errors.New("malformed stat: no command name")
 	}
 	fields := bytes.Fields(b[end+1:])
 	// Fields after the name start at field 3 (state); starttime is field 22.
 	if len(fields) < 20 {
-		return "", 0, false
+		return "", 0, fmt.Errorf("malformed stat: %d fields after the command name", len(fields))
 	}
 	start, err = strconv.ParseUint(string(fields[19]), 10, 64)
 	if err != nil {
-		return "", 0, false
+		return "", 0, fmt.Errorf("malformed stat start time: %w", err)
 	}
-	return string(b[open+1 : end]), start, true
+	return string(b[open+1 : end]), start, nil
 }
 
 // bootTime is when the clock /proc's start times count from began: now on
