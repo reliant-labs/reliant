@@ -223,7 +223,7 @@ func TestToolResultAttachments_DocumentBecomesADocumentBlock(t *testing.T) {
 	svc := NewService(repo)
 	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-1", SaveMessageOpts{
 		ToolResults: []ToolResult{{ToolCallID: "toolu_1", Name: "view", Content: "PDF file: report.pdf", AttachmentIDs: []string{"att-pdf-1"}}},
-	}, time.Now().UTC())
+	}, time.Date(2025, 1, 2, 3, 4, 5, 0, time.UTC))
 	require.NoError(t, err)
 	require.Len(t, blocks, 2)
 	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT, blocks[1].BlockType)

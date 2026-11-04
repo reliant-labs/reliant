@@ -101,12 +101,48 @@ func TestPersistToolMedia(t *testing.T) {
 	assert.Contains(t, content, "Image file: shot.png")
 	assert.Contains(t, content, "logo.svg is not shown: SVG")
 
-	t.Run("a tool that stored its own media is left alone", func(t *testing.T) {
+	t.Run("a tool that stored its own media is not stored twice", func(t *testing.T) {
 		created = nil
-		content, ids := a.persistToolMedia(context.Background(), tec, "Generated.", []message.BinaryContent{{MIMEType: "image/png", Data: shot}}, []string{"att-own"})
+		owned := &ExecuteToolsActivity{repo: &MockExecuteToolsStore{
+			GetAttachmentFunc: func(_ context.Context, id string) (*db.Attachment, error) {
+				return &db.Attachment{ID: id, UserID: "user-1", Content: shot}, nil
+			},
+		}}
+		content, ids := owned.persistToolMedia(context.Background(), tec, "Generated.", []message.BinaryContent{{MIMEType: "image/png", Data: shot}}, []string{"att-own"})
 		assert.Equal(t, []string{"att-own"}, ids)
 		assert.Equal(t, "Generated.", content)
-		assert.Empty(t, created)
+	})
+
+	t.Run("media beside a reported id is still persisted", func(t *testing.T) {
+		created = nil
+		store.GetAttachmentFunc = func(_ context.Context, id string) (*db.Attachment, error) {
+			return &db.Attachment{ID: id, UserID: "user-1", Content: []byte("other bytes")}, nil
+		}
+		defer func() { store.GetAttachmentFunc = nil }()
+		_, ids := a.persistToolMedia(context.Background(), tec, "", []message.BinaryContent{{Path: "/w/shot.png", MIMEType: "image/png", Data: shot}}, []string{"att-own"})
+		require.Len(t, ids, 2)
+		assert.Equal(t, "att-own", ids[0])
+		require.Len(t, created, 1)
+		assert.Equal(t, ids[1], created[0].ID)
+	})
+
+	t.Run("a reported id the user does not own is dropped", func(t *testing.T) {
+		created = nil
+		store.GetAttachmentFunc = func(_ context.Context, id string) (*db.Attachment, error) {
+			switch id {
+			case "att-theirs":
+				return &db.Attachment{ID: id, UserID: "user-2", Content: shot}, nil
+			case "att-gone":
+				return nil, nil
+			}
+			return nil, errors.New("lookup failed")
+		}
+		defer func() { store.GetAttachmentFunc = nil }()
+		_, ids := a.persistToolMedia(context.Background(), tec, "", []message.BinaryContent{{Path: "/w/shot.png", MIMEType: "image/png", Data: shot}}, []string{"att-theirs", "att-gone", "att-err"})
+		require.Len(t, ids, 1, "only the freshly persisted part survives")
+		require.Len(t, created, 1)
+		assert.Equal(t, ids[0], created[0].ID)
+		assert.Equal(t, "user-1", created[0].UserID)
 	})
 
 	t.Run("a failed save says so and keeps the result", func(t *testing.T) {

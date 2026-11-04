@@ -70,6 +70,31 @@ func TestDbMessagesToMessages_FoldsToolMediaIntoItsResult(t *testing.T) {
 	require.Len(t, results[2].BinaryParts, 1, "a PDF replays its bytes, not a read_attachment pointer; video and a missing row are dropped")
 	assert.Equal(t, "application/pdf", results[2].BinaryParts[0].MIMEType)
 	assert.Equal(t, pdf, results[2].BinaryParts[0].Data)
+	assert.Contains(t, results[2].Content, "Attachment missing of this result could not be loaded",
+		"a missing row leaves a note on its result instead of vanishing")
+	assert.NotContains(t, results[2].Content, "vid", "generated video is dropped without a note")
+}
+
+// A media block with no tool result before it is not the fold's to consume:
+// it stays a part, as on any other message.
+func TestDbMessagesToMessages_OrphanToolMediaIsKept(t *testing.T) {
+	t.Parallel()
+
+	id := "img"
+	repo := &MockStore{
+		ListContentBlocksForMessagesFunc: func(context.Context, []string) ([]*db.MessageContentBlock, error) {
+			return []*db.MessageContentBlock{{MessageID: "t", BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE, Content: &id}}, nil
+		},
+		GetContextWindowFunc: func(context.Context, string) (*db.ContextWindow, error) { return &db.ContextWindow{}, nil },
+		GetAttachmentFunc: func(context.Context, string) (*db.Attachment, error) {
+			return &db.Attachment{MimeType: "image/png", Content: []byte("png")}, nil
+		},
+	}
+	msgs, err := DbMessagesToMessages(context.Background(), []*db.Message{
+		{ID: "t", ChatID: "chat", Role: reliantv1.MessageRole_MESSAGE_ROLE_TOOL, ContextWindowID: "cw"},
+	}, repo)
+	require.NoError(t, err)
+	require.Len(t, msgs[0].BinaryContent(), 1)
 }
 
 // On a user message an IMAGE block is still its own part: only tool messages

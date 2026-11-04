@@ -159,9 +159,12 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 // show (view and read_attachment cap a request at 20), so the result is what
 // the model asked to read.
 //
-// A block that cannot be attached — no preceding result, a missing
-// attachment, a generated video — is consumed and logged rather than failing
-// the load: the result's text still answers the tool call.
+// Only a block that follows a tool result is consumed. One with no result
+// before it is left to ContentBlockToPart, as any other message's block is.
+// A block whose attachment cannot be loaded is not dropped silently: the
+// result gains a note naming the attachment, so the model knows media is
+// missing and can ask for it again. Generated video is consumed without a
+// note: it is for the user, never the model, and the result's text names it.
 func foldToolResultMedia(ctx context.Context, chatID string, block *db.MessageContentBlock, parts []message.ContentPart, repo AttachmentReader) bool {
 	if block.BlockType != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE &&
 		block.BlockType != reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT {
@@ -172,20 +175,18 @@ func foldToolResultMedia(ctx context.Context, chatID string, block *db.MessageCo
 	}
 	last := len(parts) - 1
 	if last < 0 {
-		logging.WarnContext(ctx, "Tool message media block precedes any tool result; dropping it from LLM context",
-			"attachment_id", *block.Content, "chat_id", chatID)
-		return true
+		return false
 	}
 	result, ok := parts[last].(message.ToolResult)
 	if !ok {
-		logging.WarnContext(ctx, "Tool message media block does not follow a tool result; dropping it from LLM context",
-			"attachment_id", *block.Content, "chat_id", chatID)
-		return true
+		return false
 	}
 	attachment, err := LoadAttachment(ctx, chatID, *block.Content, repo)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to load tool result attachment for LLM context",
 			"attachment_id", *block.Content, "chat_id", chatID, "error", err)
+		result.Content += fmt.Sprintf("\n\n[Attachment %s of this result could not be loaded and is not shown; run the tool again to see it.]", *block.Content)
+		parts[last] = result
 		return true
 	}
 	// Generated video is for the user, never the model (see ContentBlockToPart).

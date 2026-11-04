@@ -67,25 +67,45 @@ var modelImageMIMETypes = map[string]bool{
 // (messageconv.foldToolResultMedia), and each driver encodes them for its
 // provider.
 //
-// A tool that persisted its own media (it reports attachment ids, as
-// generate_image does) is left alone: its BinaryParts ARE those attachments.
+// The attachment ids a tool reports in its metadata (generate_image's own
+// row, save_attachment's source) are not trusted: each joins the result only
+// if it exists and the chat's user owns it, so a tool cannot attach — and the
+// replay cannot hand the model — another user's attachment. A part whose
+// bytes are already one of those owned attachments is not stored twice;
+// every other part is persisted, whatever ids the tool reported.
 //
 // A part a provider would refuse — too large, too many pixels, a type no
 // provider takes — is not persisted, and the result's text says why, so the
 // model can act on it (resize, crop, read SVG as text) instead of retrying
 // blind. It returns the result's content and its attachment ids.
 func (a *ExecuteToolsActivity) persistToolMedia(ctx context.Context, tec *toolExecutionContext, content string, parts []message.BinaryContent, attachmentIDs []string) (string, []string) {
-	if len(parts) == 0 || len(attachmentIDs) > 0 {
-		return content, attachmentIDs
+	if len(parts) == 0 && len(attachmentIDs) == 0 {
+		return content, nil
 	}
 	userID := ""
 	if tec.project != nil {
 		userID = tec.project.UserID
 	}
 
+	ids := make([]string, 0, len(attachmentIDs)+len(parts))
+	stored := make(map[string]bool, len(attachmentIDs))
+	for _, id := range attachmentIDs {
+		att, err := a.repo.GetAttachment(ctx, id)
+		if err != nil || att == nil || userID == "" || att.UserID != userID {
+			logging.WarnContext(ctx, "[ExecuteTools] Dropping a tool-reported attachment id the chat's user does not own",
+				"chat_id", tec.getChatID(), "tool", tec.toolName, "tool_call_id", tec.toolCallID,
+				"attachment_id", id, "error", err)
+			continue
+		}
+		ids = append(ids, id)
+		stored[contentHash(att.Content)] = true
+	}
+
 	var notes []string
-	ids := make([]string, 0, len(parts))
 	for i, part := range parts {
+		if stored[contentHash(part.Data)] {
+			continue
+		}
 		normalized, attType, reason := normalizeToolMedia(part)
 		if reason != "" {
 			notes = append(notes, fmt.Sprintf("%s is not shown: %s", toolMediaName(part, i), reason))
@@ -159,6 +179,11 @@ func normalizeToolMedia(part message.BinaryContent) (message.BinaryContent, atta
 	return part, attachment.TypeImage, ""
 }
 
+func contentHash(data []byte) string {
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
+}
+
 func bmpToPNG(data []byte) ([]byte, error) {
 	img, err := bmp.Decode(bytes.NewReader(data))
 	if err != nil {
@@ -176,8 +201,7 @@ func bmpToPNG(data []byte) ([]byte, error) {
 // machine's disk the bytes came from.
 func (a *ExecuteToolsActivity) storeToolMedia(ctx context.Context, userID, toolName string, index int, part message.BinaryContent, attType attachment.AttachmentType) (string, error) {
 	id := uuid.New().String()
-	hash := sha256.Sum256(part.Data)
-	fileHash := hex.EncodeToString(hash[:])
+	fileHash := contentHash(part.Data)
 	filename := toolMediaFilename(part, toolName, index)
 	now := time.Now().UTC()
 	att := &db.Attachment{
