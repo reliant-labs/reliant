@@ -4,6 +4,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -170,6 +171,30 @@ func (s stubOOM) CheckOOMKill(int, cgroupmem.OOMSnapshot) (bool, string) { retur
 // A build that died on a full disk must say which volume is full: the bare
 // "no space left on device" names neither the volume nor what fills it, and an
 // agent left with it retries the build against the same full disk.
+// A shell that could not be forked (EAGAIN: the process table is full) says
+// so, and that waiting for the machine will not help (#1919).
+func TestClassifyExecOutcome_ProcessTableFull(t *testing.T) {
+	var noSnap cgroupmem.OOMSnapshot
+	err := &os.PathError{Op: "fork/exec", Path: "/usr/bin/bash", Err: syscall.EAGAIN}
+
+	out := ClassifyExecOutcome(err, nil, "", "", nil, noSnap, nil)
+
+	if out.ExitCode != 1 {
+		t.Errorf("ExitCode = %d, want 1", out.ExitCode)
+	}
+	if !strings.Contains(out.Stderr, "fork/exec /usr/bin/bash: resource temporarily unavailable") {
+		t.Errorf("Stderr = %q, want the start failure itself", out.Stderr)
+	}
+	if !strings.Contains(out.Stderr, ProcessTableFullMessage) {
+		t.Errorf("Stderr = %q, want the process-table explanation", out.Stderr)
+	}
+
+	other := ClassifyExecOutcome(&os.PathError{Op: "chdir", Path: "/gone", Err: syscall.ENOENT}, nil, "", "", nil, noSnap, nil)
+	if strings.Contains(other.Stderr, "process table full") {
+		t.Errorf("Stderr = %q: only EAGAIN is a full process table", other.Stderr)
+	}
+}
+
 func TestClassifyExecOutcome_NoSpace(t *testing.T) {
 	var noSnap cgroupmem.OOMSnapshot
 	disk := &stubDisk{note: "[disk full] The machine's build caches & docker volume is out of space"}
