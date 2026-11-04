@@ -10,7 +10,7 @@ import { keepsLastResult } from "@/services/controlPlane/observability/quota";
  */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { ArrowLeft, SearchX, VideoOff } from "lucide-react";
+import { ArrowLeft, SearchX } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
@@ -26,7 +26,7 @@ import { ObsAsOf, ObsError, ObsLoadingRows } from "../ObsStates";
 import { AskReliantMenu } from "../AskReliant/AskReliant";
 import { ReplayPlayer, type ReplayerCtor } from "./ReplayPlayer";
 import { SessionTimeline } from "./SessionTimeline";
-import { isLive, LEAVE_SESSIONS, noReplayReason, sessionTitle } from "./sessionModel";
+import { isLive, LEAVE_SESSIONS, sessionTitle } from "./sessionModel";
 import { SessionNote, SessionsNotConfigured } from "./SessionStates";
 
 export interface SessionDetailProps {
@@ -153,8 +153,8 @@ function SessionBody({
         </p>
       </header>
 
-      {/* No replay: the timeline is the page, at full width, and the missing
-          recording is one line, not a panel. */}
+      {/* No replay (a session reached by id from a trace or an error): the
+          timeline is the page, at full width. */}
       <div className={session.hasReplay ? "grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,2fr)]" : "space-y-2"}>
         {session.hasReplay ? (
           <Card padding="md" data-testid="session-replay">
@@ -170,14 +170,7 @@ function SessionBody({
               loadReplayer={loadReplayer}
             />
           </Card>
-        ) : (
-          <p role="status" data-testid="session-no-replay" className="flex items-start gap-1.5 text-xs text-ink-muted">
-            <VideoOff className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span>
-              <span className="text-ink">No replay was recorded for this session.</span> {noReplayReason(session)}
-            </span>
-          </p>
-        )}
+        ) : null}
         <Card padding="md" data-testid="session-timeline-card">
           <h4 className="mb-2 text-sm font-medium text-ink">Timeline</h4>
           {timeline.isLoading ? (

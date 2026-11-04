@@ -23,7 +23,6 @@ import { resolveWindow, type RangePreset } from "@/services/controlPlane/observa
 export interface SessionFilters {
   range: RangePreset;
   hasError: boolean;
-  hasReplay: boolean;
   userId: string;
   pathContains: string;
   service?: string;
@@ -57,7 +56,10 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
         services: filters.service ? [filters.service] : [],
         window: resolveWindow(filters.range),
         hasError: filters.hasError,
-        hasReplay: filters.hasReplay,
+        // Only sessions with a replay exist as sessions: one with nothing to
+        // watch (a hidden window's background requests) is never listed. The
+        // control plane enforces it too; asking for it keeps an older one honest.
+        hasReplay: true,
         userId: filters.userId,
         pathContains: filters.pathContains,
         pageSize: SESSION_PAGE_SIZE,

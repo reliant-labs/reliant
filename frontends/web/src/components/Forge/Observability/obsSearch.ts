@@ -133,8 +133,6 @@ export interface ObsSearch {
   session?: string;
   /** Sessions: the moment to open the replay at, epoch ms (a link from an error or a trace). */
   t?: number;
-  /** Sessions: only the ones with a recorded replay. */
-  replay?: boolean;
   /** Sessions: only this user id's. */
   user?: string;
   /**
@@ -184,7 +182,6 @@ export const OBS_SEARCH_KEYS = [
   "assignee",
   "session",
   "t",
-  "replay",
   "user",
   "cursor",
 ] as const satisfies readonly (keyof ObsSearch)[];

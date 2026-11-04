@@ -50,10 +50,12 @@ func userChainInterceptors(t *testing.T) []connect.Interceptor {
 }
 
 // The API listener's chain, outermost first: forge's layers (the trace span,
-// profile labels, the traceresponse header, recovery, request id, logging, tracing, metrics), reliant's
-// budgets in forge's Deadline slot, the authenticator, then reliant's domain
-// whitelist, forge's activity stream, its stream drain, and svcerr's
-// interceptor innermost. There is no error reporter: a failed RPC reaches
+// profile labels, the traceresponse header, the request span that carries the
+// browser's session.id, recovery, request id, logging, tracing, metrics),
+// reliant's budgets in forge's Deadline slot, the authenticator and forge's
+// identity stamp after it (a no-op here: reliant's auth binds user.id itself,
+// through interceptors.RequestScope), then reliant's domain whitelist, forge's
+// activity stream, its stream drain, and svcerr's interceptor innermost. There is no error reporter: a failed RPC reaches
 // Sentry once, as forge's "rpc failed" log line.
 func TestUserChainOrder(t *testing.T) {
 	chain, err := NewUserChain(UserChainDeps{Auth: &testNamedInterceptor{}})
@@ -61,13 +63,13 @@ func TestUserChainOrder(t *testing.T) {
 	require.Equal(t, serverkit.AudienceUser, chain.Audience())
 
 	got := chain.Interceptors()
-	require.Len(t, got, 14)
+	require.Len(t, got, 16)
 	require.IsType(t, interceptors.RequestScope(nil), got[0], "the trace span opens outermost, inside a request scope")
-	require.IsType(t, serverkit.Deadline{}, got[8], "the deadline wraps authentication")
-	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[10], "the domain whitelist reads the user auth stashed")
-	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[12]),
+	require.IsType(t, serverkit.Deadline{}, got[9], "the deadline wraps authentication")
+	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[12], "the domain whitelist reads the user auth stashed")
+	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[14]),
 		"the stream drain sits outside svcerr, so it judges the code the client receives")
-	require.Equal(t, reflect.TypeOf(svcerr.Interceptor()), reflect.TypeOf(got[13]),
+	require.Equal(t, reflect.TypeOf(svcerr.Interceptor()), reflect.TypeOf(got[15]),
 		"svcerr is innermost, so logging records the status the client received")
 }
 

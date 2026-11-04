@@ -112,7 +112,7 @@ function searchFromUrl(params: URLSearchParams): ObsSearch {
       } catch {
         // A malformed edit is dropped, as the real route's schema drops it.
       }
-    } else if (key === "live" || key === "errors" || key === "replay" || key === "declared" || key === "internal") out[key] = params.get(key) === "true";
+    } else if (key === "live" || key === "errors" || key === "declared" || key === "internal") out[key] = params.get(key) === "true";
     else if (key === "t") out[key] = Number(params.get(key)) || undefined;
     else out[key] = params.get(key);
   }
