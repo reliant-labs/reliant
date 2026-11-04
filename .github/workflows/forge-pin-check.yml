@@ -1,0 +1,123 @@
+name: Forge pin check
+
+# Does forge main pin into reliant main? Continuously, before a release needs it.
+#
+# WHY: every RC set the release train cuts pins forge main into reliant main with
+# scripts/pin-forge.sh (go get, go build, forge generate, generate:docs). On
+# 2026-11-04 set v1.7.93-rc.1 died AT THE CUT because forge main no longer
+# pinned (forge generate -> go build broke), and finding out, fixing forge and
+# re-cutting cost 87 minutes (control-plane designs/release-speed-2026-11-04.md,
+# "B2. Dead cuts"). Running the same script on every new (reliant main, forge
+# main) pair finds that hours earlier, when the fix is cheap and no cut waits.
+#
+# WHAT IT DOES: on a schedule (and by hand), pins forge main into a throwaway
+# checkout of reliant main exactly as the cut does. Report only: it commits and
+# pushes nothing and gates nothing. A pair already checked (pass) is skipped
+# with no setup, using a cache entry as the marker, so an idle hour costs a few
+# seconds of runner time. A failure opens one rolling issue (label
+# forge-pin:red, found by its hidden marker); the next pass, or a pair already
+# pinned or cached as passed, closes it. A check that cannot run at all opens
+# forge-pin:broken instead (scripts/forge-pin-report.sh).
+#
+# Where the logic lives: scripts/pin-forge.sh, the same script a laptop and
+# the release train run. This file only chooses the pair; the report is
+# scripts/forge-pin-report.sh.
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+    inputs:
+      forge_ref:
+        description: "forge commit or ref to pin (default: forge main)"
+        required: false
+        default: ""
+        type: string
+
+concurrency:
+  group: forge-pin-check
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  pin:
+    name: Pin forge main into reliant main
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: The pair
+        id: pair
+        env:
+          FORGE_REF: ${{ inputs.forge_ref }}
+        run: |
+          set -euo pipefail
+          ref="${FORGE_REF:-refs/heads/main}"
+          f="$(git ls-remote https://github.com/reliant-labs/forge "$ref" | cut -f1 | head -1)"
+          [ -n "$f" ] || f="$ref"
+          [[ "$f" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::cannot resolve forge ref '$ref' to a commit"; exit 1; }
+          r="$(git rev-parse HEAD)"
+          pinned=false
+          grep -Eq "github.com/reliant-labs/forge v[^ ]*-${f:0:12}( |$)" go.mod && pinned=true
+          echo "forge=$f" >> "$GITHUB_OUTPUT"
+          echo "reliant=$r" >> "$GITHUB_OUTPUT"
+          echo "pinned=$pinned" >> "$GITHUB_OUTPUT"
+          echo "reliant main ${r:0:12}, forge ${f:0:12} (already pinned: $pinned)"
+
+      # A pair that already passed is not checked again (the cache entry is the record).
+      - name: Already checked?
+        id: seen
+        if: steps.pair.outputs.pinned != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: .forge-pin-check
+          key: forge-pin-check-${{ steps.pair.outputs.reliant }}-${{ steps.pair.outputs.forge }}
+          lookup-only: true
+
+      - uses: ./.github/actions/setup
+        id: setup
+        if: steps.pair.outputs.pinned != 'true' && steps.seen.outputs.cache-hit != 'true'
+        with:
+          node: "true"
+          buf: "true"
+
+      - name: scripts/pin-forge.sh <forge>
+        id: pin
+        if: steps.pair.outputs.pinned != 'true' && steps.seen.outputs.cache-hit != 'true'
+        run: |
+          set -o pipefail
+          mkdir -p .forge-pin-check
+          bash scripts/pin-forge.sh "${{ steps.pair.outputs.forge }}" 2>&1 | tee .forge-pin-check/pin.log
+
+      - name: Record the pass
+        if: steps.pin.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: .forge-pin-check
+          key: forge-pin-check-${{ steps.pair.outputs.reliant }}-${{ steps.pair.outputs.forge }}
+
+      # Every outcome is reported, in scripts/forge-pin-report.sh (self-test:
+      # scripts/test-forge-pin-report.sh): a pass, or a pair already pinned or
+      # cached as passed, closes the rolling issue; a pin failure opens or updates
+      # it; a failure to run the check at all (pair, cache lookup, setup) goes to
+      # a separate forge-pin:broken issue naming the stage, and records nothing.
+      - name: Report
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PAIR_OUTCOME: ${{ steps.pair.outcome }}
+          PINNED: ${{ steps.pair.outputs.pinned }}
+          SEEN_OUTCOME: ${{ steps.seen.outcome }}
+          CACHE_HIT: ${{ steps.seen.outputs.cache-hit }}
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          PIN_OUTCOME: ${{ steps.pin.outcome }}
+          F: ${{ steps.pair.outputs.forge }}
+          R: ${{ steps.pair.outputs.reliant }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/forge-pin-report.sh
