@@ -125,11 +125,16 @@ has_nul() {
   [ "${rc}" -eq 0 ] && [ "${#chunk}" -lt 8000 ]
 }
 
-# numstat -z, without renames: "<added>\t<deleted>\t<path>\0".
+# numstat -z, without renames: "<added>\t<deleted>\t<path>\0", the path
+# verbatim (never quoted under -z), so everything after the second tab is the
+# path, newlines and tabs included. Only a rename or copy record puts its paths
+# in separate NUL fields ("<added>\t<deleted>\t\0<src>\0<dst>\0"), and
+# --no-renames rules those out; an empty path means one arrived anyway.
 while IFS= read -r -d '' rec; do
   checked=$((checked + 1))
   ins="${rec%%$'\t'*}" rest="${rec#*$'\t'}"
   del="${rest%%$'\t'*}" path="${rest#*$'\t'}"
+  [ -n "${path}" ] || die "unexpected rename-format numstat record from git diff ${diff_args[*]}"
   is_allowlisted "${path}" && continue
   if [ "${ins}" = - ] && [ "${del}" = - ]; then
     echo "no-binaries: ${path}: binary file (git cannot diff it as text)" >&2

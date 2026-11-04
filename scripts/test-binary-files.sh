@@ -79,6 +79,30 @@ git add tools/y.bin
 check
 if [ "${RC}" -eq 1 ] && [[ "${OUT}" == *"tools/y.bin: binary file"* ]]; then pass "staged: exit 1 naming tools/y.bin"; else fail "exit ${RC}: ${OUT}"; fi
 
+echo "check-binary-files: a binary whose name holds a newline or a tab is caught by name"
+new_repo oddnames
+nl_bin="$(printf 'a\nb.bin')" tab_bin="$(printf 'c\td.bin')"
+elf "${nl_bin}"
+elf "${tab_bin}"
+printf 'text\n' >"$(printf 'e\nf.txt')"
+git add -A && git commit -qm "binaries with a newline and a tab in their names"
+check --range main HEAD
+if [ "${RC}" -eq 1 ] && [[ "${OUT}" == *"${nl_bin}: binary file"* ]] && [[ "${OUT}" == *"${tab_bin}: binary file"* ]] && [[ "${OUT}" != *"f.txt"* ]]; then
+    pass "range: exit 1 naming both, not the text file"
+else
+    fail "exit ${RC}: ${OUT}"
+fi
+nl_staged="$(printf 'g\nh')" tab_staged="$(printf 'i\tj')"
+elf "${nl_staged}"
+elf "${tab_staged}"
+git add -A
+check
+if [ "${RC}" -eq 1 ] && [[ "${OUT}" == *"${nl_staged}: binary file"* ]] && [[ "${OUT}" == *"${tab_staged}: binary file"* ]]; then
+    pass "staged: exit 1 naming both"
+else
+    fail "exit ${RC}: ${OUT}"
+fi
+
 echo "check-binary-files: a new file over the cap fails; a grown existing one does not"
 new_repo size
 head -c 2048 /dev/zero | tr '\0' x >data.json
