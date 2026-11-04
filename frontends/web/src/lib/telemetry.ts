@@ -198,18 +198,26 @@ let unsubscribeConsent: (() => void) | null = null;
 
 /**
  * Start browser telemetry. Idempotent, never throws, and resolves to whether
- * it is running.
+ * it is running. Concurrent callers share one attempt; an attempt that ends
+ * not running is forgotten, so a later call tries again (and can still hand
+ * over the held landing attribution).
  */
 export function initTelemetry(): Promise<boolean> {
   if (started) return started;
   if (isDev || !clickstackEnabled()) return Promise.resolve(false);
   if (!privacyConsent().crashReportingEnabled) return Promise.resolve(false);
 
-  started = start().catch((err) => {
-    console.warn("[telemetry] init failed:", err);
-    return false;
-  });
-  return started;
+  const attempt: Promise<boolean> = start()
+    .catch((err) => {
+      console.warn("[telemetry] init failed:", err);
+      return false;
+    })
+    .then((running) => {
+      if (!running && started === attempt) started = null;
+      return running;
+    });
+  started = attempt;
+  return attempt;
 }
 
 async function start(): Promise<boolean> {

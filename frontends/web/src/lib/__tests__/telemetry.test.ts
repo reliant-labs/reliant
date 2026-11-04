@@ -444,6 +444,27 @@ describe("initTelemetry: the landing attribution handoff", () => {
     expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).not.toBeNull();
   });
 
+  it("hands it over on a later start in the same page after a start that did not run", async () => {
+    runtime.initBrowserTelemetry.mockResolvedValueOnce(false);
+    holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", NOW);
+    await expect(initTelemetry()).resolves.toBe(false);
+    await expect(initTelemetry()).resolves.toBe(true);
+    expect(runtime.initBrowserTelemetry).toHaveBeenCalledTimes(2);
+    expect(runtime.enableAttribution).toHaveBeenLastCalledWith({ search: "?rid=v_landing_123456&utm_source=reddit" });
+    expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).toBeNull();
+  });
+
+  it("hands it over on a later start in the same page after a start that rejected", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    runtime.initBrowserTelemetry.mockRejectedValueOnce(new Error("sdk load failed"));
+    holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", NOW);
+    await expect(initTelemetry()).resolves.toBe(false);
+    warn.mockRestore();
+    await expect(initTelemetry()).resolves.toBe(true);
+    expect(runtime.initBrowserTelemetry).toHaveBeenCalledTimes(2);
+    expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).toBeNull();
+  });
+
   it("drops it without analytics consent", async () => {
     privacy.state.analyticsEnabled = false;
     holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", NOW);
