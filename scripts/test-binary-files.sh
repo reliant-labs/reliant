@@ -66,6 +66,19 @@ git merge -q --no-ff --no-edit side
 check --range main HEAD
 if [ "${RC}" -eq 1 ] && [[ "${OUT}" == *"tools/x/x: binary file"* ]]; then pass "exit 1 naming tools/x/x"; else fail "exit ${RC}: ${OUT}"; fi
 
+echo "check-binary-files: a .gitattributes rule that diffs a binary as text does not hide it"
+new_repo attrs
+printf '*.bin diff\n' >.gitattributes
+elf tools/x.bin
+chmod +x tools/x.bin
+git add -A && git commit -qm "a binary, and an attribute that makes git diff it as text"
+check --range main HEAD
+if [ "${RC}" -eq 1 ] && [[ "${OUT}" == *"tools/x.bin: binary file"* ]]; then pass "exit 1 naming tools/x.bin"; else fail "exit ${RC}: ${OUT}"; fi
+elf tools/y.bin
+git add tools/y.bin
+check
+if [ "${RC}" -eq 1 ] && [[ "${OUT}" == *"tools/y.bin: binary file"* ]]; then pass "staged: exit 1 naming tools/y.bin"; else fail "exit ${RC}: ${OUT}"; fi
+
 echo "check-binary-files: a new file over the cap fails; a grown existing one does not"
 new_repo size
 head -c 2048 /dev/zero | tr '\0' x >data.json

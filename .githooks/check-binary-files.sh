@@ -19,10 +19,11 @@
 #                                                 task ci:repo-checks)
 #
 # Detection needs git and nothing else:
-#   - binary: git's own verdict, the `-<TAB>-` that `git diff --numstat` prints
-#     for a file it will not diff as text (a NUL byte in the first 8000 bytes,
-#     or a `binary` / `-diff` attribute). Every compiled executable, archive and
-#     image has one. Added and modified files are judged: turning a text file
+#   - binary: the `-<TAB>-` that `git diff --numstat` prints for a file it will
+#     not diff as text (a `binary` / `-diff` attribute, or a NUL byte), or a NUL
+#     byte in the blob's first 8000 bytes, read from the content itself so no
+#     `.gitattributes` line can switch it off. Every compiled executable, archive
+#     and image has one. Added and modified files are judged: turning a text file
 #     into a binary is the same defect.
 #   - size: an ADDED file over MAX_NEW_FILE_BYTES (default 1 MiB) fails, text or
 #     not: generated bundles and data dumps are the other way history bloats.
@@ -57,7 +58,7 @@ case "${1:-}" in
     head="${3:-HEAD}"
     [ -n "${base}" ] || die "--range needs a base revision"
     ;;
-  -h | --help) sed -n '2,34p' "$0"; exit 0 ;;
+  -h | --help) sed -n '2,35p' "$0"; exit 0 ;;
   *) die "unknown argument '$1' (see --help)" ;;
 esac
 
@@ -108,13 +109,33 @@ git diff "${common[@]}" --name-only --diff-filter=A "${diff_args[@]}" -- > "${tm
 
 status=0 checked=0
 
+# has_nul <path>: the path's new content has a NUL byte in its first 8000
+# bytes, git's own binary heuristic, read from the blob itself. git's numstat
+# verdict alone is not enough: a committed `.gitattributes` line such as
+# `*.bin diff` makes git diff a NUL-containing blob as text, so the change
+# that adds a binary could also switch its detection off. Pure bash: `read -d ''`
+# stops at the first NUL, so fewer than 8000 bytes read without hitting EOF
+# means one was found.
+has_nul() {
+  local LC_ALL=C blob chunk rc
+  blob="$(blob_rev "$1")"
+  git cat-file -e "${blob}" 2> /dev/null || die "cannot read ${1} (${blob})"
+  rc=0
+  IFS= read -r -d '' -n 8000 chunk < <(git cat-file blob "${blob}") || rc=$?
+  [ "${rc}" -eq 0 ] && [ "${#chunk}" -lt 8000 ]
+}
+
 # numstat -z, without renames: "<added>\t<deleted>\t<path>\0".
 while IFS= read -r -d '' rec; do
   checked=$((checked + 1))
   ins="${rec%%$'\t'*}" rest="${rec#*$'\t'}"
   del="${rest%%$'\t'*}" path="${rest#*$'\t'}"
-  if [ "${ins}" = - ] && [ "${del}" = - ] && ! is_allowlisted "${path}"; then
+  is_allowlisted "${path}" && continue
+  if [ "${ins}" = - ] && [ "${del}" = - ]; then
     echo "no-binaries: ${path}: binary file (git cannot diff it as text)" >&2
+    status=1
+  elif has_nul "${path}"; then
+    echo "no-binaries: ${path}: binary file (a NUL byte in its first 8000 bytes)" >&2
     status=1
   fi
 done < "${tmp}/numstat"
