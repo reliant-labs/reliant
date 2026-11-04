@@ -18,6 +18,7 @@
 
 import { disableTelemetry, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
 import {
+  enableAttribution,
   initBrowserTelemetry,
   type BrowserTelemetryConfig,
 } from "@reliantlabs/forge-web-runtime/telemetry";
@@ -26,6 +27,7 @@ import { appBuild } from "./appBuild";
 import { loadConfig, type ReliantWebConfig } from "./config_gen";
 import { isDev } from "./constants";
 import { reportFirstLaunch } from "./appFirstLaunch";
+import { takeLandingAttribution } from "./landingAttribution";
 import { reportError } from "./errorReporting";
 import { clickstackEnabled } from "./telemetryEndpoint";
 import { SERVICE_NAME } from "./otel_gen";
@@ -252,6 +254,15 @@ async function start(): Promise<boolean> {
       window.RELIANT_CONFIG?.gatewayUrl,
     ],
   });
+
+  // The landing site's rid / utm_* handoff, held since boot: by now the router and
+  // the sign-in have replaced the URL it arrived on (landingAttribution.ts). Taken
+  // either way, so it is never handed over later; handed to the runtime only with
+  // analytics consent, as the landing site gave it only with that consent.
+  const handoff = takeLandingAttribution();
+  if (handoff && privacyConsent().analyticsEnabled) {
+    enableAttribution({ search: handoff });
+  }
 
   const running = await initBrowserTelemetry(config);
   if (!running) return false;

@@ -24,6 +24,7 @@ const privacy = vi.hoisted(() => {
 
 const runtime = vi.hoisted(() => ({
   initBrowserTelemetry: vi.fn(async () => true),
+  enableAttribution: vi.fn(),
   disableTelemetry: vi.fn(),
   setTelemetryUser: vi.fn(),
   reportException: vi.fn(() => true),
@@ -37,6 +38,7 @@ vi.mock("@reliantlabs/forge-web-runtime", () => ({
 }));
 vi.mock("@reliantlabs/forge-web-runtime/telemetry", () => ({
   initBrowserTelemetry: runtime.initBrowserTelemetry,
+  enableAttribution: runtime.enableAttribution,
 }));
 vi.mock("@hyperdx/browser", () => ({
   default: { setGlobalAttributes: runtime.setGlobalAttributes },
@@ -50,6 +52,7 @@ vi.mock("../appBuild", () => ({
   appBuild: () => ({ version: "1.8.1", commit: "c", ref: "r", built: "t" }),
 }));
 
+import { holdLandingAttribution, LANDING_ATTRIBUTION_KEY } from "../landingAttribution";
 import {
   buildTelemetryConfig,
   initTelemetry,
@@ -398,5 +401,33 @@ describe("buildTelemetryConfig", () => {
     });
     expect(config.consoleCapture).toBe(false);
     expect(config.advancedNetworkCapture).toBe(false);
+  });
+});
+
+// The landing → app handoff (landingAttribution.ts): held at boot, handed to the
+// runtime when telemetry starts, after the sign-in has replaced the URL it came on.
+describe("initTelemetry: the landing attribution handoff", () => {
+  it("hands the held rid and utm_* to the runtime before it starts", async () => {
+    holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", Date.now());
+    window.history.replaceState(null, "", "/auth/callback?code=abc");
+    await initTelemetry();
+    expect(runtime.enableAttribution).toHaveBeenCalledWith({ search: "?rid=v_landing_123456&utm_source=reddit" });
+    expect(runtime.enableAttribution.mock.invocationCallOrder[0]).toBeLessThan(
+      runtime.initBrowserTelemetry.mock.invocationCallOrder[0],
+    );
+    expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).toBeNull();
+  });
+
+  it("drops it without analytics consent", async () => {
+    privacy.state.analyticsEnabled = false;
+    holdLandingAttribution("?rid=v_landing_123456&utm_source=reddit", Date.now());
+    await initTelemetry();
+    expect(runtime.enableAttribution).not.toHaveBeenCalled();
+    expect(localStorage.getItem(LANDING_ATTRIBUTION_KEY)).toBeNull();
+  });
+
+  it("leaves the runtime's own capture alone when nothing is held", async () => {
+    await initTelemetry();
+    expect(runtime.enableAttribution).not.toHaveBeenCalled();
   });
 });
