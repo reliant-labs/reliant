@@ -46,6 +46,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
     (state) => state.setActiveSessionForWorktree
   );
   const createSession = useTerminalStore((state) => state.createSession);
+  const bindSessionChat = useTerminalStore((state) => state.bindSessionChat);
   const killSession = useTerminalStore((state) => state.killSession);
   const setActiveSession = useTerminalStore((state) => state.setActiveSession);
   const requestFocus = useTerminalStore((state) => state.requestFocus);
@@ -123,6 +124,10 @@ export function TerminalPanel(_props: TerminalPanelProps) {
 
   // Get sessions scoped to current worktree (for UI display)
   const sessions = getWorktreeSessions(currentWorktreeId);
+  // The machine the shown terminal is on, as the server named it. A terminal
+  // on another machine than the chat's is indistinguishable by its prompt, so
+  // the header always says.
+  const activeMachine = sessions.find((s) => s.id === activeSessionId)?.machineName;
 
   // Keep terminals alive across workspace switches, but never mount a
   // persisted terminal for a workspace known to be archived. A mounted
@@ -153,6 +158,17 @@ export function TerminalPanel(_props: TerminalPanelProps) {
     const worktreeSessions = getWorktreeSessions(currentWorktreeId);
 
     if (worktreeSessions.length > 0) {
+      // A session saved before terminals recorded their chat has none, and
+      // the server then picked a machine on its own — in prod not the chat's
+      // (`ls` of a folder the chat had just written said it did not exist).
+      // It belongs to the chat it is shown beside; binding reconnects it there.
+      const activeChatId = useChatStore.getState().activeChatId;
+      if (activeChatId) {
+        for (const session of worktreeSessions) {
+          if (!session.chatId) bindSessionChat(session.id, activeChatId);
+        }
+      }
+
       // Worktree has sessions - restore the last active one
       const lastActiveSessionId = getActiveSessionForWorktree(currentWorktreeId);
       const sessionExists = worktreeSessions.find((s) => s.id === lastActiveSessionId);
@@ -179,7 +195,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
         workingDir: workingDir.path,
       });
     }
-  }, [currentWorktreeId, currentProject, workingDir, getWorktreeSessions, getActiveSessionForWorktree, setActiveSession, createSession, isTerminalOpen]);
+  }, [currentWorktreeId, currentProject, workingDir, getWorktreeSessions, getActiveSessionForWorktree, setActiveSession, createSession, bindSessionChat, isTerminalOpen]);
 
   const handleNewTerminal = useCallback(() => {
     if (!currentProject || workingDir.kind !== "ready") return;
@@ -314,8 +330,17 @@ export function TerminalPanel(_props: TerminalPanelProps) {
 
       {/* Header - styled to match ChatTabs */}
       <div className="flex items-center justify-between px-3 py-0 bg-accent border-b border-border h-10 flex-shrink-0">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <span className="text-xs font-mono">Terminal</span>
+          {activeMachine && (
+            <span
+              className="truncate text-xs text-muted-foreground"
+              title={`This terminal runs on ${activeMachine}`}
+              data-testid="terminal-machine"
+            >
+              on {activeMachine}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
@@ -435,6 +460,9 @@ export function TerminalPanel(_props: TerminalPanelProps) {
                   <div className="absolute right-full mr-2 top-0 hidden group-hover:block z-50 pointer-events-none">
                     <div className="bg-popover text-popover-foreground border border-border rounded px-2 py-1.5 shadow-lg whitespace-nowrap text-xs">
                       <div className="font-semibold">{session.title}</div>
+                      {session.machineName && (
+                        <div className="text-muted-foreground">On {session.machineName}</div>
+                      )}
                       {session.pid && (
                         <div className="text-muted-foreground">
                           PID: {session.pid}

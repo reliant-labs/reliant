@@ -100,6 +100,7 @@ type APIHTTPRoutesStore interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
+	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 }
 
 // NewAPIHTTPRoutes builds the routes; nothing is mounted until Register.
