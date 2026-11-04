@@ -1,0 +1,184 @@
+---
+title: "Querying with forge obs"
+description: "Ask a running forge environment what happened from the command line: forge obs check judges a deploy with exit codes 0, 1, 2 and 8, and status, issue, trace, logs and db query find the cause"
+---
+
+Everything the [boundaries record](/forge/observability/signals) is also readable without leaving the terminal. `forge obs` asks an environment's telemetry a question and prints the answer as a table for you or, with `--json`, as one document a script or an agent can parse. The same verbs work against your local stack in development and against a hosted environment, because both go through one query compiler. A query that works locally means the same thing against production.
+
+After you change something, four questions decide what you do next, and each has a command:
+
+| Question | Command |
+|---|---|
+| Did the deploy work? | `forge obs check <env>` |
+| What is wrong right now? | `forge obs status <env>` |
+| What broke, and why? | `forge obs issues`, `issue`, `trace`, `logs` |
+| What is in the database? | `forge db query <env> "<select>"` |
+
+The environment argument defaults to `dev`. Which backend answers is decided by the environment's KCL, not by a flag: an environment with no destination reads the local ClickStack that `forge env up` started, and a hosted environment reads the platform's store with your credential (under Reliant, the credential helper supplies it). If the local stack is down, the command exits 2 and tells you to run `forge env up`.
+
+## The loop
+
+```bash
+forge env deploy prod
+forge obs check prod --wait --json      # 0 PASS · 1 FAIL · 2 cannot tell · 8 wait timed out
+# on a FAIL, findings[] and suggested[] name the next commands
+forge obs issue ISS-7f3a prod           # culprit, latest event, trace id, suspect commits
+forge obs trace 0af7651916cd43dd8448eb211c80319c prod
+forge obs logs prod --trace 0af7651916cd43dd8448eb211c80319c
+forge db query prod "select count(*) from jobs where crew_id is null" \
+  --confirm-env prod --reason ISS-7f3a
+# fix, deploy, check again; then
+forge obs issue resolve ISS-7f3a prod --in next
+```
+
+Each step uses an ID the previous one printed. That chain, from a verdict to an issue to a trace to the rows, is the point of the design.
+
+## obs check: did the deploy work?
+
+`forge obs check` judges one promotion. It takes the window of time after the release went live and compares it with an equal window before, per service, then lists what the release opened: new and regressed issues, alerts still firing, workload restarts. The verdict is PASS, FAIL or INCONCLUSIVE.
+
+```bash
+forge obs check prod --wait --json
+forge obs check prod --release v1.4.2 --window 30m
+forge obs check dev --since 20m          # local: no promotions, so you name the start
+```
+
+`--wait` polls until the after window has finished, which is how you run it straight after a deploy. Each window stops at the neighbouring promotion and at the present, and the error rate is weighted for tail sampling so dropped healthy spans do not distort it. A local environment has no promotions, so `--since` (or the start of the last `forge env up`) names the instant to judge from, and regressed issues, alerts and restarts are reported as not evaluated.
+
+### The exit codes
+
+The exit code is the contract. It is the same as the `exit_code` field in the JSON document on every path, so a shell script and a program reading the document always agree.
+
+| Exit | Verdict | Meaning |
+|---|---|---|
+| 0 | PASS | The release did not make things worse |
+| 1 | FAIL | A finding the environment treats as failing fired: we looked, and the release made things worse |
+| 2 | INCONCLUSIVE | The after window has not finished, or no service reached the minimum request count, or forge could not look (control plane unreachable, auth refused, telemetry off) |
+| 8 | Wait timed out | `--wait` ran out (`--timeout`, default 30 minutes) before the after window finished |
+
+<Warning>
+Exit 2 is never green. "Not enough traffic to judge" and "the telemetry query failed" both mean the release is **not proven good**, and a gate that reads either as a pass has turned a blind spot into a green tick. If you do want an inconclusive result to pass, say so with `--allow-inconclusive`; that flag exists so the choice is explicit rather than a default. Exit 8 is a different case: the verdict is still coming, so check again later rather than redeploy.
+</Warning>
+
+Here is the exit-2 case, captured in a scratch project whose local stack was not running. The command did not guess:
+
+```bash
+forge obs check dev --json
+```
+
+```json
+{
+  "schema": "forge.obs.check/v1",
+  "ok": false,
+  "exit_code": 2,
+  "error": "the local ClickStack is not running — start it with `forge env up dev`: exit status 1: service \"clickstack\" is not running",
+  "query_mode": "structured",
+  "findings": [],
+  "suggested": [
+    "forge env up dev"
+  ]
+}
+[exit 2]
+```
+
+`ok` is false, the exit code is 2, the reason is in plain words, and `suggested` holds a complete command to run next. The same shape appears on every `forge obs` verb.
+
+### What fails a release
+
+The environment declares the thresholds in its KCL, so the console, the CLI and alerting all judge the same way. They are recorded in the release, and `--threshold name=value` overrides one for a single call.
+
+```python
+release_health = forge.ReleaseHealth {
+    window = "15m"                      # 1m to 6h
+    min_requests = 50                   # below this a service is not judged
+    max_error_rate_increase = 0.01      # a fraction: one percentage point
+    max_p95_ratio = 1.5
+    new_issue_min_events = 3
+    fail_on = ["new_issue", "regressed_issue", "error_rate", "alert_firing"]
+}
+```
+
+Latency and workload restarts are findings too, but they warn by default instead of failing. `--fail-on` changes the failing set for one call, and the document says where each effective threshold came from: the release, a default, or your request. `--gate-json FILE` writes the evidence in a form `forge gate record --from FILE` attaches to the promotion.
+
+For an environment on Reliant hosting, the platform also judges every promotion itself once the after window closes and stores that verdict once, append-only. A failing verdict raises a `ReleaseRegressed` alert. The optional promotion health gate (`delivery_policy.health_gate`) reads that stored verdict, so a release can be held until staging's verdict for it is `pass`. The gate is opt-in and off by default, and you choose which environment's verdict a release must have before it moves on. The CLI exit code tells you what the gate will see, and loosening it locally with `--threshold` or `--allow-inconclusive` changes nothing on the server.
+
+## obs status: what is wrong right now
+
+When there is no deploy to judge and you only know something is wrong, start with `status`. It reads each section independently and prints them together: requests, error rate and p95 per service; new and regressed issues; alerts firing or pending (hosted); when the newest log and span arrived; and the release currently in force with the last few changes.
+
+```bash
+forge obs status prod
+forge obs status dev --since 15m --service api
+forge obs status prod --json --fields services,issues.id,issues.title
+```
+
+A section the backend cannot answer is left out and named under `unread` with the reason under `warnings`, so "no issues" and "could not read issues" never look alike. A section that was read and is empty is an empty list. Status reports; it does not judge. It exits 0 when everything was read and 2 when any evidence could not be, so use `check` to gate a release and `status` to orient yourself.
+
+Captured against the scratch project with the stack down:
+
+```text
+dev (local backend), 2026-11-03T23:37:08Z .. 2026-11-04T00:37:08Z
+no promotion on record
+
+not evaluated on this backend: alerts
+warning: services: the local ClickStack is not running — start it with `forge env up dev`: …
+warning: issues: the local ClickStack is not running — start it with `forge env up dev`: …
+warning: telemetry: the local ClickStack is not running — start it with `forge env up dev`: …
+status for dev is partial: some evidence could not be read (see unread and warnings)
+[exit 2]
+```
+
+## Issues, traces, logs and rows
+
+| Verb | Answers |
+|---|---|
+| `forge obs issues [env]` | Grouped errors, with `--status`, `--since-release`, `--platform server\|browser` and `--sort last\|first\|events`. Issues that share a cause and first fired together are one incident and collapse under the first. |
+| `forge obs issue <id> [env]` | Everything needed to fix one: the culprit and its frames, the latest event and its trace, events per version, issues that fire in the same traces, the release live when it was last seen, and suspect commits read from your local git history. |
+| `forge obs issue resolve\|ignore\|unresolve <id>` | Triage on a hosted environment (needs the `obs:triage` scope): `resolve --in next`, `ignore --until 72h`. A local issue has no state, because it is a query over logs. |
+| `forge obs trace <trace-id> [env]` | One trace as a tree. Failing spans, their ancestors and the critical path are always expanded; runs of identical siblings collapse (`×37 SELECT jobs … p50 2ms p95 9ms`); `--full` lifts the caps. A span whose children cover little of it is marked as uninstrumented time. |
+| `forge obs traces [env]` | Find traces: `--slow`, `--errors`, `--min-duration`, `--route`. |
+| `forge obs logs [env] [query]` | Search and tail, with `--trace`, `--severity` and `--follow`. |
+| `forge obs endpoints [env]` | The busiest, slowest or most failing endpoints. |
+| `forge obs sessions` and `session <id>` | Real browser sessions, and one session as a text timeline of navigations, clicks, failed requests and errors. Hosted environments only. |
+| `forge obs workloads [env]` | Restarts, crash loops, last termination reasons and failing jobs per workload, for a hosted environment where you have no kubeconfig. |
+| `forge obs metrics list\|describe\|query\|declared` | The metric catalogue, one metric over time, and the metrics your code declares. |
+| `forge obs query [env] --sql "…"` | Anything else, as raw SQL behind a read-only guard. |
+
+`forge env releases list|show|at <env>` completes the picture by saying which release was live at any moment, and `forge obs issue`, `trace` and `db query` documents carry the live release, so you can go from an error to the change that shipped it.
+
+### Incidents
+
+An issue is one distinct bug, not one log line; how issues are fingerprinted and what states they move through is in [Hosted dashboards, alerts and issues](/forge/observability/dashboards-and-alerts#how-errors-are-grouped).
+
+A dead database fails every caller, and each caller is its own call site and so its own issue. `forge obs issues` marks issues that share a cause and first fired within ten minutes of each other as one incident and collapses them under the first, so an outage shows up as one row. The others still exist with their own counts, and `--expand-incidents` lists them.
+
+### Reading the database: forge db query
+
+`forge db query <env> "<sql>"` runs one read-only statement and prints the rows, so after a trace says what failed, the rows say what state caused it. The environment is always required, `dev` included, so a query never reads a database by accident.
+
+- **Read-only by construction.** Each query runs in a `READ ONLY` transaction with a statement timeout, as a single statement, then rolls back. A lexical guard refuses writes first so the message is readable, and Postgres would refuse them anyway. The defaults are 200 rows and 5 seconds; narrow the query rather than raising the caps.
+- **Secrets stay unreadable.** The connection uses a `forge_ro` role that holds column-level `SELECT` only. A column marked `forge:secret`, or one whose name looks like a credential and that nobody has decided, is refused through any expression, such as `select upper(api_key)`.
+- **Policy.** An environment's `data_access` setting is `open`, `audited` or `deny`. The default for a deployed environment is `audited`: a person passes `--confirm-env <env>` and a `--reason`, and on hosting the platform records an audit row for the call.
+
+It exits 0 with rows, 1 when the statement or the policy is wrong, and 2 when forge could not look. Treat 2 as "not answered", never as "no rows".
+
+## The JSON contract
+
+Every `forge obs` verb, and `forge db query`, prints the same kind of document with `--json`:
+
+- **One document on stdout.** It carries `schema` (for example `forge.obs.check/v1`), `ok`, `exit_code` and `error`, computed from the same error the process exits with. Progress and warnings go to stderr.
+- **Bounded by default.** Lists carry `truncated` and `next_page_token`, so an agent's context is not flooded.
+- **Next steps included.** `suggested` holds up to three complete, runnable commands.
+- **Projectable.** `--fields a,b.c` keeps only the paths you name, to save tokens. A misspelled path is refused with the real list.
+- **No placeholders.** A missing key means unknown, never a made-up zero.
+- **Inspectable.** `--explain` prints the compiled SQL instead of running it, so you can copy a statement into `forge obs query` when the structured verbs cannot express what you need.
+
+Across every verb, exit 1 means you asked for something wrong (a bad query, a refused policy) and exit 2 means forge could not look. A script that gates on any of them should treat 2 as not proven good.
+
+## Credentials
+
+A CI token reads telemetry with the `obs:read` scope (`forge cloud token create --env prod --scopes obs:read`). Triage needs `obs:triage`, and `forge env releases` against a hosted environment also needs `deploy:read`. Under Reliant, the credential helper grants these from the signed-in person's own authority and you never run `forge login`. A hosted `db query` on an audited environment is for people only; an organization automation token is refused.
+
+## Related topics
+
+[Why this helps an agent](/forge/observability/agents) shows these commands in an agent's loop. [Hosted dashboards, alerts and issues](/forge/observability/dashboards-and-alerts) describes the built-in alerts that feed `status` and `check`. [Environments & deploys](/forge/environments-and-deploys) covers promotion, which is what `check` judges.

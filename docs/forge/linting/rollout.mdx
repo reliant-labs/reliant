@@ -1,0 +1,96 @@
+---
+title: "Linting: new rules warn before they gate"
+description: "How a new or tightened forge lint rule warns for one release before it fails your build, how your forge_version pin decides, and how to gate early or stay in the grace period"
+---
+
+A forge release can add a lint rule or tighten an old one. If every new rule failed your build the day you bumped the pin, upgrading forge would also be the day you learned about two hundred findings you did not write. Forge avoids that. A new or tightened rule warns for one release, then gates in the next. The pin in your `forge.yaml` decides which side of that line you are on.
+
+## The two versions on every rule
+
+Every rule that `lint.rules` can grade has a row in forge's rollout table (`internal/cli/lint/lint_rollout_table.go`) with two release numbers:
+
+| Field | Meaning |
+|-------|---------|
+| `introduced_in` | The release that shipped the rule, or tightened it. |
+| `gates_from` | The release where it starts to fail the gate. Always a later release than `introduced_in`. Empty for a rule that has always gated. |
+
+Rules that shipped at or before v0.1.46 have no `gates_from`: they gate from the first release you can pin. Every rule introduced after that declares both. A rule currently in its grace period reads `v1.0.0 -> v1.0.1` in the [rule reference](/forge/linting/rules-index); an older rule reads just its release.
+
+Your `forge.yaml` carries `forge_version`. Lint compares it with `gates_from`:
+
+| Your pin versus the rule | A finding that would have failed the gate |
+|--------------------------|-------------------------------------------|
+| below `gates_from` | A **warning** with a note. The gate stays green. |
+| `gates_from` or later | An error. |
+| no pin, `0.0.0`, or not a version | An error. Nothing says you are behind. |
+
+Only a finding that would have failed the gate is softened. A warning stays an ordinary warning with no note, and a rule at or before v0.1.46 is never softened. A pseudo-version such as `v1.0.14-0.20261102231925-a88d3c30f302` sorts below the release it leads to, which is the right reading: a project pinned between releases has not been through a release with the rule yet.
+
+## What you see
+
+This is a real run. The scratch project has an `slog.Info` call inside a function that has a `ctx`, which `forge-tracing-log-without-ctx` flags. The pin is `v1.0.0`, one release before the rule gates (`v1.0.1`). The finding is a warning, it carries the note that explains why, and the run exits 0:
+
+```text
+⚠️  tracing — 1 warning
+   ⚠ internal/handlers/order/rpc_list.go:9 [forge-tracing-log-without-ctx] slog.Info logs without the context in scope, so the line carries no trace_id and cannot be joined to its request; use slog.InfoContext(ctx, …)
+      → warn: [forge-tracing-log-without-ctx] is new in v1.0.0 and gates from v1.0.1; fix with `forge lint --tracing --fix`; gate now with lint.rules: {forge-tracing-log-without-ctx: error}
+      → `forge lint --tracing --fix` rewrites every such call to its …Context form
+✅ 1 gating linter(s) passed; 1 new-rule finding warn until they gate (forge-tracing-log-without-ctx ×1, gates from v1.0.1)
+```
+
+The verdict counts these findings and names them, so a green run never hides that a pin bump will turn it red. They do not fail the lane, the verdict, the exit code, or `--gate-json`. With `--quiet` the note is hidden along with the other warnings, but the verdict line still counts them. With `--json` the same facts are on the finding as a `grace` object:
+
+```json
+"grace": {
+  "introduced_in": "v1.0.0",
+  "gates_from": "v1.0.1",
+  "fix": "forge lint --tracing --fix"
+}
+```
+
+`fix` names the `forge fix` codemod or the `--fix` flag when one clears the finding. It is omitted when you have to make the change by hand.
+
+<Note>
+The two lint captures above ran the forge v1.0.14 binary against a project whose pin was set to `v1.0.0` with `--allow-version-skew`, so the rule's `introduced_in` and `gates_from` shown are the ones the rollout table declares for that rule. They illustrate the mechanism for any rule in its grace period.
+</Note>
+
+## lint.rules wins, in both directions
+
+`lint.rules` in `forge.yaml` always beats the rollout, because naming a rule is an explicit decision. The rollout only supplies the default for a rule you have not spoken about.
+
+```yaml
+lint:
+  rules:
+    forge-tracing-log-without-ctx: error   # gate today, before the pin reaches v1.0.1
+    forge-closed-set: warn                 # keep it a warning even after it gates
+    forgeconv-handler-file-size: off       # drop it
+    "*": warn                              # every forge rule at warning (use sparingly)
+```
+
+- `error` opts in early. Do this once you have cleaned the findings, so a regression cannot slip in during the grace period.
+- `warn` extends the grace period for as long as you need, even past `gates_from`.
+- `off` drops the finding.
+- The golangci-lint pass over files behind your build tags is graded under the key `golangci-build-tags`. It is the one rule key that stands for another tool's findings; `"*"` never reaches golangci-lint's own linters.
+
+A key that names no gradable rule is an error, so a typo cannot quietly disable a rule. See [Silencing a rule](/forge/linting/overview#silencing-a-rule).
+
+## Bumping the pin
+
+When you move `forge_version` forward, run lint before you commit the bump. Anything that was in its grace period at the old pin and reaches `gates_from` at the new one will start to fail. The warnings you saw before the bump are the exact list. Clear them first (most have a mechanical fix: `forge lint --fix`, `forge fix connect-errors`, `forge fix narrow-deps <package-dir>`), or pin them to `warn` in `lint.rules` with a note that says when you will turn them back on.
+
+`forge project upgrade list` shows the one-time migration playbooks that apply to a pin bump. The rollout is a complement to them, not a replacement: the playbooks cover changes to files, the rollout covers new checks.
+
+## For forge contributors
+
+Adding a rule to forge means adding it to `gradableRules` in `lint_rules.go` and a row to `newRules` in `lint_rollout_table.go`, with `IntroducedIn` set to the release the rule will ship in and `GatesFrom` to the one after. `TestEveryGradableRuleDeclaresItsRollout` fails until you do, and `TestRolloutRowsAreWellFormed` refuses a row whose `GatesFrom` equals its `IntroducedIn`. A rule that must gate on arrival needs the owner's say, because it breaks every pinned consumer. Tightening an existing rule is the same act: move its ID from `shippedRules` to `newRules` and its findings warn again for one release.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Linting overview" icon="magnifying-glass" href="/forge/linting/overview">
+    The lanes, flags, the verdict line, and where lint runs.
+  </Card>
+  <Card title="Rule reference" icon="list-check" href="/forge/linting/rules-index">
+    Every rule with its rollout status in one table.
+  </Card>
+</CardGroup>

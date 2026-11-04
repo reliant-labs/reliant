@@ -1,0 +1,73 @@
+---
+title: "Health probes and graceful shutdown"
+description: "The /healthz and /readyz endpoints every forge process serves, how a process reports what it is waiting for while it boots, and how a rollout drains a replica without dropping requests"
+---
+
+Two questions get asked of a running process over and over: "are you alive?" and "can you take traffic?". Forge answers both from the first instant a process runs, and answers them honestly while it starts up and while it shuts down. These are the signals the platform uses to decide when to send a new pod traffic and when it is safe to stop an old one, so getting them right is what makes a rollout invisible to users.
+
+## Probes
+
+Every process built from a forge project answers two paths on its HTTP port:
+
+| Path | Answers | Status |
+|---|---|---|
+| `/healthz` | Liveness: the process is running | 200 as soon as the port is bound |
+| `/readyz` | Readiness: the process can serve requests | 200 when ready, 503 when not |
+
+A service forge builds gets both written explicitly into its deployment spec on every runtime, so there is nothing to declare. A third-party image with ports gets a TCP probe on its first port, and a worker or job gets none unless it declares one. You declare `probes` on a workload only to change them. If a platform in front of you probes other paths, set `liveness_paths` and `readiness_paths` in the server config (comma-separated, defaulting to `/healthz` and `/readyz`); the deployment's default probe reads the same values.
+
+### Reporting what it is waiting for
+
+The port is bound before anything else happens, before the database is touched and before migrations run. Until the API takes over the address, `/healthz` answers 200 and `/readyz` answers 503 and names what the process is waiting on. That has two effects. A slow dependency no longer shows up as a crash loop, because the process is alive and says so while it retries the database connection (for up to `DB_CONNECT_TIMEOUT`). And when boot hangs, the 503 body tells you where:
+
+- the dependency being connected to;
+- `schema`, when a worker is waiting for another process to finish migrating the database;
+- each node of the composition graph, as `ok: true` once built and `detail: "building"` while still under construction, so a constructor that blocks boot is identified by name.
+
+A root that reaches the database migrates before it builds the graph, so a service never starts answering requests against a schema its migrations have not reached.
+
+You can check the same thing yourself in development. `forge env status dev --signal app` checks `/healthz` and `/readyz`, as part of the [runtime checks](/forge/observability/where-it-goes#check-that-the-pipeline-works).
+
+## Graceful shutdown
+
+When a pod is replaced during a rollout, the platform sends the old one a SIGTERM. A process that exits immediately drops requests in flight, and one that keeps accepting new connections after load balancers have stopped routing to it is not much better, because a pod leaves the load balancer's backend list slightly after the signal arrives. Forge's server handles both.
+
+On SIGTERM it runs this sequence, inside a fixed budget:
+
+<Steps>
+  <Step title="Readiness flips">
+    `/readyz` starts answering 503 with `{"status":"draining"}`, so the load balancer stops sending new requests.
+  </Step>
+  <Step title="Pre-stop pause">
+    The process keeps serving for `PRE_STOP_DELAY` (5 seconds by default) while the rest of the platform notices it is draining. Stopping at this point would drop requests on every rollout.
+  </Step>
+  <Step title="The listener drains">
+    It stops accepting new connections. In-flight unary requests finish. Long-lived streams (server-sent events, websockets, server-streaming RPCs) are ended inside the budget rather than holding it open.
+  </Step>
+  <Step title="Teardown">
+    Workers and operators stop, `OnShutdown` hooks run (this is where the database pool closes), and telemetry flushes last, so the shutdown's own spans, metrics and logs are exported.
+  </Step>
+</Steps>
+
+The whole thing runs inside `SHUTDOWN_TIMEOUT` (30 seconds by default). A zero value means the default and a negative value means none, which is a phase that takes no time, never an unbounded one: the kubelet would end an unbounded shutdown at the grace period anyway.
+
+Forge derives the deployment's `terminationGracePeriodSeconds` from the same two values (`PRE_STOP_DELAY + SHUTDOWN_TIMEOUT`, plus five seconds), so a rollout never sends SIGKILL in the middle of a drain. Above one replica, forge also writes a PodDisruptionBudget and a soft topology spread, so voluntary disruptions take down one replica at a time.
+
+### Streams and the client contract
+
+A stream that never ends on its own used to hold the drain for the whole budget, log a deadline error at ERROR, and be cut without a status on every rollout. Now the listener tracks long-lived streams and ends them with a distinct cause. A Connect streaming RPC that the drain ends is seen by the client in one of two ways:
+
+| Procedure | The client receives |
+|---|---|
+| Default | Every message sent, then **OK** with the trailer `x-forge-drained: true` |
+| Listed in `RedialOnDrain` | Every message sent, then **Unavailable** ("server draining…") with the same trailer |
+
+OK is the default because a browser treats Unavailable as "the network died" and may abandon every read on that connection. A watch client should reopen the stream, from its resume cursor, when it ends with the trailer. Use `RedialOnDrain` for peers that already redial on Unavailable, such as a daemon on a bidirectional stream. For a plain-HTTP streaming route, wrap the handler with `serverkit.LongLived(…)` so it is ended when the drain begins; never wrap a unary route, because a rollout would cut it short instead of letting it finish.
+
+### A drain is not an incident
+
+A call that this replica ended because it is shutting down is logged like a success, with `expected=true`, and never at ERROR. The error-level policy treats `context.Canceled` and a draining stream as `canceled`, not `server`, so a rollout does not open issues, trip the [error-rate alert](/forge/observability/dashboards-and-alerts#alerts) or fail the [`obs check`](/forge/observability/forge-obs#obs-check-did-the-deploy-work) that follows it.
+
+## Related topics
+
+[What every boundary records](/forge/observability/signals) describes the error classes a drain is excluded from. [Environments & deploys](/forge/environments-and-deploys) covers rollouts. Agents can load the `services/shutdown` skill for the full drain contract, including how to use the same pieces from a `main` that runs its own listener.

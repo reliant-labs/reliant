@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 610" width="420" height="610">
+  <style>
+    text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 16px; fill: #111827; }
+    .s { font-size: 14px; fill: #4b5563; }
+    .t { font-size: 17px; font-weight: 600; }
+    .note { font-size: 14px; fill: #6b7280; }
+    .acc { font-size: 14px; fill: #2563eb; }
+    .box { fill: #ffffff; stroke: #374151; stroke-width: 1.5; }
+    .ln { stroke: #6b7280; stroke-width: 1.5; fill: none; }
+    .back { stroke: #2563eb; stroke-width: 1.8; fill: none; }
+  </style>
+  <defs>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+    </marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/>
+    </marker>
+  </defs>
+  <rect width="420" height="610" fill="#ffffff"/>
+
+  <text x="14" y="28" class="t">One agent's loop through forge</text>
+
+  <!-- six steps, box tops at 50, 134, 218, 302, 386, 470 -->
+  <rect class="box" x="14" y="50" width="362" height="56" rx="6"/>
+  <text x="28" y="73">1. Load a skill</text>
+  <text x="28" y="94" class="s">forge skill load, read from the binary</text>
+
+  <rect class="box" x="14" y="134" width="362" height="56" rx="6"/>
+  <text x="28" y="157">2. Recon</text>
+  <text x="28" y="178" class="s">shapes, capabilities, libraries</text>
+
+  <rect class="box" x="14" y="218" width="362" height="56" rx="6"/>
+  <text x="28" y="241">3. Edit</text>
+  <text x="28" y="262" class="s">Go, proto, SQL</text>
+
+  <rect class="box" x="14" y="302" width="362" height="56" rx="6"/>
+  <text x="28" y="325">4. Generate, lint, test</text>
+  <text x="28" y="346" class="s">a heavy slot, the lock, the no-op cache</text>
+
+  <rect class="box" x="14" y="386" width="362" height="56" rx="6"/>
+  <text x="28" y="409">5. Run it</text>
+  <text x="28" y="430" class="s">env up dev, on its own 100 ports</text>
+
+  <rect class="box" x="14" y="470" width="362" height="56" rx="6"/>
+  <text x="28" y="493">6. Read what happened</text>
+  <text x="28" y="514" class="s">browser errors on disk, obs exit codes</text>
+
+  <g class="ln">
+    <line x1="80" y1="106" x2="80" y2="131" marker-end="url(#ag)"/>
+    <line x1="80" y1="190" x2="80" y2="215" marker-end="url(#ag)"/>
+    <line x1="80" y1="274" x2="80" y2="299" marker-end="url(#ag)"/>
+    <line x1="80" y1="358" x2="80" y2="383" marker-end="url(#ag)"/>
+    <line x1="80" y1="442" x2="80" y2="467" marker-end="url(#ag)"/>
+  </g>
+
+  <!-- back to the top -->
+  <path class="back" d="M376,498 L404,498 L404,78 L380,78" marker-end="url(#ab)"/>
+  <text x="398" y="300" class="acc" text-anchor="middle" transform="rotate(-90 398 300)" dy="-6">and round again</text>
+
+  <text x="14" y="562" class="note">Every step prints something the agent can</text>
+  <text x="14" y="582" class="note">act on, or an exit code it can branch on.</text>
+</svg>
