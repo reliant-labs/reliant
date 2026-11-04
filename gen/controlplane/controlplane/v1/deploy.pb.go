@@ -2586,11 +2586,16 @@ type DomainBinding struct {
 	Target string `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
 	// Serve a 308 to this hostname instead of proxying. The apex/www pair is
 	// the case: 'www.example.com' redirects to 'example.com'.
-	RedirectTo    string                 `protobuf:"bytes,5,opt,name=redirect_to,json=redirectTo,proto3" json:"redirect_to,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	RedirectTo string                 `protobuf:"bytes,5,opt,name=redirect_to,json=redirectTo,proto3" json:"redirect_to,omitempty"`
+	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt  *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Add includeSubDomains to the hostname's Strict-Transport-Security, so a
+	// browser that has seen it uses HTTPS for every name under it. Off by
+	// default: it breaks any subdomain still served over plain HTTP. Honoured
+	// where the platform sends HSTS: static sites and their redirects.
+	HstsIncludeSubdomains bool `protobuf:"varint,8,opt,name=hsts_include_subdomains,json=hstsIncludeSubdomains,proto3" json:"hsts_include_subdomains,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *DomainBinding) Reset() {
@@ -2670,6 +2675,13 @@ func (x *DomainBinding) GetUpdatedAt() *timestamppb.Timestamp {
 		return x.UpdatedAt
 	}
 	return nil
+}
+
+func (x *DomainBinding) GetHstsIncludeSubdomains() bool {
+	if x != nil {
+		return x.HstsIncludeSubdomains
+	}
+	return false
 }
 
 // Deployment is one deployable unit inside an environment.
@@ -7586,7 +7598,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"updated_at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x128\n" +
 	"\abinding\x18\v \x01(\v2\x1e.controlplane.v1.DomainBindingR\abinding\x12E\n" +
-	"\fserving_path\x18\f \x01(\x0e2\".controlplane.v1.DeployServingPathR\vservingPath\"\x92\x02\n" +
+	"\fserving_path\x18\f \x01(\x0e2\".controlplane.v1.DeployServingPathR\vservingPath\"\xca\x02\n" +
 	"\rDomainBinding\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tdomain_id\x18\x02 \x01(\tR\bdomainId\x12%\n" +
@@ -7597,7 +7609,8 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc2\x04\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x126\n" +
+	"\x17hsts_include_subdomains\x18\b \x01(\bR\x15hstsIncludeSubdomains\"\xc2\x04\n" +
 	"\n" +
 	"Deployment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +

@@ -854,6 +854,11 @@ message DomainBinding {
   string redirect_to = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
+  // Add includeSubDomains to the hostname's Strict-Transport-Security, so a
+  // browser that has seen it uses HTTPS for every name under it. Off by
+  // default: it breaks any subdomain still served over plain HTTP. Honoured
+  // where the platform sends HSTS: static sites and their redirects.
+  bool hsts_include_subdomains = 8;
 }
 
 // Deployment is one deployable unit inside an environment.
