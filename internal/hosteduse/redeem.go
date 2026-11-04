@@ -14,7 +14,7 @@ import (
 // consume the ticket. The DB rechecks current active run ownership at consume.
 func Redeem(ctx context.Context, store Store, req RedeemRequest) (*Metadata, error) {
 	digest, err := hex.DecodeString(req.RequestSHA256)
-	if err != nil || len(digest) != 32 || strings.ToLower(req.RequestSHA256) != req.RequestSHA256 || req.TicketID == "" || req.GrantID == "" || len(req.TicketID) > 256 || len(req.GrantID) > 256 {
+	if err != nil || len(digest) != 32 || strings.ToLower(req.RequestSHA256) != req.RequestSHA256 || req.TicketID == "" || len(req.TicketID) > 256 || len(req.GrantID) > 256 {
 		return nil, errors.New("hosted HTTP ticket denied")
 	}
 	if err = ctx.Err(); err != nil {

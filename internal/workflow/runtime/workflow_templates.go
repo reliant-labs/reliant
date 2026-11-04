@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -185,7 +186,10 @@ func resolveWorkflowTemplatesRecursive(
 				return v, nil
 			}
 		}
-		return resolveTemplateString(v, context)
+		// A declared secret is resolved inside the step's activity, never here:
+		// the hole becomes a marker and everything an expression produces is
+		// data that cannot become one.
+		return stepsecrets.Render(v, func(t string) (interface{}, error) { return resolveTemplateString(t, context) })
 
 	default:
 		// Non-string primitives (int, float, bool, nil) pass through unchanged
