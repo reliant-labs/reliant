@@ -469,7 +469,23 @@ const RECOVERY_REUSE_MS = 5_000;
 type RecoveryOutcome =
   | { kind: "refreshed"; token: string }
   | { kind: "signed-out" }
-  | { kind: "no-session" };
+  | { kind: "no-session" }
+  | { kind: "kept" };
+
+// The messages with which a backend says it looked at the credential and
+// rejected it: reliant's auth interceptor ("invalid or expired token",
+// "invalid authorization header format") and forge's auth package
+// ("invalid token: …", "invalid API key: …", "invalid authorization format",
+// "authentication failed: provide a valid Bearer token or API key"). Any other
+// 401 on a presented credential came from past authentication: a handler that
+// serves people only ("no user ID in context", "no authenticated user")
+// refusing a machine credential such as an API key.
+const CREDENTIAL_REJECTED = /^\s*(\[unauthenticated\]\s*)?(invalid\b|authentication failed)/i;
+
+/** Whether a 401 says the presented credential itself was rejected. */
+export function rejectsCredential(error: ConnectError): boolean {
+  return CREDENTIAL_REJECTED.test(error.rawMessage);
+}
 
 interface Recovery {
   rejectedToken: string;
@@ -537,6 +553,19 @@ async function runRecovery(
       method: req.method.name,
     });
     return { kind: "refreshed", token: refreshed };
+  }
+
+  // An API key is valid until the backend says otherwise. A person-only RPC
+  // refusing it (GetCurrentUser, billing) is that call's failure, not the
+  // key's, and signing out over it threw an agent's or a self-hoster's key
+  // session out of the app whenever a page asked who "me" is (#1831).
+  if (provider.isApiKey?.() && !rejectsCredential(error)) {
+    logger.warn("[gRPC Client] 401 for an API key that the backend did not reject; staying signed in", {
+      service: req.service.typeName,
+      method: req.method.name,
+      message: error.message,
+    });
+    return { kind: "kept" };
   }
 
   logger.warn(

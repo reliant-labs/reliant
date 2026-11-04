@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
   getToken: vi.fn(),
   hasSession: vi.fn(),
   refresh: vi.fn(),
+  isApiKey: vi.fn(() => false),
   signOut: vi.fn(async () => undefined),
   logger: {
     info: vi.fn(),
@@ -48,6 +49,7 @@ vi.mock('@/api/authProvider', () => ({
     getToken: mocks.getToken,
     hasSession: mocks.hasSession,
     refresh: mocks.refresh,
+    isApiKey: mocks.isApiKey,
   }),
 }))
 
@@ -107,6 +109,7 @@ describe('unauthInterceptor — 401 sign-out discrimination', () => {
     // By default the session cannot be refreshed, so a rejected token signs
     // the user out — the behaviour the tests above this change pinned.
     mocks.refresh.mockResolvedValue(null)
+    mocks.isApiKey.mockReturnValue(false)
     vi.stubGlobal('location', {
       pathname: '/',
       href: '/',
@@ -179,6 +182,52 @@ describe('unauthInterceptor — 401 sign-out discrimination', () => {
 
     expect(next).toHaveBeenCalledTimes(2)
     expect(mocks.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  // #1831: an API key (an agent's CLI login, a self-host key) cannot be
+  // refreshed, so a 401 used to sign it out — including the 401 a person-only
+  // RPC returns for a machine credential, which every page that asks who "me"
+  // is triggered.
+  it('keeps an API key session when a person-only RPC refuses it', async () => {
+    mocks.isApiKey.mockReturnValue(true)
+    const interceptor = await loadUnauthInterceptor()
+    const req = buildRequest({ Authorization: 'Bearer rlat_key' })
+    const next = vi.fn(async () => {
+      throw new ConnectError('no user ID in context', Code.Unauthenticated)
+    })
+
+    await expect(interceptor(next)(req)).rejects.toThrow('no user ID in context')
+
+    expect(mocks.signOut).not.toHaveBeenCalled()
+  })
+
+  it('signs an API key out when the backend rejects the key itself', async () => {
+    mocks.isApiKey.mockReturnValue(true)
+    const interceptor = await loadUnauthInterceptor()
+    const req = buildRequest({ Authorization: 'Bearer rlat_revoked' })
+    const next = vi.fn(async () => {
+      throw new ConnectError(REJECTED, Code.Unauthenticated)
+    })
+
+    await expect(interceptor(next)(req)).rejects.toThrow()
+
+    expect(mocks.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('recognises every backend wording of a rejected credential', async () => {
+    const { rejectsCredential } = await import('../transport')
+    for (const msg of [
+      'invalid or expired token',
+      'invalid authorization header format',
+      'invalid token: signature is invalid',
+      'invalid API key: not found',
+      'authentication failed: provide a valid Bearer token or API key',
+    ]) {
+      expect(rejectsCredential(new ConnectError(msg, Code.Unauthenticated)), msg).toBe(true)
+    }
+    for (const msg of ['no user ID in context', 'no authenticated user', 'resolving internal user']) {
+      expect(rejectsCredential(new ConnectError(msg, Code.Unauthenticated)), msg).toBe(false)
+    }
   })
 
   it('does not sign out when there is no session at all', async () => {

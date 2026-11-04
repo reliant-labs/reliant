@@ -50,6 +50,14 @@ export interface AuthTokenProvider {
    * Called at most once per burst of rejections — see `unauthInterceptor`.
    */
   refresh(): Promise<string | null>;
+
+  /**
+   * Whether the credential is a long-lived API key rather than a session.
+   * A key cannot be refreshed, so a 401 that does not say the key itself was
+   * rejected (a person-only RPC refusing a machine credential, for one) must
+   * not sign it out. Optional: a provider without it is treated as a session.
+   */
+  isApiKey?(): boolean;
 }
 
 /** Key under which `ApiKeyLogin` stores a long-lived API key. */
@@ -105,6 +113,10 @@ export const browserAuthTokenProvider: AuthTokenProvider = {
       // Fall through as "no session"; nothing to clear.
       return false;
     }
+  },
+
+  isApiKey() {
+    return !!readApiKey();
   },
 
   async refresh() {
