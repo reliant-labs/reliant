@@ -380,6 +380,13 @@ func Start(ctx context.Context, opts StartOptions) error {
 	}
 	go client.diskGuard.Run(ctx)
 	go client.procGuard.Run(ctx)
+	// A managed machine logs a load/pressure/disk/heavy-slot sample a minute,
+	// which control-plane's machine-health dashboard and alerts read from
+	// tenant zero's logs (internal/machinehealth). A person's own machine
+	// ships no logs to us, so it does not sample.
+	if opts.Host.Managed() {
+		go newMachineHealthSampler(client.diskWatcher).Run(ctx)
+	}
 	// Stop the background processes finished chats left behind, once idle
 	// for the window (shell/background_reaper.go).
 	idleReap := opts.Guards.IdleReapWindow()
