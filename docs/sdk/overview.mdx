@@ -1,0 +1,91 @@
+---
+title: "SDKs: Reliant from your own code"
+description: "What the Go and TypeScript SDKs are for, which credentials they use, what they deliberately cannot do, and how they are versioned"
+---
+
+Reliant's own app and command line talk to Reliant through a public API. The SDKs are the same clients, packaged so your code can use them: a backend that starts a run when a customer signs up, a CI job that waits for a run's verdict, a service that fires an automation, a web frontend that shows a live chat. From code you can start a run, watch it to a verdict, steer it, answer its questions and cancel it.
+
+There are two SDKs, and they are for different places.
+
+| | Go | TypeScript |
+|---|---|---|
+| Package | `github.com/reliant-labs/reliant/sdk/go` | `@reliantlabs/sdk` |
+| Runs where | Backends, workers, CI and command-line tools | Frontends: a browser, an Electron renderer, a worker |
+| Does | Start, list, steer and follow runs; answer questions; fire triggers; deliver webhooks | Stream a chat live, with resume, and fold it into state your UI renders |
+| Guide | [Go SDK](/sdk/go) | [TypeScript SDK](/sdk/typescript) |
+
+The [API reference](/sdk/reference) lists every remote procedure the Go SDK's generated clients expose, and says which Go method wraps each one.
+
+## What the SDKs will not do
+
+A run executes as a person, on that person's machines, with that person's connections and billing. So anything that decides who a run executes as, where, or whether an automation runs at all is not part of the public API: enabling, disabling, creating or editing a trigger, rotating a webhook token, approving or denying an approval, and minting tokens. The same goes for everything that exists to wire up a machine to Reliant. An SDK cannot do these things, and neither can any client you generate from the public definitions, because the procedures are not in them.
+
+You can still see an approval. `Gates.Pending` in the Go SDK reports one, so a supervisor process can tell a person that a run is waiting for them, but the decision stays with a person in the app, as [Who can decide an approval](/automations/overview#who-can-decide-an-approval) explains. Enabling a trigger is a decision of the same kind; [Automations](/automations/overview) covers it.
+
+## Credentials
+
+The Go SDK authenticates with an **API token**: an `rlat_…` token that acts as the user who created it. Create one on a computer with a browser:
+
+```bash
+reliant auth token create --name billing-service
+```
+
+The command prints the token once. It has the `reliant:api` permission and lasts 90 days. Running the command again with the same `--name` replaces the token, which is how you rotate one, and `reliant auth token revoke billing-service` withdraws it. [Sign in and tokens](/cli/sign-in) compares this with the credential the CLI itself uses, and [Scripting and CI](/cli/scripting) shows the same token in a pipeline.
+
+Store the token as a secret in whatever runs your code, and pass it in `RELIANT_TOKEN`. The SDK reads that variable, and `RELIANT_SERVER_URL` if you run your own server, exactly as the `reliant` command does, so a script that works with the CLI works with the SDK. Because the token acts as you, the runs your code starts are yours: they appear in your run list, use your connections, and are billed to your account.
+
+Two other credentials are not for the SDK. Your CLI login would be accepted, since it also carries `reliant:api`, but it adds deploy, secret and domain permissions that a service has no use for and should not hold. Daemon credentials belong to a machine and are refused by the API.
+
+A webhook trigger has its own, narrower credential: the token or signing secret shown when the automation was enabled. It can do one thing, deliver an event to that one trigger, and the Go SDK's `NewWebhook` uses it without any API token at all. If all your code needs is "start this automation", that is the right credential to give it. See [Webhooks](/automations/webhooks).
+
+### Scopes
+
+Today an API token carries the single permission `reliant:api`, which is the whole of the user's API: a token held by a service that only starts runs could also cancel any of your runs. Narrower permissions are defined and are being switched on:
+
+| Scope | Intended for |
+|---|---|
+| `runs:read` | Getting and listing runs |
+| `runs:start` | Starting runs (includes reading them) |
+| `runs:control` | Signalling, pausing, resuming, interrupting and cancelling runs (includes reading them) |
+| `triggers:fire` | Firing a trigger now |
+| `triggers:manage` | The activation procedures, which no SDK exposes yet |
+
+<Note>
+  These scopes are not enforced by the Reliant API yet, and `reliant auth token create` cannot request them yet. Every API token you create today is a `reliant:api` token, and that permission will keep working when the narrow scopes arrive. When it does, creating a token that can only start runs and fire triggers will be the recommended setup for a service, and this page will say how.
+</Note>
+
+### Keep tokens out of frontends
+
+An API token is long-lived and powerful. Never put one in code that ships to a browser, a mobile app or a desktop app: anyone who opens the developer tools has it. Use the Go SDK on your server, where the token is a secret, and give the frontend only what it needs to display. The TypeScript SDK takes whatever credential the signed-in user's session holds through a small interface you implement, and it never asks for an API token. See [the TypeScript guide](/sdk/typescript#where-the-token-comes-from).
+
+## Versioning
+
+Both SDKs follow Reliant's API, not the app. The API is `reliant.v1` and changes only additively within it: new procedures, new fields and new filters appear, and nothing you call is removed or changes meaning. A change that cannot be additive would be a `reliant.v2`, introduced beside v1 rather than in place of it. The public procedures are generated from the same definitions as the server, so a client cannot disagree with the server it was built from.
+
+The Go module has no tagged releases yet, so you require it at a commit of `main`, and Go records that commit as a pseudo-version:
+
+```bash
+go get github.com/reliant-labs/reliant/sdk/go@main
+```
+
+```text
+require github.com/reliant-labs/reliant/sdk/go v0.0.0-20261105143730-a1700c764828
+```
+
+`@main` resolves to whatever is newest when you run it. To make a build reproducible, name a commit instead (`@a1700c764828`), or keep the version `go.mod` recorded and update it deliberately with another `go get`. Do not add a `replace` directive for the SDK: a module that depends on yours ignores it, and `go install` refuses a module that has one. The module needs Go 1.27 or newer. Once releases are tagged, this page will name the tag.
+
+The TypeScript package is `@reliantlabs/sdk`, imported from its `/client` entry point. It is built from `sdk/ts` in the [Reliant repository](https://github.com/reliant-labs/reliant), at a version that follows the API (`0.1.0` today). It is not on the npm registry yet: Reliant's release train will publish it, and until then you build it from the repository, as [the TypeScript guide](/sdk/typescript#install) describes. React hooks are not part of it yet.
+
+Some calls are marked beta in the Go SDK: `Pause`, `Resume` and `Interrupt`. They work, but their semantics around positions and interrupted tools are still settling, and they may change in ways the stable calls will not.
+
+## License
+
+Both SDKs are licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so you can embed them in your own software, commercial or not. The rest of the Reliant repository is under the Business Source License; the `sdk/` directory is the exception. The [license FAQ](/license-faq) has the details.
+
+## Related topics
+
+- [Go SDK](/sdk/go)
+- [TypeScript SDK](/sdk/typescript)
+- [API reference](/sdk/reference)
+- [Sign in and tokens](/cli/sign-in)
+- [Scripting and CI](/cli/scripting)

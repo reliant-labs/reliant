@@ -1,0 +1,168 @@
+---
+title: "TypeScript SDK"
+description: "Connect a frontend to Reliant, stream a chat live with resume, send messages safely, and fold the stream into state with the pure reducer"
+---
+
+`@reliantlabs/sdk` is the client for frontends: a browser app, an Electron renderer, a worker. Its job is the live chat. It opens the stream the Reliant app itself uses, reconnects when the network drops, resumes from where it left off instead of starting over, and turns the stream's updates into a state object your UI renders. It is framework-free (no React, nothing that only runs in Node), and Reliant's own web app is built on it.
+
+It is not the SDK for driving runs from a backend. Starting a run, listing runs, firing a trigger and the rest are in the [Go SDK](/sdk/go), which runs where an API token can be kept secret.
+
+## Install
+
+The package is at version `0.1.0` and is not on the npm registry yet; Reliant's release train will publish it as `@reliantlabs/sdk`. Until then, build it from the [Reliant repository](https://github.com/reliant-labs/reliant). `sdk/ts` is a member of the `frontends/web` pnpm workspace, so install there and build the package:
+
+```bash
+cd frontends/web && pnpm install
+cd ../../sdk/ts && node scripts/build.mjs
+npm pack          # produces reliantlabs-sdk-0.1.0.tgz to install in your app
+```
+
+The package declares four peer dependencies, which your app provides: `@bufbuild/protobuf`, `@connectrpc/connect`, `@opentelemetry/api` and `@reliantlabs/forge-web-runtime`. You also need a Connect transport for your environment, such as `createConnectTransport` from `@connectrpc/connect-web` in a browser. It requires Node 22 or newer to build.
+
+Its only entry point is `@reliantlabs/sdk/client`. There are no React hooks yet; you bind the client to your framework yourself, as shown below.
+
+## Where the token comes from
+
+The SDK never asks you for an API token, and you should not give it one. The Go SDK uses an API token because it runs on your server, where the token is a secret. Code that ships to a browser cannot keep a secret, and an API token acts as you with `reliant:api`, the whole of your API. Keep tokens on your server.
+
+Instead, the client asks an `AuthTokenProvider` you write for the bearer token on every request. What the provider returns is whatever credential your host application holds for the signed-in user. Reliant's own web app returns the user's session token, and refreshes it when the server rejects it. The interface is deliberately small, so the host keeps ownership of storage, refresh and sign-out:
+
+| Method | Returns |
+|---|---|
+| `getToken()` | The bearer token, or `null` when there is none. Called on every request, so cache |
+| `hasSession()` | Whether a session is believed active. Must not refresh: it decides whether a 401 should sign the user out |
+| `refresh()` | A fresh token after the server rejected the current one, or `null` if it cannot be refreshed |
+| `isApiKey()` | Optional. `true` for a long-lived key, which cannot be refreshed |
+
+`staticTokenProvider(token)` wraps a fixed token and is meant for development and tests. A deployment's CORS allow-list also decides which web origins a browser may call the API from, so a page on an origin the server has not allowed fails in the browser before it reaches the SDK.
+
+## Connect
+
+`createReliantClient` takes the base URL, the auth provider, and a function that builds the Connect transport. The SDK passes your function the interceptors it needs (error normalization, auth and tracing), and you hand them to the transport:
+
+```ts
+import { createConnectTransport } from "@connectrpc/connect-web";
+import {
+  createReliantClient,
+  staticTokenProvider,
+  type AuthTokenProvider,
+} from "@reliantlabs/sdk/client";
+
+const reliant = createReliantClient({
+  baseUrl: "https://api.reliantapi.com",
+  auth: staticTokenProvider(token),
+  createTransport: ({ baseUrl, interceptors }) =>
+    createConnectTransport({ baseUrl, interceptors }),
+});
+```
+
+In an app, implement the provider over your own session instead:
+
+```ts
+const auth: AuthTokenProvider = {
+  getToken: () => session.accessToken(),
+  hasSession: () => session.isSignedIn(),
+  refresh: () => session.refresh(),
+};
+```
+
+Other interceptors, such as an upgrade prompt or error reporting, go in the `interceptors` option and run after the SDK's. To use a transport of your own, a mock in a test or your app's routing, pass `transport` and the other transport options no longer apply. `logger` receives the SDK's diagnostics, which are silent by default.
+
+## Stream a chat
+
+`reliant.chat({ chatId })` returns a `ChatSession`: one chat, live. It owns the chat's stream, folds each update into a state object, and sends messages. `start()` opens the stream, and it is safe to call twice. `subscribe` registers a listener that runs whenever anything changes, and `getState()` returns the current state, a new object on every change, so it suits a framework's external-store hook (`useSyncExternalStore` in React).
+
+```ts
+const chat = reliant.chat({ chatId }).start();
+const unsubscribe = chat.subscribe(() => {
+  render(chat.getState());
+  if (chat.getError()) console.warn(chat.getError());
+});
+```
+
+The state has the chat's messages in order, a placeholder for the assistant message currently being written, tool calls and their results, approvals, questions an agent is blocked on, the workflow tree and each node's status, errors, and `syncPending`, which is true until the server finishes the initial sync. `getConnectionStatus()` is `connecting`, `connected`, `disconnected` or `error`, and `getError()` is the last stream error, cleared when the stream reconnects. When the server refuses the chat (it does not exist, or is not the signed-in user's), the session sets an error and stops trying. The two cases look the same on purpose.
+
+`close()` stops the stream for good. The state stays readable afterward.
+
+### Send a message
+
+`send` delivers a user message. Network failures are routine in a browser, so a send is built to be repeated safely. Each logical send (the same text, attachments and thread) gets one client message id, and every attempt reuses it. If a response is lost on the way back, the retry returns the message the first attempt saved instead of saving it twice and taking a second turn.
+
+```ts
+try {
+  const sent = await chat.send(text);
+  console.log(sent.messageId, sent.queued);
+} catch {
+  const failed = chat.getState().messages.find((m) => m.id.startsWith(FAILED_SEND_PREFIX));
+  if (failed) await chat.retry(failed.id);
+}
+```
+
+Transient failures (the server unavailable, a deadline, an aborted call) are retried automatically, three times by default and backing off up to four seconds; set `retries` in the options to change that. When they are used up, `send` throws, and the optimistic message stays in the state, marked as not sent, with an id that starts with `FAILED_SEND_PREFIX`. `retry(id)` sends exactly that request again under exactly that id. To drop it instead, call `dispatch({ kind: "sendDiscarded", clientMessageId })`. `queued` is true when the message went to a running thread's queue rather than into the transcript, which is normal when the agent is mid-turn. `targetThread` in the options sends to a spawned thread rather than the main one.
+
+### Resume
+
+A stream that reconnects does not start over. The session tracks a sequence number: the position in the chat's update log that the state has absorbed. When the connection drops and returns, the stream asks the server for everything after that number, and the server replays what was missed. If it cannot (the log has moved past that point), it sends a snapshot instead. Either way the client then receives exactly one caught-up marker, and `syncPending` clears. You get this without doing anything.
+
+You can carry it further than one page load. The state's `cursor` is the sequence number, and a session can start from a state you saved, say in `sessionStorage`, so a reload resumes instead of refetching the whole chat:
+
+```ts
+const chat = reliant.chat({ chatId, initialState: previous }).start();
+```
+
+Only pass a state that you took from the same chat and that was not modified. A cursor is a promise that the state is the server's state as of that sequence, and a state that does not keep it will show a wrong chat. Without `initialState`, the first connection asks for a snapshot. (`ChatState` holds a `bigint` cursor and `Map` and `Set` fields, so write your own serializer rather than `JSON.stringify`.)
+
+Reconnection itself is automatic and patient. The delay starts at one second and grows with each failure up to 30 seconds, and only a real wake signal resets it. A watchdog notices a connection that is open but silent (the server sends a heartbeat every 30 seconds, and 75 seconds without anything counts as stale). Coming back from a hidden tab or a sleeping laptop replaces connections that cannot be trusted. The wake signal is a `WakeSource` the SDK builds from the page's online and visibility events when there is a `window`, and you can supply your own with the `wake` option, which is how a non-browser host reports "the user is back".
+
+## Use the reducer on its own
+
+`ChatSession` is a stream and a reducer wired together. The reducer, `reduceChat`, is exported separately, and it is where the stream's rules live: a snapshot replaces the state, while a replay merges into it; streaming deltas build a placeholder message under the id the server pre-allocated, and the persisted message or a finalize marker retires it; a delta that names an already-finalized message is a stale tail and is dropped; tool statuses never move backward; a tool's result joins its call by id. It is `(state, action) => state`, with no clock, no store and no I/O, which makes it easy to test, to run in a worker, or to feed from a source other than the SDK's stream.
+
+```ts
+const s0 = createChatState("chat-1", { syncPending: false });
+const s1 = reduceChat(s0, {
+  kind: "sendStarted",
+  clientMessageId: "c1",
+  text: "hello",
+  createdAt: "2026-11-05T10:00:00.000Z",
+});
+console.log(s1.messages.length, s0.messages.length); // 1 0: s0 is untouched
+```
+
+The actions are `snapshot`, `updates`, `pagination`, `contextUsage`, `caughtUp`, `sendStarted`, `sendFailed` and `sendDiscarded`. The first two carry decoded updates and the stream's cursor after the batch. Its one impure input, the time used to stamp a placeholder, is injected through the optional third argument (`{ now }`).
+
+If you keep your own state instead of using `ChatSession`, open the stream yourself with `reliant.streams.chat` and reduce its callbacks. This is what `ChatSession` does internally:
+
+```ts
+let state = createChatState(chatId);
+const stream = reliant.streams.chat({
+  callbacks: {
+    onChatSnapshot: (_id, updates) => {
+      state = reduceChat(state, { kind: "snapshot", updates, cursor: BigInt(stream.getLastChatSequence()) });
+    },
+    onChatUpdate: (_id, updates) => {
+      state = reduceChat(state, { kind: "updates", updates, cursor: BigInt(stream.getLastChatSequence()) });
+    },
+    onChatSyncPending: (pendingFor) => {
+      if (pendingFor === null) {
+        state = reduceChat(state, { kind: "caughtUp", cursor: BigInt(stream.getLastChatSequence()) });
+      }
+    },
+    resolveChatResumeSequence: () => state.cursor,
+  },
+});
+stream.subscribeToChat(chatId);
+// later: stream.stop();
+```
+
+`resolveChatResumeSequence` is where resume is decided: return the cursor of a state you can vouch for, or `0n` to ask for a snapshot. `decodeChatUpdate` is the one place that turns the wire's JSON payloads into the typed `ChatUpdate` union, if you receive updates from somewhere else. `reliant.streams.user` opens the user-wide stream (chat state, projects and other user-level events), and `reliant.streams.processOutput` the live output of a background process.
+
+## What is not here
+
+The TypeScript SDK exposes the chat and process streams and `SendMessage`, and nothing else. It cannot start a run, list runs, fire a trigger or answer a question; for those, call [the Go SDK](/sdk/go) from your server and pass your frontend what it needs. Like the Go SDK, it has no call that decides an approval or enables an automation. The chat state shows you pending approvals and questions so your UI can display them.
+
+## Related topics
+
+- [SDK overview](/sdk/overview), for credentials, versioning and the license
+- [Go SDK](/sdk/go), for backends
+- [API reference](/sdk/reference)
