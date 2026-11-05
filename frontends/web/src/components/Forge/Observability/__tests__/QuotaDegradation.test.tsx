@@ -274,8 +274,8 @@ describe("when the allowance runs out", () => {
     );
     await flush();
     const table = screen.getByTestId("observability-services");
-    expect(within(table).getByRole("heading", { name: "Process health" })).toBeInTheDocument();
-    expect(within(table).getByRole("columnheader", { name: "Memory" })).toBeInTheDocument();
+    expect(within(table).getByRole("heading", { name: /^Processes/ })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "CPU" })).toBeInTheDocument();
     const rows = within(table).getAllByTestId(/^observability-service-/);
     expect(within(table).queryByTestId("obs-as-of")).not.toBeInTheDocument();
 

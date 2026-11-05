@@ -1,6 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
 
-/** Landed process telemetry, retained on the single app Overview rather than a second home. */
+/**
+ * PROCESSES on the Overview: every process that sends telemetry
+ * (service.name), one dense line each — status, the RED figures, CPU, error
+ * logs and alerts. Compact on purpose: the service cards above carry a
+ * workload's full picture (memory, restarts, release), so this list is the
+ * request-side index, and it reads as a different thing from the cards.
+ */
 import { useMemo } from "react";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import Link from "@/components/forge-ui/link";
@@ -12,7 +18,7 @@ import type { ObsScope, Workload } from "@/services/controlPlane/observability/t
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { ENV_KEY } from "../Observability/attributes";
-import { formatBytes, formatCores, formatDuration, formatPercent, formatRate } from "../Observability/format";
+import { formatCores, formatDuration, formatPercent, formatRate } from "../Observability/format";
 import { byAttention, serviceRows } from "../Observability/Home/homeModel";
 import { ObsAsOf, ObsError, ObsLoadingRows } from "../Observability/ObsStates";
 import { INK_LINK, Panel } from "../Releases/releaseParts";
@@ -59,12 +65,6 @@ export function ProcessHealth({ scope, range, workloads, alerts, envNameOf, work
       render: (_, { row }) => (row.workload ? <UsageMeter usage={worstUsage(row.workload, "cpu")} format={formatCores} what="CPU" /> : "—"),
     },
     {
-      key: "memory",
-      header: "Memory",
-      width: "10rem",
-      render: (_, { row }) => (row.workload ? <UsageMeter usage={worstUsage(row.workload, "memory")} format={formatBytes} what="Memory" /> : "—"),
-    },
-    {
       key: "errorLogs",
       header: "Error logs",
       numeric: true,
@@ -83,15 +83,14 @@ export function ProcessHealth({ scope, range, workloads, alerts, envNameOf, work
         row.alertsFiring > 0 ? <span className="text-warning-ink">{row.alertsFiring} firing</span> : <span className="text-ink-muted">·</span>,
     },
   ];
-  return <Panel title="Process health" flush testId="observability-services">
-    <p className="px-4 pt-3 text-sm text-ink-muted">Deployed processes (service.name), not RPC services. Open a process to investigate.</p>
-    {overview.data && <div className="px-4"><ObsAsOf updatedAt={overview.dataUpdatedAt} /></div>}
+  return <Panel title="Processes" meta="What each deployed process (service.name) served, worst first" actions={overview.data ? <ObsAsOf updatedAt={overview.dataUpdatedAt} /> : undefined} flush testId="observability-services">
     {overview.isLoading ? <ObsLoadingRows /> : overview.error && !keepsLastResult(overview.error, overview.data) ?
       <div className="p-4"><ObsError error={overview.error} subject={scope?.projectId ?? ""} onRetry={() => void overview.refetch()} /></div> : rows.length === 0 ?
       <p className="px-4 py-6 text-sm text-ink-muted" data-testid="observability-no-services">No process sent telemetry in this window.</p> :
       <DataTable<HealthRow>
         flush
         stacked
+        compact
         ariaLabel="Services, sorted by what needs attention"
         columns={columns}
         data={rows.map((row) => ({ key: `${row.name}/${row.env ?? ""}`, row }))}

@@ -33,14 +33,13 @@
 import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { ArrowRight, Boxes, RotateCcw } from "lucide-react";
 
-import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import { FilterBar, FilterChip, FilterMenu, FilterSearch } from "@/components/forge-ui/filter_bar";
 import Link from "@/components/forge-ui/link";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { useAlerts, useObservabilityOrg, useWorkloads } from "@/hooks/observability-queries";
+import { useAlerts, useObservabilityOrg, useServiceOverview, useWorkloads } from "@/hooks/observability-queries";
 import { useProjectReleases } from "@/hooks/release-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
@@ -48,7 +47,7 @@ import type { ObsScope, Workload } from "@/services/controlPlane/observability/t
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { frontendsInScope } from "@/services/forge/frontends";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
-import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, RANGE_PRESETS, resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { DeployStatusUnread, type DeployStatusUnreadState } from "../Console/DeployStatusUnread";
@@ -56,44 +55,38 @@ import { ENV_ALL } from "../Console/envScope";
 import { consolePath, withSearch } from "../Console/paths";
 import { AskReliantMenu, DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import type { AskSubject } from "../Observability/AskReliant/askReliantPrompt";
+import { ENV_KEY } from "../Observability/attributes";
 import { VariableSelect } from "../Observability/Dashboards/parts";
-import { formatAgo, formatBytes, formatCores } from "../Observability/format";
 import { promotionIsSuspect, type RollbackTarget } from "../Promote/rollback";
 import { HealthStrip } from "../Observability/Home/HealthStrip";
-import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
+import { latParam, SessionsTile, TracesTile } from "../Observability/Home/SignalTiles";
+import { ObsError, ObsNotSetUp, ObsAsOf } from "../Observability/ObsStates";
 import { Ago, INK_BUTTON, INK_LINK, Panel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import {
-  HEALTH_STATUS,
-  JOB_STATUS,
   KIND_LABEL,
   attentionItems,
   filterServices,
   formatAge,
-  formatSeconds,
   jobRows,
   kindsOf,
-  lastExitOf,
   needsAttention,
   previewsCell,
-  replicasShort,
-  replicasText,
   serviceRows,
   stripCell,
-  worstUsage,
   OVERVIEW_RANGE,
   type AttentionItem,
   type JobRow,
   type KindFilter,
-  type ServiceRow,
   type StatusFilter,
   type StripCell,
   type StripEnv,
 } from "./workloadModel";
-import { exitPhrase, jobFailurePhrase } from "./plainHealth";
-import { HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
+import { SkeletonRows } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
+import { JobTimeline } from "./JobTimeline";
 import { ProcessHealth } from "./ProcessHealth";
+import { ServiceCards, type RedLookup } from "./ServiceCards";
 
 export interface OverviewSearch {
   q?: string;
@@ -196,6 +189,19 @@ export function OverviewHome({
   const services = useMemo(() => serviceRows(workloads, env, envs), [workloads, env, envs]);
   const jobs = useMemo(() => (all ? allJobs : allJobs.filter((row) => row.envName === env)), [allJobs, all, env]);
   const visible = useMemo(() => filterServices(services, search), [services, search]);
+  // Every run in scope, for the jobs' timeline; the window it is drawn over.
+  const jobRuns = useMemo(() => (listed.data?.jobs ?? []).filter((run) => all || run.envName === env), [listed.data, all, env]);
+  const jobWindow = useMemo(() => resolveWindow(range), [range, listed.dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The service cards' requests: the same GetServiceOverview read (scope, window, group-by) Processes makes, so one cached answer.
+  const redGroupBy = useMemo(() => (kpiScope?.envIds.length === 0 ? [ENV_KEY] : []), [kpiScope]);
+  const red = useServiceOverview(kpiScope, range, [], redGroupBy);
+  const redLookup = useMemo<RedLookup>(() => {
+    const byKey = new Map(red.data?.services.map((health) => [`${health.group[ENV_KEY] ?? ""}/${health.name}`, health] as const) ?? []);
+    return { loading: red.isLoading, of: (name, envName) => byKey.get(`${redGroupBy.length ? envName : ""}/${name}`) };
+  }, [red.data, red.isLoading, redGroupBy]);
+  const obsHref = (view: "traces" | "sessions", extra: Record<string, unknown> = {}) =>
+    withSearch(consolePath(project, { kind: "obs-view", view }), { env, range, ...extra });
 
   const projectEnvIds = useMemo(() => new Set(envs.map((candidate) => candidate.id)), [envs]);
   const firing = useMemo(
@@ -340,6 +346,19 @@ export function OverviewHome({
         </aside>
       </div>
 
+      {!unrecorded && !notSetUp && (
+        // Each tile reads, loads, fails and retries on its own (SignalTiles).
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2" data-testid="overview-signals">
+          <TracesTile
+            scope={kpiScope}
+            range={range}
+            band={{ href: (band) => obsHref("traces", { lat: latParam(band) }) }}
+            all={{ href: () => obsHref("traces") }}
+          />
+          <SessionsTile scope={kpiScope} range={range} session={{ href: (id) => obsHref("sessions", { session: id }) }} all={{ href: () => obsHref("sessions") }} />
+        </div>
+      )}
+
       {notSetUp ? (
         <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
       ) : listed.error && !keepsLastResult(listed.error, listed.data) ? (
@@ -371,14 +390,20 @@ export function OverviewHome({
             />
           </FilterBar>
 
-          <Panel title="Services" meta="Long-running workloads. CPU and memory against their limits." flush testId="overview-services">
-            <ServicesTable
+          <section className="space-y-2" aria-labelledby="overview-services-heading" data-testid="overview-services">
+            <h2 id="overview-services-heading" className="text-sm font-medium text-ink">
+              Services
+              <span className="ml-2 text-xs font-normal text-ink-muted">Long-running workloads: health, requests, and CPU and memory against their limits</span>
+            </h2>
+            <div data-testid="overview-services-table">
+            <ServiceCards
               rows={visible}
               loading={loading}
               showEnv={all}
               windowShort={range}
               hosted={hosted}
               hrefs={hrefs}
+              red={redLookup}
               empty={
                 filtered ? (
                   <>
@@ -397,12 +422,13 @@ export function OverviewHome({
                 )
               }
             />
+            </div>
             {listed.data?.truncated && (
-              <p className="border-t border-border px-4 py-2.5 text-xs text-ink-muted" data-testid="overview-services-truncated">
+              <p className="text-xs text-ink-muted" data-testid="overview-services-truncated">
                 Showing the first 500 workloads.
               </p>
             )}
-          </Panel>
+          </section>
 
           {!unrecorded && <ProcessHealth
             scope={kpiScope}
@@ -414,9 +440,11 @@ export function OverviewHome({
             logsHref={(name) => withSearch(consolePath(project, { kind: "obs-view", view: "logs" }), { env, range, service: name, severity: "error,fatal" })}
           />}
 
-          <Panel title="Jobs" meta="Migrations, provisioning and scheduled jobs. The latest run of each." flush testId="overview-jobs">
-            <JobsTable
+          <Panel title="Jobs" meta="Migrations, provisioning and scheduled jobs: every run in the window" flush testId="overview-jobs">
+            <JobTimeline
               rows={jobs}
+              runs={jobRuns}
+              window={jobWindow}
               loading={loading}
               showEnv={all}
               hrefs={hrefs}
@@ -804,228 +832,5 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
         </ol>
       )}
     </Panel>
-  );
-}
-
-// ── Tables ──────────────────────────────────────────────────────────────────
-
-type ServiceTableRow = { key: string; w: ServiceRow };
-type JobTableRow = { key: string; row: JobRow };
-
-/** An unobserved workload has no figures: its cells say so with a dash. */
-const NONE = <span className="text-ink-muted">—</span>;
-
-function ServicesTable({
-  rows,
-  loading,
-  showEnv,
-  windowShort,
-  hosted,
-  hrefs,
-  empty,
-}: {
-  rows: ServiceRow[];
-  loading: boolean;
-  showEnv: boolean;
-  windowShort: string;
-  hosted: HostedByEnv;
-  hrefs: OverviewHrefs;
-  empty: ReactNode;
-}) {
-  const columns: DataTableColumn<ServiceTableRow>[] = [
-    {
-      key: "name",
-      header: "Name",
-      render: (_, { w }) => (
-        <>
-          <span className="font-medium">{w.workload}</span>
-          {!w.unobserved && KIND_LABEL[w.kind] && <span className="ml-2 text-xs text-ink-muted">{KIND_LABEL[w.kind]}</span>}
-        </>
-      ),
-    },
-    ...(showEnv ? [{ key: "env", header: "Environment", render: (_: unknown, { w }: ServiceTableRow) => <Tag>{w.envName}</Tag> }] : []),
-    {
-      key: "status",
-      header: "Status",
-      render: (_, { w }) =>
-        w.unobserved ? (
-          <span title={w.healthReason}>
-            <Status tone="neutral" label="Unobserved" />
-          </span>
-        ) : (
-          <HealthStatus workload={w} />
-        ),
-    },
-    {
-      key: "ready",
-      header: "Ready",
-      numeric: true,
-      render: (_, { w }) => (w.unobserved ? NONE : <span className={cn(replicasShort(w) && "text-warning-ink")}>{replicasText(w)}</span>),
-    },
-    {
-      key: "version",
-      header: "Version",
-      interactive: true,
-      render: (_, { w }) =>
-        w.unobserved ? NONE : <WorkloadRelease workload={w} releaseHref={hrefs.release} hosted={hosted.get(w.envName)?.get(w.workload) ?? null} />,
-    },
-    {
-      key: "restarts",
-      header: `Restarts ${windowShort}`,
-      numeric: true,
-      render: (_, { w }) => {
-        if (w.unobserved) return NONE;
-        if (!w.restartsInWindow) return <span className="text-ink-muted">0</span>;
-        const exit = lastExitOf(w);
-        const status = HEALTH_STATUS[w.health];
-        return (
-          <>
-            {w.restartsInWindow}
-            {exit && (
-              <span
-                className={cn("ml-1", status.tone === "danger" ? "text-danger-ink" : status.tone === "warning" ? "text-warning-ink" : "text-ink-muted")}
-                title={exit.atMs ? `Last exited ${new Date(exit.atMs).toLocaleString()}` : undefined}
-              >
-                · {exitPhrase(exit.reason)}
-              </span>
-            )}
-          </>
-        );
-      },
-    },
-    {
-      key: "cpu",
-      header: "CPU",
-      render: (_, { w }) => (w.unobserved ? NONE : <UsageMeter usage={worstUsage(w, "cpu")} format={formatCores} what="CPU" />),
-    },
-    {
-      key: "memory",
-      header: "Memory",
-      render: (_, { w }) => (w.unobserved ? NONE : <UsageMeter usage={worstUsage(w, "memory")} format={formatBytes} what="Memory" />),
-    },
-  ];
-  return (
-    <div data-testid="overview-services-table">
-      <DataTable<ServiceTableRow>
-        flush
-        stacked
-        ariaLabel="Services"
-        columns={columns}
-        data={rows.map((w) => ({ key: `${w.envName}/${w.workload}`, w }))}
-        loading={loading}
-        pageSize={4}
-        emptyMessage={<span data-testid="overview-services-empty">{empty}</span>}
-        getRowKey={(r) => r.key}
-        // A workload a self-managed environment's render declares and nothing
-        // has observed has no page to open: there is nothing observed to show.
-        getRowHref={({ w }) => (w.unobserved ? undefined : hrefs.workload(w.workload, w.envName))}
-        getRowDetail={({ w }) =>
-          w.unobserved ? (
-            <span className="text-xs text-ink-muted">Declared by {w.envName}&apos;s last recorded render; nothing reports from it.</span>
-          ) : undefined
-        }
-        getRowProps={({ w }) => ({
-          "data-testid": `overview-service-${w.workload}${showEnv ? `-${w.envName}` : ""}`,
-          "data-health": w.unobserved ? "unobserved" : w.health,
-        })}
-      />
-    </div>
-  );
-}
-
-function JobsTable({ rows, loading, showEnv, hrefs, empty }: { rows: JobRow[]; loading: boolean; showEnv: boolean; hrefs: OverviewHrefs; empty: ReactNode }) {
-  const columns: DataTableColumn<JobTableRow>[] = [
-    {
-      key: "name",
-      header: "Name",
-      render: (_, { row }) => (
-        <>
-          <span className="font-medium" title={row.latest.name}>
-            {row.workload}
-          </span>
-          {row.runs > 1 && (
-            <span className="ml-2 text-xs text-ink-muted">
-              {row.runs} runs{row.failedRuns ? `, ${row.failedRuns} failed` : ""}
-            </span>
-          )}
-        </>
-      ),
-    },
-    ...(showEnv ? [{ key: "env", header: "Environment", render: (_: unknown, { row }: JobTableRow) => <Tag>{row.envName}</Tag> }] : []),
-    {
-      key: "result",
-      header: "Result",
-      render: (_, { row }) => {
-        const job = row.latest;
-        const status = JOB_STATUS[job.result];
-        return (
-          <span className="inline-flex items-center gap-1.5">
-            <Status tone={status.tone} label={status.label} />
-            {job.result === "failed" && job.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(job.reason)}</span>}
-          </span>
-        );
-      },
-    },
-    {
-      key: "release",
-      header: "Ran in release",
-      interactive: true,
-      render: (_, { row }) =>
-        row.latest.releaseVersion ? (
-          <Link href={hrefs.release(row.latest.releaseVersion)} className={INK_LINK} title={row.latest.releaseVersion}>
-            {shortVersion(row.latest.releaseVersion)}
-          </Link>
-        ) : (
-          <span className="text-ink-muted">unknown</span>
-        ),
-    },
-    {
-      key: "duration",
-      header: "Duration",
-      numeric: true,
-      render: (_, { row }) =>
-        row.latest.durationSeconds ? (
-          formatSeconds(row.latest.durationSeconds)
-        ) : (
-          <span className="text-ink-muted">{row.latest.result === "running" ? "running" : "—"}</span>
-        ),
-    },
-    {
-      key: "finished",
-      header: "Finished",
-      className: "text-ink-muted",
-      render: (_, { row }) => {
-        const job = row.latest;
-        return job.finishedAtMs ? (
-          <time dateTime={new Date(job.finishedAtMs).toISOString()} title={new Date(job.finishedAtMs).toLocaleString()}>
-            {formatAgo(job.finishedAtMs)}
-          </time>
-        ) : job.result === "running" ? (
-          "not yet"
-        ) : (
-          "not observed"
-        );
-      },
-    },
-  ];
-  return (
-    <div data-testid="overview-jobs-table">
-      <DataTable<JobTableRow>
-        flush
-        stacked
-        ariaLabel="Jobs"
-        columns={columns}
-        data={rows.map((row) => ({ key: row.key, row }))}
-        loading={loading}
-        pageSize={2}
-        emptyMessage={<span data-testid="overview-jobs-empty">{empty}</span>}
-        getRowKey={(r) => r.key}
-        getRowHref={({ row }) => hrefs.workload(row.workload, row.envName)}
-        getRowProps={({ row }) => ({
-          "data-testid": `overview-job-${row.workload}${showEnv ? `-${row.envName}` : ""}`,
-          "data-result": row.latest.result,
-        })}
-      />
-    </div>
   );
 }
