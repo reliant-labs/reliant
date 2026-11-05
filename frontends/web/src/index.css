@@ -333,6 +333,35 @@
       animation: none;
     }
   }
+
+  /* Live headline of a simplified-thread work fold: a soft highlight sweeps
+     across muted text. Reduced motion keeps the plain muted text. */
+  @keyframes turnWorkShimmer {
+    from { background-position: 100% 0; }
+    to { background-position: -100% 0; }
+  }
+
+  .turn-work-shimmer {
+    background-image: linear-gradient(
+      90deg,
+      hsl(var(--muted-foreground)) 35%,
+      hsl(var(--foreground)) 50%,
+      hsl(var(--muted-foreground)) 65%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: turnWorkShimmer 2s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .turn-work-shimmer {
+      background-image: none;
+      -webkit-text-fill-color: currentColor;
+      animation: none;
+    }
+  }
 }
 
 /* Syntax highlighting themes - using .dark class instead of media queries */

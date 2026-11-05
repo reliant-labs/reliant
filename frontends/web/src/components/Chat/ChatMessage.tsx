@@ -35,7 +35,7 @@ import { CodeContextPill } from "./CodeContextPill";
 import { FailedSendStatus } from "./FailedSendStatus";
 import { clientIdOfFailedSend } from "../../lib/pendingSends";
 import type { Message } from "../../api/client";
-import type { Approval } from "../../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, type Approval } from "../../gen/reliant/v1/approval_pb";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import {
   useActiveChatId,
@@ -57,6 +57,7 @@ import {
 } from "../../lib/messageProcessor";
 import * as chatActions from "../../hooks/chat-actions";
 import { isQuietToolRun } from "./thread-views/transcriptPresentation";
+import type { MessageSlice } from "./thread-views/simplifiedTurns";
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
 
@@ -111,6 +112,21 @@ interface ChatMessageProps {
    * expands — the pin is a breadcrumb, not a copy of the message.
    */
   pinned?: boolean;
+  /**
+   * Render only part of an assistant message, for the simplified thread (see
+   * `MessageSlice`). Absent: the whole message, as always.
+   */
+  slice?: MessageSlice;
+}
+
+function sameSlice(a: MessageSlice | undefined, b: MessageSlice | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.role !== b.role) return false;
+  if (a.segmentIndexes === b.segmentIndexes) return true;
+  return (
+    a.segmentIndexes.length === b.segmentIndexes.length &&
+    a.segmentIndexes.every((idx, i) => idx === b.segmentIndexes[i])
+  );
 }
 
 // Re-export for components that import from here
@@ -199,8 +215,12 @@ function ChatMessageComponent({
   timelineVariant = "compact",
   compactToolSpacing = false,
   pinned = false,
+  slice: sliceProp,
 }: ChatMessageProps) {
   const isUser = message.role === MessageRole.USER;
+  // A slice only ever cuts an assistant message.
+  const slice = isUser ? undefined : sliceProp;
+  const sliceRole = slice?.role;
   const activeChatId = useActiveChatId();
   // Prefer chatId from props (command center), fallback to chat navigation store
   const chatId = propChatId || activeChatId;
@@ -354,12 +374,17 @@ function ChatMessageComponent({
       // Copy formatted content instead of raw JSON
       let contentToCopy = "";
 
-      if (parsed.text) {
+      if (sliceRole === "answer") {
+        // The answer row copies the answer, not the work folded above it.
+        contentToCopy += visibleSegments
+          .flatMap(({ segment }) => (segment.kind === "text" && segment.text ? [segment.text] : []))
+          .join("\n\n");
+      } else if (parsed.text) {
         // Include full text with code contexts for copy
         contentToCopy += parsed.text + "\n\n";
       }
 
-      if (parsed.toolExecutions && parsed.toolExecutions.length > 0) {
+      if (!slice && parsed.toolExecutions && parsed.toolExecutions.length > 0) {
         // A large result is held as a preview: copy the full output instead.
         const resultContents = await Promise.all(
           parsed.toolExecutions.map((execution) =>
@@ -424,7 +449,7 @@ function ChatMessageComponent({
       }
 
       // If no formatted content, fall back to text from contentBlocks
-      if (!contentToCopy.trim()) {
+      if (!slice && !contentToCopy.trim()) {
         contentToCopy = (message.contentBlocks || [])
           .filter((b) => b.type === ContentBlockType.TEXT)
           .map((b) => b.content || "")
@@ -456,6 +481,14 @@ function ChatMessageComponent({
       segments: processed.segments,
     };
   }, [message, approvals, toolResultsByCallId]);
+
+  // The segments this row renders: all of them, or the slice's.
+  const visibleSegments = (() => {
+    const all = parsed.segments.map((segment, segIdx) => ({ segment, segIdx }));
+    if (!slice) return all;
+    const wanted = new Set(slice.segmentIndexes);
+    return all.filter(({ segIdx }) => wanted.has(segIdx));
+  })();
 
   // Check for overflow after rendering - runs on text changes, font changes, and initial render
   // PERFORMANCE: Use requestAnimationFrame to batch DOM reads and avoid forced synchronous layout
@@ -599,13 +632,18 @@ function ChatMessageComponent({
         (isDraftAutomationTool(exec.call.name) && !!exec.result && !exec.result.is_error),
     ),
   );
-  const hasVisibleContent =
-    parsed.text ||
-    hasAttachments ||
-    hasUserCards ||
-    (!hideToolExecutions &&
-      enhancedToolExecutions &&
-      enhancedToolExecutions.length > 0);
+  // A slice judges visibility from its own segments. work / work-surfaced rows
+  // only know once they have rendered, so they are checked after the helpers.
+  const hasVisibleContent = slice
+    ? sliceRole !== "answer" ||
+      hasAttachments ||
+      visibleSegments.some(({ segment }) => segment.kind === "text" && Boolean(segment.text))
+    : parsed.text ||
+      hasAttachments ||
+      hasUserCards ||
+      (!hideToolExecutions &&
+        enhancedToolExecutions &&
+        enhancedToolExecutions.length > 0);
 
   if (!hasVisibleContent) {
     return null;
@@ -718,6 +756,176 @@ function ChatMessageComponent({
       </div>
     );
   };
+
+  const renderTextSegment = (text: string, segIdx: number): JSX.Element | null => {
+    if (!text) return null;
+    return (
+      <div key={`${message.id}-seg-${segIdx}`} className="message-bubble w-full">
+        {text.trim().startsWith("Error:") ? (
+          <ErrorMessage content={text} />
+        ) : (
+          <div className="relative">
+            <MarkdownRenderer
+              content={text}
+              isUser={false}
+              isStreaming={isStreaming}
+              worktreeId={chatWorktreeId}
+              className={cn(isMobile ? MOBILE_PROSE_TYPE_CLASS : "text-sm", "w-full")}
+            />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderToolsSegment = (
+    executions: EnhancedToolExecution[],
+    segIdx: number,
+  ): JSX.Element | null => {
+    const keyBase = `${message.id}-seg-${segIdx}`;
+    // The answer row carries no tools; the work fold renders the rows only,
+    // its cards and images being the work-surfaced row's.
+    if (sliceRole === "answer") return null;
+    if (sliceRole === "work") {
+      if (hideToolExecutions) return null;
+      // A call awaiting approval is the work-surfaced row's, which stays on
+      // screen whether or not the fold is open: rendering it here too would
+      // put two sets of approve/deny buttons on screen.
+      const rows = executions.filter(
+        (exec) =>
+          !isRequestMachineTool(exec.call.name) &&
+          exec.call.name !== "ask_user" &&
+          exec.approval?.status !== ApprovalStatus.PENDING,
+      );
+      const run = renderToolRun(rows, keyBase);
+      return run ? <Fragment key={keyBase}>{run}</Fragment> : null;
+    }
+
+    // request_machine is a question to the user, not a record of
+    // work: it renders as its own card, outside the tool rows and
+    // even when tool rows are hidden (NO_MACHINE_CHATS.md §3).
+    const machineRequestCards = executions
+      .filter((exec) => isRequestMachineTool(exec.call.name))
+      .map((exec) => (
+        <RequestMachineCard
+          key={`${keyBase}-request-machine-${exec.call.id}`}
+          chatId={chatId || undefined}
+          reason={requestMachineReason(exec.call.input)}
+        />
+      ));
+    // An ask_user is a question to the user too, shown on its own
+    // card whatever the tool rows show.
+    const askUserCards = executions
+      .filter((exec) => exec.call.name === "ask_user")
+      .map((exec) => (
+        <AskUserCard
+          key={`${keyBase}-ask-user-${exec.call.id}`}
+          chatId={chatId || undefined}
+          toolCallId={exec.call.id}
+          input={exec.call.input}
+          finished={exec.result !== undefined}
+        />
+      ));
+    // A drafted automation is a decision for the user too: its card
+    // ("Review & create") shows once the draft is back and valid.
+    const draftCards = executions
+      .filter((exec) => isDraftAutomationTool(exec.call.name) && exec.result && !exec.result.is_error)
+      .map((exec) => (
+        <DraftAutomationCard
+          key={`${keyBase}-draft-automation-${exec.call.id}`}
+          chatId={chatId || undefined}
+          metadata={exec.result?.metadata}
+        />
+      ));
+    const userCards = [...machineRequestCards, ...askUserCards, ...draftCards];
+    if (hideToolExecutions && sliceRole !== "work-surfaced") {
+      return userCards.length > 0 ? <Fragment key={keyBase}>{userCards}</Fragment> : null;
+    }
+    const runExecutions = executions.filter(
+      (exec) => !isRequestMachineTool(exec.call.name) && exec.call.name !== "ask_user",
+    );
+    // Images the tools in this run generated. Rendered AFTER the
+    // tool card and OUTSIDE it: the card explains how the image was
+    // made (and is collapsed by default), the image is the result.
+    // Emitting them per-segment rather than once at the end of the
+    // message keeps text -> image -> text ordering intact when a
+    // turn generates an image and then keeps talking.
+    const runAttachments = runExecutions.flatMap((exec) => exec.result?.attachments ?? []);
+    const runVideos = runAttachments.filter((a) => isVideoMimeType(a.mimeType));
+    const runImages = runAttachments.filter((a) => !isVideoMimeType(a.mimeType));
+    const media = (
+      <>
+        {runImages.length > 0 && <MessageGeneratedImages attachments={runImages} />}
+        {runVideos.length > 0 && <MessageGeneratedVideos attachments={runVideos} />}
+      </>
+    );
+
+    if (sliceRole === "work-surfaced") {
+      // What must stay visible while the fold is collapsed: a call waiting
+      // on the user's approval, plus the cards and media above.
+      const pending = runExecutions.filter((exec) => exec.approval?.status === ApprovalStatus.PENDING);
+      if (pending.length + userCards.length + runImages.length + runVideos.length === 0) return null;
+      return (
+        <Fragment key={keyBase}>
+          {pending.length > 0 && (
+            <div className="space-y-1">
+              {pending.map((exec) => (
+                <ToolExecution
+                  key={exec.call.content_block_id || exec.call.id}
+                  toolCall={exec.call}
+                  toolResult={exec.result}
+                  status={exec.status}
+                  onCancel={exec.onCancel}
+                  onConvertToBackground={exec.onConvertToBackground}
+                  approval={exec.approval}
+                  chatId={chatId || undefined}
+                  showRichContent
+                  onSelectThread={onSelectThread}
+                  density={toolDensity}
+                />
+              ))}
+            </div>
+          )}
+          {userCards}
+          {media}
+        </Fragment>
+      );
+    }
+
+    return (
+      <Fragment key={keyBase}>
+        {renderToolRun(runExecutions, keyBase)}
+        {userCards}
+        {media}
+      </Fragment>
+    );
+  };
+
+  // Tool-run segments show during streaming too (preparing state).
+  const renderSegment = (segment: MessageSegment, segIdx: number): JSX.Element | null => {
+    if (segment.kind === "text") {
+      return sliceRole === "work-surfaced" ? null : renderTextSegment(segment.text, segIdx);
+    }
+    const executions = segment.executions
+      .map((exec) => enhancedById.get(exec.call.id))
+      .filter((e): e is EnhancedToolExecution => e !== undefined);
+    return renderToolsSegment(executions, segIdx);
+  };
+
+  // The fold's rows carry none of a message's chrome (avatar, timestamp,
+  // actions): they are part of the turn's work, not a message of their own.
+  if (sliceRole === "work" || sliceRole === "work-surfaced") {
+    const rendered = visibleSegments.map(({ segment, segIdx }) => renderSegment(segment, segIdx));
+    if (rendered.every((node) => node === null)) return null;
+    return (
+      <div
+        className={cn("space-y-1", isMobile && "select-text")}
+        data-testid={`message-${message.id}-${sliceRole}`}
+      >
+        {rendered}
+      </div>
+    );
+  }
 
   const isOptimistic = message.id.startsWith("optimistic-");
   // A send that failed for good: still local-only (no branching from it), but
@@ -1114,109 +1322,7 @@ function ChatMessageComponent({
               {/* Ordered content: text and tool runs interleaved exactly as
                   they occurred in the message, so a mid-message tool call
                   renders between paragraphs, not after all the prose. */}
-              {parsed.segments.map((segment, segIdx) => {
-                if (segment.kind === "text") {
-                  if (!segment.text) return null;
-                  return (
-                    <div
-                      key={`${message.id}-seg-${segIdx}`}
-                      className="message-bubble w-full"
-                    >
-                      {segment.text.trim().startsWith("Error:") ? (
-                        <ErrorMessage content={segment.text} />
-                      ) : (
-                        <div className="relative">
-                          <MarkdownRenderer
-                            content={segment.text}
-                            isUser={false}
-                            isStreaming={isStreaming}
-                            worktreeId={chatWorktreeId}
-                            className={cn(isMobile ? MOBILE_PROSE_TYPE_CLASS : "text-sm", "w-full")}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                // Tool run — show during streaming too (preparing state).
-                const allRunExecutions = segment.executions
-                  .map((exec) => enhancedById.get(exec.call.id))
-                  .filter((e): e is EnhancedToolExecution => e !== undefined);
-                // request_machine is a question to the user, not a record of
-                // work: it renders as its own card, outside the tool rows and
-                // even when tool rows are hidden (NO_MACHINE_CHATS.md §3).
-                const machineRequests = allRunExecutions.filter((exec) =>
-                  isRequestMachineTool(exec.call.name),
-                );
-                const machineRequestCards = machineRequests.map((exec) => (
-                  <RequestMachineCard
-                    key={`${message.id}-seg-${segIdx}-request-machine-${exec.call.id}`}
-                    chatId={chatId || undefined}
-                    reason={requestMachineReason(exec.call.input)}
-                  />
-                ));
-                // An ask_user is a question to the user too, shown on its own
-                // card whatever the tool rows show.
-                const askUserCards = allRunExecutions
-                  .filter((exec) => exec.call.name === "ask_user")
-                  .map((exec) => (
-                    <AskUserCard
-                      key={`${message.id}-seg-${segIdx}-ask-user-${exec.call.id}`}
-                      chatId={chatId || undefined}
-                      toolCallId={exec.call.id}
-                      input={exec.call.input}
-                      finished={exec.result !== undefined}
-                    />
-                  ));
-                // A drafted automation is a decision for the user too: its card
-                // ("Review & create") shows once the draft is back and valid.
-                const draftCards = allRunExecutions
-                  .filter((exec) => isDraftAutomationTool(exec.call.name) && exec.result && !exec.result.is_error)
-                  .map((exec) => (
-                    <DraftAutomationCard
-                      key={`${message.id}-seg-${segIdx}-draft-automation-${exec.call.id}`}
-                      chatId={chatId || undefined}
-                      metadata={exec.result?.metadata}
-                    />
-                  ));
-                const userCards = [...machineRequestCards, ...askUserCards, ...draftCards];
-                if (hideToolExecutions) {
-                  return userCards.length > 0 ? (
-                    <Fragment key={`${message.id}-seg-${segIdx}`}>{userCards}</Fragment>
-                  ) : null;
-                }
-                const runExecutions = allRunExecutions.filter(
-                  (exec) => !isRequestMachineTool(exec.call.name) && exec.call.name !== "ask_user",
-                );
-                // Images the tools in this run generated. Rendered AFTER the
-                // tool card and OUTSIDE it: the card explains how the image was
-                // made (and is collapsed by default), the image is the result.
-                // Emitting them per-segment rather than once at the end of the
-                // message keeps text -> image -> text ordering intact when a
-                // turn generates an image and then keeps talking.
-                const runAttachments = runExecutions.flatMap(
-                  (exec) => exec.result?.attachments ?? [],
-                );
-                const runVideos = runAttachments.filter((a) =>
-                  isVideoMimeType(a.mimeType),
-                );
-                const runImages = runAttachments.filter(
-                  (a) => !isVideoMimeType(a.mimeType),
-                );
-                return (
-                  <Fragment key={`${message.id}-seg-${segIdx}`}>
-                    {renderToolRun(runExecutions, `${message.id}-seg-${segIdx}`)}
-                    {userCards}
-                    {runImages.length > 0 && (
-                      <MessageGeneratedImages attachments={runImages} />
-                    )}
-                    {runVideos.length > 0 && (
-                      <MessageGeneratedVideos attachments={runVideos} />
-                    )}
-                  </Fragment>
-                );
-              })}
+              {visibleSegments.map(({ segment, segIdx }) => renderSegment(segment, segIdx))}
 
               {/* Attachments */}
               {hasAttachments && (
@@ -1311,7 +1417,8 @@ export const ChatMessage = memo(ChatMessageComponent, (prev, next) => {
       prev.timelineVariant === next.timelineVariant &&
       prev.compactToolSpacing === next.compactToolSpacing &&
       prev.onSelectThread === next.onSelectThread &&
-      prev.approvals === next.approvals
+      prev.approvals === next.approvals &&
+      sameSlice(prev.slice, next.slice)
     );
   }
 
@@ -1327,6 +1434,7 @@ export const ChatMessage = memo(ChatMessageComponent, (prev, next) => {
   if (prev.timelineVariant !== next.timelineVariant) return false;
   if (prev.compactToolSpacing !== next.compactToolSpacing) return false;
   if (prev.onSelectThread !== next.onSelectThread) return false;
+  if (!sameSlice(prev.slice, next.slice)) return false;
 
   // Check approvals - if same reference, skip deep comparison
   if (prev.approvals === next.approvals) return true;
