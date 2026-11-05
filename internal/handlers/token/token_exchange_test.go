@@ -188,6 +188,9 @@ func TestExchangeToken_ScopeRequests(t *testing.T) {
 		{scopes: []string{"token:write"}, code: connect.CodeInvalidArgument},
 		{scopes: []string{"token:read", "token:write"}, code: connect.CodeInvalidArgument},
 		{scopes: []string{"daemon:connect", "reliant:api", "llm:invoke", "mcp:connector", "proxy:port", "daemon:resume"}, code: connect.CodeInvalidArgument},
+		// The runs:* and triggers:* slices of a person's Reliant API (forge
+		// #1757) act as that person, so a helper never holds them either.
+		{scopes: []string{"runs:start", "runs:read", "runs:control", "triggers:fire", "triggers:manage"}, code: connect.CodeInvalidArgument},
 		{scopes: []string{"deploy:wrIte"}, code: connect.CodeInvalidArgument},
 	} {
 		resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{

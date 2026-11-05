@@ -13,7 +13,10 @@
 -- Replace it with a CHECK that lists exactly that set, in the set's order.
 -- DROP and ADD are one ALTER TABLE: one lock, and no instant
 -- without the constraint. postgres drops a constraint's comment with it, so the
--- declaration is re-issued after.
+-- declaration is re-issued after. The validating scan runs under that
+-- ACCESS EXCLUSIVE lock; access_tokens is small (one row per issued
+-- credential) and the scan reads only the scopes array, so it is not split into
+-- NOT VALID + VALIDATE (as in 20261021161825_access_tokens_scopes_forge_1060).
 ALTER TABLE access_tokens
     DROP CONSTRAINT access_tokens_scopes,
     ADD CONSTRAINT access_tokens_scopes CHECK (
