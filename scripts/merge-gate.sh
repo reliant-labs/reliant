@@ -415,20 +415,9 @@ if [ "$fail" = 0 ]; then
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
   fi
-  # One awk, not a dirname per file: forking hundreds of processes on a
-  # loaded host delayed lint's start by over a minute.
-  # Directories inside a nested Go module (sdk/go has its own go.mod) are
-  # dropped: forge lint loads packages from the root module, and its contract
-  # lane fails outright on a pattern the root module does not contain. The
-  # nested module's own build and tests cover it.
-  nested=$(git ls-files '*/go.mod' | awk -F/ '{ NF--; print }' OFS=/ | paste -sd' ' -)
-  scope=$(echo "$files" | awk -F/ -v nested="$nested" '
-    BEGIN { n = split(nested, mods, " ") }
-    NF > 1 {
-      NF--
-      for (i = 1; i <= n; i++) if ($0 == mods[i] || index($0, mods[i] "/") == 1) next
-      print
-    }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
+  # The changed files' directories, minus nested Go modules (sdk/go): see
+  # scripts/lint-scope.sh and its self-test, scripts/test-lint-scope.sh.
+  scope=$(echo "$files" | scripts/lint-scope.sh)
   if [ "$queue" = 1 ]; then
     notes+=("queue tier: vet and forge lint run in the release gate$(echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$' || echo '; buf lint too (no proto changed)')")
   elif [ -n "$scope" ]; then

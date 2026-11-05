@@ -986,6 +986,11 @@ tasks:
     cmds:
       - ./scripts/test-flake-report.sh
 
+  lint:scope:test:
+    desc: Self-test of scripts/lint-scope.sh (the merge gate's forge lint scope drops nested Go modules, keeps root-module directories) against throwaway repos
+    cmds:
+      - ./scripts/test-lint-scope.sh
+
   pin:check:report:test:
     desc: Self-test of scripts/forge-pin-report.sh (forge-pin-check.yml's verdicts and its forge-pin:red / forge-pin:broken issue transitions) against a fake gh
     cmds:

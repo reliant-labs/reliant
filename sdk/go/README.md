@@ -115,3 +115,41 @@ two steps, each its own PR:
 
 Never point the root module at `./sdk/go` with a `replace`. To work on both
 halves at once in a checkout, use a local `go.work` that you do not commit.
+
+### Hosted check before adopting: resolved-approval replay
+
+`Runs.Follow` attributes an approval to its run from the `workflow_id` and
+`thread_id` the server writes on every approval feed update, its resolution
+included (`internal/db/approval_close.go`, `AttributeApprovalUpdate`). That is
+what lets a follower that attaches after an approval was resolved still replay
+its open and close on the right run: a resolved approval is gone from the
+pending-only `ListApprovalsByChat`. An update that names neither (written by a
+server without the attribution) falls back to that pending list, so on such a
+server a resolved approval's rows are skipped, not misattributed.
+
+The in-memory tests (`TestFollowRunReplaysAnAlreadyResolvedApproval`) prove the
+wire shape, not that the hosted server writes it. So after the server change
+deploys, and **before the pin bump (step 2 above) lands**, check it on the
+hosted server:
+
+1. With an `rlat_` token for a test user, start a run whose workflow raises an
+   approval gate, and note its run id. In a second run of the same session (or
+   a sibling chat), raise another approval, so the session holds more than one
+   run.
+2. Approve the first run's approval in the app (this API cannot), and let the
+   run finish.
+3. Only then follow it: `c.Runs.Follow(ctx, runID, reliant.FollowOptions{})`,
+   printing every event.
+
+Expected: exactly one `approval` and one `approval_resolved` event with that
+approval's id, the resolved one carrying `Status: "approved"`, both with the
+followed run's `WorkflowID` (or a child workflow of it); no approval event of
+the other run; then the run's terminal event and `Wait()` returning its
+verdict. Following the second run shows only its own approval.
+
+If the check fails (no `approval`/`approval_resolved` pair, or one attributed to
+the other run), do not land the pin bump, or revert it if it landed: no hosted
+consumer runs this SDK until that bump, and reverting it returns the CLI to the
+code it ran before, with nothing else to undo. A server that does not attribute
+approvals degrades the SDK to the pending-list fallback, so reverting the
+server change is safe on its own; fix the attribution and repeat the check.
