@@ -17,13 +17,12 @@
  * chunk. A test pins them to the fixture's.
  */
 
-import { useEffect, useRef, useState } from "react";
-import { Check, Copy } from "lucide-react";
-
 import { FORGE_DEMO_PATH } from "../../Forge/Demo/demoPath";
 import { trackEvent } from "../../../lib/analytics";
 import { isForgeUIEnabled } from "../../../lib/forgeFeature";
+import { isDemoShell } from "../../../lib/shell";
 import type { Journey, JourneyRoute, RouteTarget } from "../types";
+import { TourCommands } from "./TourCommand";
 
 /** The CreateOrder trace the tour opens (FIXTURE_TRACE_ID): two failed payment calls, then the worker. */
 export const DEMO_TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -42,47 +41,6 @@ function demo(search: Record<string, unknown>): JourneyRoute {
 
 // The panel's keys a step clears, so arriving at it (Back included) starts from its list, not an open item.
 const CLOSED = { trace: undefined, span: undefined, issue: undefined };
-
-/** Shell commands in a step card, each with a Copy button. */
-function TourCommands({ commands }: { commands: string[] }) {
-  return (
-    <div className="mt-3 space-y-1.5" data-testid="tour-commands">
-      {commands.map((command) => (
-        <TourCommand key={command} command={command} />
-      ))}
-    </div>
-  );
-}
-
-function TourCommand({ command }: { command: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(command);
-    } catch {
-      return; // No clipboard: the command is on screen to select.
-    }
-    setCopied(true);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setCopied(false), 1500);
-  }
-  return (
-    <div className="flex items-center gap-1 rounded-md border border-border bg-muted/40 py-0.5 pl-2 pr-0.5">
-      <code className="min-w-0 flex-1 overflow-x-auto whitespace-pre font-mono text-xs text-foreground">{command}</code>
-      <button
-        type="button"
-        onClick={() => void copy()}
-        aria-label={copied ? `Copied ${command}` : `Copy ${command}`}
-        title={copied ? "Copied" : "Copy"}
-        className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-      >
-        {copied ? <Check className="h-3 w-3" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}
-      </button>
-    </div>
-  );
-}
 
 function ExternalLink({ href, children, onClick }: { href: string; children: React.ReactNode; onClick?: () => void }) {
   return (
@@ -119,7 +77,8 @@ export const forgeJourney: Journey = {
   // Settings → Developer can switch the forge UI off; that turns its tour off too. (On by default, and in the forge shell.)
   isAvailable: isForgeUIEnabled,
   // Reliant: forge's Apps (the bare /forge lands there). The forge shell: its project picker, which signs a visitor in first.
-  finish: (shell) => (shell === "reliant" ? { to: "/forge" } : { to: "/apps" }),
+  // The demo: nowhere to go, so the visitor stays on the console with the tour closed.
+  finish: (shell) => (shell === "reliant" ? { to: "/forge" } : isDemoShell() ? null : { to: "/apps" }),
   steps: [
     {
       id: "fg-console",

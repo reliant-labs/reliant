@@ -23,12 +23,16 @@ import { useUpdateIssueStatus } from "@/hooks/observability-queries";
 import { issuesErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 
+import { useObsReadOnly } from "../obsReadOnly";
 import { conflictSummary, IGNORE_FOR, ignoreChange, resolveChange, triageActionsOf, type IgnoreFor, type ResolveChoice } from "./issueModel";
 
 const FIELD = "h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export function IssueTriage({ issue }: { issue: Issue }) {
   const update = useUpdateIssueStatus();
+  // The demo: every control disabled, saying why (obsReadOnly.tsx).
+  const { readOnly, reason } = useObsReadOnly();
+  const locked = readOnly ? { disabled: true, title: reason } : {};
   const [resolveIn, setResolveIn] = useState<ResolveChoice>("now");
   const [version, setVersion] = useState("");
   const [ignoreFor, setIgnoreFor] = useState<IgnoreFor>("forever");
@@ -61,13 +65,14 @@ export function IssueTriage({ issue }: { issue: Issue }) {
               disabled={!resolve || update.isPending}
               loading={update.isPending && update.variables?.change.status === "resolved"}
               data-testid="obs-issue-resolve"
+              {...locked}
             >
               Resolve
             </Button>
             <label htmlFor="obs-issue-resolve-in" className="sr-only">
               Resolve in
             </label>
-            <select id="obs-issue-resolve-in" value={resolveIn} onChange={(e) => setResolveIn(e.target.value as ResolveChoice)} className={FIELD} data-testid="obs-issue-resolve-in">
+            <select id="obs-issue-resolve-in" value={resolveIn} onChange={(e) => setResolveIn(e.target.value as ResolveChoice)} className={FIELD} data-testid="obs-issue-resolve-in" {...locked}>
               <option value="now">now</option>
               <option value="next_release">in the next release</option>
               <option value="version">in version…</option>
@@ -99,13 +104,14 @@ export function IssueTriage({ issue }: { issue: Issue }) {
               disabled={update.isPending}
               loading={update.isPending && update.variables?.change.status === "ignored"}
               data-testid="obs-issue-ignore"
+              {...locked}
             >
               Ignore
             </Button>
             <label htmlFor="obs-issue-ignore-for" className="sr-only">
               Ignore for
             </label>
-            <select id="obs-issue-ignore-for" value={ignoreFor} onChange={(e) => setIgnoreFor(e.target.value as IgnoreFor)} className={FIELD} data-testid="obs-issue-ignore-for">
+            <select id="obs-issue-ignore-for" value={ignoreFor} onChange={(e) => setIgnoreFor(e.target.value as IgnoreFor)} className={FIELD} data-testid="obs-issue-ignore-for" {...locked}>
               {IGNORE_FOR.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.label}
@@ -123,6 +129,7 @@ export function IssueTriage({ issue }: { issue: Issue }) {
             disabled={update.isPending}
             loading={update.isPending}
             data-testid="obs-issue-unresolve"
+            {...locked}
           >
             Reopen
           </Button>

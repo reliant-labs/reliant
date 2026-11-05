@@ -90,6 +90,17 @@ export const obsKeys = {
   usage: (orgId: string | null) => ["observability", orgId ?? "", "usage"] as const,
 };
 
+/**
+ * A read's placeholder while a new key loads: the previous answer when it was
+ * for the same scope (a new range keeps the last rows on screen instead of a
+ * blank table), and nothing when the scope changed (another project's or
+ * environment's rows must never stand in for this one's).
+ */
+export function sameScopePlaceholder<T>(scope: ObsScope | null, previous: T | undefined, previousKey: QueryKey | undefined): T | undefined {
+  const prefix = obsKeys.all(scope);
+  return previousKey && hashKey(previousKey.slice(0, prefix.length)) === hashKey(prefix) ? previous : undefined;
+}
+
 // ── Quota-aware reads and polls ──────────────────────────────────────────────
 //
 // Every read that spends the org's ClickHouse query quota (logs, traces,
@@ -173,6 +184,7 @@ export function useServiceOverview(scope: ObsScope | null, range: RangePreset, s
     queryFn: ({ signal }) => api.getServiceOverview({ ...(scope as ObsScope), window: resolveWindow(range), services, groupBy }, { signal }),
     enabled: !!scope,
     staleTime: 30_000,
+    placeholderData: (previous, previousQuery) => sameScopePlaceholder(scope, previous, previousQuery?.queryKey),
     retry: obsRetry, retryDelay: obsRetryDelay,
   });
   usePolled(queryKey, 60_000, !!scope);
@@ -593,6 +605,7 @@ export function useWorkloads(scope: ObsScope | null, range: RangePreset, service
     queryFn: ({ signal }) => api.listWorkloads({ ...(scope as ObsScope), window: resolveWindow(range), services }, { signal }),
     enabled: !!scope,
     staleTime: 30_000,
+    placeholderData: (previous, previousQuery) => sameScopePlaceholder(scope, previous, previousQuery?.queryKey),
     retry: obsRetry, retryDelay: obsRetryDelay,
   });
   usePolled(queryKey, 60_000, !!scope);

@@ -108,6 +108,7 @@ import { orgDashboardHrefs, orgExploreHref, orgQueryScope, orgScopeLabel, orgSel
 import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
 import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
+import { useObsReadOnly } from "../obsReadOnly";
 
 export interface DashboardHrefs extends ExploreHrefs {
   list: string;
@@ -157,6 +158,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   const consoleExplore = useExploreHref();
 
   const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
+  // The demo's reason first (obsReadOnly.tsx): there, nobody can, admin or not.
+  const readOnlyReason = useObsReadOnly().reason;
   const spec = doc.data?.spec;
   const summary = doc.data?.summary;
   // The dashboard's own default when the URL names no range: a day-grained one
@@ -470,7 +473,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                 className={BUTTON_PRIMARY}
                 onClick={() => setDialog("copy")}
                 disabled={!doc.data?.canWrite}
-                title={doc.data?.canWrite ? undefined : "Only organization admins can create dashboards."}
+                title={doc.data?.canWrite ? undefined : readOnlyReason ?? "Only organization admins can create dashboards."}
                 data-testid="dashboard-save-copy"
               >
                 Save as copy
@@ -485,7 +488,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                     promote.mutate(search.version);
                   }}
                   disabled={!doc.data?.canWrite}
-                  title={doc.data?.canWrite ? undefined : "Only organization admins can promote dashboards."}
+                  title={doc.data?.canWrite ? undefined : readOnlyReason ?? "Only organization admins can promote dashboards."}
                   data-testid="dashboard-promote-open"
                 >
                   Promote to code

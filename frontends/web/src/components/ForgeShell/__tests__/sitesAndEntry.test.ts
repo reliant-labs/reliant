@@ -15,6 +15,7 @@ const env = (id: string, name: string, links: AppSummary["envs"][number]["links"
   release: "v1",
   links,
   loading: false,
+  unread: false,
 });
 const domain = (hostname: string, environmentId: string, target: string, state: ForgeDomain["state"] = "live"): ForgeDomain => ({
   id: hostname,

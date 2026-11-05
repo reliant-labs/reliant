@@ -513,7 +513,19 @@ export async function getServiceOverview(
       operatorData: s.operatorData,
     };
   });
-  return { services, trendStepSeconds: step };
+  return { services, trendStepSeconds: step, unavailableSections: unavailableSectionsOf(res) };
+}
+
+/**
+ * The response's unavailable_sections (control-plane: the sections of a
+ * ListWorkloads / GetServiceOverview answer that did not arrive within the
+ * read's budget). Read by name because the vendored contract gains the field
+ * at the next control-plane sync; until then it is empty, as from a server
+ * that always answers whole.
+ */
+function unavailableSectionsOf(res: object): string[] {
+  const sections = (res as { unavailableSections?: unknown }).unavailableSections;
+  return Array.isArray(sections) ? sections.filter((s): s is string => typeof s === "string") : [];
 }
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
@@ -799,6 +811,7 @@ export async function listWorkloads(req: ObsScope & { window: TimeWindow; servic
     workloads: res.workloads.map(mapWorkload),
     jobs: res.jobs.map(mapJob),
     jobsTruncated: res.jobsTruncated,
+    unavailableSections: unavailableSectionsOf(res),
   };
 }
 

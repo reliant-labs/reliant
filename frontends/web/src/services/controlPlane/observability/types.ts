@@ -396,6 +396,8 @@ export interface ServiceHealth extends Provenance {
 export interface ServiceOverview {
   services: ServiceHealth[];
   trendStepSeconds: number;
+  /** The sections the server could not answer in time ("red", "logs", "trend"); absent or empty when complete. */
+  unavailableSections?: string[];
 }
 
 // ── Dashboards (obsdash.Spec, forge.dashboards/v1) ───────────────────────────
@@ -872,6 +874,12 @@ export interface ListWorkloadsResult {
   /** Newest first, at most 200. */
   jobs: WorkloadJob[];
   jobsTruncated: boolean;
+  /**
+   * The sections the server could not answer in time ("usage", "replicas",
+   * "restarts", "terminations", "warnings", "history", "jobs", "versions");
+   * absent or empty when complete. A missing section is not shown as zero.
+   */
+  unavailableSections?: string[];
 }
 
 export type WorkloadMetric =

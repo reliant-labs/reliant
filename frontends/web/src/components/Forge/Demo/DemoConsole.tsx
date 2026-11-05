@@ -32,7 +32,6 @@ import { useCallback, useMemo, useState } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { FlaskConical } from "lucide-react";
 
 import PageHeader from "@/components/forge-ui/page_header";
 import { getTourShell, type TourShell } from "@/components/Onboarding/tourShell";
@@ -49,6 +48,9 @@ import { OBS_VIEW_LABELS, OBS_VIEWS, viewOf, type ObsNavigate, type ObsSearch, t
 import { FIXTURE_DECLARED } from "../Observability/__fixtures__/fixtureAlerting";
 import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 import { FIXTURE_SIGNALS } from "../Observability/__fixtures__/fixtureSignals";
+import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadOnly";
+import { withReadOnly } from "../Observability/readOnlyApi";
+import { DemoBanner } from "./DemoBanner";
 import { FORGE_DEMO_PATH } from "./demoPath";
 
 /** The fixture environments with what each declares (rules, routes, observability policy), for Alerts. */
@@ -69,6 +71,8 @@ const legacyBillingApi = {
   updateObservabilityLimits: legacyOnly,
 };
 
+const READ_ONLY: ObsReadOnly = { readOnly: true, reason: "Read-only demo" };
+
 /** Every nav row and crumb stays on the demo: a panel view by `view`, anything else the overview. */
 function demoLink(target: ConsolePage): string {
   if (target.kind === "obs-view" && (OBS_VIEWS as readonly string[]).includes(target.view)) {
@@ -80,39 +84,6 @@ function demoLink(target: ConsolePage): string {
 /** The nav's open page for a panel view. */
 function pageOf(view: ObsView): ConsolePage {
   return view !== "overview" && isObsNavView(view) ? { kind: "obs-view", view } : { kind: "overview" };
-}
-
-/** Where "Leave the demo" goes: forge's Apps in Reliant, the project picker in the forge shell. */
-const exitHref = (shell: TourShell) => (shell === "forge" ? "/apps" : "/forge");
-
-export function DemoBanner({ shell }: { shell: TourShell }) {
-  const navigate = useNavigate();
-  return (
-    <div
-      role="note"
-      className="sticky top-0 z-20 -mx-1 mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-ink"
-      data-testid="forge-demo-banner"
-    >
-      <span className="inline-flex items-center gap-1.5 font-semibold text-warning-ink">
-        <FlaskConical className="h-4 w-4" aria-hidden="true" />
-        Demo data
-      </span>
-      <span className="min-w-0 flex-1 text-ink-muted">Sample data from a made-up app called shop. Nothing here touches your projects.</span>
-      <a
-        href={exitHref(shell)}
-        onClick={(event) => {
-          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-          event.preventDefault();
-          // Leaving the demo leaves its tour too: the root keeps `?tour=` unless told otherwise.
-          void navigate({ to: exitHref(shell), search: { tour: undefined } } as never);
-        }}
-        className="no-color text-sm font-medium text-ink underline-offset-2 hover:underline"
-        data-testid="forge-demo-exit"
-      >
-        Leave the demo
-      </a>
-    </div>
-  );
 }
 
 export interface DemoConsoleProps {
@@ -127,7 +98,8 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
   const [collapsed, setCollapsed] = useState(false);
   // Its own client and API: nothing here shares a cache entry with a real project's console.
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }));
-  const api = useMemo(() => createFixtureApi({ signals: FIXTURE_SIGNALS }), []);
+  // Writes are refused in every shell, visibly (obsReadOnly) and underneath (readOnlyApi).
+  const api = useMemo(() => withReadOnly(createFixtureApi({ signals: FIXTURE_SIGNALS, dashboardsReadOnly: true })), []);
 
   const view = viewOf(search.view);
   const env = search.envs?.length === 1 ? search.envs[0] : ENV_ALL;
@@ -146,38 +118,40 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
 
   return (
     <AskAgentModeProvider mode="handoff" cli={shell === "forge" ? "forge" : "reliant forge"} demo>
-      <QueryClientProvider client={queryClient}>
-        <ObservabilityApiProvider api={api}>
-          <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
-            <ConsoleShell
-              project={FIXTURE_PROJECT}
-              page={pageOf(view)}
-              env={env}
-              envs={NAV_ENVS}
-              alertsFiring={1}
-              scope={SCOPE}
-              onEnvChange={(next) => navigateObs({ envs: next === ENV_ALL ? undefined : [next] }, { replace: true })}
-              linkTo={demoLink}
-              collapsed={collapsed}
-              onToggleCollapsed={() => setCollapsed((prev) => !prev)}
-              brand={
-                <span className="flex items-center gap-2 px-1.5 text-sm font-semibold text-ink">
-                  <ProjectMonogram name={FIXTURE_PROJECT} />
-                  {FIXTURE_PROJECT}
-                </span>
-              }
-              brandCollapsed={<ProjectMonogram name={FIXTURE_PROJECT} />}
-            >
-              <DemoBanner shell={shell} />
-              <div className="space-y-4" data-testid="forge-demo">
-                {/* One compact row; the top bar's scope control says which environments. */}
-                <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
-                <ObservabilityPanel place={PLACE} search={{ ...search, view }} navigate={navigateObs} />
-              </div>
-            </ConsoleShell>
-          </ObservabilityBillingApiContext.Provider>
-        </ObservabilityApiProvider>
-      </QueryClientProvider>
+      <ObsReadOnlyProvider value={READ_ONLY}>
+        <QueryClientProvider client={queryClient}>
+          <ObservabilityApiProvider api={api}>
+            <ObservabilityBillingApiContext.Provider value={legacyBillingApi}>
+              <ConsoleShell
+                project={FIXTURE_PROJECT}
+                page={pageOf(view)}
+                env={env}
+                envs={NAV_ENVS}
+                alertsFiring={1}
+                scope={SCOPE}
+                onEnvChange={(next) => navigateObs({ envs: next === ENV_ALL ? undefined : [next] }, { replace: true })}
+                linkTo={demoLink}
+                collapsed={collapsed}
+                onToggleCollapsed={() => setCollapsed((prev) => !prev)}
+                brand={
+                  <span className="flex items-center gap-2 px-1.5 text-sm font-semibold text-ink">
+                    <ProjectMonogram name={FIXTURE_PROJECT} />
+                    {FIXTURE_PROJECT}
+                  </span>
+                }
+                brandCollapsed={<ProjectMonogram name={FIXTURE_PROJECT} />}
+              >
+                <DemoBanner shell={shell} />
+                <div className="space-y-4" data-testid="forge-demo">
+                  {/* One compact row; the top bar's scope control says which environments. */}
+                  <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
+                  <ObservabilityPanel place={PLACE} search={{ ...search, view }} navigate={navigateObs} />
+                </div>
+              </ConsoleShell>
+            </ObservabilityBillingApiContext.Provider>
+          </ObservabilityApiProvider>
+        </QueryClientProvider>
+      </ObsReadOnlyProvider>
     </AskAgentModeProvider>
   );
 }
