@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics";
+import { readLandingJourney } from "@/lib/landingAttribution";
 import type { LaunchPlan } from "./types";
 import { codeSourceForCompute } from "./steps/ComputeStep";
 
@@ -35,6 +36,9 @@ export function markOnboardingFinalized(
       : "unknown",
     intent: plan.intent ?? "unknown",
     project_source: source,
+    // The journey the landing page carried (`?journey=`); the in-app choice
+    // comes later, at the picker (journey_selected).
+    journey: readLandingJourney() ?? "none",
   });
 }
 
@@ -49,7 +53,10 @@ export function useOnboardingTracking(currentStep: string): void {
     lastStepRef.current = currentStep;
     completedFlag = false;
     stepsViewed = new Set([currentStep]);
-    trackEvent("onboarding_flow_started", { initial_step: currentStep });
+    trackEvent("onboarding_flow_started", {
+      initial_step: currentStep,
+      journey: readLandingJourney() ?? "none",
+    });
     trackEvent("onboarding_flow_step_viewed", { step: currentStep });
 
     return () => {

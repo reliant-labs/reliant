@@ -50,6 +50,7 @@ import {
   withWorkflowArgs,
 } from "../../../types/workflow";
 import { workflowToFlowElements } from "../../../lib/workflow-flow";
+import { tourEvents } from "../../Onboarding/tourEvents";
 import {
   carriedDefinitionFields,
   withoutCarriedDefinitionFields,
@@ -243,6 +244,7 @@ export function useInlineEditStack({
   const enterLoopEdit = useCallback(
     (loopStep: LoopStep) => {
       enterInlineEdit(loopStep, "loop");
+      if (loopStep.id) tourEvents.emit("workflow:loopExpanded", { nodeId: loopStep.id });
     },
     [enterInlineEdit],
   );

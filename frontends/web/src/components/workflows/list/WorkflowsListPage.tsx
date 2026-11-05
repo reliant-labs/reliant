@@ -175,7 +175,14 @@ function WorkflowsHeader({ projectId }: { projectId?: string }) {
                 {
                   label: "New workflow",
                   variant: "primary",
-                  icon: <Plus className="h-4 w-4" aria-hidden="true" />,
+                  // forge-ui's PageHeader actions take no data attributes, so
+                  // the tour anchor rides on the icon: the workflows journey
+                  // targets button:has([data-tour='new-workflow']).
+                  icon: (
+                    <span data-tour="new-workflow" className="contents">
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                  ),
                   onClick: () => void navigate({ to: "/workflow/new" }),
                 },
               ]
@@ -755,6 +762,7 @@ function WorkflowsControls({
             key={chip}
             type="button"
             aria-pressed={active === chip}
+            data-tour={chip === "on" ? "workflows-show-on" : undefined}
             onClick={() => onChange({ ...search, show: chip === "all" ? undefined : chip })}
             className={
               active === chip

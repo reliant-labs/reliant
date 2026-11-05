@@ -26,6 +26,8 @@
  * and telemetry.ts drops the held handoff when analytics consent is off.
  */
 
+import { isJourneyId, type JourneyId } from "../components/Onboarding/tourParam";
+
 /** localStorage key of the held handoff. */
 export const LANDING_ATTRIBUTION_KEY = "reliant.landing_attribution";
 
@@ -123,6 +125,77 @@ export function readLandingAttribution(now: number = Date.now()): string | undef
 export function dropLandingAttribution(): void {
   try {
     storage()?.removeItem(LANDING_ATTRIBUTION_KEY);
+  } catch {
+    // Best-effort.
+  }
+}
+
+// ─── The journey choice ─────────────────────────────────────────────────────
+// The landing page's picker ("Explore a forge app" / "Use AI workflows") links
+// here with `?journey=forge|workflows`, and the sign-in round trip loses it
+// exactly as it loses `rid`. It is held the same way, but separately and with
+// NO consent gate: it is a product choice, not an identifier, so it never
+// reaches the runtime and telemetry's consent drop above doesn't touch it.
+// Onboarding reads it to preselect the journey picker; the picker drops it
+// once the user has chosen (or dismissed) a journey.
+
+/** localStorage key of the held journey choice. */
+export const LANDING_JOURNEY_KEY = "reliant.landing_journey";
+
+interface HeldJourney {
+  journey: JourneyId;
+  at: number;
+}
+
+/** The `journey` param in search, when it names a known journey. Pure. */
+export function journeyFromSearch(search: string): JourneyId | undefined {
+  try {
+    const value = new URLSearchParams(search).get("journey")?.trim();
+    return isJourneyId(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Hold the journey this page load arrived with. A load without one keeps an
+ * earlier one (the sign-in's own page load must not erase it). Never throws.
+ */
+export function holdLandingJourney(search: string = currentSearch(), now: number = Date.now()): void {
+  const journey = journeyFromSearch(search);
+  if (!journey) return;
+  try {
+    storage()?.setItem(LANDING_JOURNEY_KEY, JSON.stringify({ journey, at: now } satisfies HeldJourney));
+  } catch {
+    // Storage blocked or full: the picker just isn't preselected.
+  }
+}
+
+/** The held journey, or undefined when none is held or it is older than HOLD_MS. */
+export function readLandingJourney(now: number = Date.now()): JourneyId | undefined {
+  let raw: string | null = null;
+  try {
+    raw = storage()?.getItem(LANDING_JOURNEY_KEY) ?? null;
+  } catch {
+    return undefined;
+  }
+  if (!raw) return undefined;
+  try {
+    const held = JSON.parse(raw) as Partial<HeldJourney>;
+    if (isJourneyId(held.journey) && typeof held.at === "number" && now - held.at <= HOLD_MS && now >= held.at) {
+      return held.journey;
+    }
+  } catch {
+    // fall through: corrupt
+  }
+  dropLandingJourney();
+  return undefined;
+}
+
+/** Forget the held journey: the user has chosen one in the app. */
+export function dropLandingJourney(): void {
+  try {
+    storage()?.removeItem(LANDING_JOURNEY_KEY);
   } catch {
     // Best-effort.
   }

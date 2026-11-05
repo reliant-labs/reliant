@@ -530,7 +530,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   const selfHostedDaemons = daemons.filter((d) => isExternalDaemon(d));
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-tour="machines-list">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <select
           value={String(statusFilter)}
@@ -808,6 +808,7 @@ function ManagedMachinesTable({
         columns={columns}
         data={daemons.map((d) => ({ id: d.daemonId, d }))}
         getRowKey={(r) => r.id}
+        getRowProps={() => ({ "data-tour": "machine-row", "data-machine-kind": "cloud" })}
         // The row being renamed holds a form, so it is not a link meanwhile.
         getRowAction={(r) => (r.id === renaming ? undefined : () => onOpenDetail(r.id))}
         getRowLabel={(r) => daemonDisplayName(r.d)}
@@ -939,6 +940,7 @@ function SelfHostedMachinesTable({
         columns={columns}
         data={daemons.map((d) => ({ id: d.daemonId, d }))}
         getRowKey={(r) => r.id}
+        getRowProps={() => ({ "data-tour": "machine-row", "data-machine-kind": "local" })}
         // The row being renamed holds a form, so it is not a link meanwhile.
         getRowAction={(r) => (r.id === renaming ? undefined : () => onOpenDetail(r.id))}
         getRowLabel={(r) => daemonDisplayName(r.d)}

@@ -4,7 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { toast } from "../../lib/toast-manager";
 import { UpdateSection } from "./UpdateSection";
 import { useTourStore } from "../../store/tourStore";
-import { ONBOARDING_STEPS } from "../Onboarding/constants";
+import { pickerParam } from "../Onboarding/tourParam";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import { BrandMark } from "../icons/BrandMark";
 import { VersionDetails } from "./VersionDetails";
@@ -79,15 +79,15 @@ export function AboutSection() {
       icon: WandSparkles,
       label: "Restart Onboarding Guide",
       onClick: () => {
-        // Drop the user on the home route with `?tour=<first-step>` — the
-        // wizard reads the URL and takes it from there. The reset is
+        // Drop the user on the home route with the journey picker open
+        // (`?tour=pick:menu`) — the wizard reads the URL. The reset is
         // fire-and-forget (matches OnboardingChecklist.startTour); waiting on
         // the persistence RPC just delays the navigation and, when the RPC
         // is slow, makes the click look like a no-op.
         void useTourStore.getState().resetTourProgress();
         void navigate({
           to: "/",
-          search: { tour: ONBOARDING_STEPS[0].id },
+          search: { tour: pickerParam("menu") },
         });
         toast.success("Onboarding guide has been reset");
       },

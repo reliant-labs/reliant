@@ -12,7 +12,6 @@
  */
 
 import { z } from "zod";
-import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
 import { DASHBOARD_GROUPS } from "./components/Forge/Observability/Dashboards/dashboardGroups";
 import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observability/Dashboards/dashboardModel";
@@ -23,12 +22,13 @@ import { HEALTH_WINDOWS } from "./services/controlPlane/observability/deliveryTy
 import { ISSUE_PLATFORMS, ISSUE_SORTS } from "./services/controlPlane/observability/issuesTypes";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
 
-// The guided tour's "active step" lives in the URL as `?tour=<step-id>` —
-// absence means the wizard is not active. Adding this to every search schema
-// the wizard may render on keeps tanstack-router's strict validation from
-// stripping the param when the user navigates between hub / builder / chat
-// while in the middle of a step.
-const tourParam = z.enum(ONBOARDING_STEP_IDS).optional();
+// The onboarding journey's active step lives in the URL as
+// `?tour=<journey>:<step>` (grammar: components/Onboarding/tourParam.ts) —
+// absence means no tour. A plain string here: the hook resolves it against
+// the journey registry and ignores what it can't, so an unknown or retired
+// value is "no tour", never a route error. The root route retains the param
+// across navigations (routes.tsx).
+const tourParam = z.string().optional().catch(undefined);
 
 export const launchPlanSchema = z
   .object({
@@ -814,7 +814,7 @@ export const forgeLegacySearchSchema = z.object({
 export const workflowsAreaSearchSchema = z.object({
   project: z.string().optional().catch(undefined),
   allProjects: z.boolean().optional().catch(undefined),
-  tour: tourParam.catch(undefined),
+  tour: tourParam,
 });
 export type WorkflowsAreaSearch = Partial<z.output<typeof workflowsAreaSearchSchema>>;
 
