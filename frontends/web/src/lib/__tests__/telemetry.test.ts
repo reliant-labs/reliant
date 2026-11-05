@@ -375,6 +375,31 @@ describe("consent withdrawn mid-session", () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  // The runtime awaits visibility and the SDK import before it initialises,
+  // and the consent subscription does not replay: a withdrawal saved in that
+  // window is the only one there will be.
+  it("stops and reloads when consent is withdrawn while the SDK is starting", async () => {
+    const reload = vi.fn();
+    setReloadForTests(reload);
+    let finish!: (running: boolean) => void;
+    runtime.initBrowserTelemetry.mockImplementationOnce(
+      () => new Promise<boolean>((resolve) => (finish = resolve)),
+    );
+    const starting = initTelemetry();
+    await vi.waitFor(() => expect(runtime.initBrowserTelemetry).toHaveBeenCalledTimes(1));
+
+    // Withdrawn and saved before the SDK finished starting: no listener yet.
+    privacy.set({ crashReportingEnabled: false });
+    finish(true);
+    await starting;
+
+    expect(runtime.disableTelemetry).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+    resetTelemetryForTests();
+    expect(await initTelemetry()).toBe(false);
+    expect(runtime.initBrowserTelemetry).toHaveBeenCalledTimes(1);
+  });
+
   it("does not reload when the server refused the switch", async () => {
     const reload = vi.fn();
     setReloadForTests(reload);

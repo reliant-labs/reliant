@@ -286,6 +286,10 @@ async function start(): Promise<boolean> {
   if (!running) return false;
 
   unsubscribeConsent = subscribePrivacyConsent(onConsentChange);
+  // The subscription does not replay the current consent, and initBrowserTelemetry
+  // awaited visibility and the SDK import: a withdrawal saved in that window
+  // fired no event we heard. Reconcile now, so it still stops and reloads.
+  onConsentChange(privacyConsent());
 
   try {
     await stampClientAttributes({ "reliant.build": buildVersion });
