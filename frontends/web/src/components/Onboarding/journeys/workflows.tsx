@@ -23,7 +23,7 @@ import { toast } from "sonner";
 
 import { useTriggers } from "../../../hooks/trigger-queries";
 import { triggerRunsWorkflow } from "../../../lib/triggerRail";
-import { WORKFLOWS_LIBRARY_PATH } from "../../../lib/workflowsArea";
+import { WORKFLOW_PAGES_PREFIX, WORKFLOWS_LIBRARY_PATH } from "../../../lib/workflowsArea";
 import { useProjectStore } from "../../../store/projectStore";
 import { useTourStore } from "../../../store/tourStore";
 import { tourEvents, type TourEventMap, type TourEventName } from "../tourEvents";
@@ -159,7 +159,7 @@ export const workflowsJourney: Journey = {
       description:
         "A workflow is a set of steps an agent follows. You'll build one that reviews a pull request, fixes it until the tests pass, and asks you before it merges. Click New workflow.",
       target: "button:has([data-tour='new-workflow'])",
-      route: { path: "/workflow", open: { to: WORKFLOWS_LIBRARY_PATH }, label: "Open Workflows" },
+      route: { path: WORKFLOW_PAGES_PREFIX, open: { to: WORKFLOWS_LIBRARY_PATH }, label: "Open Workflows" },
       phases: [
         { target: "button:has([data-tour='new-workflow'])" },
         {
