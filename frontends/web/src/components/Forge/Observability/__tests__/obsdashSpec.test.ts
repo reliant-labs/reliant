@@ -35,7 +35,9 @@ describe("validation", () => {
   });
 
   it.each<[string, Partial<Panel>, string]>([
-    ["unknown kind", { kind: "heatmap" }, "not a panel kind"],
+    ["unknown kind", { kind: "cube" }, "not a panel kind"],
+    ["a filter of another signal", { where: [{ field: "log.severity", op: "eq", value: "error" }] }, "is not a field of traces"],
+    ["a display a table does not take", { kind: "table", display: { style: "area" } }, "drawn one way"],
     ["unknown signal", { signal: "profiles" }, "not a signal"],
     ["no title", { title: " " }, "title"],
     ["no series", { series: [] }, "at least one series"],
@@ -131,7 +133,7 @@ describe("metric aggregations (MX-F1's vocabulary)", () => {
 
   it("accepts a table and a bar over metrics, with a limit; a bar needs a group-by", () => {
     expect(panelProblems(metricPanel([s("rate", "sum")], { kind: "table", limit: 20 }))).toEqual([]);
-    expect(panelProblems(metricPanel([s("rate", "sum")], { kind: "bar", groupBy: ["status"], limit: 10 }))).toEqual([]);
+    expect(panelProblems(metricPanel([s("rate", "sum")], { kind: "bar", groupBy: ["metric.attr.status"], limit: 10 }))).toEqual([]);
     expect(panelProblems(metricPanel([s("rate", "sum")], { kind: "bar" })).join(" ")).toContain("needs a group-by");
   });
 

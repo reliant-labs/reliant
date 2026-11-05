@@ -30,6 +30,7 @@ import {
 } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
 
 import { getControlPlaneClient } from "../client";
+import { canonicalJson } from "./canonicalJson";
 import type {
   DashboardDocument,
   DashboardIndex,
@@ -177,9 +178,15 @@ export function dashboardFromJson(value: JsonObject | undefined): Dashboard {
   };
 }
 
-/** The dashboard as a Struct: plain JSON, undefined keys dropped. */
+/**
+ * The dashboard as a Struct, in forge's canonical form: what the console
+ * fills in when reading (an empty `series` on a text panel, an empty signal)
+ * and every other empty value is dropped, as forge's omitempty fields drop
+ * them, because forge's validator refuses a field a kind does not take even
+ * when it is empty.
+ */
 export function dashboardToJson(dashboard: Dashboard): JsonObject {
-  return JSON.parse(JSON.stringify(dashboard)) as JsonObject;
+  return JSON.parse(JSON.stringify(canonicalJson(dashboard) ?? {})) as JsonObject;
 }
 
 // ── RPCs ─────────────────────────────────────────────────────────────────────

@@ -70,6 +70,7 @@
         ContentStall: 6m0s
         Progress: 11m0s
         MidBlock: 3m0s
+        FirstToken: 0s
       }
       ReliantBaseURL: "https://llm.surface.test"
       VertexProject: "surface-project"

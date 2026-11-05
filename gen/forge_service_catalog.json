@@ -5349,6 +5349,12 @@
               "Name": "oldest_seq",
               "ProtoType": "int64",
               "IsOptional": false
+            },
+            {
+              "Name": "errors",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ChatErrorUpdate"
             }
           ],
           "ListQueuedAgentMessagesRequest": [
@@ -6289,6 +6295,24 @@
               "type_name": "reliant.v1.ChatOrigin"
             }
           ],
+          "reliant.v1.ChatErrorUpdate": [
+            {
+              "name": "entity_id",
+              "kind": "string"
+            },
+            {
+              "name": "sequence_number",
+              "kind": "int64"
+            },
+            {
+              "name": "data_json",
+              "kind": "string"
+            },
+            {
+              "name": "created_at",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.ChatPlan": [
             {
               "name": "id",
@@ -6835,6 +6859,12 @@
             {
               "name": "oldest_seq",
               "kind": "int64"
+            },
+            {
+              "name": "errors",
+              "kind": "message",
+              "type_name": "reliant.v1.ChatErrorUpdate",
+              "repeated": true
             }
           ],
           "reliant.v1.ListQueuedAgentMessagesRequest": [
@@ -7852,6 +7882,7 @@
           "reliant.v1.CancelQueuedAgentMessageRequest": "reliant/v1/chat.proto",
           "reliant.v1.CancelQueuedAgentMessageResponse": "reliant/v1/chat.proto",
           "reliant.v1.Chat": "reliant/v1/chat.proto",
+          "reliant.v1.ChatErrorUpdate": "reliant/v1/chat.proto",
           "reliant.v1.ChatPlan": "reliant/v1/chat.proto",
           "reliant.v1.ChatSelection": "reliant/v1/chat.proto",
           "reliant.v1.ChatUpdate": "reliant/v1/chat.proto",
@@ -38694,6 +38725,17 @@
               "name": "hosted_use",
               "kind": "message",
               "type_name": "reliant.v1.CelString"
+            },
+            {
+              "name": "credential",
+              "kind": "message",
+              "type_name": "reliant.v1.ActionCredential"
+            }
+          ],
+          "reliant.v1.ActionCredential": [
+            {
+              "name": "secret",
+              "kind": "string"
             }
           ],
           "reliant.v1.AnyInputConfig": [
@@ -40008,6 +40050,12 @@
               "kind": "string"
             },
             {
+              "name": "secret_refs",
+              "kind": "message",
+              "type_name": "reliant.v1.NodeSecretRef",
+              "repeated": true
+            },
+            {
               "name": "call_llm",
               "kind": "message",
               "type_name": "reliant.v1.CallLLMArgs",
@@ -40112,6 +40160,17 @@
             {
               "name": "description",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.NodeSecretRef": [
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "environment",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
             }
           ],
           "reliant.v1.NumberInputConfig": [
@@ -40613,6 +40672,13 @@
               "name": "catchup_window",
               "kind": "string",
               "optional": true
+            }
+          ],
+          "reliant.v1.SecretDeclaration": [
+            {
+              "name": "environment",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
             }
           ],
           "reliant.v1.SetWorkflowStatusRequest": [
@@ -41182,6 +41248,13 @@
               "name": "requires",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowRequirements"
+            },
+            {
+              "name": "secrets",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "message",
+              "map_value_type_name": "reliant.v1.SecretDeclaration"
             }
           ],
           "reliant.v1.WorkflowConcurrency": [
@@ -41410,6 +41483,7 @@
         },
         "SchemaFiles": {
           "reliant.v1.ActionArgs": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.ActionCredential": "reliant/v1/workflow_v2.proto",
           "reliant.v1.AnyInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ApprovalArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ArrayInputConfig": "reliant/v1/workflow_v2.proto",
@@ -41469,6 +41543,7 @@
           "reliant.v1.ModelSelector": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Node": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeRouterCandidate": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.NodeSecretRef": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NumberInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ObjectInputConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Position": "reliant/v1/workflow_v2.proto",
@@ -41485,6 +41560,7 @@
           "reliant.v1.SaveWorkflowRequest": "reliant/v1/workflow.proto",
           "reliant.v1.SaveWorkflowResponse": "reliant/v1/workflow.proto",
           "reliant.v1.ScheduleSource": "reliant/v1/trigger.proto",
+          "reliant.v1.SecretDeclaration": "reliant/v1/workflow_v2.proto",
           "reliant.v1.SetWorkflowStatusRequest": "reliant/v1/workflow.proto",
           "reliant.v1.SetWorkflowStatusResponse": "reliant/v1/workflow.proto",
           "reliant.v1.SetWorkflowVisibilityRequest": "reliant/v1/workflow.proto",

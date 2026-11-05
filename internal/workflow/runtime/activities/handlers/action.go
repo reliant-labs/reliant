@@ -36,6 +36,16 @@ type ActionActivity struct {
 	runner      writeledger.Runner
 	credentials httpaction.CredentialSource
 	hosted      HostedActionExecutor
+	secrets     SecretResolver
+}
+
+// WithSecretResolver lets an action's credential slots (an http/request header,
+// credential: {secret: NAME}) use the workflow's declared secrets. A nil
+// resolver makes such an action fail rather than send the placeholder.
+func (a *ActionActivity) WithSecretResolver(r SecretResolver) *ActionActivity {
+	clone := *a
+	clone.secrets = r
+	return &clone
 }
 
 // HostedActionExecutor is used only by fixed action nodes, never by the
@@ -118,7 +128,30 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 		params[httpaction.ConnectionParam] = connection
 	}
 
+	// Declared secrets reach an action only in a credential slot: a header of
+	// the generic HTTP request, or the action's credential. Slot headers leave
+	// params here, so nothing
+	// that renders, records or returns params (the request template, the write
+	// ledger, the output) ever holds a value; a marker anywhere else fails the
+	// step before anything is resolved or sent.
+	slots, failure := takeSecretHeaders(uses, resolved.Manifest.GetId(), resolved.Spec.GetId(), params)
+	if failure != nil {
+		return failure, nil
+	}
+	// The other slot: credential {secret: NAME}, written where the
+	// integration's api_key method puts a key.
+	if c := args.GetCredential(); c != nil {
+		slot, failure := credentialSlot(uses, resolved.Manifest, c.GetSecret(), params, len(slots) > 0, args.GetHostedUse() != nil, rtx.ActingIdentity)
+		if failure != nil {
+			return failure, nil
+		}
+		slots = append(slots, slot)
+	}
+
 	if args.GetHostedUse() != nil {
+		if len(slots) > 0 {
+			return failedAction(uses, "invalid_argument", "a hosted_use action cannot use declared secrets"), nil
+		}
 		grant := strings.TrimSpace(model.CelStringRaw(args.GetHostedUse()))
 		return a.executeHosted(ctx, uses, grant, params, rtx), nil
 	}
@@ -126,6 +159,15 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 	site := httpaction.CallSite{
 		RunID: rtx.WorkflowID, NodeID: rtx.StepID, ToolCallID: invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration),
 		ActingIdentity: rtx.ActingIdentity, Automation: rtx.Automation,
+	}
+	if len(slots) > 0 {
+		cred, failure := a.secretHeaderCredential(ctx, input, uses, slots)
+		if failure != nil {
+			return failure, nil
+		}
+		// A credential holds the call to https and to the host it started at
+		// (redirects and pagination links included), as a saved connection does.
+		site.StepCredential = cred
 	}
 	result, runErr := a.runner.RunAuthenticated(ctx, resolved.Manifest, resolved.Spec, params, a.credentials, site)
 	out := &reliantv1.ActionOutput{Uses: uses}
@@ -152,4 +194,40 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 	activity.GetLogger(ctx).Debug("[Action] Completed", "stepID", rtx.StepID, "uses", uses,
 		"isError", out.IsError, "status", out.StatusCode)
 	return out, nil
+}
+
+// secretHeaderCredential resolves the secrets the step's header slots name and
+// returns the credential that writes them into the request.
+func (a *ActionActivity) secretHeaderCredential(ctx context.Context, input ActivityInput, uses string, slots []secretHeader) (httpaction.Credential, *reliantv1.ActionOutput) {
+	rtx := input.Runtime
+	fail := func(code, message string) *reliantv1.ActionOutput { return failedAction(uses, code, message) }
+	names := make([]string, 0, len(slots))
+	for _, h := range slots {
+		names = append(names, h.secret)
+	}
+	want, err := nodeSecretRefs(input.Node, names)
+	if err != nil {
+		return nil, fail("invalid_argument", err.Error())
+	}
+	if rtx.WorkflowID == "" || rtx.StepID == "" {
+		return nil, fail("failed_precondition", "secrets require a fixed workflow step")
+	}
+	values, err := resolveStepSecrets(ctx, a.secrets, rtx.WorkflowID, rtx.StepID, want)
+	if err != nil {
+		message, denied := secretFailure(err)
+		code := "failed_precondition"
+		if denied {
+			code = "permission_denied"
+		}
+		return nil, fail(code, message)
+	}
+	cred, err := newSecretHeaderCredential(slots, values)
+	if err != nil {
+		return nil, fail("invalid_argument", err.Error())
+	}
+	return cred, nil
+}
+
+func failedAction(uses, code, message string) *reliantv1.ActionOutput {
+	return &reliantv1.ActionOutput{Uses: uses, IsError: true, ErrorCode: code, Content: message}
 }

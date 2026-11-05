@@ -242,6 +242,39 @@ func LatestWorkflowNodeUpdates(ctx context.Context, db orm.Context, chatID, work
 	return scanChatUpdates(ctx, db, WorkflowNodeHeadsSQL, chatID, workflowID)
 }
 
+// ErrorUpdatesInRangeSQL is ErrorUpdatesInRange's statement: for each error
+// with an update in [$2, the creation of thread $3's first message at or after
+// seq $4), its newest update INSIDE that range, oldest first. $2 NULL leaves
+// the range open below; no such message leaves it open above. The range is
+// applied before DISTINCT ON on purpose: it is what keeps the read on
+// idx_chat_updates_errors_created. Read through that index.
+const ErrorUpdatesInRangeSQL = `
+		SELECT id, chat_id, sequence_number, update_type, entity_id, data, created_at FROM (
+			SELECT DISTINCT ON (entity_id) id, chat_id, sequence_number, update_type, entity_id, data, created_at
+			  FROM chat_updates
+			 WHERE chat_id = $1 AND update_type = 6
+			   AND ($2::timestamptz IS NULL OR created_at >= $2::timestamptz)
+			   AND created_at < COALESCE(
+					(SELECT m.created_at FROM messages m
+					  WHERE m.thread_id = $3 AND m.seq >= $4
+					  ORDER BY m.seq LIMIT 1),
+					'infinity'::timestamptz)
+			 ORDER BY entity_id, sequence_number DESC
+		) e
+		ORDER BY sequence_number`
+
+// ErrorUpdatesInRange is the errors a page of history holds: raised at or
+// after from (nil: since the chat began) and before the first message of
+// thread at or after beforeSeq, the message the client already shows next.
+// One update per error (a retry series shares one id): its newest attempt
+// inside the range, which is not its newest overall when the series runs on
+// past the range's upper edge. That later attempt lies in history the client
+// already holds, so a caller merging these must never let one replace a newer
+// attempt it has (the web client's applyHistoricalErrors).
+func ErrorUpdatesInRange(ctx context.Context, db orm.Context, chatID string, from *time.Time, thread string, beforeSeq int64) ([]core.ChatUpdate, error) {
+	return scanChatUpdates(ctx, db, ErrorUpdatesInRangeSQL, chatID, from, thread, beforeSeq)
+}
+
 // scanChatUpdates runs a statement selecting chat_updates' columns in table
 // order and reads its rows.
 func scanChatUpdates(ctx context.Context, db orm.Context, query string, args ...any) ([]core.ChatUpdate, error) {

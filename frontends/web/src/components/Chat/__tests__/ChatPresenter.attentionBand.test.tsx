@@ -21,6 +21,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
+import { NARROW_VIEWPORT_QUERY } from "../../../hooks/useNarrowViewport";
 
 const CHAT_ID = "chat-abc";
 const MAIN_THREAD_ID = "workflow-xyz";
@@ -228,9 +229,11 @@ describe.each(["desktop", "mobile"] as const)(
 );
 
 /**
- * On a compact column the band collapses into the status slot's one line
- * (mobile-chat-redesign.md §6). Keyed on the column's width, not the surface:
- * a narrow desktop pane collapses too. The real strip and pill report into it.
+ * On a phone's compact column the band collapses into the status slot's one
+ * line (mobile-chat-redesign.md §6); the real strip and pill report into it.
+ * The desktop shell is unchanged at any column width: the queued strip and the
+ * background-work pill render inline, the pill expands in place, and nothing
+ * opens a sheet.
  */
 describe("the attention band on a compact column", () => {
   let rectSpy: ReturnType<typeof vi.spyOn>;
@@ -239,11 +242,47 @@ describe("the attention band on a compact column", () => {
       width: 390, height: 0, top: 0, left: 0, right: 390, bottom: 0, x: 0, y: 0, toJSON: () => ({}),
     } as DOMRect);
   });
-  afterEach(() => rectSpy.mockRestore());
+  afterEach(() => {
+    rectSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
 
-  it.each(["desktop", "mobile"] as const)(
+  function stubViewport(narrow: boolean) {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: narrow && query === NARROW_VIEWPORT_QUERY,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+  }
+
+  it("keeps the queued strip and the running pill inline on desktop, the pill expanding in place", async () => {
+    stubViewport(false);
+    seedRunningSpawn();
+    renderPresenter("desktop");
+
+    expect(await screen.findByText("check the migration file")).toBeVisible();
+    expect(screen.getByLabelText("Cancel queued message")).toBeVisible();
+    expect(screen.getByLabelText("Interrupt the agent and deliver queued messages now")).toBeVisible();
+    expect(screen.queryByTestId("composer-status-slot")).toBeNull();
+
+    const pill = await screen.findByTestId("background-work-pill");
+    expect(pill).toBeVisible();
+    expect(pill).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(pill);
+    expect(pill).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("background-work-spawn-thread-42")).toBeVisible();
+    expect(screen.queryByTestId("status-slot-sheet")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it.each([
+    ["the mobile shell", "mobile", false],
+    ["a desktop viewport below the mobile breakpoint", "desktop", true],
+  ] as const)(
     "shows queued and running as two chips, and the strip in full in the sheet (%s)",
-    async (surface) => {
+    async (_name, surface, narrow) => {
+      stubViewport(narrow);
       seedRunningSpawn();
       renderPresenter(surface);
 

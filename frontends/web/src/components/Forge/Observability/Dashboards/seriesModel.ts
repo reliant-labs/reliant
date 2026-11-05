@@ -128,7 +128,7 @@ const FOLDABLE_AGGS = new Set(["count", "sum", "increase", "rate"]);
 const TOTALABLE_AGGS = new Set(["count", "sum", "increase"]);
 
 export function additivityOf(panel: Pick<Panel, "series" | "ratio" | "formula" | "kind">, unit: Unit): Additivity {
-  if (panel.ratio || panel.formula || unit === "percent" || panel.kind === "sql" || panel.series.length === 0) {
+  if (panel.ratio || panel.formula || unit === "percent" || panel.kind === "sql" || panel.kind === "postgres" || panel.series.length === 0) {
     // A sql panel declares no aggregate: whether its numbers add up is unknown, so nothing is summed for it.
     return { foldable: false, totalable: false };
   }
@@ -177,7 +177,7 @@ export function seriesLabel(series: Pick<Series, "label" | "group">, panel: Pick
   if (!group) return series.label;
   // SQL may return several numeric columns for each group without declaring
   // panel.series. Keep their response labels, even when one is named "ratio".
-  if (panel.kind !== "sql" && (series.label === "ratio" || panel.series.length <= 1)) return group;
+  if (panel.kind !== "sql" && panel.kind !== "postgres" && (series.label === "ratio" || panel.series.length <= 1)) return group;
   return `${group} — ${series.label}`;
 }
 

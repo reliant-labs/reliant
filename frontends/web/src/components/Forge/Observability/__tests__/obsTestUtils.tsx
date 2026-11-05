@@ -11,7 +11,7 @@
 
 import { useState, type ReactElement } from "react";
 import { render, type RenderResult } from "@testing-library/react";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
@@ -56,8 +56,7 @@ export function renderPanel(api: ObservabilityApi, initial: ObsSearch = {}, plac
   return { ...result, navigations, current: () => latest };
 }
 
-export function renderWithApi(api: ObservabilityApi, ui: ReactElement): RenderResult {
-  const client = createTestQueryClient();
+export function renderWithApi(api: ObservabilityApi, ui: ReactElement, client: QueryClient = createTestQueryClient()): RenderResult {
   return render(
     <QueryClientProvider client={client}>
       <ObsQuotaProvider><ObservabilityApiProvider api={api}>{ui}</ObservabilityApiProvider></ObsQuotaProvider>

@@ -21,6 +21,7 @@
 
 import { disableTelemetry, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
 import {
+  enableAttribution,
   initBrowserTelemetry,
   type BrowserTelemetryConfig,
 } from "@reliantlabs/forge-web-runtime/telemetry";
@@ -33,6 +34,7 @@ import { appBuild } from "./appBuild";
 import { loadConfig, type ReliantWebConfig } from "./config_gen";
 import { isDev } from "./constants";
 import { reportFirstLaunch } from "./appFirstLaunch";
+import { dropLandingAttribution, readLandingAttribution } from "./landingAttribution";
 import { reportError } from "./errorReporting";
 import { clickstackEnabled } from "./telemetryEndpoint";
 import { SERVICE_NAME } from "./otel_gen";
@@ -225,18 +227,26 @@ function onConsentChange(consent: { crashReportingEnabled: boolean }): void {
 
 /**
  * Start browser telemetry. Idempotent, never throws, and resolves to whether
- * it is running.
+ * it is running. Concurrent callers share one attempt; an attempt that ends
+ * not running is forgotten, so a later call tries again (and can still hand
+ * over the held landing attribution).
  */
 export function initTelemetry(): Promise<boolean> {
   if (started) return started;
   if (isDev || !clickstackEnabled()) return Promise.resolve(false);
   if (!privacyConsent().crashReportingEnabled) return Promise.resolve(false);
 
-  started = start().catch((err) => {
-    console.warn("[telemetry] init failed:", err);
-    return false;
-  });
-  return started;
+  const attempt: Promise<boolean> = start()
+    .catch((err) => {
+      console.warn("[telemetry] init failed:", err);
+      return false;
+    })
+    .then((running) => {
+      if (!running && started === attempt) started = null;
+      return running;
+    });
+  started = attempt;
+  return attempt;
 }
 
 async function start(): Promise<boolean> {
@@ -282,8 +292,23 @@ async function start(): Promise<boolean> {
     ],
   });
 
+  // The landing site's rid / utm_* handoff, held since boot: by now the router and
+  // the sign-in have replaced the URL it arrived on (landingAttribution.ts). Handed
+  // to the runtime only with analytics consent, as the landing site gave it only
+  // with that consent, and dropped without it. It stays held until the runtime is
+  // running, so a failed start leaves it for the next page load's attempt.
+  const handoff = readLandingAttribution();
+  if (handoff) {
+    if (privacyConsent().analyticsEnabled) {
+      enableAttribution({ search: handoff });
+    } else {
+      dropLandingAttribution();
+    }
+  }
+
   const running = await initBrowserTelemetry(config);
   if (!running) return false;
+  if (handoff) dropLandingAttribution();
 
   unsubscribeConsent = subscribePrivacyConsent(onConsentChange);
   // The subscription does not replay the current consent, and initBrowserTelemetry

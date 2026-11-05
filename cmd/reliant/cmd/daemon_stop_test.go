@@ -324,7 +324,7 @@ func TestShutdownForceExitsWhenGracefulShutdownDoesNotFinish(t *testing.T) {
 
 	go watchShutdownSignals(sigCh, &out, func() { close(canceled) }, 150*time.Millisecond, func(code int) {
 		exited <- code
-	})
+	}, nil)
 
 	sigCh <- syscall.SIGTERM
 	select {
@@ -348,7 +348,7 @@ func TestSecondSignalForceExitsImmediately(t *testing.T) {
 	exited := make(chan int, 1)
 	var out lockedBuffer
 
-	go watchShutdownSignals(sigCh, &out, func() {}, time.Minute, func(code int) { exited <- code })
+	go watchShutdownSignals(sigCh, &out, func() {}, time.Minute, func(code int) { exited <- code }, nil)
 
 	sigCh <- syscall.SIGINT
 	require.Eventually(t, func() bool { return strings.Contains(out.String(), "Shutting down") },
@@ -360,5 +360,30 @@ func TestSecondSignalForceExitsImmediately(t *testing.T) {
 		require.Equal(t, 130, code)
 	case <-time.After(5 * time.Second):
 		t.Fatal("a second signal must force-exit without waiting out the deadline")
+	}
+}
+
+// The first signal is explained before anything shuts down: by the time the
+// daemon has stopped, the commands in flight — often including the one that
+// sent the signal — are gone.
+func TestShutdownDescribesTheFirstSignalBeforeCancelling(t *testing.T) {
+	sigCh := make(chan os.Signal, 2)
+	canceled := make(chan string, 1)
+	var out lockedBuffer
+	var got os.Signal
+
+	go watchShutdownSignals(sigCh, &out, func() { canceled <- out.String() }, time.Minute, func(int) {},
+		func(sig os.Signal) string {
+			got = sig
+			return "Stop signal terminated after 1m0s up\n"
+		})
+
+	sigCh <- syscall.SIGTERM
+	select {
+	case before := <-canceled:
+		require.Equal(t, syscall.SIGTERM, got)
+		require.Contains(t, before, "Stop signal terminated after 1m0s up")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first signal must start a graceful shutdown")
 	}
 }

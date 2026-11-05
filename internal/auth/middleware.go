@@ -178,6 +178,7 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 
 		// Add claims to context
 		ctx := WithUser(r.Context(), claims.Sub, claims.Role, claims.Email)
+		ctx = WithCredential(ctx, claims.Credential)
 		if principal != nil {
 			ctx = WithMachineToken(ctx, principal)
 		}
