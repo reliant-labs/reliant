@@ -140,6 +140,22 @@ const fkProximityWindow = 100
 // commentedFKClaims returns every passage in text that mentions foreign keys
 // and commenting CLOSE TOGETHER — i.e. every place the prose could be read as
 // "forge comments its FKs out".
+// birthMappingSkill names the forge skill that holds the proto → SQL birth
+// mapping: db/birth since forge #1785 split db into a router and sub-skills,
+// db before it. Decided from the pinned forge's own skill list, not from a
+// load error, so a db/birth that exists but fails to load still fails loudly.
+func birthMappingSkill(t *testing.T) string {
+	t.Helper()
+	skills, err := forgecli.ListSkills("")
+	require.NoError(t, err, "could not list forge's skills")
+	for _, s := range skills {
+		if s.Path == "db/birth" {
+			return "db/birth"
+		}
+	}
+	return "db"
+}
+
 func commentedFKClaims(text string) []string {
 	flat := strings.Join(strings.Fields(text), " ")
 	var out []string
@@ -195,9 +211,12 @@ func commentedFKClaims(text string) []string {
 func TestForgeOneShotDoesNotCallBirthsForeignKeysCommented(t *testing.T) {
 	t.Parallel()
 	// The producer half: forge's own db/birth skill is the authority the
-	// charter is paraphrasing, and it says the reference is APPLIED.
-	skill, err := forgecli.LoadSkill("", "db/birth")
-	require.NoError(t, err, "could not load forge's db/birth skill — this guard derives the fact "+
+	// charter is paraphrasing, and it says the reference is APPLIED. A forge
+	// pinned from before #1785 still carries the mapping in the db skill
+	// itself, so read whichever skill the pinned forge actually ships.
+	skillPath := birthMappingSkill(t)
+	skill, err := forgecli.LoadSkill("", skillPath)
+	require.NoError(t, err, "could not load forge's "+skillPath+" skill — this guard derives the fact "+
 		"from it, and a guard that cannot reach its producer must fail loudly rather than "+
 		"pass over an empty set")
 
