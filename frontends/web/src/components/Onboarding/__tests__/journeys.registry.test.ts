@@ -22,6 +22,19 @@ import type { Journey } from "../types";
 
 const resolve = (raw: string) => resolveTour(parseTourParam(raw));
 
+/** The workflows journey proper (journeys-spec.md §2.2), before its outro. */
+const WORKFLOWS_STEPS = [
+  "wf-new",
+  "wf-edge",
+  "wf-loop",
+  "wf-branch",
+  "wf-trigger",
+  "wf-enable",
+  "wf-machines",
+  "wf-automations",
+  "wf-params",
+];
+
 function journeys(over: Partial<Record<"workflows" | "forge", Partial<Journey>>>) {
   return {
     workflows: { ...JOURNEYS.workflows, ...over.workflows },
@@ -74,8 +87,8 @@ describe("journey registry", () => {
 
   describe("resolveTour", () => {
     it("opens journey:step, and a journey alone at its first step", () => {
-      expect(resolve("workflows:wf-library")).toMatchObject({ kind: "step", journey: "workflows", stepId: "wf-library" });
-      expect(resolve("workflows")).toMatchObject({ stepId: "wf-open" });
+      expect(resolve("workflows:wf-loop")).toMatchObject({ kind: "step", journey: "workflows", stepId: "wf-loop" });
+      expect(resolve("workflows")).toMatchObject({ stepId: "wf-new" });
     });
 
     it("finds the journey of a bare step id", () => {
@@ -83,19 +96,19 @@ describe("journey registry", () => {
     });
 
     it("opens an unknown step of a known journey at its first step", () => {
-      expect(resolve("workflows:not-a-step")).toMatchObject({ journey: "workflows", stepId: "wf-open" });
+      expect(resolve("workflows:not-a-step")).toMatchObject({ journey: "workflows", stepId: "wf-new" });
     });
 
     it("redirects the retired single tour's ids to their successor journey", () => {
-      expect(resolve("chat-and-sidebars")).toMatchObject({ journey: "workflows", stepId: "wf-open" });
-      expect(resolve("workflow-builder")).toMatchObject({ journey: "workflows", stepId: "wf-open" });
+      expect(resolve("chat-and-sidebars")).toMatchObject({ journey: "workflows", stepId: "wf-new" });
+      expect(resolve("workflow-builder")).toMatchObject({ journey: "workflows", stepId: "wf-new" });
       expect(resolve("deployments")).toMatchObject({ journey: "forge", stepId: "fg-open-apps" });
     });
 
     it("is null for an unknown id or a journey that doesn't run here", () => {
       expect(resolve("zz-nothing")).toBeNull();
       setTourShell("forge");
-      expect(resolve("workflows:wf-open")).toBeNull();
+      expect(resolve("workflows:wf-new")).toBeNull();
       setTourShell("reliant");
       setForgeUIEnabled(false);
       expect(resolve("forge")).toBeNull();
@@ -104,17 +117,17 @@ describe("journey registry", () => {
 
   describe("walking steps", () => {
     it("walks steps then the outro, in Reliant", () => {
-      expect(activeJourneySteps("workflows").map((s) => s.id)).toEqual(["wf-open", "wf-library", "wf-outro-layout"]);
-      expect(nextStepId("workflows", "wf-library")).toBe("wf-outro-layout");
+      expect(activeJourneySteps("workflows").map((s) => s.id)).toEqual([...WORKFLOWS_STEPS, "wf-outro-layout"]);
+      expect(nextStepId("workflows", "wf-params")).toBe("wf-outro-layout");
       expect(nextStepId("workflows", "wf-outro-layout")).toBeNull();
-      expect(previousStepId("workflows", "wf-outro-layout")).toBe("wf-library");
-      expect(stepPosition("workflows", "wf-outro-layout")).toEqual({ index: 2, total: 3 });
+      expect(previousStepId("workflows", "wf-outro-layout")).toBe("wf-params");
+      expect(stepPosition("workflows", "wf-outro-layout")).toEqual({ index: 9, total: 10 });
     });
 
     it("drops a reliant-only outro step in the forge shell, so the journey ends on its last step", () => {
       setTourShell("forge");
-      expect(activeJourneySteps("workflows").map((s) => s.id)).toEqual(["wf-open", "wf-library"]);
-      expect(nextStepId("workflows", "wf-library")).toBeNull();
+      expect(activeJourneySteps("workflows").map((s) => s.id)).toEqual(WORKFLOWS_STEPS);
+      expect(nextStepId("workflows", "wf-params")).toBeNull();
     });
 
     it("lists only the journeys that run in this shell", () => {

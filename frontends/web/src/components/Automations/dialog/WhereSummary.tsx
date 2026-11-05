@@ -17,6 +17,7 @@ import { CardInset } from "../../forge-ui/card";
 import { WorktreeField } from "../../workflow/run/RunWorkflowForm";
 import { errorTextClass, fieldClass, hintClass, labelClass } from "../../workflow/run/runFormStyles";
 import { NO_MACHINE, type DaemonChoice } from "../daemonChoices";
+import { tourEvents } from "../../Onboarding/tourEvents";
 import { machineOptionLabel, NO_MACHINE_OPTION_LABEL } from "./machineDefault";
 
 export interface WhereSummaryProps {
@@ -52,7 +53,7 @@ export function WhereSummary(props: WhereSummaryProps) {
     projectId,
     onProjectChange,
     machine,
-    onMachineChange,
+    onMachineChange: setMachine,
     choices,
     daemonsLoading,
     hasDaemons,
@@ -65,6 +66,11 @@ export function WhereSummary(props: WhereSummaryProps) {
     machineError,
     onBlurField,
   } = props;
+  // Every Runs on change also tells the tour (the workflows journey's W6).
+  const onMachineChange = (next: string) => {
+    tourEvents.emit("automation:machineChosen", { machine: next === NO_MACHINE ? "none" : next });
+    setMachine(next);
+  };
   const panelId = useId();
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -150,7 +156,7 @@ export function WhereSummary(props: WhereSummaryProps) {
               {projectError && <p id={id("project-error")} className={errorTextClass}>{projectError}</p>}
             </div>
           )}
-          <div onBlur={() => onBlurField?.("machine")}>
+          <div onBlur={() => onBlurField?.("machine")} data-tour="runs-on">
             {!daemonsLoading && !hasDaemons && !machine ? (
               <span id={id("machine-label")} className={labelClass}>
                 Runs on
