@@ -1,0 +1,61 @@
+{
+  "name": "@reliantlabs/sdk",
+  "version": "0.1.0",
+  "description": "The Reliant SDK for TypeScript: a framework-free client for Reliant's chat and run streams (transport, a reconnecting stream that resumes by sequence number, typed events, a pure reducer, retry-safe sends). Versioned with Reliant's API.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reliant-labs/reliant.git",
+    "directory": "sdk/ts"
+  },
+  "homepage": "https://github.com/reliant-labs/reliant/tree/main/sdk/ts#readme",
+  "bugs": {
+    "url": "https://github.com/reliant-labs/reliant/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "NOTICE"
+  ],
+  "main": "./dist/client/index.js",
+  "types": "./dist/client/index.d.ts",
+  "exports": {
+    "./client": {
+      "types": "./dist/client/index.d.ts",
+      "default": "./dist/client/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "imports": {
+    "#gen/*": "./dist/gen/*"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@bufbuild/protobuf": "^2.5.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@reliantlabs/forge-web-runtime": "^0.12.0 || ^0.13.0"
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "^2.10.0",
+    "@connectrpc/connect": "^2.1.1",
+    "@opentelemetry/api": "^1.9.1",
+    "@reliantlabs/forge-web-runtime": "^0.13.0",
+    "@types/node": "^24.3.0",
+    "typescript": "~5.8.3",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,14 +1,12 @@
-// Copyright (c) 2025 Reliant Labs
-// Connection lifecycle shared by the two live streams: the user-wide stream
-// (streaming-grpc.ts) and the per-chat stream (chat-streaming-grpc.ts). Each
-// stream owns one instance, so they connect, back off, detect a dead socket
-// and reconnect independently — a chat switch never touches the user stream,
-// and a chat stream failure never takes the user stream down with it.
+// Connection lifecycle shared by the live streams: the user-wide stream and
+// the per-chat stream. Each stream owns one instance, so they connect, back
+// off, detect a dead socket and reconnect independently — a chat switch never
+// touches the user stream, and a chat stream failure never takes the user
+// stream down with it.
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { logger } from "../lib/logger";
-import { pageActivity } from "../lib/pageActivity";
-import type { ConnectionStatus } from "../types/streaming";
+import type { ConnectionStatus } from "./events.js";
+import { noopLogger, withPrefix, type Logger } from "./logger.js";
 
 // Reconnect pacing. Each stream is a push path the UI has no other source
 // for, so there is no state in which giving up permanently is correct — a
@@ -37,8 +35,8 @@ export const SHORT_LIVED_CONNECTION_MS = 10_000;
 
 // Liveness watchdog. The server sends a heartbeat every 30s on both streams
 // (internal/handlers/streaming defaultHeartbeatInterval). A half-open
-// connection — backend SIGKILLed under `air`, laptop slept, proxy dropped the
-// socket without a FIN — never surfaces as a stream error, so `for await` just
+// connection — backend SIGKILLed under "air", laptop slept, proxy dropped the
+// socket without a FIN — never surfaces as a stream error, so "for await" just
 // blocks forever and no reconnect is attempted. Treat "no event of any kind
 // for 2.5 heartbeat intervals" as dead and force a reconnect.
 export const STREAM_STALE_TIMEOUT_MS = 75_000;
@@ -76,6 +74,84 @@ export function isConnectionLevelFailure(error: unknown): boolean {
   return error.code === Code.Unknown || error.code === Code.Unavailable;
 }
 
+/** The moments a stream should stop trusting its connection and look again. */
+export interface WakeHandlers {
+  /** The network came back. */
+  online(): void;
+  /** The page's visibility changed; read it with "WakeSource.isVisible". */
+  visibilityChange(): void;
+  /** The page was shown; "restoredFromCache" is a back/forward-cache restore. */
+  pageShow(restoredFromCache: boolean): void;
+}
+
+/**
+ * Where wake signals come from. The default listens on "window"/"document"
+ * when they exist (browsers, Electron renderers) and is inert elsewhere
+ * (Node, workers, React Native), where a caller may supply its own.
+ */
+export interface WakeSource {
+  subscribe(handlers: WakeHandlers): () => void;
+  /** Whether the page is visible; true when there is no page to ask. */
+  isVisible(): boolean;
+}
+
+export function browserWakeSource(): WakeSource {
+  return {
+    subscribe(handlers) {
+      if (typeof window === "undefined" || typeof document === "undefined") return () => {};
+      const online = (): void => handlers.online();
+      const visibility = (): void => handlers.visibilityChange();
+      const pageShow = (event: PageTransitionEvent): void => handlers.pageShow(event.persisted);
+      window.addEventListener("online", online);
+      document.addEventListener("visibilitychange", visibility);
+      window.addEventListener("pageshow", pageShow);
+      return () => {
+        window.removeEventListener("online", online);
+        document.removeEventListener("visibilitychange", visibility);
+        window.removeEventListener("pageshow", pageShow);
+      };
+    },
+    isVisible: () => typeof document === "undefined" || document.visibilityState === "visible",
+  };
+}
+
+/**
+ * How a stream paces and polices itself. The defaults are the chat and user
+ * streams', whose server sends a heartbeat every 30 seconds and which must
+ * never give up. A stream with a different protocol overrides what differs.
+ */
+export interface StreamTuning {
+  /** First reconnect delay; doubles per attempt. */
+  baseDelayMs?: number;
+  /** Ceiling of the reconnect delay. */
+  maxDelayMs?: number;
+  /** Random extra delay, up to this much, so clients do not reconnect in step. */
+  jitterMs?: number;
+  /** Consecutive failed reconnects before giving up and reporting an error. Default: never. */
+  maxReconnectAttempts?: number;
+  /**
+   * Whether silence means a dead connection: the stale-stream watchdog, and
+   * the replace-on-wake handling. Off for a stream the server does not
+   * heartbeat, where silence is normal.
+   */
+  liveness?: boolean;
+  /** Credit a connection that lasted past SHORT_LIVED_CONNECTION_MS when it ends, not only while it is up. */
+  creditLongConnectionOnEnd?: boolean;
+}
+
+/** What a stream needs from its host, all optional. */
+export interface StreamEnvironment {
+  tuning?: StreamTuning;
+  logger?: Logger;
+  wake?: WakeSource;
+  /**
+   * The connection under the stream died at the network level, or the page
+   * resumed with a connection it could not trust. Every request multiplexed
+   * onto that connection is stranded too; a transport can replace them now.
+   */
+  onConnectionLost?: () => void;
+}
+
 /** What a stream reports about its connection. */
 export interface StreamLifecycleCallbacks {
   onStatusChange?: (status: ConnectionStatus) => void;
@@ -99,8 +175,8 @@ export abstract class ReconnectingStream<E> {
   // loop — see SHORT_LIVED_CONNECTION_MS.
   protected connectionOpenedAt = 0;
   protected isConnected_ = false;
-  // Liveness / lifecycle bookkeeping. `connectAttemptInFlight` and
-  // `reconnectTimer` exist so callers can tell "a connection is genuinely
+  // Liveness / lifecycle bookkeeping. "connectAttemptInFlight" and
+  // "reconnectTimer" exist so callers can tell "a connection is genuinely
   // being worked on" from "we hold a stale AbortController that will never
   // fire".
   protected connectAttemptInFlight = false;
@@ -112,22 +188,50 @@ export abstract class ReconnectingStream<E> {
   private lastResumeReplaceAt = 0;
   private resumeCheckTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private readonly logPrefix: string;
-  private readonly lifecycle: StreamLifecycleCallbacks;
+  private unsubscribeWake: (() => void) | null = null;
 
-  protected constructor(logPrefix: string, lifecycle: StreamLifecycleCallbacks) {
-    this.logPrefix = logPrefix;
+  protected readonly log: Logger;
+  private readonly lifecycle: StreamLifecycleCallbacks;
+  private readonly wake: WakeSource;
+  private readonly onConnectionLost: (() => void) | undefined;
+  private readonly tuning: Required<StreamTuning>;
+
+  protected constructor(
+    logPrefix: string,
+    lifecycle: StreamLifecycleCallbacks,
+    env: StreamEnvironment = {},
+  ) {
+    this.log = withPrefix(env.logger ?? noopLogger, logPrefix);
     this.lifecycle = lifecycle;
+    this.wake = env.wake ?? browserWakeSource();
+    this.onConnectionLost = env.onConnectionLost;
+    this.tuning = {
+      baseDelayMs: BASE_RECONNECT_DELAY_MS,
+      maxDelayMs: MAX_RECONNECT_DELAY_MS,
+      jitterMs: 1_000,
+      maxReconnectAttempts: Number.POSITIVE_INFINITY,
+      liveness: true,
+      creditLongConnectionOnEnd: false,
+      ...env.tuning,
+    };
   }
 
-  /** Open the server stream for the connection attempt guarded by `signal`. */
+  /**
+   * Whether a stream that ended cleanly should be reopened. A server may end a
+   * stream on purpose (a replica draining); by default the answer is yes.
+   */
+  protected reconnectAfterCleanEnd(): boolean {
+    return true;
+  }
+
+  /** Open the server stream for the connection attempt guarded by "signal". */
   protected abstract openStream(signal: AbortSignal): AsyncIterable<E>;
 
   /** Handle one frame of the current connection. */
   protected abstract handleEvent(event: E): void;
 
   /**
-   * A connection attempt failed before (`delivered` false) or after its first
+   * A connection attempt failed before ("delivered" false) or after its first
    * frame. Return true when the subclass has dealt with it and the generic
    * retry must not run — a refusal that every retry would repeat.
    */
@@ -161,12 +265,12 @@ export abstract class ReconnectingStream<E> {
       this.replaceStreamOnResume("online");
       return;
     }
-    logger.info(`${this.logPrefix} Network back online — reconnecting now`);
+    this.log.info("Network back online — reconnecting now");
     this.reconnectNow("online");
   };
 
   private handleVisibilityChange = (): void => {
-    if (document.visibilityState !== "visible") {
+    if (!this.wake.isVisible()) {
       this.hiddenAt ??= Date.now();
       return;
     }
@@ -181,14 +285,14 @@ export abstract class ReconnectingStream<E> {
       this.scheduleResumeLivenessCheck();
       return;
     }
-    logger.info(`${this.logPrefix} Tab visible again — reconnecting now`);
+    this.log.info("Tab visible again — reconnecting now");
     this.reconnectNow("visible");
   };
 
   // Restored from the back/forward cache: the page was frozen, whatever the
   // stream says.
-  private handlePageShow = (event: PageTransitionEvent): void => {
-    if (!event.persisted || this.isIntentionallyClosed) return;
+  private handlePageShow = (restoredFromCache: boolean): void => {
+    if (!restoredFromCache || this.isIntentionallyClosed) return;
     this.hiddenAt = null;
     if (this.isConnected_) {
       this.replaceStreamOnResume("visible", { restoredFromCache: true });
@@ -214,11 +318,11 @@ export abstract class ReconnectingStream<E> {
       clearTimeout(this.resumeCheckTimer);
       this.resumeCheckTimer = null;
     }
-    logger.warn(
-      `${this.logPrefix} Page resumed (${reason}) with a 'connected' stream — replacing it`,
+    this.log.warn(
+      `Page resumed (${reason}) with a 'connected' stream — replacing it`,
       detail,
     );
-    pageActivity().noteConnectionLost();
+    this.onConnectionLost?.();
     this.isConnected_ = false;
     this.setStatus("disconnected");
     this.reconnectNow(reason);
@@ -231,11 +335,11 @@ export abstract class ReconnectingStream<E> {
       if (this.isIntentionallyClosed || !this.isConnected_) return;
       const silentFor = Date.now() - this.lastEventAt;
       if (silentFor < RESUME_STALE_AFTER_MS) return;
-      logger.warn(
-        `${this.logPrefix} Tab visible again but the stream has been silent — replacing the connection`,
+      this.log.warn(
+        "Tab visible again but the stream has been silent — replacing the connection",
         { silentForMs: silentFor },
       );
-      pageActivity().noteConnectionLost();
+      this.onConnectionLost?.();
       this.isConnected_ = false;
       this.setStatus("disconnected");
       this.reconnectNow("visible");
@@ -243,21 +347,19 @@ export abstract class ReconnectingStream<E> {
   }
 
   protected bindWakeHandlers(): void {
-    if (this.wakeHandlersBound || typeof window === "undefined") return;
-    window.addEventListener("online", this.handleOnline);
-    document.addEventListener("visibilitychange", this.handleVisibilityChange);
-    window.addEventListener("pageshow", this.handlePageShow);
+    if (this.wakeHandlersBound || !this.tuning.liveness) return;
+    this.unsubscribeWake = this.wake.subscribe({
+      online: this.handleOnline,
+      visibilityChange: this.handleVisibilityChange,
+      pageShow: this.handlePageShow,
+    });
     this.wakeHandlersBound = true;
   }
 
   private unbindWakeHandlers(): void {
-    if (!this.wakeHandlersBound || typeof window === "undefined") return;
-    window.removeEventListener("online", this.handleOnline);
-    document.removeEventListener(
-      "visibilitychange",
-      this.handleVisibilityChange,
-    );
-    window.removeEventListener("pageshow", this.handlePageShow);
+    if (!this.wakeHandlersBound) return;
+    this.unsubscribeWake?.();
+    this.unsubscribeWake = null;
     this.hiddenAt = null;
     this.wakeHandlersBound = false;
   }
@@ -283,14 +385,14 @@ export abstract class ReconnectingStream<E> {
       const silentFor = Date.now() - this.lastEventAt;
       if (silentFor < STREAM_STALE_TIMEOUT_MS) return;
 
-      logger.warn(
-        `${this.logPrefix} No events (not even heartbeats) — connection is half-open, forcing reconnect`,
+      this.log.warn(
+        "No events (not even heartbeats) — connection is half-open, forcing reconnect",
         { silentForMs: silentFor, staleAfterMs: STREAM_STALE_TIMEOUT_MS },
       );
       // The socket is dead but `for await` will never unblock on its own.
       // reconnectNow() aborts it, which makes the orphaned loop's catch see a
       // superseded controller and bail out quietly.
-      pageActivity().noteConnectionLost();
+      this.onConnectionLost?.();
       this.isConnected_ = false;
       this.setStatus("disconnected");
       this.reconnectNow("stale");
@@ -337,7 +439,7 @@ export abstract class ReconnectingStream<E> {
       this.reconnectAttempts = 0;
     }
 
-    logger.info(`${this.logPrefix} Immediate reconnect`, {
+    this.log.info("Immediate reconnect", {
       reason,
       attempts: this.reconnectAttempts,
     });
@@ -352,6 +454,17 @@ export abstract class ReconnectingStream<E> {
 
     // Establish new connection (creates a new AbortController)
     void this.establishConnection();
+  }
+
+  /** A connection that stayed up long enough to count as healthy starts the next backoff afresh. */
+  private creditLongConnection(): void {
+    if (
+      this.tuning.creditLongConnectionOnEnd &&
+      this.isConnected_ &&
+      Date.now() - this.connectionOpenedAt >= SHORT_LIVED_CONNECTION_MS
+    ) {
+      this.reconnectAttempts = 0;
+    }
   }
 
   protected async establishConnection(): Promise<void> {
@@ -370,7 +483,7 @@ export abstract class ReconnectingStream<E> {
       for await (const event of this.openStream(myAbortController.signal)) {
         // If our controller was replaced, a new connection took over — bail out.
         if (this.abortController !== myAbortController) {
-          logger.info(`${this.logPrefix} Connection superseded, stopping old stream`);
+          this.log.info("Connection superseded, stopping old stream");
           return;
         }
 
@@ -390,7 +503,7 @@ export abstract class ReconnectingStream<E> {
           // server-side fault spin an unthrottled reconnect loop. The reset
           // now happens once the connection has survived
           // SHORT_LIVED_CONNECTION_MS (see the watchdog tick).
-          this.armWatchdog();
+          if (this.tuning.liveness) this.armWatchdog();
         }
 
         this.handleEvent(event);
@@ -398,32 +511,34 @@ export abstract class ReconnectingStream<E> {
 
       // If our controller was replaced, a new connection took over — don't reconnect.
       if (this.abortController !== myAbortController) {
-        logger.info(`${this.logPrefix} Connection superseded after stream end`);
+        this.log.info("Connection superseded after stream end");
         return;
       }
 
-      logger.info(`${this.logPrefix} Stream ended normally`);
+      this.log.info("Stream ended normally");
+      this.creditLongConnection();
       this.isConnected_ = false;
       this.connectAttemptInFlight = false;
       this.disarmWatchdog();
       this.setStatus("disconnected");
 
-      if (!this.isIntentionallyClosed) {
+      if (!this.isIntentionallyClosed && this.reconnectAfterCleanEnd()) {
         this.attemptReconnect();
       }
     } catch (error) {
       // If our controller was replaced, a new connection took over — don't reconnect.
       if (this.abortController !== myAbortController) {
-        logger.info(`${this.logPrefix} Connection superseded (caught error from old stream)`);
+        this.log.info("Connection superseded (caught error from old stream)");
         return;
       }
 
+      this.creditLongConnection();
       this.isConnected_ = false;
       this.connectAttemptInFlight = false;
       this.disarmWatchdog();
 
       if (this.isIntentionallyClosed || myAbortController.signal.aborted) {
-        logger.info(`${this.logPrefix} Stream aborted (intentional)`);
+        this.log.info("Stream aborted (intentional)");
         this.setStatus("disconnected");
         return;
       }
@@ -432,13 +547,13 @@ export abstract class ReconnectingStream<E> {
 
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      logger.error(`${this.logPrefix} Stream error`, {
+      this.log.error("Stream error", {
         error: errorMessage,
       });
       // The connection under the stream died; reads in flight on it will not
       // be answered either. Let the transport replace them now.
       if (isConnectionLevelFailure(error)) {
-        pageActivity().noteConnectionLost();
+        this.onConnectionLost?.();
       }
       this.lifecycle.onError?.(errorMessage);
       this.setStatus("error");
@@ -460,17 +575,23 @@ export abstract class ReconnectingStream<E> {
     // short-circuit it, so a server that comes back (a rebuilt dev backend, a
     // finished deploy) is picked up promptly without hammering one that is
     // still down.
+    if (this.reconnectAttempts >= this.tuning.maxReconnectAttempts) {
+      this.log.error("Max reconnect attempts reached", { attempts: this.reconnectAttempts });
+      this.lifecycle.onError?.("Max reconnection attempts reached");
+      return;
+    }
+
     this.reconnectAttempts++;
     const exponent = Math.min(
       this.reconnectAttempts - 1,
       MAX_RECONNECT_EXPONENT,
     );
     const delay = Math.min(
-      BASE_RECONNECT_DELAY_MS * Math.pow(2, exponent) + Math.random() * 1000,
-      MAX_RECONNECT_DELAY_MS,
+      this.tuning.baseDelayMs * Math.pow(2, exponent) + Math.random() * this.tuning.jitterMs,
+      this.tuning.maxDelayMs,
     );
 
-    logger.info(`${this.logPrefix} Reconnecting`, {
+    this.log.info("Reconnecting", {
       attempt: this.reconnectAttempts,
       delayMs: delay,
       ...this.describe(),
@@ -501,7 +622,7 @@ export abstract class ReconnectingStream<E> {
   /**
    * Take the stream down on purpose: abort the connection, cancel every timer
    * and unbind the wake handlers. The backoff survives, so a stream closed
-   * and reopened in a loop still paces itself; `resetBackoff` clears it for a
+   * and reopened in a loop still paces itself; "resetBackoff" clears it for a
    * full teardown.
    */
   protected close(resetBackoff: boolean): void {
