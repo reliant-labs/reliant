@@ -268,7 +268,7 @@ func (r *RunsClient) PauseWithResult(ctx context.Context, runID string) (ActionR
 // execution, so the id can differ from runID.
 //
 // A resume the server declines is [ErrNotApplied]; use [RunsClient.ResumeWithResult]
-// to tell a run that needs recovery apart from other refusals.
+// to get the decline as a result, with the server's message, instead.
 //
 // Beta: see [RunsClient.Pause].
 func (r *RunsClient) Resume(ctx context.Context, runID string) (*Run, error) {
@@ -286,24 +286,24 @@ func (r *RunsClient) Resume(ctx context.Context, runID string) (*Run, error) {
 // ResumeResult is how a resume ended.
 type ResumeResult struct {
 	// Run is the run after the resume (see [RunsClient.Resume]); nil when
-	// NeedsRecovery.
+	// Declined.
 	Run *Run
 	// Message is the server's own words about it.
 	Message string
-	// NeedsRecovery is true when the server answered but could not resume: the
-	// run's workflow session was lost, so nothing is running and the caller
-	// must send a new message to continue. It is a state to report, not a
-	// failure of the call, so it is not an error.
+	// Declined is true when the server answered but did not resume the run:
+	// the server declined to resume, and Message says why. It is a state to
+	// report, not a failure of the call, so it is not an error; a transport or
+	// rpc failure is always an error and never Declined.
 	//
-	// The server declines a resume this way (success=false with a message) only
-	// when the session is lost; every other refusal is an rpc error. NeedsRecovery
-	// reads that answer, since the run API has no dedicated field for it yet.
-	NeedsRecovery bool
+	// The reason is not machine-readable: the run API carries only success and
+	// a message, so a caller must not infer one (a lost session and any other
+	// refusal look alike). Show Message.
+	Declined bool
 }
 
-// ResumeWithResult is [RunsClient.Resume] for a caller that must tell "needs
-// recovery" from success: it returns the answer instead of turning a declined
-// resume into [ErrNotApplied].
+// ResumeWithResult is [RunsClient.Resume] for a caller that wants a declined
+// resume as a result to report rather than as [ErrNotApplied]: it returns the
+// server's answer, with its message, instead of an error.
 //
 // Beta: see [RunsClient.Pause].
 func (r *RunsClient) ResumeWithResult(ctx context.Context, runID string) (ResumeResult, error) {
@@ -313,7 +313,7 @@ func (r *RunsClient) ResumeWithResult(ctx context.Context, runID string) (Resume
 		return ResumeResult{}, r.c.wrap(op, err)
 	}
 	if !resp.Msg.GetSuccess() {
-		return ResumeResult{Message: resp.Msg.GetMessage(), NeedsRecovery: true}, nil
+		return ResumeResult{Message: resp.Msg.GetMessage(), Declined: true}, nil
 	}
 	return ResumeResult{Run: resp.Msg.GetRun(), Message: resp.Msg.GetMessage()}, nil
 }

@@ -386,7 +386,7 @@ func TestCancelAndPauseWithResultStillReportADeclinedCallAsAnError(t *testing.T)
 	}
 }
 
-func TestResumeWithResultSeparatesNeedsRecoveryFromSuccessAndFailure(t *testing.T) {
+func TestResumeWithResultReportsADeclineWithoutClaimingWhy(t *testing.T) {
 	var answer *reliantv1.ResumeRunResponse
 	var rpcErr error
 	f := &fake{resumeRun: func(*reliantv1.ResumeRunRequest) (*reliantv1.ResumeRunResponse, error) { return answer, rpcErr }}
@@ -396,15 +396,18 @@ func TestResumeWithResultSeparatesNeedsRecoveryFromSuccessAndFailure(t *testing.
 	// Resumed, possibly as a new execution.
 	answer = &reliantv1.ResumeRunResponse{Success: true, Message: "Chat resumed successfully", Run: &reliantv1.Run{Id: "r1-2"}}
 	res, err := c.Runs.ResumeWithResult(ctx, "r1")
-	if err != nil || res.NeedsRecovery || res.Run.GetId() != "r1-2" || res.Message != "Chat resumed successfully" {
+	if err != nil || res.Declined || res.Run.GetId() != "r1-2" || res.Message != "Chat resumed successfully" {
 		t.Fatalf("resumed = %+v, %v", res, err)
 	}
 
-	// The server answered and could not resume: a state, not an error.
-	answer = &reliantv1.ResumeRunResponse{Success: false, Message: "The workflow session was interrupted and cannot be resumed."}
-	res, err = c.Runs.ResumeWithResult(ctx, "r1")
-	if err != nil || !res.NeedsRecovery || res.Run != nil || !strings.Contains(res.Message, "interrupted") {
-		t.Fatalf("needs recovery = %+v, %v", res, err)
+	// The server answered and declined: a state with the server's words, not
+	// an error. Any reason reads the same, since the wire gives none.
+	for _, msg := range []string{"The workflow session was interrupted and cannot be resumed.", "run is already running", ""} {
+		answer = &reliantv1.ResumeRunResponse{Success: false, Message: msg}
+		res, err = c.Runs.ResumeWithResult(ctx, "r1")
+		if err != nil || !res.Declined || res.Run != nil || res.Message != msg {
+			t.Fatalf("declined (%q) = %+v, %v", msg, res, err)
+		}
 	}
 
 	// Resume keeps its contract: the same answer is ErrNotApplied there.
@@ -412,9 +415,9 @@ func TestResumeWithResultSeparatesNeedsRecoveryFromSuccessAndFailure(t *testing.
 		t.Fatalf("Resume on a declined resume = %v, want ErrNotApplied", err)
 	}
 
-	// An rpc error is an error on both, never NeedsRecovery.
+	// An rpc error is an error on both, never Declined.
 	answer, rpcErr = nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("cannot be resumed"))
-	if res, err := c.Runs.ResumeWithResult(ctx, "r1"); !errors.Is(err, ErrFailedPrecondition) || res.NeedsRecovery {
+	if res, err := c.Runs.ResumeWithResult(ctx, "r1"); !errors.Is(err, ErrFailedPrecondition) || res.Declined {
 		t.Fatalf("rpc error = %+v, %v", res, err)
 	}
 }
