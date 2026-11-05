@@ -18,6 +18,11 @@ func TestForgeScopes_IsEveryControlPlaneCapability(t *testing.T) {
 		// Session and personal-resource authority: never delegated to forge.
 		fat.ScopeReliantAPI, fat.ScopeDaemonConnect, fat.ScopeLLMInvoke,
 		fat.ScopeMCPConnector, fat.ScopeDaemonResume,
+		// Slices of a person's Reliant API (forge #1757): they act as a
+		// person (RequiresActingUser), like reliant:api, so they never ride a
+		// forge credential either.
+		fat.ScopeRunsStart, fat.ScopeRunsRead, fat.ScopeRunsControl,
+		fat.ScopeTriggersFire, fat.ScopeTriggersManage,
 		// A port share: forge refuses it on a daemon binding.
 		fat.ScopeProxyPort,
 		// Token administration: reserved to a signed-in person.
