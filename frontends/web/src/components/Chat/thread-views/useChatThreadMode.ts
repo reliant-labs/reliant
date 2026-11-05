@@ -7,6 +7,13 @@ import { useMediaQuery } from "../../../hooks/useMediaQuery";
 export type ChatThreadModePreference = "auto" | "simplified" | "detailed";
 export type ChatThreadMode = "simplified" | "detailed";
 
+/**
+ * What a user who has never chosen gets: the simplified thread, everywhere.
+ * Detailed and Auto (simplified only on phones and narrow windows) stay one
+ * setting away.
+ */
+export const DEFAULT_CHAT_THREAD_MODE: ChatThreadModePreference = "simplified";
+
 export const NARROW_THREAD_QUERY = "(max-width: 1023px)";
 
 export const CHAT_THREAD_MODE_CHOICES: readonly {
@@ -14,17 +21,19 @@ export const CHAT_THREAD_MODE_CHOICES: readonly {
   label: string;
   description: string;
 }[] = [
-  { value: "auto", label: "Auto", description: "Simplified on phones and narrow windows" },
   { value: "simplified", label: "Simplified", description: "Collapse each turn's tool work into one fold" },
+  { value: "auto", label: "Auto", description: "Simplified on phones and narrow windows" },
   { value: "detailed", label: "Detailed", description: "Show every message and tool call" },
 ];
 
 export function parseChatThreadMode(value: unknown): ChatThreadModePreference {
-  return value === "simplified" || value === "detailed" || value === "auto" ? value : "auto";
+  return value === "simplified" || value === "detailed" || value === "auto"
+    ? value
+    : DEFAULT_CHAT_THREAD_MODE;
 }
 
 export function getStoredChatThreadMode(): ChatThreadModePreference {
-  return parseChatThreadMode(settingsSync.getSetting(SETTINGS_KEYS.CHAT_THREAD_MODE, "auto"));
+  return parseChatThreadMode(settingsSync.getSetting(SETTINGS_KEYS.CHAT_THREAD_MODE, DEFAULT_CHAT_THREAD_MODE));
 }
 
 export function resolveChatThreadMode(

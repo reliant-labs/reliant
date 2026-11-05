@@ -37,7 +37,7 @@ import {
   type SpawnDisplayMode,
 } from "../Settings/SpawnDisplaySettings";
 import { FONT_SIZE_MAP, applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
-import { parseChatThreadMode, type ChatThreadModePreference } from "../Chat/thread-views/useChatThreadMode";
+import { DEFAULT_CHAT_THREAD_MODE, parseChatThreadMode, type ChatThreadModePreference } from "../Chat/thread-views/useChatThreadMode";
 import {
   MobileSegmentedRow,
   MobileSelectRow,
@@ -80,8 +80,8 @@ const CHAT_TIMELINE_OPTIONS: Array<{ value: ChatTimelineVariant; label: string }
 ];
 
 const CHAT_THREAD_OPTIONS: Array<{ value: ChatThreadModePreference; label: string }> = [
-  { value: "auto", label: "Auto" },
   { value: "simplified", label: "Simplified" },
+  { value: "auto", label: "Auto" },
   { value: "detailed", label: "Detailed" },
 ];
 
@@ -111,7 +111,7 @@ export function MobileAppearancePanel() {
   const [useCodeFont, setUseCodeFont] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<FontSize>(DEFAULT_FONT_SIZE as FontSize);
   const [chatTimelineVariant, setChatTimelineVariant] = useState<ChatTimelineVariant>("compact");
-  const [chatThreadMode, setChatThreadMode] = useState<ChatThreadModePreference>("auto");
+  const [chatThreadMode, setChatThreadMode] = useState<ChatThreadModePreference>(DEFAULT_CHAT_THREAD_MODE);
   const [workflowViewerDefaultMode, setWorkflowViewerDefaultMode] = useState<"inline" | "side">("side");
   const [spawnDisplayMode, setSpawnDisplayMode] = useState<SpawnDisplayMode>("preview");
   const [isLoaded, setIsLoaded] = useState(false);
@@ -141,7 +141,7 @@ export function MobileAppearancePanel() {
       setUseCodeFont(savedEditorFont !== "default");
       setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE) as FontSize);
       setChatTimelineVariant(readPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact"));
-      setChatThreadMode(parseChatThreadMode(readPref(SETTINGS_KEYS.CHAT_THREAD_MODE, "auto")));
+      setChatThreadMode(parseChatThreadMode(readPref(SETTINGS_KEYS.CHAT_THREAD_MODE, DEFAULT_CHAT_THREAD_MODE)));
       setWorkflowViewerDefaultMode(readPref(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, "side"));
       setSpawnDisplayMode(getSpawnDisplayMode());
       setIsLoaded(true);
@@ -209,8 +209,8 @@ export function MobileAppearancePanel() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    // Unset already means "auto"; don't write the default just for opening the page.
-    if (chatThreadMode === "auto" && !settingsSync.getSetting(SETTINGS_KEYS.CHAT_THREAD_MODE, "")) return;
+    // Unset already means the default; don't write it just for opening the page.
+    if (chatThreadMode === DEFAULT_CHAT_THREAD_MODE && !settingsSync.getSetting(SETTINGS_KEYS.CHAT_THREAD_MODE, "")) return;
     if (persistPref(SETTINGS_KEYS.CHAT_THREAD_MODE, chatThreadMode)) {
       window.dispatchEvent(new CustomEvent("appearance-updated"));
     }

@@ -76,8 +76,8 @@ describe("resolveChatThreadMode", () => {
 });
 
 describe("getStoredChatThreadMode", () => {
-  it("defaults to auto when unset", () => {
-    expect(getStoredChatThreadMode()).toBe("auto");
+  it("defaults to simplified when unset", () => {
+    expect(getStoredChatThreadMode()).toBe("simplified");
   });
 
   it.each(["auto", "simplified", "detailed"] as const)("returns stored %s", (value) => {
@@ -85,9 +85,9 @@ describe("getStoredChatThreadMode", () => {
     expect(getStoredChatThreadMode()).toBe(value);
   });
 
-  it("falls back to auto for an unknown stored value", () => {
+  it("falls back to the simplified default for an unknown stored value", () => {
     store.set(SETTINGS_KEYS.CHAT_THREAD_MODE, "bogus");
-    expect(getStoredChatThreadMode()).toBe("auto");
+    expect(getStoredChatThreadMode()).toBe("simplified");
   });
 });
 
@@ -103,12 +103,19 @@ describe("setChatThreadMode", () => {
 });
 
 describe("useChatThreadMode", () => {
+  it("is simplified by default, even on a wide desktop", () => {
+    const { result } = renderHook(() => useChatThreadMode(), { wrapper: wrapperFor("desktop") });
+    expect(result.current).toEqual({ mode: "simplified", preference: "simplified" });
+  });
+
   it("resolves auto from the surface", () => {
+    store.set(SETTINGS_KEYS.CHAT_THREAD_MODE, "auto");
     const { result } = renderHook(() => useChatThreadMode(), { wrapper: wrapperFor("mobile") });
     expect(result.current).toEqual({ mode: "simplified", preference: "auto" });
   });
 
-  it("reacts to media query changes", () => {
+  it("reacts to media query changes under auto", () => {
+    store.set(SETTINGS_KEYS.CHAT_THREAD_MODE, "auto");
     const { result } = renderHook(() => useChatThreadMode(), { wrapper: wrapperFor("desktop") });
     expect(result.current.mode).toBe("detailed");
     setNarrow(true);
@@ -119,16 +126,17 @@ describe("useChatThreadMode", () => {
 
   it("re-reads the preference on appearance-updated", () => {
     const { result } = renderHook(() => useChatThreadMode(), { wrapper: wrapperFor("desktop") });
-    store.set(SETTINGS_KEYS.CHAT_THREAD_MODE, "simplified");
+    store.set(SETTINGS_KEYS.CHAT_THREAD_MODE, "detailed");
     act(() => {
       window.dispatchEvent(new CustomEvent("appearance-updated"));
     });
-    expect(result.current).toEqual({ mode: "simplified", preference: "simplified" });
+    expect(result.current).toEqual({ mode: "detailed", preference: "detailed" });
   });
 
   it("is safe without matchMedia", () => {
     // @ts-expect-error simulate an environment lacking matchMedia
     window.matchMedia = undefined;
+    store.set(SETTINGS_KEYS.CHAT_THREAD_MODE, "auto");
     const { result } = renderHook(() => useChatThreadMode(), { wrapper: wrapperFor("desktop") });
     expect(result.current.mode).toBe("detailed");
   });
