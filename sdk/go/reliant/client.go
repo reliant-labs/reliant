@@ -110,6 +110,7 @@ type config struct {
 	source     TokenSource
 	httpClient *http.Client
 	loopback   bool
+	anyHTTP    bool
 }
 
 // Option configures [New].
@@ -147,6 +148,15 @@ func WithInsecureLoopback() Option {
 	return func(c *config) { c.loopback = true }
 }
 
+// WithInsecureHTTP allows a plain http:// base URL to any host, for a
+// self-hosted or dev server that is not on the local machine. A bearer token
+// sent over plain http is readable by anyone on the path, so use it only on a
+// network you trust; the default, and WithInsecureLoopback, stay stricter. It
+// changes nothing else: redirects off the base URL's origin are still refused.
+func WithInsecureHTTP() Option {
+	return func(c *config) { c.anyHTTP = true }
+}
+
 // New builds a client. A token is required: WithToken or WithTokenSource.
 func New(opts ...Option) (*Client, error) {
 	cfg := config{baseURL: DefaultBaseURL}
@@ -154,7 +164,7 @@ func New(opts ...Option) (*Client, error) {
 		o(&cfg)
 	}
 
-	base, err := normalizeBaseURL(cfg.baseURL, cfg.loopback)
+	base, err := normalizeBaseURL(cfg.baseURL, cfg.loopback, cfg.anyHTTP)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +219,7 @@ func FromEnv(opts ...Option) (*Client, error) {
 // normalizeBaseURL validates the server URL and strips a trailing slash. A
 // token only ever travels over https, except to the local machine when the
 // caller asked for that.
-func normalizeBaseURL(raw string, allowLoopback bool) (string, error) {
+func normalizeBaseURL(raw string, allowLoopback, allowAnyHTTP bool) (string, error) {
 	raw = strings.TrimRight(strings.TrimSpace(raw), "/")
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" {
@@ -218,8 +228,8 @@ func normalizeBaseURL(raw string, allowLoopback bool) (string, error) {
 	switch u.Scheme {
 	case "https":
 	case "http":
-		if !allowLoopback || !isLoopbackHost(u.Hostname()) {
-			return "", fmt.Errorf("reliant: base URL %q is not https; a token must not cross a network in the clear (WithInsecureLoopback permits http to the local machine only)", raw)
+		if !allowAnyHTTP && (!allowLoopback || !isLoopbackHost(u.Hostname())) {
+			return "", fmt.Errorf("reliant: base URL %q is not https; a token must not cross a network in the clear (WithInsecureLoopback permits http to the local machine only; WithInsecureHTTP permits it to any host)", raw)
 		}
 	default:
 		return "", fmt.Errorf("reliant: base URL %q must be https", raw)

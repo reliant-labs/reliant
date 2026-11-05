@@ -37,7 +37,9 @@ with `reliant.WithToken`, or rotate it with `reliant.WithTokenSource`. Tokens la
 90 days.
 
 The base URL must be `https`. `reliant.WithInsecureLoopback()` permits plain
-`http` to the local machine only, for a dev server.
+`http` to the local machine only, for a dev server. `reliant.WithInsecureHTTP()`
+permits it to any host, for a self-hosted server on a network you trust: the
+token crosses that network in the clear.
 
 A webhook trigger needs no API token: `reliant.NewWebhook(baseURL, triggerID,
 reliant.WebhookBearer(token))` delivers with the trigger's own credential.
@@ -46,7 +48,7 @@ reliant.WebhookBearer(token))` delivers with the trigger's own credential.
 
 | | |
 |---|---|
-| `Runs` | `Start`, `Get`, `List`, `LastPerWorkflow`, `Signal`, `Cancel`, `Pause`\*, `Resume`\*, `Interrupt`\*, `Follow`, `Status`, `Nodes` |
+| `Runs` | `Start`, `Get`, `List`, `LastPerWorkflow`, `Signal`, `Cancel`, `Pause`\*, `Resume`\*, `Interrupt`\*, `CancelWithResult`, `PauseWithResult`\*, `ResumeWithResult`\*, `Follow`, `Status`, `Nodes` |
 | `Gates` | `Pending`, `Answer` |
 | `Triggers` | `Get`, `List`, `Fire`, `Events`, `LaunchEvent` |
 | `NewWebhook` | `POST /hooks/{id}` with a bearer token, a path token or an HMAC signature |

@@ -165,7 +165,7 @@ func NewWebhook(baseURL, triggerID string, cred WebhookCredential, opts ...Webho
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
-	base, err := normalizeBaseURL(baseURL, cfg.loopback)
+	base, err := normalizeBaseURL(baseURL, cfg.loopback, false)
 	if err != nil {
 		return nil, err
 	}

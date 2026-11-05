@@ -6,6 +6,7 @@ package reliant
 import (
 	"context"
 	"errors"
+	"io"
 	"sync"
 	"time"
 
@@ -32,6 +33,12 @@ type FollowOptions struct {
 	// consumer; 64 when zero. A consumer that stops reading stalls the follow,
 	// it does not lose events.
 	Buffer int
+	// Log receives the follow's own diagnostics, one line each: a poll that
+	// failed and will be retried ("reliant: fetching updates failed (2/5): ..."),
+	// and a gate reconciliation that failed. Nil is silent. It is not the event
+	// stream (that is Events), and a failure that ends the follow is returned
+	// by Wait whether or not Log is set.
+	Log io.Writer
 }
 
 // FollowResult is how a followed run ended.
@@ -110,6 +117,7 @@ func (r *RunsClient) followSession(ctx context.Context, executionID, sessionID s
 		Timeout:     opts.Timeout,
 		Tail:        opts.Tail,
 		ExitOnGate:  opts.StopOnGate,
+		Log:         opts.Log,
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	f.cancel = cancel

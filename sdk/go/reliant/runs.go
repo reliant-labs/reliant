@@ -213,12 +213,29 @@ func (r *RunsClient) Signal(ctx context.Context, runID, thread string, msgs ...M
 // Cancel hard-stops a run. It is terminal by intent: the position is dropped,
 // so there is nothing to resume.
 func (r *RunsClient) Cancel(ctx context.Context, runID string) error {
+	_, err := r.CancelWithResult(ctx, runID)
+	return err
+}
+
+// ActionResult is what the server said about a run-control call it applied.
+type ActionResult struct {
+	// Message is the server's own words about it ("Chat terminated
+	// successfully"); empty when it said none.
+	Message string
+}
+
+// CancelWithResult is [RunsClient.Cancel], also returning the server's message.
+// A call the server declined is still an error ([ErrNotApplied]).
+func (r *RunsClient) CancelWithResult(ctx context.Context, runID string) (ActionResult, error) {
 	const op = "runs.cancel"
 	resp, err := r.runs.CancelRun(ctx, connect.NewRequest(&reliantv1.CancelRunRequest{RunId: runID}))
 	if err != nil {
-		return r.c.wrap(op, err)
+		return ActionResult{}, r.c.wrap(op, err)
 	}
-	return r.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage())
+	if err := r.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+		return ActionResult{}, err
+	}
+	return ActionResult{Message: resp.Msg.GetMessage()}, nil
 }
 
 // Pause parks a run: it stays live and resumable. Pausing a run that already
@@ -226,17 +243,32 @@ func (r *RunsClient) Cancel(ctx context.Context, runID string) error {
 //
 // Beta: the semantics of positions and interrupted tools are still settling.
 func (r *RunsClient) Pause(ctx context.Context, runID string) error {
+	_, err := r.PauseWithResult(ctx, runID)
+	return err
+}
+
+// PauseWithResult is [RunsClient.Pause], also returning the server's message.
+// A call the server declined is still an error ([ErrNotApplied]).
+//
+// Beta: see [RunsClient.Pause].
+func (r *RunsClient) PauseWithResult(ctx context.Context, runID string) (ActionResult, error) {
 	const op = "runs.pause"
 	resp, err := r.runs.PauseRun(ctx, connect.NewRequest(&reliantv1.PauseRunRequest{RunId: runID}))
 	if err != nil {
-		return r.c.wrap(op, err)
+		return ActionResult{}, r.c.wrap(op, err)
 	}
-	return r.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage())
+	if err := r.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+		return ActionResult{}, err
+	}
+	return ActionResult{Message: resp.Msg.GetMessage()}, nil
 }
 
 // Resume continues a paused run from its recorded position. It returns the run
 // as it is after the resume: resuming an interrupted run may start a NEW
 // execution, so the id can differ from runID.
+//
+// A resume the server declines is [ErrNotApplied]; use [RunsClient.ResumeWithResult]
+// to tell a run that needs recovery apart from other refusals.
 //
 // Beta: see [RunsClient.Pause].
 func (r *RunsClient) Resume(ctx context.Context, runID string) (*Run, error) {
@@ -249,6 +281,41 @@ func (r *RunsClient) Resume(ctx context.Context, runID string) (*Run, error) {
 		return nil, err
 	}
 	return resp.Msg.GetRun(), nil
+}
+
+// ResumeResult is how a resume ended.
+type ResumeResult struct {
+	// Run is the run after the resume (see [RunsClient.Resume]); nil when
+	// NeedsRecovery.
+	Run *Run
+	// Message is the server's own words about it.
+	Message string
+	// NeedsRecovery is true when the server answered but could not resume: the
+	// run's workflow session was lost, so nothing is running and the caller
+	// must send a new message to continue. It is a state to report, not a
+	// failure of the call, so it is not an error.
+	//
+	// The server declines a resume this way (success=false with a message) only
+	// when the session is lost; every other refusal is an rpc error. NeedsRecovery
+	// reads that answer, since the run API has no dedicated field for it yet.
+	NeedsRecovery bool
+}
+
+// ResumeWithResult is [RunsClient.Resume] for a caller that must tell "needs
+// recovery" from success: it returns the answer instead of turning a declined
+// resume into [ErrNotApplied].
+//
+// Beta: see [RunsClient.Pause].
+func (r *RunsClient) ResumeWithResult(ctx context.Context, runID string) (ResumeResult, error) {
+	const op = "runs.resume"
+	resp, err := r.runs.ResumeRun(ctx, connect.NewRequest(&reliantv1.ResumeRunRequest{RunId: runID}))
+	if err != nil {
+		return ResumeResult{}, r.c.wrap(op, err)
+	}
+	if !resp.Msg.GetSuccess() {
+		return ResumeResult{Message: resp.Msg.GetMessage(), NeedsRecovery: true}, nil
+	}
+	return ResumeResult{Run: resp.Msg.GetRun(), Message: resp.Msg.GetMessage()}, nil
 }
 
 // InterruptResult says what an interrupt stopped.
