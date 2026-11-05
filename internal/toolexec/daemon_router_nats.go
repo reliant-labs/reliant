@@ -1371,13 +1371,18 @@ func (e daemonReportedFailure) ErrorClass() svcerr.Class {
 // is what there is to match: Go's ENOENT on Unix, the two Win32 messages for a
 // missing file and directory, and the prefixes daemonruntime writes for a
 // missing pkg working dir (pkgDirNotExistPrefix) and forge project dir
-// (forgeProjectDirNotExistPrefix).
+// (forgeProjectDirNotExistPrefix), and the one fs.preview_info writes for a
+// file it could not open ("file not found: <path>"). Without that last one a
+// preview of a path that is not on the machine was Internal: an ERROR "rpc
+// failed" on the server and a browser issue per click (prod, 2026-11-03..05,
+// issues 55ada191, 1e396220, b52cdbdb, 584d1a9a).
 var missingPathMarkers = []string{
 	"no such file or directory",
 	"cannot find the file specified",
 	"cannot find the path specified",
 	"working dir does not exist",
 	"forge project dir does not exist",
+	"file not found: ",
 }
 
 // IsMissingPathText reports whether a daemon's failure text says the path it
