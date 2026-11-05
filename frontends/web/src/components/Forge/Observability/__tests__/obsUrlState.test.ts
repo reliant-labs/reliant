@@ -156,10 +156,17 @@ describe("the URL round trip", () => {
         "alerts", "apps", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
         "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
         "issue", "istatus", "platform", "isort", "assignee",
-        "session", "t", "user", "rsession", "cursor",
+        "session", "t", "user", "rsession", "browser", "os", "fe", "be", "build", "cursor",
         "declared", "internal", "rpcId", "rpcService",
       ].sort()
     );
+  });
+
+  it("carries the client and build filters, and drops one longer than the server takes", () => {
+    const { parsed } = throughTheUrl({ view: "traces", browser: "Mobile Safari", os: "iOS", fe: "1.8.16-dev+7d787d80", be: "v1.7.92-rc.1" });
+    expect(parsed).toMatchObject({ browser: "Mobile Safari", os: "iOS", fe: "1.8.16-dev+7d787d80", be: "v1.7.92-rc.1" });
+    expect(throughTheUrl({ view: "errors", build: "v1.8.3" }).parsed.build).toBe("v1.8.3");
+    expect(throughTheUrl({ browser: "x".repeat(65) }).parsed.browser).toBeUndefined();
   });
 
   it("carries the Errors view's assignee filter: me or a user id", () => {

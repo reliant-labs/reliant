@@ -137,6 +137,14 @@ export interface ObsSearch {
   user?: string;
   /** Traces: only the ones of this browser session (its rum.sessionId). */
   rsession?: string;
+  /** Sessions, Errors and Traces: only this browser's / OS's (the platform-derived name, exact). */
+  browser?: string;
+  os?: string;
+  /** Sessions and Traces: only this frontend build's; Traces: only this backend build's. */
+  fe?: string;
+  be?: string;
+  /** Errors: only the issues with an event of this build. */
+  build?: string;
   /**
    * Sessions: the page tokens walked to reach the page shown, oldest first —
    * the last is the page's own. Absent: the first page. A trail, not one
@@ -186,6 +194,11 @@ export const OBS_SEARCH_KEYS = [
   "t",
   "user",
   "rsession",
+  "browser",
+  "os",
+  "fe",
+  "be",
+  "build",
   "cursor",
 ] as const satisfies readonly (keyof ObsSearch)[];
 

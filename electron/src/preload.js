@@ -59,6 +59,32 @@ ipcRenderer.on('menu-shortcut', (_event, shortcutId) => {
   heldMenuShortcuts = heldMenuShortcuts.slice(-MENU_SHORTCUT_HOLD_MAX);
 });
 
+// The desktop app's versions, for the web runtime's telemetry: it reads
+// window.forgeDesktop once at startup and reports them as app.desktop.version,
+// app.desktop.electron.version and app.desktop.chromium.version, so the console
+// can tell which desktop release a session, trace or error ran on. Only the main
+// process knows the app's version (app.getVersion()), so it passes it on the
+// command line (window-config.js, DESKTOP_VERSION_ARG); this sandboxed preload
+// can read process.argv and process.versions, and nothing else of the app. Each
+// value must look like a version or it is left out. Nothing is sent from here:
+// the runtime sends only while crash and error reporting is on.
+const DESKTOP_VERSION_ARG = '--reliant-app-version=';
+const DESKTOP_VERSION_RE = /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$/;
+
+function desktopVersions() {
+  const pick = (v) => (typeof v === 'string' && DESKTOP_VERSION_RE.test(v) ? v : undefined);
+  const argv = Array.isArray(process.argv) ? process.argv : [];
+  const arg = argv.find((a) => typeof a === 'string' && a.startsWith(DESKTOP_VERSION_ARG));
+  const versions = process.versions || {};
+  return Object.freeze({
+    appVersion: pick(arg ? arg.slice(DESKTOP_VERSION_ARG.length) : undefined),
+    electronVersion: pick(versions.electron),
+    chromiumVersion: pick(versions.chrome),
+  });
+}
+
+contextBridge.exposeInMainWorld('forgeDesktop', desktopVersions());
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {

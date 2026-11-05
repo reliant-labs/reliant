@@ -50,6 +50,7 @@ import { StatusBadge, Trend } from "./IssueBits";
 import { affectedNoun, issueAskSubject, PLATFORM_LABEL, SORT_LABEL, STATUS_LABEL } from "./issueModel";
 import { linkChatToIssue } from "./linkIssueChat";
 import { assigneeFilterOf, assigneeFilterWaitsForMe, assigneeParam, serverAssignee } from "./issueTimelineModel";
+import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
 
 export interface ErrorsViewProps {
   scope: ObsScope;
@@ -66,10 +67,15 @@ export interface ErrorsViewProps {
   assignee: string | undefined;
   /** Only the issues a user id hit in the window (the URL's `user`). Empty: everyone's. */
   user?: string;
+  /** Only the issues with an event of this browser, OS or build (the URL's `browser`, `os`, `build`). */
+  client?: ClientFilterValues;
   /** The issue open in detail. */
   issueId: string | undefined;
   navigate: ObsNavigate;
 }
+
+const NO_FILTER_VALUES: ClientFilterValues = {};
+const ERROR_CLIENT_FIELDS = ["browser", "os", "build"] as const;
 
 export function ErrorsView(props: ErrorsViewProps) {
   if (props.issueId) {
@@ -91,7 +97,8 @@ export function issueScopeOf(scope: ObsScope): IssueScope {
   return { orgId: scope.orgId, projectId: scope.projectId, envIds: scope.envIds };
 }
 
-function IssueList({ scope, subject, range, text, service, statuses, platform, sort, assignee, user = "", navigate }: ErrorsViewProps) {
+function IssueList({ scope, subject, range, text, service, statuses, platform, sort, assignee, user = "", client = NO_FILTER_VALUES, navigate }: ErrorsViewProps) {
+  const { browser, os, build } = client;
   const issueScope = useMemo(() => issueScopeOf(scope), [scope]);
   const me = useCurrentIssueUser();
   const assigneeFilter = useMemo(() => assigneeFilterOf(assignee), [assignee]);
@@ -100,16 +107,34 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
   const meUnknown = assigneeFilter.kind === "me" && !me.isLoading && !me.data?.id;
   const serverUser = serverAssignee(assigneeFilter, me.data?.id);
   const filters: IssueFilters = useMemo(
-    () => ({ range, statuses, platform, service, assignee: serverUser, userId: user || undefined, sort, text }),
-    [range, statuses, platform, service, serverUser, user, sort, text]
+    () => ({
+      range,
+      statuses,
+      platform,
+      service,
+      assignee: serverUser,
+      userId: user || undefined,
+      browser: browser || undefined,
+      os: os || undefined,
+      serviceVersion: build || undefined,
+      sort,
+      text,
+    }),
+    [range, statuses, platform, service, serverUser, user, browser, os, build, sort, text]
   );
   const issues = useIssues(waitingForMe || meUnknown ? null : issueScope, filters);
   const rows = useMemo(() => issues.data?.pages.flatMap((page) => page.issues) ?? [], [issues.data]);
-  const filtered = statuses.length > 0 || !!platform || !!service || !!text || !!user || assigneeFilter.kind !== "anyone";
+  const filtered = statuses.length > 0 || !!platform || !!service || !!text || !!user || hasClientFilters(client) || assigneeFilter.kind !== "anyone";
 
   return (
     <div className="space-y-3" data-testid="obs-errors">
       <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} assignee={assignee} user={user} navigate={navigate} />
+      <ClientFilters
+        id="obs-errors-client"
+        fields={ERROR_CLIENT_FIELDS}
+        values={client}
+        onApply={(next) => navigate(next, { replace: true })}
+      />
       {issues.data && <ObsAsOf updatedAt={issues.dataUpdatedAt} />}
       {meUnknown ? (
         <p className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" data-testid="obs-errors-mine-unknown">
@@ -135,7 +160,9 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
           filtered={filtered}
           topic="errors"
           onWiden={() => navigate({ range: "7d" })}
-          onClearFilters={() => navigate({ istatus: undefined, platform: undefined, service: undefined, assignee: undefined, user: undefined, q: undefined })}
+          onClearFilters={() =>
+            navigate({ istatus: undefined, platform: undefined, service: undefined, assignee: undefined, user: undefined, q: undefined, ...NO_CLIENT_FILTERS })
+          }
         />
       ) : (
         <IssueTable

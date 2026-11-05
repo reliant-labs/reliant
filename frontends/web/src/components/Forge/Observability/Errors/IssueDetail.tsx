@@ -42,6 +42,7 @@ import { IssueTimeline, useOpenChat } from "./IssueTimeline";
 import { chatLabel, latestChatLink, mergeTimelinePages } from "./issueTimelineModel";
 import { IssueTriage } from "./IssueTriage";
 import { linkChatToIssue } from "./linkIssueChat";
+import { ClientSummary } from "../Client";
 
 export function IssueDetail({
   issueId,
@@ -375,7 +376,12 @@ function LatestEvent({ event, onTrace, onSession }: { event: IssueEvent; onTrace
       <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
         <EventUser event={event} />
         <Place geo={event} />
-        {event.serviceVersion && <span className="font-mono">{event.serviceVersion}</span>}
+        <ClientSummary client={event.client} testId="obs-issue-latest-client" />
+        {event.serviceVersion && (
+          <span className="font-mono" title="The build that raised it">
+            {event.serviceVersion}
+          </span>
+        )}
         {event.urlPath && <span className="font-mono">{event.urlPath}</span>}
         <SessionLink event={event} onSession={onSession} />
         <TraceLink event={event} onTrace={onTrace} />
@@ -444,7 +450,12 @@ function RecentEvents({ issueId, onTrace, onSession }: { issueId: string; onTrac
               <span className="tabular-nums">{formatTimestamp(event.timeMs, now)}</span>
               <EventUser event={event} />
               <Place geo={event} />
-              {event.serviceVersion && <span className="font-mono">{event.serviceVersion}</span>}
+              <ClientSummary client={event.client} testId="obs-issue-event-client" />
+              {event.serviceVersion && (
+                <span className="font-mono" title="The build that raised it">
+                  {event.serviceVersion}
+                </span>
+              )}
               <TraceLink event={event} onTrace={onTrace} />
               <SessionLink event={event} onSession={onSession} />
             </p>
