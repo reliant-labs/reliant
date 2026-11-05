@@ -18,7 +18,9 @@ while [ \$# -gt 0 ]; do case "\$1" in --jq) f="\$2"; shift 2 ;; */labels|*/event
 # repos/o/r/issues/<n>/<kind>: $T/<kind>-<n>.json when a case wrote one, else $T/<kind>.json.
 n="\${src%/*}"; n="\${n##*/}"; kind="\${src##*/}"
 file="$T/\$kind-\$n.json"; [ -f "\$file" ] || file="$T/\$kind.json"
-jq -r "\$f" "\$file"
+jq -r "\$f" "\$file" || exit
+# FAKE_GH_EVENTS_EXIT: print the events, then fail, as gh does when a later page errors.
+case "\$kind" in events) exit "\${FAKE_GH_EVENTS_EXIT:-0}" ;; esac
 EOF
 chmod +x "$T/gh"
 labels() { printf '%s\n' "$1" >"$T/labels.json"; }
@@ -42,6 +44,7 @@ events '[{"event":"labeled","label":{"name":"migration:breaks-rollback-approved"
 check "the label applied by a bot does not count" 1 CI_PR=7
 events '[{"event":"labeled","label":{"name":"migration:breaks-rollback-approved"},"actor":{"login":"reliant-01"}}]'
 check "the owner's label passes" 0 CI_PR=7
+check "an owner event from a paginated read that then failed does not count" 1 CI_PR=7 FAKE_GH_EVENTS_EXIT=1
 labels '[]'
 check "the owner's label, since removed, does not" 1 CI_PR=7
 CMD=proto check "no buf.yaml: proto has nothing to judge" 0
@@ -98,4 +101,21 @@ if command -v buf >/dev/null; then
 else
   echo "skip: buf is not on PATH, so the proto cases did not run"
 fi
+
+# Deleting buf.yaml must not switch the proto check off (refused before buf runs).
+mkdir -p "$T/r/proto/x/v1"
+printf 'version: v2\nmodules:\n  - path: proto\nbreaking:\n  use:\n    - FILE\n' >"$T/r/buf.yaml"
+printf 'syntax = "proto3";\npackage x.v1;\nmessage M {\n  string a = 1;\n  string b = 2;\n}\n' >"$T/r/proto/x/v1/x.proto"
+g add -A; g commit -q --allow-empty -m "proto base"; g tag -f base >/dev/null
+g rm -q buf.yaml
+printf 'syntax = "proto3";\npackage x.v1;\nmessage M {\n  string a = 1;\n}\n' >"$T/r/proto/x/v1/x.proto"
+g add -A; g commit -qm "drop buf.yaml and a field"
+labels '[]'; events '[]'
+CMD=proto check "deleting buf.yaml beside a breaking change fails" 1 CI_PR=9
+grep -q 'buf.yaml' "$T/out" || { echo "FAIL: the refusal does not name buf.yaml"; fail=1; }
+labels '[{"name":"breaking:approved"}]'
+events '[{"event":"labeled","label":{"name":"breaking:approved"},"actor":{"login":"reliant-labs[bot]"}}]'
+CMD=proto check "a bot's breaking:approved does not accept it" 1 CI_PR=9
+events '[{"event":"labeled","label":{"name":"breaking:approved"},"actor":{"login":"reliant-01"}}]'
+CMD=proto check "the owner's breaking:approved accepts it" 0 CI_PR=9
 exit "$fail"

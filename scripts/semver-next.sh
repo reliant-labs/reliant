@@ -14,7 +14,9 @@
 #
 #   --repo DIR      the git checkout to read (default: the current directory)
 #   --base vX.Y.Z   the last final release (default: the newest local vX.Y.Z tag; an
-#                   rc/ or pre-release tag is never a base)
+#                   rc/ or pre-release tag is never a base). Not "the newest the head
+#                   descends from": reliant's and control-plane's final tags sit on the
+#                   release train's pin commits, beside main, never on it.
 #   --base-rev REV  the commit to count from (default: the --base tag)
 #   --head REV      the release candidate (default: HEAD)
 #   --breaking-since REV
@@ -24,18 +26,24 @@
 #   --allow-breaking
 #                   print the version anyway, warning about each breaking commit (a
 #                   release script checking a version the train or the owner chose)
+#   --no-older-check
+#                   do not refuse a head a later release descends from (the release
+#                   train: a repo unchanged since its last release still gets a pin commit)
 #   --explain       print each commit's bump on stderr
 #
 # Classifies each commit subject `type(scope)!: title`:
-#   `!`, or a body line `BREAKING CHANGE:` / `BREAKING-CHANGE:`  -> breaking
+#   `!`, or a body line `BREAKING CHANGE:` / `BREAKING-CHANGE:`, or forge's
+#   apigate declaration `API-BREAK:`                             -> breaking
 #   type `feat`                                                  -> minor
 #   anything else (fix, perf, chore, docs, refactor, ...)        -> patch
 #
 # Prints the version on stdout and exits 0; exits 3 naming every breaking commit
-# (its subject carries the PR number), 2 on a usage or git error.
+# (its subject carries the PR number), 4 when a later commit is already released (a
+# final tag on a descendant of the head) or the computed version is already a tag, 2 on a
+# usage or git error.
 set -euo pipefail
 
-REPO=. BASE="" BASE_REV="" HEAD_REV=HEAD EXPLAIN=0 SINCE="" ALLOW=0
+REPO=. BASE="" BASE_REV="" HEAD_REV=HEAD EXPLAIN=0 SINCE="" ALLOW=0 OLDER=1
 die() { echo "semver-next: $*" >&2; exit 2; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -45,21 +53,32 @@ while [ $# -gt 0 ]; do
     --head) HEAD_REV="${2:?}"; shift 2 ;;
     --breaking-since) SINCE="${2:?}"; shift 2 ;;
     --allow-breaking) ALLOW=1; shift ;;
+    --no-older-check) OLDER=0; shift ;;
     --explain) EXPLAIN=1; shift ;;
     -h|--help) sed -n '2,/^set -euo/p' "$0" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown argument $1" ;;
   esac
 done
 
+git -C "$REPO" rev-parse -q --verify "$HEAD_REV^{commit}" >/dev/null || die "cannot resolve $HEAD_REV in $REPO"
+finals() { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V || true; }
+# A final release on a later commit (a descendant of the head) already shipped
+# newer source: any version computed here would publish older source as a newer
+# release. Refuse, naming it.
+released="$(comm -23 <(git -C "$REPO" tag -l 'v*' --contains "$HEAD_REV" | sort) \
+  <(git -C "$REPO" tag -l 'v*' --points-at "$HEAD_REV" | sort) | finals | tail -1)"
+if [ -n "$released" ] && [ "$OLDER" = 1 ]; then
+  echo "semver-next: refusing: $HEAD_REV is older than a release: $released is on a later commit; a release of it would be older source under a newer version" >&2
+  exit 4
+fi
 if [ -z "$BASE" ]; then
-  BASE="$(git -C "$REPO" tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)"
+  BASE="$(git -C "$REPO" tag -l 'v*' | finals | tail -1)"
   [ -n "$BASE" ] || die "no final vX.Y.Z tag in $REPO to count from (pass --base)"
 fi
 [[ "$BASE" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]] || die "--base $BASE is not vX.Y.Z"
 major="${BASH_REMATCH[1]}" minor="${BASH_REMATCH[2]}" patch="${BASH_REMATCH[3]}"
 [ -n "$BASE_REV" ] || BASE_REV="refs/tags/$BASE"
 git -C "$REPO" rev-parse -q --verify "$BASE_REV^{commit}" >/dev/null || die "cannot resolve $BASE_REV in $REPO"
-git -C "$REPO" rev-parse -q --verify "$HEAD_REV^{commit}" >/dev/null || die "cannot resolve $HEAD_REV in $REPO"
 [ -z "$SINCE" ] || git -C "$REPO" rev-parse -q --verify "$SINCE^{commit}" >/dev/null || die "cannot resolve $SINCE in $REPO"
 
 bump=patch breaking=()
@@ -78,7 +97,7 @@ while IFS= read -r -d '' rec; do
     [ "${BASH_REMATCH[1]}" = feat ] && kind=minor
     [ -n "${BASH_REMATCH[3]}" ] && kind=breaking
   fi
-  grep -qE '^BREAKING[ -]CHANGE:' <<<"$body" && kind=breaking
+  grep -qE '^(BREAKING[ -]CHANGE|API-BREAK):' <<<"$body" && kind=breaking
   [ "$EXPLAIN" = 1 ] && printf '%-8s %s %s\n' "$kind" "${sha:0:12}" "$subject" >&2
   case "$kind" in
     breaking)
@@ -102,6 +121,12 @@ elif [ "${#breaking[@]}" -gt 0 ]; then
   exit 3
 fi
 case "$bump" in
-  minor) echo "v$major.$((minor + 1)).0" ;;
-  *) echo "v$major.$minor.$((patch + 1))" ;;
+  minor) next="v$major.$((minor + 1)).0" ;;
+  *) next="v$major.$minor.$((patch + 1))" ;;
 esac
+# The version is already a release of other source (a tag on another branch).
+if git -C "$REPO" rev-parse -q --verify "refs/tags/$next" >/dev/null; then
+  echo "semver-next: refusing: $next is already released, from a commit $HEAD_REV does not descend from" >&2
+  exit 4
+fi
+echo "$next"
