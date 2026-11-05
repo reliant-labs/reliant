@@ -285,6 +285,30 @@ func TestForgeService_ASameNamedProjectOfAnotherRepositoryNeverAnswers(t *testin
 	}
 }
 
+// A port other than the transport's default can be another server, and a host
+// other than GitHub can serve Team/App beside team/app: neither is folded into
+// the requested project's remote, so neither answers for it.
+func TestForgeService_ARemoteThatMayBeAnotherRepositoryNeverAnswers(t *testing.T) {
+	for _, tc := range []struct{ name, requested, other string }{
+		{"another nondefault port", "ssh://git@git.example:2222/team/app.git", "ssh://git@git.example:2223/team/app.git"},
+		{"the default port against a nondefault one", "ssh://git@git.example/team/app.git", "ssh://git@git.example:2223/team/app.git"},
+		{"another path case on a case-sensitive host", "git@git.example:Team/App.git", "git@git.example:team/app.git"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := fallbackRepo(
+				fallbackProject{id: "proj-1", forgeName: "control-plane", remote: tc.requested, installs: []*core.ProjectDaemon{installed("mac", macPath)}},
+				fallbackProject{id: "proj-2", forgeName: "control-plane", remote: tc.other, installs: []*core.ProjectDaemon{installed("cloud", cloudPath)}},
+			)
+			router := &forgeTestRouter{reply: forgeDaemonReply(t, true, true, 0, `{}`), replyErrFor: asleep("mac")}
+
+			err := topology(newForgeService(router, repo))
+
+			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+			assert.Equal(t, []string{"mac"}, router.asked)
+		})
+	}
+}
+
 // Without a remote of its own, the requested project cannot prove it is the
 // same repository as any other: only its own checkouts are asked.
 func TestForgeService_AProjectWithNoRemoteFallsBackOnlyToItsOwnCheckouts(t *testing.T) {
@@ -316,4 +340,18 @@ func TestRemoteIdentity(t *testing.T) {
 	assert.Equal(t, "", remoteIdentity(nil))
 	assert.Equal(t, "", remoteIdentity(str("  ")))
 	assert.NotEqual(t, remoteIdentity(str("git@github.com:someone/control-plane.git")), remoteIdentity(str(same[0])))
+
+	// What may name another repository is never folded.
+	distinct := [][2]string{
+		// Two nondefault ports can be two servers.
+		{"ssh://git@git.example:2222/team/app.git", "ssh://git@git.example:2223/team/app.git"},
+		{"ssh://git@git.example:2222/team/app.git", "git@git.example:team/app.git"},
+		// A case-sensitive host can serve both.
+		{"https://git.example/Team/App.git", "https://git.example/team/app.git"},
+		{"git@gitlab.com:Team/App.git", "git@gitlab.com:team/app.git"},
+	}
+	for _, pair := range distinct {
+		assert.NotEqual(t, remoteIdentity(str(pair[0])), remoteIdentity(str(pair[1])), pair)
+	}
+	assert.Equal(t, remoteIdentity(str("ssh://git@Git.Example:22/team/app")), remoteIdentity(str("git@git.example:team/app.git")))
 }

@@ -121,9 +121,16 @@ func forgeNameOf(project *db.Project) string {
 
 // remoteIdentity is the repository a git remote URL names, in one form for
 // every spelling of it: "git@github.com:Org/Repo.git",
-// "ssh://git@github.com/org/repo" and "https://user:tok@github.com/org/repo/"
+// "ssh://git@github.com:22/org/repo" and "https://user:tok@github.com/org/repo/"
 // are all "github.com/org/repo". "" when there is no remote, so a project
 // without one never matches another.
+//
+// Only proven equivalences are folded: credentials, a trailing "/" or ".git",
+// the host's case, a scheme's default port, and the path's case on hosts whose
+// repository names are case-insensitive (caseInsensitivePathHosts). Any other
+// port, or the path's case elsewhere, can name a different repository (another
+// server, or a case-sensitive host serving Team/App beside team/app), so it is
+// kept and such remotes never match.
 func remoteIdentity(raw *string) string {
 	if raw == nil {
 		return ""
@@ -132,21 +139,36 @@ func remoteIdentity(raw *string) string {
 	if s == "" {
 		return ""
 	}
+	scheme := ""
 	if i := strings.Index(s, "://"); i >= 0 {
-		s = s[i+3:]
+		scheme, s = strings.ToLower(s[:i]), s[i+3:]
 	} else if i := strings.Index(s, ":"); i >= 0 && !strings.Contains(s[:i], "/") {
-		// scp-like: [user@]host:path
+		// scp-like: [user@]host:path. Its ":" never introduces a port.
 		s = s[:i] + "/" + s[i+1:]
 	}
-	if i := strings.Index(s, "@"); i >= 0 && i < strings.Index(s+"/", "/") {
-		s = s[i+1:]
+	host, path, _ := strings.Cut(s, "/")
+	if i := strings.LastIndex(host, "@"); i >= 0 {
+		host = host[i+1:]
 	}
-	if i := strings.Index(s, "/"); i >= 0 {
-		// A port is not part of the repository's identity.
-		if j := strings.LastIndex(s[:i], ":"); j >= 0 {
-			s = s[:j] + s[i:]
-		}
+	host = strings.ToLower(host)
+	if h, port, ok := strings.Cut(host, ":"); ok && port == defaultGitPorts[scheme] {
+		host = h
 	}
-	s = strings.TrimSuffix(strings.TrimRight(s, "/"), ".git")
-	return strings.ToLower(strings.TrimRight(s, "/"))
+	path = strings.TrimSuffix(strings.TrimRight(path, "/"), ".git")
+	path = strings.TrimRight(path, "/")
+	if caseInsensitivePathHosts[host] {
+		path = strings.ToLower(path)
+	}
+	if host == "" || path == "" {
+		return ""
+	}
+	return host + "/" + path
 }
+
+// defaultGitPorts is the port each git transport uses when a URL names none,
+// so "ssh://host:22/x" is the same remote as "ssh://host/x".
+var defaultGitPorts = map[string]string{"ssh": "22", "git+ssh": "22", "https": "443", "http": "80", "git": "9418"}
+
+// caseInsensitivePathHosts are the hosts known to resolve a repository path
+// regardless of case (GitHub's owner and repository names are).
+var caseInsensitivePathHosts = map[string]bool{"github.com": true, "www.github.com": true}
