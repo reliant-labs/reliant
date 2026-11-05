@@ -161,7 +161,8 @@
             "group": "Get started",
             "pages": [
               "forge/overview",
-              "forge/quick-start"
+              "forge/quick-start",
+              "forge/deploy-without-an-account"
             ]
           },
           {
