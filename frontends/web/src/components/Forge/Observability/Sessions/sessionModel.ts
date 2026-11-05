@@ -235,6 +235,7 @@ export function sessionLink(sessionId: string, atMs?: number): ObsSearch {
     live: undefined,
     severity: undefined,
     minDuration: undefined,
+    lat: undefined,
     rsession: undefined,
     cursor: undefined,
   };

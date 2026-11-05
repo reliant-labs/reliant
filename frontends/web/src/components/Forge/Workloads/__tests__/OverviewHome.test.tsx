@@ -61,11 +61,11 @@ describe("the Overview", () => {
     expect(within(table).getByTestId("overview-service-litellm")).toHaveTextContent("Degraded");
     // The whole row opens the workload, in its environment.
     expect(within(worker).getByRole("link", { name: /^reliant-temporal-worker\b/ })).toHaveAttribute("href", "/w/prod/reliant-temporal-worker");
-    // Only prod's: no environment column, no other env's rows.
+    // Only prod's: one card per service, no other env's.
     expect(within(table).queryByText("Environment")).toBeNull();
-    expect(within(table).getAllByRole("row")).toHaveLength(1 + 6);
+    expect(within(table).getAllByRole("listitem")).toHaveLength(6);
     expect(screen.getByTestId("overview-counts")).toHaveTextContent("6 services and 1 job in prod");
-    expect(within(table).getByRole("columnheader", { name: "Restarts 24h" })).toBeInTheDocument();
+    expect(within(worker).getByText("Restarts 24h")).toBeInTheDocument();
   });
 
   it("says when a release is declared by the promotion rather than verified by digest", async () => {
@@ -135,12 +135,11 @@ describe("the Overview", () => {
     expect(job).toHaveTextContent("5m 12s");
   });
 
-  it("adds an Environment column with every environment in scope", async () => {
+  it("names each card's environment with every environment in scope", async () => {
     renderOverview({ env: "all" });
     await ready();
     const table = screen.getByTestId("overview-services-table");
-    expect(within(table).getByText("Environment")).toBeInTheDocument();
-    expect(within(table).getByTestId("overview-service-admin-server-e2e")).toBeInTheDocument();
+    expect(within(within(table).getByTestId("overview-service-admin-server-e2e")).getByText("e2e")).toBeInTheDocument();
     expect(screen.getByTestId("overview-counts")).toHaveTextContent("all environments");
   });
 
@@ -149,7 +148,7 @@ describe("the Overview", () => {
     await ready();
     await userEvent.click(screen.getByTestId("overview-chip-status"));
     expect(harness.current().status).toBe("attention");
-    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("row")).toHaveLength(1 + 2);
+    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem")).toHaveLength(2);
     await userEvent.type(screen.getByTestId("overview-filter"), "nope");
     expect(screen.getByTestId("overview-services-empty")).toHaveTextContent("No service matches these filters");
   });
@@ -211,7 +210,9 @@ describe("its states", () => {
     await waitFor(() => expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "error"), { timeout: 5000 });
     expect(screen.getByTestId("overview-env-prod")).toHaveTextContent("health unavailable");
     expect(screen.getByTestId("overview-attention")).toHaveTextContent("Workload health could not be read");
-    expect(screen.getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
+    // Each tile the read feeds says so with its own Try again (OverviewTiles.test.tsx).
+    expect(within(screen.getByTestId("overview-services")).getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
+    expect(within(screen.getByTestId("overview-jobs")).getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
   });
 
   it("still lists the firing alerts when the workload read times out", async () => {

@@ -79,6 +79,39 @@ message ReliantWebConfig {
     description: "Hostname that serves the forge-branded shell (ForgeShell) from this same bundle. A document loaded on this host mounts the forge console, claim, sites, usage and settings pages with forge branding; every other host mounts Reliant. Also where Reliant's \"Open Forge console\" link points."
   }];
 
+  // ── The public forge demo (demo shell, lib/shell.ts) ──────────────────
+  string demo_app_host = 24 [(forge.v1.config) = {
+    env_var: "DEMO_APP_HOST"
+    default_value: "demo.reliantlabs.io"
+    description: "Hostname that serves the public forge demo (the demo shell) from this same bundle: one route, /forge/demo, read-only, with the forge tour started on every visit. No sign-in exists on this host."
+  }];
+
+  string demo_telemetry = 25 [(forge.v1.config) = {
+    env_var: "DEMO_TELEMETRY"
+    default_value: "replay"
+    description: "What the demo host records about its anonymous visitors, under service forge-demo. \"replay\": page and tour analytics and masked session replay. \"analytics\": page and tour analytics only. \"off\": nothing. A browser that sends Do Not Track or Global Privacy Control is never recorded."
+    allowed_values: ["replay", "analytics", "off"]
+  }];
+
+  string demo_tour = 26 [(forge.v1.config) = {
+    env_var: "DEMO_TOUR"
+    default_value: "short"
+    description: "The forge tour on the demo host. \"short\": at most ten steps (no profile or on-call step; the cross-service, graph and agent steps instead). \"full\": every forge step."
+    allowed_values: ["short", "full"]
+  }];
+
+  string demo_data_source = 27 [(forge.v1.config) = {
+    env_var: "DEMO_DATA_SOURCE"
+    default_value: "fixtures"
+    description: "Where the demo host's console reads come from. \"fixtures\": built-in sample data, no network. \"remote\": the demo-data gateway at DEMO_DATA_URL (read RPCs only), falling back to the sample data on any failure."
+    allowed_values: ["fixtures", "remote"]
+  }];
+
+  string demo_data_url = 28 [(forge.v1.config) = {
+    env_var: "DEMO_DATA_URL"
+    description: "Base URL of the demo-data gateway the demo host reads from when DEMO_DATA_SOURCE is \"remote\": a public, read-only Connect endpoint serving the observability read RPCs (research/2026-11-05-console-health/demo-plan.md, Phase 2 contract). Unset: the sample data."
+  }];
+
   string disable_tls = 5 [(forge.v1.config) = {
     env_var: "DISABLE_TLS"
     description: "\"true\": build loopback and WebSocket URLs with http/ws instead of https/wss (a plain-http local stack). The desktop app takes this from its main process instead."

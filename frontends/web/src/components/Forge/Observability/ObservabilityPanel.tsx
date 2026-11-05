@@ -158,6 +158,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       live: undefined,
       errors: undefined,
       minDuration: undefined,
+      lat: undefined,
       alerts: undefined,
       rule: undefined,
       compare: undefined,
@@ -383,6 +384,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             service={search.service}
             errorsOnly={!!search.errors}
             minDuration={search.minDuration}
+            latency={search.lat}
             traceId={search.trace}
             spanId={search.span}
             groupBy={groupBy}

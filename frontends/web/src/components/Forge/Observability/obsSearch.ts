@@ -97,6 +97,13 @@ export interface ObsSearch {
   /** Traces: only the ones slower than this ("500ms", "1s"). */
   minDuration?: string;
   /**
+   * Traces: a latency band, "<lo>-<hi>" in ms ("120-480"): what a bucket of
+   * the Overview's latency histogram opens. It seeds the chart's selected
+   * region (every time, that band of latency) and asks the server for traces
+   * at least `lo` long.
+   */
+  lat?: string;
+  /**
    * The project area's environment filter: env NAMES (unique within a
    * project, and readable in a shared link). Absent: every environment. An
    * env page pins its own environment and ignores this.
@@ -177,6 +184,7 @@ export const OBS_SEARCH_KEYS = [
   "live",
   "errors",
   "minDuration",
+  "lat",
   "envs",
   "apps",
   "f",

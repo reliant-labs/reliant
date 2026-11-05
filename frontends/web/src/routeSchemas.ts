@@ -591,6 +591,7 @@ export const obsSearchShape = {
   live: z.boolean().optional().catch(undefined),
   errors: z.boolean().optional().catch(undefined),
   minDuration: z.string().optional().catch(undefined),
+  lat: z.string().regex(/^\d+(\.\d+)?-\d+(\.\d+)?$/).optional().catch(undefined),
   envs: z.array(z.string()).optional().catch(undefined),
   apps: z.array(z.string()).optional().catch(undefined),
   f: z.array(z.string()).optional().catch(undefined),

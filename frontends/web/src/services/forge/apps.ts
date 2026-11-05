@@ -55,6 +55,8 @@ export interface AppEnv {
   links: AppLink[];
   /** The status read has not answered yet. */
   loading: boolean;
+  /** The status read failed: `release` is "" because nothing could be read, not because nothing was deployed. */
+  unread: boolean;
 }
 
 export interface AppSummary {
@@ -127,21 +129,25 @@ function toAppEnv(env: CloudEnv, status: AppEnvStatus): AppEnv {
     deployedAt: status?.currentPromotion?.createdAt,
     links: status ? appLinksOf(status.workloads) : [],
     loading: status === undefined,
+    unread: status === null,
   };
 }
 
 /**
- * The environments Reliant runs, and so can link to: persistent and preview.
- * A local environment runs on a developer's machine under `forge env up` and
- * has no public URL; an unknown kind is not claimed as hosted.
+ * The environments an app is deployed to: the ones Reliant runs (persistent
+ * and preview), and the self-managed ones — the customer's own cluster, which
+ * Reliant does not run but whose promotions it records. Leaving those out is
+ * how control-plane, deployed to its own cluster 160 times, was listed as "Not
+ * deployed yet". A local environment runs on a developer's machine under
+ * `forge env up` and is deployed nowhere; an unknown kind is not claimed.
  */
-export function isHostedEnv(env: CloudEnv): boolean {
-  return env.kind === "persistent" || env.kind === "preview";
+export function isAppEnv(env: CloudEnv): boolean {
+  return env.kind === "persistent" || env.kind === "preview" || env.kind === "self_managed";
 }
 
 /**
- * Every app: the org's hosted environments grouped by forge project, plus the
- * forge projects among `projects` that have none yet.
+ * Every app: the org's environments grouped by forge project, plus the forge
+ * projects among `projects` that have none yet.
  *
  * Ordered by the newest deploy, so what the user just shipped leads; apps that
  * were never deployed follow, by name.
@@ -162,7 +168,7 @@ export function buildApps(
   };
 
   for (const env of envs) {
-    if (!env.project || !isHostedEnv(env)) continue;
+    if (!env.project || !isAppEnv(env)) continue;
     const summary = app(env.project);
     const appEnv = toAppEnv(env, statuses.get(env.id));
     if (appEnv.preview) summary.previews += 1;
@@ -202,6 +208,15 @@ export function isLive(app: Pick<AppSummary, "envs">): boolean {
 /** Whether any long-lived environment has had a release promoted to it. */
 export function isDeployed(app: Pick<AppSummary, "envs" | "lastDeployedAt">): boolean {
   return !!app.lastDeployedAt || app.envs.some((env) => env.release !== "");
+}
+
+/**
+ * Whether the app is known never to have been deployed: no release anywhere,
+ * and every environment's status was read. An environment whose read failed
+ * may well have one, so the answer then is "unknown", never "not deployed".
+ */
+export function isNeverDeployed(app: Pick<AppSummary, "envs" | "lastDeployedAt">): boolean {
+  return !isDeployed(app) && !app.envs.some((env) => env.unread);
 }
 
 // ── A deploy in a chat ──────────────────────────────────────────────────────

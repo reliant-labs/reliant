@@ -13,7 +13,10 @@
  *   - each route's Connect transport, built lazily and rebuilt when its base
  *     URL changes (packaged Electron learns its backend URL asynchronously,
  *     from preload, after the bundle has already loaded);
- *   - the test seam (`setTransport`).
+ *   - the test seam (`setTransport`);
+ *   - a shell's own transport (`installShellTransport`): the public demo
+ *     host answers every RPC from forge's mock transport and reaches no
+ *     real backend at all (Forge/Demo/demoData/demoTransport.ts).
  *
  * The interceptor chain every route runs is `buildInterceptors` in
  * `api/transport.ts`: forge's runtime interceptors (error normalization, auth)
@@ -297,6 +300,17 @@ function mockTransport(): Promise<Transport> {
 }
 
 let _override: Transport | null = null;
+let _shell: Transport | Promise<Transport> | null = null;
+
+/**
+ * A shell's own transport for EVERY route, installed once at boot, before any
+ * client is used, by a shell that must reach no real backend: the public demo
+ * (demoShellRoutes.tsx). Below the test seam, above mock mode. A promise is
+ * accepted so the transport's module can load lazily.
+ */
+export function installShellTransport(t: Transport | Promise<Transport> | null): void {
+  _shell = t;
+}
 
 /**
  * Test seam: send EVERY route to `t` (null restores the real routing).
@@ -313,6 +327,7 @@ export function setTransport(t: Transport | null): void {
  */
 export const transport: Transport = routed((method) => {
   if (_override) return _override;
+  if (_shell) return _shell;
   if (MOCK_MODE === "true" || MOCK_MODE === "hybrid") return mockTransport();
   return transportFor(routeFor(method.parent.typeName, method.name));
 });

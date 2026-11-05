@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { appLinksOf, buildApps, deployedEnvOf, isDeployed, isLive, primaryLink, type AppEnvStatus } from "../apps";
+import { appLinksOf, buildApps, deployedEnvOf, isAppEnv, isDeployed, isLive, isNeverDeployed, primaryLink, type AppEnvStatus } from "../apps";
 import type { CloudEnv, CloudEnvStatus } from "../cloudEnvs";
 import type { ForgeHostedWorkload } from "../topology";
 
@@ -125,6 +125,41 @@ describe("buildApps — one entry per forge project", () => {
     expect(isDeployed(api)).toBe(true);
     const [never] = buildApps([], new Map(), [{ id: "p", is_forge: true, forge_project_name: "fresh" }]);
     expect(isDeployed(never)).toBe(false);
+    expect(isNeverDeployed(never)).toBe(true);
+  });
+
+  // Prod: control-plane's only environment is its own cluster (self_managed),
+  // promoted to 160 times — and the list called it "Not deployed yet", because
+  // only Reliant-run kinds were read and the Reliant project row was all that
+  // was left of it.
+  it("lists a self-managed environment, so an app deployed to its own cluster is deployed", () => {
+    const [cp] = buildApps(
+      [env("cp-prod", "control-plane", "prod", "self_managed")],
+      new Map([["cp-prod", { ...status([], "v2026.11.04", "2026-11-04T23:04:21Z"), verdict: "unknown" as const }]]),
+      [{ id: "proj-1", is_forge: true, forge_project_name: "control-plane" }]
+    );
+    expect(cp).toMatchObject({ name: "control-plane", projectId: "proj-1", lastDeployedAt: "2026-11-04T23:04:21Z" });
+    expect(cp.envs.map((e) => [e.name, e.release])).toEqual([["prod", "v2026.11.04"]]);
+    expect(isDeployed(cp)).toBe(true);
+    expect(isLive(cp)).toBe(false);
+  });
+
+  it("reads which kinds an app is deployed to: Reliant-run and self-managed, never local or unknown", () => {
+    expect(isAppEnv(env("a", "x", "prod", "persistent"))).toBe(true);
+    expect(isAppEnv(env("b", "x", "pr-1", "preview"))).toBe(true);
+    expect(isAppEnv(env("c", "x", "prod", "self_managed"))).toBe(true);
+    expect(isAppEnv(env("d", "x", "dev", "local"))).toBe(false);
+    expect(isAppEnv(env("e", "x", "prod", "unknown"))).toBe(false);
+  });
+
+  it("does not call an app never deployed when an environment's status could not be read", () => {
+    const [unread] = buildApps([env("t-stg", "trader", "staging")], new Map([["t-stg", null]]), []);
+    expect(unread.envs[0]).toMatchObject({ unread: true, loading: false, release: "" });
+    expect(isDeployed(unread)).toBe(false);
+    expect(isNeverDeployed(unread)).toBe(false);
+    const [read] = buildApps([env("t-stg", "trader", "staging")], new Map([["t-stg", status([])]]), []);
+    expect(read.envs[0].unread).toBe(false);
+    expect(isNeverDeployed(read)).toBe(true);
   });
 });
 

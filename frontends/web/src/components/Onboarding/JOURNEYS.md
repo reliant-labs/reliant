@@ -297,6 +297,30 @@ by ForgeShell/landingJourney.ts:
 - `workflows` never runs there; a card links to Reliant
   (`<APP_URL>/?journey=workflows`).
 
+The public demo host (`demo.reliantlabs.io`, the `demo` shell,
+`demoShellRoutes.tsx`) boots the tour as the forge shell does, but with
+`memoryTourStorage()`: nothing is remembered. `Forge/Demo/DemoAutoStart`
+starts the forge journey once per page load (`source: "demo"`), unless the URL
+already names a forge step. The forge journey runs its own cut there, chosen
+with `isAvailable` (`lib/demoTour.ts`, runtime config `DEMO_TOUR`):
+
+| Step | Reliant / forge shell | demo, `short` (default) | demo, `full` |
+|---|---|---|---|
+| fg-console, fg-instrumented, fg-trace | ✓ | ✓ | ✓ |
+| fg-hops, fg-inside (between and inside services) | | ✓ | ✓ |
+| fg-logs | ✓ | ✓ | ✓ |
+| fg-profile | ✓ | | ✓ |
+| fg-graph | | | ✓ |
+| fg-issue | ✓ | ✓ | ✓ |
+| fg-oncall | ✓ | | ✓ |
+| fg-agent (what a coding agent reads) | | ✓ | ✓ |
+| fg-ask, fg-done | ✓ | ✓ | ✓ |
+| **steps** | 9 | 10 | 13 |
+
+Keep the short cut at ten or fewer: an auto-started tour has to earn each
+step (`forgeJourney.test.tsx` pins it). `finish` returns null on the demo
+host, so the visitor stays on the console.
+
 ## Analytics (through `trackEvent`)
 
 | Event | Props |

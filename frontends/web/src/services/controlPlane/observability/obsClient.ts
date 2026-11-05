@@ -15,14 +15,14 @@
  *
  * The scheduler is here, below every hook and component, rather than in any one
  * view, because the cap is per user: the dashboard, the metrics explorer, logs,
- * traces and the service graph share the same six slots.
+ * traces and the service graph share the same slots (SERVER_READ_CAP).
  */
 
 import type { DescService } from "@bufbuild/protobuf";
 import type { Client } from "@connectrpc/connect";
 
 import { getControlPlaneClient } from "../client";
-import { obsReadScheduler } from "./readScheduler";
+import { isBackgroundRead, obsReadScheduler, type ReadPriority } from "./readScheduler";
 import { callOptions, isPollRead } from "./quotaStore";
 import { READ_SLOT_RPCS } from "./readSlots";
 
@@ -39,14 +39,17 @@ export function obsClient<S extends DescService>(service: S): Client<S> {
       const call = member as (...a: unknown[]) => Promise<unknown>;
       return (request: unknown, options?: Options) => {
         // Read now, synchronously: the scheduler may start the call after the poll that asked for it has ended.
-        const poll = callOptions({ poll: isPollRead() });
+        const polling = isPollRead();
+        const poll = callOptions({ poll: polling });
+        // A poll or a prefetch waits behind the reads a person is looking at (readScheduler PRIORITY).
+        const priority: ReadPriority = polling || isBackgroundRead() ? "background" : "visible";
         const send = (signal: AbortSignal | undefined) => {
           const merged: Options | undefined =
             poll || signal ? { ...options, ...(signal ? { signal } : {}), ...(poll ? { headers: { ...options?.headers, ...poll.headers } } : {}) } : options;
           return call.call(target, request, merged);
         };
         if (typeof prop !== "string" || !READ_SLOT_RPCS.has(prop)) return send(options?.signal);
-        return obsReadScheduler().run((signal) => send(signal), options?.signal);
+        return obsReadScheduler().run((signal) => send(signal), options?.signal, priority);
       };
     },
   });

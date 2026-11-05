@@ -18,10 +18,10 @@ describe("FilterBar", () => {
     );
     expect(screen.getByRole("group", { name: "Filter services" })).toBeInTheDocument();
     expect(screen.getByTestId("on")).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByTestId("on").className).toContain("bg-primary/10");
+    expect(screen.getByTestId("on").className).toContain("bg-accent/10");
     expect(screen.getByTestId("on")).toHaveTextContent("Needs attention2");
     expect(screen.getByTestId("off")).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByTestId("off").className).not.toContain("bg-primary/10");
+    expect(screen.getByTestId("off").className).not.toContain("bg-accent/10");
   });
 
   it("names how many filters are set, and clears them", async () => {

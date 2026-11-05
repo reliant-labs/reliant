@@ -4,7 +4,7 @@
  * at its own rate while the quota is tight or gone, and telemetry polls pause.
  */
 
-import { QueryClient } from "@tanstack/react-query";
+import { focusManager, QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ObsPollRegistry } from "../pollRegistry";
@@ -42,5 +42,23 @@ describe("ObsPollRegistry", () => {
     // Tight: the telemetry poll slows to a quarter, the postgres one does not.
     expect(polled(telemetry)).toBe(1);
     expect(polled(postgres)).toBe(5);
+  });
+
+  it("polls nothing while the tab is hidden, and resumes when it is shown", async () => {
+    const store = new ObsQuotaStore(() => NOW);
+    const registry = new ObsPollRegistry(store);
+    const client = new QueryClient();
+    const refetch = vi.spyOn(client, "refetchQueries").mockResolvedValue();
+    registry.subscribe(client, ["observability", "workloads"], 1_000);
+    try {
+      focusManager.setFocused(false);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(refetch).not.toHaveBeenCalled();
+      focusManager.setFocused(true);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(refetch).toHaveBeenCalledTimes(1);
+    } finally {
+      focusManager.setFocused(undefined);
+    }
   });
 });
