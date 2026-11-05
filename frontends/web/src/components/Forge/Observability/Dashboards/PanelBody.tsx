@@ -21,7 +21,10 @@
  *   heatmap   time across, value buckets up, events per cell (HeatmapChart).
  *   table     one row per group, one column per series.
  *   sql       response-shaped: time series, rows, or ungrouped aggregate
- *             figures; its rows as a funnel with display.style: funnel.
+ *             figures; its rows as a funnel with display.style: funnel, and
+ *             as bars with display.style: bars (a histogram, a top N: rows
+ *             with no time column), laid along the y axis when the labels
+ *             are long or many.
  *   search    a list of rows, which is what Logs and Traces do: a way in.
  *   text      the author's Markdown, with no query (TextPanel).
  *   funnel    product events in order: how many journeys reached each step,
@@ -196,13 +199,16 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
     ? [...new Set([...data.rows, ...data.series].flatMap((row) => Object.keys(row.group)))]
     : groupBy?.length ? groupBy : (panel.groupBy ?? []);
   const sqlFunnel = panel.kind === "sql" && panel.display?.style === "funnel" ? funnelFromRows(data) : null;
+  // "bars" on a sql panel draws its time series as bars; on rows with no time
+  // column (a histogram's buckets, a top N) it draws the rows as bars.
+  const sqlBars = panel.kind === "sql" && panel.display?.style === "bars" && data.series.length === 0 && data.rows.length > 0 && !sqlAggregate(data);
   const draw = panel.postgres?.draw;
   const kind = statement
     ? sqlFunnel
       ? "sql-funnel"
       : data.series.length > 0
         ? "line"
-        : draw === "bar"
+        : draw === "bar" || sqlBars
           ? "bar"
           : draw === "number" || (draw !== "table" && sqlAggregate(data))
             ? "number"
@@ -244,7 +250,15 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
     case "bar":
       return (
         <>
-          <CategoryChart panel={panel} data={data} unit={unit} keys={keys} onDrill={links?.onDrill} height={chartHeight} compact={compact} />
+          <CategoryChart
+            panel={sqlBars ? sqlBarPanel(panel, data, keys) : panel}
+            data={data}
+            unit={unit}
+            keys={keys}
+            onDrill={links?.onDrill}
+            height={chartHeight}
+            compact={compact}
+          />
           {truncated}
         </>
       );
@@ -290,6 +304,21 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
 }
 
 
+
+/** Labels longer than this, or more rows than SQL_BARS_UPRIGHT, lay a sql panel's bars along the y axis. */
+const SQL_BAR_LABEL = 14;
+const SQL_BARS_UPRIGHT = 12;
+
+/**
+ * A sql panel's rows drawn as bars. dashspec gives a sql panel no
+ * "horizontal" (only a bar panel takes it), so the reader picks the
+ * orientation: upright for a few short buckets ("0", "2-5", "51+"), along the
+ * y axis for names that would not fit under a bar (pages, sources).
+ */
+export function sqlBarPanel(panel: Panel, data: PanelResult, keys: string[]): Panel {
+  const long = data.rows.length > SQL_BARS_UPRIGHT || data.rows.some((row) => groupLabel(row.group, keys).length > SQL_BAR_LABEL);
+  return { ...panel, display: { ...panel.display, horizontal: long } };
+}
 
 /** A single numeric-only row is an aggregate; never collapse multiple rows or groups. */
 function sqlAggregate(data: PanelResult): boolean {
