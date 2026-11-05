@@ -13,10 +13,19 @@
 -- Replace it with a CHECK that lists exactly that set, in the set's order.
 -- DROP and ADD are one ALTER TABLE: one lock, and no instant
 -- without the constraint. postgres drops a constraint's comment with it, so the
--- declaration is re-issued after. The validating scan runs under that
--- ACCESS EXCLUSIVE lock; access_tokens is small (one row per issued
--- credential) and the scan reads only the scopes array, so it is not split into
--- NOT VALID + VALIDATE (as in 20261021161825_access_tokens_scopes_forge_1060).
+-- declaration is re-issued after.
+--
+-- The new CHECK is added NOT VALID, so this ACCESS EXCLUSIVE lock is held only
+-- for the catalog change, never for a scan of the table, and lock_timeout
+-- bounds the wait for it: behind a long transaction the migration fails
+-- after 5s (and is retried by the next deploy) instead of queueing every
+-- token read behind it. New and updated rows are checked from this commit on.
+-- 20261105063955_access_tokens_runs_triggers_scopes_validate validates the
+-- existing rows in its own transaction (a migration file is one), under
+-- SHARE UPDATE EXCLUSIVE, which does not block reads or writes. Every
+-- existing row already satisfied the narrower CHECK this replaces, so
+-- validation cannot fail.
+SET LOCAL lock_timeout = '5s';
 ALTER TABLE access_tokens
     DROP CONSTRAINT access_tokens_scopes,
     ADD CONSTRAINT access_tokens_scopes CHECK (
@@ -51,6 +60,6 @@ ALTER TABLE access_tokens
             'triggers:fire',
             'triggers:manage'
         ]::text[]
-    );
+    ) NOT VALID;
 COMMENT ON CONSTRAINT access_tokens_scopes ON access_tokens IS
     'forge:closed-set accesstoken.AllScopes';
