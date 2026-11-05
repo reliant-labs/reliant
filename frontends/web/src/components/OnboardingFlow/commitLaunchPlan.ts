@@ -162,6 +162,14 @@ const DAEMON_STATUS_PENDING = DaemonStatus.PENDING;
 const DAEMON_STATUS_ACTIVE = DaemonStatus.ACTIVE;
 const DAEMON_STATUS_SUSPENDED = DaemonStatus.SUSPENDED;
 
+/**
+ * What a requested-but-not-yet-running machine goes through. The stages are
+ * named here so every surface describes the wait the same way; the live gate
+ * beneath the checklist reports which one the machine is actually in.
+ */
+export const STARTING_MACHINE_DETAIL =
+  "Requesting compute → pulling the image → starting Reliant on it → connected. A first start can take a few minutes.";
+
 export type CommitTaskName = "grant_ai_access" | "provision_daemon";
 
 export type CommitTaskStatus =
@@ -169,6 +177,12 @@ export type CommitTaskStatus =
   | "skipped"
   /** Not finished, and not failed: waiting on a server fact (entitlement). */
   | "pending"
+  /**
+   * The request was accepted and the work is under way, but the result is not
+   * observable yet: a machine that was asked for is not a machine that is up.
+   * Shown with a spinner; it becomes done only once the machine is ACTIVE.
+   */
+  | "starting"
   | "complete"
   | "failed";
 
@@ -446,8 +460,8 @@ async function provisionDaemon(
     if (booting) {
       return {
         name: "provision_daemon",
-        status: "complete",
-        detail: "Starting your machine…",
+        status: "starting",
+        detail: STARTING_MACHINE_DETAIL,
         daemonId: booting.daemonId,
       };
     }
@@ -460,8 +474,8 @@ async function provisionDaemon(
       await deps.resumeDaemon(suspended.daemonId);
       return {
         name: "provision_daemon",
-        status: "complete",
-        detail: "Starting your machine…",
+        status: "starting",
+        detail: STARTING_MACHINE_DETAIL,
         daemonId: suspended.daemonId,
       };
     }
@@ -482,8 +496,8 @@ async function provisionDaemon(
     });
     return {
       name: "provision_daemon",
-      status: "complete",
-      detail: "Starting your machine…",
+      status: daemonId ? "starting" : "complete",
+      detail: daemonId ? STARTING_MACHINE_DETAIL : "Your machine was requested.",
       daemonId: daemonId || undefined,
     };
   } catch (err) {
@@ -497,13 +511,16 @@ async function provisionDaemon(
 
 /** `complete` when nothing that was attempted failed; `failed` when nothing
  *  that was attempted succeeded; `partial` otherwise. Skipped work is not an
- *  attempt, so a local + own-key plan commits `complete` having done nothing. */
+ *  attempt, so a local + own-key plan commits `complete` having done nothing.
+ *  A `starting` task counts as done here: the commit's job is to make the
+ *  request, and the gate (not the commit) watches the machine come up. */
 export function deriveCommitStatus(tasks: CommitTask[]): CommitStatus {
   const attempted = tasks.filter((t) => t.status !== "skipped");
   if (attempted.length === 0) return "complete";
-  const unfinished = attempted.filter((t) => t.status !== "complete");
+  const accepted = (t: CommitTask) => t.status === "complete" || t.status === "starting";
+  const unfinished = attempted.filter((t) => !accepted(t));
   if (unfinished.length === 0) return "complete";
-  const succeeded = attempted.some((t) => t.status === "complete");
+  const succeeded = attempted.some(accepted);
   return succeeded ? "partial" : "failed";
 }
 

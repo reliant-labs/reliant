@@ -179,6 +179,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
       <div className="space-y-6">
         <ProvisioningGate
           commit={commit}
+          compute={plan.compute}
           onContinue={() =>
             void leaveOnboarding("completed_cloud_gate_continue", navigate)
           }
