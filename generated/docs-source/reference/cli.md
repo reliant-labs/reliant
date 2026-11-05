@@ -156,6 +156,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env releases`](#reliant-forge-env-releases) | What was released to an environment, when, and what changed |
 | [`reliant forge env releases at`](#reliant-forge-env-releases-at) | Which release was live at a moment, and the releases either side |
 | [`reliant forge env releases backfill-migrations`](#reliant-forge-env-releases-backfill-migrations) | Record, from git, the migrations of releases cut before forge recorded them |
+| [`reliant forge env releases interrupted`](#reliant-forge-env-releases-interrupted) | Whether a cut of <version> pushed its images, was never recorded, and can be resumed from here |
 | [`reliant forge env releases list`](#reliant-forge-env-releases-list) | The release timeline of an environment, newest first |
 | [`reliant forge env releases show`](#reliant-forge-env-releases-show) | One release in full: commits and PRs, what changed, migrations, gates, health |
 | [`reliant forge env render`](#reliant-forge-env-render) | Print the Kubernetes objects deploy/kcl/<env>/ renders, with the cluster each lands on |
@@ -5416,6 +5417,9 @@ and obs:read).
   backfill-migrations <env>
                          record, from git, the migrations of releases cut
                          before forge recorded them
+  interrupted <env> <version>
+                         whether a cut pushed its images, was never
+                         recorded, and can be resumed from this checkout
 
 Every reading verb takes --json for one machine-readable document (--fields projects it).
 
@@ -5429,6 +5433,7 @@ reliant forge env releases [flags]
 |---------|-------------|
 | [`at`](#reliant-forge-env-releases-at) | Which release was live at a moment, and the releases either side |
 | [`backfill-migrations`](#reliant-forge-env-releases-backfill-migrations) | Record, from git, the migrations of releases cut before forge recorded them |
+| [`interrupted`](#reliant-forge-env-releases-interrupted) | Whether a cut of <version> pushed its images, was never recorded, and can be resumed from here |
 | [`list`](#reliant-forge-env-releases-list) | The release timeline of an environment, newest first |
 | [`show`](#reliant-forge-env-releases-show) | One release in full: commits and PRs, what changed, migrations, gates, health |
 
@@ -5646,6 +5651,36 @@ reliant forge env releases backfill-migrations <env> [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | Print each manifest that would be recorded; record nothing |
 | `--since` | `string` | - | Oldest release to backfill (a version); default every release in the ledger |
+
+---
+
+#### reliant forge env releases interrupted
+
+Whether a cut of <version> pushed its images, was never recorded, and can be resumed from here
+
+A `forge env build <env> --release <version>` writes a cut journal to the registry after
+its last push and before its ledger record. If the cut is interrupted between the two,
+the version's image tags exist (and are immutable) while the ledger has no release.
+Re-running the same cut from the same clean commit, with the same forge, resumes it:
+it records the release over the images already pushed and rebuilds nothing.
+
+This answers, without building or writing anything, whether such a journal exists
+and whether this checkout can resume it: the commit and tree, the forge version,
+and that every recorded tag still names its recorded digest.
+
+Exit 0 a journal exists and this checkout resumes it, 1 no journal or not resumable
+(the document says which), 2 the registry or the env could not be read.
+
+```
+reliant forge env releases interrupted <env> <version> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--json` | `bool` | - | Print one JSON document |
 
 ---
 
@@ -8188,6 +8223,7 @@ The document says where each effective threshold came from: release_shape,
 default or request.
 
 JSON schema forge.obs.check/v1. --fields takes dotted paths of:
+  early_pass
   findings
   findings.code
   findings.message
@@ -8254,6 +8290,7 @@ reliant forge obs check [env] [flags]
 | `--allow-inconclusive` | `bool` | - | exit 0 on INCONCLUSIVE instead of 2 |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--early-pass` | `duration` | `0s` | with --wait: PASS before the after window finishes, once at least this much of it is observed with the new version serving all traffic, enough requests, and nothing found (no finding of any policy, issue, alert or restart); 0 waits for the whole window |
 | `--explain` | `bool` | - | local env only: print the compiled statements instead of running them |
 | `--fail-on` | `string` | - | comma-separated finding codes that fail the release (default: the env's release_health.fail_on): error_rate, latency, new_issue, regressed_issue, alert_firing, workload_restarts |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
@@ -11133,8 +11170,10 @@ Use --kind to limit the dump to one annotation level, and --json for a
 machine-readable dump that tools can query instead of re-deriving the spec.
 --kind column is the forge:* markers declared as a postgres catalog COMMENT
 in a migration rather than a proto/Go comment (forge:immutable on a column,
-forge:ref on a foreign-key constraint); --kind table is the same mechanism one
-level up, on the table itself (forge:append-only). --kind go is the wiring/observability
+forge:ref on a foreign-key constraint). Postgres keeps ONE comment per object,
+so several markers share it, space-separated, in any order:
+COMMENT ON COLUMN t.tenant_id IS 'forge:owner forge:immutable'. --kind table is
+the same mechanism one level up, on the table itself (forge:append-only). --kind go is the wiring/observability
 /contract vocabulary forge reads out of .go files (forge:optional-dep,
 forge:constructor, forge:no-observe, forge:exclude-contract, ...) — the
 markers you meet in scaffolded code.
@@ -12584,6 +12623,12 @@ then run it:
            pb-through handler stub for every new custom RPC (a method on
            the handler *Service returning Unimplemented) and the CRUD
            wiring for every entity-backed one.
+
+Before phase 1, in --dry-run too, a CRUD-named rpc (Create/Get/List/
+Update/Delete<X>) whose <X> message has no table, and none this run
+births, is refused by name, with the fixes: write its migration, name the
+table with forge:entity-name, or put `// forge:custom` above the rpc.
+Phase 2 would refuse it anyway, minutes later.
 
 With a NOUN it scaffolds exactly that one thing, no marker required:
 
