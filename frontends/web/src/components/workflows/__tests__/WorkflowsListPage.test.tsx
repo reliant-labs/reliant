@@ -169,6 +169,9 @@ describe("WorkflowsListPage", () => {
     expect(within(table).queryByTestId("workflow-row-health")).toBeNull();
     expect(within(table).queryByTestId("workflow-row-next-run")).toBeNull();
     expect(within(table).queryByRole("switch")).toBeNull();
+    // The On filter is not the On column: the journey (W8) anchors on it, so it stays with zero triggers.
+    const show = screen.getByRole("group", { name: "Show" });
+    expect(within(show).getByRole("button", { name: "On" })).toHaveAttribute("aria-pressed", "false");
     unmount();
     presetQueryClient.clear();
 
