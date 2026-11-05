@@ -102,7 +102,7 @@ describe("journey registry", () => {
     it("redirects the retired single tour's ids to their successor journey", () => {
       expect(resolve("chat-and-sidebars")).toMatchObject({ journey: "workflows", stepId: "wf-new" });
       expect(resolve("workflow-builder")).toMatchObject({ journey: "workflows", stepId: "wf-new" });
-      expect(resolve("deployments")).toMatchObject({ journey: "forge", stepId: "fg-open-apps" });
+      expect(resolve("deployments")).toMatchObject({ journey: "forge", stepId: "fg-console" });
     });
 
     it("is null for an unknown id or a journey that doesn't run here", () => {

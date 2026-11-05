@@ -38,6 +38,7 @@ import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
 import { ForgeAuthGuard } from './components/ForgeShell/ForgeAuthGuard'
 import { ForgeShellLayout } from './components/ForgeShell/ForgeShellLayout'
 import { AuthGuard } from './components/AuthGuard'
+import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { ModalLayer } from './components/Modals/ModalLayer'
@@ -292,6 +293,9 @@ const ForgeShellPreview = lazyRoute(() => import('./components/ForgeShell/__prev
 export const forgeRouteTree = buildForgeShellTree({
   Guard: ForgeAuthGuard,
   extraRoutes: (root) => [
+    // The forge journey's demo console (/forge/demo, public: fixture data only) and /demo pointing at it.
+    createForgeDemoRoute(() => root),
+    createForgeDemoRedirectRoute(() => root),
     createRoute({
       getParentRoute: () => root,
       path: '/forge-shell-preview',

@@ -69,12 +69,12 @@ describe("trace list", () => {
     const listTraces = vi.spyOn(api, "listTraces");
     const harness = renderPanel(api, { view: "traces" });
     const [first, second] = await screen.findAllByTestId("obs-trace-row");
-    // Fixture trace 0: a browser on Chrome / macOS made the call from build v1.8.3; api v1.7.91 and worker v1.7.92 served it.
+    // Fixture trace 0: a browser on Chrome / macOS made the call from build v1.8.3; api and worker v1.8.3 served it.
     // Each service shows its own version.
     expect(within(first).getByTestId("obs-trace-client")).toHaveTextContent("Chrome 156 · macOS 15.1");
     const versions = within(first).getByTestId("obs-trace-versions");
     expect(versions).toHaveTextContent("shop-web v1.8.3");
-    expect(versions).toHaveTextContent("api v1.7.91");
+    expect(versions).toHaveTextContent("api v1.8.3");
     expect(versions).toHaveTextContent("+1 more");
     // Trace 1: no browser started it, so no client and no frontend build.
     expect(within(second).queryByTestId("obs-trace-client")).not.toBeInTheDocument();
@@ -302,8 +302,8 @@ describe("trace waterfall", () => {
     // The root, and each span that crosses into another service; never a span inside one.
     expect(entries[0]).toBe(items[0]);
     expect(entries.length).toBeLessThan(items.length);
-    for (const e of entries) expect(within(e).getByTestId("waterfall-span-version")).toHaveTextContent("v1.7.15");
-    expect(screen.getByTestId("trace-builds")).toHaveTextContent("v1.7.15");
+    for (const e of entries) expect(within(e).getByTestId("waterfall-span-version")).toHaveTextContent("v1.8.3");
+    expect(screen.getByTestId("trace-builds")).toHaveTextContent("v1.8.3");
   });
 
   it("draws every span as a tree item, with the failed ones said aloud", async () => {
