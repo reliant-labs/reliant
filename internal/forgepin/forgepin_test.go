@@ -54,6 +54,28 @@ func TestOutput_FirstAcceptedTryIsCachedPerVersion(t *testing.T) {
 	assert.Equal(t, []string{"a --new-flag", "a"}, runs, "asked again for what the pinned forge already said")
 }
 
+// A pinned forge that refuses every try is not run again on the next ask: the
+// daemon asks for the framework guide on every config poll of every project.
+// The failure is retried once it is older than failedResolutionTTL.
+func TestOutput_AFailureIsReusedUntilItAges(t *testing.T) {
+	var runs []string
+	s := fakeSource(t, "pin:v1.0.4", &runs)
+	pf, _, err := s.Pinned(t.TempDir(), "project memory")
+	require.NoError(t, err)
+
+	for range 3 {
+		_, err := s.Output(pf, "", "memory.json", []string{"project", "memory", "--new-flag"})
+		require.ErrorContains(t, err, "unknown flag")
+	}
+	assert.Len(t, runs, 1, "the refused command ran again within the failure TTL")
+
+	key := pf.Key + "\x00memory.json"
+	s.failures.Store(key, failedOutput{at: time.Now().Add(-failedResolutionTTL - time.Second), err: errors.New("old")})
+	_, err = s.Output(pf, "", "memory.json", []string{"project", "memory", "--new-flag"})
+	require.ErrorContains(t, err, "unknown flag")
+	assert.Len(t, runs, 2, "an aged failure was not retried")
+}
+
 // A linked checkout changes with every edit: its output is not kept on disk.
 func TestOutput_ACheckoutIsNotCachedOnDisk(t *testing.T) {
 	var runs []string
