@@ -52,7 +52,7 @@ func TestDispatchTerminalEvent_SlowSubscriberGetsEveryByteInOrder(t *testing.T) 
 		}
 	}()
 	for i := 0; i < n; i++ {
-		want.WriteString(fmt.Sprintf("<chunk %05d>", i))
+		fmt.Fprintf(&want, "<chunk %05d>", i)
 	}
 
 	var got bytes.Buffer
