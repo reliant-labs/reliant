@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
@@ -209,6 +210,43 @@ func TestExchangeToken_ScopeRequests(t *testing.T) {
 		if strings.Join(resp.Msg.GetScopes(), ",") != strings.Join(tc.want, ",") {
 			t.Errorf("scopes %v: granted %v, want %v", tc.scopes, resp.Msg.GetScopes(), tc.want)
 		}
+	}
+}
+
+// TestExchangeableScopes_CoverTheWholeCatalog walks every scope forge defines,
+// not a hand-picked list, so a scope forge adds later is classified here the
+// release it ships in: exchangeable exactly when the CLI sign-in requests it
+// (cliauth.ForgeScopes), and never when it acts as a person
+// (RequiresActingUser — reliant:api, the runs:* and triggers:* slices, …),
+// administers tokens, or manages machines.
+func TestExchangeableScopes_CoverTheWholeCatalog(t *testing.T) {
+	forgeScopes, err := fat.NewSet(cliauth.ForgeScopes())
+	if err != nil {
+		t.Fatalf("ForgeScopes() names an unknown scope: %v", err)
+	}
+	never := fat.SetOf(fat.ScopeTokenRead, fat.ScopeTokenWrite, fat.ScopeDaemonManage)
+	for _, scope := range fat.AllScopes {
+		got, err := requestedExchangeScopes([]string{string(scope)})
+		exchangeable := err == nil && len(got) == 1 && got[0] == scope
+		if exchangeable != forgeScopes.Has(scope) {
+			t.Errorf("%s: exchangeable = %v, but ForgeScopes() has it = %v", scope, exchangeable, forgeScopes.Has(scope))
+		}
+		if exchangeable && (fat.RequiresActingUser(scope) || never.Has(scope)) {
+			t.Errorf("%s is exchangeable, but a helper credential must never hold it", scope)
+		}
+	}
+	// The default (no scopes asked) is the same set, never a wider one.
+	all, err := requestedExchangeScopes(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range all {
+		if !forgeScopes.Has(scope) {
+			t.Errorf("the default exchange grants %s, which ForgeScopes() does not request", scope)
+		}
+	}
+	if len(all) != len(forgeScopes) {
+		t.Errorf("the default exchange grants %d scopes, ForgeScopes() requests %d", len(all), len(forgeScopes))
 	}
 }
 
