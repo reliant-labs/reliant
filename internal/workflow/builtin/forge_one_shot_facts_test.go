@@ -193,8 +193,10 @@ func commentedFKClaims(text string) []string {
 func TestForgeOneShotDoesNotCallBirthsForeignKeysCommented(t *testing.T) {
 	t.Parallel()
 	// The producer half: forge's own db skill is the authority the charter
-	// is paraphrasing, and it says the reference is APPLIED.
-	skill, err := forgecli.LoadSkill("", "db")
+	// is paraphrasing, and it says the reference is APPLIED. What birth
+	// emits lives in its db/birth sub-skill (split out of db's body in
+	// forge a54d7bcc).
+	skill, err := forgecli.LoadSkill("", "db/birth")
 	require.NoError(t, err, "could not load forge's db skill — this guard derives the fact "+
 		"from it, and a guard that cannot reach its producer must fail loudly rather than "+
 		"pass over an empty set")

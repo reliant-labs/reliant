@@ -5,12 +5,27 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
 	forgecli "github.com/reliant-labs/forge/cli"
+	"github.com/reliant-labs/reliant/internal/forgepin"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 )
+
+// forgeCmdRE matches "forge" used as a CLI command — followed by a space —
+// the same match forge's skill renderer rewrites in a body.
+var forgeCmdRE = regexp.MustCompile(`\bforge( )`)
+
+// spellForgeCommands spells a forge skill's description for the mount that
+// serves it, as forgecli.RenderSkill spells the body: ListSkills returns the
+// frontmatter raw, so a description saying `forge project new` would put a
+// bare `forge` command (absent, or a different build) in the sub-skill and
+// related lists printed beside the rendered body.
+func spellForgeCommands(desc string) string {
+	return forgeCmdRE.ReplaceAllString(desc, forgepin.CLIName()+"$1")
+}
 
 // forgeNamespace is the synthetic top-level skill path under which all forge
 // skills are surfaced. A forge skill at path "db" becomes "forge/db" in
@@ -246,7 +261,7 @@ func discoverForgeSkillsFiltered(baseDir, source string, loadFullDefinitions, ha
 
 		defs = append(defs, Definition{
 			Name:        skillscore.NormalizeSkillName(s.Name),
-			Description: s.Description,
+			Description: spellForgeCommands(s.Description),
 			Body:        "",
 			Path:        forgeSyntheticPath(baseDir, s.Path),
 			Scope:       skillscore.ScopeForge,
@@ -406,7 +421,7 @@ func forgeParentBody(skills []forgecli.Skill) string {
 		if !ok {
 			continue
 		}
-		desc := strings.TrimSpace(s.Description)
+		desc := spellForgeCommands(strings.TrimSpace(s.Description))
 		if desc == "" {
 			fmt.Fprintf(&b, "- **%s**\n", path)
 		} else {
