@@ -3253,11 +3253,25 @@ other env: pass --confirm-env `<env>` and a --reason) or deny. A hosted env is
 judged by the control plane from the policy its deployed release recorded, and
 an audited one is open to people only (and to a db:query grant).
 
+A real env (lifecycle neither local nor ephemeral) is read only as a role that
+cannot write: forge asks the server what the role it signed in as can do, and
+refuses one with a write grant, an owned relation, a sequence it may advance,
+a SECURITY DEFINER function it may execute, CREATE on a schema or the
+database, a role attribute or a predefined role such as pg_signal_backend. forge_ro and a SELECT-only
+ExternalDatabase username pass; a workload's own DATABASE_URL does not.
+--allow-writable-role reads as such a role anyway.
+
+Every query forge runs itself is recorded: who, the env, the reason, the
+statement, its sha256, the outcome and the row count, as one line appended to
+.forge/audit/`<env>`.jsonl, one structured log line on stderr, and the record's
+id in the connection's application_name. A hosted env's query is recorded by
+the control plane instead. A record that cannot be written withholds the rows.
+
 Output: a table, or --format json|csv. --json is --format json; the document
 carries ok, exit_code and error like every other forge --json verb, plus
 schema "forge.db.query/v1", scope, columns`[{name,pg_type}]`, rows, row_count,
-truncated, truncated_by, cells_truncated, duration_ms and bytes; a hosted
-query adds `audit{id, sql_sha256, replica}.`
+truncated, truncated_by, cells_truncated, duration_ms, bytes and audit\{id,
+sql_sha256\}: a hosted query's adds replica, a local one's record (the file).
 
 Exit codes: 0 rows returned; 1 the statement or the request is wrong (refused
 by the guard or the read-only transaction, a SQL error, a permission error, a
@@ -3281,6 +3295,7 @@ reliant forge db query <env> ["<sql>" | -f FILE] [flags]
 |------|------|---------|-------------|
 | `--addr` | `string` | - | Dial host:port directly (your VPN, kubectl port-forward or bastion) instead of forge's own transport; not for a hosted env |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--allow-writable-role` | `bool` | - | On a real env, read as a role that can do more than read (still in a READ ONLY transaction; the audit record says so) |
 | `--confirm-env` | `string` | - | Required on a real env: the env name again |
 | `--database` | `string` | - | ManagedDatabase or ExternalDatabase to query, when a cluster env declares several |
 | `--file`, `-f` | `string` | - | Read the statement from FILE (- for stdin) |
@@ -4109,8 +4124,16 @@ which is exactly when a binding must survive. It also lets you bind a domain
 before its target has ever been deployed, which is the natural order for a
 first launch.
 
---redirect-to serves a 308 to another hostname instead of proxying. The
-apex/www pair is the case for it.
+--redirect-to answers with a permanent redirect to another hostname,
+preserving the path and query, instead of proxying: a 301 for GET and HEAD,
+a 308 for anything else. The apex/www pair is the case for it; point the www
+name at the same records as its apex.
+
+--hsts-include-subdomains adds includeSubDomains to the hostname's
+Strict-Transport-Security, so a browser that has seen it uses HTTPS for every
+name under it. Off by default, and leave it off until every subdomain serves
+HTTPS: a browser remembers the header for a year. A rebind without the flag
+turns it off.
 
 BINDABLE IN ANY STATE, SERVES ONLY WHEN LIVE. Bind before DNS has propagated
 and it starts serving by itself once verification and the certificate
@@ -4126,7 +4149,8 @@ reliant forge domain bind <hostname> [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--env` | `string` | - | Environment whose control plane to talk to (required; deploy/kcl/`<env>`/) |
-| `--redirect-to` | `string` | - | Serve a 308 to this hostname instead of a target |
+| `--hsts-include-subdomains` | `bool` | - | Add includeSubDomains to the hostname's HSTS (every subdomain must serve HTTPS) |
+| `--redirect-to` | `string` | - | Redirect permanently to this hostname instead of serving a target |
 | `--target` | `string` | - | Workload or frontend name in --env to serve |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 
@@ -4371,6 +4395,7 @@ reliant forge env build <environment> [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--base-promotion` | `string` | - | Compose from this exact desired promotion (or resolve current once before builds) |
 | `--bundle-envs` | `string` | - | Write a bundle for each of these envs (comma-separated) from this one build, instead of only for the env argument. A release is env-agnostic and a bundle is not, so this is how one cut produces the manifests for every env it will ship to — each pinned to the same release and the same source. Each env is rendered; each bundle is pushed beside its images for a control-plane env, or written to this machine's ledger otherwise. |
+| `--config-check` | `string` | `auto` | Before a push, boot every workload of the project image with this env's config in the binary's config-check mode (no network) and refuse the push if one would not start: auto (gates from v1.0.16, warns below that pin), gate, warn, off |
 | `--debug` | `bool` | - | Build with debug symbols for Delve |
 | `--docker` | `bool` | - | Build Docker images for all services (implied by --push and --release) |
 | `--gate-json` | `string` | - | Also write this build's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the build log and the exit code are unchanged. |
@@ -4583,6 +4608,16 @@ machine, and that apply's per-resource rollout wait IS the health gate. Both
 reach "the release is live or this command is red"; which machinery got there
 is an implementation detail of where the env runs.
 
+AN ENV THAT DECLARES applier = "flux" is applied by the Flux forge installed in
+its own cluster (`forge env deploy <env> --target flux-delivery`, once). Its
+deploy records the release, pushes the release's bundle to its delivery registry,
+points that Flux at it (one ResourceSetInputProvider in the env's delivery
+namespace) and waits until every Kustomization has applied it. Before anything
+is written it checks the release against what the bootstrap granted the Flux's
+apply identities: a release that needs a new kind (a CRD, a first CronJob) is
+granted it in the same command when YOUR credential can grant it (shown on the
+plan), and refused with exit 9 otherwise.
+
 `forge env build <env> --release <version>` builds the env-agnostic images
 ONCE, captures their content-addressed digests, and cuts a release. Naming that
 version here advances it BY REFERENCE: one entry — env, release, and the
@@ -4652,6 +4687,11 @@ Exit codes (release deploys):
      a hosted deploy is STILL APPLYING: published and accepted, and not yet
      reported applied by the platform. Nothing failed (--json: .applying);
      keep watching with forge env status `<env>` --wait
+  9  needs a person — an applier = "flux" env's release needs permissions its
+     Flux was not granted and this credential cannot grant them. NOTHING was
+     recorded, pushed or pointed. The output names each missing permission
+     (--json: .delivery_grants) and the bootstrap a cluster admin runs; re-run
+     the deploy once they have. Re-running before that changes nothing
 
 5 USED TO MEAN THE TIMEOUT, which is now 8. The confirmation gate took 5
 because it is the one outcome that must be impossible to misread as success:

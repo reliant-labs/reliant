@@ -419,7 +419,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=b8887c4e8519ec46dbe7b910b009f6b92f017e865471828e45b6d22ffd1ce8d9
+# forge:hash=1761f6db8979a535906c5f20e6a84a8eb34222f40f64782343f1078fe61f5e20
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -463,6 +463,8 @@ schema DaemonConfig:
     heavy_share: int = 0
     # Threads each command may have at once (0: 1024 + 64 per CPU, at most half of what all commands share)
     command_threads: int = 0
+    # How long a finished chat's background process may sit idle before the daemon stops it (0 = off)
+    background_idle_reap: str = "4h"
     # Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)
     fetch_allow_private_network: bool = False
     # Egress tool calls per minute this daemon may make (0: default 600; managed daemons: 60, fixed)
@@ -479,6 +481,7 @@ schema DaemonConfig:
     check:
         child_priority != "", "child_priority = \"\" cannot reach the process: an empty RELIANT_CHILD_PRIORITY counts as unset, so it would load the default \"low\" — set a value, or change its default in the proto"
         heavy_commands != "", "heavy_commands = \"\" cannot reach the process: an empty RELIANT_HEAVY_COMMANDS counts as unset, so it would load the default \"go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build\" — set a value, or change its default in the proto"
+        background_idle_reap != "", "background_idle_reap = \"\" cannot reach the process: an empty RELIANT_BACKGROUND_IDLE_REAP counts as unset, so it would load the default \"4h\" — set a value"
 
 # forge:section env-map daemonConfigEnvMap
 # forge:hash=676e66c5731f3b4e320263f77a2afc832c3c0ef1200249925c9c8336d20f6ef5
@@ -531,7 +534,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_INSTANCE_WORKSPACE" = c.instance.workspace
 
         # forge:section daemonConfigEnvMap values (root)
-        # forge:hash=8f7bc9655cabc4b23e3322e0128a5d8e10712442fc3fa3b36b7db8a9448f9707
+        # forge:hash=37eed5299bd0513631f0fae627e3e69b7844b68e037dfff84cd2c808076976e8
         "DAEMON_GRPC_URL" = c.gateway_url
         "TOOLS_DAEMON_PORT" = str(c.gateway_port)
         "DAEMON_TLS_MODE" = c.tls_mode
@@ -553,6 +556,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_HEAVY_COMMANDS" = c.heavy_commands
         "RELIANT_HEAVY_SHARE" = str(c.heavy_share)
         "RELIANT_COMMAND_THREADS" = str(c.command_threads)
+        "RELIANT_BACKGROUND_IDLE_REAP" = c.background_idle_reap
         "RELIANT_FETCH_ALLOW_PRIVATE_NETWORK" = "true" if c.fetch_allow_private_network else "false"
         "RELIANT_DAEMON_EGRESS_USER_PER_MINUTE" = str(c.egress_user_per_minute)
         "RELIANT_DAEMON_EGRESS_USER_BURST" = str(c.egress_user_burst)

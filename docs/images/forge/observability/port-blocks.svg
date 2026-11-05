@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 470" width="420" height="470">
+  <style>
+    text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-size: 16px; fill: #111827; }
+    .t { font-size: 17px; font-weight: 600; }
+    .s { font-size: 14px; fill: #4b5563; }
+    .note { font-size: 14px; fill: #6b7280; }
+    .accT { fill: #2563eb; }
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, "Liberation Mono", monospace; font-size: 13px; fill: #4b5563; }
+    .box { fill: #ffffff; stroke: #374151; stroke-width: 1.5; }
+    .acc { fill: #ffffff; stroke: #2563eb; stroke-width: 1.8; }
+    .no { fill: #ffffff; stroke: #9ca3af; stroke-width: 1.5; stroke-dasharray: 5 4; }
+  </style>
+  <rect width="420" height="470" fill="#ffffff"/>
+
+  <text x="14" y="28" class="t">One machine, up to eight stacks</text>
+  <text x="14" y="50" class="mono">dev_stack.block_size: 100   max_stacks: 8</text>
+
+  <rect class="box" x="14" y="70" width="392" height="58" rx="6"/>
+  <text x="28" y="94">primary checkout</text>
+  <text x="28" y="116" class="s">block 0: 100 ports, its own database</text>
+
+  <rect class="box" x="14" y="140" width="392" height="58" rx="6"/>
+  <text x="28" y="164">worktree 1, an agent</text>
+  <text x="28" y="186" class="s">block 1: 100 ports, its own database</text>
+
+  <rect class="box" x="14" y="210" width="392" height="58" rx="6"/>
+  <text x="28" y="234">worktree 2, an agent</text>
+  <text x="28" y="256" class="s">block 2: 100 ports, its own database</text>
+
+  <text x="210" y="290" text-anchor="middle" class="s">…</text>
+
+  <rect class="acc" x="14" y="304" width="392" height="58" rx="6"/>
+  <text x="28" y="328">worktree 7, an agent</text>
+  <text x="28" y="350" class="s">block 7: the last one k3d maps</text>
+
+  <rect class="no" x="14" y="384" width="392" height="58" rx="6"/>
+  <text x="28" y="408" class="accT">a ninth stack</text>
+  <text x="28" y="430" class="s">refused, with an error that names the fix</text>
+</svg>

@@ -90,7 +90,9 @@ type CacheTrimConfig struct {
 	// of every extracted file, and it grows slowly.
 	GoModInterval time.Duration
 	// GoWorkDirAge is the age past which a go-build* directory in TMPDIR (a
-	// killed build's work dir) is removed; negative disables it.
+	// killed build's work dir) is removed where its death cannot be proven
+	// (no /proc: gowork.go); negative disables that. Where it can be, a
+	// directory is removed once proven dead, whatever its age.
 	GoWorkDirAge time.Duration
 	// UrgentFactor scales every budget for TrimCaches(urgent=true), the
 	// disk-pressure guard's call: the caches are trimmed to UrgentFactor of
@@ -190,8 +192,15 @@ type cacheTrimState struct {
 	cfg       CacheTrimConfig
 	lastGoMod time.Time
 	cursor    map[string]int
-	// remove overrides os.Remove (tests: distress).
+	// remove replaces every unlink when set (tests: distress).
 	remove func(string) error
+	// uid overrides os.Getuid as the owner a go-build work dir must have
+	// (tests: a foreign owner).
+	uid func() int
+	// procs and birth replace the /proc scan and a directory's birth time
+	// (tests).
+	procs func() (procSnapshot, error)
+	birth func(string) time.Time
 }
 
 // ConfigureCacheTrim sets the trim's budgets. Zero fields take defaults.
@@ -277,17 +286,46 @@ func (w *Watcher) trimNativeCaches(ctx context.Context, urgent, measureMod bool,
 			logCacheTrim(trigger, *r)
 		}
 	}
+	if r := w.goWorkDirPass(ctx, cfg, urgent, trigger, p); r != nil {
+		out = append(out, *r)
+	}
+	return out
+}
+
+// goWorkDirTick runs the go_work_dirs pass alone, between full passes, on the
+// Go-cache pass's cadence (reaperTick). The caller holds the storage
+// single-flight.
+func (w *Watcher) goWorkDirTick(ctx context.Context, trigger string) {
+	defer func() {
+		if r := recover(); r != nil {
+			logging.WarnContext(ctx, "[diskwatch] Go work dir pass panicked", "trigger", trigger, "panic", fmt.Sprint(r))
+		}
+	}()
+	if w.systemEnv && testing.Testing() {
+		return
+	}
+	cfg := w.cacheTrimConfig()
+	ctx, cancel := context.WithTimeout(ctx, cfg.PassBudget)
+	defer cancel()
+	w.goWorkDirPass(ctx, cfg, trigger == "pressure", trigger, w.newPacer(cfg.RatePerSec))
+}
+
+// goWorkDirPass runs the go_work_dirs pass (gowork.go), logs it and records it
+// in the trim audit log.
+func (w *Watcher) goWorkDirPass(ctx context.Context, cfg CacheTrimConfig, urgent bool, trigger string, p *pacer) *CacheTrimResult {
+	if ctx.Err() != nil || p.stopped != nil {
+		return nil
+	}
 	age := cfg.GoWorkDirAge
 	if urgent && (age < 0 || age > 2*time.Hour) {
 		age = 2 * time.Hour
 	}
-	if age > 0 && ctx.Err() == nil && p.stopped == nil {
-		if r := w.trimGoWorkDirs(ctx, age, p); r != nil {
-			out = append(out, *r)
-			logCacheTrim(trigger, *r)
-		}
+	r, audit := w.trimGoWorkDirs(ctx, age, p)
+	w.auditGoWorkDirs(ctx, trigger, audit)
+	if r != nil {
+		logCacheTrim(trigger, *r)
 	}
-	return out
+	return r
 }
 
 func logCacheTrim(trigger string, r CacheTrimResult) {
@@ -322,23 +360,42 @@ type pacer struct {
 	rate      int
 	inBatch   int
 	batchFrom time.Time
-	remove    func(string) error
-	stopped   error
+	// remove replaces every unlink when set (tests); nil makes the real one.
+	remove  func(string) error
+	stopped error
+	// afterLstat, when set, runs between removeTree examining an entry and
+	// acting on it (tests: the swap race).
+	afterLstat func(string)
+	// ownerOf, when set, overrides the uid removeTree read for an entry
+	// (tests: a foreign-owned descendant, which a test cannot chown).
+	ownerOf func(path string, uid int) int
 }
 
 func (w *Watcher) newPacer(rate int) *pacer {
 	w.mu.Lock()
 	remove := w.trim.remove
 	w.mu.Unlock()
-	if remove == nil {
-		remove = os.Remove
-	}
 	return &pacer{rate: rate, remove: remove}
 }
 
-// unlink removes one file or empty directory, pacing first. A path already
-// gone is not an error. A distress error stops the pass.
+// unlink removes one file or empty directory by path, pacing first. A path
+// already gone is not an error. A distress error stops the pass.
 func (p *pacer) unlink(ctx context.Context, path string) error {
+	return p.governed(ctx, path, func() error {
+		err := os.Remove(path)
+		if err != nil && errors.Is(err, fs.ErrPermission) {
+			// Module caches write read-only files and directories.
+			_ = os.Chmod(filepath.Dir(path), 0o755)
+			_ = os.Chmod(path, 0o644)
+			err = os.Remove(path)
+		}
+		return err
+	})
+}
+
+// governed paces one unlink and makes it with rm — or with the pass's remove
+// seam, when a test set one.
+func (p *pacer) governed(ctx context.Context, path string, rm func() error) error {
 	if p.stopped != nil {
 		return p.stopped
 	}
@@ -359,12 +416,11 @@ func (p *pacer) unlink(ctx context.Context, path string) error {
 		p.batchFrom = time.Now()
 	}
 	p.inBatch++
-	err := p.remove(path)
-	if err != nil && errors.Is(err, fs.ErrPermission) {
-		// Module caches write read-only files and directories.
-		_ = os.Chmod(filepath.Dir(path), 0o755)
-		_ = os.Chmod(path, 0o644)
+	var err error
+	if p.remove != nil {
 		err = p.remove(path)
+	} else {
+		err = rm()
 	}
 	if err == nil || errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -376,40 +432,103 @@ func (p *pacer) unlink(ctx context.Context, path string) error {
 	return err
 }
 
-// removeTree removes a tree through the pacer, children first, never
-// following a symlink; directories are made writable so a read-only module
-// tree can be emptied. It returns the bytes it freed.
-func (p *pacer) removeTree(ctx context.Context, path string) (freed uint64, err error) {
-	info, err := os.Lstat(path)
+// anyOwner is removeTree's owner for a tree whoever owns it.
+const anyOwner = -1
+
+// errForeignOwner refuses a tree that is not the owner removeTree was asked
+// for.
+var errForeignOwner = errors.New("owned by another user")
+
+// removeTree removes a tree through the pacer, children first, and returns
+// the bytes it freed. owner, unless anyOwner, is the uid every entry of the
+// tree must belong to — the root and each descendant — checked on the entry
+// the walk then acts on, before any chmod, traversal or unlink: an entry
+// another user owns stops the removal with errForeignOwner and is left whole.
+//
+// The walk holds each directory open and acts on its entries relative to that
+// descriptor (treedir_unix.go): it never follows a symlink, including one
+// swapped in for a directory after the walk examined it — the reason this
+// matters is the go-build work dirs in a world-writable /tmp — and never
+// changes permissions through a path. Directories are made owner-writable
+// through their descriptor so a read-only module tree can be emptied.
+func (p *pacer) removeTree(ctx context.Context, path string, owner int) (freed uint64, err error) {
+	parent, name, err := openTreeParent(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return 0, nil
 		}
-		return 0, err
+		return 0, p.observe(err)
 	}
-	if info.IsDir() {
-		_ = os.Chmod(path, 0o755)
-		entries, rerr := os.ReadDir(path)
-		if rerr != nil && !errors.Is(rerr, fs.ErrNotExist) {
-			if distressed(rerr) {
-				p.stopped = rerr
-			}
-			return 0, rerr
+	defer parent.close()
+	return p.removeEntry(ctx, parent, name, path, owner)
+}
+
+// removeEntry removes parent's entry name (at path) and, when it is a
+// directory, everything under it first.
+func (p *pacer) removeEntry(ctx context.Context, parent *treeDir, name, path string, owner int) (freed uint64, err error) {
+	st, err := parent.lstat(name)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return 0, nil
 		}
-		for _, e := range entries {
-			n, err := p.removeTree(ctx, filepath.Join(path, e.Name()))
-			freed += n
-			if err != nil {
-				return freed, err
-			}
-		}
-	} else {
-		freed = allocatedBytes(info)
+		return 0, p.observe(err)
 	}
-	if err := p.unlink(ctx, path); err != nil {
+	if p.ownerOf != nil {
+		st.uid = p.ownerOf(path, st.uid)
+	}
+	if owner != anyOwner && st.uid != owner {
+		return 0, &fs.PathError{Op: "remove", Path: path, Err: errForeignOwner}
+	}
+	if p.afterLstat != nil {
+		p.afterLstat(path)
+	}
+	if !st.dir {
+		return p.removeLeaf(ctx, parent, name, path, st)
+	}
+	dir, err := parent.openDir(name, st)
+	switch {
+	case errors.Is(err, errNotDir):
+		// Swapped for a symlink or a file since lstat: remove the entry
+		// itself, never what it points to.
+		return p.removeLeaf(ctx, parent, name, path, treeStat{})
+	case errors.Is(err, fs.ErrNotExist):
+		return 0, nil
+	case err != nil:
+		return 0, p.observe(err)
+	}
+	names, err := dir.names()
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		dir.close()
+		return 0, p.observe(err)
+	}
+	for _, n := range names {
+		got, err := p.removeEntry(ctx, dir, n, filepath.Join(path, n), owner)
+		freed += got
+		if err != nil {
+			dir.close()
+			return freed, err
+		}
+	}
+	dir.close()
+	if err := p.governed(ctx, path, func() error { return parent.remove(name, true) }); err != nil {
 		return freed, err
 	}
 	return freed, nil
+}
+
+func (p *pacer) removeLeaf(ctx context.Context, parent *treeDir, name, path string, st treeStat) (uint64, error) {
+	if err := p.governed(ctx, path, func() error { return parent.remove(name, false) }); err != nil {
+		return 0, err
+	}
+	return st.bytes, nil
+}
+
+// observe stops the pass when err means filesystem distress, and returns err.
+func (p *pacer) observe(err error) error {
+	if distressed(err) && p.stopped == nil {
+		p.stopped = err
+	}
+	return err
 }
 
 func distressed(err error) bool {
@@ -708,7 +827,7 @@ func (w *Watcher) trimGoMod(ctx context.Context, root string, cfg CacheTrimConfi
 		// files is not trusted by go.
 		var freed uint64
 		if v.hasUnpack {
-			n, err := p.removeTree(ctx, v.tree)
+			n, err := p.removeTree(ctx, v.tree, anyOwner)
 			freed += n
 			if err != nil {
 				res.Freed += freed
@@ -737,57 +856,18 @@ func (w *Watcher) trimGoMod(ctx context.Context, root string, cfg CacheTrimConfi
 	return res
 }
 
-// ---- go-build work dirs --------------------------------------------------
+// ---- go-build work dirs (gowork.go) -----------------------------------
 
-// trimGoWorkDirs removes go-build* directories in TMPDIR (and GOTMPDIR)
-// whose directory and direct children are all older than age: the work dirs
-// of builds that were killed before they could remove their own.
-func (w *Watcher) trimGoWorkDirs(ctx context.Context, age time.Duration, p *pacer) *CacheTrimResult {
-	var dirs []string
-	for _, k := range []string{"GOTMPDIR", "TMPDIR"} {
-		if v := strings.TrimSpace(w.env.Getenv(k)); v != "" && filepath.IsAbs(v) {
-			dirs = append(dirs, filepath.Clean(v))
-		}
+// currentUID is the uid this process's own go-build work dirs belong to; -1
+// where uids do not exist (Windows), which removes none.
+func (w *Watcher) currentUID() int {
+	w.mu.Lock()
+	uid := w.trim.uid
+	w.mu.Unlock()
+	if uid != nil {
+		return uid()
 	}
-	if len(dirs) == 0 && w.env.GOOS != "windows" {
-		dirs = append(dirs, "/tmp")
-	}
-	cutoff := w.now().Add(-age)
-	res := &CacheTrimResult{Kind: "go_work_dirs"}
-	seen := map[string]bool{}
-	for _, dir := range dirs {
-		if seen[dir] {
-			continue
-		}
-		seen[dir] = true
-		res.Path = strings.TrimPrefix(res.Path+", "+dir, ", ")
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, e := range entries {
-			if ctx.Err() != nil || p.stopped != nil {
-				break
-			}
-			if !e.IsDir() || !strings.HasPrefix(e.Name(), "go-build") {
-				continue
-			}
-			path := filepath.Join(dir, e.Name())
-			if !olderThan(path, cutoff) {
-				continue
-			}
-			n, err := p.removeTree(ctx, path)
-			res.Freed += n
-			if err == nil {
-				res.Removed++
-			}
-		}
-	}
-	res.Size = res.Freed
-	if res.Removed == 0 && res.Freed == 0 {
-		return nil
-	}
-	return res
+	return os.Getuid()
 }
 
 // olderThan reports whether a directory and every direct child were last

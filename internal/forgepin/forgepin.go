@@ -43,20 +43,20 @@ const (
 	// pin" is reused. Resolving can run the project's .tools/bin/forge to
 	// read its version, and a skills index asks once per skill.
 	resolutionTTL = time.Minute
+	// failedResolutionTTL is how long a failure to obtain the pinned forge
+	// is reused. Obtaining it can mean building it (minutes, several cores):
+	// retried every minute for every project that pins it, a machine whose
+	// builds were failing (a full disk, load past its CPUs) ran one more
+	// build per project per minute, each killed at resolveTimeout, which kept
+	// it failing (2026-11-03).
+	failedResolutionTTL = 10 * time.Minute
 	// runTimeout bounds one command of the pinned forge.
 	runTimeout = time.Minute
 )
 
-// Source runs the forge projects pin. The zero value is not usable; New
-// returns the real one, and tests build their own with fake funcs.
-type Source struct {
-	// Resolve is forge's decision of which forge runs a command in a project.
-	Resolve func(ctx context.Context, projectRoot, command string, log io.Writer) (forgecli.PinnedForge, bool, error)
-	// Run runs the pinned forge bin with args in dir and returns its stdout.
-	Run func(bin, dir string, args ...string) ([]byte, error)
-	// CacheDir is where a module version's output is kept ("" keeps nothing
-	// on disk).
-	CacheDir func() string
+// source runs the forge projects pin, through its Deps.
+type source struct {
+	Deps
 
 	resolutions sync.Map // projectRoot -> resolution
 	outputs     sync.Map // cache key -> []byte
@@ -70,25 +70,34 @@ type resolution struct {
 	err  error
 }
 
-// New is the Source that resolves, runs and caches for real.
-func New() *Source {
-	return &Source{Resolve: forgecli.ResolvePinnedForge, Run: execForge, CacheDir: defaultCacheDir}
+// New is a Service over deps. Tests pass fake funcs.
+func New(deps Deps) Service { return &source{Deps: deps} }
+
+// RealDeps resolve, run and cache for real.
+func RealDeps() Deps {
+	return Deps{Resolve: forgecli.ResolvePinnedForge, Run: execForge, CacheDir: defaultCacheDir}
 }
 
-// Default is the process's Source.
-var Default = New()
+var defaultService = New(RealDeps())
+
+// Default is the process's Service: every caller shares its caches.
+func Default() Service { return defaultService }
 
 // Pinned reports the forge the project at root pins when it is not the
 // embedded one (ok), or why it could not be obtained (err). command is the
 // forge command the caller will run, which the decision depends on. An answer
-// is reused for a minute while forge.yaml is unchanged — a failure too, so an
-// unobtainable pin is not rebuilt once per skill.
-func (s *Source) Pinned(root, command string) (forgecli.PinnedForge, bool, error) {
+// is reused for a minute while forge.yaml is unchanged, and a failure for ten,
+// so an unobtainable pin is not rebuilt once per skill or once a minute.
+func (s *source) Pinned(root, command string) (forgecli.PinnedForge, bool, error) {
 	yaml, _ := os.ReadFile(filepath.Join(root, "forge.yaml"))
 	key := root + "\x00" + command
 	if v, ok := s.resolutions.Load(key); ok {
 		r := v.(resolution)
-		if r.yaml == string(yaml) && time.Since(r.at) < resolutionTTL {
+		ttl := resolutionTTL
+		if r.err != nil {
+			ttl = failedResolutionTTL
+		}
+		if r.yaml == string(yaml) && time.Since(r.at) < ttl {
 			return r.pf, r.ok, r.err
 		}
 	}
@@ -105,7 +114,7 @@ func (s *Source) Pinned(root, command string) (forgecli.PinnedForge, bool, error
 // (Fingerprint). Kept in memory, and on disk for a module version, which
 // never changes; a linked checkout's key moves with every edit, so its output
 // is kept in memory only.
-func (s *Source) Output(pf forgecli.PinnedForge, dir, name string, tries ...[]string) ([]byte, error) {
+func (s *source) Output(pf forgecli.PinnedForge, dir, name string, tries ...[]string) ([]byte, error) {
 	memKey := pf.Key + "\x00" + name
 	if v, ok := s.outputs.Load(memKey); ok {
 		return v.([]byte), nil
@@ -195,7 +204,8 @@ func execForge(bin, dir string, args ...string) ([]byte, error) {
 	cmd.Args[0] = CLIName()
 	cmd.Dir = dir
 	var env []string
-	for _, kv := range os.Environ() {
+	// forge:lint-disable-next-line forgeconv-no-getenv: the child forge inherits this process's ambient environment (PATH, HOME, credentials) as any exec does; nothing here is read as configuration
+	for _, kv := range os.Environ() { //nolint:forbidigo // ambient environment passed through to the child forge, not configuration
 		// No inherited hand-off marker: a forge older than the
 		// single-process marker would believe one.
 		if !strings.HasPrefix(kv, "FORGE_VERSION_DELEGATED=") {

@@ -41,6 +41,7 @@ func NewLocalMCPContextBinder(runtime mcp.Runtime) MCPContextBinder {
 
 // NewDaemonMCPContextBinder binds a daemon-backed MCP runtime resolved from execution context.
 func NewDaemonMCPContextBinder(router DaemonRouter) MCPContextBinder {
+	loads := newMCPLoads()
 	return MCPContextBinderFunc(func(toolCtx *rctx.ToolContext) *rctx.ToolContext {
 		// A run with no machine has no MCP servers: every user-configured
 		// server runs on the daemon.
@@ -51,7 +52,7 @@ func NewDaemonMCPContextBinder(router DaemonRouter) MCPContextBinder {
 		if !ok || userID == "" {
 			return toolCtx
 		}
-		return toolCtx.WithMCP(&daemonMCPRuntime{router: router, userID: userID, selector: DaemonSelectorFromContext(toolCtx.Context)})
+		return toolCtx.WithMCP(&daemonMCPRuntime{router: router, userID: userID, selector: DaemonSelectorFromContext(toolCtx.Context), loads: loads})
 	})
 }
 
@@ -59,6 +60,9 @@ type daemonMCPRuntime struct {
 	router   DaemonRouter
 	userID   string
 	selector *DaemonSelector
+	// loads bounds how long a caller waits on this machine's MCP loading
+	// (mcp_load_budget.go). Nil waits for the daemon's answer, as before.
+	loads *mcpLoads
 }
 
 // MCPListIdentity names whose listing this is: the user, and the daemon the
@@ -89,26 +93,33 @@ func (r *daemonMCPRuntime) send(ctx context.Context, commandType string, payload
 }
 
 func (r *daemonMCPRuntime) EnsureProjectServersLoaded(ctx context.Context, projectPath string) *mcp.ProjectServerLoadResult {
-	result := &mcp.ProjectServerLoadResult{
-		LoadedServers: []string{},
-		FailedServers: []string{},
-		Errors:        make(map[string]error),
-	}
 	if projectPath == "" {
+		return &mcp.ProjectServerLoadResult{LoadedServers: []string{}, FailedServers: []string{}, Errors: map[string]error{}}
+	}
+	if r.loads == nil {
+		result, err := r.ensureLoaded(ctx, projectPath)
+		if err != nil {
+			return failedMCPLoad(projectPath, err)
+		}
 		return result
 	}
+	return r.loads.ensure(ctx, r.MCPListIdentity(), projectPath, func(ctx context.Context) (*mcp.ProjectServerLoadResult, error) {
+		return r.ensureLoaded(ctx, projectPath)
+	})
+}
 
+// ensureLoaded sends mcp.ensure_loaded and waits for the answer. The error is
+// a failure to get one — the machine did not answer, or answered garbage —
+// and is distinct from servers the machine tried and failed to start, which
+// are in the result.
+func (r *daemonMCPRuntime) ensureLoaded(ctx context.Context, projectPath string) (*mcp.ProjectServerLoadResult, error) {
 	payload, err := json.Marshal(map[string]string{"project_path": projectPath})
 	if err != nil {
-		result.FailedServers = append(result.FailedServers, projectPath)
-		result.Errors[projectPath] = err
-		return result
+		return nil, err
 	}
-	respData, err := r.send(ctx, "mcp.ensure_loaded", payload, int32((120 * time.Second).Milliseconds()))
+	respData, err := r.send(ctx, "mcp.ensure_loaded", payload, int32(mcpLoadCommandTimeout.Milliseconds()))
 	if err != nil {
-		result.FailedServers = append(result.FailedServers, projectPath)
-		result.Errors[projectPath] = err
-		return result
+		return nil, err
 	}
 	var resp struct {
 		LoadedServers []string          `json:"loaded_servers"`
@@ -116,16 +127,17 @@ func (r *daemonMCPRuntime) EnsureProjectServersLoaded(ctx context.Context, proje
 		Errors        map[string]string `json:"errors,omitempty"`
 	}
 	if err := json.Unmarshal(respData, &resp); err != nil {
-		result.FailedServers = append(result.FailedServers, projectPath)
-		result.Errors[projectPath] = err
-		return result
+		return nil, err
 	}
-	result.LoadedServers = resp.LoadedServers
-	result.FailedServers = resp.FailedServers
+	result := &mcp.ProjectServerLoadResult{
+		LoadedServers: resp.LoadedServers,
+		FailedServers: resp.FailedServers,
+		Errors:        make(map[string]error, len(resp.Errors)),
+	}
 	for name, msg := range resp.Errors {
 		result.Errors[name] = fmt.Errorf("%s", msg)
 	}
-	return result
+	return result, nil
 }
 
 func (r *daemonMCPRuntime) ListProjectTools(projectPath string) (map[string][]mcp.Tool, error) {
@@ -176,6 +188,14 @@ func (r *daemonMCPRuntime) callTool(session, projectPath, serverName, toolName s
 }
 
 func (r *daemonMCPRuntime) listTools(projectPath string) (map[string][]mcp.Tool, error) {
+	// A machine that is not answering MCP commands would hold this listing
+	// for its full timeout. The error makes the caller keep the last good
+	// listing instead.
+	if r.loads != nil {
+		if err := r.loads.unresponsive(r.MCPListIdentity()); err != nil {
+			return nil, err
+		}
+	}
 	payload, err := json.Marshal(map[string]string{"project_path": projectPath})
 	if err != nil {
 		return nil, fmt.Errorf("marshal mcp server status payload: %w", err)

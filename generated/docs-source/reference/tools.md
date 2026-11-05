@@ -788,7 +788,7 @@ LIMITATIONS:
 - Default reading limit is 1500 lines, which reads most source files whole
 - Lines longer than 500 characters are truncated
 - Cannot display binary files (executables, archives, etc.)
-- Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
+- Images (PNG, JPEG, GIF, WebP, BMP) up to 3.75MB and 8000px on a side are shown to you as images; SVG files are read as text
 - PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
 
 TIPS:
@@ -1134,6 +1134,7 @@ Usage notes:
 - The command argument is required.
 - You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 60 seconds.
 - Use 'run_in_background: true' to run long-running commands in the background. You can then use shell_output to check output, shell_kill to terminate, and shell_list to see all running processes.
+- A background process is stopped automatically once it has been idle for 4 hours by default (no output, and no agent used it with shell_output, shell_wait, shell_list or shell_kill) and the chat that started it has no run in progress. Stop your own servers with shell_kill when you are done; set 'keep_alive: true' only for an intentional long-lived server the user will keep using.
 - Searching the codebase IS a use of this tool (prefer 'rg', scoped to a relative path — see above). For reading whole files, prefer the View tool over 'cat'/'head'/'tail'.
 - VERY IMPORTANT: YOU MUST AVOID WRITING FILES USING SHELL. Please use the appropriate edit and create tools.
 - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings).
@@ -1960,6 +1961,10 @@ WORKSPACE SCOPING:
 - Multiple chats in the same workspace share the same process list
 - This enables coordination: one chat can start a server, another can check its status
 - Use shell_output to view output and shell_kill to terminate any workspace process
+
+AUTOMATIC STOP:
+- A background process is stopped once it has been idle (no output, and no agent used it with shell_output, shell_wait, shell_list or shell_kill) for 4 hours by default and the chat that started it has no run in progress; one started with keep_alive: true is exempt
+- Each running process shows how long it has been idle and when it could be stopped. Listing a process counts as using it
 
 Usage notes:
 - By default, shows only running processes in the current workspace

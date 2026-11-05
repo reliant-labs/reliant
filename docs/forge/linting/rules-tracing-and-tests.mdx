@@ -1,0 +1,190 @@
+---
+title: "Lint rules: tracing, tests, generated files and ownership"
+description: "The rules that keep a request in one trace, keep slow tests out of the fast tier, stop hand-edits to generated files, and check lockfiles and scaffold markers"
+---
+
+These are the rules about how the code is built and observed rather than what it does: that logs and clients carry the request's trace, that a slow test says so, that generated files stay generated, and that the lockfile matches `package.json`. The [overview](/forge/linting/overview) covers flags and silencing.
+
+## Tracing
+
+`forge lint --tracing` keeps one request's work inside one trace. The audit that produced it found production traces that were mostly a single span. Forge ships the pieces for a whole trace (`otelconnect`, `dbtrace`, `observe.NewHTTPClient`, the generated component decorators), but the application's own code stepped around them: a hand-built `*http.Client`, a `sql.Open`, a contract constructed without its decorator, and above all a log line written without the request's context, which carried no `trace_id` and could not be joined to anything. Each of those is invisible at review time.
+
+All four rules are error severity and are pure syntax passes over your own Go source. Tests, generated files and vendored trees are out of scope, and every rule leans toward silence where the code may already be right, because a false positive costs trust in the gate.
+
+| Rule | What it catches |
+|------|-----------------|
+| `forge-tracing-log-without-ctx` | A log call that does not pass the `context.Context` in scope, so the line carries no `trace_id` |
+| `forge-tracing-raw-http-client` | A `http.DefaultClient`, `http.Get` or `*http.Client` with no tracing transport, so the callee is missing from the caller's trace |
+| `forge-tracing-raw-sql-open` | A `sql.Open`, `sqlx.Connect` or `pgxpool.New` instead of `dbtrace`, so a request's SQL is missing from its trace |
+| `forge-tracing-contract-uninstrumented` | A contract package's `New(…)` used without its generated `NewInstrumented` decorator, so its work is parentless in the trace |
+
+### `forge-tracing-log-without-ctx`
+
+A log call with the context in scope but not passed has no `trace_id`, so you cannot go from a trace to its logs or back. This is the real finding from a scratch project:
+
+```go
+// bad
+func (s *Service) audit(ctx context.Context, id string) {
+    slog.Info("order viewed", "id", id)
+}
+```
+
+```text
+✗ internal/handlers/order/rpc_list.go:9 [forge-tracing-log-without-ctx] slog.Info logs without the context in scope, so the line carries no trace_id and cannot be joined to its request; use slog.InfoContext(ctx, …)
+   → `forge lint --tracing --fix` rewrites every such call to its …Context form
+```
+
+```go
+// fix
+slog.InfoContext(ctx, "order viewed", "id", id)
+```
+
+`forge lint --tracing --fix` makes the rewrite for you and type-checks the package afterwards. If your project has its own logging helper that wraps `slog.Info(msg, args…)`, name it in `forge.yaml` so the rule flags and rewrites its calls too:
+
+```yaml
+lint:
+  tracing:
+    log_wrappers:
+      - call: example.com/shop/internal/logging.Info
+        context_call: log/slog.InfoContext   # optional; defaults to <Call>Context in the helper's package
+```
+
+`call` is the helper as `<import path>.<Func>`. The rewrite passes the context first and the helper's arguments unchanged.
+
+### `forge-tracing-raw-http-client`
+
+A client with no tracing transport opens no client span and sends no `traceparent`, so the callee is invisible in the caller's trace.
+
+```go
+// bad
+client := &http.Client{Timeout: 5 * time.Second}
+
+// fix
+client := observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 5 * time.Second})
+// or wrap a transport you already have
+client := &http.Client{Transport: observe.NewHTTPTransport(base)}
+```
+
+Assigning a traced default to `http.DefaultClient` is not a use of it and is not flagged.
+
+### `forge-tracing-raw-sql-open`
+
+An untraced pool opens no span per query, so a request's SQL is missing from its trace. Use the traced constructor from forge's `dbtrace` instead of `sql.Open`, `sqlx.Connect` or `pgxpool.New`.
+
+### `forge-tracing-contract-uninstrumented`
+
+Every contract package generates a decorator (`NewInstrumented`) that opens a span per method. A `New(…)` used directly skips it, so the work under those methods is parentless in the trace. `--fix` rewrites the construction to `NewInstrumented`. The rule also flags a reference to a decorator that no longer exists because the package opted out with `forge:no-observe`.
+
+See [Observability](/forge/observability) for what the traces and logs look like once they are joined.
+
+## Tests
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forge-slow-test-unmarked` | error | A Go test that does slow work, such as exec'ing `go` or `docker` or dialing a host, without being marked slow |
+| `forge-slow-test-inputs` | error | A `testkit.Inputs` argument that is not a string literal, so the analyzer cannot read which files the test depends on |
+| `forgeconv-handler-tests-use-tdd` | warning | A hand-rolled `tests := []struct{name, call}` loop in a handler test instead of `forge/pkg/tdd` |
+| `forgeconv-frontend-hook-tests` | warning | A generated `*-hooks.ts` file with no sibling test, so a broken hook is found only at run time |
+
+### `forge-slow-test-unmarked`
+
+`forge lint --slow-tests` runs only when you name it. A test that shells out to `go`, `forge`, `kcl`, `node`, `npm`, `git` or `docker`, starts a container, or dials an external host belongs in the full test run, not the fast tier that every edit pays for. Worse, a child process reads repo files the Go test cache cannot see, so a cached run replays a stale pass after an edit that broke it. The fix is to mark the test:
+
+```go
+// bad
+func TestRenderProd(t *testing.T) {
+    out, err := exec.Command("forge", "env", "render", "prod").CombinedOutput()
+    // …
+}
+
+// fix: it now skips under -short and runs in `task test`
+func TestRenderProd(t *testing.T) {
+    testkit.Slow(t, "execs forge env render", testkit.Inputs("deploy/**"))
+    out, err := exec.Command("forge", "env", "render", "prod").CombinedOutput()
+    // …
+}
+```
+
+A plain `if testing.Short() { t.Skip("…") }` on the test's path also counts. The analyzer follows calls, so a helper that execs is attributed to the test that reaches it, and a test whose exec argument is a temp directory it created is not flagged. Gate a slow test; never weaken its assertions.
+
+### `forge-slow-test-inputs`
+
+`testkit.Inputs(globs…)` names the files a slow test depends on, so the test cache can be keyed on them. The analyzer reads the globs from the source, so they must be string literals in the call.
+
+```go
+// bad
+testkit.Slow(t, "renders", testkit.Inputs(globs...))
+// fix
+testkit.Slow(t, "renders", testkit.Inputs("deploy/**"))
+```
+
+## Generated files and ownership
+
+Forge generates files it owns, scaffolds files you own, and tells the two apart with banners and a content hash. These rules check that boundary.
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `forge-generated-file-edited` | error | A forge-generated file edited by hand, which the next `forge generate` overwrites |
+| `forge-generated-file-unverified` | warning | A generated file whose provenance forge could not establish after the move off the legacy checksums manifest |
+| `gen-missing-header` | error | A `_gen` file without the `Code generated … DO NOT EDIT.` header, so tools and reviewers do not treat it as generated |
+| `gen-missing-source` | warning | A `_gen` file without a `// Source:` line, so a reader cannot tell which input drives its regeneration |
+| `scaffold-not-customized` | warning | A file that still carries `FORGE_SCAFFOLD` placeholder markers, which is unfinished scaffold output |
+| `cross-tier-derived-symbol` | error | A regenerated forge template that references a symbol only a scaffold-once file can define (forge repo only) |
+| `forge-frontend-lock-drift` | error | `package.json` ranges the lockfile does not record, which fails a frozen install in CI but passes locally |
+
+### `forge-generated-file-edited`
+
+Every generated file carries a banner and a hash of what forge wrote. If the bytes no longer match, the next `forge generate` regenerates the file and your edit is lost. Without this rule, an agent could hand-edit a `DO NOT EDIT` file, watch every check pass, commit it, and lose the work at the next regenerate: the pre-generate guard fires at the moment the edit is about to be destroyed, and `forge ci verify-generated` only runs in the gate. Lint runs between the edit and the generate, which is where the check belongs. It reports exactly what forge's drift scan reports, minus the legitimate cases (scaffold-once files, disowned paths, formatter-only churn), because a gate that cries wolf gets disabled.
+
+```text
+internal/handlers/order/helpers_gen.go is forge-generated (it carries the `Code generated by forge. DO NOT EDIT.` banner) and was edited after forge wrote it — the next `forge generate` regenerates the file and these edits are lost.
+   → revert the edit (`git checkout -- internal/handlers/order/helpers_gen.go`) and move the customization to a user-owned file, or run `forge project disown internal/handlers/order/helpers_gen.go --reason "<why>"` to take permanent ownership of it (one-way: forge stops regenerating it).
+```
+
+`forge-generated-file-unverified` is the warning for a file whose provenance the one-time migration off the legacy checksums manifest could not establish. Resolve it once with `forge generate --force` or `forge project disown`.
+
+### `gen-missing-header`, `gen-missing-source`
+
+A file named `*_gen.go` that does not carry the canonical header is not recognized as generated by tooling, linters and reviewers. A missing `// Source: <input>` line means a reader cannot tell which input drives the regeneration; regenerate with a current forge to restamp it, and do not hand-edit the file.
+
+### `scaffold-not-customized`
+
+A file that still contains `FORGE_SCAFFOLD` placeholder comments has unfinished work in it. It is a warning, deliberately: a fresh scaffold always carries the markers, so an uncustomized scaffold is the expected state between `forge scaffold` and implementation. Making it an error would have made `forge lint` unable to pass on forge's own fresh output.
+
+### `cross-tier-derived-symbol`
+
+This one protects forge's own template tree and only matters if you are working on forge. A file forge regenerates must never reference a symbol that only a scaffold-once file can define, or forge has authored a permanent build break. In a project it does not fire.
+
+### `forge-frontend-lock-drift`
+
+A frontend whose `package.json` and lockfile disagree about a dependency range fails a frozen install (`npm ci`, `pnpm install --frozen-lockfile`) in CI while passing on your machine. The lane compares them offline, with no install and no registry, for every frontend including adopted ones. The finding includes the command that refreshes the lockfile:
+
+```text
+package.json and package-lock.json are out of sync, so a frozen install (`npm ci`) fails: …
+   → refresh the lockfile and commit it: (cd frontends/web && <the package manager's lock-refresh command>)
+```
+
+The hint prints the refresh command for the package manager that owns the lockfile (npm, pnpm or yarn), already scoped to the frontend's directory. Run it and commit the lockfile.
+
+## Everything else
+
+These rules do not belong to a family of their own.
+
+| Rule | Severity | What it catches |
+|------|----------|-----------------|
+| `typed-config-guardrail` | warning | A golangci-lint config that does not forbid `os.Getenv`, so the typed-config guardrail has nothing to enforce |
+| `forge-config-unreachable` | warning | A config field that no binary and no frontend loads, which is dead weight |
+| `workaround-testing-extras` | warning | A hand-rolled `pkg/app/testing_extras.go`, which forge's generated `With<Svc>Deps(...)` now covers |
+| `workaround-cmd-not-in-binaries` | warning | A `cmd/<name>.go` binary not declared in `forge.yaml`, which `forge scaffold binary` now covers |
+| `golangci-build-tags` | error | golangci-lint findings in files behind a project build tag, which plain `forge lint` used not to see |
+| `banner-tier1-missing-generated-header` | warning | A forge template regenerated on every run without the `Code generated by forge` banner (forge repo only) |
+| `banner-tier2-missing-scaffold-header` | warning | A scaffold-once forge template without the "yours: scaffolded once" banner (forge repo only) |
+| `banner-unclassified` | warning | A forge template whose name matches no known lifecycle tier (forge repo only) |
+
+`typed-config-guardrail` checks that your `.golangci.yml` tells `forbidigo` to forbid `os.Getenv`. When none of the forbid patterns cover it, the lane reports that it could not run, names the file and the patterns to add, and does not pretend it passed. `forge-config-unreachable` is a warning because an unreachable field is dead weight, not a defect, and the remedy is a deletion that is your judgment to make. It stays silent when `cmd/` cannot be enumerated: "I could not tell" must never read as "it is dead".
+
+`workaround-testing-extras` and `workaround-cmd-not-in-binaries` flag patterns forge's generators now cover (`With<Svc>Deps(...)` fills every interface-typed Deps field, `forge scaffold binary` declares a second binary), so the hand-rolled version can usually be deleted.
+
+`golangci-build-tags` is not a rule ID your findings carry. It is the key under which golangci-lint's own findings in files behind your build tags roll out as one unit. Golangci-lint's linters (noctx, errcheck and the rest) keep their own config; this key is the only one `lint.rules` reads for them, and `"*"` never reaches another tool's findings.
+
+The three `banner-*` rules check that forge's own templates carry the right lifecycle banner. `forge lint --banners` is a no-op outside the forge repository, so they never fire in a project; they are listed because they are graded rules.

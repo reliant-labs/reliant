@@ -43,6 +43,7 @@ import { formatAgo, formatCount, formatWhen } from "../format";
 import { ServiceSelect } from "../LogsView";
 import { issueStatusParam, type ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
+import { UserIdFilter } from "../UserIdFilter";
 import { IssueDetail } from "./IssueDetail";
 import { IssuesNotConfigured } from "./IssueStates";
 import { StatusBadge, Trend } from "./IssueBits";
@@ -63,6 +64,8 @@ export interface ErrorsViewProps {
   sort: IssueSort;
   /** `me` or a user id; absent: anyone's. */
   assignee: string | undefined;
+  /** Only the issues a user id hit in the window (the URL's `user`). Empty: everyone's. */
+  user?: string;
   /** The issue open in detail. */
   issueId: string | undefined;
   navigate: ObsNavigate;
@@ -88,7 +91,7 @@ export function issueScopeOf(scope: ObsScope): IssueScope {
   return { orgId: scope.orgId, projectId: scope.projectId, envIds: scope.envIds };
 }
 
-function IssueList({ scope, subject, range, text, service, statuses, platform, sort, assignee, navigate }: ErrorsViewProps) {
+function IssueList({ scope, subject, range, text, service, statuses, platform, sort, assignee, user = "", navigate }: ErrorsViewProps) {
   const issueScope = useMemo(() => issueScopeOf(scope), [scope]);
   const me = useCurrentIssueUser();
   const assigneeFilter = useMemo(() => assigneeFilterOf(assignee), [assignee]);
@@ -97,16 +100,16 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
   const meUnknown = assigneeFilter.kind === "me" && !me.isLoading && !me.data?.id;
   const serverUser = serverAssignee(assigneeFilter, me.data?.id);
   const filters: IssueFilters = useMemo(
-    () => ({ range, statuses, platform, service, assignee: serverUser, sort, text }),
-    [range, statuses, platform, service, serverUser, sort, text]
+    () => ({ range, statuses, platform, service, assignee: serverUser, userId: user || undefined, sort, text }),
+    [range, statuses, platform, service, serverUser, user, sort, text]
   );
   const issues = useIssues(waitingForMe || meUnknown ? null : issueScope, filters);
   const rows = useMemo(() => issues.data?.pages.flatMap((page) => page.issues) ?? [], [issues.data]);
-  const filtered = statuses.length > 0 || !!platform || !!service || !!text || assigneeFilter.kind !== "anyone";
+  const filtered = statuses.length > 0 || !!platform || !!service || !!text || !!user || assigneeFilter.kind !== "anyone";
 
   return (
     <div className="space-y-3" data-testid="obs-errors">
-      <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} assignee={assignee} navigate={navigate} />
+      <IssueToolbar scope={scope} range={range} text={text} service={service} statuses={statuses} platform={platform} sort={sort} assignee={assignee} user={user} navigate={navigate} />
       {issues.data && <ObsAsOf updatedAt={issues.dataUpdatedAt} />}
       {meUnknown ? (
         <p className="rounded-lg border border-dashed border-border bg-surface-sunken px-4 py-5 text-sm text-ink-muted" data-testid="obs-errors-mine-unknown">
@@ -132,7 +135,7 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
           filtered={filtered}
           topic="errors"
           onWiden={() => navigate({ range: "7d" })}
-          onClearFilters={() => navigate({ istatus: undefined, platform: undefined, service: undefined, assignee: undefined, q: undefined })}
+          onClearFilters={() => navigate({ istatus: undefined, platform: undefined, service: undefined, assignee: undefined, user: undefined, q: undefined })}
         />
       ) : (
         <IssueTable
@@ -158,6 +161,7 @@ function IssueToolbar({
   platform,
   sort,
   assignee,
+  user,
   navigate,
 }: {
   scope: ObsScope;
@@ -168,6 +172,7 @@ function IssueToolbar({
   platform: IssuePlatform | undefined;
   sort: IssueSort;
   assignee: string | undefined;
+  user: string;
   navigate: ObsNavigate;
 }) {
   const members = useOrgMembers(scope.orgId);
@@ -267,7 +272,8 @@ function IssueToolbar({
           ))}
         </select>
       </div>
-      <form role="search" onSubmit={submit} className="max-w-xl">
+      <div className="flex max-w-2xl flex-wrap items-center gap-2">
+      <form role="search" onSubmit={submit} className="min-w-[14rem] flex-1">
         <label htmlFor="obs-errors-query" className="sr-only">
           Title or culprit contains
         </label>
@@ -284,6 +290,8 @@ function IssueToolbar({
           />
         </div>
       </form>
+      <UserIdFilter id="obs-errors-user" value={user} onChange={(next) => navigate({ user: next }, { replace: true })} />
+      </div>
     </div>
   );
 }

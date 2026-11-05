@@ -2,8 +2,6 @@ package threads
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -35,16 +33,13 @@ func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, w
 	// their own message so retry classification upstream sees them for what
 	// they are instead of a terminal-looking not-found.
 	if _, err := s.repo.GetThread(ctx, opts.ParentThreadID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, nil, fmt.Errorf("parent thread not found: %w", err)
-		}
-		return nil, nil, fmt.Errorf("failed to load parent thread: %w", err)
+		return nil, nil, lookupFailed(err, "parent thread not found", "failed to load parent thread")
 	}
 
 	// Get the parent's context window to inherit the sequence
 	parentCW, err := s.repo.GetContextWindow(ctx, opts.ForkAtContextWindowID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("fork context window not found: %w", err)
+		return nil, nil, lookupFailed(err, "fork context window not found", "failed to load fork context window")
 	}
 
 	threadID := generateID(opts.ID)

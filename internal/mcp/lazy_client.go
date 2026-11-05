@@ -14,9 +14,16 @@ import (
 const (
 	// lazyStartTimeout bounds how long a first-use spawn (npx cold start +
 	// handshake, and for chrome-devtools the headless Chrome launch) may take
-	// before the triggering tool call fails. Matches the generous
-	// project-server load budget so first-run package downloads don't time out.
-	lazyStartTimeout = defaultProjectServerLoadTimeout
+	// before the triggering tool call fails.
+	//
+	// It is twice the eager project-server budget because a lazy start is
+	// paid inside a tool call the agent is waiting on, where waiting longer
+	// beats failing: a failed start costs the call AND a retry cooldown.
+	// Measured on a loaded cloud machine (load average ~90 on 31 CPUs): the
+	// chrome-devtools initialize handshake took 30-50s through npx, so the
+	// old 45s budget failed it about half the time with "context deadline
+	// exceeded" (chromeDevtoolsLaunch avoids npx where it can).
+	lazyStartTimeout = 2 * defaultProjectServerLoadTimeout
 
 	// lazyIdleTimeout is how long a lazily-started server may sit idle (no tool
 	// calls in flight) before its subprocess is reaped. For chrome-devtools this

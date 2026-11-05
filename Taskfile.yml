@@ -523,16 +523,17 @@ tasks:
     # Cheap repo guards no gate runs: no committed binaries in BASE..HEAD (the
     # pre-commit hook is opt-in, and --no-verify skips it), the committed
     # electron/release.config.json values are shippable, the unit tests of the
-    # scripts the release and health workflows run, and the pre-commit hook's
-    # staged-file formatter.
+    # scripts the release and health workflows run, and of the pre-commit
+    # hook's staged-file formatter and binary guard.
     desc: "No committed binaries since BASE (default origin/main), shippable release config, .github/scripts and hook tests"
     vars:
       BASE: '{{.BASE | default "origin/main"}}'
     cmds:
-      - .githooks/check-binary-files-ci.sh {{.BASE}} HEAD
+      - .githooks/check-binary-files.sh --range {{.BASE}} HEAD
       - node .github/scripts/sync-release-config.mjs --check
       - node --test .github/scripts/*.test.mjs
       - ./scripts/test-fmt-staged.sh
+      - ./scripts/test-binary-files.sh
 
   test:flake:
     desc: "Run each Go test this change adds or edits three times (-short -count=3); -- --base <rev>"
@@ -552,22 +553,58 @@ tasks:
       - node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
 
   test:web:e2e:
+    desc: Run desktop Chromium and representative touch Chromium/WebKit against the built renderer
+    cmds:
+      - task: web:e2e:run
+        vars:
+          BROWSERS: chromium webkit
+          PROJECTS: --project=chromium --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet
+          PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
+
+  # The two halves CI runs as parallel jobs (ci.yml `playwright` matrix). The
+  # split follows the install cost: WebKit's system packages (GStreamer, GTK 4,
+  # ~114 MB from the Ubuntu mirror) took 6.5 of a 15-minute budget on a slow
+  # mirror, and the desktop suite, which needs none of them, timed out behind
+  # that install. Each half now pays only for the browsers it runs.
+  test:web:e2e:desktop:
+    desc: Run the desktop Chromium Playwright suite against the built renderer
+    cmds:
+      - task: web:e2e:run
+        vars:
+          BROWSERS: chromium
+          PROJECTS: --project=chromium
+          PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
+
+  test:web:e2e:responsive:
+    desc: Run the touch Chromium and WebKit phone/tablet Playwright projects against the built renderer
+    cmds:
+      - task: web:e2e:run
+        vars:
+          BROWSERS: chromium webkit
+          PROJECTS: --project=responsive-chromium-touch --project=responsive-webkit-phone --project=responsive-webkit-tablet
+          PLAYWRIGHT_DEPS: '{{.PLAYWRIGHT_DEPS}}'
+
+  web:e2e:run:
     # Playwright against the built renderer, no Go backend, one worker (the
     # tests share one preview server). The runtime config document is the
     # public KCL-sourced renderer config committed in
     # electron/release.config.json; `vite preview` serves it as config.js.
     # PLAYWRIGHT_DEPS=--with-deps also installs the browser's system
     # packages (CI does; it needs sudo).
-    desc: Run the Playwright suite against the built renderer (chromium)
+    internal: true
+    requires:
+      vars: [BROWSERS, PROJECTS]
     cmds:
       - |
         set -euo pipefail
-        doc="$(mktemp -d)/config.js"
+        config_dir="$(mktemp -d)"
+        trap 'rm -rf "$config_dir"' EXIT
+        doc="$config_dir/config.js"
         printf 'window.__FORGE_CONFIG__ = %s;\n' "$(jq -e '.renderer' electron/release.config.json)" > "$doc"
         cd frontends/web
         npm run build:alpha
-        npx playwright install chromium {{.PLAYWRIGHT_DEPS}}
-        FORGE_RUNTIME_CONFIG_FILE="$doc" npm run test:e2e -- --project=chromium {{.CLI_ARGS}}
+        npx playwright install {{.BROWSERS}} {{.PLAYWRIGHT_DEPS}}
+        CI=true FORGE_RUNTIME_CONFIG_FILE="$doc" npm run test:e2e -- {{.PROJECTS}} {{.CLI_ARGS}}
 
   build:electron:smoke:
     # dist:pr runs with-release-config -> build:config -> build:web:alpha ->
@@ -927,6 +964,11 @@ tasks:
     desc: Self-test of scripts/flake-report.sh (a retried pass is a suspected flake; a data race never is) against a throwaway module
     cmds:
       - ./scripts/test-flake-report.sh
+
+  pin:check:report:test:
+    desc: Self-test of scripts/forge-pin-report.sh (forge-pin-check.yml's verdicts and its forge-pin:red / forge-pin:broken issue transitions) against a fake gh
+    cmds:
+      - ./scripts/test-forge-pin-report.sh
 
   release:lock:test:
     desc: Self-test of scripts/release-lock.sh (one release of the repo at a time, heartbeat, stale replacement, re-check of main) against a bare remote

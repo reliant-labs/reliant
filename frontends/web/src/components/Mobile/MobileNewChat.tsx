@@ -1,11 +1,8 @@
 /**
  * `/m/new` — start a chat.
  *
- * Deliberately the narrow slice of `NewChatView`: a project header, a
- * workflow picker, where the chat runs, which workspace it runs in, one
- * message box. Attachments, workflow params, presets and branching are all
- * `false` for this surface, and the point of that list is that none of them
- * appear here.
+ * Shares ChatInput's upload, draft and workflow configuration mechanisms.
+ * Machine/workspace choices stay on this route; branching stays unavailable.
  *
  * Where it runs (research/NO_MACHINE_CHATS.md §2.5): one of the user's
  * machines, or No machine — preselected when none of their machines is awake,
@@ -20,13 +17,26 @@
  * `startChat` (hooks/chat-actions) here would land on `/m/chats/$chatId` with an empty
  * transcript and no spinner until the stream caught up.
  *
+ * ## The canvas is where the chat runs (dev-docs/design/mobile-chat-redesign.md §8)
+ *
+ * Where a chat runs is the decision that matters before the first send, and it
+ * cannot change afterward, so that is what fills the screen above the
+ * composer — no suggested prompts, and no model (it lives in the composer's ⊕
+ * sheet on every touch layout).
+ *
  * Workspace: defaults to the project's main worktree, the same default the
  * desktop composer resolves to when the user hasn't switched workspaces. The
- * Workspace row picks another one, or creates one (`worktreeCreate`) through
- * the same sheet the chat list opens. A `worktreeId` search param preselects
- * it; that is how a workspace just created from the chat list arrives here.
- * The row is hidden for No machine, because a branch workspace is a checkout
- * on one machine and a machineless chat always runs in main.
+ * first few workspaces (main, then most recent) are radio rows on the canvas;
+ * "Show all" opens the full, paged list, and "New workspace"
+ * (`worktreeCreate`) opens the same sheet the chat list does. A `worktreeId`
+ * search param preselects one; that is how a workspace just created from the
+ * chat list arrives here. The group is hidden for No machine, because a branch
+ * workspace is a checkout on one machine and a machineless chat always runs in
+ * main.
+ *
+ * With the keyboard up the options scroll away under the composer, so a
+ * one-line summary under the header keeps the choice in view; tapping it drops
+ * the keyboard and brings the options back.
  *
  * ## Why the workflow picker is a single row, not 23 full-bleed ones
  *
@@ -42,9 +52,12 @@
  * new pattern for this one screen.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ChatInput } from "../Chat/ChatInput";
+import { NewChatDraftBoundary, newChatAttachmentDraftId } from "../Chat/NewChatDraftBoundary";
+import { useChatParamsStore } from "../../store/chatParamsStore";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowUp, ChevronLeft, GitBranchPlus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, GitBranchPlus, Loader2 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useProjectStore } from "../../store/projectStore";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
@@ -57,10 +70,12 @@ import {
 } from "../workflow/useWorkflowInputs";
 import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { trackEvent } from "../../lib/analytics";
-import { cn } from "../../lib/utils";
 import { MobileCardGroup, MobileScreenHeader } from "./MobileChrome";
-import { MobileSelectRow, type MobileSettingOption } from "./MobileSettingsRow";
+import { MobileOptionSheet, MobileSelectRow, type MobileSettingOption } from "./MobileSettingsRow";
 import { MobileCreateWorkspaceSheet } from "./MobileCreateWorkspaceSheet";
+import { relativeTime } from "./relativeTime";
+import { useComposeMode } from "@/lib/composeMode";
+import { cn } from "@/lib/utils";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { createProjectFromRepo, useProjectDaemonInstalls } from "@/hooks/project-queries";
 import { useCapability } from "@/lib/surfaceContext";
@@ -105,11 +120,20 @@ const sameWorkflow = (a: string, b: string) =>
  * FAILED ones are left out because they never got a checkout. CREATING ones
  * stay in: a chat can start while its checkout finishes, which is what the
  * desktop composer allows straight after create too.
+ *
+ * `sortActiveWorkspaces` is the ranking, not the chat list's `buildGroups`:
+ * that one ranks groups by their chats, which this screen has not loaded, and
+ * a workspace's `last_active` is the same recency the server orders by.
  */
-export function workspaceOptions(worktrees: Worktree[]): MobileSettingOption[] {
+export function startableWorkspaces(worktrees: Worktree[]): Worktree[] {
   return sortActiveWorkspaces(
     worktrees.filter((w) => !w.deleted_at && w.status !== WorktreeStatus.FAILED),
-  ).map((w) => ({
+  );
+}
+
+/** `startableWorkspaces` as options for the "Show all" sheet. */
+export function workspaceOptions(worktrees: Worktree[]): MobileSettingOption[] {
+  return startableWorkspaces(worktrees).map((w) => ({
     value: w.id,
     label: w.name,
     description:
@@ -121,16 +145,50 @@ export function workspaceOptions(worktrees: Worktree[]): MobileSettingOption[] {
   }));
 }
 
+/** How many workspaces the canvas lists before "Show all". */
+export const INLINE_WORKSPACE_LIMIT = 4;
+
+/**
+ * The workspaces listed on the canvas: the first few of `ranked`, and always
+ * the selected one — a workspace picked from "Show all" takes the last slot,
+ * so the choice that decides where the chat runs never sits off-screen.
+ */
+export function inlineWorkspaces(
+  ranked: Worktree[],
+  selectedId: string | undefined,
+  limit = INLINE_WORKSPACE_LIMIT,
+): Worktree[] {
+  const head = ranked.slice(0, limit);
+  if (!selectedId || head.some((w) => w.id === selectedId)) return head;
+  const selected = ranked.find((w) => w.id === selectedId);
+  return selected ? [...head.slice(0, limit - 1), selected] : head;
+}
+
+/** Trailing meta on an inline workspace row ("default", "2h ago"). */
+function workspaceMeta(worktree: Worktree): string {
+  if (worktree.status === WorktreeStatus.CREATING) return "Setting up…";
+  if (worktree.is_main) return "default";
+  const age = relativeTime(worktree.last_active);
+  return !age || age === "now" ? age : `${age} ago`;
+}
+
 export function MobileNewChat() {
+  const projectId = useProjectStore((s) => s.currentProject?.id);
+  if (!projectId) return <MobileScreenHeader title="New chat" subtitle="No project" />;
+  return <NewChatDraftBoundary key={projectId} projectId={projectId}><MobileNewChatDraft /></NewChatDraftBoundary>;
+}
+
+function MobileNewChatDraft() {
   const navigate = useNavigate();
   // `strict: false` — nested under `_authenticated` → `_mobile`, same as
   // every other param/search read on this surface.
   const { worktreeId: requestedWorktreeId } = useSearch({ strict: false }) as {
     worktreeId?: string;
   };
-  const [message, setMessage] = useState("");
+  const creatingRef = useRef(false);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState("");
+  const [createdChatId, setCreatedChatId] = useState<string>();
 
   const currentProject = useProjectStore((s) => s.currentProject);
   const { worktrees, hasMore, isLoadingMore, loadMore } = useWorktreeList(currentProject?.id);
@@ -142,7 +200,13 @@ export function MobileNewChat() {
 
   // null means "whatever the user's default is" — resolved at send time so a
   // preferences load that lands after mount is still respected.
-  const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(null);
+  const selectedWorkflow = useChatParamsStore((s) => s.tempNewChatWorkflow);
+  const setSelectedWorkflow = (workflow: string) => {
+    const store = useChatParamsStore.getState();
+    store.setTempNewChatParams({});
+    store.setTempNewChatPresets({});
+    store.setTempNewChatWorkflow(workflow);
+  };
 
   // The user's pick on this screen wins over the one the URL arrived with.
   const [pickedWorktreeId, setPickedWorktreeId] = useState<string | null>(null);
@@ -204,10 +268,12 @@ export function MobileNewChat() {
   const machine = resolvedMachine.value;
   const noMachine = machine === NO_MACHINE;
   const workspaceMachineId = workspaceFilterMachine(effectiveChoice, resolvedMachine);
-  const workspaceRowOptions = useMemo(
-    () => workspaceOptions(workspacesOnMachine(worktrees, workspaceMachineId)),
+  const rankedWorkspaces = useMemo(
+    () => startableWorkspaces(workspacesOnMachine(worktrees, workspaceMachineId)),
     [worktrees, workspaceMachineId],
   );
+  const workspaceSheetOptions = useMemo(() => workspaceOptions(rankedWorkspaces), [rankedWorkspaces]);
+  const [showingAllWorkspaces, setShowingAllWorkspaces] = useState(false);
   // Choosing a machine that does not hold the picked workspace falls back to
   // the main checkout, which every machine has.
   const handleMachineChange = (next: string) => {
@@ -272,12 +338,12 @@ export function MobileNewChat() {
       setSettingUp(false);
     }
   };
-  const canSend = message.trim().length > 0 && !isCreating && !!currentProject && !placementBlock;
-
-  const handleSend = async () => {
-    const content = message.trim();
-    if (!content || isCreating || !currentProject || placementBlock) return;
-
+  const handleSend = async (content: string, attachmentIds?: string[], workflow?: string | null, params?: Record<string, unknown>, _thread?: string | null, presets?: Record<string, string | null>) => {
+    // ChatInput keeps the draft when this throws, so a blocked or duplicate
+    // send never loses the prompt.
+    if (creatingRef.current || !currentProject) throw new Error("Chat creation is unavailable");
+    if (placementBlock) throw new Error(placementBlock);
+    creatingRef.current = true;
     setIsCreating(true);
     setError("");
     try {
@@ -290,15 +356,15 @@ export function MobileNewChat() {
         .startChat(
           worktreeId,
           content,
-          undefined,
-          undefined,
-          effectiveWorkflow,
-          undefined,
+          attachmentIds,
+          params,
+          workflow ?? effectiveWorkflow,
+          presets ? Object.fromEntries(Object.entries(presets).filter((entry): entry is [string, string] => entry[1] !== null)) : undefined,
           daemonId || startNoMachine ? { daemonId, noMachine: startNoMachine } : undefined,
         );
 
       trackEvent("chat_created", {
-        has_attachments: false,
+        has_attachments: !!attachmentIds?.length,
         workflow: effectiveWorkflow,
         surface: "mobile",
         no_machine: noMachine,
@@ -308,7 +374,12 @@ export function MobileNewChat() {
       // reads activeChatId for its subscriptions.
       useChatStore.getState().selectChat(chat);
 
-      await navigate({ to: "/m/chats/$chatId", params: { chatId: chat.id } });
+      setCreatedChatId(chat.id);
+      try {
+        await navigate({ to: "/m/chats/$chatId", params: { chatId: chat.id } });
+      } catch {
+        setError("Chat created. Open it to continue.");
+      }
     } catch (err) {
       // Stay on the screen with the text intact — retyping a prompt on a
       // phone is the worst possible recovery.
@@ -316,7 +387,43 @@ export function MobileNewChat() {
         err instanceof Error ? err.message : "Could not start the chat",
       );
       setIsCreating(false);
+      creatingRef.current = false;
+      throw err;
     }
+  };
+
+  // No workspace group without a machine: a branch workspace is a checkout on
+  // one machine and a machineless chat always runs in main. With main as the
+  // only choice and nothing to create, the group is one read-only line.
+  const showWorkspaces = !noMachine && rankedWorkspaces.length > 0;
+  const workspacesReadOnly = rankedWorkspaces.length === 1 && !canCreateWorkspace;
+  const listedWorkspaces = inlineWorkspaces(rankedWorkspaces, targetWorktree?.id);
+  const canShowAllWorkspaces = hasMore || rankedWorkspaces.length > listedWorkspaces.length;
+  const pickWorkspace = (id: string) => {
+    setPickedWorktreeId(id);
+    setShowingAllWorkspaces(false);
+  };
+
+  const workflowEntry = visibleWorkflows.find((workflow) => sameWorkflow(workflow.name, effectiveWorkflow));
+  // Keyboard up: the viewport is ~400px and the options scroll away under the
+  // composer, so where the chat will run stays visible as one line.
+  const composeMode = useComposeMode();
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const summary = [
+    (noMachine ? mainWorktree : targetWorktree)?.name,
+    noMachine
+      ? "No machine"
+      : canPickMachine && !daemonsLoading
+        ? machineRowOptions.find((option) => option.value === machineRowValue)?.label
+        : undefined,
+    workflowDisplayName(workflowEntry ?? { name: effectiveWorkflow }),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const revealOptions = () => {
+    // Blurring the composer drops the keyboard, which ends compose mode.
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    if (canvasRef.current) canvasRef.current.scrollTop = 0;
   };
 
   return (
@@ -337,17 +444,84 @@ export function MobileNewChat() {
           </Link>
         }
       />
+      {composeMode && summary && (
+        <button
+          type="button"
+          onClick={revealOptions}
+          aria-label={`Chat options: ${summary}. Show options`}
+          data-testid="mobile-new-chat-summary"
+          className="flex min-h-[44px] w-full shrink-0 items-center gap-1 border-b border-border bg-background px-4 text-left text-xs text-muted-foreground active:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        >
+          <span className="min-w-0 flex-1 truncate">{summary}</span>
+          <ChevronDown className="h-4 w-4 shrink-0" aria-hidden="true" />
+        </button>
+      )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {workflowsLoading && visibleWorkflows.length === 0 ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (
-          <MobileCardGroup label="Start with">
+      <div ref={canvasRef} className="mx-auto min-h-0 w-full max-w-3xl flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        {showWorkspaces &&
+          (workspacesReadOnly ? (
+            <MobileCardGroup label="Workspace">
+              <div className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-3 text-sm text-foreground">
+                <span className="min-w-0 truncate">{rankedWorkspaces[0].name}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{workspaceMeta(rankedWorkspaces[0])}</span>
+              </div>
+            </MobileCardGroup>
+          ) : (
+            <MobileCardGroup label="Workspace" className="divide-y divide-border">
+              <div role="radiogroup" aria-label="Workspace" className="divide-y divide-border">
+                {listedWorkspaces.map((worktree) => (
+                  <WorkspaceRadioRow
+                    key={worktree.id}
+                    worktree={worktree}
+                    checked={worktree.id === targetWorktree?.id}
+                    onSelect={() => pickWorkspace(worktree.id)}
+                  />
+                ))}
+              </div>
+              {canCreateWorkspace && (
+                <button
+                  type="button"
+                  onClick={() => setCreatingWorkspace(true)}
+                  className={cn(CARD_ROW, "font-medium text-primary-ink")}
+                >
+                  <GitBranchPlus className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  New workspace
+                </button>
+              )}
+              {canShowAllWorkspaces && (
+                <button
+                  type="button"
+                  onClick={() => setShowingAllWorkspaces(true)}
+                  className={cn(CARD_ROW, "justify-between text-foreground")}
+                >
+                  <span>
+                    Show all ({rankedWorkspaces.length}
+                    {hasMore ? "+" : ""})
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                </button>
+              )}
+            </MobileCardGroup>
+          ))}
+
+        <MobileCardGroup>
+          {canPickMachine && !daemonsLoading && (
+            <MobileSelectRow
+              label="Runs on"
+              value={machineRowValue}
+              sheetTitle="Where this chat runs"
+              options={machineRowOptions}
+              onChange={handleMachineChange}
+            />
+          )}
+          {workflowsLoading && visibleWorkflows.length === 0 ? (
+            <div className="flex min-h-[44px] items-center justify-center py-3">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" aria-label="Loading workflows" />
+            </div>
+          ) : (
             <MobileSelectRow
               label="Workflow"
-              value={effectiveWorkflow}
+              value={workflowEntry?.name ?? effectiveWorkflow}
               sheetTitle="Choose a workflow"
               options={visibleWorkflows.map((workflow) => ({
                 value: workflow.name,
@@ -356,110 +530,94 @@ export function MobileNewChat() {
               }))}
               onChange={setSelectedWorkflow}
             />
-            {canPickMachine && !daemonsLoading && (
-              <MobileSelectRow
-                label="Runs on"
-                value={machineRowValue}
-                sheetTitle="Where this chat runs"
-                options={machineRowOptions}
-                onChange={handleMachineChange}
-              />
-            )}
-            {placementBlock && (
-              <div className="space-y-2 px-4 py-3 text-xs text-muted-foreground" data-testid="mobile-new-chat-placement">
-                <p role="status">{placementBlock}</p>
-                {canSetUpHere && (
-                  <button
-                    type="button"
-                    onClick={() => void setUpHere()}
-                    disabled={settingUp}
-                    className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-border font-medium text-primary-ink active:bg-muted disabled:opacity-60"
-                  >
-                    {settingUp && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                    Set up {currentProject?.name} on{" "}
-                    {daemonLabel(daemons.find((d) => d.daemonId === runsOnDaemonId), runsOnDaemonId ?? "")}
-                  </button>
-                )}
-              </div>
-            )}
-            {/* Shown only when there is something to do with it: another
-                workspace to pick, or one to create. A row with main as the
-                only choice is just noise above the composer. */}
-            {!noMachine &&
-              workspaceRowOptions.length > 0 &&
-              (workspaceRowOptions.length > 1 || canCreateWorkspace) && (
-                <MobileSelectRow
-                  label="Workspace"
-                  value={targetWorktree?.id ?? ""}
-                  sheetTitle="Which workspace"
-                  options={workspaceRowOptions}
-                  onChange={setPickedWorktreeId}
-                  paging={{ hasMore, isLoadingMore, onLoadMore: () => void loadMore() }}
-                  action={
-                    canCreateWorkspace
-                      ? {
-                          label: "New workspace",
-                          icon: <GitBranchPlus className="h-4 w-4" />,
-                          onSelect: () => setCreatingWorkspace(true),
-                        }
-                      : undefined
-                  }
-                />
-              )}
-          </MobileCardGroup>
-        )}
+          )}
+        </MobileCardGroup>
+
         {canPickMachine && resolvedMachine.lockedBy && daemons.length > 1 && (
-          <p role="note" className="mt-3 px-1 text-xs text-muted-foreground">
+          <p role="note" className="px-1 text-xs text-muted-foreground">
             Runs on{" "}
             {daemonLabel(daemons.find((d) => d.daemonId === resolvedMachine.lockedBy), resolvedMachine.lockedBy)}, where
             this workspace lives.
           </p>
         )}
         {noMachine && (
-          <p role="note" className="mt-3 px-1 text-xs text-muted-foreground">
+          <p role="note" className="px-1 text-xs text-muted-foreground">
             {NO_MACHINE_COMPOSER_HINT}
           </p>
         )}
       </div>
 
-      {error && (
-        <p className="shrink-0 px-4 py-2 text-xs text-destructive-ink">{error}</p>
-      )}
-
-      {/* Composer pins to the bottom. This screen has no tab bar, so it
+      {/* Composer pins to the bottom with what stands between the user and a
+          send as status lines right above it. No bordered footer: the
+          composer card is the only frame. This screen has no tab bar, so it
           absorbs the home-indicator inset itself — MobileLayout leaves the
           bottom inset to whichever element actually sits at the edge. */}
       <div
-        className="flex shrink-0 items-end gap-2 border-t border-border px-3 py-3"
-        style={{ paddingBottom: "calc(0.75rem + var(--mobile-safe-bottom, env(safe-area-inset-bottom)))" }}
+        className="shrink-0 px-3 pt-2"
+        style={{ paddingBottom: "calc(0.5rem + var(--mobile-safe-bottom, env(safe-area-inset-bottom)))" }}
       >
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="What do you want to do?"
-          rows={2}
-          aria-label="Message"
-          disabled={isCreating}
-          className={cn(
-            "max-h-40 min-h-14 flex-1 resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground",
-            "placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring",
-            "disabled:opacity-60",
+        <div className="mx-auto w-full max-w-3xl min-w-0">
+          {placementBlock && (
+            <StatusLine data-testid="mobile-new-chat-placement">
+              <p role="status">{placementBlock}</p>
+              {canSetUpHere && (
+                <button
+                  type="button"
+                  onClick={() => void setUpHere()}
+                  disabled={settingUp}
+                  className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-border font-medium text-primary-ink active:bg-foreground/5 disabled:opacity-60"
+                >
+                  {settingUp && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                  Set up {currentProject?.name} on{" "}
+                  {daemonLabel(daemons.find((d) => d.daemonId === runsOnDaemonId), runsOnDaemonId ?? "")}
+                </button>
+              )}
+            </StatusLine>
           )}
-        />
-        <button
-          type="button"
-          onClick={() => void handleSend()}
-          disabled={!canSend}
-          aria-label="Send"
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground active:opacity-80 disabled:opacity-40"
-        >
-          {isCreating ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <ArrowUp className="h-5 w-5" />
+          {error && (
+            <StatusLine tone="destructive">
+              <p role="alert">{error}</p>
+            </StatusLine>
           )}
-        </button>
+          {createdChatId && (
+            <StatusLine>
+              <Link
+                to="/m/chats/$chatId"
+                params={{ chatId: createdChatId }}
+                className="flex min-h-[44px] items-center font-medium text-primary-ink"
+              >
+                Open created chat
+              </Link>
+            </StatusLine>
+          )}
+          <ChatInput attachmentDraftId={newChatAttachmentDraftId(currentProject!.id)} onSend={handleSend} disabled={isCreating || !currentProject || !!placementBlock} placeholder="What do you want to do?" />
+        </div>
       </div>
+
+      {showingAllWorkspaces && (
+        <MobileOptionSheet
+          title="Which workspace"
+          options={workspaceSheetOptions}
+          value={targetWorktree?.id ?? ""}
+          onSelect={pickWorkspace}
+          onClose={() => setShowingAllWorkspaces(false)}
+          paging={{ hasMore, isLoadingMore, onLoadMore: () => void loadMore() }}
+          action={
+            canCreateWorkspace
+              ? {
+                  label: "New workspace",
+                  icon: <GitBranchPlus className="h-4 w-4" />,
+                  // Close first: two stacked bottom sheets read as one stuck
+                  // on top of the other.
+                  onSelect: () => {
+                    setShowingAllWorkspaces(false);
+                    setCreatingWorkspace(true);
+                  },
+                }
+              : undefined
+          }
+        />
+      )}
 
       {creatingWorkspace && currentProject && (
         <MobileCreateWorkspaceSheet
@@ -474,6 +632,68 @@ export function MobileNewChat() {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/** A 44px action row inside a `MobileCardGroup`, matching `MobileSelectRow`. */
+const CARD_ROW =
+  "flex min-h-[44px] w-full items-center gap-3 px-4 py-3 text-left text-sm active:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+
+/**
+ * One workspace on the canvas. Radio semantics because exactly one is
+ * selected and one tap selects it; a sheet per choice is what this replaced.
+ */
+function WorkspaceRadioRow({
+  worktree,
+  checked,
+  onSelect,
+}: {
+  worktree: Worktree;
+  checked: boolean;
+  onSelect: () => void;
+}) {
+  const meta = workspaceMeta(worktree);
+  return (
+    <button type="button" role="radio" aria-checked={checked} onClick={onSelect} className={cn(CARD_ROW, "text-foreground")}>
+      <span
+        aria-hidden="true"
+        className={cn(
+          "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border-2",
+          checked ? "border-primary" : "border-muted-foreground/50",
+        )}
+      >
+        {checked && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+      </span>
+      <span className={cn("min-w-0 flex-1 truncate", checked && "font-medium")}>{worktree.name}</span>
+      {meta && <span className="shrink-0 text-xs text-muted-foreground">{meta}</span>}
+    </button>
+  );
+}
+
+/**
+ * A line above the composer for what stands between the user and the chat:
+ * a placement block, a failed send, a created chat to open. Kept local — the
+ * chat screen's status slot is its own component with its own lifecycle.
+ */
+function StatusLine({
+  tone = "muted",
+  children,
+  "data-testid": testId,
+}: {
+  tone?: "muted" | "destructive";
+  children: ReactNode;
+  "data-testid"?: string;
+}) {
+  return (
+    <div
+      data-testid={testId}
+      className={cn(
+        "px-1 pb-2 text-xs",
+        tone === "destructive" ? "text-destructive-ink" : "text-muted-foreground",
+      )}
+    >
+      {children}
     </div>
   );
 }

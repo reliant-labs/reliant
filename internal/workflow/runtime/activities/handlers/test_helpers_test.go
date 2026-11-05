@@ -139,10 +139,11 @@ func (t *SaveMessageInput) V3() ActivityInput {
 	var protoToolResults []*reliantv1.ToolResultMsg
 	for _, tr := range t.ToolResults {
 		protoToolResults = append(protoToolResults, &reliantv1.ToolResultMsg{
-			ToolCallId: tr.ToolCallID,
-			Name:       tr.Name,
-			Content:    tr.Content,
-			IsError:    tr.IsError,
+			ToolCallId:    tr.ToolCallID,
+			Name:          tr.Name,
+			Content:       tr.Content,
+			IsError:       tr.IsError,
+			AttachmentIds: tr.AttachmentIDs,
 		})
 	}
 

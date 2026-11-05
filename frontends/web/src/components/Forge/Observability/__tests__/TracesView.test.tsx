@@ -44,6 +44,54 @@ describe("trace list", () => {
     );
   });
 
+  it("shows who each trace served and where, and narrows to a user from the list or the box", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces" });
+    const [first] = await screen.findAllByTestId("obs-trace-row");
+    expect(first).toHaveTextContent("u_8812");
+    expect(first).toHaveTextContent(/Berlin/);
+    await user.click(within(first).getByTestId("obs-trace-user"));
+    expect(harness.current()).toMatchObject({ user: "u_8812" });
+    await waitFor(() =>
+      expect(listTraces).toHaveBeenLastCalledWith(expect.objectContaining({ userId: "u_8812" }), expect.objectContaining({ signal: expect.anything() }))
+    );
+    await user.click(screen.getByTestId("obs-traces-user-clear"));
+    expect(harness.current().user).toBeUndefined();
+    await user.type(screen.getByTestId("obs-traces-user"), "u_42{Enter}");
+    expect(harness.current()).toMatchObject({ user: "u_42" });
+  });
+
+  it("lists one browser session's traces, says so, and links back to it", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces", rsession: "sess-001003" });
+    const bar = await screen.findByTestId("obs-traces-session");
+    await waitFor(() =>
+      expect(listTraces).toHaveBeenLastCalledWith(expect.objectContaining({ sessionId: "sess-001003" }), expect.objectContaining({ signal: expect.anything() }))
+    );
+    await user.click(within(bar).getByTestId("obs-traces-session-open"));
+    expect(harness.current()).toMatchObject({ view: "sessions", session: "sess-001003" });
+  });
+
+  it.each([
+    ["user", { user: "u_8812" }, "can't filter traces by user"],
+    ["browser session", { rsession: "sess-001003" }, "can't filter traces by browser session"],
+  ])("never shows an older control plane's unfiltered traces as one %s's", async (_, search, copy) => {
+    const api = createFixtureApi();
+    const listTraces = api.listTraces;
+    // A control plane from before user_id/session_id: it ignores both fields, and fills neither.
+    api.listTraces = async (req, options) => {
+      const result = await listTraces({ ...req, userId: undefined, sessionId: undefined }, options);
+      return { ...result, traces: result.traces.map((t) => ({ ...t, userId: "", sessionId: "" })) };
+    };
+    renderPanel(api, { view: "traces", ...search });
+    expect(await screen.findByTestId("obs-error-filter-unsupported")).toHaveTextContent(copy);
+    expect(screen.queryAllByTestId("obs-trace-row")).toHaveLength(0);
+  });
+
   it("shows the root span's duration, and the whole trace's when work outlived it", async () => {
     renderPanel(createFixtureApi(), { view: "traces" });
     const [first] = await screen.findAllByTestId("obs-trace-row");
@@ -65,9 +113,61 @@ describe("trace list", () => {
     const user = userEvent.setup();
     const harness = renderPanel(createFixtureApi(), { view: "traces" });
     const [first] = await screen.findAllByTestId("obs-trace-row");
-    await user.click(within(first).getByRole("button"));
+    await user.click(within(first).getByRole("button", { name: /^Open trace/ }));
     expect(harness.current().trace).toBe(FIXTURE_TRACE_ID);
     expect(await screen.findByTestId("trace-detail")).toBeInTheDocument();
+  });
+});
+
+describe("trace title", () => {
+  // A fixed instant: the fixtures never depend on the wall clock.
+  const NOW = Date.parse("2026-10-27T21:30:00Z");
+  const browserFetch = (traceId: string, now: number) => {
+    const base = fixtureTrace(traceId, now);
+    const root = base.spans[0]!;
+    return {
+      ...base,
+      spans: [
+        {
+          ...root,
+          spanId: "w1",
+          parentSpanId: "",
+          name: "HTTP POST",
+          service: "reliant-web",
+          kind: "client",
+          attributes: { "http.method": "POST", "http.url": "https://api.reliantapi.com/reliant.v1.SettingsService/GetConfigHealth" },
+          resource: { "service.name": "reliant-web", "reliant.ingest.class": "browser", "process.runtime.name": "browser" },
+        },
+      ],
+    };
+  };
+
+  it("names a server-rooted trace Service.Method, keeping the raw name as its title", async () => {
+    renderPanel(createFixtureApi(), { view: "traces", trace: FIXTURE_TRACE_ID });
+    const title = await screen.findByTestId("trace-title");
+    expect(title).toHaveTextContent("api OrdersService.CreateOrder");
+    expect(title).toHaveAttribute("title", "orders.v1.OrdersService/CreateOrder");
+    expect(screen.queryByTestId("trace-browser-only")).not.toBeInTheDocument();
+  });
+
+  it("names a browser fetch by the RPC it called, and says its backend spans were sampled out", async () => {
+    const api = createFixtureApi();
+    vi.spyOn(api, "getTrace").mockImplementation(async (req) => browserFetch(req.traceId, NOW));
+    renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID });
+    expect(await screen.findByTestId("trace-title")).toHaveTextContent("reliant-web SettingsService.GetConfigHealth");
+    expect(screen.getByTestId("trace-browser-only")).toHaveTextContent(/Logs for this trace/);
+  });
+
+  it("names a browser-started trace by the server span it caused, from the browser", async () => {
+    const api = createFixtureApi();
+    vi.spyOn(api, "getTrace").mockImplementation(async (req) => {
+      const browser = browserFetch(req.traceId, NOW);
+      const server = { ...fixtureTrace(req.traceId, NOW).spans[0]!, spanId: "s1", parentSpanId: "w1", name: "reliant.v1.SettingsService/GetConfigHealth", service: "reliant-api-server", kind: "server" };
+      return { ...browser, spans: [...browser.spans, server] };
+    });
+    renderPanel(api, { view: "traces", trace: FIXTURE_TRACE_ID });
+    expect(await screen.findByTestId("trace-title")).toHaveTextContent("reliant-api-server SettingsService.GetConfigHealth from reliant-web");
+    expect(screen.queryByTestId("trace-browser-only")).not.toBeInTheDocument();
   });
 });
 
@@ -110,7 +210,7 @@ describe("trace waterfall", () => {
       await screen.findAllByTestId("obs-trace-row");
       arrived = true;
       now += 16_000;
-      await user.click(within(screen.getAllByTestId("obs-trace-row")[0]).getByRole("button"));
+      await user.click(within(screen.getAllByTestId("obs-trace-row")[0]).getByRole("button", { name: /^Open trace/ }));
       await waitFor(() => expect(within(screen.getByRole("region", { name: "Related traces" })).getByRole("button")).toBeInTheDocument());
       expect(getTrace).toHaveBeenCalledTimes(2);
       arrived = false;

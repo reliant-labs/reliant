@@ -72,6 +72,12 @@ func (r *terminalCreateRouter) SendDaemonCommand(_ context.Context, _ string, co
 	return r.createResponse, r.createErr
 }
 
+// SendDaemonCommandToDaemon answers a command pinned to a machine (every
+// terminal is pinned once its machine resolves) as SendDaemonCommand does.
+func (r *terminalCreateRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
 func (r *terminalCreateRouter) SubscribeTerminalOutput(context.Context, string, string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
 	return make(chan *toolexec.TerminalOutputEvent), func() {}, nil
 }
@@ -184,6 +190,11 @@ type fakeTerminalCheckouts struct {
 	// projectOwners maps a project to its owner; unlisted projects are the
 	// test user's.
 	projectOwners map[string]string
+	// projectPaths is each project's creation path (projects.path).
+	projectPaths map[string]string
+	// daemons are machine records by id; an unlisted id is an unnamed
+	// machine of the test user's.
+	daemons map[string]*db.Daemon
 }
 
 func (f fakeTerminalCheckouts) GetProject(_ context.Context, id string) (*db.Project, error) {
@@ -191,7 +202,14 @@ func (f fakeTerminalCheckouts) GetProject(_ context.Context, id string) (*db.Pro
 	if o, ok := f.projectOwners[id]; ok {
 		owner = o
 	}
-	return &db.Project{ID: id, UserID: owner}, nil
+	return &db.Project{ID: id, UserID: owner, Name: id, Path: f.projectPaths[id]}, nil
+}
+
+func (f fakeTerminalCheckouts) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
+	if d, ok := f.daemons[id]; ok {
+		return d, nil
+	}
+	return &db.Daemon{ID: id, UserID: terminalTestUserID}, nil
 }
 
 func (f fakeTerminalCheckouts) GetChat(_ context.Context, id string) (*db.Chat, error) {

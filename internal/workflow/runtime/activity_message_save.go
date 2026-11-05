@@ -10,6 +10,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/dbconn"
 	"github.com/reliant-labs/reliant/internal/logging"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -58,8 +59,10 @@ func (r *ActivityRegistry) SetMessageWriter(w MessageWriter) {
 
 // messageWriteBudget bounds how long the wrapper keeps retrying a failed
 // message write before failing the activity (and handing the retry to
-// Temporal). Short: the activity's result is already in hand, and a database
-// that stays down longer than this is Temporal's retry policy's problem.
+// Temporal). Short, for an error the database answered with. A database that
+// did not answer at all is waited out for far longer (dbOutageRideOut; see
+// writeMessageWithRetry): 15s was the whole budget on 2026-11-02, and a
+// 28-second restart outlasted it (reliant#2100).
 const messageWriteBudget = 15 * time.Second
 
 // messageWriteBackoff is the first retry delay; it doubles per attempt.
@@ -220,7 +223,7 @@ func (w *ActivityWrapper[I, O]) saveActivityMessage(
 	args := buildSaveMessageNode(saveInput).GetSaveMessageNode()
 
 	start := time.Now()
-	saveOutput, err := writeMessageWithRetry(ctx, w.messageWriteRetry, writer, rtx, args, idempotencyKey, info.Attempt)
+	saveOutput, err := writeMessageWithRetry(ctx, w.messageWriteRetry, w.dbOutage, writer, rtx, args, idempotencyKey, info.Attempt)
 	if err != nil {
 		return fmt.Errorf("save_message for %s: %w", stepID, err)
 	}
@@ -327,33 +330,67 @@ func resultForSave[O any](result O) interface{} {
 // writeMessageWithRetry writes through writer, retrying with doubling backoff
 // until retry.budget is spent. The last error is returned, never swallowed: a
 // message that could not be written must fail the activity.
+//
+// A database that is not answering (dbconn.Unavailable) is waited out for up
+// to outage.rideOut instead: the activity's result is already in hand, and
+// failing the activity would redo its work — for call_llm, a whole LLM turn —
+// only to hit the same outage. Every retry reuses idempotencyKey and attempt,
+// so a write that committed but lost its reply converges on its own row on the
+// next try rather than duplicating it.
 func writeMessageWithRetry(
 	ctx context.Context,
 	retry messageWriteRetry,
+	outage dbOutagePolicy,
 	writer MessageWriter,
 	rtx types.RuntimeContext,
 	args *reliantv1.SaveMessageNodeArgs,
 	idempotencyKey string,
 	attempt int32,
 ) (*reliantv1.SaveMessageOutput, error) {
-	deadline := time.Now().Add(retry.budget)
+	clock := outage.clock
+	deadline := clock.Now().Add(retry.budget)
 	backoff := retry.backoff
+	var outageSince time.Time
+	outageTries := 0
 	for try := 1; ; try++ {
 		out, err := writer.WriteMessage(ctx, rtx, args, idempotencyKey, attempt)
 		if err == nil {
+			if !outageSince.IsZero() {
+				logging.InfoContext(ctx, "[ActivityWrapper] Database answering again; message written",
+					"stepID", rtx.StepID, "try", try, "waited", clock.Now().Sub(outageSince).Round(time.Millisecond))
+			}
 			return out, nil
 		}
-		if ctx.Err() != nil || time.Now().Add(backoff).After(deadline) {
+		if ctx.Err() != nil {
 			return nil, fmt.Errorf("writing message (after %d tries): %w", try, err)
 		}
-		logging.WarnContext(ctx, "[ActivityWrapper] Message write failed, retrying",
-			"stepID", rtx.StepID, "try", try, "backoff", backoff, "error", err)
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("writing message (after %d tries): %w", try, err)
-		case <-time.After(backoff):
+
+		var wait time.Duration
+		if dbconn.Unavailable(err) {
+			now := clock.Now()
+			if outageSince.IsZero() {
+				outageSince = now
+				logging.WarnContext(ctx, "[ActivityWrapper] Database unavailable; waiting for it to write the message",
+					"stepID", rtx.StepID, "try", try, "waitUpTo", outage.rideOut, "error", err)
+			}
+			if now.Sub(outageSince) >= outage.rideOut {
+				return nil, fmt.Errorf("writing message (after %d tries, database unavailable for %s): %w",
+					try, now.Sub(outageSince).Round(time.Second), err)
+			}
+			outageTries++
+			wait = outage.backoff(outageTries)
+		} else {
+			if clock.Now().Add(backoff).After(deadline) {
+				return nil, fmt.Errorf("writing message (after %d tries): %w", try, err)
+			}
+			logging.WarnContext(ctx, "[ActivityWrapper] Message write failed, retrying",
+				"stepID", rtx.StepID, "try", try, "backoff", backoff, "error", err)
+			wait = backoff
+			backoff *= 2
 		}
-		backoff *= 2
+		if clock.Sleep(ctx, wait) != nil {
+			return nil, fmt.Errorf("writing message (after %d tries): %w", try, err)
+		}
 	}
 }
 

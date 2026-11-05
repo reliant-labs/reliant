@@ -1,0 +1,29 @@
+# Deliberately project-owned example: agent itself has no required string.
+name: review-request
+title: Review Request (fixture)
+apiVersion: "0.0.5"
+description: Mock-only required-input example; never executes a backend run.
+inputs:
+  repository:
+    type: string
+    required: true
+    example: reliant-labs/reliant
+    description: Repository to review
+  mode:
+    type: enum
+    ui: toolbar
+    enum: [manual, auto, plan]
+    default: plan
+  model:
+    type: model
+    default:
+      tags: [flagship]
+entry: [review]
+nodes:
+  - id: review
+    type: workflow
+    ref: builtin://agent
+    args:
+      mode: "{{inputs.mode}}"
+      model: "{{inputs.model}}"
+      system_prompt: "Review {{inputs.repository}}"

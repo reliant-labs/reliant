@@ -159,7 +159,7 @@ describe("Sidebar activity indicators", () => {
     renderSidebar();
     const needsInput = await screen.findByTestId("chat-needs-input-asking");
     expect(within(needsInput).getByRole("img", { name: "Needs your input · 2 agents still running" })).toBeInTheDocument();
-    expect(screen.getByTestId("chat-needs-input-running-asking")).toBeInTheDocument();
+    expect(screen.getByTestId("chat-needs-input-running-asking")).toHaveClass("animate-spin");
     // Needs-input is not unread: no unread dot on a chat that has none.
     expect(screen.queryByTestId("chat-unread-dot-asking")).not.toBeInTheDocument();
   });
@@ -192,7 +192,13 @@ describe("Sidebar activity indicators", () => {
     const failed = await screen.findByTestId("chat-activity-dot-failed");
     expect(within(failed).getByRole("img", { name: "Failed" })).toBeInTheDocument();
     expect(failed).toHaveTextContent("Failed");
-    expect(screen.getByTestId("chat-activity-dot-running")).toHaveTextContent("Running");
+    // Running is a small spinner, not a chip with a word in it.
+    const running = screen.getByTestId("chat-activity-dot-running");
+    expect(running).toHaveAccessibleName("Running");
+    expect(running).toHaveAttribute("data-tone", "running");
+    expect(running).toHaveClass("animate-spin");
+    expect(running.querySelector("title")).toHaveTextContent("Running");
+    expect(running.tagName.toLowerCase()).toBe("svg"); // the icon itself: no chip box around it
     // Green means success; no row, chip or dot here is one.
     for (const id of Object.keys(rows)) {
       const row = document.querySelector(`[data-chat-id="${id}"]`)!;

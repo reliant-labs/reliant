@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/gitutil"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"golang.org/x/sync/singleflight"
 )
 
 // mcpMgrPtr is the package-level MCP manager instance used by MCP runtime
@@ -515,6 +517,12 @@ type mcpEnsureLoadedResponse struct {
 	Errors        map[string]string `json:"errors,omitempty"`
 }
 
+// ensureLoadedFlights dedupes concurrent mcp.ensure_loaded by project path.
+var ensureLoadedFlights singleflight.Group
+
+// ensureLoadedMaxDuration bounds one shared load: the callers' own timeout.
+const ensureLoadedMaxDuration = 2 * time.Minute
+
 func handleMCPEnsureLoaded(ctx context.Context, payload []byte) ([]byte, error) {
 	mgr := mcpMgr()
 	if mgr == nil {
@@ -530,7 +538,25 @@ func handleMCPEnsureLoaded(ctx context.Context, payload []byte) ([]byte, error) 
 		return nil, fmt.Errorf("project_path is required")
 	}
 
-	result := mgr.EnsureProjectServersLoaded(ctx, req.ProjectPath)
+	// One load per project at a time. Every turn of every chat on this machine
+	// asks, and each load resolves the project's whole config and may spawn
+	// servers; on a busy machine concurrent loads of the same project piled up
+	// behind one another until none answered inside the caller's timeout.
+	// Later callers share the load already running.
+	ch := ensureLoadedFlights.DoChan(req.ProjectPath, func() (interface{}, error) {
+		// Detached from the first caller, who may give up before it ends,
+		// and bounded on its own.
+		loadCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ensureLoadedMaxDuration)
+		defer cancel()
+		return mgr.EnsureProjectServersLoaded(loadCtx, req.ProjectPath), nil
+	})
+	var result *mcp.ProjectServerLoadResult
+	select {
+	case res := <-ch:
+		result = res.Val.(*mcp.ProjectServerLoadResult)
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 
 	resp := mcpEnsureLoadedResponse{
 		LoadedServers: result.LoadedServers,

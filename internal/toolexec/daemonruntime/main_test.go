@@ -50,9 +50,9 @@ func TestMain(m *testing.M) {
 	// No test resolves, builds or runs a real pinned forge for the framework
 	// memory (forge_memory.go): every project is served by the embedded forge
 	// unless a test installs fakes (useFakePinnedForges).
-	pinnedForge = &forgepin.Source{Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
+	pinnedForge = forgepin.New(forgepin.Deps{Resolve: func(context.Context, string, string, io.Writer) (forgecli.PinnedForge, bool, error) {
 		return forgecli.PinnedForge{}, false, nil
-	}}
+	}})
 	os.Exit(runIsolated(m))
 }
 

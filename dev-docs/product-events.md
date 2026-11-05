@@ -80,6 +80,20 @@ stopped on 2026-10-24.)
 sub-agent, or a node of a parent graph) and false for one a user, trigger or API
 call started, so a panel counting runs filters `is_child != 'true'`.
 
+`session_start` is the API server's: the first authenticated request after a
+user was idle for 30 minutes (the auth interceptor's session tracker, in memory
+and per replica). `app_first_session` rides on it: the first `session_start` of a
+user EVER, recorded durably in `user_app_sessions` (an `INSERT ... ON CONFLICT DO
+NOTHING` that wins), so it fires exactly once per user across replicas and
+restarts. It tells "signed up but never opened the app" (a control-plane
+`user_signed_up` with no `app_first_session`) from "opened it but did not
+onboard". Any authenticated client counts: the web app, the desktop app, or the
+reliant CLI; a claimable deploy's anonymous account never reaches this API. Like
+every backend event it honours the user's analytics setting, which a new user
+cannot have turned off before their first request. Users who had a project or a
+chat when the table was created were backfilled, so their next visit is not a
+first session.
+
 `page_visited` is the web's: one per navigation, from the router root
 (`components/PageVisitTracker.tsx`). `page_name` is the matched route template
 (`/project/$projectId`), never the URL, so ids, query strings and hashes (a claim
@@ -95,6 +109,17 @@ renderer (it owns consent and the telemetry pipeline) with `install_id`,
 install record in `userData/install.json` and marks the launch reported only
 after the renderer says the event went out, so a first launch made offline or
 before consent is sent on a later launch, dated by `installed_at`.
+
+`user_identified` is the forge web runtime's, once per user per browser, at the
+first `setTelemetryUser`: it carries `visitor_id` and the captured `utm_*`, and it
+is the only join from a landing visitor (`Client = 'landing'`) to a user. The
+landing site hands the visitor over as `?rid=<visitor id>&utm_*` on links to the
+app. This app starts telemetry only after sign-in, by which time the router and the
+sign-in have replaced that URL, so `lib/attributionBoot.ts` holds the handoff at
+boot (localStorage `reliant.landing_attribution`, 7 days, until telemetry starts;
+`lib/landingAttribution.ts`) and `initTelemetry` gives it to the runtime
+(`enableAttribution({search})`), only with analytics consent.
+`lib/__tests__/landingAttributionHandoff.test.ts` pins it through the real runtime.
 
 ## Who a failure belongs to
 
@@ -144,6 +169,22 @@ Web events (`otel_traces`): `SpanName LIKE 'product.%'`, user in
 `SpanAttributes['rum.sessionId']`. A backend event logged during a request
 carries that request's `TraceId`, which joins it to the browser span (and so
 the browser session) that made the call.
+
+### Who and where (every browser span, not only product events)
+
+Collected with **Crash and Error Reporting**, not analytics, and stopped with it:
+
+| attribute | on | where it comes from |
+| --- | --- | --- |
+| `userId` | every browser span | the page (`setTelemetryUserId`): display only, never trusted for access |
+| `user.id` | the backend's server span | the AUTHENTICATED caller, bound by reliant's own auth (`telemetry.BindUser`, through `interceptors.RequestScope`) on both server spans. forge's `observe.IdentitySpanInterceptor` is in the chain too, but it reads forge claims, which reliant's auth does not set, so it adds nothing here |
+| `session.id` | browser fetch/XHR spans; the backend's server span | the RUM session, sent by forge-web-runtime as W3C baggage on every Connect call; shape-checked, never propagated further. The pinned forge reads it onto the server span (`observe.RequestSpanInterceptor`). **Pending:** the installed `@reliantlabs/forge-web-runtime` (0.12) does not send it yet, so until a release that does is installed, only browser spans name the session, and a session's traces are its browser-started ones |
+| `geo.country.iso_code`, `geo.region.name`, `geo.locality.name` | browser resource | derived at ingest by control-plane's workspace-proxy from the request's IP (DB-IP City Lite, CC BY 4.0, local); the page's own values are deleted |
+| `client.address` | browser resource | **not collected.** One proxy flag (`PROXY_OTEL_INGEST_FORWARD_CLIENT_IP`) would keep it; turning it on requires updating `docs/help/privacy.mdx` first |
+
+Never an email, and never on a metric: these are row attributes only, so no
+series is keyed by a person or a place. Design and the GeoIP refresh:
+control-plane `docs/observability/geoip.md`.
 
 ## Claim funnel (the `/claim` page)
 

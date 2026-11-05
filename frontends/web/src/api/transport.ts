@@ -64,6 +64,7 @@ import { upgradeInterceptor } from "./upgradeInterceptor";
 import { orgInterceptor } from "./orgInterceptor";
 import { machineWakeInterceptor } from "./machineWakeInterceptor";
 import { createDeadlineInterceptor } from "./rpcDeadline";
+import { isReadSlotProcedure } from "../services/controlPlane/observability/readSlots";
 import { classifyRpcFailure } from "./rpcErrorPolicy";
 import { noteVersionSkew } from "./versionSkew";
 import { pageActivity } from "../lib/pageActivity";
@@ -257,10 +258,23 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
   "controlplane.v1.DeployService/ListEnvironments": 30_000,
 };
 
+/**
+ * What a console ClickHouse read (readSlots.ts) waits for. The server lets
+ * one run up to the gateway's 15s (the prod route has no timeout policy, so
+ * Envoy's default ends it at 15.0s), and the 10s default threw away reads
+ * that were about to answer: on 2026-11-03 the Overview's ListWorkloads was
+ * cut at 10.0s while admin-server finished in 9.4-11.0s, so Services, Jobs
+ * and "Needs attention" never loaded. Just under the gateway, so a read that
+ * cannot answer in time ends here, as a timeout the page explains and does not
+ * retry, rather than as a dropped connection that is retried once.
+ */
+export const OBS_READ_TIMEOUT_MS = 14_000;
+
 /** The client-side budget for one RPC. Exported for the transport tests. */
 export function timeoutForProcedure(serviceTypeName: string, methodName: string): number {
   return (
     PROCEDURE_TIMEOUTS[`${serviceTypeName}/${methodName}`] ??
+    (isReadSlotProcedure(serviceTypeName, methodName) ? OBS_READ_TIMEOUT_MS : undefined) ??
     LONG_TIMEOUT_METHODS[methodName] ??
     DEFAULT_GRPC_TIMEOUT_MS
   );
@@ -455,7 +469,26 @@ const RECOVERY_REUSE_MS = 5_000;
 type RecoveryOutcome =
   | { kind: "refreshed"; token: string }
   | { kind: "signed-out" }
-  | { kind: "no-session" };
+  | { kind: "no-session" }
+  | { kind: "kept" };
+
+// The messages with which a handler that serves people only refuses a caller
+// that authenticated without a person behind it, such as an API key: the
+// credential was accepted, this one RPC just has no user to act for. This is
+// an allowlist on purpose. A 401 with any other message — a rejected or
+// revoked key ("invalid or expired token", "missing authorization token",
+// "this Reliant credential is no longer valid", another backend's wording) —
+// fails closed and signs the key out, so a dead key is never kept.
+const MACHINE_CREDENTIAL_REFUSED =
+  /^\s*(\[unauthenticated\]\s*)?(no user ID in context|user ID not found in context|no authenticated user|user not authenticated)\s*$/i;
+
+/**
+ * Whether a 401 says only that this RPC needs a person, not that the presented
+ * credential was rejected.
+ */
+export function refusesMachineCredential(error: ConnectError): boolean {
+  return MACHINE_CREDENTIAL_REFUSED.test(error.rawMessage);
+}
 
 interface Recovery {
   rejectedToken: string;
@@ -523,6 +556,19 @@ async function runRecovery(
       method: req.method.name,
     });
     return { kind: "refreshed", token: refreshed };
+  }
+
+  // An API key is valid until the backend says otherwise. A person-only RPC
+  // refusing it (GetCurrentUser, billing) is that call's failure, not the
+  // key's, and signing out over it threw an agent's or a self-hoster's key
+  // session out of the app whenever a page asked who "me" is (#1831).
+  if (provider.isApiKey?.() && refusesMachineCredential(error)) {
+    logger.warn("[gRPC Client] 401 for an API key that the backend did not reject; staying signed in", {
+      service: req.service.typeName,
+      method: req.method.name,
+      message: error.message,
+    });
+    return { kind: "kept" };
   }
 
   logger.warn(

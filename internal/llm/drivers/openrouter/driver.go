@@ -15,6 +15,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -324,31 +325,16 @@ func (c *Client) convertMessagesForGemini(prompts []string, messages []message.M
 
 		case message.Tool:
 			// Each tool result becomes a separate message in OpenAI format
-			for _, toolResult := range msg.ToolResults() {
-				toolMsg := map[string]interface{}{
+			toolResults := msg.ToolResults()
+			for _, toolResult := range toolResults {
+				result = append(result, map[string]interface{}{
 					"role":         "tool",
 					"tool_call_id": toolResult.ToolCallID,
 					"content":      toolResult.Content,
-				}
-				result = append(result, toolMsg)
-				if len(toolResult.BinaryParts) > 0 {
-					// OpenRouter Gemini uses OpenAI-format — inject binary parts as follow-up user message
-					content := []map[string]interface{}{
-						{"type": "text", "text": "Tool result attachments:"},
-					}
-					for _, bp := range toolResult.BinaryParts {
-						content = append(content, map[string]interface{}{
-							"type": "image_url",
-							"image_url": map[string]string{
-								"url": bp.String("openrouter"),
-							},
-						})
-					}
-					result = append(result, map[string]interface{}{
-						"role":    "user",
-						"content": content,
-					})
-				}
+				})
+			}
+			if attachments, ok := toolResultAttachmentsMessage(toolResults); ok {
+				result = append(result, attachments)
 			}
 		}
 	}
@@ -482,31 +468,16 @@ func (c *Client) convertMessagesWithCacheControl(prompts []string, messages []me
 
 		case message.Tool:
 			// Each tool result becomes a separate message in OpenAI format
-			for _, toolResult := range msg.ToolResults() {
-				toolMsg := map[string]interface{}{
+			toolResults := msg.ToolResults()
+			for _, toolResult := range toolResults {
+				result = append(result, map[string]interface{}{
 					"role":         "tool",
 					"tool_call_id": toolResult.ToolCallID,
 					"content":      toolResult.Content,
-				}
-				result = append(result, toolMsg)
-				if len(toolResult.BinaryParts) > 0 {
-					// OpenAI-format tool messages don't support images — inject as follow-up user message
-					content := []map[string]interface{}{
-						{"type": "text", "text": "Tool result attachments:"},
-					}
-					for _, bp := range toolResult.BinaryParts {
-						content = append(content, map[string]interface{}{
-							"type": "image_url",
-							"image_url": map[string]string{
-								"url": bp.String("openrouter"),
-							},
-						})
-					}
-					result = append(result, map[string]interface{}{
-						"role":    "user",
-						"content": content,
-					})
-				}
+				})
+			}
+			if attachments, ok := toolResultAttachmentsMessage(toolResults); ok {
+				result = append(result, attachments)
 			}
 		}
 	}
@@ -624,4 +595,45 @@ func (c *Client) ValidateKey(ctx context.Context) error {
 
 	_, err := validationClient.SendMessages(ctx, []string{}, testMessages, []tools.Tool{})
 	return err
+}
+
+// toolResultAttachmentsMessage carries the turn's tool-result media as ONE
+// user message after its tool messages: OpenAI-format tool messages hold text
+// only, and the tool messages answering one assistant turn must stay
+// contiguous. This used to emit a user message after each result, which put
+// it between two tool messages whenever a turn ran several tools.
+func toolResultAttachmentsMessage(results []message.ToolResult) (map[string]interface{}, bool) {
+	var content []map[string]interface{}
+	for _, toolResult := range results {
+		if len(toolResult.BinaryParts) == 0 {
+			continue
+		}
+		if len(content) == 0 {
+			content = append(content, map[string]interface{}{"type": "text", "text": "Tool result attachments:"})
+		}
+		content = append(content, map[string]interface{}{
+			"type": "text", "text": fmt.Sprintf("From tool call %s:", toolResult.ToolCallID),
+		})
+		for _, bp := range toolResult.BinaryParts {
+			if bp.MIMEType == "application/pdf" {
+				filename := filepath.Base(bp.Path)
+				if bp.Path == "" || filename == "." {
+					filename = "file.pdf"
+				}
+				content = append(content, map[string]interface{}{
+					"type": "file",
+					"file": map[string]string{"filename": filename, "file_data": bp.DataURL()},
+				})
+				continue
+			}
+			content = append(content, map[string]interface{}{
+				"type":      "image_url",
+				"image_url": map[string]string{"url": bp.DataURL()},
+			})
+		}
+	}
+	if len(content) == 0 {
+		return nil, false
+	}
+	return map[string]interface{}{"role": "user", "content": content}, true
 }

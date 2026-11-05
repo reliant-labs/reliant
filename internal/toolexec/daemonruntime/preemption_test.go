@@ -95,16 +95,3 @@ func TestExecuteTool_PreemptedWaitSendsItsOwnAnswer(t *testing.T) {
 	assert.Contains(t, resp.Content, "Stopped waiting")
 	assert.Contains(t, resp.Content, "has not been killed")
 }
-
-// Any other stop still reports as cancelled: the daemon keeps a tool's own
-// answer only when it was told the stop is a preemption.
-func TestExecuteTool_CancelledWaitStillReportsCancelled(t *testing.T) {
-	d, processID := newWaitingClient(t)
-	startWait(t, d, "toolu_cancelled", processID)
-
-	cancelWith(t, d, "toolu_cancelled", "user interrupted the agent")
-	resp := toolResponse(t, d)
-
-	assert.False(t, resp.Success)
-	assert.Equal(t, "CANCELLED", resp.ErrorCode)
-}

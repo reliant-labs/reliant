@@ -139,9 +139,21 @@ Telemetry goes to **our own telemetry store**: ClickStack (ClickHouse with OpenT
 | Toggle | Sent to | What's included |
 | --- | --- | --- |
 | **Analytics and Usage Data** | Our own telemetry store | Product-usage events such as message sent, model call completed (provider, model, token counts, latency, and whether it succeeded), project opened and page visited, tied to your account ID. Events from the app also carry its session ID. Events record what you did, not what you wrote: a "message sent" event records the message's length, not its text, and a "model call completed" event records counts, never the prompt or the reply. A "page visited" event records which screen you opened (for example, the settings page), not what is on it. |
-| **Crash and Error Reporting** | Our own telemetry store | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Error messages are cut to one short line with known credential formats redacted, and that short line can still contain a fragment of text. Request bodies and console output aren't sent. Stack traces from the desktop app's background process have your home folder and install location removed. In the web app and desktop window, this also covers page-load and request timings (without query strings). Our ClickStack recorder supports masked web replays, but replay is not enabled in the packaged desktop configuration. The desktop background process does not record session replays. |
+| **Crash and Error Reporting** | Our own telemetry store | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Reports from the web and desktop apps also carry your approximate location (see [Approximate location](#approximate-location)) and which browser, operating system and app version you used (see [Device and app version](#device-and-app-version)). Error messages are cut to one short line with known credential formats redacted, and that short line can still contain a fragment of text. Request bodies and console output aren't sent. Stack traces from the desktop app's background process have your home folder and install location removed. In the web app and desktop window, this also covers page-load and request timings (without query strings). Masked session replay records the web app and the desktop app's window: all of a new user's first five sessions (or first 15 minutes), then a 10% sample. All text and everything you type is masked. The desktop background process does not record session replays. |
 
 Crash reports contain error details and stack traces; we don't create or upload memory dumps.
+
+### Approximate location
+
+When the web or desktop app sends telemetry, our ingest derives an **approximate location** (country, region and city) from the IP address the request came from, and stores that location with your session, its error reports and its request timings. The lookup uses a copy of the [DB-IP IP to City Lite](https://db-ip.com/db/download/ip-to-city-lite) database that runs inside our own servers (licensed CC BY 4.0), so your address is never sent to a third party for the lookup. **The IP address itself is then discarded: it isn't forwarded to our telemetry store and isn't stored with your telemetry.** The location is only as accurate as IP geolocation (a VPN or a mobile network can place you elsewhere), and we use it to diagnose problems, such as an error that only affects one region, never to decide what you can access.
+
+Telemetry also links each session to the requests it made: the app sends its session ID with its requests to our servers, which record it, and your internal user ID, on their side of the request. That is how a request's trace links back to the session that made it.
+
+### Device and app version
+
+Telemetry from the web and desktop apps also records **which browser, operating system, device type and app version** it came from, so we can tie a problem to a browser or a release. Our ingest reads these from the request's User-Agent header, which every browser sends, and the client hints the browser sends with it, using the open-source [ua-parser](https://github.com/ua-parser) rules inside our own servers: your browser and its version (in the desktop app, its Electron and Chromium versions), your operating system and its version, and whether the device is a desktop, phone or tablet. The header itself is stored too, cut at 512 characters; in the desktop app it names the app's version, and on some phones it names the device model. The web app's version is the build that sent the telemetry. We don't use any of this to identify you, to track you across sites or to decide what you can access.
+
+Location, device and app version, and these links are part of crash and error reporting: turning **Crash and Error Reporting** off stops them with the rest of it. They are kept as long as the telemetry they belong to: 14 days with a session, 30 days with crash and error data.
 
 **Crash and Error Reporting**, not the analytics switch, controls whether browser telemetry starts. Turning it off mid-session stops it.
 
@@ -149,7 +161,7 @@ For deployment administrators, the renderer runtime configuration's `OTEL_ENDPOI
 
 Turning off analytics also stops the analytics events our servers record about your account. The switches don't cover:
 
-- **Server logs.** They record identifiers (such as user, chat and run IDs, and sometimes your email address), counts, durations, status codes and IP addresses, not the content of your prompts, chats, tool inputs or outputs, or files. File paths can appear in error logs for file operations. Server logs and metrics are kept for 30 days.
+- **Server logs.** They record identifiers (such as user, chat and run IDs, and sometimes your email address), counts, durations, status codes and IP addresses, not the content of your prompts, chats, tool inputs or outputs, or files. (Server logs are separate from browser telemetry, whose IP address is discarded as described in [Approximate location](#approximate-location).) File paths can appear in error logs for file operations. Server logs are kept for up to 30 days, depending on severity (3, 14 or 30 days), and metrics for 30 days.
 - **Server-side error reports**, which go to our own telemetry store with the same shortening and credential redaction.
 - **Billing usage records:** the model, token count and cost of each request, which we need to bill you. These cover Reliant AI. Usage on your own keys and logins is covered by [Model usage records](#model-usage-records).
 - **Model usage records:** the counts described under [Model usage records](#model-usage-records).
@@ -191,12 +203,14 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Cloud machine disks | Until you delete the machine, except as described in [Local daemon vs. cloud machine](#local-daemon-vs-cloud-machine) |
 | Hosted app databases | Until you delete them. **They are not backed up** |
 | Database backups | Nightly backups are kept for 7 days. Backups taken on demand, for example before maintenance, are deleted when they're no longer needed |
-| Server logs and metrics | 30 days |
+| Server logs | Up to 30 days, by severity (3, 14 or 30 days) |
+| Server metrics | 30 days |
+| Request traces in our telemetry store | 7 days |
 | Model usage records, per call | 90 days |
 | Model usage daily totals | Until you delete your account |
-| Analytics events | Up to 14 days |
+| Analytics events | Up to 90 days |
 | Crash and error data in our telemetry store | 30 days |
-| Web session replays in our telemetry store | 14 days |
+| Session replays (web app and desktop window) in our telemetry store | 14 days |
 | Crash and error data and session replays sent to Sentry (web app and desktop window) before we moved error reporting off it | According to Sentry's retention settings for our account |
 | Billing records, including refunds made at deletion | As long as tax and accounting law requires, typically 7 years |
 

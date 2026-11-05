@@ -8,7 +8,12 @@ type EventType string
 
 const (
 	EventSessionStart EventType = "session_start"
-	EventPageVisited  EventType = "page_visited"
+	// EventAppFirstSession is a user's first authenticated request to the API,
+	// ever: the web or desktop app (or the reliant CLI) opened by someone who
+	// signed up. It tells "signed up but never opened the app" from "opened it
+	// but did not onboard", which session_start (in-memory, per replica) cannot.
+	EventAppFirstSession EventType = "app_first_session"
+	EventPageVisited     EventType = "page_visited"
 
 	// Chat and Workflow events
 	EventMessageSent          EventType = "message_sent"

@@ -24,6 +24,7 @@ vi.mock("@/hooks/useDaemonStatus", () => ({
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
 
 import { OomKillBanner } from "../OomKillBanner";
+import { ComposerStatusSlot, StatusSlotItem } from "../ComposerStatusSlot";
 import { useGlobalUpdatesStore } from "@/store/globalUpdatesStore";
 
 const GiB = 2 ** 30;
@@ -73,5 +74,22 @@ describe("OomKillBanner: process kills from the heartbeat", () => {
 
     reportKills("d-1", 2, first + 30_000);
     expect(screen.getByTestId("oom-kill-banner-process")).toBeTruthy();
+  });
+
+  it("reports itself to the composer's status slot, and stops once dismissed", async () => {
+    reportKills("d-1", 1, Date.now() - 60_000);
+    render(
+      <ComposerStatusSlot
+        layout="compact"
+        upper={null}
+        approvals={null}
+        lower={<StatusSlotItem id="oom"><OomKillBanner /></StatusSlotItem>}
+      />,
+    );
+    const line = screen.getByTestId("status-slot-line-oom");
+    expect(line).toHaveTextContent("Machine ran out of memory");
+    await userEvent.click(line);
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByTestId("status-slot-line-oom")).toBeNull();
   });
 });

@@ -36,6 +36,7 @@ import { ObsAsOf, ObsError, ObsLoadingRows, OperatorBadge } from "./ObsStates";
 import { signalState, useSignalsIndex, type SignalState } from "./serviceSignals";
 import { SessionName } from "./Sessions/SessionName";
 import { rumScopeOf, rumSessionIdOf, sessionLink } from "./Sessions/sessionModel";
+import { isBrowserSpan, traceTitle } from "./traceTitle";
 import { TraceWaterfall } from "./waterfall/TraceWaterfall";
 import { traceExtent } from "./waterfall/traceTree";
 
@@ -58,6 +59,7 @@ export function TraceDetail({
   const { environments } = useObsAskContext();
   const spans = trace.data?.spans ?? [];
   const root = spans.find((span) => !span.parentSpanId) ?? spans[0];
+  const title = traceTitle(spans);
   const selected = spans.find((span) => span.spanId === spanId) ?? null;
   const extent = trace.data ? traceExtent(spans) : null;
   const exploreHref = useExploreHref();
@@ -122,9 +124,10 @@ export function TraceDetail({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {back}
-          <h3 className="truncate text-sm font-semibold text-ink">
-            <span className="text-ink-muted">{root?.service}</span>{" "}
-            <span className="font-mono">{root?.name}</span>
+          <h3 className="truncate text-sm font-semibold text-ink" title={title?.raw} data-testid="trace-title">
+            <span className="text-ink-muted">{title?.service}</span>{" "}
+            <span className="font-mono">{title?.operation}</span>
+            {title?.from && <span className="font-normal text-ink-muted"> from {title.from}</span>}
           </h3>
           {root && <OperatorBadge provenance={root} />}
         </div>
@@ -171,11 +174,19 @@ export function TraceDetail({
               data-testid="trace-session"
               title={`Browser session ${sessionId}`}
             >
-              <SessionName scope={rumScopeOf(scope)} sessionId={sessionId} />
+              <SessionName scope={rumScopeOf(scope)} sessionId={sessionId} replayPrefix />
             </Button>
           )}
         </div>
       </div>
+
+      {title && !title.from && spans.every(isBrowserSpan) && spans.some((span) => span.kind === "client") && (
+        <p role="status" data-testid="trace-browser-only" className="rounded-lg border border-border bg-surface-sunken px-3 py-2 text-xs text-ink-muted">
+          Only the browser&apos;s side of this request was kept. Browser spans are always stored, but the backend keeps a sample of
+          ordinary traces (errors, slow requests and ones that logged a warning are always kept), so the server&apos;s spans for
+          this one were dropped. Its log lines are not sampled: open <span className="text-ink">Logs for this trace</span>.
+        </p>
+      )}
 
       <section aria-label="Related traces" className="space-y-2 rounded-lg border border-border bg-surface-sunken p-3 text-xs">
         <h4 className="font-semibold text-ink">Related traces</h4>

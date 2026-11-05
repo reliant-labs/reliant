@@ -23,6 +23,7 @@ import { QUEUED_FOR_MACHINE_DETAIL } from "../../lib/daemon-wait";
 import { type QueuedAgentMessageView } from "../../hooks/chat-model";
 import { AgentMessageKind } from "../../gen/reliant/v1/chat_pb";
 import * as chatActions from "../../hooks/chat-actions";
+import { STATUS_SHEET_CARD_BODY, useStatusSlotCollapsed, useStatusSlotSummary } from "./ComposerStatusSlot";
 
 
 const AGE_TICK_MS = 1_000;
@@ -237,13 +238,18 @@ export function QueuedMessages({
   // exited) is marked by the reconciler's resolveOrphanedAgentMessages rather
   // than being silently resent from a stale client view.
 
+  // Collapsed into the composer's status slot this is "2 queued"; take-back
+  // and interrupt stay in the slot's sheet, which renders this strip in full.
+  useStatusSlotSummary(hasPending ? { label: `${pending.length} queued` } : null);
+  const inSheet = useStatusSlotCollapsed();
+
   // Nothing queued means nothing to say. An empty container here would be a
   // permanent gap above the composer.
   if (!hasPending) return null;
 
   return (
     <div
-      className="flex flex-col gap-1 pb-1.5"
+      className={cn("flex flex-col gap-1", inSheet ? STATUS_SHEET_CARD_BODY : "pb-1.5")}
       data-testid="queued-messages"
       aria-label="Messages queued for the running agent"
     >

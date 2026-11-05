@@ -545,9 +545,12 @@ type CreateDomainBindingRequest struct {
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	OrgId *string `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Add includeSubDomains to the hostname's Strict-Transport-Security
+	// (DomainBinding.hsts_include_subdomains). Off by default.
+	HstsIncludeSubdomains bool `protobuf:"varint,6,opt,name=hsts_include_subdomains,json=hstsIncludeSubdomains,proto3" json:"hsts_include_subdomains,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *CreateDomainBindingRequest) Reset() {
@@ -613,6 +616,13 @@ func (x *CreateDomainBindingRequest) GetOrgId() string {
 		return *x.OrgId
 	}
 	return ""
+}
+
+func (x *CreateDomainBindingRequest) GetHstsIncludeSubdomains() bool {
+	if x != nil {
+		return x.HstsIncludeSubdomains
+	}
+	return false
 }
 
 type CreateDomainBindingResponse struct {
@@ -892,14 +902,15 @@ const file_services_domain_v1_domain_proto_rawDesc = "" +
 	"\x06org_id\x18\x02 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
 	"\a_org_id\"G\n" +
 	"\x14VerifyDomainResponse\x12/\n" +
-	"\x06domain\x18\x01 \x01(\v2\x17.controlplane.v1.DomainR\x06domain\"\xc0\x01\n" +
+	"\x06domain\x18\x01 \x01(\v2\x17.controlplane.v1.DomainR\x06domain\"\xf8\x01\n" +
 	"\x1aCreateDomainBindingRequest\x12\x1b\n" +
 	"\tdomain_id\x18\x01 \x01(\tR\bdomainId\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x16\n" +
 	"\x06target\x18\x03 \x01(\tR\x06target\x12\x1f\n" +
 	"\vredirect_to\x18\x04 \x01(\tR\n" +
 	"redirectTo\x12\x1a\n" +
-	"\x06org_id\x18\x05 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\x06org_id\x18\x05 \x01(\tH\x00R\x05orgId\x88\x01\x01\x126\n" +
+	"\x17hsts_include_subdomains\x18\x06 \x01(\bR\x15hstsIncludeSubdomainsB\t\n" +
 	"\a_org_id\"W\n" +
 	"\x1bCreateDomainBindingResponse\x128\n" +
 	"\abinding\x18\x01 \x01(\v2\x1e.controlplane.v1.DomainBindingR\abinding\"\x7f\n" +

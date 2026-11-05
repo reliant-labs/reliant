@@ -318,6 +318,10 @@ func (r *RemoteClient) KillProcess(ctx context.Context, processID string) error 
 	return r.send(ctx, "exec.bg_kill", killProcessRequest{ProcessID: processID}, nil, timeoutExecBG)
 }
 
+func (r *RemoteClient) TouchProcesses(ctx context.Context, processIDs []string) error {
+	return r.send(ctx, "exec.bg_touch", TouchProcessesRequest{ProcessIDs: processIDs}, nil, timeoutExecBG)
+}
+
 func (r *RemoteClient) ListProcesses(ctx context.Context) ([]*ProcessInfo, error) {
 	var resp []*ProcessInfo
 	if err := r.send(ctx, "exec.bg_list", struct{}{}, &resp, timeoutExecBGList); err != nil {

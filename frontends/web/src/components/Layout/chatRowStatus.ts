@@ -6,7 +6,8 @@ import type { ChatListIndicators } from "../../lib/runStatus";
  * tooltip. Green is not one of them: green means a success, and a row is never
  * painted for one.
  *
- *   running    work in progress: a neutral chip with a live dot
+ *   running    work in progress: a small spinner, no chip and no word (the
+ *              label is its accessible name and hover title)
  *   attention  the user is needed (a question, an approval): a warning chip,
  *              and the only state that tints the row
  *   failed     the run stopped on an error: a destructive chip
@@ -36,8 +37,8 @@ export function chatRowChip({ needsInput, status }: Pick<ChatListIndicators, "ne
   }
 }
 
-export const CHAT_ROW_CHIP_CLASS: Record<ChatRowTone, string> = {
-  running: "border-border text-foreground/80",
+/** Chip colours. Running has none: it renders as a small spinner, not a chip. */
+export const CHAT_ROW_CHIP_CLASS: Record<Exclude<ChatRowTone, "running">, string> = {
   attention: "border-warning/40 bg-warning/10 text-warning-ink",
   failed: "border-destructive/40 bg-destructive/10 text-destructive-ink",
   neutral: "border-border text-muted-foreground",

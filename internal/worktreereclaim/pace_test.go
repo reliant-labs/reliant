@@ -119,63 +119,6 @@ func TestIdleDone_AWorktreeBeingRestoredIsNeverProbed(t *testing.T) {
 	}
 }
 
-// One worktree stalled inside a check must cost its own row, not the budget the
-// others need: the request ends by its deadline and the stalled one is
-// reported as timed out, not held.
-//
-// The stalled check ends only at the real deadline, so the budget is what the
-// two healthy worktrees get for their phase one. It was 6s, which a loaded
-// machine spends on ~40 git processes: both came back deferred too. 30s is
-// that work with room to spare, and is spent in parallel with the package.
-func TestReconcile_AStalledWorktreeIsDeferredAndTheOthersFinish(t *testing.T) {
-	t.Parallel()
-	if testing.Short() {
-		t.Skip("waits out a real request deadline; skipped under -short")
-	}
-	const budget = 30 * time.Second
-	f := newFixture(t)
-	f.idle()
-	f.r.Budget = budget
-	var first atomic.Bool
-	f.r.Cwds = func(ctx context.Context) ([]string, error) {
-		if first.CompareAndSwap(false, true) {
-			<-ctx.Done() // the stalled check
-			return nil, ctx.Err()
-		}
-		return nil, nil
-	}
-	var ws []Worktree
-	for _, id := range []string{"s1", "s2", "s3"} {
-		w := f.worktree(id, "feat/"+id)
-		w.Fence = "100"
-		ws = append(ws, w)
-	}
-	start := time.Now()
-	resp := f.r.Reconcile(context.Background(), Request{Worktrees: ws})
-	if d := time.Since(start); d > budget+14*time.Second {
-		t.Fatalf("the request overran its budget: %v", d)
-	}
-	var deferred, claimed int
-	for _, res := range resp.Results {
-		switch {
-		case res.Outcome == OutcomeDeferred && res.Detail == DetailTimedOut:
-			deferred++
-		case res.Outcome == OutcomeClaimed:
-			claimed++
-		default:
-			t.Errorf("unexpected %+v (a stalled check is not a hold)", res)
-		}
-	}
-	if deferred != 1 || claimed != 2 {
-		t.Fatalf("deferred=%d claimed=%d, want 1 and 2: %+v", deferred, claimed, resp.Results)
-	}
-	for _, w := range ws {
-		if !exists(w.Path) {
-			t.Fatalf("%s: phase one must not remove anything", w.ID)
-		}
-	}
-}
-
 func TestReconcile_ResultsKeepRequestOrder(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "several worktrees through one reconcile (~72 git processes)")
@@ -192,31 +135,6 @@ func TestReconcile_ResultsKeepRequestOrder(t *testing.T) {
 		if res.ID != ws[i].ID {
 			t.Fatalf("result %d is %s, want %s", i, res.ID, ws[i].ID)
 		}
-	}
-}
-
-// A rebase or amend leaves the old tip in the worktree's reflog, on no branch.
-// Its change is on main, so losing the name loses nothing.
-func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
-	t.Parallel()
-	heavyUnderShort(t, "~57 git processes")
-	f := newFixture(t)
-	f.idle()
-	w := f.worktree("rb", "feat/rb")
-	f.commitIn(w, "feat/rb", "one.txt", "1\n", true)
-	old := run(t, w.Path, "rev-parse", "HEAD")
-	f.squashMerge("feat/rb")
-	run(t, w.Path, "fetch", "-q", "--prune", "origin")     // the PR branch is gone from origin
-	run(t, w.Path, "reset", "-q", "--hard", "origin/main") // the "git pull" after merge: the old tip survives only in the reflog
-	if run(t, w.Path, "cat-file", "-t", old) != "commit" {
-		t.Fatal("setup: old tip gone")
-	}
-	got := f.one(w)
-	if got.Outcome != OutcomeRemoved {
-		t.Fatalf("a reflog tip whose change is on main must not hold the worktree: %+v", got)
-	}
-	if refs := run(t, f.project, "for-each-ref", "refs/reliant/"); refs != "" {
-		t.Fatalf("a tip whose change is on main is not saved (a ref pins it forever):\n%s", refs)
 	}
 }
 

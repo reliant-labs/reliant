@@ -24,6 +24,7 @@ import {
   stripChatMarker,
 } from "../lib/chatMarkers";
 import {
+  applyHistoricalErrors,
   applyLogSlice,
   applyToolCallStateUpdates,
   bySequenceNumber,
@@ -994,7 +995,9 @@ interface ChatStoreState {
 
   // Branch chat
   _navigateToBranchedChat: (newChat: Chat, worktreeId?: string) => void;
-  branchChat: (chatId: string, messageId: string) => Promise<void>;
+  // Return the created chat so route-owned surfaces can open it without
+  // coupling this store to browser paths or the router.
+  branchChat: (chatId: string, messageId: string) => Promise<Chat | undefined>;
   // "Continue without machine": a no-machine branch that carries the
   // conversation and leaves the original chat as it is. Navigates to it.
   branchChatWithoutMachine: (chatId: string, messageId: string) => Promise<Chat>;
@@ -1009,7 +1012,7 @@ interface ChatStoreState {
       filesCopied?: string[];
       copyFilesEnabled?: boolean;
     },
-  ) => Promise<void>;
+  ) => Promise<Chat | undefined>;
 
   // Connection management
   onConnectionRestored: () => void;
@@ -2174,6 +2177,27 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         loaded: older.length,
         reachedStart,
       });
+
+      // The page's own errors: the snapshot carries only the errors of its
+      // window, so an older error arrives with the history it belongs to and
+      // renders at its place in the timeline. Merged by id, never replacing a
+      // newer attempt the snapshot or the stream already delivered.
+      const pageErrors = (response.errors || []).flatMap((e): ErrorUpdate[] => {
+        try {
+          const data = JSON.parse(e.dataJson || "{}") as Omit<ErrorUpdate, "sequence_number">;
+          return [{ ...data, update_type: "error", sequence_number: Number(e.sequenceNumber) }];
+        } catch {
+          return [];
+        }
+      });
+      if (pageErrors.length > 0) {
+        set((s) => ({
+          errorEvents: {
+            ...s.errorEvents,
+            [chatId]: applyHistoricalErrors(s.errorEvents[chatId] || [], pageErrors),
+          },
+        }));
+      }
 
       return !reachedStart;
     } catch (error) {
@@ -3803,8 +3827,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // Select the new chat
       get().selectChat(newChat);
 
-      // Navigate to the branched chat
+      // Preserve desktop navigation; route-owned surfaces use the returned
+      // chat to update their URL after creation has succeeded.
       get()._navigateToBranchedChat(newChat);
+      return newChat;
     } catch (error) {
       // Extract error message from ConnectError or other error types
       const errorMessage =
@@ -3879,8 +3905,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // Select the new chat
       get().selectChat(newChat);
 
-      // Navigate to the branched chat
+      // Route-owned surfaces can navigate independently of creation errors.
       get()._navigateToBranchedChat(newChat, worktreeId);
+      return newChat;
     } catch (error) {
       logger.error("Failed to branch chat to worktree:", error);
       throw error;

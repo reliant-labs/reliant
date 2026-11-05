@@ -11,6 +11,7 @@ package chat
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
@@ -90,6 +91,7 @@ type Repository interface {
 	// The chat and user update logs.
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]db.ChatUpdate, error)
+	ListErrorUpdatesInRange(ctx context.Context, chatID string, from *time.Time, thread string, beforeSeq int64) ([]db.ChatUpdate, error)
 	GetLatestWorkflowNodeUpdates(ctx context.Context, chatID, workflowID string) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error)
 

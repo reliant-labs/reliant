@@ -10,7 +10,7 @@
  */
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { VirtuosoMockContext } from "react-virtuoso";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -24,8 +24,12 @@ vi.mock("@tanstack/react-router", () => ({
     <a {...props}>{children}</a>
   ),
   useNavigate: () => navigate,
+  useParams: () => routeParams,
   useRouterState: () => "/m/chats",
 }));
+
+// What the chats layout routes beside the list; empty on `/m/chats`.
+let routeParams: { chatId?: string } = {};
 
 // The list response: chats (each carrying its workspace) plus the project's
 // main workspace. No workspace read is consulted, so the cache holds none — a
@@ -164,6 +168,7 @@ beforeEach(() => {
   // the all-projects grouping is pinned in its own describe below.
   useWorkspaceStateStore.setState({ projectFilterId: "p1" });
   navigate.mockReset();
+  routeParams = {};
   archiveWorktree.mockReset();
   useChatListWithWorkspaces.mockReset();
 });
@@ -305,6 +310,37 @@ describe("MobileChatList", () => {
     expect(newChat).toHaveLength(1);
     expect(newChat[0]).toHaveAttribute("to", "/m/new");
     expect(screen.queryByRole("button", { name: /New chat in/ })).not.toBeInTheDocument();
+  });
+
+  it("puts search and new chat in the top bar, after the title", () => {
+    useChatListWithWorkspaces.mockReturnValue(listOf([chat({ id: "c1", title: "Main chat" })]));
+    renderList();
+
+    const header = screen.getByRole("banner");
+    const search = within(header).getByLabelText("Search chats");
+    const newChat = within(header).getByLabelText("New chat");
+    expect(search).toHaveAttribute("to", "/m/search");
+    expect(newChat).toHaveAttribute("to", "/m/new");
+    // `☰  Chats  🔍  ✎`: search leads, compose ends the bar.
+    expect(search.compareDocumentPosition(newChat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(header).getByRole("heading", { name: "Chats" })).toBeInTheDocument();
+    // 44px floor on both icon-only targets.
+    for (const target of [search, newChat]) {
+      expect(target.className).toContain("min-h-[44px]");
+      expect(target.className).toContain("min-w-[44px]");
+    }
+  });
+
+  it("marks the chat routed beside the list as current", () => {
+    routeParams = { chatId: "c2" };
+    useChatListWithWorkspaces.mockReturnValue(listOf([
+      chat({ id: "c1", title: "First chat" }),
+      chat({ id: "c2", title: "Second chat" }),
+    ]));
+    renderList();
+
+    expect(screen.getByText("Second chat").closest("a")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByText("First chat").closest("a")).not.toHaveAttribute("aria-current");
   });
 
   it("creates a workspace from the list and lands on the composer pointed at it", async () => {

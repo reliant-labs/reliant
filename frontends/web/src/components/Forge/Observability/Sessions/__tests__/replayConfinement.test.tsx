@@ -42,6 +42,10 @@ const SESSION: SessionSummary = {
   interactions: 0,
   errors: 0,
   hasReplay: true,
+  country: "",
+  region: "",
+  city: "",
+  clientAddress: "",
 };
 
 const ATTACKER = "https://attacker.example";

@@ -197,3 +197,20 @@ describe("ChatPresenter workflow viewer chrome across surfaces", () => {
     expect(setSettingMock).not.toHaveBeenCalled();
   });
 });
+
+describe("ChatPresenter header slot", () => {
+  it("renders the ChatHeader row by default", () => {
+    renderPresenter("desktop");
+    expect(screen.getByTestId("chat-header")).toBeInTheDocument();
+  });
+
+  it("renders no header row when the host owns the chrome (mobile top bar)", () => {
+    renderWithQuery(
+      <SurfaceProvider surface="mobile">
+        <ChatPresenter {...baseProps} hideHeader />
+      </SurfaceProvider>,
+    );
+    expect(screen.queryByTestId("chat-header")).not.toBeInTheDocument();
+    expect(screen.getByTestId("chat-input")).toBeInTheDocument();
+  });
+});

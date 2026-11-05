@@ -36,6 +36,7 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { SurfaceProvider } from "../../lib/surfaceContext";
+import { ComposeModeProvider } from "../../lib/composeMode";
 import { useVisualViewport } from "../../hooks/useVisualViewport";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
@@ -79,6 +80,10 @@ export function MobileLayout({ children }: { children: ReactNode }) {
           // progress bar) sit outside it and inset themselves. Inline because
           // these are `env()` values Tailwind has no token for.
           paddingTop: "env(safe-area-inset-top)",
+          // Landscape notches occupy the sides, not the top. In-flow screens
+          // inherit this protection; portalled/fixed overlays own their insets.
+          paddingLeft: "env(safe-area-inset-left)",
+          paddingRight: "env(safe-area-inset-right)",
           // `fixed` rather than a transform: a transform would make the shell
           // the containing block of every fixed descendant.
           ...(keyboardOpen && viewport
@@ -95,8 +100,9 @@ export function MobileLayout({ children }: { children: ReactNode }) {
           // its tappable row stays above the indicator.
         }}
         data-surface="mobile"
+        data-compose-mode={keyboardOpen || undefined}
       >
-        {children}
+        <ComposeModeProvider keyboardOpen={keyboardOpen}>{children}</ComposeModeProvider>
       </div>
     </SurfaceProvider>
   );

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
-import Tooltip from "../forge-ui/tooltip";
-import { X } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { RotateCw, X } from 'lucide-react';
+import { cn } from '../../lib/utils';
 import { FileIcon } from '../FileBrowser/FileIcon';
 import { ImagePreviewModal } from './ImagePreviewModal';
 import { useAttachmentStore } from '../../store/attachmentStore';
@@ -13,119 +13,127 @@ interface Attachment {
   url: string;
 }
 
-interface AttachmentPreviewProps {
-  attachments: Attachment[];
-  onRemove: (id: string) => void;
-  className?: string;
+const isImageMimeType = (mimeType: string): boolean => mimeType.startsWith('image/');
+
+/**
+ * One chip in the composer's chip row (design doc §5.3): a body that opens the
+ * thing the chip stands for, and a × that removes it. The × is the chip's
+ * full height on touch (44px), so it is never a 12px target beside the body.
+ */
+export function ComposerChip({
+  icon,
+  label,
+  onOpen,
+  openLabel,
+  onRemove,
+  removeLabel,
+  tone = 'default',
+  children,
+}: {
+  icon?: ReactNode;
+  label: ReactNode;
+  /** Tap on the body. Absent: the body is plain text. */
+  onOpen?: () => void;
+  openLabel?: string;
+  /** The ×. Absent: the chip cannot be removed from here. */
+  onRemove?: () => void;
+  removeLabel?: string;
+  tone?: 'default' | 'warning';
+  /** Extra controls between the label and the × (an upload's Retry). */
+  children?: ReactNode;
+}) {
+  const body = (
+    <>
+      {icon && <span className="flex shrink-0 items-center">{icon}</span>}
+      <span className="min-w-0 truncate">{label}</span>
+    </>
+  );
+  return (
+    <div
+      className={cn(
+        'flex h-8 max-w-[16rem] shrink-0 items-center rounded-full border text-xs touch:h-11',
+        tone === 'warning'
+          ? 'border-warning/40 bg-warning/10 text-warning-ink'
+          : 'border-border bg-background text-foreground',
+      )}
+    >
+      {onOpen ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen();
+          }}
+          aria-label={openLabel}
+          className="flex h-full min-w-0 items-center gap-1.5 rounded-full pl-2.5 pr-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {body}
+        </button>
+      ) : (
+        <span className="flex h-full min-w-0 items-center gap-1.5 pl-2.5 pr-1">{body}</span>
+      )}
+      {children}
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            onRemove();
+          }}
+          aria-label={removeLabel}
+          className="flex h-full w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:text-destructive-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:w-11"
+        >
+          <X className="h-3 w-3" aria-hidden />
+        </button>
+      ) : (
+        <span className="w-1.5" aria-hidden />
+      )}
+    </div>
+  );
 }
 
-const isImageMimeType = (mimeType: string): boolean => {
-  return mimeType.startsWith('image/');
-};
-
-export function AttachmentPreview({ attachments, onRemove, className = '' }: AttachmentPreviewProps) {
+/**
+ * The attachments on the next message, as chips. An image chip carries a
+ * thumbnail and opens the full preview on tap.
+ *
+ * Renders chips only — no wrapper — so they share the composer's single chip
+ * row with uploads, file references, the thread and the preset; with no
+ * attachments it renders nothing and takes no space.
+ */
+export function AttachmentPreview({ attachments, onRemove }: {
+  attachments: Attachment[];
+  onRemove: (id: string) => void;
+}) {
   const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const getBlobUrl = useAttachmentStore((state) => state.getBlobUrl);
-
-  // Detect touch device on mount
-  useEffect(() => {
-    const hasTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-    setIsTouchDevice(hasTouch);
-  }, []);
 
   if (attachments.length === 0) return null;
 
   return (
     <>
-      <div className={`flex flex-wrap gap-2 ${className}`}>
-        {attachments.map((attachment) => {
-          const isImage = isImageMimeType(attachment.mime_type);
-          const blobUrl = getBlobUrl(attachment.id);
-          const imageUrl = blobUrl || attachment.url;
-          
-          return isImage ? (
-            <div
-              key={attachment.id}
-              className="relative group rounded overflow-hidden transition-all duration-200"
-              style={{
-                border: '1px solid var(--chat-border)',
-                isolation: 'isolate',
-              }}
-            >
-              <img
-                src={imageUrl}
-                alt={attachment.filename}
-                className="h-20 w-20 object-cover cursor-pointer transition-opacity duration-200 hover:opacity-80"
-                onClick={() => setPreviewImage({ url: imageUrl, filename: attachment.filename })}
-                title={attachment.filename}
-              />
-              <Tooltip content="Remove attachment" side="top" delay={300} triggerClassName="inline-flex">
-<button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onRemove(attachment.id);
-                }}
-                className={`absolute top-0.5 right-0.5 p-1.5 rounded-full bg-black/60 hover:bg-black/80 transition-colors duration-100 ${
-                  isTouchDevice ? 'opacity-90' : 'opacity-0 group-hover:opacity-100'
-                }`}
-                style={{
-                  pointerEvents: 'auto',
-                }}
-                aria-label="Remove attachment"
-              >
-                <X className="w-3.5 h-3.5 text-white" strokeWidth={2.5} />
-              </button>
-</Tooltip>
-            </div>
-          ) : (
-            <div
-              key={attachment.id}
-              className="flex items-center gap-2 px-2 py-1 rounded text-xs transition-all duration-200 w-fit"
-              style={{
-                backgroundColor: 'var(--chat-button-bg)',
-                border: '1px solid var(--chat-border)',
-                color: 'var(--chat-input-text)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--chat-button-hover)';
-                e.currentTarget.style.borderColor = 'var(--chat-border-streaming)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'var(--chat-button-bg)';
-                e.currentTarget.style.borderColor = 'var(--chat-border)';
-              }}
-            >
-              <span className="flex-shrink-0"><FileIcon mimeType={attachment.mime_type} /></span>
-              <span className="whitespace-nowrap">{attachment.filename}</span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onRemove(attachment.id);
-                }}
-                className="flex-shrink-0 transition-opacity duration-200 hover:opacity-100"
-                style={{
-                  color: 'var(--chat-input-placeholder)',
-                  opacity: 0.8,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.color = 'var(--destructive)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.color = 'var(--chat-input-placeholder)';
-                }}
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          );
-        })}
-      </div>
-      
+      {attachments.map((attachment) => {
+        const isImage = isImageMimeType(attachment.mime_type);
+        const imageUrl = getBlobUrl(attachment.id) || attachment.url;
+        return (
+          <ComposerChip
+            key={attachment.id}
+            icon={
+              isImage ? (
+                <img src={imageUrl} alt="" className="h-5 w-5 rounded object-cover touch:h-7 touch:w-7" />
+              ) : (
+                <FileIcon mimeType={attachment.mime_type} />
+              )
+            }
+            label={attachment.filename}
+            onOpen={isImage ? () => setPreviewImage({ url: imageUrl, filename: attachment.filename }) : undefined}
+            openLabel={isImage ? `Preview ${attachment.filename}` : undefined}
+            onRemove={() => onRemove(attachment.id)}
+            removeLabel={`Remove ${attachment.filename}`}
+          />
+        );
+      })}
+
       {previewImage && (
         <ImagePreviewModal
           isOpen={true}
@@ -135,5 +143,39 @@ export function AttachmentPreview({ attachments, onRemove, className = '' }: Att
         />
       )}
     </>
+  );
+}
+
+/** A file still uploading, or one whose upload failed: progress, Retry, and × to cancel. */
+export function UploadChip({ name, failed, onRetry, onCancel }: {
+  name: string;
+  failed: boolean;
+  onRetry: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div role="status" className="contents">
+      <ComposerChip
+        tone={failed ? 'warning' : 'default'}
+        icon={failed ? undefined : <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />}
+        label={`${name} · ${failed ? 'Upload failed' : 'Uploading…'}`}
+        onRemove={onCancel}
+        removeLabel={`Cancel ${name}`}
+      >
+        {failed && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onRetry();
+            }}
+            aria-label={`Retry ${name}`}
+            className="flex h-full w-7 shrink-0 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:w-11"
+          >
+            <RotateCw className="h-3 w-3" aria-hidden />
+          </button>
+        )}
+      </ComposerChip>
+    </div>
   );
 }

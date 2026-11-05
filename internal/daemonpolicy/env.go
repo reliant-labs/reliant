@@ -15,7 +15,9 @@ import (
 )
 
 // inheritableEnvPrefixes and inheritableEnvVars name the environment a confined
-// caller's process may inherit from the daemon.
+// caller's process, or any `credentials: none` process, may inherit from the
+// daemon. A variable on the list whose value looks like a secret (looksSecret)
+// is still dropped: GOPROXY or HTTPS_PROXY with a password in the URL.
 //
 // The daemon's own environment is not a safe default to hand a connector. It
 // holds the user's git credential (GIT_TOKEN, which the daemon uses to
@@ -49,22 +51,65 @@ var inheritableEnvVars = map[string]bool{
 
 	// Locale and terminal. Purely presentational, and their absence produces
 	// mojibake and odd sorting in tool output.
-	"LANG":     true,
-	"LANGUAGE": true,
-	"TERM":     true,
-	"TZ":       true,
+	"LANG":      true,
+	"LANGUAGE":  true,
+	"TERM":      true,
+	"COLORTERM": true,
+	"NO_COLOR":  true,
+	"TZ":        true,
 
 	// Toolchain locations a workspace image sets up. These point at
 	// installations, not at credentials.
-	"GOPATH":      true,
-	"GOROOT":      true,
-	"GOMODCACHE":  true,
-	"GOCACHE":     true,
-	"CARGO_HOME":  true,
-	"RUSTUP_HOME": true,
-	"JAVA_HOME":   true,
-	"NVM_DIR":     true,
-	"PYENV_ROOT":  true,
+	"GOPATH":        true,
+	"GOROOT":        true,
+	"GOMODCACHE":    true,
+	"GOCACHE":       true,
+	"GOBIN":         true,
+	"GOFLAGS":       true,
+	"GOTOOLCHAIN":   true,
+	"GOPROXY":       true,
+	"GOPRIVATE":     true,
+	"GONOPROXY":     true,
+	"GONOSUMDB":     true,
+	"GOSUMDB":       true,
+	"GOMAXPROCS":    true,
+	"GOMEMLIMIT":    true,
+	"GOGC":          true,
+	"CGO_ENABLED":   true,
+	"CARGO_HOME":    true,
+	"RUSTUP_HOME":   true,
+	"JAVA_HOME":     true,
+	"NVM_DIR":       true,
+	"PYENV_ROOT":    true,
+	"NODE_OPTIONS":  true,
+	"NODE_PATH":     true,
+	"PNPM_HOME":     true,
+	"COREPACK_HOME": true,
+
+	// Per-user directories every XDG tool resolves its config and cache
+	// from. Paths, not contents.
+	"XDG_CONFIG_HOME": true,
+	"XDG_CACHE_HOME":  true,
+	"XDG_DATA_HOME":   true,
+	"XDG_STATE_HOME":  true,
+	"XDG_RUNTIME_DIR": true,
+
+	// Network settings: the shell shares the network, and behind a proxy
+	// nothing downloads without them. A proxy URL with a password in it is
+	// dropped by the value check.
+	"HTTP_PROXY":          true,
+	"HTTPS_PROXY":         true,
+	"NO_PROXY":            true,
+	"ALL_PROXY":           true,
+	"SSL_CERT_FILE":       true,
+	"SSL_CERT_DIR":        true,
+	"NODE_EXTRA_CA_CERTS": true,
+
+	// forge's heavy-slot pool, so a `task test` inside the shell queues on
+	// the machine's slots like every other one (forge/pkg/hostslot).
+	"FORGE_SLOTS_DIR":   true,
+	"FORGE_SLOT_HELD":   true,
+	"FORGE_HEAVY_SLOTS": true,
 
 	// Marks the process as machine-driven, which makes many tools drop
 	// interactive prompts and color codes.
@@ -104,14 +149,14 @@ const AgentShellEnv = "RELIANT_AGENT_SHELL"
 // Policy.checkExec), and it is not filtered again here.
 //
 // credentials is the request's `credentials` setting (ParseCredentials).
-// CredentialsNone strips every credential variable from the result, extra
-// included: see WithoutCredentials for what that does and does not cover.
+// CredentialsNone gives every caller, first-party included, the allowlisted
+// subset and strips every credential variable from extra: see
+// WithoutCredentials for what that does and does not cover.
 func ChildEnv(ctx context.Context, extra map[string]string, credentials string) []string {
-	env := childEnv(ctx, extra)
 	if credentials == CredentialsNone {
-		return WithoutCredentials(env)
+		return WithoutCredentials(os.Environ(), withAgentShellMarker(extra)) //nolint:forbidigo // filtered to the allowlist for a credentials-none child; not configuration
 	}
-	return env
+	return childEnv(ctx, extra)
 }
 
 func childEnv(ctx context.Context, extra map[string]string) []string {
@@ -126,11 +171,11 @@ func childEnv(ctx context.Context, extra map[string]string) []string {
 
 	filtered := make([]string, 0, len(base))
 	for _, kv := range base {
-		name, _, ok := strings.Cut(kv, "=")
+		name, value, ok := strings.Cut(kv, "=")
 		if !ok {
 			continue
 		}
-		if envInheritable(name) {
+		if envInheritable(name) && !looksSecret(name, value) {
 			filtered = append(filtered, kv)
 		}
 	}

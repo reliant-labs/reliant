@@ -41,7 +41,13 @@ export const FONT_SIZE_MAP: Record<string, string> = {
   xl: "16px",
 };
 
-/** Two steps up from the desktop map — see the module comment. */
+/**
+ * Two steps up from the desktop map — see the module comment.
+ *
+ * Transcript prose is sized against this map's default step (17px): the 16px
+ * mobile body in ChatMessage's MOBILE_PROSE_TYPE_CLASS is 16/17rem. Moving the
+ * default step here moves that body size with it.
+ */
 export const MOBILE_FONT_SIZE_MAP: Record<string, string> = {
   xs: "14px",
   sm: "15px",

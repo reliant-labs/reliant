@@ -13,8 +13,7 @@ import { useSurface } from "../../lib/surfaceContext";
 import { useVisualViewport } from "../../hooks/useVisualViewport";
 import { composerMaxHeight } from "./composerHeight";
 import { takeSwitchFocus } from "./composerSwitchFocus";
-import { CodeContextChip } from "./CodeContextChip";
-import type { CodeContext } from "./useCodeContexts";
+import { useCoarsePointer } from "./useCoarsePointer";
 import {
   SlashCommandMenu,
   type SlashCommand,
@@ -46,11 +45,11 @@ interface ChatTextAreaProps {
   onSend: () => void;
   onStop?: () => void;
   /**
-   * Called when Enter is pressed while streaming, instead of inserting a
-   * newline. Queues the message for the agent's next turn. Enter is always
+   * Called instead of `onSend` when the send key is pressed while streaming.
+   * Queues the message for the agent's next turn. The send key is always
    * handled deliberately while streaming -- if this is omitted, it falls
-   * back to `onStop` (matching the "streaming turns Enter/the send button
-   * into stop" behavior elsewhere) rather than inserting a newline or doing
+   * back to `onStop` (matching the "streaming turns the send button into
+   * stop" behavior elsewhere) rather than inserting a newline or doing
    * nothing.
    */
   onQueue?: () => void;
@@ -63,10 +62,6 @@ interface ChatTextAreaProps {
    * composers where a leading slash is ordinary text).
    */
   slashCommands?: SlashCommand[];
-  /** File references attached to this message, rendered as chips above the text. */
-  contexts?: CodeContext[];
-  /** Remove one of those references. */
-  onRemoveContext?: (id: string) => void;
 }
 
 // Example prompts that rotate randomly
@@ -142,8 +137,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
       placeholder,
       chatId,
       slashCommands,
-      contexts,
-      onRemoveContext,
     },
     ref,
   ) {
@@ -197,7 +190,12 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
       // already sized to fit it.
       el.style.height = "auto";
       el.style.maxHeight = `${maxHeight}px`;
-      el.style.height = `${Math.min(Math.max(el.scrollHeight, minHeight), maxHeight)}px`;
+      // Empty, the box is one line whatever the placeholder: Chromium counts a
+      // wrapped placeholder in scrollHeight, and a random example prompt that
+      // wrapped would grow the composer (and reflow the screen) with nothing
+      // typed. The placeholder itself is clipped to one line in CSS.
+      const contentHeight = el.value === "" ? minHeight : el.scrollHeight;
+      el.style.height = `${Math.min(Math.max(contentHeight, minHeight), maxHeight)}px`;
 
       const caretAtEnd =
         document.activeElement === el &&
@@ -225,6 +223,27 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
       [onChange],
     );
 
+    // What the send key does: send, queue into the running agent, or (with no
+    // mailbox to queue into, e.g. the workflow-builder composer) stop --
+    // matching what the action button already does once streaming starts.
+    const submit = useCallback(() => {
+      if (!isStreaming) {
+        onSend();
+      } else if (onQueue) {
+        onQueue();
+      } else if (onStop) {
+        onStop();
+      }
+    }, [isStreaming, onSend, onQueue, onStop]);
+
+    // Which key sends depends on the keyboard (design doc §5.3, D2). With a
+    // fine pointer -- a desktop keyboard -- Enter sends and Cmd+Enter inserts
+    // a newline. With a coarse pointer the on-screen keyboard's Return is the
+    // only way to break a line, and a stray tap on it must not send a
+    // half-typed prompt, so plain Enter falls through to the newline and only
+    // the action button or Cmd/Ctrl+Enter (an iPad's hardware keyboard) sends.
+    const coarsePointer = useCoarsePointer();
+
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
         // The slash menu gets first refusal: while it is open, Arrow/Enter/Escape
@@ -244,27 +263,29 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
         // not send the message.
         if (e.nativeEvent.isComposing) return;
 
-        if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
-          // Enter is always fully handled here -- it must never fall through
-          // to the textarea's default newline insertion. A keystroke must
-          // always produce a deliberate outcome: send, queue, or (when
-          // there's no mailbox to queue into, e.g. the workflow-builder
-          // composer) stop, matching what the send button already does once
-          // streaming starts.
+        if (e.key !== "Enter" || e.shiftKey) return; // Shift+Enter: the textarea's own newline.
+        const modified = e.metaKey || e.ctrlKey;
+
+        if (coarsePointer) {
+          // Plain Return: the textarea's newline. Cmd/Ctrl+Enter normally
+          // reaches the shortcut dispatcher first (capture phase), which routes
+          // it to the "composer-insert-newline" listener below; this branch is
+          // the path where no dispatcher claimed it.
+          if (!modified || e.defaultPrevented) return;
           e.preventDefault();
-          if (!isStreaming) {
-            onSend();
-          } else if (onQueue) {
-            onQueue();
-          } else if (onStop) {
-            onStop();
-          }
+          submit();
           return;
         }
 
-        // Shift+Enter falls through to the textarea's own newline handling.
+        // Fine pointer: Cmd+Enter belongs to the newline shortcut.
+        if (modified) return;
+        // Enter is fully handled here -- it must never fall through to the
+        // textarea's default newline insertion. A keystroke must always
+        // produce a deliberate outcome.
+        e.preventDefault();
+        submit();
       },
-      [isStreaming, onStop, onSend, onQueue],
+      [isStreaming, onStop, coarsePointer, submit],
     );
 
     // Focus request from elsewhere in the app (e.g. after attaching a file).
@@ -289,7 +310,9 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
       if (takeSwitchFocus(chatId)) focusAtEnd(el);
     }, [chatId, activeChatId, disabled]);
 
-    // Cmd+Enter inserts a newline while the composer has focus.
+    // Cmd+Enter inserts a newline while the composer has focus -- with a fine
+    // pointer. With a coarse one Return already inserts newlines, so the
+    // chord is the hardware keyboard's send key instead (see handleKeyDown).
     //
     // Registered as a shortcut in the `chat-input` context rather than a window
     // capture-phase listener: a listener that ran before the dispatcher and
@@ -301,6 +324,11 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
         // The dispatcher resolved `chat-input`, but that context covers the
         // whole composer subtree — confirm this textarea is the focused one.
         if (!el || document.activeElement !== el) return;
+
+        if (coarsePointer) {
+          submit();
+          return;
+        }
 
         const { selectionStart, selectionEnd } = el;
         const next =
@@ -318,7 +346,7 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
       window.addEventListener("composer-insert-newline", handleNewline);
       return () =>
         window.removeEventListener("composer-insert-newline", handleNewline);
-    }, [value, onChange]);
+    }, [value, onChange, coarsePointer, submit]);
 
     // Clear the composer before a slash command runs, so the "/whatever" text is
     // not left behind as a message the user never meant to send.
@@ -343,20 +371,6 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
 
     return (
       <>
-        {contexts && contexts.length > 0 && (
-          <div
-            className="flex flex-wrap gap-1.5 pb-2"
-            data-testid="chat-input-contexts"
-          >
-            {contexts.map((context) => (
-              <CodeContextChip
-                key={context.id}
-                context={context}
-                onRemove={() => onRemoveContext?.(context.id)}
-              />
-            ))}
-          </div>
-        )}
         <textarea
           aria-label="Message the agent"
           ref={textareaRef}
@@ -371,10 +385,17 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
           placeholder={placeholder || defaultPlaceholder}
           // text-base, not text-sm: this is the app's primary input, and it was
           // rendering a step below body text. It scales with the Appearance
-          // font-size preference like everything else. On touch the one-line
-          // box is padded to 44px: a tap just above or below the text line
-          // otherwise misses the field (the auto-resize counts the padding).
-          className="chat-composer w-full resize-none border-0 bg-transparent px-0 py-0 text-base chat-input outline-none disabled:cursor-not-allowed disabled:opacity-50 touch:min-h-[44px] touch:py-2.5"
+          // font-size preference like everything else. The one-line box is
+          // padded to the height of the controls beside it (32px, 44px on
+          // touch), so the text line sits level with ⊕ and send, and a tap
+          // just above or below the line still lands in the field (the
+          // auto-resize counts the padding). Touch padding is in px, not rem:
+          // with the default line height it lands just under the 44px floor,
+          // so min-height alone sets the one-line box at every Appearance
+          // step instead of the rem padding overshooting it. `block`: an
+          // inline textarea sits on a text baseline and its parent grows a
+          // descender gap under it (8px of dead composer height).
+          className="chat-composer block w-full resize-none border-0 bg-transparent px-0 py-1 text-base chat-input outline-none disabled:cursor-not-allowed disabled:opacity-50 touch:min-h-[44px] touch:py-[8px]"
           style={{
             color: "var(--chat-input-text)",
           }}

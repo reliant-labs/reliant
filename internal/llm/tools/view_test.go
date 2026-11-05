@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -267,6 +268,44 @@ func TestViewBinaryAndPDFDetection(t *testing.T) {
 		require.Len(t, resp.BinaryParts, 1)
 		assert.Equal(t, "image/png", resp.BinaryParts[0].MIMEType)
 		assert.Equal(t, []byte(dummyContent), resp.BinaryParts[0].Data)
+	})
+
+	t.Run("image addressed by a relative ../ path returns its bytes", func(t *testing.T) {
+		// The reported failure viewed ../../g3-logs/…/dashboard-end.png from a
+		// project root: the path resolves against the working directory, and
+		// the bytes come back whole.
+		sub := filepath.Join(tempDir, "a", "b")
+		require.NoError(t, os.MkdirAll(sub, 0o755))
+		png := append([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'}, bytes.Repeat([]byte{0xff, 0x00}, 120_000)...)
+		writeFile("shot.png", png)
+		resp, err := tool.Execute(newViewTestCtx(t, sub), ViewParams{FilePath: "../../shot.png"})
+		require.NoError(t, err)
+		assert.False(t, resp.IsError)
+		assert.Equal(t, ToolResponseTypeImage, resp.Type)
+		assert.Contains(t, resp.Content, "../../shot.png (image/png, 234.4KB)")
+		require.Len(t, resp.BinaryParts, 1)
+		assert.Equal(t, png, resp.BinaryParts[0].Data)
+		assert.Equal(t, filepath.Join(tempDir, "shot.png"), resp.BinaryParts[0].Path)
+	})
+
+	t.Run("image larger than a model accepts is refused with what to do", func(t *testing.T) {
+		path := writeFile("huge.png", make([]byte, MaxImageFileSize+1))
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.True(t, resp.IsError)
+		assert.Empty(t, resp.BinaryParts)
+		assert.Contains(t, resp.Content, "larger than the 3.8MB a model accepts")
+		assert.Contains(t, resp.Content, "Downscale")
+	})
+
+	t.Run("SVG reads as text, not as an image no provider accepts", func(t *testing.T) {
+		path := writeFile("logo.svg", []byte("<svg xmlns=\"http://www.w3.org/2000/svg\"><circle r=\"4\"/></svg>\n"))
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.False(t, resp.IsError)
+		assert.Equal(t, ToolResponseTypeText, resp.Type)
+		assert.Empty(t, resp.BinaryParts)
+		assert.Contains(t, resp.Content, "<circle r=\"4\"/>")
 	})
 
 	t.Run("TXT with binary content detected at runtime", func(t *testing.T) {

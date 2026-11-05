@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
+	"github.com/reliant-labs/reliant/internal/dbconn"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 )
 
@@ -270,6 +271,11 @@ func extractInfrastructureSummary(errLower string) string {
 
 	case strings.Contains(errLower, "driver: bad connection"):
 		return "Lost the database connection — retrying automatically"
+
+	// A restart, failover or maintenance window: the step waits for the
+	// database and carries on (db_outage.go).
+	case dbconn.UnavailableText(errLower):
+		return "The database is briefly unavailable — retrying automatically"
 	}
 
 	// Deliberately NOT handled here: "context deadline exceeded" and bare

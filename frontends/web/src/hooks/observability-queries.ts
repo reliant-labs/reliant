@@ -16,13 +16,13 @@ import { useEffect, useMemo } from "react";
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { hashKey, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
-import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";
-import { alertingRetry, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
+import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
+import { alertingRetry, FilterUnsupportedError, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
 import type {
   AddIssueCommentRequest,
   AssignIssueRequest,
@@ -50,6 +50,7 @@ import type {
   SearchLogsResult,
   Severity,
   TimeWindow,
+  TraceSummary,
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -124,18 +125,19 @@ export function useObsReadApi(): ObservabilityApi {
  * (pollRegistry.ts): a single timer per key however many panels watch it,
  * stopped while the quota is gone, a quarter as fast while it is tight, idle in
  * a hidden tab, and each poll marked `Forge-Poll` for the server. `false` or a
- * disabled query does not poll.
+ * disabled query does not poll. `quota: false` is for a read that does not
+ * spend the ClickHouse quota (a postgres panel): its polls ignore the quota.
  */
-function usePolled(queryKey: QueryKey, intervalMs: number | false, enabled = true) {
+function usePolled(queryKey: QueryKey, intervalMs: number | false, enabled = true, quota = true) {
   const client = useQueryClient();
   const { polls } = useObsQuota();
   const keyHash = hashKey(queryKey);
   useEffect(() => {
     if (!enabled || intervalMs === false) return;
-    return polls.subscribe(client, queryKey, intervalMs);
+    return polls.subscribe(client, queryKey, intervalMs, { quota });
     // The key is compared by hash: a new array with the same content is the same key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, polls, keyHash, intervalMs, enabled]);
+  }, [client, polls, keyHash, intervalMs, enabled, quota]);
 }
 
 interface PageParam {
@@ -233,9 +235,25 @@ export interface TraceFilters {
   errorsOnly: boolean;
   minDurationMs: number;
   groupBy?: string[];
+  /** Only traces of this user id. */
+  userId?: string;
+  /** Only traces of this browser session. */
+  sessionId?: string;
 }
 
 export const TRACE_PAGE_SIZE = 100;
+
+/**
+ * Refuse rows a control plane older than the user/session filters answered
+ * without them (it ignores the unknown fields). A server that applies a filter
+ * returns only traces with a span carrying the id, so every summary names one;
+ * an older one never fills either field, so rows with none are its signature.
+ */
+function assertTraceFiltersApplied(filters: TraceFilters, traces: TraceSummary[]) {
+  if (traces.length === 0) return;
+  if (filters.userId && traces.every((t) => !t.userId)) throw new FilterUnsupportedError("user", "traces");
+  if (filters.sessionId && traces.every((t) => !t.sessionId)) throw new FilterUnsupportedError("browser session", "traces");
+}
 
 export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
   const api = useObsReadApi();
@@ -251,9 +269,12 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
         errorsOnly: filters.errorsOnly,
         minDurationMs: filters.minDurationMs,
         groupBy: filters.groupBy,
+        userId: filters.userId,
+        sessionId: filters.sessionId,
         limit: TRACE_PAGE_SIZE,
         cursor: pageParam?.cursor,
       }, { signal });
+      assertTraceFiltersApplied(filters, result.traces);
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,
@@ -322,21 +343,56 @@ export function usePanelQuery(
   options: PanelQueryOptions = {}
 ) {
   const api = useObsReadApi();
+  // A postgres panel reads the environment's own database, not ClickHouse: the telemetry quota does not apply to it.
+  const databaseApi = useObservabilityApi();
   const queryKey = obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? "");
   const enabled = !!scope && panelRunsQuery(panel.kind) && (options.enabled ?? true);
   const query = useQuery({
     queryKey,
     queryFn: ({ signal }) => {
       const offset = options.offsetMs?.() ?? 0;
-      return api.queryPanel({ ...(scope as ObsScope), window: resolveWindow(range, Date.now() - offset), panel, services, stepSeconds: 0, groupBy }, { signal });
+      const window = resolveWindow(range, Date.now() - offset);
+      if (panel.kind === "postgres") return queryPostgresPanel(databaseApi, scope as ObsScope, window, panel, signal);
+      return api.queryPanel({ ...(scope as ObsScope), window, panel, services, stepSeconds: 0, groupBy }, { signal });
     },
     enabled,
     staleTime: 30_000,
     retry: obsRetry,
     retryDelay: obsRetryDelay,
   });
-  usePolled(queryKey, options.refetchInterval ?? false, enabled);
+  // Nor does the quota slow or stop a postgres panel's refresh.
+  usePolled(queryKey, options.refetchInterval ?? false, enabled, panel.kind !== "postgres");
   return query;
+}
+
+/**
+ * A postgres panel's read (AppDatabaseService.QueryDatabasePanel): one
+ * environment's database, so a scope over several environments, or none, is
+ * refused here with the reason, as the server would refuse it.
+ */
+function queryPostgresPanel(api: ObservabilityApi, scope: ObsScope, window: TimeWindow, panel: Panel, signal: AbortSignal) {
+  if (scope.envIds.length !== 1) {
+    throw new ConnectError("a postgres panel reads one environment's database: choose one environment", Code.InvalidArgument);
+  }
+  if (!panel.postgres) throw new ConnectError("the panel has no postgres query", Code.InvalidArgument);
+  return api.queryDatabasePanel({ environmentId: scope.envIds[0], window, query: panel.postgres, panelId: panel.id }, { signal });
+}
+
+/**
+ * The environment's databases a postgres panel may read, with the tables and
+ * columns its dashboard role may SELECT: the panel editor's schema browser.
+ * Postgres, not ClickHouse, so no quota guard.
+ */
+export function useDashboardDatabases(environmentId: string | null) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: ["observability", "dashboard-databases", environmentId ?? ""] as const,
+    queryFn: ({ signal }) => api.listDashboardDatabases(environmentId as string, { signal }),
+    enabled: !!environmentId,
+    staleTime: 60_000,
+    retry: obsRetry,
+    retryDelay: obsRetryDelay,
+  });
 }
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
@@ -697,6 +753,40 @@ export function useReleaseHealth(scope: DeliveryScope | null, promotionId: strin
   return query;
 }
 
+/**
+ * GetReleaseHealth for several environments' current promotions at once, by
+ * environment id: the Environments page's obs-check column. The same cache
+ * entries as useReleaseHealth, so a release's Health tab and this page share
+ * one read. Not polled: the page is a summary, and a release's own page polls.
+ */
+export function useReleaseHealths(
+  orgId: string | null,
+  projectId: string,
+  items: readonly { envId: string; promotionId: string }[],
+  windowMs: number
+): Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }> {
+  const api = useObsReadApi();
+  const results = useQueries({
+    queries: items.map(({ envId, promotionId }) => {
+      const scope: DeliveryScope = { orgId: orgId ?? "", projectId, envIds: [envId] };
+      return {
+        queryKey: [...deliveryKeys.all(scope), "health", promotionId, windowMs] as const,
+        queryFn: ({ signal }: { signal: AbortSignal }) => api.getReleaseHealth({ ...scope, promotionId, windowMs }, { signal }),
+        enabled: !!orgId && !!promotionId,
+        staleTime: 30_000,
+        retry: releaseHealthRetry,
+        retryDelay: obsRetryDelay,
+      };
+    }),
+  });
+  const byEnv = new Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }>();
+  items.forEach(({ envId }, index) => {
+    const result = results[index];
+    byEnv.set(envId, { data: result?.data, isLoading: !!result?.isLoading, error: result?.error ?? null });
+  });
+  return byEnv;
+}
+
 // ── Issues (IssuesService) ────────────────────────────────────────────────────
 
 export interface IssueFilters {
@@ -707,11 +797,22 @@ export interface IssueFilters {
   service?: string;
   /** Only the issues assigned to this user id (the server filters). */
   assignee?: string;
+  /** Only the issues with an event of this user id in the window (the server filters). */
+  userId?: string;
   sort: IssueSort;
   text: string;
 }
 
 export const ISSUE_PAGE_SIZE = 50;
+
+/**
+ * A user id no one has, which useIssues asks for to learn whether user_id is
+ * applied. User ids are the application's own strings, so no fixed value is
+ * reserved: each read draws a fresh random one (122 bits) nobody can hold.
+ */
+export function issueUserFilterProbe(): string {
+  return `reliant-console-filter-probe-${crypto.randomUUID()}`;
+}
 
 /**
  * One root for every issue read, so a triage (which can move an issue between
@@ -770,18 +871,28 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
     queryKey: issueKeys.list(scope, filters),
     queryFn: async ({ pageParam, signal }): Promise<IssueList & { window: TimeWindow }> => {
       const window = pageParam?.window ?? resolveWindow(filters.range);
-      const result = await api.listIssues({
+      const request = {
         ...(scope as IssueScope),
         services: filters.service ? [filters.service] : [],
         window,
         statuses: filters.statuses,
         platform: filters.platform,
         assignee: filters.assignee,
+        userId: filters.userId,
         sort: filters.sort,
         text: filters.text,
         pageSize: ISSUE_PAGE_SIZE,
         pageToken: pageParam?.cursor,
-      }, { signal });
+      };
+      // An issue row names no user, so whether the server applied user_id is
+      // asked, not inferred: the same first page for a user nobody is. A server
+      // that knows the filter answers it with nothing; one that ignores it
+      // answers with exactly the unfiltered rows the real read would get.
+      const [result, probe] = await Promise.all([
+        api.listIssues(request, { signal }),
+        filters.userId && !pageParam ? api.listIssues({ ...request, userId: issueUserFilterProbe(), pageSize: 1 }, { signal }) : null,
+      ]);
+      if (probe && probe.issues.length > 0) throw new FilterUnsupportedError("user", "issues");
       return { ...result, window };
     },
     initialPageParam: null as PageParam | null,

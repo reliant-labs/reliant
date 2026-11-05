@@ -22,7 +22,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { WhereBadge } from "../EnvBadges";
-import { EnvironmentTable } from "../Overview/EnvironmentTable";
+import { EnvironmentList } from "../Overview/EnvironmentList";
 import { DeployApproveStep } from "../Deploy/DeployApproveStep";
 import { TargetPanel } from "../Deploy/DeployPlanView";
 import { prodPlan } from "../Deploy/__tests__/fixtures";
@@ -42,7 +42,7 @@ import type { LiveEnv } from "@/services/forge/live";
  */
 function renderLiveRows(envs: LiveEnv[], statuses: Record<string, CloudEnvStatus> = {}) {
   return render(
-    <EnvironmentTable
+    <EnvironmentList
       rows={envs.map((env) => ({ env, status: statuses[env.id], statusLoading: false }))}
       onOpen={vi.fn()}
     />

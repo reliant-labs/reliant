@@ -18,12 +18,13 @@ import (
 
 func TestDefaultShare(t *testing.T) {
 	for _, tc := range []struct{ cpus, slots, want int }{
-		{32, 8, 8},
-		{4, 8, 2}, // never below two
-		{64, 4, 32},
-		{30, 8, 7}, // rounds down
+		{32, 8, 6},
+		{31, 8, 5}, // the 2026-11-03 machine: 8 x 5 = 40 CPUs, 1.3x
+		{4, 8, 2},  // never below two
+		{64, 4, 24},
+		{30, 8, 5}, // rounds down
 		{1, 1, 2},
-		{16, 0, 32}, // no slot count reads as one slot
+		{16, 0, 24}, // no slot count reads as one slot
 	} {
 		if got := DefaultShare(tc.cpus, tc.slots); got != tc.want {
 			t.Errorf("DefaultShare(%d CPUs, %d slots) = %d, want %d", tc.cpus, tc.slots, got, tc.want)

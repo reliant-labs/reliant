@@ -606,8 +606,8 @@ export const obsSearchShape = {
   assignee: z.string().optional().catch(undefined),
   session: z.string().optional().catch(undefined),
   t: z.number().int().nonnegative().optional().catch(undefined),
-  replay: z.boolean().optional().catch(undefined),
   user: z.string().optional().catch(undefined),
+  rsession: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional().catch(undefined),
   cursor: z.array(z.string()).optional().catch(undefined),
 };
 

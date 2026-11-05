@@ -101,15 +101,11 @@ test('waitForReady resolves false promptly when awaiting credentials — it does
   const { manager, writeState } = harness();
   writeState({ pid: DAEMON_PID, stream: DAEMON_STREAM_AWAITING_CREDENTIALS });
 
-  const start = Date.now();
+  // A hang to the startup timeout rejects ("failed to become ready"), so
+  // resolving false at all proves it settled early.
   const ready = await manager.waitForReady();
-  const elapsed = Date.now() - start;
 
   assert.equal(ready, false, 'awaiting-credentials must resolve false, not throw');
-  assert.ok(
-    elapsed < manager.startupTimeout,
-    `expected an early settle well under the ${manager.startupTimeout}ms startup timeout, took ${elapsed}ms`
-  );
 });
 
 test('waitForReady still rejects on timeout for a daemon that is NOT awaiting credentials (real crash/stall path preserved)', async () => {
