@@ -30,6 +30,19 @@ interface OnboardingSpotlightProps {
   tooltipPadding?: number;
   /** Spotlight configuration for padding and border-radius */
   spotlightConfig?: SpotlightConfig;
+  /**
+   * Enter / → advance and ← goes back. Off while a step waits on a required
+   * action: the user is typing into the app, and Enter must reach it.
+   */
+  keyboardNav?: boolean;
+  /**
+   * Block pointer clicks outside the target (a required action is pending).
+   * Only the dimmed area blocks: the target stays clickable, the nav bar sits
+   * above, and keyboard focus and screen readers are untouched. Nothing is
+   * blocked while the target can't be found, so a missing anchor never traps
+   * the user.
+   */
+  blockOutside?: boolean;
 }
 
 interface Position {
@@ -160,6 +173,8 @@ export function OnboardingSpotlight({
   autoSkipIfMissing = false,
   tooltipPadding = 16,
   spotlightConfig,
+  keyboardNav = true,
+  blockOutside = false,
 }: OnboardingSpotlightProps) {
   // stepNumber/totalSteps are accepted for interface compatibility — the
   // OnboardingNavBar renders progress. onSkipAll is accepted but unused:
@@ -180,6 +195,8 @@ export function OnboardingSpotlight({
   const [isVisible, setIsVisible] = useState(true);
   // Highlight fades in separately from tooltip
   const [highlightVisible, setHighlightVisible] = useState(false);
+  // A blocked click pulses the highlight, pointing at what to click instead.
+  const [nudge, setNudge] = useState(0);
   // updatePosition also runs from resize/scroll listeners, so its highlight
   // fade-in timer is not owned by any one effect: tie it to the component.
   const scheduleTimeout = useUnmountSafeTimeout();
@@ -326,6 +343,7 @@ export function OnboardingSpotlight({
   // ESC intentionally does nothing — it must not end the tour. The user can
   // skip explicitly via the "Skip tour" button in OnboardingNavBar.
   useEffect(() => {
+    if (!keyboardNav) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Enter" || e.key === "ArrowRight") {
         e.stopPropagation();
@@ -341,7 +359,7 @@ export function OnboardingSpotlight({
     // Use capture phase to intercept before other handlers
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [onNext, onBack]);
+  }, [onNext, onBack, keyboardNav]);
 
   // Calculate the spotlight cutout dimensions (element + padding)
   // For elements at viewport edges, use exact bounds with no padding
@@ -418,12 +436,41 @@ export function OnboardingSpotlight({
        * to app on /workflow). */}
       <div className="absolute inset-0 pointer-events-none" />
 
+      {/* Click blockers — only while a required action is pending (see
+       * blockOutside), and only around a target that was found. Four panes
+       * around the cutout, so the target itself stays clickable. */}
+      {blockOutside && cutoutRect && (
+        <>
+          {[
+            { top: 0, left: 0, width: "100%", height: cutoutRect.y },
+            { top: cutoutRect.y + cutoutRect.height, left: 0, width: "100%", bottom: 0 },
+            { top: cutoutRect.y, left: 0, width: cutoutRect.x, height: cutoutRect.height },
+            { top: cutoutRect.y, left: cutoutRect.x + cutoutRect.width, right: 0, height: cutoutRect.height },
+          ].map((style, i) => (
+            <div
+              key={i}
+              aria-hidden="true"
+              data-testid="onboarding-click-blocker"
+              className="absolute pointer-events-auto"
+              style={style}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setNudge((n) => n + 1);
+              }}
+            />
+          ))}
+        </>
+      )}
+
       {/* Highlight border around target - uses inset box-shadow to avoid overflow issues */}
       {cutoutRect && (
         <div
+          key={nudge}
           className={cn(
             "absolute pointer-events-none transition-opacity duration-300",
-            highlightVisible ? "opacity-100" : "opacity-0"
+            highlightVisible ? "opacity-100" : "opacity-0",
+            nudge > 0 && "animate-pulse"
           )}
           style={{
             top: cutoutRect.y,
@@ -440,6 +487,8 @@ export function OnboardingSpotlight({
       {/* Tooltip content - shows and animates from last position */}
       <div
         ref={tooltipRef}
+        role="status"
+        aria-live="polite"
         className={cn(
           "absolute rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl",
           "transition-all duration-500 ease-out",

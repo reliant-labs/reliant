@@ -1,18 +1,15 @@
 /**
- * Integration tests for OnboardingWizard's URL-driven render gating.
+ * The journey engine end to end, through the Reliant wizard and a real
+ * (memory) router: what `?tour=` renders, the picker and its preselection,
+ * a page-bound step's "Open <page>" card, an action-gated step (advanceOn),
+ * Skip step / End tour, the end card (Finish, Try the other journey) and the
+ * outro's onComplete hook, and the retired tour's ids.
  *
- * Contract:
- *   - Wizard renders iff ?tour=<valid-step-id> is present in the URL.
- *   - With no tour param the wizard returns null (no spotlight, no modal).
- *   - When the current pathname doesn't match a spotlight step's expected
- *     page, the wizard renders an "Open <page>" modal with an action button
- *     that navigates to the correct page (carrying the tour param).
- *   - When the pathname matches, the spotlight branch is rendered.
- *
- * Several tests rely on the impl agent's refactor; they will fail until the
- * wizard reads tour state from the URL (instead of `useTourStore`).
+ * Runs against the shipped placeholder journeys:
+ *   workflows: wf-open (click/route, autoAdvance) → wf-library (route-bound)
+ *              → wf-outro-layout (Reliant-only outro, collapses panels)
+ *   forge:     fg-open-apps (click) → fg-instrumented (card)
  */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -45,7 +42,19 @@ const tourStoreState = vi.hoisted(() => ({
     saveTourState: vi.fn(async () => undefined),
     detectProjectCode: vi.fn(async () => undefined),
     markTourCompleted: vi.fn(async () => undefined),
+    markRemainingSkipped: vi.fn(),
     resetTourProgress: vi.fn(async () => undefined),
+    setLastJourney: vi.fn(async () => undefined),
+    setResumeStep: vi.fn(async () => undefined),
+    setJourneyContext: vi.fn(),
+    markJourneyShown: vi.fn(async () => undefined),
+    resumeStep: null as string | null,
+    contexts: {},
+    lastJourney: null,
+    journeys: {
+      workflows: { version: 1, current: null, completedOlder: false },
+      forge: { version: 1, current: null, completedOlder: false },
+    },
   },
 }));
 
@@ -188,12 +197,21 @@ vi.mock("../OnboardingChecklist", () => ({
   OnboardingChecklist: () => null,
 }));
 
+// The workflows outro collapses the workspace panels on completion; observe
+// it rather than drive the real panel stores.
+vi.mock("../journeys/layoutActions", () => ({
+  layoutActions: { collapseAll: vi.fn(), showSidebar: vi.fn(), hideSidebar: vi.fn() },
+}));
+
 // Imported statically, after the mocks (vitest hoists vi.mock above it): a
 // dynamic import inside the first test made that test pay for loading the
 // wizard's whole module graph, and on a loaded machine it hit the 10s test
 // timeout.
-import { OnboardingWizard } from "../OnboardingWizard";
+import { OnboardingWizard, __resetJourneyReshow } from "../OnboardingWizard";
 import { trackEvent } from "../../../lib/analytics";
+import { holdLandingJourney } from "../../../lib/landingAttribution";
+import { layoutActions } from "../journeys/layoutActions";
+import { __resetJourneyAnalytics } from "../journeyAnalytics";
 
 // ─── Test router ─────────────────────────────────────────────────────────────
 
@@ -210,40 +228,19 @@ function makeRouter(initialEntries: string[], Wizard: React.ComponentType<any>) 
         React.createElement(Wizard)
       ),
   });
-
-  const indexRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/",
-    validateSearch: searchSchema,
-    component: () => React.createElement("div", { "data-testid": "index" }),
-  });
-  const workflowHubRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/workflows/library",
-    validateSearch: searchSchema,
-    component: () =>
-      React.createElement("div", { "data-testid": "workflow-hub-page" }),
-  });
-  const workflowBuilderRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/workflow/$workflowName",
-    validateSearch: searchSchema,
-    component: () =>
-      React.createElement("div", { "data-testid": "workflow-builder-page" }),
-  });
-  // Where finishing the tour lands the user (chatRouteAfterTour).
-  const projectRoute = createRoute({
-    getParentRoute: () => rootRoute,
-    path: "/project/$projectId",
-    validateSearch: searchSchema,
-    component: () => React.createElement("div", { "data-testid": "project-chat" }),
-  });
-
+  const route = (path: string, testId: string) =>
+    createRoute({
+      getParentRoute: () => rootRoute,
+      path,
+      validateSearch: searchSchema,
+      component: () => React.createElement("div", { "data-testid": testId }),
+    });
   const tree = rootRoute.addChildren([
-    indexRoute,
-    workflowHubRoute,
-    workflowBuilderRoute,
-    projectRoute,
+    route("/", "index"),
+    route("/workflows/library", "workflow-hub-page"),
+    route("/apps", "apps-page"),
+    // Where finishing the tour lands the user (chatRouteAfterTour).
+    route("/project/$projectId", "project-chat"),
   ]);
   return createRouter({
     routeTree: tree as any,
@@ -251,126 +248,189 @@ function makeRouter(initialEntries: string[], Wizard: React.ComponentType<any>) 
   });
 }
 
+function renderAt(url: string) {
+  const router = makeRouter([url], OnboardingWizard);
+  render(React.createElement(RouterProvider as any, { router }));
+  return router;
+}
+
+const tourParam = (router: ReturnType<typeof makeRouter>) =>
+  (router.state.location.search as { tour?: string }).tour;
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe("OnboardingWizard URL gating", () => {
+describe("journey engine (OnboardingWizard)", () => {
   beforeEach(() => {
+    vi.mocked(trackEvent).mockClear();
+    vi.mocked(layoutActions.collapseAll).mockClear();
+    tourStoreState.state.markTourCompleted.mockClear();
+    tourStoreState.state.setResumeStep.mockClear();
+    localStorage.clear();
+    __resetJourneyReshow();
+    __resetJourneyAnalytics();
     tourStoreState.state = {
       ...tourStoreState.state,
       completedSteps: new Set(),
       skippedSteps: new Set(),
       hasCompletedOnboarding: false,
       isInitialized: true,
+      resumeStep: null,
     };
   });
 
   it("renders nothing when no ?tour param is present", async () => {
-    const router = makeRouter(["/"], OnboardingWizard);
-    render(React.createElement(RouterProvider as any, { router }));
-    await waitFor(() =>
-      expect(screen.getByTestId("index")).toBeInTheDocument()
-    );
-    // No tour modal, no spotlight title — heuristic: none of the known
-    // step titles should appear.
-    expect(screen.queryByText("Ready-made workflows")).toBeNull();
-    expect(screen.queryByText("Everything in one view")).toBeNull();
+    renderAt("/");
+    await screen.findByTestId("index");
+    expect(screen.queryByTestId("onboarding-nav-bar")).toBeNull();
+    expect(screen.queryByTestId("journey-picker")).toBeNull();
   });
 
-  it("renders the multi-spotlight step when at /?tour=chat-and-sidebars", async () => {
-    const router = makeRouter(["/?tour=chat-and-sidebars"], OnboardingWizard);
-    render(React.createElement(RouterProvider as any, { router }));
-    await waitFor(() => {
-      // The chat-and-sidebars step renders the OnboardingNavBar with step 1/7.
-      expect(screen.getByText(/1 \/ 7/)).toBeInTheDocument();
+  it("opens the retired single tour's ids at their successor journey", async () => {
+    renderAt("/?tour=chat-and-sidebars");
+    expect(await screen.findByText(/1 \/ 3/)).toBeInTheDocument();
+    expect(screen.getAllByText("Workflows").length).toBeGreaterThan(0);
+  });
+
+  describe("the picker", () => {
+    it("shows both journeys and preselects the one the landing page carried", async () => {
+      holdLandingJourney("?journey=forge");
+      const router = renderAt("/?tour=pick");
+      const forge = await screen.findByTestId("journey-card-forge");
+      expect(forge).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByTestId("journey-card-workflows")).toHaveAttribute("aria-pressed", "false");
+
+      await userEvent.click(screen.getByRole("button", { name: /start tour/i }));
+      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-open-apps"));
+      expect(trackEvent).toHaveBeenCalledWith(
+        "journey_selected",
+        expect.objectContaining({ journey: "forge", source: "landing" }),
+      );
+      expect(tourStoreState.state.setLastJourney).toHaveBeenCalledWith("forge");
     });
-  });
 
-  it("renders an 'Open Workflows' modal when on / but tour=workflow-hub", async () => {
-    const router = makeRouter(["/?tour=workflow-hub"], OnboardingWizard);
-    render(React.createElement(RouterProvider as any, { router }));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /open workflows/i })).toBeInTheDocument()
-    );
-    expect(
-      screen.getByText(/open workflows to continue/i)
-    ).toBeInTheDocument();
-  });
+    it("records a changed choice as the picker's", async () => {
+      holdLandingJourney("?journey=forge");
+      renderAt("/?tour=pick");
+      await userEvent.click(await screen.findByTestId("journey-card-workflows"));
+      await userEvent.click(screen.getByRole("button", { name: /start tour/i }));
+      await waitFor(() =>
+        expect(trackEvent).toHaveBeenCalledWith(
+          "journey_selected",
+          expect.objectContaining({ journey: "workflows", source: "picker" }),
+        ),
+      );
+    });
 
-  it("clicking 'Open Workflows' navigates to the Library with the tour param preserved", async () => {
-    const router = makeRouter(["/?tour=workflow-hub"], OnboardingWizard);
-    render(React.createElement(RouterProvider as any, { router }));
-
-    const button = await waitFor(() =>
-      screen.getByRole("button", { name: /open workflows/i })
-    );
-    await userEvent.click(button);
-
-    await waitFor(() => {
+    it("offers Resume when a tour was ended mid-way", async () => {
+      tourStoreState.state = { ...tourStoreState.state, resumeStep: "workflows:wf-library" };
+      const router = renderAt("/?tour=pick:menu");
+      await userEvent.click(await screen.findByTestId("journey-resume"));
+      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-library"));
       expect(router.state.location.pathname).toBe("/workflows/library");
     });
-    // The wizard should preserve the tour param across the navigation so
-    // the spotlight branch can take over on the right page.
-    expect(router.state.location.search).toMatchObject({
-      tour: "workflow-hub",
+
+    it("Not now closes it and records the dismissal", async () => {
+      const router = renderAt("/?tour=pick");
+      await userEvent.click(await screen.findByRole("button", { name: /not now/i }));
+      await waitFor(() => expect(tourParam(router)).toBeUndefined());
+      expect(trackEvent).toHaveBeenCalledWith("journey_skipped", { journey: "none", step: "picker" });
+      expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith();
     });
   });
 
-  it("renders the spotlight branch (not the open-page modal) at /workflows/library?tour=workflow-hub", async () => {
-    const router = makeRouter(["/workflows/library?tour=workflow-hub"], OnboardingWizard);
-    render(React.createElement(RouterProvider as any, { router }));
-    await waitFor(() =>
-      expect(screen.getByTestId("workflow-hub-page")).toBeInTheDocument()
-    );
-    // On the right page, the open-page modal action button must NOT appear;
-    // the spotlight tooltip (which contains the step title) should.
-    expect(
-      screen.queryByRole("button", { name: /open workflows/i })
-    ).toBeNull();
+  describe("a page-bound step", () => {
+    it("off its page, renders an Open card that goes there keeping the tour", async () => {
+      const router = renderAt("/?tour=workflows:wf-library");
+      await userEvent.click(await screen.findByRole("button", { name: /open workflows/i }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/library"));
+      expect(tourParam(router)).toBe("workflows:wf-library");
+    });
+
+    it("on its page, renders the spotlight", async () => {
+      renderAt("/workflows/library?tour=workflows:wf-library");
+      expect(await screen.findByText(/2 \/ 3/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /open workflows/i })).toBeNull();
+    });
   });
 
-  // There is no closing "Ready to go" modal: the last spotlight is the end of
-  // the tour, so its button finishes it — and still takes the user home.
-  describe("the last step", () => {
-    const lastStepUrl =
-      "/workflow/builtin%3A%2F%2Fget-it-right?drill=attempt&tour=workflow-builder";
-
-    it("labels its button Finish and offers no Skip tour", async () => {
-      const router = makeRouter([lastStepUrl], OnboardingWizard);
-      render(React.createElement(RouterProvider as any, { router }));
-
-      expect(await screen.findByRole("button", { name: /finish/i })).toBeInTheDocument();
-      expect(screen.getByText(/7 \/ 7/)).toBeInTheDocument();
+  describe("an action-gated step (advanceOn)", () => {
+    it("hides Next until the action, then moves on by itself (autoAdvance)", async () => {
+      const router = renderAt("/?tour=workflows:wf-open");
+      await screen.findByText(/1 \/ 3/);
       expect(screen.queryByRole("button", { name: /^next/i })).toBeNull();
-      expect(screen.queryByRole("button", { name: /skip tour/i })).toBeNull();
+      expect(screen.getByRole("button", { name: /skip step/i })).toBeInTheDocument();
+      expect(screen.getByText(/click workflows to continue/i)).toBeInTheDocument();
+
+      // The action: reaching the Workflows area (route condition).
+      await router.navigate({ to: "/workflows/library", search: { tour: "workflows:wf-open" } } as any);
+      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-library"), { timeout: 3000 });
+      expect(trackEvent).toHaveBeenCalledWith(
+        "journey_step_completed",
+        expect.objectContaining({ journey: "workflows", step: "wf-open", via: "action" }),
+      );
     });
 
-    it("Finish records completion and lands the user on their project chat", async () => {
-      vi.mocked(trackEvent).mockClear();
+    it("already satisfied on entry: shows Next with a check, without moving on", async () => {
+      renderAt("/workflows/library?tour=workflows:wf-open");
+      expect(await screen.findByRole("button", { name: /^next/i })).toBeInTheDocument();
+      expect(screen.getByText("Done")).toBeInTheDocument();
+    });
 
-      const router = makeRouter([lastStepUrl], OnboardingWizard);
-      render(React.createElement(RouterProvider as any, { router }));
-      await userEvent.click(await screen.findByRole("button", { name: /finish/i }));
-
-      await waitFor(() =>
-        expect(router.state.location.pathname).toBe("/project/project-1")
+    it("Skip step moves on and records it as skipped", async () => {
+      const router = renderAt("/?tour=workflows:wf-open");
+      await userEvent.click(await screen.findByRole("button", { name: /skip step/i }));
+      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-library"));
+      expect(tourStoreState.state.skipStep).toHaveBeenCalledWith("workflows:wf-open");
+      expect(trackEvent).toHaveBeenCalledWith(
+        "journey_step_completed",
+        expect.objectContaining({ step: "wf-open", via: "skip" }),
       );
-      expect(router.state.location.search.tour).toBeUndefined();
-      expect(tourStoreState.state.markTourCompleted).toHaveBeenCalled();
-      // The funnel-stall alert counts this event; the removed modal used to
-      // be its only emitter.
+    });
+  });
+
+  describe("ending a journey", () => {
+    const lastStepUrl = "/workflows/library?tour=workflows:wf-outro-layout";
+
+    it("the last step offers Finish and Try the other journey, and no End tour", async () => {
+      renderAt(lastStepUrl);
+      expect(await screen.findByRole("button", { name: /finish/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /try the other journey/i })).toBeInTheDocument();
+      expect(screen.getByText(/3 \/ 3/)).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /end tour/i })).toBeNull();
+    });
+
+    it("Finish runs the step's onComplete, records completion and lands on the project chat", async () => {
+      const router = renderAt(lastStepUrl);
+      await userEvent.click(await screen.findByRole("button", { name: /finish/i }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
+      expect(tourParam(router)).toBeUndefined();
+      expect(layoutActions.collapseAll).toHaveBeenCalledTimes(1);
+      expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "completed");
+      expect(trackEvent).toHaveBeenCalledWith("journey_completed", expect.objectContaining({ journey: "workflows" }));
       expect(trackEvent).toHaveBeenCalledWith(
         "onboarding_completed",
-        expect.objectContaining({ totalSteps: 7 })
+        expect.objectContaining({ journey: "workflows", totalSteps: 3 }),
       );
     });
 
-    it("earlier steps still say Next", async () => {
-      const router = makeRouter(["/?tour=workflow-controls"], OnboardingWizard);
-      render(React.createElement(RouterProvider as any, { router }));
+    it("Try the other journey completes this one and starts the other", async () => {
+      const router = renderAt(lastStepUrl);
+      await userEvent.click(await screen.findByRole("button", { name: /try the other journey/i }));
+      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-open-apps"));
+      expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "completed");
+      expect(trackEvent).toHaveBeenCalledWith(
+        "journey_selected",
+        expect.objectContaining({ journey: "forge", source: "picker", from_journey: "workflows" }),
+      );
+    });
 
-      expect(await screen.findByRole("button", { name: /^next/i })).toBeInTheDocument();
-      expect(screen.getByText(/2 \/ 7/)).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /finish/i })).toBeNull();
+    it("End tour records the journey skipped and where it ended, for Resume", async () => {
+      const router = renderAt("/workflows/library?tour=workflows:wf-library");
+      await userEvent.click(await screen.findByRole("button", { name: /end tour/i }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
+      expect(tourStoreState.state.setResumeStep).toHaveBeenCalledWith("workflows:wf-library");
+      expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "skipped");
+      expect(trackEvent).toHaveBeenCalledWith("journey_skipped", expect.objectContaining({ journey: "workflows", step: "wf-library" }));
     });
   });
 });

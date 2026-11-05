@@ -1,10 +1,11 @@
 /**
  * Tour Store
  *
- * Owns the post-onboarding tour's *persistence* — completion flag, per-step
- * completed/skipped sets. It has ZERO navigation and ZERO router access.
- * The active step lives in the URL as `?tour=<step-id>`; anything that needs
- * to know whether the tour is active reads the URL, not this store.
+ * Owns the post-onboarding journeys' *persistence* — completion flag, per-step
+ * completed/skipped sets, per-journey versioned outcomes, the chosen journey.
+ * It has ZERO navigation and ZERO router access. The active journey and step
+ * live in the URL as `?tour=<journey>:<step>`; anything that needs to know
+ * whether the tour is active reads the URL, not this store.
  *
  * The wizard UI derives the active step from `useSearch({ strict: false })`
  * via `useTourNavigation()`. Step components observe the current pathname and
@@ -15,36 +16,87 @@
 import { create } from "zustand";
 import { logger } from "../lib/logger";
 import { trackEvent } from "../lib/analytics";
+import { getTourStorage } from "../components/Onboarding/tourShell";
 import {
-  safeGetSetting,
-  upsertStringSetting,
-  deleteSettingIfExists,
-} from "../lib/settingsPersistence";
-import { TOUR_SETTINGS_KEYS, getActiveTourSteps } from "../components/Onboarding/constants";
-import type { OnboardingStepId } from "../components/Onboarding/types";
+  TOUR_SETTINGS_KEYS,
+  journeyCompletionKey,
+} from "../components/Onboarding/constants";
+import { JOURNEY_IDS, isJourneyId, type JourneyId } from "../components/Onboarding/tourParam";
+import type { JourneyContext } from "../components/Onboarding/types";
+
+// ─── Journey records ──────────────────────────────────────────────────────────
+// Each journey records its outcome per VERSION under
+// `onboarding.tour.<journey>.v<version>.completed`, so changing a journey's
+// steps (and bumping its version) re-offers it to users who completed an
+// older one — once: the re-offer itself records "shown" at the new version.
+// The retired single tour's `onboarding.completed` counts as workflows v0.
+
+/** What happened at a journey version. Any value means "don't auto-offer again". */
+export type JourneyOutcome = "completed" | "skipped" | "shown";
+
+export interface JourneyRecord {
+  /** The journey's current version, as declared by its content. */
+  version: number;
+  /** The outcome recorded at `version`, if any. */
+  current: JourneyOutcome | null;
+  /** The user completed an older version (for workflows: or the retired single tour). */
+  completedOlder: boolean;
+}
+
+const emptyRecords = (): Record<JourneyId, JourneyRecord> =>
+  Object.fromEntries(
+    JOURNEY_IDS.map((id) => [id, { version: 1, current: null, completedOlder: false }]),
+  ) as Record<JourneyId, JourneyRecord>;
+
+function parseOutcome(value: string | undefined): JourneyOutcome | null {
+  return value === "completed" || value === "skipped" || value === "shown" ? value : null;
+}
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
 
-interface TourState {
-  completedSteps: Set<OnboardingStepId>;
-  skippedSteps: Set<OnboardingStepId>;
+export interface TourState {
+  /** `<journey>:<step>` keys. */
+  completedSteps: Set<string>;
+  /** `<journey>:<step>` keys. */
+  skippedSteps: Set<string>;
+  /**
+   * Some journey (or the picker) was finished or skipped. The legacy flag
+   * the rest of the app reads to mean "the tour is out of the way".
+   */
   hasCompletedOnboarding: boolean;
+  journeys: Record<JourneyId, JourneyRecord>;
+  /** The journey the user last chose. */
+  lastJourney: JourneyId | null;
+  /** `<journey>:<step>` the user ended the tour on (End tour), for "Resume". */
+  resumeStep: string | null;
+  /** Per-journey state steps record and later steps read (e.g. the draft's slug). */
+  contexts: Partial<Record<JourneyId, JourneyContext>>;
   projectHasCode: boolean | null;
   isInitialized: boolean;
   isLoading: boolean;
 
   loadState: () => Promise<void>;
-  completeStep: (stepId: OnboardingStepId) => Promise<void>;
-  skipStep: (stepId: OnboardingStepId) => Promise<void>;
+  completeStep: (stepKey: string) => Promise<void>;
+  skipStep: (stepKey: string) => Promise<void>;
   /**
-   * Mark every not-yet-completed, not-yet-skipped step as skipped in memory
-   * (firing per-step analytics) WITHOUT persisting. Callers batch this with a
-   * single trailing save — used by "Skip tour" so we don't re-persist the whole
-   * tour state once per step.
+   * Mark every listed step not yet completed or skipped as skipped, in memory
+   * WITHOUT persisting. Callers batch this with a single trailing save — used
+   * by "Skip tour" so we don't re-persist the whole tour state once per step.
    */
-  markRemainingSkipped: () => void;
-  /** Mark the tour as completed (sets flag + analytics + persists). */
-  markTourCompleted: () => Promise<void>;
+  markRemainingSkipped: (stepKeys: string[]) => void;
+  /**
+   * End the tour: sets the flag and persists. With a journey, also records
+   * `outcome` at the journey's current version.
+   */
+  markTourCompleted: (journey?: JourneyId, outcome?: Exclude<JourneyOutcome, "shown">) => Promise<void>;
+  /** Record that a journey was auto-offered at its current version, so it is never offered again. */
+  markJourneyShown: (journey: JourneyId) => Promise<void>;
+  /** Remember the journey the user chose. */
+  setLastJourney: (journey: JourneyId) => Promise<void>;
+  /** Remember (or, with null, forget) where the user ended the tour. */
+  setResumeStep: (stepKey: string | null) => Promise<void>;
+  /** Merge into a journey's context, and persist it. */
+  setJourneyContext: (journey: JourneyId, patch: JourneyContext) => void;
   /**
    * Queue a coalesced background save. Returns immediately — callers on a UI
    * path (step transitions) must not block on settings RPCs. Terminal
@@ -104,6 +156,10 @@ export const useTourStore = create<TourState>((set, get) => ({
   completedSteps: new Set(),
   skippedSteps: new Set(),
   hasCompletedOnboarding: false,
+  journeys: emptyRecords(),
+  lastJourney: null,
+  resumeStep: null,
+  contexts: {},
   projectHasCode: null,
   isInitialized: false,
   isLoading: false,
@@ -112,32 +168,73 @@ export const useTourStore = create<TourState>((set, get) => ({
     if (get().isLoading) return;
     set({ isLoading: true });
 
+    // Versions come from the journey content. Imported lazily so this store
+    // never pulls journey content (and whatever it imports) into its static
+    // graph — content importing a store that imports this one would cycle.
+    const { JOURNEYS } = await import("../components/Onboarding/journeys/registry");
+    const versionKeys = JOURNEY_IDS.flatMap((id) =>
+      Array.from({ length: JOURNEYS[id].version }, (_, i) => ({
+        id,
+        version: i + 1,
+        key: journeyCompletionKey(id, i + 1),
+      })),
+    );
+
     const [
       tourCompletedSetting,
       completedStepsSetting,
       skippedStepsSetting,
+      lastJourneySetting,
+      resumeSetting,
+      contextSetting,
+      ...versionSettings
     ] = await Promise.all([
-      safeGetSetting(TOUR_SETTINGS_KEYS.COMPLETED),
-      safeGetSetting(TOUR_SETTINGS_KEYS.COMPLETED_STEPS),
-      safeGetSetting(TOUR_SETTINGS_KEYS.SKIPPED_STEPS),
+      getTourStorage().get(TOUR_SETTINGS_KEYS.COMPLETED),
+      getTourStorage().get(TOUR_SETTINGS_KEYS.COMPLETED_STEPS),
+      getTourStorage().get(TOUR_SETTINGS_KEYS.SKIPPED_STEPS),
+      getTourStorage().get(TOUR_SETTINGS_KEYS.LAST_JOURNEY),
+      getTourStorage().get(TOUR_SETTINGS_KEYS.RESUME),
+      getTourStorage().get(TOUR_SETTINGS_KEYS.JOURNEY_CONTEXT),
+      ...versionKeys.map(({ key }) => getTourStorage().get(key)),
     ]);
 
-    const hasCompletedOnboarding = tourCompletedSetting?.value === "true";
+    const hasCompletedOnboarding = tourCompletedSetting === "true";
 
-    let completedSteps = new Set<OnboardingStepId>();
-    if (completedStepsSetting?.value) {
-      try { completedSteps = new Set(JSON.parse(completedStepsSetting.value)); } catch { /* ignore */ }
+    let completedSteps = new Set<string>();
+    if (completedStepsSetting) {
+      try { completedSteps = new Set(JSON.parse(completedStepsSetting)); } catch { /* ignore */ }
     }
 
-    let skippedSteps = new Set<OnboardingStepId>();
-    if (skippedStepsSetting?.value) {
-      try { skippedSteps = new Set(JSON.parse(skippedStepsSetting.value)); } catch { /* ignore */ }
+    let skippedSteps = new Set<string>();
+    if (skippedStepsSetting) {
+      try { skippedSteps = new Set(JSON.parse(skippedStepsSetting)); } catch { /* ignore */ }
+    }
+
+    const journeys = emptyRecords();
+    for (const id of JOURNEY_IDS) journeys[id].version = JOURNEYS[id].version;
+    // The retired single tour is workflows v0.
+    if (hasCompletedOnboarding) journeys.workflows.completedOlder = true;
+    versionKeys.forEach(({ id, version }, i) => {
+      const outcome = parseOutcome(versionSettings[i]);
+      if (version === journeys[id].version) journeys[id].current = outcome;
+      else if (outcome === "completed") journeys[id].completedOlder = true;
+    });
+
+    const lastJourney = isJourneyId(lastJourneySetting) ? lastJourneySetting : null;
+    const resumeStep = resumeSetting || null;
+    let contexts: Partial<Record<JourneyId, JourneyContext>> = {};
+    if (contextSetting) {
+      try { contexts = JSON.parse(contextSetting) as typeof contexts; } catch { /* ignore */ }
     }
 
     set({
       hasCompletedOnboarding,
       completedSteps,
       skippedSteps,
+      journeys,
+      lastJourney,
+      resumeStep,
+      contexts,
       isInitialized: true,
       isLoading: false,
     });
@@ -146,7 +243,7 @@ export const useTourStore = create<TourState>((set, get) => ({
     // current step under TOUR_SETTINGS_KEYS.CURRENT_STEP. That value is no
     // longer the source of truth (the URL is). Delete it on first load so
     // the row doesn't linger forever — best-effort, swallow failures.
-    void deleteSettingIfExists(TOUR_SETTINGS_KEYS.CURRENT_STEP).catch(() => {
+    void getTourStorage().delete(TOUR_SETTINGS_KEYS.CURRENT_STEP).catch(() => {
       /* ignore */
     });
   },
@@ -155,19 +252,19 @@ export const useTourStore = create<TourState>((set, get) => ({
   // authority the UI renders from, and the write is a background detail. If
   // it loses a race with the tab closing, the user re-sees one tour step —
   // far cheaper than making every Next click wait on three RPCs.
-  completeStep: async (stepId: OnboardingStepId) => {
+  // Step analytics (journey_step_completed, …) are the navigation layer's
+  // (journeyAnalytics.ts): only it knows how a step was completed.
+  completeStep: async (stepKey: string) => {
     const newCompleted = new Set(get().completedSteps);
-    newCompleted.add(stepId);
+    newCompleted.add(stepKey);
     set({ completedSteps: newCompleted });
-    trackEvent('tour_step_completed', { step_id: stepId });
     get().scheduleSave();
   },
 
-  skipStep: async (stepId: OnboardingStepId) => {
+  skipStep: async (stepKey: string) => {
     const newSkipped = new Set(get().skippedSteps);
-    newSkipped.add(stepId);
+    newSkipped.add(stepKey);
     set({ skippedSteps: newSkipped });
-    trackEvent('tour_step_skipped', { step_id: stepId });
     get().scheduleSave();
   },
 
@@ -179,30 +276,34 @@ export const useTourStore = create<TourState>((set, get) => ({
     }, SAVE_DEBOUNCE_MS);
   },
 
-  markRemainingSkipped: () => {
+  markRemainingSkipped: (stepKeys: string[]) => {
     const { completedSteps, skippedSteps } = get();
     const newSkipped = new Set(skippedSteps);
-    // Only steps this user's tour contains — an unavailable step was never
-    // shown, so recording it as skipped would be a false analytics signal.
-    for (const step of getActiveTourSteps()) {
-      if (!completedSteps.has(step.id) && !newSkipped.has(step.id)) {
-        newSkipped.add(step.id);
-        trackEvent('tour_step_skipped', { step_id: step.id });
-      }
+    for (const key of stepKeys) {
+      if (!completedSteps.has(key)) newSkipped.add(key);
     }
     set({ skippedSteps: newSkipped });
   },
 
-  markTourCompleted: async () => {
+  markTourCompleted: async (journey, outcome = "completed") => {
     trackEvent('tour_completed', {
       completed_count: get().completedSteps.size,
       skipped_count: get().skippedSteps.size,
     });
     set({ hasCompletedOnboarding: true });
+    if (journey) {
+      const record = get().journeys[journey];
+      set({ journeys: { ...get().journeys, [journey]: { ...record, current: outcome } } });
+      void getTourStorage().set(journeyCompletionKey(journey, record.version), outcome).catch(
+        (error: unknown) => logger.error("[TourStore] Failed to save journey outcome", error),
+      );
+    }
     // Coordinate with the achievement checklist — the wizard's onComplete
     // path used to do this; keep it here so any caller that finishes the
     // tour (wizard hook or external) gets consistent side effects.
-    try {
+    // The checklist is Reliant's (settings-backed); a shell with its own
+    // storage (the forge shell) has none to update.
+    if (getTourStorage().kind === "settings") try {
       const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
       void useOnboardingChecklistStore.getState().markComplete("take-product-tour");
       void useOnboardingChecklistStore.getState().markWelcomeShown();
@@ -212,11 +313,51 @@ export const useTourStore = create<TourState>((set, get) => ({
     await get().saveTourState();
   },
 
+  markJourneyShown: async (journey) => {
+    const record = get().journeys[journey];
+    if (record.current !== null) return;
+    set({ journeys: { ...get().journeys, [journey]: { ...record, current: "shown" } } });
+    try {
+      await getTourStorage().set(journeyCompletionKey(journey, record.version), "shown");
+    } catch (error) {
+      logger.error("[TourStore] Failed to save journey offer", error);
+    }
+  },
+
+  setLastJourney: async (journey) => {
+    if (get().lastJourney === journey) return;
+    set({ lastJourney: journey });
+    try {
+      await getTourStorage().set(TOUR_SETTINGS_KEYS.LAST_JOURNEY, journey);
+    } catch (error) {
+      logger.error("[TourStore] Failed to save last journey", error);
+    }
+  },
+
+  setResumeStep: async (stepKey) => {
+    if (get().resumeStep === stepKey) return;
+    set({ resumeStep: stepKey });
+    try {
+      if (stepKey) await getTourStorage().set(TOUR_SETTINGS_KEYS.RESUME, stepKey);
+      else await getTourStorage().delete(TOUR_SETTINGS_KEYS.RESUME);
+    } catch (error) {
+      logger.error("[TourStore] Failed to save resume step", error);
+    }
+  },
+
+  setJourneyContext: (journey, patch) => {
+    const contexts = { ...get().contexts, [journey]: { ...get().contexts[journey], ...patch } };
+    set({ contexts });
+    void getTourStorage()
+      .set(TOUR_SETTINGS_KEYS.JOURNEY_CONTEXT, JSON.stringify(contexts))
+      .catch((error: unknown) => logger.error("[TourStore] Failed to save journey context", error));
+  },
+
   resetTourProgress: async () => {
     trackEvent('tour_restarted');
 
     try {
-      await deleteSettingIfExists(TOUR_SETTINGS_KEYS.SKIPPED_ALL);
+      await getTourStorage().delete(TOUR_SETTINGS_KEYS.SKIPPED_ALL);
     } catch {
       /* ignore */
     }
@@ -227,6 +368,13 @@ export const useTourStore = create<TourState>((set, get) => ({
       hasCompletedOnboarding: false,
       projectHasCode: null,
     });
+
+    // The rest is Reliant's checklist and project; a shell with its own
+    // storage (the forge shell) has neither.
+    if (getTourStorage().kind !== "settings") {
+      await get().saveTourState();
+      return;
+    }
 
     // Clear checklist state without clobbering its isInitialized flag —
     // consumers like ContextualTipsLayer gate on isInitialized.
@@ -262,15 +410,15 @@ export const useTourStore = create<TourState>((set, get) => ({
       // These three keys are independent — persist them concurrently instead of
       // chaining awaits so a full tour save is one round-trip batch, not three.
       await Promise.all([
-        upsertStringSetting(
+        getTourStorage().set(
           TOUR_SETTINGS_KEYS.COMPLETED,
           state.hasCompletedOnboarding ? "true" : "false",
         ),
-        upsertStringSetting(
+        getTourStorage().set(
           TOUR_SETTINGS_KEYS.COMPLETED_STEPS,
           JSON.stringify(Array.from(state.completedSteps)),
         ),
-        upsertStringSetting(
+        getTourStorage().set(
           TOUR_SETTINGS_KEYS.SKIPPED_STEPS,
           JSON.stringify(Array.from(state.skippedSteps)),
         ),

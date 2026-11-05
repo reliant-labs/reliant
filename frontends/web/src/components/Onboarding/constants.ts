@@ -1,188 +1,13 @@
 /**
  * Onboarding Constants
  *
- * Step definitions for the guided tour, checklist items for the
- * achievement-based system, and shared settings keys.
- *
- * Flow: Tour (7 spotlight steps) → Checklist. There is no closing modal: the
- * last spotlight's nav button reads "Finish", and finishing lands the user on
- * their project's chat (useTourNavigation.completeAndAdvance).
+ * Checklist items for the achievement-based system, and shared settings
+ * keys. The tour's steps are journeys: see journeys/registry.ts and
+ * JOURNEYS.md.
  */
 
-import type {
-  OnboardingStep,
-  OnboardingStepId,
-  ChecklistItem,
-  ChecklistItemId,
-} from "./types";
-import { isForgeUIEnabled } from "../../lib/forgeFeature";
-
-// ─── Tour Steps ──────────────────────────────────────────────────────────────
-
-export const ONBOARDING_STEPS: OnboardingStep[] = [
-  {
-    id: "chat-and-sidebars",
-    type: "multi-spotlight",
-    title: "Everything in one view",
-    description:
-      "Chat in the middle, your history on the left, and your project's files and changes on the right.",
-    targets: [
-      {
-        selector: "[data-onboarding='left-sidebar']",
-        label: "Conversations",
-        description: "Every chat you've had, grouped by project and workspace",
-      },
-      {
-        selector: "[data-onboarding='chat-input']",
-        label: "Ask anything",
-        description: "Ask it to fix a bug, write a test, or explain a file",
-      },
-      {
-        selector: "[data-onboarding='right-sidebar']",
-        label: "Files and changes",
-        description: "The open chat's files, the diffs it's made, and what's running",
-      },
-    ],
-    skippable: true,
-  },
-  {
-    id: "workflow-controls",
-    type: "spotlight",
-    title: "Workflow controls",
-    description:
-      "Pick the workflow for this chat, then tune it. These controls come from the workflow's params — each one decides what shows up here, what sits behind ⚙, and what stays hidden.",
-    targetSelector: "[data-onboarding='chat-controls']",
-    skippable: true,
-    spotlightConfig: {
-      padding: 6,
-      detectBorderRadius: true,
-    },
-  },
-  {
-    id: "workspaces",
-    type: "spotlight",
-    title: "Workspaces",
-    description:
-      "Work on more than one thing at once — each workspace is its own git branch, so nothing collides with the project's main workspace.",
-    targetSelector: "[data-onboarding='workspace-buttons']",
-    skippable: true,
-    spotlightConfig: {
-      padding: 8,
-      detectBorderRadius: true,
-    },
-  },
-  {
-    id: "deployments",
-    type: "spotlight",
-    title: "Apps",
-    description:
-      "Everything your project runs: each environment, what's deployed where, its releases, and its logs, metrics and alerts.",
-    targetSelector: "[data-onboarding='apps-button']",
-    skippable: true,
-    spotlightConfig: {
-      padding: 4,
-      detectBorderRadius: true,
-    },
-    // The Apps entry is the forge UI's, which a user can switch off in
-    // Settings → Developer — and then there is nothing to point at.
-    isAvailable: isForgeUIEnabled,
-  },
-  {
-    id: "workflow-intro",
-    type: "spotlight",
-    title: "Workflows",
-    description:
-      "Automate a whole task — like fixing a bug and opening a PR — as one multi-step run instead of message by message.",
-    targetSelector: "[data-onboarding='workflow-button']",
-    skippable: true,
-    spotlightConfig: {
-      padding: 4,
-      detectBorderRadius: true,
-    },
-  },
-  {
-    id: "workflow-hub",
-    type: "spotlight",
-    title: "Library, runs, automations",
-    description:
-      "Start from a ready-made workflow in the Library, follow every run in Runs, and put one on a schedule in Automations.",
-    // The Workflows area's nav is forge-ui's SidebarLayout, which takes no
-    // data attributes; its <nav> carries aria-label={navLabel} instead.
-    targetSelector: "[data-testid='workflows-shell'] nav[aria-label='Workflows']",
-    skippable: true,
-    spotlightConfig: {
-      padding: 6,
-      detectBorderRadius: true,
-    },
-  },
-  {
-    id: "workflow-builder",
-    type: "spotlight",
-    title: "Build your own",
-    description:
-      "Drag steps onto the canvas and connect them, or describe what you want and the AI assistant builds it for you.",
-    targetSelector: "[data-onboarding='workflow-canvas']",
-    skippable: true,
-    spotlightConfig: {
-      padding: 0,
-      borderRadius: "none",
-    },
-  },
-];
-
-// ─── Tour Step Helpers ───────────────────────────────────────────────────────
-
-export function getStepById(
-  id: OnboardingStepId,
-): OnboardingStep | undefined {
-  return ONBOARDING_STEPS.find((step) => step.id === id);
-}
-
-/**
- * The steps this user's tour actually walks: ONBOARDING_STEPS minus any whose
- * `isAvailable` says no. Everything that orders or counts steps — Next, Back,
- * "n / total", which step is last — reads this, never ONBOARDING_STEPS
- * directly, so an unavailable step is invisible rather than a dead stop.
- *
- * ONBOARDING_STEPS stays the full static list: the URL schema and persisted
- * progress must still recognise every id.
- */
-export function getActiveTourSteps(): OnboardingStep[] {
-  return ONBOARDING_STEPS.filter((step) => step.isAvailable?.() ?? true);
-}
-
-/** Position of a step in the active tour, or -1 when it isn't in it. */
-export function getStepIndex(id: OnboardingStepId): number {
-  return getActiveTourSteps().findIndex((step) => step.id === id);
-}
-
-/**
- * The active step after `currentId`. Walks the FULL list from `currentId`'s
- * static position, so it still answers when the current step has itself just
- * become unavailable (e.g. the forge UI was switched off mid-tour).
- */
-export function getNextStepId(
-  currentId: OnboardingStepId,
-): OnboardingStepId | null {
-  const staticIndex = ONBOARDING_STEPS.findIndex((step) => step.id === currentId);
-  if (staticIndex === -1) return null;
-  const next = ONBOARDING_STEPS.slice(staticIndex + 1).find(
-    (step) => step.isAvailable?.() ?? true,
-  );
-  return next?.id ?? null;
-}
-
-/** The active step before `currentId`; see getNextStepId. */
-export function getPreviousStepId(
-  currentId: OnboardingStepId,
-): OnboardingStepId | null {
-  const staticIndex = ONBOARDING_STEPS.findIndex((step) => step.id === currentId);
-  if (staticIndex <= 0) return null;
-  const previous = ONBOARDING_STEPS.slice(0, staticIndex)
-    .reverse()
-    .find((step) => step.isAvailable?.() ?? true);
-  return previous?.id ?? null;
-}
+import type { ChecklistItem, ChecklistItemId } from "./types";
+import type { JourneyId } from "./tourParam";
 
 // ─── Checklist Items ─────────────────────────────────────────────────────────
 
@@ -225,8 +50,8 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   },
   {
     id: "take-product-tour",
-    title: "Take the tour",
-    description: "A two-minute walkthrough of chat, workspaces, deployments, and workflows",
+    title: "Take a tour",
+    description: "A short guided tour: build an AI workflow, or explore a forge app",
     category: "required",
     action: "navigate",
     actionTarget: "product-tour",
@@ -295,38 +120,29 @@ export const CHECKLIST_SETTINGS_KEYS = {
 
 /** Tour-specific settings keys */
 export const TOUR_SETTINGS_KEYS = {
+  /** Some journey (or the picker) was finished or skipped; also the retired single tour's flag. */
   COMPLETED: "onboarding.completed",
   SKIPPED_ALL: "onboarding.skipped_all",
-  // CURRENT_STEP is intentionally absent: the URL (?tour=<step>) is the
-  // source of truth for the active step. tourStore.loadState() best-effort
-  // deletes the stale row so old installs don't carry the value forever.
+  // CURRENT_STEP is intentionally absent: the URL (?tour=<journey>:<step>) is
+  // the source of truth for the active step. tourStore.loadState()
+  // best-effort deletes the stale row so old installs don't carry it forever.
   CURRENT_STEP: "onboarding.current_step",
+  /** `<journey>:<step>` keys (bare step ids from the retired tour may remain). */
   COMPLETED_STEPS: "onboarding.completed_steps",
   SKIPPED_STEPS: "onboarding.skipped_steps",
+  /** The journey the user last chose. */
+  LAST_JOURNEY: "onboarding.journey",
+  /** `<journey>:<step>` the user ended the tour on, offered as "Resume". */
+  RESUME: "onboarding.journey_resume",
+  /** JSON per-journey context ({ workflows: { workflowSlug, … } }). */
+  JOURNEY_CONTEXT: "onboarding.journey_context",
 } as const;
 
-// ─── Step ID tuple (for Zod search-param schemas) ───────────────────────────
-// Hard-coded here (not derived from ONBOARDING_STEPS) so it can be imported by
-// routeSchemas.ts without dragging in this module's other dependencies. The
-// build-time consistency check below (top-level throw on mismatch) guarantees
-// the tuple stays in sync with ONBOARDING_STEPS.
-export const ONBOARDING_STEP_IDS = [
-  "chat-and-sidebars",
-  "workflow-controls",
-  "workspaces",
-  "deployments",
-  "workflow-intro",
-  "workflow-hub",
-  "workflow-builder",
-] as const satisfies readonly OnboardingStepId[];
-
-if (
-  ONBOARDING_STEP_IDS.length !== ONBOARDING_STEPS.length ||
-  !ONBOARDING_STEP_IDS.every((id, i) => ONBOARDING_STEPS[i].id === id)
-) {
-  // Module-load failure surfaces immediately in dev and in tests; we never
-  // want the wizard's URL schema to silently drift from the step list.
-  throw new Error(
-    "[Onboarding] ONBOARDING_STEP_IDS does not match ONBOARDING_STEPS — update one to match the other.",
-  );
+/**
+ * The settings key recording a journey's outcome at one version
+ * ("completed" | "skipped" | "shown"). Per version, so a changed journey is
+ * offered again to users who completed an older one, and never loops.
+ */
+export function journeyCompletionKey(journey: JourneyId, version: number): string {
+  return `onboarding.tour.${journey}.v${version}.completed`;
 }

@@ -47,7 +47,7 @@ import {
   onboardingExitTarget,
   type OnboardingExitReason,
 } from "../leaveOnboarding";
-import { TOUR_FIRST_STEP_ID } from "../leaveOnboarding";
+import { TOUR_ENTRY_PARAM } from "../leaveOnboarding";
 import { START_APP } from "@/components/Apps/appStart";
 
 beforeEach(() => {
@@ -81,7 +81,7 @@ describe("onboardingExitTarget — where each reason lands the user", () => {
     // tour for every cloud user — it has to be SET on the way out.
     for (const reason of ["completed_local", "completed_cloud_gate_continue"] as const) {
       expect(onboardingExitTarget(reason).to).toBe("/");
-      expect(resolveSearch(reason)).toEqual({ tour: TOUR_FIRST_STEP_ID });
+      expect(resolveSearch(reason)).toEqual({ tour: TOUR_ENTRY_PARAM });
     }
   });
 
@@ -91,10 +91,10 @@ describe("onboardingExitTarget — where each reason lands the user", () => {
     for (const reason of ["completed_local", "completed_cloud_gate_continue"] as const) {
       const target = onboardingExitTarget(reason, "build_app");
       expect(target.to).toBe("/");
-      expect(target.search).toEqual({ tour: TOUR_FIRST_STEP_ID, start: START_APP });
+      expect(target.search).toEqual({ tour: TOUR_ENTRY_PARAM, start: START_APP });
     }
     for (const landing of ["chat", "existing_codebase", undefined] as const) {
-      expect(onboardingExitTarget("completed_cloud_gate_continue", landing).search).toEqual({ tour: TOUR_FIRST_STEP_ID });
+      expect(onboardingExitTarget("completed_cloud_gate_continue", landing).search).toEqual({ tour: TOUR_ENTRY_PARAM });
     }
   });
 
@@ -135,7 +135,7 @@ describe("leaveOnboarding — the single exit", () => {
     expect(options.to).toBe("/");
     expect(
       typeof options.search === "function" ? options.search({}) : options.search,
-    ).toEqual({ tour: TOUR_FIRST_STEP_ID });
+    ).toEqual({ tour: TOUR_ENTRY_PARAM });
   });
 
   it("logs the reason, so an exit nobody asked for is greppable", async () => {

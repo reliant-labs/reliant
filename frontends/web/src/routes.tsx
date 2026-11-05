@@ -7,6 +7,7 @@ import { mobilePathFor, shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import { isForgeUIEnabled } from './lib/forgeFeature'
 import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
+import { retainTourParam } from './components/Onboarding/tourParam'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
@@ -306,6 +307,9 @@ function RootShell() {
 
 const rootRoute = createRootRoute({
   component: RootShell,
+  // Keep `?tour=` across navigations that don't name it (retainTourParam).
+  // The root has no search schema, so its middleware type is `{}`-shaped.
+  search: { middlewares: [retainTourParam as never] },
   notFoundComponent: () => <Navigate to="/" search={{}} />,
   errorComponent: RouteErrorFallback,
 })
