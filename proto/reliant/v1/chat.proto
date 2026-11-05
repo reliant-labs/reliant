@@ -101,6 +101,10 @@ enum AgentMessageKind {
   // Text the HUMAN user sent into a running thread (SendAgentMessage), as
   // opposed to AGENT_MESSAGE_KIND_MESSAGE, which is agent-to-agent.
   AGENT_MESSAGE_KIND_HUMAN_MESSAGE = 5;
+  // Text another top-level run sent into this one (send_to_run), as opposed
+  // to AGENT_MESSAGE_KIND_MESSAGE, which is between a parent and its own
+  // sub-agent. The sender thread is that run's main thread, in another chat.
+  AGENT_MESSAGE_KIND_RUN_MESSAGE = 6;
 }
 
 // ContentBlockType identifies the kind of content in a message block

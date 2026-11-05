@@ -90,7 +90,16 @@ type RunResumeResult struct {
 // RunMessenger delivers a message to a run that is already going. It must
 // never start a run: a run that is not live reports Delivered=false.
 type RunMessenger interface {
-	DeliverToRun(ctx context.Context, userID, chatID, message string) (RunDelivery, error)
+	DeliverToRun(ctx context.Context, userID, chatID, message string, from RunSender) (RunDelivery, error)
+}
+
+// RunSender names the run a delivered message comes from, so the target
+// stores and shows it as that run's message rather than as its user's.
+type RunSender struct {
+	// ThreadID is the sending run's main thread.
+	ThreadID string
+	// Subject is the sender's one-line summary of the message, "" for none.
+	Subject string
 }
 
 // RunDelivery is what a delivery did. It never claims more than happened: a

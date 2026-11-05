@@ -830,3 +830,112 @@ func TestDrainAgentMessages_HumanMessageStillPlainVisible(t *testing.T) {
 	require.NotNil(t, bodyBlocks[0].Content)
 	assert.Equal(t, "hey, please also check the other file", *bodyBlocks[0].Content)
 }
+
+// A message another run sent (send_to_run) to a running thread queues as that
+// run's and drains attributed to it: the owner's repro was pr-fix's hand-off
+// ("[pr-fix] Your PR … is stuck") stored with no sender and shown as the
+// owner's own words. The model is told it came from that run, by run id.
+func TestDrainAgentMessages_RunMessageIsTheSendingRuns(t *testing.T) {
+	t.Parallel()
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	prFixRun := uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+	// The sending run: another chat, whose main thread shares its id.
+	require.NoError(t, h.Repo().CreateChat(ctx, &db.Chat{ID: prFixRun, ProjectID: projectID, UserID: userID}))
+	_, err := h.Repo().CreateThread(ctx, &db.Thread{ID: prFixRun, ChatID: prFixRun})
+	require.NoError(t, err)
+
+	require.NoError(t, h.Repo().EnqueueAgentMessage(ctx, &db.AgentMessage{
+		ID:           uuid.New().String(),
+		ChatID:       chatID,
+		FromThreadID: prFixRun,
+		ToThreadID:   chatID,
+		Kind:         core.AgentMessageKindRunMessage,
+		Body:         "[pr-fix] Your PR reliant-labs/control-plane#2017 is stuck",
+		Subject:      "PR stuck",
+		Status:       core.AgentMessageStatusQueued,
+		CreatedAt:    time.Now().UTC(),
+	}))
+
+	act := newDrainTestActivity(h)
+	var output DrainAgentMessagesOutput
+	require.NoError(t, h.ExecuteActivity(act.Execute,
+		DrainAgentMessagesInput{ChatID: chatID, Thread: chatID}, &output))
+	require.Equal(t, 1, output.Count)
+
+	msgs, err := h.Repo().ListMessages(ctx, chatID, db.MessageListOptions{})
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+
+	envelope, err := h.Repo().ListContentBlocks(ctx, msgs[0].ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, envelope)
+	assert.Contains(t, *envelope[0].Content, `<message from_run="`+prFixRun+`"`,
+		"the model reads it as another run's, not the user's")
+
+	body := msgs[1]
+	assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_USER, body.Role)
+	assert.Nil(t, body.DisplayStyle, "visible, as a run card")
+	require.NotNil(t, body.SenderThreadID, "a run's message must never drain as the human's")
+	assert.Equal(t, prFixRun, *body.SenderThreadID)
+	require.NotNil(t, body.SenderKind)
+	assert.Equal(t, core.AgentMessageKindRunMessage, *body.SenderKind)
+	require.NotNil(t, body.SenderSubject)
+	assert.Equal(t, "PR stuck", *body.SenderSubject)
+}
+
+// An async ask_user answer queued for a working thread is LLM-only: it drains
+// HIDDEN, because the user sees it on the question card ("Question answered:
+// …"), never as a user bubble of words they did not type.
+func TestDrainAgentMessages_LLMOnlyRowDrainsHidden(t *testing.T) {
+	t.Parallel()
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	require.NoError(t, h.Repo().EnqueueAgentMessage(ctx, &db.AgentMessage{
+		ID:           uuid.New().String(),
+		ChatID:       chatID,
+		FromThreadID: chatID,
+		ToThreadID:   chatID,
+		Kind:         core.AgentMessageKindHumanMessage,
+		Body:         "Answer to the question you asked without waiting (ask_user, question_id: q-1):\n\nA: yes",
+		Status:       core.AgentMessageStatusQueued,
+		CreatedAt:    time.Now().UTC(),
+		DisplayStyle: db.QueuedDisplayStyle(db.WithLLMOnlyDelivery(ctx)),
+	}))
+
+	queued, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, chatID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	require.NotNil(t, queued[0].DisplayStyle, "the queued row keeps its display style")
+
+	act := newDrainTestActivity(h)
+	var output DrainAgentMessagesOutput
+	require.NoError(t, h.ExecuteActivity(act.Execute,
+		DrainAgentMessagesInput{ChatID: chatID, Thread: chatID}, &output))
+	require.Equal(t, 1, output.Count)
+
+	msgs, err := h.Repo().ListMessages(ctx, chatID, db.MessageListOptions{})
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+	body := msgs[1]
+	assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_USER, body.Role, "the agent still reads the answer")
+	require.NotNil(t, body.DisplayStyle)
+	assert.Equal(t, reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN, *body.DisplayStyle)
+}

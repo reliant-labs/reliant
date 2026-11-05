@@ -64,9 +64,10 @@ type ToolCallReader interface {
 }
 
 // ThreadReader is what AssembleForDisplay reads the titles of message senders
-// through: one batched read per response, never one per message.
+// through: one batched read per response, never one per message. A sender
+// that is another run's main thread is titled by that run (db.Repo.SenderTitles).
 type ThreadReader interface {
-	ListThreadsByIDs(ctx context.Context, ids []string) ([]*db.Thread, error)
+	SenderTitles(ctx context.Context, threadIDs []string) (map[string]string, error)
 }
 
 // Reader is everything AssembleForDisplay reads.
@@ -94,16 +95,10 @@ func SenderTitles(ctx context.Context, threads ThreadReader, messages []*db.Mess
 	if len(ids) == 0 {
 		return nil
 	}
-	rows, err := threads.ListThreadsByIDs(ctx, ids)
+	titles, err := threads.SenderTitles(ctx, ids)
 	if err != nil {
-		logging.WarnContext(ctx, "Failed to list sender threads for messages", "error", err, "count", len(ids))
+		logging.WarnContext(ctx, "Failed to list sender titles for messages", "error", err, "count", len(ids))
 		return nil
-	}
-	titles := make(map[string]string, len(rows))
-	for _, t := range rows {
-		if t.Title != nil {
-			titles[t.ID] = *t.Title
-		}
 	}
 	return titles
 }

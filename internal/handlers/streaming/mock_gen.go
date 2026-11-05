@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=c6dd5b5cda7157369b311e9bc3116ef0cba2f26569838184b4012f6df6d7f1b9
+// forge:hash=d3b692d4ad92d9ebc3293668e6db1315fc63a88a36c6a8d16abd2ccd9c2cc3b9
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -47,6 +47,7 @@ type MockRepository struct {
 	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
+	SenderTitleFunc                                func(context.Context, string) *string
 	CreateWorkflowFunc                             func(context.Context, *db.Workflow) error
 	UpdateThreadWorkflowFunc                       func(context.Context, string, string) (*db.Thread, error)
 	CreateContextWindowFunc                        func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -82,8 +83,8 @@ type MockRepository struct {
 	SaveMessageAtomicFunc                          func(context.Context, db.AtomicMessageWrite) (*db.AtomicMessageResult, error)
 	SeedSeqCounterForForkFunc                      func(context.Context, string, string) error
 	RunTxFunc                                      func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	ListThreadsByIDsFunc                           func(context.Context, []string) ([]*db.Thread, error)
 	ListToolCallsByIDsFunc                         func(context.Context, []string) ([]*db.ToolCall, error)
+	SenderTitlesFunc                               func(context.Context, []string) (map[string]string, error)
 }
 
 // GetChatRow records the call and delegates to GetChatRowFunc when set.
@@ -246,6 +247,15 @@ func (m *MockRepository) GetRootThread(ctx context.Context, conversationID strin
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetRootThread")
+}
+
+// SenderTitle records the call and delegates to SenderTitleFunc when set.
+func (m *MockRepository) SenderTitle(ctx context.Context, threadID string) *string {
+	m.Recorder.Record("SenderTitle", ctx, threadID)
+	if m.SenderTitleFunc != nil {
+		return m.SenderTitleFunc(ctx, threadID)
+	}
+	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -563,15 +573,6 @@ func (m *MockRepository) RunTx(p0 context.Context, policy orm.TxPolicy, f func(c
 	return contractkit.MockNotSet("MockRepository", "RunTx")
 }
 
-// ListThreadsByIDs records the call and delegates to ListThreadsByIDsFunc when set.
-func (m *MockRepository) ListThreadsByIDs(ctx context.Context, ids []string) ([]*db.Thread, error) {
-	m.Recorder.Record("ListThreadsByIDs", ctx, ids)
-	if m.ListThreadsByIDsFunc != nil {
-		return m.ListThreadsByIDsFunc(ctx, ids)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListThreadsByIDs")
-}
-
 // ListToolCallsByIDs records the call and delegates to ListToolCallsByIDsFunc when set.
 func (m *MockRepository) ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error) {
 	m.Recorder.Record("ListToolCallsByIDs", ctx, toolCallIDs)
@@ -579,6 +580,15 @@ func (m *MockRepository) ListToolCallsByIDs(ctx context.Context, toolCallIDs []s
 		return m.ListToolCallsByIDsFunc(ctx, toolCallIDs)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListToolCallsByIDs")
+}
+
+// SenderTitles records the call and delegates to SenderTitlesFunc when set.
+func (m *MockRepository) SenderTitles(ctx context.Context, threadIDs []string) (map[string]string, error) {
+	m.Recorder.Record("SenderTitles", ctx, threadIDs)
+	if m.SenderTitlesFunc != nil {
+		return m.SenderTitlesFunc(ctx, threadIDs)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "SenderTitles")
 }
 
 // Compile-time check.

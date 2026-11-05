@@ -132,7 +132,7 @@ func (s staticToolCalls) ListToolCallsByIDs(context.Context, []string) ([]*db.To
 	return nil, nil
 }
 
-func (s staticToolCalls) ListThreadsByIDs(context.Context, []string) ([]*db.Thread, error) {
+func (s staticToolCalls) SenderTitles(context.Context, []string) (map[string]string, error) {
 	return nil, nil
 }
 
