@@ -45,6 +45,7 @@ const env = (name: string, over: Partial<AppEnv> = {}): AppEnv => ({
   deployedAt: "2026-10-20T10:00:00Z",
   links: [],
   loading: false,
+  unread: false,
   ...over,
 });
 
@@ -124,6 +125,16 @@ describe("the Apps page", () => {
     render(<AppsPage />);
     expect(screen.getByTestId("app-row-newsletter")).toHaveTextContent("Unavailable");
     expect(screen.getByTestId("app-row-newsletter")).not.toHaveTextContent("Not deployed yet");
+  });
+
+  it("does not claim 'not deployed' for an app whose environment status could not be read", () => {
+    state.apps = [{ name: "trader", envs: [env("staging", { release: "", deployedAt: undefined, verdict: "unknown", unread: true })], previews: 0 }];
+    render(<AppsPage />);
+    const row = screen.getByTestId("app-row-trader");
+    expect(row).toHaveTextContent("Unavailable");
+    expect(row).not.toHaveTextContent("Not deployed yet");
+    expect(row).not.toHaveTextContent("Never");
+    expect(within(row).getByTestId("app-env-staging")).toHaveAttribute("title", expect.stringContaining("release unknown"));
   });
 
   it("shows skeleton rows while loading, and the build prompt when there is nothing", () => {
