@@ -332,6 +332,25 @@ tasks:
     cmds:
       - go test -short -timeout 5m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
 
+  test:sdk:
+    # The Go SDK (sdk/go) is its own module: the root `./...` stops at its
+    # go.mod, so `task test` and `task test:short` never see it. This is its lane
+    # (the merge gate runs it -short when a change touches sdk/go). GOWORK=off: it
+    # is judged against its own go.mod, as a consumer who imports it would build it.
+    desc: "Go SDK module tests (sdk/go): -short, no workspace. Scope it: task test:sdk -- ./reliant/follow/..."
+    dir: sdk/go
+    cmds:
+      - env GOWORK=off go test -short -timeout 5m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+
+  test:sdk:full:
+    # The SDK module without -short, as `task test` (the release gate) runs it:
+    # adds the slow tests, e.g. the scratch consumer module that builds against
+    # the SDK as an external dependency (sdk/go/consumer_test.go).
+    desc: "Go SDK module tests (sdk/go), the full tier: no -short, no workspace"
+    dir: sdk/go
+    cmds:
+      - env GOWORK=off go test {{.GOTESTRACE}} -count=1 -timeout 10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+
   test:
     # Everything after `--` REPLACES the default `./...`, so it takes both
     # flags and package patterns:
@@ -351,6 +370,8 @@ tasks:
     desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
     cmds:
       - '{{.SLOT}} go test {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - task: test:sdk:full
+        if: '[ -z "{{.CLI_ARGS}}" ]'
       - task: test:web
         if: '[ -z "{{.CLI_ARGS}}" ]'
       - task: test:electron

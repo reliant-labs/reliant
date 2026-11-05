@@ -136,6 +136,11 @@ generate:
         - name: sdk-ts-gen
           command: [scripts/proto-generate-atomic.sh, buf.gen.sdk-ts.yaml, sdk/ts/src/gen]
           writes: [sdk/ts/src/gen]
+        # The Go SDK's copy of the public protos (sdk/go/gen, its own module),
+        # from buf.gen.sdk-go.yaml. Replaced wholesale, only after buf succeeds.
+        - name: sdk-go-gen
+          command: [scripts/proto-generate-atomic.sh, buf.gen.sdk-go.yaml, sdk/go/gen]
+          writes: [sdk/go/gen]
         - name: yaml-bindings
           command: [go, generate, ./internal/workflow/yaml]
           writes: [internal/workflow/yaml/bindings_generated.go]

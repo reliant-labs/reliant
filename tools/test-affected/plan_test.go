@@ -901,3 +901,59 @@ func TestDeletedGoPackageCompilesTheModule(t *testing.T) {
 		}
 	}
 }
+
+// sdk/go is a nested module: `go list ./...` never sees it, so no package owns
+// its files and the "claimed by no rule" fail-safe would run every lane (web and
+// electron included) for a doc edit. It is claimed, and it runs its own tests.
+func TestSDKModuleChangeIsClaimedAndRunsItsOwnTests(t *testing.T) {
+	pl := classify("sdk/go/reliant/runs.go")
+	for _, f := range pl.Files {
+		if f.Note == "UNCLAIMED" {
+			t.Fatalf("%s fell through to the fail-safe: %+v", f.Path, f)
+		}
+	}
+	if pl.Web.Full || pl.Electron.Full {
+		t.Fatalf("an SDK edit forced the web or electron lane: web=%v electron=%v", pl.Web.Full, pl.Electron.Full)
+	}
+	if !pl.ForgeGen.Full {
+		t.Fatal("the SDK holds forge's generated output; a change to it must run the no-op check")
+	}
+
+	r := &runner{root: "/repo"}
+	steps := r.steps(pl, laneSet("go"))
+	var sdk *step
+	for i := range steps {
+		if steps[i].name == "go (sdk module)" {
+			sdk = &steps[i]
+		}
+	}
+	if sdk == nil {
+		t.Fatalf("no step runs the SDK module's tests: %+v", steps)
+	}
+	if sdk.dir != "/repo/sdk/go" || sdk.argv[len(sdk.argv)-1] != "./..." {
+		t.Fatalf("SDK step = %+v", *sdk)
+	}
+}
+
+// A change that does not touch the SDK must not pay for its tests.
+func TestSDKTestsAreNotRunForUnrelatedChanges(t *testing.T) {
+	pl := classify("internal/leaf/leaf.go")
+	r := &runner{root: "/repo"}
+	for _, s := range r.steps(pl, laneSet("go")) {
+		if s.name == "go (sdk module)" {
+			t.Fatalf("an unrelated change ran the SDK module's tests: %+v", s)
+		}
+	}
+}
+
+// proto/public-api.txt is read by a Go test and judged by forge-generate; it is
+// not proto tooling, and must not force the whole web suite.
+func TestPublicAPIAllowlistDoesNotForceTheWebLane(t *testing.T) {
+	pl := classify("proto/public-api.txt")
+	if pl.Web.Full {
+		t.Fatal("editing the public API allowlist forced the web lane")
+	}
+	if !pl.ForgeGen.Full {
+		t.Fatal("the allowlist decides what is generated into the SDK; forge-generate must judge it")
+	}
+}

@@ -53,10 +53,17 @@ var forgeInputs = []string{
 	"**/*_gen.go", "**/*_gen_test.go", "**/*_gen.ts", "**/*_gen_test.ts", "**/*_gen.test.ts",
 	"**/*_gen.json", "**/*_gen.ndjson", "**/*_gen.k",
 	"gen/**", "frontends/web/src/gen/**", "pkg/config/**", "deploy/**",
+	// The public protos are generated into the SDK module too
+	// (buf.gen.sdk-go.yaml), and proto/public-api.txt decides which rpcs get a
+	// client. proto/** above already covers the allowlist; this is the
+	// generated half.
+	"sdk/go/gen/**",
 	".forge/hashes.json", ".forge/scaffolded.json", ".forge/disowned.json",
 	// generate.hooks: controlplane-client, sdk-ts-gen.
 	"proto-vendor/**", "buf.gen.controlplane.yaml", "scripts/proto-generate-atomic.sh",
 	"buf.gen.sdk-ts.yaml", "sdk/ts/src/gen/**",
+	// generate.hooks: sdk-go-gen.
+	"buf.gen.sdk-go.yaml",
 	"tools/protoc-gen-es/package.json", "tools/protoc-gen-es/package-lock.json",
 	// generate.hooks: the go:generate outputs, the manifest schemas, and the
 	// integration projections' specs, upstream schema and catalog output.
@@ -250,7 +257,7 @@ var rules = []rule{
 		// lane for it cost three merge-queue gates the whole web suite.
 		id: "global-config",
 		patterns: []string{
-			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml", "buf.gen.sdk-ts.yaml",
+			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml", "buf.gen.sdk-ts.yaml", "buf.gen.sdk-go.yaml",
 		},
 		full:   []lane{laneForgeGen},
 		reason: "buf's generation configuration changed: the generated code must match it",
@@ -286,9 +293,12 @@ var rules = []rule{
 	{
 		id:       "proto-config",
 		patterns: []string{"proto/**", "proto-vendor/**"},
-		except:   []string{"**/*.proto", "**/*.md"},
-		full:     []lane{laneGo, laneWeb},
-		reason:   "proto tooling configuration changed (it regenerates every client)",
+		// public-api.txt is read by internal/buildmode's tests and regenerates
+		// through buf.gen.sdk-go.yaml's filters; the forge-generate lane judges it, so
+		// it does not force the web suite.
+		except: []string{"**/*.proto", "**/*.md", "proto/public-api.txt"},
+		full:   []lane{laneGo, laneWeb},
+		reason: "proto tooling configuration changed (it regenerates every client)",
 	},
 	{
 		id:       "migrations",
@@ -318,6 +328,20 @@ var rules = []rule{
 		note:     "served assets: only tests that name the file run",
 	},
 	{
+		// sdk/go is its own Go module (go.mod), which the root `go list ./...`
+		// does not see, so no package owns its files. Its generated half is
+		// forge's output (a forge input above), so a change runs
+		// forge-generate; its own tests run as a step in the module (goSteps).
+		// The app does not import it yet; when it does (pinned by version),
+		// a change here reaches the app only through that pin bump.
+		id:       "sdk-go",
+		patterns: []string{"sdk/go/**"},
+		full:     []lane{laneForgeGen},
+		reason:   "the SDK module changed: its generated protos must match proto/, and its own tests run in the module",
+		noGraph:  true,
+		note:     "sdk/go is its own Go module; its tests run with the Go lane",
+	},
+	{
 		id: "web-inert",
 		patterns: []string{
 			"frontends/web/.gitignore", "frontends/web/README.md", "frontends/web/eslint.config.js", "frontends/web/stylelint.config.js",
@@ -332,7 +356,7 @@ var rules = []rule{
 		patterns: []string{
 			"deploy/**", "config/**", "scripts/**", "e2e/**", "docker/**", "assets/**",
 			"generated/**", "examples/**", "gen/forge_descriptor.json", ".forge/**",
-			"bindings_generated.go",
+			"bindings_generated.go", "proto/public-api.txt",
 		},
 		note: "data a test reads only if its sources name it",
 	},

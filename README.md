@@ -169,4 +169,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and the [`contribut
 
 ## License
 
-Copyright (c) 2026 Reliant Labs, Inc. Licensed under the [Business Source License 1.1](LICENSE), except the SDKs under [`sdk/`](sdk/), which carry their own license (the TypeScript SDK, [`sdk/ts`](sdk/ts), is [Apache-2.0](sdk/ts/LICENSE)).
+Copyright (c) 2026 Reliant Labs, Inc. Licensed under the [Business Source License 1.1](LICENSE), except the SDKs under [`sdk/`](sdk/), which carry their own license: the TypeScript SDK, [`sdk/ts`](sdk/ts), and the Go SDK, [`sdk/go`](sdk/go), are Apache-2.0 ([sdk/ts/LICENSE](sdk/ts/LICENSE), [sdk/go/LICENSE](sdk/go/LICENSE)).
