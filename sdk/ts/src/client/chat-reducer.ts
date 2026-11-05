@@ -27,6 +27,7 @@ import type {
 } from "./events.js";
 import { compareMessagesWithinThread } from "./message-order.js";
 import {
+  applyHistoricalErrors,
   applyLogSlice,
   applyToolCallStateUpdates,
   bySequenceNumber,
@@ -35,6 +36,7 @@ import {
   mergeActiveThreads,
   mergeMessages,
   normalizeThreadKey,
+  oldestSeqOf,
   resolveStreamingBase,
   settleCancelledStreamBlocks,
   snapshotReplacesMessages,
@@ -43,6 +45,7 @@ import {
 import { failedSendId, optimisticSendId } from "./send-ids.js";
 import {
   foldToolResultImages,
+  foldToolResultMessage,
   resolvedToolResultFromBlock,
   type ToolResultsByCallId,
 } from "./tool-results.js";
@@ -96,6 +99,29 @@ export function reduceChat(state: ChatState, action: ChatAction, env: ReduceEnv 
       return { ...state, pagination: action.pagination };
     case "contextUsage":
       return { ...state, contextUsage: action.contextUsage };
+    case "olderPage": {
+      const held = new Set(state.messages.map((m) => m.id));
+      const additions = action.messages.filter((m) => !held.has(m.id));
+      // First write wins per call id, as for live results: this page's copy of
+      // a result the chat already holds is a re-delivery.
+      const pageResults: ToolResultsByCallId = {};
+      for (const message of additions) {
+        if (message.role === MessageRole.TOOL) foldToolResultMessage(message, pageResults);
+      }
+      return {
+        ...state,
+        messages: [...additions, ...state.messages].sort(compareMessagesWithinThread),
+        toolResults: { ...state.toolResults, ...pageResults },
+        // The page's own errors arrive with the history they belong to; merged
+        // by id, never replacing a newer attempt the stream already delivered.
+        errors: action.errors.length > 0 ? applyHistoricalErrors(state.errors, action.errors) : state.errors,
+        pagination: {
+          total: action.total,
+          hasMore: action.hasMore,
+          oldestSeq: oldestSeqOf([...additions, ...state.messages]),
+        },
+      };
+    }
     case "caughtUp":
       return { ...state, syncPending: false, cursor: action.cursor > state.cursor ? action.cursor : state.cursor };
     case "sendStarted":

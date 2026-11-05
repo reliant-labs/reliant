@@ -9,6 +9,7 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "isolatedModules": true,
+    "jsx": "react-jsx",
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "composite": true,
@@ -19,5 +20,5 @@
     "baseUrl": ".",
     "paths": { "#gen/*": ["./src/gen/*"] }
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
 }

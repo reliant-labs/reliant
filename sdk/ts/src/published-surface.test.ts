@@ -16,6 +16,7 @@ const pkg = JSON.parse(readFileSync(join(pkgDir, "package.json"), "utf8")) as {
   exports: Record<string, { types: string; default: string } | string>;
   imports: Record<string, string>;
   peerDependencies: Record<string, string>;
+  peerDependenciesMeta?: Record<string, { optional?: boolean }>;
   dependencies?: Record<string, string>;
   scripts: Record<string, string>;
 };
@@ -42,8 +43,8 @@ describe("the manifest", () => {
     expect(pkg.files).toEqual(["dist", "README.md", "NOTICE"]);
   });
 
-  it("resolves only into dist/, and publishes exactly the /client subpath", () => {
-    expect(Object.keys(pkg.exports).sort()).toEqual(["./client", "./package.json"]);
+  it("resolves only into dist/, and publishes exactly the /client and /react subpaths", () => {
+    expect(Object.keys(pkg.exports).sort()).toEqual(["./client", "./package.json", "./react"]);
     for (const e of Object.values(pkg.exports)) {
       for (const target of typeof e === "string" ? [e] : [e.types, e.default]) {
         expect(target.startsWith("./src/"), `${target} points into src/`).toBe(false);
@@ -65,7 +66,13 @@ describe("the manifest", () => {
       "@connectrpc/connect",
       "@opentelemetry/api",
       "@reliantlabs/forge-web-runtime",
+      "@tanstack/react-query",
+      "react",
     ]);
+  });
+
+  it("makes React and React Query optional: only /react reaches them", () => {
+    expect(pkg.peerDependenciesMeta).toEqual({ react: { optional: true }, "@tanstack/react-query": { optional: true } });
   });
 });
 
@@ -85,11 +92,19 @@ describe("the built /client", () => {
 
   it("imports no Node built-in, no React and no DOM-only package", () => {
     const offenders: string[] = [];
-    for (const file of jsFiles(outDir)) {
+    for (const file of [...jsFiles(join(outDir, "client")), ...jsFiles(join(outDir, "gen"))]) {
       for (const spec of specifiers(file)) {
         if (spec.startsWith(".") || spec.startsWith("#")) continue;
         if (!allowedBare.has(spec)) offenders.push(`${relative(outDir, file)}: ${spec}`);
       }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("never reaches into /react", () => {
+    const offenders: string[] = [];
+    for (const file of jsFiles(join(outDir, "client"))) {
+      for (const spec of specifiers(file)) if (/(^|\/)react(\/|$)/.test(spec) && spec.startsWith(".")) offenders.push(`${relative(outDir, file)}: ${spec}`);
     }
     expect(offenders).toEqual([]);
   });
@@ -107,6 +122,52 @@ describe("the built /client", () => {
   it("touches no process, fs, Buffer or other Node global", () => {
     const hits: string[] = [];
     for (const file of jsFiles(join(outDir, "client"))) {
+      const src = readFileSync(file, "utf8");
+      for (const needle of [/\bprocess\./, /\brequire\(/, /\bBuffer\b/, /__dirname/]) {
+        if (needle.test(src)) hits.push(`${relative(outDir, file)}: ${needle}`);
+      }
+    }
+    expect(hits).toEqual([]);
+  });
+});
+
+describe("the built /react", () => {
+  const allowedBare = new Set([
+    "@bufbuild/protobuf",
+    "@connectrpc/connect",
+    "@reliantlabs/forge-web-runtime/service-hooks",
+    "@tanstack/react-query",
+    "react",
+  ]);
+  const specifiers = (file: string): string[] =>
+    [
+      ...readFileSync(file, "utf8").matchAll(/^\s*(?:import|export)\b[^;"']*?\bfrom\s*[\"']([^\"']+)[\"']|^\s*import\s*[\"']([^\"']+)[\"']|\bimport\(\s*[\"']([^\"']+)[\"']/gm),
+    ].map((m) => (m[1] ?? m[2] ?? m[3])!);
+
+  it("reaches only React, React Query, forge's service-hooks and the client", () => {
+    const offenders: string[] = [];
+    for (const file of jsFiles(join(outDir, "react"))) {
+      for (const spec of specifiers(file)) {
+        if (spec.startsWith(".") || spec.startsWith("#")) continue;
+        if (!allowedBare.has(spec)) offenders.push(`${relative(outDir, file)}: ${spec}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("marks every module that uses React as a client module", () => {
+    const missing: string[] = [];
+    for (const file of jsFiles(join(outDir, "react"))) {
+      const src = readFileSync(file, "utf8");
+      const usesReact = specifiers(file).some((s) => s === "react" || s === "@tanstack/react-query");
+      if (usesReact && !/^\s*(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*["']use client["']/.test(src)) missing.push(relative(outDir, file));
+    }
+    expect(missing).toEqual([]);
+  });
+
+  it("touches no process, fs, Buffer or other Node global", () => {
+    const hits: string[] = [];
+    for (const file of jsFiles(join(outDir, "react"))) {
       const src = readFileSync(file, "utf8");
       for (const needle of [/\bprocess\./, /\brequire\(/, /\bBuffer\b/, /__dirname/]) {
         if (needle.test(src)) hits.push(`${relative(outDir, file)}: ${needle}`);

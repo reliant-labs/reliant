@@ -65,6 +65,12 @@ export type ChatAction =
   | { kind: "pagination"; pagination: MessagePaginationInfo }
   /** The main thread's context usage, for the compaction indicator. */
   | { kind: "contextUsage"; contextUsage: ContextUsageInfo }
+  /**
+   * A page of history older than what the chat holds, fetched by the host
+   * (ChatSession.loadOlder does). Prepended, never replacing: the newer messages
+   * stay, and `oldestSeq` can only move backward.
+   */
+  | { kind: "olderPage"; messages: Message[]; errors: ErrorUpdate[]; total: number; hasMore: boolean }
   /** The server finished the initial sync. */
   | { kind: "caughtUp"; cursor: bigint }
   /** A message the user sent that no server row describes yet. */

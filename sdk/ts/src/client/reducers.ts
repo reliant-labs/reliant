@@ -504,3 +504,18 @@ export function isMessageComplete(msg: Message): boolean {
   if (!blocks || blocks.length === 0) return false;
   return !isMessageBlocksStreaming(blocks);
 }
+
+/**
+ * The smallest positive seq in a message list, 0 when none has one: the paging
+ * cursor for "everything older than this". A message without a seq carries no
+ * position, and counting it would make the cursor 0, which ends scroll-back.
+ */
+export function oldestSeqOf(messages: readonly Message[]): number {
+  let oldest = 0;
+  for (const message of messages) {
+    const seq = Number(message.seq ?? 0);
+    if (seq <= 0) continue;
+    if (oldest === 0 || seq < oldest) oldest = seq;
+  }
+  return oldest;
+}
