@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -153,5 +154,33 @@ func TestHookStdinIsNDJSONEvenWithARenderer(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "workflow completed") || strings.HasPrefix(strings.TrimSpace(out.String()), "{") {
 		t.Errorf("visible stream should be rendered text, got %q", out.String())
+	}
+}
+
+// A nil Out writes no event stream, as the SDK's engine documents: nothing
+// reaches the process's stdout unless the caller names a writer.
+func TestEngineNilOutWritesNoStream(t *testing.T) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = stdout })
+
+	src := &fakeSource{
+		updates: []RawUpdate{nodeUpdate(1, 1, "build"), workflowUpdate(2, "completed", "wf-1")},
+		root:    RootState{Found: true, Status: "completed"},
+	}
+	e := &Engine{Source: src, ExecutionID: "chat-1", Log: &bytes.Buffer{}, Interval: 5 * time.Millisecond}
+	code, runErr := e.Run(context.Background())
+	os.Stdout = stdout
+	_ = w.Close()
+	got, _ := io.ReadAll(r)
+	if runErr != nil || code != ExitSuccess {
+		t.Fatalf("Run = %d, %v", code, runErr)
+	}
+	if len(got) != 0 {
+		t.Fatalf("a nil Out wrote the event stream to stdout:\n%s", got)
 	}
 }

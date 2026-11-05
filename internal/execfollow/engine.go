@@ -84,13 +84,15 @@ var (
 )
 
 // Engine drives a follow session for the CLI: the SDK's engine, plus the
-// --hook shell hooks and the CLI's output defaults (Out is stdout and Log is
-// stderr when nil). Field for field it is the struct the CLI has always built.
+// --hook shell hooks and the CLI's diagnostics default (Log is stderr when
+// nil). Out keeps the SDK's contract: nil writes no event stream, so a caller
+// that wants one names its writer (every CLI command passes cmd.OutOrStdout()
+// or io.Discard). Field for field it is the struct the CLI has always built.
 type Engine struct {
 	Source      Source
 	ExecutionID string
 
-	Out io.Writer // event stream (stdout)
+	Out io.Writer // event stream; nil writes none
 	Log io.Writer // diagnostics (stderr)
 
 	// Renderer formats an event for the Out stream. When nil the engine writes
@@ -120,10 +122,6 @@ func (e *Engine) log() io.Writer {
 // Run follows the execution until terminal state, timeout, or context
 // cancellation. It returns the process exit code.
 func (e *Engine) Run(ctx context.Context) (int, error) {
-	out := e.Out
-	if out == nil {
-		out = os.Stdout
-	}
 	runner := e.HookRunner
 	if runner == nil {
 		runner = &HookRunner{Stderr: e.log()}
@@ -132,7 +130,7 @@ func (e *Engine) Run(ctx context.Context) (int, error) {
 	e.inner = &follow.Engine{
 		Source:      e.Source,
 		ExecutionID: e.ExecutionID,
-		Out:         out,
+		Out:         e.Out,
 		Log:         e.log(),
 		Renderer:    e.Renderer,
 		Interval:    e.Interval,
