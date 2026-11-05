@@ -143,11 +143,11 @@ describe("the forge demo console", () => {
     // The tour rides along every navigation.
     expect(search(router).tour).toBe("forge:fg-trace");
 
-    // F4: its logs, four lines.
+    // F4: its logs, five lines from three services.
     await user.click(screen.getByTestId("trace-logs"));
     await waitFor(() => expect(search(router)).toMatchObject({ view: "logs", trace: FIXTURE_TRACE_ID }));
     expect(await screen.findByTestId("obs-logs-trace-scope")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByTestId("obs-log-row")).toHaveLength(4));
+    await waitFor(() => expect(screen.getAllByTestId("obs-log-row")).toHaveLength(5));
 
     // F5: back on the trace, its flamegraph.
     await router.navigate({ to: "/forge/demo", search: { view: "traces", trace: FIXTURE_TRACE_ID } as never });

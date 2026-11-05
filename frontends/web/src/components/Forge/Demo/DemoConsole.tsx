@@ -46,10 +46,9 @@ import { AskAgentModeProvider } from "../Observability/AskReliant/askAgentMode";
 import ObservabilityPanel, { type ObsPlace } from "../Observability/ObservabilityPanel";
 import { OBS_VIEW_LABELS, OBS_VIEWS, viewOf, type ObsNavigate, type ObsSearch, type ObsView } from "../Observability/obsSearch";
 import { FIXTURE_DECLARED } from "../Observability/__fixtures__/fixtureAlerting";
-import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
-import { FIXTURE_SIGNALS } from "../Observability/__fixtures__/fixtureSignals";
+import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadOnly";
-import { withReadOnly } from "../Observability/readOnlyApi";
+import { createDemoApi } from "./data/demoApi";
 import { DemoBanner } from "./DemoBanner";
 import { FORGE_DEMO_PATH } from "./demoPath";
 
@@ -98,8 +97,9 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
   const [collapsed, setCollapsed] = useState(false);
   // Its own client and API: nothing here shares a cache entry with a real project's console.
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }));
-  // Writes are refused in every shell, visibly (obsReadOnly) and underneath (readOnlyApi).
-  const api = useMemo(() => withReadOnly(createFixtureApi({ signals: FIXTURE_SIGNALS, dashboardsReadOnly: true })), []);
+  // Writes are refused in every shell, visibly (obsReadOnly) and underneath (readOnlyApi); on the
+  // demo host the scenario's reads go over forge's mock transport (data/demoApi.ts).
+  const api = useMemo(() => createDemoApi(), []);
 
   const view = viewOf(search.view);
   const env = search.envs?.length === 1 ? search.envs[0] : ENV_ALL;

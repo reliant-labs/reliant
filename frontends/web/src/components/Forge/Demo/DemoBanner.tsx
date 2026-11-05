@@ -8,7 +8,8 @@
  *    picker).
  *  - The public demo (lib/shell.ts `demo`): Install forge and Sign up instead
  *    (there is nowhere to leave to), and one line saying what it records
- *    (lib/demoTelemetry.ts).
+ *    (lib/demoTelemetry.ts), and where its data comes from when that is not
+ *    the built-in sample (DEMO_DATA_SOURCE, data/demoDataStatus.ts).
  */
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -23,6 +24,7 @@ import { browserOptedOut, demoTelemetry, demoTelemetryNotice } from "@/lib/demoT
 import { isDemoShell } from "@/lib/shell";
 
 import { DemoCta } from "./DemoCta";
+import { useDemoDataStatus } from "./data/demoDataStatus";
 
 /** Where "Leave the demo" goes: forge's Apps in Reliant, the project picker in the forge shell. */
 const exitHref = (shell: TourShell) => (shell === "forge" ? "/apps" : "/forge");
@@ -37,6 +39,7 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
   const demo = isDemoShell();
   const optedOut = demo && browserOptedOut();
   const notice = demo ? demoTelemetryNotice(demoTelemetry(optedOut), optedOut) : null;
+  const data = useDemoDataStatus();
 
   return (
     <div
@@ -49,10 +52,14 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
           <FlaskConical className="h-4 w-4" aria-hidden="true" />
           Demo data
         </span>
-        <span className="min-w-0 flex-1 text-ink-muted">
-          {demo
-            ? "Sample data from a made-up app called shop. Nothing you click here changes anything."
-            : "Sample data from a made-up app called shop. Nothing here touches your projects."}
+        <span className="min-w-0 flex-1 text-ink-muted" data-testid="forge-demo-data" data-source={demo ? data : "fixtures"}>
+          {!demo
+            ? "Sample data from a made-up app called shop. Nothing here touches your projects."
+            : data === "live"
+              ? "Live data from shop, a sample forge app. Nothing you click here changes anything."
+              : data === "fallback"
+                ? "Showing sample data: the live demo did not answer. Nothing you click here changes anything."
+                : "Sample data from a made-up app called shop. Nothing you click here changes anything."}
         </span>
         {!tour && (
           <button
