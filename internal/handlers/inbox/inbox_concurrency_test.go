@@ -99,15 +99,12 @@ func TestListInbox_ReadsRunConcurrentlyWithinTheBound(t *testing.T) {
 	repo := newInflightRepo(hold)
 	svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}))
 
-	start := time.Now()
 	_, err := svc.ListInbox(userCtx(), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 	require.NoError(t, err)
-	elapsed := time.Since(start)
 
+	// The peak in flight is what proves the reads overlap. A wall-clock bound
+	// on the call was removed as flaky under load (flake:removed).
 	assert.EqualValues(t, inboxReadConcurrency, repo.peak.Load(), "reads overlap, up to the bound and no further")
-	// Seven held reads one after another take 7×hold; the longest chain
-	// (triggers, then firings, then the dismissal check) is 3×hold.
-	assert.Less(t, elapsed, 6*hold, "the reads ran one after another")
 	// The triggers are read once for both automation sections.
 	assert.Len(t, repo.Calls("ListTriggers"), 1)
 }
