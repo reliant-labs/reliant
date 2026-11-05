@@ -77,8 +77,9 @@ func (t *sessionTracker) cleanup() {
 
 // AuthInterceptor provides authentication for gRPC requests. A session JWT (or
 // the self-host API key) goes to the configured validator; an `rlat_` access
-// token goes to the token authority, must carry reliant:api, and resolves to
-// the same claims/identity object its acting user's session would.
+// token goes to the token authority, must carry the rpc's scope (reliant:api,
+// or for a run or trigger rpc the narrower scope rpcScopes names), and
+// resolves to the same claims/identity object its acting user's session would.
 type AuthInterceptor struct {
 	validator      auth.TokenValidator
 	accessTokens   auth.AccessTokenIntrospector // optional; nil disables access-token auth
@@ -176,7 +177,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	}
 
 	// Shape dispatch: `rlat_` bearers are access tokens (resolved by the token
-	// authority, reliant:api only); anything else goes through the configured
+	// authority, scoped per rpc by rpcScopes); anything else goes through the configured
 	// JWT/apikey validator. A machine credential that reaches a token-MINTING
 	// RPC is refused by that handler (TokenService.CreateToken), not here.
 	isAccessToken := auth.IsAccessTokenFormat(tokenString)
@@ -189,9 +190,18 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 				"procedure", procedure)
 			return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid or expired token"))
 		}
-		claims, principal, err = auth.ClaimsForAPIToken(ctx, i.accessTokens, tokenString)
+		// The scope this rpc needs (rpcScopes): reliant:api, or the runs or
+		// triggers slice of it an SDK token may hold instead.
+		claims, principal, err = auth.ClaimsForAPITokenScope(ctx, i.accessTokens, tokenString, procedureScope(procedure))
 	} else {
 		claims, err = i.validator.ValidateToken(tokenString)
+	}
+	if err != nil && svcerr.IsPermissionDenied(err) {
+		// A live token whose scopes do not reach this rpc: the credential
+		// is fine, so not Unauthenticated. The error names the scope.
+		logging.DebugContext(ctx, "[gRPC Auth] Access token lacks the rpc's scope",
+			"procedure", procedure)
+		return nil, nil, svcerr.ToConnect(err)
 	}
 	if err != nil {
 		// Only a credential rejection is Unauthenticated. Anything else — the
@@ -222,6 +232,9 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	ctx = telemetry.BindUser(ctx, claims.Sub)
 	if principal != nil {
 		ctx = auth.WithMachineToken(ctx, principal)
+		// For fat.RequireScope in a handler that checks a narrower scope
+		// than its rpc's (none does yet).
+		ctx = fat.WithPrincipal(ctx, principal)
 	}
 
 	// Store the bearer so subsystems (e.g. Reliant LLM driver) can look it up

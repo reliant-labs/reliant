@@ -78,6 +78,22 @@ var ErrAccessTokenNotAPI = fmt.Errorf("%w: access token does not grant reliant:a
 // introspection failure is returned as-is (NOT a rejection — the auth layer
 // reports it as Unavailable).
 func ClaimsForAPIToken(ctx context.Context, introspector AccessTokenIntrospector, token string) (*JWTClaims, *fat.Principal, error) {
+	return ClaimsForAPITokenScope(ctx, introspector, token, fat.ScopeReliantAPI)
+}
+
+// ClaimsForAPITokenScope is ClaimsForAPIToken for an action that needs scope
+// need: one rpc of the API. The token must be live, act as a user, hold API
+// authority at all (reliant:api, or one of the runs and triggers slices of
+// it, fat.RunsAndTriggersScopes), and permit need (fat.Set.Permits:
+// reliant:api permits every slice; runs:start and runs:control imply
+// runs:read).
+//
+// A token with no API authority (a daemon, LLM or connector credential) is
+// ErrAccessTokenNotAPI, a credential rejection. A token with API authority
+// that does not reach need is the PermissionDenied error fat.Principal.Require
+// builds (reason scope_missing, the scope named in fat.ScopesHeader): the
+// credential is fine, this action is outside it.
+func ClaimsForAPITokenScope(ctx context.Context, introspector AccessTokenIntrospector, token string, need fat.Scope) (*JWTClaims, *fat.Principal, error) {
 	p, err := introspector.Introspect(ctx, token)
 	if err != nil {
 		if errors.Is(err, ErrAccessTokenInactive) {
@@ -85,10 +101,26 @@ func ClaimsForAPIToken(ctx context.Context, introspector AccessTokenIntrospector
 		}
 		return nil, nil, err
 	}
-	if !p.Scopes.Permits(fat.ScopeReliantAPI) || p.ActingUserID == "" {
+	if p.ActingUserID == "" || !holdsAPIAuthority(p.Scopes) {
 		return nil, nil, ErrAccessTokenNotAPI
 	}
+	if err := p.Require(need); err != nil {
+		return nil, nil, err
+	}
 	return &JWTClaims{Sub: p.ActingUserID, Role: "authenticated", Credential: CredentialAccessToken}, p, nil
+}
+
+// holdsAPIAuthority reports whether scopes reach any part of reliant's API.
+func holdsAPIAuthority(scopes fat.Set) bool {
+	if scopes.Permits(fat.ScopeReliantAPI) {
+		return true
+	}
+	for _, s := range fat.RunsAndTriggersScopes {
+		if scopes.Has(s) {
+			return true
+		}
+	}
+	return false
 }
 
 // ErrAccessTokenInactive is the sentinel an introspector wraps for a token
