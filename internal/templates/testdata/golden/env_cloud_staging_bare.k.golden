@@ -1,0 +1,222 @@
+"""
+The `staging` environment of shop, hosted on Reliant.
+
+YOURS. forge scaffolds this file once and never rewrites it.
+
+This file BINDS; it does not declare. `deploy/kcl/workloads.k` states what
+each workload is (build, subcommand, ports, credentials). This file says
+where each one runs here, and states the values only this env knows.
+
+As scaffolded, everything runs on the forge control plane (Reliant cloud),
+which owns the namespace, the registry, the database and the secrets (and,
+for static sites, the bucket, the CDN and the hostname):
+
+  workloads  `forge.OnHosted`: each a Workload the platform admits under its
+             Restricted profile (kinds service, worker, job) and renders with
+             the same Go renderer a cluster you operate uses. The API is ONE
+             of them, `_api`: every service and worker, in one process
+  database   `_db`, a dedicated managed Postgres; workloads read its URL
+             through `forge.DatabaseRef`, so nobody handles the password
+  secrets    the control plane's write-only store:
+             `forge secret set --env staging <KEY>` (value on stdin)
+
+Hosted workloads, the managed database and static sites all need billing on
+your Reliant organization (Reliant → Settings → Billing).
+
+HOSTING ELSEWHERE is a binding edit, not a rewrite: the binders for a
+cluster you operate (`_on_cluster`) and your own bucket (`_on_bucket`) are
+declared below, unused, each saying what to fill in.
+
+Render and deploy through forge: `forge env render staging`,
+`forge env deploy staging`.
+"""
+
+import forge
+import forge.workloads as fw
+
+# What this project RUNS — declared once, shared by every env.
+import ..workloads as wl
+
+# Per-environment config values (the typed AppConfig instance in config.k).
+import config_gen
+import .config as appcfg
+
+# The database. RETAIN (the default deletionPolicy): removing this
+# declaration never drops the data. Your own Postgres instead? Delete `_db`,
+# `databases` and the DATABASE_URL line in `_hosted`, then
+# `forge secret set --env staging DATABASE_URL`.
+_db = forge.ManagedDatabase {
+    name = "shop"
+    runtime = forge.OnHosted {}
+}
+
+# This env's layer over a workload: the typed config projected into its env
+# (a credential only into the workloads that list it in `config_secrets`).
+# OTEL_SERVICE_NAME is not set here: forge.render gives every workload its
+# own name unless its env sets one.
+_configured = lambda w: fw.Workload -> fw.Workload {
+    w | {env = config_gen.appConfigEnvMap(appcfg.app_config, w.config_secrets) | w.env}
+}
+
+# ---------------------------------------------------------------------------
+# THE BINDINGS: where each workload runs in this env.
+# ---------------------------------------------------------------------------
+# There is no env-wide runtime: each line in `_workloads` names its binder,
+# and rebinding a workload is editing that one line.
+
+# HOSTED: a Workload on the forge control plane. Its image is the declared
+# one minus the registry host: the platform pulls only from its own
+# registry, and forge composes that address (<registry>/<org>/shop/<name>)
+# from your credential. DATABASE_URL is the managed database's.
+_hosted = lambda w: fw.Workload -> fw.Workload {
+    _c = _configured(w)
+    _c | {
+        image = w.image[w.image.rfind("/") + 1:] if w.image else w.image
+        env = _c.env \
+            | ({DATABASE_URL = forge.DatabaseRef {name = _db.name}} if "DATABASE_URL" in w.config_secrets else {})
+        runtime = forge.OnHosted {}
+    }
+}
+
+# A CLUSTER YOU OPERATE, for what hosting refuses — an operator (no
+# Kubernetes API on shared nodes), a `kind = "cron"` CronJob (not metered
+# yet) — or what you would rather run yourself. Declare the cluster, then
+# rebind the workload's line: `_hosted(_api)` → `_on_cluster(_api)`.
+#
+#     _cluster = forge.ClusterTarget {
+#         cluster = "gke_acme_us-central1_staging"   # its kubectl context
+#         connected_cluster = "shop-staging"     # see below
+#         namespace = "shop-staging"
+#         platform = "amd64"                       # the nodes' arch
+#     }
+#
+# This env's deploys go through the control plane, so it must reach the
+# cluster too: register it once with `forge cluster connect shop-staging
+# --context <kubectl context> --env staging`. Until `_cluster` is declared, a
+# workload bound here fails the render, naming itself. A cluster workload
+# pulls the image workloads.k declares (`forge env build staging --push`), gets
+# the capacity floor below, and reads DATABASE_URL from the
+# `shop-secrets` Secret you provision in its namespace.
+_cluster = None
+_on_cluster = lambda w: fw.Workload -> fw.Workload {
+    assert _cluster, "workload '${w.name}' is bound to _on_cluster, but deploy/kcl/staging/main.k declares no `_cluster`: declare the cluster you operate there" \
+        + (" — the hosted platform refuses ${w.kind}s, so it cannot be rebound `_hosted`; drop the line to not run it here" if w.kind in ["cron", "operator"] else ", or rebind the line `_hosted`")
+    _configured(w) | {
+        resources = fw.Resources {
+            cpuRequestMillicores = forge.cpu(0.25)
+            memoryRequestBytes = forge.mib(256)
+            cpuLimitMillicores = forge.cpu(1.0)
+            memoryLimitBytes = forge.mib(512)
+        }
+        # A replica FLOOR for the long-running kinds; above one, forge adds a
+        # PodDisruptionBudget and spreads the pods across nodes.
+        if w.kind in ["service", "worker", "operator"]:
+            replicas = w.replicas if w.replicas > 2 else 2
+        runtime = forge.OnCluster {target = _cluster}
+    }
+}
+# Elsewhere again: `wl.<name> | {runtime = forge.OnCompose {}}` runs a
+# workload as a docker-compose service on the machine that deploys.
+
+# Built, never run.
+_build_only = lambda w: fw.Workload -> fw.Workload {
+    w | {runtime = forge.BuildOnly {}}
+}
+
+# THE API, as ONE workload: the binary's `server` command, which mounts
+# every service on one Connect mux and supervises every worker beside it.
+#
+# A browser reaches the API at one origin. Its Connect transport has one
+# base URL (a call is `/<package>.<Service>/<Method>`, so one origin serves
+# every service), and sign-in answers with an HttpOnly session cookie the
+# browser sends back to that origin only. The platform gives each workload
+# its own hostname and routes no paths between them, so a workload per
+# service would leave the frontend reaching one of them, signed in to none
+# of the others.
+#
+# workloads.k still declares each service and worker; here `server` runs
+# them (dev runs the same `_api`, under air). So `forge scaffold
+# service|worker` adds no line below for one. Splitting one out — a service
+# no browser calls, a worker that needs its own capacity — is its own line,
+# `_hosted(wl.<name>)`, and taking it out of `server`'s mount or worker list:
+# cmd/shop/cmd/server.go. (`server` runs no operator here — with
+# no Kubernetes API it logs that operators are disabled and serves on.)
+_api = fw.Workload {
+    name = "api"
+    kind = "service"
+    image = "ghcr.io/acme/shop"
+    build = forge.GoBuild {cmd = "./cmd/shop", output_name = "shop"}
+    args = ["server"]
+    ports = [fw.Port {name = "http", port = 8080, expose = True}]
+    config_secrets = ["DATABASE_URL"]
+}
+
+# Every workload this env runs, one binding each. `forge scaffold` appends
+# a line here when it adds a workload; drop a line to not run it here.
+# (The dev-IdP convergence job is not here: this env's issuer is a real
+# one, with its applications registered out of band.)
+_workloads = [
+    _hosted(wl.migrate)
+]
+
+# ---------------------------------------------------------------------------
+# FRONTENDS bind a runtime the same way, through these binders. A frontend
+# is a static export (`output: static` in forge.yaml), published from its
+# `public_dir`.
+# ---------------------------------------------------------------------------
+
+# The API the browser calls: `_api`, once this env runs it — every
+# service, at one origin.
+_api_config = {API_URL = forge.WorkloadURL {workload = _api.name}} if any w in _workloads {w.name == _api.name} else {}
+
+# HOSTED: the platform's static hosting. Like a workload, its image
+# names no registry host. The release carries no config.js: the control
+# plane writes one after every sync, so one release promotes between envs
+# unchanged. An API_URL that references a workload becomes "/_api": the
+# platform serves that workload on every host of the site (custom domains
+# too) at /_api/*, the path the dev loop proxies, so the session cookie is
+# first-party to the site. The API's own URL keeps working for CLIs, mobile
+# apps and servers. To have the browser call that URL instead, write it as a
+# literal: `API_URL = "https://<api host>"` is never rewritten.
+_hosted_frontend = lambda f: forge.Frontend -> forge.Frontend {
+    f | {
+        image = f.name
+        runtime = forge.OnHosted {}
+        runtime_config = _api_config
+    }
+}
+
+# YOUR OWN BUCKET (and a CDN you operate): each deploy uploads an immutable
+# `releases/<digest>/` and syncs `live/` from it. Bucket names are global,
+# so forge does not guess one: declare it, then rebind the frontend's line
+# to `_on_bucket(...)`.
+#
+#     _bucket = forge.OnBucket {bucket = "shop-staging-site"}   # cdn = forge.StaticSiteCDN {...}
+_bucket = None
+_on_bucket = lambda f: forge.Frontend -> forge.Frontend {
+    assert _bucket, "frontend '${f.name}' is bound to _on_bucket, but deploy/kcl/staging/main.k declares no `_bucket`: declare it there, or rebind the line `_hosted_frontend`"
+    f | {runtime = _bucket}
+}
+
+_bundle = forge.Bundle {
+    project = "shop"
+    # Where hosted workloads, the database are published:
+    # Reliant cloud (set `endpoint` for another control plane).
+    control_plane = forge.ControlPlane {}
+    workloads = _workloads
+    databases = [_db]
+    # SECRET VALUES live in the control plane's store; forge never sees one.
+    # A `sensitive` config field a hosted workload reads is a managedSecret
+    # of the same key: `forge secret set --env staging <KEY>`.
+    secret_provider = forge.HostedSecrets {}
+    # Once workloads run on `_cluster`, it carries this env's support objects
+    # too. Add, with `import .ingress as ing` above (deploy/kcl/staging/ingress.k):
+    #
+    #     cluster_target = _cluster
+    #     network_policy = forge.NetworkPolicy {ingress_namespace = "envoy-gateway-system"}
+    #     gateways = ing.GATEWAYS
+    #     http_routes = ing.HTTP_ROUTES
+    #     grpc_routes = ing.GRPC_ROUTES
+}
+
+output = forge.render(_bundle)

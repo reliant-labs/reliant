@@ -1,0 +1,162 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// This route is OWNED and DISPOSABLE. forge scaffolds a full CRUD route for
+// EVERY entity, but a purpose-built frontend uses only a fraction — if this
+// entity isn't part of THIS frontend's product surface, delete the route
+// instead of leaving it wired into navigation.
+// Detail page emitted by `forge scaffold page`. See `forge skill load frontend/pages` for canonical patterns.
+{{- /* Import ORDER is derived, not authored: the page writer sorts the
+       imports this render actually emitted into the groups the scaffold's
+       eslint import/order rule expects (templates.CanonicalTSImportOrder).
+       List a new import wherever it reads best. */}}
+{{- if or .HasUpdate .HasDelete}}
+import { {{if .HasDelete}}Trash2{{end}}{{if and .HasDelete .HasUpdate}}, {{end}}{{if .HasUpdate}}SquarePen{{end}}{{if .HasDelete}}, TriangleAlert{{end}} } from "lucide-react";
+{{- end}}
+import { userMessage } from "@reliantlabs/forge-web-runtime";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+{{- if .HasDelete}}
+import { useState } from "react";
+{{- end}}
+
+{{if .HasDetailFK}}import { EntityName } from "@/components/entity-name";
+{{end -}}
+{{if .HasBadgeColumns}}import { StatusBadge } from "@/components/status-badge";
+{{end}}import AlertBanner from "@/components/ui/alert_banner";
+import KeyValueList from "@/components/ui/key_value_list";
+{{- if .HasDelete}}
+import Modal from "@/components/ui/modal";
+{{- end}}
+import PageHeader from "@/components/ui/page_header";
+import SkeletonLoader from "@/components/ui/skeleton_loader";
+{{- range .ColumnEnumImports}}
+import { {{range $i, $t := .Types}}{{if $i}}, {{end}}{{$t}}{{end}} } from "{{.Path}}";
+{{- end}}
+{{- range .DetailHookImports}}
+import { {{joinStrings .Symbols ", "}} } from "{{.Module}}";
+{{- end}}
+import { formatValue } from "@/lib/format-utils";
+
+// Route params are validated on the ROUTE in src/routes.tsx via
+// `parseParams: z.object({ id: z.string().min(1) }).parse`. We read the
+// typed value via `useParams` (non-strict — useable before the route is
+// fully wired).
+export default function {{.EntityName}}DetailPage() {
+  const navigate = useNavigate();
+  const params = useParams({ strict: false }) as { id: string };
+  const id = params.id;
+  {{- if .HasDelete}}
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  {{- end}}
+
+  const { data, isLoading, error } = use{{.GetRPC}}({ id });
+  {{- if .HasDelete}}
+  // The generated hook already invalidates the {{.EntityName | humanLower}} query scope on
+  // success — no manual cache invalidation needed here. Failure surfaces
+  // via the app-wide error-toast chokepoint (query-client.ts).
+  const deleteMutation = use{{.DeleteRPC}}({
+    onSuccess: () => void navigate({ to: "/{{.EntitySlug}}" }),
+  });
+  {{- end}}
+
+  if (isLoading) return <SkeletonLoader variant="list-item" count={5} />;
+  if (error) return (
+    <div className="px-4 py-8">
+      <AlertBanner variant="error" message={userMessage(error)} />
+      <Link to="/{{.EntitySlug}}" className="mt-4 inline-flex text-sm text-accent underline hover:text-accent-hover">
+        Back to {{.EntityNamePlural | humanLower}}
+      </Link>
+    </div>
+  );
+
+  // Typed access: the generator knows the response wraps the entity in
+  // `{{.GetEntityAccessor}}` — no `?? data` hedging, no Record<string, unknown> cast.
+  const item = data?.{{.GetEntityAccessor}};
+  const title = {{if .DisplayField}}item?.{{.DisplayField}} || {{end}}String(item?.{{.PkFieldCamel}} ?? "{{.EntityName | humanize}}");
+
+  // Typed field rows — one entry per renderable proto field, declared by
+  // the generator instead of reflected out of Object.entries at runtime.
+  const fields = item
+    ? [
+{{- range .Columns}}
+        {
+          label: "{{.Label}}",
+{{- if .FK}}
+{{- template "fkNameValue" .}}
+{{- else if .IsBadge}}
+{{- if .EnumType}}
+          value: <StatusBadge value={item.{{.Name}}} enumType={ {{.EnumType}} } />,
+{{- else}}
+          value: <StatusBadge value={item.{{.Name}}} />,
+{{- end}}
+{{- else}}
+          value: formatValue(item.{{.Name}}),
+{{- end}}
+        },
+{{- end}}
+      ]
+    : [];
+
+  const actions: Array<{ label: string; href?: string; variant?: "primary" | "secondary" | "danger"; icon?: React.ReactNode; onClick?: () => void }> = [
+    {{- if .HasUpdate}}
+    {
+      label: "Edit",
+      href: `/{{.EntitySlug}}/${id}/edit`,
+      variant: "secondary" as const,
+      icon: <SquarePen aria-hidden className="h-4 w-4" strokeWidth={1.5} />,
+    },
+    {{- end}}
+    {{- if .HasDelete}}
+    {
+      label: "Delete",
+      onClick: () => setShowDeleteConfirm(true),
+      variant: "danger" as const,
+      icon: <Trash2 aria-hidden className="h-4 w-4" strokeWidth={1.5} />,
+    },
+    {{- end}}
+  ];
+
+  return (
+    <div>
+      <PageHeader
+        title={title}
+        breadcrumbs={[
+          { label: "{{.EntityNamePlural | humanize}}", href: "/{{.EntitySlug}}" },
+          { label: title },
+        ]}
+        actions={actions}
+      />
+
+      <KeyValueList groups={[{ fields }]} />
+
+      {{- if .HasDelete}}
+      <Modal
+        open={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        title="Delete {{.EntityName | humanize}}"
+        description="Are you sure you want to delete this {{.EntityName | humanLower}}? This action cannot be undone."
+        footer={
+          <>
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              className="rounded-lg border border-border bg-surface px-4 py-2 text-sm font-medium text-ink shadow-sm hover:bg-surface-muted"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => deleteMutation.mutate({ id })}
+              disabled={deleteMutation.isPending}
+              className="rounded-lg bg-danger px-4 py-2 text-sm font-medium text-on-danger shadow-sm hover:bg-danger-hover disabled:opacity-50"
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </button>
+          </>
+        }
+      >
+        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-danger-surface">
+          <TriangleAlert aria-hidden className="h-5 w-5 text-danger" strokeWidth={1.5} />
+        </div>
+      </Modal>
+      {{- end}}
+    </div>
+  );
+}

@@ -1,0 +1,80 @@
+import { createConnectTransport } from "@connectrpc/connect-web";
+import { createClient, type Transport } from "@connectrpc/connect";
+import { buildRuntimeInterceptors } from "@reliantlabs/forge-web-runtime/interceptors";
+import type { DescService } from "@bufbuild/protobuf";
+import { DEV_API_URL } from "./apiurl_gen";
+
+// The API URL is read from the EXPO_PUBLIC_API_URL environment variable.
+// In dev it falls back to DEV_API_URL — regenerated on every `forge
+// generate` (src/lib/apiurl_gen.ts) so it tracks the port the backend
+// actually binds. In a deployable build the per-env EXPO_PUBLIC_API_URL is
+// injected from KCL (forge.Frontend config / env_vars); this floor is
+// dev-only.
+//
+// No same-origin dev proxy here, unlike the web scaffolds' `/_api`
+// (src/lib/api-base.ts in a Next.js or Vite frontend). A native app has no
+// page origin to proxy through: on a device or emulator "localhost" is the
+// device itself, so point EXPO_PUBLIC_API_URL at an address the device can
+// reach (the dev machine's LAN IP, or a tunnel to the API port).
+const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? DEV_API_URL;
+
+// Module-level token getter. Nothing wires it by default: this tree ships
+// the mock session provider, whose fixture token no server accepts, so the
+// scaffold sends NO Authorization header rather than one that is guaranteed
+// to be rejected. Call this from app/_layout.tsx once you have implemented
+// AuthProvider (src/lib/auth/provider) over a real identity source.
+let _getToken: () => Promise<string | null> = async () => null;
+
+export function setAuthTokenGetter(fn: () => Promise<string | null>) {
+  _getToken = fn;
+}
+
+// The forge frontend runtime owns the interceptor stack: auth-token attach,
+// brand headers, W3C traceparent propagation (so backend spans join the same
+// trace — always on, no collector required) and typed error normalization.
+// It is the SAME stack the Next.js and Vite SPA frontends build, so a mobile
+// request is as traceable as a browser one. The token getter resolves the
+// CURRENT token on every call, so wiring it after login is enough — there is
+// no captured value to go stale.
+//
+// The import is the runtime's DOM-free entry point, not its "." barrel: the
+// barrel also carries React components typed against React 19, which Expo's
+// React 18 types reject. "/interceptors" reaches only the transport layer.
+const interceptors = buildRuntimeInterceptors({
+  getToken: () => _getToken(),
+});
+
+function buildTransport(): Transport {
+  return createConnectTransport({
+    baseUrl,
+    interceptors,
+  });
+}
+
+export const transport = buildTransport();
+{{- if .Workspaces}}
+
+// Wire the workspace-shared hooks package to this frontend's Transport.
+// The hooks package is DOM-free; each frontend hands its Transport over
+// once at module load so generated hooks resolve against the right
+// network layer.
+import { setApiTransport } from "{{.HooksPackage}}";
+setApiTransport(transport);
+{{- end}}
+
+/**
+ * connectClient creates a typed Connect client for a given service descriptor.
+ *
+ * Usage:
+{{- if .Workspaces}}
+ *   import { UserService } from "{{.APIPackage}}/services/users/v1/users_pb";
+{{- else}}
+ *   import { UserService } from "../gen/user/v1/user_pb";
+{{- end}}
+ *
+ *   const client = connectClient(UserService);
+ *   const user = await client.getUser({ id: "1" });
+ */
+export function connectClient<S extends DescService>(service: S) {
+  return createClient(service, transport);
+}
