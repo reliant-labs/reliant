@@ -45,7 +45,17 @@ describe("summarizeTurnWork", () => {
     });
     expect(s.running).toBe(0);
     expect(s.failed).toBe(0);
-    expect(s.current).toBeUndefined();
+  });
+
+  it("names the latest finished step when nothing is running, so the live line never blanks", () => {
+    expect(summarizeTurnWork([]).current).toBeUndefined();
+    const s = summarizeTurnWork([
+      exec("view", { input: { file_path: "src/a.ts" } }),
+      exec("view", { input: { file_path: "src/ChatInput.tsx" } }),
+    ]);
+    expect(s.running).toBe(0);
+    expect(s.current).toContain("ChatInput.tsx");
+    expect(s.current).not.toMatch(/^Reading /);
   });
 
   it("counts failed from error results and failed status, running from unresolved calls", () => {

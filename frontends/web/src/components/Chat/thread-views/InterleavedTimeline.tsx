@@ -54,6 +54,7 @@ import {
   type WorkItem,
 } from "./simplifiedTurns";
 import { TurnWorkFold } from "../TurnWorkFold";
+import { LiveTurnFoldContext } from "./liveTurnContext";
 import {
   measureRows,
   resolvePinnedUserMessage,
@@ -1744,7 +1745,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
           <div ref={timeline.footerRef} className="absolute inset-x-0" style={{ bottom: chromeInsets.bottom }}>
             {footer ? (
               <div className={cn(timelineHorizontalPaddingClass, "pb-3")}>
-                <div className={cn(contentMaxWidthClass, "mx-auto")}>{footer}</div>
+                <div className={cn(contentMaxWidthClass, "mx-auto")}>
+                  <LiveTurnFoldContext.Provider value={liveWorkIndex >= 0}>{footer}</LiveTurnFoldContext.Provider>
+                </div>
               </div>
             ) : (
               <div className="pb-10" />

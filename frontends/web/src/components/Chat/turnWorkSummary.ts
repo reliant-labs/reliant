@@ -52,7 +52,11 @@ export interface TurnWorkSummary {
   /** Spawned agents whose child workflow is still going. */
   spawnsRunning: number;
   counts: TurnWorkCounts;
-  /** Live label of the latest running call, e.g. "Reading ChatInput.tsx". */
+  /**
+   * The step the live line names: the latest running call ("Reading
+   * ChatInput.tsx"), or, when none is running, the latest call ("Read
+   * ChatInput.tsx").
+   */
   current?: string;
 }
 
@@ -113,11 +117,11 @@ function countKeyFor(toolName: string): TurnWorkCountKey {
   }
 }
 
-function liveLabel(call: TurnWorkCall, max: number): string {
+function stepLabel(call: TurnWorkCall, max: number, phase: "live" | "done"): string {
   const formatted =
     call.input === undefined ? undefined : formatToolParams(call.name, call.input as ToolInput);
   const preview = formatted?.summary?.trim();
-  const verb = toolActionVerb(call.name, "live");
+  const verb = toolActionVerb(call.name, phase);
   // A shell call's description is already an action ("Run cart tests").
   if (verb && preview && typeof formatted?.structured?.description === "string") {
     return truncate(preview, max);
@@ -175,7 +179,13 @@ export function summarizeTurnWork(
     failed,
     spawnsRunning,
     counts,
-    current: latestRunning ? liveLabel(latestRunning, max) : undefined,
+    // Between tool calls (the model is thinking) the latest finished step
+    // stands in, so the live line never blanks out between steps.
+    current: latestRunning
+      ? stepLabel(latestRunning, max, "live")
+      : executions.length > 0
+        ? stepLabel(executions[executions.length - 1].call, max, "done")
+        : undefined,
   };
 }
 

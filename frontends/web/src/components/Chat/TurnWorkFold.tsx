@@ -15,6 +15,7 @@ import {
 } from "./turnWorkSummary";
 import type { TurnWork } from "./thread-views/simplifiedTurns";
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
+import { useMinimumDwell } from "./useMinimumDwell";
 
 interface TurnWorkFoldProps {
   work: TurnWork;
@@ -27,6 +28,9 @@ interface TurnWorkFoldProps {
 }
 
 const NO_APPROVALS: Approval[] = [];
+
+/** How long each step stays on the live line before the next replaces it. */
+const STEP_MIN_DWELL_MS = 1200;
 
 function parseTime(value: string | undefined): number | null {
   if (!value) return null;
@@ -124,7 +128,13 @@ function TurnWorkFoldComponent({
           ? endMs - startMs
           : null;
 
-  const headline = formatTurnWorkHeadline(summary, { live, elapsedMs });
+  // Hold each step on the live line long enough to read: a fast agent moves
+  // through several reads a second, which otherwise flashes past unreadable.
+  const heldStep = useMinimumDwell(summary.current, STEP_MIN_DWELL_MS);
+  const headline = formatTurnWorkHeadline(
+    live ? { ...summary, current: heldStep } : summary,
+    { live, elapsedMs },
+  );
 
   // Collapsed by default, even while live: the header carries the live state.
   const [expanded, setExpanded] = useState(false);
