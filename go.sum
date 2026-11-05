@@ -643,6 +643,8 @@ github.com/quic-go/quic-go v0.54.0 h1:6s1YB9QotYI6Ospeiguknbp2Znb/jZYjZLRXn9kMQB
 github.com/quic-go/quic-go v0.54.0/go.mod h1:e68ZEaCdyviluZmy44P6Iey98v/Wfz6HCjQEm+l8zTY=
 github.com/reliant-labs/forge v1.0.16-0.20261105110032-109260489079 h1:ZR4ehCtXugbVKXKxuxMMJZczC3gSEEO75Bu4bSXWzGY=
 github.com/reliant-labs/forge v1.0.16-0.20261105110032-109260489079/go.mod h1:9uOvn+nL2z8Nl6gEaLVJegOg0Et8OMEVHZccsmkruRE=
+github.com/reliant-labs/forge v1.0.16-0.20261105192403-a54d7bccb888 h1:a5Zqx0qHSgsoYHKrF5i6uomsrxyvVhPBLQgqwgNg++k=
+github.com/reliant-labs/forge v1.0.16-0.20261105192403-a54d7bccb888/go.mod h1:9uOvn+nL2z8Nl6gEaLVJegOg0Et8OMEVHZccsmkruRE=
 github.com/reliant-labs/reliant/sdk/go v0.0.0-20261105182825-818571182a51 h1:k5O1F+CzCkwUeZiYlm00HaALM+xPFM33Kols4B1KE10=
 github.com/reliant-labs/reliant/sdk/go v0.0.0-20261105182825-818571182a51/go.mod h1:+A16dfAG9c6oCm2ODMSa1OQx3j1CeYnDwqlwZym/Wic=
 github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=

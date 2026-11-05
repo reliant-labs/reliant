@@ -94,7 +94,7 @@ func ClaimsForAPIToken(ctx context.Context, introspector AccessTokenIntrospector
 
 // ClaimsForAccessToken authenticates an `rlat_` that may be narrow: it must be
 // live, act as a user, and hold reliant:api or one of the runs and triggers
-// scopes (fat.RunsAndTriggersScopes). Which rpcs the token may reach is the
+// scopes (fat.RunsAndTriggersScopes, fat.InboxScopes). Which rpcs the token may reach is the
 // caller's job (interceptors.RequireProcedureScope); this only admits it.
 func ClaimsForAccessToken(ctx context.Context, introspector AccessTokenIntrospector, token string) (*JWTClaims, *fat.Principal, error) {
 	p, err := introspector.Introspect(ctx, token)
@@ -116,6 +116,11 @@ func holdsAPIScope(scopes fat.Set) bool {
 		return true
 	}
 	for _, s := range fat.RunsAndTriggersScopes {
+		if scopes.Has(s) {
+			return true
+		}
+	}
+	for _, s := range fat.InboxScopes {
 		if scopes.Has(s) {
 			return true
 		}
