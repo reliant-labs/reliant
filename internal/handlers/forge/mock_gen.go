@@ -63,7 +63,7 @@ func (m *MockRouter) PlacementDaemonID(ctx context.Context, userID string, daemo
 var _ Router = (*MockRouter)(nil)
 
 // forge:section MockRepository
-// forge:hash=ef8204ac3e13dd45a36d2e11b0342b3360ebf9521c878c8b49f96beed93c35e5
+// forge:hash=b34274969ce5e5c83414b92a6694ede3dc60b5bdbcba50a8d228341772e111ff
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -75,6 +75,7 @@ type MockRepository struct {
 	contractkit.Recorder
 	GetProjectWithUserCheckFunc      func(context.Context, string, string) (*db.Project, error)
 	SetProjectForgeNameFunc          func(context.Context, string, string, string) (bool, error)
+	ListProjectsFunc                 func(context.Context, db.ProjectFilters) ([]*db.Project, error)
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
 }
@@ -95,6 +96,15 @@ func (m *MockRepository) SetProjectForgeName(ctx context.Context, id string, use
 		return m.SetProjectForgeNameFunc(ctx, id, userID, forgeProjectName)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "SetProjectForgeName")
+}
+
+// ListProjects records the call and delegates to ListProjectsFunc when set.
+func (m *MockRepository) ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error) {
+	m.Recorder.Record("ListProjects", ctx, filters)
+	if m.ListProjectsFunc != nil {
+		return m.ListProjectsFunc(ctx, filters)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListProjects")
 }
 
 // GetDaemon records the call and delegates to GetDaemonFunc when set.

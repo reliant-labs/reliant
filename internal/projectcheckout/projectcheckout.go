@@ -121,6 +121,26 @@ func Resolve(ctx context.Context, r Reader, machines daemonplacement.Machines, u
 	return t, nil
 }
 
+// Checkouts is every installed checkout of project on userID's machines, oldest
+// first, each as a Target: the machines a read about the project can be asked
+// when the one Resolve chose does not answer. Empty, not an error, when none of
+// the user's machines holds one.
+func Checkouts(ctx context.Context, r Reader, userID string, project *db.Project) ([]Target, error) {
+	rows, err := daemonplacement.UserCheckouts(ctx, r, userID, project.ID)
+	if err != nil {
+		return nil, err
+	}
+	roots := installedRoots(rows)
+	var out []Target
+	for _, row := range rows {
+		if strings.TrimSpace(row.Path) == "" {
+			continue
+		}
+		out = append(out, Target{Project: project, DaemonID: row.DaemonID, Path: row.Path, roots: roots})
+	}
+	return out, nil
+}
+
 // IsMissing reports whether err is Resolve's "no machine holds a checkout"
 // answer: for a caller whose daemon read is best effort (a cached flag it
 // refreshes when it can) and which carries on without it.

@@ -52,14 +52,22 @@ type forgeTestRouter struct {
 	unplaceable map[string]bool
 	// sends counts every dispatch, pinned or not.
 	sends int
+	// replyErrFor overrides replyErr for the named machines.
+	replyErrFor map[string]error
+	// asked is every machine a pinned command went to, in order.
+	asked []string
 }
 
 func (r *forgeTestRouter) SendDaemonCommandToDaemon(_ context.Context, _, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
 	r.sends++
+	r.asked = append(r.asked, daemonID)
 	r.lastDaemonID = daemonID
 	r.lastCommandType = commandType
 	r.lastPayload = payload
 	r.lastTimeoutMs = timeoutMs
+	if err, ok := r.replyErrFor[daemonID]; ok {
+		return nil, err
+	}
 	return r.reply, r.replyErr
 }
 

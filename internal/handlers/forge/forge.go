@@ -592,18 +592,20 @@ func (s *Service) GetTopology(
 		timeout = forgeTopologyVerifyTimeoutMs
 	}
 
-	payload := struct {
-		ProjectPath string   `json:"project_path"`
-		Verify      bool     `json:"verify,omitempty"`
-		Envs        []string `json:"envs,omitempty"`
-		OrgID       string   `json:"org_id,omitempty"`
-	}{ProjectPath: target.Path, Verify: verify, Envs: req.Msg.Envs, OrgID: req.Msg.GetOrgId()}
+	payload := func(projectPath string) any {
+		return struct {
+			ProjectPath string   `json:"project_path"`
+			Verify      bool     `json:"verify,omitempty"`
+			Envs        []string `json:"envs,omitempty"`
+			OrgID       string   `json:"org_id,omitempty"`
+		}{ProjectPath: projectPath, Verify: verify, Envs: req.Msg.Envs, OrgID: req.Msg.GetOrgId()}
+	}
 
-	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.topology", payload, timeout, verify)
+	reply, unreachable, answered, err := s.forgeReadDispatch(ctx, userID, target, "forge.topology", payload, timeout, verify)
 	if err != nil {
 		return nil, err
 	}
-	s.rememberForgeProjectName(ctx, target.Project, userID, reply)
+	s.rememberForgeProjectName(ctx, answered.Project, userID, reply)
 
 	return connect.NewResponse(&reliantv1.GetForgeTopologyResponse{
 		Meta:       forgeMeta(reply, verify, unreachable),
@@ -629,13 +631,15 @@ func (s *Service) VerifyEnv(
 		return nil, err
 	}
 
-	payload := struct {
-		ProjectPath string `json:"project_path"`
-		Env         string `json:"env"`
-		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId()}
+	payload := func(projectPath string) any {
+		return struct {
+			ProjectPath string `json:"project_path"`
+			Env         string `json:"env"`
+			OrgID       string `json:"org_id,omitempty"`
+		}{ProjectPath: projectPath, Env: env, OrgID: req.Msg.GetOrgId()}
+	}
 
-	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_verify", payload, forgeEnvVerifyTimeoutMs, true)
+	reply, unreachable, _, err := s.forgeReadDispatch(ctx, userID, target, "forge.env_verify", payload, forgeEnvVerifyTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}
@@ -716,13 +720,15 @@ func (s *Service) GetEnvStatus(
 		return nil, err
 	}
 
-	payload := struct {
-		ProjectPath string `json:"project_path"`
-		Env         string `json:"env"`
-		OrgID       string `json:"org_id,omitempty"`
-	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId()}
+	payload := func(projectPath string) any {
+		return struct {
+			ProjectPath string `json:"project_path"`
+			Env         string `json:"env"`
+			OrgID       string `json:"org_id,omitempty"`
+		}{ProjectPath: projectPath, Env: env, OrgID: req.Msg.GetOrgId()}
+	}
 
-	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_status", payload, forgeEnvStatusTimeoutMs, true)
+	reply, unreachable, _, err := s.forgeReadDispatch(ctx, userID, target, "forge.env_status", payload, forgeEnvStatusTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}
