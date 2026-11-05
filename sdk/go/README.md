@@ -50,6 +50,8 @@ reliant.WebhookBearer(token))` delivers with the trigger's own credential.
 |---|---|
 | `Runs` | `Start`, `Get`, `List`, `LastPerWorkflow`, `Signal`, `Cancel`, `Pause`\*, `Resume`\*, `Interrupt`\*, `CancelWithResult`, `PauseWithResult`\*, `ResumeWithResult`\*, `Follow`, `Status`, `Nodes` |
 | `Gates` | `Pending`, `Answer` |
+| `Inbox` | `List` (filters: project, kinds, automation; follows truncation), `Counts`, `Dismiss`, `Restore` |
+| `Approvals` | `List` (by chat), `ListForRun`; read-only |
 | `Triggers` | `Get`, `List`, `Fire`, `Events`, `LaunchEvent` |
 | `NewWebhook` | `POST /hooks/{id}` with a bearer token, a path token or an HMAC signature |
 | `reliant/follow` | the follow engine, if you have your own source of updates |
@@ -73,7 +75,8 @@ the two; reading status alone is the false green.
 ## What is not in it
 
 Anything that decides who a run executes as, where, or whether an automation runs
-at all: enabling, creating or editing triggers, approving. They are not in the
+at all: enabling, creating or editing triggers, approving. The inbox's machine
+actions (`CleanupStorage`, `ForgetStorageWorktree`) are not here either. They are not in the
 generated clients either (`proto/public-api.txt` in the repository lists exactly
 which rpcs are public). Approval gates are reported by `Gates.Pending` so a
 supervisor can tell a person; this API cannot decide them.

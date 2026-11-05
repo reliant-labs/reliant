@@ -87,6 +87,10 @@ type Client struct {
 	Gates *GatesClient
 	// Triggers reads automations, fires them, and lists their firings.
 	Triggers *TriggersClient
+	// Inbox lists what is waiting on the caller and dismisses it.
+	Inbox *InboxClient
+	// Approvals reads approvals. It cannot decide them.
+	Approvals *ApprovalsClient
 
 	baseURL string
 	http    *http.Client
@@ -197,6 +201,8 @@ func New(opts ...Option) (*Client, error) {
 	c.Runs = &RunsClient{c: c, runs: reliantv1connect.NewRunServiceClient(authed, base)}
 	c.Gates = &GatesClient{c: c, questions: reliantv1connect.NewQuestionServiceClient(authed, base), approvals: reliantv1connect.NewApprovalServiceClient(authed, base)}
 	c.Triggers = &TriggersClient{c: c, triggers: reliantv1connect.NewTriggerServiceClient(authed, base)}
+	c.Inbox = &InboxClient{c: c, inbox: reliantv1connect.NewInboxServiceClient(authed, base)}
+	c.Approvals = &ApprovalsClient{c: c, approvals: reliantv1connect.NewApprovalServiceClient(authed, base)}
 	c.Runs.chat = reliantv1connect.NewChatServiceClient(authed, base)
 	return c, nil
 }

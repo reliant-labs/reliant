@@ -43,7 +43,7 @@ import (
 
 func main() {
 	fmt.Println(reliant.New, reliant.NewWebhook, follow.Succeeded, follow.RenderText, askuser.IsAskUser,
-		reliantv1connect.NewRunServiceClient, (*reliantv1.Run)(nil), (*follow.Engine)(nil))
+		reliantv1connect.NewRunServiceClient, reliantv1connect.NewInboxServiceClient, (*reliantv1.Run)(nil), (*reliantv1.InboxItem)(nil), (*reliant.InboxClient)(nil), (*follow.Engine)(nil))
 }
 `
 
