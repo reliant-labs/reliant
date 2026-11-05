@@ -26,6 +26,7 @@ import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { useGitStatusRefreshTrigger } from "../../store/gitStatusStore";
 import { useFileTreePushRefresh } from "./useFileTreePushRefresh";
+import { withAncestorsExpanded } from "./treePaths";
 import type { FileNode } from "./index";
 import { useCurrentWorktree, useActiveWorktreeId } from "../../hooks/worktree-queries";
 
@@ -124,21 +125,9 @@ export function RightSidebar() {
       return;
     }
 
-    // Expand parents to make file visible
-    setExpandedPaths((prev) => {
-      const newExpanded = new Set(prev);
-      let parentPath = activeFilePath.substring(0, activeFilePath.lastIndexOf('/'));
-      let changed = false;
-      while (parentPath) {
-        if (!newExpanded.has(parentPath)) {
-          newExpanded.add(parentPath);
-          changed = true;
-        }
-        const lastSlash = parentPath.lastIndexOf('/');
-        parentPath = lastSlash > 0 ? parentPath.substring(0, lastSlash) : '';
-      }
-      return changed ? newExpanded : prev;
-    });
+    // Expand parents to make file visible. A file outside the tree (an
+    // absolute or "~" path) expands nothing: see treePaths.ts.
+    setExpandedPaths((prev) => withAncestorsExpanded(prev, activeFilePath));
     setFocusedPath(activeFilePath);
 
     // Scroll to the file after React renders (instant, no animation)
@@ -221,20 +210,7 @@ export function RightSidebar() {
       const restoredPath = e.detail.path;
       
       // Expand parent directories to make restored file/folder visible
-      setExpandedPaths((prev) => {
-        const newExpanded = new Set(prev);
-        let parentPath = restoredPath.substring(0, restoredPath.lastIndexOf("/"));
-        let changed = false;
-        while (parentPath) {
-          if (!newExpanded.has(parentPath)) {
-            newExpanded.add(parentPath);
-            changed = true;
-          }
-          const lastSlash = parentPath.lastIndexOf("/");
-          parentPath = lastSlash > 0 ? parentPath.substring(0, lastSlash) : "";
-        }
-        return changed ? newExpanded : prev;
-      });
+      setExpandedPaths((prev) => withAncestorsExpanded(prev, restoredPath));
 
       // Set focus to the restored file/folder
       setFocusedPath(restoredPath);
