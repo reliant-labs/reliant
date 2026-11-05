@@ -353,7 +353,7 @@ func (s *Service) ConnectDaemon(
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
 		pendingToolRequests: make(map[string]chan *toolexec.ToolExecutionResponse),
-		terminalSubs:        make(map[string][]chan *toolexec.TerminalOutputEvent),
+		terminalSubs:        make(map[string][]*toolexec.TerminalOutputQueue),
 		processOutputSubs:   make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 
@@ -537,7 +537,7 @@ func (s *Service) RegisterOutboundConnection(
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
 		pendingToolRequests: make(map[string]chan *toolexec.ToolExecutionResponse),
-		terminalSubs:        make(map[string][]chan *toolexec.TerminalOutputEvent),
+		terminalSubs:        make(map[string][]*toolexec.TerminalOutputQueue),
 		processOutputSubs:   make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 
