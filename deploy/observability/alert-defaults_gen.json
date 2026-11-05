@@ -77,6 +77,11 @@
           "name": "min_active_hours",
           "default": 18,
           "doc": "of the previous 24h, the hours the service must have served requests in to count as steady (a quiet staging service never pages)"
+        },
+        {
+          "name": "max_prior_silences",
+          "default": 2,
+          "doc": "of the previous 24h, the most gaps of silent_minutes or longer a steady service may have had (a bursty service that is often this quiet never pages)"
         }
       ]
     },

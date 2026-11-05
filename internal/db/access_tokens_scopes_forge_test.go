@@ -25,6 +25,15 @@ func TestAccessTokensScopesCheckMatchesForge(t *testing.T) {
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
+	// A widening is added NOT VALID and validated by a later migration, so
+	// after the chain the CHECK must be validated: it holds every existing
+	// row, not only new writes.
+	var validated bool
+	require.NoError(t, raw.QueryRow(
+		`SELECT convalidated FROM pg_constraint
+		  WHERE conname = 'access_tokens_scopes' AND conrelid = 'access_tokens'::regclass`).Scan(&validated))
+	require.True(t, validated, "access_tokens_scopes is NOT VALID after the migration chain: its VALIDATE migration did not run")
+
 	for _, scope := range accesstoken.AllScopes {
 		t.Run(string(scope), func(t *testing.T) {
 			_, err := raw.Exec(
