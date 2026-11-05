@@ -607,6 +607,13 @@ export const obsSearchShape = {
   session: z.string().optional().catch(undefined),
   t: z.number().int().nonnegative().optional().catch(undefined),
   user: z.string().optional().catch(undefined),
+  rsession: z.string().regex(/^[A-Za-z0-9_-]{1,128}$/).optional().catch(undefined),
+  // The client and build filters: exact names and versions, bounded as the server bounds them.
+  browser: z.string().max(64).optional().catch(undefined),
+  os: z.string().max(64).optional().catch(undefined),
+  fe: z.string().max(256).optional().catch(undefined),
+  be: z.string().max(256).optional().catch(undefined),
+  build: z.string().max(256).optional().catch(undefined),
   cursor: z.array(z.string()).optional().catch(undefined),
 };
 

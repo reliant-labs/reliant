@@ -150,6 +150,9 @@ type CallLLMActivity struct {
 	// trackerFor returns the product-event tracker for a user; analytics.ForUser
 	// outside tests.
 	trackerFor func(ctx context.Context, userID string) analytics.Tracker
+	// firstTokenNow is the first-token guard's clock; nil is time.Now. Tests
+	// set it to decide exactly when the deadline passes.
+	firstTokenNow func() time.Time
 }
 
 // WithAccountRouting wires multi-account routing: which of a provider's
@@ -1747,6 +1750,25 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		progressTimer.Reset(progressTimeout)
 	}
 
+	// First-token guard: the progress guard measures the gap between events,
+	// so a stream trickling non-output events never trips it. This one bounds
+	// the total time to the first output token (see ErrStreamFirstTokenTimeout
+	// and firstTokenGuard for the one keepalive exception).
+	firstToken := newFirstTokenGuard(llm.StreamFirstTokenTimeout(), llm.StreamIdleTimeout(), llm.StreamFirstTokenHoldCap(), a.firstTokenNow)
+	defer firstToken.stop()
+	cutForFirstToken := func() {
+		activity.GetLogger(ctx).Warn("[CallLLM] Stream produced no output token; cutting the turn for retry",
+			"chatID", chat.ID,
+			"thread", thread,
+			"provider", resolved.ProviderDriver,
+			"model", resolvedModelID,
+			"firstTokenTimeout", firstToken.timeout,
+			"heldOnKeepalives", firstToken.held,
+			"elapsed", time.Since(llmCallStart))
+		streamErr = llm.ErrStreamFirstTokenTimeout
+		cancelStream()
+	}
+
 streamLoop:
 	for {
 		// Events the provider has already handed us are part of this turn, even
@@ -1759,6 +1781,14 @@ streamLoop:
 		case event, ok := <-eventChan:
 			if ok {
 				resetProgressTimer()
+				// A continuously ready channel never reaches the select
+				// below, so the deadline is checked here too: framing
+				// events alone must not hold the stream open past it, and
+				// an output token queued after it does not disarm it.
+				if firstToken.admit(event, liveness) {
+					cutForFirstToken()
+					break streamLoop
+				}
 				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
 					streamErr = err
 					driverErrored = true
@@ -1828,6 +1858,15 @@ streamLoop:
 			cancelStream()
 			break streamLoop
 
+		case <-firstToken.C():
+			// The deadline, or the end of a keepalive hold (see
+			// firstTokenGuard for the rule).
+			if !firstToken.fire(liveness) {
+				continue
+			}
+			cutForFirstToken()
+			break streamLoop
+
 		case event, ok := <-eventChan:
 			if !ok {
 				if streamCtx.Err() != nil {
@@ -1849,6 +1888,13 @@ streamLoop:
 			// as in the drain above, or a healthy stream whose events all
 			// arrive through this branch would trip the progress timer.
 			resetProgressTimer()
+			// Select picks at random among ready cases, so a busy event
+			// channel can keep winning over a fired first-token timer; an
+			// output token that arrives after it fired is late.
+			if firstToken.admit(event, liveness) {
+				cutForFirstToken()
+				break streamLoop
+			}
 
 			// CRITICAL: Check for cancellation before processing each event
 			// This is necessary because Go's select is non-deterministic, and when
@@ -3008,28 +3054,20 @@ func (a *CallLLMActivity) handleThinkingDelta(ctx context.Context, chatID string
 	}
 
 	// Start a new thinking block if needed
-	thinkingPos := state.blockStates.GetThinkingBlockPosition()
 	if len(state.thinkingParts) == 0 {
 		state.thinkingParts = append(state.thinkingParts, "")
 		// Track thinking block position properly
-		thinkingPos = state.blockStates.StartThinkingBlock()
-		// Dual-write: Write thinking_block_start delta to chat_updates
-		a.writeStreamingDelta(ctx, chatID, "thinking_block_start", map[string]interface{}{
-			"block_index": thinkingPos,
-			"block_type":  "thinking",
-			"thread":      thread,
-		}, state)
+		state.blockStates.StartThinkingBlock()
 	}
 
-	// Append to thinking content
+	// Append to thinking content. It reaches the client with the persisted
+	// message, never as a live delta: no client renders thinking while it
+	// streams (the web store discards thinking deltas on arrival), and
+	// publishing them made them most of every chat's delta stream. In prod
+	// they were 82% of the deltas a chat open replays from the 5-minute
+	// deltas buffer: 1,443 of 1,752 frames sent to a phone opening one
+	// active chat, before a single one could be shown.
 	state.thinkingParts[0] += event.Thinking
-
-	// Dual-write: Write thinking_block_delta to chat_updates
-	a.writeStreamingDelta(ctx, chatID, "thinking_block_delta", map[string]interface{}{
-		"block_index": thinkingPos,
-		"delta":       event.Thinking,
-		"thread":      thread,
-	}, state)
 }
 
 // handleToolUseStart handles the start of a tool use block

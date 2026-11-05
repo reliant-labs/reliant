@@ -3,6 +3,7 @@ syntax = "proto3";
 package controlplane.v1;
 
 import "buf/validate/validate.proto";
+import "controlplane/v1/client.proto";
 import "controlplane/v1/issues.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/timestamp.proto";
@@ -326,6 +327,32 @@ message ListIssuesRequest {
     (buf.validate.field).int32.gte = 0,
     (buf.validate.field).int32.lte = 3600
   ];
+  // Only the issues with an event of this user id in the range (IssueEvent.
+  // user_id). At most 500 matching issues are considered.
+  optional string user_id = 15 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Only the issues with an event of this browser in the range
+  // (IssueEvent.client.browser_name, exact). Browser issues only: with it, no
+  // server issue is listed. At most 500 matching issues are considered.
+  optional string browser = 16 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 64
+  ];
+  // Only the issues with an event on this OS in the range
+  // (IssueEvent.client.os_name). Browser issues only, like browser.
+  optional string os = 17 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 64
+  ];
+  // Only the issues with an event of this build in the range
+  // (IssueEvent.service_version): a frontend build for a browser issue, a
+  // backend build for a server issue. At most 500 matching issues per platform.
+  optional string service_version = 18 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
 }
 
 message ListIssuesResponse {
@@ -378,6 +405,19 @@ message IssueEvent {
   // Browser issues only.
   string session_id = 7;
   string url_path = 8;
+  // Who hit it: a server event's user.id (the authenticated caller the record
+  // was logged for), a browser event's userId (the id the page reported).
+  // Empty when the event names none.
+  string user_id = 9;
+  // Browser issues only: where the browser was, derived by the platform from
+  // its address at ingest (RumService SessionSummary.country/region/city).
+  string country = 10;
+  string region = 11;
+  string city = 12;
+  // Browser issues only: which client raised it (browser, OS, device type,
+  // desktop app version; RumService SessionSummary.client). service_version
+  // above is its frontend build (a server event's: its backend build).
+  ClientContext client = 13;
 }
 
 // IssueFrame is one stack frame. For a browser issue, symbolicated frames are
@@ -422,6 +462,26 @@ message ListIssueEventsRequest {
     (buf.validate.field).int32.lte = 100
   ];
   string page_token = 4 [(buf.validate.field).string.max_len = 512];
+  // Only the events of this user id (IssueEvent.user_id).
+  optional string user_id = 5 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Only the events of this browser and OS (IssueEvent.client.browser_name,
+  // os_name). A server issue's events have no client: either filter lists none.
+  optional string browser = 6 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 64
+  ];
+  optional string os = 7 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 64
+  ];
+  // Only the events of this build (IssueEvent.service_version).
+  optional string service_version = 8 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
 }
 
 message ListIssueEventsResponse {

@@ -134,6 +134,47 @@ func TestExecuteTools_ABranchWorktreeUnderTheCreationPathIsNeverRebased(t *testi
 	assert.Equal(t, "cloud-box", req.DaemonSelector.ID, "on the worktree's owner")
 }
 
+// A branch workspace exists on its owner alone. A selector the workflow
+// configures keeps its precedence, so when it names another machine the calls
+// are refused with the reason: no command carrying the owner's path reaches
+// the other machine, and no ensure (which could recreate the worktree there)
+// is sent (#2085).
+func TestExecuteTools_ASelectorNamingAnotherMachineThanTheBranchOwnerIsRefused(t *testing.T) {
+	f := newChatCheckoutFixture(t)
+	f.machine(t, "owner-box", t.TempDir())
+	f.machine(t, "other-box", t.TempDir())
+	ctx := context.Background()
+	owner := "owner-box"
+	now := time.Now().UTC()
+	wt := &db.Worktree{
+		ID: "wt-" + uuid.NewString(), Name: "feature", Path: t.TempDir(),
+		Branch: "feature", BaseBranch: "main", ProjectID: f.project, ChatID: &f.chat, DaemonID: &owner,
+		Status: 1, CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}
+	require.NoError(t, f.h.Repo().CreateWorktree(ctx, wt))
+	chat, err := f.h.Repo().GetChat(ctx, f.chat)
+	require.NoError(t, err)
+	chat.WorktreeID = &wt.ID
+	require.NoError(t, f.h.Repo().UpdateChat(ctx, chat))
+
+	executor := &daemonLikeExecutor{}
+	var output ExecuteToolsOutput
+	require.NoError(t, f.h.ExecuteActivity(NewExecuteToolsActivity(f.h.Repo(), executor).Execute, ExecuteToolsInput{
+		ChatID: f.chat, Thread: f.chat, ProjectPath: wt.Path,
+		ToolCalls:      []message.ToolCall{bashCall("pwd")},
+		DaemonSelector: &types.DaemonSelector{ID: "other-box"},
+	}, &output), "a refusal never fails the activity: the conversation carries on")
+
+	require.Len(t, output.ToolResults, 1)
+	result := output.ToolResults[0]
+	assert.True(t, result.GetIsError())
+	assert.Contains(t, result.GetContent(), "lives on machine owner-box")
+	assert.Contains(t, result.GetContent(), "routes its tools to machine other-box")
+	assert.Contains(t, result.GetContent(), "Retrying will not help")
+	assert.Empty(t, executor.requests, "no command reached a machine")
+	assert.Empty(t, executor.ensures, "no ensure or repair was sent to a machine that does not own the worktree")
+}
+
 // A chat on a machine with no checkout is not a stuck run: each machine call
 // answers with the reason and the way out, nothing runs, and putting the
 // project there unblocks the very next call with no restart.

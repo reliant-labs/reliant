@@ -2,6 +2,13 @@
 # these apply here and nowhere else (pnpm reads them from this file, never from
 # package.json or .npmrc).
 
+# The web app consumes @reliantlabs/sdk from the sibling package as a workspace
+# member, so the SDK and the app share one copy of @connectrpc/connect and
+# @bufbuild/protobuf.
+packages:
+  - "."
+  - "../../sdk/ts"
+
 # Install scripts pnpm may run; an unlisted one fails the install
 # (ERR_PNPM_IGNORED_BUILDS) rather than being skipped silently.
 #   better-sqlite3: fetches (or compiles) its native addon.
@@ -11,3 +18,11 @@ allowBuilds:
   better-sqlite3: true
   esbuild: true
   protobufjs: false
+minimumReleaseAgeExclude:
+  - '@reliantlabs/forge-web-runtime@0.13.1'
+
+# Dependency versions forced past what a package pins.
+#   monaco-editor pins dompurify exactly (3.4.15 in 0.57.0); keep its copy on
+#   the same patched release as ours.
+overrides:
+  monaco-editor>dompurify: ^3.4.17

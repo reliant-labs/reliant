@@ -6,9 +6,12 @@
  * (telemetryEndpoint.ts). A failure the app catches itself is reported through
  * errorReporting.ts.
  *
- * Consent: init only when crash reporting is on. Turning it off mid-session
- * calls the runtime's disableTelemetry(). The SDK has no off switch for its own
- * auto-instrumentation, which is why init, not a flag, is the gate.
+ * Consent: init only when crash reporting is on. The SDK has no off switch for
+ * its own auto-instrumentation (page loads, fetch/XHR, uncaught errors), which
+ * is why init, not a flag, is the gate. So turning it off mid-session calls the
+ * runtime's disableTelemetry() at once (replay, product events, reported
+ * errors) and then, once the switch is saved, reloads the page: the reload
+ * starts without the SDK, so its automatic spans stop too.
  *
  * Privacy rules the runtime forces while replay is on: all text and inputs
  * masked, media blocked, no canvas, no request/response bodies, no query
@@ -18,14 +21,20 @@
 
 import { disableTelemetry, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
 import {
+  enableAttribution,
   initBrowserTelemetry,
   type BrowserTelemetryConfig,
 } from "@reliantlabs/forge-web-runtime/telemetry";
-import { privacyConsent, subscribePrivacyConsent } from "../hooks/privacy-queries";
+import {
+  privacyConsent,
+  privacyWritesSettled,
+  subscribePrivacyConsent,
+} from "../hooks/privacy-queries";
 import { appBuild } from "./appBuild";
 import { loadConfig, type ReliantWebConfig } from "./config_gen";
 import { isDev } from "./constants";
 import { reportFirstLaunch } from "./appFirstLaunch";
+import { dropLandingAttribution, readLandingAttribution } from "./landingAttribution";
 import { reportError } from "./errorReporting";
 import { clickstackEnabled } from "./telemetryEndpoint";
 import { SERVICE_NAME } from "./otel_gen";
@@ -193,21 +202,51 @@ async function stampClientAttributes(
 
 let started: Promise<boolean> | null = null;
 let unsubscribeConsent: (() => void) | null = null;
+let withdrawing = false;
+let reloadPage: () => void = () => window.location.reload();
+
+/**
+ * Crash reporting switched off while the SDK runs: stop what the runtime can
+ * stop now, then reload into the consent-gated startup, which leaves the SDK
+ * out. The reload waits for the write, which a reload would abandon; a write
+ * the server refused rolls the switch back, and then there is nothing to
+ * reload for (this page's replay and events stay off until the next load).
+ */
+function onConsentChange(consent: { crashReportingEnabled: boolean }): void {
+  if (consent.crashReportingEnabled || withdrawing) return;
+  withdrawing = true;
+  disableTelemetry();
+  void privacyWritesSettled().then(() => {
+    if (privacyConsent().crashReportingEnabled) {
+      withdrawing = false;
+      return;
+    }
+    reloadPage();
+  });
+}
 
 /**
  * Start browser telemetry. Idempotent, never throws, and resolves to whether
- * it is running.
+ * it is running. Concurrent callers share one attempt; an attempt that ends
+ * not running is forgotten, so a later call tries again (and can still hand
+ * over the held landing attribution).
  */
 export function initTelemetry(): Promise<boolean> {
   if (started) return started;
   if (isDev || !clickstackEnabled()) return Promise.resolve(false);
   if (!privacyConsent().crashReportingEnabled) return Promise.resolve(false);
 
-  started = start().catch((err) => {
-    console.warn("[telemetry] init failed:", err);
-    return false;
-  });
-  return started;
+  const attempt: Promise<boolean> = start()
+    .catch((err) => {
+      console.warn("[telemetry] init failed:", err);
+      return false;
+    })
+    .then((running) => {
+      if (!running && started === attempt) started = null;
+      return running;
+    });
+  started = attempt;
+  return attempt;
 }
 
 async function start(): Promise<boolean> {
@@ -253,12 +292,29 @@ async function start(): Promise<boolean> {
     ],
   });
 
+  // The landing site's rid / utm_* handoff, held since boot: by now the router and
+  // the sign-in have replaced the URL it arrived on (landingAttribution.ts). Handed
+  // to the runtime only with analytics consent, as the landing site gave it only
+  // with that consent, and dropped without it. It stays held until the runtime is
+  // running, so a failed start leaves it for the next page load's attempt.
+  const handoff = readLandingAttribution();
+  if (handoff) {
+    if (privacyConsent().analyticsEnabled) {
+      enableAttribution({ search: handoff });
+    } else {
+      dropLandingAttribution();
+    }
+  }
+
   const running = await initBrowserTelemetry(config);
   if (!running) return false;
+  if (handoff) dropLandingAttribution();
 
-  unsubscribeConsent = subscribePrivacyConsent((consent) => {
-    if (!consent.crashReportingEnabled) disableTelemetry();
-  });
+  unsubscribeConsent = subscribePrivacyConsent(onConsentChange);
+  // The subscription does not replay the current consent, and initBrowserTelemetry
+  // awaited visibility and the SDK import: a withdrawal saved in that window
+  // fired no event we heard. Reconcile now, so it still stops and reloads.
+  onConsentChange(privacyConsent());
 
   try {
     await stampClientAttributes({ "reliant.build": buildVersion });
@@ -322,4 +378,11 @@ export function resetTelemetryForTests(): void {
   started = null;
   unsubscribeConsent?.();
   unsubscribeConsent = null;
+  withdrawing = false;
+  reloadPage = () => window.location.reload();
+}
+
+/** Test seam: what a consent withdrawal reloads with. */
+export function setReloadForTests(reload: () => void): void {
+  reloadPage = reload;
 }

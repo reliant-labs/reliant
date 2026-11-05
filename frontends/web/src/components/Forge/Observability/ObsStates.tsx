@@ -18,6 +18,7 @@ import Button from "@/components/forge-ui/button";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import type { BillingTab } from "@/routeSchemas";
 import {
+  FilterUnsupportedError,
   obsErrorKind,
   obsErrorMessage,
   type ObsErrorKind,
@@ -385,9 +386,12 @@ export function ObsNoCustomerMetadata({
 }
 
 const ERROR_COPY: Record<Exclude<ObsErrorKind, "not-set-up">, { title: string; body: string }> = {
+  // The copy does not name a cause: a role without observability is one, but
+  // so is a credential that cannot choose an organization (an API key or CLI
+  // login, #1831). The server's own reason is drawn under it.
   denied: {
     title: "You can't read this environment's telemetry",
-    body: "Your role in this organization doesn't include observability. An organization admin can grant it.",
+    body: "The server refused this read; its reason is below. If your role in this organization doesn't include observability, an organization admin can grant it.",
   },
   invalid: {
     title: "That search couldn't be run",
@@ -430,6 +434,13 @@ export function ObsError({
   const kind = obsErrorKind(error);
   if (kind === "not-set-up") return <ObsNotSetUp subject={subject} />;
   if (kind === "over-quota") return <ObsWillLoad error={error} />;
+  if (error instanceof FilterUnsupportedError) {
+    return (
+      <StateFrame testId="obs-error-filter-unsupported" tone="error" icon={<AlertTriangle className="h-4 w-4" />} title={`This control plane can't filter ${error.subject} by ${error.filter} yet`}>
+        <p>It answered without the filter, so its {error.subject} are not shown: they would not be narrowed. Clear the filter to see them all.</p>
+      </StateFrame>
+    );
+  }
   const copy = ERROR_COPY[kind];
   const detail = obsErrorMessage(error);
   return (

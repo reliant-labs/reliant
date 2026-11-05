@@ -50,6 +50,36 @@ type claudeContentBlock struct {
 	Data         string                 `json:"data,omitempty"`
 }
 
+// claudeToolResultContent is a tool_result's content: the plain string, or —
+// when the tool returned images or PDFs — a block list carrying them inside the
+// result, which the Messages API accepts (the direct Anthropic driver sends
+// the same shape). Sending only the text left the model with the tool's
+// caption and never the image.
+func claudeToolResultContent(result message.ToolResult) interface{} {
+	if len(result.BinaryParts) == 0 {
+		return result.Content
+	}
+	blocks := make([]claudeContentBlock, 0, len(result.BinaryParts)+1)
+	if result.Content != "" {
+		blocks = append(blocks, claudeContentBlock{Type: "text", Text: result.Content})
+	}
+	for _, bp := range result.BinaryParts {
+		blockType := "image"
+		if bp.MIMEType == "application/pdf" {
+			blockType = "document"
+		}
+		blocks = append(blocks, claudeContentBlock{
+			Type: blockType,
+			Source: &claudeImageSource{
+				Type:      "base64",
+				MediaType: bp.MIMEType,
+				Data:      bp.String("anthropic"),
+			},
+		})
+	}
+	return blocks
+}
+
 type claudeImageSource struct {
 	Type      string `json:"type"`
 	MediaType string `json:"media_type"`
@@ -451,7 +481,7 @@ func (c *VertexAIClient) convertMessagesToClaude(messages []message.Message) []c
 				content = append(content, claudeContentBlock{
 					Type:      "tool_result",
 					ToolUseID: result.ToolCallID,
-					Content:   result.Content,
+					Content:   claudeToolResultContent(result),
 					IsError:   result.IsError,
 				})
 			}

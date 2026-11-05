@@ -59,6 +59,7 @@ import type {
   UpdateIssueCommentRequest,
   UpdateIssueStatusRequest,
 } from "./issuesTypes";
+import { mapClient } from "./client";
 
 function client() {
   return obsClient(IssuesService);
@@ -202,6 +203,11 @@ export function mapIssueEvent(e: WireEvent): IssueEvent {
     attributes: { ...e.attributes },
     sessionId: e.sessionId,
     urlPath: e.urlPath,
+    userId: e.userId,
+    country: e.country,
+    region: e.region,
+    city: e.city,
+    client: mapClient(e.client),
   };
 }
 
@@ -239,6 +245,10 @@ export async function listIssues(req: ListIssuesRequest, options: { signal?: Abo
     platform: req.platform ? WIRE_PLATFORM[req.platform] : undefined,
     text: req.text || undefined,
     assignee: req.assignee || undefined,
+    userId: req.userId || undefined,
+    browser: req.browser || undefined,
+    os: req.os || undefined,
+    serviceVersion: req.serviceVersion || undefined,
     sort: WIRE_SORT[req.sort],
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
@@ -256,8 +266,8 @@ export async function getIssue(req: { issueId: string; window?: { startMs: numbe
 }
 
 /** One issue's events, newest first, a page at a time (default range: its first to its last event). */
-export async function listIssueEvents(req: { issueId: string; pageSize?: number; pageToken?: string }, options: { signal?: AbortSignal } = {}): Promise<IssueEventList> {
-  const res = await client().listIssueEvents({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "" }, options);
+export async function listIssueEvents(req: { issueId: string; pageSize?: number; pageToken?: string; userId?: string }, options: { signal?: AbortSignal } = {}): Promise<IssueEventList> {
+  const res = await client().listIssueEvents({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "", userId: req.userId || undefined }, options);
   return { events: res.events.map(mapIssueEvent), nextPageToken: res.nextPageToken };
 }
 

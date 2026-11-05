@@ -11,9 +11,11 @@
  * the console, can unmask one: the original text never left the browser.
  */
 
+import type { ClientInfo } from "./client";
 import type { TimeWindow } from "./types";
 
 /** What every RumService call is scoped by: the org (checked server-side), the project, its environments and services. */
+
 export interface RumScope {
   orgId: string;
   projectId?: string;
@@ -43,6 +45,24 @@ export interface SessionSummary {
   errors: number;
   /** Whether a replay was recorded. */
   hasReplay: boolean;
+  /**
+   * Where the browser was: derived by the platform at ingest from the address it
+   * connected from, never reported by the page. ISO 3166-1 alpha-2 country and
+   * English region/city names; empty when unknown.
+   */
+  country: string;
+  region: string;
+  city: string;
+  /** The browser's IP address. Empty unless the platform keeps it (off by default). */
+  clientAddress: string;
+  /** Which client the session ran in (client.ts). NO_CLIENT for one stored before the platform recorded it. */
+  client: ClientInfo;
+  /**
+   * The forge release the frontend build shipped in (v1.7.92-rc.1), from the
+   * deploy ledger: the release that first carried serviceVersion. Empty when no
+   * release carries the build (a frontend built outside the release, a desktop app).
+   */
+  release: string;
 }
 
 export interface ListSessionsRequest extends RumScope {
@@ -53,6 +73,10 @@ export interface ListSessionsRequest extends RumScope {
   userId: string;
   /** Case-insensitive substring of the entry path. */
   pathContains: string;
+  /** Only sessions of this browser / OS (ClientInfo.browserName / osName, exact) and frontend build (serviceVersion). */
+  browser?: string;
+  os?: string;
+  frontendVersion?: string;
   pageSize?: number;
   pageToken?: string;
 }

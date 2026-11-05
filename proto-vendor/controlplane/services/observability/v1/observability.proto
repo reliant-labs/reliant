@@ -3,6 +3,7 @@ syntax = "proto3";
 package controlplane.v1;
 
 import "buf/validate/validate.proto";
+import "controlplane/v1/client.proto";
 import "controlplane/v1/deploy.proto";
 import "controlplane/v1/issues.proto";
 import "forge/v1/forge.proto";
@@ -662,6 +663,25 @@ message ListTracesRequest {
   repeated string group_by = 8 [(buf.validate.field).repeated.max_items = 3];
   // Row order. Default newest first.
   optional TraceOrder order = 9 [(buf.validate.field).enum.defined_only = true];
+  // Only traces with a span of this user: a backend span's user.id (the
+  // authenticated caller) or a browser span's userId (the id the page
+  // reported). Part of the page token's filters.
+  optional string user_id = 10 [(buf.validate.field).string.max_len = 256];
+  // Only traces with a span of this browser session: a backend span's
+  // session.id (propagated from the browser as W3C baggage) or a browser
+  // span's rum.sessionId. Part of the page token's filters.
+  optional string session_id = 11 [(buf.validate.field).string.pattern = "^[A-Za-z0-9_-]{1,128}$"];
+  // Only traces a browser of this client started (TraceSummary.client.
+  // browser_name, exact). Part of the page token's filters.
+  optional string browser = 12 [(buf.validate.field).string.max_len = 64];
+  // Only traces a browser on this OS started (TraceSummary.client.os_name).
+  optional string os = 13 [(buf.validate.field).string.max_len = 64];
+  // Only traces with a browser span of this frontend build
+  // (TraceSummary.frontend_version).
+  optional string frontend_version = 14 [(buf.validate.field).string.max_len = 256];
+  // Only traces with a server span of this backend build
+  // (TraceSummary.backend_builds[].version).
+  optional string backend_version = 15 [(buf.validate.field).string.max_len = 256];
 }
 
 enum TraceOrder {
@@ -702,6 +722,26 @@ message TraceSummary {
   bool operator_data = 10;
   // Duration of the root span alone (duration_ms spans the whole trace).
   double root_duration_ms = 11;
+  // Who the trace served: the first user id any of its spans carries (see
+  // ListTracesRequest.user_id). Empty when none does.
+  string user_id = 12;
+  // The browser session the trace belongs to, when one of its spans names it.
+  // RumService.GetSession opens it (and its replay, when it has one).
+  string session_id = 13;
+  // Where its browser was (RumService SessionSummary.country/region/city),
+  // from its browser spans. Empty for a trace no browser started.
+  string country = 14;
+  string region = 15;
+  string city = 16;
+  // Which client started it (RumService SessionSummary.client), from its
+  // browser spans: browser, OS, device type and desktop app version. Empty for
+  // a trace no browser started.
+  ClientContext client = 17;
+  // The frontend build that made the call: a browser span's service.version.
+  string frontend_version = 18;
+  // The backend builds that served it: the service.version of each service
+  // whose spans did not come from a browser, at most 8.
+  repeated ServiceBuild backend_builds = 19;
 }
 
 // TraceRedSummary: Rate, Errors, Duration over the matched traces.

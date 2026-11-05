@@ -258,6 +258,10 @@ var purgeSteps = []step{
 	{"llm_call_usage", `DELETE FROM llm_call_usage WHERE user_id = $1`},
 	{"llm_call_usage_daily", `DELETE FROM llm_call_usage_daily WHERE user_id = $1`},
 
+	// The durable first-session marker (app_first_session analytics): when the
+	// user first used the app. No users table cascades it.
+	{"user_app_sessions", `DELETE FROM user_app_sessions WHERE user_id = $1`},
+
 	// --- Depth 6: credentials, deleted last. ---
 	//
 	// Deliberately the final step. These are live third-party OAuth refresh

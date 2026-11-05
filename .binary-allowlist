@@ -1,0 +1,26 @@
+# Binary files .githooks/check-binary-files.sh lets through: one path or glob
+# per line, where * also crosses / (docs/images/*.png covers every PNG under
+# docs/images/). A match also lifts the 1 MiB cap on a new file.
+#
+# Only media belongs here, each in the directory that ships it: images, icons
+# and fonts the app and its docs use, and the Playwright snapshots the e2e
+# suite compares against. A build output never does: build it into a
+# gitignored directory instead.
+
+# App icons and fonts.
+assets/*.webp
+electron/build/*.png
+electron/build/*.ico
+electron/build/*.icns
+frontends/web/public/*.png
+frontends/web/public/*.ico
+frontends/web/public/*.woff2
+frontends/web/src/assets/*.png
+
+# Docs and research images.
+docs/*.ico
+docs/images/*.png
+research/*.png
+
+# Playwright snapshots and screenshots.
+frontends/web/e2e/*.png

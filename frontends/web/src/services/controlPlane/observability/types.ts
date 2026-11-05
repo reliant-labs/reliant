@@ -16,6 +16,7 @@
  */
 
 import type { SeriesMeta } from "./metricsTypes";
+import type { ClientInfo, ServiceBuild } from "./client";
 
 /** A resolved, absolute time window. `endMs` is exclusive. */
 export interface TimeWindow {
@@ -130,6 +131,24 @@ export interface TraceSummary extends Provenance {
   spanCount: number;
   errorCount: number;
   services: string[];
+  /** The user the trace served: a backend span's authenticated user.id, else the id the page reported. Empty: none. */
+  userId: string;
+  /** The browser session the trace belongs to. Empty: no browser started it. */
+  sessionId: string;
+  /**
+   * Where the browser was: derived by the platform at ingest from the address it
+   * connected from, never reported by the page. ISO 3166-1 alpha-2 country and
+   * English region/city names; empty when unknown.
+   */
+  country: string;
+  region: string;
+  city: string;
+  /** Which client started it, from its browser spans (client.ts). NO_CLIENT when no browser did. */
+  client: ClientInfo;
+  /** The frontend build that made the call: a browser span's service.version. Empty: no browser span. */
+  frontendVersion: string;
+  /** The backend builds that served it: each server span's service and service.version. */
+  backendBuilds: ServiceBuild[];
 }
 
 /** Rate, errors and duration over every trace the filters matched in the window — not just one page. */
@@ -151,6 +170,16 @@ export interface ListTracesRequest extends ObsScope {
   services: string[];
   errorsOnly: boolean;
   minDurationMs: number;
+  /** Only traces of this user id. Empty: every trace. */
+  userId?: string;
+  /** Only traces of this browser session. Empty: every trace. */
+  sessionId?: string;
+  /** Only traces a browser of this client / OS started (exact). Empty: every trace. */
+  browser?: string;
+  os?: string;
+  /** Only traces with a browser span of this frontend build, or a server span of this backend build. */
+  frontendVersion?: string;
+  backendVersion?: string;
   limit: number;
   cursor?: string;
   /** Up to 3 keys: the response gains one RED summary per group. */
@@ -428,6 +457,26 @@ export interface PanelFunnel {
 }
 export type Unit = "" | "count" | "ms" | "bytes" | "percent" | "s";
 
+/**
+ * What a postgres panel draws (forge dashspec PostgresQuery): one read-only
+ * statement run live against one of the environment's databases, as the
+ * database's dashboard role. $1 (from), $2 (to) and $3 (step seconds) are
+ * bound, never spliced.
+ */
+export interface PanelPostgres {
+  /** The database's name, as `forge db query` takes it. */
+  database: string;
+  sql: string;
+  /** auto (or empty) | line | number | table | bar. */
+  draw?: string;
+  /** The result column holding each row's timestamp; a line needs it. */
+  time?: string;
+  /** The numeric result columns to plot; empty is every one that is not time or a group. */
+  values?: string[];
+  /** The result columns that split rows into series. */
+  group?: string[];
+}
+
 export interface Panel {
   id: string;
   /** Optional dashboard section; viewer visibility never edits this association. */
@@ -455,6 +504,8 @@ export interface Panel {
   minStep?: string;
   /** text panels only: Markdown, drawn with no query. */
   markdown?: string;
+  /** postgres panels only: the statement and how its result is drawn. */
+  postgres?: PanelPostgres;
   /** How the panel's data is drawn; absent is the kind's default. */
   display?: PanelDisplay;
   unit?: Unit;

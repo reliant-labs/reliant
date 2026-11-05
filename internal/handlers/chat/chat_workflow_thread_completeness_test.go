@@ -140,9 +140,9 @@ func TestGetWorkflowExecutions_IncludesInlineForkThreadWithoutWorkflowRow(t *tes
 		ChatId: chatID,
 	}))
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.RootWorkflow)
+	require.NotEmpty(t, resp.Msg.AllRootWorkflows)
 
-	byThread := collectThreads(resp.Msg.RootWorkflow)
+	byThread := collectThreads(resp.Msg.AllRootWorkflows[0])
 
 	forkNode, ok := byThread[forkThreadID]
 	require.True(t, ok,
@@ -236,9 +236,9 @@ func TestGetWorkflowExecutions_PreservesSpawnAndNodeOriginDistinction(t *testing
 		ChatId: chatID,
 	}))
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.RootWorkflow)
+	require.NotEmpty(t, resp.Msg.AllRootWorkflows)
 
-	byThread := collectThreads(resp.Msg.RootWorkflow)
+	byThread := collectThreads(resp.Msg.AllRootWorkflows[0])
 
 	originByThread := map[string]string{}
 	for id, node := range byThread {

@@ -105,6 +105,7 @@ import type {
 } from "./types";
 import { SERVICE_SIGNALS } from "./types";
 import type { MetricKind, SeriesMeta } from "./metricsTypes";
+import { mapClient, mapServiceBuilds } from "./client";
 
 function client() {
   return obsClient(ObservabilityService);
@@ -244,6 +245,14 @@ function mapTraceSummary(t: WireTraceSummary): TraceSummary {
     spanCount: t.spanCount,
     errorCount: t.errorCount,
     services: [...t.services],
+    userId: t.userId,
+    sessionId: t.sessionId,
+    country: t.country,
+    region: t.region,
+    city: t.city,
+    client: mapClient(t.client),
+    frontendVersion: t.frontendVersion,
+    backendBuilds: mapServiceBuilds(t.backendBuilds),
     source: t.source,
     operatorData: t.operatorData,
   };
@@ -255,6 +264,12 @@ export async function listTraces(req: ListTracesRequest, options: { signal?: Abo
     errorsOnly: req.errorsOnly || undefined,
     minDurationMs: req.minDurationMs > 0 ? req.minDurationMs : undefined,
     rootSpanName: req.rootSpanName || undefined,
+    userId: req.userId || undefined,
+    sessionId: req.sessionId || undefined,
+    browser: req.browser || undefined,
+    os: req.os || undefined,
+    frontendVersion: req.frontendVersion || undefined,
+    backendVersion: req.backendVersion || undefined,
     pageSize: req.limit,
     pageToken: req.cursor ?? "",
     groupBy: req.groupBy ?? [],

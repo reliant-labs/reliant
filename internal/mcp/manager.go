@@ -3,9 +3,11 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -1437,25 +1439,23 @@ func builtinMCPServers(chromeBrowserURL string) map[string]config.MCPServer {
 	//     downloads its own Chrome, and run --headless (no display in the pod)
 	//     --isolated (throwaway profile/session).
 	if browserURL := strings.TrimSpace(chromeBrowserURL); browserURL != "" {
+		command, args := chromeDevtoolsLaunch()
 		servers[chromeDevtoolsServerName] = config.MCPServer{
 			Type:    config.MCPStdio,
-			Command: "npx",
-			Args: []string{
-				"-y",
-				"chrome-devtools-mcp@" + chromeDevtoolsMCPVersion,
+			Command: command,
+			Args: append(args,
 				"--isolated",
-				"--browserUrl=" + browserURL,
-			},
+				"--browserUrl="+browserURL,
+			),
 			Enabled: true,
 		}
 	} else if chromePath := detectSystemChrome(); chromePath != "" {
-		args := []string{
-			"-y",
-			"chrome-devtools-mcp@" + chromeDevtoolsMCPVersion,
+		command, args := chromeDevtoolsLaunch()
+		args = append(args,
 			"--headless",
 			"--isolated",
-			"--executablePath=" + chromePath,
-		}
+			"--executablePath="+chromePath,
+		)
 		// Sandbox policy differs by pod shape. The amd64 cloud daemon runs on the
 		// privileged docker-tier (Kata) with a setuid chrome-sandbox, so Chrome
 		// keeps its sandbox. The arm64 local-dev daemon pod drops ALL caps and
@@ -1473,13 +1473,75 @@ func builtinMCPServers(chromeBrowserURL string) map[string]config.MCPServer {
 		}
 		servers[chromeDevtoolsServerName] = config.MCPServer{
 			Type:    config.MCPStdio,
-			Command: "npx",
+			Command: command,
 			Args:    args,
 			Enabled: true,
 		}
 	}
 
 	return servers
+}
+
+// lookPath is exec.LookPath, a seam for tests.
+var lookPath = exec.LookPath
+
+// chromeDevtoolsLaunch is the command and leading arguments that start the
+// pinned chrome-devtools-mcp: its installed binary when the machine already
+// has exactly that version on PATH (the cloud workspace image preinstalls it),
+// `npx -y chrome-devtools-mcp@<pin>` otherwise.
+//
+// Why not always npx: npx resolves the package through npm on every spawn
+// before node even starts the server. Measured on a cloud machine at load
+// average ~90 (31 CPUs): the initialize handshake answered after 30-50s
+// through npx and after 7.5s from the installed binary, against a 45s start
+// budget — so under load the browser MCP failed with "failed to connect to MCP
+// server: context deadline exceeded" while the server itself was healthy.
+//
+// A binary of any other version is not used: the flags below are written for
+// the pinned release, and an image that drifted from the pin falls back to the
+// pinned npx package rather than to an untested server.
+func chromeDevtoolsLaunch() (string, []string) {
+	if bin := installedChromeDevtoolsMCP(); bin != "" {
+		return bin, nil
+	}
+	return "npx", []string{"-y", "chrome-devtools-mcp@" + chromeDevtoolsMCPVersion}
+}
+
+// installedChromeDevtoolsMCP returns the chrome-devtools-mcp on PATH when its
+// package is the pinned version, or "". npm installs the bin as a symlink into
+// the package (…/node_modules/chrome-devtools-mcp/build/src/…), so the version
+// is the package.json of the first ancestor that names the package.
+func installedChromeDevtoolsMCP() string {
+	bin, err := lookPath("chrome-devtools-mcp")
+	if err != nil {
+		return ""
+	}
+	target, err := filepath.EvalSymlinks(bin)
+	if err != nil {
+		return ""
+	}
+	const maxDepth = 8
+	dir := filepath.Dir(target)
+	for i := 0; i < maxDepth && dir != filepath.Dir(dir); i, dir = i+1, filepath.Dir(dir) {
+		data, err := os.ReadFile(filepath.Join(dir, "package.json"))
+		if err != nil {
+			continue
+		}
+		var pkg struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		}
+		if json.Unmarshal(data, &pkg) != nil || pkg.Name != "chrome-devtools-mcp" {
+			continue
+		}
+		if pkg.Version != chromeDevtoolsMCPVersion {
+			logging.Info("Installed chrome-devtools-mcp is not the pinned version; launching the pinned one through npx",
+				"path", bin, "installed", pkg.Version, "pinned", chromeDevtoolsMCPVersion)
+			return ""
+		}
+		return bin
+	}
+	return ""
 }
 
 func (m *Manager) loadProjectServersFromConfig(ctx context.Context, projectPath string) map[string]config.MCPServer {

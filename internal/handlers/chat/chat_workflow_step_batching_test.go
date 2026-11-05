@@ -207,7 +207,7 @@ func TestGetWorkflowExecutions_OneStepQueryRegardlessOfWorkflowCount(t *testing.
 		View:   reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL,
 	}))
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.RootWorkflow)
+	require.NotEmpty(t, resp.Msg.AllRootWorkflows)
 
 	require.Equal(t, 1, counting.chatScoped(),
 		"steps must be read in exactly one chat-scoped query")
@@ -217,10 +217,10 @@ func TestGetWorkflowExecutions_OneStepQueryRegardlessOfWorkflowCount(t *testing.
 
 	// The batching must not have cost us the data: every workflow's steps are
 	// still attached to the right workflow.
-	require.Len(t, resp.Msg.RootWorkflow.Steps, 1)
+	require.Len(t, resp.Msg.AllRootWorkflows[0].Steps, 1)
 	require.Len(t, resp.Msg.AllRootWorkflows, 1)
-	require.Len(t, resp.Msg.RootWorkflow.Children, childCount)
-	for _, child := range resp.Msg.RootWorkflow.Children {
+	require.Len(t, resp.Msg.AllRootWorkflows[0].Children, childCount)
+	for _, child := range resp.Msg.AllRootWorkflows[0].Children {
 		require.Len(t, child.Steps, 1,
 			"child workflow %s lost its steps", child.Id)
 	}
@@ -278,10 +278,10 @@ func TestGetWorkflowExecutions_SavedMessageIdWithoutOutputJson(t *testing.T) {
 		View:   reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL,
 	}))
 	require.NoError(t, err)
-	require.NotNil(t, resp.Msg.RootWorkflow)
+	require.NotEmpty(t, resp.Msg.AllRootWorkflows)
 
 	byStepID := map[string]*reliantv1.StepExecution{}
-	for _, step := range resp.Msg.RootWorkflow.Steps {
+	for _, step := range resp.Msg.AllRootWorkflows[0].Steps {
 		byStepID[step.StepId] = step
 	}
 	require.Len(t, byStepID, 3)

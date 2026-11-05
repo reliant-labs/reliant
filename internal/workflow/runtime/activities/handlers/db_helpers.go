@@ -202,6 +202,12 @@ func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 			chatID, thread, summarizeViolations(violations))
 	}
 
+	// Tool media is durable history now (persistToolMedia), so a long session
+	// of screenshots would otherwise replay every one of them on every turn
+	// until the provider refuses the request — and keeps refusing it, since
+	// each retry rebuilds the same history. Only the newest window is sent.
+	msgs = message.LimitToolResultMedia(msgs, message.MaxReplayedToolMediaParts, message.MaxReplayedToolMediaBytes)
+
 	return msgs, nil
 }
 

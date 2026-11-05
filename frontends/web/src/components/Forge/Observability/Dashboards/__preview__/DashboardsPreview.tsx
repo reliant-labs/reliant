@@ -20,6 +20,7 @@
  *   …&alert=ratio|p95|grouped|formula|gauge|sql|heatmap|counter|funnel   "Create alert from this panel", for a sample panel
  *   …&dark=1&scheme=pure-black
  *   /forge-dashboards-preview?page=chart-gallery              every panel chart (ChartGalleryPreview)
+ *   /forge-dashboards-preview?page=panel-editor&kind=sql      the panel editor, for every kind (PanelEditorPreview)
  */
 
 import { useEffect, useMemo } from "react";
@@ -42,6 +43,7 @@ import { AlertFromPanelDialog } from "../AlertFromPanelDialog";
 import { DashboardView } from "../DashboardView";
 import ChartCorrectnessPreview from "../../charts/__preview__/ChartCorrectnessPreview";
 import ChartGalleryPreview from "./ChartGalleryPreview";
+import PanelEditorPreview from "./PanelEditorPreview";
 
 const BASE = "/forge-dashboards-preview";
 
@@ -246,6 +248,7 @@ export default function DashboardsPreview() {
             <option value="list">Dashboards</option>
             <option value="dashboard">A dashboard</option>
             <option value="chart-gallery">Chart gallery</option>
+            <option value="panel-editor">Panel editor</option>
           </select>
           <select data-testid="preview-case" value={caseId} onChange={(e) => go({ case: e.target.value === "data" ? undefined : e.target.value })} className={CONTROL}>
             {CASES.map((c) => (
@@ -269,7 +272,13 @@ export default function DashboardsPreview() {
     >
       <QueryClientProvider client={queryClient}>
         <ObservabilityApiProvider api={api}>
-          {page === "chart-correctness" ? <ChartCorrectnessPreview /> : page === "chart-gallery" ? <ChartGalleryPreview /> : page !== "dashboard" || !dashRef ? (
+          {page === "chart-correctness" ? (
+            <ChartCorrectnessPreview />
+          ) : page === "chart-gallery" ? (
+            <ChartGalleryPreview />
+          ) : page === "panel-editor" ? (
+            <PanelEditorPreview />
+          ) : page !== "dashboard" || !dashRef ? (
             <DashboardsList
               key={caseId}
               project={FIXTURE_PROJECT}

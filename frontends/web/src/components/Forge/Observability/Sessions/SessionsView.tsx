@@ -33,10 +33,13 @@ import { formatAgo, formatCount, formatDuration } from "../format";
 import { ServiceSelect } from "../LogsView";
 import type { ObsNavigate } from "../obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData } from "../ObsStates";
+import { Place } from "../Place";
 import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
 import { isReplayKnownUnplayable, rumScopeOf, sessionTitle } from "./sessionModel";
 import { SessionsNotConfigured } from "./SessionStates";
+import { ClientName, DeviceSummary } from "../Client";
+import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
 
 export interface SessionsViewProps {
   scope: ObsScope;
@@ -47,6 +50,8 @@ export interface SessionsViewProps {
   text: string;
   hasError: boolean;
   user: string;
+  /** Only sessions of this client and frontend build (the URL's `browser`, `os`, `fe`). */
+  client?: ClientFilterValues;
   /** The page-token trail (the URL's `cursor`). */
   cursor: readonly string[];
   /** The session open in detail. */
@@ -60,6 +65,8 @@ export interface SessionsViewProps {
 
 /** What a filter change also resets: the page (its token belongs to the old filters). */
 const FIRST_PAGE = { cursor: undefined } as const;
+const NO_FILTER_VALUES: ClientFilterValues = {};
+const SESSION_CLIENT_FIELDS = ["browser", "os", "fe"] as const;
 
 export function SessionsView(props: SessionsViewProps) {
   const { scope, service, sessionId, navigate } = props;
@@ -80,20 +87,38 @@ export function SessionsView(props: SessionsViewProps) {
   return <SessionList {...props} rumScope={rumScope} service={service} />;
 }
 
-function SessionList({ scope, rumScope, subject, range, service, text, hasError, user, cursor, navigate }: SessionsViewProps & { rumScope: RumScope }) {
+function SessionList({ scope, rumScope, subject, range, service, text, hasError, user, client = NO_FILTER_VALUES, cursor, navigate }: SessionsViewProps & { rumScope: RumScope }) {
   const pageToken = cursor.length ? cursor[cursor.length - 1] : undefined;
+  const { browser, os, fe } = client;
   const filters: SessionFilters = useMemo(
-    () => ({ range, hasError, userId: user, pathContains: text, service, pageToken }),
-    [range, hasError, user, text, service, pageToken]
+    () => ({
+      range,
+      hasError,
+     
+      userId: user,
+      pathContains: text,
+      service,
+      pageToken,
+      browser: browser || undefined,
+      os: os || undefined,
+      frontendVersion: fe || undefined,
+    }),
+    [range, hasError, user, text, service, pageToken, browser, os, fe]
   );
   const sessions = useSessions(rumScope, filters);
   const rows = sessions.data?.sessions ?? [];
-  const filtered = hasError || !!user || !!text || !!service;
+  const filtered = hasError || !!user || !!text || !!service || hasClientFilters(client);
   const page = cursor.length + 1;
 
   return (
     <div className="space-y-3" data-testid="obs-sessions">
       <SessionToolbar scope={scope} range={range} service={service} text={text} hasError={hasError} user={user} navigate={navigate} />
+      <ClientFilters
+        id="obs-sessions-client"
+        fields={SESSION_CLIENT_FIELDS}
+        values={client}
+        onApply={(next) => navigate({ ...next, ...FIRST_PAGE }, { replace: true })}
+      />
       {sessions.data && <ObsAsOf updatedAt={sessions.dataUpdatedAt} />}
       {sessions.isLoading ? (
         <Card padding="none">
@@ -112,7 +137,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
           filtered={filtered}
           topic="sessions"
           onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })}
-          onClearFilters={() => navigate({ errors: undefined, user: undefined, q: undefined, service: undefined, ...FIRST_PAGE })}
+          onClearFilters={() => navigate({ errors: undefined, user: undefined, q: undefined, service: undefined, ...NO_CLIENT_FILTERS, ...FIRST_PAGE })}
         />
       ) : (
         <Card padding="none" data-testid="obs-sessions-list" aria-busy={sessions.isFetching || undefined}>
@@ -272,6 +297,30 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
       ),
     },
     {
+      key: "location",
+      header: "Location",
+      className: "max-w-[12rem]",
+      render: (_, { session: s }) => <Place geo={s} className="text-xs text-ink-muted" testId={`obs-session-place-${s.sessionId}`} />,
+    },
+    {
+      key: "device",
+      header: "Device",
+      className: "max-w-[10rem]",
+      render: (_, { session: s }) => <DeviceSummary client={s.client} className="text-xs" testId={`obs-session-device-${s.sessionId}`} />,
+    },
+    {
+      key: "client",
+      header: "Client",
+      className: "max-w-[10rem]",
+      render: (_, { session: s }) => <ClientName client={s.client} className="text-xs" testId={`obs-session-client-${s.sessionId}`} />,
+    },
+    {
+      key: "version",
+      header: "App version",
+      className: "max-w-[10rem]",
+      render: (_, { session: s }) => <AppVersion session={s} />,
+    },
+    {
       key: "entry",
       header: "Entry",
       className: "max-w-[16rem] truncate",
@@ -309,6 +358,38 @@ function SessionTable({ sessions, onOpen }: { sessions: SessionSummary[]; onOpen
         };
       }}
     />
+  );
+}
+
+/**
+ * The version the session ran: the forge release its frontend shipped in
+ * (which names every service of that bundle), with the frontend's build id —
+ * what its source maps are keyed by — beneath; the build id alone when no
+ * release carries it. In the desktop app, the app's own version when it differs.
+ */
+function AppVersion({ session: s }: { session: SessionSummary }) {
+  const desktop = s.client.desktopVersion && s.client.desktopVersion !== s.serviceVersion ? s.client.desktopVersion : "";
+  if (!s.release && !s.serviceVersion && !desktop) return <span className="text-xs text-ink-muted">—</span>;
+  return (
+    <span className="flex min-w-0 flex-col leading-tight" data-testid={`obs-session-version-${s.sessionId}`}>
+      {s.release ? (
+        <span className="truncate font-mono text-xs text-ink" title={`Release ${s.release}: the bundle this frontend build shipped in`} data-testid="obs-session-release">
+          {s.release}
+        </span>
+      ) : (
+        s.serviceVersion && (
+          <span className="truncate font-mono text-xs text-ink" title={`Frontend build ${s.serviceVersion} (no release carries it)`}>
+            {s.serviceVersion}
+          </span>
+        )
+      )}
+      {s.release && s.serviceVersion && (
+        <span className="truncate font-mono text-2xs text-ink-muted" title="The frontend's build id, which its source maps are keyed by">
+          build {s.serviceVersion}
+        </span>
+      )}
+      {desktop && <span className="truncate text-2xs text-ink-muted">desktop {desktop}</span>}
+    </span>
   );
 }
 

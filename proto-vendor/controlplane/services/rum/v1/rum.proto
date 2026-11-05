@@ -3,6 +3,7 @@ syntax = "proto3";
 package controlplane.v1;
 
 import "buf/validate/validate.proto";
+import "controlplane/v1/client.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -202,6 +203,26 @@ message SessionSummary {
   int64 errors = 12;
   // Whether a replay was recorded. GetSessionReplay serves it.
   bool has_replay = 13;
+  // Where the browser was: derived by the platform at ingest from the address
+  // it connected from (DB-IP City Lite), never reported by the page. An ISO
+  // 3166-1 alpha-2 country, and the English names of the region and city.
+  // Empty when unknown.
+  string country = 14;
+  string region = 15;
+  string city = 16;
+  // The browser's IP address. Empty unless the platform is configured to keep
+  // it; by default it derives the location above and drops the address.
+  string client_address = 17;
+  // Which client the session ran in (browser, OS, device type, desktop app,
+  // viewport). Empty for a session stored before the platform recorded it.
+  ClientContext client = 18;
+  // The forge release the session's frontend build shipped in (e.g.
+  // v1.7.92-rc.1): the release that first carried service_version, from the
+  // deploy ledger. A build id is content-derived, so a later release that
+  // re-binds the same build serves the same bytes. Empty when no release
+  // carries the build: a frontend built outside the release (a bucket or
+  // Firebase site, a desktop app) has none.
+  string release = 19;
 }
 
 message ListSessionsRequest {
@@ -221,6 +242,14 @@ message ListSessionsRequest {
   ];
   // next_page_token from the previous page; valid only with the same filters.
   string page_token = 7 [(buf.validate.field).string.max_len = 512];
+  // Only sessions of this browser (ClientContext.browser_name, exact).
+  optional string browser = 8 [(buf.validate.field).string.max_len = 64];
+  // Only sessions on this OS (ClientContext.os_name, exact).
+  optional string os = 9 [(buf.validate.field).string.max_len = 64];
+  // Only sessions on this device type: desktop, mobile, tablet or bot.
+  optional string device_type = 10 [(buf.validate.field).string.max_len = 16];
+  // Only sessions of this frontend build (SessionSummary.service_version).
+  optional string frontend_version = 11 [(buf.validate.field).string.max_len = 256];
 }
 
 message ListSessionsResponse {

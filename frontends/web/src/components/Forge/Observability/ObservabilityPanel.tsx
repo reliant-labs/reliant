@@ -83,6 +83,7 @@ import { useNothingArrived } from "./serviceSignals";
 import { SessionsView } from "./Sessions/SessionsView";
 import { TracesView } from "./TracesView";
 import { GraphView } from "./Graph/GraphView";
+import { NO_CLIENT_FILTERS } from "./ClientFilters";
 
 export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
@@ -169,6 +170,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       session: undefined,
       t: undefined,
       user: undefined,
+      rsession: undefined,
+      ...NO_CLIENT_FILTERS,
       cursor: undefined,
     });
   };
@@ -328,6 +331,8 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             platform={issuePlatformOf(search.platform)}
             sort={issueSortOf(search.isort)}
             assignee={search.assignee}
+            user={search.user ?? ""}
+            client={{ browser: search.browser, os: search.os, build: search.build }}
             issueId={search.issue}
             navigate={navigate}
           />
@@ -340,6 +345,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             text={search.q ?? ""}
             hasError={!!search.errors}
             user={search.user ?? ""}
+            client={{ browser: search.browser, os: search.os, fe: search.fe }}
             cursor={search.cursor ?? []}
             sessionId={search.session}
             atMs={search.t}
@@ -373,6 +379,9 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             spanId={search.span}
             groupBy={groupBy}
             filters={filterTokens}
+            user={search.user ?? ""}
+            sessionId={search.rsession}
+            client={{ browser: search.browser, os: search.os, fe: search.fe, be: search.be }}
             navigate={navigate}
           />
         ) : (

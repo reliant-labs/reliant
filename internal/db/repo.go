@@ -923,6 +923,12 @@ func (r *Repo) GetLatestWorkflowNodeUpdates(ctx context.Context, chatID, workflo
 	return store.LatestWorkflowNodeUpdates(ctx, r.ORM(), chatID, workflowID)
 }
 
+// ListErrorUpdatesInRange returns the errors a page of a chat's history holds
+// (see store.ErrorUpdatesInRange).
+func (r *Repo) ListErrorUpdatesInRange(ctx context.Context, chatID string, from *time.Time, thread string, beforeSeq int64) ([]ChatUpdate, error) {
+	return store.ErrorUpdatesInRange(ctx, r.ORM(), chatID, from, thread, beforeSeq)
+}
+
 // GetUpdatesSince returns all updates since a given sequence number
 // This is used for polling clients to fetch new updates
 // limit: maximum number of updates to return (defaults to 100 if <= 0)

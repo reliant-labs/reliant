@@ -11,6 +11,8 @@
  */
 
 /** new → unresolved → resolved → regressed, with ignored reachable from any state. */
+import type { ClientInfo } from "./client";
+
 export const ISSUE_STATUSES = ["new", "unresolved", "regressed", "resolved", "ignored"] as const;
 export type IssueStatus = (typeof ISSUE_STATUSES)[number];
 
@@ -91,6 +93,14 @@ export interface IssueEvent {
   /** Browser issues only. */
   sessionId: string;
   urlPath: string;
+  /** Who hit it: a server record's authenticated user.id, a browser event's page-reported userId. Empty: none. */
+  userId: string;
+  /** Browser issues only: where the browser was, derived by the platform from its address. */
+  country: string;
+  region: string;
+  city: string;
+  /** Browser issues only: which client raised it (client.ts). serviceVersion is its build. */
+  client: ClientInfo;
 }
 
 export interface IssueFrame {
@@ -163,6 +173,12 @@ export interface ListIssuesRequest extends IssueScope {
   text?: string;
   /** Only the issues assigned to this user id. Unset: every issue (the server has no "unassigned" filter). */
   assignee?: string;
+  /** Only the issues with an event of this user id in the window. Unset: every issue. */
+  userId?: string;
+  /** Only the issues with an event of this browser / OS (browser issues only) or build (either platform). */
+  browser?: string;
+  os?: string;
+  serviceVersion?: string;
   sort: IssueSort;
   pageSize?: number;
   pageToken?: string;

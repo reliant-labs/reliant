@@ -175,7 +175,11 @@ func (s *Service) StreamChatUpdates(
 				deltaCh = nil
 				continue
 			}
-			if err := s.sendStreamingDelta(chatID, delta, lastChatSeq, stream); err != nil {
+			batch, open := drainDeltas(delta, deltaCh)
+			if !open {
+				deltaCh = nil
+			}
+			if err := s.sendStreamingDeltas(chatID, batch, lastChatSeq, stream); err != nil {
 				return err
 			}
 
@@ -304,27 +308,65 @@ func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, st
 	return nil
 }
 
-// sendStreamingDelta sends an ephemeral streaming delta.
-func (s *Service) sendStreamingDelta(chatID string, delta streaming.StreamingDelta, lastChatSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) error {
-	deltaJSON, err := json.Marshal(delta)
-	if err != nil {
-		logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to marshal streaming delta", "error", err, "chatID", shortID(chatID))
-		return nil // Don't break stream for marshal errors
+// maxDeltaBatch bounds the deltas one frame carries, so a long backlog still
+// reaches the client in pieces it can apply as they arrive.
+const maxDeltaBatch = 500
+
+// drainDeltas returns first plus every delta already waiting on ch, up to
+// maxDeltaBatch, without blocking, with adjacent text of one block merged.
+// open is false when ch was closed while draining.
+//
+// A chat open replays the chat's last five minutes of deltas from the
+// deltas buffer, and they are all waiting by the time the snapshot has been
+// sent. Sent one frame each, an active chat's open was 1,752 frames (prod,
+// 2026-11-04) that the client parsed and applied one store update at a time;
+// streams that opened in about 0.2s server-side took over 10s to settle in
+// the browser. Live streaming is unchanged: a delta that arrives on an idle
+// channel goes out alone, at once.
+func drainDeltas(first streaming.StreamingDelta, ch <-chan streaming.StreamingDelta) (_ []streaming.StreamingDelta, open bool) {
+	batch := []streaming.StreamingDelta{first}
+	for len(batch) < maxDeltaBatch {
+		select {
+		case d, ok := <-ch:
+			if !ok {
+				return streaming.CoalesceDeltas(batch), false
+			}
+			batch = append(batch, d)
+		default:
+			return streaming.CoalesceDeltas(batch), true
+		}
+	}
+	return streaming.CoalesceDeltas(batch), true
+}
+
+// sendStreamingDeltas sends ephemeral streaming deltas, in order, as one
+// frame.
+func (s *Service) sendStreamingDeltas(chatID string, deltas []streaming.StreamingDelta, lastChatSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) error {
+	now := time.Now().Format(time.RFC3339Nano)
+	updates := make([]*reliantv1.ChatUpdateData, 0, len(deltas))
+	for _, delta := range deltas {
+		deltaJSON, err := json.Marshal(delta)
+		if err != nil {
+			// Don't break the stream for one unencodable delta.
+			logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to marshal streaming delta", "error", err, "chatID", shortID(chatID))
+			continue
+		}
+		updates = append(updates, &reliantv1.ChatUpdateData{
+			UpdateType:     reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAMING_DELTA,
+			SequenceNumber: 0, // Ephemeral - no sequence number
+			ChatId:         chatID,
+			DataJson:       string(deltaJSON),
+			CreatedAt:      now,
+		})
+	}
+	if len(updates) == 0 {
+		return nil
 	}
 
 	event := &reliantv1.ChatStreamEvent{
 		Event: &reliantv1.ChatStreamEvent_Updates{
 			Updates: &reliantv1.ChatUpdateBatch{
-				Updates: []*reliantv1.ChatUpdateData{
-					{
-						UpdateType:     reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAMING_DELTA,
-						SequenceNumber: 0, // Ephemeral - no sequence number
-						EntityId:       "",
-						ChatId:         chatID,
-						DataJson:       string(deltaJSON),
-						CreatedAt:      time.Now().Format(time.RFC3339Nano),
-					},
-				},
+				Updates:        updates,
 				LatestSequence: lastChatSeq,
 			},
 		},

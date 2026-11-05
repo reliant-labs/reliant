@@ -23,6 +23,7 @@ import { createIssuesFixture, type IssuesFixtureOptions } from "./fixtureIssues"
 import { createSessionsFixture, type SessionsFixtureOptions } from "./fixtureSessions";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { DashboardDatabase, DatabasePanelResult, QueryDatabasePanelInput } from "@/services/controlPlane/observability/appDatabaseApi";
 import { fixtureGraph, fixtureCatalog } from "./fixtureGraph";
 import type {
   AttributeValueCount,
@@ -50,6 +51,8 @@ import type {
   Trace,
   TraceSummary,
 } from "@/services/controlPlane/observability/types";
+import { NO_CLIENT } from "@/services/controlPlane/observability/client";
+import { FIXTURE_CLIENTS } from "./fixtureSessions";
 
 export const FIXTURE_ORG = "org-fixture";
 export const FIXTURE_PROJECT = "shop";
@@ -193,7 +196,8 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
     const root = Math.round((rpc === "ListOrders" ? 180 : 40) * (0.5 + random() * 2) * 100) / 100;
     return {
       traceId: i === 0 ? FIXTURE_TRACE_ID : `${(i * 40503).toString(16).padStart(6, "0")}77b34da6a3ce929d0e0e47${(i % 100).toString().padStart(2, "0")}`.slice(0, 32),
-      rootService: "api",
+      // A browser started every other trace: its root is the browser's span.
+      rootService: i % 2 === 0 ? "shop-web" : "api",
       rootOperation: PROCEDURE(rpc),
       startMs: window.endMs - (i + 1) * 9_000,
       durationMs: root + (i % 5 === 0 ? 120 : 0),
@@ -201,6 +205,16 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
       spanCount: 4 + (i % 5),
       errorCount: failed ? 1 : 0,
       services: ["api", "worker"],
+      userId: i % 4 === 3 ? "" : `u_${8812 + (i % 3)}`,
+      sessionId: i % 2 === 0 ? `sess-${(i * 7919 + 4099).toString(16).padStart(6, "0")}` : "",
+      ...(i % 2 === 0 ? { country: "DE", region: "Land Berlin", city: "Berlin" } : { country: "", region: "", city: "" }),
+      // A browser started every other trace: its client and the build that made the call.
+      client: i % 2 === 0 ? FIXTURE_CLIENTS[(i / 2) % FIXTURE_CLIENTS.length] : NO_CLIENT,
+      frontendVersion: i % 2 === 0 ? (i % 4 === 0 ? "v1.8.3" : "1.8.16") : "",
+      backendBuilds: [
+        { service: "api", version: i % 6 === 0 ? "v1.7.91" : "v1.7.92" },
+        { service: "worker", version: "v1.7.92" },
+      ],
       source: "",
       operatorData: false,
     };
@@ -619,7 +633,17 @@ export function fixturePanel(
     return { ...base, series: [], ...fixtureBrowserPanel(panel, window, services) };
   }
 
-  if (panel.kind === "table") {
+  // A latency heatmap: most events fast, a slow tail that thickens mid-window.
+  if (panel.kind === "heatmap") {
+    const step = Math.max(60, Math.round((window.endMs - window.startMs) / 1000 / 30));
+    const bounds = [0, 5, 10, 25, 50, 100, 250, 500, 1000];
+    const heatmap = Array.from({ length: 30 }, (_, t) =>
+      bounds.slice(0, -1).map((low, b) => ({ timeSec: Math.round(window.startMs / 1000) + t * step, low, high: bounds[b + 1]!, count: Math.round(400 / (b + 1) ** 1.6 + (b > 4 && t > 12 && t < 20 ? 30 : 0)) }))
+    ).flat();
+    return { ...base, series: [], stepSeconds: step, heatmap, window };
+  }
+  // A bar panel is answered as a table is: one row per group, the largest first.
+  if (panel.kind === "table" || panel.kind === "bar") {
     return {
       ...base,
       series: [],
@@ -1018,6 +1042,12 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         if (req.rootSpanName) traces = traces.filter((t) => t.rootOperation.includes(req.rootSpanName));
         if (req.errorsOnly) traces = traces.filter((t) => t.errorCount > 0);
         if (req.minDurationMs) traces = traces.filter((t) => t.durationMs >= req.minDurationMs);
+        if (req.userId) traces = traces.filter((t) => t.userId === req.userId);
+        if (req.sessionId) traces = traces.filter((t) => t.sessionId === req.sessionId);
+        if (req.browser) traces = traces.filter((t) => t.client.browserName === req.browser);
+        if (req.os) traces = traces.filter((t) => t.client.osName === req.os);
+        if (req.frontendVersion) traces = traces.filter((t) => t.frontendVersion === req.frontendVersion);
+        if (req.backendVersion) traces = traces.filter((t) => t.backendBuilds.some((b) => b.version === req.backendVersion));
         const durations = traces.map((t) => t.durationMs).sort((a, b) => a - b);
         const at = (p: number) => durations[Math.min(durations.length - 1, Math.floor(p * durations.length))] ?? 0;
         const errors = traces.filter((t) => t.errorCount > 0).length;
@@ -1094,5 +1124,92 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         return { workloads: req.services?.length ? all.filter((w) => req.services!.includes(w.workload)) : all, truncated: false, jobs: fixtureJobs(req, req.window.endMs), jobsTruncated: false };
       }),
     getWorkload: (req) => call("GetWorkload", req, () => fixtureWorkloadDetail(req, req.workload, req.container, req.window)),
+    queryDatabasePanel: (req) => call("QueryDatabasePanel", req, () => fixtureDatabasePanel(req)),
+    listDashboardDatabases: (environmentId) => call("ListDashboardDatabases", { environmentId }, () => (options.empty ? [] : FIXTURE_DATABASES)),
   };
+}
+
+/** The environment's one dashboards-enabled database, with what its dashboard role may read. */
+export const FIXTURE_DATABASES: DashboardDatabase[] = [
+  {
+    name: "app",
+    rowCap: 1000,
+    timeoutMs: 5000,
+    replica: "ro",
+    tablesError: "",
+    tables: [
+      {
+        schema: "public",
+        name: "users",
+        columns: [
+          { name: "id", type: "bigint" },
+          { name: "email", type: "text" },
+          { name: "plan", type: "text" },
+          { name: "created_at", type: "timestamp with time zone" },
+        ],
+      },
+      {
+        schema: "public",
+        name: "orders",
+        columns: [
+          { name: "id", type: "bigint" },
+          { name: "user_id", type: "bigint" },
+          { name: "state", type: "text" },
+          { name: "total_cents", type: "bigint" },
+          { name: "created_at", type: "timestamp with time zone" },
+        ],
+      },
+    ],
+  },
+];
+
+/**
+ * A postgres panel answered the way control-plane answers it: the dbquery
+ * guard's refusal for anything but a read (InvalidArgument, its own words), a
+ * series per value column when the panel names a time column, one figure
+ * otherwise.
+ */
+function fixtureDatabasePanel(req: QueryDatabasePanelInput): DatabasePanelResult {
+  const sql = req.query.sql.trim();
+  const leader = (sql.match(/^[A-Za-z]+/)?.[0] ?? "").toUpperCase();
+  if (!["SELECT", "WITH", "TABLE", "VALUES"].includes(leader)) {
+    throw new ConnectError(`dbquery: refused (statement_not_read_only): the statement starts with ${leader || "nothing"}; a dashboard query may only SELECT, WITH, TABLE or VALUES`, Code.InvalidArgument);
+  }
+  if (/\$[4-9]/.test(sql)) throw new ConnectError("the statement references $4; a postgres panel binds only $1 (from), $2 (to) and $3 (step)", Code.InvalidArgument);
+  const base = {
+    kind: "postgres",
+    unit: "",
+    truncated: false,
+    truncatedBy: "",
+    columns: [] as string[],
+    rows: [] as PanelResult["rows"],
+    series: [] as PanelResult["series"],
+    ...NO_BROWSER_ROWS,
+    ...NO_METRIC_EXTRAS,
+    window: req.window,
+    database: req.query.database || "app",
+    replica: "ro",
+    servedFrom: "db",
+    durationMs: 12,
+  };
+  if (req.query.draw === "line" || req.query.time) {
+    const step = Math.max(60, Math.round((req.window.endMs - req.window.startMs) / 1000 / 24));
+    const timestamps = Array.from({ length: 24 }, (_, i) => Math.round(req.window.startMs / 1000) + i * step);
+    const values = req.query.values?.length ? req.query.values : ["signups"];
+    return {
+      ...base,
+      stepSeconds: step,
+      bucketSeconds: step,
+      series: values.map((label, n) => ({ label, group: {}, timestamps, values: timestamps.map((_, i) => 12 + n * 5 + ((i * 5) % 9)), value: null })),
+    };
+  }
+  if (req.query.draw === "table" || req.query.draw === "bar") {
+    return {
+      ...base,
+      stepSeconds: 0,
+      columns: ["orders"],
+      rows: ["paid", "pending", "refunded"].map((state, i) => ({ group: { state }, values: [420 / (i + 1)] })),
+    };
+  }
+  return { ...base, stepSeconds: 0, columns: ["tables"], rows: [{ group: {}, values: [14] }] };
 }

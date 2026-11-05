@@ -21,7 +21,7 @@
  * handled:
  *   - Live proto path (streaming-grpc convertNodeExecutionEvent): `event_type`
  *     and `status` are NUMERIC proto enum values.
- *   - Persisted / snapshot path (convertChatUpdateData spreads Go's raw JSON):
+ *   - Persisted / snapshot path (decodeChatUpdate spreads Go's raw JSON):
  *     `event_type` is a STRING ("started" / "completed" / "failed") and
  *     `status` is the numeric enum value.
  * normalizeEventStatus() below collapses both into 'running' | 'completed' |

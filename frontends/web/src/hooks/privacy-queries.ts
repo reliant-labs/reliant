@@ -105,6 +105,27 @@ export function subscribePrivacyConsent(listener: (consent: PrivacyConsent) => v
   });
 }
 
+/** The mutation key of every consent write, so a reader can wait for them. */
+const PRIVACY_WRITE_KEY = ["privacy-settings-write"] as const;
+
+/**
+ * Resolves once no consent write is in flight. A switch flips the entry at
+ * once (optimistically), so a reader that acts irreversibly on the new answer
+ * (a reload) waits here first: a reload would abandon the write, and the
+ * server's answer may yet roll the switch back.
+ */
+export function privacyWritesSettled(): Promise<void> {
+  const pending = () => queryClient.isMutating({ mutationKey: PRIVACY_WRITE_KEY }) > 0;
+  if (!pending()) return Promise.resolve();
+  return new Promise((resolve) => {
+    const unsubscribe = queryClient.getMutationCache().subscribe(() => {
+      if (pending()) return;
+      unsubscribe();
+      resolve();
+    });
+  });
+}
+
 /**
  * Load the user's consent into the entry. Never throws: a backend that is
  * down keeps the previous answer (the app does not work then anyway). A
@@ -150,6 +171,7 @@ export function usePrivacyConsent(): PrivacyConsent {
 export function useUpdatePrivacySettings() {
   const qc = useQueryClient();
   const rpc = useUpdatePrivacySettingsRpc({
+    mutationKey: [...PRIVACY_WRITE_KEY],
     onMutate: async (req) => {
       installCacheRules();
       await qc.cancelQueries({ queryKey: privacySettingsKey() });

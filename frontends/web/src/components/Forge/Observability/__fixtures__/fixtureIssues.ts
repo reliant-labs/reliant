@@ -34,6 +34,8 @@ import type {
 } from "@/services/controlPlane/observability/issuesTypes";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { TimeWindow } from "@/services/controlPlane/observability/types";
+import { NO_CLIENT } from "@/services/controlPlane/observability/client";
+import { FIXTURE_CLIENTS } from "./fixtureSessions";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -272,6 +274,9 @@ function framesOf(seed: Seed) {
   ];
 }
 
+/** The users eventOf's events name (every issue has at least three events, so both). */
+const FIXTURE_EVENT_USERS = ["u_8812", "u_8813"];
+
 function eventOf(seed: Seed, atMs: number, index: number): IssueEvent {
   return {
     timeMs: atMs,
@@ -282,6 +287,9 @@ function eventOf(seed: Seed, atMs: number, index: number): IssueEvent {
     attributes: seed.platform === "browser" ? { "browser.name": "Chrome", "url.path": "/checkout" } : { "rpc.method": "CreateOrder", "http.response.status_code": "504" },
     sessionId: seed.platform === "browser" ? `sess-${(index * 7919).toString(16).padStart(8, "0")}` : "",
     urlPath: seed.platform === "browser" ? "/checkout" : "",
+    userId: index % 3 === 2 ? "" : `u_${8812 + (index % 2)}`,
+    ...(seed.platform === "browser" ? { country: "US", region: "California", city: "San Francisco" } : { country: "", region: "", city: "" }),
+    client: seed.platform === "browser" ? FIXTURE_CLIENTS[index % 3] : NO_CLIENT,
   };
 }
 
@@ -494,6 +502,12 @@ export function createIssuesFixture(
           .filter((s) => !req.platform || s.platform === req.platform)
           .filter((s) => !req.services?.length || req.services.includes(s.service))
           .filter((s) => !req.assignee || s.assignee?.id === req.assignee)
+          // Every fixture issue has events of both of eventOf's users, and of no one else.
+          .filter(() => !req.userId || FIXTURE_EVENT_USERS.includes(req.userId))
+          // Browser events carry the first three fixture clients; a server event has none.
+          .filter((s) => !req.browser || (s.platform === "browser" && FIXTURE_CLIENTS.slice(0, 3).some((c) => c.browserName === req.browser)))
+          .filter((s) => !req.os || (s.platform === "browser" && FIXTURE_CLIENTS.slice(0, 3).some((c) => c.osName === req.os)))
+          .filter((s) => !req.serviceVersion || s.lastVersion === req.serviceVersion)
           .filter((s) => !text || s.title.toLowerCase().includes(text) || s.culprit.toLowerCase().includes(text))
           .map((s) => build(s, req.window, versions.get(s.id) ?? 1));
         const order: Record<typeof req.sort, (a: Issue, b: Issue) => number> = {

@@ -783,6 +783,10 @@ message HostedUsageRate {
   string display_name = 2;
   string unit = 3;
   string price_cents = 4;
+  // Exact decimal quantity of `unit` included free each UTC month per org
+  // before price_cents applies ("10" GiB of egress); empty when the kind has
+  // no free allowance. Disclosed beside the rate; never restated by a client.
+  string included_monthly = 5;
 }
 
 message GetCurrentUserUsageBillingResponse {
@@ -791,6 +795,9 @@ message GetCurrentUserUsageBillingResponse {
   UsageBillingAgreement agreement = 3;
   // Present before enrollment; never hardcode rates in a checkout page.
   repeated HostedUsageRate rates = 4;
+  // The monthly hosting minimum: a period whose hosting charges total more
+  // than zero and less than this is billed this. 0 when there is none.
+  int64 minimum_monthly_cents = 5;
 }
 
 message CreateCurrentUserUsageBillingCheckoutRequest {

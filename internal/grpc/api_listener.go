@@ -76,7 +76,7 @@ func NewAPIListener(deps APIListenerDeps) (*APIListener, error) {
 		Chain:  deps.Chain.Chain,
 		Routes: deps.Routes,
 		Logger: deps.Logger,
-		Edge:   func(h http.Handler) http.Handler { return cors(securityHeaders(h)) },
+		Edge:   func(h http.Handler) http.Handler { return cors(securityHeaders(compressBrowserStreams(h))) },
 	})
 	if err != nil {
 		return nil, fmt.Errorf("api listener: %w", err)

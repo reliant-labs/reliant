@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -172,13 +173,53 @@ func (s *Service) ListMessages(
 	protoMessages := messageproto.AssembleForDisplay(
 		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0)
 
+	var pageErrors []*reliantv1.ChatErrorUpdate
+	if beforeSeq > 0 && (req.Msg.ThreadId == nil || *req.Msg.ThreadId == "") && len(messages) > 0 {
+		pageErrors = s.pageErrors(ctx, req.Msg.ChatId, mainThreadID, beforeSeq, messages, hasMore)
+	}
+
 	return connect.NewResponse(&reliantv1.ListMessagesResponse{
 		Messages:  protoMessages,
 		Total:     int32(totalCount),
 		Count:     int32(len(protoMessages)),
 		HasMore:   hasMore,
 		OldestSeq: oldestSeq,
+		Errors:    pageErrors,
 	}), nil
+}
+
+// pageErrors is the errors raised in the stretch of history a scroll-back
+// page loads: from its oldest message (or the chat's start, on the last page)
+// up to the main-thread message at beforeSeq that the client already shows.
+// The chat snapshot sends only the errors of its own window, so this is how
+// an older error reaches its place in the timeline. A failed read degrades
+// to none: the page's messages still render.
+func (s *Service) pageErrors(ctx context.Context, chatID, mainThreadID string, beforeSeq int64, page []*db.Message, hasMore bool) []*reliantv1.ChatErrorUpdate {
+	var from *time.Time
+	if hasMore {
+		oldest := page[0].CreatedAt
+		for _, msg := range page[1:] {
+			if msg.CreatedAt.Before(oldest) {
+				oldest = msg.CreatedAt
+			}
+		}
+		from = &oldest
+	}
+	updates, err := s.deps.Repo.ListErrorUpdatesInRange(ctx, chatID, from, mainThreadID, beforeSeq)
+	if err != nil {
+		logging.WarnContext(ctx, "Failed to read a page's errors", "error", err, "chatID", chatID)
+		return nil
+	}
+	out := make([]*reliantv1.ChatErrorUpdate, 0, len(updates))
+	for _, u := range updates {
+		out = append(out, &reliantv1.ChatErrorUpdate{
+			EntityId:       u.EntityID,
+			SequenceNumber: u.SequenceNumber,
+			DataJson:       string(u.Data),
+			CreatedAt:      u.CreatedAt.Format(time.RFC3339Nano),
+		})
+	}
+	return out
 }
 
 // listMessagesUnbounded resolves EVERY message this chat has -- the main

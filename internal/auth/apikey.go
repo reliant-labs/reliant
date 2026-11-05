@@ -59,8 +59,9 @@ func (v *apiKeyValidator) ValidateToken(token string) (*JWTClaims, error) {
 	}
 
 	return &JWTClaims{
-		Sub:   v.userID,
-		Role:  "authenticated",
-		Email: "apikey@localhost",
+		Sub:        v.userID,
+		Role:       "authenticated",
+		Email:      "apikey@localhost",
+		Credential: CredentialSharedKey,
 	}, nil
 }

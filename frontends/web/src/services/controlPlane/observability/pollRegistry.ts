@@ -10,6 +10,10 @@
  * the quota is gone, timers run at a quarter of their rate while it is tight,
  * and a tick in a hidden tab does nothing. When the quota state changes the
  * timers are re-armed, so polling pauses and resumes on its own.
+ *
+ * A key subscribed with `quota: false` (a read that never touches ClickHouse,
+ * such as a postgres panel's) keeps one timer and the hidden-tab rule but
+ * ignores the quota: its interval is never slowed or stopped by it.
  */
 
 import { focusManager, hashKey, type QueryClient, type QueryKey } from "@tanstack/react-query";
@@ -22,6 +26,13 @@ interface Entry {
   subs: Set<{ ms: number }>;
   timer: ReturnType<typeof setInterval> | null;
   armedMs: number | false;
+  /** Whether the org's ClickHouse quota governs this key's polls. */
+  quota: boolean;
+}
+
+export interface PollOptions {
+  /** false: the read does not spend the ClickHouse quota, so its state never slows or stops the poll. */
+  quota?: boolean;
 }
 
 export class ObsPollRegistry {
@@ -35,11 +46,11 @@ export class ObsPollRegistry {
   }
 
   /** Poll `key` every `ms` for as long as the returned function is not called. */
-  subscribe(client: QueryClient, key: QueryKey, ms: number): () => void {
+  subscribe(client: QueryClient, key: QueryKey, ms: number, { quota = true }: PollOptions = {}): () => void {
     const id = hashKey(key);
     let entry = this.entries.get(id);
     if (!entry) {
-      entry = { client, key, subs: new Set(), timer: null, armedMs: false };
+      entry = { client, key, subs: new Set(), timer: null, armedMs: false, quota };
       this.entries.set(id, entry);
     }
     const sub = { ms };
@@ -60,7 +71,8 @@ export class ObsPollRegistry {
 
   private arm(entry: Entry): void {
     const base = Math.min(...[...entry.subs].map((sub) => sub.ms));
-    const ms = this.store.pollMs(Number.isFinite(base) ? base : false);
+    const baseMs = Number.isFinite(base) ? base : false;
+    const ms = entry.quota ? this.store.pollMs(baseMs) : baseMs;
     if (ms === entry.armedMs && (ms === false) === (entry.timer === null)) return;
     this.disarm(entry);
     entry.armedMs = ms;
@@ -75,7 +87,7 @@ export class ObsPollRegistry {
   }
 
   private tick(entry: Entry): void {
-    if (!focusManager.isFocused() || this.store.getState().kind === "exhausted") return;
+    if (!focusManager.isFocused() || (entry.quota && this.store.getState().kind === "exhausted")) return;
     // exact + active: the query the components watch, and only while one is mounted.
     // cancelRefetch false: a read still in flight is the answer; never restart it.
     runAsPoll(() => {

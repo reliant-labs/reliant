@@ -651,6 +651,31 @@ func HostedActions(log *slog.Logger, store hosteduse.Store, cfg *configv1.Contro
 	return client
 }
 
+// SecretResolver is the worker's resolver for declared secrets: the same private
+// controller hop and trust as hosted actions, a different route. nil when there
+// is no control plane (a step that uses a secret then fails with a clear
+// reason rather than running with the placeholder).
+func SecretResolver(log *slog.Logger, store hosteduse.Store, cfg *configv1.ControlPlaneConfig, worker *configv1.WorkerConfig) handlers.SecretResolver {
+	if worker.GetHostedActionsUrl() == "" {
+		return nil
+	}
+	cp := ControlPlaneEndpoint(cfg)
+	if cp.InternalServiceSecret == "" {
+		log.Warn("declared secrets are DISABLED: internal service signer is missing")
+		return nil
+	}
+	secret := cp.InternalServiceSecret
+	client, err := hosteduse.NewResolver(hosteduse.Deps{
+		Store: store, Worker: worker,
+		Sign: func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+	if err != nil {
+		log.Warn("declared secrets are DISABLED on this worker until the control-plane URL is accepted", "error", err)
+		return nil
+	}
+	return client
+}
+
 // disabledHostedActions refuses every hosted action with its configuration
 // reason, which executeHosted publishes as the action's error.
 type disabledHostedActions struct{ reason string }
@@ -668,6 +693,7 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
 	hostedActions := HostedActions(slog.Default(), d.DB, d.ControlPlane, d.Worker)
+	secretResolver := SecretResolver(slog.Default(), d.DB, d.ControlPlane, d.Worker)
 	// Stop nudges reach this worker's activities over NATS (stopnudge). If
 	// the subscription cannot be made, stops still arrive on the regular
 	// heartbeat, one throttle window later: degrade, never refuse to run.
@@ -690,6 +716,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		TriggerLauncher:        d.Launcher,
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
+		SecretResolver:         secretResolver,
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerCredentials:     triggerCredentials(creds),

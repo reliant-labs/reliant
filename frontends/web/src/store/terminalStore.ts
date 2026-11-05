@@ -41,9 +41,19 @@ export interface TerminalSession {
    */
   daemonId?: string;
   /**
-   * The chat open when the terminal was created. On the main checkout, which
-   * every machine with the project has, the terminal opens on that chat's
-   * machine — where its agent is changing the files.
+   * What to call that machine, as the server names it ("init" and every
+   * machine error carry it). The panel shows it on the terminal, so a shell
+   * on another machine than the chat's is never mistaken for the chat's.
+   * Connection-scoped like daemonId.
+   */
+  machineName?: string;
+  /**
+   * The chat the terminal belongs to. On the main checkout, which every
+   * machine with the project has, the terminal opens on that chat's machine —
+   * where its agent is changing the files. A session restored without one
+   * (persisted before it was recorded) takes the active chat's
+   * (bindSessionChat): without a chat the server picked a machine on its own,
+   * which in prod was a different machine from the chat's.
    */
   chatId?: string;
 }
@@ -112,6 +122,10 @@ interface TerminalState {
   updateSessionPID: (id: string, pid: number) => void;
   /** Bind the daemon's session id once "init" arrives. See TerminalSession.daemonSessionId. */
   setDaemonSessionId: (id: string, daemonSessionId: string, daemonId?: string) => void;
+  /** Record the machine the server says the terminal is on. See TerminalSession.machineName. */
+  setSessionMachine: (id: string, daemonId: string, machineName?: string) => void;
+  /** Give a session with no chat the chat it is shown beside. See TerminalSession.chatId. */
+  bindSessionChat: (id: string, chatId: string) => void;
   /**
    * Drop the project's sessions whose workspace is gone (archived, deleted,
    * or no longer listed). See pruneSessionsForWorkspaces.
@@ -174,7 +188,9 @@ export function pruneSessionsForWorkspaces(
 
 /** Sessions as they are written to storage: no connection-scoped fields. */
 function persistableSessions(sessions: readonly TerminalSession[]): TerminalSession[] {
-  return sessions.map(({ daemonSessionId: _daemonSessionId, daemonId: _daemonId, ...rest }) => rest);
+  return sessions.map(
+    ({ daemonSessionId: _daemonSessionId, daemonId: _daemonId, machineName: _machineName, ...rest }) => rest,
+  );
 }
 
 function isInsideTerminalPanel(target: EventTarget | null): boolean {
@@ -410,6 +426,23 @@ export const useTerminalStore = create(
       ),
     }));
     logger.debug("[TerminalStore] Bound daemon session id", { id, daemonSessionId, daemonId });
+  },
+
+  setSessionMachine: (id: string, daemonId: string, machineName?: string) => {
+    const current = get().sessions.find((s) => s.id === id);
+    if (!current || (current.daemonId === daemonId && current.machineName === machineName)) return;
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, daemonId, machineName } : s)),
+    }));
+  },
+
+  bindSessionChat: (id: string, chatId: string) => {
+    const current = get().sessions.find((s) => s.id === id);
+    if (!current || current.chatId) return;
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, chatId } : s)),
+    }));
+    logger.info("[TerminalStore] Bound session to chat", { id, chatId });
   },
 
   updateSessionPID: (id: string, pid: number) => {

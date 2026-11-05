@@ -223,6 +223,9 @@ message CreateDomainBindingRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 5;
+  // Add includeSubDomains to the hostname's Strict-Transport-Security
+  // (DomainBinding.hsts_include_subdomains). Off by default.
+  bool hsts_include_subdomains = 6;
 }
 
 message CreateDomainBindingResponse {

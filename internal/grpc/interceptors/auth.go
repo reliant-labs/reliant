@@ -218,6 +218,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 
 	// Add claims to context
 	ctx = auth.WithUser(ctx, claims.Sub, claims.Role, claims.Email)
+	ctx = auth.WithCredential(ctx, claims.Credential)
 	ctx = telemetry.BindUser(ctx, claims.Sub)
 	if principal != nil {
 		ctx = auth.WithMachineToken(ctx, principal)

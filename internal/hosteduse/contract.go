@@ -14,6 +14,7 @@ import (
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 )
 
@@ -21,6 +22,7 @@ import (
 type Service interface {
 	Issue(ctx context.Context, runID, nodeID, grantID string, req hostedhttp.Request) (string, error)
 	ExecuteAction(ctx context.Context, runID, nodeID, grantID string, req hostedhttp.Request) (*hostedhttp.Result, error)
+	ResolveSecrets(ctx context.Context, runID, nodeID string, refs []stepsecrets.Ref) (map[stepsecrets.Ref]string, error)
 }
 
 // Store persists ticket authority derived from active runs and atomically
@@ -48,8 +50,10 @@ type Deps struct {
 
 // RedeemRequest names the exact authority the controller intends to consume.
 type RedeemRequest struct {
-	TicketID      string `json:"ticket_id"`
-	GrantID       string `json:"grant_id"`
+	TicketID string `json:"ticket_id"`
+	// GrantID is empty on the access-list path. A ticket redeems only with the
+	// grant id it was issued with, so the two paths cannot be confused.
+	GrantID       string `json:"grant_id,omitempty"`
 	RequestSHA256 string `json:"request_sha256"`
 }
 

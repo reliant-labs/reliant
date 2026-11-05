@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/stepsecrets"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -152,11 +153,18 @@ func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
 
 	// Pure expression (entire string is {{expr}} with optional whitespace)
 	if len(matches) == 1 && isPureExpressionWithWhitespace(expr, matches[0]) {
+		// A declared secret is not CEL: the hole becomes a marker that the
+		// step's activity resolves. The value never exists in workflow state.
+		if name, ok := stepsecrets.PlainName(matches[0].Expr); ok {
+			return stepsecrets.Marker(name), nil
+		}
 		result, err := b.evalSingleCEL(matches[0].Expr, config, evalCtx)
 		if err != nil {
 			return nil, err
 		}
-		return result, nil
+		// What an expression produces is data (a PR title, an issue body): it
+		// cannot become a placeholder, whatever it spells.
+		return stepsecrets.SanitizeAny(result), nil
 	}
 
 	// Mixed string — interpolate each {{expr}} into a string
@@ -164,12 +172,17 @@ func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
 	lastEnd := 0
 	for _, match := range matches {
 		result.WriteString(expr[lastEnd:match.Start])
+		if name, ok := stepsecrets.PlainName(match.Expr); ok {
+			result.WriteString(stepsecrets.Marker(name))
+			lastEnd = match.End
+			continue
+		}
 		value, err := b.evalSingleCEL(match.Expr, config, evalCtx)
 		if err != nil {
 			return nil, err
 		}
 		if value != nil {
-			result.WriteString(valueToInterpolatedString(value))
+			result.WriteString(stepsecrets.Sanitize(valueToInterpolatedString(value)))
 		} else {
 			result.WriteString("NULL_VALUE")
 		}

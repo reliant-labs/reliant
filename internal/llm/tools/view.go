@@ -51,7 +51,11 @@ const (
 	// tokens the right move is a targeted offset read, which the truncation
 	// notice names along with the file's true line count.
 	MaxReadSize       = 64_000
-	MaxBinaryFileSize = 5 * 1024 * 1024 // 5MB max for binary files (images, PDFs)
+	MaxBinaryFileSize = 5 * 1024 * 1024 // 5MB max for binary files (PDFs)
+	// MaxImageFileSize is the largest image the model can be handed: Anthropic
+	// refuses an image whose base64 exceeds 5MiB, and base64 is 4/3 of the raw
+	// size. Refusing here says so at once, with what to do about it.
+	MaxImageFileSize = 5 * 1024 * 1024 * 3 / 4
 	// DefaultReadLimit is the line ceiling for a read that does not ask for
 	// one. Every view costs a full model round-trip while the read itself
 	// costs milliseconds, so paging a 900-line file 300 lines at a time buys
@@ -88,7 +92,7 @@ LIMITATIONS:
 - Default reading limit is 1500 lines, which reads most source files whole
 - Lines longer than 500 characters are truncated
 - Cannot display binary files (executables, archives, etc.)
-- Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
+- Images (PNG, JPEG, GIF, WebP, BMP) up to 3.75MB and 8000px on a side are shown to you as images; SVG files are read as text
 - PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
 
 TIPS:
@@ -218,7 +222,13 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 	// Check if it's an image file — read binary and return as image content
 	isImage, mimeType := isImageFile(filePath)
 	if isImage {
-		data, err := rctx.Daemon.ReadBinaryFile(rctx.Context, filePath, MaxBinaryFileSize)
+		if stat.Size > MaxImageFileSize {
+			return NewTextErrorResponse(fmt.Sprintf(
+				"Image file %s is %s, larger than the %s a model accepts. Downscale or crop it first "+
+					"(e.g. `convert in.png -resize 50%% out.png`), then view the result.",
+				displayPath, formatFileSize(stat.Size), formatFileSize(MaxImageFileSize))), nil
+		}
+		data, err := rctx.Daemon.ReadBinaryFile(rctx.Context, filePath, MaxImageFileSize)
 		if err != nil {
 			return NewTextErrorResponse(fmt.Sprintf("Failed to read image file %s: %v", displayPath, err)), nil
 		}
@@ -446,8 +456,8 @@ func isImageFile(filePath string) (bool, string) {
 		return true, "image/gif"
 	case ".bmp":
 		return true, "image/bmp"
-	case ".svg":
-		return true, "image/svg+xml"
+	// No .svg: it is XML, which a model reads as text, and no provider takes
+	// image/svg+xml as an image.
 	case ".webp":
 		return true, "image/webp"
 	default:

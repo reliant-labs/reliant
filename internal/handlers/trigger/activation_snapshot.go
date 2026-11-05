@@ -267,6 +267,9 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						return err
 					}
 				}
+				secretSummary, secretCaps := secretDeclarationDisclosure(w, values, k, tainted)
+				snap.Summary = append(snap.Summary, secretSummary...)
+				snap.Capabilities.Add(secretCaps...)
 				counts := map[string]int{}
 				for _, node := range w.GetNodes() {
 					counts[model.NodeType(node)]++

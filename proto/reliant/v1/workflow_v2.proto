@@ -279,6 +279,14 @@ message Node {
   }];
 
   // Type-specific arguments. Exactly one must be set, matching the type field.
+  // SecretRefs are the declared secrets this node's activity resolves, written by
+  // the parser from the workflow's `secrets:` block and never authored. An action
+  // node lists the secrets its `with` names; a run node lists every declared
+  // secret (each is exported to the command as an environment variable). The
+  // environment is an expression over inputs, evaluated with the node's other
+  // templates. Names and environments only: a value is never part of a node.
+  repeated NodeSecretRef secret_refs = 40 [(reliant) = {hidden: true}];
+
   oneof args {
     CallLLMArgs call_llm = 10;
     ExecuteToolsArgs execute_tools = 11;
@@ -739,6 +747,27 @@ message ActionArgs {
     label: "Hosted use grant"
     visibility_contexts: "basic"
   }];
+
+  // Credential authenticates the action with one of the workflow's declared
+  // secrets, in place of a saved connection. The value is resolved inside the
+  // action's activity and written only where the integration's api_key auth
+  // method puts a key (its header and prefix); the call is held to https and to
+  // the integration's own hosts. Refused alongside connection or hosted_use, and
+  // for an integration with no api_key method that names its header.
+  ActionCredential credential = 6 [(reliant) = {
+    description: "Authenticate with a declared secret instead of a saved connection, as {secret: NAME}"
+    example: "{\"secret\": \"SENTRY_TOKEN\"}"
+    type_hint: "JSON object"
+    label: "Credential"
+    visibility_contexts: "basic"
+  }];
+}
+
+// ActionCredential names the declared secret an action authenticates with.
+message ActionCredential {
+  // Secret is the name of a secret in the workflow's `secrets:` block. A name,
+  // never a value and never an expression.
+  string secret = 1;
 }
 
 // GitPublishArgs configures a git_publish node: commit a worktree's changes and
@@ -2157,6 +2186,31 @@ message Workflow {
   // machine is up and before its first node (preflight), and fails at once,
   // with every missing item named, instead of an hour in.
   WorkflowRequirements requires = 21;
+  // Secrets declares the secrets this workflow uses, by name. A secret travels
+  // only in a credential slot, never in text a step can print or return:
+  //   - a header value of http/request@1, as {{ secrets.NAME }} alone or after
+  //     a literal prefix ("Bearer {{ secrets.NAME }}");
+  //   - an action's credential: {secret: NAME}, applied through its
+  //     integration's api_key auth method.
+  // It is refused everywhere else, run steps and every model-facing field
+  // included. The placeholder stays a marker in workflow state and Temporal
+  // history: only the action's activity resolves it, through the control plane,
+  // and writes it into the outgoing request. A child workflow (a ref) declares
+  // its own secrets.
+  map<string, SecretDeclaration> secrets = 22;
+}
+
+// SecretDeclaration says where a secret lives.
+message SecretDeclaration {
+  // Environment is "<forge project>/<env name>" or an environment id, in the
+  // run owner's organization. It may be an expression over inputs.
+  CelString environment = 1;
+}
+
+// NodeSecretRef binds one declared secret to the environment it lives in.
+message NodeSecretRef {
+  string name = 1;
+  CelString environment = 2;
 }
 
 // WorkflowRequirements is what a run checks before its first node.

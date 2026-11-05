@@ -24,6 +24,7 @@ import {
   stripChatMarker,
 } from "../lib/chatMarkers";
 import {
+  applyHistoricalErrors,
   applyLogSlice,
   applyToolCallStateUpdates,
   bySequenceNumber,
@@ -2177,6 +2178,27 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         reachedStart,
       });
 
+      // The page's own errors: the snapshot carries only the errors of its
+      // window, so an older error arrives with the history it belongs to and
+      // renders at its place in the timeline. Merged by id, never replacing a
+      // newer attempt the snapshot or the stream already delivered.
+      const pageErrors = (response.errors || []).flatMap((e): ErrorUpdate[] => {
+        try {
+          const data = JSON.parse(e.dataJson || "{}") as Omit<ErrorUpdate, "sequence_number">;
+          return [{ ...data, update_type: "error", sequence_number: Number(e.sequenceNumber) }];
+        } catch {
+          return [];
+        }
+      });
+      if (pageErrors.length > 0) {
+        set((s) => ({
+          errorEvents: {
+            ...s.errorEvents,
+            [chatId]: applyHistoricalErrors(s.errorEvents[chatId] || [], pageErrors),
+          },
+        }));
+      }
+
       return !reachedStart;
     } catch (error) {
       logger.error("[ChatStore] Failed to load older messages:", error);
@@ -2396,7 +2418,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           (u): u is NodeExecutionUpdate => u.update_type === "node_execution",
         );
         // Handle refetch signals from the chat stream (e.g., workflow_executions, plan_tasks)
-        // After convertChatUpdateData, the JSON data is spread into the update object,
+        // After decodeChatUpdate (the SDK), the JSON data is spread into the update object,
         // so { type: "workflow_executions" } becomes a top-level field.
         for (const u of updates) {
           if (u.update_type === "refetch") {
