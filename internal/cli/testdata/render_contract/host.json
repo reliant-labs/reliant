@@ -1,0 +1,262 @@
+{
+  "output": {
+    "applier": null,
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "databases": [],
+    "env": "dev",
+    "external_secrets_operators": [],
+    "frontends": [
+      {
+        "asset_dir": "assets",
+        "base_path": null,
+        "bundle": [],
+        "cache_control": [],
+        "config": null,
+        "dev_runner": "npm",
+        "env_file": null,
+        "env_vars": [],
+        "image": null,
+        "name": "web",
+        "path": "frontends/web",
+        "port": 3000,
+        "public_dir": "dist",
+        "runtime": {
+          "type": "host"
+        },
+        "runtime_config": {},
+        "runtime_config_spec": {},
+        "source": null,
+        "type": "vite"
+      }
+    ],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "latest",
+    "infra": [
+      {
+        "data_dir": null,
+        "database": "acme",
+        "engine": "postgres",
+        "idp_database": "zitadel",
+        "idp_database_port": null,
+        "idp_masterkey": "MasterkeyNeedsToHave32Characters",
+        "idp_pat_path": ".forge/idp/pat.txt",
+        "idp_steps_file": "idp-steps.yaml",
+        "name": "postgres",
+        "nats_monitor_port": null,
+        "password": "postgres",
+        "port": 5433,
+        "temporal_namespaces": null,
+        "temporal_ui_port": null,
+        "user": "postgres",
+        "version": null
+      },
+      {
+        "data_dir": null,
+        "database": "postgres",
+        "engine": "nats",
+        "idp_database": "zitadel",
+        "idp_database_port": null,
+        "idp_masterkey": "MasterkeyNeedsToHave32Characters",
+        "idp_pat_path": ".forge/idp/pat.txt",
+        "idp_steps_file": "idp-steps.yaml",
+        "name": "nats",
+        "nats_monitor_port": 8223,
+        "password": "postgres",
+        "port": 4223,
+        "temporal_namespaces": null,
+        "temporal_ui_port": null,
+        "user": "postgres",
+        "version": null
+      },
+      {
+        "data_dir": null,
+        "database": "postgres",
+        "engine": "temporal",
+        "idp_database": "zitadel",
+        "idp_database_port": null,
+        "idp_masterkey": "MasterkeyNeedsToHave32Characters",
+        "idp_pat_path": ".forge/idp/pat.txt",
+        "idp_steps_file": "idp-steps.yaml",
+        "name": "temporal",
+        "nats_monitor_port": null,
+        "password": "postgres",
+        "port": 7234,
+        "temporal_namespaces": [
+          "acme"
+        ],
+        "temporal_ui_port": null,
+        "user": "postgres",
+        "version": null
+      }
+    ],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifest_owners": [],
+    "manifests": [],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "secret_provider": {
+      "path": "secrets/dev.yaml",
+      "type": "file"
+    },
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "acme",
+        "image": "acme",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "air_config": ".air.toml",
+          "delve_port": 2345,
+          "listen_ports": [
+            8080
+          ],
+          "runner": "air",
+          "type": "host",
+          "working_dir": null
+        },
+        "spec": {
+          "args": [
+            "api"
+          ],
+          "env": [
+            {
+              "name": "LOG_LEVEL",
+              "value": "debug"
+            },
+            {
+              "name": "API_KEY",
+              "secretRef": {
+                "key": "api_key",
+                "name": "acme-secrets",
+                "optional": true
+              }
+            },
+            {
+              "name": "WEB_URL",
+              "value": "http://localhost:3000"
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            }
+          ],
+          "image": "",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "acme",
+        "image": "acme",
+        "kind": "job",
+        "name": "migrate",
+        "release_inputs": {},
+        "runtime": {
+          "air_config": null,
+          "delve_port": 2345,
+          "listen_ports": null,
+          "runner": "go-run",
+          "type": "host",
+          "working_dir": null
+        },
+        "spec": {
+          "args": [
+            "db",
+            "migrate",
+            "up"
+          ],
+          "before": [
+            "*"
+          ],
+          "env": [
+            {
+              "name": "DATABASE_URL",
+              "value": "postgres://postgres:postgres@localhost:5433/acme"
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "migrate"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            }
+          ],
+          "image": "",
+          "kind": "job",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,457 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// Tanstack-router setup for the {{.FrontendName}} SPA. Forge writes this
+// file once at scaffold time and never overwrites it. New routes added by
+// `forge scaffold page <Entity>` are appended in the marker block below.
+//
+// Routing model
+// -------------
+// We use the code-based router (createRootRoute / createRoute / addChildren)
+// rather than file-based routing. The code-based form keeps the route tree
+// inspectable in one place and lets the page generator stitch new entity
+// routes into the same array without touching anything else.
+//
+// Common edits:
+//   - Replace <App /> with your own root layout
+//   - Add static routes (login, settings) above the FORGE-ROUTES marker
+//   - Filter or reorder ALL_ROUTES in the marker block
+//
+// Conventions
+//   - Search-param validation lives on the route via `validateSearch: schema`.
+//     Read it inside the component with `useSearch({ from: '/<route-id>' })`.
+//   - Path params: `parseParams: z.object({...}).parse` on the route.
+
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+{{- if not .Public}}
+  useRouterState,
+{{- end}}
+} from "@tanstack/react-router";
+{{- if not .Public}}
+import { useState } from "react";
+
+import { ForgotPasswordForm } from "@/components/forgot-password-form";
+import { PasswordRequirements } from "@/components/password-requirements";
+import { ResetPasswordForm } from "@/components/reset-password-form";
+import Button from "@/components/ui/button";
+import Input from "@/components/ui/input";
+import Label from "@/components/ui/label";
+import { AuthError, signIn, signUp, type PasswordRule } from "@/lib/auth/native-login";
+import { RouteGuard } from "@/lib/auth/route-guard";
+import { useAuth } from "@/lib/auth/use-auth";
+import { useAuthOptions } from "@/lib/auth/use-auth-options";
+import { usePasswordPolicy } from "@/lib/auth/use-password-policy";
+{{- end}}
+
+import App from "./App";
+{{- if .Public}}
+
+// Root route — renders the app shell (<App />) and an <Outlet /> for matched
+// children.
+//
+// PUBLIC FRONTEND (auth_mode: none): there is no route guard and no sign-in
+// route — every page renders for every visitor. To gate it later, set
+// `auth_mode: native` in forge.yaml, wrap the shell in the RouteGuard from
+// @/lib/auth/route-guard and add a sign-in route (`forge skill load
+// auth/frontend`).
+export const rootRoute = createRootRoute({
+  component: function RootShell() {
+    return (
+      <App>
+        <Outlet />
+      </App>
+    );
+  },
+});
+{{- else}}
+
+// Root route — renders the app shell (<App />) and an <Outlet /> for
+// matched children.
+//
+// The shell is wrapped in the route guard, so an anonymous visitor is sent to
+// the sign-in screen instead of getting a rendered page whose every RPC then
+// answers 401. The guard is framework-agnostic and shared byte-for-byte with
+// the Next.js scaffold (`@/lib/auth/route-guard`); this supplies the TanStack
+// Router bindings for "what path are we on" and "how do I navigate". It asks
+// this app's own API who is signed in — never an identity provider — and it
+// is always enforcing. Edit that file (or delete this wrapper) to change
+// which routes are public.
+//
+// The /auth routes render OUTSIDE the shell, which is the same call the
+// Next.js scaffold makes in src/app/auth/layout.tsx. Framing a sign-in card
+// in the product's own chrome makes two false promises at once: that the
+// visitor is inside the app, and that the header's links lead somewhere they
+// can go. They are signed out. They cannot. Put branding for the sign-in
+// screen in the route's own markup rather than restoring <App /> here.
+export const rootRoute = createRootRoute({
+  component: function RootShell() {
+    const pathname = useRouterState({ select: (s) => s.location.pathname });
+    const chromeless = pathname.startsWith("/auth/");
+    return (
+      <RouteGuard
+        pathname={pathname}
+        navigate={(path) => void router.navigate({ to: path, replace: true })}
+      >
+        {chromeless ? (
+          <div className="min-h-screen bg-surface-muted text-ink">
+            <Outlet />
+          </div>
+        ) : (
+          <App>
+            <Outlet />
+          </App>
+        )}
+      </RouteGuard>
+    );
+  },
+});
+{{- end}}
+
+// Index route — the welcome / dashboard landing page. Replace with your own
+// dashboard component once you have services with CRUD entities and have
+// run `forge generate` to scaffold them.
+const indexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/",
+  component: function Index() {
+    return (
+      <div className="mx-auto max-w-3xl p-8">
+        <h1 className="text-3xl font-bold tracking-tight text-ink">Welcome to {{.FrontendName}}</h1>
+        <p className="mt-3 text-sm text-ink-muted">
+          This is a Vite + React + tanstack-router scaffold generated by forge. Add a service with
+          CRUD RPCs and run{" "}
+          <code className="rounded bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-ink">
+            forge generate
+          </code>{" "}
+          to populate entity routes.
+        </p>
+      </div>
+    );
+  },
+});
+{{if not .Public}}
+// ── The sign-in route ──────────────────────────────────────────────────
+//
+// ONE route, and no callback route beside it.
+//
+// Sign-in is NATIVE: the form below POSTs the credentials to this app's own
+// API, the server runs the whole OIDC flow against the identity provider
+// (internal/app/login_broker.go), and the answer comes back as an HttpOnly
+// session cookie. The browser never contacts the provider — no authorize
+// redirect, no discovery document, no token endpoint, no hidden iframe.
+//
+// That is why there is no `/auth/callback` route here. A callback route
+// exists to receive an authorization code the browser was handed and trade
+// it for a token; in this architecture the browser is never handed one, and
+// the exchange happens server-side before the response to this form is even
+// written. A callback route would be a dead URL that no provider redirects
+// to and no code path navigates to.
+//
+// Delete this route if your product is gated at the edge and never shows a
+// sign-in page of its own — and delete the broker's routes with it.
+//
+// This is STARTER CODE, deliberately plain: most products restyle sign-in
+// heavily, and an opinionated design here would be harder to replace than a
+// neutral one. It is the same form as the Next.js scaffold's
+// src/app/auth/sign-in/page.tsx; only the routing around it differs.
+const signInRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/sign-in",
+  component: function SignIn() {
+    const { refresh } = useAuth();
+
+    // Where the visitor was headed before the route guard sent them here.
+    // Read from the raw query string rather than a typed search schema: the
+    // guard writes this param only when it redirects, so it is often absent
+    // and a schema would reject the bare /auth/sign-in navigation.
+    //
+    // Same-origin, absolute-path only: this is attacker-supplied input, and
+    // handing it to a navigation unchecked is an open redirect. `//evil.com`
+    // is a protocol-relative URL, so the second character matters as much as
+    // the first.
+    const requested = new URLSearchParams(window.location.search).get("returnTo");
+    const returnTo =
+      requested !== null && requested.startsWith("/") && !requested.startsWith("//")
+        ? requested
+        : "/";
+
+    // Whether this deployment serves sign-up at all: off outside development
+    // unless the server's config sets auth_self_signup (see
+    // internal/app/login_broker.go). The screen follows the server, so the
+    // two cannot disagree.
+    const { selfSignup } = useAuthOptions();
+    const [mode, setMode] = useState<"signIn" | "signUp">("signIn");
+    const signingUp = selfSignup && mode === "signUp";
+
+    const [email, setEmail] = useState("");
+    const [password, setPassword] = useState("");
+    const [totp, setTotp] = useState("");
+    const [needsTotp, setNeedsTotp] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    // The password rules the SERVER found unmet on the last attempt, so the
+    // checklist marks exactly those.
+    const [serverUnmet, setServerUnmet] = useState<PasswordRule[]>([]);
+    const [submitting, setSubmitting] = useState(false);
+    // What a password must contain. Only shown when signing up.
+    const policy = usePasswordPolicy();
+
+    async function onSubmit(event: React.FormEvent) {
+      event.preventDefault();
+      setSubmitting(true);
+      setError(null);
+      setServerUnmet([]);
+      try {
+        if (signingUp) {
+          await signUp({ email, password });
+        } else {
+          await signIn({ email, password, ...(totp ? { totp } : {}) });
+        }
+        // The cookie is set. Tell the app to re-read its auth state, then go
+        // where the visitor was headed. A full navigation rather than a
+        // router navigate: it guarantees every provider re-initialises with
+        // the session in place.
+        await refresh();
+        window.location.assign(returnTo);
+      } catch (err) {
+        const message =
+          err instanceof AuthError ? err.message : "Sign-in failed. Please try again.";
+        // The issuer reports a missing second factor as a rejection; showing
+        // the field on the retry turns a dead end into a completable form.
+        if (/(totp|factor|otp)/i.test(message)) setNeedsTotp(true);
+        setError(message);
+        setServerUnmet(err instanceof AuthError ? err.unmet : []);
+        setSubmitting(false);
+      }
+    }
+
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center py-12">
+        <div className="w-full max-w-sm">
+          <form
+            onSubmit={onSubmit}
+            className="rounded-xl border border-border bg-surface p-8 shadow-sm"
+          >
+            <h1 className="text-xl font-semibold tracking-tight text-ink">
+              {signingUp ? "Create your {{.ProjectName}} account" : "Sign in to {{.ProjectName}}"}
+            </h1>
+
+            <Label className="mt-6" htmlFor="email">
+              Email
+            </Label>
+            <Input
+              id="email"
+              name="email"
+              type="email"
+              autoComplete="username"
+              required
+              autoFocus
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+
+            <Label className="mt-4" htmlFor="password">
+              Password
+            </Label>
+            <Input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete={signingUp ? "new-password" : "current-password"}
+              required
+              aria-describedby={signingUp ? "password-requirements" : undefined}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+
+            {signingUp ? (
+              <PasswordRequirements
+                id="password-requirements"
+                policy={policy}
+                password={password}
+                serverUnmet={serverUnmet}
+              />
+            ) : (
+              /*
+                Self-serve reset. The link is emailed only if this app's
+                identity has SMTP configured (forge.ManagedIdentity.smtp) —
+                the /auth/forgot screen says so. Delete this link, the two
+                routes below and the broker's /auth/forgot and /auth/reset
+                to turn password reset off.
+              */
+              <p className="mt-1 text-right text-xs">
+                <a className="font-medium text-accent underline" href="/auth/forgot">
+                  Forgot your password?
+                </a>
+              </p>
+            )}
+
+            {!signingUp && needsTotp ? (
+              <>
+                <Label className="mt-4" htmlFor="totp">
+                  Authentication code
+                </Label>
+                <Input
+                  id="totp"
+                  name="totp"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={totp}
+                  onChange={(e) => setTotp(e.target.value)}
+                />
+              </>
+            ) : null}
+
+            {error ? (
+              <p
+                role="alert"
+                className="mt-4 break-words rounded-md border border-danger-border bg-danger-surface p-3 text-sm text-danger-ink"
+              >
+                {error}
+              </p>
+            ) : null}
+
+            <Button type="submit" size="xl" fullWidth loading={submitting} className="mt-6">
+              {submitting
+                ? signingUp
+                  ? "Creating your account…"
+                  : "Signing in…"
+                : signingUp
+                  ? "Create account"
+                  : "Sign in"}
+            </Button>
+
+            {/*
+              Sign in and sign up on ONE screen, swapping behaviour rather
+              than navigating: both post to the same API and land in the same
+              place, so a second route would add a page transition and
+              nothing else.
+
+              Shown only when the server serves /auth/register — a deployed
+              app is invite-only until its config sets auth_self_signup
+              (internal/app/login_broker.go explains how an invite-only app
+              gets its users).
+            */}
+            {selfSignup ? (
+              <p className="mt-4 text-center text-sm text-ink-muted">
+                {signingUp ? "Already have an account?" : "New here?"}{" "}
+                <button
+                  type="button"
+                  className="font-medium text-accent underline"
+                  onClick={() => {
+                    setMode(signingUp ? "signIn" : "signUp");
+                    setError(null);
+                    setServerUnmet([]);
+                  }}
+                >
+                  {signingUp ? "Sign in" : "Create an account"}
+                </button>
+              </p>
+            ) : null}
+          </form>
+        </div>
+      </div>
+    );
+  },
+});
+
+// ── Password reset ─────────────────────────────────────────────────────
+//
+// /auth/forgot asks for a reset link; /auth/reset?userID=…&code=…&orgID=…
+// redeems it. Both are public (the route guard lists /auth/forgot and
+// /auth/reset beside /auth/sign-in) and render outside the app shell like the
+// sign-in screen. The query shape is what the link the identity provider
+// emails carries.
+//
+// THE LINK IS EMAILED ONLY IF the app's identity has SMTP configured
+// (forge.ManagedIdentity.smtp). The forgot screen says so; see handleForgot in
+// internal/app/login_broker.go for delivering the code another way.
+//
+// Delete both routes, their entries in addChildren below, the guard's
+// publicPaths and the broker's two handlers to turn password reset off.
+const forgotRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/forgot",
+  component: function Forgot() {
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center py-12">
+        <div className="w-full max-w-sm">
+          <ForgotPasswordForm signInHref="/auth/sign-in" />
+        </div>
+      </div>
+    );
+  },
+});
+
+const resetRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/auth/reset",
+  component: function Reset() {
+    // Read from the raw query string: the link carries them and a typed
+    // search schema would reject the bare /auth/reset navigation.
+    const params = new URLSearchParams(window.location.search);
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center py-12">
+        <div className="w-full max-w-sm">
+          <ResetPasswordForm
+            userID={params.get("userID")}
+            code={params.get("code")}
+            signInHref="/auth/sign-in"
+            forgotHref="/auth/forgot"
+            // A full navigation, as the sign-in screen does. If the
+            // follow-up sign-in failed the password is still set.
+            onDone={(signedIn) => window.location.assign(signedIn ? "/" : "/auth/sign-in")}
+          />
+        </div>
+      </div>
+    );
+  },
+});
+
+{{end -}}
+// ── FORGE-ROUTES: BEGIN (managed by `forge scaffold page` and `forge generate`) ──
+// Entity routes are appended below this marker. Hand-editing inside this
+// block is allowed, but `forge generate` may re-stitch entries — keep the
+// markers intact.
+//
+// Format expected by the page generator: one `createRoute({...})` call
+// per entity, assigned to a const, followed by an entry pushed onto
+// `generatedRoutes`. Example:
+//
+//   const tasksListRoute = createRoute({
+//     getParentRoute: () => rootRoute,
+//     path: "/tasks",
+//     component: lazy(() => import("@/pages/tasks/List")),
+//   });
+//   generatedRoutes.push(tasksListRoute);
+//
+// `unknown[]` keeps the array assignable without forcing every entry
+// through a single concrete route generic — tanstack-router types each
+// `createRoute` call against its own search/param shape, and a single
+// homogenous element type would force every entity route into the same
+// shape.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const generatedRoutes: any[] = [];
+// ── FORGE-ROUTES: END ──
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+{{- if not .Public}}
+  signInRoute,
+  forgotRoute,
+  resetRoute,
+{{- end}}
+  ...generatedRoutes,
+]);
+
+export const router = createRouter({ routeTree });
+
+// Register router type for autocomplete and type-safe Link / navigate.
+declare module "@tanstack/react-router" {
+  interface Register {
+    router: typeof router;
+  }
+}
