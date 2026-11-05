@@ -47,12 +47,12 @@ const LIFECYCLE: Record<WorktreeStatus, LifecycleInfo> = {
   },
   [WorktreeStatus.CREATING]: {
     label: "Creating",
-    description: "The worktree is still being created on your machine",
+    description: "The workspace is still being created on your machine",
     variant: "neutral",
   },
   [WorktreeStatus.FAILED]: {
     label: "Failed",
-    description: "Creating the worktree did not finish",
+    description: "Creating the workspace did not finish",
     variant: "danger",
   },
 };

@@ -126,7 +126,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
   const counts: Array<{ label: string; value: bigint | undefined }> = [
     { label: 'Projects', value: preview?.projectCount },
     { label: 'Chats', value: preview?.chatCount },
-    { label: 'Worktrees', value: preview?.worktreeCount },
+    { label: 'Workspaces', value: preview?.worktreeCount },
     { label: 'Messages', value: preview?.messageCount },
   ]
 

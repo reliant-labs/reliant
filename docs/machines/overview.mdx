@@ -23,7 +23,7 @@ Choose your own computer for a chat when the project is already checked out ther
 
 Because the daemon is the thing that reads your files, several pieces of configuration belong to the machine rather than to your account:
 
-- Your project files and git history, including any [worktrees](/features/worktrees).
+- Your project files and git history, including any [workspaces](/features/worktrees).
 - [Memory files](/settings/memories): `~/.reliant/reliant.md` is the one on *that* machine, so a cloud machine has its own, separate from your laptop's.
 - [MCP servers](/settings/mcp-servers). They are started by the daemon, so a server that needs `npx` or `uvx` needs it installed on the machine that runs it.
 - [Model configuration](/settings/model-config) and any [local models](/settings/api-keys).
@@ -32,11 +32,11 @@ What a machine sends back to Reliant is covered in [Privacy & security](/help/pr
 
 ## Which machine a chat runs on
 
-A project is not tied to one machine. You can install the same project on several machines, for example your laptop and a cloud machine, and each has its own checkout, git history and worktrees. What decides where work happens is the chat.
+A project is not tied to one machine. You can install the same project on several machines, for example your laptop and a cloud machine, and each has its own checkout, git history and workspaces. What decides where work happens is the chat.
 
 Each chat runs on one machine. On the new-chat screen the machine picker shows where it will run, starting from your default machine, and you can choose another machine you own, or **No machine**. A chat with no machine can use the web and your integrations but cannot read or change files, run a shell or reach a local MCP server. If you leave the machine unchosen, the chat runs on your default machine. You can change a chat's machine later with **Connect a machine**, which is also how a no-machine chat gets one.
 
-A branched chat is the exception to choosing freely. Its [worktree](/features/worktrees) lives on the disk of the machine that created it, so the branch runs on that machine. A new worktree is created on the machine of the chat it is created for, and the Files tab and the file, worktree and git operations for a chat all go to that chat's machine. A workspace you create from the new-chat screen, before the chat exists, is created on your default machine.
+A branched chat is the exception to choosing freely. Its [workspace](/features/worktrees) lives on the disk of the machine that created it, so the branch runs on that machine. A new workspace is created on the machine of the chat it is created for, and the Files tab and the file, workspace and git operations for a chat all go to that chat's machine. A workspace you create from the new-chat screen, before the chat exists, is created on your default machine.
 
 ### Your default machine
 

@@ -108,7 +108,7 @@ describe("MobileSettingsScreen", () => {
     expect(screen.getByText("Notifications")).toBeInTheDocument();
     expect(screen.getByText("Privacy")).toBeInTheDocument();
     expect(screen.getByText("Appearance")).toBeInTheDocument();
-    expect(screen.getByText("Branches")).toBeInTheDocument();
+    expect(screen.getByText("Workspaces")).toBeInTheDocument();
     expect(screen.getByText("About")).toBeInTheDocument();
     expect(screen.getByText("Diagnostics")).toBeInTheDocument();
   });

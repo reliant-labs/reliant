@@ -113,7 +113,7 @@ export function DiscoverWorktreesModal({
 
   return (
     <>
-      <Modal open={isOpen} fallbackFocus={focusChatInput} onClose={onClose} title="Worktrees made outside Reliant" size="xl">
+      <Modal open={isOpen} fallbackFocus={focusChatInput} onClose={onClose} title="Git worktrees made outside Reliant" size="xl">
         <div className="space-y-4">
           {error && (
             <div
@@ -127,7 +127,7 @@ export function DiscoverWorktreesModal({
 
           {isDiscovering ? (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Looking for worktrees…
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> Looking for git worktrees…
             </div>
           ) : (
             <>
@@ -228,7 +228,7 @@ export function DiscoverWorktreesModal({
       </Modal>
 
       {pending && (
-        <Modal open fallbackFocus={focusChatInput} onClose={() => !adopting && setPending(null)} title="Adopt this worktree?" size="md">
+        <Modal open fallbackFocus={focusChatInput} onClose={() => !adopting && setPending(null)} title="Adopt this worktree as a workspace?" size="md">
           <div className="space-y-3">
             <p className="text-sm text-foreground">{adoptConfirmation(pending, workspacesRoot, name.trim() || pending.name)}</p>
             {pendingBlocked && (
