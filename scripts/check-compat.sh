@@ -17,6 +17,13 @@
 #   COMPAT_OWNERS  logins whose label counts (default: reliant-01, the owner)
 #   COMPAT_GH      the gh binary (default: gh)
 #   COMPAT_REPO    owner/repo (default: from origin's URL)
+#   CI_QUEUE_ENTRY 1 in the merge queue: judge only this entry's own squash, HEAD
+#                  against its sole parent (the entry ahead of it, or main), and
+#                  require CI_BASE (the group's base) to be an ancestor of that parent.
+#                  A group's diff from its base holds every entry ahead of this one,
+#                  while CI_PR names only this one: each entry has its own run, so
+#                  each break is judged in the run of the pull request that made it,
+#                  against that pull request's labels.
 #
 # A pull request passes a finding only when the OWNER applied its label (the label's
 # `labeled` event names the actor; a label a bot or the author added does not count):
@@ -32,6 +39,14 @@ base="${CI_BASE:-}"
 [ -n "$base" ] || base="$(git merge-base HEAD origin/main 2>/dev/null || true)"
 [ -n "$base" ] || die "no base: set CI_BASE, or fetch origin/main"
 base="$(git rev-parse --verify --quiet "$base^{commit}")" || die "cannot resolve the base $CI_BASE"
+if [ "${CI_QUEUE_ENTRY:-0}" = 1 ]; then
+  # main squash-merges, so a queue entry is one commit on top of its predecessor.
+  read -r -a parents <<<"$(git rev-list --parents -n 1 HEAD)"
+  [ "${#parents[@]}" -eq 2 ] || die "the queue entry's HEAD has $((${#parents[@]} - 1)) parents, not 1: cannot isolate this entry's change"
+  git merge-base --is-ancestor "$base" "${parents[1]}" \
+    || die "the group base ${base:0:12} is not an ancestor of HEAD's parent ${parents[1]:0:12}"
+  base="${parents[1]}"
+fi
 
 repo="${COMPAT_REPO:-}"
 if [ -z "$repo" ]; then
@@ -86,7 +101,11 @@ case "${1:-}" in
     found=""
     while IFS= read -r f; do
       [ -n "$f" ] || continue
-      if git show "HEAD:$f" 2>/dev/null | grep -qE '^[[:space:]]*--[[:space:]]*forge:breaks-rollback'; then found="$found $f"; fi
+      # Read the whole file before matching: `git show | grep -q` under pipefail
+      # reports a match as a failure when grep exits before git show has written
+      # a large file (SIGPIPE), which would let the migration through.
+      body="$(git show "HEAD:$f")" || die "cannot read $f at HEAD"
+      if grep -qE '^[[:space:]]*--[[:space:]]*forge:breaks-rollback' <<<"$body"; then found="$found $f"; fi
     done < <(changed 'db/migrations/*.sql' AM)
     [ -n "$found" ] || { echo "check-compat: no migration declares forge:breaks-rollback"; exit 0; }
     refuse migration:breaks-rollback-approved "migrations declaring forge:breaks-rollback:$found" \

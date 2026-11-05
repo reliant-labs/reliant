@@ -14,8 +14,11 @@ check() { # <name> <want exit> <args...>
 cat >"$T/gh" <<EOF
 #!/usr/bin/env bash
 f=""; src=""
-while [ \$# -gt 0 ]; do case "\$1" in --jq) f="\$2"; shift 2 ;; */labels) src="$T/labels.json"; shift ;; */events) src="$T/events.json"; shift ;; *) shift ;; esac; done
-jq -r "\$f" "\$src"
+while [ \$# -gt 0 ]; do case "\$1" in --jq) f="\$2"; shift 2 ;; */labels|*/events) src="\$1"; shift ;; *) shift ;; esac; done
+# repos/o/r/issues/<n>/<kind>: $T/<kind>-<n>.json when a case wrote one, else $T/<kind>.json.
+n="\${src%/*}"; n="\${n##*/}"; kind="\${src##*/}"
+file="$T/\$kind-\$n.json"; [ -f "\$file" ] || file="$T/\$kind.json"
+jq -r "\$f" "\$file"
 EOF
 chmod +x "$T/gh"
 labels() { printf '%s\n' "$1" >"$T/labels.json"; }
@@ -42,6 +45,40 @@ check "the owner's label passes" 0 CI_PR=7
 labels '[]'
 check "the owner's label, since removed, does not" 1 CI_PR=7
 CMD=proto check "no buf.yaml: proto has nothing to judge" 0
+
+# A migration far larger than a pipe buffer, the marker on its first line: the
+# marker must be found (a `git show | grep -q` under pipefail would miss it).
+g tag -f base >/dev/null
+{ printf -- '-- forge:breaks-rollback rewrites a table the previous release reads\n'
+  for i in $(seq 1 20000); do printf 'INSERT INTO a (id) VALUES (%d);\n' "$i"; done; } >"$T/r/db/migrations/4_big.up.sql"
+g add -A; g commit -qm big
+[ "$(wc -c <"$T/r/db/migrations/4_big.up.sql")" -gt 262144 ] || { echo "FAIL: the large migration is not larger than a pipe buffer"; fail=1; }
+labels '[]'; events '[]'
+check "a large breaks-rollback migration with no label fails" 1 CI_PR=7
+
+# Merge-queue groups (CI_QUEUE_ENTRY=1): main squash-merges, so each entry is one
+# commit on its predecessor, and each is judged alone against its own PR's labels.
+g tag -f base >/dev/null
+printf -- '-- forge:breaks-rollback drops table a\nDROP TABLE a;\n' >"$T/r/db/migrations/5_drop.up.sql"
+g add -A; g commit -qm "entry #10"; g tag e10
+printf -- '-- forge:backward-compatible — additive\nCREATE TABLE z (id int);\n' >"$T/r/db/migrations/6_z.up.sql"
+g add -A; g commit -qm "entry #11"; g tag e11
+printf '%s\n' '[{"name":"migration:breaks-rollback-approved"}]' >"$T/labels-10.json"
+printf '%s\n' '[{"event":"labeled","label":{"name":"migration:breaks-rollback-approved"},"actor":{"login":"reliant-01"}}]' >"$T/events-10.json"
+printf '%s\n' '[]' >"$T/labels-11.json"; printf '%s\n' '[]' >"$T/events-11.json"
+check "queue: a compatible entry behind an approved break passes" 0 CI_QUEUE_ENTRY=1 CI_PR=11
+check "queue (group diff, no entry isolation) would have blamed it" 1 CI_PR=11
+g checkout -q e10
+check "queue: the approved break's own entry passes" 0 CI_QUEUE_ENTRY=1 CI_PR=10
+printf '%s\n' '[]' >"$T/labels-10.json"; printf '%s\n' '[]' >"$T/events-10.json"
+check "queue: an unapproved break fails in its own entry's run" 1 CI_QUEUE_ENTRY=1 CI_PR=10
+g checkout -q e11
+check "queue: an unapproved earlier break does not fail the entry behind it" 0 CI_QUEUE_ENTRY=1 CI_PR=11
+printf '%s\n' '[{"name":"migration:breaks-rollback-approved"}]' >"$T/labels-11.json"
+printf '%s\n' '[{"event":"labeled","label":{"name":"migration:breaks-rollback-approved"},"actor":{"login":"reliant-01"}}]' >"$T/events-11.json"
+g checkout -q e10
+check "queue: a trailing entry's approval does not authorize an earlier break" 1 CI_QUEUE_ENTRY=1 CI_PR=10
+g checkout -q main
 
 if command -v buf >/dev/null; then
   mkdir -p "$T/r/proto/x/v1"

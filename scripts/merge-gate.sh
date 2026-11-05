@@ -429,8 +429,9 @@ if [ "$fail" = 0 ]; then
   if [ "$queue" != 1 ] || echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$'; then
     # buf lint, then buf breaking against the diff base: semver at major 1 (owner,
     # 2026-11-05), so a wire break fails unless the owner applied breaking:approved
-    # (scripts/check-compat.sh; CI_PR names the pull request).
-    phase proto env CI_BASE="$base" bash -c 'task proto:lint && scripts/check-compat.sh proto' & pids+=($!)
+    # (scripts/check-compat.sh; CI_PR names the pull request). In the queue,
+    # CI_QUEUE_ENTRY judges only this entry's squash, against its own PR's labels.
+    phase proto env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c 'task proto:lint && scripts/check-compat.sh proto' & pids+=($!)
   fi
   # Build reach includes ordinary production packages with no test binary.
   # Keep test-only changes too: vet checks their tests even when Build is empty.
@@ -443,7 +444,7 @@ if [ "$fail" = 0 ]; then
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     # A migration declaring forge:breaks-rollback also needs the owner's
     # migration:breaks-rollback-approved label (scripts/check-compat.sh).
-    phase migsafety env CI_BASE="$base" bash -c '"$@" && scripts/check-compat.sh migrations' _ "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
+    phase migsafety env CI_BASE="$base" CI_QUEUE_ENTRY="$queue" bash -c '"$@" && scripts/check-compat.sh migrations' _ "${forge[@]}" lint --migration-safety --no-fix & pids+=($!)
   fi
   # A migration below main's newest is never applied and reliant's migrator
   # refuses to start on it (reliant#1399). The check fetches origin/main

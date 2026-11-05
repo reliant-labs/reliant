@@ -67,7 +67,9 @@ jobs:
           buf: "true"
       # Migration order is the gate's migorder phase whenever a migration changed.
       # CI_PR: the queued pull request (gh-readonly-queue/main/pr-<n>-<sha>), whose
-      # labels scripts/check-compat.sh reads for an owner-accepted break.
+      # labels scripts/check-compat.sh reads for an owner-accepted break. --queue
+      # makes it judge only this entry's squash (HEAD against its parent), so an
+      # entry ahead of this one is judged, against its own labels, in its own run.
       - name: task ci:merge -- --queue
         env:
           HEAD_REF: ${{ github.event.merge_group.head_ref }}

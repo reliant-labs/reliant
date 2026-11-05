@@ -128,7 +128,7 @@ func TestMergeGateCoverageAndWiring(t *testing.T) {
 		return string(b)
 	}
 	merge, release := read("scripts/merge-gate.sh"), read("scripts/release-gate.sh")
-	for _, s := range []string{"plan -json", "-lanes \"$test_lanes\" -p", "test_lanes=go,electron", "phase docs gen_docs", "task generate:docs", "phase proto env CI_BASE=\"$base\" bash -c 'task proto:lint && scripts/check-compat.sh proto'", "scripts/check-compat.sh migrations", "phase vet", "gate-report", "summary.md"} {
+	for _, s := range []string{"plan -json", "-lanes \"$test_lanes\" -p", "test_lanes=go,electron", "phase docs gen_docs", "task generate:docs", "phase proto env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c 'task proto:lint && scripts/check-compat.sh proto'", "phase migsafety env CI_BASE=\"$base\" CI_QUEUE_ENTRY=\"$queue\" bash -c", "scripts/check-compat.sh migrations", "phase vet", "gate-report", "summary.md"} {
 		if !strings.Contains(merge, s) {
 			t.Errorf("merge missing %s", s)
 		}
