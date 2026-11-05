@@ -18,7 +18,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { CircleCheck, Plus } from "lucide-react";
+import { ArrowUpRight, CircleCheck, Plus } from "lucide-react";
+import { forgeAppOrigin } from "@/lib/shell";
+import { isElectron } from "@/lib/constants";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
@@ -35,6 +37,7 @@ import { consolePath } from "../Forge/Console/paths";
 import { AreaShell } from "../Layout/AreaShell";
 import { envHealth, LiveLink } from "./appParts";
 import { useStartBuildingApp } from "./startBuilding";
+import { RunFromTerminal } from "../ForgeShell/RunFromTerminal";
 
 export function AppsPage() {
   return (
@@ -44,7 +47,14 @@ export function AppsPage() {
   );
 }
 
-function AppsBody() {
+/**
+ * The list itself, without Reliant's area chrome. The forge shell
+ * (lib/shell.ts) mounts it in its own layout as `variant="forge"`: no chat
+ * builds apps there, so the empty state and the header say how to deploy one
+ * from a checkout instead of offering "Build an app".
+ */
+export function AppsBody({ variant = "reliant" }: { variant?: "reliant" | "forge" }) {
+  const forge = variant === "forge";
   const { apps, loading, availability, detail } = useApps();
   const startBuilding = useStartBuildingApp();
   const claimed = useClaimedApp(apps.map((a) => a.name), loading);
@@ -55,7 +65,7 @@ function AppsBody() {
       title="Apps"
       meta={
         loading ? undefined : apps.length === 0 ? (
-          <span>What you build and deploy with Reliant, with the links to open it.</span>
+          <span>{forge ? "What you deploy with forge, with the links to open it." : "What you build and deploy with Reliant, with the links to open it."}</span>
         ) : (
           <span data-testid="apps-counts">
             {apps.length} {apps.length === 1 ? "app" : "apps"}
@@ -63,7 +73,19 @@ function AppsBody() {
           </span>
         )
       }
-      actions={[{ label: "Build an app", onClick: startBuilding, variant: "primary", icon: <Plus className="h-4 w-4" aria-hidden="true" /> }]}
+      actions={
+        forge
+          ? []
+          : [
+              // The same apps in forge's own console (lib/shell.ts), for a user
+              // who wants it without Reliant around it. A website: not offered
+              // inside the desktop app, whose window would navigate away.
+              ...(isElectron()
+                ? []
+                : [{ label: "Open Forge console", href: forgeAppOrigin(), variant: "secondary" as const, icon: <ArrowUpRight className="h-4 w-4" aria-hidden="true" /> }]),
+              { label: "Build an app", onClick: startBuilding, variant: "primary", icon: <Plus className="h-4 w-4" aria-hidden="true" /> },
+            ]
+      }
       className="mb-0"
     />
   );
@@ -74,7 +96,19 @@ function AppsBody() {
       {claimed.name && <ClaimedBanner name={claimed.name} listed={claimed.found} loading={loading} paused={claimed.paused} />}
       <AvailabilityNote availability={availability} detail={detail} />
       {!loading && apps.length === 0 ? (
-        <NoApps onBuild={startBuilding} />
+        forge ? (
+          <RunFromTerminal
+            title="Nothing deployed yet"
+            description="Deploy a forge project from its checkout and it shows up here, with the links to open it, one per environment."
+            commands={[
+              { label: "Sign the forge CLI in to this account", command: "forge login" },
+              { label: "Deploy to production", command: "forge env deploy prod" },
+            ]}
+            testId="apps-empty"
+          />
+        ) : (
+          <NoApps onBuild={startBuilding} />
+        )
       ) : (
         <AppsTable apps={apps} loading={loading} deploysKnown={availability === "available"} highlighted={claimed.name} />
       )}

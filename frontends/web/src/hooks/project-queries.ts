@@ -25,6 +25,7 @@
  * stale.
  */
 
+import { isForgeShell } from "@/lib/shell";
 import { useCallback, useMemo } from "react";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
@@ -255,8 +256,12 @@ export interface ProjectListView {
 /** Every project the caller can open, from the shared list entry. */
 export function useProjects(): ProjectListView {
   const hasSession = useHasSession();
+  // The forge shell (lib/shell.ts) has no Reliant projects: its apps are the
+  // control plane's forge projects, keyed by name. Disabled there, the list
+  // reads empty and settled for every caller.
+  const enabled = hasSession && !isForgeShell();
   const query = useListProjects(LIST_PROJECTS_REQUEST, {
-    enabled: hasSession,
+    enabled,
     staleTime: PROJECTS_STALE_TIME_MS,
     select: projectsOf,
   });
@@ -266,7 +271,7 @@ export function useProjects(): ProjectListView {
   }, [refetch]);
   return {
     projects: query.data ?? EMPTY_PROJECTS,
-    isLoading: hasSession && query.isPending,
+    isLoading: enabled && query.isPending,
     error: query.error,
     refetch: refetchList,
   };
