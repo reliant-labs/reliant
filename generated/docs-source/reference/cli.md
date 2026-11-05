@@ -2733,7 +2733,8 @@ Install components into your project
 Install one or more components from the library into your project's
 src/components/ui/ directory — or the directory the frontend's package.json
 names in "forge": {"components_dir": "..."}. If --dir is not specified, the
-command auto-detects the nearest frontend directory. A component whose file
+command uses the frontend you are inside, or the project's only web frontend;
+with several, it lists the --dir value for each. A component whose file
 name differs only in case from one already there (button.tsx beside
 Button.tsx) is refused: on macOS and Windows that is one file.
 
@@ -6483,11 +6484,17 @@ Lifecycle (what happens after host services + frontends start):
     prints the summary (URLs + per-service log paths), and RETURNS,
     leaving the processes running — the same end-state as --background.
     This is what keeps `forge env up <env>` from hanging an agent.
-  * --watch forces the hold-and-teardown lifecycle even without a TTY
-    (for a human piping the output through a tool).
+  * --watch holds the foreground even without a TTY. It is THE way for an
+    agent or a daemon to run the stack under a process it tracks: start
+    `forge env up <env> --watch` as a background process of the
+    harness (never nohup or &), and stop it with a signal.
   * --background always detaches and returns immediately, regardless of
-    the TTY. If both --watch and --background are passed, --background
-    wins (detach + return).
+    the TTY. --watch and --background cannot be combined.
+
+A holding run (a TTY, or --watch) owns its children from the moment the
+first one starts: SIGINT, SIGTERM or SIGHUP — even one that arrives while
+the stack is still starting — and a failed readiness or cluster gate stop
+them, so nothing it started outlives it.
 
 Either way the long-running children are tracked under
 ~/.cache/forge/up/<project-id>/; stop a detached / non-TTY stack with
@@ -6521,7 +6528,7 @@ Examples:
   forge env up dev
   forge env up dev --no-build
   forge env up dev --target admin-server -D host_runner=go-run
-  forge env up dev --watch        # hold + Ctrl-C teardown even when piped
+  forge env up dev --watch        # hold + teardown on a signal, even without a TTY (agents)
   forge env up dev --background
   forge env up dev -- --host 0.0.0.0   # forward flags to the dev servers
   forge env down dev
@@ -6578,7 +6585,7 @@ reliant forge env up <environment> [-- <dev-server flags>] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
-| `--background` | `bool` | - | Detach long-running phases and return immediately (stop with 'forge env down <env>'). Beats --watch and the TTY default. |
+| `--background` | `bool` | - | Detach long-running phases and return immediately (stop with 'forge env down <env>'). Cannot be combined with --watch. |
 | `--host-ready-timeout` | `duration` | `2m0s` | Maximum wait for host services to bind their ports, including compilation; exited runners fail immediately |
 | `--no-build` | `bool` | - | Skip the build phase (use already-built images / binaries) |
 | `--no-deploy` | `bool` | - | Skip the cluster apply phase (host services and frontends still launch) |
@@ -6587,7 +6594,7 @@ reliant forge env up <environment> [-- <dev-server flags>] [flags]
 | `--no-seed` | `bool` | - | Skip the first-boot dev auto-seed. By default 'forge env up' seeds a dev database once when it is reachable and all seedable tables are empty. |
 | `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with 'forge env options <env>'. |
 | `--target` | `stringArray` | `[]` | Scope the whole run — build, deploy, host and frontend phases — to specific services/operators/frontends by name (repeatable). Targeting only host/frontend apps builds no images. An unknown name is an error listing the env's app names. Default: everything. |
-| `--watch` | `bool` | - | Force the hold-and-teardown lifecycle (block until Ctrl-C, then cascade-stop) even without a TTY. Default without --watch/--background: hold when stdin is a TTY, otherwise return after start (non-TTY agent/CI path). |
+| `--watch` | `bool` | - | Hold the foreground and tear the stack down on SIGINT/SIGTERM/SIGHUP even without a TTY: the way an agent or daemon runs env up as a tracked background process. Default without --watch/--background: hold when stdin is a TTY, otherwise return after start (non-TTY agent/CI path). |
 
 ---
 
@@ -7965,8 +7972,8 @@ introspection, skill and lint/generate verbs as tools, with no memory file in
 the project telling it how. The server says what forge is, and tells the model to
 load the 'forge' skill first.
 
-Tools (each takes an optional "dir": the project to act on; default is the
-directory the server was started in, or -C):
+Tools (each but explain_error takes an optional "dir": the project to act on;
+default is the directory the server was started in, or -C):
 
   read-only   capabilities   every verb, lint analyzer and marker
               annotations    the entity-authoring vocabulary
@@ -7976,16 +7983,25 @@ directory the server was started in, or -C):
               skill_list     the skill catalog
               skill_search   find a skill by keyword
               skill_load     print one skill
+              deploy_status  the claimable deploy of an env: URL, claim link, state
+              explain_error  a forge failure's meaning and the exact next command
   mutating    lint           forge lint --quiet [--scope PATH...]
               generate       forge generate [--dry-run | --check]
+              deploy_claimable
+                             forge env deploy <env> --claimable: a live URL plus a
+                             claim link, no account; adopts a Vite/Next.js app with
+                             no forge.yaml in place first. Streams progress
+                             (notifications/progress) and stops on cancel
 
 Each tool runs the same command in-process; it does not shell out to a forge
 binary, and it does not hand a project pinned to another forge over to that
 forge (it reports the skew instead).
 
-Register it:
+Register it. With no install, the command is "npx -y @reliantlabs/forge mcp"
+(the npm shim downloads the matching forge binary on first run):
 
-  Claude Code   claude mcp add forge -- forge mcp
+  Claude Code   claude mcp add forge -- npx -y @reliantlabs/forge mcp
+                claude mcp add forge -- forge mcp
   Codex         codex mcp add forge -- forge mcp
   Cursor        {"mcpServers": {"forge": {"command": "forge", "args": ["mcp"]}}}
                 in .cursor/mcp.json
