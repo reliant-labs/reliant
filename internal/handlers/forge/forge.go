@@ -631,15 +631,13 @@ func (s *Service) VerifyEnv(
 		return nil, err
 	}
 
-	payload := func(projectPath string) any {
-		return struct {
-			ProjectPath string `json:"project_path"`
-			Env         string `json:"env"`
-			OrgID       string `json:"org_id,omitempty"`
-		}{ProjectPath: projectPath, Env: env, OrgID: req.Msg.GetOrgId()}
-	}
+	payload := struct {
+		ProjectPath string `json:"project_path"`
+		Env         string `json:"env"`
+		OrgID       string `json:"org_id,omitempty"`
+	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId()}
 
-	reply, unreachable, _, err := s.forgeReadDispatch(ctx, userID, target, "forge.env_verify", payload, forgeEnvVerifyTimeoutMs, true)
+	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_verify", payload, forgeEnvVerifyTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}
@@ -720,15 +718,13 @@ func (s *Service) GetEnvStatus(
 		return nil, err
 	}
 
-	payload := func(projectPath string) any {
-		return struct {
-			ProjectPath string `json:"project_path"`
-			Env         string `json:"env"`
-			OrgID       string `json:"org_id,omitempty"`
-		}{ProjectPath: projectPath, Env: env, OrgID: req.Msg.GetOrgId()}
-	}
+	payload := struct {
+		ProjectPath string `json:"project_path"`
+		Env         string `json:"env"`
+		OrgID       string `json:"org_id,omitempty"`
+	}{ProjectPath: target.Path, Env: env, OrgID: req.Msg.GetOrgId()}
 
-	reply, unreachable, _, err := s.forgeReadDispatch(ctx, userID, target, "forge.env_status", payload, forgeEnvStatusTimeoutMs, true)
+	reply, unreachable, err := s.forgeDispatch(ctx, userID, target, "forge.env_status", payload, forgeEnvStatusTimeoutMs, true)
 	if err != nil {
 		return nil, err
 	}

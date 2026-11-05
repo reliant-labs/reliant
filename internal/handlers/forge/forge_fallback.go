@@ -16,9 +16,9 @@ import (
 //
 // forgeTarget picks one machine: the one the Reliant project's work is placed
 // on. For a write (plan, deploy, promote) that is the only right answer — what
-// it builds and ships is that machine's working tree. But topology, env status
-// and verify describe the FORGE project — its declared environments, its
-// release ledger, its live clusters — and any checkout of it can answer them.
+// it builds and ships is that machine's working tree. But topology describes
+// the FORGE project — its declared environments, its release ledger, its live
+// clusters — and any checkout of it can answer it.
 //
 // Prod, 2026-11-03..05: every GetTopology of the owner's control-plane console
 // answered 503 "no daemon connected" (157 of 157). The console had selected
@@ -26,12 +26,18 @@ import (
 // laptops, both asleep, while three connected cloud machines held a checkout
 // of the same forge project under a second Reliant project.
 //
-// So when the chosen machine is not reachable, a read is asked of the next
-// machine holding a checkout of the same forge project: the project's own other
-// checkouts first, then those of the caller's other projects that declare the
-// same forge.yaml name, most recently active first. Only "not reachable"
-// (daemonerr.Unreachable) moves on; an answer, or any other failure, is the
-// answer. Each machine is asked at most once.
+// So when the chosen machine is not reachable, a topology read is asked of the
+// next machine holding a checkout of the same forge project: the project's own
+// other checkouts first, then those of the caller's other projects that are the
+// same repository (the same git remote) AND declare the same forge.yaml name,
+// most recently active first. A forge name alone is not an identity: a fork or
+// an unrelated repo can declare it while targeting other clusters. Only "not
+// reachable" (daemonerr.Unreachable) moves on; an answer, or any other
+// failure, is the answer. Each machine is asked at most once.
+//
+// Env status and verify never move: `forge env status` carries a RUNTIME half
+// (host services, listeners, logs, local sessions) that is the answering
+// machine's own, so another machine's answer is not this one's.
 // -----------------------------------------------------------------------------
 
 // forgeReadDispatch is forgeDispatch for a read about the forge project.
@@ -72,7 +78,8 @@ func (s *Service) forgeReadDispatch(
 }
 
 // forgeFallbackTargets is every checkout of project's forge project on the
-// caller's machines, in the order forgeReadDispatch asks them. Best effort: a
+// caller's machines (its own, then those of the caller's projects with the
+// same git remote and forge name), in the order forgeReadDispatch asks them. Best effort: a
 // failed read leaves fewer candidates, never an error, because the first
 // machine's failure is still the answer then.
 func (s *Service) forgeFallbackTargets(ctx context.Context, userID string, project *db.Project) []projectcheckout.Target {
@@ -80,8 +87,8 @@ func (s *Service) forgeFallbackTargets(ctx context.Context, userID string, proje
 	if err != nil {
 		logging.WarnContext(ctx, "forge: failed to list the project's checkouts", "error", err, "project_id", project.ID)
 	}
-	name := forgeNameOf(project)
-	if name == "" {
+	name, remote := forgeNameOf(project), remoteIdentity(project.RemoteURL)
+	if name == "" || remote == "" {
 		return targets
 	}
 	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID})
@@ -90,7 +97,7 @@ func (s *Service) forgeFallbackTargets(ctx context.Context, userID string, proje
 		return targets
 	}
 	for _, other := range projects {
-		if other == nil || other.ID == project.ID || forgeNameOf(other) != name {
+		if other == nil || other.ID == project.ID || forgeNameOf(other) != name || remoteIdentity(other.RemoteURL) != remote {
 			continue
 		}
 		more, err := projectcheckout.Checkouts(ctx, s.deps.Repo, userID, other)
@@ -110,4 +117,36 @@ func forgeNameOf(project *db.Project) string {
 		return ""
 	}
 	return strings.TrimSpace(*project.ForgeProjectName)
+}
+
+// remoteIdentity is the repository a git remote URL names, in one form for
+// every spelling of it: "git@github.com:Org/Repo.git",
+// "ssh://git@github.com/org/repo" and "https://user:tok@github.com/org/repo/"
+// are all "github.com/org/repo". "" when there is no remote, so a project
+// without one never matches another.
+func remoteIdentity(raw *string) string {
+	if raw == nil {
+		return ""
+	}
+	s := strings.TrimSpace(*raw)
+	if s == "" {
+		return ""
+	}
+	if i := strings.Index(s, "://"); i >= 0 {
+		s = s[i+3:]
+	} else if i := strings.Index(s, ":"); i >= 0 && !strings.Contains(s[:i], "/") {
+		// scp-like: [user@]host:path
+		s = s[:i] + "/" + s[i+1:]
+	}
+	if i := strings.Index(s, "@"); i >= 0 && i < strings.Index(s+"/", "/") {
+		s = s[i+1:]
+	}
+	if i := strings.Index(s, "/"); i >= 0 {
+		// A port is not part of the repository's identity.
+		if j := strings.LastIndex(s[:i], ":"); j >= 0 {
+			s = s[:j] + s[i:]
+		}
+	}
+	s = strings.TrimSuffix(strings.TrimRight(s, "/"), ".git")
+	return strings.ToLower(strings.TrimRight(s, "/"))
 }
