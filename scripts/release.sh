@@ -122,12 +122,14 @@ fi
 
 # Handle rc version increment specially
 if [[ $RELEASE_TYPE == "prerelease" ]]; then
-    # The RC's core version is the computed one: the next RC of the current core
-    # when they agree, else the first RC of the computed version (a feature landed
-    # since the last RC makes it a minor). Only an owner override with no computed
-    # version falls back to the next patch below.
+    # The RC's core version is the computed one: the next RC when the current
+    # version is already an RC of it, else the first RC of the computed version (a
+    # feature landed since the last RC makes it a minor; a stable current version
+    # equal to the computed one is a release still pending, not a reason to bump
+    # again). Only an owner override with no computed version falls back to the
+    # next patch below.
     CORE=${CURRENT_VERSION%%-*}
-    if [[ -n "$COMPUTED" && "$CORE" != "${COMPUTED#v}" ]]; then
+    if [[ -n "$COMPUTED" && ( "$CORE" != "${COMPUTED#v}" || "$CURRENT_VERSION" == "$CORE" ) ]]; then
         NEW_VERSION="${COMPUTED#v}-rc1"
         echo -e "${YELLOW}📦 Creating first RC of the computed version: $CURRENT_VERSION → $NEW_VERSION${NC}"
     # Support both -rc.N and -rcN formats

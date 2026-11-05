@@ -113,6 +113,10 @@ fixture 1.4.2 "feat(cli): a feature (#2)"
 expect_ok 1.5.0-rc1 prerelease
 fixture 1.5.0-rc1 "feat(cli): a feature (#2)"
 expect_ok 1.5.0-rc2 prerelease
+# A stable current version equal to the computed one (its tag still pending) is
+# the RC's core, not a reason to bump the patch again.
+fixture 1.4.3 "fix: a fix (#1)"
+expect_ok 1.4.3-rc1 prerelease
 fixture 1.4.3-rc1 "fix: a fix (#1)" "feat(cli): a feature since the RC (#3)"
 expect_ok 1.5.0-rc1 prerelease
 # A break an earlier release candidate (rc/ tag) carried does not refuse again.
