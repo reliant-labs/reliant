@@ -18,7 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import {
   buildApps,
-  isHostedEnv,
+  isAppEnv,
   type AppEnvStatus,
   type AppSummary,
 } from "@/services/forge/apps";
@@ -69,7 +69,7 @@ export function useOrgEnvironments() {
 export function useApps(): AppsState {
   const orgEnvs = useOrgEnvironments();
   const { projects } = useProjects();
-  const envs = useMemo(() => (orgEnvs.data?.envs ?? []).filter(isHostedEnv), [orgEnvs.data]);
+  const envs = useMemo(() => (orgEnvs.data?.envs ?? []).filter(isAppEnv), [orgEnvs.data]);
   const statuses = useCloudEnvStatuses(envs.map((env) => env.id));
 
   // Rebuilt per render, like useCloudEnvStatuses' map: a handful of apps, and
