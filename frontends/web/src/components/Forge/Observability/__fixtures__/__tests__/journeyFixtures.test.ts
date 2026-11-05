@@ -20,7 +20,7 @@ const END_MS = Date.UTC(2026, 0, 15, 12, 0, 0);
 const window = { startMs: END_MS - 3_600_000, endMs: END_MS };
 const scope = { orgId: "org-fixture", projectId: "shop", envIds: [] as string[], filters: [] };
 
-// The demo console's fixtures (Forge/Demo/data/demoApi.ts): the toured trace crosses into inventory.
+// The demo console's fixtures (Forge/Demo/demoData/demoApi.ts): the toured trace crosses into inventory.
 const createFixtureApi = () => createAnyFixtureApi({ crossService: true });
 const fixtureTrace = (traceId: string, now: number) => anyFixtureTrace(traceId, now, { crossService: true });
 

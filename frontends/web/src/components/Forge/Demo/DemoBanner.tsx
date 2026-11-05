@@ -9,7 +9,7 @@
  *  - The public demo (lib/shell.ts `demo`): Install forge and Sign up instead
  *    (there is nowhere to leave to), and one line saying what it records
  *    (lib/demoTelemetry.ts), and where its data comes from when that is not
- *    the built-in sample (DEMO_DATA_SOURCE, data/demoDataStatus.ts).
+ *    the built-in sample (DEMO_DATA_SOURCE, demoData/demoDataStatus.ts).
  */
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -24,7 +24,7 @@ import { browserOptedOut, demoTelemetry, demoTelemetryNotice } from "@/lib/demoT
 import { isDemoShell } from "@/lib/shell";
 
 import { DemoCta } from "./DemoCta";
-import { useDemoDataStatus } from "./data/demoDataStatus";
+import { useDemoDataStatus } from "./demoData/demoDataStatus";
 
 /** Where "Leave the demo" goes: forge's Apps in Reliant, the project picker in the forge shell. */
 const exitHref = (shell: TourShell) => (shell === "forge" ? "/apps" : "/forge");

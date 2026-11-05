@@ -48,7 +48,7 @@ import { OBS_VIEW_LABELS, OBS_VIEWS, viewOf, type ObsNavigate, type ObsSearch, t
 import { FIXTURE_DECLARED } from "../Observability/__fixtures__/fixtureAlerting";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadOnly";
-import { createDemoApi } from "./data/demoApi";
+import { createDemoApi } from "./demoData/demoApi";
 import { DemoBanner } from "./DemoBanner";
 import { FORGE_DEMO_PATH } from "./demoPath";
 
@@ -98,7 +98,7 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
   // Its own client and API: nothing here shares a cache entry with a real project's console.
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }));
   // Writes are refused in every shell, visibly (obsReadOnly) and underneath (readOnlyApi); on the
-  // demo host the scenario's reads go over forge's mock transport (data/demoApi.ts).
+  // demo host the scenario's reads go over forge's mock transport (demoData/demoApi.ts).
   const api = useMemo(() => createDemoApi(), []);
 
   const view = viewOf(search.view);

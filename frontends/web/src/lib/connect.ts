@@ -16,7 +16,7 @@
  *   - the test seam (`setTransport`);
  *   - a shell's own transport (`installShellTransport`): the public demo
  *     host answers every RPC from forge's mock transport and reaches no
- *     real backend at all (Forge/Demo/data/demoTransport.ts).
+ *     real backend at all (Forge/Demo/demoData/demoTransport.ts).
  *
  * The interceptor chain every route runs is `buildInterceptors` in
  * `api/transport.ts`: forge's runtime interceptors (error normalization, auth)

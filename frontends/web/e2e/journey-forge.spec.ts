@@ -211,7 +211,7 @@ test.describe('the forge journey in the forge shell', () => {
 // with ?shell=demo: the tour starts by itself on every load, its short cut is
 // ten steps (DEMO_TOUR=short), every write is off, and the page reaches no
 // other origin — its Connect transport is forge's mock transport
-// (Forge/Demo/data), so not even the sample data's reads leave the browser.
+// (Forge/Demo/demoData), so not even the sample data's reads leave the browser.
 test.describe('the forge journey on the demo host', () => {
   async function openDemo(page: Page, path = '/?shell=demo') {
     const origin = new URL(test.info().project.use.baseURL ?? 'http://localhost:5173').origin;
