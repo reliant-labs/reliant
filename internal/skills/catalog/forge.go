@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
 	forgecli "github.com/reliant-labs/forge/cli"
+	"github.com/reliant-labs/reliant/internal/forgepin"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 )
 
@@ -207,6 +209,7 @@ func discoverForgeSkillsFiltered(baseDir, source string, loadFullDefinitions, ha
 	if len(skills) == 0 && unavailable == nil {
 		return nil
 	}
+	skills = spellForgeDescriptions(skills)
 
 	// Deterministic order so the synthesized parent's body and the
 	// returned slice both stay stable across runs.
@@ -414,6 +417,46 @@ func forgeParentBody(skills []forgecli.Skill) string {
 		}
 	}
 	return b.String()
+}
+
+// forgeCommandRE is forge's own command-name rule (forge internal/cli/skill.go
+// forgeCmdRE): every bare `forge ` reference is a command to respell — except
+// the last segment of a skill path (`see forge/forge and …`), which
+// spellForgeCommands skips.
+var forgeCommandRE = regexp.MustCompile(`\bforge `)
+
+// spellForgeCommands respells each bare `forge ` command in s as cliName.
+func spellForgeCommands(s, cliName string) string {
+	var b strings.Builder
+	last := 0
+	for _, loc := range forgeCommandRE.FindAllStringIndex(s, -1) {
+		if loc[0] > 0 && s[loc[0]-1] == '/' {
+			continue
+		}
+		b.WriteString(s[last:loc[0]])
+		b.WriteString(cliName + " ")
+		last = loc[1]
+	}
+	b.WriteString(s[last:])
+	return b.String()
+}
+
+// spellForgeDescriptions returns skills with each description's commands
+// spelled for the mount that serves them, the rewrite RenderSkill applies to
+// bodies. forge writes descriptions harness-agnostic (`forge project new`) and
+// ListSkills returns them raw, but reliant prints them beside rendered bodies —
+// the related- and sub-skill lists, the namespace map, the skill catalog — so
+// a raw one hands an agent a bare `forge` to run from PATH: a different build
+// than the one linked into this binary, or nothing at all. Copies: the pinned
+// forge's list is cached and shared.
+func spellForgeDescriptions(skills []forgecli.Skill) []forgecli.Skill {
+	cliName := forgepin.CLIName()
+	out := make([]forgecli.Skill, len(skills))
+	for i, s := range skills {
+		s.Description = spellForgeCommands(s.Description, cliName)
+		out[i] = s
+	}
+	return out
 }
 
 // loadForgeDefinition hydrates a forge-scoped Definition's Body by

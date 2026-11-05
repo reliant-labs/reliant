@@ -101,7 +101,7 @@ func TestForgeOneShotCharterFacts(t *testing.T) {
 		},
 		// The "commented FK" claim used to be a row here and is now
 		// TestForgeOneShotDoesNotCallBirthsForeignKeysCommented, which
-		// derives the fact from forge's own db skill instead of banning a
+		// derives the fact from forge's own db/birth skill instead of banning a
 		// spelling. The row banned "commented-out FK" while the charter
 		// said "commented FK", so it passed for as long as the false claim
 		// stood — the exact failure mode this file's header warns about.
@@ -174,7 +174,9 @@ func commentedFKClaims(text string) []string {
 // the false claim stood. Any fixed sentence has that failure mode, so this
 // guard does not hold a sentence:
 //
-//  1. The fact is DERIVED from forge's db skill, which reliant can load
+//  1. The fact is DERIVED from forge's db/birth skill (the proto → SQL birth
+//     mapping; it lived in the db skill until forge #1785 split db into a
+//     router and sub-skills), which reliant can load
 //     through the exported forgecli.LoadSkill — the same text forge hands the
 //     agent as authority. If forge ever does start commenting FKs, the skill
 //     stops saying they are applied and this guard fails on its own
@@ -192,21 +194,21 @@ func commentedFKClaims(text string) []string {
 //     because the true claim has no reason to mention commenting near an FK.
 func TestForgeOneShotDoesNotCallBirthsForeignKeysCommented(t *testing.T) {
 	t.Parallel()
-	// The producer half: forge's own db skill is the authority the charter
-	// is paraphrasing, and it says the reference is APPLIED.
-	skill, err := forgecli.LoadSkill("", "db")
-	require.NoError(t, err, "could not load forge's db skill — this guard derives the fact "+
+	// The producer half: forge's own db/birth skill is the authority the
+	// charter is paraphrasing, and it says the reference is APPLIED.
+	skill, err := forgecli.LoadSkill("", "db/birth")
+	require.NoError(t, err, "could not load forge's db/birth skill — this guard derives the fact "+
 		"from it, and a guard that cannot reach its producer must fail loudly rather than "+
 		"pass over an empty set")
 
 	fkSentences := fkClaimRe.FindAllString(string(skill), -1)
-	require.NotEmpty(t, fkSentences, "forge's db skill says nothing about foreign keys at all. "+
+	require.NotEmpty(t, fkSentences, "forge's db/birth skill says nothing about foreign keys at all. "+
 		"That is the precondition of this guard, not a pass: either the skill was "+
 		"restructured or LoadSkill returned something unexpected, and the charter's FK "+
 		"claims are no longer being checked against anything")
 
 	require.Regexp(t, `(?i)applied `+"`?REFERENCES", string(skill),
-		"forge's db skill no longer says birth emits an APPLIED `REFERENCES`. Either forge "+
+		"forge's db/birth skill no longer says birth emits an APPLIED `REFERENCES`. Either forge "+
 			"changed what birth does — in which case the charter's FK guidance needs to change "+
 			"with it, and this guard is the thing that noticed — or the skill was reworded and "+
 			"this derivation needs a new anchor. Do NOT delete this assertion to get green.")
@@ -218,7 +220,7 @@ func TestForgeOneShotDoesNotCallBirthsForeignKeysCommented(t *testing.T) {
 			t.Errorf("phase %s puts commenting and foreign keys in the same breath:\n\n  …%s…\n\n"+
 				"Birth APPLIES the FKs it resolves (forge internal/scaffold/entityproto.go "+
 				"writeFKStatements; forge's own entityproto_test.go fails the build on a "+
-				"`-- ALTER TABLE` line), and forge's db skill calls the emitted reference "+
+				"`-- ALTER TABLE` line), and forge's db/birth skill calls the emitted reference "+
 				"APPLIED. An agent sent to vet, uncomment or add commented-out constraints "+
 				"finds none, and either reports forge broken or re-adds constraints that "+
 				"already exist. Say the constraints are live SQL to be vetted, not "+
