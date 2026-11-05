@@ -286,9 +286,11 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
             {/* Terminal button */}
             {onToggleTerminal && (
               <Tooltip
-                content={`Toggle Terminal (${formatShortcut(
-                  "onToggleTerminal"
-                )})`}
+                content={
+                  formatShortcut("onToggleTerminal")
+                    ? `Toggle Terminal (${formatShortcut("onToggleTerminal")})`
+                    : "Toggle Terminal"
+                }
                 side="bottom"
                 delay={300}
               >
