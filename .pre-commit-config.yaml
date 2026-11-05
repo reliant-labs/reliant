@@ -1,0 +1,198 @@
+# See https://pre-commit.com for full docs. Run locally with:
+#     pip install pre-commit && pre-commit install
+# CI runs the same set via .github/workflows/pre-commit.yml.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      # testdata/ is excluded from the two whitespace fixers. Golden
+      # snapshots assert on EXACT bytes — trailing blank lines included —
+      # so "fixing" one silently rewrites the expectation the test exists
+      # to check, and the suite goes red for a reason the diff makes look
+      # cosmetic.
+      #
+      # CHANGELOG.md is excluded from every formatter here (these two and
+      # prettier below): it has exactly one writer, scripts/release-forge.sh,
+      # which formats the whole file with this file's pinned prettier at
+      # release time, and a pull request may not edit it at all
+      # (scripts/check-changelog-untouched.sh). A hook checking it could only
+      # report drift no pull request is allowed to fix — a doubled blank line
+      # merged before that policy turned every PR's checks red until an admin
+      # bypass on main. The release reformats any such drift; nothing else
+      # needs to. TestChangelogIsFormattedOnlyByTheRelease pins both halves.
+      - id: trailing-whitespace
+        exclude: (^|/)testdata/|^CHANGELOG\.md$
+      - id: end-of-file-fixer
+        exclude: (^|/)testdata/|^CHANGELOG\.md$
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      # --allow-multiple-documents: a `---`-separated stream is valid YAML
+      # and is the shape every Kubernetes manifest set takes — the
+      # pkg/deploy RenderWorkloads goldens are exactly that. The hook still
+      # PARSES every document, so broken YAML is caught; it just stops
+      # rejecting the stream shape itself. (testdata/ stays in scope: this
+      # hook validates, it never rewrites, so a golden's exact bytes are safe.)
+      - id: check-yaml
+        args: ["--allow-multiple-documents"]
+      - id: check-json
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      # testdata/ is excluded from both: these trees are deliberately
+      # malformed fixtures (off-module imports, phantom packages) that the
+      # linter tests assert on, and goimports "fixes" them into passing —
+      # silently deleting the very import a test expects it to flag.
+      #
+      # *.pb.go is excluded for the same reason .golangci.yml and the
+      # prettier hook below already exclude it: protoc-gen-go emits its
+      # imports in one block, all name-qualified (`reflect "reflect"`), and
+      # goimports regroups them into stdlib-then-third-party. Neither
+      # spelling is wrong, and the file says DO NOT EDIT — so the hook and
+      # the generator disagree permanently, and the hook loses on the very
+      # next `buf generate`. Reformatting generated output means every
+      # regeneration shows up as a spurious diff, and the reformat is
+      # reverted by the tool that owns the file.
+      #
+      # zz_generated.deepcopy.go is the same case from controller-tools: its
+      # deepcopy generator writes `"k8s.io/apimachinery/pkg/apis/meta/v1"`
+      # unaliased, goimports adds a `v1` alias, and
+      # TestDeployTierDeepCopyIsCurrent pins the generator's exact bytes.
+      - id: go-fmt
+        exclude: (^|/)testdata/|\.pb\.go$|(^|/)zz_generated\.deepcopy\.go$
+      - id: go-imports
+        exclude: (^|/)testdata/|\.pb\.go$|(^|/)zz_generated\.deepcopy\.go$
+
+  # prettier as a LOCAL hook pinned to an exact release, because the version
+  # is not this file's to choose: it must be templates.PrettierVersion, the
+  # prettier scaffolded frontends run. pkg/components is copied verbatim into
+  # those projects and formatted for THEIR prettier (#502); a hook on any
+  # other release rewrites it, and that skew — pre-commit/mirrors-prettier,
+  # archived at v3.1.0, against library files formatted with 3.5.3 — is
+  # what kept this hook red on main. TestPrettierVersionIsPinnedEverywhere
+  # holds the pin below equal to the constant.
+  #
+  # This hook is also the ONE place the repo's prettier is configured for
+  # hand runs: scripts/prettier.sh (`task fmt:web`) reads the pin and the
+  # files/exclude patterns below rather than restating them, and
+  # release-forge.sh reads the pin through it. Never run a bare `npx
+  # prettier`: it resolves another release, which reformats untouched lines.
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: prettier --write --ignore-unknown
+        language: node
+        additional_dependencies: ["prettier@3.5.3"]
+        types: [text]
+        # Restrict to frontend + docs so prettier does not fight gofmt or
+        # golangci-lint on Go files.
+        #
+        # skills/ is excluded: prettier pads every markdown table cell to the
+        # column width, which inflates a skill far past the delivery budget
+        # (audit-json went 13843 -> 34328 bytes, against a 24000 hard cap) and
+        # rewrites the very table headers TestSkillsAuditCategoryDocsMatchEmittedSet
+        # asserts on. These files are size- and structure-checked by tests;
+        # a formatter cannot own them.
+        #
+        # testdata/ is excluded for the reason the whitespace fixers above
+        # exclude it: fixtures are captured tool output (e.g. the KCL
+        # projection goldens forge render emits), and reformatting one
+        # rewrites the capture rather than anything a human authored.
+        #
+        # .forge/ is excluded for the SAME reason gen/ and *.pb.go are, and
+        # it bit exactly that way: forge owns every file in it and rewrites
+        # them from its own encoder. prettier collapses
+        # .forge/scaffolded.json's one-element array onto a single line,
+        # forge's json.MarshalIndent writes it multi-line, and the next
+        # `forge generate` reverts the hook — so the two disagree forever and
+        # the hook loses. CI then fails on a formatting round-trip neither
+        # tool is wrong about.
+        files: \.(ts|tsx|js|jsx|json|md|yml|yaml|css)$
+        #
+        # pkg/deploy/*/crds/ is excluded: they are upstream CRDs vendored
+        # byte-for-byte (the ESO chart's, SF4). Reformatting one makes it
+        # differ from the release it claims to be, and the next re-vendor
+        # reverts the hook.
+        #
+        # CHANGELOG.md: formatted by scripts/release-forge.sh, its only
+        # writer (see the whitespace fixers above).
+        exclude: ^(gen/|\.forge/|.*\.pb\.go$|.*/skills/.*\.md$|pkg/deploy/[^/]+/crds/|CHANGELOG\.md$)|(^|/)testdata/
+
+  # Compiled binaries do not belong in git: they never diff usefully, they are
+  # large forever, and a Go binary embeds the build machine's absolute paths.
+  # check-added-large-files above is size-only, so a small artifact slips past
+  # it; this detects by content instead.
+  - repo: local
+    hooks:
+      - id: no-committed-binaries
+        name: no committed binaries
+        entry: scripts/check-no-binaries.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+
+  # go vet as a LOCAL hook rather than dnephin's go-vet. Two reasons:
+  # v0.5.1 ships no go-vet-mod (the module-wide id), and its go-vet runs
+  # `go vet` per changed DIRECTORY — which drags in testdata fixtures that
+  # are deliberately unbuildable (phantom imports, build constraints that
+  # exclude every file) and fails on them. Vetting the module honors those
+  # constraints and matches what CI checks.
+  - repo: local
+    hooks:
+      - id: go-vet-mod
+        name: go vet (module)
+        entry: go vet ./...
+        language: system
+        files: \.go$
+        pass_filenames: false
+
+  # Buf has no first-party pre-commit mirror; invoke its CLI locally.
+  # `buf format -d` prints a diff and exits non-zero on any
+  # formatting difference — exactly the semantics pre-commit expects.
+  - repo: local
+    hooks:
+      - id: buf-format
+        name: buf format
+        entry: buf format -d --exit-code
+        language: system
+        files: \.proto$
+        pass_filenames: false
+
+  # A forge.proto edit must carry its embedded copy and regenerated
+  # pkg/forgepb/forge.pb.go (the script says why). ~1s, and only when a proto
+  # is staged; CI skips it for the verify-generated job's complete check.
+  - repo: local
+    hooks:
+      - id: proto-generated
+        name: forge.proto's derived files are current
+        entry: scripts/check-proto-generated.sh
+        language: system
+        files: ^proto/|^internal/assets/proto/|^pkg/forgepb/
+        pass_filenames: false
+
+  # Conventional Commits enforcement.
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.18.0
+    hooks:
+      - id: commitlint
+        stages: [commit-msg]
+        additional_dependencies: ["@commitlint/config-conventional"]
+
+  # Blocks commits that add locally-forbidden strings. Patterns live in a
+  # gitignored .forbidden-strings file at the repo root; the check is a no-op
+  # when that file is absent, so the forbidden values are never committed.
+  - repo: local
+    hooks:
+      - id: forbidden-strings
+        name: forbidden strings
+        entry: scripts/check-forbidden-strings.sh
+        language: script
+        pass_filenames: false
+        always_run: true

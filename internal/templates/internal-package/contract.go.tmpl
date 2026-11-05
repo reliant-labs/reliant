@@ -1,0 +1,45 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Package contract; canonical pattern lives in `forge skill load contracts`.
+package {{.Name}}
+
+// Service defines the {{.Name}} package boundary.
+// All exported methods on the implementation type must be declared here.
+// Exported types, functions (non-methods), constants, and variables are unrestricted.
+//
+// NOTE: This file and mock_gen.go are an atomic edit pair. Adding (or
+// removing) a method on Service breaks mock_gen.go's compile-time
+// `var _ Service = (*MockService)(nil)` conformance check until the
+// matching MockService method is in place — the package will not build
+// in the interim. Re-run `forge generate` after editing this interface
+// (or, in a multi-agent round where running the full pipeline is
+// unsafe, hand-edit mock_gen.go to add the matching field + method
+// stub in the same commit; the canonical shape mirrors what
+// `forge generate` emits).
+type Service interface {
+	// Define your interface methods here.
+}
+
+// ─── Dependency interfaces ──────────────────────────────────────────
+//
+// Declare here the *behaviour* this package needs from each thing it
+// calls — one interface per dep, named for the role it plays, NOT for
+// the concrete type that will satisfy it. Each one gets a matching
+// field in Deps (service.go), and that field must be the interface,
+// not the concrete type: `Store Store`, never `Store *db.Postgres`.
+// That is what makes New(Deps{...}) constructible from mocks alone,
+// and it is lint-enforced for every package
+// (forgeconv-deps-are-interfaces).
+//
+// Keep each one minimal — only the methods this package calls. When
+// the far end is another internal package, its own contract.go
+// interface is usually the right type to use directly, and its
+// mock_gen.go already has a mock of it.
+//
+// `forge generate` writes a mock for EVERY interface in this file, not
+// just Service, into mock_gen.go. Never hand-roll a fake for something
+// declared here.
+//
+//	// Store is this package's persistence boundary.
+//	type Store interface {
+//		Get(ctx context.Context, id string) (Thing, error)
+//	}

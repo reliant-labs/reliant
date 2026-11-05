@@ -1,0 +1,59 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// AppHeader — the top bar, and the home of the session control.
+//
+// Identity belongs in the top-right corner. That is where a signed-in user
+// looks to confirm WHO they are signed in as and to find the way out, on
+// essentially every product they already use; putting it at the bottom of a
+// sidebar makes people hunt for it, and hides it completely when the rail is
+// collapsed.
+//
+// The bar is deliberately thin: a page title slot on the left, session on the
+// right. Pages own their own headings, so this does not compete with them —
+// it exists so the session control has a permanent, predictable place to live
+// that does not move when the sidebar collapses.
+
+import { Menu } from "lucide-react";
+
+import { SessionNav } from "@/components/session_nav";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { useUiStore } from "@/stores/ui-store";
+
+export function AppHeader({ children }: { children?: React.ReactNode }) {
+  const mobileNavOpen = useUiStore((s) => s.mobileNavOpen);
+  const setMobileNavOpen = useUiStore((s) => s.setMobileNavOpen);
+
+  return (
+    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-4 lg:px-6">
+      {/*
+        Left slot. Empty by default — the scaffold's pages render their own
+        <PageHeader>, and two competing titles is worse than none. Pass
+        children here if your product wants a breadcrumb or a global search.
+      */}
+      {/*
+        The nav opener, phone-only. It sits FIRST and on the left because
+        that is where a back/menu affordance lives on every mobile platform,
+        and because the alternative — burying it beside the session control
+        on the right — puts navigation under the thumb that reaches worst.
+      */}
+      <button
+        type="button"
+        onClick={() => setMobileNavOpen(true)}
+        aria-label="Open navigation"
+        aria-expanded={mobileNavOpen}
+        className="-ml-1 mr-1 shrink-0 rounded-md p-2 text-ink-muted transition hover:bg-surface-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:hidden"
+      >
+        <Menu className="h-5 w-5" aria-hidden />
+      </button>
+
+      <div className="min-w-0 flex-1">{children}</div>
+
+      <div className="flex shrink-0 items-center gap-2">
+        <ThemeToggle />
+        <SessionNav />
+      </div>
+    </header>
+  );
+}

@@ -1,0 +1,21 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// STARTER CODE, NOT A DESIGN. This and `dashboard.tsx` next door are both
+// yours; nothing here is regenerated, so rewrite as freely as you would any
+// file you had written. Swapping the entity tiles for the handful of numbers
+// your product actually leads with is the expected first edit, not a
+// customization.
+
+import { EntityTiles, QuickActions } from "@/app/dashboard";
+import PageHeader from "@/components/ui/page_header";
+
+export default function DashboardPage() {
+  return (
+    <div>
+      <PageHeader title="Dashboard" subtitle="Overview of your application resources." />
+
+      <EntityTiles />
+      <QuickActions />
+    </div>
+  );
+}

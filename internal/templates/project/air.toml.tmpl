@@ -1,0 +1,73 @@
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+[build]
+  # Atomic binary replacement: build to .tmp then mv (unix). Windows is
+  # overridden in [build.windows] below: air stops the running .exe before
+  # building there (a running .exe cannot be replaced), so it builds in place.
+  cmd = "forge storage check ./tmp && CGO_ENABLED=0 go build -buildvcs=false -o ./tmp/{{.Name}}.tmp ./cmd/{{.Name}} && mv ./tmp/{{.Name}}.tmp ./tmp/{{.Name}}"
+  delay = 1000
+  # exclude_dir entries are root-relative: the bare "node_modules" only
+  # covers a top-level node_modules. "frontends" excludes the whole
+  # Next.js tree (frontends/<name>/node_modules included) — no Go code
+  # lives there and npm owns that dev loop; without it air watches
+  # thousands of node_modules dirs per boot.
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "web", "dist", "node_modules", "frontends", "e2e", "gen", ".forge", ".git", "config", "deploy", "proto", "db"]
+  exclude_file = ["_test.go"]
+  exclude_regex = ["_test\\.go$"]
+  exclude_unchanged = false
+  follow_symlink = false
+  # The server must run with ENVIRONMENT=development: it is what makes the
+  # reloaded server usable from a browser — the only thing that turns the CORS
+  # layer on when CORS_ORIGINS is empty (serverkit.Config.CORSEnabled), and the
+  # frontend's dev port is not knowable to the server, so an allow-list cannot
+  # be pre-seeded. The config field defaults to `production` — a deployed
+  # posture — so a launcher that does not set this serves no CORS at all and
+  # every page in the scaffolded frontend fails with "Failed to fetch".
+  #
+  # It is NOT set here: an inline `ENVIRONMENT=development ./tmp/x` prefix is
+  # POSIX shell syntax, and air runs commands through PowerShell on Windows.
+  # The launchers set it in the process environment instead, which air passes
+  # to the server: `forge env up` (dev env default, overridable from KCL or
+  # the shell), docker-compose's app service, and .vscode/launch.json. Running
+  # bare `air` yourself? Export ENVIRONMENT=development first.
+  #
+  # `entrypoint` carries the subcommand, so there is no shell-quoted full_bin.
+  entrypoint = ["./tmp/{{.Name}}", "server"]
+  include_ext = ["go", "yaml"]
+  include_file = []
+  kill_delay = "5s"
+  log = "build-errors.log"
+  poll = false
+  poll_interval = 0
+  post_cmd = []
+  pre_cmd = []
+  rerun = false
+  rerun_delay = 500
+  send_interrupt = true
+  stop_on_error = false
+
+[build.windows]
+  # PowerShell, not sh: no `&&`, no `mv`, no inline VAR=val. air >= v1.65.3
+  # stops the running .exe before building, so building in place is safe.
+  cmd = 'forge storage check ./tmp; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; $env:CGO_ENABLED=0; go build -buildvcs=false -o ./tmp/{{.Name}}.exe ./cmd/{{.Name}}'
+  entrypoint = ["./tmp/{{.Name}}.exe", "server"]
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  main_only = false
+  time = false
+
+[misc]
+  clean_on_exit = true
+
+[screen]
+  clear_on_rebuild = false
+  keep_scroll = true
