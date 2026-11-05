@@ -39,18 +39,6 @@ const (
 	sdkPkgPath    = "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
 
-// appStillOwns are public files the SDK already generates but the app still
-// generates itself, because the root module pins an SDK that does not have them
-// yet. A file moves into the SDK in two PRs (sdk/go/README.md, "Changing the
-// SDK"): the SDK generates it, then the pin bump drops the app's copy and routes
-// the app's buf.gen.yaml to the SDK. Until the second lands, the app's copy is
-// the only registration its binary links, so it is not a duplicate. The pin
-// bump empties this set.
-var appStillOwns = map[string]bool{
-	"reliant/v1/inbox.proto":        true,
-	"reliant/v1/tools_daemon.proto": true,
-}
-
 // neverPublic are rpcs that must not be exported however the file is edited:
 // they decide who a run executes as, whether an automation runs at all, or
 // mint authority. A rule of the product, not of this file, so a careless edit
@@ -463,14 +451,8 @@ func TestBufGenMatchesThePublicAPI(t *testing.T) {
 		if tool == "" {
 			continue
 		}
-		appFiles := map[string]bool{}
-		for f := range files {
-			if !appStillOwns[f] {
-				appFiles[f] = true
-			}
-		}
-		if got, want := sorted(mappedFiles(p)), sorted(appFiles); !reflect.DeepEqual(got, want) {
-			t.Errorf("buf.gen.yaml: %s (out %q) routes %v into the SDK, want the public files the app no longer owns %v", tool, p.Out, got, want)
+		if got, want := sorted(mappedFiles(p)), sorted(files); !reflect.DeepEqual(got, want) {
+			t.Errorf("buf.gen.yaml: %s (out %q) routes %v into the SDK, want exactly the public files %v", tool, p.Out, got, want)
 		}
 		if tool == "protoc-gen-connect-go" && len(p.Types) > 0 {
 			t.Errorf("buf.gen.yaml: the app's protoc-gen-connect-go entry filters by `types:`; the app's handlers need every rpc (the SDK's filtered clients are %s's)", sdkBufGen)
@@ -536,7 +518,7 @@ func TestGeneratedTreeMatchesThePublicAPI(t *testing.T) {
 		if name == "sdk_alias" {
 			continue // tools/sdkalias's re-export of the SDK's names, not a proto
 		}
-		if wantPB[name] && !appStillOwns["reliant/v1/"+name+".proto"] {
+		if wantPB[name] {
 			t.Errorf("gen/reliant/v1/%s.pb.go duplicates a public proto that sdk/go/gen already generates; the app must import the SDK's", name)
 		}
 	}
