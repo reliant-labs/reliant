@@ -52,6 +52,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
 			"connection": {},
+			"credential": {},
 			"hosted_use": {},
 			"uses":       {},
 			"with":       {},

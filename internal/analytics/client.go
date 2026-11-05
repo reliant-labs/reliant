@@ -55,6 +55,9 @@ type Settings struct {
 // Start; without one every Tracker is silent.
 type Client struct {
 	consent PrivacyChecker
+	// firstSessions records each user's first session (app_first_session);
+	// nil leaves that event off.
+	firstSessions FirstSessionRecorder
 	// logger is where events are written; nil means slog.Default() at the
 	// moment of each event, so the process logger may be installed (or
 	// replaced) after Start.
@@ -73,15 +76,28 @@ func NewClient(consent PrivacyChecker, logger *slog.Logger) *Client {
 
 var installed atomic.Pointer[Client]
 
+// FirstSessionRecorder durably records that a user made an authenticated
+// request and reports whether it was their first ever (db.Repo).
+type FirstSessionRecorder interface {
+	RecordFirstAppSession(ctx context.Context, userID string) (bool, error)
+}
+
+// WithFirstSessions makes TrackSessionStart also emit app_first_session, once
+// per user, as recorded by r. It returns c.
+func (c *Client) WithFirstSessions(r FirstSessionRecorder) *Client {
+	c.firstSessions = r
+	return c
+}
+
 // Start installs the process's product-event client. With s.Disabled nothing
-// is installed and every event is dropped.
-func Start(s Settings, consent PrivacyChecker) {
+// is installed and every event is dropped. firstSessions may be nil.
+func Start(s Settings, consent PrivacyChecker, firstSessions FirstSessionRecorder) {
 	if s.Disabled {
 		logging.Info("[Analytics] Product events disabled by RELIANT_ANALYTICS_DISABLED")
 		installed.Store(nil)
 		return
 	}
-	installed.Store(NewClient(consent, nil))
+	installed.Store(NewClient(consent, nil).WithFirstSessions(firstSessions))
 }
 
 // ForUser is the installed client's Tracker for userID (Client.ForUser).
@@ -171,9 +187,27 @@ func (t Tracker) emit(event EventType, identity string, fields ...slog.Attr) {
 }
 
 // TrackSessionStart records the first authenticated request after a user was
-// idle (see the auth interceptor's session tracker).
+// idle (see the auth interceptor's session tracker), and, when it is the user's
+// first request ever, app_first_session. A failure to record the first session
+// is logged and drops only that event: the request it rides on goes on.
 func (t Tracker) TrackSessionStart() {
 	t.emit(EventSessionStart, "")
+	if t.c == nil || t.c.firstSessions == nil || t.userID == "" {
+		return
+	}
+	ctx := t.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	first, err := t.c.firstSessions.RecordFirstAppSession(ctx, t.userID)
+	if err != nil {
+		logging.WarnContext(ctx, "[Analytics] Could not record the user's first session; app_first_session not emitted",
+			"userID", t.userID, "error", err)
+		return
+	}
+	if first {
+		t.emit(EventAppFirstSession, "")
+	}
 }
 
 // TrackMessageSent records a message the user sent in a chat.

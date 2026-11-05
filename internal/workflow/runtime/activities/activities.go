@@ -44,6 +44,10 @@ type Activities struct {
 	// HostedActions dispatches only explicitly granted fixed HTTP action nodes.
 	// It is intentionally separate from generic integration-tool credentials.
 	HostedActions handlers.HostedActionExecutor
+	// SecretResolver resolves the workflow's declared secrets for the steps that
+	// run a command or a request. Optional: nil makes a step that uses a secret
+	// fail rather than run with the placeholder.
+	SecretResolver handlers.SecretResolver
 	// AllowPrivateEgress picks the dial policy for user-supplied model
 	// endpoint URLs (netguard.ForDeployment); false refuses private targets.
 	AllowPrivateEgress bool

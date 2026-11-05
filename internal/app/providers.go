@@ -391,7 +391,7 @@ func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 	// LLM drivers resolve per-user keys from the database.
 	drivers.InitializeAPIKeyProvider(repo)
 	healer := drivers.InstallReliantKeyHealer(repo, cp.URL, cp.InternalServiceSecret)
-	analytics.Start(AnalyticsSettings(d.Analytics), repo)
+	analytics.Start(AnalyticsSettings(d.Analytics), repo, repo)
 	return &ProcessRuntime{KeyHealer: healer}, nil
 }
 

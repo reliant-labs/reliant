@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.0.15-0.20261104065322-fe9fb2df0f25
+forge_version: v1.0.15-0.20261104103628-5f5293e733e6
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -219,4 +219,4 @@ ci:
               command: [sh, -c, "node --test .github/scripts/*.test.mjs"]
               requires: [node]
             - name: no-binaries
-              command: [.githooks/check-binary-files-ci.sh, origin/main, HEAD]
+              command: [.githooks/check-binary-files.sh, --range, origin/main, HEAD]

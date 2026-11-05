@@ -134,11 +134,11 @@ func TestDisabledOrUninstalledRecordsNothing(t *testing.T) {
 	nilClient.ForUser(context.Background(), "user-1").TrackSessionStart()
 	Tracker{}.TrackSessionStart()
 
-	Start(Settings{Disabled: true}, consent{"user-1": true})
+	Start(Settings{Disabled: true}, consent{"user-1": true}, nil)
 	assert.Nil(t, installed.Load())
 	assert.Equal(t, Tracker{}, ForUser(context.Background(), "user-1"))
 
-	Start(Settings{}, consent{"user-1": true})
+	Start(Settings{}, consent{"user-1": true}, nil)
 	assert.NotEqual(t, Tracker{}, ForUser(context.Background(), "user-1"))
 }
 
@@ -230,4 +230,60 @@ func TestLLMCallCompletedOmitsUnsetOptionalFields(t *testing.T) {
 		assert.NotContains(t, rec, "product."+key)
 	}
 	assert.Equal(t, true, rec["product.success"])
+}
+
+// firstSessions is a FirstSessionRecorder over a set: true the first time a user
+// is recorded.
+type firstSessions struct {
+	seen map[string]bool
+	err  error
+}
+
+func (f *firstSessions) RecordFirstAppSession(_ context.Context, userID string) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
+	first := !f.seen[userID]
+	f.seen[userID] = true
+	return first, nil
+}
+
+func eventNames(t *testing.T, buf *bytes.Buffer) []string {
+	t.Helper()
+	var names []string
+	for _, r := range records(t, buf) {
+		names = append(names, r[AttrEventName].(string))
+	}
+	return names
+}
+
+// A user's first session ever is app_first_session as well as session_start,
+// once; later sessions are session_start only. Without a recorder, or when the
+// record fails, only session_start goes out (the request is never failed).
+func TestSessionStartEmitsAppFirstSessionOncePerUser(t *testing.T) {
+	c, buf := jsonClient(t, consent{"user-1": true, "user-2": true})
+	c.WithFirstSessions(&firstSessions{seen: map[string]bool{}})
+	ctx := context.Background()
+
+	c.ForUser(ctx, "user-1").TrackSessionStart()
+	c.now = func() time.Time { return time.Now().Add(time.Minute) } // past the dedup window
+	c.ForUser(ctx, "user-1").TrackSessionStart()
+	c.ForUser(ctx, "user-2").TrackSessionStart()
+	require.Equal(t, []string{
+		"product.session_start", "product.app_first_session",
+		"product.session_start",
+		"product.session_start", "product.app_first_session",
+	}, eventNames(t, buf))
+	for _, r := range records(t, buf) {
+		require.NotEmpty(t, r[AttrUserID], "every event names its user")
+	}
+
+	failing, fbuf := jsonClient(t, consent{"user-1": true})
+	failing.WithFirstSessions(&firstSessions{err: errors.New("db down")})
+	failing.ForUser(ctx, "user-1").TrackSessionStart()
+	require.Equal(t, []string{"product.session_start"}, eventNames(t, fbuf))
+
+	bare, bbuf := jsonClient(t, consent{"user-1": true})
+	bare.ForUser(ctx, "user-1").TrackSessionStart()
+	require.Equal(t, []string{"product.session_start"}, eventNames(t, bbuf))
 }

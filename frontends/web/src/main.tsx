@@ -10,6 +10,9 @@ import "./lib/configGuard";
 // THIRD: a claim link's token leaves the address bar before the router or any
 // telemetry SDK can read it — see lib/claimLink.ts.
 import "./lib/claimLinkBoot";
+// FOURTH: the landing site's rid / utm_* handoff is held before the router or a
+// sign-in redirect replaces the URL — see lib/landingAttribution.ts.
+import "./lib/attributionBoot";
 
 import { createRoot } from "react-dom/client";
 // The brand faces, bundled and served from our own origin (index.css names

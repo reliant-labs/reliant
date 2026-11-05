@@ -28,14 +28,31 @@ const executePath = "/internal/hosted-http/execute"
 type Client struct {
 	store    Store
 	endpoint string
-	sign     func() (string, error)
-	http     *http.Client
+	// resolveURL is the controller's private secret-resolve route, on the same
+	// hop as endpoint.
+	resolveURL string
+	sign       func() (string, error)
+	http       *http.Client
 }
 
 // New constructs a fixed-action client. Verified HTTPS is required outside
 // loopback development, including for cluster Service names. Auth tokens are
 // minted at use; missing configuration fails closed.
 func New(d Deps) (Service, error) {
+	c, err := newClient(d)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// NewResolver is the same client, for the one thing the generated Service
+// interface does not carry: resolving declared secrets. It is deliberately not
+// wrapped by the instrumented middleware, so a resolve call's arguments and
+// results never reach a span or a log.
+func NewResolver(d Deps) (*Client, error) { return newClient(d) }
+
+func newClient(d Deps) (*Client, error) {
 	baseURL, caFile := d.Worker.GetHostedActionsUrl(), d.Worker.GetHostedActionsCaFile()
 	u, err := url.Parse(baseURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || (u.Path != "" && u.Path != "/") {
@@ -64,7 +81,8 @@ func New(d Deps) (Service, error) {
 		h.Transport = transport
 	}
 	h.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &Client{store: d.Store, endpoint: strings.TrimRight(baseURL, "/") + executePath, sign: d.Sign, http: &h}, nil
+	root := strings.TrimRight(baseURL, "/")
+	return &Client{store: d.Store, endpoint: root + executePath, resolveURL: root + resolvePath, sign: d.Sign, http: &h}, nil
 }
 
 // Issue accepts only the real Temporal Action activity context matching the
