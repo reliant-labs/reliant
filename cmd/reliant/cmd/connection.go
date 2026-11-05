@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 	"github.com/reliant-labs/reliant/pkg/config"
+	"github.com/reliant-labs/reliant/sdk/go/reliant"
 )
 
 // ============================================================================
@@ -382,6 +383,34 @@ func (c *connection) httpClientWithBearer(bearer string) *http.Client {
 	return &http.Client{
 		Transport: &bearerAuthTransport{token: bearer, target: c.describeServer(), base: tr},
 	}
+}
+
+// sdkClient builds the SDK client for this connection. The SDK rides the CLI's
+// own transport (dial, TLS and unreachable-server naming) and bearer, so every
+// credential kind and the session and expiry checks in resolveConnection reach
+// the server exactly as before. A plain http:// server is the user's explicit
+// choice (--server / RELIANT_SERVER_URL), so it opts in to that.
+func (c *connection) sdkClient() (*reliant.Client, error) {
+	opts := []reliant.Option{
+		reliant.WithBaseURL(c.ServerURL),
+		reliant.WithToken(c.Token),
+		reliant.WithHTTPClient(c.httpClient()),
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(c.ServerURL)), "http://") {
+		opts = append(opts, reliant.WithInsecureHTTP())
+	}
+	return reliant.New(opts...)
+}
+
+// sdkCause is the error the SDK wrapped, so the CLI's own wording for a Connect
+// failure (rpcError, annotate) applies unchanged. An error the SDK raised
+// itself has no cause and is returned as is.
+func sdkCause(err error) error {
+	var re *reliant.Error
+	if errors.As(err, &re) && errors.Unwrap(re) != nil {
+		return errors.Unwrap(re)
+	}
+	return err
 }
 
 // shouldSkipTLSVerify returns true when TLS cert verification is skipped for
