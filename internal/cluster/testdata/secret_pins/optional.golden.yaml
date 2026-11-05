@@ -1,0 +1,130 @@
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+    name: vault
+    namespace: app
+spec:
+    data:
+        - remoteRef:
+            key: orgs/acme/prod/VAULT_KEY
+            property: value
+            version: "4"
+          secretKey: vault_key
+    target:
+        name: vault
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: optional-env
+    namespace: app
+spec:
+    template:
+        metadata:
+            annotations:
+                forge.dev/secret-pins: vault/VAULT_KEY=4
+        spec:
+            containers:
+                - env:
+                    - name: VAULT_KEY
+                      valueFrom:
+                        secretKeyRef:
+                            key: vault_key
+                            name: vault
+                            optional: true
+                  image: reg/c@sha256:1
+                  name: c
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+    name: optional-mounts
+    namespace: app
+spec:
+    template:
+        metadata:
+            annotations:
+                forge.dev/secret-pins: vault/VAULT_KEY=4
+        spec:
+            containers:
+                - envFrom:
+                    - secretRef:
+                        name: vault
+                        optional: true
+                  image: reg/c@sha256:1
+                  name: c
+            volumes:
+                - name: v
+                  secret:
+                    optional: true
+                    secretName: vault
+                - name: p
+                  projected:
+                    sources:
+                        - secret:
+                            name: vault
+                            optional: true
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+    name: optional-cron
+    namespace: app
+spec:
+    jobTemplate:
+        spec:
+            template:
+                metadata:
+                    annotations:
+                        forge.dev/secret-pins: vault/VAULT_KEY=4
+                spec:
+                    containers:
+                        - env:
+                            - name: VAULT_KEY
+                              valueFrom:
+                                secretKeyRef:
+                                    key: vault_key
+                                    name: vault
+                                    optional: true
+                          image: reg/c@sha256:1
+                          name: c
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: optional-absent
+    namespace: app
+spec:
+    template:
+        spec:
+            containers:
+                - env:
+                    - name: BREAK_GLASS
+                      valueFrom:
+                        secretKeyRef:
+                            key: token
+                            name: break-glass
+                            optional: true
+                  image: reg/c@sha256:1
+                  name: c
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: required-env
+    namespace: app
+spec:
+    template:
+        metadata:
+            annotations:
+                forge.dev/secret-pins: vault/VAULT_KEY=4
+        spec:
+            containers:
+                - env:
+                    - name: VAULT_KEY
+                      valueFrom:
+                        secretKeyRef:
+                            key: vault_key
+                            name: vault
+                  image: reg/c@sha256:1
+                  name: c

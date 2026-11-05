@@ -1,0 +1,35 @@
+{
+  "name": "@reliantlabs/forge",
+  "version": "1.0.15",
+  "description": "The forge CLI via npm: `npx @reliantlabs/forge ...`. A thin shim that downloads the matching prebuilt forge binary from the GitHub release and runs it. No Go toolchain, no postinstall script.",
+  "license": "Apache-2.0",
+  "mcpName": "io.github.reliant-labs/forge",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reliant-labs/forge.git",
+    "directory": "npm"
+  },
+  "homepage": "https://github.com/reliant-labs/forge#install",
+  "bugs": {
+    "url": "https://github.com/reliant-labs/forge/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "forge": "bin/forge.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/install.test.js"
+  }
+}

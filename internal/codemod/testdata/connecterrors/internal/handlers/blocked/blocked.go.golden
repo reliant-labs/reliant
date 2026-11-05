@@ -1,0 +1,12 @@
+// Package blocked is a handler package with no reader of its own, imported
+// by internal/app, which has one.
+package blocked
+
+import (
+	"github.com/reliant-labs/forge/pkg/svcerr"
+)
+
+// Offline is what a daemon proxy returns when the machine is away.
+func Offline() error {
+	return svcerr.ToConnect(svcerr.Unavailable("no daemon connected"))
+}
