@@ -64,8 +64,7 @@ func validateSecrets(wf *reliantv1.Workflow, result *Result) {
 	}
 
 	used := map[string]bool{}
-	var walkBody func(w *reliantv1.Workflow, base []string, root bool)
-	walkBody = func(w *reliantv1.Workflow, base []string, root bool) {
+	walkBody := func(w *reliantv1.Workflow, base []string, root bool) {
 		if !root && len(w.GetSecrets()) > 0 {
 			result.AddError(CategoryStructure, base, "secrets", "secrets are declared once, at the top level of the workflow file; an inline body uses them, and a workflow loaded by ref declares its own")
 		}
