@@ -63,7 +63,12 @@ git -C "$REPO" rev-parse -q --verify "$HEAD_REV^{commit}" >/dev/null || die "can
 [ -z "$SINCE" ] || git -C "$REPO" rev-parse -q --verify "$SINCE^{commit}" >/dev/null || die "cannot resolve $SINCE in $REPO"
 
 bump=patch breaking=()
-# One record per commit: sha, subject, body, NUL-terminated.
+# One record per commit: sha, subject, body, NUL-terminated. Captured through a
+# checked command first: a git log failing inside a process substitution would
+# escape set -e and read as "no commits", a silent patch.
+LOG="$(mktemp)"; trap 'rm -f "$LOG"' EXIT
+git -C "$REPO" log --no-merges --format='%H%x09%s%n%b%x00' "$BASE_REV..$HEAD_REV" >"$LOG" \
+  || die "git log $BASE_REV..$HEAD_REV failed in $REPO"
 while IFS= read -r -d '' rec; do
   rec="${rec#$'\n'}"
   sha="${rec%%$'\t'*}"; rest="${rec#*$'\t'}"
@@ -83,7 +88,7 @@ while IFS= read -r -d '' rec; do
       else breaking+=("${sha:0:12} $subject"); fi ;;
     minor) bump=minor ;;
   esac
-done < <(git -C "$REPO" log --no-merges --format='%H%x09%s%n%b%x00' "$BASE_REV..$HEAD_REV")
+done <"$LOG"
 
 if [ "${#breaking[@]}" -gt 0 ] && [ "$ALLOW" = 1 ]; then
   printf 'semver-next: warning: breaking, allowed by the caller: %s\n' "${breaking[@]}" >&2

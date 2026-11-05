@@ -38,4 +38,14 @@ expect "" 3 --breaking-since HEAD~1
 c "feat: mentions BREAKING CHANGE: in prose only (#7)"
 expect v1.6.0 0 --base-rev HEAD~1
 expect "" 2 --base v9
+
+# A git log that fails after both ends resolve (a history object is missing) is a
+# git error, never a silent patch.
+B="$T/broken"; mkdir "$B"
+gb() { git -C "$B" -c user.name=t -c user.email=t@t -c commit.gpgsign=false "$@"; }
+gb init -q -b main; gb commit -q --allow-empty -m "chore: init"; gb tag v2.0.0
+gb commit -q --allow-empty -m "feat: lost (#8)"; mid="$(gb rev-parse HEAD)"
+gb commit -q --allow-empty -m "fix: tip (#9)"
+rm -f "$B/.git/objects/${mid:0:2}/${mid:2}"
+expect "" 2 --repo "$B"
 exit "$fail"

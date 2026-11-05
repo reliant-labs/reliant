@@ -78,7 +78,7 @@ case $RELEASE_TYPE in
         echo "  patch: 0.2.3-rc1 → 0.2.3 (stable release from RC)"
         echo "  minor: 0.2.3 → 0.3.0 (new features)"
         echo "  major: 0.2.3 → 1.0.0 (breaking changes)"
-        echo "  prerelease: 0.2.3 → 0.2.4-rc1 (first RC) or 0.2.4-rc1 → 0.2.4-rc2 (next RC)"
+        echo "  prerelease: the first RC of the computed version (0.2.3 → 0.3.0-rc1 after a feat) or the next RC of it (0.3.0-rc1 → 0.3.0-rc2)"
         exit 1
         ;;
 esac
@@ -111,7 +111,8 @@ git fetch origin main --tags --quiet
 SINCE_RC=$(git tag -l 'rc/v*' --sort=-v:refname | head -1)
 COMPUTE_ERR=$(mktemp)
 COMPUTED=$(bash scripts/semver-next.sh --head origin/main ${SINCE_RC:+--breaking-since "refs/tags/$SINCE_RC"} 2>"$COMPUTE_ERR") || COMPUTED=""
-if [[ -z "$COMPUTED" && "$RELEASE_TYPE" != "prerelease" && "$OWNER_OVERRIDE" != "true" ]]; then
+# A release candidate is a published release too: the refusal applies to it alike.
+if [[ -z "$COMPUTED" && "$OWNER_OVERRIDE" != "true" ]]; then
     echo -e "${RED}Error: cannot compute the release version:${NC}"
     cat "$COMPUTE_ERR"
     echo -e "${YELLOW}  Only the owner releases over this: $0 <patch|minor|major> --owner-override${NC}"
@@ -120,8 +121,16 @@ fi
 
 # Handle rc version increment specially
 if [[ $RELEASE_TYPE == "prerelease" ]]; then
+    # The RC's core version is the computed one: the next RC of the current core
+    # when they agree, else the first RC of the computed version (a feature landed
+    # since the last RC makes it a minor). Only an owner override with no computed
+    # version falls back to the next patch below.
+    CORE=${CURRENT_VERSION%%-*}
+    if [[ -n "$COMPUTED" && "$CORE" != "${COMPUTED#v}" ]]; then
+        NEW_VERSION="${COMPUTED#v}-rc1"
+        echo -e "${YELLOW}📦 Creating first RC of the computed version: $CURRENT_VERSION → $NEW_VERSION${NC}"
     # Support both -rc.N and -rcN formats
-    if [[ $CURRENT_VERSION =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.?([0-9]+)$ ]]; then
+    elif [[ $CURRENT_VERSION =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)-rc\.?([0-9]+)$ ]]; then
         # Already an RC version, increment RC number
         MAJOR=${BASH_REMATCH[1]}
         MINOR=${BASH_REMATCH[2]}
