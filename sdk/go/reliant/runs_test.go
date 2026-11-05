@@ -8,8 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
+
+	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
@@ -332,5 +335,89 @@ func TestStatusLabelAndSucceeded(t *testing.T) {
 		if IsTerminal(s) {
 			t.Errorf("IsTerminal(%q) = true; a paused run resumes", s)
 		}
+	}
+}
+
+func TestCancelAndPauseWithResultReturnTheServersMessage(t *testing.T) {
+	f := &fake{
+		cancelRun: func(*reliantv1.CancelRunRequest) (*reliantv1.CancelRunResponse, error) {
+			return &reliantv1.CancelRunResponse{Success: true, Message: "Chat terminated successfully"}, nil
+		},
+		pauseRun: func(*reliantv1.PauseRunRequest) (*reliantv1.PauseRunResponse, error) {
+			return &reliantv1.PauseRunResponse{Success: true, Message: "Chat paused successfully"}, nil
+		},
+	}
+	c, _ := f.start(t)
+	ctx := context.Background()
+
+	if res, err := c.Runs.CancelWithResult(ctx, "r1"); err != nil || res.Message != "Chat terminated successfully" {
+		t.Fatalf("CancelWithResult = %+v, %v", res, err)
+	}
+	if res, err := c.Runs.PauseWithResult(ctx, "r1"); err != nil || res.Message != "Chat paused successfully" {
+		t.Fatalf("PauseWithResult = %+v, %v", res, err)
+	}
+	// The error-only forms are unchanged.
+	if err := c.Runs.Cancel(ctx, "r1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Runs.Pause(ctx, "r1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestCancelAndPauseWithResultStillReportADeclinedCallAsAnError(t *testing.T) {
+	f := &fake{
+		cancelRun: func(*reliantv1.CancelRunRequest) (*reliantv1.CancelRunResponse, error) {
+			return &reliantv1.CancelRunResponse{Success: false, Message: "already finished"}, nil
+		},
+		pauseRun: func(*reliantv1.PauseRunRequest) (*reliantv1.PauseRunResponse, error) {
+			return &reliantv1.PauseRunResponse{Success: false}, nil
+		},
+	}
+	c, _ := f.start(t)
+	ctx := context.Background()
+
+	res, err := c.Runs.CancelWithResult(ctx, "r1")
+	if !errors.Is(err, ErrNotApplied) || !strings.Contains(err.Error(), "already finished") || res != (ActionResult{}) {
+		t.Fatalf("CancelWithResult = %+v, %v", res, err)
+	}
+	if _, err := c.Runs.PauseWithResult(ctx, "r1"); !errors.Is(err, ErrNotApplied) {
+		t.Fatalf("PauseWithResult = %v, want ErrNotApplied", err)
+	}
+}
+
+func TestResumeWithResultReportsADeclineWithoutClaimingWhy(t *testing.T) {
+	var answer *reliantv1.ResumeRunResponse
+	var rpcErr error
+	f := &fake{resumeRun: func(*reliantv1.ResumeRunRequest) (*reliantv1.ResumeRunResponse, error) { return answer, rpcErr }}
+	c, _ := f.start(t)
+	ctx := context.Background()
+
+	// Resumed, possibly as a new execution.
+	answer = &reliantv1.ResumeRunResponse{Success: true, Message: "Chat resumed successfully", Run: &reliantv1.Run{Id: "r1-2"}}
+	res, err := c.Runs.ResumeWithResult(ctx, "r1")
+	if err != nil || res.Declined || res.Run.GetId() != "r1-2" || res.Message != "Chat resumed successfully" {
+		t.Fatalf("resumed = %+v, %v", res, err)
+	}
+
+	// The server answered and declined: a state with the server's words, not
+	// an error. Any reason reads the same, since the wire gives none.
+	for _, msg := range []string{"The workflow session was interrupted and cannot be resumed.", "run is already running", ""} {
+		answer = &reliantv1.ResumeRunResponse{Success: false, Message: msg}
+		res, err = c.Runs.ResumeWithResult(ctx, "r1")
+		if err != nil || !res.Declined || res.Run != nil || res.Message != msg {
+			t.Fatalf("declined (%q) = %+v, %v", msg, res, err)
+		}
+	}
+
+	// Resume keeps its contract: the same answer is ErrNotApplied there.
+	if _, err := c.Runs.Resume(ctx, "r1"); !errors.Is(err, ErrNotApplied) {
+		t.Fatalf("Resume on a declined resume = %v, want ErrNotApplied", err)
+	}
+
+	// An rpc error is an error on both, never Declined.
+	answer, rpcErr = nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("cannot be resumed"))
+	if res, err := c.Runs.ResumeWithResult(ctx, "r1"); !errors.Is(err, ErrFailedPrecondition) || res.Declined {
+		t.Fatalf("rpc error = %+v, %v", res, err)
 	}
 }

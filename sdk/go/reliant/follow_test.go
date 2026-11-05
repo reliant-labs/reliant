@@ -4,12 +4,18 @@
 package reliant
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
@@ -379,5 +385,51 @@ func TestFollowUnknownRunFailsBeforePolling(t *testing.T) {
 	c, _ := f.start(t)
 	if _, err := c.Runs.Follow(context.Background(), "missing", FollowOptions{}); err == nil {
 		t.Fatal("following an unknown run must fail up front")
+	}
+}
+
+func TestFollowLogReceivesPollDiagnosticsAndNilIsSilent(t *testing.T) {
+	build := func() (*Client, *atomic.Int32) {
+		fd := &feed{}
+		fd.workflowStatus("started", "")
+		fd.workflowStatus("completed", "")
+		// Active, so only the feed's own "completed" ends the run: a terminal
+		// root would end the follow through the fallback on the first failure.
+		fd.setRoot(reliantv1.WorkflowState_WORKFLOW_STATE_ACTIVE, 0, "")
+		f := &fake{}
+		fd.install(f)
+		var polls atomic.Int32
+		inner := f.getChatUpdates
+		f.getChatUpdates = func(r *reliantv1.GetChatUpdatesRequest) (*reliantv1.GetChatUpdatesResponse, error) {
+			if polls.Add(1) <= 2 {
+				return nil, connect.NewError(connect.CodeUnavailable, errors.New("blip"))
+			}
+			return inner(r)
+		}
+		c, _ := f.start(t)
+		return c, &polls
+	}
+
+	c, _ := build()
+	var log bytes.Buffer
+	_, res := runFollow(t, c, FollowOptions{Log: &log})
+	if !res.Succeeded {
+		t.Fatalf("result = %+v", res)
+	}
+	out := log.String()
+	for _, want := range []string{"reliant: fetching updates failed (1/15)", "reliant: fetching updates failed (2/15)", "blip"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Log = %q, want it to contain %q", out, want)
+		}
+	}
+	if got := strings.Count(out, "\n"); got != 2 {
+		t.Errorf("Log has %d lines, want one per failed poll (2): %q", got, out)
+	}
+
+	// No Log: the same follow runs to the same verdict and writes nowhere.
+	c, polls := build()
+	_, res = runFollow(t, c, FollowOptions{})
+	if !res.Succeeded || polls.Load() < 3 {
+		t.Fatalf("result = %+v after %d polls", res, polls.Load())
 	}
 }

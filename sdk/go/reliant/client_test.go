@@ -277,3 +277,48 @@ func TestSuccessFalseIsAnErrorNotAQuietNo(t *testing.T) {
 		t.Fatalf("Cancel with success=false = %v, want ErrNotApplied carrying the server's message", err)
 	}
 }
+
+func TestInsecureHTTPAllowsPlainHTTPToAnyHostAndOnlyThat(t *testing.T) {
+	cases := []struct {
+		url string
+		ok  bool
+	}{
+		{"http://reliant.internal:8080", true},
+		{"http://10.1.2.3:8080/", true},
+		{"http://localhost:8080", true},
+		{"https://api.reliantapi.com", true},
+		{"ftp://reliant.internal", false},
+		{"http://user:pw@reliant.internal", false},
+		{"http://reliant.internal?x=1", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		_, err := New(WithToken("rlat_x"), WithBaseURL(tc.url), WithInsecureHTTP())
+		if (err == nil) != tc.ok {
+			t.Errorf("New(base=%q, WithInsecureHTTP) err = %v, want ok=%v", tc.url, err, tc.ok)
+		}
+	}
+	// Without the option the refusal stands, and names the way out.
+	_, err := New(WithToken("rlat_x"), WithBaseURL("http://reliant.internal:8080"))
+	if err == nil || !strings.Contains(err.Error(), "WithInsecureHTTP") {
+		t.Fatalf("plain http without the opt-in = %v, want a refusal naming WithInsecureHTTP", err)
+	}
+}
+
+func TestInsecureHTTPStillRefusesARedirectOffTheOrigin(t *testing.T) {
+	other := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("a redirect off the origin was followed")
+	}))
+	defer other.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, other.URL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	defer srv.Close()
+	c, err := New(WithToken("rlat_x"), WithBaseURL(srv.URL), WithInsecureHTTP())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Runs.Get(context.Background(), "r1"); err == nil {
+		t.Fatal("a redirect to another origin must fail")
+	}
+}
