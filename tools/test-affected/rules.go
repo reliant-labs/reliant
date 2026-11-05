@@ -62,8 +62,8 @@ var forgeInputs = []string{
 	// generate.hooks: controlplane-client, sdk-ts-gen.
 	"proto-vendor/**", "buf.gen.controlplane.yaml", "scripts/proto-generate-atomic.sh",
 	"buf.gen.sdk-ts.yaml", "sdk/ts/src/gen/**",
-	// generate.hooks: sdk-go-gen.
-	"buf.gen.sdk-go.yaml",
+	// generate.hooks: sdk-go-gen, sdk-aliases.
+	"buf.gen.sdk-go.yaml", "tools/sdkalias/**",
 	"tools/protoc-gen-es/package.json", "tools/protoc-gen-es/package-lock.json",
 	// generate.hooks: the go:generate outputs, the manifest schemas, and the
 	// integration projections' specs, upstream schema and catalog output.
@@ -86,6 +86,7 @@ var forgeHookGenerators = []string{
 	"internal/llm/tools/cmd/toolconfiggen",
 	"internal/integrations/manifest/schema/cmd/schemagen",
 	"tools/integrationgen",
+	"tools/sdkalias",
 }
 
 // forgeHookOf names the forge.yaml hook that runs each generator
@@ -96,6 +97,7 @@ var forgeHookOf = map[string]string{
 	"internal/llm/tools/cmd/toolconfiggen":                "tool-catalog",
 	"internal/integrations/manifest/schema/cmd/schemagen": "manifest-schema",
 	"tools/integrationgen":                                "integrations",
+	"tools/sdkalias":                                      "sdk-aliases",
 }
 
 // forgeInputsExcept are paths under forgeInputs that forge generate neither

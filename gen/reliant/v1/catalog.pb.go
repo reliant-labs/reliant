@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -3026,7 +3027,7 @@ type ListInputOptionsRequest struct {
 	PageSize int32 `protobuf:"varint,6,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// ActingIdentity only feeds the type's warnings, which may differ for the
 	// owner and for the bot.
-	ActingIdentity *ActingIdentity `protobuf:"varint,7,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity,oneof" json:"acting_identity,omitempty"`
+	ActingIdentity *v1.ActingIdentity `protobuf:"varint,7,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity,oneof" json:"acting_identity,omitempty"`
 	// Resolve, when set, labels these stored values instead of listing: the
 	// response holds one option per value the type could resolve, and query,
 	// page_token and page_size are ignored.
@@ -3107,11 +3108,11 @@ func (x *ListInputOptionsRequest) GetPageSize() int32 {
 	return 0
 }
 
-func (x *ListInputOptionsRequest) GetActingIdentity() ActingIdentity {
+func (x *ListInputOptionsRequest) GetActingIdentity() v1.ActingIdentity {
 	if x != nil && x.ActingIdentity != nil {
 		return *x.ActingIdentity
 	}
-	return ActingIdentity_ACTING_IDENTITY_UNSPECIFIED
+	return v1.ActingIdentity(0)
 }
 
 func (x *ListInputOptionsRequest) GetResolve() []string {
@@ -3627,7 +3628,7 @@ var file_reliant_v1_catalog_proto_goTypes = []any{
 	(*structpb.Struct)(nil),                 // 46: google.protobuf.Struct
 	(*IntegrationAuthMethod)(nil),           // 47: reliant.v1.IntegrationAuthMethod
 	(*IntegrationConnectionParam)(nil),      // 48: reliant.v1.IntegrationConnectionParam
-	(ActingIdentity)(0),                     // 49: reliant.v1.ActingIdentity
+	(v1.ActingIdentity)(0),                  // 49: reliant.v1.ActingIdentity
 	(*structpb.Value)(nil),                  // 50: google.protobuf.Value
 }
 var file_reliant_v1_catalog_proto_depIdxs = []int32{
@@ -3709,7 +3710,6 @@ func file_reliant_v1_catalog_proto_init() {
 		return
 	}
 	file_reliant_v1_connection_proto_init()
-	file_reliant_v1_trigger_proto_init()
 	file_reliant_v1_catalog_proto_msgTypes[13].OneofWrappers = []any{}
 	file_reliant_v1_catalog_proto_msgTypes[17].OneofWrappers = []any{}
 	file_reliant_v1_catalog_proto_msgTypes[31].OneofWrappers = []any{}

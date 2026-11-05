@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -95,18 +96,18 @@ func (x *PortInfo) GetAddress() string {
 
 // BackgroundProcess represents a background process
 type BackgroundProcess struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Id            string                  `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Command       string                  `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
-	Status        BackgroundProcessStatus `protobuf:"varint,3,opt,name=status,proto3,enum=reliant.v1.BackgroundProcessStatus" json:"status,omitempty"`
-	StartTime     string                  `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	EndTime       *string                 `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3,oneof" json:"end_time,omitempty"`
-	ExitCode      *int32                  `protobuf:"varint,6,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
-	WorkingDir    string                  `protobuf:"bytes,7,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
-	WorktreeId    *string                 `protobuf:"bytes,8,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
-	SessionId     string                  `protobuf:"bytes,9,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
-	ChatId        *string                 `protobuf:"bytes,10,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
-	Ports         []*PortInfo             `protobuf:"bytes,11,rep,name=ports,proto3" json:"ports,omitempty"`
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Id            string                     `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Command       string                     `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	Status        v1.BackgroundProcessStatus `protobuf:"varint,3,opt,name=status,proto3,enum=reliant.v1.BackgroundProcessStatus" json:"status,omitempty"`
+	StartTime     string                     `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	EndTime       *string                    `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3,oneof" json:"end_time,omitempty"`
+	ExitCode      *int32                     `protobuf:"varint,6,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
+	WorkingDir    string                     `protobuf:"bytes,7,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
+	WorktreeId    *string                    `protobuf:"bytes,8,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	SessionId     string                     `protobuf:"bytes,9,opt,name=session_id,json=sessionId,proto3" json:"session_id,omitempty"`
+	ChatId        *string                    `protobuf:"bytes,10,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	Ports         []*PortInfo                `protobuf:"bytes,11,rep,name=ports,proto3" json:"ports,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -155,11 +156,11 @@ func (x *BackgroundProcess) GetCommand() string {
 	return ""
 }
 
-func (x *BackgroundProcess) GetStatus() BackgroundProcessStatus {
+func (x *BackgroundProcess) GetStatus() v1.BackgroundProcessStatus {
 	if x != nil {
 		return x.Status
 	}
-	return BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_UNSPECIFIED
+	return v1.BackgroundProcessStatus(0)
 }
 
 func (x *BackgroundProcess) GetStartTime() string {
@@ -726,7 +727,7 @@ func (*ProcessOutputEvent_Snapshot) isProcessOutputEvent_Event() {}
 // ProcessOutputLine represents a single line of process output
 type ProcessOutputLine struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          OutputStreamType       `protobuf:"varint,1,opt,name=type,proto3,enum=reliant.v1.OutputStreamType" json:"type,omitempty"`
+	Type          v1.OutputStreamType    `protobuf:"varint,1,opt,name=type,proto3,enum=reliant.v1.OutputStreamType" json:"type,omitempty"`
 	Text          string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`          // The line content
 	Sequence      int64                  `protobuf:"varint,3,opt,name=sequence,proto3" json:"sequence,omitempty"` // Monotonically increasing sequence number
 	unknownFields protoimpl.UnknownFields
@@ -763,11 +764,11 @@ func (*ProcessOutputLine) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_background_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *ProcessOutputLine) GetType() OutputStreamType {
+func (x *ProcessOutputLine) GetType() v1.OutputStreamType {
 	if x != nil {
 		return x.Type
 	}
-	return OutputStreamType_OUTPUT_STREAM_TYPE_UNSPECIFIED
+	return v1.OutputStreamType(0)
 }
 
 func (x *ProcessOutputLine) GetText() string {
@@ -786,10 +787,10 @@ func (x *ProcessOutputLine) GetSequence() int64 {
 
 // ProcessOutputComplete indicates the process has finished
 type ProcessOutputComplete struct {
-	state         protoimpl.MessageState  `protogen:"open.v1"`
-	Status        BackgroundProcessStatus `protobuf:"varint,1,opt,name=status,proto3,enum=reliant.v1.BackgroundProcessStatus" json:"status,omitempty"`
-	ExitCode      *int32                  `protobuf:"varint,2,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
-	EndTime       string                  `protobuf:"bytes,3,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	Status        v1.BackgroundProcessStatus `protobuf:"varint,1,opt,name=status,proto3,enum=reliant.v1.BackgroundProcessStatus" json:"status,omitempty"`
+	ExitCode      *int32                     `protobuf:"varint,2,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
+	EndTime       string                     `protobuf:"bytes,3,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -824,11 +825,11 @@ func (*ProcessOutputComplete) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_background_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *ProcessOutputComplete) GetStatus() BackgroundProcessStatus {
+func (x *ProcessOutputComplete) GetStatus() v1.BackgroundProcessStatus {
 	if x != nil {
 		return x.Status
 	}
-	return BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_UNSPECIFIED
+	return v1.BackgroundProcessStatus(0)
 }
 
 func (x *ProcessOutputComplete) GetExitCode() int32 {
@@ -847,12 +848,12 @@ func (x *ProcessOutputComplete) GetEndTime() string {
 
 // ProcessOutputSnapshot contains all existing output (sent on stream start)
 type ProcessOutputSnapshot struct {
-	state          protoimpl.MessageState   `protogen:"open.v1"`
-	Lines          []*ProcessOutputLine     `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
-	LatestSequence int64                    `protobuf:"varint,2,opt,name=latest_sequence,json=latestSequence,proto3" json:"latest_sequence,omitempty"` // Sequence number of last line
-	IsComplete     bool                     `protobuf:"varint,3,opt,name=is_complete,json=isComplete,proto3" json:"is_complete,omitempty"`             // True if process already finished
-	Status         *BackgroundProcessStatus `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.BackgroundProcessStatus,oneof" json:"status,omitempty"`
-	ExitCode       *int32                   `protobuf:"varint,5,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
+	state          protoimpl.MessageState      `protogen:"open.v1"`
+	Lines          []*ProcessOutputLine        `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
+	LatestSequence int64                       `protobuf:"varint,2,opt,name=latest_sequence,json=latestSequence,proto3" json:"latest_sequence,omitempty"` // Sequence number of last line
+	IsComplete     bool                        `protobuf:"varint,3,opt,name=is_complete,json=isComplete,proto3" json:"is_complete,omitempty"`             // True if process already finished
+	Status         *v1.BackgroundProcessStatus `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.BackgroundProcessStatus,oneof" json:"status,omitempty"`
+	ExitCode       *int32                      `protobuf:"varint,5,opt,name=exit_code,json=exitCode,proto3,oneof" json:"exit_code,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -908,11 +909,11 @@ func (x *ProcessOutputSnapshot) GetIsComplete() bool {
 	return false
 }
 
-func (x *ProcessOutputSnapshot) GetStatus() BackgroundProcessStatus {
+func (x *ProcessOutputSnapshot) GetStatus() v1.BackgroundProcessStatus {
 	if x != nil && x.Status != nil {
 		return *x.Status
 	}
-	return BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_UNSPECIFIED
+	return v1.BackgroundProcessStatus(0)
 }
 
 func (x *ProcessOutputSnapshot) GetExitCode() int32 {
@@ -1048,8 +1049,8 @@ var file_reliant_v1_background_proto_goTypes = []any{
 	(*ProcessOutputLine)(nil),               // 11: reliant.v1.ProcessOutputLine
 	(*ProcessOutputComplete)(nil),           // 12: reliant.v1.ProcessOutputComplete
 	(*ProcessOutputSnapshot)(nil),           // 13: reliant.v1.ProcessOutputSnapshot
-	(BackgroundProcessStatus)(0),            // 14: reliant.v1.BackgroundProcessStatus
-	(OutputStreamType)(0),                   // 15: reliant.v1.OutputStreamType
+	(v1.BackgroundProcessStatus)(0),         // 14: reliant.v1.BackgroundProcessStatus
+	(v1.OutputStreamType)(0),                // 15: reliant.v1.OutputStreamType
 }
 var file_reliant_v1_background_proto_depIdxs = []int32{
 	14, // 0: reliant.v1.BackgroundProcess.status:type_name -> reliant.v1.BackgroundProcessStatus
@@ -1082,7 +1083,6 @@ func file_reliant_v1_background_proto_init() {
 	if File_reliant_v1_background_proto != nil {
 		return
 	}
-	file_reliant_v1_common_proto_init()
 	file_reliant_v1_background_proto_msgTypes[1].OneofWrappers = []any{}
 	file_reliant_v1_background_proto_msgTypes[3].OneofWrappers = []any{}
 	file_reliant_v1_background_proto_msgTypes[9].OneofWrappers = []any{}

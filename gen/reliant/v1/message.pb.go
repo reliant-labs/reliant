@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -71,7 +72,7 @@ func (x *GetMessageRequest) GetMessageId() string {
 // GetMessageResponse returns the message with its content blocks
 type GetMessageResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Message       *v1.Message            `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -106,7 +107,7 @@ func (*GetMessageResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_message_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *GetMessageResponse) GetMessage() *Message {
+func (x *GetMessageResponse) GetMessage() *v1.Message {
 	if x != nil {
 		return x.Message
 	}
@@ -144,7 +145,7 @@ var file_reliant_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_reliant_v1_message_proto_goTypes = []any{
 	(*GetMessageRequest)(nil),  // 0: reliant.v1.GetMessageRequest
 	(*GetMessageResponse)(nil), // 1: reliant.v1.GetMessageResponse
-	(*Message)(nil),            // 2: reliant.v1.Message
+	(*v1.Message)(nil),         // 2: reliant.v1.Message
 }
 var file_reliant_v1_message_proto_depIdxs = []int32{
 	2, // 0: reliant.v1.GetMessageResponse.message:type_name -> reliant.v1.Message
@@ -162,7 +163,6 @@ func file_reliant_v1_message_proto_init() {
 	if File_reliant_v1_message_proto != nil {
 		return
 	}
-	file_reliant_v1_chat_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
