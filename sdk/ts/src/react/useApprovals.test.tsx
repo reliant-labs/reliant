@@ -7,6 +7,7 @@ import { harness, settle } from "../test/react-harness.js";
 import { approvalData, CHAT, caughtUpFrame, snapshotFrame, textMessage, updatesFrame } from "../test/scripted-server.js";
 import { approvalStatusFromFeed, isApprovalNotActionable, notActionableMessage } from "./approvals.js";
 import { useApprovals } from "./useApprovals.js";
+import { useChat } from "./useChat.js";
 
 type Row = { id: string; chatId: string; status: ApprovalStatus; title: string };
 
@@ -164,6 +165,20 @@ describe("useApprovals", () => {
     });
     await waitFor(() => expect(result.current.pending).toEqual([]));
     expect(result.current.approvals[0]).toMatchObject({ status: ApprovalStatus.APPROVED, title: "Run the migration" });
+  });
+
+  it("shares the chat's stream with the other hooks on it under the same project scope", async () => {
+    const h = harness({ ...approvalServer().handlers });
+    h.render(() => useChat(CHAT, { projectId: "p-1" }));
+    h.render(() => useApprovals(CHAT, { projectId: "p-1" }));
+    await settle();
+    expect(h.server.chatStreams()).toHaveLength(1);
+    expect(h.server.chatStreams()[0]!.request.projectId).toBe("p-1");
+
+    // Without the scope it is another session, as the stream is routed by it.
+    h.render(() => useApprovals(CHAT));
+    await settle();
+    expect(h.server.chatStreams()).toHaveLength(2);
   });
 
   it("reads a status it does not know as a resolution, never as pending", () => {
