@@ -317,7 +317,19 @@ function reportRpcTimeout(
   _lastRpcTimeoutReportAt = now;
   // A no-op until browser telemetry is running, and it never starts in dev
   // (lib/errorReporting.ts), so this only reports from deployed builds.
-  reportFailure(`rpc-timeout: ${method} after ${timeoutMs}ms (${diagnostics})`);
+  //
+  // THE MESSAGE IS THE ISSUE'S IDENTITY: the pipeline groups a handled failure
+  // by it, so it names only the method and its budget. The in-flight snapshot
+  // differs on every timeout (which calls, in which order, how old), and in
+  // the message it opened a new issue, and fired NewIssue, for each variant:
+  // control-plane prod, 2026-11-03..05, one slow ListWorkloads/GetServiceOverview
+  // read was seven issues and seven NewIssue alerts, four firing at once. It
+  // travels as an attribute on the event, where the console still shows it.
+  reportFailure(`rpc-timeout: ${method} after ${timeoutMs}ms`, {
+    "rpc.method": method,
+    "rpc.timeout_ms": timeoutMs,
+    "rpc.in_flight": diagnostics,
+  });
 }
 
 const deadline = createDeadlineInterceptor({
