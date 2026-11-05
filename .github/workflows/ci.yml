@@ -333,7 +333,7 @@ jobs:
     env:
       RELEASE_GATE_PUBLISH: ${{ github.ref == 'refs/heads/main' && '1' || '0' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
       - name: Identify the record's author
@@ -350,7 +350,7 @@ jobs:
           set -euo pipefail
           bad=$(jq -r 'to_entries[] | select(.key == "web-bundle" or .key == "playwright" or .key == "electron-package") | select(.value.result != "success") | "\(.key): \(.value.result)"' <<< "${RESULTS}")
           if [ -n "${bad}" ]; then echo "::error::release blockers that did not pass (no record is written):"; echo "${bad}"; exit 1; fi
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: release-gate-part-*
           merge-multiple: true

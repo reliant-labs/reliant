@@ -9,6 +9,7 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 
 - `incidents/` — incident write-ups, referenced by path from code comments.
 - `pinning.md` — why reliant pins forge by commit pre-launch, and the commands.
+- `action-pins.md` — the reviewed action-to-commit pins in privileged workflows, how to change one, and the live verification after a change.
 - `observability.md` — how reliant's own server binaries export traces, metrics and logs, and the known gaps.
 - `integration-manifests.md` — authoring an integration manifest: the generated JSON Schema, fragment layout, `$ref`, event conformance.
 - `backlog.md` — product proposals and deferred designs moved out of the issue tracker (2026-11-04), each under its original issue number.
