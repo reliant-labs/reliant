@@ -104,6 +104,16 @@ describe("ClickStack prop keys", () => {
     }
   });
 
+  it("tags the public demo's events surface=demo", () => {
+    resetShellForTests("demo");
+    try {
+      trackEvent("demo_tour_autostarted", { deepLink: false });
+      expect(track).toHaveBeenLastCalledWith("product.demo_tour_autostarted", { surface: "demo", deep_link: false });
+    } finally {
+      resetShellForTests();
+    }
+  });
+
   it("leaves already-conforming keys alone", () => {
     trackEvent("onboarding_flow_step_completed", { step: "compute", duration_ms: 1234 });
 

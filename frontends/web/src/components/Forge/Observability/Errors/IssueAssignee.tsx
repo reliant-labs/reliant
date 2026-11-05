@@ -23,6 +23,7 @@ import type { Issue, IssueUser } from "@/services/controlPlane/observability/iss
 
 import { conflictSummary } from "./issueModel";
 import { discussionErrorText } from "./issueTimelineModel";
+import { useObsReadOnly } from "../obsReadOnly";
 
 const FIELD = "h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -36,6 +37,8 @@ export function assigneeChoices(roster: readonly IssueUser[] | undefined, me: Is
 
 export function IssueAssignee({ issue, orgId }: { issue: Issue; orgId: string }) {
   const assign = useAssignIssue();
+  const { readOnly, reason } = useObsReadOnly();
+  const locked = readOnly ? { disabled: true, title: reason } : {};
   const me = useCurrentIssueUser();
   const members = useOrgMembers(orgId);
   const [readAtClick, setReadAtClick] = useState<Issue | null>(null);
@@ -72,6 +75,7 @@ export function IssueAssignee({ issue, orgId }: { issue: Issue; orgId: string })
           disabled={assign.isPending}
           className={FIELD}
           data-testid="obs-issue-assignee-pick"
+          {...locked}
         >
           <option value="">Unassigned</option>
           {choices.map((person) => (
@@ -89,6 +93,7 @@ export function IssueAssignee({ issue, orgId }: { issue: Issue; orgId: string })
             disabled={assign.isPending}
             loading={assign.isPending && assign.variables?.assigneeUserId === meUser.id}
             data-testid="obs-issue-assign-me"
+            {...locked}
           >
             Assign to me
           </Button>
@@ -102,6 +107,7 @@ export function IssueAssignee({ issue, orgId }: { issue: Issue; orgId: string })
             disabled={assign.isPending}
             loading={assign.isPending && assign.variables?.assigneeUserId === ""}
             data-testid="obs-issue-unassign"
+            {...locked}
           >
             Unassign
           </Button>

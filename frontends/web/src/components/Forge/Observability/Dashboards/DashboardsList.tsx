@@ -59,6 +59,7 @@ import { DashboardsHub, type DashboardsHubHrefs } from "./DashboardsHub";
 import { NewDashboardDialog, SaveCopyDialog, envScopeOf } from "./dialogs";
 import { PanelBody } from "./PanelBody";
 import { BUTTON_PRIMARY, INK_LINK, Menu, StarButton } from "./parts";
+import { useObsReadOnly } from "../obsReadOnly";
 
 /** The list's own view: absent is the Overview (when the app has one). */
 export type DashboardsView = "all";
@@ -172,8 +173,10 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
     });
   const starred = starredOf(shown);
   const owners = ownersOf(all);
+  const readOnlyReason = useObsReadOnly().reason;
   const toggleStar = (d: DashboardSummary) => star.mutate({ ref: d.ref, starred: !d.starred });
-  const writeHint = canWrite ? undefined : "Only organization admins can create dashboards.";
+  // The demo's reason first (obsReadOnly.tsx): there, nobody can, admin or not.
+  const writeHint = canWrite ? undefined : readOnlyReason ?? "Only organization admins can create dashboards.";
 
   const header = (
     <DashboardHeader

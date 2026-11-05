@@ -57,8 +57,11 @@ vi.mock("../appBuild", () => ({
 }));
 
 import { holdLandingAttribution, LANDING_ATTRIBUTION_KEY } from "../landingAttribution";
+import { resetShellForTests } from "../shell";
 import {
   buildTelemetryConfig,
+  DEMO_SHELL_SERVICE_NAME,
+  demoReplayRate,
   initTelemetry,
   replaySampleRate,
   reportErrorToTelemetry,
@@ -110,6 +113,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  resetShellForTests();
 });
 
 describe("initTelemetry: when it starts", () => {
@@ -488,6 +492,67 @@ describe("buildTelemetryConfig", () => {
     });
     expect(config.consoleCapture).toBe(false);
     expect(config.advancedNetworkCapture).toBe(false);
+  });
+});
+
+// The public demo (lib/shell.ts `demo`): anonymous visitors, its own service,
+// replay by DEMO_TELEMETRY, and nothing at all for a browser that opted out.
+describe("the demo shell", () => {
+  const base = { config: {}, prerelease: false, buildVersion: "1", replayRate: 1 };
+  const setNavigator = (props: Record<string, unknown>) => {
+    for (const [key, value] of Object.entries(props)) Object.defineProperty(navigator, key, { value, configurable: true });
+  };
+  afterEach(() => setNavigator({ doNotTrack: null, globalPrivacyControl: undefined }));
+
+  it("reports as forge-demo, still the reliant-web frontend (source maps)", () => {
+    const config = buildTelemetryConfig({ ...base, shell: "demo", demoTelemetry: "replay" });
+    expect(config.serviceName).toBe(DEMO_SHELL_SERVICE_NAME);
+    expect(DEMO_SHELL_SERVICE_NAME).toBe("forge-demo");
+    expect(config.frontend).toBe("reliant-web");
+    expect(buildTelemetryConfig({ ...base, shell: "forge" }).serviceName).toBe("forge-web");
+    expect(buildTelemetryConfig(base).serviceName).toBe("reliant-web");
+  });
+
+  it("records replay by DEMO_TELEMETRY, not OTEL_REPLAY", () => {
+    expect(buildTelemetryConfig({ ...base, shell: "demo", demoTelemetry: "replay" }).replay).toBe(true);
+    expect(buildTelemetryConfig({ ...base, config: { OTEL_REPLAY: "true" }, shell: "demo", demoTelemetry: "analytics" }).replay).toBe(false);
+    expect(demoReplayRate(undefined)).toBe(1);
+    expect(demoReplayRate("0.25")).toBe(0.25);
+  });
+
+  it("starts anonymously with replay on by default", async () => {
+    resetShellForTests("demo");
+    expect(await initTelemetry()).toBe(true);
+    expect(lastConfig()).toMatchObject({ serviceName: "forge-demo", replay: true, replaySampleRate: 1 });
+    expect(runtime.setTelemetryUser).not.toHaveBeenCalled();
+  });
+
+  it("records analytics without replay when DEMO_TELEMETRY=analytics, and nothing when off", async () => {
+    resetShellForTests("demo");
+    stubConfig({ DEMO_TELEMETRY: "analytics" });
+    await initTelemetry();
+    expect(lastConfig().replay).toBe(false);
+    resetTelemetryForTests();
+    runtime.initBrowserTelemetry.mockClear();
+    stubConfig({ DEMO_TELEMETRY: "off" });
+    expect(await initTelemetry()).toBe(false);
+    expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Global Privacy Control", { globalPrivacyControl: true }],
+    ["Do Not Track", { doNotTrack: "1" }],
+  ])("never starts for a browser that sends %s", async (_name, signal) => {
+    resetShellForTests("demo");
+    setNavigator(signal);
+    expect(await initTelemetry()).toBe(false);
+    expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
+  });
+
+  it("leaves the other shells alone when the browser sends DNT (their consent is the settings switch)", async () => {
+    resetShellForTests("forge");
+    setNavigator({ doNotTrack: "1" });
+    expect(await initTelemetry()).toBe(true);
   });
 });
 

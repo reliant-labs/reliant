@@ -39,6 +39,7 @@ import { reportError } from "./errorReporting";
 import { clickstackEnabled } from "./telemetryEndpoint";
 import { SERVICE_NAME } from "./otel_gen";
 import { getShell, type AppShell } from "./shell";
+import { demoTelemetry, type DemoTelemetry } from "./demoTelemetry";
 
 const PRERELEASE_REGEX = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/i;
 
@@ -106,6 +107,12 @@ export function replaySampleRate(input: ReplayRateInput): number {
   }
 }
 
+/** The demo's replay share: OTEL_REPLAY_SAMPLE_RATE when it is a number, else every session. */
+export function demoReplayRate(rateOverride?: string): number {
+  const override = parseFloat(rateOverride ?? "");
+  return Number.isNaN(override) ? 1 : override;
+}
+
 export interface TelemetryConfigInput {
   /** The runtime config's fields this module reads (config_gen.ts). */
   config: Partial<
@@ -127,6 +134,8 @@ export interface TelemetryConfigInput {
   desktop?: boolean;
   /** The app shell this page mounts (lib/shell.ts). Default "reliant". */
   shell?: AppShell;
+  /** In the demo shell: what it records (demoTelemetry.ts). Replay follows this, not OTEL_REPLAY. */
+  demoTelemetry?: DemoTelemetry;
   replayRate: number;
   extraApiOrigins?: Array<string | undefined>;
 }
@@ -148,19 +157,33 @@ export const WEB_FRONTEND = "reliant-web";
  * which is the name its source maps are filed under.
  */
 export const FORGE_SHELL_SERVICE_NAME = "forge-web";
+
+/**
+ * The service.name the public demo reports (lib/shell.ts `demo`): its
+ * anonymous visitors must not move forge-web's error rate or funnels, and
+ * `product_events` is keyed by ServiceName, so no new column is needed.
+ */
+export const DEMO_SHELL_SERVICE_NAME = "forge-demo";
 export const DESKTOP_FRONTEND = "desktop";
+
+const SHELL_SERVICE_NAME: Record<AppShell, string> = {
+  reliant: SERVICE_NAME,
+  forge: FORGE_SHELL_SERVICE_NAME,
+  demo: DEMO_SHELL_SERVICE_NAME,
+};
 
 /** The runtime config for this build. Pure; the privacy-relevant options are fixed here. */
 export function buildTelemetryConfig(
   input: TelemetryConfigInput,
 ): BrowserTelemetryConfig {
   const { config } = input;
+  const demo = input.shell === "demo";
   return {
     // forge's derivation for this frontend ("<project>-<frontend>"), the
     // service.name the generated dashboards and alert defaults filter on
     // (deploy/observability/). A literal here drifted from it once, and every
     // web alert matched nothing.
-    serviceName: input.shell === "forge" ? FORGE_SHELL_SERVICE_NAME : SERVICE_NAME,
+    serviceName: SHELL_SERVICE_NAME[input.shell ?? "reliant"],
     frontend: input.desktop ? DESKTOP_FRONTEND : WEB_FRONTEND,
     serviceVersion: input.appVersion || input.buildVersion,
     environment: input.prerelease ? "prerelease" : "prod",
@@ -177,7 +200,9 @@ export function buildTelemetryConfig(
     appClient: input.desktop ? "electron" : "web",
     consoleCapture: false,
     advancedNetworkCapture: false,
-    replay: config.OTEL_REPLAY === "true",
+    // The demo records replays by its own switch (DEMO_TELEMETRY, owner
+    // default on); the runtime masks all text and inputs whenever replay runs.
+    replay: demo ? input.demoTelemetry === "replay" : config.OTEL_REPLAY === "true",
     replaySampleRate: input.replayRate,
   };
 }
@@ -246,6 +271,9 @@ export function initTelemetry(): Promise<boolean> {
   if (started) return started;
   if (isDev || !clickstackEnabled()) return Promise.resolve(false);
   if (!privacyConsent().crashReportingEnabled) return Promise.resolve(false);
+  // The demo's anonymous visitors: nothing at all when it is switched off or
+  // the browser sent Do Not Track / Global Privacy Control (demoTelemetry.ts).
+  if (getShell() === "demo" && demoTelemetry() === "off") return Promise.resolve(false);
 
   const attempt: Promise<boolean> = start()
     .catch((err) => {
@@ -277,6 +305,7 @@ async function start(): Promise<boolean> {
   if (!privacyConsent().crashReportingEnabled) return false;
 
   const buildVersion = appBuild()?.version ?? "unknown";
+  const shell = getShell();
   const config = buildTelemetryConfig({
     config: runtime,
     // BUILD-TIME ON PURPOSE, the one VITE_ read left: forge stamps its
@@ -288,15 +317,20 @@ async function start(): Promise<boolean> {
     prerelease,
     buildVersion,
     desktop,
-    shell: getShell(),
-    replayRate: replaySampleRate({
-      prerelease,
-      policy: runtime.OTEL_REPLAY_SAMPLE_POLICY,
-      rateOverride: runtime.OTEL_REPLAY_SAMPLE_RATE,
-      now: Date.now(),
-      local: safeStorage("localStorage"),
-      session: safeStorage("sessionStorage"),
-    }),
+    shell,
+    demoTelemetry: shell === "demo" ? demoTelemetry() : undefined,
+    // The demo records every visit (a numeric override still wins); its
+    // visitors have no sessions to count toward the new-user policy.
+    replayRate: shell === "demo"
+      ? demoReplayRate(runtime.OTEL_REPLAY_SAMPLE_RATE)
+      : replaySampleRate({
+          prerelease,
+          policy: runtime.OTEL_REPLAY_SAMPLE_POLICY,
+          rateOverride: runtime.OTEL_REPLAY_SAMPLE_RATE,
+          now: Date.now(),
+          local: safeStorage("localStorage"),
+          session: safeStorage("sessionStorage"),
+        }),
     extraApiOrigins: [
       window.RELIANT_CONFIG?.grpcUrl,
       window.RELIANT_CONFIG?.controlPlaneURL,

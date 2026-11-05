@@ -36,6 +36,7 @@ vi.mock("@tanstack/react-virtual", async () => (await import("../../Observabilit
 
 import { tourEvents } from "@/components/Onboarding/tourEvents";
 import { setTransport } from "@/lib/connect";
+import { resetShellForTests } from "@/lib/shell";
 
 import { FIXTURE_TRACE_ID } from "../../Observability/__fixtures__/fixtureApi";
 import { createForgeDemoRoute } from "../demoRoute";
@@ -194,4 +195,42 @@ describe("the forge demo console", () => {
     offCopied();
     expectNothingTouched();
   }, 60_000);
+
+  it("turns every write off, visibly: triage, assignee, comments and alerting", async () => {
+    renderDemo("/forge/demo?view=errors&issue=iss-orders-deadline");
+    expect(await screen.findByTestId("obs-issue-header", {}, { timeout: 15_000 })).toBeInTheDocument();
+    const resolve = await screen.findByTestId("obs-issue-resolve");
+    expect(resolve).toBeDisabled();
+    expect(resolve).toHaveAttribute("title", "Read-only demo");
+    expect(screen.getByTestId("obs-issue-ignore")).toBeDisabled();
+    expect(await screen.findByTestId("obs-issue-assignee-pick")).toBeDisabled();
+    const box = await screen.findByTestId("obs-comment-box");
+    expect(box).toHaveAttribute("readonly");
+    expect(box).toHaveAttribute("placeholder", "Comments are off in the demo.");
+    expect(screen.getByTestId("obs-comment-submit")).toBeDisabled();
+
+    renderDemo("/forge/demo?view=alerts");
+    expect(await screen.findByTestId("obs-alerts-read-only")).toHaveTextContent("This is a demo");
+    expectNothingTouched();
+  }, 30_000);
+
+  describe("on the demo host", () => {
+    beforeEach(() => resetShellForTests("demo"));
+    afterEach(() => resetShellForTests());
+
+    it("offers Install forge and Sign up instead of Leave the demo, and says what it records", async () => {
+      const user = userEvent.setup();
+      renderDemo("/forge/demo?view=overview");
+      const banner = await screen.findByTestId("forge-demo-banner", {}, { timeout: 15_000 });
+      expect(banner).toHaveTextContent("Nothing you click here changes anything.");
+      expect(within(banner).queryByTestId("forge-demo-exit")).toBeNull();
+      expect(within(banner).getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("/auth?utm_source=demo&utm_medium=banner"));
+      expect(within(banner).getByTestId("forge-demo-telemetry-notice")).toHaveTextContent("This demo records usage and session replays to improve the product.");
+      await user.click(within(banner).getByTestId("demo-cta-install"));
+      const sheet = await screen.findByTestId("demo-install-sheet");
+      expect(sheet).toHaveTextContent("brew install reliant-labs/reliant/forge");
+      expect(sheet).toHaveTextContent("forge start");
+      expectNothingTouched();
+    }, 30_000);
+  });
 });
