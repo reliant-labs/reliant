@@ -46,8 +46,10 @@ How reliant pins forge (commit pseudo-versions of forge `main`, both forge modul
 at one commit, `GOWORK=off` builds) is in `dev-docs/pinning.md`. The steps below
 assume it.
 
-1. **Pick the target: forge's newest `main`.** Read it from the remote, not from a
-   local `../forge`, which is often on another agent's branch:
+1. **Pick the target: by default, forge's newest `main`.** Read it from the
+   remote, not from a local `../forge`, which is often on another agent's branch,
+   and resolve it to a commit **once**: `main` moves, so every later step uses
+   this `$sha`/`$v`, never `main` again.
 
    ```sh
    export GOPRIVATE='github.com/reliant-labs/*'
@@ -55,6 +57,13 @@ assume it.
    v=$(GOWORK=off go list -m -f '{{.Version}}' "github.com/reliant-labs/forge@$sha")
    F="env GOFLAGS=-trimpath FORGE_NO_HOOKS=1 go run github.com/reliant-labs/forge/cmd/forge@$v"
    ```
+
+   The one exception is a reliant change that needs a forge fix not yet on
+   `main`: set `sha` to that forge PR's head instead and follow
+   `dev-docs/pinning.md` ("To land a change that needs an unmerged forge
+   commit"): merge forge, then re-pin to forge's `main` before this PR merges
+   (`task pin:ancestry` stays red until you do). "Newest" rules out picking an
+   older forge, not pinning a fix ahead of its merge.
 
 2. **See what the range needs** before writing anything:
 
@@ -98,8 +107,8 @@ assume it.
 
 8. **Open the pin PR.** Title it `chore(pin): forge@<short sha> (<what it brings>)`.
    In the body, give from → to, the playbooks applied and what needed a person.
-   Add this bump's row to the log below in the same PR. Label it `merge:queue`
-   and stop: the pipeline reviews and gates it.
+   Add this bump's row to the log below in the same PR. Open it non-draft, add
+   no queue label, and stop: the pipeline reviews and gates it.
 
 9. **Bump control-plane in lockstep when it needs it.** control-plane's forge must
    equal the forge of the reliant commit it pins: `check-forge-coherence.sh` fails
