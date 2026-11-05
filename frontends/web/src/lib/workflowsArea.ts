@@ -23,6 +23,11 @@ export const WORKFLOWS_AREA_PATH = "/workflows";
 /** The Workflows tab's list; a workflow's page is `${this}/<ref>`. */
 export const WORKFLOWS_LIBRARY_PATH = "/workflows/library";
 export const WORKFLOWS_RUNS_PATH = "/workflows/runs";
+/**
+ * A path PREFIX, never a link: every workflow page starts with it, the area
+ * (`/workflows/...`) and the builder (`/workflow/$workflowName`, `/workflow/new`) alike.
+ */
+export const WORKFLOW_PAGES_PREFIX = "/workflow";
 /** Retired: the Automations tab. A redirect only. */
 const RETIRED_AUTOMATIONS_PATH = "/workflows/automations";
 

@@ -27,6 +27,9 @@ import { toast } from "sonner";
 import { useProjectStore } from "../../store/projectStore";
 import { trackEvent } from "../../lib/analytics";
 import { hasErrorReason } from "../../lib/errorReasons";
+import { sourceCase, type DeclaredTrigger } from "../../lib/declaredTriggers";
+import { tourEvents } from "../Onboarding/tourEvents";
+import { isWorkflowsTour } from "../Onboarding/journeys/workflowsTour";
 
 interface WorkflowBuilderPageProps {
   selectedWorkflow?: Workflow | null;
@@ -74,7 +77,7 @@ export function WorkflowBuilderPage({
   onNavigateToSettings,
 }: WorkflowBuilderPageProps) {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const [editingWorkflow, setEditingWorkflow] = useState<Workflow | undefined>(
     selectedWorkflow || undefined,
   );
@@ -343,6 +346,10 @@ export function WorkflowBuilderPage({
       if (!draftId) {
         trackEvent("workflow_created");
       }
+      tourEvents.emit("workflow:saved", {
+        slug: response.slug || workflow.name,
+        triggerSources: ((workflow.triggers ?? []) as DeclaredTrigger[]).flatMap((t) => sourceCase(t) ?? []),
+      });
 
       // Note: No toasts here - WorkflowBuilder handles toasts for explicit button clicks
       // Auto-save uses the SaveStatusIndicator instead
@@ -542,6 +549,7 @@ export function WorkflowBuilderPage({
         <NewWorkflowDialog
           open
           projectId={projectId}
+          guided={isWorkflowsTour((search as { tour?: unknown }).tour)}
           onClose={() => navigate({ to: "/workflows/library", replace: true })}
           onCreated={(created) => {
             trackEvent("workflow_created");

@@ -19,12 +19,15 @@
 import { useReactFlow, useStoreApi, type Edge, type Node, type XYPosition } from "@xyflow/react";
 import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 
+import { tourEvents } from "../../Onboarding/tourEvents";
 import { toolCallsDefaultForEdge } from "../executeToolsDefaults";
 import {
   connectionProblem,
   defaultSourceHandle,
+  describeInsert,
   planInsert,
   resolveAnchor,
+  stepTypeOfNode,
   type InsertAnchor,
 } from "./insertPlacement";
 
@@ -128,6 +131,11 @@ export function useCanvasInsertion(options: UseCanvasInsertionOptions): CanvasIn
       setNodes(plan.nodes.map((n) => (n.id === inserted.id ? inserted : n.selected ? { ...n, selected: false } : n)));
       setEdges(plan.edges);
       reveal(inserted);
+      tourEvents.emit("workflow:nodeAdded", {
+        nodeId: inserted.id,
+        type: stepTypeOfNode(inserted),
+        ...describeInsert(anchor, pending, { nodes, edges, selectedNodeId }),
+      });
       return inserted;
     };
 
