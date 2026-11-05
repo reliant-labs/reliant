@@ -86,7 +86,7 @@ function TourCommand({ command }: { command: string }) {
 
 function ExternalLink({ href, children, onClick }: { href: string; children: React.ReactNode; onClick?: () => void }) {
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" onClick={onClick} className="font-medium text-primary underline-offset-2 hover:underline">
+    <a href={href} target="_blank" rel="noopener noreferrer" onClick={onClick} className="font-medium text-primary-ink underline-offset-2 hover:underline">
       {children}
     </a>
   );
