@@ -108,7 +108,8 @@ echo -e "${YELLOW}Current version: $CURRENT_VERSION${NC}"
 
 # The computed version: origin's tags, origin/main's PR titles.
 git fetch origin main --tags --quiet
-SINCE_RC=$(git tag -l 'rc/v*' --sort=-v:refname | head -1)
+# for-each-ref, not a tag command: this script must never touch tags (TestReleaseScriptDoesNotTag).
+SINCE_RC=$(git for-each-ref --sort=-v:refname --count=1 --format='%(refname:lstrip=2)' 'refs/tags/rc/v*')
 COMPUTE_ERR=$(mktemp)
 COMPUTED=$(bash scripts/semver-next.sh --head origin/main ${SINCE_RC:+--breaking-since "refs/tags/$SINCE_RC"} 2>"$COMPUTE_ERR") || COMPUTED=""
 # A release candidate is a published release too: the refusal applies to it alike.
