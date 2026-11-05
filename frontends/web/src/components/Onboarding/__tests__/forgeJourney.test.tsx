@@ -1,6 +1,7 @@
 /**
  * The forge journey's content (journeys/forge.tsx, journeys-spec.md §3): its
- * nine steps, each step's required action against the URL or signal the spec
+ * nine steps in Reliant and the forge shell, the demo host's own cut of ten
+ * (DEMO_TOUR=short) or thirteen (full), each step's required action against the URL or signal the spec
  * names (watchAdvance, against a fake router), where Skip lands, and the copy
  * that differs in the forge shell.
  */
@@ -8,8 +9,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { conditionsOf, watchAdvance, type AdvanceEnv } from "../advanceOn";
-import { DEMO_ISSUE_ID, DEMO_TRACE_ID, forgeJourney } from "../journeys/forge";
-import { presentStep } from "../journeys/registry";
+import { setRuntimeConfig } from "@/test/runtimeConfig";
+import { resetShellForTests } from "@/lib/shell";
+
+import { DEMO_INSIDE_SPAN_IDS, DEMO_INVENTORY_SPAN_ID, DEMO_ISSUE_ID, DEMO_TRACE_ID, forgeJourney } from "../journeys/forge";
+import { activeJourneySteps, presentStep } from "../journeys/registry";
 import { tourEvents } from "../tourEvents";
 import { setTourShell } from "../tourShell";
 import type { JourneyStep, RouteTarget } from "../types";
@@ -57,28 +61,64 @@ const openSearch = (id: string) => (step(id).route?.open as RouteTarget).search 
 
 afterEach(() => {
   setTourShell(null);
+  resetShellForTests();
+  setRuntimeConfig({});
 });
 
+const NINE = ["fg-console", "fg-instrumented", "fg-trace", "fg-logs", "fg-profile", "fg-issue", "fg-oncall", "fg-ask", "fg-done"];
+const active = () => activeJourneySteps("forge").map((s) => s.id);
+
 describe("the forge journey", () => {
-  it("is the spec's nine steps, at a new version", () => {
+  it("is the spec's nine steps in Reliant and the forge shell, unchanged (so the version stays)", () => {
     expect(forgeJourney.version).toBe(2);
-    expect(forgeJourney.steps.map((s) => s.id)).toEqual([
-      "fg-console",
-      "fg-instrumented",
-      "fg-trace",
-      "fg-logs",
-      "fg-profile",
-      "fg-issue",
-      "fg-oncall",
-      "fg-ask",
-      "fg-done",
-    ]);
+    resetShellForTests("reliant");
+    expect(active()).toEqual(NINE);
+    resetShellForTests("forge");
+    expect(active()).toEqual(NINE);
     // It runs in both shells: the demo reads nothing of the user's.
     expect(forgeJourney.shells).toBeUndefined();
   });
 
-  it("lives on the demo console, every step but the end card", () => {
-    for (const s of forgeJourney.steps.slice(0, -1)) {
+  it("is ten steps or fewer on the demo host: no profile or on-call; across and inside services, and what an agent reads", () => {
+    resetShellForTests("demo");
+    expect(active()).toEqual([
+      "fg-console",
+      "fg-instrumented",
+      "fg-trace",
+      "fg-hops",
+      "fg-inside",
+      "fg-logs",
+      "fg-issue",
+      "fg-agent",
+      "fg-ask",
+      "fg-done",
+    ]);
+    expect(active().length).toBeLessThanOrEqual(10);
+  });
+
+  it("is every step on the demo host with DEMO_TOUR=full, the graph included", () => {
+    resetShellForTests("demo");
+    setRuntimeConfig({ DEMO_TOUR: "full" });
+    expect(active()).toEqual(forgeJourney.steps.map((s) => s.id));
+    expect(active()).toEqual([
+      "fg-console",
+      "fg-instrumented",
+      "fg-trace",
+      "fg-hops",
+      "fg-inside",
+      "fg-logs",
+      "fg-profile",
+      "fg-graph",
+      "fg-issue",
+      "fg-oncall",
+      "fg-agent",
+      "fg-ask",
+      "fg-done",
+    ]);
+  });
+
+  it("lives on the demo console, every step but the cards", () => {
+    for (const s of forgeJourney.steps.filter((candidate) => !["fg-done", "fg-agent"].includes(candidate.id))) {
       expect(s.route?.path, s.id).toBe("/forge/demo");
       expect((s.route?.open as RouteTarget).to, s.id).toBe("/forge/demo");
     }
@@ -91,8 +131,13 @@ describe("the forge journey", () => {
     expect(forgeJourney.finish?.("forge")).toEqual({ to: "/apps" });
   });
 
+  it("stays on the console when it finishes on the demo host: there is nowhere to go", () => {
+    resetShellForTests("demo");
+    expect(forgeJourney.finish?.("forge")).toBeNull();
+  });
+
   it("asks only for Next on the explaining steps", () => {
-    for (const id of ["fg-console", "fg-instrumented", "fg-oncall", "fg-done"]) expect(conditionsOf(step(id)), id).toEqual([]);
+    for (const id of ["fg-console", "fg-instrumented", "fg-inside", "fg-graph", "fg-oncall", "fg-agent", "fg-done"]) expect(conditionsOf(step(id)), id).toEqual([]);
   });
 
   describe("required actions", () => {
@@ -104,6 +149,23 @@ describe("the forge journey", () => {
       go({ view: "traces", trace: DEMO_TRACE_ID });
       expect(onFire).toHaveBeenCalledTimes(1);
       expect(step("fg-trace").autoAdvance).toBeFalsy();
+      watcher.dispose();
+    });
+
+    it("fg-hops: inventory's server span selected (?span=e1), on the toured trace", () => {
+      expect(openSearch("fg-hops")).toMatchObject({ view: "traces", trace: DEMO_TRACE_ID });
+      const { onFire, go, watcher } = watchStep("fg-hops", openSearch("fg-hops"));
+      expect(watcher.initiallySatisfied).toBe(false);
+      go({ view: "traces", trace: DEMO_TRACE_ID, span: "a1" });
+      expect(onFire).not.toHaveBeenCalled();
+      go({ view: "traces", trace: DEMO_TRACE_ID, span: DEMO_INVENTORY_SPAN_ID });
+      expect(onFire).toHaveBeenCalledTimes(1);
+      // No auto-advance: the second phase is there to be read.
+      expect(step("fg-hops").autoAdvance).toBeFalsy();
+      expect(step("fg-hops").phases?.map((p) => p.target)).toEqual([
+        `[data-testid='trace-span-row'][data-span-id='${DEMO_INVENTORY_SPAN_ID}']`,
+        "[data-testid='span-details']",
+      ]);
       watcher.dispose();
     });
 
@@ -168,6 +230,11 @@ describe("the forge journey", () => {
     expect(step("fg-console").target).toBe("[data-tour='forge-console'] #sidebar-layout-nav");
     expect(step("fg-trace").phases?.[0].target).toBe(`[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`);
     expect(step("fg-ask").phases?.map((p) => p.target)).toEqual(["[data-testid='ask-reliant-actions']", "[data-testid='ask-agent-sheet']"]);
+    expect(step("fg-inside").targets?.map((t) => t.selector)).toEqual(
+      Object.values(DEMO_INSIDE_SPAN_IDS).map((id) => `[data-testid='trace-span-row'][data-span-id='${id}']`),
+    );
+    expect(step("fg-graph").target).toBe("[data-testid='graph-view']");
+    expect(openSearch("fg-graph")).toMatchObject({ view: "graph", trace: undefined });
   });
 
   describe("per shell", () => {
@@ -181,6 +248,19 @@ describe("the forge journey", () => {
       expect(screen.getByText("forge obs status prod")).toBeInTheDocument();
       expect(screen.getByText("forge obs traces prod --errors")).toBeInTheDocument();
       expect(screen.queryByText(/reliant forge/)).toBeNull();
+    });
+
+    it("tells the agent story with the shell's CLI, and offers Install and Sign up on the demo's end card", () => {
+      setTourShell("forge");
+      const agent = render(<>{presentStep(step("fg-agent")).description}</>);
+      expect(screen.getByText(`forge obs trace ${DEMO_TRACE_ID} prod`)).toBeInTheDocument();
+      expect(screen.getByText("claude mcp add forge -- forge mcp")).toBeInTheDocument();
+      agent.unmount();
+      resetShellForTests("demo");
+      render(<>{presentStep(step("fg-done")).description}</>);
+      expect(screen.getByText("forge scaffold service inventory")).toBeInTheDocument();
+      expect(screen.getByTestId("demo-cta-end_card")).toBeInTheDocument();
+      expect(screen.getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("utm_medium=end_card"));
     });
 
     it("says Autopilot runs in Reliant, in the forge shell", () => {

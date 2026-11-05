@@ -227,9 +227,12 @@ describe("the forge journey's end card in the forge shell", () => {
     renderShell("/forge/demo?tour=forge:fg-done", JourneyTour);
     fireEvent.click(await screen.findByRole("button", { name: "Try AI workflows in Reliant" }));
     expect(open).toHaveBeenCalledWith("https://app.staging.test/?journey=workflows", "_blank", "noopener");
-    // The forge shell's CLI is `forge`.
-    expect(screen.getByTestId("tour-commands")).toHaveTextContent("forge obs status prod");
-    expect(screen.getByTestId("tour-commands")).not.toHaveTextContent("reliant forge");
+    // The forge shell's CLI is `forge`, in both of the end card's command lists.
+    const lists = screen.getAllByTestId("tour-commands");
+    expect(lists).toHaveLength(2);
+    expect(lists[0]).toHaveTextContent("forge scaffold service inventory");
+    expect(lists[1]).toHaveTextContent("forge obs status prod");
+    for (const list of lists) expect(list).not.toHaveTextContent("reliant forge");
     open.mockRestore();
   });
 });

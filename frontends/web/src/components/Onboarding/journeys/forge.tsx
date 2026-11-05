@@ -7,6 +7,13 @@
  * logs, its CPU profile, the grouped error), then how an agent gets the
  * problem: an alert starting Autopilot on-call, and the Ask-an-agent handoff.
  *
+ * The public demo host (demo.reliantlabs.io, lib/shell.ts `demo`) starts it on
+ * every visit, so it runs a SHORTER, different cut there (DEMO_TOUR, default
+ * `short`, at most ten steps): no profile or on-call step, and instead the
+ * instrumentation forge writes between services (fg-hops) and inside one
+ * (fg-inside), and what a coding agent reads (fg-agent). DEMO_TOUR=full adds
+ * the service graph (fg-graph) and puts the left-out steps back.
+ *
  * It runs unchanged in both shells. Nothing here needs a daemon, a chat or a
  * signed-in user: every step's target is fixture data, every required action
  * is a URL change or a tour signal, and copy that differs (the CLI's name,
@@ -21,6 +28,8 @@ import { FORGE_DEMO_PATH } from "../../Forge/Demo/demoPath";
 import { trackEvent } from "../../../lib/analytics";
 import { isForgeUIEnabled } from "../../../lib/forgeFeature";
 import { isDemoShell } from "../../../lib/shell";
+import { notOnShortDemo, onDemo, onDemoFull } from "../../../lib/demoTour";
+import { DemoCta } from "../../Forge/Demo/DemoCta";
 import type { Journey, JourneyRoute, RouteTarget } from "../types";
 import { TourCommands } from "./TourCommand";
 
@@ -28,6 +37,10 @@ import { TourCommands } from "./TourCommand";
 export const DEMO_TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
 /** The issue that trace belongs to: new in v1.8.3, its latest event is that trace. */
 export const DEMO_ISSUE_ID = "iss-orders-deadline";
+/** In that trace: inventory's server span, the hop the worker made over Connect (fg-hops). */
+export const DEMO_INVENTORY_SPAN_ID = "e1";
+/** In that trace: the api's CreateOrder method span, one SELECT, and the worker's consumer span (fg-inside). */
+export const DEMO_INSIDE_SPAN_IDS = { method: "a2", query: "b1", worker: "d1" } as const;
 
 const AUTOPILOT_PATH = "/workflows/library/builtin%3A%2F%2Fautopilot-oncall";
 const RELIANT_APP_URL = "https://app.reliantlabs.io";
@@ -54,14 +67,48 @@ const ONCALL_LEAD =
   "Alerts, and new or regressed issues, can start an agent. The Autopilot on-call workflow listens for them.";
 
 const tryCommands = (cli: string) => [`${cli} obs status prod`, `${cli} obs issues prod`, `${cli} obs traces prod --errors`];
+const scaffoldCommands = (cli: string) => [`${cli} scaffold service inventory`, `${cli} scaffold worker fulfilment`, `${cli} lint --tracing`];
 
 function TryOnYourApp({ cli }: { cli: string }) {
   return (
     <>
-      <p>In a forge project, these show what&apos;s wrong right now, the grouped errors, and one trace. Use your own environment name.</p>
+      <p>Everything in this tour came from code forge writes. In your own project:</p>
+      <TourCommands commands={scaffoldCommands(cli)} />
+      <p className="mt-3">
+        A new service comes with its traced handlers and method wrapper, and a worker&apos;s every run is a trace of its own. The lint
+        finds where a trace would break. Then, on a deployed environment (use your own name):
+      </p>
       <TourCommands commands={tryCommands(cli)} />
       <p className="mt-3">
         New to forge? <ExternalLink href={QUICK_START_URL}>Quick start</ExternalLink>
+      </p>
+      {/* The public demo's way out: install it, or make an account. */}
+      {isDemoShell() && (
+        <div className="mt-3">
+          <DemoCta placement="end_card" />
+        </div>
+      )}
+    </>
+  );
+}
+
+const agentCommands = (cli: string) => [`${cli} obs status prod`, `${cli} obs trace ${DEMO_TRACE_ID} prod`, `${cli} obs traces prod --errors --json`];
+const agentSetup = (cli: string) => [`${cli} skill load observability/query`, `claude mcp add forge -- ${cli} mcp`];
+
+function WhatYourAgentReads({ cli }: { cli: string }) {
+  return (
+    <>
+      <p>
+        Your coding agent reads the same data from a terminal. Each <code>forge obs</code> command prints text sized for a model&apos;s
+        context. With <code>--json</code> it prints a stable document with the next commands to run, and exit codes a script can branch
+        on. <code>obs trace</code> collapses repeated spans, marks the slowest path, and points out time no span accounts for.
+      </p>
+      <TourCommands commands={agentCommands(cli)} />
+      <p className="mt-3">Give it forge&apos;s playbook and tools once:</p>
+      <TourCommands commands={agentSetup(cli)} />
+      <p className="mt-2 text-xs text-muted-foreground">
+        The MCP server gives an agent forge&apos;s skills, lint and code generation; it runs <code>forge obs</code> in its own shell. The
+        trace id is the sample&apos;s.
       </p>
     </>
   );
@@ -94,7 +141,7 @@ export const forgeJourney: Journey = {
       id: "fg-instrumented",
       title: "Instrumented from the start",
       description:
-        "Nobody added tracing to this app by hand. forge's generated handlers and its observe package send a span for every RPC, database query and queue message, and put the trace id on every log line. Services also push a CPU profile about once a minute. The rate, errors and latency here come from those spans.",
+        "Nobody added tracing to this app by hand. forge writes the code at every boundary it owns: the Connect handlers and clients, a wrapper around each service package, and the database driver. It also ships helpers that carry a trace across NATS and Temporal. Each of these opens a span and passes the trace on, and every log line gets the trace id. Services also push a CPU profile about once a minute. The rate, errors and latency here come from those spans.",
       target: "[data-testid='obs-overview']",
       route: demo({ view: "overview", ...CLOSED }),
     },
@@ -109,7 +156,7 @@ export const forgeJourney: Journey = {
           when: { kind: "element", selector: "[data-testid='trace-waterfall']" },
           target: "[data-testid='trace-waterfall']",
           description:
-            "Each bar is a span. The call to the payment provider timed out once, was retried, and failed, which is most of the 182 ms. The order event then went over a queue to the worker, and that work is part of the same trace.",
+            "Each bar is a span. The call to the payment provider timed out once, was retried, and failed, which is most of the 182 ms. The order event then went over a queue to the worker, which called the inventory service. All of that is one trace.",
         },
       ],
       advanceOn: { kind: "when", test: ({ location }) => location.search.trace === DEMO_TRACE_ID },
@@ -117,10 +164,53 @@ export const forgeJourney: Journey = {
       signal: "trace_opened",
     },
     {
+      id: "fg-hops",
+      title: "Across services",
+      description: "This request crossed three services. Click Reserve on inventory, near the bottom.",
+      // The demo host only: the instrumentation forge writes BETWEEN services.
+      isAvailable: onDemo,
+      route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
+      phases: [
+        { target: `[data-testid='trace-span-row'][data-span-id='${DEMO_INVENTORY_SPAN_ID}']` },
+        {
+          when: { kind: "element", selector: "[data-testid='span-details']" },
+          target: "[data-testid='span-details']",
+          description:
+            "The worker called inventory over Connect. forge's client added the trace context to the request headers, and inventory's server picked it up, so inventory's spans joined this trace with no tracing code in either service. The hop from the api to the worker went over NATS: forge's NATS helpers put the trace context in the message headers, and the worker carried on from it.",
+        },
+      ],
+      advanceOn: { kind: "when", test: ({ location }) => location.search.span === DEMO_INVENTORY_SPAN_ID },
+      actionHint: "Click Reserve on inventory",
+      signal: "service_hop_opened",
+    },
+    {
+      id: "fg-inside",
+      title: "Inside a service",
+      description: (
+        <>
+          <p>
+            Inside the api, the RPC span holds a span for the CreateOrder method, one for each query, and one for the payment call. Each
+            layer is a span because forge owns that boundary, not because someone remembered to add one.
+          </p>
+          <p className="mt-2">
+            <code>forge lint --tracing</code> points out the places a trace would break, such as a log call without its context.
+          </p>
+        </>
+      ),
+      // The demo host only: the instrumentation forge writes WITHIN a service.
+      isAvailable: onDemo,
+      route: demo({ view: "traces", trace: DEMO_TRACE_ID, issue: undefined }),
+      targets: [
+        { selector: `[data-testid='trace-span-row'][data-span-id='${DEMO_INSIDE_SPAN_IDS.method}']`, label: "A method", description: "forge wraps every service package, so each method call is a span." },
+        { selector: `[data-testid='trace-span-row'][data-span-id='${DEMO_INSIDE_SPAN_IDS.query}']`, label: "A query", description: "The database driver makes a span for each statement, with the values replaced by ?." },
+        { selector: `[data-testid='trace-span-row'][data-span-id='${DEMO_INSIDE_SPAN_IDS.worker}']`, label: "A worker", description: "Each message the worker handles continues the trace that sent it." },
+      ],
+    },
+    {
       id: "fg-logs",
       title: "What that request logged",
       description:
-        "Click Logs for this trace. Every log line carries its trace id, so you get exactly what this request logged across both services, without writing a search.",
+        "Click Logs for this trace. Every log line carries its trace id, so you get exactly what this request logged across every service, without writing a search.",
       target: "[data-testid='trace-logs']",
       route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
       phases: [
@@ -129,7 +219,7 @@ export const forgeJourney: Journey = {
           when: { kind: "element", selector: "[data-testid='obs-logs-trace-scope']" },
           target: "[data-testid='obs-logs-trace-scope']",
           description:
-            "Four lines from two services: the order started, the first charge failed and was retried, the retry hit its deadline, and the worker still processed the order event.",
+            "Five lines from three services: the order started, the first charge failed and was retried, the retry hit its deadline, the worker processed the order event, and inventory reserved the items.",
         },
       ],
       advanceOn: {
@@ -154,6 +244,18 @@ export const forgeJourney: Journey = {
       advanceOn: { kind: "when", test: ({ location }) => location.search.view === "profiles" },
       actionHint: "Click Flamegraph",
       signal: "flamegraph_opened",
+      // The demo host's short tour leaves it out (DEMO_TOUR).
+      isAvailable: notOnShortDemo,
+    },
+    {
+      id: "fg-graph",
+      title: "Who calls whom",
+      description:
+        "Because every hop carries the trace, forge can draw the app from its spans. The browser calls the api; the api uses the database, the payment provider and a queue; the worker calls inventory. Nobody drew this map. Point at a line to see its requests and errors.",
+      // The demo host's full tour only (DEMO_TOUR=full).
+      isAvailable: onDemoFull,
+      target: "[data-testid='graph-view']",
+      route: demo({ view: "graph", ...CLOSED }),
     },
     {
       id: "fg-issue",
@@ -211,6 +313,16 @@ export const forgeJourney: Journey = {
       },
       target: "[data-testid='obs-alerts-firing']",
       route: demo({ view: "alerts", ...CLOSED }),
+      // The demo host's short tour leaves it out (DEMO_TOUR).
+      isAvailable: notOnShortDemo,
+    },
+    {
+      id: "fg-agent",
+      title: "What your agent reads",
+      description: <WhatYourAgentReads cli="reliant forge" />,
+      copyByShell: { forge: { description: <WhatYourAgentReads cli="forge" /> } },
+      // The demo host only: how forge helps the model.
+      isAvailable: onDemo,
     },
     {
       id: "fg-ask",
