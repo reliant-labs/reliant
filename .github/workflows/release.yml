@@ -238,7 +238,6 @@ jobs:
       # A release is the LAST place to skip the check, so it runs the same
       # gate the hosted frontend does.
       - name: Build React frontend
-        working-directory: frontends/web
         # NODE_ENV=production is scoped to this command, NOT the step, and NOT
         # the job. Vite honours NODE_ENV even under `vite build`, so a leaked
         # `development` folds `import.meta.env.DEV` to TRUE inside a production
@@ -264,6 +263,7 @@ jobs:
         # renderer would embed a dev identity and ship it inside the release.
         env:
           RELEASE_VERSION: ${{ startsWith(steps.version.outputs.version, 'v') && steps.version.outputs.version || '' }}
+        working-directory: frontends/web
         run: NODE_ENV=production npm run build
 
       # A release's renderer reports exactly the release (version.json); for a
