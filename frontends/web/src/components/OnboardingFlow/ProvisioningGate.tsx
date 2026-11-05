@@ -29,6 +29,18 @@ function currentUrl(): string | undefined {
   return isSafeReturnTo(here) ? here : undefined;
 }
 
+/** A stable, distinct key per commit result: each retry is a new attempt. */
+const attemptKeys = new WeakMap<CommitResult, number>();
+let nextAttemptKey = 0;
+function commitAttemptKey(commit: CommitResult): number {
+  let key = attemptKeys.get(commit);
+  if (key === undefined) {
+    key = nextAttemptKey++;
+    attemptKeys.set(commit, key);
+  }
+  return key;
+}
+
 const TASK_LABELS: Record<CommitTask["name"], string> = {
   grant_ai_access: "AI access",
   provision_daemon: "Your machine",
@@ -132,8 +144,18 @@ export function ProvisioningGate({
           },
     [hosted, rawCommit],
   );
-  const [machinePhase, setMachinePhase] =
-    useState<DaemonConnectingPhase>("connecting");
+  // The machine's phase belongs to ONE commit. A retry hands this gate a new
+  // commit result, and the old attempt's `failed` (often its five-minute
+  // timeout) must not carry over to it — so the phase is recorded against the
+  // commit it was observed for, and reads `connecting` for any other.
+  const [observed, setObserved] = useState<{
+    commit: CommitResult;
+    phase: DaemonConnectingPhase;
+  } | null>(null);
+  const machinePhase: DaemonConnectingPhase =
+    observed?.commit === commit ? observed.phase : "connecting";
+  // Disables the re-provision button between the click and the new commit.
+  const [retryingFor, setRetryingFor] = useState<CommitResult | null>(null);
   // Hides the modal once the user has linked and the re-run is in flight; a
   // new commit result replaces `commit`, so this resets with the next ask.
   const [linkedFor, setLinkedFor] = useState<CommitResult | null>(null);
@@ -208,11 +230,35 @@ export function ProvisioningGate({
           gate that already knows how to narrate that wait, including the
           three-minute clone and the wedged image pull. */}
       {waitingOnMachine ? (
-        <DaemonConnectingGate
-          daemonRef={commit.daemonId}
-          onContinue={onContinue}
-          onPhaseChange={setMachinePhase}
-        />
+        <div className="space-y-2">
+          {/* Keyed on the commit: a re-provisioned machine is a new attempt,
+              with its own elapsed clock and its own five-minute budget. */}
+          <DaemonConnectingGate
+            key={commitAttemptKey(commit)}
+            daemonRef={commit.daemonId}
+            onContinue={onContinue}
+            onPhaseChange={(phase) => setObserved({ commit, phase })}
+          />
+          {/* The daemon gate's own Retry only re-reads the machine's status.
+              A machine that failed to start, or never came up, needs the
+              commit run again — an explicit click, never automatic, because
+              it re-issues CreateDaemon. */}
+          {machinePhase === "failed" && onRetry ? (
+            <button
+              type="button"
+              disabled={retryingFor === commit}
+              onClick={() => {
+                setRetryingFor(commit);
+                onRetry();
+              }}
+              className="w-full rounded-lg border border-border/40 bg-background py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+            >
+              {retryingFor === commit
+                ? "Starting your machine again…"
+                : "Start your machine again"}
+            </button>
+          ) : null}
+        </div>
       ) : (
         <div className="space-y-2">
           {/* Continue is enabled on PARTIAL as well as COMPLETE. They paid and

@@ -132,6 +132,73 @@ describe("ProvisioningGate — a requested machine is not a running machine", ()
   });
 });
 
+describe("ProvisioningGate — a machine that failed to start can be started again", () => {
+  const startAgain = () => screen.queryByRole("button", { name: /Start your machine again/i });
+
+  it("offers no re-provision while the machine is still starting", async () => {
+    mockListDaemons.mockResolvedValue({ daemons: [daemon(DaemonStatus.PENDING)] });
+    render(
+      <ProvisioningGate commit={startingCommit()} onContinue={vi.fn()} onRetry={vi.fn()} />,
+      { wrapper },
+    );
+    await flush(50);
+    expect(startAgain()).toBeNull();
+  });
+
+  it("re-runs the commit when the machine FAILED", async () => {
+    mockListDaemons.mockResolvedValue({ daemons: [daemon(DaemonStatus.FAILED)] });
+    const onRetry = vi.fn();
+    render(
+      <ProvisioningGate commit={startingCommit()} onContinue={vi.fn()} onRetry={onRetry} />,
+      { wrapper },
+    );
+    await flush(50);
+
+    await act(async () => {
+      startAgain()!.click();
+    });
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    // One click, one re-run: the button holds until the new commit lands.
+    expect(startAgain()).toBeNull();
+    expect(screen.getByRole("button", { name: /Starting your machine again/i })).toBeDisabled();
+  });
+
+  it("re-runs the commit when the machine never came up in time", async () => {
+    mockListDaemons.mockResolvedValue({ daemons: [daemon(DaemonStatus.PENDING)] });
+    const onRetry = vi.fn();
+    render(
+      <ProvisioningGate commit={startingCommit()} onContinue={vi.fn()} onRetry={onRetry} />,
+      { wrapper },
+    );
+    await flush(300_000 + 2_000);
+
+    expect(machineRow()).toHaveAttribute("data-status", "failed");
+    await act(async () => {
+      startAgain()!.click();
+    });
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats the retried commit as a fresh attempt", async () => {
+    mockListDaemons.mockResolvedValue({ daemons: [daemon(DaemonStatus.FAILED)] });
+    const { rerender } = render(
+      <ProvisioningGate commit={startingCommit()} onContinue={vi.fn()} onRetry={vi.fn()} />,
+      { wrapper },
+    );
+    await flush(50);
+    expect(machineRow()).toHaveAttribute("data-status", "failed");
+
+    mockListDaemons.mockResolvedValue({ daemons: [daemon(DaemonStatus.PENDING)] });
+    rerender(
+      <ProvisioningGate commit={startingCommit()} onContinue={vi.fn()} onRetry={vi.fn()} />,
+    );
+    await flush(50);
+
+    expect(machineRow()).toHaveAttribute("data-status", "starting");
+    expect(startAgain()).toBeNull();
+  });
+});
+
 describe("ProvisioningGate — local compute never sees cloud-provisioning copy", () => {
   it("renders no machine row and no connecting gate for a local-daemon plan", async () => {
     mockListDaemons.mockResolvedValue({ daemons: [daemon(DaemonStatus.PENDING)] });
