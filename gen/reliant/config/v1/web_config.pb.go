@@ -70,6 +70,7 @@ type ReliantWebConfig struct {
 	ControlPlaneApiUrl string `protobuf:"bytes,2,opt,name=control_plane_api_url,json=controlPlaneApiUrl,proto3" json:"control_plane_api_url,omitempty"`
 	GatewayUrl         string `protobuf:"bytes,3,opt,name=gateway_url,json=gatewayUrl,proto3" json:"gateway_url,omitempty"`
 	AppUrl             string `protobuf:"bytes,4,opt,name=app_url,json=appUrl,proto3" json:"app_url,omitempty"`
+	ForgeAppHost       string `protobuf:"bytes,23,opt,name=forge_app_host,json=forgeAppHost,proto3" json:"forge_app_host,omitempty"`
 	DisableTls         string `protobuf:"bytes,5,opt,name=disable_tls,json=disableTls,proto3" json:"disable_tls,omitempty"`
 	// ── Identity ──────────────────────────────────────────────────────────
 	AuthMode        string `protobuf:"bytes,6,opt,name=auth_mode,json=authMode,proto3" json:"auth_mode,omitempty"`
@@ -143,6 +144,13 @@ func (x *ReliantWebConfig) GetGatewayUrl() string {
 func (x *ReliantWebConfig) GetAppUrl() string {
 	if x != nil {
 		return x.AppUrl
+	}
+	return ""
+}
+
+func (x *ReliantWebConfig) GetForgeAppHost() string {
+	if x != nil {
+		return x.ForgeAppHost
 	}
 	return ""
 }
@@ -235,7 +243,7 @@ var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xa3!\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\x98$\n" +
 	"\x10ReliantWebConfig\x12\xa0\x03\n" +
 	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
 	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
@@ -247,7 +255,9 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\vGATEWAY_URL*\xbf\x01Origin of the daemon gateway (ToolsDaemonService). The browser never dials it; the onboarding renders it into the `reliant daemon start` command, which cannot derive it for a loopback server.R\n" +
 	"gatewayUrl\x12\x98\x02\n" +
 	"\aapp_url\x18\x04 \x01(\tB\xfe\x01\x82\xce\x18\xf9\x01\n" +
-	"\aAPP_URL*\xed\x01This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default.R\x06appUrl\x12\xd8\x01\n" +
+	"\aAPP_URL*\xed\x01This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default.R\x06appUrl\x12\xf2\x02\n" +
+	"\x0eforge_app_host\x18\x17 \x01(\tB\xcb\x02\x82\xce\x18\xc6\x02\n" +
+	"\x0eFORGE_APP_HOST\x1a\x14forge.reliantlabs.io*\x9d\x02Hostname that serves the forge-branded shell (ForgeShell) from this same bundle. A document loaded on this host mounts the forge console, claim, sites, usage and settings pages with forge branding; every other host mounts Reliant. Also where Reliant's \"Open Forge console\" link points.R\fforgeAppHost\x12\xd8\x01\n" +
 	"\vdisable_tls\x18\x05 \x01(\tB\xb6\x01\x82\xce\x18\xb1\x01\n" +
 	"\vDISABLE_TLS*\xa1\x01\"true\": build loopback and WebSocket URLs with http/ws instead of https/wss (a plain-http local stack). The desktop app takes this from its main process instead.R\n" +
 	"disableTls\x12\x93\x03\n" +

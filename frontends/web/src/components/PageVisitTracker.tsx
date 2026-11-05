@@ -22,7 +22,11 @@ import { routeTemplate } from "../lib/pageVisit";
 /** Visits held while consent loads; a signed-out stretch keeps only the latest. */
 const MAX_HELD_VISITS = 20;
 
-export function PageVisitTracker() {
+/**
+ * `firstVisitProps` ride on this page load's first visit only: the forge
+ * shell's landing handoff and journey (ForgeShell/forgeEntry.ts).
+ */
+export function PageVisitTracker({ firstVisitProps }: { firstVisitProps?: Record<string, string> } = {}) {
   const visit = useRouterState({
     select: (s) => {
       const leaf = s.matches[s.matches.length - 1];
@@ -47,6 +51,7 @@ export function PageVisitTracker() {
     if (!visit) return;
     const template = visit.slice(visit.indexOf("\n") + 1);
     const props = {
+      ...(previous.current ? {} : firstVisitProps),
       pageName: template,
       ...(previous.current ? { previousPage: previous.current } : {}),
     };
@@ -57,6 +62,8 @@ export function PageVisitTracker() {
       held.current.push(props);
       if (held.current.length > MAX_HELD_VISITS) held.current.shift();
     }
+    // firstVisitProps is fixed for the page load; only a navigation is a visit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visit]);
 
   return null;

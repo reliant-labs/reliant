@@ -67,6 +67,11 @@
       "source": "runtime"
     },
     {
+      "name": "FORGE_APP_HOST",
+      "type": "string",
+      "source": "config"
+    },
+    {
       "name": "GATEWAY_URL",
       "type": "string",
       "source": "config"

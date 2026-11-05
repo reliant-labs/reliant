@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 import { supabase } from "@/lib/supabase";
 import { initTelemetry } from "@/lib/telemetry";
 import { settingsSync } from "@/services/settingsSync";
+import { isForgeShell } from "@/lib/shell";
 
 // NOTE: OAuth callback handling is done in authStore.initialize() to avoid duplicate listeners
 
@@ -147,9 +148,12 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         await Promise.all([
           loadPrivacySettings(),
           settingsSync.initialize(),
-          fetchProjects().catch((err: unknown) => {
-            logger.warn("[AuthInitializer] fetchProjects failed (will retry in ModernApp):", err);
-          }),
+          // The forge shell has no Reliant projects (lib/shell.ts).
+          isForgeShell()
+            ? Promise.resolve()
+            : fetchProjects().catch((err: unknown) => {
+                logger.warn("[AuthInitializer] fetchProjects failed (will retry in ModernApp):", err);
+              }),
         ]);
 
         logger.info("[AuthInitializer] Applying appearance settings to DOM...");
@@ -168,7 +172,10 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
 
   // Prefetch global data ONCE after auth is ready
   // Using ref to prevent any possibility of double-prefetch
+  // Not in the forge shell (lib/shell.ts): the prefetch, the onboarding
+  // checklist, the tour and the API-key check are all Reliant's.
   useEffect(() => {
+    if (isForgeShell()) return;
     if (initialized && !loading && user && !hasPrefetched.current) {
       hasPrefetched.current = true;
       logger.info("[AuthInitializer] Auth ready, triggering global data prefetch...", {

@@ -15,6 +15,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 
 import { useProject } from "@/hooks/project-queries";
+import { isForgeShell } from "@/lib/shell";
 
 import { useForgeConsole } from "../Console/consoleContext";
 import type { PromoteControl, PromoteRequest } from "../Releases/ReleasesList";
@@ -30,7 +31,9 @@ export function usePromoteFlow(): { control: PromoteControl; dialog: ReactNode }
       onPromote: setRequest,
       blockedReason: projectId
         ? null
-        : "Promoting plans the change against this project's checkout. Open the project in Reliant, with its daemon running, to promote from here.",
+        : isForgeShell()
+          ? "Promotions are planned against a checkout of this project: run `forge env promote --to <env>` there."
+          : "Promoting plans the change against this project's checkout. Open the project in Reliant, with its daemon running, to promote from here.",
     }),
     [projectId]
   );

@@ -11,6 +11,8 @@
  * hand-rolled copies of the same heading-and-rule.
  */
 
+import { isForgeShell } from "@/lib/shell";
+import { RunFromTerminal } from "@/components/ForgeShell/RunFromTerminal";
 import { useState, type ReactNode } from "react";
 import { Play, RefreshCw } from "lucide-react";
 
@@ -126,7 +128,13 @@ export function OverviewTab(props: OverviewTabProps) {
           description="Reliant has no record of this environment, so its releases and secrets aren't tracked here yet. Register it from your checkout — after that it shows here with your daemon offline."
           testId="env-register-panel"
         >
-          {props.daemon === "ok" ? (
+          {isForgeShell() ? (
+            <RunFromTerminal
+              title="Register it from your terminal"
+              description="The first deploy from a checkout registers the environment."
+              commands={[{ label: `Deploy ${envName}`, command: `forge env deploy ${envName}` }]}
+            />
+          ) : props.daemon === "ok" ? (
             <RegisterEnvPanel
               projectId={props.projectId}
               envName={envName}

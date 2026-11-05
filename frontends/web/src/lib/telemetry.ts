@@ -38,6 +38,7 @@ import { dropLandingAttribution, readLandingAttribution } from "./landingAttribu
 import { reportError } from "./errorReporting";
 import { clickstackEnabled } from "./telemetryEndpoint";
 import { SERVICE_NAME } from "./otel_gen";
+import { getShell, type AppShell } from "./shell";
 
 const PRERELEASE_REGEX = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/i;
 
@@ -124,6 +125,8 @@ export interface TelemetryConfigInput {
   buildVersion: string;
   /** True in the Electron renderer (window.electronAPI is present). */
   desktop?: boolean;
+  /** The app shell this page mounts (lib/shell.ts). Default "reliant". */
+  shell?: AppShell;
   replayRate: number;
   extraApiOrigins?: Array<string | undefined>;
 }
@@ -137,6 +140,14 @@ export interface TelemetryConfigInput {
  * frontend (deploy/kcl/lib/env.k, reliant_desktop_ingest_keys).
  */
 export const WEB_FRONTEND = "reliant-web";
+
+/**
+ * The service.name the forge shell reports (lib/shell.ts), so forge's funnels
+ * and dashboards separate from Reliant's by ServiceName with no new column.
+ * Only the SERVICE changes: the bundle is still the `reliant-web` frontend,
+ * which is the name its source maps are filed under.
+ */
+export const FORGE_SHELL_SERVICE_NAME = "forge-web";
 export const DESKTOP_FRONTEND = "desktop";
 
 /** The runtime config for this build. Pure; the privacy-relevant options are fixed here. */
@@ -149,7 +160,7 @@ export function buildTelemetryConfig(
     // service.name the generated dashboards and alert defaults filter on
     // (deploy/observability/). A literal here drifted from it once, and every
     // web alert matched nothing.
-    serviceName: SERVICE_NAME,
+    serviceName: input.shell === "forge" ? FORGE_SHELL_SERVICE_NAME : SERVICE_NAME,
     frontend: input.desktop ? DESKTOP_FRONTEND : WEB_FRONTEND,
     serviceVersion: input.appVersion || input.buildVersion,
     environment: input.prerelease ? "prerelease" : "prod",
@@ -277,6 +288,7 @@ async function start(): Promise<boolean> {
     prerelease,
     buildVersion,
     desktop,
+    shell: getShell(),
     replayRate: replaySampleRate({
       prerelease,
       policy: runtime.OTEL_REPLAY_SAMPLE_POLICY,

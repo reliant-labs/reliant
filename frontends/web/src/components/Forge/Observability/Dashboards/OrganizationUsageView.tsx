@@ -25,6 +25,12 @@ import type { OrganizationUsage, OrganizationUsageRequest } from "@/services/con
 
 import { costSourceLabel } from "./organizationCostModel";
 import {
+  FORGE_USAGE_CATEGORIES,
+  forgeScopedCostSummary,
+  forgeScopedUsage,
+  provisionedRows,
+} from "@/components/ForgeShell/forgeUsage";
+import {
   allowanceRows,
   bucketStarts,
   categoryAmount,
@@ -68,6 +74,13 @@ import {
 
 export interface OrganizationUsageViewProps {
   orgId: string;
+  /**
+   * "forge": the forge shell's Usage & spend (lib/shell.ts) — hosting and the
+   * infrastructure forge provisions only. Every answer is narrowed to forge's
+   * categories before a panel sees it (ForgeShell/forgeUsage.ts), and the
+   * managed-LLM panels are not rendered. Default "organization": everything.
+   */
+  scope?: "organization" | "forge";
   /** The clock, for tests and previews. */
   nowMs?: number;
 }
@@ -75,7 +88,9 @@ export interface OrganizationUsageViewProps {
 const BILLING_SETTINGS = "/settings/billing";
 const HOSTED = ["hosted_apps", "databases", "static_hosting", "hosted_other", "observability"] as const;
 
-export function OrganizationUsageView({ orgId, nowMs: fixedNow }: OrganizationUsageViewProps) {
+export function OrganizationUsageView({ orgId, nowMs: fixedNow, scope = "organization" }: OrganizationUsageViewProps) {
+  const forge = scope === "forge";
+  const categories: readonly string[] = forge ? FORGE_USAGE_CATEGORIES : USAGE_CATEGORIES;
   const [range, setRange] = useState<UsageRangeId>("30d");
   const [clock, setClock] = useState(() => fixedNow ?? Date.now());
   const nowMs = fixedNow ?? clock;
@@ -84,10 +99,16 @@ export function OrganizationUsageView({ orgId, nowMs: fixedNow }: OrganizationUs
   const mtd = useOrganizationUsage(orgId ? monthToDateRequest(orgId, nowMs) : null);
   const byCategory = useOrganizationUsage(request("category"));
   const byEnv = useOrganizationUsage(request("env"));
-  const byModel = useOrganizationUsage(request("model"));
+  // Models are managed LLM only: the forge view never asks.
+  const byModel = useOrganizationUsage(forge ? null : request("model"));
   const cost = useOrganizationCostSummary(orgId || null);
-  const purposes = useOwnManagedPurposeUsage({ startMs: span.startMs, endMs: span.endMs });
-  const queries = [mtd, byCategory, byEnv, byModel, cost];
+  const purposes = useOwnManagedPurposeUsage({ startMs: span.startMs, endMs: span.endMs }, { enabled: !forge });
+  const queries = forge ? [mtd, byCategory, byEnv, cost] : [mtd, byCategory, byEnv, byModel, cost];
+  // What the panels read: the answers as given, or narrowed to forge's categories.
+  const mtdView = scopedQuery(mtd, forge ? forgeScopedUsage : undefined);
+  const byCategoryView = scopedQuery(byCategory, forge ? forgeScopedUsage : undefined);
+  const byEnvView = scopedQuery(byEnv, forge ? forgeScopedUsage : undefined);
+  const costView = scopedQuery(cost, forge ? forgeScopedCostSummary : undefined);
   // A live refusal hides everything, including anything cached before it.
   const denied = queries.some((q) => isPermissionDenied(q.error));
   const fetching = queries.some((q) => q.isFetching) || purposes.fetching;
@@ -101,8 +122,8 @@ export function OrganizationUsageView({ orgId, nowMs: fixedNow }: OrganizationUs
     <section className="min-w-0 space-y-4 p-4 text-ink sm:p-6" aria-labelledby="organization-usage-title" data-testid="organization-usage-view">
       <UsageViewHeader
         id="organization-usage-title"
-        title="Spend and usage"
-        scope={`Organization ${orgId || "not selected"} · All projects and environments · UTC`}
+        title={forge ? "Usage & spend" : "Spend and usage"}
+        scope={`Organization ${orgId || "not selected"} · ${forge ? "Hosting, databases, machines and observability" : "All projects and environments"} · UTC`}
         completeness={!denied && byCategory.data?.orgId === orgId ? byCategory.data.completeness : undefined}
         controls={
           <>
@@ -121,42 +142,44 @@ export function OrganizationUsageView({ orgId, nowMs: fixedNow }: OrganizationUs
             Settled charges and list-price estimates are separate facts and are never added into one total. n/a means measured without a price, or not measured: never zero.
           </p>
           <UsagePanel title="Period to date" description="This calendar month (UTC), by category." testId="usage-period-to-date">
-            <Loaded query={mtd} orgId={orgId} what="month-to-date usage">
-              {(usage) => <PeriodTiles usage={usage} />}
+            <Loaded query={mtdView} orgId={orgId} what="month-to-date usage">
+              {(usage) => <PeriodTiles usage={usage} categories={categories} />}
             </Loaded>
           </UsagePanel>
-          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-            <UsagePanel title="Settled charges over time" description="Managed LLM wallet debits, stacked by category." testId="usage-spend-actual" actions={<BasisTag basis="actual" />}>
-              <Loaded query={byCategory} orgId={orgId} what="spend history">
-                {(usage) => <SpendChart usage={usage} basis="actual" />}
-              </Loaded>
-            </UsagePanel>
+          <div className={forge ? "min-w-0" : "grid min-w-0 gap-4 lg:grid-cols-2"}>
+            {!forge && (
+              <UsagePanel title="Settled charges over time" description="Managed LLM wallet debits, stacked by category." testId="usage-spend-actual" actions={<BasisTag basis="actual" />}>
+                <Loaded query={byCategory} orgId={orgId} what="spend history">
+                  {(usage) => <SpendChart usage={usage} basis="actual" />}
+                </Loaded>
+              </UsagePanel>
+            )}
             <UsagePanel
               title="Estimated spend over time"
               description="Hosting and observability at list price, before included allowances, stacked by category."
               testId="usage-spend-estimate"
               actions={<BasisTag basis="list_equivalent" />}
             >
-              <Loaded query={byCategory} orgId={orgId} what="spend history">
-                {(usage) => <SpendChart usage={usage} basis="list_equivalent" />}
+              <Loaded query={byCategoryView} orgId={orgId} what="spend history">
+                {(usage) => <SpendChart usage={usage} basis="list_equivalent" categories={categories} />}
               </Loaded>
             </UsagePanel>
           </div>
           <div className="grid min-w-0 gap-4 lg:grid-cols-2">
             <UsagePanel title="Allowances" description="Used and included per meter this period, with a straight-line projection." testId="usage-allowances">
-              <Loaded query={cost} orgId={orgId} what="allowances">
+              <Loaded query={costView} orgId={orgId} what="allowances">
                 {(summary) => <Allowances summary={summary} nowMs={nowMs} />}
               </Loaded>
             </UsagePanel>
             <UsagePanel title="Spend by environment" description="Hosting and observability, list-price estimate over the selected range." testId="usage-by-env" actions={<BasisTag basis="list_equivalent" />}>
-              <Loaded query={byEnv} orgId={orgId} what="spend by environment">
+              <Loaded query={byEnvView} orgId={orgId} what="spend by environment">
                 {(usage) => <ByEnvironment usage={usage} />}
               </Loaded>
             </UsagePanel>
           </div>
           <div className="grid min-w-0 gap-4 lg:grid-cols-2">
             <UsagePanel title="Credit" description="Promotional credit granted this period." testId="usage-credit">
-              <Loaded query={cost} orgId={orgId} what="credit">
+              <Loaded query={costView} orgId={orgId} what="credit">
                 {(summary) => <Credit summary={summary} />}
               </Loaded>
             </UsagePanel>
@@ -166,6 +189,34 @@ export function OrganizationUsageView({ orgId, nowMs: fixedNow }: OrganizationUs
               </ElsewhereNote>
             </UsagePanel>
           </div>
+          {forge && (
+            <UsagePanel
+              title="Provisioned now"
+              description="What is running or allocated right now, by kind and size. A per-machine breakdown is not available from the billing history yet."
+              testId="usage-provisioned"
+            >
+              <Loaded query={byCategoryView} orgId={orgId} what="provisioned infrastructure">
+                {(usage) => (
+                  <RowsTable
+                    caption="Provisioned infrastructure"
+                    head={["Kind", "Size", "State", "Environment", "Count"]}
+                    rows={provisionedRows(usage).map((row) => [
+                      categoryLabel(row.category),
+                      row.size || "—",
+                      row.state || "—",
+                      row.environment || "—",
+                      <span key="c" className="tabular-nums">
+                        {row.count}
+                        {row.storageGib > 0 ? ` · ${row.storageGib} GiB` : ""}
+                      </span>,
+                    ])}
+                    empty="Nothing provisioned is reported for this organization."
+                  />
+                )}
+              </Loaded>
+            </UsagePanel>
+          )}
+          {!forge && (
           <UsagePanel
             title="Your Reliant AI calls by purpose"
             description="Where your own Reliant AI calls went over the selected range: chat turns, context compaction, chat titles and automation drafts. Your calls only, not the organization's, and counts rather than dollars."
@@ -173,25 +224,33 @@ export function OrganizationUsageView({ orgId, nowMs: fixedNow }: OrganizationUs
           >
             <ManagedPurposes purposes={purposes} />
           </UsagePanel>
+          )}
           <UsagePanel title="Top cost drivers" description="The largest models and environments over the selected range. Each list keeps its own basis." testId="usage-top-drivers">
-            <div className="grid min-w-0 gap-4 lg:grid-cols-2">
-              <Loaded query={byModel} orgId={orgId} what="spend by model">
-                {(usage) => <TopDrivers usage={usage} categories={["managed_llm"]} title="Models (managed LLM)" basis="actual" empty="No settled managed-LLM charges in range." />}
-              </Loaded>
+            <div className={forge ? "min-w-0" : "grid min-w-0 gap-4 lg:grid-cols-2"}>
+              {!forge && (
+                <Loaded query={byModel} orgId={orgId} what="spend by model">
+                  {(usage) => <TopDrivers usage={usage} categories={["managed_llm"]} title="Models (managed LLM)" basis="actual" empty="No settled managed-LLM charges in range." />}
+                </Loaded>
+              )}
               <Loaded query={byEnv} orgId={orgId} what="spend by environment">
                 {(usage) => <TopDrivers usage={usage} categories={HOSTED} title="Environments (hosting and observability)" basis="list_equivalent" empty="No priced hosting usage in range." />}
               </Loaded>
             </div>
             <p className="mt-3 text-xs text-ink-muted">A breakdown by individual deployment or dev box is not available from the billing history yet.</p>
           </UsagePanel>
-          <Loaded query={byCategory} orgId={orgId} what="spend rate">
-            {(usage) => <SpendRatePanel usage={usage} monthToDate={mtd.data?.orgId === orgId ? mtd.data : undefined} nowMs={nowMs} />}
+          <Loaded query={byCategoryView} orgId={orgId} what="spend rate">
+            {(usage) => <SpendRatePanel usage={usage} monthToDate={mtdView.data?.orgId === orgId ? mtdView.data : undefined} nowMs={nowMs} />}
           </Loaded>
-          {byCategory.data?.orgId === orgId && <CoverageNotes entries={limitationsOf(byCategory.data)} />}
+          {byCategoryView.data?.orgId === orgId && <CoverageNotes entries={limitationsOf(byCategoryView.data)} />}
         </>
       )}
     </section>
   );
+}
+
+/** A query as the panels read it, its answer narrowed by `narrow` when given. */
+function scopedQuery<T>(query: { isPending: boolean; isError: boolean; data: T | undefined }, narrow?: (data: T) => T) {
+  return { isPending: query.isPending, isError: query.isError, data: narrow && query.data ? narrow(query.data) : query.data };
 }
 
 function ManagedPurposes({ purposes }: { purposes: ReturnType<typeof useOwnManagedPurposeUsage> }) {
@@ -219,10 +278,10 @@ function ManagedPurposes({ purposes }: { purposes: ReturnType<typeof useOwnManag
   );
 }
 
-function PeriodTiles({ usage }: { usage: OrganizationUsage }) {
+function PeriodTiles({ usage, categories = USAGE_CATEGORIES }: { usage: OrganizationUsage; categories?: readonly string[] }) {
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {USAGE_CATEGORIES.map((category) => {
+      {categories.map((category) => {
         const amount = categoryAmount(usage, category);
         const points = usage.points.filter((p) => p.category === category);
         const running = category === "machines" ? quantitySum(points, "running_seconds") : undefined;
@@ -244,9 +303,9 @@ function PeriodTiles({ usage }: { usage: OrganizationUsage }) {
   );
 }
 
-function SpendChart({ usage, basis }: { usage: OrganizationUsage; basis: "actual" | "list_equivalent" }) {
+function SpendChart({ usage, basis, categories }: { usage: OrganizationUsage; basis: "actual" | "list_equivalent"; categories?: readonly string[] }) {
   const buckets = bucketStarts(usage);
-  const series = spendSeries(usage, basis);
+  const series = spendSeries(usage, basis, categories);
   return (
     <UsageChart
       label={basis === "actual" ? "Settled charges in US dollars per bucket" : "Estimated spend at list price in US dollars per bucket"}

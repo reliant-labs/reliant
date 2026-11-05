@@ -60,6 +60,8 @@ import { lifecycleOf } from "@/services/forge/roster";
 import { isLocalLifecycle } from "@/services/forge/status";
 import { environments } from "@/services/forge/topology";
 import { useProjectStore } from "@/store/projectStore";
+import { isForgeShell } from "@/lib/shell";
+import { RunFromTerminal } from "@/components/ForgeShell/RunFromTerminal";
 
 import { DeployDialog } from "../Deploy/DeployDialog";
 import { useForgeConsole, type ForgeConsole } from "../Console/consoleContext";
@@ -106,7 +108,7 @@ export function ForgeEnvPage() {
   const [clicked, setClicked] = useState<{ tab: EnvTab; fromUrl: string | undefined } | null>(null);
   const requestedTab = clicked && clicked.fromUrl === tabSearch ? clicked.tab : null;
   const askedTab = requestedTab ?? tabSearch;
-  const tabWantsDaemon = tabNeedsDaemon(askedTab);
+  const tabWantsDaemon = !isForgeShell() && tabNeedsDaemon(askedTab);
 
   // A header action is a request for the daemon too: Promote and Deploy are
   // planned by forge on the user's checkout.
@@ -149,9 +151,14 @@ export function ForgeEnvPage() {
   const envStatusReport = envStatus.data?.kind === "report" ? envStatus.data.report : null;
   const lifecycle = lifecycleOf(liveEnv, forgeEnv, isLocalLifecycle(envStatusReport));
 
-  const tab = requestedTab && tabsFor(lifecycle).some((spec) => spec.id === requestedTab)
+  // The forge shell has no daemon (lib/shell.ts): a tab that reads the
+  // checkout is not offered there, and its link lands on Overview.
+  const forgeShell = isForgeShell();
+  const offered = (spec: { id: EnvTab }) => !forgeShell || !tabNeedsDaemon(spec.id);
+  const resolvedTab = requestedTab && tabsFor(lifecycle).some((spec) => spec.id === requestedTab)
     ? requestedTab
     : resolveTab(tabSearch, lifecycle);
+  const tab: EnvTab = offered({ id: resolvedTab }) ? resolvedTab : "overview";
 
   // ── The backend's per-env reads. ──
   const placedId = liveEnv && isPlacedKind(liveEnv.kind) ? liveEnv.id : null;
@@ -235,7 +242,7 @@ export function ForgeEnvPage() {
     setPendingAction(null);
   }, [pendingAction, daemon, promoteReason, daemonReason, latestRelease]);
 
-  const tabs = tabsFor(lifecycle);
+  const tabs = tabsFor(lifecycle).filter(offered);
   const headline = liveEnv && lifecycle !== "local" ? envHeadline(liveEnv, cloudStatus.data) : null;
   const identityLoading = !backendSettled || (askDaemonForIdentity && envStatus.isLoading && !envStatus.data && !liveEnv);
 
@@ -258,7 +265,7 @@ export function ForgeEnvPage() {
         forgeRelease={forgeEnv?.release ?? null}
         headline={headline}
         promote={
-          lifecycle === "local"
+          lifecycle === "local" || forgeShell
             ? null
             : {
                 target: latestRelease && latestRelease !== currentRelease ? latestRelease : null,
@@ -268,7 +275,7 @@ export function ForgeEnvPage() {
               }
         }
         deploy={
-          lifecycle === "local"
+          lifecycle === "local" || forgeShell
             ? null
             : {
                 disabledReason: daemonReason,
@@ -277,6 +284,20 @@ export function ForgeEnvPage() {
               }
         }
       />
+
+      {/* Deploy and Promote are planned by forge against a checkout: the
+          forge shell, which has no daemon, says how to run them instead. */}
+      {forgeShell && (
+        <RunFromTerminal
+          description="Deploys and promotions run from a checkout of this project."
+          commands={[
+            { label: `Deploy ${envName} from your working tree`, command: `forge env deploy ${envName}` },
+            ...(lifecycle === "local"
+              ? [{ label: `Run ${envName} locally`, command: `forge env up ${envName}` }]
+              : [{ label: `Promote a release to ${envName}`, command: `forge env promote --to ${envName}` }]),
+          ]}
+        />
+      )}
 
       {/* A QUEUED deploy: accepted, recorded, waiting on a person. Above the
           tabs because it is true of every one of them, and it is the one
