@@ -349,6 +349,7 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 			if actionTaken != nil {
 				updateData["action_taken"] = *actionTaken
 			}
+			db.AttributeApprovalUpdate(updateData, approval)
 			updateDataJSON, err := json.Marshal(updateData)
 			if err != nil {
 				return fmt.Errorf("failed to marshal chat_update data: %w", err)

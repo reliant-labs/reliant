@@ -123,10 +123,18 @@ func (s *session) install(f *fake) {
 		defer s.mu.Unlock()
 		return &reliantv1.ListPendingQuestionsResponse{Questions: s.questions}, nil
 	}
+	// The server lists a chat's PENDING approvals only
+	// (internal/handlers/approval: ListApprovalsByChat).
 	f.listApprovals = func(*reliantv1.ListApprovalsByChatRequest) (*reliantv1.ListApprovalsByChatResponse, error) {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		return &reliantv1.ListApprovalsByChatResponse{Approvals: s.approvals}, nil
+		var pending []*reliantv1.Approval
+		for _, a := range s.approvals {
+			if a.GetStatus() == reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING {
+				pending = append(pending, a)
+			}
+		}
+		return &reliantv1.ListApprovalsByChatResponse{Approvals: pending}, nil
 	}
 }
 
@@ -302,9 +310,9 @@ func TestFollowRunAttributesAResolvedQuestionByItsWorkflow(t *testing.T) {
 	}
 }
 
-// An approval resolved before the follow attached is never pending, so no
-// pending-list read attributes it; the session's approval list does, by the
-// workflow it names.
+// An approval resolved before the follow attached is never pending, so the
+// pending-only approval list never shows it; its own updates name the workflow
+// that raised it (db.AttributeApprovalUpdate), and that attributes them.
 func TestFollowRunReplaysAnAlreadyResolvedApproval(t *testing.T) {
 	s := &session{roots: []*reliantv1.WorkflowExecution{
 		{Id: "run-new", Thread: "t-new", State: completed, StopReason: reasonOK, Outcome: ptr(OutcomeSuccess)},
@@ -314,8 +322,8 @@ func TestFollowRunReplaysAnAlreadyResolvedApproval(t *testing.T) {
 		{Id: "a-old", Status: reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED, WorkflowId: ptr("run-old")},
 	}
 	s.status("run-old", "", "started", "")
-	s.add("CHAT_UPDATE_TYPE_APPROVAL", map[string]any{"update_type": "approval", "id": "a-old", "status": "pending", "title": "deploy"})
-	s.add("CHAT_UPDATE_TYPE_APPROVAL", map[string]any{"update_type": "approval", "id": "a-old", "status": "approved", "title": "deploy"})
+	s.add("CHAT_UPDATE_TYPE_APPROVAL", map[string]any{"update_type": "approval", "id": "a-old", "status": "pending", "title": "deploy", "workflow_id": "run-old"})
+	s.add("CHAT_UPDATE_TYPE_APPROVAL", map[string]any{"update_type": "approval", "id": "a-old", "status": "approved", "title": "deploy", "workflow_id": "run-old"})
 	s.status("run-old", "", "completed", OutcomeSuccess)
 	s.status("run-new", "", "started", "")
 	s.status("run-new", "", "completed", OutcomeSuccess)

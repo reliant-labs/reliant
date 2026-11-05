@@ -106,14 +106,25 @@ func (s *chatSource) narrow(ctx context.Context, u follow.RawUpdate, poll *pollS
 			s.scope.gates[g.ID] = true
 			return true
 		case strings.Contains(u.Type, "APPROVAL"):
-			// An approval update names no workflow or thread: the session's
-			// approval list does, and attributes it (see learnApprovals).
-			return s.scope.gates[p.ID]
+			// An approval update names the workflow that raised it and its
+			// thread, resolved ones included, so its historical rows replay
+			// on their own run. One that names neither (written before the
+			// server attributed them) falls back to the pending list.
+			if p.WorkflowID == "" && p.ThreadID == "" {
+				return s.scope.gates[p.ID]
+			}
+			g := Gate{ID: p.ID, ThreadID: p.ThreadID, RunID: p.WorkflowID}
+			if !s.scope.owns(g) {
+				return false
+			}
+			s.scope.gates[g.ID] = true
+			return true
 		}
 		return true // a type the engine does not surface
 	}
 	ok := known()
-	if !ok && !poll.treeRead && !strings.Contains(u.Type, "APPROVAL") {
+	unattributedApproval := strings.Contains(u.Type, "APPROVAL") && p.WorkflowID == "" && p.ThreadID == ""
+	if !ok && !poll.treeRead && !unattributedApproval {
 		poll.treeRead = true
 		if roots, err := s.runs.sessionTree(ctx, s.sessionID, reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_BASIC); err == nil {
 			s.scope.load(roots)
@@ -128,7 +139,7 @@ func (s *chatSource) narrow(ctx context.Context, u follow.RawUpdate, poll *pollS
 		s.scope.newest = true
 		ok = true
 	}
-	if !ok && !poll.approvalsRead && strings.Contains(u.Type, "APPROVAL") {
+	if !ok && !poll.approvalsRead && unattributedApproval {
 		poll.approvalsRead = true
 		if s.learnApprovals(ctx) == nil {
 			ok = known()
@@ -153,9 +164,10 @@ func (s *chatSource) narrow(ctx context.Context, u follow.RawUpdate, poll *pollS
 	return u
 }
 
-// learnApprovals attributes the session's approvals, resolved ones included,
-// by the workflow each names, so an approval's historical rows replay on the
-// run that raised it before any pending-list read could have seen it.
+// learnApprovals attributes the session's pending approvals by the workflow
+// each names: the fallback for an approval update that names no workflow or
+// thread. ListApprovalsByChat lists pending approvals only, so a resolved one
+// is attributed by its own update (see narrow), never here.
 func (s *chatSource) learnApprovals(ctx context.Context) error {
 	if !s.scope.pinned() {
 		return errors.New("no run pinned yet")
