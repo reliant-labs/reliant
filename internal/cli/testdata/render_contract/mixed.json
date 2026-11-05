@@ -1,0 +1,538 @@
+{
+  "output": {
+    "applier": null,
+    "cluster_target": {
+      "cluster": "k3d-acme",
+      "connected_cluster": null,
+      "domain": null,
+      "image_pull_secrets": [],
+      "namespace": "acme-dev",
+      "platform": null
+    },
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane": {
+      "endpoint": "http://127.0.0.1:8090",
+      "registry_host": "registry.reliantapi.com",
+      "token_env": "FORGE_CONTROL_PLANE_TOKEN",
+      "type": "control_plane"
+    },
+    "control_plane_secrets": [],
+    "databases": [],
+    "env": "dev",
+    "external_secrets_operators": [],
+    "frontends": [
+      {
+        "asset_dir": "assets",
+        "base_path": null,
+        "bundle": [],
+        "cache_control": [],
+        "config": null,
+        "dev_runner": "npm",
+        "env_file": null,
+        "env_vars": [],
+        "image": null,
+        "name": "web",
+        "path": "frontends/web",
+        "port": 3000,
+        "public_dir": "dist",
+        "runtime": {
+          "type": "host"
+        },
+        "runtime_config": {
+          "API_URL": "http://localhost:8080"
+        },
+        "runtime_config_spec": {
+          "API_URL": {
+            "workloadURL": {
+              "name": "api"
+            }
+          }
+        },
+        "source": null,
+        "type": "vite"
+      },
+      {
+        "asset_dir": "assets",
+        "base_path": "/docs",
+        "bundle": [],
+        "cache_control": [
+          {
+            "cache_control": "public, max-age=31536000, immutable",
+            "pattern": "assets/**"
+          }
+        ],
+        "config": null,
+        "dev_runner": "npm",
+        "env_file": null,
+        "env_vars": [],
+        "image": null,
+        "name": "site",
+        "path": "frontends/site",
+        "port": 3000,
+        "public_dir": "dist",
+        "runtime": {
+          "bucket": "gs://acme-site",
+          "cdn": {
+            "extra_invalidate_paths": [],
+            "invalidate": "entrypoints",
+            "url_map": "acme-lb"
+          },
+          "keep_releases": 10,
+          "type": "bucket"
+        },
+        "runtime_config": {
+          "API_URL": "http://localhost:8080"
+        },
+        "runtime_config_spec": {
+          "API_URL": {
+            "workloadURL": {
+              "name": "api"
+            }
+          }
+        },
+        "source": null,
+        "type": "vite"
+      }
+    ],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "latest",
+    "infra": [
+      {
+        "data_dir": null,
+        "database": "acme",
+        "engine": "postgres",
+        "idp_database": "zitadel",
+        "idp_database_port": null,
+        "idp_masterkey": "MasterkeyNeedsToHave32Characters",
+        "idp_pat_path": ".forge/idp/pat.txt",
+        "idp_steps_file": "idp-steps.yaml",
+        "name": "postgres",
+        "nats_monitor_port": null,
+        "password": "postgres",
+        "port": 5433,
+        "temporal_namespaces": null,
+        "temporal_ui_port": null,
+        "user": "postgres",
+        "version": null
+      }
+    ],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifest_owners": [],
+    "manifests": [
+      {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev",
+            "pod-security.kubernetes.io/audit": "restricted",
+            "pod-security.kubernetes.io/enforce": "restricted",
+            "pod-security.kubernetes.io/warn": "restricted"
+          },
+          "name": "acme-dev"
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "search",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev"
+          },
+          "name": "search",
+          "namespace": "acme-dev"
+        },
+        "spec": {
+          "args": [
+            "search"
+          ],
+          "env": [
+            {
+              "name": "API_URL",
+              "value": "http://host.k3d.internal:8080"
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "search"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme:latest",
+          "kind": "service",
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "secret_provider": {
+      "path": "secrets/dev.yaml",
+      "type": "file"
+    },
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "acme",
+        "image": "acme",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "air_config": ".air.toml",
+          "delve_port": 2345,
+          "listen_ports": [
+            8080
+          ],
+          "runner": "air",
+          "type": "host",
+          "working_dir": null
+        },
+        "spec": {
+          "args": [
+            "api"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            }
+          ],
+          "image": "",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "acme",
+        "image": "acme",
+        "kind": "job",
+        "name": "migrate",
+        "release_inputs": {},
+        "runtime": {
+          "air_config": null,
+          "delve_port": 2345,
+          "listen_ports": null,
+          "runner": "go-run",
+          "type": "host",
+          "working_dir": null
+        },
+        "spec": {
+          "args": [
+            "db",
+            "migrate",
+            "up"
+          ],
+          "before": [
+            "*"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "migrate"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            }
+          ],
+          "image": "",
+          "kind": "job",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": null,
+        "build_image": null,
+        "image": "",
+        "kind": "service",
+        "name": "nats",
+        "release_inputs": {},
+        "runtime": {
+          "env": {},
+          "env_file": null,
+          "file": "docker-compose.yml",
+          "service": "nats",
+          "shared": false,
+          "type": "compose",
+          "wait": true,
+          "wait_timeout": 0
+        },
+        "spec": {
+          "image": "",
+          "kind": "service",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "localhost:5050/acme",
+        "image": "localhost:5050/acme",
+        "kind": "service",
+        "name": "search",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "k3d-acme",
+          "connected_cluster": null,
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-dev",
+          "platform": null,
+          "type": "cluster"
+        },
+        "spec": {
+          "args": [
+            "search"
+          ],
+          "env": [
+            {
+              "name": "API_URL",
+              "value": "http://host.k3d.internal:8080"
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "search"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme:latest",
+          "kind": "service",
+          "ports": [
+            {
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "localhost:5050/acme",
+        "image": "localhost:5050/acme",
+        "kind": "worker",
+        "name": "billing",
+        "release_inputs": {},
+        "runtime": {
+          "platform": "amd64",
+          "type": "hosted"
+        },
+        "spec": {
+          "args": [
+            "billing"
+          ],
+          "env": [
+            {
+              "managedSecret": {
+                "name": "STRIPE_KEY"
+              },
+              "name": "STRIPE_KEY"
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "billing"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme",
+          "kind": "worker",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme-cli",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme-cli",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "acme-cli",
+        "image": "acme-cli",
+        "kind": "tool",
+        "name": "cli",
+        "release_inputs": {},
+        "runtime": {
+          "build_variants": [],
+          "type": "build-only"
+        },
+        "spec": {
+          "image": "",
+          "kind": "tool",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

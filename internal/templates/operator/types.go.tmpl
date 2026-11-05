@@ -1,0 +1,112 @@
+//go:build ignore
+
+// +groupName supplies the API group to controller-gen. controller-gen does not
+// read the GroupVersion var below — it is Go, not a marker — so without this
+// line `controller-gen crd` emits a CRD with an empty spec.group and a
+// malformed metadata.name ("<plurals>."), which the API server rejects.
+//
+// +groupName={{.Group}}
+// +kubebuilder:object:generate=true
+package {{.Package}}
+
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+)
+
+var (
+	// GroupVersion is the API group and version for this operator's resources.
+	GroupVersion = schema.GroupVersion{Group: "{{.Group}}", Version: "{{.Version}}"}
+
+	// SchemeBuilder is used to add go types to the GroupVersionResource scheme.
+	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
+
+	// AddToScheme adds the types in this group-version to the given scheme.
+	AddToScheme = SchemeBuilder.AddToScheme
+)
+
+func addKnownTypes(scheme *runtime.Scheme) error {
+	scheme.AddKnownTypes(GroupVersion,
+		&{{.TypeName}}{},
+		&{{.TypeName}}List{},
+	)
+	metav1.AddToGroupVersion(scheme, GroupVersion)
+	return nil
+}
+
+// {{.TypeName}} is the Schema for the {{.Name}} API.
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+type {{.TypeName}} struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   {{.TypeName}}Spec   `json:"spec,omitempty"`
+	Status {{.TypeName}}Status `json:"status,omitempty"`
+}
+
+// {{.TypeName}}Spec defines the desired state.
+type {{.TypeName}}Spec struct {
+	// TODO: Add your spec fields here.
+	// Example:
+	// Replicas int32 `json:"replicas,omitempty"`
+}
+
+// {{.TypeName}}Status defines the observed state.
+type {{.TypeName}}Status struct {
+	// TODO: Add your status fields here.
+	// Example:
+	// Ready bool `json:"ready,omitempty"`
+	// Phase string `json:"phase,omitempty"`
+
+	// Conditions represent the latest available observations.
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// {{.TypeName}}List contains a list of {{.TypeName}}.
+// +kubebuilder:object:root=true
+type {{.TypeName}}List struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []{{.TypeName}} `json:"items"`
+}
+{{- if .SplitAPI }}
+
+// DeepCopy / DeepCopyInto / DeepCopyObject for both types above are GENERATED:
+// these types live under api/, and `forge generate` writes this package's
+// zz_generated.deepcopy.go from the +kubebuilder:object:root markers. Do not
+// hand-write them here — a second declaration stops the package compiling.
+{{- else }}
+
+// DeepCopyObject implements runtime.Object.
+//
+// Hand-written because these types live beside the controller, outside api/,
+// where forge generates no deepcopy. Move them under api/<version>/ (scaffold
+// with --api-package) to get a generated, field-complete deepcopy instead.
+func (in *{{.TypeName}}) DeepCopyObject() runtime.Object {
+	if in == nil {
+		return nil
+	}
+	out := new({{.TypeName}})
+	*out = *in
+	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	out.Status.Conditions = make([]metav1.Condition, len(in.Status.Conditions))
+	copy(out.Status.Conditions, in.Status.Conditions)
+	return out
+}
+
+// DeepCopyObject implements runtime.Object.
+func (in *{{.TypeName}}List) DeepCopyObject() runtime.Object {
+	if in == nil {
+		return nil
+	}
+	out := new({{.TypeName}}List)
+	*out = *in
+	out.Items = make([]{{.TypeName}}, len(in.Items))
+	for i := range in.Items {
+		out.Items[i] = *in.Items[i].DeepCopyObject().(*{{.TypeName}})
+	}
+	return out
+}
+{{- end }}

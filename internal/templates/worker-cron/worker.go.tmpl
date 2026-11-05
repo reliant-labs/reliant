@@ -1,0 +1,89 @@
+//go:build ignore
+
+package {{.Package}}
+
+// MIGRATION (forge v1.0.16): the schedule runs on forge/pkg/cronkit, and each
+// tick fires on ONE replica (the one that claims it in the app's database)
+// instead of on every replica. See the forge `migrations/v1.0.16` skill to
+// convert a cron worker scaffolded before it.
+
+import (
+	"context"
+	"log/slog"
+
+	"github.com/reliant-labs/forge/pkg/cronkit"
+{{- if .HasDatabase}}
+	"github.com/reliant-labs/forge/pkg/orm"
+{{- end}}
+{{- if .HasConfig}}
+
+	"{{.Module}}/pkg/config"
+{{- end}}
+)
+
+// Schedule is the cron expression that controls how often Run executes.
+const Schedule = "{{.Schedule}}"
+
+// PerReplica is false: each tick runs on exactly one replica, however many
+// the workload scales to. Set it true only for a job meant to run on every
+// pod (refreshing an in-process cache, sweeping a local temp dir).
+const PerReplica = false
+
+// Deps contains the dependencies for the {{.Name}} cron worker.
+type Deps struct {
+	Logger *slog.Logger
+{{- if .HasConfig}}
+	Config *config.Config
+{{- end}}
+{{- if .HasDatabase}}
+	// DB is where ticks are claimed, so a tick fires once across replicas.
+	// With no database every replica fires, and Start warns at boot.
+	// forge:optional-dep
+	DB orm.Context
+{{- end}}
+}
+
+// Worker implements a cron-scheduled background worker for {{.Name}}.
+type Worker struct {
+	deps Deps
+}
+
+// New creates a new {{.Name}} cron worker.
+func New(deps Deps) *Worker {
+	return &Worker{deps: deps}
+}
+
+// Name returns the worker's identifier. It is also the key each tick is
+// claimed under, so renaming the worker starts a fresh claim history.
+func (w *Worker) Name() string { return "{{.Name | kebabCase}}" }
+
+// Start runs the schedule until ctx is cancelled, then waits for an
+// in-flight Run to return (its ctx is cancelled too).
+func (w *Worker) Start(ctx context.Context) error {
+	return cronkit.Run(ctx, cronkit.Options{
+		Name:       w.Name(),
+		Schedule:   Schedule,
+		PerReplica: PerReplica,
+{{- if .HasDatabase}}
+		Claims:     cronkit.Postgres(w.deps.DB),
+{{- end}}
+		Logger:     w.deps.Logger,
+	}, w.Run)
+}
+
+// Stop is called after Start has returned; there is nothing left to stop.
+func (w *Worker) Stop(ctx context.Context) error {
+	w.deps.Logger.InfoContext(ctx, "cron worker stopped", "worker", w.Name())
+	return nil
+}
+
+// Run is one tick. Implement your logic here, and plumb ctx through every
+// context-aware call so shutdown is observed. cronkit runs each tick as a
+// trace of its own, logs a returned error and recovers a panic, so one bad
+// tick never stops the schedule. cronkit.TickTime(ctx) is the tick's
+// scheduled time, the same on every replica: key idempotent writes on it.
+// See the forge `workers` skill.
+func (w *Worker) Run(ctx context.Context) error {
+	w.deps.Logger.InfoContext(ctx, "cron job executing", "worker", w.Name(), "schedule", Schedule)
+	return nil
+}

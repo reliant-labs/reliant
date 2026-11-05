@@ -1,0 +1,57 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// THE VERSION STAMP. These three variables exist to be overwritten by the
+// LINKER, and that is the whole reason this file is in your tree rather than
+// in a forge library: `-X` targets a variable by its full package path, so a
+// stamped variable has to live in a package you build. The Taskfile and
+// Dockerfile that already stamp them name this package:
+//
+//	-ldflags "-X example.com/app/cmd/app/cmd.version=v1.0.0 \
+//	          -X example.com/app/cmd/app/cmd.commit=abc123 \
+//	          -X example.com/app/cmd/app/cmd.date=2026-01-01"
+//
+// So changing a NAME here is a change to your build. That is the decision this
+// file holds. The formatting of the block — and reading the Go toolchain
+// version from the build info the compiler embedded rather than trusting a
+// fourth stamped string — is in pkg/cmdkit.PrintVersion, because nobody needs
+// to re-derive how to print four fields.
+//
+// The defaults are deliberately honest words rather than a fake version: an
+// unstamped binary reporting "dev"/"none"/"unknown" tells you it was built
+// outside the release path, which is exactly what you want to learn from a bug
+// report.
+package cmd
+
+import (
+	"github.com/spf13/cobra"
+
+	"github.com/reliant-labs/forge/pkg/cmdkit"
+)
+
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
+// newVersionCmd builds the `version` command. deps is accepted but unused —
+// every constructor in this tree takes Deps so root.go can wire them
+// uniformly.
+func newVersionCmd(deps Deps) *cobra.Command {
+	_ = deps
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print version information",
+		Run: func(cmd *cobra.Command, args []string) {
+			// ServiceName (root.go) is this binary's app identity — the same
+			// constant reported on OTel traces — so the version block and the
+			// telemetry cannot disagree about what this process is called.
+			cmdkit.PrintVersion(cmd.OutOrStdout(), cmdkit.BuildInfo{
+				Name:    ServiceName,
+				Version: version,
+				Commit:  commit,
+				Date:    date,
+			})
+		},
+	}
+}

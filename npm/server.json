@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.reliant-labs/forge",
+  "title": "Reliant Forge",
+  "description": "Deploy a site or app with no account: live URL plus a claim link. Scaffold, lint, generate.",
+  "websiteUrl": "https://reliantlabs.io",
+  "repository": {
+    "url": "https://github.com/reliant-labs/forge",
+    "source": "github",
+    "subfolder": "npm"
+  },
+  "version": "1.0.15",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@reliantlabs/forge",
+      "version": "1.0.15",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    }
+  ]
+}
