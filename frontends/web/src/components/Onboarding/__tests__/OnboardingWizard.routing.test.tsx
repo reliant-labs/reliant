@@ -220,6 +220,7 @@ import { holdLandingJourney } from "../../../lib/landingAttribution";
 import { layoutActions } from "../journeys/layoutActions";
 import { __resetJourneyAnalytics } from "../journeyAnalytics";
 import { tourEvents } from "../tourEvents";
+import { retainTourParam } from "../tourParam";
 
 // ─── Test router ─────────────────────────────────────────────────────────────
 
@@ -235,6 +236,9 @@ function makeRouter(initialEntries: string[], Wizard: React.ComponentType<any>) 
         React.createElement(Outlet),
         React.createElement(Wizard)
       ),
+    // As in routes.tsx: `?tour=` survives navigations that don't clear it, so
+    // every tour exit asserted below must clear it explicitly.
+    search: { middlewares: [retainTourParam as never] },
   });
   const route = (path: string, testId: string) =>
     createRoute({
@@ -439,10 +443,18 @@ describe("journey engine (OnboardingWizard)", () => {
       );
     });
 
+    it("a journey with no finish target leaves a builder page for the chat with ?tour= cleared", async () => {
+      const router = renderAt("/workflow/fix-my-pr?tour=workflows:wf-loop");
+      await userEvent.click(await screen.findByRole("button", { name: /end tour/i }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
+      expect(tourParam(router)).toBeUndefined();
+    });
+
     it("End tour records the journey skipped and where it ended, for Resume", async () => {
       const router = renderAt("/workflows/library?tour=workflows:wf-automations");
       await userEvent.click(await screen.findByRole("button", { name: /end tour/i }));
       await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
+      expect(tourParam(router)).toBeUndefined();
       expect(tourStoreState.state.setResumeStep).toHaveBeenCalledWith("workflows:wf-automations");
       expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "skipped");
       expect(trackEvent).toHaveBeenCalledWith("journey_skipped", expect.objectContaining({ journey: "workflows", step: "wf-automations" }));
