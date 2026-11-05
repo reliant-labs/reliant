@@ -11,6 +11,7 @@ import (
 type SendToRunParams struct {
 	RunID   string `json:"run_id" jsonschema:"required,description=The run id (chat id), from start_run or list_runs."`
 	Message string `json:"message" jsonschema:"required,description=The message to deliver to the run."`
+	Subject string `json:"subject,omitempty" jsonschema:"description=Optional one-line summary of the message (at most 100 characters). The target chat shows the message collapsed to it; without one it shows the message's first line."`
 }
 
 const (
@@ -58,6 +59,13 @@ func (s *sendToRunTool) Execute(rctx *rctx.ToolContext, params SendToRunParams) 
 	if strings.TrimSpace(params.Message) == "" {
 		return NewTextErrorResponse("message is required"), nil
 	}
+	subject := ""
+	if strings.TrimSpace(params.Subject) != "" {
+		var problem string
+		if subject, problem = normalizeSpawnSendSubject(params.Subject); problem != "" {
+			return NewTextErrorResponse(problem), nil
+		}
+	}
 	if errResp := rejectSelfTarget(rctx, params.RunID, "message"); errResp != nil {
 		return *errResp, nil
 	}
@@ -86,7 +94,10 @@ func (s *sendToRunTool) Execute(rctx *rctx.ToolContext, params SendToRunParams) 
 				"send_to_run only reaches a run that is running or paused; use start_run for new work.", chat.ID, state)), meta), nil
 	}
 
-	delivery, err := s.messenger.DeliverToRun(rctx.Context, caller.userID, chat.ID, params.Message)
+	// The message is the calling run's, never its user's: the target chat
+	// shows it as from this run (by its main thread), and so does its model.
+	from := RunSender{ThreadID: caller.chat.MainThreadID(), Subject: subject}
+	delivery, err := s.messenger.DeliverToRun(rctx.Context, caller.userID, chat.ID, params.Message, from)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Could not deliver to run %s: %v", chat.ID, err)), nil
 	}

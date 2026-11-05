@@ -13,8 +13,7 @@
  * box so nothing typed is lost.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
-import { useRouter } from "@tanstack/react-router";
+import { useMemo, useRef, useState } from "react";
 import { CheckCircle2, CircleDot, MessageSquare, MessageSquareText, Pencil, Trash2, UserRound } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
@@ -29,8 +28,7 @@ import {
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { IssueComment, IssueTimelineEntry } from "@/services/controlPlane/observability/issuesTypes";
-import { loadRunContext } from "@/components/runs/loadRunContext";
-import { toast } from "@/lib/toast-manager";
+import { useOpenRun } from "@/components/runs/useOpenRun";
 
 import { formatAgo, formatWhen } from "../format";
 import { ObsLoadingRows } from "../ObsStates";
@@ -190,20 +188,7 @@ function TimelineRow({
 }
 
 /** Open a chat from the console: select its project and workspace, then go to the project's chat screen. */
-export function useOpenChat(): (chatId: string) => Promise<void> {
-  const router = useRouter({ warn: false });
-  return useCallback(
-    async (chatId: string) => {
-      try {
-        const chat = await loadRunContext(chatId);
-        await router?.navigate({ to: "/project/$projectId", params: { projectId: chat.projectId }, search: {} });
-      } catch (error) {
-        void toast.error(error);
-      }
-    },
-    [router]
-  );
-}
+export const useOpenChat = useOpenRun;
 
 function ChatLink({ chatId, label }: { chatId: string; label: string }) {
   const open = useOpenChat();

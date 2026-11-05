@@ -234,6 +234,8 @@ func (s *Service) SendAgentMessage(
 		Attachments:  req.Msg.Attachments,
 		Status:       core.AgentMessageStatusQueued,
 		CreatedAt:    time.Now(),
+		// Hidden when it is an async ask_user answer, shown on its card.
+		DisplayStyle: db.QueuedDisplayStyle(ctx),
 	}
 	// Queued once: a repeat of a send that already queued the message finds its
 	// row and finishes around it, so what the first attempt may not have

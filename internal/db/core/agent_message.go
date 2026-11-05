@@ -47,6 +47,16 @@ const (
 	// the drain envelope actually keys off to label the sender, so it must
 	// be unambiguous on its own.
 	AgentMessageKindHumanMessage = reliantv1.AgentMessageKind_AGENT_MESSAGE_KIND_HUMAN_MESSAGE
+	// AgentMessageKindRunMessage is free-form text another top-level run sent
+	// into this one (send_to_run). FromThreadID is that run's main thread, in
+	// another chat; the transcript shows it as the run's, never the human's.
+	//
+	// Spelled by number until the SDK pin bump: the app reads reliantv1 from
+	// the PINNED sdk/go module (gen/reliant/v1/sdk_alias.pb.go), which gains
+	// AGENT_MESSAGE_KIND_RUN_MESSAGE only once the pin moves past the commit
+	// that added it (sdk/go/README.md, "Changing the SDK"). The value is the
+	// proto's and never changes.
+	AgentMessageKindRunMessage = reliantv1.AgentMessageKind(6)
 )
 
 // AgentMessageStatus is the durable lifecycle state of a mailbox row.
@@ -111,7 +121,11 @@ type AgentMessage struct {
 	// (spawn_send's `subject`); the transcript shows the message collapsed to
 	// it. Empty for every kind that carries none.
 	Subject string
-	Body    string
+	// DisplayStyle is the reliant.v1.DisplayStyle the drain saves the message
+	// with; nil is an ordinary visible message. HIDDEN makes it LLM-only: an
+	// async ask_user answer, which the transcript shows on the question card.
+	DisplayStyle *int32
+	Body         string
 	// Attachments are attachment IDs, exactly as SaveMessageToThread takes
 	// them -- a queued message carries files the same way a normally-sent
 	// one does, and the drain fold hands this slice straight to

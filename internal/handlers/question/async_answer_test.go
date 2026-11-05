@@ -44,6 +44,9 @@ type recordingMessenger struct {
 	// yielded records, per send, whether its doorbell would make a blocking
 	// question's wait yield (threadwake.YieldsQuestions on its ctx).
 	yielded []bool
+	// llmOnly records, per send, whether it ran as an LLM-only delivery
+	// (db.LLMOnlyDelivery): the answer is saved hidden, shown on its card.
+	llmOnly []bool
 
 	// agentReply answers SendAgentMessage; nil accepts it.
 	agentReply func(*reliantv1.SendAgentMessageRequest) (*reliantv1.SendAgentMessageResponse, error)
@@ -55,6 +58,7 @@ func (m *recordingMessenger) SendAgentMessage(ctx context.Context, req *connect.
 	m.mu.Lock()
 	m.agentSends = append(m.agentSends, req.Msg)
 	m.yielded = append(m.yielded, threadwake.YieldsQuestions(ctx))
+	m.llmOnly = append(m.llmOnly, db.LLMOnlyDelivery(ctx))
 	reply := m.agentReply
 	m.mu.Unlock()
 	if reply == nil {
@@ -72,6 +76,7 @@ func (m *recordingMessenger) SendMessage(ctx context.Context, req *connect.Reque
 	defer m.mu.Unlock()
 	m.mainSends = append(m.mainSends, req.Msg)
 	m.yielded = append(m.yielded, threadwake.YieldsQuestions(ctx))
+	m.llmOnly = append(m.llmOnly, db.LLMOnlyDelivery(ctx))
 	if m.mainErr != nil {
 		return nil, m.mainErr
 	}
@@ -162,6 +167,8 @@ func TestResolveAsyncQuestion_DeliversToTheAskingSubAgent(t *testing.T) {
 
 	assert.Equal(t, []bool{false}, f.messages.yielded,
 		"the answer's doorbell is not the user's: a blocking question its thread is parked on stays open")
+	assert.Equal(t, []bool{true}, f.messages.llmOnly,
+		"the answer is the agent's input, shown on the question card, never a user bubble")
 
 	q := f.status(t, "q-live")
 	assert.Equal(t, db.QuestionStatusResolved, q.Status)
@@ -192,6 +199,7 @@ func TestResolveAsyncQuestion_AfterTheAskingThreadFinishedDeliversToTheMainThrea
 	assert.Equal(t, asyncAnswerForwardedBody("q-finished", f.spawnID, wantSQLiteAnswer), sent.Messages[0].Content)
 	assert.Contains(t, sent.Messages[0].Content, `spawn(agent_id="`+f.spawnID+`")`)
 	assert.Equal(t, asyncAnswerMessageID("q-finished", f.mainID, sent.Messages[0].Content), sent.GetClientMessageId())
+	assert.Equal(t, []bool{true, true}, f.messages.llmOnly, "both attempts deliver the answer LLM-only")
 
 	assert.Equal(t, db.QuestionStatusResolved, f.status(t, "q-finished").Status)
 }
@@ -207,6 +215,7 @@ func TestResolveAsyncQuestion_MainThreadQuestionUsesSendMessage(t *testing.T) {
 	assert.Empty(t, f.messages.agentSends)
 	require.Len(t, f.messages.mainSends, 1)
 	assert.Equal(t, asyncAnswerBody("q-main", wantSQLiteAnswer), f.messages.mainSends[0].Messages[0].Content)
+	assert.Equal(t, []bool{true}, f.messages.llmOnly, "the main thread's answer is LLM-only too")
 	assert.Equal(t, db.QuestionStatusResolved, f.status(t, "q-main").Status)
 }
 
@@ -335,6 +344,8 @@ func TestResolveAsyncQuestion_ThreadParkedOnABlockingQuestionGetsItInItsMailboxO
 			require.Len(t, queued, 1, "A's answer waits in the asking thread's mailbox")
 			assert.Equal(t, asyncAnswerBody("q-a", wantSQLiteAnswer), queued[0].Body)
 			assert.Equal(t, asyncAnswerMessageID("q-a", asker, queued[0].Body), queued[0].ID)
+			require.NotNil(t, queued[0].DisplayStyle, "queued LLM-only: it drains hidden, shown on its card")
+			assert.Equal(t, int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN), *queued[0].DisplayStyle)
 
 			// The thread failing while parked does not lose it: its pending
 			// question is what resumes it.

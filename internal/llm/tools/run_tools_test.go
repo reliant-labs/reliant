@@ -64,6 +64,7 @@ func (f *fakeRunStarter) calls() []StartRunRequest {
 type fakeRunController struct {
 	pauses, resumes, cancels []string
 	deliveries               []string
+	senders                  []RunSender
 	resumeResult             RunResumeResult
 	delivered                bool
 	err                      error
@@ -84,8 +85,9 @@ func (f *fakeRunController) CancelRun(_ context.Context, userID, chatID string) 
 	return f.err
 }
 
-func (f *fakeRunController) DeliverToRun(_ context.Context, userID, chatID, message string) (RunDelivery, error) {
+func (f *fakeRunController) DeliverToRun(_ context.Context, userID, chatID, message string, from RunSender) (RunDelivery, error) {
 	f.deliveries = append(f.deliveries, userID+"/"+chatID+"/"+message)
+	f.senders = append(f.senders, from)
 	return RunDelivery{Delivered: f.delivered, MessageID: "msg-1"}, f.err
 }
 
@@ -410,6 +412,8 @@ func TestSendToRun_LiveRunIsDeliveredThroughTheMessenger(t *testing.T) {
 				SendToRunToolName, SendToRunParams{RunID: target, Message: "status?"})
 			require.False(t, resp.IsError, resp.Content)
 			assert.Equal(t, []string{runTestUser + "/" + target + "/status?"}, ctl.deliveries)
+			assert.Equal(t, []RunSender{{ThreadID: callerID}}, ctl.senders,
+				"the message is the calling run's (its main thread), never its user's")
 
 			var meta SendToRunResponseMetadata
 			require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
@@ -418,6 +422,26 @@ func TestSendToRun_LiveRunIsDeliveredThroughTheMessenger(t *testing.T) {
 			assert.Contains(t, resp.Content, "NOT necessarily read", "the receipt must not overclaim")
 		})
 	}
+}
+
+func TestSendToRun_SubjectTravelsWithTheMessage(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	callerID := newCaller(t, repo)
+	target := uuid.NewString()
+	seedRun(t, repo, runSeed{id: target, user: runTestUser, status: db.Active()})
+	ctl := &fakeRunController{delivered: true}
+
+	resp := callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+		SendToRunToolName, SendToRunParams{RunID: target, Message: "details", Subject: "  PR stuck: review asked for changes "})
+	require.False(t, resp.IsError, resp.Content)
+	assert.Equal(t, []RunSender{{ThreadID: callerID, Subject: "PR stuck: review asked for changes"}}, ctl.senders)
+
+	resp = callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+		SendToRunToolName, SendToRunParams{RunID: target, Message: "details", Subject: "two\nlines"})
+	assert.True(t, resp.IsError, "a multi-line subject is refused, not cut")
+	assert.Len(t, ctl.senders, 1, "a refused subject delivers nothing")
 }
 
 // The run can finish between the tool's read and the messenger's write; the

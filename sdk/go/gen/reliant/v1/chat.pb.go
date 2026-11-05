@@ -392,6 +392,10 @@ const (
 	// Text the HUMAN user sent into a running thread (SendAgentMessage), as
 	// opposed to AGENT_MESSAGE_KIND_MESSAGE, which is agent-to-agent.
 	AgentMessageKind_AGENT_MESSAGE_KIND_HUMAN_MESSAGE AgentMessageKind = 5
+	// Text another top-level run sent into this one (send_to_run), as opposed
+	// to AGENT_MESSAGE_KIND_MESSAGE, which is between a parent and its own
+	// sub-agent. The sender thread is that run's main thread, in another chat.
+	AgentMessageKind_AGENT_MESSAGE_KIND_RUN_MESSAGE AgentMessageKind = 6
 )
 
 // Enum value maps for AgentMessageKind.
@@ -403,6 +407,7 @@ var (
 		3: "AGENT_MESSAGE_KIND_CANCELLED",
 		4: "AGENT_MESSAGE_KIND_FAILED",
 		5: "AGENT_MESSAGE_KIND_HUMAN_MESSAGE",
+		6: "AGENT_MESSAGE_KIND_RUN_MESSAGE",
 	}
 	AgentMessageKind_value = map[string]int32{
 		"AGENT_MESSAGE_KIND_UNSPECIFIED":   0,
@@ -411,6 +416,7 @@ var (
 		"AGENT_MESSAGE_KIND_CANCELLED":     3,
 		"AGENT_MESSAGE_KIND_FAILED":        4,
 		"AGENT_MESSAGE_KIND_HUMAN_MESSAGE": 5,
+		"AGENT_MESSAGE_KIND_RUN_MESSAGE":   6,
 	}
 )
 
@@ -7995,14 +8001,15 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x12DISPLAY_STYLE_INFO\x10\x01\x12\x19\n" +
 	"\x15DISPLAY_STYLE_WARNING\x10\x02\x12\x19\n" +
 	"\x15DISPLAY_STYLE_SUCCESS\x10\x03\x12\x18\n" +
-	"\x14DISPLAY_STYLE_HIDDEN\x10\x04*\xe0\x01\n" +
+	"\x14DISPLAY_STYLE_HIDDEN\x10\x04*\x84\x02\n" +
 	"\x10AgentMessageKind\x12\"\n" +
 	"\x1eAGENT_MESSAGE_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aAGENT_MESSAGE_KIND_MESSAGE\x10\x01\x12!\n" +
 	"\x1dAGENT_MESSAGE_KIND_COMPLETION\x10\x02\x12 \n" +
 	"\x1cAGENT_MESSAGE_KIND_CANCELLED\x10\x03\x12\x1d\n" +
 	"\x19AGENT_MESSAGE_KIND_FAILED\x10\x04\x12$\n" +
-	" AGENT_MESSAGE_KIND_HUMAN_MESSAGE\x10\x05*\xca\x02\n" +
+	" AGENT_MESSAGE_KIND_HUMAN_MESSAGE\x10\x05\x12\"\n" +
+	"\x1eAGENT_MESSAGE_KIND_RUN_MESSAGE\x10\x06*\xca\x02\n" +
 	"\x10ContentBlockType\x12\"\n" +
 	"\x1eCONTENT_BLOCK_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17CONTENT_BLOCK_TYPE_TEXT\x10\x01\x12 \n" +
