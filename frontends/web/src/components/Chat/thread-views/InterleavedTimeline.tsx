@@ -46,6 +46,14 @@ import { settingsSync, SETTINGS_KEYS } from "../../../services/settingsSync";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 import { messageText } from "../../../lib/transcript";
 import { pinnedPromptFirstLine, usePinnedPromptForm } from "./pinnedPromptForm";
+import { useChatThreadMode } from "./useChatThreadMode";
+import {
+  buildSimplifiedTimeline,
+  createSegmentReader,
+  type MessageSlice,
+  type WorkItem,
+} from "./simplifiedTurns";
+import { TurnWorkFold } from "../TurnWorkFold";
 import {
   measureRows,
   resolvePinnedUserMessage,
@@ -106,7 +114,13 @@ interface WorkflowDisplay {
 }
 
 type TimelineItem =
-  | { type: "message"; message: Message; workflow: WorkflowDisplay }
+  /**
+   * `slice` is set only in the simplified thread mode, on a turn's answer
+   * rows: the message renders just those segments (see simplifiedTurns.ts).
+   */
+  | { type: "message"; message: Message; workflow: WorkflowDisplay; slice?: MessageSlice }
+  /** Simplified thread mode only: one agent turn's folded work. */
+  | WorkItem<WorkflowDisplay>
   | { type: "thread-start"; workflow: WorkflowDisplay; parentName: string }
   | { type: "handoff"; toName: string; color: string; key: string }
   /**
@@ -136,6 +150,8 @@ function timelineItemKey(item: TimelineItem): string {
   switch (item.type) {
     case "message":
       return item.message.id;
+    case "work":
+      return item.work.key;
     case "thread-start":
       return `thread-${item.workflow.thread}`;
     case "handoff":
@@ -629,7 +645,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const contentMaxWidthClass = timelineVariant === "minimal" ? "max-w-[900px]" : "max-w-[1200px]";
   const timelineHorizontalPaddingClass = timelineVariant === "minimal" ? "px-4 sm:px-8" : "px-4 sm:px-6 lg:px-8";
   const timelineGapClass = timelineVariant === "card" ? "py-1" : timelineVariant === "minimal" ? "py-0.5" : "";
-  const timelineItems = useMemo(() => {
+  const { mode: threadMode } = useChatThreadMode();
+  const simplified = threadMode === "simplified";
+
+  const detailedTimelineItems = useMemo((): TimelineItem[] => {
     // Build workflow lookups from execution tree
     const { byId, displays } = buildWorkflowLookups(workflowExecution, chatId);
 
@@ -746,8 +765,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
       // In "preview" mode, spawn thread messages render inside the tool call instead
       // Only skip when viewing all threads — if a spawn thread is explicitly selected, show its messages
+      // The simplified thread always previews: a sub-agent's whole transcript
+      // inline is exactly the noise that mode exists to fold away.
       const shouldCollapseSpawn =
-        display.isSpawn && getSpawnDisplayMode() === "preview" && showAll;
+        display.isSpawn && (simplified || getSpawnDisplayMode() === "preview") && showAll;
 
       if (shouldCollapseSpawn) continue;
 
@@ -930,7 +951,40 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     }
 
     return items;
-  }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads, hasOlderMessages]);
+  }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads, hasOlderMessages, simplified]);
+
+  // Simplified mode folds each agent turn's work into one row (see
+  // simplifiedTurns.ts). The reader memoizes per message object, so the pass
+  // stays a cheap linear walk on every streamed delta.
+  const segmentReader = useMemo(() => createSegmentReader(), []);
+  const timelineItems = useMemo((): TimelineItem[] => {
+    if (!simplified) return detailedTimelineItems;
+    let lastMessageId: string | undefined;
+    for (let i = detailedTimelineItems.length - 1; i >= 0; i--) {
+      const item = detailedTimelineItems[i];
+      if (item.type === "message") {
+        lastMessageId = item.message.id;
+        break;
+      }
+    }
+    return buildSimplifiedTimeline(detailedTimelineItems, {
+      segmentsOf: segmentReader,
+      isLiveTurn: (last) => isStreaming && last.id === lastMessageId,
+      workflowOf: (item) => item.workflow,
+    }) as TimelineItem[];
+  }, [simplified, detailedTimelineItems, segmentReader, isStreaming]);
+
+  // The fold still being worked on: the last work row, when only its own
+  // answer rows follow it. Its header shows live status and an elapsed timer.
+  const liveWorkIndex = useMemo(() => {
+    if (!simplified || !isStreaming) return -1;
+    for (let i = timelineItems.length - 1; i >= 0; i--) {
+      const item = timelineItems[i];
+      if (item.type === "work") return i;
+      if (item.type !== "message" || item.slice?.role !== "answer") return -1;
+    }
+    return -1;
+  }, [simplified, isStreaming, timelineItems]);
 
   // `timelineItems` IS the list the virtualizer renders. There is deliberately
   // no per-row wrapper carrying `key`/`isLast`: both are derivable from the
@@ -1185,8 +1239,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     const handleScrollToMessage = (event: Event) => {
       const messageId = (event as CustomEvent<{ messageId?: string }>).detail?.messageId;
       if (!messageId) return;
+      // In the simplified thread a message's work lives inside its turn's
+      // fold, so a hit on that message lands on the fold.
       const index = timelineItems.findIndex(
-        (item) => item.type === "message" && item.message.id === messageId,
+        (item) =>
+          (item.type === "message" && item.message.id === messageId) ||
+          (item.type === "work" && item.work.parts.some((part) => part.message.id === messageId)),
       );
       // Not in the loaded window — the message lives in a page we have not
       // fetched yet, so there is nothing to scroll to.
@@ -1339,6 +1397,47 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       );
     }
 
+    // Indents a non-main thread's row under its thread colour.
+    const threadRow = (workflow: WorkflowDisplay, children: React.ReactNode) => (
+      <div
+        className={cn(
+          // Colors only — never transition-all. The virtualizer measures row
+          // heights with a ResizeObserver, so an animated height reports a new value
+          // every frame of the animation and each one triggers a re-measure
+          // and a follow-scroll correction.
+          "transition-colors",
+          !workflow.isMain && "pl-3",
+          !workflow.isMain && timelineVariant !== "minimal" && "ml-1",
+          timelineVariant === "card" && !workflow.isMain && "rounded-xl bg-background/30"
+        )}
+        style={
+          !workflow.isMain
+            ? {
+                borderLeftColor: workflow.color,
+                borderLeftWidth: timelineVariant === "minimal" ? 2 : 3,
+                borderLeftStyle: "solid",
+              }
+            : undefined
+        }
+      >
+        {children}
+      </div>
+    );
+
+    if (item.type === "work") {
+      return threadRow(
+        item.workflow,
+        <TurnWorkFold
+          work={item.work}
+          chatId={chatId}
+          approvals={approvals}
+          isStreaming={index === liveWorkIndex}
+          onSelectThread={onSelectThread}
+          timelineVariant={timelineVariant}
+        />,
+      );
+    }
+
     // Message item (both user and assistant)
     const msg = item.message;
     const isLastItem = index === lastItemIndex;
@@ -1363,28 +1462,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       );
     }
 
-    return (
-      <div
-        className={cn(
-          // Colors only — never transition-all. The virtualizer measures row
-          // heights with a ResizeObserver, so an animated height reports a new value
-          // every frame of the animation and each one triggers a re-measure
-          // and a follow-scroll correction.
-          "transition-colors",
-          !item.workflow.isMain && "pl-3",
-          !item.workflow.isMain && timelineVariant !== "minimal" && "ml-1",
-          timelineVariant === "card" && !item.workflow.isMain && "rounded-xl bg-background/30"
-        )}
-        style={
-          !item.workflow.isMain
-            ? {
-                borderLeftColor: item.workflow.color,
-                borderLeftWidth: timelineVariant === "minimal" ? 2 : 3,
-                borderLeftStyle: "solid",
-              }
-            : undefined
-        }
-      >
+    return threadRow(
+      item.workflow,
+      <>
         {isCompactionMessage(msg) ? (
           <CompactionMessage message={msg} chatId={chatId} />
         ) : msg.displayStyle ? (
@@ -1399,11 +1479,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
             onSelectThread={onSelectThread}
             timelineVariant={timelineVariant}
             compactToolSpacing={compactToolSpacing}
+            slice={item.slice}
           />
         )}
-      </div>
+      </>,
     );
-  }, [approvals, chatId, isStreaming, lastItemIndex, onSelectThread, timelineVariant]);
+  }, [approvals, chatId, isStreaming, lastItemIndex, liveWorkIndex, onSelectThread, timelineVariant]);
 
   // Wrap each row in the padding/max-width container.
   // One virtual row: absolutely positioned at its measured offset, and handed

@@ -1,0 +1,192 @@
+import { memo, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { AlertCircle, ChevronDown, ChevronRight, ListTree } from "lucide-react";
+import { cn } from "../../lib/utils";
+import { useSurface } from "../../lib/surfaceContext";
+import { getProcessedMessage } from "../../lib/messageProcessor";
+import { useToolCallStates, useToolResultsByCallId } from "../../store/chatStoreHooks";
+import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
+import { findWorkflowById } from "../../lib/workflowTree";
+import { workflowLifecycleToDisplayStatus } from "./ToolExecution";
+import { ChatMessage, type ChatTimelineVariant } from "./ChatMessage";
+import {
+  formatTurnWorkHeadline,
+  summarizeTurnWork,
+  type TurnWorkExecution,
+} from "./turnWorkSummary";
+import type { TurnWork } from "./thread-views/simplifiedTurns";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
+
+interface TurnWorkFoldProps {
+  work: TurnWork;
+  chatId?: string;
+  approvals?: Approval[];
+  /** The turn is still being worked on: the header shows live text and ticks. */
+  isStreaming?: boolean;
+  onSelectThread?: (threadId: string | null) => void;
+  timelineVariant?: ChatTimelineVariant;
+}
+
+const NO_APPROVALS: Approval[] = [];
+
+function parseTime(value: string | undefined): number | null {
+  if (!value) return null;
+  const ms = Date.parse(value);
+  return Number.isNaN(ms) ? null : ms;
+}
+
+function TurnWorkFoldComponent({
+  work,
+  chatId,
+  approvals = NO_APPROVALS,
+  isStreaming = false,
+  onSelectThread,
+  timelineVariant,
+}: TurnWorkFoldProps) {
+  const surface = useSurface();
+  const panelId = useId();
+  const live = isStreaming;
+
+  const toolResultsByCallId = useToolResultsByCallId(chatId || "");
+  const toolCallStates = useToolCallStates(chatId || "");
+  const { allWorkflows } = useWorkflowExecutions(chatId || null);
+
+  const executions = useMemo((): TurnWorkExecution[] => {
+    const approvalsByBlock = new Map<string, Approval>();
+    for (const approval of approvals) {
+      if (approval.entityId) approvalsByBlock.set(approval.entityId, approval);
+    }
+    const out: TurnWorkExecution[] = [];
+    for (const part of work.parts) {
+      const { segments } = getProcessedMessage(part.message, toolResultsByCallId, approvals);
+      for (const index of part.segmentIndexes) {
+        const segment = segments[index];
+        if (segment?.kind !== "tools") continue;
+        for (const execution of segment.executions) {
+          const state = toolCallStates.get(execution.call.id);
+          const childWorkflowId = execution.call.childWorkflowId ?? state?.childWorkflowId;
+          out.push({
+            call:
+              childWorkflowId === execution.call.childWorkflowId
+                ? execution.call
+                : { ...execution.call, childWorkflowId },
+            result: execution.result,
+            approval:
+              execution.approval ??
+              (execution.call.content_block_id
+                ? approvalsByBlock.get(execution.call.content_block_id)
+                : undefined),
+            status: state?.status,
+          });
+        }
+      }
+    }
+    return out;
+  }, [work.parts, toolResultsByCallId, toolCallStates, approvals]);
+
+  const summary = useMemo(
+    () =>
+      summarizeTurnWork(executions, {
+        spawnStatus: (call) => {
+          if (!call.childWorkflowId) return undefined;
+          const workflow = findWorkflowById(allWorkflows, call.childWorkflowId);
+          return workflowLifecycleToDisplayStatus(workflow?.state, workflow?.stopReason);
+        },
+      }),
+    [executions, allWorkflows],
+  );
+
+  // One tick per second, only while live: a finished turn never re-renders.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [live]);
+
+  const startMs = parseTime(work.parts[0]?.message.createdAt);
+  const endMs = useMemo(() => {
+    let latest: number | null = null;
+    for (const { call } of executions) {
+      const done = parseTime(call.durableCompletedAt);
+      if (done !== null && (latest === null || done > latest)) latest = done;
+    }
+    if (latest !== null) return latest;
+    return parseTime(work.parts[work.parts.length - 1]?.message.createdAt);
+  }, [executions, work.parts]);
+
+  const elapsedMs =
+    startMs === null
+      ? null
+      : live
+        ? Math.max(0, now - startMs)
+        : endMs !== null && endMs >= startMs
+          ? endMs - startMs
+          : null;
+
+  const headline = formatTurnWorkHeadline(summary, { live, elapsedMs });
+
+  // Collapsed by default, even while live: the header carries the live state.
+  const [expanded, setExpanded] = useState(false);
+  const toggle = useCallback(() => setExpanded((open) => !open), []);
+
+  const common = { chatId, approvals, isStreaming, onSelectThread, timelineVariant };
+
+  return (
+    <div className="my-1" data-testid="turn-work-fold" data-live={live ? "true" : "false"}>
+      <button
+        type="button"
+        className={cn(
+          "flex w-full items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left text-xs text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:min-h-[44px]",
+          surface !== "desktop" && "min-h-[44px]",
+        )}
+        onClick={toggle}
+        aria-expanded={expanded}
+        aria-controls={panelId}
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <ListTree className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" aria-hidden="true" />
+          <span className={cn("truncate font-medium", live && "turn-work-shimmer")}>{headline}</span>
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5">
+          {summary.failed > 0 && (
+            <span className="inline-flex items-center gap-1 font-mono text-destructive-ink">
+              <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+              {summary.failed}
+              <span className="sr-only">failed</span>
+            </span>
+          )}
+          {expanded ? (
+            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+          )}
+        </span>
+      </button>
+
+      {expanded && (
+        <div id={panelId} className="mt-1 space-y-1 pl-3" data-testid="turn-work-body">
+          {work.parts.map((part) => (
+            <ChatMessage
+              key={`${part.message.id}-work`}
+              message={part.message}
+              slice={{ segmentIndexes: part.segmentIndexes, role: "work" }}
+              {...common}
+            />
+          ))}
+        </div>
+      )}
+
+      {work.parts.map((part) => (
+        <ChatMessage
+          key={`${part.message.id}-surfaced`}
+          message={part.message}
+          slice={{ segmentIndexes: part.segmentIndexes, role: "work-surfaced" }}
+          {...common}
+        />
+      ))}
+    </div>
+  );
+}
+
+export const TurnWorkFold = memo(TurnWorkFoldComponent);
