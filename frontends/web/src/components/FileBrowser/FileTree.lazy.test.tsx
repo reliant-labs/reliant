@@ -219,4 +219,38 @@ describe("FileTree lazy loading", () => {
     fireEvent.click(screen.getByTestId("collapse-src"));
     await waitFor(() => expect(screen.queryByTestId("row-src/a.ts")).not.toBeInTheDocument());
   });
+
+  it("refresh never re-reads an expanded path the tree does not list", async () => {
+    // Revealing an absolute or "~" file used to leave these expanded, and every
+    // refresh re-read them: the server refuses the absolute ones and the daemon
+    // cannot find the rest, about 50 failing calls a minute per open tab.
+    apiMocks.getFileTree.mockImplementation(async (path: string) =>
+      path === "/" ? rootDepth2(true) : []
+    );
+    const ref = createRef<FileTreeHandle>();
+    render(
+      <FileTree
+        ref={ref}
+        searchQuery=""
+        onFileSelect={vi.fn()}
+        onPathChange={vi.fn()}
+        selectedFile={null}
+        showHidden={false}
+        onRefresh={vi.fn()}
+        collapseKey={0}
+        worktreeId="wt-1"
+        expandedPaths={new Set(["src", "/home", "/home/workspace", "~", "~/projects", "gone"])}
+        onExpandedPathsChange={vi.fn()}
+      />
+    );
+    await waitFor(() => expect(screen.getByTestId("row-src/a.ts")).toBeInTheDocument());
+    apiMocks.getFileTree.mockClear();
+
+    await act(async () => {
+      await ref.current!.refresh();
+    });
+
+    const fetched = apiMocks.getFileTree.mock.calls.map(([path]) => path).sort();
+    expect(fetched).toEqual(["/", "src"]);
+  });
 });

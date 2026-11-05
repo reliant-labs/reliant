@@ -9,6 +9,7 @@ import { cn } from "../../lib/utils";
 import { isDaemonConnectingError, isNoMachineError, projectCheckoutMissing } from "../../lib/daemon-errors";
 import { ProjectCheckoutState, type ProjectCheckoutMissing } from "../../gen/reliant/v1/filesystem_pb";
 import { ProjectCheckoutMissingPanel } from "./ProjectCheckoutMissingPanel";
+import { withAncestorsExpanded } from "./treePaths";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { useDaemonWait } from "../../hooks/useDaemonWait";
 import { useProjectStore } from "../../store/projectStore";
@@ -157,24 +158,6 @@ function setChildrenAtPath(
   });
 }
 
-// Get parent path from a path
-function getParentPath(path: string): string | null {
-  const lastSlash = path.lastIndexOf('/');
-  if (lastSlash <= 0) return null;
-  return path.substring(0, lastSlash);
-}
-
-// Expand all parent directories of a path
-function expandPathToNode(path: string, currentExpanded: Set<string>): Set<string> {
-  const newExpanded = new Set(currentExpanded);
-  let parentPath = getParentPath(path);
-  while (parentPath) {
-    newExpanded.add(parentPath);
-    parentPath = getParentPath(parentPath);
-  }
-  return newExpanded;
-}
-
 export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileTree({
   searchQuery,
   onFileSelect,
@@ -237,6 +220,9 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   // Keep a ref mirror so loadChildren/refresh read the latest expansion without
   // being re-created on every expand.
   expandedPathsRef.current = expandedPaths;
+  // Likewise the loaded tree, which refresh reads to skip paths it does not list.
+  const treeRef = useRef<FileNode[]>(tree);
+  treeRef.current = tree;
 
   const setFocusedPath = useCallback((path: string | null) => {
     if (onFocusedPathChange) {
@@ -371,9 +357,17 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   // whole recursive tree. Each directory is refetched so files removed on disk
   // disappear; expanded subtrees are preserved (and themselves refreshed) so the
   // tree doesn't collapse under the user.
+  //
+  // Only expanded paths that are directories of the tree are re-read. An
+  // expanded path with no node — one the server refused, one deleted from disk,
+  // one outside the checkout — shows nothing, and re-reading it on every pushed
+  // change event is how one tab sent ~50 refused GetFileTree a minute
+  // (treePaths.ts). It is fetched again only once a listing shows it.
   const refresh = useCallback(async () => {
+    const expanded = Array.from(expandedPathsRef.current).filter(
+      (p) => findNodeByPath(treeRef.current, p)?.type === "directory",
+    );
     await loadChildren("/", 2);
-    const expanded = Array.from(expandedPathsRef.current);
     await Promise.all(expanded.map((p) => loadChildren(p, 1)));
   }, [loadChildren]);
 
@@ -386,8 +380,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     if (activeViewer?.type === "file") {
       const filePath = activeViewer.file.path;
       // Expand path to make sure file is visible
-      const newExpanded = expandPathToNode(filePath, expandedPaths);
-      setExpandedPaths(newExpanded);
+      const newExpanded = withAncestorsExpanded(expandedPaths, filePath);
+      if (newExpanded !== expandedPaths) setExpandedPaths(newExpanded);
       setFocusedPath(filePath);
       return true;
     }
