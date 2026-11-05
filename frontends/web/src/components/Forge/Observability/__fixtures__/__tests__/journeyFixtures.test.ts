@@ -12,7 +12,9 @@ import { DEMO_ISSUE_ID, DEMO_TRACE_ID } from "@/components/Onboarding/journeys/f
 
 import { createFixtureApi, fixtureTrace, FIXTURE_TRACE_ID } from "../fixtureApi";
 
-const window = { startMs: Date.now() - 3_600_000, endMs: Date.now() };
+// A fixed hour, not the wall clock: the fixture places every record relative to the window it is asked for.
+const END_MS = Date.UTC(2026, 0, 15, 12, 0, 0);
+const window = { startMs: END_MS - 3_600_000, endMs: END_MS };
 const scope = { orgId: "org-fixture", projectId: "shop", envIds: [] as string[], filters: [] };
 
 describe("the forge journey's fixture story", () => {

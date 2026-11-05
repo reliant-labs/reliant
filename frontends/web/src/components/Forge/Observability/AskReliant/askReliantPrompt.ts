@@ -289,14 +289,21 @@ function panelPrompt(subject: Extract<AskSubject, { kind: "panel" }>, ctx: AskCo
   const query = spec.length <= MAX_PANEL_SPEC_CHARS ? `Query: ${spec}` : `Query: too long to quote; read panel ${shellWord(panel.id)} from the dashboard.`;
 
   const exact = subject.env ? metricsQueryCommand(panel, env, since, ctx) : null;
+  const raw = RAW_VERB[panel.signal];
+  const rawRead = raw ? `, or read the raw signal with ${cmd(ctx, ...raw, env, "--since", since)}` : "";
   const run = exact
     ? `${exact} runs this panel's query`
-    : `save the Query above as panel.json and run ${cmd(ctx, "query", env, "--panel", "panel.json", "--since", since)}, or read the raw signal with ${cmd(ctx, RAW_VERB[panel.signal] ?? "query", env, "--since", since)}`;
+    : `save the Query above as panel.json and run ${cmd(ctx, "query", env, "--panel", "panel.json", "--since", since)}${rawRead}`;
   return `${head}\n${query}\n\n${FETCH}: ${run}.`;
 }
 
-/** The structured verb that reads a signal as it is, without the panel's shaping. */
-const RAW_VERB: Record<string, string> = { traces: "traces", logs: "logs", metrics: "metrics list" };
+/**
+ * The structured `obs` subcommand that reads a signal as it is, without the
+ * panel's shaping, as its words. A signal with none (profiles) gets no raw
+ * read: `obs query` needs --sql, --sql-file or --panel, and `obs profile` reads
+ * only a local ClickStack.
+ */
+const RAW_VERB: Record<string, readonly string[]> = { traces: ["traces"], logs: ["logs"], metrics: ["metrics", "list"] };
 
 const INVESTIGATE = "Find the root cause and explain it, with the evidence for it. Don't change any code yet: say what you would change, and why.";
 
@@ -362,9 +369,12 @@ export interface AskAgentCommand {
   command: string;
 }
 
-const plain = (ctx: AskContext, verb: string, ...args: string[]): AskAgentCommand => ({
-  verb,
-  command: [cliOf(ctx), verb, ...args].join(" "),
+/** A forge subcommand path, one word per level (`["obs", "alerts", "check"]`), as `forge <path> --help` names it. */
+type CliPath = readonly [string, ...string[]];
+
+const plain = (ctx: AskContext, path: CliPath, ...args: string[]): AskAgentCommand => ({
+  verb: path.join(" "),
+  command: [cliOf(ctx), ...path, ...args].join(" "),
 });
 
 /**
@@ -380,40 +390,41 @@ export function askAgentCommands(subject: AskSubject, ctx: AskContext = {}): Ask
       const id = shellWord(subject.issueId);
       const trace = subject.latestTraceId ? shellWord(subject.latestTraceId) : null;
       return [
-        plain(ctx, "obs issue", id, env),
-        ...(trace ? [plain(ctx, "obs trace", trace, env), plain(ctx, "obs logs", env, "--trace", trace)] : []),
+        plain(ctx, ["obs", "issue"], id, env),
+        ...(trace ? [plain(ctx, ["obs", "trace"], trace, env), plain(ctx, ["obs", "logs"], env, "--trace", trace)] : []),
       ];
     }
     case "trace": {
       const id = shellWord(subject.traceId);
-      return [plain(ctx, "obs trace", id, env), plain(ctx, "obs logs", env, "--trace", id)];
+      return [plain(ctx, ["obs", "trace"], id, env), plain(ctx, ["obs", "logs"], env, "--trace", id)];
     }
     case "alert":
       return [
-        plain(ctx, "obs status", env, "--json", "--fields", "alerts"),
-        plain(ctx, "obs alerts check", "--env", env, "--rule", shellWord(subject.rule), "--sql"),
+        plain(ctx, ["obs", "status"], env, "--json", "--fields", "alerts"),
+        plain(ctx, ["obs", "alerts", "check"], "--env", env, "--rule", shellWord(subject.rule), "--sql"),
       ];
     case "workload": {
       const name = shellWord(subject.name);
       return [
-        subject.job ? plain(ctx, "obs workloads", env, "--service", name, "--jobs", "all") : plain(ctx, "obs workloads", env, "--service", name),
-        plain(ctx, "obs logs", env, shellWord(`service:${subject.name}`), "--since", "1h"),
+        subject.job ? plain(ctx, ["obs", "workloads"], env, "--service", name, "--jobs", "all") : plain(ctx, ["obs", "workloads"], env, "--service", name),
+        plain(ctx, ["obs", "logs"], env, shellWord(`service:${subject.name}`), "--since", "1h"),
       ];
     }
     case "release":
-      return [plain(ctx, "obs check", env, "--release", shellWord(subject.version), "--json"), plain(ctx, "obs changes", env, "--since", "24h")];
+      return [plain(ctx, ["obs", "check"], env, "--release", shellWord(subject.version), "--json"), plain(ctx, ["obs", "changes"], env, "--since", "24h")];
     case "deploy-failed":
-      return [plain(ctx, "env status", env), plain(ctx, "obs changes", env, "--since", "24h")];
+      return [plain(ctx, ["env", "status"], env), plain(ctx, ["obs", "changes"], env, "--since", "24h")];
     case "session":
-      return [plain(ctx, "obs session", shellWord(subject.sessionId), env)];
+      return [plain(ctx, ["obs", "session"], shellWord(subject.sessionId), env)];
     case "deploy":
-      return [plain(ctx, "env deploy", env), plain(ctx, "obs check", env, "--wait", "--json")];
+      return [plain(ctx, ["env", "deploy"], env), plain(ctx, ["obs", "check"], env, "--wait", "--json")];
     case "panel": {
       const since = SINCE[subject.window];
       const exact = subject.env ? metricsQueryCommand(subject.panel, env, since, ctx) : null;
-      return exact
-        ? [{ verb: "obs metrics query", command: exact.slice(1, -1) }]
-        : [plain(ctx, RAW_VERB[subject.panel.signal] ? `obs ${RAW_VERB[subject.panel.signal]}` : "obs query", env, "--since", since)];
+      if (exact) return [{ verb: "obs metrics query", command: exact.slice(1, -1) }];
+      // No raw read for this signal: the prompt's panel.json is the way in, and there is no file to name here.
+      const raw = RAW_VERB[subject.panel.signal];
+      return raw ? [plain(ctx, ["obs", ...raw], env, "--since", since)] : [];
     }
     case "graph":
       return [];

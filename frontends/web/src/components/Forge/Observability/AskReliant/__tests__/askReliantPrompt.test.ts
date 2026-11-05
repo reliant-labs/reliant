@@ -406,6 +406,18 @@ describe("the handoff: the reader's own agent, a standalone CLI", () => {
     expect(askAgentCommands({ kind: "issue", issueId: "x", env: null }, external).map((c) => c.command)).toEqual(["forge obs issue x <env>"]);
   });
 
+  it("offers a panel's raw read as its full subcommand path, and no source-less obs query", () => {
+    const panel = (signal: string): Panel => ({ id: "p", title: "P", kind: "heatmap", signal, series: [{ label: "A", agg: "count" }] });
+    const commands = (signal: string) => askAgentCommands({ kind: "panel", panel: panel(signal), window: "1h", env: "prod" }, external);
+    expect(commands("traces")).toEqual([{ verb: "obs traces", command: "forge obs traces prod --since 1h" }]);
+    expect(commands("metrics")).toEqual([{ verb: "obs metrics list", command: "forge obs metrics list prod --since 1h" }]);
+    // `obs query` needs --sql, --sql-file or --panel; profiles have no hosted raw read.
+    expect(commands("profiles")).toEqual([]);
+    const prompt = buildAskReliantPrompt({ kind: "panel", panel: panel("profiles"), window: "1h", env: "prod" });
+    expect(prompt).toContain("`reliant forge obs query prod --panel panel.json --since 1h`");
+    expect(prompt).not.toContain("read the raw signal");
+  });
+
   it("never offers obs profile, which reads only a local ClickStack", () => {
     const subjects: AskSubject[] = [
       issue,

@@ -21,6 +21,16 @@ vi.mock("@/hooks/project-queries", async (importOriginal) => ({
 }));
 const startAskReliantChat = vi.hoisted(() => vi.fn());
 vi.mock("@/components/Forge/Observability/AskReliant/startAskReliantChat", () => ({ startAskReliantChat }));
+// Every fixture API read, to see the scope the panel asked for.
+const fixtureCalls = vi.hoisted(() => [] as { rpc: string; request: unknown }[]);
+vi.mock("../../Observability/__fixtures__/fixtureApi", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../Observability/__fixtures__/fixtureApi")>();
+  return {
+    ...actual,
+    createFixtureApi: (options: Parameters<typeof actual.createFixtureApi>[0] = {}) =>
+      actual.createFixtureApi({ ...options, onCall: (rpc, request) => fixtureCalls.push({ rpc, request }) }),
+  };
+});
 vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.virtual());
 
@@ -63,6 +73,7 @@ describe("the forge demo console", () => {
 
   beforeEach(() => {
     rpcCalls.length = 0;
+    fixtureCalls.length = 0;
     setTransport(recordingTransport(rpcCalls));
     fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("the demo fetched"));
     fetchProjects.mockClear();
@@ -91,6 +102,21 @@ describe("the forge demo console", () => {
     expect(nav).not.toBeNull();
     expect(within(nav!).getByRole("link", { name: /Overview/ })).toHaveAttribute("href", "/forge/demo");
     expect(within(nav!).getByRole("link", { name: /Releases/ })).toHaveAttribute("href", "/forge/demo");
+    expectNothingTouched();
+  }, 30_000);
+
+  it("scopes the views to the environment picked by name, as the fixture's id", async () => {
+    // The panel's `envs` are env NAMES (obsSearch.ts); the project place maps them to the fixture's ids.
+    const router = renderDemo("/forge/demo?view=traces");
+    await screen.findAllByTestId("obs-trace-row", {}, { timeout: 15_000 });
+    const scopes = () => fixtureCalls.filter((c) => c.rpc === "ListTraces").map((c) => (c.request as { envIds: string[] }).envIds);
+    expect(scopes()).toContainEqual([]);
+    // What the console's environment picker writes (DemoConsole's onEnvChange): the name.
+    fixtureCalls.length = 0;
+    await router.navigate({ to: "/forge/demo", search: { view: "traces", envs: ["staging"] } as never });
+    await waitFor(() => expect(scopes().length).toBeGreaterThan(0));
+    for (const envIds of scopes()) expect(envIds).toEqual(["env-staging"]);
+    expect(screen.getAllByText("staging").length).toBeGreaterThan(0);
     expectNothingTouched();
   }, 30_000);
 
