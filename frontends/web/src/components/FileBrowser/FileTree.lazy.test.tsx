@@ -253,4 +253,42 @@ describe("FileTree lazy loading", () => {
     const fetched = apiMocks.getFileTree.mock.calls.map(([path]) => path).sort();
     expect(fetched).toEqual(["/", "src"]);
   });
+
+  it("refresh does not re-read an expanded directory the root re-read no longer lists", async () => {
+    // A directory deleted from disk is still in the tree until the root is
+    // re-read; judging it against the old tree would re-read it every refresh.
+    let libPresent = true;
+    apiMocks.getFileTree.mockImplementation(async (path: string) => {
+      if (path !== "/") return [];
+      const nodes = rootDepth2(false);
+      if (libPresent) nodes.push({ name: "lib", path: "lib", type: "directory", hasChildren: false, children: [] });
+      return nodes;
+    });
+    const ref = createRef<FileTreeHandle>();
+    render(
+      <FileTree
+        ref={ref}
+        searchQuery=""
+        onFileSelect={vi.fn()}
+        onPathChange={vi.fn()}
+        selectedFile={null}
+        showHidden={false}
+        onRefresh={vi.fn()}
+        collapseKey={0}
+        worktreeId="wt-1"
+        expandedPaths={new Set(["src", "lib"])}
+        onExpandedPathsChange={vi.fn()}
+      />
+    );
+    await waitFor(() => expect(screen.getByTestId("row-lib")).toBeInTheDocument());
+    libPresent = false;
+    apiMocks.getFileTree.mockClear();
+
+    await act(async () => {
+      await ref.current!.refresh();
+    });
+
+    const fetched = apiMocks.getFileTree.mock.calls.map(([path]) => path).sort();
+    expect(fetched).toEqual(["/", "src"]);
+  });
 });
