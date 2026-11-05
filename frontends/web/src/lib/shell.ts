@@ -20,6 +20,10 @@
  * remembers it in localStorage; `?shell=` (empty) or `?shell=auto` forgets it.
  * The desktop app is always Reliant: the forge shell is a website.
  *
+ * The forge host needs DNS, TLS, CORS and auth-redirect configuration outside
+ * this repo before it works: dev-docs/forge-shell-rollout.md has the order,
+ * the post-deploy checks and the rollback.
+ *
  * Resolved ONCE per page load (getShell memoises): the shell decides which
  * router is built, and a router cannot be swapped under a mounted app.
  */

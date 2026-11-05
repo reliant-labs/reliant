@@ -14,5 +14,6 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `integration-manifests.md` — authoring an integration manifest: the generated JSON Schema, fragment layout, `$ref`, event conformance.
 - `backlog.md` — product proposals and deferred designs moved out of the issue tracker (2026-11-04), each under its original issue number.
 - `human-only-approvals-verification.md` — post-deploy check that real app sessions and OAuth-client tokens classify correctly for human-only approvals.
+- `forge-shell-rollout.md` — activating the forge shell host (forge.reliantlabs.io): external configuration, post-deploy checks, rollback.
 - `dashboard-postgres-panels.md` — post-deploy check for dashboard postgres panels (`AppDatabaseService`), and how to roll them back.
 - `design/mobile-chat-redesign.md` — mobile and tablet chat thread redesign: one top bar, inline composer, status slot, parity map.

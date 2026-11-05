@@ -3,8 +3,8 @@
 /**
  * Settings › API tokens in the forge shell: personal access tokens for the
  * forge CLI and CI (services/controlPlane/forgeTokens.ts). Reliant's Tokens
- * section makes DAEMON credentials; these are the ones `FORGE_TOKEN=… forge
- * env deploy` and a pipeline use. The secret is shown once, with a copy
+ * section makes DAEMON credentials; these are the ones
+ * `FORGE_CONTROL_PLANE_TOKEN=… forge env deploy` and a pipeline use. The secret is shown once, with a copy
  * button, and never again.
  */
 
@@ -16,6 +16,7 @@ import { formatRelativeTime } from "@/lib/relativeTime";
 import {
   createForgeToken,
   DEFAULT_FORGE_TOKEN_SCOPES,
+  FORGE_TOKEN_ENV,
   FORGE_TOKEN_SCOPES,
   listForgeTokens,
   revokeForgeToken,
@@ -117,7 +118,10 @@ export function ForgeTokensSection() {
           <div className="space-y-2 rounded-md border border-border bg-background p-3" data-testid="forge-token-secret">
             <p className="text-sm font-medium">Copy your token now. It is not shown again.</p>
             <CommandLine command={secret} />
-            <p className="text-xs text-muted-foreground">Use it as FORGE_TOKEN in CI, or pass it to the forge CLI.</p>
+            <p className="text-xs text-muted-foreground" data-testid="forge-token-usage">
+              Set it as <code>{FORGE_TOKEN_ENV}</code> in CI (or the variable your environment&apos;s <code>token_env</code> names), or pass
+              it to the forge CLI with <code>--token</code>.
+            </p>
           </div>
         )}
       </section>

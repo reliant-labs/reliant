@@ -115,7 +115,8 @@ export function OrganizationUsageView({ orgId, nowMs: fixedNow, scope = "organiz
   const refresh = () => {
     if (fixedNow === undefined) setClock(Date.now());
     for (const q of queries) void q.refetch();
-    purposes.refresh();
+    // refetch ignores `enabled`: the forge view never asks for managed LLM.
+    if (!forge) purposes.refresh();
   };
 
   return (

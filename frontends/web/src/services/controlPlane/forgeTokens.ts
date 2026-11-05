@@ -15,11 +15,23 @@ import { timestampDate, timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { AccessTokenService } from "@/gen/controlplane/services/access_token/v1/access_token_pb";
 import { getControlPlaneClient } from "./client";
 
+/**
+ * The environment variable the forge CLI reads a token from when an
+ * environment's control-plane declaration names no `token_env` of its own
+ * (forge internal/cloud/credential.go DefaultTokenEnv).
+ */
+export const FORGE_TOKEN_ENV = "FORGE_CONTROL_PLANE_TOKEN";
+
 /** The scopes a forge token is offered with, in display order. */
 export const FORGE_TOKEN_SCOPES = [
   { scope: "deploy:read", label: "Read deployments, releases and status" },
   { scope: "deploy:write", label: "Deploy and promote releases" },
-  { scope: "secret:read", label: "Read secret names and metadata" },
+  // forge pkg/accesstoken/scope.go ScopeSecretRead: metadata everywhere, and
+  // the VALUES of local environments' secrets (forge env up pulls them).
+  {
+    scope: "secret:read",
+    label: "Read secret names and metadata, and pull the secret VALUES of local environments (forge env up)",
+  },
   { scope: "secret:write", label: "Set and delete secrets" },
   { scope: "domain:read", label: "Read custom domains" },
   { scope: "domain:write", label: "Add, bind and remove custom domains" },
