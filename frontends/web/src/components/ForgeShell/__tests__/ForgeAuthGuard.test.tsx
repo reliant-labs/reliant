@@ -16,6 +16,8 @@ vi.mock("@/store/authStore", () => ({
 
 vi.mock("@/components/Layout/LoadingSpinner", () => ({ LoadingSpinner: () => <div data-testid="spinner" /> }));
 
+import { LANDING_JOURNEY_KEY } from "@/lib/landingAttribution";
+
 import { ForgeAuthGuard, forgeAuthDecision, forgeSignInHref } from "../ForgeAuthGuard";
 
 /**
@@ -82,6 +84,30 @@ describe("ForgeAuthGuard", () => {
     expect(screen.getByTestId("spinner")).toBeInTheDocument();
     expect(auth.initialize).toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("leaves a signed-out visitor the landing sent for the forge journey to the public demo", () => {
+    window.localStorage.setItem(LANDING_JOURNEY_KEY, JSON.stringify({ journey: "forge", at: Date.now() }));
+    href = "/apps";
+    render(<ForgeAuthGuard><p>console</p></ForgeAuthGuard>);
+    expect(screen.getByTestId("spinner")).toBeInTheDocument();
+    // ForgeLandingJourney starts the journey on the demo; no sign-in redirect races it.
+    expect(navigate).not.toHaveBeenCalled();
+    window.localStorage.removeItem(LANDING_JOURNEY_KEY);
+  });
+
+  it("still asks for sign-in when a tour is already open, or the held journey is workflows", () => {
+    window.localStorage.setItem(LANDING_JOURNEY_KEY, JSON.stringify({ journey: "forge", at: Date.now() }));
+    href = "/apps?tour=forge%3Afg-console";
+    render(<ForgeAuthGuard><p>console</p></ForgeAuthGuard>);
+    expect(navigate).toHaveBeenCalledWith({ href: expect.stringMatching(/^\/auth\?redirect=/), replace: true });
+
+    navigate.mockClear();
+    window.localStorage.setItem(LANDING_JOURNEY_KEY, JSON.stringify({ journey: "workflows", at: Date.now() }));
+    href = "/apps";
+    render(<ForgeAuthGuard><p>console</p></ForgeAuthGuard>);
+    expect(navigate).toHaveBeenCalledWith({ href: "/auth?redirect=%2Fapps", replace: true });
+    window.localStorage.removeItem(LANDING_JOURNEY_KEY);
   });
 
   it("sends an unconfirmed email account to verify it", () => {
