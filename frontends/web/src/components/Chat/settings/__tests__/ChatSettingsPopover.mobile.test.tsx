@@ -75,6 +75,7 @@ describe("anchored placement", () => {
     render(<ChatSettingsPopover {...shell(embedded)} embedded={embedded} isOpen onClose={vi.fn()} inputs={inputs} values={{}} onChange={onChange} />);
     // The popover is its own dialog; embedded, the host sheet is.
     if (!embedded) expect(screen.getByRole("dialog", { name: "Chat settings" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "auto" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "plan" }));
     expect(onChange).toHaveBeenLastCalledWith({ mode: "plan" });
     await user.click(screen.getByRole("button", { name: /Model flagship/ }));
@@ -86,6 +87,20 @@ describe("anchored placement", () => {
     await user.click(screen.getByRole("button", { name: /review/i }));
     expect(screen.getByDisplayValue("Review carefully")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Secret prompt")).not.toBeInTheDocument();
+  });
+
+  it("drops the Execution Mode row when auto was the only alternative", () => {
+    const manualOrAuto = setInputEnumValues(inputs.mode, ["manual", "auto"]);
+    render(<ChatSettingsPopover {...shell(embedded)} embedded={embedded} isOpen onClose={vi.fn()} inputs={{ mode: manualOrAuto }} values={{}} onChange={vi.fn()} />);
+    expect(screen.queryByText("Execution Mode")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "manual" })).not.toBeInTheDocument();
+  });
+
+  it("returns to auto when the active mode is picked again", async () => {
+    const onChange = vi.fn();
+    render(<ChatSettingsPopover {...shell(embedded)} embedded={embedded} isOpen onClose={vi.fn()} inputs={inputs} values={{ mode: "plan" }} onChange={onChange} />);
+    await userEvent.click(screen.getByRole("button", { name: "plan" }));
+    expect(onChange).toHaveBeenLastCalledWith({ mode: "auto" });
   });
 
   it("keeps multi-enum mode-like inputs in More Settings and writes arrays", async () => {

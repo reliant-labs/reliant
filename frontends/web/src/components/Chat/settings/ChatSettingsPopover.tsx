@@ -20,6 +20,7 @@ import {
   getInputUI,
 } from "../../../lib/inputHelpers";
 import type { Preset } from "../../../hooks/preset-queries";
+import { AUTO_MODE, isSelectorHidden, selectableOptions } from "../../../lib/executionMode";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -317,7 +318,7 @@ export function ChatSettingsPopover({
             )}
 
             {/* Divider before mode */}
-            {modeKey && modeOptions && (
+            {modeKey && modeOptions && !isSelectorHidden(modeOptions) && (
               <>
                 <div className="h-px bg-border/50 mx-0 my-1" />
 
@@ -326,14 +327,14 @@ export function ChatSettingsPopover({
                   Execution Mode
                 </div>
                 <div className="px-4 pb-2.5 flex gap-1.5">
-                  {modeOptions.map((mode) => {
+                  {selectableOptions(modeOptions).map((mode) => {
                     const currentMode =
                       modeValue ?? (modeDefault as string) ?? modeOptions[0];
                     const isSelected = currentMode === mode;
                     return (
                       <button
                         key={mode}
-                        onClick={() => handleModeChange(mode)}
+                        onClick={() => handleModeChange(isSelected ? AUTO_MODE : mode)}
                         className={cn(
                           "flex-1 px-2.5 py-1.5 rounded-md border text-xs font-medium text-center transition-all capitalize touch:min-h-[44px]",
                           isSelected

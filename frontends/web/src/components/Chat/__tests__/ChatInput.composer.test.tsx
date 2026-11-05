@@ -18,6 +18,7 @@ import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useProjectStore } from "../../../store/projectStore";
 import { useAttachmentStore } from "../../../store/attachmentStore";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
+import { useChatParamsStore } from "../../../store/chatParamsStore";
 import { foldCount } from "../composerPriority";
 
 globalThis.ResizeObserver ??= class {
@@ -103,6 +104,7 @@ beforeEach(() => {
   useWorkspaceStateStore.getState().clearNewChatDraft(PROJECT_ID);
   useAttachmentStore.setState({ attachments: new Map() as never });
   slash.action.mockReset();
+  useChatParamsStore.getState().clearTempNewChatParams();
 });
 afterEach(() => vi.unstubAllGlobals());
 
