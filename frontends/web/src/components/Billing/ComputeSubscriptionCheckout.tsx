@@ -175,10 +175,12 @@ export function ComputeSubscriptionCheckout({
 
       <section className="space-y-3 border-t border-border p-5">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Pay with card
+          {currentPlanId ? "Change plan" : "Pay with card"}
         </h3>
         {selected ? (
-          <MachineSaleConsent planId={selected.planId}>{monthlyPriceCents => <SubscriptionPaymentForm
+          /* A subscriber gets the plan change here, not a second subscription
+             (MachineSaleConsent decides from the server's readiness answer). */
+          <MachineSaleConsent planId={selected.planId} onPlanChanged={onDone}>{monthlyPriceCents => <SubscriptionPaymentForm
             plan={monthlyPriceCents === undefined ? selected : { ...selected, monthlyPriceCents }}
             confirmSettlement={confirmSettlement}
             onSettled={() => setSettled(true)}

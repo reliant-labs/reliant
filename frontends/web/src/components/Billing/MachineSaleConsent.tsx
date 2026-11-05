@@ -8,6 +8,7 @@ import { exactCentsLabel, parseRational } from "@/lib/exact-rational";
 import Button from "@/components/forge-ui/button";
 import { formatSizeLabel } from "@/components/Settings/cloud/billingUtils";
 import { ConsentCheckbox } from "./ConsentCheckbox";
+import { MachinePlanChange } from "./MachinePlanChange";
 import { friendlyCheckoutHolds } from "./holdReasons";
 import { formatPrice } from "./priceFormat";
 
@@ -20,15 +21,21 @@ interface MachineSaleConsentProps {
    * "use your own computer instead". Without it the screen offers only a retry.
    */
   onUseOwnComputer?: () => void;
+  /** An existing subscriber's plan change finished (its Done button). */
+  onPlanChanged?: () => void;
 }
 
-/** New paid checkout only. Existing subscriptions use separate next-period consent. */
-export function MachineSaleConsent({ planId, children, onUseOwnComputer }: MachineSaleConsentProps) {
+/**
+ * New paid checkout. An organization that already has a machine subscription
+ * is never sold a second one: it gets the plan change (MachinePlanChange,
+ * an upgrade now or a switch at the next period) instead.
+ */
+export function MachineSaleConsent({ planId, children, onUseOwnComputer, onPlanChanged }: MachineSaleConsentProps) {
   const org = useActiveOrg();
   if (!org.active) return <CheckoutUnavailable message="Cloud machines can be bought once your organization is verified." onUseOwnComputer={onUseOwnComputer} />;
-  return <OrgMachineSale key={`${org.active.id}:${planId}`} orgId={org.active.id} planId={planId} canManage={["owner", "admin"].includes(org.active.role)} onUseOwnComputer={onUseOwnComputer}>{children}</OrgMachineSale>;
+  return <OrgMachineSale key={`${org.active.id}:${planId}`} orgId={org.active.id} planId={planId} canManage={["owner", "admin"].includes(org.active.role)} onUseOwnComputer={onUseOwnComputer} onPlanChanged={onPlanChanged}>{children}</OrgMachineSale>;
 }
-function OrgMachineSale({ orgId, planId, canManage, children, onUseOwnComputer }: { orgId: string; planId: string; canManage: boolean; children: (monthlyPriceCents?: number) => ReactNode; onUseOwnComputer?: () => void }) {
+function OrgMachineSale({ orgId, planId, canManage, children, onUseOwnComputer, onPlanChanged }: { orgId: string; planId: string; canManage: boolean; children: (monthlyPriceCents?: number) => ReactNode; onUseOwnComputer?: () => void; onPlanChanged?: () => void }) {
   const readiness = useQuery({ queryKey: ["machine-pricing-readiness", orgId, planId], queryFn: () => getControlPlaneClient(BillingService).getMachinePricingReadiness({ orgId, planId, pricingVersion: "" }), retry: false, staleTime: 0 });
   const retry = () => void readiness.refetch();
   if (readiness.error) return <CheckoutUnavailable role="alert" message="We couldn't load machine pricing just now." onRetry={retry} onUseOwnComputer={onUseOwnComputer} />;
@@ -36,22 +43,12 @@ function OrgMachineSale({ orgId, planId, canManage, children, onUseOwnComputer }
   const terms = readiness.data;
   // A verified existing-period boundary is scoped to this org. The legacy
   // subscription read has no org_id and must not decide another org's phase.
-  if (terms?.effectivePeriodStart && terms.effectivePeriodStart.seconds > 0n) return <ExistingPlanChange />;
+  // The readiness answer carries `effectivePeriodStart` for an organization
+  // that already has a machine subscription: it changes plan (ChangeMachinePlan),
+  // it never mounts the new-subscription payment.
+  if (terms?.effectivePeriodStart && terms.effectivePeriodStart.seconds > 0n) return <MachinePlanChange planId={planId} onDone={onPlanChanged} />;
   if (!terms) return <CheckoutUnavailable message="Machine pricing is unavailable right now." onRetry={retry} onUseOwnComputer={onUseOwnComputer} />;
   return <NewSale key={`${terms.pricingVersion}:${terms.termsSha256}`} orgId={orgId} planId={planId} canManage={canManage} terms={terms} onRetry={retry} onUseOwnComputer={onUseOwnComputer}>{children}</NewSale>;
-}
-
-/**
- * SEAM — changing an existing machine plan.
- *
- * The readiness answer carries `effectivePeriodStart` for an organization that
- * already has a machine subscription; this new-subscription checkout must not
- * sell it a second one. The plan-change flow (an upgrade or next-period
- * switch, and its backend) is owned separately and replaces this component.
- * Until it lands this only says, plainly, that the switch isn't available here.
- */
-function ExistingPlanChange() {
-  return <p role="status" className="text-sm text-muted-foreground">You already have a machine plan. Switching to a different plan isn't available here yet.</p>;
 }
 
 function CheckoutUnavailable({ message, role = "status", onRetry, onUseOwnComputer }: { message: string; role?: "status" | "alert"; onRetry?: () => void; onUseOwnComputer?: () => void }) {
