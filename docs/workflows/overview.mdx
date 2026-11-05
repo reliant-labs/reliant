@@ -70,7 +70,7 @@ While the agent workflow handles most tasks, Reliant ships additional workflows 
 
 **Get It Right** (`get-it-right`) is for complex changes in an existing codebase, where a first attempt often fails. Each iteration implements, runs lint/test/build checks in parallel, then reviews. A failed check skips review and loops straight back; a bad attempt is undone before the next one. Many of the workflows below are built on it.
 
-**Best of Three** (`parallel-compete`) runs three agents on the same task in isolated worktrees, then a reviewer picks the winner or synthesizes the best parts. Good for comparing implementation strategies.
+**Best of Three** (`parallel-compete`) runs three agents on the same task in isolated workspaces, then a reviewer picks the winner or synthesizes the best parts. Good for comparing implementation strategies.
 
 **Build an App** (`forge-one-shot`) scopes an app with you, scaffolds it with Forge, gets the build green, then fans out sub-agents per part of the app and verifies the running result.
 

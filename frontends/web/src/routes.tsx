@@ -8,6 +8,7 @@ import { isForgeUIEnabled } from './lib/forgeFeature'
 import { getIsDev } from './lib/constants'
 import { createWorkflowsAreaRoutes } from './workflowsAreaRoutes'
 import { retainTourParam } from './components/Onboarding/tourParam'
+import { createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
@@ -775,6 +776,13 @@ const appsRoute = createRoute({
   component: gated(AppsPage),
 })
 
+// The forge demo console: the console and its Observability views on fixture
+// data, with no daemon, chat or control-plane call (components/Forge/Demo). The
+// forge journey walks it. Signed in here; the forge shell mounts the same route
+// publicly. Not behind ForgeGate: it reads nothing of the user's, and the
+// journey picker offers it to everyone.
+const forgeDemoRoute = createForgeDemoRoute(() => authenticatedLayoutRoute)
+
 const onboardingRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
   path: '/onboarding',
@@ -990,6 +998,7 @@ const routeTree = rootRoute.addChildren([
       mobileDiagnosticsRoute,
     ]),
     onboardingRoute,
+    forgeDemoRoute,
     forgeConsoleRoutes,
     settingsRoute,
     ...settingsConnectorRoutes,

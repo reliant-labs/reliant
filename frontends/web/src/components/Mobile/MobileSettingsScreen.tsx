@@ -191,8 +191,8 @@ export function MobileSettingsScreen() {
     },
     {
       id: "workspace",
-      label: "Branches",
-      description: "Cleanup defaults for branched chats",
+      label: "Workspaces",
+      description: "Cleanup defaults for workspaces",
       icon: FolderGit2,
       group: "preferences",
       capability: "settingsWorkspace",

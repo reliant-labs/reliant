@@ -116,30 +116,36 @@ func (q *TerminalOutputQueue) Fail() {
 // channel. The delivery waits for the consumer however long it takes, so a
 // consumer that resumes always learns why its stream ended; every consumer
 // closes the queue when it stops reading, which ends the wait.
+//
+// Once failed, that delivery goroutine is the channel's only sender (Send and
+// Fail return at once on a failed queue) and the only one that closes it, so
+// it waits for the consumer WITHOUT holding mu. Holding mu through that wait
+// deadlocked a producer whose next Send needs mu just to learn the queue has
+// failed, while the consumer was not yet reading.
 func (q *TerminalOutputQueue) failLocked() {
 	q.failed = true
 	go func() {
 		evt := &TerminalOutputEvent{SessionID: q.sessionID, Error: TerminalOutputOverflowMessage, Overflow: true}
-		q.mu.Lock()
-		defer q.mu.Unlock()
-		if q.chClosed {
-			return
-		}
 		select {
 		case q.ch <- evt:
 		case <-q.stop:
 		}
+		q.mu.Lock()
+		defer q.mu.Unlock()
 		q.closeChLocked()
 	}()
 }
 
 // Close ends the queue: a waiting Send returns, and the consumer's channel
-// closes after what is already queued.
+// closes after what is already queued. On a failed queue the delivery
+// goroutine closes it, once it has delivered the overflow event or seen Close.
 func (q *TerminalOutputQueue) Close() {
 	q.stopOnce.Do(func() { close(q.stop) })
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.closeChLocked()
+	if !q.failed {
+		q.closeChLocked()
+	}
 }
 
 func (q *TerminalOutputQueue) closeChLocked() {

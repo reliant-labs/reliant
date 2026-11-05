@@ -49,7 +49,7 @@ export const workflowsJourney: Journey = {
   steps: [ /* JourneyStep[] */ ],
   outro: [ /* JourneyStep[], walked after steps; see "Outro" */ ],
   finish: (shell) => shell === "reliant" ? { to: "/forge" } : null, // where Finish lands; default: Reliant's chat
-  elsewhere: { label: "Try AI workflows in Reliant", href: () => "https://app.reliantlabs.io/?journey=workflows" },
+  elsewhere: { label: "Try AI workflows in Reliant", href: () => `${reliantAppOrigin()}/?journey=workflows` }, // lib/shell.ts: runtime config APP_URL
   isAvailable: () => true,          // e.g. a feature flag
   reshowAfterVersionBump: true,     // default true
 };
@@ -286,6 +286,16 @@ effects are skipped when storage isn't the settings adapter:
 - the checklist;
 - the API-key prompt;
 - the chat landing.
+
+The forge shell does this in `forgeShellRoutes.tsx` (`bootForgeTour`,
+ForgeShell/forgeTourBoot.ts), mounts `<JourneyTour />` at its root, and mounts
+`/forge/demo` (and `/demo`) as public routes. A landing `?journey=` is handled
+by ForgeShell/landingJourney.ts:
+- `forge` starts the forge journey: at once for a signed-out visitor (on the
+  public demo, instead of the sign-in redirect), on arrival for a signed-in
+  one, and after sign-in for a visitor who came in through `/auth`.
+- `workflows` never runs there; a card links to Reliant
+  (`<APP_URL>/?journey=workflows`).
 
 ## Analytics (through `trackEvent`)
 

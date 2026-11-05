@@ -48,7 +48,7 @@ describe("WorktreesDiscoverHint", () => {
   it("shows the count and opens review", async () => {
     discover.mockResolvedValue(list(2));
     const { onReview } = mount();
-    expect(await screen.findByText(/2 worktrees made outside Reliant/)).toBeTruthy();
+    expect(await screen.findByText(/2 git worktrees made outside Reliant/)).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Review" }));
     expect(onReview).toHaveBeenCalled();
   });
@@ -63,13 +63,13 @@ describe("WorktreesDiscoverHint", () => {
   it("stays dismissed, and reappears when the count grows", async () => {
     discover.mockResolvedValue(list(2));
     const { qc } = mount();
-    await screen.findByText(/2 worktrees/);
+    await screen.findByText(/2 git worktrees/);
     await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByTestId("worktrees-discover-hint")).toBeNull();
     expect(localStorage.getItem("reliant.worktreeHint.dismissed.p1")).toBe("2");
 
     discover.mockResolvedValue(list(3));
     await invalidateDiscoveredWorktrees(qc, "p1");
-    expect(await screen.findByText(/3 worktrees/)).toBeTruthy();
+    expect(await screen.findByText(/3 git worktrees/)).toBeTruthy();
   });
 });

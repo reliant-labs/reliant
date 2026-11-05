@@ -14,12 +14,14 @@
  * screen honours for a same-origin path, through OAuth and magic links too).
  */
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 
 import { LoadingSpinner } from "@/components/Layout/LoadingSpinner";
 import { isSafeReturnTo } from "@/lib/returnTo";
 import { useAuthStore } from "@/store/authStore";
+
+import { landingJourneyHoldsSignIn } from "./landingJourney";
 
 export type ForgeAuthDecision = "wait" | "sign-in" | "verify-email" | "allow";
 
@@ -52,15 +54,22 @@ export function ForgeAuthGuard({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const here = useRouterState({ select: (s) => s.location.href });
   const decision = forgeAuthDecision({ initialized, loading, user });
+  // A signed-out visitor the landing page sent for the forge journey goes to
+  // the public demo instead (ForgeLandingJourney); sign-in can wait. Decided
+  // once: while the journey's navigation is under way the location already
+  // carries its `?tour=` and the held choice is spent, and re-deciding then
+  // would send the visitor to sign in after all.
+  const [journeyPending] = useState(() => landingJourneyHoldsSignIn(here));
+  const leaveToJourney = decision === "sign-in" && journeyPending;
 
   useEffect(() => {
     if (!initialized) void initialize();
   }, [initialized, initialize]);
 
   useEffect(() => {
-    if (decision === "sign-in") void navigate({ href: forgeSignInHref(here), replace: true });
+    if (decision === "sign-in" && !leaveToJourney) void navigate({ href: forgeSignInHref(here), replace: true });
     if (decision === "verify-email") void navigate({ href: "/verify-email", replace: true });
-  }, [decision, here, navigate]);
+  }, [decision, leaveToJourney, here, navigate]);
 
   if (decision !== "allow") return <LoadingSpinner />;
   return <>{children}</>;

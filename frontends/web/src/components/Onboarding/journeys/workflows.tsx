@@ -22,6 +22,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 
 import { useTriggers } from "../../../hooks/trigger-queries";
+import { reliantAppOrigin } from "../../../lib/shell";
 import { triggerRunsWorkflow } from "../../../lib/triggerRail";
 import { WORKFLOW_PAGES_PREFIX, WORKFLOWS_LIBRARY_PATH } from "../../../lib/workflowsArea";
 import { useProjectStore } from "../../../store/projectStore";
@@ -143,11 +144,12 @@ export const workflowsJourney: Journey = {
   id: "workflows",
   // v1 was the engine's two-step placeholder; v0 the retired single tour.
   version: 2,
-  // Workflows need Reliant; the forge shell links here instead.
+  // Workflows need Reliant; the forge shell links here instead. Reliant's
+  // origin is the runtime config's (APP_URL), as the shell's "Open in Reliant".
   shells: ["reliant"],
   elsewhere: {
     label: "Try AI workflows in Reliant",
-    href: () => "https://app.reliantlabs.io/?journey=workflows",
+    href: () => `${reliantAppOrigin()}/?journey=workflows`,
   },
   title: "Use AI workflows",
   description:

@@ -100,7 +100,7 @@ const sectionGroups: SectionGroup[] = [
       { id: "prompts", label: "Prompts", icon: List },
       { id: "presets", label: "Presets", icon: Layers },
       { id: "automations", label: "Approve agent changes", icon: Zap },
-      { id: "branches", label: "Branches", icon: GitBranch },
+      { id: "branches", label: "Workspaces", icon: GitBranch },
       // Tokens exist to let a self-hosted machine or headless daemon connect.
       { id: "tokens", label: "Access tokens", icon: KeyRound },
       // Reliant's own browser is app behaviour, not something agents run on.

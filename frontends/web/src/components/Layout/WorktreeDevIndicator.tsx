@@ -70,7 +70,7 @@ export function WorktreeDevIndicator({
         className
       )}
       style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-      title={`Development Worktree: ${displayName}`}
+      title={`Development workspace: ${displayName}`}
     >
       <span className="text-purple-50">{displayName}</span>
     </div>

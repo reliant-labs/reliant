@@ -11,6 +11,8 @@
  *   /claim                                    claim a no-signup deploy
  *                                             (components/Claim), landing in
  *                                             the app's console
+ *   /forge/demo, /demo                        the forge journey's demo console
+ *                                             on fixture data: public
  *   _authenticated                            ForgeAuthGuard: signed in, nothing else
  *     _forgeShell                             ForgeShellLayout: brand, nav, org,
  *                                             "Open in Reliant"
@@ -36,8 +38,12 @@ import { createRootRoute, createRoute, createRouter, Navigate, Outlet, useRouter
 
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
 import { ForgeAuthGuard } from './components/ForgeShell/ForgeAuthGuard'
+import { ForgeLandingJourney } from './components/ForgeShell/ForgeLandingJourney'
 import { ForgeShellLayout } from './components/ForgeShell/ForgeShellLayout'
+import { bootForgeTour } from './components/ForgeShell/forgeTourBoot'
+import { JourneyTour } from './components/Onboarding/JourneyTour'
 import { AuthGuard } from './components/AuthGuard'
+import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { ModalLayer } from './components/Modals/ModalLayer'
@@ -53,6 +59,8 @@ import { authSearchSchema, oauthCallbackSearchSchema, upgradeSearchSchema } from
 // Taken before the router exists: the guard's sign-in redirect replaces the
 // URL the landing handoff arrived on (forgeEntry.ts).
 const entry = captureForgeEntry()
+// Before anything renders the tour: this shell, and progress in localStorage.
+bootForgeTour()
 
 const AuthScreen = lazyRoute(() => import('./components/AuthScreen'), 'AuthScreen')
 const OAuthCallback = lazyRoute(() => import('./components/OAuthCallback'), 'OAuthCallback')
@@ -82,12 +90,10 @@ function ForgeRootShell() {
         <ModalLayer />
         <Toaster />
         <NewBuildPrompt />
-        {/* TODO(forge-journey, reliant#2206): mount the journey tour here once
-            the journey engine lands. At boot (beside captureForgeEntry):
-              setTourShell("forge")
-              setTourStorage(localStorageTourStorage("forge.tour.v1"))
-            and render <JourneyTour /> beside the outlet. Not imported now so
-            this branch does not depend on an unmerged one. */}
+        {/* The journeys (Onboarding/JOURNEYS.md): at the root, so a step
+            follows the visitor between the public demo and signed-in pages. */}
+        <JourneyTour />
+        <ForgeLandingJourney />
       </div>
     </SurfaceProvider>
   )
@@ -183,12 +189,11 @@ export function buildForgeShellTree({
     component: ClaimPage,
   })
 
-  // TODO(forge-demo, feat/journey-forge stacked on reliant#2206): mount the
-  // public /forge/demo route here — root-level and UNGUARDED (fixture
-  // observability data, no daemon, no chat), before the authenticated layout
-  // so `/forge/…` console routes do not shadow it:
-  //   const forgeDemoRoute = createRoute({ getParentRoute: () => rootRoute, path: '/forge/demo', component: ForgeDemo })
-  // and add it to the tree below next to claimRoute.
+  // The forge journey's demo console, public: fixture observability data, no
+  // daemon, no chat, no account. Root-level, outside the guard, so it is
+  // reached signed out; `/demo` points at it (a landing link's short form).
+  const forgeDemoRoute = createForgeDemoRoute(() => rootRoute)
+  const demoRedirectRoute = createForgeDemoRedirectRoute(() => rootRoute)
 
   const indexRoute = createRoute({
     getParentRoute: () => rootRoute,
@@ -276,6 +281,8 @@ export function buildForgeShellTree({
     verifyEmailRoute,
     upgradeRoute,
     claimRoute,
+    forgeDemoRoute,
+    demoRedirectRoute,
     indexRoute,
     ...extraRoutes(rootRoute),
     authenticatedLayoutRoute.addChildren([

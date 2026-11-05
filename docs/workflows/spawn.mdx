@@ -148,7 +148,7 @@ When an agent has access to spawn, the tool accepts these parameters:
 | `prompt` | Yes | Detailed task description for the spawned workflow |
 | `title` | No | A readable title for the sub-agent's thread; defaults to the preset name |
 | `agent_id` | No | Agent ID to resume an existing conversation |
-| `worktree` | No | The name of a worktree created with the `worktree` tool. The sub-agent works in that workspace, on its own branch, instead of the parent's |
+| `worktree` | No | The name of a workspace created with the `worktree` tool (the parameter and the tool keep the git name). The sub-agent works in that workspace, on its own branch, instead of the parent's |
 | `providers` | No | Provider policy for this sub-agent only: `{ "prefer": ["codex"], "on_limit": "wait" \| "fallback", "fallback": "<model>@<driver>" }`. Beats the preset's `providers:` and the chat's policy; see [Presets](/workflows/presets#provider-policy-providers). |
 
 ### Basic Example
@@ -172,9 +172,9 @@ If a spawned agent was previously used, you can resume its conversation:
 }
 ```
 
-### Running in a Worktree
+### Running in a Workspace
 
-For tasks that modify files, you can isolate changes in a worktree. The parent creates one with the `worktree` tool (`action: create`, a `name` and optionally a `base_branch`), then names it in the spawn:
+For tasks that modify files, you can isolate changes in a workspace. The parent creates one with the `worktree` tool (`action: create`, a `name` and optionally a `base_branch`), then names it in the spawn:
 
 ```json
 {
@@ -184,7 +184,7 @@ For tasks that modify files, you can isolate changes in a worktree. The parent c
 }
 ```
 
-The worktree appears in the app's Workspaces like any other, so you can open it, review its branch, and archive it when you are done.
+The workspace appears in the app's Workspaces like any other, so you can open it, review its branch, and archive it when you are done.
 
 ## Use Cases
 
@@ -295,10 +295,10 @@ If the child workflow encounters an error, the error message is delivered with a
 
 **Do not over-delegate**: Simple tasks do not need spawn. Use spawn when the task benefits from a specialist's focused attention or when you want isolation between concerns.
 
-**Consider worktrees for modifications**: When spawning workflows that will modify files, consider using worktrees to isolate changes until you are ready to merge them.
+**Consider workspaces for modifications**: When spawning workflows that will modify files, consider using workspaces to isolate changes until you are ready to merge them.
 
 ## Related Topics
 
 - [Presets](/workflows/presets) - Understanding the presets that configure spawned workflows
-- [Worktrees & Workspaces](/features/worktrees) - Isolating file changes in separate working directories
+- [Workspaces](/features/worktrees) - Isolating file changes in separate working directories
 - [Multi-Agent Patterns](/workflows/patterns) - Broader patterns for coordinating multiple agents

@@ -252,7 +252,15 @@ test.describe.serial('Workflow Builder Final Validation', () => {
         const hasLoop = nodeTexts.some(t => t.includes('agent_loop'));
         console.log(`  agent_loop node: ${hasLoop}`);
 
-        const yamlBtn = page.locator('button:has-text("YAML")').first();
+        // YAML is in the header's More menu for an editable workflow; built-ins keep a top-level "View YAML".
+        let yamlBtn = page.locator('button:has-text("YAML")').first();
+        if (!(await yamlBtn.isVisible().catch(() => false))) {
+          const more = page.getByTestId('workflow-more');
+          if (await more.isVisible().catch(() => false)) {
+            await more.click();
+            yamlBtn = page.getByRole('menuitem', { name: 'YAML' });
+          }
+        }
         if (await yamlBtn.isVisible().catch(() => false)) {
           await yamlBtn.click();
           await page.waitForTimeout(2000);

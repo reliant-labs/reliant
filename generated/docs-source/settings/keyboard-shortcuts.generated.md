@@ -66,8 +66,8 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 | `Cmd+Shift+Down` |  | Next Chat |
 | `Cmd+K D` |  | Next Chat Needing Attention |
 | `Cmd+Shift+Up` |  | Previous Chat |
-| `Cmd+K B` |  | Switch Branch Chat |
 | `Cmd+E` |  | Switch Chat |
+| `Cmd+K B` |  | Switch Workspace |
 
 ## Project Navigation
 

@@ -4,7 +4,18 @@ import { describe, expect, it } from "vitest";
 
 import type { Panel } from "@/services/controlPlane/observability/types";
 
-import { askWorkspaceName, buildAskReliantPrompt, MAX_PANEL_SPEC_CHARS, metricsQueryCommand, panelQuery, shellWord, traceEnvName, type AskSubject } from "../askReliantPrompt";
+import {
+  askAgentCommands,
+  askAgentPlaybook,
+  askWorkspaceName,
+  buildAskReliantPrompt,
+  MAX_PANEL_SPEC_CHARS,
+  metricsQueryCommand,
+  panelQuery,
+  shellWord,
+  traceEnvName,
+  type AskSubject,
+} from "../askReliantPrompt";
 
 const TRACE = "0af7651916cd43dd8448eb211c80319c";
 
@@ -339,5 +350,93 @@ describe("deploy", () => {
     const prompt = buildAskReliantPrompt({ kind: "deploy", env: null }, { envChoices: ["staging", "prod"] });
     expect(prompt).toContain("to an environment (one of staging, prod); ask me which before deploying.");
     expect(prompt).toContain("`reliant forge env deploy <env>`");
+  });
+});
+
+describe("the handoff: the reader's own agent, a standalone CLI", () => {
+  const issue: AskSubject = {
+    kind: "issue",
+    issueId: "iss-orders-deadline",
+    env: "prod",
+    latestTraceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+    firstVersion: "v1.8.3",
+    lastVersion: "v1.8.3",
+  };
+  const external = { forgeProject: "shop", cli: "forge", host: "external" } as const;
+
+  it("is the forge journey's prompt, word for word, spelled with forge", () => {
+    expect(buildAskReliantPrompt(issue, { ...external, intent: "investigate" })).toBe(
+      "Issue iss-orders-deadline in environment prod (forge project shop).\n" +
+        "Seen in v1.8.3.\n\n" +
+        "Fetch the details yourself with the forge CLI, starting with `forge obs issue iss-orders-deadline prod` (its latest event's trace: `forge obs trace 4bf92f3577b34da6a3ce929d0e0e4736 prod`).\n\n" +
+        "Find the root cause and explain it, with the evidence for it. Don't change any code yet: say what you would change, and why."
+    );
+  });
+
+  it("claims no workspace or branch of its own when asked to fix", () => {
+    const prompt = buildAskReliantPrompt(issue, { ...external, intent: "fix" });
+    expect(prompt).not.toMatch(/workspace|this chat|main checkout is untouched/i);
+    expect(prompt).toMatch(
+      /Then fix it on a new branch: find the root cause, make the smallest correct change, add a test that fails without it, run the tests that cover it, and report the root cause, the change and how you verified it\.$/
+    );
+    // Reliant's own chat still says it has one.
+    expect(buildAskReliantPrompt(issue, { intent: "fix" })).toContain("This chat has a workspace of its own");
+  });
+
+  it("names no other CLI than the one it was given", () => {
+    for (const subject of [issue, { kind: "trace", traceId: "abc", env: "prod" }, { kind: "deploy", env: "prod" }, { kind: "deploy-failed", env: "prod" }] as AskSubject[]) {
+      expect(buildAskReliantPrompt(subject, external)).not.toContain("reliant forge");
+    }
+  });
+
+  it("offers the commands that read the subject, exactly as `forge obs <verb> --help` spells them", () => {
+    expect(askAgentCommands(issue, external).map((c) => c.command)).toEqual([
+      "forge obs issue iss-orders-deadline prod",
+      "forge obs trace 4bf92f3577b34da6a3ce929d0e0e4736 prod",
+      "forge obs logs prod --trace 4bf92f3577b34da6a3ce929d0e0e4736",
+    ]);
+    expect(askAgentCommands({ kind: "trace", traceId: "abc", env: "prod" }).map((c) => c.command)).toEqual([
+      "reliant forge obs trace abc prod",
+      "reliant forge obs logs prod --trace abc",
+    ]);
+    expect(askAgentCommands({ kind: "alert", rule: "CheckoutP95High", fingerprint: "f", env: "prod" }, external).map((c) => c.command)).toEqual([
+      "forge obs status prod --json --fields alerts",
+      "forge obs alerts check --env prod --rule CheckoutP95High --sql",
+    ]);
+    expect(askAgentCommands({ kind: "issue", issueId: "x", env: null }, external).map((c) => c.command)).toEqual(["forge obs issue x <env>"]);
+  });
+
+  it("offers a panel's raw read as its full subcommand path, and no source-less obs query", () => {
+    const panel = (signal: string): Panel => ({ id: "p", title: "P", kind: "heatmap", signal, series: [{ label: "A", agg: "count" }] });
+    const commands = (signal: string) => askAgentCommands({ kind: "panel", panel: panel(signal), window: "1h", env: "prod" }, external);
+    expect(commands("traces")).toEqual([{ verb: "obs traces", command: "forge obs traces prod --since 1h" }]);
+    expect(commands("metrics")).toEqual([{ verb: "obs metrics list", command: "forge obs metrics list prod --since 1h" }]);
+    // `obs query` needs --sql, --sql-file or --panel; profiles have no hosted raw read.
+    expect(commands("profiles")).toEqual([]);
+    const prompt = buildAskReliantPrompt({ kind: "panel", panel: panel("profiles"), window: "1h", env: "prod" });
+    expect(prompt).toContain("`reliant forge obs query prod --panel panel.json --since 1h`");
+    expect(prompt).not.toContain("read the raw signal");
+  });
+
+  it("never offers obs profile, which reads only a local ClickStack", () => {
+    const subjects: AskSubject[] = [
+      issue,
+      { kind: "trace", traceId: "abc", env: "prod" },
+      { kind: "alert", rule: "r", fingerprint: "f", env: "prod" },
+      { kind: "workload", name: "api", env: "prod" },
+      { kind: "release", version: "v1", env: "prod" },
+      { kind: "session", sessionId: "s", env: "prod" },
+      { kind: "deploy", env: "prod" },
+      { kind: "deploy-failed", env: "prod" },
+    ];
+    for (const subject of subjects) for (const { command } of askAgentCommands(subject, external)) expect(command).not.toMatch(/obs profile/);
+  });
+
+  it("gives the agent forge's playbook: the observability skill and the MCP server", () => {
+    expect(askAgentPlaybook("forge")).toEqual([
+      "forge skill load observability/query",
+      "claude mcp add forge -- forge mcp",
+      "codex mcp add forge -- forge mcp",
+    ]);
   });
 });
