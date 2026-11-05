@@ -142,7 +142,7 @@ func TestCredentialSlot(t *testing.T) {
 
 func TestValuesNeverPrint(t *testing.T) {
 	v := Values{"K": "super-secret-value-123"}
-	for _, s := range []string{fmt.Sprint(v), fmt.Sprintf("%v", v), fmt.Sprintf("%+v", v), fmt.Sprintf("%#v", v), fmt.Sprintf("%s", v)} {
+	for _, s := range []string{fmt.Sprint(v), fmt.Sprintf("%v", v), fmt.Sprintf("%+v", v), fmt.Sprintf("%#v", v), v.String()} {
 		assert.NotContains(t, s, "super-secret-value-123")
 	}
 }

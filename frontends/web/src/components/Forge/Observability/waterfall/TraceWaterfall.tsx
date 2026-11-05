@@ -262,6 +262,13 @@ export function TraceWaterfall({
               const hasChildren = node.children.length > 0;
               const isOpen = hasChildren && !collapsed.has(node.id);
               const color = isError ? "hsl(var(--destructive))" : serviceColor(slots.get(span.service));
+              // Each service's own build, on the span where the trace enters it
+              // (a root, or a child of another service or build): its other
+              // spans are the same build, said in their title.
+              const version = span.resource["service.version"] ?? "";
+              const parent = tree.nodesById.get(parentOf.get(node.id) ?? "")?.span;
+              const showVersion =
+                !!version && (!parent || parent.service !== span.service || (parent.resource["service.version"] ?? "") !== version);
               return (
                 <div
                   key={item.key}
@@ -302,7 +309,14 @@ export function TraceWaterfall({
                       <span className="w-3 shrink-0" />
                     )}
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />
-                    <span className="shrink-0 text-ink-muted">{span.service}</span>
+                    <span className="shrink-0 text-ink-muted" title={version ? `${span.service} ${version}` : undefined}>
+                      {span.service}
+                    </span>
+                    {showVersion && (
+                      <span className="shrink-0 font-mono text-2xs text-ink-muted" data-testid="waterfall-span-version">
+                        {version}
+                      </span>
+                    )}
                     <span className={cn("truncate font-mono", isError ? "text-danger-ink" : "text-ink")}>{span.name}</span>
                     {hasChildren && !isOpen && (
                       <span className="shrink-0 text-ink-muted">({node.children.length})</span>

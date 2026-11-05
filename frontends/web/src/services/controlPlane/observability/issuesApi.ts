@@ -59,6 +59,7 @@ import type {
   UpdateIssueCommentRequest,
   UpdateIssueStatusRequest,
 } from "./issuesTypes";
+import { mapClient } from "./client";
 
 function client() {
   return obsClient(IssuesService);
@@ -206,6 +207,7 @@ export function mapIssueEvent(e: WireEvent): IssueEvent {
     country: e.country,
     region: e.region,
     city: e.city,
+    client: mapClient(e.client),
   };
 }
 
@@ -244,6 +246,9 @@ export async function listIssues(req: ListIssuesRequest, options: { signal?: Abo
     text: req.text || undefined,
     assignee: req.assignee || undefined,
     userId: req.userId || undefined,
+    browser: req.browser || undefined,
+    os: req.os || undefined,
+    serviceVersion: req.serviceVersion || undefined,
     sort: WIRE_SORT[req.sort],
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",

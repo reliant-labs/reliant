@@ -40,6 +40,13 @@ function getFindBarWebPreferences() {
 }
 
 /**
+ * The flag that hands the app's version to the preload, which exposes it to the
+ * page as window.forgeDesktop.appVersion (preload.js, desktopVersions). The
+ * sandboxed preload cannot call app.getVersion(); it can read process.argv.
+ */
+const DESKTOP_VERSION_ARG = '--reliant-app-version=';
+
+/**
  * Common webPreferences for all BrowserWindows
  * These settings are security-critical and should be consistent across all windows
  */
@@ -51,6 +58,7 @@ function getWebPreferences() {
     enableRemoteModule: false,
     webviewTag: true, // Required for browser embedding feature
     preload: getPreloadPath(),
+    additionalArguments: [DESKTOP_VERSION_ARG + app.getVersion()],
   };
 }
 
@@ -80,6 +88,7 @@ function getTitleBarStyle(variant = 'hidden') {
 }
 
 module.exports = {
+  DESKTOP_VERSION_ARG,
   getPreloadPath,
   getFindBarPreloadPath,
   getFindBarWebPreferences,

@@ -249,4 +249,9 @@ export const LEAVE_SESSIONS: ObsSearch = {
   cursor: undefined,
   errors: undefined,
   q: undefined,
+  // The client and build filters: a session's frontend build kept on Traces
+  // would exclude the backend traces a session link promises.
+  browser: undefined,
+  os: undefined,
+  fe: undefined,
 };
