@@ -6,6 +6,42 @@ is the product's only client of control-plane's `PreviewMachinePlanChange` /
 `docs/design/guaranteed-machine-repricing.md` §11). Those RPCs move real
 money, so the post-merge check below comes with what to do when it goes wrong.
 
+## Before the panel ships: the paired control-plane must hold #1935
+
+The panel's "Check again" retry and its "nothing was charged" wording are
+safe only against a control-plane that contains control-plane#1935 (merge
+commit `71b62c0f0008b1232b7cbf3ab8888896425d85ee`: per-attempt Stripe
+idempotency, webhook-race and late-attempt recovery). An older server can
+charge a retried confirmation twice. Before the release that carries this
+panel is promoted to an environment, the person promoting it checks both, in
+a control-plane checkout with `origin` fetched:
+
+1. **The paired server contains the fix.** Take the control-plane revision
+   that environment runs (the release tag being deployed with it, or the
+   running image's revision) and run
+   `git merge-base --is-ancestor 71b62c0f0008b1232b7cbf3ab8888896425d85ee <revision>`.
+   Exit 0 passes; anything else fails. (When this panel merged, the open
+   candidate `release/v1.7.88-rc.7` did not contain it and
+   `release/v1.7.96-rc.1` did, so the check is not a formality.)
+2. **The fix's integration suite ran green on it.** `scripts/ci-full-main.sh`
+   must show a PASS record for that revision or an ancestor that descends from
+   `71b62c0f` (`scripts/cut-release.sh` already refuses a cut without one).
+   That run is `task ci:full`, whose integration lane runs the
+   `//go:build integration` files #1935 added to:
+   `internal/billing/svcbilling/machine_plan_change_integration_test.go`
+   (`TestMachinePlanChangeRetryNeverChargesTwice`,
+   `TestMachinePlanChangeWebhookRaceRecordsOnce`,
+   `TestMachinePlanChangeAppliedAfterClose*`,
+   `TestMachinePlanChangeClosedAttempt*`,
+   `TestMachinePlanChangeSupersededChargedAttemptIsNeverSettledAsUnapplied`)
+   and `internal/billing/daemonmeter/coupon_drain_integration_test.go`.
+   A cut made with `--skip-full-gate` does not pass this check.
+
+If either check fails: **hold this repo's release** for that environment
+(do not promote it; pair it with a control-plane release that passes), or, if
+it already shipped, revert this PR's merge commit as in "Stop further
+confirmations" below. Record the revision and the record's sha on the PR.
+
 ## Live check (Stripe test mode, after the release ships)
 
 On an org with an M machine subscription in a test-mode environment:
