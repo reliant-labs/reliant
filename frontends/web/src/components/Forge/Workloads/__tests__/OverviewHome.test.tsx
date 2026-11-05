@@ -211,7 +211,9 @@ describe("its states", () => {
     await waitFor(() => expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "error"), { timeout: 5000 });
     expect(screen.getByTestId("overview-env-prod")).toHaveTextContent("health unavailable");
     expect(screen.getByTestId("overview-attention")).toHaveTextContent("Workload health could not be read");
-    expect(screen.getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
+    // Each tile the read feeds says so with its own Try again (OverviewTiles.test.tsx).
+    expect(within(screen.getByTestId("overview-services")).getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
+    expect(within(screen.getByTestId("overview-jobs")).getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
   });
 
   it("still lists the firing alerts when the workload read times out", async () => {
