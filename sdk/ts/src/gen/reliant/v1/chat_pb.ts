@@ -7,6 +7,7 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_buf_validate_validate } from "../../buf/validate/validate_pb.js";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb.js";
 import type { Value } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
@@ -16,7 +17,7 @@ import type { Message as Message$1 } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/chat.proto.
  */
 export const file_reliant_v1_chat: GenFile = /*@__PURE__*/
-  fileDesc("ChVyZWxpYW50L3YxL2NoYXQucHJvdG8SCnJlbGlhbnQudjEilAUKB01lc3NhZ2USCgoCaWQYASABKAkSDwoHY2hhdF9pZBgCIAEoCRILCgNzZXEYAyABKAMSDgoGdGhyZWFkGAQgASgJEiUKBHJvbGUYBiABKA4yFy5yZWxpYW50LnYxLk1lc3NhZ2VSb2xlEhIKBW1vZGVsGAcgASgJSACIAQESEgoFYWdlbnQYCCABKAlIAYgBARIZCgxpbnB1dF90b2tlbnMYCSABKAVIAogBARIaCg1vdXRwdXRfdG9rZW5zGAogASgFSAOIAQESMwoPc3RyZWFtaW5nX3N0YXRlGAsgASgOMhoucmVsaWFudC52MS5TdHJlYW1pbmdTdGF0ZRIwCg5jb250ZW50X2Jsb2NrcxgMIAMoCzIYLnJlbGlhbnQudjEuQ29udGVudEJsb2NrEisKC2F0dGFjaG1lbnRzGA0gAygLMhYucmVsaWFudC52MS5BdHRhY2htZW50EhIKCmNyZWF0ZWRfYXQYDiABKAkSEgoKdXBkYXRlZF9hdBgPIAEoCRIYCgt3b3JrZmxvd19pZBgQIAEoCUgEiAEBEjQKDWRpc3BsYXlfc3R5bGUYESABKA4yGC5yZWxpYW50LnYxLkRpc3BsYXlTdHlsZUgFiAEBEhcKD3NlcXVlbmNlX251bWJlchgSIAEoAxIUCgdub2RlX2lkGBMgASgJSAaIAQESKQoGc2VuZGVyGBQgASgLMhkucmVsaWFudC52MS5NZXNzYWdlU2VuZGVyQggKBl9tb2RlbEIICgZfYWdlbnRCDwoNX2lucHV0X3Rva2Vuc0IQCg5fb3V0cHV0X3Rva2Vuc0IOCgxfd29ya2Zsb3dfaWRCEAoOX2Rpc3BsYXlfc3R5bGVCCgoIX25vZGVfaWQibgoNTWVzc2FnZVNlbmRlchIRCgl0aHJlYWRfaWQYASABKAkSDQoFdGl0bGUYAiABKAkSKgoEa2luZBgDIAEoDjIcLnJlbGlhbnQudjEuQWdlbnRNZXNzYWdlS2luZBIPCgdzdWJqZWN0GAQgASgJIs8ECgxDb250ZW50QmxvY2sSCgoCaWQYASABKAkSDQoFaW5kZXgYAiABKAUSKgoEdHlwZRgDIAEoDjIcLnJlbGlhbnQudjEuQ29udGVudEJsb2NrVHlwZRIUCgdjb250ZW50GAQgASgJSACIAQESFgoJdG9vbF9uYW1lGAUgASgJSAGIAQESGQoMdG9vbF9jYWxsX2lkGAYgASgJSAKIAQESEgoFaW5wdXQYByABKAlIA4gBARIVCghpc19lcnJvchgIIAEoCEgEiAEBEjkKEHRvb2xfY2FsbF9zdGF0dXMYCiABKA4yGi5yZWxpYW50LnYxLlRvb2xDYWxsU3RhdHVzSAWIAQESFwoKc3RhcnRlZF9hdBgLIAEoCUgGiAEBEhkKDGNvbXBsZXRlZF9hdBgMIAEoCUgHiAEBEh4KEWNoaWxkX3dvcmtmbG93X2lkGA0gASgJSAiIAQESFgoJdHJ1bmNhdGVkGA4gASgISAmIAQESGgoNb3JpZ2luYWxfc2l6ZRgPIAEoA0gKiAEBQgoKCF9jb250ZW50QgwKCl90b29sX25hbWVCDwoNX3Rvb2xfY2FsbF9pZEIICgZfaW5wdXRCCwoJX2lzX2Vycm9yQhMKEV90b29sX2NhbGxfc3RhdHVzQg0KC19zdGFydGVkX2F0Qg8KDV9jb21wbGV0ZWRfYXRCFAoSX2NoaWxkX3dvcmtmbG93X2lkQgwKCl90cnVuY2F0ZWRCEAoOX29yaWdpbmFsX3NpemVKBAgJEApSDm1hdGNoZWRfcmVzdWx0IlgKCkF0dGFjaG1lbnQSCgoCaWQYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSDAoEc2l6ZRgDIAEoAxIRCgltaW1lX3R5cGUYBCABKAkSCwoDdXJsGAUgASgJIo4BCgxJbnB1dE1lc3NhZ2USJQoEcm9sZRgBIAEoDjIXLnJlbGlhbnQudjEuTWVzc2FnZVJvbGUSDwoHY29udGVudBgCIAEoCRI0Cg1kaXNwbGF5X3N0eWxlGAMgASgOMhgucmVsaWFudC52MS5EaXNwbGF5U3R5bGVIAIgBAUIQCg5fZGlzcGxheV9zdHlsZSKOBQoSU2VuZE1lc3NhZ2VSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkSEwoLYXR0YWNobWVudHMYAyADKAkSFQoId29ya2Zsb3cYBSABKAlIAIgBARIYCgt0ZW1wZXJhdHVyZRgIIAEoAUgBiAEBEhcKCm1heF90b2tlbnMYCSABKANIAogBARJLCg93b3JrZmxvd19wYXJhbXMYCyADKAsyMi5yZWxpYW50LnYxLlNlbmRNZXNzYWdlUmVxdWVzdC5Xb3JrZmxvd1BhcmFtc0VudHJ5EhEKBG1vZGUYDCABKAlIA4gBARIaCg10YXJnZXRfdGhyZWFkGA0gASgJSASIAQESTQoQc2VsZWN0ZWRfcHJlc2V0cxgOIAMoCzIzLnJlbGlhbnQudjEuU2VuZE1lc3NhZ2VSZXF1ZXN0LlNlbGVjdGVkUHJlc2V0c0VudHJ5EioKCG1lc3NhZ2VzGA8gAygLMhgucmVsaWFudC52MS5JbnB1dE1lc3NhZ2USHgoRY2xpZW50X21lc3NhZ2VfaWQYEiABKAlIBYgBARpNChNXb3JrZmxvd1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAEaNgoUU2VsZWN0ZWRQcmVzZXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUILCglfd29ya2Zsb3dCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zQgcKBV9tb2RlQhAKDl90YXJnZXRfdGhyZWFkQhQKEl9jbGllbnRfbWVzc2FnZV9pZEoECBEQElIHZGlzY3VzcyKxAQoTU2VuZE1lc3NhZ2VSZXNwb25zZRIPCgdjaGF0X2lkGAEgASgJEhMKC3dvcmtmbG93X2lkGAIgASgJEg4KBnJ1bl9pZBgDIAEoCRIOCgZzdGF0dXMYBCABKAkSHAoPd29ya2Zsb3dfc3RhdHVzGAUgASgJSACIAQESEgoKbWVzc2FnZV9pZBgGIAEoCRIOCgZxdWV1ZWQYByABKAhCEgoQX3dvcmtmbG93X3N0YXR1cyqOAQoLTWVzc2FnZVJvbGUSHAoYTUVTU0FHRV9ST0xFX1VOU1BFQ0lGSUVEEAASFQoRTUVTU0FHRV9ST0xFX1VTRVIQARIaChZNRVNTQUdFX1JPTEVfQVNTSVNUQU5UEAISFwoTTUVTU0FHRV9ST0xFX1NZU1RFTRADEhUKEU1FU1NBR0VfUk9MRV9UT09MEAQqigEKDlN0cmVhbWluZ1N0YXRlEh8KG1NUUkVBTUlOR19TVEFURV9VTlNQRUNJRklFRBAAEh0KGVNUUkVBTUlOR19TVEFURV9TVFJFQU1JTkcQARIcChhTVFJFQU1JTkdfU1RBVEVfQ09NUExFVEUQAhIaChZTVFJFQU1JTkdfU1RBVEVfRkFJTEVEEAMqlQEKDERpc3BsYXlTdHlsZRIdChlESVNQTEFZX1NUWUxFX1VOU1BFQ0lGSUVEEAASFgoSRElTUExBWV9TVFlMRV9JTkZPEAESGQoVRElTUExBWV9TVFlMRV9XQVJOSU5HEAISGQoVRElTUExBWV9TVFlMRV9TVUNDRVNTEAMSGAoURElTUExBWV9TVFlMRV9ISURERU4QBCqEAgoQQWdlbnRNZXNzYWdlS2luZBIiCh5BR0VOVF9NRVNTQUdFX0tJTkRfVU5TUEVDSUZJRUQQABIeChpBR0VOVF9NRVNTQUdFX0tJTkRfTUVTU0FHRRABEiEKHUFHRU5UX01FU1NBR0VfS0lORF9DT01QTEVUSU9OEAISIAocQUdFTlRfTUVTU0FHRV9LSU5EX0NBTkNFTExFRBADEh0KGUFHRU5UX01FU1NBR0VfS0lORF9GQUlMRUQQBBIkCiBBR0VOVF9NRVNTQUdFX0tJTkRfSFVNQU5fTUVTU0FHRRAFEiIKHkFHRU5UX01FU1NBR0VfS0lORF9SVU5fTUVTU0FHRRAGKsoCChBDb250ZW50QmxvY2tUeXBlEiIKHkNPTlRFTlRfQkxPQ0tfVFlQRV9VTlNQRUNJRklFRBAAEhsKF0NPTlRFTlRfQkxPQ0tfVFlQRV9URVhUEAESIAocQ09OVEVOVF9CTE9DS19UWVBFX1RPT0xfQ0FMTBACEiIKHkNPTlRFTlRfQkxPQ0tfVFlQRV9UT09MX1JFU1VMVBADEhwKGENPTlRFTlRfQkxPQ0tfVFlQRV9JTUFHRRAEEh8KG0NPTlRFTlRfQkxPQ0tfVFlQRV9USElOS0lORxAFEiUKIUNPTlRFTlRfQkxPQ0tfVFlQRV9GSUxFX1JFRkVSRU5DRRAGEh8KG0NPTlRFTlRfQkxPQ0tfVFlQRV9ET0NVTUVOVBAHEigKJENPTlRFTlRfQkxPQ0tfVFlQRV9SRURBQ1RFRF9USElOS0lORxAIKvABCg5Ub29sQ2FsbFN0YXR1cxIgChxUT09MX0NBTExfU1RBVFVTX1VOU1BFQ0lGSUVEEAASHAoYVE9PTF9DQUxMX1NUQVRVU19QRU5ESU5HEAESHgoaVE9PTF9DQUxMX1NUQVRVU19FWEVDVVRJTkcQAhIeChpUT09MX0NBTExfU1RBVFVTX0NPTVBMRVRFRBADEhsKF1RPT0xfQ0FMTF9TVEFUVVNfRkFJTEVEEAQSHgoaVE9PTF9DQUxMX1NUQVRVU19DQU5DRUxMRUQQBRIhCh1UT09MX0NBTExfU1RBVFVTX0JBQ0tHUk9VTkRFRBAGMrgBCgtDaGF0U2VydmljZRKoAQoLU2VuZE1lc3NhZ2USHi5yZWxpYW50LnYxLlNlbmRNZXNzYWdlUmVxdWVzdBofLnJlbGlhbnQudjEuU2VuZE1lc3NhZ2VSZXNwb25zZSJYorsYVDpSOlBwZXItdHVybiBjb252ZXJzYXRpb24gdHJhZmZpYzogdGhlIGNoYXQncyBvd24gbWVzc2FnZSBoaXN0b3J5IHJlY29yZHMgZXZlcnkgc2VuZEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge, file_google_protobuf_struct]);
+  fileDesc("ChVyZWxpYW50L3YxL2NoYXQucHJvdG8SCnJlbGlhbnQudjEilAUKB01lc3NhZ2USCgoCaWQYASABKAkSDwoHY2hhdF9pZBgCIAEoCRILCgNzZXEYAyABKAMSDgoGdGhyZWFkGAQgASgJEiUKBHJvbGUYBiABKA4yFy5yZWxpYW50LnYxLk1lc3NhZ2VSb2xlEhIKBW1vZGVsGAcgASgJSACIAQESEgoFYWdlbnQYCCABKAlIAYgBARIZCgxpbnB1dF90b2tlbnMYCSABKAVIAogBARIaCg1vdXRwdXRfdG9rZW5zGAogASgFSAOIAQESMwoPc3RyZWFtaW5nX3N0YXRlGAsgASgOMhoucmVsaWFudC52MS5TdHJlYW1pbmdTdGF0ZRIwCg5jb250ZW50X2Jsb2NrcxgMIAMoCzIYLnJlbGlhbnQudjEuQ29udGVudEJsb2NrEisKC2F0dGFjaG1lbnRzGA0gAygLMhYucmVsaWFudC52MS5BdHRhY2htZW50EhIKCmNyZWF0ZWRfYXQYDiABKAkSEgoKdXBkYXRlZF9hdBgPIAEoCRIYCgt3b3JrZmxvd19pZBgQIAEoCUgEiAEBEjQKDWRpc3BsYXlfc3R5bGUYESABKA4yGC5yZWxpYW50LnYxLkRpc3BsYXlTdHlsZUgFiAEBEhcKD3NlcXVlbmNlX251bWJlchgSIAEoAxIUCgdub2RlX2lkGBMgASgJSAaIAQESKQoGc2VuZGVyGBQgASgLMhkucmVsaWFudC52MS5NZXNzYWdlU2VuZGVyQggKBl9tb2RlbEIICgZfYWdlbnRCDwoNX2lucHV0X3Rva2Vuc0IQCg5fb3V0cHV0X3Rva2Vuc0IOCgxfd29ya2Zsb3dfaWRCEAoOX2Rpc3BsYXlfc3R5bGVCCgoIX25vZGVfaWQibgoNTWVzc2FnZVNlbmRlchIRCgl0aHJlYWRfaWQYASABKAkSDQoFdGl0bGUYAiABKAkSKgoEa2luZBgDIAEoDjIcLnJlbGlhbnQudjEuQWdlbnRNZXNzYWdlS2luZBIPCgdzdWJqZWN0GAQgASgJIs8ECgxDb250ZW50QmxvY2sSCgoCaWQYASABKAkSDQoFaW5kZXgYAiABKAUSKgoEdHlwZRgDIAEoDjIcLnJlbGlhbnQudjEuQ29udGVudEJsb2NrVHlwZRIUCgdjb250ZW50GAQgASgJSACIAQESFgoJdG9vbF9uYW1lGAUgASgJSAGIAQESGQoMdG9vbF9jYWxsX2lkGAYgASgJSAKIAQESEgoFaW5wdXQYByABKAlIA4gBARIVCghpc19lcnJvchgIIAEoCEgEiAEBEjkKEHRvb2xfY2FsbF9zdGF0dXMYCiABKA4yGi5yZWxpYW50LnYxLlRvb2xDYWxsU3RhdHVzSAWIAQESFwoKc3RhcnRlZF9hdBgLIAEoCUgGiAEBEhkKDGNvbXBsZXRlZF9hdBgMIAEoCUgHiAEBEh4KEWNoaWxkX3dvcmtmbG93X2lkGA0gASgJSAiIAQESFgoJdHJ1bmNhdGVkGA4gASgISAmIAQESGgoNb3JpZ2luYWxfc2l6ZRgPIAEoA0gKiAEBQgoKCF9jb250ZW50QgwKCl90b29sX25hbWVCDwoNX3Rvb2xfY2FsbF9pZEIICgZfaW5wdXRCCwoJX2lzX2Vycm9yQhMKEV90b29sX2NhbGxfc3RhdHVzQg0KC19zdGFydGVkX2F0Qg8KDV9jb21wbGV0ZWRfYXRCFAoSX2NoaWxkX3dvcmtmbG93X2lkQgwKCl90cnVuY2F0ZWRCEAoOX29yaWdpbmFsX3NpemVKBAgJEApSDm1hdGNoZWRfcmVzdWx0IlgKCkF0dGFjaG1lbnQSCgoCaWQYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSDAoEc2l6ZRgDIAEoAxIRCgltaW1lX3R5cGUYBCABKAkSCwoDdXJsGAUgASgJIo4BCgxJbnB1dE1lc3NhZ2USJQoEcm9sZRgBIAEoDjIXLnJlbGlhbnQudjEuTWVzc2FnZVJvbGUSDwoHY29udGVudBgCIAEoCRI0Cg1kaXNwbGF5X3N0eWxlGAMgASgOMhgucmVsaWFudC52MS5EaXNwbGF5U3R5bGVIAIgBAUIQCg5fZGlzcGxheV9zdHlsZSKOBQoSU2VuZE1lc3NhZ2VSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkSEwoLYXR0YWNobWVudHMYAyADKAkSFQoId29ya2Zsb3cYBSABKAlIAIgBARIYCgt0ZW1wZXJhdHVyZRgIIAEoAUgBiAEBEhcKCm1heF90b2tlbnMYCSABKANIAogBARJLCg93b3JrZmxvd19wYXJhbXMYCyADKAsyMi5yZWxpYW50LnYxLlNlbmRNZXNzYWdlUmVxdWVzdC5Xb3JrZmxvd1BhcmFtc0VudHJ5EhEKBG1vZGUYDCABKAlIA4gBARIaCg10YXJnZXRfdGhyZWFkGA0gASgJSASIAQESTQoQc2VsZWN0ZWRfcHJlc2V0cxgOIAMoCzIzLnJlbGlhbnQudjEuU2VuZE1lc3NhZ2VSZXF1ZXN0LlNlbGVjdGVkUHJlc2V0c0VudHJ5EioKCG1lc3NhZ2VzGA8gAygLMhgucmVsaWFudC52MS5JbnB1dE1lc3NhZ2USHgoRY2xpZW50X21lc3NhZ2VfaWQYEiABKAlIBYgBARpNChNXb3JrZmxvd1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAEaNgoUU2VsZWN0ZWRQcmVzZXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUILCglfd29ya2Zsb3dCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zQgcKBV9tb2RlQhAKDl90YXJnZXRfdGhyZWFkQhQKEl9jbGllbnRfbWVzc2FnZV9pZEoECBEQElIHZGlzY3VzcyKxAQoTU2VuZE1lc3NhZ2VSZXNwb25zZRIPCgdjaGF0X2lkGAEgASgJEhMKC3dvcmtmbG93X2lkGAIgASgJEg4KBnJ1bl9pZBgDIAEoCRIOCgZzdGF0dXMYBCABKAkSHAoPd29ya2Zsb3dfc3RhdHVzGAUgASgJSACIAQESEgoKbWVzc2FnZV9pZBgGIAEoCRIOCgZxdWV1ZWQYByABKAhCEgoQX3dvcmtmbG93X3N0YXR1cyI8ChZJbnRlcnJ1cHRUaHJlYWRSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkSEQoJdGhyZWFkX2lkGAIgASgJIlkKF0ludGVycnVwdFRocmVhZFJlc3BvbnNlEhwKFGNhbmNlbGxlZF90b29sX2NhbGxzGAEgASgFEiAKGHVuZGVsaXZlcmFibGVfdG9vbF9jYWxscxgCIAMoCSKcAQoTTGlzdE1lc3NhZ2VzUmVxdWVzdBIXCgdjaGF0X2lkGAEgASgJQga6SAPIAQESEwoGcmVjZW50GAIgASgFSACIAQESFwoKYmVmb3JlX3NlcRgDIAEoA0gBiAEBEhYKCXRocmVhZF9pZBgEIAEoCUgCiAEBQgkKB19yZWNlbnRCDQoLX2JlZm9yZV9zZXFCDAoKX3RocmVhZF9pZCKuAQoUTGlzdE1lc3NhZ2VzUmVzcG9uc2USJQoIbWVzc2FnZXMYASADKAsyEy5yZWxpYW50LnYxLk1lc3NhZ2USDQoFdG90YWwYAiABKAUSDQoFY291bnQYAyABKAUSEAoIaGFzX21vcmUYBCABKAgSEgoKb2xkZXN0X3NlcRgFIAEoAxIrCgZlcnJvcnMYBiADKAsyGy5yZWxpYW50LnYxLkNoYXRFcnJvclVwZGF0ZSJkCg9DaGF0RXJyb3JVcGRhdGUSEQoJZW50aXR5X2lkGAEgASgJEhcKD3NlcXVlbmNlX251bWJlchgCIAEoAxIRCglkYXRhX2pzb24YAyABKAkSEgoKY3JlYXRlZF9hdBgEIAEoCSIjChBQYXVzZUNoYXRSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkiNQoRUGF1c2VDaGF0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIiQKEVJlc3VtZUNoYXRSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkipAEKElJlc3VtZUNoYXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSEwoLd29ya2Zsb3dfaWQYAyABKAkSDgoGcnVuX2lkGAQgASgJEhYKDm5lZWRzX3JlY292ZXJ5GAUgASgIEi8KDXJlY292ZXJ5X3R5cGUYBiABKA4yGC5yZWxpYW50LnYxLlJlY292ZXJ5VHlwZSqCAQoNV29ya2Zsb3dTdGF0ZRIeChpXT1JLRkxPV19TVEFURV9VTlNQRUNJRklFRBAAEhoKFldPUktGTE9XX1NUQVRFX1BFTkRJTkcQARIZChVXT1JLRkxPV19TVEFURV9BQ1RJVkUQAhIaChZXT1JLRkxPV19TVEFURV9TVE9QUEVEEAMqxAEKEldvcmtmbG93U3RvcFJlYXNvbhIkCiBXT1JLRkxPV19TVE9QX1JFQVNPTl9VTlNQRUNJRklFRBAAEiIKHldPUktGTE9XX1NUT1BfUkVBU09OX0NPTVBMRVRFRBABEh8KG1dPUktGTE9XX1NUT1BfUkVBU09OX0ZBSUxFRBACEh8KG1dPUktGTE9XX1NUT1BfUkVBU09OX1BBVVNFRBADEiIKHldPUktGTE9XX1NUT1BfUkVBU09OX0NBTkNFTExFRBAEKo4BCgtNZXNzYWdlUm9sZRIcChhNRVNTQUdFX1JPTEVfVU5TUEVDSUZJRUQQABIVChFNRVNTQUdFX1JPTEVfVVNFUhABEhoKFk1FU1NBR0VfUk9MRV9BU1NJU1RBTlQQAhIXChNNRVNTQUdFX1JPTEVfU1lTVEVNEAMSFQoRTUVTU0FHRV9ST0xFX1RPT0wQBCqKAQoOU3RyZWFtaW5nU3RhdGUSHwobU1RSRUFNSU5HX1NUQVRFX1VOU1BFQ0lGSUVEEAASHQoZU1RSRUFNSU5HX1NUQVRFX1NUUkVBTUlORxABEhwKGFNUUkVBTUlOR19TVEFURV9DT01QTEVURRACEhoKFlNUUkVBTUlOR19TVEFURV9GQUlMRUQQAyqVAQoMRGlzcGxheVN0eWxlEh0KGURJU1BMQVlfU1RZTEVfVU5TUEVDSUZJRUQQABIWChJESVNQTEFZX1NUWUxFX0lORk8QARIZChVESVNQTEFZX1NUWUxFX1dBUk5JTkcQAhIZChVESVNQTEFZX1NUWUxFX1NVQ0NFU1MQAxIYChRESVNQTEFZX1NUWUxFX0hJRERFThAEKoQCChBBZ2VudE1lc3NhZ2VLaW5kEiIKHkFHRU5UX01FU1NBR0VfS0lORF9VTlNQRUNJRklFRBAAEh4KGkFHRU5UX01FU1NBR0VfS0lORF9NRVNTQUdFEAESIQodQUdFTlRfTUVTU0FHRV9LSU5EX0NPTVBMRVRJT04QAhIgChxBR0VOVF9NRVNTQUdFX0tJTkRfQ0FOQ0VMTEVEEAMSHQoZQUdFTlRfTUVTU0FHRV9LSU5EX0ZBSUxFRBAEEiQKIEFHRU5UX01FU1NBR0VfS0lORF9IVU1BTl9NRVNTQUdFEAUSIgoeQUdFTlRfTUVTU0FHRV9LSU5EX1JVTl9NRVNTQUdFEAYqygIKEENvbnRlbnRCbG9ja1R5cGUSIgoeQ09OVEVOVF9CTE9DS19UWVBFX1VOU1BFQ0lGSUVEEAASGwoXQ09OVEVOVF9CTE9DS19UWVBFX1RFWFQQARIgChxDT05URU5UX0JMT0NLX1RZUEVfVE9PTF9DQUxMEAISIgoeQ09OVEVOVF9CTE9DS19UWVBFX1RPT0xfUkVTVUxUEAMSHAoYQ09OVEVOVF9CTE9DS19UWVBFX0lNQUdFEAQSHwobQ09OVEVOVF9CTE9DS19UWVBFX1RISU5LSU5HEAUSJQohQ09OVEVOVF9CTE9DS19UWVBFX0ZJTEVfUkVGRVJFTkNFEAYSHwobQ09OVEVOVF9CTE9DS19UWVBFX0RPQ1VNRU5UEAcSKAokQ09OVEVOVF9CTE9DS19UWVBFX1JFREFDVEVEX1RISU5LSU5HEAgqjQIKDENoYXRBY3Rpdml0eRIWChJDSEFUX0FDVElWSVRZX0lETEUQABIZChVDSEFUX0FDVElWSVRZX1JVTk5JTkcQARIgChxDSEFUX0FDVElWSVRZX0FXQUlUSU5HX0lOUFVUEAISFwoTQ0hBVF9BQ1RJVklUWV9FUlJPUhADEhgKFENIQVRfQUNUSVZJVFlfUEFVU0VEEAQSJAogQ0hBVF9BQ1RJVklUWV9XQUlUSU5HX0ZPUl9EQUVNT04QBRIkCiBDSEFUX0FDVElWSVRZX1FVRVVFRF9GT1JfTUFDSElORRAGEikKJUNIQVRfQUNUSVZJVFlfV0FJVElOR19GT1JfVVNBR0VfTElNSVQQByrwAQoOVG9vbENhbGxTdGF0dXMSIAocVE9PTF9DQUxMX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGFRPT0xfQ0FMTF9TVEFUVVNfUEVORElORxABEh4KGlRPT0xfQ0FMTF9TVEFUVVNfRVhFQ1VUSU5HEAISHgoaVE9PTF9DQUxMX1NUQVRVU19DT01QTEVURUQQAxIbChdUT09MX0NBTExfU1RBVFVTX0ZBSUxFRBAEEh4KGlRPT0xfQ0FMTF9TVEFUVVNfQ0FOQ0VMTEVEEAUSIQodVE9PTF9DQUxMX1NUQVRVU19CQUNLR1JPVU5ERUQQBippCgxSZWNvdmVyeVR5cGUSHQoZUkVDT1ZFUllfVFlQRV9VTlNQRUNJRklFRBAAEhkKFVJFQ09WRVJZX1RZUEVfUkVTVU1FRBABEh8KG1JFQ09WRVJZX1RZUEVfV09SS0ZMT1dfTE9TVBACMqIFCgtDaGF0U2VydmljZRKoAQoLU2VuZE1lc3NhZ2USHi5yZWxpYW50LnYxLlNlbmRNZXNzYWdlUmVxdWVzdBofLnJlbGlhbnQudjEuU2VuZE1lc3NhZ2VSZXNwb25zZSJYorsYVDpSOlBwZXItdHVybiBjb252ZXJzYXRpb24gdHJhZmZpYzogdGhlIGNoYXQncyBvd24gbWVzc2FnZSBoaXN0b3J5IHJlY29yZHMgZXZlcnkgc2VuZBK8AQoPSW50ZXJydXB0VGhyZWFkEiIucmVsaWFudC52MS5JbnRlcnJ1cHRUaHJlYWRSZXF1ZXN0GiMucmVsaWFudC52MS5JbnRlcnJ1cHRUaHJlYWRSZXNwb25zZSJgorsYXDpaOlhwZXItdHVybiBzdGVlcmluZyBvZiBhIHJ1bm5pbmcgdGhyZWFkOyBlYWNoIHRvb2wgY2FsbCBpdCBjYW5jZWxzIHJlY29yZHMgaXRzIG93biBvdXRjb21lElEKDExpc3RNZXNzYWdlcxIfLnJlbGlhbnQudjEuTGlzdE1lc3NhZ2VzUmVxdWVzdBogLnJlbGlhbnQudjEuTGlzdE1lc3NhZ2VzUmVzcG9uc2USaAoJUGF1c2VDaGF0EhwucmVsaWFudC52MS5QYXVzZUNoYXRSZXF1ZXN0Gh0ucmVsaWFudC52MS5QYXVzZUNoYXRSZXNwb25zZSIeorsYGjoYCgVwYXVzZRIPCgRjaGF0EgdjaGF0X2lkEmwKClJlc3VtZUNoYXQSHS5yZWxpYW50LnYxLlJlc3VtZUNoYXRSZXF1ZXN0Gh4ucmVsaWFudC52MS5SZXN1bWVDaGF0UmVzcG9uc2UiH6K7GBs6GQoGcmVzdW1lEg8KBGNoYXQSB2NoYXRfaWRCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_struct]);
 
 /**
  * Message represents a conversation message
@@ -533,6 +534,412 @@ export const SendMessageResponseSchema: GenMessage<SendMessageResponse> = /*@__P
   messageDesc(file_reliant_v1_chat, 6);
 
 /**
+ * InterruptThreadRequest stops the work in flight on one thread.
+ *
+ * @generated from message reliant.v1.InterruptThreadRequest
+ */
+export type InterruptThreadRequest = Message$1<"reliant.v1.InterruptThreadRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+
+  /**
+   * The thread to interrupt. Its executing tool calls are cancelled; the
+   * thread's mailbox is delivered by the next call_llm.
+   *
+   * @generated from field: string thread_id = 2;
+   */
+  threadId: string;
+};
+
+/**
+ * Describes the message reliant.v1.InterruptThreadRequest.
+ * Use `create(InterruptThreadRequestSchema)` to create a new message.
+ */
+export const InterruptThreadRequestSchema: GenMessage<InterruptThreadRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 7);
+
+/**
+ * InterruptThreadResponse reports what the interrupt actually stopped.
+ *
+ * @generated from message reliant.v1.InterruptThreadResponse
+ */
+export type InterruptThreadResponse = Message$1<"reliant.v1.InterruptThreadResponse"> & {
+  /**
+   * How many executing tool calls were cancelled. Zero is a normal, successful
+   * outcome: the thread was between tool calls, or already winding down. The
+   * queued mailbox is still delivered either way.
+   *
+   * @generated from field: int32 cancelled_tool_calls = 1;
+   */
+  cancelledToolCalls: number;
+
+  /**
+   * Honest about partial delivery, in the same spirit as
+   * SendAgentMessageResponse. A tool whose cancellation could not be delivered
+   * (daemon offline, spawn unreachable) is named here rather than silently
+   * counted as cancelled -- it may still be running.
+   *
+   * @generated from field: repeated string undeliverable_tool_calls = 2;
+   */
+  undeliverableToolCalls: string[];
+};
+
+/**
+ * Describes the message reliant.v1.InterruptThreadResponse.
+ * Use `create(InterruptThreadResponseSchema)` to create a new message.
+ */
+export const InterruptThreadResponseSchema: GenMessage<InterruptThreadResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 8);
+
+/**
+ * ListMessagesRequest lists messages for a chat
+ *
+ * @generated from message reliant.v1.ListMessagesRequest
+ */
+export type ListMessagesRequest = Message$1<"reliant.v1.ListMessagesRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+
+  /**
+   * Number of most recent messages
+   *
+   * @generated from field: optional int32 recent = 2;
+   */
+  recent?: number | undefined;
+
+  /**
+   * Load messages before this seq
+   *
+   * @generated from field: optional int64 before_seq = 3;
+   */
+  beforeSeq?: bigint | undefined;
+
+  /**
+   * Read exactly one thread instead of the whole chat.
+   *
+   * Returns that thread's visual thread (inherited messages from the context
+   * window chain included, fork/compaction resolved) and nothing else. This is
+   * the read for anything that displays a single thread: a spawn's collapsed
+   * preview, or the timeline with a thread selected.
+   *
+   * Without it those callers took the chat-wide list and filtered it by
+   * thread, which only worked when the child's messages happened to survive a
+   * window sized for the MAIN transcript. When they didn't, the spawn preview
+   * rendered "Starting..." over a child thread that already had hundreds of
+   * messages -- indistinguishable from a spawn that truly hadn't started.
+   *
+   * @generated from field: optional string thread_id = 4;
+   */
+  threadId?: string | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.ListMessagesRequest.
+ * Use `create(ListMessagesRequestSchema)` to create a new message.
+ */
+export const ListMessagesRequestSchema: GenMessage<ListMessagesRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 9);
+
+/**
+ * ListMessagesResponse returns messages with content blocks
+ *
+ * @generated from message reliant.v1.ListMessagesResponse
+ */
+export type ListMessagesResponse = Message$1<"reliant.v1.ListMessagesResponse"> & {
+  /**
+   * @generated from field: repeated reliant.v1.Message messages = 1;
+   */
+  messages: Message[];
+
+  /**
+   * @generated from field: int32 total = 2;
+   */
+  total: number;
+
+  /**
+   * @generated from field: int32 count = 3;
+   */
+  count: number;
+
+  /**
+   * @generated from field: bool has_more = 4;
+   */
+  hasMore: boolean;
+
+  /**
+   * @generated from field: int64 oldest_seq = 5;
+   */
+  oldestSeq: bigint;
+
+  /**
+   * On a scroll-back page (before_seq set, no thread_id): the errors raised in
+   * the stretch of history this page loads, each at its place in the
+   * timeline. The chat snapshot carries only the errors of its own window.
+   *
+   * @generated from field: repeated reliant.v1.ChatErrorUpdate errors = 6;
+   */
+  errors: ChatErrorUpdate[];
+};
+
+/**
+ * Describes the message reliant.v1.ListMessagesResponse.
+ * Use `create(ListMessagesResponseSchema)` to create a new message.
+ */
+export const ListMessagesResponseSchema: GenMessage<ListMessagesResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 10);
+
+/**
+ * ChatErrorUpdate is one error's newest ERROR chat update: the payload the
+ * chat stream carries as a ChatUpdateData of type ERROR, delivered outside it.
+ *
+ * @generated from message reliant.v1.ChatErrorUpdate
+ */
+export type ChatErrorUpdate = Message$1<"reliant.v1.ChatErrorUpdate"> & {
+  /**
+   * @generated from field: string entity_id = 1;
+   */
+  entityId: string;
+
+  /**
+   * @generated from field: int64 sequence_number = 2;
+   */
+  sequenceNumber: bigint;
+
+  /**
+   * @generated from field: string data_json = 3;
+   */
+  dataJson: string;
+
+  /**
+   * @generated from field: string created_at = 4;
+   */
+  createdAt: string;
+};
+
+/**
+ * Describes the message reliant.v1.ChatErrorUpdate.
+ * Use `create(ChatErrorUpdateSchema)` to create a new message.
+ */
+export const ChatErrorUpdateSchema: GenMessage<ChatErrorUpdate> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 11);
+
+/**
+ * PauseChatRequest pauses a chat's workflow
+ *
+ * @generated from message reliant.v1.PauseChatRequest
+ */
+export type PauseChatRequest = Message$1<"reliant.v1.PauseChatRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+};
+
+/**
+ * Describes the message reliant.v1.PauseChatRequest.
+ * Use `create(PauseChatRequestSchema)` to create a new message.
+ */
+export const PauseChatRequestSchema: GenMessage<PauseChatRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 12);
+
+/**
+ * PauseChatResponse confirms pause
+ *
+ * @generated from message reliant.v1.PauseChatResponse
+ */
+export type PauseChatResponse = Message$1<"reliant.v1.PauseChatResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: string message = 2;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message reliant.v1.PauseChatResponse.
+ * Use `create(PauseChatResponseSchema)` to create a new message.
+ */
+export const PauseChatResponseSchema: GenMessage<PauseChatResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 13);
+
+/**
+ * ResumeChatRequest resumes a paused workflow
+ *
+ * @generated from message reliant.v1.ResumeChatRequest
+ */
+export type ResumeChatRequest = Message$1<"reliant.v1.ResumeChatRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+};
+
+/**
+ * Describes the message reliant.v1.ResumeChatRequest.
+ * Use `create(ResumeChatRequestSchema)` to create a new message.
+ */
+export const ResumeChatRequestSchema: GenMessage<ResumeChatRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 14);
+
+/**
+ * ResumeChatResponse confirms resume
+ *
+ * @generated from message reliant.v1.ResumeChatResponse
+ */
+export type ResumeChatResponse = Message$1<"reliant.v1.ResumeChatResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: string message = 2;
+   */
+  message: string;
+
+  /**
+   * @generated from field: string workflow_id = 3;
+   */
+  workflowId: string;
+
+  /**
+   * @generated from field: string run_id = 4;
+   */
+  runId: string;
+
+  /**
+   * needs_recovery is true when the Temporal workflow was lost and the user needs to send a new message to continue
+   *
+   * @generated from field: bool needs_recovery = 5;
+   */
+  needsRecovery: boolean;
+
+  /**
+   * recovery_type provides more context about what happened during resume
+   *
+   * @generated from field: reliant.v1.RecoveryType recovery_type = 6;
+   */
+  recoveryType: RecoveryType;
+};
+
+/**
+ * Describes the message reliant.v1.ResumeChatResponse.
+ * Use `create(ResumeChatResponseSchema)` to create a new message.
+ */
+export const ResumeChatResponseSchema: GenMessage<ResumeChatResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 15);
+
+/**
+ * WorkflowState is where a workflow run IS: it has not started, it is going,
+ * or it has stopped. Why it stopped is WorkflowStopReason, carried alongside.
+ *
+ * This replaces the older eight-value status enum, which conflated the two.
+ * That enum also carried EXPIRED, which no code path ever wrote: Temporal
+ * TIMED_OUT is deliberately mapped to FAILED, so the value was read in four
+ * places and set in none. It is gone rather than ported.
+ *
+ * @generated from enum reliant.v1.WorkflowState
+ */
+export enum WorkflowState {
+  /**
+   * @generated from enum value: WORKFLOW_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * PENDING: created, no run started yet. Its first step is still ahead of it,
+   * so work queued now is drained when it starts.
+   *
+   * @generated from enum value: WORKFLOW_STATE_PENDING = 1;
+   */
+  PENDING = 1,
+
+  /**
+   * ACTIVE: a Temporal execution is progressing.
+   *
+   * @generated from enum value: WORKFLOW_STATE_ACTIVE = 2;
+   */
+  ACTIVE = 2,
+
+  /**
+   * STOPPED: not executing. Read the stop reason to learn whether it finished,
+   * died, or is parked awaiting a resume.
+   *
+   * @generated from enum value: WORKFLOW_STATE_STOPPED = 3;
+   */
+  STOPPED = 3,
+}
+
+/**
+ * Describes the enum reliant.v1.WorkflowState.
+ */
+export const WorkflowStateSchema: GenEnum<WorkflowState> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_chat, 0);
+
+/**
+ * WorkflowStopReason is why a STOPPED run stopped. Meaningless (UNSPECIFIED)
+ * for any other state.
+ *
+ * PAUSED is a stop reason rather than a state because a paused run is not
+ * executing — but it is still LIVE, because it resumes and finishes. That
+ * distinction is what WorkflowState alone cannot express, and it is why the
+ * two fields always travel together.
+ *
+ * @generated from enum reliant.v1.WorkflowStopReason
+ */
+export enum WorkflowStopReason {
+  /**
+   * @generated from enum value: WORKFLOW_STOP_REASON_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * COMPLETED: ran to a terminal node. Nothing to resume — there is no
+   * position left, so the next message starts a new run.
+   *
+   * @generated from enum value: WORKFLOW_STOP_REASON_COMPLETED = 1;
+   */
+  COMPLETED = 1,
+
+  /**
+   * FAILED: died mid-run (error, worker loss, or an operator/system
+   * terminate). Resumable at position.
+   *
+   * @generated from enum value: WORKFLOW_STOP_REASON_FAILED = 2;
+   */
+  FAILED = 2,
+
+  /**
+   * PAUSED: parked deliberately and awaiting resume. Live, and resumable.
+   *
+   * @generated from enum value: WORKFLOW_STOP_REASON_PAUSED = 3;
+   */
+  PAUSED = 3,
+
+  /**
+   * CANCELLED: hard-stopped by a user or operator. Terminal by intent — the
+   * position checkpoint is dropped, so the next message starts fresh.
+   *
+   * @generated from enum value: WORKFLOW_STOP_REASON_CANCELLED = 4;
+   */
+  CANCELLED = 4,
+}
+
+/**
+ * Describes the enum reliant.v1.WorkflowStopReason.
+ */
+export const WorkflowStopReasonSchema: GenEnum<WorkflowStopReason> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_chat, 1);
+
+/**
  * MessageRole identifies the sender of a message
  *
  * @generated from enum reliant.v1.MessageRole
@@ -568,7 +975,7 @@ export enum MessageRole {
  * Describes the enum reliant.v1.MessageRole.
  */
 export const MessageRoleSchema: GenEnum<MessageRole> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_chat, 0);
+  enumDesc(file_reliant_v1_chat, 2);
 
 /**
  * StreamingState tracks message streaming progress
@@ -601,7 +1008,7 @@ export enum StreamingState {
  * Describes the enum reliant.v1.StreamingState.
  */
 export const StreamingStateSchema: GenEnum<StreamingState> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_chat, 1);
+  enumDesc(file_reliant_v1_chat, 3);
 
 /**
  * DisplayStyle controls how a message is rendered in the UI
@@ -639,7 +1046,7 @@ export enum DisplayStyle {
  * Describes the enum reliant.v1.DisplayStyle.
  */
 export const DisplayStyleSchema: GenEnum<DisplayStyle> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_chat, 2);
+  enumDesc(file_reliant_v1_chat, 4);
 
 /**
  * AgentMessageKind identifies what a mailbox (agent_messages) row carries and,
@@ -704,7 +1111,7 @@ export enum AgentMessageKind {
  * Describes the enum reliant.v1.AgentMessageKind.
  */
 export const AgentMessageKindSchema: GenEnum<AgentMessageKind> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_chat, 3);
+  enumDesc(file_reliant_v1_chat, 5);
 
 /**
  * ContentBlockType identifies the kind of content in a message block
@@ -770,7 +1177,82 @@ export enum ContentBlockType {
  * Describes the enum reliant.v1.ContentBlockType.
  */
 export const ContentBlockTypeSchema: GenEnum<ContentBlockType> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_chat, 4);
+  enumDesc(file_reliant_v1_chat, 6);
+
+/**
+ * ChatActivity represents the computed activity state of a chat.
+ * This is derived from workflow status and pending approvals.
+ *
+ * @generated from enum reliant.v1.ChatActivity
+ */
+export enum ChatActivity {
+  /**
+   * @generated from enum value: CHAT_ACTIVITY_IDLE = 0;
+   */
+  IDLE = 0,
+
+  /**
+   * @generated from enum value: CHAT_ACTIVITY_RUNNING = 1;
+   */
+  RUNNING = 1,
+
+  /**
+   * A pending question or approval the user can still answer: its thread's run
+   * has not completed, failed or been cancelled (a paused run still counts).
+   * Outranks every other state; Chat.working_threads says whether other
+   * threads are still running meanwhile.
+   *
+   * @generated from enum value: CHAT_ACTIVITY_AWAITING_INPUT = 2;
+   */
+  AWAITING_INPUT = 2,
+
+  /**
+   * @generated from enum value: CHAT_ACTIVITY_ERROR = 3;
+   */
+  ERROR = 3,
+
+  /**
+   * @generated from enum value: CHAT_ACTIVITY_PAUSED = 4;
+   */
+  PAUSED = 4,
+
+  /**
+   * A live run whose last tool call hit a machine that is suspended or still
+   * starting (toolexec.ErrDaemonPending). Outranked by AWAITING_INPUT, outranks
+   * RUNNING; cleared by the next successful tool call. Chat.active_daemon_id
+   * names the machine when the chat pins one.
+   *
+   * @generated from enum value: CHAT_ACTIVITY_WAITING_FOR_DAEMON = 5;
+   */
+  WAITING_FOR_DAEMON = 5,
+
+  /**
+   * No run is live, and the chat holds a message queued for its machine: its
+   * last run ended because the machine failed to start, was removed, or was
+   * still not online after hours of waiting. The message is not dropped — a
+   * run is started for it as soon as the chat's machine connects (or the user
+   * sends again). Outranks ERROR; every live-run state outranks it.
+   *
+   * @generated from enum value: CHAT_ACTIVITY_QUEUED_FOR_MACHINE = 6;
+   */
+  QUEUED_FOR_MACHINE = 6,
+
+  /**
+   * A live run whose root thread is parked until a provider's usage limit
+   * resets (Chat.usage_limit_*). The run is not paused or failed: it retries the
+   * step by itself at the reset, or at once on RetryUsageLimitWait. Outranked by
+   * AWAITING_INPUT and WAITING_FOR_DAEMON, outranks RUNNING.
+   *
+   * @generated from enum value: CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT = 7;
+   */
+  WAITING_FOR_USAGE_LIMIT = 7,
+}
+
+/**
+ * Describes the enum reliant.v1.ChatActivity.
+ */
+export const ChatActivitySchema: GenEnum<ChatActivity> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_chat, 7);
 
 /**
  * ToolCallStatus is the durable lifecycle state of a tool call, mirroring
@@ -820,7 +1302,41 @@ export enum ToolCallStatus {
  * Describes the enum reliant.v1.ToolCallStatus.
  */
 export const ToolCallStatusSchema: GenEnum<ToolCallStatus> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_chat, 5);
+  enumDesc(file_reliant_v1_chat, 8);
+
+/**
+ * RecoveryType indicates what kind of resume/recovery happened
+ *
+ * @generated from enum reliant.v1.RecoveryType
+ */
+export enum RecoveryType {
+  /**
+   * RECOVERY_TYPE_UNSPECIFIED - default, not a recovery scenario
+   *
+   * @generated from enum value: RECOVERY_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * RECOVERY_TYPE_RESUMED - simple signal-based resume (workflow was paused)
+   *
+   * @generated from enum value: RECOVERY_TYPE_RESUMED = 1;
+   */
+  RESUMED = 1,
+
+  /**
+   * RECOVERY_TYPE_WORKFLOW_LOST - Temporal workflow was lost, user must start new workflow
+   *
+   * @generated from enum value: RECOVERY_TYPE_WORKFLOW_LOST = 2;
+   */
+  WORKFLOW_LOST = 2,
+}
+
+/**
+ * Describes the enum reliant.v1.RecoveryType.
+ */
+export const RecoveryTypeSchema: GenEnum<RecoveryType> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_chat, 9);
 
 /**
  * ChatService handles chat-related operations
@@ -841,6 +1357,64 @@ export const ChatService: GenService<{
     methodKind: "unary";
     input: typeof SendMessageRequestSchema;
     output: typeof SendMessageResponseSchema;
+  },
+  /**
+   * InterruptThread stops what a thread is doing right now so it reads its
+   * mailbox at once, instead of at the end of the work already in flight.
+   *
+   * This is the "stop, this changes things" verb, as distinct from
+   * SendAgentMessage's "finish up, then read this". It cancels every tool
+   * call currently executing on the thread, each through the same per-tool
+   * path CancelToolCall uses -- so each cancelled call still records a
+   * durable outcome and still returns a tool_result. That matters: a tool
+   * call with no result deadlocks the provider, so an interrupt that simply
+   * killed the work would corrupt the conversation it was trying to steer.
+   *
+   * Deliberately takes no message id. Interrupt is an action on the THREAD,
+   * not a property of one queued message: it stops the work, and the next
+   * call_llm delivers whatever the mailbox holds, oldest first. That is what
+   * makes "queue a message, then decide to send it now" work without racing
+   * the delivery -- there is no row to update and no window to lose.
+   *
+   * Queue the message first (SendAgentMessage), then interrupt.
+   *
+   * @generated from rpc reliant.v1.ChatService.InterruptThread
+   */
+  interruptThread: {
+    methodKind: "unary";
+    input: typeof InterruptThreadRequestSchema;
+    output: typeof InterruptThreadResponseSchema;
+  },
+  /**
+   * ListMessages lists messages for a chat with content blocks
+   * forge:custom — reads a chat's thread history through threads.Service, including a branch's inherited messages
+   *
+   * @generated from rpc reliant.v1.ChatService.ListMessages
+   */
+  listMessages: {
+    methodKind: "unary";
+    input: typeof ListMessagesRequestSchema;
+    output: typeof ListMessagesResponseSchema;
+  },
+  /**
+   * PauseChat pauses the running workflow (keeps it resumable)
+   *
+   * @generated from rpc reliant.v1.ChatService.PauseChat
+   */
+  pauseChat: {
+    methodKind: "unary";
+    input: typeof PauseChatRequestSchema;
+    output: typeof PauseChatResponseSchema;
+  },
+  /**
+   * ResumeChat resumes a paused or expired workflow
+   *
+   * @generated from rpc reliant.v1.ChatService.ResumeChat
+   */
+  resumeChat: {
+    methodKind: "unary";
+    input: typeof ResumeChatRequestSchema;
+    output: typeof ResumeChatResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_chat, 0);

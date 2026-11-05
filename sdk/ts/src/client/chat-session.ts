@@ -7,9 +7,11 @@ import { MessageRole, type ChatService } from "#gen/reliant/v1/chat_pb.js";
 import { createChatState, reduceChat } from "./chat-reducer.js";
 import type { ChatAction, ChatState } from "./chat-state.js";
 import { ChatStream, type ChatStreamHooks } from "./chat-stream.js";
-import type { ConnectionStatus } from "./events.js";
+import type { ConnectionStatus, ErrorUpdate } from "./events.js";
 import type { StreamEnvironment } from "./reconnecting-stream.js";
+import { oldestSeqOf } from "./reducers.js";
 import { createAttemptIds, clientIdOfFailedSend, type AttemptIds } from "./send-ids.js";
+import type { Message } from "./types.js";
 import type { StreamingClient } from "./user-stream.js";
 
 export interface ChatSessionOptions {
@@ -79,6 +81,7 @@ export class ChatSession {
   private readonly failedSends = new Map<string, PendingSend>();
   private errorMessage: string | null = null;
   private closed = false;
+  private olderInFlight = false;
   private started = false;
 
   constructor(options: ChatSessionOptions) {
@@ -246,6 +249,63 @@ export class ChatSession {
       }
     }
   }
+
+  /** Stop the work in flight on a thread; its tool calls are cancelled. */
+  async interrupt(threadId: string = this.chatId): Promise<{ cancelledToolCalls: number; undeliverableToolCalls: string[] }> {
+    const response = await this.chats().interruptThread({ chatId: this.chatId, threadId });
+    return { cancelledToolCalls: response.cancelledToolCalls, undeliverableToolCalls: response.undeliverableToolCalls };
+  }
+
+  /** Pause the chat's run. It stays resumable. */
+  async pause(): Promise<void> {
+    await this.chats().pauseChat({ chatId: this.chatId });
+  }
+
+  /** Resume a paused chat's run. */
+  async resume(): Promise<void> {
+    await this.chats().resumeChat({ chatId: this.chatId });
+  }
+
+  /**
+   * Fetch the page of history just older than what the chat holds and prepend
+   * it. Resolves to whether more remains (the server's word, or a full page).
+   * One page at a time: a call while one
+   * is in flight resolves to true without a second request.
+   */
+  async loadOlder(pageSize = 100): Promise<boolean> {
+    if (this.olderInFlight) return true;
+    const pagination = this.state.pagination;
+    // Nothing held yet, or the whole history is: there is nothing to page from.
+    if (!pagination || !pagination.hasMore) return false;
+    const beforeSeq = oldestSeqOf(this.state.messages);
+    if (beforeSeq <= 0) return false;
+    this.olderInFlight = true;
+    this.emit();
+    try {
+      const response = await this.chats().listMessages({ chatId: this.chatId, recent: pageSize, beforeSeq: BigInt(beforeSeq) });
+      const messages = response.messages as unknown as Message[];
+      // An empty page is the start of history. Otherwise the server says whether
+      // more lies below the cursor; a full page is more evidence of it, so an
+      // answer that under-reports does not strand the older history.
+      const hasMore = messages.length > 0 && (response.hasMore || messages.length >= pageSize);
+      const errors = response.errors.flatMap((e): ErrorUpdate[] => {
+        try {
+          const data = JSON.parse(e.dataJson || "{}") as Omit<ErrorUpdate, "sequence_number">;
+          return [{ ...data, update_type: "error", sequence_number: Number(e.sequenceNumber) }];
+        } catch {
+          return [];
+        }
+      });
+      this.dispatch({ kind: "olderPage", messages, errors, total: response.total, hasMore });
+      return hasMore;
+    } finally {
+      this.olderInFlight = false;
+      this.emit();
+    }
+  }
+
+  /** Whether an older page is being fetched. */
+  isLoadingOlder = (): boolean => this.olderInFlight;
 
   private cursor(): bigint {
     return BigInt(this.stream.getLastChatSequence());

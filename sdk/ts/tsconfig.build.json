@@ -14,5 +14,5 @@
     "inlineSources": true,
     "types": []
   },
-  "exclude": ["src/**/*.test.ts", "src/test/**"]
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**"]
 }

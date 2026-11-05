@@ -179,5 +179,16 @@ export const toolCallData = (seq: number, toolCallId: string, status: string) =>
     sequence_number: seq,
   });
 
+export const questionData = (seq: number, questionId: string, status: string, extra: Record<string, unknown> = {}) =>
+  updateData(ChatUpdateType.QUESTION, seq, questionId, {
+    question_id: questionId,
+    chat_id: CHAT,
+    workflow_id: "wf-1",
+    thread_id: CHAT,
+    step_id: "step-1",
+    status,
+    ...extra,
+  });
+
 export const finalizedData = (seq: number, messageId: string, reason: string) =>
   updateData(ChatUpdateType.STREAM_FINALIZED, seq, messageId, { message_id: messageId, reason });
