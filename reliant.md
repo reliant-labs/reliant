@@ -78,6 +78,12 @@ retired).
 a release candidate when a main moved and 2h passed, or right after a PR
 labelled **`release:asap`** merges: add that label to ship sooner.
 
+## Forge: always the newest
+
+Bump to the newest forge, never a chosen older one: reliant dogfoods both forge
+and its upgrade process. Follow `dev-docs/forge-upgrade.md`, and record the bump
+in its upgrade log in the same PR.
+
 ## Load these skills before touching their area
 
 - `web-styling` — any styling/layout change under `frontends/web/src` (semantic tokens, the `bg-muted` elevation trap).
