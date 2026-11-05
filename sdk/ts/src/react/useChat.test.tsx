@@ -86,6 +86,25 @@ describe("useChat", () => {
     expect(h.server.chatStreams()[0]!.signal?.aborted).toBe(true);
   });
 
+  it("opens one stream per project scope: the same chat under two projects is not shared", async () => {
+    const h = harness();
+    const a = h.render(() => useChat(CHAT, { projectId: "p-a" }));
+    const b = h.render(() => useChat(CHAT, { projectId: "p-b" }));
+    const a2 = h.render(() => useChat(CHAT, { projectId: "p-a" }));
+    await settle();
+    const streams = h.server.chatStreams();
+    expect(streams).toHaveLength(2);
+    expect(streams.map((c) => c.request.projectId).sort()).toEqual(["p-a", "p-b"]);
+
+    // Each scope's stream feeds only the hooks that asked for it.
+    const forA = streams.find((c) => c.request.projectId === "p-a")!;
+    act(() => forA.push(snapshotFrame(2, [textMessage("m-1", 1, 1, "for a")])));
+    await settle();
+    expect(texts(a.result.current.messages)).toEqual(["for a"]);
+    expect(texts(a2.result.current.messages)).toEqual(["for a"]);
+    expect(b.result.current.messages).toEqual([]);
+  });
+
   it("holds nothing while disabled or without a chat id", async () => {
     const h = harness();
     const none = h.render(() => useChat(undefined));
@@ -148,6 +167,49 @@ describe("useChat", () => {
     expect(seen.map(([name]) => name)).toEqual(["pause", "resume", "interrupt", "interrupt"]);
     expect(seen[2]![1]).toMatchObject({ chatId: CHAT, threadId: CHAT });
     expect(seen[3]![1]).toMatchObject({ chatId: CHAT, threadId: SUB });
+  });
+
+  it("a short page is not the end of history while the server says more remains", async () => {
+    const h = harness({
+      ListMessages: () => ({ messages: [textMessage("m-0", 1, 5, "earlier")], total: 9, hasMore: true }),
+    });
+    const { result } = h.render(() => useChat(CHAT));
+    await settle();
+    const snapshot = snapshotFrame(10, [textMessage("m-1", 1, 6, "recent")]);
+    (snapshot.event.value as { hasMore: boolean; oldestSeq: bigint }).hasMore = true;
+    (snapshot.event.value as { hasMore: boolean; oldestSeq: bigint }).oldestSeq = 6n;
+    act(() => h.server.chatStreams()[0]!.push(snapshot));
+    await settle();
+
+    // Asked for 100, got 1: filtered or truncated, with earlier history still there.
+    let more = false;
+    await act(async () => {
+      more = await result.current.loadOlder(100);
+    });
+    expect(more).toBe(true);
+    expect(result.current.hasMore).toBe(true);
+    expect(texts(result.current.messages)).toEqual(["earlier", "recent"]);
+  });
+
+  it("an empty page, or a short one the server calls the last, ends history", async () => {
+    let page = 0;
+    const h = harness({
+      ListMessages: () => (++page === 1 ? { messages: [textMessage("m-0", 1, 5, "earlier")], hasMore: false } : { messages: [] }),
+    });
+    const { result } = h.render(() => useChat(CHAT));
+    await settle();
+    const snapshot = snapshotFrame(10, [textMessage("m-1", 1, 6, "recent")]);
+    (snapshot.event.value as { hasMore: boolean; oldestSeq: bigint }).hasMore = true;
+    (snapshot.event.value as { hasMore: boolean; oldestSeq: bigint }).oldestSeq = 6n;
+    act(() => h.server.chatStreams()[0]!.push(snapshot));
+    await settle();
+
+    let more = true;
+    await act(async () => {
+      more = await result.current.loadOlder(100);
+    });
+    expect(more).toBe(false);
+    expect(result.current.hasMore).toBe(false);
   });
 
   it("pages older history in, one page at a time", async () => {

@@ -83,6 +83,26 @@ describe("useQuestions", () => {
     expect(result.current.async[0]).toMatchObject({ questionId: "qa", status: "resolved", withdrawnReason: "obsolete" });
   });
 
+  it("an async question a reconnect snapshot no longer carries is resolved in the cache, not left pending", async () => {
+    const h = harness({
+      ListPendingQuestions: () => ({ questions: [] }),
+      ListAsyncQuestions: () => ({ questions: [] }),
+    });
+    const { result } = h.render(() => useQuestions(CHAT));
+    await settle();
+
+    const conn = h.server.chatStreams()[0]!;
+    act(() => {
+      conn.push(snapshotFrame(5, [textMessage("m-1", 1, 1, "hi")], [questionData(5, "qa", "pending", { async: true, tool_call_id: "tc-9" })]));
+      conn.push(caughtUpFrame(5));
+    });
+    await waitFor(() => expect(result.current.async.map((x) => [x.questionId, x.status])).toEqual([["qa", "pending"]]));
+
+    // It was answered while the chat was away: the server's snapshot has no trace of it.
+    act(() => conn.push(snapshotFrame(9, [textMessage("m-2", 1, 2, "later")])));
+    await waitFor(() => expect(result.current.async.map((x) => [x.questionId, x.status])).toEqual([["qa", "resolved"]]));
+  });
+
   it("reads nothing without a chat", async () => {
     const h = harness();
     const { result } = h.render(() => useQuestions(undefined));

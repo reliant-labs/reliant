@@ -20,47 +20,53 @@ interface Entry {
 
 const registry = new WeakMap<ReliantClient, Map<string, Entry>>();
 
-function entryFor(client: ReliantClient, chatId: string, projectId: string | undefined): Entry {
-  let byChat = registry.get(client);
-  if (!byChat) {
-    byChat = new Map();
-    registry.set(client, byChat);
+// A session's stream is scoped by the project it was opened with, so the same
+// chat under two scopes is two sessions: sharing one would silently route the
+// second caller's stream by the first caller's project.
+const keyOf = (chatId: string, projectId: string | undefined): string => `${chatId}\u0000${projectId ?? ""}`;
+
+function entryFor(client: ReliantClient, key: string, chatId: string, projectId: string | undefined): Entry {
+  let byKey = registry.get(client);
+  if (!byKey) {
+    byKey = new Map();
+    registry.set(client, byKey);
   }
-  let entry = byChat.get(chatId);
+  let entry = byKey.get(key);
   if (!entry) {
     entry = { session: client.chat({ chatId, projectId }), refs: 0, closing: false };
-    byChat.set(chatId, entry);
+    byKey.set(key, entry);
   }
   return entry;
 }
 
-function release(client: ReliantClient, chatId: string, entry: Entry): void {
+function release(client: ReliantClient, key: string, entry: Entry): void {
   entry.refs--;
   if (entry.refs > 0) return;
   entry.closing = true;
   queueMicrotask(() => {
     if (!entry.closing) return;
     entry.session.close();
-    const byChat = registry.get(client);
-    if (byChat?.get(chatId) === entry) byChat.delete(chatId);
+    const byKey = registry.get(client);
+    if (byKey?.get(key) === entry) byKey.delete(key);
   });
 }
 
 /**
- * The live session of a chat, streaming for as long as the component is
- * mounted. `enabled: false` (or no chat id) holds none: the chat is not read.
+ * The live session of a chat under a project scope, streaming for as long as
+ * the component is mounted. Hooks that pass the same chat and project share one. `enabled: false` (or no chat id) holds none: the chat is not read.
  */
 export function useChatSession(chatId: string | undefined, projectId?: string, enabled = true): ChatSession | null {
   const client = useReliantClient();
-  const entry = chatId && enabled ? entryFor(client, chatId, projectId) : null;
+  const key = chatId ? keyOf(chatId, projectId) : "";
+  const entry = chatId && enabled ? entryFor(client, key, chatId, projectId) : null;
 
   useEffect(() => {
-    if (!entry || !chatId) return;
+    if (!entry) return;
     entry.refs++;
     entry.closing = false;
     entry.session.start();
-    return () => release(client, chatId, entry);
-  }, [client, chatId, entry]);
+    return () => release(client, key, entry);
+  }, [client, key, entry]);
 
   return entry?.session ?? null;
 }

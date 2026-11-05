@@ -82,6 +82,8 @@ export interface UseApprovalsOptions extends UseApprovalActionsOptions {
   live?: boolean;
   /** Read nothing while false. Default true. */
   enabled?: boolean;
+  /** The project scope of the chat's stream, to share the session of a hook that opened it under the same scope. */
+  projectId?: string;
 }
 
 export interface UseApprovalsResult extends UseApprovalActionsResult {
@@ -101,7 +103,7 @@ const EMPTY: Approval[] = [];
 export function useApprovals(chatId?: string, options: UseApprovalsOptions = {}): UseApprovalsResult {
   const client = useReliantClient();
   const queryClient = useQueryClient();
-  const { live = true, enabled = true, onNotActionable } = options;
+  const { live = true, enabled = true, onNotActionable, projectId } = options;
 
   // The fetch is only the cold-start seed: the stream patches the list live and
   // replays what a reopened chat missed, so a time-based staleTime would add a
@@ -113,7 +115,7 @@ export function useApprovals(chatId?: string, options: UseApprovalsOptions = {})
     staleTime: Infinity,
   });
 
-  const session = useChatSession(chatId, undefined, live && enabled);
+  const session = useChatSession(chatId, projectId, live && enabled);
   useEffect(() => {
     if (!session || !chatId) return;
     let seen = new Set<ToolApprovalUpdate>();

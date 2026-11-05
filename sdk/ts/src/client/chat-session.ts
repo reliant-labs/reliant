@@ -268,7 +268,8 @@ export class ChatSession {
 
   /**
    * Fetch the page of history just older than what the chat holds and prepend
-   * it. Resolves to whether more remains. One page at a time: a call while one
+   * it. Resolves to whether more remains (the server's word, or a full page).
+   * One page at a time: a call while one
    * is in flight resolves to true without a second request.
    */
   async loadOlder(pageSize = 100): Promise<boolean> {
@@ -283,8 +284,10 @@ export class ChatSession {
     try {
       const response = await this.chats().listMessages({ chatId: this.chatId, recent: pageSize, beforeSeq: BigInt(beforeSeq) });
       const messages = response.messages as unknown as Message[];
-      // An empty page is the start of history; a short one consumed the remainder.
-      const hasMore = messages.length >= pageSize;
+      // An empty page is the start of history. Otherwise the server says whether
+      // more lies below the cursor; a full page is more evidence of it, so an
+      // answer that under-reports does not strand the older history.
+      const hasMore = messages.length > 0 && (response.hasMore || messages.length >= pageSize);
       const errors = response.errors.flatMap((e): ErrorUpdate[] => {
         try {
           const data = JSON.parse(e.dataJson || "{}") as Omit<ErrorUpdate, "sequence_number">;

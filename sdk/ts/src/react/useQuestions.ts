@@ -19,6 +19,8 @@ export interface UseQuestionsOptions {
   /** Keep the lists current from the chat's stream. Default true. */
   live?: boolean;
   enabled?: boolean;
+  /** The project scope of the chat's stream, to share the session of a hook that opened it under the same scope. */
+  projectId?: string;
 }
 
 export interface UseQuestionsResult {
@@ -41,7 +43,7 @@ const EMPTY: QuestionInfo[] = [];
 export function useQuestions(chatId: string | undefined, options: UseQuestionsOptions = {}): UseQuestionsResult {
   const client = useReliantClient();
   const queryClient = useQueryClient();
-  const { live = true, enabled = true } = options;
+  const { live = true, enabled = true, projectId } = options;
 
   // The fetch only seeds a cold chat; the stream keeps the lists current and
   // replays what a reopened chat missed.
@@ -58,11 +60,11 @@ export function useQuestions(chatId: string | undefined, options: UseQuestionsOp
     staleTime: Infinity,
   });
 
-  const session = useChatSession(chatId, undefined, live && enabled);
+  const session = useChatSession(chatId, projectId, live && enabled);
   useEffect(() => {
     if (!session || !chatId) return;
     let seenPending = new Map<string, QuestionUpdate>();
-    let seenAsync = new Set<QuestionUpdate>();
+    let seenAsync = new Map<string, QuestionUpdate>();
     const feed = () => {
       const { pendingQuestions, asyncQuestions } = session.getState();
       for (const q of pendingQuestions) {
@@ -74,8 +76,16 @@ export function useQuestions(chatId: string | undefined, options: UseQuestionsOp
         if (!now.has(id)) applyQuestionUpdate(queryClient, chatId, { ...q, status: "resolved" });
       }
       seenPending = new Map(pendingQuestions.map((q) => [q.question_id, q]));
-      for (const q of asyncQuestions) if (!seenAsync.has(q)) applyQuestionUpdate(queryClient, chatId, q);
-      seenAsync = new Set(asyncQuestions);
+      for (const q of asyncQuestions) {
+        if (seenAsync.get(q.question_id) !== q) applyQuestionUpdate(queryClient, chatId, q);
+      }
+      // A reconnect snapshot that no longer carries an async question means it
+      // ended while the chat was away: its card shows it resolved, not pending.
+      const nowAsync = new Set(asyncQuestions.map((q) => q.question_id));
+      for (const [id, q] of seenAsync) {
+        if (!nowAsync.has(id) && q.status === "pending") applyQuestionUpdate(queryClient, chatId, { ...q, status: "resolved" });
+      }
+      seenAsync = new Map(asyncQuestions.map((q) => [q.question_id, q]));
     };
     feed();
     return session.subscribe(feed);
