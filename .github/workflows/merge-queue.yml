@@ -66,8 +66,15 @@ jobs:
           free-disk: background
           buf: "true"
       # Migration order is the gate's migorder phase whenever a migration changed.
+      # CI_PR: the queued pull request (gh-readonly-queue/main/pr-<n>-<sha>), whose
+      # labels scripts/check-compat.sh reads for an owner-accepted break.
       - name: task ci:merge -- --queue
-        run: MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}" --queue
+        env:
+          HEAD_REF: ${{ github.event.merge_group.head_ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CI_PR="$(sed -n 's|.*/pr-\([0-9][0-9]*\)-.*|\1|p' <<<"${HEAD_REF}")" \
+            MG_LOGDIR="${RUNNER_TEMP}/merge-gate" task ci:merge -- --base "${BASE}" --queue
       - name: task test:flake (each new or changed test, three times)
         if: ${{ !cancelled() }}
         run: task test:flake -- --base "${BASE}"

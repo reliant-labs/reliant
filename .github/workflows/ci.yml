@@ -176,6 +176,9 @@ jobs:
     timeout-minutes: 40
     env:
       BASE: ${{ needs.lanes.outputs.base }}
+      # scripts/check-compat.sh reads the pull request's labels (an owner-accepted break).
+      CI_PR: ${{ github.event.pull_request.number }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v6
         with:
