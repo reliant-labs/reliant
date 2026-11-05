@@ -19,8 +19,7 @@ import { useArchiveChat, useChat, useRenameChat, useUnarchiveChat } from "../../
 import { useMessages } from "../../hooks/message-queries";
 import { fetchFullToolResult } from "../../hooks/tool-result-queries";
 import * as chatActions from "../../hooks/chat-actions";
-import { loadMainWorktree } from "../../hooks/worktree-actions";
-import { resolveWorktree, type Worktree, getCachedMainWorktree } from "../../hooks/worktree-queries";
+import { resolveMainWorktree, resolveWorktree, type Worktree } from "../../hooks/worktree-queries";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useCapability } from "../../lib/surfaceContext";
 import { toast } from "../../lib/toast-manager";
@@ -100,11 +99,11 @@ export function useChatActions(chatId: string | null, worktreeIdOverride?: strin
         return;
       }
       // Only the recovery items read it, so fetch it (one row) rather than
-      // depend on the store happening to hold it.
+      // depend on the cache happening to hold it. A read, never a selection:
+      // this runs while the chat's own open is still switching workspace.
       if (!resolved.project_id) return;
-      await loadMainWorktree(resolved.project_id);
+      const main = await resolveMainWorktree(resolved.project_id);
       if (cancelled) return;
-      const main = getCachedMainWorktree(resolved.project_id);
       setMainWorktree(main && !main.deleted_at ? main : undefined);
     })();
     return () => {

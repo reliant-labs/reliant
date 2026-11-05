@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   switchViewer: vi.fn(),
   saveWorkspace: vi.fn(),
   resolveWorktree: vi.fn(async (id: string) => ({ id, project_id: "project-1" })),
+  resolveMainWorktree: vi.fn(async (): Promise<unknown> => ({ id: "main", project_id: "project-1" })),
 }));
 
 vi.mock("../../store/chatStore", () => ({
@@ -32,7 +33,10 @@ vi.mock("../../store/chatNavigationStore", () => ({
 vi.mock("../../store/workspaceStateStore", () => ({
   useWorkspaceStateStore: { getState: () => ({ setLastWorktree: state.saveWorkspace }) },
 }));
-vi.mock("../../hooks/worktree-queries", () => ({ resolveWorktree: state.resolveWorktree }));
+vi.mock("../../hooks/worktree-queries", () => ({
+  resolveWorktree: state.resolveWorktree,
+  resolveMainWorktree: state.resolveMainWorktree,
+}));
 vi.mock("../logger", () => ({ logger: { info: vi.fn() } }));
 
 function deferred() {
@@ -155,5 +159,44 @@ describe("chat open workspace commit fence", () => {
     expect(state.restoreNavigation.mock.calls).toEqual([["project-1", "branch-a"], ["project-1", null]]);
     expect(state.persist.mock.calls).toEqual([["a"], ["b"]]);
     expect(state.navigate.mock.calls).toEqual([["a"], ["b"]]);
+  });
+
+  // The chat header resolves main (useChatActions) the moment selectChat
+  // lands, while this open is still mid-switch. Loading main used to begin a
+  // new open epoch, which cancelled the switch: the sidebar stayed on the old
+  // workspace until the chat was clicked a second time.
+  it("commits the branch workspace when main loads during the switch", async () => {
+    const { openChatInWorkspace, useWorktreeStore, entered, gate } = await setup();
+    const { loadMainWorktree } = await import("../../hooks/worktree-actions");
+    const a = openChatInWorkspace(chat("a", "branch-a"), { navigate: true });
+    await entered.promise;
+    await loadMainWorktree("project-1");
+    gate.resolve();
+    await a;
+
+    expect(useWorktreeStore.getState().currentWorktreeId).toBe("branch-a");
+    expect(state.switchViewer.mock.calls).toEqual([["project-1", "branch-a"]]);
+    expect(state.persist.mock.calls).toEqual([["a"]]);
+    expect(state.navigate.mock.calls).toEqual([["a"]]);
+  });
+
+  it("loading main still yields to an open that begins while it loads", async () => {
+    const { openChatInWorkspace, useWorktreeStore, entered, gate } = await setup();
+    const { loadMainWorktree } = await import("../../hooks/worktree-actions");
+    let releaseMain!: () => void;
+    state.resolveMainWorktree.mockImplementationOnce(
+      () => new Promise((done) => { releaseMain = () => done({ id: "main", project_id: "project-1" }); }),
+    );
+    const main = loadMainWorktree("project-1");
+    const a = openChatInWorkspace(chat("a", "branch-a"), { navigate: true });
+    await entered.promise;
+    releaseMain();
+    await main;
+    // The open has not committed yet: nothing is selected, and main must not
+    // claim the empty selection over it.
+    expect(useWorktreeStore.getState().currentWorktreeId).toBeNull();
+    gate.resolve();
+    await a;
+    expect(useWorktreeStore.getState().currentWorktreeId).toBe("branch-a");
   });
 });

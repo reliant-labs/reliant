@@ -22,7 +22,7 @@ import { WorktreeService } from "../gen/reliant/v1/worktree_pb";
 import { connectClient } from "../lib/connect";
 import { retryAcrossWake } from "../lib/daemon-retry";
 import { logger } from "../lib/logger";
-import { beginWorkspaceOpen } from "../lib/openChatInWorkspace";
+import { beginWorkspaceOpen, observeWorkspaceOpen } from "../lib/openChatInWorkspace";
 import { queryClient as appQueryClient } from "../lib/query-client";
 import { toast } from "../lib/toast-manager";
 import { useBrowserStore } from "../store/browserStore";
@@ -464,10 +464,13 @@ export async function updateWorktreeStatus(
  * Fetch just the project's main workspace and select it when nothing is
  * selected. What app start and project switches use: one cheap row, however
  * many workspaces the project holds.
+ *
+ * A default, not an intent: it yields to any open that begins while it loads
+ * and never cancels one already in flight (observeWorkspaceOpen).
  */
 export async function loadMainWorktree(projectId: string | undefined, qc: QueryClient = appQueryClient): Promise<void> {
   if (!projectId) return;
-  const isCurrent = beginWorkspaceOpen();
+  const isCurrent = observeWorkspaceOpen();
   const main = await resolveMainWorktree(projectId, qc);
   if (!isCurrent() || !main || useWorktreeStore.getState().currentWorktreeId) return;
   logger.info("[Worktrees] Auto-selecting main worktree after load", { worktreeId: main.id, name: main.name });
