@@ -441,6 +441,33 @@ Run `task ci:merge` locally before asking for a merge: it is the same gate CI's
 (the queue builds up to five entries at once; a failure rebuilds those behind
 it).
 
+### Backwards-compatibility checks in the queue
+
+`scripts/check-compat.sh` (the `proto` and `migsafety` phases, only when the
+group's diff touches proto or a migration) fails a `buf breaking` change or a
+`forge:breaks-rollback` migration unless the owner applied `breaking:approved` /
+`migration:breaks-rollback-approved` to the PR. With `--queue` it judges only
+the entry's own change: HEAD against its sole parent, which must descend from
+the group's base. That rests on one assumption about GitHub: a squash-merge
+queue builds each entry's `gh-readonly-queue/main/pr-<n>-<sha>` head as ONE
+single-parent squash commit on top of the entry ahead of it (or main). When it
+does not hold, the script exits 2 naming the parent count or the ancestry it
+expected: it refuses, it never passes a break it could not isolate.
+
+**Check after the first queue run that reaches it** (the first entry touching
+`proto/` or `db/migrations/` after this lands): its `task ci:merge -- --queue`
+step logs `check-compat: proto unchanged since <sha>`, `... wire-compatible
+with <sha>` or `no migration declares forge:breaks-rollback`, never `the queue
+entry's HEAD has N parents` or `is not an ancestor`; and the group head is
+single-parent, its parent the previous entry's head (or the group base):
+`gh api repos/reliant-labs/reliant/commits/<merge_group head sha> --jq
+'[.parents[].sha]'` prints one sha.
+
+**Rollback** if either fails: revert the PR that added the checks (a plain
+`git revert` of its squash). The revert touches only `scripts/`, `.github/`, `tools/test-affected` tests and
+docs, so the compat phases do not run on it and it cannot be blocked by them;
+until it merges, only queue entries that touch proto or migrations are affected.
+
 The fleet's old local queue (`.fm-tools/merge_queue3.sh`), the `merge-gate`
 commit status and its audited waiver (`merge_gate_waive.sh`) are retired.
 
