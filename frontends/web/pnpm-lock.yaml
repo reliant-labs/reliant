@@ -41,6 +41,9 @@ importers:
       '@reliantlabs/forge-web-runtime':
         specifier: ^0.13.0
         version: 0.13.1(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@hyperdx/browser@0.26.0(supports-color@10.2.2)(zone.js@0.16.3))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)
+      '@reliantlabs/sdk':
+        specifier: workspace:*
+        version: link:../../sdk/ts
       '@rrweb/replay':
         specifier: 2.1.7
         version: 2.1.7
@@ -264,6 +267,30 @@ importers:
       vite:
         specifier: ^7.1.2
         version: 7.3.6(@types/node@24.10.9)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.46.0)
+      vitest:
+        specifier: ^4.1.11
+        version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.10.9)(jsdom@26.1.0(supports-color@10.2.2))(vite@7.3.6(@types/node@24.10.9)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.46.0))
+
+  ../../sdk/ts:
+    devDependencies:
+      '@bufbuild/protobuf':
+        specifier: ^2.10.0
+        version: 2.10.2
+      '@connectrpc/connect':
+        specifier: ^2.1.1
+        version: 2.1.1(@bufbuild/protobuf@2.10.2)
+      '@opentelemetry/api':
+        specifier: ^1.9.1
+        version: 1.9.1
+      '@reliantlabs/forge-web-runtime':
+        specifier: ^0.13.0
+        version: 0.13.1(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@hyperdx/browser@0.26.0(supports-color@10.2.2)(zone.js@0.16.3))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)
+      '@types/node':
+        specifier: ^24.3.0
+        version: 24.10.9
+      typescript:
+        specifier: ~5.8.3
+        version: 5.8.3
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@opentelemetry/api@1.9.1)(@types/node@24.10.9)(jsdom@26.1.0(supports-color@10.2.2))(vite@7.3.6(@types/node@24.10.9)(jiti@2.6.1)(lightningcss@1.30.2)(terser@5.46.0))

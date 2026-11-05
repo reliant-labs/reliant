@@ -1,0 +1,34 @@
+# buf.gen.sdk-ts.yaml - the TypeScript SDK's generated protobuf code
+# (sdk/ts/src/gen), run by the `sdk-ts-client` generate hook in forge.yaml.
+#
+# Only the services the SDK's client layer calls are generated, with just the
+# messages they reach (`types`): the published package must stay small, and
+# every added service is a public-surface decision. Same local, version-pinned
+# protoc-gen-es as buf.gen.yaml (see its header); internal/buildmode/
+# buf_plugin_pins_test.go holds the pin.
+version: v2
+managed:
+  enabled: false
+inputs:
+  - directory: proto
+    exclude_paths:
+      - proto/forge/v1
+      - proto/buf/validate
+plugins:
+  - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-v2.15.0/bin/protoc-gen-es]
+    strategy: all
+    out: sdk/ts/src/gen
+    include_imports: true
+    types:
+      - reliant.v1.StreamingService
+      - reliant.v1.BackgroundService.StreamProcessOutput
+      - reliant.v1.ChatService.SendMessage
+      # Enums the typed events name directly (events.ts).
+      - reliant.v1.NodeExecutionEventType
+      - reliant.v1.WorkflowExecutionEventType
+      - reliant.v1.ExecutionLogLevel
+    opt:
+      - target=ts
+      - ts_nocheck=true
+      # Node ESM resolves no extensionless specifier, and this is the published artifact.
+      - import_extension=js
