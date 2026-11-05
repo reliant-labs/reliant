@@ -85,7 +85,10 @@ describe("the demo scenario, through the console's real client", () => {
   });
 
   it("answers the overview, the flamegraph and the service signals as the fixtures do", async () => {
-    expect(normalize(await wire.getServiceOverview({ ...scope, window }))).toEqual(normalize(await fixtures.getServiceOverview({ ...scope, window })));
+    // The client always reports unavailableSections (empty from a whole answer); the fixture leaves it out.
+    expect(normalize(await wire.getServiceOverview({ ...scope, window }))).toEqual(
+      normalize({ unavailableSections: [], ...(await fixtures.getServiceOverview({ ...scope, window })) }),
+    );
     const flame = { ...scope, window, service: "api", profileType: "cpu", traceId: TRACE };
     expect(normalize(await wire.getFlamegraph(flame))).toEqual(normalize(await fixtures.getFlamegraph(flame)));
     expect(await wire.getServiceSignals({ ...scope, window })).toEqual(FIXTURE_SIGNALS);
