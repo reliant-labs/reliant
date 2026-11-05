@@ -11,6 +11,16 @@ on:
         required: false
         default: false
         type: boolean
+      prebuild_version:
+        description: >-
+          Prebuild this version (vX.Y.Z) from the dispatched commit (with dry_run: true):
+          signed and notarized, published nowhere. rc-train dispatches it on an RC commit
+          when the commit's release gate passes. When the repository variable
+          ELECTRON_REUSE_PREBUILD is 'true', the tag push of vX.Y.Z on the same commit
+          publishes these artifacts instead of building them again.
+        required: false
+        default: ""
+        type: string
 
 concurrency:
   group: releases
@@ -19,6 +29,7 @@ concurrency:
 permissions:
   contents: write
   packages: write
+  actions: read # find and download a prebuild's artifacts (prebuild_version)
 
 env:
   # Optimize npm
@@ -43,12 +54,42 @@ jobs:
       electron_version: ${{ steps.electron-versions.outputs.electron_version }}
       electron_builder_version: ${{ steps.electron-versions.outputs.electron_builder_version }}
       duration_seconds: ${{ steps.prepare-metrics.outputs.duration_seconds }}
+      # A successful prebuild run of this tag's version on this tag's commit, whose
+      # artifacts the platform jobs publish instead of building (empty: build).
+      prebuilt_run: ${{ steps.prebuilt.outputs.run }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0 # Full clone needed for tag-triggered workflows
+
+      # PREBUILD (release-speed, control-plane designs/release-speed-2026-11-04.md):
+      # rc-train dispatches this workflow with prebuild_version on the RC commit as
+      # soon as its release gate passes, so the ~45m Electron build overlaps the
+      # control-plane gate, the build and the deploy instead of starting at finalize.
+      # A prebuild publishes nothing: it must be a dry run. Its marker artifact
+      # (written after the renderer build, below) names the version, the commit
+      # and the renderer's identity; the tag push reuses it only when all three
+      # match. The decisions live in scripts/release-prebuild.sh, proven by
+      # scripts/test-release-prebuild.sh.
+      - name: Prebuild preconditions
+        if: inputs.prebuild_version != ''
+        env:
+          V: ${{ inputs.prebuild_version }}
+          DRY: ${{ inputs.dry_run }}
+        run: bash scripts/release-prebuild.sh admit "$V" "$DRY" electron/package.json
+
+      - name: Find a prebuild of this tag
+        id: prebuilt
+        if: github.ref_type == 'tag' && vars.ELECTRON_REUSE_PREBUILD == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          run="$(bash scripts/release-prebuild.sh find "$GITHUB_REPOSITORY" "$TAG" "$GITHUB_SHA")"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
 
       - name: Record job start
         id: timing-start
@@ -82,7 +123,9 @@ jobs:
       - name: Extract version
         id: version
         run: |
-          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+          if [[ -n "${{ inputs.prebuild_version }}" ]]; then
+            echo "version=${{ inputs.prebuild_version }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref_type }}" == "tag" ]]; then
             echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           else
             echo "version=dev-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
@@ -91,7 +134,8 @@ jobs:
       - name: Detect release type and set config
         id: config
         run: |
-          TAG_NAME="${{ github.ref_name }}"
+          # A prebuild is named by its version, not its branch (release/vX-rc.N).
+          TAG_NAME="${{ inputs.prebuild_version || github.ref_name }}"
           echo "Tag: $TAG_NAME"
 
           if [[ $TAG_NAME =~ -rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+ ]]; then
@@ -194,7 +238,6 @@ jobs:
       # A release is the LAST place to skip the check, so it runs the same
       # gate the hosted frontend does.
       - name: Build React frontend
-        working-directory: frontends/web
         # NODE_ENV=production is scoped to this command, NOT the step, and NOT
         # the job. Vite honours NODE_ENV even under `vite build`, so a leaked
         # `development` folds `import.meta.env.DEV` to TRUE inside a production
@@ -213,7 +256,38 @@ jobs:
         #
         # Never set on `npm ci`/`npm install`: npm reads the same variable and
         # skips devDependencies, removing vite and typescript themselves.
+        #
+        # RELEASE_VERSION names the release to the renderer's identity resolver
+        # (vite-plugin-version-json.ts -> scripts/release-identity.sh --tag). A
+        # prebuild runs on the RC commit before its tag exists, so without it the
+        # renderer would embed a dev identity and ship it inside the release.
+        env:
+          RELEASE_VERSION: ${{ startsWith(steps.version.outputs.version, 'v') && steps.version.outputs.version || '' }}
+        working-directory: frontends/web
         run: NODE_ENV=production npm run build
+
+      # A release's renderer reports exactly the release (version.json); for a
+      # prebuild the marker records it, and the tag push reuses only a match.
+      - name: Verify the renderer's release identity
+        if: startsWith(steps.version.outputs.version, 'v')
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          got="$(jq -r .version frontends/web/dist/version.json)"
+          [ "$got" = "${VERSION#v}" ] || { echo "::error::the renderer reports version '$got', not ${VERSION#v}"; exit 1; }
+
+      - name: Write the prebuild marker
+        if: inputs.prebuild_version != ''
+        run: bash scripts/release-prebuild.sh marker "${{ inputs.prebuild_version }}" "$GITHUB_SHA" frontends/web/dist prebuild/prebuild.json
+
+      - name: Upload the prebuild marker
+        if: inputs.prebuild_version != ''
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: prebuild-${{ inputs.prebuild_version }}
+          path: prebuild/prebuild.json
+          retention-days: 7
 
       # ── The artifact gate. Asserts on the BUILT BUNDLE, not the source. ────
       #
@@ -293,6 +367,7 @@ jobs:
   build-backend:
     name: Build backend (${{ matrix.target_os }}-${{ matrix.target_arch }})
     needs: prepare
+    if: needs.prepare.outputs.prebuilt_run == ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -541,6 +616,7 @@ jobs:
         run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       - name: Setup Node.js
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
@@ -549,6 +625,7 @@ jobs:
 
       # Platform-specific Electron cache (macOS uses ~/Library/Caches)
       - name: Cache Electron binaries
+        if: needs.prepare.outputs.prebuilt_run == ''
         id: electron-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -560,24 +637,28 @@ jobs:
             ${{ runner.os }}-electron-
 
       - name: Download web build
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: web-dist
           path: frontends/web/dist
 
       - name: Download backend (darwin-amd64)
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-darwin-amd64
           path: electron/resources/server/mac-x64
 
       - name: Download backend (darwin-arm64)
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-darwin-arm64
           path: electron/resources/server/mac-arm64
 
       - name: Verify backend binaries (macOS)
+        if: needs.prepare.outputs.prebuilt_run == ''
         run: |
           for dir in electron/resources/server/mac-*; do
             test -f "$dir/reliant-backend"
@@ -586,10 +667,12 @@ jobs:
           ls -la electron/resources/server/mac-*/
 
       - name: Install electron dependencies
+        if: needs.prepare.outputs.prebuilt_run == ''
         working-directory: electron
         run: npm ci --legacy-peer-deps --prefer-offline
 
       - name: Generate runtime build config
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: ./.github/actions/generate-build-config
         with:
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
@@ -599,6 +682,7 @@ jobs:
           reliant-gateway-url: ${{ env.RELIANT_GATEWAY_URL }}
 
       - name: Build and Publish macOS apps (Signed & Notarized)
+        if: needs.prepare.outputs.prebuilt_run == ''
         working-directory: electron
         env:
           # NOTARIZATION IDENTITY — two strategies, both passed; the hook
@@ -645,6 +729,34 @@ jobs:
           echo "Config: $CONFIG | Channel: $CHANNEL | Publish: $PUBLISH_FLAG"
 
           npx electron-builder --config "$CONFIG" --mac --publish $PUBLISH_FLAG
+
+      # A prebuild of this version on this commit (prepare's prebuilt_run): publish its
+      # signed artifacts exactly where electron-builder --publish puts them (the s3
+      # provider of electron-builder*.js: bucket root of `downloads` on R2), the
+      # update feeds (*.yml) last so no client sees a feed before its files.
+      - name: Publish the prebuild
+        if: needs.prepare.outputs.prebuilt_run != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: macos-builds
+          path: electron/dist
+          run-id: ${{ needs.prepare.outputs.prebuilt_run }}
+          github-token: ${{ github.token }}
+
+      - name: Upload the prebuild to R2
+        if: needs.prepare.outputs.prebuilt_run != ''
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        # Refuses, uploading nothing, unless every update feed mac clients poll is
+        # present and names VERSION; feeds go last.
+        run: bash scripts/release-prebuild.sh publish mac "$CHANNEL" "$VERSION" electron/dist
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -729,6 +841,7 @@ jobs:
         run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       - name: Setup Node.js
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
@@ -737,6 +850,7 @@ jobs:
 
       # Platform-specific Electron cache (Linux uses ~/.cache)
       - name: Cache Electron binaries
+        if: needs.prepare.outputs.prebuilt_run == ''
         id: electron-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -748,24 +862,28 @@ jobs:
             ${{ runner.os }}-electron-
 
       - name: Download web build
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: web-dist
           path: frontends/web/dist
 
       - name: Download backend (linux-amd64)
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-linux-amd64
           path: electron/resources/server/linux-amd64
 
       - name: Download backend (linux-arm64)
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-linux-arm64
           path: electron/resources/server/linux-arm64
 
       - name: Verify backend binaries (Linux)
+        if: needs.prepare.outputs.prebuilt_run == ''
         run: |
           for dir in electron/resources/server/linux-*; do
             test -f "$dir/reliant-backend"
@@ -774,10 +892,12 @@ jobs:
           ls -la electron/resources/server/linux-*/
 
       - name: Install electron dependencies
+        if: needs.prepare.outputs.prebuilt_run == ''
         working-directory: electron
         run: npm ci --legacy-peer-deps --prefer-offline
 
       - name: Generate runtime build config
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: ./.github/actions/generate-build-config
         with:
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
@@ -787,6 +907,7 @@ jobs:
           reliant-gateway-url: ${{ env.RELIANT_GATEWAY_URL }}
 
       - name: Build and Publish Linux apps
+        if: needs.prepare.outputs.prebuilt_run == ''
         working-directory: electron
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -803,6 +924,34 @@ jobs:
 
           npx electron-builder --config "$CONFIG" --linux --publish $PUBLISH_FLAG
 
+      # A prebuild of this version on this commit (prepare's prebuilt_run): publish its
+      # signed artifacts exactly where electron-builder --publish puts them (the s3
+      # provider of electron-builder*.js: bucket root of `downloads` on R2), the
+      # update feeds (*.yml) last so no client sees a feed before its files.
+      - name: Publish the prebuild
+        if: needs.prepare.outputs.prebuilt_run != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: linux-builds
+          path: electron/dist
+          run-id: ${{ needs.prepare.outputs.prebuilt_run }}
+          github-token: ${{ github.token }}
+
+      - name: Upload the prebuild to R2
+        if: needs.prepare.outputs.prebuilt_run != ''
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        # Refuses, uploading nothing, unless every update feed linux clients poll is
+        # present and names VERSION; feeds go last.
+        run: bash scripts/release-prebuild.sh publish linux "$CHANNEL" "$VERSION" electron/dist
+
       - name: Upload Linux artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -811,6 +960,7 @@ jobs:
             electron/dist/*.AppImage
             electron/dist/*.deb
             electron/dist/*-linux.yml
+            electron/dist/*-linux-arm64.yml
             electron/dist/*.blockmap
           retention-days: 90
 
@@ -850,6 +1000,8 @@ jobs:
   release-windows:
     name: Build Windows
     needs: [prepare, build-backend]
+    # As before (every backend leg built), or publishing a prebuild (no backend leg ran).
+    if: always() && needs.prepare.result == 'success' && (needs.prepare.outputs.prebuilt_run != '' || needs.build-backend.result == 'success')
     runs-on: windows-latest
     timeout-minutes: 45
     outputs:
@@ -877,6 +1029,7 @@ jobs:
         run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       - name: Setup Node.js
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
@@ -885,6 +1038,7 @@ jobs:
 
       # Platform-specific Electron cache (Windows)
       - name: Cache Electron binaries
+        if: needs.prepare.outputs.prebuilt_run == ''
         id: electron-cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -896,24 +1050,28 @@ jobs:
             ${{ runner.os }}-electron-
 
       - name: Download web build
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: web-dist
           path: frontends/web/dist
 
       - name: Download backend (windows-amd64)
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-windows-amd64
           path: electron/resources/server/win32-amd64
 
       - name: Download backend (windows-arm64)
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-windows-arm64
           path: electron/resources/server/win32-arm64
 
       - name: Verify backend binaries
+        if: needs.prepare.outputs.prebuilt_run == ''
         shell: bash
         run: |
           test -f electron/resources/server/win32-amd64/reliant-backend.exe
@@ -921,10 +1079,12 @@ jobs:
           ls -la electron/resources/server/win32-*/
 
       - name: Install electron dependencies
+        if: needs.prepare.outputs.prebuilt_run == ''
         working-directory: electron
         run: npm ci --legacy-peer-deps --prefer-offline
 
       - name: Generate runtime build config
+        if: needs.prepare.outputs.prebuilt_run == ''
         uses: ./.github/actions/generate-build-config
         with:
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
@@ -934,6 +1094,7 @@ jobs:
           reliant-gateway-url: ${{ env.RELIANT_GATEWAY_URL }}
 
       - name: Build and Publish Windows apps
+        if: needs.prepare.outputs.prebuilt_run == ''
         working-directory: electron
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -969,13 +1130,44 @@ jobs:
           # Use direct path to electron-builder to avoid npx issues on Windows
           & .\node_modules\.bin\electron-builder.cmd --config "$CONFIG" --win --publish $PUBLISH
 
+      # A prebuild of this version on this commit (prepare's prebuilt_run): publish its
+      # signed artifacts exactly where electron-builder --publish puts them (the s3
+      # provider of electron-builder*.js: bucket root of `downloads` on R2), the
+      # update feeds (*.yml) last so no client sees a feed before its files.
+      - name: Publish the prebuild
+        if: needs.prepare.outputs.prebuilt_run != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: windows-builds
+          path: electron/dist
+          run-id: ${{ needs.prepare.outputs.prebuilt_run }}
+          github-token: ${{ github.token }}
+
+      - name: Upload the prebuild to R2
+        if: needs.prepare.outputs.prebuilt_run != ''
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        # Refuses, uploading nothing, unless every update feed win clients poll is
+        # present and names VERSION; feeds go last.
+        run: bash scripts/release-prebuild.sh publish win "$CHANNEL" "$VERSION" electron/dist
+
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-builds
+          # The Windows update feed is <channel>.yml (latest.yml / alpha.yml), not
+          # *-win.yml: publishing a prebuild needs it (scripts/release-prebuild.sh).
           path: |
             electron/dist/*.exe
-            electron/dist/*-win.yml
+            electron/dist/latest.yml
+            electron/dist/alpha.yml
             electron/dist/*.blockmap
           retention-days: 90
 
