@@ -1,7 +1,16 @@
 #!/bin/bash
 
 # PHASE 1 of a release: propose the version bump. Creates NO tag.
-# Usage: ./scripts/release.sh [patch|minor|major|prerelease]
+# Usage: ./scripts/release.sh [auto|patch|minor|major|prerelease] [--owner-override]
+#
+# The version is real semver at major 1 (owner, 2026-11-05). `auto`, the default,
+# computes it with scripts/semver-next.sh from the PR titles merged since the last
+# final tag: any `feat` is a minor, anything else a patch, and a breaking change
+# (`feat!:`, a `BREAKING CHANGE:` footer) is refused, naming the PR: within v1,
+# deprecate and keep the old path. A breaking change an earlier release candidate
+# (rc/ tag) already carried does not refuse again. An explicit patch/minor/major
+# that is not the computed bump, or any release over a refusal, is the owner's
+# alone: --owner-override.
 #
 # This script will:
 # 1. Validate and regenerate the changelog
@@ -49,16 +58,23 @@ RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Default to prerelease if no argument provided
-RELEASE_TYPE=${1:-prerelease}
+RELEASE_TYPE=auto
+OWNER_OVERRIDE=false
+for arg in "$@"; do
+    case "$arg" in
+        --owner-override) OWNER_OVERRIDE=true ;;
+        *) RELEASE_TYPE="$arg" ;;
+    esac
+done
 
 # Validate release type
 case $RELEASE_TYPE in
-    patch|minor|major|prerelease)
+    auto|patch|minor|major|prerelease)
         ;;
     *)
         echo -e "${RED}Error: Invalid release type '$RELEASE_TYPE'${NC}"
-        echo "Usage: $0 [patch|minor|major|prerelease]"
+        echo "Usage: $0 [auto|patch|minor|major|prerelease] [--owner-override]"
+        echo "  auto (default): the bump the PR titles since the last tag compute (feat → minor, else patch)"
         echo "  patch: 0.2.3-rc1 → 0.2.3 (stable release from RC)"
         echo "  minor: 0.2.3 → 0.3.0 (new features)"
         echo "  major: 0.2.3 → 1.0.0 (breaking changes)"
@@ -90,6 +106,18 @@ fi
 CURRENT_VERSION=$(node -p "require('./electron/package.json').version")
 echo -e "${YELLOW}Current version: $CURRENT_VERSION${NC}"
 
+# The computed version: origin's tags, origin/main's PR titles.
+git fetch origin main --tags --quiet
+SINCE_RC=$(git tag -l 'rc/v*' --sort=-v:refname | head -1)
+COMPUTE_ERR=$(mktemp)
+COMPUTED=$(bash scripts/semver-next.sh --head origin/main ${SINCE_RC:+--breaking-since "refs/tags/$SINCE_RC"} 2>"$COMPUTE_ERR") || COMPUTED=""
+if [[ -z "$COMPUTED" && "$RELEASE_TYPE" != "prerelease" && "$OWNER_OVERRIDE" != "true" ]]; then
+    echo -e "${RED}Error: cannot compute the release version:${NC}"
+    cat "$COMPUTE_ERR"
+    echo -e "${YELLOW}  Only the owner releases over this: $0 <patch|minor|major> --owner-override${NC}"
+    exit 1
+fi
+
 # Handle rc version increment specially
 if [[ $RELEASE_TYPE == "prerelease" ]]; then
     # Support both -rc.N and -rcN formats
@@ -120,13 +148,21 @@ if [[ $RELEASE_TYPE == "prerelease" ]]; then
     node -e "const pkg = require('./package.json'); pkg.version = '$NEW_VERSION'; require('fs').writeFileSync('./package.json', JSON.stringify(pkg, null, 2) + '\n');"
     cd ..
 else
-    # Use npm version for other cases
-    echo -e "${YELLOW}📦 Creating release: $CURRENT_VERSION → ${RELEASE_TYPE}${NC}"
+    # npm version takes a bump name or an exact version; `auto` is the computed one.
+    BUMP="$RELEASE_TYPE"
+    [[ "$BUMP" != "auto" ]] || BUMP="${COMPUTED#v}"
+    echo -e "${YELLOW}📦 Creating release: $CURRENT_VERSION → ${BUMP}${NC}"
     cd electron
-    NEW_VERSION=$(npm version $RELEASE_TYPE --no-git-tag-version)
+    NEW_VERSION=$(npm version "$BUMP" --no-git-tag-version --allow-same-version)
     cd ..
     # npm version returns with 'v' prefix, strip it
     NEW_VERSION=${NEW_VERSION#v}
+    if [[ "v$NEW_VERSION" != "$COMPUTED" && "$OWNER_OVERRIDE" != "true" ]]; then
+        git checkout -- electron/package.json electron/package-lock.json 2>/dev/null || true
+        echo -e "${RED}Error: $RELEASE_TYPE makes v$NEW_VERSION, but the PR titles since the last tag compute ${COMPUTED}${NC}"
+        echo -e "${YELLOW}  Omit the type to propose ${COMPUTED}; only the owner proposes another (--owner-override).${NC}"
+        exit 1
+    fi
 fi
 
 echo -e "${GREEN}✅ New version: $NEW_VERSION${NC}"
