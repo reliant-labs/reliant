@@ -123,6 +123,27 @@ describe("streaming placeholder", () => {
     expect(t.finalizedStreamIds.has("m-9")).toBe(true);
   });
 
+  it("addresses blocks by block_index across batches, past a thinking block that takes no slot", () => {
+    let s = apply(
+      fresh(),
+      deltaData("message_start"),
+      deltaData("thinking_block_start"),
+      deltaData("thinking_block_delta", { delta: "hmm" }),
+      deltaData("content_block_start", { block_index: 1 }),
+      deltaData("content_block_delta", { block_index: 1, delta: "Hel" }),
+    );
+    expect(streamingText(s)).toBe("Hel");
+    s = apply(s, deltaData("content_block_delta", { block_index: 1, delta: "lo" }));
+    expect(streamingText(s)).toBe("Hello");
+    s = apply(s, deltaData("tool_use_start", { block_index: 3, tool_call: { id: "t1", name: "shell" } }));
+    s = apply(s, deltaData("content_block_start", { block_index: 4 }), deltaData("content_block_delta", { block_index: 4, delta: "!" }));
+    s = apply(s, deltaData("content_block_delta", { block_index: 1, delta: " there" }));
+    const blocks = s.streaming[CHAT]!.contentBlocks;
+    expect(blocks.map((b) => b.index)).toEqual([1, 3, 4]);
+    expect(blocks.map((b) => b.content ?? "")).toEqual(["Hello there", "", "!"]);
+    expect(blocks[1]!.toolCallId).toBe("t1");
+  });
+
   it("keeps threads apart", () => {
     const s = apply(
       fresh(),
@@ -197,6 +218,35 @@ describe("approvals, questions, logs", () => {
     s = apply(s, q("pending", { question_id: "q2", async: true }));
     expect(s.pendingQuestions).toEqual([]);
     expect(s.asyncQuestions.map((x) => x.question_id)).toEqual(["q2"]);
+  });
+
+  it("a replacement snapshot reconciles gates, threads, workflows and placeholders against itself", () => {
+    const question = updateData(ChatUpdateType.QUESTION, 2, "q1", { question_id: "q1", chat_id: CHAT, workflow_id: "w", step_id: "s", status: "pending" });
+    const asyncQuestion = updateData(ChatUpdateType.QUESTION, 3, "q2", { question_id: "q2", chat_id: CHAT, workflow_id: "w", step_id: "s", status: "pending", async: true });
+    const thread = updateData(ChatUpdateType.THREAD, 4, "t-a", { id: "t-a", chat_id: CHAT, thread_id: "t-a", status: "active" });
+    const workflow = updateData(ChatUpdateType.WORKFLOW_STATUS, 5, "w", { workflow_id: "w", chat_id: CHAT, status: "running" });
+    let s = snapshot(fresh(), messageData(1, "m-1", "one"), approvalData(1, "pending"), question, asyncQuestion, thread, workflow);
+    s = apply(s, deltaData("content_block_start"), deltaData("content_block_delta", { delta: "half" }));
+    expect(s.approvals).toHaveLength(1);
+    expect(s.pendingQuestions).toHaveLength(1);
+    expect(s.asyncQuestions).toHaveLength(1);
+    expect(s.threads).toHaveLength(1);
+    expect(Object.keys(s.workflowStatus)).toEqual(["w"]);
+    expect(streamingText(s)).toBe("half");
+
+    // The reconnect could not replay the cursor; the server's snapshot no longer
+    // has any of it, and the stream's finalize was missed.
+    s = snapshot(s, messageData(9, "m-9", "fresh start"));
+    expect(s.approvals).toEqual([]);
+    expect(s.pendingQuestions).toEqual([]);
+    expect(s.asyncQuestions).toEqual([]);
+    expect(s.threads).toEqual([]);
+    expect(s.workflowStatus).toEqual({});
+    expect(s.streaming).toEqual({});
+
+    // What the snapshot does report is held.
+    s = snapshot(s, messageData(9, "m-9", "fresh start"), approvalData(9, "pending"));
+    expect(s.approvals.map((a) => a.id)).toEqual(["appr-1"]);
   });
 
   it("errors dedupe by id and a snapshot starts the log afresh", () => {

@@ -52,6 +52,15 @@ export interface SendResult {
   clientMessageId: string;
 }
 
+/** One send's request, as it was first made: what a retry of it repeats. */
+interface PendingSend {
+  text: string;
+  attachments: string[];
+  targetThread: string | undefined;
+  /** The send's key in the id cache. */
+  key: string;
+}
+
 /** Codes a repeat of the same send can succeed after. */
 const TRANSIENT = new Set<Code>([Code.Unavailable, Code.DeadlineExceeded, Code.Unknown, Code.Aborted, Code.ResourceExhausted]);
 const isTransient = (error: unknown): boolean => !(error instanceof ConnectError) || TRANSIENT.has(error.code);
@@ -66,6 +75,8 @@ export class ChatSession {
   private readonly ids: AttemptIds;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly chats: () => Client<typeof ChatService>;
+  /** Failed sends by client message id, until retried or discarded. */
+  private readonly failedSends = new Map<string, PendingSend>();
   private errorMessage: string | null = null;
   private closed = false;
   private started = false;
@@ -150,6 +161,7 @@ export class ChatSession {
 
   /** Feed the reducer an action of your own, e.g. a discarded failed send. */
   dispatch(action: ChatAction): void {
+    if (action.kind === "sendDiscarded") this.failedSends.delete(action.clientMessageId);
     this.state = reduceChat(this.state, action, { now: this.now });
     this.emit();
   }
@@ -163,15 +175,45 @@ export class ChatSession {
    * discarded.
    */
   async send(text: string, options: SendOptions = {}): Promise<SendResult> {
-    const attachments = options.attachments ?? [];
-    const key = JSON.stringify([this.chatId, options.targetThread ?? "", text, attachments]);
-    const clientMessageId = this.ids.idFor(key);
+    const request: PendingSend = {
+      text,
+      attachments: options.attachments ?? [],
+      targetThread: options.targetThread,
+      key: "",
+    };
+    request.key = JSON.stringify([this.chatId, request.targetThread ?? "", text, request.attachments]);
+    return this.deliver(this.ids.idFor(request.key), request, options.retries);
+  }
 
+  /**
+   * Send a failed entry again: the exact request that failed (its text,
+   * attachments and thread) under the id it already has, however many other
+   * sends came between. `options` fill in only an entry this session did not
+   * send itself (one restored from a persisted state); its `retries` always applies.
+   */
+  async retry(failedMessageId: string, options: SendOptions = {}): Promise<SendResult> {
+    const clientMessageId = clientIdOfFailedSend(failedMessageId);
+    const entry = this.state.messages.find((m) => m.id === failedMessageId);
+    if (!clientMessageId || !entry) throw new Error(`${failedMessageId} is not a failed send of this chat`);
+    const request: PendingSend = this.failedSends.get(clientMessageId) ?? {
+      text: entry.contentBlocks.map((b) => b.content ?? "").join(""),
+      attachments: options.attachments ?? [],
+      targetThread: options.targetThread,
+      key: "",
+    };
+    if (!request.key) {
+      request.key = JSON.stringify([this.chatId, request.targetThread ?? "", request.text, request.attachments]);
+    }
+    return this.deliver(clientMessageId, request, options.retries);
+  }
+
+  private async deliver(clientMessageId: string, request: PendingSend, retries = 3): Promise<SendResult> {
+    const { text, attachments, targetThread, key } = request;
     // A retry of a failed send replaces its "Not sent" entry.
     this.dispatch({ kind: "sendDiscarded", clientMessageId });
     this.dispatch({ kind: "sendStarted", clientMessageId, text, createdAt: this.now() });
 
-    const attempts = 1 + (options.retries ?? 3);
+    const attempts = 1 + retries;
     for (let attempt = 1; ; attempt++) {
       try {
         const response = await this.chats().sendMessage({
@@ -179,7 +221,7 @@ export class ChatSession {
           clientMessageId,
           messages: [{ role: MessageRole.USER, content: text }],
           attachments,
-          targetThread: options.targetThread,
+          targetThread,
         });
         this.ids.end(key);
         // A queued message is in the thread's mailbox, not the transcript: it
@@ -196,19 +238,13 @@ export class ChatSession {
           await this.sleep(Math.min(500 * 2 ** (attempt - 1), 4_000));
           continue;
         }
+        // Kept with its id, outside the bounded id cache, so retry() resends
+        // exactly this request under exactly this id.
+        this.failedSends.set(clientMessageId, request);
         this.dispatch({ kind: "sendFailed", clientMessageId });
         throw error;
       }
     }
-  }
-
-  /** Send a failed entry again, under the id it already has. */
-  async retry(failedMessageId: string, options: SendOptions = {}): Promise<SendResult> {
-    const clientMessageId = clientIdOfFailedSend(failedMessageId);
-    const entry = this.state.messages.find((m) => m.id === failedMessageId);
-    if (!clientMessageId || !entry) throw new Error(`${failedMessageId} is not a failed send of this chat`);
-    const text = entry.contentBlocks.map((b) => b.content ?? "").join("");
-    return this.send(text, options);
   }
 
   private cursor(): bigint {

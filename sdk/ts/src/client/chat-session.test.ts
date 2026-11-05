@@ -294,6 +294,37 @@ describe("sending", () => {
     expect(session.getState().messages.some((m) => m.id.startsWith("optimistic-failed-"))).toBe(false);
   });
 
+  it("retries the exact failed request (attachments, child thread) under its id, even after the id cache evicted it", async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    let fail = true;
+    const session = open({
+      SendMessage: (request: Record<string, unknown>) => {
+        calls.push(request);
+        if (fail && request.targetThread === "t-child") throw new ConnectError("down", Code.Unavailable);
+        return { chatId: CHAT, messageId: `m-${calls.length}`, queued: false };
+      },
+    });
+
+    await expect(
+      session.send("look at this", { attachments: ["att-1"], targetThread: "t-child", retries: 0 }),
+    ).rejects.toThrow("down");
+    const failed = session.getState().messages.find((m) => m.id.startsWith("optimistic-failed-"))!;
+    const firstId = calls[0]!.clientMessageId;
+
+    // Far more sends than the id cache keeps, each failing for good so it keeps its id.
+    for (let i = 0; i < 40; i++) {
+      await expect(session.send(`other ${i}`, { targetThread: "t-child", retries: 0 })).rejects.toThrow("down");
+    }
+
+    fail = false;
+    const result = await session.retry(failed.id);
+    const last = calls.at(-1)!;
+    expect(result.clientMessageId).toBe(firstId);
+    expect(last).toMatchObject({ clientMessageId: firstId, attachments: ["att-1"], targetThread: "t-child" });
+    expect(last.messages).toMatchObject([{ content: "look at this" }]);
+    expect(session.getState().messages.some((m) => m.id === failed.id)).toBe(false);
+  });
+
   it("does not retry a refusal", async () => {
     const calls: unknown[] = [];
     const session = open({

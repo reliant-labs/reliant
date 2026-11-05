@@ -137,8 +137,6 @@ export class ProcessOutputStream extends ReconnectingStream<ProcessOutputEvent> 
       daemonId: this.daemonId,
     });
     this.log.info("Connecting to gRPC stream", { processId: this.processId.slice(0, 8) });
-    // A reconnect skips the output we already have.
-    this.newOnly = true;
     return this.client().streamProcessOutput(request, { signal });
   }
 
@@ -156,6 +154,11 @@ export class ProcessOutputStream extends ReconnectingStream<ProcessOutputEvent> 
   }
 
   protected handleEvent(event: ProcessOutputEvent): void {
+    // A reconnect skips the output we already have — but only once a
+    // connection has delivered it. The server sends the existing output first,
+    // so any event means it arrived; a connection that failed before its first
+    // event delivered nothing, and its retry must still ask for everything.
+    this.newOnly = true;
     switch (event.event.case) {
       case "snapshot": {
         const snapshot = event.event.value;

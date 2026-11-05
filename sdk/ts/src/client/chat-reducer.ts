@@ -216,6 +216,16 @@ function applyUpdates(
     chatId,
   );
 
+  // A snapshot is the server's whole account of the chat: what it omits is
+  // over. A placeholder is built from ephemeral deltas no snapshot carries, so
+  // none survives one (a missed finalize would otherwise leave it on screen),
+  // and the gates and workflow state the snapshot reports replace the held ones.
+  const priorStreaming: Readonly<Record<string, Message>> = isSnapshot ? {} : state.streaming;
+  const prior: Pick<ChatState, "approvals" | "threads" | "pendingQuestions" | "asyncQuestions" | "workflowStatus"> =
+    isSnapshot
+      ? { approvals: [], threads: [], pendingQuestions: [], asyncQuestions: [], workflowStatus: {} }
+      : state;
+
   // Build each thread's placeholder from the deltas that survived.
   const processedStreaming = new Map<string, Message>();
   const deltasByThread = new Map<string | undefined, StreamingDelta[]>();
@@ -226,7 +236,7 @@ function applyUpdates(
   }
   for (const [thread, threadDeltas] of deltasByThread) {
     const threadKey = normalizeThreadKey(chatId, thread);
-    const base = resolveStreamingBase(state.streaming as Record<string, Message | null>, threadKey);
+    const base = resolveStreamingBase(priorStreaming as Record<string, Message | null>, threadKey);
     const built = foldStreamingDeltas(threadDeltas, base, chatId, toolCallsBeforeAbort, now());
     if (built) processedStreaming.set(threadKey, built);
   }
@@ -268,7 +278,7 @@ function applyUpdates(
   const toolResults: ToolResultsByCallId =
     Object.keys(batchResults).length === 0 ? existingResults : { ...existingResults, ...batchResults };
 
-  const streaming = new Map<string, Message>(Object.entries(state.streaming));
+  const streaming = new Map<string, Message>(Object.entries(priorStreaming));
   for (const [key, msg] of processedStreaming) streaming.set(key, msg);
 
   // A complete message retires its thread's placeholder. Tool calls the
@@ -362,9 +372,9 @@ function applyUpdates(
         : toolCallsBeforeAbort,
     streaming: Object.fromEntries(streaming),
     finalizedStreamIds,
-    approvals: applyApprovals(state.approvals, of<ToolApprovalUpdate>("approval")),
-    threads: mergeActiveThreads(state.threads, of<ActiveThreadUpdate>("thread")),
-    ...applyQuestions(state, of<QuestionUpdate>("question")),
+    approvals: applyApprovals(prior.approvals, of<ToolApprovalUpdate>("approval")),
+    threads: mergeActiveThreads(prior.threads, of<ActiveThreadUpdate>("thread")),
+    ...applyQuestions(prior, of<QuestionUpdate>("question")),
     errors: applyLogSlice(state.errors, of<ErrorUpdate>("error"), isSnapshot, { key: (e) => e.id }),
     info: applyLogSlice(
       state.info,
@@ -384,7 +394,7 @@ function applyUpdates(
       key: (n) => `${n.workflow_id}:${n.node_id}:${n.event_type}`,
       sort: bySequenceNumber,
     }),
-    workflowStatus: applyWorkflowStatus(state.workflowStatus, of<WorkflowStatusUpdate>("workflow_status")),
+    workflowStatus: applyWorkflowStatus(prior.workflowStatus, of<WorkflowStatusUpdate>("workflow_status")),
     metadata: of<import("./events.js").ChatMetadataUpdate>("chat").at(-1) ?? state.metadata,
   };
 }
@@ -424,7 +434,11 @@ function foldStreamingDeltas(
   toolCalls: ReadonlyMap<string, ToolCallState>,
   timestamp: string,
 ): Message | null {
-  let blocks: StreamBlock[] = current?.contentBlocks ? [...(current.contentBlocks as StreamBlock[])] : [];
+  // Blocks are addressed by their wire block_index, never by array position:
+  // the placeholder holds them compacted (a thinking block takes an index but
+  // no slot), so re-spread them at their own index before folding more deltas.
+  let blocks: StreamBlock[] = [];
+  for (const block of (current?.contentBlocks ?? []) as StreamBlock[]) blocks[block.index] = block;
   let streamCancelled = false;
 
   const thread = deltas.find((d) => d.thread)?.thread ?? current?.thread;
@@ -537,7 +551,7 @@ function applyApprovals(existing: ToolApprovalUpdate[], updates: ToolApprovalUpd
 }
 
 function applyQuestions(
-  state: ChatState,
+  state: Pick<ChatState, "pendingQuestions" | "asyncQuestions">,
   updates: QuestionUpdate[],
 ): Pick<ChatState, "pendingQuestions" | "asyncQuestions"> {
   let pending = state.pendingQuestions;

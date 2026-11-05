@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { ProcessOutputStream, type BackgroundClient } from "./process-output-stream.js";
 
 // An API replica that is shutting down ends every stream it holds with an OK
@@ -61,6 +62,22 @@ describe("a process-output stream the server ended", () => {
     expect(requests.map((r) => r.newOnly)).toEqual([false, true]);
     expect(stream.isConnected()).toBe(true);
     expect(callbacks.onError).not.toHaveBeenCalled();
+    stream.stop();
+  });
+
+  it("still asks for the existing output when the first connection failed before delivering any", async () => {
+    const failsAtSetup = () => ({
+      // eslint-disable-next-line require-yield
+      async *[Symbol.asyncIterator]() {
+        throw new ConnectError("rolling out", Code.Unavailable);
+      },
+    });
+    streams = [failsAtSetup, staysOpenAfter(snapshot, line)];
+    const { stream, callbacks } = make();
+    stream.start();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(requests.map((r) => r.newOnly)).toEqual([false, false]);
+    expect(callbacks.onSnapshot).toHaveBeenCalledTimes(1);
     stream.stop();
   });
 
