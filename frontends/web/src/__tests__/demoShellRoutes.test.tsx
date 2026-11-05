@@ -115,8 +115,10 @@ describe("the tour on every visit", () => {
     // Same page load (module state kept), the tour finished (no ?tour=): it stays closed.
     const second = renderDemoShell("/forge/demo");
     await screen.findByTestId("demo-console");
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(searchOf(second).tour).toBeUndefined();
+    // render() flushes effects inside act, so the remount's DemoAutoStart has
+    // already run by now; it records demo_tour_autostarted before it would
+    // start the tour, so a single event proves it declined.
     expect(tracked.filter((t) => t.event === "demo_tour_autostarted")).toHaveLength(1);
+    expect(searchOf(second).tour).toBeUndefined();
   });
 });
