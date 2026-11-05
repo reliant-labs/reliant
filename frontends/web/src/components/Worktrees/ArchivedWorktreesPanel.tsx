@@ -146,7 +146,7 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
         <EmptyState
           icon={<Archive className="h-6 w-6" />}
           title="No project open"
-          description="Pick a project to see the branches you've archived in it."
+          description="Pick a project to see the workspaces you've archived in it."
         />
       </div>
     );

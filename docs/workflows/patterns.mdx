@@ -450,7 +450,7 @@ edges:
     default: implementations_done
 ```
 
-A `type: join` node waits until all incoming edges complete. Use worktrees for isolated working directories.
+A `type: join` node waits until all incoming edges complete. Use workspaces for isolated working directories.
 
 **When to use:** Competitive implementations, exploring multiple approaches, reducing wall-clock time.
 
@@ -688,7 +688,7 @@ on_failure:
 
 ## Combining Techniques
 
-These techniques compose naturally. A sophisticated workflow might combine: pipeline (improve prompt → implement → verify), parallel execution in isolated worktrees, retry loops while tests fail, escalation to senior agent on failure, and multi-model review.
+These techniques compose naturally. A sophisticated workflow might combine: pipeline (improve prompt → implement → verify), parallel execution in isolated workspaces, retry loops while tests fail, escalation to senior agent on failure, and multi-model review.
 
 Start simple. A basic agent with compaction handles most tasks. Add verification loops for reliability, parallelism for exploration, and auditing for oversight.
 

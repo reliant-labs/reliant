@@ -9,7 +9,7 @@ description: "Five built-in workflows that review pull requests, security-review
 |----------|-----------|------|-----------------|
 | **PR review** (`autopilot-pr-review`) | A pull request opened or marked ready; the re-review label; `/autopilot re-review` | Reads the diff and the code around it, posts one review | No |
 | **Security review** (`autopilot-security-review`) | A pull request opened, reopened, marked ready or given new commits (optionally only with a label); `/autopilot security-review`; Run now | Threat-models the diff read-only and posts one review comment: findings by severity, each confirmed or suspected, with evidence, an exploit sketch and a fix | Yes |
-| **Issue worker** (`autopilot-issue-worker`) | `agent:ready` added to an issue; an `@reliant` mention | Writes a failing test and the fix in a worktree, runs your fast checks, pushes a branch, opens a PR that closes the issue | Yes |
+| **Issue worker** (`autopilot-issue-worker`) | `agent:ready` added to an issue; an `@reliant` mention | Writes a failing test and the fix in a workspace, runs your fast checks, pushes a branch, opens a PR that closes the issue | Yes |
 | **Review responder** (`autopilot-review-responder`) | A review, an inline comment or a comment on an `agent:authored` PR | Changes the code to address the feedback, pushes to that PR's own branch, replies in each thread | Yes |
 | **On-call** (`autopilot-oncall`) | Your alerts, and new, regressed or spiking errors | Files one issue per new alert or error, investigates it read-only, writes up severity, evidence, cause and a proposed fix | Yes |
 

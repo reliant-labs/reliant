@@ -647,9 +647,9 @@ outputs:
 
 ---
 
-## Worktrees
+## Workspaces
 
-### Create Worktree for Isolated Work
+### Create a Workspace for Isolated Work
 
 Give an agent its own working directory.
 
@@ -675,12 +675,12 @@ Give an agent its own working directory.
 **Key points:**
 
 - Include `workflow.id` in name for uniqueness
-- `force: true` overwrites existing worktree with same name
-- Reference worktree path via `nodes.create_worktree.path`
+- `force: true` overwrites an existing workspace with the same name
+- Reference the workspace path via `nodes.create_worktree.path`
 
-### Copy Env Files to Worktree
+### Copy Env Files to a Workspace
 
-Include configuration files in new worktree.
+Include configuration files in a new workspace.
 
 ```yaml
 - id: create_worktree
@@ -698,15 +698,15 @@ Include configuration files in new worktree.
 **Key points:**
 
 - `copy_files` are exact paths from the project root; nothing is searched for (`.env` is only the root `.env` — list `frontend/.env` separately)
-- Each path lands in the same place in the new worktree; a directory is copied whole and a missing path is skipped
-- Files are copied from the project root, not the current worktree
+- Each path lands in the same place in the new workspace; a directory is copied whole and a missing path is skipped
+- Files are copied from the project root, not the current workspace
 
-### Multiple Parallel Worktrees
+### Multiple Parallel Workspaces
 
 Create isolated environments for competing implementations.
 
 ```yaml
-entry: [create_wt_1, create_wt_2]  # create worktrees in parallel
+entry: [create_wt_1, create_wt_2]  # create workspaces in parallel
 
 nodes:
   - id: create_wt_1
@@ -762,7 +762,7 @@ edges:
 
 **Key points:**
 
-- Create worktrees in parallel for faster setup
+- Create workspaces in parallel for faster setup
 - Use `thread: mode: new` so implementations don't share context
 - Each parallel edge needs its own `- from:` block
 
@@ -1118,7 +1118,7 @@ edges:
 ```
 
 **Key techniques:**
-- Worktrees provide isolated Git environments
+- Workspaces provide isolated Git environments
 - `thread: mode: new` keeps implementations separate
 - Join synchronizes parallel work
 - Final comparison sees both implementations' context

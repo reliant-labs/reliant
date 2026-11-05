@@ -226,11 +226,11 @@ The [Privacy Policy](https://reliantlabs.io/privacy#retention) has the complete 
 These commands remove Reliant's files from your computer: your local config, the desktop app's data and sign-in state, and daemon credentials. They **don't** delete anything on our servers; delete your chats and account for that. Your project files (`reliant.md`, `.reliant/` in your repos) aren't touched.
 
 <Warning>
-`~/.reliant/` also contains the git worktrees Reliant creates (`~/.reliant/worktrees/`). Commit or push any work in them before deleting it.
+`~/.reliant/` also contains the workspaces Reliant creates (`~/.reliant/worktrees/`). Commit or push any work in them before deleting it.
 </Warning>
 
 ```bash
-# Local config, including worktrees (all platforms)
+# Local config, including workspaces (all platforms)
 rm -rf ~/.reliant/
 
 # macOS: desktop app data, daemon credentials, logs

@@ -31,7 +31,7 @@ describe("SettingsNavigation grouping", () => {
     renderNav("account");
     const toggle = within(group("Advanced")).getByRole("button", { name: "Advanced" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
-    for (const name of ["Prompts", "Presets", "Approve agent changes", "Branches", "Access tokens", "Built-in browser", "Developer"]) {
+    for (const name of ["Prompts", "Presets", "Approve agent changes", "Workspaces", "Access tokens", "Built-in browser", "Developer"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
   });
@@ -41,7 +41,7 @@ describe("SettingsNavigation grouping", () => {
     const toggle = within(group("Advanced")).getByRole("button", { name: "Advanced" });
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(labels("Advanced")).toEqual(["Advanced", "Prompts", "Presets", "Approve agent changes", "Branches", "Access tokens", "Built-in browser", "Developer"]);
+    expect(labels("Advanced")).toEqual(["Advanced", "Prompts", "Presets", "Approve agent changes", "Workspaces", "Access tokens", "Built-in browser", "Developer"]);
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "Prompts" })).not.toBeInTheDocument();
@@ -50,7 +50,7 @@ describe("SettingsNavigation grouping", () => {
   it.each<[SettingsSection, string]>([
     ["tokens", "Access tokens"],
     ["automations", "Approve agent changes"],
-    ["branches", "Branches"],
+    ["branches", "Workspaces"],
     ["prompts", "Prompts"],
   ])("opens Advanced by itself when %s is the active section", (section, label) => {
     renderNav(section);

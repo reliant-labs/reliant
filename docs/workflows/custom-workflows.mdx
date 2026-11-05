@@ -322,7 +322,7 @@ cannot read each other, so chain two compute nodes when one feeds the next. A fa
 fails the node. In a scenario a compute node needs no mock event. The expressions it can use are
 listed in [CEL expressions](/reference/cel-expressions).
 
-**Publish nodes** commit a worktree's changes and push them to a feature branch, so a workflow can open a
+**Publish nodes** commit a workspace's changes and push them to a feature branch, so a workflow can open a
 pull request without any shell holding a git credential. Pair one with `credentials: none` on the shell
 that does the editing:
 

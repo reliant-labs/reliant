@@ -266,9 +266,9 @@ function WorkspaceDetail({
                   <p className="text-pretty text-sm text-muted-foreground">
                     {worktree.status === WorktreeStatus.FAILED
                       ? worktree.failure_reason
-                        ? `Creating this workspace's worktree failed: ${worktree.failure_reason}. Archive it and try again.`
-                        : "Creating this workspace's worktree did not finish, so there is no checkout to show. Archive it and branch the chat again to retry."
-                      : "Your machine is still creating this workspace's worktree. Its git status and commits appear here once the checkout exists."}
+                        ? `Creating this workspace failed: ${worktree.failure_reason}. Archive it and try again.`
+                        : "Creating this workspace did not finish, so there is no checkout to show. Archive it and branch the chat again to retry."
+                      : "Your machine is still creating this workspace. Its git status and commits appear here once the checkout exists."}
                   </p>
                 </Card>
               )}

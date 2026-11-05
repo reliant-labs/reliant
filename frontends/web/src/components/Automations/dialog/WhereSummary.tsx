@@ -96,7 +96,7 @@ export function WhereSummary(props: WhereSummaryProps) {
         : daemonsLoading
           ? "on …"
           : "on no machine yet";
-  const workspaceText = noMachine ? null : worktreeId ? (worktree?.name ?? "a branch workspace") : "main checkout";
+  const workspaceText = noMachine ? null : worktreeId ? (worktree?.name ?? "a separate workspace") : "main checkout";
 
   const machineHint = noMachine
     ? needsNoMachine

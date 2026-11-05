@@ -208,8 +208,8 @@ describe("Settings → Branches", () => {
 
   it("explains the page and scopes it to the open project and machine", async () => {
     await renderLoaded();
-    expect(screen.getByRole("heading", { level: 1, name: "Branches" })).toBeInTheDocument();
-    expect(screen.getByText(/each branched chat works in its own git worktree/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Workspaces" })).toBeInTheDocument();
+    expect(screen.getByText(/each branched chat works in its own workspace/i)).toBeInTheDocument();
     // The header names the project, and switching it opens that project.
     const picker = screen.getByLabelText("Project");
     expect(picker).toHaveValue("project-1");

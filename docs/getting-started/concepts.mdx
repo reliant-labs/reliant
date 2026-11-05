@@ -17,7 +17,7 @@ A **machine** is where your agents' tools run, and the **daemon** is the small p
 
 ### Chat
 
-A **chat** is one conversation with an agent or a workflow, tied to a project. You can run many chats at once, each on its own branch or [worktree](/features/worktrees), and step away while they work.
+A **chat** is one conversation with an agent or a workflow, tied to a project. You can run many chats at once, each in its own [workspace](/features/worktrees), and step away while they work.
 
 ### Project
 
@@ -116,13 +116,11 @@ Controls how much autonomy the agent has: **Auto** (full autonomy), **Manual** (
 
 **Related**: [Execution Modes](/workflows/overview#execution-modes)
 
-### Worktree (Workspace)
+### Workspace
 
-A **worktree** is an isolated Git working directory on your machine. Reliant uses worktrees to let parallel agents work on separate branches without interfering, or to let you work on multiple branches simultaneously.
+A **workspace** is an isolated copy of your repo on its own git branch (a git worktree), on your machine. Reliant uses workspaces to let parallel agents work on separate branches without interfering, or to let you work on multiple branches simultaneously.
 
-In the UI, these appear as "Workspaces."
-
-**Related**: [Worktrees](/features/worktrees)
+**Related**: [Workspaces](/features/worktrees)
 
 ---
 

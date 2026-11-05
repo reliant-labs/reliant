@@ -259,7 +259,7 @@ export function CreateWorktreeModal({
       resetFormState();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to create worktree"
+        err instanceof Error ? err.message : "Failed to create workspace"
       );
     } finally {
       setIsCreating(false);

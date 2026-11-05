@@ -70,13 +70,13 @@ export function BranchesSection() {
   return (
     <div className="flex flex-col" data-testid="branches-section">
         <SettingsPageHeader
-          title="Branches"
-          description="Each branched chat works in its own git worktree, so agents can work in parallel without touching your main checkout. Review, open, archive or clean them up here."
+          title="Workspaces"
+          description="Each branched chat works in its own workspace, an isolated copy of your repo on its own git branch (a git worktree), so agents can work in parallel without touching your main checkout. Review, open, archive or clean them up here."
           meta={
             <>
-              <SettingsProjectScope hint="Branches are listed for this project" />
+              <SettingsProjectScope hint="Workspaces are listed for this project" />
               {activeDaemon && (
-                <span className={workspaceChip} title="The machine these worktrees live on">
+                <span className={workspaceChip} title="The machine these workspaces live on">
                   <Monitor className="h-3 w-3" aria-hidden="true" />
                   <span className="sr-only">Machine:</span>
                   {machineDisplayName(activeDaemon)}
@@ -101,7 +101,7 @@ export function BranchesSection() {
               value={activeTab}
               onChange={selectTab}
               idPrefix="branches"
-              ariaLabel="Branch views"
+              ariaLabel="Workspace views"
               className="mb-4"
             />
 
