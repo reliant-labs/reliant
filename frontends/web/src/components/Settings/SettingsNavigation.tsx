@@ -143,11 +143,12 @@ export function SettingsNavigation({
   onSectionChange,
   isCollapsed = false,
 }: SettingsNavigationProps) {
-  // The user's own open/close of Advanced, good only for the section it was
-  // made on: moving to another section goes back to "open when it is inside".
+  // The user's own open of Advanced, good only for the section it was made
+  // on. While the active section is inside Advanced the group stays open and
+  // its heading cannot fold it: folding would hide the item that is current.
   const [toggled, setToggled] = useState<{ section: SettingsSection; open: boolean } | null>(null);
   const activeInAdvanced = isInCollapsibleGroup(activeSection);
-  const advancedOpen = toggled?.section === activeSection ? toggled.open : activeInAdvanced;
+  const advancedOpen = activeInAdvanced || (toggled?.section === activeSection && toggled.open);
 
   const renderItem = (section: SectionItem) => {
     const isActive = section.id === activeSection;
@@ -203,8 +204,11 @@ export function SettingsNavigation({
                       type="button"
                       aria-expanded={!folded}
                       aria-controls={listId}
-                      onClick={() => setToggled({ section: activeSection, open: !advancedOpen })}
-                      className="flex w-full cursor-pointer items-center gap-1 px-3 pb-1 pt-3 text-left text-xs font-medium text-muted-foreground hover:text-foreground"
+                      aria-disabled={activeInAdvanced || undefined}
+                      onClick={() => {
+                        if (!activeInAdvanced) setToggled({ section: activeSection, open: !advancedOpen });
+                      }}
+                      className="flex w-full cursor-pointer items-center aria-disabled:cursor-default gap-1 px-3 pb-1 pt-3 text-left text-xs font-medium text-muted-foreground hover:text-foreground"
                     >
                       <ChevronRight className={cn("h-3 w-3 transition-transform", !folded && "rotate-90")} aria-hidden="true" />
                       {group.label}

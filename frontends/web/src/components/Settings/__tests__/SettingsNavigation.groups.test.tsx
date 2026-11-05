@@ -58,14 +58,21 @@ describe("SettingsNavigation grouping", () => {
     expect(screen.getByRole("button", { name: label })).toHaveAttribute("aria-current", "page");
   });
 
-  it("a fold made on one section does not stick to the next: landing on another advanced section opens it", () => {
-    const { rerender, onSectionChange } = renderNav("tokens");
+  it("keeps Advanced open while its section is active: the heading cannot hide the current item", () => {
+    renderNav("tokens");
     const toggle = () => within(group("Advanced")).getByRole("button", { name: "Advanced" });
     fireEvent.click(toggle());
-    expect(toggle()).toHaveAttribute("aria-expanded", "false");
-    rerender(<SettingsNavigation activeSection="branches" onSectionChange={onSectionChange} />);
     expect(toggle()).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByRole("button", { name: "Branches" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("button", { name: "Access tokens" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("an open made on one section does not stick to the next: leaving Advanced's sections folds it", () => {
+    const { rerender, onSectionChange } = renderNav("account");
+    const toggle = () => within(group("Advanced")).getByRole("button", { name: "Advanced" });
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-expanded", "true");
+    rerender(<SettingsNavigation activeSection="privacy" onSectionChange={onSectionChange} />);
+    expect(toggle()).toHaveAttribute("aria-expanded", "false");
   });
 
   it("keeps Machines and its route id in Machines & projects", () => {
