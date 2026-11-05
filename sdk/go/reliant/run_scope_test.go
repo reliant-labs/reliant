@@ -335,6 +335,11 @@ func TestFollowRunReplaysAnAlreadyResolvedApproval(t *testing.T) {
 	if got := kinds(evs); !slices.Contains(got, EventApproval) || !slices.Contains(got, EventApprovalResolved) {
 		t.Fatalf("Follow(run-old) = %v, want its approval opened and resolved", got)
 	}
+	for _, e := range evs {
+		if e.Approval != nil && e.WorkflowID != "run-old" {
+			t.Fatalf("Follow(run-old) %s carries WorkflowID %q, want run-old", e.Event, e.WorkflowID)
+		}
+	}
 	evs, _ = followRun(t, c, "run-new", FollowOptions{}, nil)
 	for _, e := range evs {
 		if e.Approval != nil {

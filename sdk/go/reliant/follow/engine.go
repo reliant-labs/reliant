@@ -663,6 +663,10 @@ type approvalPayload struct {
 	Status     string `json:"status"`
 	Title      string `json:"title"`
 	ActivityID string `json:"activity_id"`
+	// WorkflowID is the workflow that raised the approval, written on every
+	// update by the server's attribution (db.AttributeApprovalUpdate); empty
+	// from a server without it.
+	WorkflowID string `json:"workflow_id"`
 }
 
 // mapApprovalUpdate turns a pending-approval update into an approval boundary
@@ -682,6 +686,7 @@ func (e *Engine) mapApprovalUpdate(u RawUpdate) (Event, bool) {
 		return Event{
 			Event:       EventApprovalResolved,
 			ExecutionID: e.ExecutionID,
+			WorkflowID:  p.WorkflowID,
 			NodeID:      p.ActivityID,
 			Timestamp:   u.CreatedAt.UTC().Format(time.RFC3339),
 			Sequence:    u.Seq,
@@ -698,6 +703,7 @@ func (e *Engine) mapApprovalUpdate(u RawUpdate) (Event, bool) {
 	return Event{
 		Event:       EventApproval,
 		ExecutionID: e.ExecutionID,
+		WorkflowID:  p.WorkflowID,
 		NodeID:      p.ActivityID,
 		Timestamp:   u.CreatedAt.UTC().Format(time.RFC3339),
 		Sequence:    u.Seq,
