@@ -3,7 +3,7 @@ title: "SDK API reference"
 description: "Every remote procedure in Reliant's public API, which Go SDK method wraps it, and what the SDK deliberately leaves out"
 ---
 
-Reliant's public API is a deliberately small slice of its full API: 19 procedures across five services, all in the `reliant.v1` package and all served over [Connect](https://connectrpc.com/). This page lists them. The Go SDK wraps each in a method, and its generated clients contain exactly these procedures and no others, so a procedure that is not here cannot be called through the SDK, whatever token you hold.
+Reliant's public API is a deliberately small slice of its full API: 22 procedures across six services, all in the `reliant.v1` package and all served over [Connect](https://connectrpc.com/). This page lists them. The Go SDK wraps each in a method, and its generated clients contain exactly these procedures and no others, so a procedure that is not here cannot be called through the SDK, whatever token you hold.
 
 <Note>
   This page is written by hand from `proto/public-api.txt` in the [Reliant repository](https://github.com/reliant-labs/reliant), the file that decides what is public. It is not generated yet, so it can fall behind that file. A generator that writes it from the public descriptors is planned. When this page and the file disagree, the file is right.
@@ -22,9 +22,9 @@ A request names a procedure by its path, `/reliant.v1.<Service>/<Rpc>`, and carr
 | `ListRuns` | `Runs.List` | Lists runs, newest first, narrowed by workflow, display state, trigger, launch kind, time window, title and more, and paged by token. With a session or parent id it lists that session's runs or that run's children. |
 | `LastRunPerWorkflow` | `Runs.LastPerWorkflow` | Returns the most recent root run of each workflow you have run, one per workflow. |
 | `SignalRun` | `Runs.Signal` | Delivers messages to a run that is already going. It never starts one. `delivered` is false when the run was not live. |
-| `CancelRun` | `Runs.Cancel` | Hard-stops a run. There is no position to resume from afterward. |
-| `PauseRun` | `Runs.Pause` | Parks a run, which stays live and resumable. **Beta.** |
-| `ResumeRun` | `Runs.Resume` | Continues a paused run from where it stopped. **Beta.** |
+| `CancelRun` | `Runs.Cancel`, `Runs.CancelWithResult` | Hard-stops a run. There is no position to resume from afterward. |
+| `PauseRun` | `Runs.Pause`, `Runs.PauseWithResult` | Parks a run, which stays live and resumable. **Beta.** |
+| `ResumeRun` | `Runs.Resume`, `Runs.ResumeWithResult` | Continues a paused run from where it stopped. **Beta.** |
 | `InterruptRun` | `Runs.Interrupt` | Cancels the in-flight model call and executing tools and parks the run, without ending it. **Beta.** |
 
 `Runs.Follow`, `Runs.FollowSession`, `Runs.Status` and `Runs.StatusSession` are not procedures of their own. They are built from the reads below (`GetRun`, and the chat and workflow-execution reads) and add the verdict logic, which is why they are the better way to ask whether a run succeeded.
@@ -55,7 +55,30 @@ A run's progress is the update feed of the session it lives in, and its open gat
 | `ChatService/GetWorkflowExecutions` | Used by `Runs.Follow`, `Runs.Status`, `Gates.Pending` | Returns the session's tree of workflow executions. |
 | `QuestionService/ListPendingQuestions` | `Gates.Pending` | Lists the pending questions in a session, oldest first, each naming the thread that asked. |
 | `QuestionService/ResolveQuestion` | `Gates.Answer` | Answers a pending question. |
-| `ApprovalService/ListApprovalsByChat` | `Gates.Pending` | Lists a session's approvals. Reading only. |
+| `ApprovalService/ListApprovalsByChat` | `Gates.Pending`, `Approvals.List`, `Approvals.ListForRun` | Lists a session's approvals. Reading only. |
+
+## Inbox
+
+`InboxService` is partly public: you can read the inbox and hide or restore items, but not act on the machine-storage items it lists.
+
+| Procedure | Go method | What it does |
+|---|---|---|
+| `InboxService/ListInbox` | `Inbox.List`, `Inbox.Counts` | Lists what is waiting on you, blocking items first. With a limit of zero it returns only the counts, which is what `Counts` asks for. |
+| `InboxService/DismissInboxItem` | `Inbox.Dismiss` | Hides items from your inbox. It does not resolve an approval or a question. |
+| `InboxService/RestoreInboxItem` | `Inbox.Restore` | Undoes a dismissal. |
+
+## Which token scope each procedure needs
+
+Reliant enforces [token scopes](/sdk/overview#scopes) on every call. A token with `reliant:api` may call any procedure on this page. A narrow token may call only these:
+
+| Scope | Procedures |
+|---|---|
+| `runs:read` | `GetRun`, `ListRuns`, `LastRunPerWorkflow` |
+| `runs:start` | `StartRun`, and what `runs:read` allows |
+| `runs:control` | `SignalRun`, `PauseRun`, `ResumeRun`, `CancelRun`, `InterruptRun`, and what `runs:read` allows |
+| `triggers:fire` | `FireTrigger` |
+
+Every other procedure on this page, including the trigger reads, the chat reads, the questions, the approvals and the inbox, needs `reliant:api`. A narrow token that calls one is refused with `PermissionDenied` (`scope_missing`).
 
 ## What is not public
 
@@ -63,10 +86,10 @@ A run's progress is the update feed of the session it lives in, and its open gat
 
 | Withheld | Why |
 |---|---|
-| Enabling, disabling, creating, updating or deleting a trigger (`EnableWorkflow`, `DisableWorkflow`, `SetTriggerEnabled`, `CreateTrigger`, `UpdateTrigger`, `DeleteTrigger`) and `RotateWebhookToken` | They decide whether an automation runs at all, as whom and where. A narrow `triggers:manage` permission is planned for them; see [scopes](/sdk/overview#scopes). |
+| Enabling, disabling, creating, updating or deleting a trigger (`EnableWorkflow`, `DisableWorkflow`, `SetTriggerEnabled`, `CreateTrigger`, `UpdateTrigger`, `DeleteTrigger`) and `RotateWebhookToken` | They decide whether an automation runs at all, as whom and where. The `triggers:manage` scope guards them on the server; see [scopes](/sdk/overview#scopes). |
 | Approving or denying (`Approve`, `Deny`, `BatchApprove`, `BatchDeny`) | An approval means a person said yes. |
 | Minting tokens (`TokenService`) | A token never mints a token. |
-| Binding a chat to a machine (`SetChatDaemon`) and every service a machine uses to talk to Reliant | They wire up infrastructure, not your code. |
+| Binding a chat to a machine (`SetChatDaemon`), the inbox's machine-storage actions (`CleanupStorage`, `ForgetStorageWorktree`) and every service a machine uses to talk to Reliant | They wire up or change infrastructure, not your code. |
 
 Every other service in the API, such as projects, workflows, settings, connections and usage, is not part of the first public surface. The set grows additively. When a procedure is added it appears here and in the SDK, and nothing listed on this page is removed within `reliant.v1`.
 

@@ -3,7 +3,7 @@ title: "SDKs: Reliant from your own code"
 description: "What the Go and TypeScript SDKs are for, which credentials they use, what they deliberately cannot do, and how they are versioned"
 ---
 
-Reliant's own app and command line talk to Reliant through a public API. The SDKs are the same clients, packaged so your code can use them: a backend that starts a run when a customer signs up, a CI job that waits for a run's verdict, a service that fires an automation, a web frontend that shows a live chat. From code you can start a run, watch it to a verdict, steer it, answer its questions and cancel it.
+Reliant's own app and command line talk to Reliant through a public API, and the `reliant` command's workflow supervision and trigger reads are built on the Go SDK. The SDKs are those clients, packaged so your code can use them: a backend that starts a run when a customer signs up, a CI job that waits for a run's verdict, a service that fires an automation, a web frontend that shows a live chat. From code you can start a run, watch it to a verdict, steer it, answer its questions and cancel it.
 
 There are two SDKs, and they are for different places.
 
@@ -11,7 +11,7 @@ There are two SDKs, and they are for different places.
 |---|---|---|
 | Package | `github.com/reliant-labs/reliant/sdk/go` | `@reliantlabs/sdk` |
 | Runs where | Backends, workers, CI and command-line tools | Frontends: a browser, an Electron renderer, a worker |
-| Does | Start, list, steer and follow runs; answer questions; fire triggers; deliver webhooks | Stream a chat live, with resume, and fold it into state your UI renders |
+| Does | Start, list, steer and follow runs; answer questions; fire triggers; read and dismiss inbox items; deliver webhooks | Stream a chat live, with resume, and fold it into state your UI renders |
 | Guide | [Go SDK](/sdk/go) | [TypeScript SDK](/sdk/typescript) |
 
 The [API reference](/sdk/reference) lists every remote procedure the Go SDK's generated clients expose, and says which Go method wraps each one.
@@ -20,7 +20,7 @@ The [API reference](/sdk/reference) lists every remote procedure the Go SDK's ge
 
 A run executes as a person, on that person's machines, with that person's connections and billing. So anything that decides who a run executes as, where, or whether an automation runs at all is not part of the public API: enabling, disabling, creating or editing a trigger, rotating a webhook token, approving or denying an approval, and minting tokens. The same goes for everything that exists to wire up a machine to Reliant. An SDK cannot do these things, and neither can any client you generate from the public definitions, because the procedures are not in them.
 
-You can still see an approval. `Gates.Pending` in the Go SDK reports one, so a supervisor process can tell a person that a run is waiting for them, but the decision stays with a person in the app, as [Who can decide an approval](/automations/overview#who-can-decide-an-approval) explains. Enabling a trigger is a decision of the same kind; [Automations](/automations/overview) covers it.
+You can still see an approval. `Gates.Pending` and `Approvals.List` in the Go SDK report one, so a supervisor process can tell a person that a run is waiting for them, but the decision stays with a person in the app, as [Who can decide an approval](/automations/overview#who-can-decide-an-approval) explains. Enabling a trigger is a decision of the same kind; [Automations](/automations/overview) covers it.
 
 ## Credentials
 
@@ -30,7 +30,7 @@ The Go SDK authenticates with an **API token**: an `rlat_…` token that acts as
 reliant auth token create --name billing-service
 ```
 
-The command prints the token once. It has the `reliant:api` permission and lasts 90 days. Running the command again with the same `--name` replaces the token, which is how you rotate one, and `reliant auth token revoke billing-service` withdraws it. [Sign in and tokens](/cli/sign-in) compares this with the credential the CLI itself uses, and [Scripting and CI](/cli/scripting) shows the same token in a pipeline.
+The command prints the token once. It has the `reliant:api` permission (see [Scopes](#scopes) for narrower ones) and lasts 90 days. Running the command again with the same `--name` replaces the token, which is how you rotate one, and `reliant auth token revoke billing-service` withdraws it. [Sign in and tokens](/cli/sign-in) compares this with the credential the CLI itself uses, and [Scripting and CI](/cli/scripting) shows the same token in a pipeline.
 
 Store the token as a secret in whatever runs your code, and pass it in `RELIANT_TOKEN`. The SDK reads that variable, and `RELIANT_SERVER_URL` if you run your own server, exactly as the `reliant` command does, so a script that works with the CLI works with the SDK. Because the token acts as you, the runs your code starts are yours: they appear in your run list, use your connections, and are billed to your account.
 
@@ -40,18 +40,35 @@ A webhook trigger has its own, narrower credential: the token or signing secret 
 
 ### Scopes
 
-Today an API token carries the single permission `reliant:api`, which is the whole of the user's API: a token held by a service that only starts runs could also cancel any of your runs. Narrower permissions are defined and are being switched on:
+An API token made with `reliant auth token create` carries the single permission `reliant:api`, which is the whole of your API. Reliant also accepts narrower tokens, and enforces them on every call. A token with only `runs:start` can start runs and nothing else: it cannot cancel one, read the inbox or touch a trigger. `reliant:api` still permits everything below, so tokens you already have behave as before.
 
-| Scope | Intended for |
-|---|---|
-| `runs:read` | Getting and listing runs |
-| `runs:start` | Starting runs (includes reading them) |
-| `runs:control` | Signalling, pausing, resuming, interrupting and cancelling runs (includes reading them) |
-| `triggers:fire` | Firing a trigger now |
-| `triggers:manage` | The activation procedures, which no SDK exposes yet |
+| Scope | Lets the token call | Also allows |
+|---|---|---|
+| `runs:read` | `GetRun`, `ListRuns`, `LastRunPerWorkflow` | |
+| `runs:start` | `StartRun` | `runs:read` |
+| `runs:control` | `SignalRun`, `PauseRun`, `ResumeRun`, `CancelRun`, `InterruptRun` | `runs:read` |
+| `triggers:fire` | `FireTrigger` | |
+| `triggers:manage` | The activation procedures: create, update, delete, enable and disable a trigger, rotate a webhook token | |
+
+`triggers:fire` and `triggers:manage` imply nothing else. Firing a trigger now and changing what runs unattended are different authorities, and neither lets a token start or control a run directly. `triggers:manage` is the permission the server requires for the activation procedures. Neither SDK exposes those procedures, and the generated clients do not contain them, so no SDK call needs it today.
+
+Everything else needs `reliant:api`. A narrow token that reaches any other procedure is refused with `PermissionDenied` and the reason `scope_missing`, which the Go SDK returns as `ErrPermissionDenied`. That list includes what you might expect a "read" token to do:
+
+| Go SDK call | Procedures it makes | Narrow scope that is enough |
+|---|---|---|
+| `Runs.Start` | `StartRun` | `runs:start` |
+| `Runs.Get`, `Runs.Nodes`, `Runs.List`, `Runs.LastPerWorkflow` | `GetRun`, `ListRuns`, `LastRunPerWorkflow` | `runs:read` |
+| `Runs.Signal`, `Cancel`, `Pause`, `Resume`, `Interrupt` (and the `WithResult` forms) | the matching `*Run` procedure | `runs:control` |
+| `Runs.Follow`, `FollowSession`, `Status`, `StatusSession` | `GetRun` plus the session's updates and workflow tree | `reliant:api` |
+| `Gates.Pending`, `Gates.Answer`, `Approvals.*` | questions and approvals | `reliant:api` |
+| `Inbox.*` | the inbox | `reliant:api` |
+| `Triggers.Get`, `List`, `Events`, `LaunchEvent` | trigger reads | `reliant:api` |
+| `Triggers.Fire` | `GetTrigger`, then `FireTrigger` | `reliant:api` (see below) |
+
+So a narrow token suits a service that starts runs and checks on them with `Runs.Get`, or one that cancels runs, but not one that follows a run to a verdict: `Follow` reads a session's updates, which only `reliant:api` may. `Triggers.Fire` looks the trigger up before firing it, so with a token that holds only `triggers:fire`, call the generated client's `FireTrigger` with the trigger's id instead; [Beyond the wrappers](/sdk/go#beyond-the-wrappers) shows how to build one. A token for a webhook-only caller needs no scope at all, because it does not use an API token: see below.
 
 <Note>
-  These scopes are not enforced by the Reliant API yet, and `reliant auth token create` cannot request them yet. Every API token you create today is a `reliant:api` token, and that permission will keep working when the narrow scopes arrive. When it does, creating a token that can only start runs and fire triggers will be the recommended setup for a service, and this page will say how.
+  `reliant auth token create` cannot request a narrow scope yet. The login it runs through does not grant the runs and triggers scopes by name, so every token it makes is `reliant:api`. The flag will come back together with that change. Until then, a narrow token can only be minted through the control plane's token API (`CreateMyToken`), and this page will name the CLI flag when it exists.
 </Note>
 
 ### Keep tokens out of frontends
@@ -69,14 +86,14 @@ go get github.com/reliant-labs/reliant/sdk/go@main
 ```
 
 ```text
-require github.com/reliant-labs/reliant/sdk/go v0.0.0-20261105143730-a1700c764828
+require github.com/reliant-labs/reliant/sdk/go v0.0.0-20261105200618-6bd6513537ed
 ```
 
-`@main` resolves to whatever is newest when you run it. To make a build reproducible, name a commit instead (`@a1700c764828`), or keep the version `go.mod` recorded and update it deliberately with another `go get`. Do not add a `replace` directive for the SDK: a module that depends on yours ignores it, and `go install` refuses a module that has one. The module needs Go 1.27 or newer. Once releases are tagged, this page will name the tag.
+`@main` resolves to whatever is newest when you run it. To make a build reproducible, name a commit instead (`@6bd6513537ed`), or keep the version `go.mod` recorded and update it deliberately with another `go get`. Do not add a `replace` directive for the SDK: a module that depends on yours ignores it, and `go install` refuses a module that has one. The module needs Go 1.27 or newer. Once releases are tagged, this page will name the tag.
 
 The TypeScript package is `@reliantlabs/sdk`, imported from its `/client` entry point. It is built from `sdk/ts` in the [Reliant repository](https://github.com/reliant-labs/reliant), at a version that follows the API (`0.1.0` today). It is not on the npm registry yet: Reliant's release train will publish it, and until then you build it from the repository, as [the TypeScript guide](/sdk/typescript#install) describes. React hooks are not part of it yet.
 
-Some calls are marked beta in the Go SDK: `Pause`, `Resume` and `Interrupt`. They work, but their semantics around positions and interrupted tools are still settling, and they may change in ways the stable calls will not.
+Some calls are marked beta in the Go SDK: `Pause`, `Resume` and `Interrupt`, with their `WithResult` forms. They work, but their semantics around positions and interrupted tools are still settling, and they may change in ways the stable calls will not.
 
 ## License
 
