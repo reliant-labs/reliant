@@ -19,7 +19,7 @@ import { layoutActions } from "../journeys/layoutActions";
 import {
   FIX_MY_PR_START,
   FIX_MY_PR_TEMPLATE,
-  fixMyPrSlug,
+  fixMyPrName,
   fixMyPrYaml,
   seedFixMyPr,
 } from "../journeys/fixMyPr";
@@ -281,8 +281,23 @@ describe("the Fix my PR seed", () => {
   it("takes the slug and title it is imported under", () => {
     const wf = yaml.load(fixMyPrYaml("fix-my-pr-3", "Fix: my \"PR\"")) as { name: string; title: string };
     expect(wf).toMatchObject({ name: "fix-my-pr-3", title: 'Fix: my "PR"' });
-    expect(fixMyPrSlug(0)).toBe("fix-my-pr");
-    expect(fixMyPrSlug(1)).toBe("fix-my-pr-2");
+    expect(fixMyPrName(0)).toEqual({ slug: "fix-my-pr", title: "Fix my PR" });
+    expect(fixMyPrName(1)).toEqual({ slug: "fix-my-pr-2", title: "Fix my PR 2" });
+  });
+
+  it("derives the slug from the title the user typed, like New workflow's other starts", () => {
+    expect(fixMyPrName(0, "  Ship_it: my PR!  ")).toEqual({ slug: "ship-it-my-pr", title: "Ship_it: my PR!" });
+    expect(fixMyPrName(2, "Ship it")).toEqual({ slug: "ship-it-3", title: "Ship it 3" });
+    expect(fixMyPrName(0, "!!!")).toEqual({ slug: "fix-my-pr", title: "!!!" });
+    expect(fixMyPrName(0, "   ")).toEqual({ slug: "fix-my-pr", title: "Fix my PR" });
+  });
+
+  it("imports a renamed draft under the slug of its new name", async () => {
+    importWorkflow.mockResolvedValueOnce({ success: true, slug: "ship-it", id: "d9", status: "draft" });
+    const seeded = await seedFixMyPr("project-1", "Ship it");
+    expect(importWorkflow).toHaveBeenCalledWith("project-1", expect.stringMatching(/^name: ship-it$/m));
+    expect(importWorkflow).toHaveBeenCalledWith("project-1", expect.stringMatching(/^title: "Ship it"$/m));
+    expect(seeded).toEqual({ slug: "ship-it", draftId: "d9", title: "Ship it" });
   });
 
   it("imports under the first free slug, records it, and emits workflow:draftCreated", async () => {
@@ -295,7 +310,8 @@ describe("the Fix my PR seed", () => {
     off();
     expect(importWorkflow).toHaveBeenNthCalledWith(1, "project-1", expect.stringMatching(/^name: fix-my-pr$/m));
     expect(importWorkflow).toHaveBeenNthCalledWith(2, "project-1", expect.stringMatching(/^name: fix-my-pr-2$/m));
-    expect(seeded).toEqual({ slug: "fix-my-pr-2", draftId: "draft-2", title: "Fix my PR" });
+    expect(importWorkflow).toHaveBeenNthCalledWith(2, "project-1", expect.stringMatching(/^title: "Fix my PR 2"$/m));
+    expect(seeded).toEqual({ slug: "fix-my-pr-2", draftId: "draft-2", title: "Fix my PR 2" });
     expect(seen).toHaveBeenCalledWith({ slug: "fix-my-pr-2", draftId: "draft-2", start: FIX_MY_PR_START });
     expect(useTourStore.getState().contexts.workflows).toMatchObject({ workflowSlug: "fix-my-pr-2", draftId: "draft-2" });
   });

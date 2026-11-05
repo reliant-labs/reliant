@@ -2,7 +2,8 @@
 # own draft by "Fix my PR (guided)" in New workflow. It is deliberately
 # incomplete — the user draws review -> fix_until_green (W2) and adds the
 # Approval before merge (W4) — so it imports as a draft with "unreachable"
-# findings until they do. `name:` is replaced with a free slug at import.
+# findings until they do. `name:` and `title:` are replaced at import with the
+# name the user chose and its slug (fixMyPr.ts fixMyPrName).
 # cmd/reliant/cmd/onboarding_template_test.go validates it, before and after
 # the tour's edits.
 name: fix-my-pr

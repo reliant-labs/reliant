@@ -25,9 +25,32 @@ const MAX_SLUG_TRIES = 20;
 
 export const FIX_MY_PR_TEMPLATE: string = templateYaml;
 
-/** The slug to try on attempt `n` (0-based): fix-my-pr, fix-my-pr-2, fix-my-pr-3, … */
-export function fixMyPrSlug(n: number): string {
-  return n === 0 ? BASE_SLUG : `${BASE_SLUG}-${n + 1}`;
+/**
+ * A workflow name in the form the server compares it in (workflowref.Slug):
+ * lower case, spaces and underscores as hyphens, nothing but [a-z0-9-], no
+ * leading, trailing or repeated hyphens. New workflow derives a draft's slug
+ * from its title the same way, so a renamed guided draft gets its own slug.
+ */
+export function workflowSlug(title: string): string {
+  return title
+    .trim()
+    .toLowerCase()
+    .replace(/[ _]/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/**
+ * The slug and title to try on attempt `n` (0-based), numbered like the
+ * server's CreateWorkflowDraft: "Fix my PR" / fix-my-pr, then
+ * "Fix my PR 2" / fix-my-pr-2, … A title with no slug-able characters
+ * falls back to fix-my-pr.
+ */
+export function fixMyPrName(n: number, title: string = FIX_MY_PR_TITLE): { slug: string; title: string } {
+  const base = title.trim() || FIX_MY_PR_TITLE;
+  const slug = workflowSlug(base) || BASE_SLUG;
+  return n === 0 ? { slug, title: base } : { slug: `${slug}-${n + 1}`, title: `${base} ${n + 1}` };
 }
 
 /** The template with its `name:` and `title:` replaced. */
@@ -49,15 +72,17 @@ export interface SeededWorkflow {
  * message when the import fails for any reason other than a taken slug.
  */
 export async function seedFixMyPr(projectId: string, title: string = FIX_MY_PR_TITLE): Promise<SeededWorkflow> {
-  const name = title.trim() || FIX_MY_PR_TITLE;
   for (let n = 0; n < MAX_SLUG_TRIES; n++) {
-    const result = await importWorkflow(projectId, fixMyPrYaml(fixMyPrSlug(n), name));
+    const name = fixMyPrName(n, title);
+    const result = await importWorkflow(projectId, fixMyPrYaml(name.slug, name.title));
     if (result.conflict) continue;
     if (!result.success || !result.slug) throw new Error(result.message || "Could not create the workflow");
-    const seeded = { slug: result.slug, draftId: result.id, title: name };
+    const seeded = { slug: result.slug, draftId: result.id, title: name.title };
     useTourStore.getState().setJourneyContext("workflows", { workflowSlug: seeded.slug, draftId: seeded.draftId });
     tourEvents.emit("workflow:draftCreated", { slug: seeded.slug, draftId: seeded.draftId, start: FIX_MY_PR_START });
     return seeded;
   }
-  throw new Error(`Every name from ${fixMyPrSlug(0)} to ${fixMyPrSlug(MAX_SLUG_TRIES - 1)} is taken`);
+  throw new Error(
+    `Every name from ${fixMyPrName(0, title).slug} to ${fixMyPrName(MAX_SLUG_TRIES - 1, title).slug} is taken`,
+  );
 }
