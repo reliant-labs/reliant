@@ -10,5 +10,6 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `incidents/` — incident write-ups, referenced by path from code comments.
 - `pinning.md` — why reliant pins forge by commit pre-launch, and the commands.
 - `observability.md` — how reliant's own server binaries export traces, metrics and logs, and the known gaps.
+- `machine-plan-change-rollout.md` — the machine plan change's live check, and how to stop confirmations and reconcile Stripe if it misbehaves.
 - `integration-manifests.md` — authoring an integration manifest: the generated JSON Schema, fragment layout, `$ref`, event conformance.
 - `design/mobile-chat-redesign.md` — mobile and tablet chat thread redesign: one top bar, inline composer, status slot, parity map.

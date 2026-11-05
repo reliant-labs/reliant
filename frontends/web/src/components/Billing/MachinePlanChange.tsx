@@ -20,7 +20,8 @@ import Button from "@/components/forge-ui/button";
  * downgrade waits for the next billing period and charges nothing. Choosing
  * the current plan while a downgrade is scheduled withdraws it. Every figure
  * here is the server's quote; the confirmation sends that quote's digest back,
- * so the customer is charged exactly what this panel showed.
+ * so the customer is charged exactly what this panel showed. Live check,
+ * containment and rollback: dev-docs/machine-plan-change-rollout.md.
  *
  * `onDone` and `onCancel` are optional: a surface whose own controls move
  * on (the checkout's plan tiles) passes neither, and their buttons are left out.
