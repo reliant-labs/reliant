@@ -1,7 +1,10 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -85,5 +88,53 @@ func TestSelectChangedTestsSkipsFilesBehindBuildTags(t *testing.T) {
 	}
 	if len(got) != 0 {
 		t.Fatalf("a tagged file does not build in the unit lane; got %+v", got)
+	}
+}
+
+// A package in a nested Go module (sdk/go) is not in the root module, so
+// `go test ./sdk/go/reliant` from the root fails before running anything. It
+// is reported relative to its own module, with the module's directory.
+func TestChangedTestsInANestedModuleAreRelativeToIt(t *testing.T) {
+	moduleOf := func(dir string) string {
+		if dir == "sdk/go" || strings.HasPrefix(dir, "sdk/go/") {
+			return "sdk/go"
+		}
+		return ""
+	}
+	got := inNestedModules([]changedPkg{
+		{Dir: "./internal/leaf", Tests: []string{"TestA"}},
+		{Dir: "./sdk/go", Tests: []string{"TestB"}},
+		{Dir: "./sdk/go/reliant/follow", Tests: []string{"TestC"}},
+		{Dir: "./sdk/gox", Tests: []string{"TestD"}},
+	}, moduleOf)
+	want := []changedPkg{
+		{Dir: "./internal/leaf", Tests: []string{"TestA"}},
+		{Dir: ".", Tests: []string{"TestB"}, Module: "sdk/go"},
+		{Dir: "./reliant/follow", Tests: []string{"TestC"}, Module: "sdk/go"},
+		{Dir: "./sdk/gox", Tests: []string{"TestD"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+func TestNestedModuleOfFindsTheNearestGoModBelowTheRoot(t *testing.T) {
+	root := t.TempDir()
+	for _, f := range []string{"go.mod", "sdk/go/go.mod", "sdk/go/reliant/x.go", "internal/leaf/x.go"} {
+		p := filepath.Join(root, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	of := nestedModuleOf(root)
+	for dir, want := range map[string]string{
+		"sdk/go/reliant": "sdk/go", "sdk/go": "sdk/go", "internal/leaf": "", ".": "", "sdk": "",
+	} {
+		if got := of(dir); got != want {
+			t.Errorf("nestedModuleOf(%q) = %q, want %q", dir, got, want)
+		}
 	}
 }
