@@ -33,6 +33,7 @@ import {
   mapSessionSummary,
   mapTimelineEntry,
 } from "../rumApi";
+import { NO_CLIENT } from "../client";
 
 const client = { listSessions: vi.fn(), getSession: vi.fn(), getSessionTimeline: vi.fn(), getSessionReplay: vi.fn() };
 vi.mock("../../client", () => ({ getControlPlaneClient: () => client }));
@@ -83,6 +84,8 @@ describe("sessions", () => {
       region: "",
       city: "",
       clientAddress: "",
+      client: NO_CLIENT,
+      release: "",
     });
     const fromBinary = mapSessionSummary(create(SessionSummarySchema, { sessionId: "s", pageViews: 4n, errors: 0n }));
     expect(fromBinary).toMatchObject({ pageViews: 4, errors: 0, startedMs: 0, hasReplay: false });

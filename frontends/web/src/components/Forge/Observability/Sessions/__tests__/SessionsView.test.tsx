@@ -16,7 +16,7 @@ import userEvent from "@testing-library/user-event";
 import type { PanelResult } from "@/services/controlPlane/observability/types";
 
 import { createFixtureApi, fixtureTrace } from "../../__fixtures__/fixtureApi";
-import { FIXTURE_LIVE_SESSION, FIXTURE_STORY_SESSION } from "../../__fixtures__/fixtureSessions";
+import { FIXTURE_LIVE_SESSION, FIXTURE_RELEASE, FIXTURE_STORY_SESSION } from "../../__fixtures__/fixtureSessions";
 import { ENV_PLACE, PROJECT_PLACE, renderPanel } from "../../__tests__/obsTestUtils";
 import { PanelBody } from "../../Dashboards/PanelBody";
 import { FakeReplayer } from "./fakeReplayer";
@@ -27,7 +27,7 @@ vi.mock("@tanstack/react-virtual", async () => (await import("../../__tests__/ob
 vi.mock("@rrweb/replay", async () => ({ Replayer: (await import("./fakeReplayer")).FakeReplayer }));
 vi.mock("@rrweb/replay/dist/style.css", () => ({}));
 
-type ListReq = { envIds: string[]; hasError: boolean; hasReplay: boolean; userId: string; pathContains: string; pageToken?: string };
+type ListReq = { envIds: string[]; hasError: boolean; hasReplay: boolean; userId: string; pathContains: string; browser?: string; os?: string; pageToken?: string };
 const listCalls = (onCall: ReturnType<typeof vi.fn>) => onCall.mock.calls.filter(([rpc]) => rpc === "ListSessions").map(([, req]) => req as ListReq);
 const rowIds = () => screen.getAllByTestId(/^obs-session-sess-/).map((row) => row.getAttribute("data-testid")!.replace("obs-session-", ""));
 
@@ -125,6 +125,44 @@ describe("the session list", () => {
     await waitFor(() => expect(rowIds()[0]).toBe(FIXTURE_STORY_SESSION));
   });
 
+  it("shows each session's device, client and app version", async () => {
+    renderPanel(createFixtureApi(), { view: "sessions", range: "24h" }, PROJECT_PLACE);
+    await screen.findByTestId("obs-sessions-list");
+    // The fixture's live and story sessions are base(0): Chrome on macOS.
+    const device = screen.getByTestId(`obs-session-device-${FIXTURE_STORY_SESSION}`);
+    expect(device).toHaveTextContent("macOS 15.1");
+    expect(device).toHaveTextContent("desktop · 1440×900");
+    expect(device).toHaveAttribute("title", expect.stringContaining("derived by the platform from the request's User-Agent"));
+    expect(screen.getByTestId(`obs-session-client-${FIXTURE_STORY_SESSION}`)).toHaveTextContent("Chrome 156");
+    // The release the build shipped in first, the build id (what source maps are keyed by) beneath.
+    const version = screen.getByTestId(`obs-session-version-${FIXTURE_STORY_SESSION}`);
+    expect(within(version).getByTestId("obs-session-release")).toHaveTextContent(FIXTURE_RELEASE);
+    expect(version).toHaveTextContent("build v1.8.3");
+    // A build no release carries is shown by its build id alone.
+    const unreleased = screen.getAllByTestId(/^obs-session-version-/).find((cell) => cell.textContent === "v1.8.2");
+    expect(unreleased).toBeDefined();
+    // A desktop session: the app's own version under the build, and its Electron.
+    const desktop = screen.getAllByTestId(/^obs-session-client-/).find((cell) => cell.textContent?.startsWith("Desktop app"));
+    expect(desktop).toHaveTextContent("Desktop app 1.8.16Electron 41.10.7");
+  });
+
+  it("narrows by browser, OS and frontend build, in the URL and back to page one", async () => {
+    const onCall = vi.fn();
+    const harness = renderPanel(createFixtureApi({ onCall }), { view: "sessions", range: "24h", cursor: ["s:25"] }, PROJECT_PLACE);
+    await screen.findByTestId("obs-sessions-list");
+    const user = userEvent.setup();
+    await user.type(screen.getByTestId("obs-sessions-client-browser"), "Firefox");
+    await user.type(screen.getByTestId("obs-sessions-client-os"), "Windows");
+    await user.click(screen.getByTestId("obs-sessions-client-apply"));
+    expect(harness.current()).toMatchObject({ browser: "Firefox", os: "Windows" });
+    expect(harness.current().cursor).toBeUndefined();
+    await waitFor(() => expect(listCalls(onCall).at(-1)).toMatchObject({ browser: "Firefox", os: "Windows", pageToken: undefined }));
+    await waitFor(() => expect(screen.getAllByTestId(/^obs-session-client-/).every((c) => c.textContent === "Firefox 133")).toBe(true));
+    await user.click(screen.getByTestId("obs-sessions-client-clear"));
+    expect(harness.current().browser).toBeUndefined();
+    expect(harness.current().os).toBeUndefined();
+  });
+
   it("explains an empty window, and an older control plane", async () => {
     renderPanel(createFixtureApi({ sessions: "empty" }), { view: "sessions" }, ENV_PLACE);
     expect(await screen.findByTestId("obs-no-data")).toHaveTextContent("No browser sessions");
@@ -175,7 +213,8 @@ describe("one session", () => {
   it("says where the browser was, and opens every trace of the session", async () => {
     // Opened from a list narrowed to its frontend: the traces must not stay
     // narrowed to it, or the backend work the session caused is excluded.
-    const harness = renderPanel(createFixtureApi(), { view: "sessions", session: FIXTURE_STORY_SESSION, service: "shop-web" }, PROJECT_PLACE);
+    // Nor a client or build filter: fe would exclude every backend trace.
+    const harness = renderPanel(createFixtureApi(), { view: "sessions", session: FIXTURE_STORY_SESSION, service: "shop-web", browser: "Chrome", os: "macOS", fe: "v1" }, PROJECT_PLACE);
     const place = await screen.findByTestId("session-place");
     expect(place).toHaveTextContent(/Berlin/);
     expect(place.getAttribute("title")).toContain("DB-IP");
@@ -184,6 +223,9 @@ describe("one session", () => {
     expect(harness.current().service).toBeUndefined();
     expect(harness.current().session).toBeUndefined();
     expect(harness.current().trace).toBeUndefined();
+    expect(harness.current().browser).toBeUndefined();
+    expect(harness.current().os).toBeUndefined();
+    expect(harness.current().fe).toBeUndefined();
   });
 
   it("links an error to its issue and a failed request to its trace", async () => {

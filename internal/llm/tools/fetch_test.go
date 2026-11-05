@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -305,6 +306,28 @@ func TestExtractTextFromHTML(t *testing.T) {
 	// Should NOT have nav/footer (we remove them now)
 	assert.NotContains(t, text, "Navigation links")
 	assert.NotContains(t, text, "Footer content")
+}
+
+// TestExtractTextFromHTMLCoalescesTextLinearly pins GO-2026-6860: before
+// golang.org/x/net v0.62.0, html.Parse merged each adjacent text token into
+// the previous text node with string concatenation, so a fetched page of n
+// tiny text tokens cost O(n^2) memory and CPU in the process running the tool.
+// Not parallel: it reads process-wide allocation counters.
+func TestExtractTextFromHTMLCoalescesTextLinearly(t *testing.T) {
+	const n = 20000 // 100 KB of input; ~200 MB of copying when quadratic
+	page := strings.Repeat("a</x>", n)
+
+	var before, after runtime.MemStats
+	runtime.GC()
+	runtime.ReadMemStats(&before)
+	text, err := extractTextFromHTML(page)
+	runtime.ReadMemStats(&after)
+	require.NoError(t, err)
+
+	assert.Equal(t, n, strings.Count(text, "a"))
+	const budget = 32 << 20
+	assert.LessOrEqual(t, after.TotalAlloc-before.TotalAlloc, uint64(budget),
+		"extractTextFromHTML allocated quadratically in its input")
 }
 
 func runFetchCaps(t *testing.T, params FetchParams) ToolResponse {

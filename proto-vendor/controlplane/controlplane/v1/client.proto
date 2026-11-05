@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. See proto/controlplane/v1/README.md.
+
+package controlplane.v1;
+
+option go_package = "github.com/reliant-labs/control-plane/gen/controlplane/v1;controlplanev1";
+
+// Which client a browser session, trace or error came from, shared by
+// RumService (SessionSummary), ObservabilityService (TraceSummary) and
+// IssuesService (IssueEvent). Declared here, not in a service proto, because
+// this repo forbids service-to-service proto imports.
+//
+// Two sources, never mixed:
+//   - browser, OS, device type and Chromium version are the PLATFORM's: the
+//     workspace-proxy parses the request's own User-Agent and Sec-CH-UA*
+//     headers (which page script cannot set) and the gateway stamps them
+//     (user_agent.name/.version, os.name/.version, reliant.device.type,
+//     reliant.chromium.version), after deleting any the page sent;
+//   - the desktop versions and the viewport are the PAGE's (app.desktop.*,
+//     app.viewport.*, app.screen.*): only it can know them.
+// An empty or zero field is unknown.
+message ClientContext {
+  // The browser, or Electron for a desktop app's renderer: "Chrome",
+  // "Mobile Safari", "Firefox", "Edge", "Electron", ...
+  string browser_name = 1;
+  string browser_version = 2;
+  // "macOS", "Windows", "iOS", "Android", "Linux", "ChromeOS", ...
+  string os_name = 3;
+  string os_version = 4;
+  // "desktop", "mobile", "tablet" or "bot".
+  string device_type = 5;
+  // A Chromium-based client's engine version (a desktop app's included).
+  string chromium_version = 6;
+  // The desktop app's own version, and the Electron it runs on. Empty outside
+  // a desktop app.
+  string desktop_version = 7;
+  string electron_version = 8;
+  // The viewport and screen in CSS pixels (sessions only: the widest viewport
+  // the session reported, and its screen). 0 when unknown.
+  int32 viewport_width = 9;
+  int32 viewport_height = 10;
+  int32 screen_width = 11;
+  int32 screen_height = 12;
+}
+
+// A backend build that served a trace: a server span's service.name and
+// service.version.
+message ServiceBuild {
+  string service = 1;
+  string version = 2;
+}

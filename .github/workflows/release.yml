@@ -60,7 +60,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0 # Full clone needed for tag-triggered workflows
 
@@ -150,12 +150,12 @@ jobs:
 
       - name: Install pnpm
         # The version that wrote frontends/web/pnpm-lock.yaml (its engines.pnpm).
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
         with:
           version: 12.15.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
           cache: "npm"
@@ -283,7 +283,7 @@ jobs:
 
       - name: Upload the prebuild marker
         if: inputs.prebuild_version != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: prebuild-${{ inputs.prebuild_version }}
           path: prebuild/prebuild.json
@@ -317,7 +317,7 @@ jobs:
         run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
 
       - name: Upload web build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: web-dist
           path: frontends/web/dist
@@ -325,7 +325,7 @@ jobs:
           compression-level: 6 # Faster upload with good compression
 
       - name: Upload generated backend sources
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: generated-backend-sources
           # `gen/` is TOP-LEVEL, not internal/gen — buf.gen.yaml writes
@@ -418,7 +418,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 1
 
@@ -432,13 +432,13 @@ jobs:
         run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       - name: Setup Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Download generated backend sources
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: generated-backend-sources
           # `.`, not `internal`: upload-artifact roots a multi-path artifact at
@@ -560,7 +560,7 @@ jobs:
           ls -la "$OUT_DIR"
 
       - name: Upload backend binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ matrix.artifact_name }}
           path: backend-build/${{ matrix.target_os }}-${{ matrix.target_arch }}/
@@ -598,7 +598,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 1
 
@@ -617,7 +617,7 @@ jobs:
 
       - name: Setup Node.js
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
           cache: "npm"
@@ -627,7 +627,7 @@ jobs:
       - name: Cache Electron binaries
         if: needs.prepare.outputs.prebuilt_run == ''
         id: electron-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/Library/Caches/electron
@@ -638,21 +638,21 @@ jobs:
 
       - name: Download web build
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: web-dist
           path: frontends/web/dist
 
       - name: Download backend (darwin-amd64)
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-darwin-amd64
           path: electron/resources/server/mac-x64
 
       - name: Download backend (darwin-arm64)
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-darwin-arm64
           path: electron/resources/server/mac-arm64
@@ -736,7 +736,7 @@ jobs:
       # update feeds (*.yml) last so no client sees a feed before its files.
       - name: Publish the prebuild
         if: needs.prepare.outputs.prebuilt_run != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: macos-builds
           path: electron/dist
@@ -759,7 +759,7 @@ jobs:
         run: bash scripts/release-prebuild.sh publish mac "$CHANNEL" "$VERSION" electron/dist
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: macos-builds
           path: |
@@ -823,7 +823,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 1
 
@@ -842,7 +842,7 @@ jobs:
 
       - name: Setup Node.js
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
           cache: "npm"
@@ -852,7 +852,7 @@ jobs:
       - name: Cache Electron binaries
         if: needs.prepare.outputs.prebuilt_run == ''
         id: electron-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/.cache/electron
@@ -863,21 +863,21 @@ jobs:
 
       - name: Download web build
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: web-dist
           path: frontends/web/dist
 
       - name: Download backend (linux-amd64)
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-linux-amd64
           path: electron/resources/server/linux-amd64
 
       - name: Download backend (linux-arm64)
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-linux-arm64
           path: electron/resources/server/linux-arm64
@@ -930,7 +930,7 @@ jobs:
       # update feeds (*.yml) last so no client sees a feed before its files.
       - name: Publish the prebuild
         if: needs.prepare.outputs.prebuilt_run != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: linux-builds
           path: electron/dist
@@ -953,7 +953,7 @@ jobs:
         run: bash scripts/release-prebuild.sh publish linux "$CHANNEL" "$VERSION" electron/dist
 
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: linux-builds
           path: |
@@ -1010,7 +1010,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 1
 
@@ -1030,7 +1030,7 @@ jobs:
 
       - name: Setup Node.js
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: "24"
           cache: "npm"
@@ -1040,7 +1040,7 @@ jobs:
       - name: Cache Electron binaries
         if: needs.prepare.outputs.prebuilt_run == ''
         id: electron-cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             ~/AppData/Local/electron/Cache
@@ -1051,21 +1051,21 @@ jobs:
 
       - name: Download web build
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: web-dist
           path: frontends/web/dist
 
       - name: Download backend (windows-amd64)
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-windows-amd64
           path: electron/resources/server/win32-amd64
 
       - name: Download backend (windows-arm64)
         if: needs.prepare.outputs.prebuilt_run == ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: backend-windows-arm64
           path: electron/resources/server/win32-arm64
@@ -1136,7 +1136,7 @@ jobs:
       # update feeds (*.yml) last so no client sees a feed before its files.
       - name: Publish the prebuild
         if: needs.prepare.outputs.prebuilt_run != ''
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: windows-builds
           path: electron/dist
@@ -1159,7 +1159,7 @@ jobs:
         run: bash scripts/release-prebuild.sh publish win "$CHANNEL" "$VERSION" electron/dist
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-builds
           # The Windows update feed is <channel>.yml (latest.yml / alpha.yml), not
@@ -1230,7 +1230,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 1
 
@@ -1239,7 +1239,7 @@ jobs:
         run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: artifacts
 
@@ -1615,7 +1615,7 @@ jobs:
     if: always() && needs.prepare.result == 'success' && github.event.inputs.dry_run != 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 1
 
