@@ -80,6 +80,8 @@ interface DaemonConnectingGateProps {
    * first daemon in the list — fine during onboarding since we only create
    * one. */
   daemonRef?: string;
+  /** Reports the gate's phase as it changes, so a host can mirror it in its own UI. */
+  onPhaseChange?: (phase: DaemonConnectingPhase) => void;
 }
 
 function pickDaemon(daemons: Daemon[], ref?: string): Daemon | undefined {
@@ -114,6 +116,7 @@ export function derivePhase(
 export function DaemonConnectingGate({
   onContinue,
   daemonRef,
+  onPhaseChange,
 }: DaemonConnectingGateProps) {
   const navigate = useNavigate();
   // `attemptStartedAt` resets on Retry, which both resets the elapsed clock
@@ -184,6 +187,12 @@ export function DaemonConnectingGate({
   const daemon = pickDaemon(daemons, daemonRef);
   const phase = derivePhase(daemon, elapsedMs);
   const reason = daemon?.lastStatusMessage ?? "";
+
+  const onPhaseChangeRef = useRef(onPhaseChange);
+  onPhaseChangeRef.current = onPhaseChange;
+  useEffect(() => {
+    onPhaseChangeRef.current?.(phase);
+  }, [phase]);
 
   const handleRetry = useCallback(() => {
     setAttemptStartedAt(Date.now());
@@ -276,6 +285,10 @@ export function DaemonConnectingGate({
           >
             Skip and continue
           </button>
+          <p className="text-xs text-muted-foreground">
+            Skipping opens Reliant without a machine. You can retry or check on
+            it later in Settings → Machines.
+          </p>
         </div>
       </div>
     );
@@ -312,13 +325,20 @@ export function DaemonConnectingGate({
       <p className="text-xs text-muted-foreground">
         Elapsed: {elapsedSeconds}s {timedOut ? "" : `/ ${Math.floor(POLL_TIMEOUT_MS / 1000)}s`}
       </p>
-      <button
-        type="button"
-        onClick={onContinue}
-        className="w-full py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
-      >
-        Skip and continue
-      </button>
+      <div className="space-y-1">
+        <button
+          type="button"
+          onClick={onContinue}
+          className="w-full py-2 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        >
+          Skip and continue
+        </button>
+        <p className="text-xs text-muted-foreground">
+          Your machine keeps starting in the background. You can look around
+          now; anything that needs the machine, like chat or the terminal,
+          connects once it is ready.
+        </p>
+      </div>
     </div>
   );
 }
