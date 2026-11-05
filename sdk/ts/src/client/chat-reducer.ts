@@ -25,6 +25,7 @@ import type {
   ToolCallUpdate,
   WorkflowStatusUpdate,
 } from "./events.js";
+import { noopLogger, type Logger } from "./logger.js";
 import { compareMessagesWithinThread } from "./message-order.js";
 import {
   applyHistoricalErrors,
@@ -90,11 +91,12 @@ const defaultNow = (): string => new Date(0).toISOString();
 
 export function reduceChat(state: ChatState, action: ChatAction, env: ReduceEnv = {}): ChatState {
   const now = env.now ?? defaultNow;
+  const log = env.log ?? noopLogger;
   switch (action.kind) {
     case "snapshot":
-      return { ...applyUpdates(state, action.updates, true, now), cursor: action.cursor };
+      return { ...applyUpdates(state, action.updates, true, now, log, action.keepStreaming), cursor: action.cursor };
     case "updates":
-      return { ...applyUpdates(state, action.updates, false, now), cursor: action.cursor };
+      return { ...applyUpdates(state, action.updates, false, now, log), cursor: action.cursor };
     case "pagination":
       return { ...state, pagination: action.pagination };
     case "contextUsage":
@@ -102,8 +104,8 @@ export function reduceChat(state: ChatState, action: ChatAction, env: ReduceEnv 
     case "olderPage": {
       const held = new Set(state.messages.map((m) => m.id));
       const additions = action.messages.filter((m) => !held.has(m.id));
-      // First write wins per call id, as for live results: this page's copy of
-      // a result the chat already holds is a re-delivery.
+      // The page's results join the index; a result the chat already holds is
+      // the same one re-delivered (a call id is a primary key at rest).
       const pageResults: ToolResultsByCallId = {};
       for (const message of additions) {
         if (message.role === MessageRole.TOOL) foldToolResultMessage(message, pageResults);
@@ -111,7 +113,7 @@ export function reduceChat(state: ChatState, action: ChatAction, env: ReduceEnv 
       return {
         ...state,
         messages: [...additions, ...state.messages].sort(compareMessagesWithinThread),
-        toolResults: { ...state.toolResults, ...pageResults },
+        toolResults: { ...pageResults, ...state.toolResults },
         // The page's own errors arrive with the history they belong to; merged
         // by id, never replacing a newer attempt the stream already delivered.
         errors: action.errors.length > 0 ? applyHistoricalErrors(state.errors, action.errors) : state.errors,
@@ -173,6 +175,8 @@ function applyUpdates(
   updates: ChatUpdate[],
   isSnapshot: boolean,
   now: () => string,
+  log: Logger,
+  keepStreaming = false,
 ): ChatState {
   const chatId = state.chatId;
   const of = <T extends ChatUpdate>(type: T["update_type"]): T[] =>
@@ -182,7 +186,15 @@ function applyUpdates(
   // stream has since left).
   const messages: Message[] = (of<ProtoMessageUpdate>("message") as ProtoMessageUpdate[])
     .map((u) => u.message as unknown as Message)
-    .filter((m) => !m.chatId || m.chatId === chatId);
+    .filter((m) => {
+      if (!m.chatId || m.chatId === chatId) return true;
+      log.warn("Dropping message from wrong chat", {
+        expectedChatId: chatId.slice(0, 8),
+        actualChatId: m.chatId.slice(0, 8),
+        messageId: m.id?.slice(0, 8),
+      });
+      return false;
+    });
 
   const rawDeltas = of<StreamingDelta>("streaming_delta");
   const finalized = of<StreamFinalizedUpdate>("stream_finalized");
@@ -246,7 +258,7 @@ function applyUpdates(
   // over. A placeholder is built from ephemeral deltas no snapshot carries, so
   // none survives one (a missed finalize would otherwise leave it on screen),
   // and the gates and workflow state the snapshot reports replace the held ones.
-  const priorStreaming: Readonly<Record<string, Message>> = isSnapshot ? {} : state.streaming;
+  const priorStreaming: Readonly<Record<string, Message>> = isSnapshot && !keepStreaming ? {} : state.streaming;
   const prior: Pick<ChatState, "approvals" | "threads" | "pendingQuestions" | "asyncQuestions" | "workflowStatus"> =
     isSnapshot
       ? { approvals: [], threads: [], pendingQuestions: [], asyncQuestions: [], workflowStatus: {} }
@@ -272,11 +284,15 @@ function applyUpdates(
   // is the same result re-delivered: first write wins.
   const batchResults: ToolResultsByCallId = {};
   const sourceMsgId: Record<string, string> = {};
+  let duplicatesInBatch = 0;
   for (const msg of messages) {
     if (msg.role !== MessageRole.TOOL) continue;
     for (const block of msg.contentBlocks) {
       if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
-        if (sourceMsgId[block.toolCallId] !== undefined) continue;
+        if (sourceMsgId[block.toolCallId] !== undefined) {
+          duplicatesInBatch++;
+          continue;
+        }
         sourceMsgId[block.toolCallId] = msg.id;
         batchResults[block.toolCallId] = resolvedToolResultFromBlock(block);
       }
@@ -297,9 +313,30 @@ function applyUpdates(
   const snapshotReplaces = isSnapshot && snapshotReplacesMessages(state.messages, messages);
   let nextMessages = mergeMessages(state.messages, messages, isSnapshot);
 
+  // Re-delivery is the steady state, not an anomaly: every gap-resync re-sends a
+  // window of up to 200 messages. So it is counted and reported once per batch;
+  // only a copy whose CONTENT DIFFERS from the one held is suspicious (a stub
+  // that would clobber real output), and first write still wins.
   const existingResults = snapshotReplaces ? {} : state.toolResults;
+  let alreadyRecorded = 0;
+  const conflicting: string[] = [];
   for (const id of Object.keys(batchResults)) {
-    if (id in existingResults) delete batchResults[id];
+    if (!(id in existingResults)) continue;
+    const held = existingResults[id]!;
+    const incoming = batchResults[id]!;
+    if (held.content !== incoming.content || held.is_error !== incoming.is_error) conflicting.push(id);
+    alreadyRecorded++;
+    delete batchResults[id];
+  }
+  if (conflicting.length > 0) {
+    log.warn("Tool result re-delivered with different content — keeping existing", {
+      chatId: chatId.slice(0, 8),
+      count: conflicting.length,
+      toolCallIds: conflicting.slice(0, 5),
+    });
+  }
+  if (alreadyRecorded > 0 || duplicatesInBatch > 0) {
+    log.debug("Dropped re-delivered tool results", { chatId: chatId.slice(0, 8), alreadyRecorded, duplicatesInBatch });
   }
   const toolResults: ToolResultsByCallId =
     Object.keys(batchResults).length === 0 ? existingResults : { ...existingResults, ...batchResults };
@@ -396,7 +433,7 @@ function applyUpdates(
       abortSettled.length > 0
         ? applyToolCallStateUpdates(toolCallsBeforeAbort, abortSettled, chatId)
         : toolCallsBeforeAbort,
-    streaming: Object.fromEntries(streaming),
+    streaming: sameEntries(streaming, state.streaming) ? state.streaming : Object.fromEntries(streaming),
     finalizedStreamIds,
     approvals: applyApprovals(prior.approvals, of<ToolApprovalUpdate>("approval")),
     threads: mergeActiveThreads(prior.threads, of<ActiveThreadUpdate>("thread")),
@@ -404,7 +441,7 @@ function applyUpdates(
     errors: applyLogSlice(state.errors, of<ErrorUpdate>("error"), isSnapshot, { key: (e) => e.id }),
     info: applyLogSlice(
       state.info,
-      [...of<InfoUpdate>("info"), ...of<InfoUpdate>("warning")],
+      updates.filter((u): u is InfoUpdate => u.update_type === "info" || u.update_type === "warning"),
       isSnapshot,
       {
         key: (e) => e.id,
@@ -423,6 +460,14 @@ function applyUpdates(
     workflowStatus: applyWorkflowStatus(prior.workflowStatus, of<WorkflowStatusUpdate>("workflow_status")),
     metadata: of<import("./events.js").ChatMetadataUpdate>("chat").at(-1) ?? state.metadata,
   };
+}
+
+/** Whether the map holds exactly the record's entries (so the record can stand for it, keeping its identity). */
+function sameEntries(map: ReadonlyMap<string, Message>, record: Readonly<Record<string, Message>>): boolean {
+  const keys = Object.keys(record);
+  if (keys.length !== map.size) return false;
+  for (const key of keys) if (map.get(key) !== record[key]) return false;
+  return true;
 }
 
 function inferredCancel(
