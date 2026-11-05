@@ -48,6 +48,10 @@ type fake struct {
 	fireTrigger       func(*reliantv1.FireTriggerRequest) (*reliantv1.FireTriggerResponse, error)
 	listTriggerEvents func(*reliantv1.ListTriggerEventsRequest) (*reliantv1.ListTriggerEventsResponse, error)
 	getLaunchEvent    func(*reliantv1.GetLaunchEventRequest) (*reliantv1.GetLaunchEventResponse, error)
+
+	listInbox    func(*reliantv1.ListInboxRequest) (*reliantv1.ListInboxResponse, error)
+	dismissInbox func(*reliantv1.DismissInboxItemRequest) (*reliantv1.DismissInboxItemResponse, error)
+	restoreInbox func(*reliantv1.RestoreInboxItemRequest) (*reliantv1.RestoreInboxItemResponse, error)
 }
 
 // call runs fn if set, else answers Unimplemented.
@@ -146,6 +150,21 @@ func (s triggerSvc) GetLaunchEvent(_ context.Context, r *connect.Request[reliant
 	return call(s.f.getLaunchEvent, r.Msg)
 }
 
+type inboxSvc struct {
+	reliantv1connect.UnimplementedInboxServiceHandler
+	f *fake
+}
+
+func (s inboxSvc) ListInbox(_ context.Context, r *connect.Request[reliantv1.ListInboxRequest]) (*connect.Response[reliantv1.ListInboxResponse], error) {
+	return call(s.f.listInbox, r.Msg)
+}
+func (s inboxSvc) DismissInboxItem(_ context.Context, r *connect.Request[reliantv1.DismissInboxItemRequest]) (*connect.Response[reliantv1.DismissInboxItemResponse], error) {
+	return call(s.f.dismissInbox, r.Msg)
+}
+func (s inboxSvc) RestoreInboxItem(_ context.Context, r *connect.Request[reliantv1.RestoreInboxItemRequest]) (*connect.Response[reliantv1.RestoreInboxItemResponse], error) {
+	return call(s.f.restoreInbox, r.Msg)
+}
+
 // start serves f and returns a client for it.
 func (f *fake) start(t *testing.T, opts ...Option) (*Client, *httptest.Server) {
 	t.Helper()
@@ -156,6 +175,7 @@ func (f *fake) start(t *testing.T, opts ...Option) (*Client, *httptest.Server) {
 		func() (string, http.Handler) { return reliantv1connect.NewQuestionServiceHandler(questionSvc{f: f}) },
 		func() (string, http.Handler) { return reliantv1connect.NewApprovalServiceHandler(approvalSvc{f: f}) },
 		func() (string, http.Handler) { return reliantv1connect.NewTriggerServiceHandler(triggerSvc{f: f}) },
+		func() (string, http.Handler) { return reliantv1connect.NewInboxServiceHandler(inboxSvc{f: f}) },
 	} {
 		path, h := mount()
 		mux.Handle(path, h)
