@@ -307,7 +307,8 @@ message MethodOptions {
 // FIELD PATHS (target.id, target.label, env, scope, detail) are dotted proto
 // field names resolved against the REQUEST, or against the RESPONSE when
 // they start with "response." — a created object's id exists only in the
-// response. Every path must end on a scalar or an enum field.
+// response. A "request." prefix names the request explicitly, the mirror of
+// "response.". Every path must end on a scalar or an enum field.
 //
 // A Create<E>, Update<E> or Delete<E> rpc whose messages have forge's CRUD
 // shape needs no option: verb create/update/delete and target kind snake(E)
