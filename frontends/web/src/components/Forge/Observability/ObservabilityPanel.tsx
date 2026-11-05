@@ -158,6 +158,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
       live: undefined,
       errors: undefined,
       minDuration: undefined,
+      lat: undefined,
       alerts: undefined,
       rule: undefined,
       compare: undefined,
@@ -190,61 +191,69 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
   /** The one environment in scope, so a quoted command names it; none when it is all of them. */
   const envHint = place.kind === "env" ? place.env.name : search.envs?.length === 1 ? search.envs[0] : undefined;
 
+  // The window, Refresh and the alert bell. They end the scope bar's row
+  // (filters, group-by, time on ONE line); drawn on a row of their own only
+  // when there is no scope bar. A row holding three small controls was empty
+  // space above every view.
+  const controls = (
+    <div className="flex items-center gap-2" data-testid="obs-controls">
+      {org.orgId && <AlertNotifications orgId={org.orgId} envName={envName} onOpenAlerts={() => selectView("alerts")} />}
+      {/* A comparison has its own windows (around the promotion). */}
+      {!comparing && (
+        <>
+          <label htmlFor="obs-range" className="sr-only">
+            Time range
+          </label>
+          <select
+            id="obs-range"
+            value={range}
+            onChange={(event) => navigate({ range: rangeOf(event.target.value) }, { replace: true })}
+            className="h-8 min-h-[32px] touch:h-11 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            data-testid="obs-range"
+          >
+            {RANGE_PRESETS.filter((preset) => (view !== "graph" && view !== "rpc") || preset === "15m" || preset === "1h" || preset === range).map((preset) => (
+              <option key={preset} value={preset}>
+                {RANGE_LABELS[preset]}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
+      <Button
+        variant="ghost"
+        size="md"
+        className="min-h-[32px] touch:h-11"
+        onClick={() => {
+          if (view === "graph" || view === "rpc") setGraphRefresh((n) => n + 1);
+          void queryClient.invalidateQueries({ queryKey: obsKeys.all(scope) });
+          void queryClient.invalidateQueries({ queryKey: deliveryKeys.root() });
+          void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
+          void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
+          void queryClient.invalidateQueries({ queryKey: sessionKeys.root() });
+        }}
+        leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
+        data-testid="obs-refresh"
+      >
+        Refresh
+      </Button>
+    </div>
+  );
+  const scopeBarShown = !!scope && (!notSetUp || view === "alerts") && !nothingYet;
+
   return (
     <ObsAskContextValue.Provider value={askContext}>
     <div className="space-y-4" data-testid="obs-panel" data-view={view} data-place={place.kind}>
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <div className="flex items-center gap-2">
-          {org.orgId && <AlertNotifications orgId={org.orgId} envName={envName} onOpenAlerts={() => selectView("alerts")} />}
-          {/* A comparison has its own windows (around the promotion). */}
-          {!comparing && (
-            <>
-              <label htmlFor="obs-range" className="sr-only">
-                Time range
-              </label>
-              <select
-                id="obs-range"
-                value={range}
-                onChange={(event) => navigate({ range: rangeOf(event.target.value) }, { replace: true })}
-                className="h-8 min-h-[32px] touch:h-11 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                data-testid="obs-range"
-              >
-                {RANGE_PRESETS.filter((preset) => (view !== "graph" && view !== "rpc") || preset === "15m" || preset === "1h" || preset === range).map((preset) => (
-                  <option key={preset} value={preset}>
-                    {RANGE_LABELS[preset]}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-          <Button
-            variant="ghost"
-            size="md"
-            className="min-h-[32px] touch:h-11"
-            onClick={() => {
-              if (view === "graph" || view === "rpc") setGraphRefresh((n) => n + 1);
-              void queryClient.invalidateQueries({ queryKey: obsKeys.all(scope) });
-              void queryClient.invalidateQueries({ queryKey: deliveryKeys.root() });
-              void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
-              void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
-              void queryClient.invalidateQueries({ queryKey: sessionKeys.root() });
-            }}
-            leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
-            data-testid="obs-refresh"
-          >
-            Refresh
-          </Button>
-        </div>
-      </div>
+      {!scopeBarShown && <div className="flex flex-wrap items-center justify-end gap-3">{controls}</div>}
 
       {/* App and org console layouts own the quota banner. An embedded env panel has no such layout. */}
       {place.kind === "env" && <ObsQuotaBanner />}
 
       {/* Attribute filters and group-by mean nothing on Alerts. */}
       {/* Only the org place draws app and environment pickers: in an app's console the top bar is the scope. */}
-      {scope && (!notSetUp || view === "alerts") && !nothingYet && (
+      {scope && scopeBarShown && (
         <ObsScopeBar
           scope={scope}
+          trailing={controls}
           range={range}
           environments={place.kind === "org" ? orgPickerEnvironments(place, selectedApps) : undefined}
           apps={place.kind === "org" ? place.apps : undefined}
@@ -375,6 +384,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             service={search.service}
             errorsOnly={!!search.errors}
             minDuration={search.minDuration}
+            latency={search.lat}
             traceId={search.trace}
             spanId={search.span}
             groupBy={groupBy}

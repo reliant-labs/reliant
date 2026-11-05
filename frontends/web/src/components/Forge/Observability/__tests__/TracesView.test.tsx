@@ -155,6 +155,25 @@ describe("trace list", () => {
     expect(harness.current().trace).toBe(FIXTURE_TRACE_ID);
     expect(await screen.findByTestId("trace-detail")).toBeInTheDocument();
   });
+
+  it("a latency band reads past the first page, and never lists a trace above its high edge", async () => {
+    const api = createFixtureApi();
+    const original = api.listTraces.bind(api);
+    // ListTraces bounds only the low end: page one is every trace too slow for
+    // the band, page two the band's own.
+    const listTraces = vi.spyOn(api, "listTraces").mockImplementation(async (req, options) => {
+      const res = await original(req, options);
+      const durationMs = req.cursor ? 150 : 5_000;
+      const traces = res.traces.slice(0, 5).map((t, i) => ({ ...t, traceId: `${req.cursor ? "b" : "a"}${i}`.padEnd(32, "0"), durationMs, rootDurationMs: durationMs }));
+      return { ...res, traces, nextCursor: req.cursor ? "" : "page-2" };
+    });
+    renderPanel(api, { view: "traces", lat: "100-200" });
+    const rows = await screen.findAllByTestId("obs-trace-row");
+    expect(rows).toHaveLength(5);
+    expect(listTraces).toHaveBeenCalledWith(expect.objectContaining({ minDurationMs: 100, cursor: "page-2" }), expect.anything());
+    expect(screen.queryByTestId("obs-trace-region-empty")).not.toBeInTheDocument();
+    expect(screen.getByTestId("obs-trace-region")).toHaveTextContent("5 of 10");
+  });
 });
 
 describe("trace title", () => {

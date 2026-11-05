@@ -61,7 +61,7 @@ describe("the Overview's tiles", () => {
 
     await waitFor(() => expect(screen.getByTestId("process-health-error")).toBeInTheDocument());
     expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "ready");
-    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("row").length).toBeGreaterThan(1);
+    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem").length).toBeGreaterThan(0);
     expect(screen.queryByTestId("overview-services-error")).toBeNull();
   });
 
@@ -96,7 +96,7 @@ describe("the Overview's tiles", () => {
     expect(within(screen.getByTestId("observability-services")).getAllByRole("row").length).toBeGreaterThan(1);
     second.resolve({} as ListWorkloadsResult);
     await waitFor(() => expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "ready"));
-    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("row").length).toBeGreaterThan(1);
+    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem").length).toBeGreaterThan(0);
     // Only the failed read went out again.
     expect(calls.filter((c) => c === "GetServiceOverview").length).toBe(overviewCalls);
   });
@@ -116,12 +116,12 @@ describe("the Overview's tiles", () => {
       },
     });
     const partial = await screen.findByTestId("overview-services-partial");
-    const rowsBefore = within(screen.getByTestId("overview-services-table")).getAllByRole("row").length;
+    const rowsBefore = within(screen.getByTestId("overview-services-table")).getAllByRole("listitem").length;
 
     await userEvent.click(within(partial).getByTestId("overview-services-partial-retry"));
 
     await waitFor(() => expect(screen.getByTestId("overview-services-stale")).toBeInTheDocument());
-    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("row")).toHaveLength(rowsBefore);
+    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem")).toHaveLength(rowsBefore);
     expect(screen.queryByTestId("overview-services-error")).toBeNull();
     expect(screen.getByTestId("overview")).toHaveAttribute("data-state", "ready");
   });
@@ -133,7 +133,7 @@ describe("the Overview's tiles", () => {
     });
     const note = await screen.findByTestId("overview-services-partial");
     expect(note).toHaveTextContent("CPU and memory did not arrive in time");
-    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("row").length).toBeGreaterThan(1);
+    expect(within(screen.getByTestId("overview-services-table")).getAllByRole("listitem").length).toBeGreaterThan(0);
     expect(screen.getByTestId("overview-jobs-partial")).toHaveTextContent("Jobs did not arrive in time");
     expect(screen.queryByTestId("overview-jobs-empty")).toBeNull();
   });

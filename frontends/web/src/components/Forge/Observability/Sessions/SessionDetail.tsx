@@ -129,6 +129,7 @@ function SessionBody({
       span: undefined,
       service: undefined,
       minDuration: undefined,
+      lat: undefined,
       groupBy: undefined,
       f: undefined,
       rsession: session.sessionId,

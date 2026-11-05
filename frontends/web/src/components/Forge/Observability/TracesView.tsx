@@ -53,6 +53,7 @@ import { rumScopeOf, sessionLink } from "./Sessions/sessionModel";
 import { TraceDetail } from "./TraceDetail";
 import { TraceLatencyChart } from "./traceScatter/TraceLatencyChart";
 import { inRegion, pointsOf, type TraceRegion } from "./traceScatter/traceScatterModel";
+import { parseLatParam } from "./Home/SignalTiles";
 import { operationName } from "./traceTitle";
 import { UserIdFilter } from "./UserIdFilter";
 import { useRovingFocus } from "./useRovingFocus";
@@ -90,6 +91,8 @@ export function TracesView(props: {
   service: string | undefined;
   errorsOnly: boolean;
   minDuration: string | undefined;
+  /** A latency band, "<lo>-<hi>" ms (the URL's `lat`): seeds the chart's selected region. */
+  latency?: string;
   traceId: string | undefined;
   spanId: string | undefined;
   groupBy?: string[];
@@ -126,6 +129,7 @@ function TraceList({
   service,
   errorsOnly,
   minDuration,
+  latency,
   groupBy = NO_KEYS,
   filters: scopeTokens = NO_TOKENS,
   user = "",
@@ -140,6 +144,7 @@ function TraceList({
   service: string | undefined;
   errorsOnly: boolean;
   minDuration: string | undefined;
+  latency?: string;
   groupBy?: string[];
   filters?: FilterToken[];
   user?: string;
@@ -148,13 +153,21 @@ function TraceList({
   navigate: ObsNavigate;
 }) {
   const { browser, os, fe, be } = client;
+  // A band from the URL (an Overview histogram bucket): the server is asked
+  // for traces at least its low end long, and the chart opens with the band
+  // selected, so the list below is that bucket's traces. ListTracesRequest has
+  // no upper duration bound (min_duration_ms only), so the band's high edge is
+  // applied here: the region drops every trace above it, and the band pages
+  // through the server's answer itself (below) so a bucket's traces past the
+  // first page are not missed.
+  const band = useMemo(() => parseLatParam(latency), [latency]);
   const filters: TraceFilters = useMemo(
     () => ({
       range,
       rootSpanName,
       services: service ? [service] : [],
       errorsOnly,
-      minDurationMs: MIN_DURATION_MS[minDuration ?? ""] ?? 0,
+      minDurationMs: Math.max(MIN_DURATION_MS[minDuration ?? ""] ?? 0, band ? Math.floor(band.loMs) : 0),
       groupBy,
       userId: user || undefined,
       sessionId: sessionId || undefined,
@@ -163,7 +176,7 @@ function TraceList({
       frontendVersion: fe || undefined,
       backendVersion: be || undefined,
     }),
-    [range, rootSpanName, service, errorsOnly, minDuration, groupBy, user, sessionId, browser, os, fe, be]
+    [range, rootSpanName, service, errorsOnly, minDuration, band, groupBy, user, sessionId, browser, os, fe, be]
   );
   const traces = useListTraces(scope, filters);
   const rows = useMemo(() => traces.data?.pages.flatMap((page) => page.traces) ?? EMPTY, [traces.data]);
@@ -172,18 +185,40 @@ function TraceList({
   // A filter the server ignored is drawn in place of the list (ObsError), not under the search box.
   const filterError =
     traces.error && obsErrorKind(traces.error) === "invalid" && !(traces.error instanceof FilterUnsupportedError) ? obsErrorMessage(traces.error) : null;
-  const filtered = !!rootSpanName || !!service || errorsOnly || !!minDuration || !!user || !!sessionId || hasClientFilters(client);
+  const filtered = !!rootSpanName || !!service || errorsOnly || !!minDuration || !!band || !!user || !!sessionId || hasClientFilters(client);
   const points = useMemo(() => pointsOf(rows), [rows]);
   // The brushed region belongs to the filters it was drawn over: new filters
   // load other traces, and a region kept across them would select nothing.
   const [selection, setSelection] = useState<{ filters: TraceFilters; region: TraceRegion } | null>(null);
-  const region = selection?.filters === filters ? selection.region : null;
+  const traceWindow = traces.data?.pages[0]?.window ?? null;
+  const bandRegion = useMemo<TraceRegion | null>(
+    () => (band && traceWindow ? { startMs: traceWindow.startMs, endMs: traceWindow.endMs, minMs: band.loMs, maxMs: band.hiMs } : null),
+    [band, traceWindow]
+  );
+  const region = selection?.filters === filters ? selection.region : bandRegion;
+  /** A drawn region replaces the band's; clearing it clears the band too, or the band would draw itself back. */
+  const selectRegion = (next: TraceRegion | null) => {
+    setSelection(next ? { filters, region: next } : null);
+    if (!next && band) navigate({ lat: undefined }, { replace: true });
+  };
   const visibleRows = useMemo(() => {
     if (!region) return rows;
     const inside = new Set(points.filter((p) => inRegion(p, region)).map((p) => p.traceId));
     return rows.filter((row) => inside.has(row.traceId));
   }, [rows, points, region]);
   const failed = !!traces.error && !traces.data && !filterError;
+  // While the band is the selection, read every page of traces at least its
+  // low end long (up to BAND_MAX_PAGES), so the list is the bucket's traces,
+  // not the ones that happened to be on the first page.
+  const pagesLoaded = traces.data?.pages.length ?? 0;
+  const banding = !!bandRegion && region === bandRegion;
+  const bandPaging = banding && !!traces.hasNextPage && pagesLoaded < BAND_MAX_PAGES && !traces.error;
+  const { fetchNextPage, isFetchingNextPage } = traces;
+  useEffect(() => {
+    if (bandPaging && !isFetchingNextPage) void fetchNextPage();
+  }, [bandPaging, isFetchingNextPage, fetchNextPage, pagesLoaded]);
+  // The band stopped short of the server's last page: say the list is not all of the bucket.
+  const bandCapped = banding && !!traces.hasNextPage && !bandPaging;
 
   return (
     <div className="space-y-3" data-testid="obs-traces">
@@ -228,14 +263,20 @@ function TraceList({
         total={red?.traceCount ?? null}
         filtered={filtered}
         region={region}
-        onRegion={(next) => setSelection(next ? { filters, region: next } : null)}
+        onRegion={selectRegion}
         onOpen={(traceId) => navigate({ trace: traceId, span: undefined })}
       />
       {traces.data && <ObsAsOf updatedAt={traces.dataUpdatedAt} />}
       {region && rows.length > 0 && (
-        <RegionBar region={region} shown={visibleRows.length} loaded={rows.length} onClear={() => setSelection(null)} />
+        <RegionBar region={region} shown={visibleRows.length} loaded={rows.length} onClear={() => selectRegion(null)} />
       )}
-      {traces.isLoading ? (
+      {bandCapped && bandRegion && (
+        <p role="status" className="text-xs text-ink-muted" data-testid="obs-trace-band-capped">
+          Searched the {formatCount(rows.length)} newest traces at least {formatDuration(bandRegion.minMs)} long; older ones in this band are not loaded. Load more below, or
+          narrow the time range.
+        </p>
+      )}
+      {traces.isLoading || (bandPaging && visibleRows.length === 0) ? (
         <Card padding="none">
           <ObsLoadingRows testId="obs-traces-loading" />
         </Card>
@@ -248,23 +289,30 @@ function TraceList({
           filtered={filtered}
           onWiden={() => navigate({ range: "7d" })}
           onClearFilters={() =>
-            navigate({ q: undefined, service: undefined, errors: undefined, minDuration: undefined, user: undefined, rsession: undefined, ...NO_CLIENT_FILTERS })
+            navigate({ q: undefined, service: undefined, errors: undefined, minDuration: undefined, lat: undefined, user: undefined, rsession: undefined, ...NO_CLIENT_FILTERS })
           }
         />
       ) : region && visibleRows.length === 0 ? (
         <Card className="text-center" data-testid="obs-trace-region-empty">
           <p className="text-sm font-medium text-ink">No loaded traces fall in the selected region</p>
           <p className="mt-1 text-xs text-ink-muted">Drag a larger region on the chart, or clear the selection to see every loaded trace.</p>
-          <Button variant="outline" size="sm" className="mt-3" onClick={() => setSelection(null)}>
-            Clear selection
-          </Button>
+          <div className="mt-3 flex justify-center gap-2">
+            {traces.hasNextPage && (
+              <Button variant="outline" size="sm" onClick={() => void traces.fetchNextPage()} disabled={traces.isFetchingNextPage} data-testid="obs-trace-region-more">
+                Load more traces
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={() => selectRegion(null)}>
+              Clear selection
+            </Button>
+          </div>
         </Card>
       ) : rows.length > 0 ? (
         <TraceTable
           traces={visibleRows}
           subject={subject}
           hasMore={!!traces.hasNextPage}
-          loadingMore={traces.isFetchingNextPage}
+          loadingMore={traces.isFetchingNextPage || bandPaging}
           onLoadMore={() => void traces.fetchNextPage()}
           onOpen={(traceId) => navigate({ trace: traceId, span: undefined })}
           onUser={(id) => navigate({ user: id }, { replace: true })}
@@ -273,6 +321,9 @@ function TraceList({
     </div>
   );
 }
+
+/** How many pages (of TRACE_PAGE_SIZE) a latency band reads on its own before it asks the user to load more. */
+export const BAND_MAX_PAGES = 20;
 
 const NO_KEYS: string[] = [];
 const NO_TOKENS: FilterToken[] = [];
