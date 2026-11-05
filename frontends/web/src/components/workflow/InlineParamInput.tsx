@@ -189,6 +189,8 @@ function InlineEnumInput({
   const options = selectableOptions(allOptions);
   const isMode = isExecutionMode(allOptions);
   const currentValue = value ?? getInputDefault(schema) ?? allOptions[0] ?? "";
+  // An execution mode on a value the menu does not list ("auto") shows "Default" checked.
+  const isDefaultMode = isMode && !options.includes(String(currentValue));
   const canInteract = !isStreaming && !disabled;
 
   // Close dropdown when clicking outside
@@ -253,6 +255,24 @@ function InlineEnumInput({
           )}
         >
           <div className="py-1">
+            {isMode && (
+              // "auto" is not listed, so the way back to the parameter's
+              // default is an explicit entry that drops the override.
+              <button
+                onClick={() => {
+                  onChange(undefined);
+                  setIsOpen(false);
+                }}
+                className={cn(
+                  "w-full flex items-center justify-between gap-2 px-3 py-1.5 text-left text-xs",
+                  "hover:bg-accent transition-colors",
+                  isDefaultMode && "bg-accent"
+                )}
+              >
+                <span>Default</span>
+                {isDefaultMode && <Check className="w-3 h-3 text-primary-ink flex-shrink-0" />}
+              </button>
+            )}
             {options.map((option) => {
               const isSelected = currentValue === option;
               return (

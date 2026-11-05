@@ -1,7 +1,7 @@
 /**
  * The execution-mode pill does not offer "auto". It stays the parameter's
- * default (an untouched pill reads "Default" and sends nothing new), and
- * choosing the active mode again returns to it.
+ * default (an untouched pill reads "Default" and sends nothing new); the
+ * "Default" entry, or choosing the active mode again, returns to it.
  */
 import { describe, it, expect, vi } from "vitest";
 import React from "react";
@@ -46,6 +46,20 @@ describe("InlineParamInput execution mode", () => {
     await userEvent.click(screen.getAllByRole("button", { name: "Plan" }).at(-1)!);
     // A reset, not the literal "auto": the host drops the key.
     expect(onChange).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it("offers Default to return to the parameter's default after picking a mode", async () => {
+    const { pill, onChange } = renderPill("plan");
+    await userEvent.click(pill);
+    await userEvent.click(screen.getByRole("button", { name: "Default" }));
+    expect(onChange).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it("checks Default while the mode is auto", async () => {
+    const { pill } = renderPill("auto");
+    await userEvent.click(pill);
+    expect(screen.getByRole("button", { name: "Default" }).className).toMatch(/(^|\s)bg-accent/);
+    expect(screen.getByRole("button", { name: "Plan" }).className).not.toMatch(/(^|\s)bg-accent/);
   });
 
   it("still lists auto in an enum that is not an execution mode", async () => {
