@@ -50,6 +50,10 @@ Each version of Reliant converts to the [Apache License 2.0](https://www.apache.
 
 **Yes.** Contact [licensing@reliantlabs.io](mailto:licensing@reliantlabs.io) to discuss alternative licensing arrangements.
 
+## Is the Reliant SDK covered by the BSL?
+
+**No.** The Go SDK (`github.com/reliant-labs/reliant/sdk/go`, the `sdk/go` directory of the Reliant repository) is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0), so you can embed it in your own software without restriction. It is a client for Reliant's public API; the rest of the repository stays under the BSL.
+
 ## Is Forge covered by the BSL?
 
 **No.** [Forge](https://github.com/reliant-labs/forge) is open source under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). That covers the Forge CLI, the `github.com/reliant-labs/forge/pkg` libraries your services import, and the `@reliantlabs/forge-web-runtime` package your frontends bundle. Forge versions published before the switch were released under the BSL. Reliant Labs also licenses every one of those versions under Apache 2.0, so you can use any of them under either license.

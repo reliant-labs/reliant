@@ -240,6 +240,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 			"title":         title,
 			"created_at":    approval.CreatedAt.Format(time.RFC3339),
 		}
+		db.AttributeApprovalUpdate(updateData, approval)
 
 		updateDataJSON, err := json.Marshal(updateData)
 		if err != nil {

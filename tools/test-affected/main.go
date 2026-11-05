@@ -686,7 +686,33 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	return out
 }
 
+// sdkModuleDir is the SDK's own Go module: the root module's `./...` stops at
+// its go.mod, so its tests are a step of their own.
+const sdkModuleDir = "sdk/go"
+
+// touchesSDK reports whether the change includes a file of the SDK module.
+func touchesSDK(pl *Plan) bool {
+	return slices.ContainsFunc(pl.Files, func(f FileReport) bool {
+		return strings.HasPrefix(f.Path, sdkModuleDir+"/")
+	})
+}
+
 func (r *runner) goSteps(pl *Plan) []step {
+	steps := r.rootGoSteps(pl)
+	// Only when the change touches the SDK: a full lane runs the root module's
+	// ./... and has always meant exactly that. The release gate's `task test`
+	// runs the SDK module too (Taskfile.yml).
+	if touchesSDK(pl) {
+		steps = append(steps, step{
+			name: "go (sdk module)",
+			dir:  filepath.Join(r.root, sdkModuleDir),
+			argv: []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "5m", "./..."},
+		})
+	}
+	return steps
+}
+
+func (r *runner) rootGoSteps(pl *Plan) []step {
 	// -timeout is per package binary and matches task test:short's (5m): the
 	// DB-backed packages run under -short too (sized in Taskfile.yml).
 	base := []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "5m"}

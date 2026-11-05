@@ -1,0 +1,86 @@
+# The PUBLIC Reliant API: which rpcs the Go SDK (sdk/go) and its generated
+# clients expose.
+#
+# Modelled on control-plane's proto/public-api.txt, at RPC granularity because
+# services here are mixed (TriggerService has FireTrigger and EnableWorkflow).
+#
+# EVERY service under proto/reliant/v1 appears exactly once, as
+#
+#   export   <Service>             all of its rpcs are public
+#   partial  <Service>             only the `export <Service>/<Rpc>` lines below
+#   withhold <Service>             none is public
+#
+# and every `export <Service>/<Rpc>` names a real rpc of a `partial` service.
+# internal/buildmode/sdk_public_api_test.go fails on an unclassified service, so
+# nothing becomes public by default. It also checks that buf.gen.yaml's SDK
+# `types:` list, the SDK-only M mappings and the generated tree in sdk/go/gen
+# all say exactly what this file says.
+#
+# NEVER publish (the test refuses them even if listed): the activation rpcs
+# (EnableWorkflow, DisableWorkflow, SetTriggerEnabled, CreateTrigger,
+# UpdateTrigger, DeleteTrigger, RotateWebhookToken), approval decisions
+# (Approve, Deny, BatchApprove, BatchDeny), token minting (TokenService), the
+# chat's daemon wiring (SetChatDaemon) and every daemon-facing service.
+#
+# Stability: PauseRun, ResumeRun and InterruptRun are beta (their semantics
+# are still settling); the rest is stable within reliant.v1.
+
+# --- Runs: start, observe and steer an execution. ---------------------------
+export   RunService
+
+# --- Triggers: read an automation, fire it, and follow what it launched. ----
+partial  TriggerService
+export   TriggerService/GetTrigger
+export   TriggerService/ListTriggers
+export   TriggerService/FireTrigger
+export   TriggerService/ListTriggerEvents
+export   TriggerService/GetLaunchEvent
+
+# --- What following a run needs. -------------------------------------------
+# A run's progress is the update feed of the session it lives in, and its open
+# gates are that session's questions and approvals. The SDK reads them to follow
+# a run, list its gates and answer a question. No Chat verb is exposed.
+partial  ChatService
+export   ChatService/GetChatUpdates
+export   ChatService/GetWorkflowExecutions
+
+partial  QuestionService
+export   QuestionService/ListPendingQuestions
+export   QuestionService/ResolveQuestion
+
+# Reads only. Approve and Deny need a person and are never public.
+partial  ApprovalService
+export   ApprovalService/ListApprovalsByChat
+
+withhold AccountService           # not part of the first public surface
+withhold AttachmentService        # not part of the first public surface
+withhold BackgroundService        # daemon-facing wiring
+withhold CatalogService           # not part of the first public surface
+withhold ConnectionService        # not part of the first public surface
+withhold ConnectorService         # not part of the first public surface
+withhold DaemonService            # daemon-facing wiring
+withhold DaemonRegistryService    # daemon-facing wiring
+withhold FileSystemService        # daemon-facing wiring
+withhold ForgeService             # not part of the first public surface
+withhold InboxService             # not part of the first public surface
+withhold MCPService               # not part of the first public surface
+withhold MessageService           # not part of the first public surface
+withhold ModelEndpointService     # not part of the first public surface
+withhold PackageCommandsService   # daemon-facing wiring
+withhold PlanService              # not part of the first public surface
+withhold PresetService            # not part of the first public surface
+withhold ProjectService           # not part of the first public surface
+withhold ProviderAccountService   # not part of the first public surface
+withhold RepoService              # not part of the first public surface
+withhold ScenarioService          # not part of the first public surface
+withhold SettingsService          # not part of the first public surface
+withhold StreamingService         # UI plumbing; a run-shaped stream is a later addition
+withhold SystemService            # not part of the first public surface
+withhold TaskService              # not part of the first public surface
+withhold TerminalService          # daemon-facing wiring
+withhold TokenService             # token minting: a token never mints a token
+withhold ToolCallService          # not part of the first public surface
+withhold ToolsDaemonService       # daemon-facing wiring
+withhold UsageService             # not part of the first public surface
+withhold WorkflowService          # authoring; read-only workflow verbs come later
+withhold WorktreeService          # not part of the first public surface
