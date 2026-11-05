@@ -126,11 +126,12 @@ func forgeNameOf(project *db.Project) string {
 // without one never matches another.
 //
 // Only proven equivalences are folded: credentials, a trailing "/" or ".git",
-// the host's case, a scheme's default port, and the path's case on hosts whose
-// repository names are case-insensitive (caseInsensitivePathHosts). Any other
-// port, or the path's case elsewhere, can name a different repository (another
-// server, or a case-sensitive host serving Team/App beside team/app), so it is
-// kept and such remotes never match.
+// the host's case, a scheme's default port, the scp-like and ssh:// spellings
+// of one ssh remote, and, on GitHub (githubHosts) alone, the transport and the
+// path's case. Anything else can name a different repository (another server
+// on another port or transport, or a case-sensitive host serving Team/App
+// beside team/app), so it is kept and such remotes never match: on any other
+// host, ssh://host/team/app and https://host/team/app stay distinct.
 func remoteIdentity(raw *string) string {
 	if raw == nil {
 		return ""
@@ -143,8 +144,11 @@ func remoteIdentity(raw *string) string {
 	if i := strings.Index(s, "://"); i >= 0 {
 		scheme, s = strings.ToLower(s[:i]), s[i+3:]
 	} else if i := strings.Index(s, ":"); i >= 0 && !strings.Contains(s[:i], "/") {
-		// scp-like: [user@]host:path. Its ":" never introduces a port.
-		s = s[:i] + "/" + s[i+1:]
+		// scp-like: [user@]host:path is ssh. Its ":" never introduces a port.
+		scheme, s = "ssh", s[:i]+"/"+s[i+1:]
+	}
+	if scheme == "git+ssh" || scheme == "ssh+git" {
+		scheme = "ssh"
 	}
 	host, path, _ := strings.Cut(s, "/")
 	if i := strings.LastIndex(host, "@"); i >= 0 {
@@ -156,19 +160,21 @@ func remoteIdentity(raw *string) string {
 	}
 	path = strings.TrimSuffix(strings.TrimRight(path, "/"), ".git")
 	path = strings.TrimRight(path, "/")
-	if caseInsensitivePathHosts[host] {
-		path = strings.ToLower(path)
-	}
 	if host == "" || path == "" {
 		return ""
 	}
-	return host + "/" + path
+	if githubHosts[host] {
+		return host + "/" + strings.ToLower(path)
+	}
+	// Elsewhere the transport is part of the identity: one hostname can run
+	// independent ssh and http(s) services, each with its own repositories.
+	return scheme + "://" + host + "/" + path
 }
 
 // defaultGitPorts is the port each git transport uses when a URL names none,
 // so "ssh://host:22/x" is the same remote as "ssh://host/x".
-var defaultGitPorts = map[string]string{"ssh": "22", "git+ssh": "22", "https": "443", "http": "80", "git": "9418"}
+var defaultGitPorts = map[string]string{"ssh": "22", "https": "443", "http": "80", "git": "9418"}
 
-// caseInsensitivePathHosts are the hosts known to resolve a repository path
-// regardless of case (GitHub's owner and repository names are).
-var caseInsensitivePathHosts = map[string]bool{"github.com": true, "www.github.com": true}
+// githubHosts are GitHub's hosts, known to serve one repository namespace on
+// every transport and to resolve a repository path regardless of case.
+var githubHosts = map[string]bool{"github.com": true, "www.github.com": true}

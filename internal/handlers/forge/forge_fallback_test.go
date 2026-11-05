@@ -293,6 +293,8 @@ func TestForgeService_ARemoteThatMayBeAnotherRepositoryNeverAnswers(t *testing.T
 		{"another nondefault port", "ssh://git@git.example:2222/team/app.git", "ssh://git@git.example:2223/team/app.git"},
 		{"the default port against a nondefault one", "ssh://git@git.example/team/app.git", "ssh://git@git.example:2223/team/app.git"},
 		{"another path case on a case-sensitive host", "git@git.example:Team/App.git", "git@git.example:team/app.git"},
+		{"ssh and https on one host, default ports", "ssh://git@git.example:22/team/app.git", "https://git.example:443/team/app.git"},
+		{"scp-like ssh and https on one host", "git@git.example:team/app.git", "https://git.example/team/app.git"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := fallbackRepo(
@@ -349,9 +351,15 @@ func TestRemoteIdentity(t *testing.T) {
 		// A case-sensitive host can serve both.
 		{"https://git.example/Team/App.git", "https://git.example/team/app.git"},
 		{"git@gitlab.com:Team/App.git", "git@gitlab.com:team/app.git"},
+		// One host can run independent ssh and http(s) services.
+		{"ssh://git@git.example:22/team/app.git", "https://git.example:443/team/app.git"},
+		{"git@git.example:team/app.git", "https://git.example/team/app.git"},
+		{"http://git.example/team/app.git", "https://git.example/team/app.git"},
 	}
 	for _, pair := range distinct {
 		assert.NotEqual(t, remoteIdentity(str(pair[0])), remoteIdentity(str(pair[1])), pair)
 	}
 	assert.Equal(t, remoteIdentity(str("ssh://git@Git.Example:22/team/app")), remoteIdentity(str("git@git.example:team/app.git")))
+	assert.Equal(t, remoteIdentity(str("git+ssh://git@git.example/team/app")), remoteIdentity(str("git@git.example:team/app.git")))
+	assert.Equal(t, remoteIdentity(str("https://git.example:443/team/app")), remoteIdentity(str("https://git.example/team/app.git")))
 }
