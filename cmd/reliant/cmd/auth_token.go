@@ -4,13 +4,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"connectrpc.com/connect"
-	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/spf13/cobra"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -43,45 +41,8 @@ func tokenServiceClient(conn *connection, bearer string) reliantv1connect.TokenS
 	return reliantv1connect.NewTokenServiceClient(conn.httpClientWithBearer(bearer), conn.ServerURL)
 }
 
-// tokenScopesFromFlags resolves repeated --scope values to the scopes to
-// request. No flag keeps today's token, reliant:api. Otherwise each value must
-// be reliant:api or one of the narrow runs/triggers scopes; anything else is a
-// different product's scope and is refused here rather than silently clipped.
-func tokenScopesFromFlags(flags []string) ([]string, error) {
-	if len(flags) == 0 {
-		return []string{cliauth.ScopeAPI}, nil
-	}
-	seen := map[string]bool{}
-	var out []string
-	for _, raw := range flags {
-		for _, part := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ' ' }) {
-			sc, ok := fat.ParseScope(part)
-			if !ok || (sc != fat.ScopeReliantAPI && !slices.Contains(fat.RunsAndTriggersScopes, sc)) {
-				return nil, fmt.Errorf("--scope %q: want %s", part, tokenScopeChoices())
-			}
-			if !seen[part] {
-				seen[part] = true
-				out = append(out, part)
-			}
-		}
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("--scope needs a value: %s", tokenScopeChoices())
-	}
-	return out, nil
-}
-
-func tokenScopeChoices() string {
-	names := []string{cliauth.ScopeAPI}
-	for _, sc := range fat.RunsAndTriggersScopes {
-		names = append(names, string(sc))
-	}
-	return strings.Join(names, ", ")
-}
-
 func newAuthTokenCreateCmd() *cobra.Command {
 	var name string
-	var scopeFlags []string
 
 	cmd := &cobra.Command{
 		Use:   "create",
@@ -91,19 +52,10 @@ browser login you approve, and prints it once. It is NOT stored: this CLI
 keeps using its own login. Hand the printed token to automation as
 RELIANT_TOKEN.
 
-Re-running with the same --name replaces that token.
-
---scope (repeatable) narrows the token to part of the API instead of all of it:
-runs:start, runs:read, runs:control, triggers:fire or triggers:manage. Without
-it the token is reliant:api, as before. A narrow token reaches only the rpcs
-its scopes cover and gets PermissionDenied (scope_missing) on the rest.`,
+Re-running with the same --name replaces that token.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if strings.TrimSpace(name) == "" {
 				return fmt.Errorf("--name is required")
-			}
-			scopes, err := tokenScopesFromFlags(scopeFlags)
-			if err != nil {
-				return err
 			}
 			conn, err := resolveServer(cmd)
 			if err != nil {
@@ -111,7 +63,7 @@ its scopes cover and gets PermissionDenied (scope_missing) on the rest.`,
 			}
 			cred, err := cliauth.Login{
 				Server:  conn.ServerURL,
-				Scopes:  scopes,
+				Scopes:  []string{cliauth.ScopeAPI},
 				Name:    name,
 				Out:     cmd.ErrOrStderr(),
 				OpenURL: loginOpener,
@@ -133,7 +85,6 @@ its scopes cover and gets PermissionDenied (scope_missing) on the rest.`,
 	}
 
 	cmd.Flags().StringVar(&name, "name", "", "Label for the token, e.g. ci-deploy (required)")
-	cmd.Flags().StringSliceVar(&scopeFlags, "scope", nil, "Narrow the token to a scope (repeatable): "+tokenScopeChoices()+". Default reliant:api")
 	return cmd
 }
 
