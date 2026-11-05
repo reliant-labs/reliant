@@ -199,7 +199,7 @@ type daemonConnection struct {
 
 	// terminalSubs tracks subscribers for terminal output, keyed by sessionID.
 	terminalSubsMu sync.Mutex
-	terminalSubs   map[string][]chan *toolexec.TerminalOutputEvent
+	terminalSubs   map[string][]*toolexec.TerminalOutputQueue
 
 	// pendingToolRequests tracks in-flight synchronous tool requests awaiting responses.
 	// Key is request_id, value is a channel that receives the response.

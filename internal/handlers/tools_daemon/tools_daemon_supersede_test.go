@@ -86,7 +86,7 @@ func newTestConn(userID, daemonID string, stream daemonStream) *daemonConnection
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
 		pendingToolRequests: make(map[string]chan *toolexec.ToolExecutionResponse),
-		terminalSubs:        make(map[string][]chan *toolexec.TerminalOutputEvent),
+		terminalSubs:        make(map[string][]*toolexec.TerminalOutputQueue),
 		processOutputSubs:   make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 }

@@ -1683,20 +1683,30 @@ func (r *NATSDaemonRouter) SubscribeTerminalOutput(ctx context.Context, userID s
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolving daemon for terminal output: %w", err)
 	}
-	ch := make(chan *TerminalOutputEvent, 64)
+	queue := NewTerminalOutputQueue(sessionID, TerminalOutputQueueCapacity, terminalOutputSendTimeout)
 	subject := daemonSubject(terminalOutputSubject, userID, resolvedDaemonID) + "." + sessionID
 
+	// The callback runs on this subscription's own goroutine, so waiting in
+	// it for the websocket pump holds up only this session. A pump still full
+	// after terminalOutputSendTimeout ends the session (TerminalOutputQueue);
+	// so does a subscription that NATS itself had to drop messages from as a
+	// slow consumer, the one loss the queue cannot see.
 	sub, err := r.nc.Subscribe(subject, func(msg *nats.Msg) {
+		if dropped, _ := msg.Sub.Dropped(); dropped > 0 {
+			r.terminalOutputOverflowed(ctx, msg.Sub, "nats", userID, sessionID, "dropped", dropped)
+			queue.Fail()
+			return
+		}
 		var evt TerminalOutputEvent
 		if err := json.Unmarshal(msg.Data, &evt); err != nil {
 			return
 		}
-		select {
-		case ch <- &evt:
-		default:
+		if err := queue.Send(&evt); errors.Is(err, ErrTerminalOutputOverflow) {
+			r.terminalOutputOverflowed(ctx, msg.Sub, "api", userID, sessionID, "timeout", terminalOutputSendTimeout)
 		}
 	})
 	if err != nil {
+		queue.Close()
 		return nil, nil, fmt.Errorf("subscribe to terminal output via NATS: %w", err)
 	}
 
@@ -1707,26 +1717,42 @@ func (r *NATSDaemonRouter) SubscribeTerminalOutput(ctx context.Context, userID s
 	// established and the initial shell prompt can no longer be dropped. Mirrors
 	// SubscribeProcessOutput, but with the publish deliberately ordered after the
 	// subscribe (the whole point of the terminal fix).
+	unsub := func() {
+		_ = sub.Unsubscribe()
+		queue.Close()
+	}
 	reqPayload, err := json.Marshal(struct {
 		SessionID string `json:"session_id"`
 	}{SessionID: sessionID})
 	if err != nil {
-		_ = sub.Unsubscribe()
+		unsub()
 		return nil, nil, err
 	}
 	subscribeSubject := daemonSubject(terminalSubscribeSubject, userID, resolvedDaemonID) + "." + sessionID
 	subMsg := natsotel.NewMsg(ctx, subscribeSubject, reqPayload)
 	if err := r.nc.PublishMsg(subMsg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.terminal.subscribe", "publish").Inc()
-		_ = sub.Unsubscribe()
+		unsub()
 		return nil, nil, fmt.Errorf("publish terminal output subscribe request via NATS: %w", err)
 	}
 	observability.NATSPublishTotal.WithLabelValues("daemon.terminal.subscribe").Inc()
 
-	unsub := func() {
-		_ = sub.Unsubscribe()
-	}
-	return ch, unsub, nil
+	return queue.C(), unsub, nil
+}
+
+// terminalOutputSendTimeout bounds how long the api-server's NATS callback
+// for a terminal session waits for the websocket pump to take a chunk. A
+// variable so tests can shrink it.
+var terminalOutputSendTimeout = 5 * time.Second
+
+// terminalOutputOverflowed records a terminal session whose output fell
+// behind at stage, and stops its NATS subscription: the queue has failed and
+// delivers the overflow error after what it already holds.
+func (r *NATSDaemonRouter) terminalOutputOverflowed(ctx context.Context, sub *nats.Subscription, stage, userID, sessionID string, detail ...any) {
+	_ = sub.Unsubscribe()
+	observability.TerminalOutputOverflowTotal.WithLabelValues(stage).Inc()
+	logging.WarnContext(ctx, "[NATSDaemonRouter] Terminal output fell behind; ending the session",
+		append([]any{"stage", stage, "user_id", userID, "session_id", sessionID}, detail...)...)
 }
 
 func (r *NATSDaemonRouter) SubscribeProcessOutput(ctx context.Context, userID string, processID string, newOnly bool) (<-chan *ProcessOutputEvent, func(), error) {
