@@ -199,6 +199,13 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   // (for per-node spinners), and an in-flight guard to dedupe concurrent loads.
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
   const inflightRef = useRef<Set<string>>(new Set());
+  // What the tree is currently showing. RightSidebar swaps worktreeId without
+  // remounting us, so a response for the previous workspace (or showHidden
+  // value) can land after the new one and must be dropped, not merged.
+  const scope = `${worktreeId ?? ""}|${showHidden ? 1 : 0}`;
+  const scopeRef = useRef(scope);
+  const [renderedWorktreeId, setRenderedWorktreeId] = useState(worktreeId);
+  const [renderedShowHidden, setRenderedShowHidden] = useState(showHidden);
   // Mirror of expandedPaths readable from callbacks/refresh without stale closures.
   const expandedPathsRef = useRef<Set<string>>(new Set());
   const [newItemName, setNewItemName] = useState("");
@@ -231,6 +238,28 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   const treeRef = useRef<FileNode[]>(tree);
   treeRef.current = tree;
 
+  // Reset during render (not in an effect) so no frame — and no effect — ever
+  // sees the old workspace's nodes under the new worktreeId.
+  if (renderedWorktreeId !== worktreeId || renderedShowHidden !== showHidden) {
+    const worktreeChanged = renderedWorktreeId !== worktreeId;
+    setRenderedWorktreeId(worktreeId);
+    setRenderedShowHidden(showHidden);
+    inflightRef.current.clear();
+    setLoadingPaths(new Set());
+    if (worktreeChanged) {
+      // A different workspace shares no nodes with the old one, so don't let
+      // reconcileChildren merge the new root against them.
+      treeRef.current = [];
+      setTree([]);
+      setLoading(true);
+      setError(null);
+      setWaitingOnDaemon(false);
+      setNoMachine(false);
+      setCheckoutMissing(null);
+    }
+  }
+  scopeRef.current = scope;
+
   const setFocusedPath = useCallback((path: string | null) => {
     if (onFocusedPathChange) {
       onFocusedPathChange(path);
@@ -261,6 +290,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     });
     try {
       const children = await getFileTree(path, showHidden, worktreeId, depth);
+      if (scopeRef.current !== scope) return null;
       setTree((prev) => setChildrenAtPath(prev, path, children, expandedPathsRef.current));
       return children;
     } catch (err) {
@@ -269,14 +299,18 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       console.debug("[FileTree] failed to load children for", path, err);
       return null;
     } finally {
-      inflightRef.current.delete(path);
-      setLoadingPaths((prev) => {
-        const next = new Set(prev);
-        next.delete(path);
-        return next;
-      });
+      // The scope change already cleared these; a stale call must not clear the
+      // new scope's entry for the same path.
+      if (scopeRef.current === scope) {
+        inflightRef.current.delete(path);
+        setLoadingPaths((prev) => {
+          const next = new Set(prev);
+          next.delete(path);
+          return next;
+        });
+      }
     }
-  }, [showHidden, worktreeId]);
+  }, [showHidden, worktreeId, scope]);
 
   // Define loadFileTree early so it can be used in useImperativeHandle
   const loadFileTree = useCallback(async (showLoading = true) => {
@@ -291,11 +325,13 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       // directories load lazily on expand. Reconcile against the existing tree so
       // a refresh doesn't collapse already-expanded subtrees.
       const rootChildren = await getFileTree("/", showHidden, worktreeId, 2);
+      if (scopeRef.current !== scope) return;
       setTree((prev) => reconcileChildren(rootChildren, prev, expandedPathsRef.current));
       setWaitingOnDaemon(false);
       setCheckoutMissing(null);
       setNoMachine(false);
     } catch (err) {
+      if (scopeRef.current !== scope) return;
       const missing = projectCheckoutMissing(err);
       setNoMachine(false);
       if (missing) {
@@ -318,11 +354,11 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
         setError(err instanceof Error ? err.message : "Failed to load file tree");
       }
     } finally {
-      if (showLoading) {
+      if (showLoading && scopeRef.current === scope) {
         setLoading(false);
       }
     }
-  }, [showHidden, worktreeId]);
+  }, [showHidden, worktreeId, scope]);
 
   // The retry cadence now lives in useDaemonWait, so the tree reloads on the
   // same schedule as every other daemon-backed surface.

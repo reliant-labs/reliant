@@ -2345,23 +2345,40 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // the stale tails it drops itself but reads for the abort pass (a marker
     // can ride the same batch as the deltas it ends). The state that only the
     // app projects elsewhere (approvals, questions, threads) is not handed in.
-    const staleTails = rawStreamingDeltas.filter((d) => !liveStreamingDeltas.includes(d));
+    // The batch keeps its server order: what the adapter hands over is the
+    // stream as it arrived, minus what it holds back, never regrouped by kind.
+    // Deltas buffered by an EARLIER batch and released by this one came first.
     const before = chatStateOf(chatId);
-    const folded: ChatUpdate[] = [
-      ...updates.filter(
-        (u) =>
-          u.update_type === "tool_call" ||
-          u.update_type === "error" ||
-          u.update_type === "info" ||
-          u.update_type === "warning" ||
-          u.update_type === "run_output" ||
-          u.update_type === "node_execution" ||
-          u.update_type === "stream_finalized",
-      ),
-      ...messages.map((message): ChatUpdate => ({ update_type: "message", message } as unknown as ChatUpdate)),
-      ...staleTails,
-      ...streamingDeltas,
-    ];
+    const liveSet = new Set<StreamingDelta>(liveStreamingDeltas);
+    const releasedNow = new Set<StreamingDelta>(streamingDeltas);
+    const convertedByUpdate = new Map<ProtoMessageUpdate["message"], Message>(
+      messageUpdates.map((msg, i) => [msg, messages[i]!]),
+    );
+    const inBatch = new Set<ChatUpdate>(updates);
+    const folded: ChatUpdate[] = streamingDeltas.filter((d) => !inBatch.has(d));
+    for (const u of updates) {
+      switch (u.update_type) {
+        case "message": {
+          const message = "message" in u ? convertedByUpdate.get((u as ProtoMessageUpdate).message) : undefined;
+          if (message) folded.push({ update_type: "message", message } as unknown as ChatUpdate);
+          break;
+        }
+        case "streaming_delta":
+          // A stale tail is read for the abort pass; a live delta goes in only
+          // if the frame buffer released it now (the rest flush on the frame).
+          if (!liveSet.has(u as StreamingDelta) || releasedNow.has(u as StreamingDelta)) folded.push(u);
+          break;
+        case "tool_call":
+        case "error":
+        case "info":
+        case "warning":
+        case "run_output":
+        case "node_execution":
+        case "stream_finalized":
+          folded.push(u);
+          break;
+      }
+    }
     const after = reduceChat(
       before,
       isSnapshot

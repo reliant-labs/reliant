@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -150,8 +151,19 @@ func TestForgeStartHerePreload_IsWhatTheCLIPrints(t *testing.T) {
 
 	// Commands are spelled for the mount that serves them, so an agent never
 	// runs a `forge` from PATH that is a different build (or absent).
+	// That covers the whole seed, not only the body: the related-skills list
+	// reliant appends carries forge's descriptions, which forge writes
+	// harness-agnostic (`forge project new`) — forge #1784 put one in the
+	// start-here's sibling list.
 	for _, bare := range []string{"\nforge project new", "`forge project new", "\nforge scaffold"} {
 		require.NotContains(t, seed, bare, "a bare `forge` command leaked into the preload")
+	}
+	for _, loc := range regexp.MustCompile(`\bforge `).FindAllStringIndex(seed, -1) {
+		// A skill path (`forge/forge`) names a skill, not a command.
+		if !strings.HasSuffix(seed[:loc[0]], "reliant ") && !strings.HasSuffix(seed[:loc[0]], "/") {
+			lo, hi := max(0, loc[0]-60), min(len(seed), loc[1]+40)
+			t.Errorf("a bare `forge` command leaked into the preload: …%s…", seed[lo:hi])
+		}
 	}
 	require.True(t, strings.Contains(seed, " forge project new"), "the start-here's commands are missing entirely")
 

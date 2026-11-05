@@ -134,7 +134,7 @@ func TestAdapterWithoutDependenciesFailsInsteadOfPanicking(t *testing.T) {
 	_, err = runs.ResumeRun(ctx, "u", "c")
 	assert.Error(t, err)
 	assert.Error(t, runs.CancelRun(ctx, "u", "c"))
-	_, err = runs.DeliverToRun(ctx, "u", "c", "m")
+	_, err = runs.DeliverToRun(ctx, "u", "c", "m", tools.RunSender{})
 	assert.Error(t, err)
 }
 
@@ -147,7 +147,9 @@ type fakeRunAPI struct {
 	resume   *reliantv1.ResumeRunResponse
 	signal   *reliantv1.SignalRunResponse
 	signaled *reliantv1.SignalRunRequest
-	err      error
+	// originSeen is the message origin SignalRun was called under.
+	originSeen db.MessageOrigin
+	err        error
 }
 
 func (f *fakeRunAPI) record(ctx context.Context, call string) {
@@ -175,6 +177,7 @@ func (f *fakeRunAPI) CancelRun(ctx context.Context, r *connect.Request[reliantv1
 func (f *fakeRunAPI) SignalRun(ctx context.Context, r *connect.Request[reliantv1.SignalRunRequest]) (*connect.Response[reliantv1.SignalRunResponse], error) {
 	f.record(ctx, "signal:"+r.Msg.RunId)
 	f.signaled = r.Msg
+	f.originSeen, _ = db.MessageOriginFrom(ctx)
 	return connect.NewResponse(f.signal), f.err
 }
 
@@ -216,16 +219,22 @@ func TestLifecycleSurfacesServiceErrors(t *testing.T) {
 
 func TestDeliverToRunUsesSignalRunSemantics(t *testing.T) {
 	api := &fakeRunAPI{signal: &reliantv1.SignalRunResponse{Delivered: true, MessageIds: []string{"m-1"}}}
-	delivery, err := New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "hello")
+	delivery, err := New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "hello",
+		tools.RunSender{ThreadID: "sender-run", Subject: "status"})
 	require.NoError(t, err)
 	assert.Equal(t, tools.RunDelivery{Delivered: true, MessageID: "m-1"}, delivery)
 	assert.Equal(t, "owner", api.userSeen)
+	assert.Equal(t, db.MessageOrigin{
+		ThreadID: "sender-run",
+		Kind:     core.AgentMessageKindRunMessage,
+		Subject:  "status",
+	}, api.originSeen, "SignalRun saves the message as the sending run's, not the owner's")
 	require.Len(t, api.signaled.Messages, 1)
 	assert.Equal(t, reliantv1.MessageRole_MESSAGE_ROLE_USER, api.signaled.Messages[0].Role)
 	assert.Equal(t, "hello", api.signaled.Messages[0].Content)
 
 	api.signal = &reliantv1.SignalRunResponse{Delivered: false}
-	delivery, err = New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "hello")
+	delivery, err = New(nil, api).DeliverToRun(context.Background(), "owner", "chat-x", "hello", tools.RunSender{ThreadID: "sender-run"})
 	require.NoError(t, err)
 	assert.False(t, delivery.Delivered, "SignalRun reports a non-live run as delivered=false, never an error")
 }

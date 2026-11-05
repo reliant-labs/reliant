@@ -23,7 +23,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=f4e7d7c4bd9ac829d5571c9fccca472326df3b65823a803100cb9d9df3c38686
+// forge:hash=052d05f3d1615f74f7d0b9ec14d8bcbd026aa7d62b68cbe93359e448aa16a208
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -96,6 +96,7 @@ type MockRepository struct {
 	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
+	SenderTitleFunc                                func(context.Context, string) *string
 	CreateWorkflowFunc                             func(context.Context, *db.Workflow) error
 	UpdateThreadWorkflowFunc                       func(context.Context, string, string) (*db.Thread, error)
 	CreateContextWindowFunc                        func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -179,8 +180,8 @@ type MockRepository struct {
 	UpdateWorkflowNameFunc                         func(context.Context, string, string) error
 	WorkflowSourceDiagnosticFunc                   func(context.Context, string, string, string) (string, error)
 	PinChatDaemonIfUnsetFunc                       func(context.Context, string, string) (string, error)
-	ListThreadsByIDsFunc                           func(context.Context, []string) ([]*db.Thread, error)
 	ListToolCallsByIDsFunc                         func(context.Context, []string) ([]*db.ToolCall, error)
+	SenderTitlesFunc                               func(context.Context, []string) (map[string]string, error)
 }
 
 // ListChats records the call and delegates to ListChatsFunc when set.
@@ -748,6 +749,15 @@ func (m *MockRepository) GetRootThread(ctx context.Context, conversationID strin
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetRootThread")
+}
+
+// SenderTitle records the call and delegates to SenderTitleFunc when set.
+func (m *MockRepository) SenderTitle(ctx context.Context, threadID string) *string {
+	m.Recorder.Record("SenderTitle", ctx, threadID)
+	if m.SenderTitleFunc != nil {
+		return m.SenderTitleFunc(ctx, threadID)
+	}
+	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -1497,15 +1507,6 @@ func (m *MockRepository) PinChatDaemonIfUnset(ctx context.Context, chatID string
 	return "", contractkit.MockNotSet("MockRepository", "PinChatDaemonIfUnset")
 }
 
-// ListThreadsByIDs records the call and delegates to ListThreadsByIDsFunc when set.
-func (m *MockRepository) ListThreadsByIDs(ctx context.Context, ids []string) ([]*db.Thread, error) {
-	m.Recorder.Record("ListThreadsByIDs", ctx, ids)
-	if m.ListThreadsByIDsFunc != nil {
-		return m.ListThreadsByIDsFunc(ctx, ids)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListThreadsByIDs")
-}
-
 // ListToolCallsByIDs records the call and delegates to ListToolCallsByIDsFunc when set.
 func (m *MockRepository) ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*db.ToolCall, error) {
 	m.Recorder.Record("ListToolCallsByIDs", ctx, toolCallIDs)
@@ -1513,6 +1514,15 @@ func (m *MockRepository) ListToolCallsByIDs(ctx context.Context, toolCallIDs []s
 		return m.ListToolCallsByIDsFunc(ctx, toolCallIDs)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListToolCallsByIDs")
+}
+
+// SenderTitles records the call and delegates to SenderTitlesFunc when set.
+func (m *MockRepository) SenderTitles(ctx context.Context, threadIDs []string) (map[string]string, error) {
+	m.Recorder.Record("SenderTitles", ctx, threadIDs)
+	if m.SenderTitlesFunc != nil {
+		return m.SenderTitlesFunc(ctx, threadIDs)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "SenderTitles")
 }
 
 // Compile-time check.

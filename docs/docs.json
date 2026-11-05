@@ -75,6 +75,15 @@
             ]
           },
           {
+            "group": "SDK",
+            "pages": [
+              "sdk/overview",
+              "sdk/go",
+              "sdk/typescript",
+              "sdk/reference"
+            ]
+          },
+          {
             "group": "Automations & integrations",
             "pages": [
               "automations/overview",

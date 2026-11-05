@@ -1,0 +1,469 @@
+---
+title: "Go SDK"
+description: "Start a run and follow it to a verdict, list runs, answer a question, fire a trigger, call a webhook and handle errors, with Reliant's Go client"
+---
+
+The Go SDK is the client for backends, workers and tools that need to drive Reliant: start a run, wait for it to pass or fail, answer a question it asks, fire an automation, or deliver an event to a webhook. This page walks through each of those. Every example here is compiled with the SDK itself, as `sdk/go/reliant/example_test.go` in the [Reliant repository](https://github.com/reliant-labs/reliant), so a name that appears on this page exists. The examples need a live server and a token to actually run, so the tests compile them without running them. To keep each one short, the snippets leave out the two lines they all begin with, and a few use `log.Fatal` where your code would return an error:
+
+```go
+ctx := context.Background()
+c, err := reliant.FromEnv()
+```
+
+## Install and connect
+
+Require the module at a commit of `main`. There are no tagged releases yet, so Go records a pseudo-version; [Versioning](/sdk/overview#versioning) explains how to pin it. It needs Go 1.27 or newer.
+
+```bash
+go get github.com/reliant-labs/reliant/sdk/go@main
+```
+
+Create an [API token](/sdk/overview#credentials) with `reliant auth token create --name <your-app>` and give it to your program in `RELIANT_TOKEN`. That token has the whole `reliant:api` permission; [Scopes](/sdk/overview#scopes) says which calls a narrower one can make. `reliant.FromEnv` builds a client from that variable and, if you run your own Reliant server, from `RELIANT_SERVER_URL`. It reads nothing else: no credential file and no stored login, so a service never picks up a developer's sign-in by accident.
+
+```go
+import "github.com/reliant-labs/reliant/sdk/go/reliant"
+
+c, err := reliant.FromEnv()
+if err != nil {
+	log.Fatal(err)
+}
+```
+
+The client has three parts, each a field: `c.Runs`, `c.Gates` and `c.Triggers`. It is safe to share between goroutines. To pass the token yourself, use `reliant.New` with `WithToken`, and `WithBaseURL` for another server. The base URL must be `https`: a bearer token that crosses a network in the clear can be read by anyone on the path. For a dev server on your own machine, add `WithInsecureLoopback()`, which allows plain `http` to `localhost`, `127.0.0.0/8` and `::1` and nothing else. For a self-hosted server on a network you trust but not on your own machine, `WithInsecureHTTP()` allows plain `http` to any host. Use it knowingly: the token is readable by anyone on the path. Redirects off the base URL's origin are refused either way.
+
+A token expires after 90 days, so a long-running service should not hold one in a variable. `WithTokenSource` takes a function that the client calls for every request, which lets you read the token from a mounted secret that something else rotates:
+
+```go
+c, err := reliant.New(reliant.WithTokenSource(func(context.Context) (string, error) {
+	b, err := os.ReadFile("/run/secrets/reliant_token")
+	return strings.TrimSpace(string(b)), err
+}))
+```
+
+Make that function cheap or cache its result, since it runs on every request. The client sends the token only to its own server and refuses a redirect to any other, so a misconfigured proxy cannot carry it elsewhere.
+
+## Start a run and follow it to a verdict
+
+`Runs.Start` begins a workflow and returns as soon as it is dispatched. The run it returns is pending or active, not finished. `Workflow` is `builtin://agent`, another `builtin://` workflow, or the name of one you saved. Bare built-in names are not resolved, so spell out the `builtin://`. `Message` is the run's first message, `Inputs` are the workflow's declared input parameters, and `SessionID` runs the workflow inside an existing session so it reads and writes that conversation.
+
+`Runs.Follow` then watches the run. It polls the server (every two seconds unless you set `Interval`) and gives you two things: a channel of events, one for each boundary the run crosses, and a verdict from `Wait`.
+
+```go
+run, err := c.Runs.Start(ctx, reliant.StartRun{
+	Workflow: "builtin://agent",
+	Message:  "fix the failing test in ./internal/billing",
+})
+if err != nil {
+	log.Fatal(err)
+}
+
+f, err := c.Runs.Follow(ctx, run.GetId(), reliant.FollowOptions{Timeout: 30 * time.Minute})
+if err != nil {
+	log.Fatal(err)
+}
+for ev := range f.Events() {
+	fmt.Println(ev.Event, ev.NodeID)
+}
+
+res, err := f.Wait()
+if err != nil {
+	log.Fatal(err)
+}
+switch {
+case res.Succeeded:
+	fmt.Println("passed")
+case res.TimedOut:
+	fmt.Println("still running; follow it again later")
+default:
+	log.Fatalf("did not pass: status=%s outcome=%s", res.Status, res.Outcome)
+}
+```
+
+The events are the run's control flow, not its transcript: `node_started`, `node_completed`, `node_failed`, `node_skipped`, the `workflow_*` boundaries, and gates (`question`, `approval` and their `_resolved`/`_answered` counterparts). The constants are `reliant.EventNodeStarted` and so on. A step that ran a command and got a non-zero exit code arrives as `node_failed`, not `node_completed`, and a gate is reported once whether it opened while you were attached or before. If you only want the verdict, skip the loop and call `Wait`, which drains the events for you. If you do read them, read them all, or call `Wait`: a consumer that stops reading stalls the follow, though it never loses events. `f.Close()` ends a follow early. A poll that fails is retried quietly; set `FollowOptions.Log` to an `io.Writer` such as `os.Stderr` to see those retries, one line each. Nil is silent, and a failure that ends the follow is returned by `Wait` whether or not you set it.
+
+### Did it succeed?
+
+Look at `res.Succeeded`, not at `res.Status`. A run's **status** says whether it finished (`completed`, `failed` or `cancelled`), and its **outcome** says whether the work passed (`success` or `failure`, or empty if the workflow declared none). A workflow that fails verification routes to its failure node and then ends normally, so its status is `completed` while its outcome is `failure`. `Succeeded` is true only when the run completed and did not declare failure. Reading the status alone calls that run a success, and it is the easiest mistake to make with this API. `reliant.Succeeded(status, outcome)` does the same combination for values you hold yourself.
+
+`FollowResult` also tells you why a follow ended without a verdict. `TimedOut` is true if your `Timeout` elapsed first, which is not a failure of the run. `StoppedOnGate` is true if you asked to stop at a gate (below). `ExitCode` is the code `reliant workflow follow` would exit with: 0 passed, 1 failed, cancelled or errored, 2 timed out, 3 stopped on a gate. A follow that cannot reach the server for 15 polls in a row gives up and returns the error.
+
+### A snapshot instead of a stream
+
+`Runs.Status` reads a run once: its status and outcome as separate fields, `Succeeded`, the tree of node threads, the steps each ran, and the gates it is waiting on. Use it when a request handler asks "how is run X doing?" and should not block.
+
+```go
+st, err := c.Runs.Status(ctx, "run-id")
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Printf("%s: status=%s outcome=%q succeeded=%v\n", st.Workflow, st.Status, st.Outcome, st.Succeeded)
+for _, g := range st.Gates {
+	fmt.Println("waiting on", g.Kind, g.ID)
+}
+```
+
+When a trigger starts a run for you, you hold the session id rather than the run id (it is the `ChatId` of the trigger event). `Runs.FollowSession` and `Runs.StatusSession` take that instead and report the session's current run.
+
+## List runs
+
+`Runs.List` returns an iterator, newest runs first. It fetches a page at a time as you advance, so nothing is requested until you call `Next`, and it follows the server's page tokens until the list ends. Filters narrow the list on the server:
+
+```go
+since := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
+it := c.Runs.List(ctx, reliant.ListRuns{
+	Workflow:      []string{"builtin://agent"},
+	DisplayStates: []reliant.RunDisplayState{reliantv1.RunDisplayState_RUN_DISPLAY_STATE_FAILED},
+	StartedAfter:  since,
+	Limit:         20,
+})
+for it.Next() {
+	run := it.Value()
+	fmt.Println(run.GetId(), run.GetTitle(), run.GetFailureDetail())
+}
+if err := it.Err(); err != nil {
+	log.Fatal(err)
+}
+```
+
+`reliantv1` is `github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1`; the SDK's `RunDisplayState` is an alias for its enum. Always check `it.Err()` after the loop, because `Next` returns false both at the end of the list and on failure.
+
+| `ListRuns` field | Narrows to |
+|---|---|
+| `Workflow` | Runs of any of these workflow names |
+| `DisplayStates` | Runs in any of these states: queued, running, needs input, paused, completed, failed, cancelled, waiting for machine |
+| `State` | A lifecycle state (pending, active, stopped). `DisplayStates` is usually what you want |
+| `ProjectID`, `TriggerID` | One project, or the runs one automation started |
+| `LaunchKind` | How runs started: `chat.start`, `schedule` or `agent.start_run` |
+| `StartedAfter`, `StartedBefore` | A time window; after is inclusive, before is exclusive |
+| `Query` | A case-insensitive substring of the run's title |
+| `IncludeArchived` | Runs whose chat was archived, which are left out by default |
+| `SessionID`, `ParentID` | One session's runs, or the child runs of one run |
+| `PageSize`, `Limit` | Rows per round trip, and the most the iterator yields in total |
+
+`it.All()` collects a short list into a slice. With the Go 1.27 the module requires, `it.Seq()` fits a `for range` loop, yielding a failure as the last pair:
+
+```go
+for trigger, err := range c.Triggers.List(ctx, reliant.ListTriggers{}).Seq() {
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(trigger.GetName(), trigger.GetEnabled())
+}
+```
+
+`Runs.LastPerWorkflow` answers "when did each workflow last run?" in one call, rather than one list per workflow.
+
+A run on the list carries its `DisplayState` (the single status word a person reads in the app), its `Title`, the `TriggerName` that started it, and for a failed run `FailureDetail`, the error it ended with. That last one is the only account of a run that failed before any node started.
+
+## Steer a run
+
+`Runs.Signal` delivers messages into a run that is already going. It never starts one. The thread argument is empty for the run's main thread. `delivered` is false, with no error, if the run was not live to receive the messages (it had already finished, say); the server still saves them, so the next run reads them. `Runs.Cancel` ends a run for good, so there is nothing to resume.
+
+```go
+delivered, err := c.Runs.Signal(ctx, "run-id", "", reliant.UserMessage("skip the migration step"))
+if err != nil {
+	log.Fatal(err)
+}
+if !delivered {
+	fmt.Println("the run was not listening; nothing was delivered")
+}
+
+if err := c.Runs.Cancel(ctx, "run-id"); err != nil {
+	log.Fatal(err)
+}
+```
+
+`Cancel` and `Pause` return only an error. `CancelWithResult` and `PauseWithResult` also return the server's own message (`ActionResult.Message`), for a log line or a status page. `Pause`, `Resume` and `Interrupt` are also there, but they are beta. A paused run stays live and resumes from where it stopped, and an interrupt stops what the run is doing right now (the model call in flight, tools that are executing) without ending it. Their semantics are still settling, so test them against your workflow before relying on them.
+
+A call the server answers with "no" rather than an error is still an error here. If `Cancel` reaches the server and the server declines, you get an error that satisfies `errors.Is(err, reliant.ErrNotApplied)`, with the reason in its message. Nothing in the SDK returns a quiet `false` for a cancel that did not happen.
+
+`Resume` is the one place you may want the decline as a value instead. `ResumeWithResult` returns a `ResumeResult`: `Run` is the run after the resume, `Message` is the server's words, and `Declined` is true when the server answered but did not resume the run. A decline is something to report, not a failure of the call, so it is not an error; a transport or RPC failure always is. The run API gives only a message, not a reason you can branch on, so show `Message` and do not infer why. Note that resuming an interrupted run can start a new execution, so `Run.GetId()` may differ from the id you passed.
+
+```go
+res, err := c.Runs.ResumeWithResult(ctx, "run-id")
+if err != nil {
+	log.Fatal(err) // the call itself failed
+}
+if res.Declined {
+	// The server answered but did not resume the run. Show its message;
+	// do not infer a reason from it.
+	fmt.Println("not resumed:", res.Message)
+	return
+}
+fmt.Println("resumed as", res.Run.GetId()) // may differ from the id you passed
+```
+
+## Answer a gate
+
+A **gate** is something a run is parked on: a question it put to a person, or an approval waiting for a decision. A supervisor process often has to find out that a run needs input and get it to the right person. `FollowOptions{StopOnGate: true}` ends the follow as soon as one opens, and `Gates.Pending` lists what is open. For a question, `Gates.Answer` replies.
+
+Answering a question unblocks the run, and the run then acts on the answer. So the answer has to be a person's choice. The example below passes the prompts to `askOperator`, which is yours to write (a chat message, a pager, a form), and calls `Gates.Answer` with exactly what they chose. Do not default an answer to the first option or to "yes": a question may carry a consequence, and the SDK deliberately supplies no default.
+
+```go
+// askOperator puts a question's prompts to a person (a chat message, a pager,
+// a form) and returns what they chose. The SDK supplies no default answer:
+// answering unblocks the run, so the decision is the operator's.
+func askOperator(prompts []reliant.Prompt) ([]reliant.Answer, error) {
+	return nil, errors.New("deliver the prompts to a person and return their choices")
+}
+
+f, err := c.Runs.Follow(ctx, runID, reliant.FollowOptions{StopOnGate: true})
+if err != nil {
+	log.Fatal(err)
+}
+res, err := f.Wait()
+if err != nil {
+	log.Fatal(err)
+}
+if !res.StoppedOnGate {
+	return // it finished, or timed out, without asking
+}
+
+gates, err := c.Gates.Pending(ctx, runID)
+if err != nil {
+	log.Fatal(err)
+}
+for _, g := range gates {
+	switch g.Kind {
+	case reliant.GateQuestion:
+		// Answer only with what a person chose. Never fill in a default.
+		answers, err := askOperator(g.Prompts)
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err := c.Gates.Answer(ctx, g.ID, answers); err != nil {
+			log.Fatal(err)
+		}
+	case reliant.GateApproval:
+		// Approving takes a person; the API cannot decide it.
+		fmt.Printf("approval %q is waiting for someone to decide\n", g.Title)
+	}
+}
+```
+
+A question can bundle several sub-questions, so an answer is a slice of `reliant.Answer` with one entry per sub-question, naming it by its exact text (`Question`). `Selected` holds exact option labels and `Freetext` any typed reply. A gate has a `Prompts` list when the server sent the question in the standard shape, and its raw `Metadata` otherwise. A gate with `Stuck` set is an escalation: the workflow parked itself because it hit a problem it could not resolve, which usually deserves a person rather than an automatic answer.
+
+Approval gates are deliberately different. `Gates.Pending` reports them, so your supervisor can page someone, but there is no call that approves or denies one. An approval is a person's decision, and it cannot be made through this API, or with any token. [Who can decide an approval](/automations/overview#who-can-decide-an-approval) explains why. `Gates.Pending` covers one run, its own and its child workflows' gates, not other runs in the same session; `PendingInSession` takes a session id and covers all of them. To read approvals alone, `Approvals.List(ctx, chatID)` returns a session's pending approvals, oldest first, and `Approvals.ListForRun(ctx, runID)` returns just one run's (its workflow's and its child workflows'). Both are read-only; the client has no method that decides one.
+
+## Fire a trigger
+
+`Triggers.Get` finds an automation by id or by name, and `Triggers.Fire` runs one now, outside its schedule. A manual fire skips the trigger's enabled check and its overlap check, because the caller asking for it has already decided. A name that exists in more than one of your projects is `ErrAmbiguous` and the error lists the ids, so use an id there.
+
+The firing is asynchronous. `Fire` returns once it is accepted, with a `FireWorkflowID` that identifies this firing, and no run exists yet. `Triggers.Events` lists a trigger's firings, newest first, and the one with your `FireWorkflowID` says what happened: it launched a run, was skipped, or failed.
+
+```go
+fired, err := c.Triggers.Fire(ctx, "nightly-report") // an id or a name
+if err != nil {
+	log.Fatal(err)
+}
+
+// The firing is asynchronous: look for its event until it settles, and
+// treat running out of time as a failure, not as success.
+waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
+defer cancel()
+tick := time.NewTicker(2 * time.Second)
+defer tick.Stop()
+for {
+	events := c.Triggers.Events(waitCtx, fired.TriggerID, reliant.EventFilter{Limit: 10})
+	for events.Next() {
+		ev := events.Value()
+		if ev.GetFireWorkflowId() != fired.FireWorkflowID {
+			continue
+		}
+		switch ev.GetOutcome() {
+		case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_LAUNCHED:
+			f, err := c.Runs.FollowSession(ctx, ev.GetChatId(), reliant.FollowOptions{})
+			if err != nil {
+				log.Fatal(err)
+			}
+			res, err := f.Wait()
+			fmt.Println(res.Succeeded, err)
+			return
+		case reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_PENDING:
+			// not launched yet; look again
+		default:
+			log.Fatalf("not launched: %s: %s", ev.GetOutcome(), ev.GetOutcomeDetail())
+		}
+	}
+	if err := events.Err(); err != nil {
+		log.Fatalf("the firing did not settle: %v", err) // includes the deadline
+	}
+	select {
+	case <-tick.C:
+	case <-waitCtx.Done():
+		log.Fatalf("the firing did not settle within a minute: %v", waitCtx.Err())
+	}
+}
+```
+
+The deadline matters. Without it, a firing that never appears (a trigger that is still pending, or an id that was wrong) would leave the loop looking like success. Bound the wait with a context and report running out of time as the failure it is.
+
+A launched event carries `ChatId`, the session its run lives in, which is why the example hands it to `FollowSession`. `Triggers.LaunchEvent` goes the other way: given a session id, it returns the event that started it, or nil for a session that was started by hand.
+
+Reading and firing triggers is all the SDK does with them. Enabling, creating, editing or deleting one, and rotating a webhook's token, is not in it. [Automations](/automations/overview) covers those.
+
+## Call a webhook trigger
+
+A webhook trigger has its own URL and its own credential, and it needs no API token. `NewWebhook` builds a sender from the Reliant server's URL (an empty string means the hosted API), the trigger's id and a credential. This is the narrowest way to start something from your code, and the one to prefer when "start this automation with this payload" is all the code does.
+
+```go
+hook, err := reliant.NewWebhook(
+	"", // the hosted API; pass your own server's URL otherwise
+	os.Getenv("TRIGGER_ID"),
+	reliant.WebhookBearer(os.Getenv("TRIGGER_TOKEN")),
+)
+if err != nil {
+	log.Fatal(err)
+}
+
+d, err := hook.SendJSON(ctx,
+	map[string]any{"status": "failed", "service": "billing"},
+	reliant.WithIdempotencyKey("deploy-4812"),
+)
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println(d.EventID, d.Outcome, d.Duplicate)
+```
+
+The id and the token come from enabling the automation in the app, which shows them once. There are three credentials, matching the three ways [a webhook accepts a delivery](/automations/webhooks#calling-it): `WebhookBearer(token)` sends `Authorization: Bearer <token>`; `WebhookPathToken(token)` puts the token in the URL for receivers that cannot set headers, which makes the whole URL a secret; and `WebhookHMAC(secret, cfg)` signs the body, for a trigger configured with an `hmac` block. The config must match the trigger's: the same header, algorithm, prefix and encoding.
+
+```go
+hook, err := reliant.NewWebhook("", os.Getenv("TRIGGER_ID"),
+	// The same header, algorithm, prefix and encoding as the trigger's
+	// webhook.hmac block.
+	reliant.WebhookHMAC([]byte(os.Getenv("WEBHOOK_SECRET")), reliant.WebhookHMACConfig{
+		Header: "X-Hub-Signature-256",
+		Prefix: "sha256=",
+	}),
+)
+```
+
+`SendJSON` marshals a value and `Send` takes bytes you have already prepared, up to the server's 1 MiB limit. Pass `WithIdempotencyKey` for anything you might send twice. The server de-duplicates by that key, so a retry after a timeout cannot start a second run, and `d.Duplicate` tells you it recognised one. Without a key, an identical body within the same minute counts as a retry. `WithHeader` and `WithContentType` add what a workflow's filter may read from `trigger.payload`.
+
+The receipt means the delivery was accepted, not that a run has finished or even started. `d.Outcome` is typically `pending`; follow it through `Triggers.Events` as above. A webhook delivery never follows a redirect, so the credential cannot be carried past the origin you named, and an error from it never contains a path-token URL.
+
+## Read the inbox
+
+The inbox is the app's list of what is waiting on you: approvals and questions that hold a run, runs waiting for a machine, automations that are failing or could not launch. `Inbox.Counts` is the cheap call, for a badge, and returns counts without fetching any items. `Inbox.List` walks the items in the server's priority order, those that block a run first and the longest-waiting first, and takes filters for a project, kinds of item and an automation.
+
+```go
+// The cheap call, for a badge: counts only, no items.
+n, err := c.Inbox.Counts(ctx, "")
+if err != nil {
+	log.Fatal(err)
+}
+fmt.Println(n.Blocking, "items are holding a run")
+
+var seen []string
+it := c.Inbox.List(ctx, reliant.ListInbox{
+	Kinds: []reliant.InboxItemKind{reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING},
+	Limit: 50,
+})
+for it.Next() {
+	item := it.Value()
+	fmt.Println(item.GetKind(), item.GetTriggerName(), item.GetWaitingSince())
+	seen = append(seen, item.GetItemId())
+}
+if err := it.Err(); errors.Is(err, reliant.ErrTruncated) {
+	fmt.Println("the inbox is longer than the client will fetch; narrow the filter")
+} else if err != nil {
+	log.Fatal(err)
+}
+
+// Dismissing hides an item. It does not resolve an approval or a question:
+// the run keeps waiting.
+if err := c.Inbox.Dismiss(ctx, seen...); err != nil {
+	log.Fatal(err)
+}
+if err := c.Inbox.Restore(ctx, seen...); err != nil {
+	log.Fatal(err)
+}
+```
+
+`Dismiss` hides items from your inbox and `Restore` undoes it. Dismissing an approval or a question hides it and leaves the run waiting, so it is not a way to answer one, and a newer failure of the same automation has a new id and appears again. The server returns the inbox in one response, cut at a limit, so `List` asks again with a larger limit until nothing is cut off. If the inbox is still cut off at the most the client will fetch, the iterator yields what it has and then ends with `ErrTruncated` rather than presenting a partial list as complete. The inbox's machine-storage items (cleaning up a machine, forgetting a worktree) can be listed but not acted on; those actions are not part of this API.
+
+## Errors and retries
+
+Every failed call returns an `*reliant.Error`: the operation (`runs.get`), the server it went to, the Connect code and the server's message. Branch on the condition with `errors.Is`:
+
+| Sentinel | Means | Retry? |
+|---|---|---|
+| `ErrNotFound` | No such run, trigger or question, or it is not yours. The server answers both the same way so ids do not leak | No |
+| `ErrUnauthenticated` | The token is missing, malformed, expired or revoked | No: create a new token |
+| `ErrPermissionDenied` | The token is valid but may not do this | No |
+| `ErrInvalidArgument` | The request was malformed, or the SDK refused it before sending (an empty workflow, say) | No: fix the request |
+| `ErrFailedPrecondition` | The request is fine but the resource's state does not allow it, such as resuming a run that is not paused | No, not until the state changes |
+| `ErrUnavailable` | The server could not be reached or is not ready | A read, yes. A mutation may or may not have happened |
+| `ErrAmbiguous` | A trigger name matches triggers in more than one project | No: use an id |
+| `ErrNotApplied` | The server answered, and said it did not do what was asked | Depends on the message |
+| `ErrTruncated` | A list walk yielded what it could, but the server cut the list short at the most the client asks for | No: narrow the filter |
+
+```go
+_, err = c.Runs.Get(ctx, "run-id")
+
+var rerr *reliant.Error
+switch {
+case err == nil:
+case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+	// Your own context ended the call. These are never wrapped.
+case errors.Is(err, reliant.ErrNotFound):
+	fmt.Println("no such run, or it is not yours")
+case errors.Is(err, reliant.ErrUnauthenticated):
+	fmt.Println("the token is missing, expired or revoked: mint a new one")
+case errors.Is(err, reliant.ErrPermissionDenied):
+	fmt.Println("the token may not do this")
+case errors.As(err, &rerr):
+	fmt.Println(rerr.Op, rerr.Code, rerr.Message)
+}
+```
+
+Cancellation and deadlines from your own `context` pass through unwrapped, so `errors.Is(err, context.Canceled)` means what it says. `connect.CodeOf(err)` also works through an `*reliant.Error`.
+
+The client does not retry for you, and this is deliberate: whether repeating a call is safe depends on the call. Reads are safe to repeat. `Start` is not, because a request whose response was lost may have started a run, so a blind retry can start two. If you retry a start, make the workflow tolerate it, or look for the run first with `Runs.List` and a filter. For a webhook, the idempotency key is what makes a retry safe. Following is the exception: `Follow` already tolerates transient poll failures, retrying on the next poll and giving up after 15 in a row.
+
+A retry wrapper for reads is a few lines of your own code, and it keeps the decision about what to retry where it belongs:
+
+```go
+// withRetry runs a read until it succeeds, the error is not worth repeating,
+// or the attempts are used up. Only ErrUnavailable is retried: that is the
+// SDK's word for "the server could not be reached or was not ready".
+func withRetry[T any](ctx context.Context, attempts int, fn func() (T, error)) (T, error) {
+	delay := 500 * time.Millisecond
+	for i := 1; ; i++ {
+		v, err := fn()
+		if err == nil || !errors.Is(err, reliant.ErrUnavailable) || i >= attempts {
+			return v, err
+		}
+		select {
+		case <-time.After(delay):
+			delay *= 2
+		case <-ctx.Done():
+			var zero T
+			return zero, ctx.Err()
+		}
+	}
+}
+
+run, err := withRetry(ctx, 4, func() (*reliant.Run, error) {
+	return c.Runs.Get(ctx, "run-id")
+})
+```
+
+## Beyond the wrappers
+
+The client wraps the procedures most programs need. For another public one, build a generated Connect client from the same authenticated HTTP client, which adds the token and keeps the redirect and origin protections:
+
+```go
+runs := reliantv1connect.NewRunServiceClient(c.HTTPClient(), c.BaseURL())
+```
+
+The generated clients contain only the procedures in the [API reference](/sdk/reference), so this reaches nothing the SDK withholds. It is also how a token with a narrow [scope](/sdk/overview#scopes) calls a procedure whose wrapper makes an extra call: `Triggers.Fire` looks the trigger up first, which a `triggers:fire` token may not do, so with that token call the generated `TriggerServiceClient.FireTrigger` with the trigger's id.
+
+## Related topics
+
+- [SDK overview](/sdk/overview), for credentials, scopes and versioning
+- [API reference](/sdk/reference)
+- [TypeScript SDK](/sdk/typescript), for frontends
+- [Scripting and CI](/cli/scripting), the same operations from a shell, with the same exit codes
+- [Webhooks](/automations/webhooks) and [Automations](/automations/overview)

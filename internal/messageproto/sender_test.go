@@ -29,10 +29,19 @@ func (f *fakeReader) ListToolCallsByIDs(context.Context, []string) ([]*db.ToolCa
 	return nil, nil
 }
 
-func (f *fakeReader) ListThreadsByIDs(_ context.Context, ids []string) ([]*db.Thread, error) {
+func (f *fakeReader) SenderTitles(_ context.Context, ids []string) (map[string]string, error) {
 	f.listCalls++
 	f.askedIDs = ids
-	return f.threads, f.err
+	if f.err != nil {
+		return nil, f.err
+	}
+	titles := map[string]string{}
+	for _, t := range f.threads {
+		if t.Title != nil {
+			titles[t.ID] = *t.Title
+		}
+	}
+	return titles, nil
 }
 
 func textBlock(messageID, text string) *db.MessageContentBlock {

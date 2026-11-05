@@ -578,6 +578,15 @@ func (s *Service) SendMessage(
 						Status:       core.AgentMessageStatusQueued,
 						CreatedAt:    time.Now(),
 					}
+					// An agent sending through the human's path (send_to_run)
+					// queues as itself, so the drain attributes the message to
+					// it instead of to the human.
+					if origin, ok := db.MessageOriginFrom(ctx); ok {
+						queuedMsg.FromThreadID = origin.ThreadID
+						queuedMsg.Kind = core.AgentMessageKind(origin.Kind)
+						queuedMsg.Subject = origin.Subject
+					}
+					queuedMsg.DisplayStyle = db.QueuedDisplayStyle(ctx)
 					// Queued once: an attempt of this send that already queued
 					// the message left its row, and this one finishes around it
 					// (the wake below is what the first may not have reached).
