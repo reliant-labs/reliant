@@ -549,6 +549,7 @@ function WorkflowsBody() {
     };
   };
   const tableRows = view.rows.map(toTableRow);
+  const buildingBlockRows = view.buildingBlocks.map(toTableRow);
   const needingCount = view.rows.filter((row) => row.needsYou).length;
   const clearNarrowing = () => setSearch({ ...search, q: undefined, show: undefined });
 
@@ -588,7 +589,7 @@ function WorkflowsBody() {
             <div className="forge-ui @container">
               <DataTable<WorkflowsTableRow>
                 ariaLabel="Workflows"
-                columns={workflowsColumns()}
+                columns={workflowsColumns(tableRows)}
                 data={tableRows}
                 layout="fixed"
                 compact
@@ -627,8 +628,8 @@ function WorkflowsBody() {
               <div className="forge-ui @container">
                 <DataTable<WorkflowsTableRow>
                   ariaLabel="Building blocks"
-                  columns={workflowsColumns()}
-                  data={view.buildingBlocks.map(toTableRow)}
+                  columns={workflowsColumns(buildingBlockRows)}
+                  data={buildingBlockRows}
                   layout="fixed"
                   compact
                   getRowKey={(row) => row.key}

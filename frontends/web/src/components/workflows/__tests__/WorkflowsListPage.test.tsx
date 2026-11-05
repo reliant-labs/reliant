@@ -132,6 +132,9 @@ function renderLibrary(path = "/workflows/library") {
 
 describe("WorkflowsListPage", () => {
   it("is one table with labelled columns: yours first, then built-in; broken files below", async () => {
+    mocks.listTriggers.mockResolvedValue({
+      triggers: [create(TriggerSchema, { ...protoTrigger("t1", "triage"), nextFireAt: "2099-01-01T09:00:00Z" })],
+    });
     renderLibrary();
     const table = await screen.findByRole("table", { name: "Workflows" });
     expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
@@ -155,6 +158,61 @@ describe("WorkflowsListPage", () => {
     expect(within(broken).getByText("yaml: line 3: bad indent")).toBeInTheDocument();
     // It asked for hidden workflows too: this is the management view.
     expect(mocks.listWorkflows).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-1", includeHidden: true }));
+  });
+
+  it("leaves out Health, Next run and On while every row's cell would be empty, and brings them back with the first trigger", async () => {
+    mocks.listTriggers.mockResolvedValue({ triggers: [] });
+    const { unmount } = renderLibrary();
+    const table = await screen.findByRole("table", { name: "Workflows" });
+    await waitFor(() => expect(within(table).getByTestId("workflow-row-triage")).toBeInTheDocument());
+    expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Name", "Runs by itself", "Last run", "Actions"]);
+    expect(within(table).queryByTestId("workflow-row-health")).toBeNull();
+    expect(within(table).queryByTestId("workflow-row-next-run")).toBeNull();
+    expect(within(table).queryByRole("switch")).toBeNull();
+    unmount();
+    presetQueryClient.clear();
+
+    // A trigger brings back Health, Runs by itself and On; Next run waits for a row with a time.
+    mocks.listTriggers.mockResolvedValue({ triggers: [protoTrigger("t1", "triage")] });
+    const second = renderLibrary();
+    const withTrigger = await screen.findByRole("table", { name: "Workflows" });
+    await waitFor(() => expect(within(withTrigger).getAllByRole("columnheader").map((th) => th.textContent)).toContain("Health"));
+    expect(within(withTrigger).getAllByRole("columnheader").map((th) => th.textContent)).toEqual(["Name", "Runs by itself", "Health", "Last run", "On", "Actions"]);
+    second.unmount();
+    presetQueryClient.clear();
+
+    mocks.listTriggers.mockResolvedValue({
+      triggers: [create(TriggerSchema, { ...protoTrigger("t1", "triage"), nextFireAt: "2099-01-01T09:00:00Z" })],
+    });
+    renderLibrary();
+    const withNextRun = await screen.findByRole("table", { name: "Workflows" });
+    await waitFor(() => expect(within(withNextRun).getAllByRole("columnheader").map((th) => th.textContent)).toContain("Next run"));
+    expect(within(withNextRun).getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
+      "Name",
+      "Runs by itself",
+      "Health",
+      "Last run",
+      "Next run",
+      "On",
+      "Actions",
+    ]);
+  });
+
+  it("lists a ready-made Autopilot workflow in its strip, not again as a row", async () => {
+    const declared = [{ name: "pr-opened" }];
+    mocks.listWorkflows.mockResolvedValue({
+      ...libraryResponse(),
+      workflows: [
+        ...libraryResponse().workflows,
+        { name: "builtin://autopilot-pr-review", filename: "autopilot-pr-review", description: "Reviews every PR", source: "builtin", stepCount: 1, nodes: [], edges: [], status: WorkflowDraftStatus.COMPLETE, validationErrors: [], automationOnly: true, triggers: declared },
+      ],
+    });
+    mocks.listTriggers.mockResolvedValue({ triggers: [] });
+    renderLibrary();
+    expect(await screen.findByTestId("ready-made-builtin://autopilot-pr-review")).toBeInTheDocument();
+    const table = screen.getByRole("table", { name: "Workflows" });
+    expect(within(table).queryByTestId("workflow-row-builtin://autopilot-pr-review")).toBeNull();
+    expect(within(table).getByTestId("workflow-row-builtin://agent")).toBeInTheDocument();
   });
 
   it("a workflow that nothing runs and declares no triggers says it runs only when started, and has no switch", async () => {
