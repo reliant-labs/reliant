@@ -44,7 +44,7 @@ import {
   type InboxItem as InboxItemData,
   type InboxStorage as InboxStorageData,
 } from "@/gen/reliant/v1/inbox_pb";
-import { useApprove, useBatchApprove, useBatchDeny, useDeny } from "@/hooks/approval-service-hooks_gen";
+import { useInboxApprovalActions } from "@/hooks/approval-queries";
 import { answerQuestion } from "@/hooks/question-queries";
 import { inboxServiceKeys } from "@/hooks/inbox-service-hooks_gen";
 import { removeInboxItems } from "@/hooks/inbox-queries";
@@ -321,8 +321,7 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState<ApprovalBatchPlan<BatchMember> | null>(null);
   const queryClient = useQueryClient();
-  const approve = useBatchApprove();
-  const deny = useBatchDeny();
+  const decide = useInboxApprovalActions();
   const first = items[0]!;
   const plan = useMemo(
     () =>
@@ -353,8 +352,8 @@ export function InboxApprovalBatch({ items, showProject, onDismissRow, onDismiss
     setBusy(true);
     try {
       const requestIds = members.map((m) => m.id);
-      if (verb === "approve") await approve.mutateAsync({ requestIds });
-      else await deny.mutateAsync({ requestIds });
+      if (verb === "approve") await decide.approveMany(requestIds);
+      else await decide.denyMany(requestIds);
       removeInboxItems(
         members.map((m) => m.itemId),
         queryClient,
@@ -890,13 +889,12 @@ function ApprovalRowAction({
 }) {
   const [busy, setBusy] = useState(false);
   const queryClient = useQueryClient();
-  const approve = useApprove();
-  const deny = useDeny();
+  const decide = useInboxApprovalActions();
   const act = async (verb: "approve" | "deny") => {
     setBusy(true);
     try {
-      if (verb === "approve") await approve.mutateAsync({ requestId: approvalId });
-      else await deny.mutateAsync({ requestId: approvalId });
+      if (verb === "approve") await decide.approve(approvalId);
+      else await decide.deny(approvalId);
       removeInboxItems([itemId], queryClient);
     } catch (error) {
       onFailure(verb)(error);

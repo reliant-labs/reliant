@@ -12,7 +12,7 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import { ApprovalStatus } from "@/gen/reliant/v1/approval_pb";
@@ -24,9 +24,13 @@ import {
   useApprovals,
   useApproveToolRequest,
   useBatchDenyInChat,
+  useInboxApprovalActions,
   usePendingApprovals,
 } from "../approval-queries";
 import { approvalServiceKeys } from "../approval-service-hooks_gen";
+
+const toastInfo = vi.hoisted(() => vi.fn());
+vi.mock("sonner", () => ({ toast: { info: toastInfo, error: vi.fn(), success: vi.fn() } }));
 
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -37,6 +41,7 @@ let server: Row[];
 let listCalls: number;
 let failWrites: boolean;
 let notPending: boolean;
+let writes: Array<[string, { requestId: string }]>;
 
 const expiredMessage = "This request expired: No one answered before the request's time limit; nothing was approved.";
 
@@ -54,6 +59,8 @@ beforeEach(() => {
     { id: "a2", chatId: "c1", status: ApprovalStatus.PENDING, title: "Migrate?" },
   ];
   listCalls = 0;
+  writes = [];
+  toastInfo.mockClear();
   failWrites = false;
   notPending = false;
   setTransport(
@@ -63,6 +70,7 @@ beforeEach(() => {
         return { approvals: server, total: server.length };
       },
       "ApprovalService.Approve": (req) => {
+        writes.push(["Approve", { requestId: (req as { requestId: string }).requestId }]);
         resolveOnServer([(req as { requestId: string }).requestId], ApprovalStatus.APPROVED);
         return { success: true };
       },
@@ -177,5 +185,44 @@ describe("ApprovalService keys", () => {
 
     await queryClient.invalidateQueries({ queryKey: approvalServiceKeys.all });
     await waitFor(() => expect(listCalls).toBe(2));
+  });
+
+  it("an inbox row and a chat card decide through one implementation", async () => {
+    const all = renderHook(() => useApprovals("c1"), { wrapper });
+    await waitFor(() => expect(all.result.current.data?.approvals).toHaveLength(2));
+    expect(listCalls).toBe(1);
+
+    // The inbox holds approvals of every chat, so its row decides with no chat in hand ...
+    const row = renderHook(() => useInboxApprovalActions(), { wrapper });
+    await act(() => row.result.current.approve("a1"));
+
+    // ... and the chat's mounted list still reads what the server recorded.
+    await waitFor(() => expect(listCalls).toBe(2));
+    await waitFor(() =>
+      expect(statuses(all.result.current.data)).toEqual([
+        ["a1", ApprovalStatus.APPROVED],
+        ["a2", ApprovalStatus.PENDING],
+      ]),
+    );
+
+    // The card on the same approval sends the same request.
+    const card = renderHook(() => useApproveToolRequest("c1"), { wrapper });
+    await act(() => card.result.current.mutateAsync({ requestId: "a2" }));
+    expect(writes).toEqual([
+      ["Approve", { requestId: "a1" }],
+      ["Approve", { requestId: "a2" }],
+    ]);
+  });
+
+  it("a card's decision that loses to the approval's end tells the person and does not throw", async () => {
+    const pending = renderHook(() => usePendingApprovals("c1"), { wrapper });
+    await waitFor(() => expect(pending.result.current.data?.approvals).toHaveLength(2));
+    // a1 expired on the server while its Approve button was on screen.
+    server = server.map((a) => (a.id === "a1" ? { ...a, status: ApprovalStatus.EXPIRED } : a));
+    notPending = true;
+    const approve = renderHook(() => useApproveToolRequest("c1"), { wrapper });
+    act(() => approve.result.current.mutate({ requestId: "a1" }));
+    await waitFor(() => expect(pending.result.current.data?.approvals.map((a) => a.id)).toEqual(["a2"]));
+    expect(toastInfo).toHaveBeenCalledWith(expiredMessage);
   });
 });

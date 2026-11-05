@@ -1,81 +1,55 @@
 /**
- * A chat's approvals: ApprovalService on the generated hooks and keys, kept
- * live by the chat stream.
+ * A chat's approvals, and every way to decide them: the app's face of
+ * @reliantlabs/sdk/react's useApprovals.
  *
- * Approvals are server data and the React Query cache is their single source
- * of truth. The cache holds exactly what the generated useListApprovalsByChat
- * fetches — a `ListApprovalsByChatResponse` under
+ * Approvals are server data and the React Query cache is their single source of
+ * truth. The cache holds exactly what ApprovalService.ListApprovalsByChat
+ * returns — a `ListApprovalsByChatResponse` under
  * `approvalServiceKeys.listApprovalsByChat({ chatId })` — so a stream event
  * patches the entry every component reads (no refetch round-trip, no shadow
- * copy in Zustand), every write goes through a generated mutation that
- * invalidates `approvalServiceKeys.all`, and a stream "reconcile" nudge
- * invalidates the same scope. See the forge frontend-state skill, "Real-time
- * server data".
+ * copy in Zustand), every write flips the status at once, rolls back on
+ * failure and reads the list again once the server has recorded it. The SDK
+ * owns all of that (reads, cache patches, the four writes, the "decided
+ * elsewhere" handling); this module binds it to the app's QueryClient and
+ * keeps the shapes the app's components were written against. The chat's
+ * approval cards, the permissions panel, the keyboard shortcut and the inbox
+ * rows all decide through it, so there is one implementation of approving.
+ *
+ * The chat stream is the app's (globalUpdatesStore owns it), so these hooks
+ * read and write the cache but open no stream of their own.
  */
 
-import { create } from "@bufbuild/protobuf";
-import { Code, ConnectError } from "@connectrpc/connect";
+import { useCallback, useMemo } from "react";
 import { toast } from "sonner";
-
 import {
-  ApprovalSchema,
-  ApprovalService,
   ApprovalStatus,
-  ListApprovalsByChatResponseSchema,
+  applyApprovalUpdate as applyApprovalUpdateTo,
+  approvalStatusFromFeed,
+  approvalsFromCache as approvalsFromQueryClient,
+  createApprovalActions,
+  isApprovalNotActionable,
+  notActionableMessage,
+  patchApprovals,
+  upsertApproval,
+  useApprovalActions,
+  useApprovals as useSdkApprovals,
   type Approval,
-  type ListApprovalsByChatResponse,
-} from "../gen/reliant/v1/approval_pb";
+  type ApprovalActions,
+  type ApprovalFields,
+} from "@reliantlabs/sdk/react";
+
+import type { ToolApprovalUpdate } from "../types/streaming";
 import { planApprovalBatch, type ApprovalBatchPlan } from "../lib/approvalCard";
-import { connectClient } from "../lib/connect";
-import { hasErrorReason } from "../lib/errorReasons";
 import { queryClient } from "../lib/query-client";
-import {
-  approvalServiceKeys,
-  useApprove,
-  useBatchApprove,
-  useBatchDeny,
-  useDeny,
-  useListApprovalsByChat,
-} from "./approval-service-hooks_gen";
+import { reliantClient } from "../lib/reliantClient";
 
-export type { Approval };
-export { ApprovalStatus };
-
-const client = connectClient(ApprovalService);
-
-const listKey = (chatId: string) => approvalServiceKeys.listApprovalsByChat({ chatId });
-
-/**
- * The status a chat feed approval update names. Only "pending" is pending: a
- * status this web does not know (a newer server's) is some resolution, and
- * reading it as pending would show an Approve button that can only fail.
- */
-export function approvalStatusFromFeed(status: string | undefined): ApprovalStatus {
-  switch (status) {
-    case "pending":
-      return ApprovalStatus.PENDING;
-    case "approved":
-      return ApprovalStatus.APPROVED;
-    case "denied":
-      return ApprovalStatus.DENIED;
-    case "expired":
-    case "timeout":
-      return ApprovalStatus.EXPIRED;
-    default:
-      return ApprovalStatus.CANCELLED;
-  }
-}
+export type { Approval, ApprovalFields };
+export { ApprovalStatus, approvalStatusFromFeed, isApprovalNotActionable, notActionableMessage };
 
 /** A chat's cached approvals, oldest first; [] before the first fetch. */
 export function approvalsFromCache(chatId: string): Approval[] {
-  return queryClient.getQueryData<ListApprovalsByChatResponse>(listKey(chatId))?.approvals ?? EMPTY;
+  return approvalsFromQueryClient(queryClient, chatId);
 }
-const EMPTY: Approval[] = [];
-
-// --- Real-time cache patching ---
-
-/** Some of an approval's fields, as a stream event carries them. */
-export type ApprovalFields = Omit<Partial<Approval>, "$typeName">;
 
 /**
  * Patch a chat's approval list. The updater receives the current list (or []
@@ -84,192 +58,122 @@ export type ApprovalFields = Omit<Partial<Approval>, "$typeName">;
  * initial fetch resolves.
  */
 export function patchApprovalsCache(chatId: string, updater: (prev: Approval[]) => Approval[]): void {
-  queryClient.setQueryData<ListApprovalsByChatResponse>(listKey(chatId), (prev) => {
-    const approvals = updater(prev?.approvals ?? []);
-    if (prev && approvals === prev.approvals) return prev;
-    return create(ListApprovalsByChatResponseSchema, { approvals, total: approvals.length });
-  });
+  patchApprovals(queryClient, chatId, updater);
+}
+
+/** Fold one approval event of a chat's stream into the chat's cached list. */
+export function applyApprovalUpdate(chatId: string, update: ToolApprovalUpdate): void {
+  applyApprovalUpdateTo(queryClient, chatId, update);
 }
 
 /**
  * Insert one approval from a stream event, or merge it over the cached one
- * with the same id. Merged rather than replaced, and only with the fields the
- * event actually carries: a resolution event has the new status but not what
- * the approval asked about (its title), and must not erase it.
+ * with the same id: only with the fields the event actually carries, so a
+ * resolution event does not erase the title.
  */
 export function upsertApprovalInCache(chatId: string, fields: ApprovalFields & { id: string }): void {
-  const defined = Object.fromEntries(
-    Object.entries(fields).filter(([, value]) => value !== undefined),
-  ) as ApprovalFields;
-  patchApprovalsCache(chatId, (prev) => {
-    const idx = prev.findIndex((a) => a.id === fields.id);
-    if (idx >= 0) {
-      const next = [...prev];
-      next[idx] = { ...prev[idx], ...defined };
-      return next;
-    }
-    return [...prev, create(ApprovalSchema, defined)];
-  });
+  upsertApproval(queryClient, chatId, fields);
 }
 
 // --- Query hooks ---
 //
-// The fetch is only the cold-start seed; freshness comes from the chat stream.
-// Approval events are durable chat updates, so the stream both patches them
-// live and REPLAYS the ones a chat missed when it is reopened (cursor resume)
-// or re-snapshotted — the latest per entity is in every snapshot. A
-// time-based staleTime would add nothing but a ListApprovalsByChat on every
-// chat open past it, racing the replay that is already bringing the same
-// answer.
-const streamMaintained = { staleTime: Infinity } as const;
+// The fetch is only the cold-start seed; freshness comes from the chat stream,
+// which both patches approvals live and REPLAYS the ones a reopened chat missed
+// (cursor resume) or re-snapshotted. A time-based staleTime would add nothing
+// but a ListApprovalsByChat on every chat open, racing that replay.
 
 /** Every approval in a chat (`data.approvals`), any status. */
 export function useApprovals(chatId?: string) {
-  return useListApprovalsByChat({ chatId: chatId ?? "" }, { enabled: !!chatId, ...streamMaintained });
-}
-
-/** Only the pending ones. Stable, so React Query reuses the selection. */
-function selectPending(data: ListApprovalsByChatResponse): ListApprovalsByChatResponse {
-  const approvals = data.approvals.filter((a) => a.status === ApprovalStatus.PENDING);
-  return approvals.length === data.approvals.length ? data : { ...data, approvals, total: approvals.length };
+  return useSdkApprovals(chatId, { live: false }).query;
 }
 
 /**
  * A chat's pending approvals (`data.approvals`). Shares useApprovals' cache
- * entry — pending is a client-side `select` — so one patch updates both.
+ * entry — pending is a client-side filter — so one patch updates both.
  */
 export function usePendingApprovals(chatId?: string) {
-  return useListApprovalsByChat(
-    { chatId: chatId ?? "" },
-    { enabled: !!chatId, ...streamMaintained, select: selectPending },
+  const { pending, query } = useSdkApprovals(chatId, { live: false });
+  const data = useMemo(
+    () => (query.data ? (pending === query.data.approvals ? query.data : { ...query.data, approvals: pending, total: pending.length }) : undefined),
+    [query.data, pending],
   );
+  return useMemo(() => ({ ...query, data }), [query, data]);
 }
 
 // --- Writes ---
 //
-// Approve/deny optimistically flip the approval's status in the chat's list
-// so the buttons respond at once, roll back on error, and — being the
-// generated mutations — invalidate approvalServiceKeys.all on success, so the
-// list converges on what the server recorded.
+// Approve/deny optimistically flip the approval's status in the chat's list so
+// the buttons respond at once, roll back on error, and invalidate the whole
+// ApprovalService scope on success so the list converges on what the server
+// recorded. A write that lost to the approval's own end takes the approval out
+// of the pending list instead of rolling back, and says why.
 
-/**
- * Optimistically set the status (and stamp resolvedAt / action / reason) on
- * the given approval ids in a chat's cache. Returns a rollback closure that
- * restores the pre-mutation cache.
- */
-function optimisticallyResolve(
-  chatId: string,
-  requestIds: readonly string[],
-  status: ApprovalStatus,
-  extra: Partial<Approval> = {},
-): () => void {
-  const key = listKey(chatId);
-  const previous = queryClient.getQueryData<ListApprovalsByChatResponse>(key);
-  const ids = new Set(requestIds);
-  patchApprovalsCache(chatId, (prev) =>
-    prev.map((a) => (ids.has(a.id) ? { ...a, status, resolvedAt: new Date().toISOString(), ...extra } : a)),
-  );
-  return () => queryClient.setQueryData(key, previous);
+/** The shape of a mutation the app's components were written against. */
+interface Decision<Req> {
+  mutate: (req: Req) => void;
+  mutateAsync: (req: Req) => Promise<void>;
+  isPending: boolean;
 }
 
-type Rollback = () => void;
+const tellNotActionable = (message: string): void => void toast.info(message);
 
-/**
- * The approval was not pending when the server got the request: someone
- * decided it elsewhere, its wait expired, or the run waiting on it ended.
- * Retrying cannot help, so it is not an error to show raw.
- */
-export function isApprovalNotActionable(err: unknown): boolean {
-  return hasErrorReason(err, "approval_not_pending") || (err instanceof ConnectError && err.code === Code.NotFound);
-}
-
-/** The server's sentence for a not-actionable approval ("This request expired: …"). */
-export function notActionableMessage(err: unknown): string {
-  const text = err instanceof ConnectError ? err.rawMessage : "";
-  return text || "This request was already resolved.";
-}
-
-/**
- * A write lost to the approval's own end: take the approvals out of the
- * pending list (rolling back would put the dead Approve button back), tell
- * the person what happened, and re-read the chat's approvals from the server.
- */
-function dropNotActionable(chatId: string | undefined, ids: readonly string[], err: unknown): void {
-  const message = notActionableMessage(err);
-  if (chatId) {
-    const gone = new Set(ids);
-    patchApprovalsCache(chatId, (prev) =>
-      prev.map((a) =>
-        gone.has(a.id) ? { ...a, status: ApprovalStatus.CANCELLED, denialReason: message, resolvedAt: new Date().toISOString() } : a,
-      ),
-    );
-  }
-  toast.info(message);
-  void queryClient.invalidateQueries({ queryKey: approvalServiceKeys.all });
-}
-
-/**
- * The optimistic onMutate/onError pair for one chat. onMutate's return value
- * reaches onError as its third argument; the generated hook infers its type
- * (TanStack's TContext) from onMutate, so the rollback is typed end to end.
- */
-function optimistic<Req>(chatId: string | undefined, resolve: (req: Req) => [readonly string[], ApprovalStatus, Partial<Approval>]) {
+function decision<Req>(run: (req: Req) => Promise<void>, isPending: boolean): Decision<Req> {
   return {
-    onMutate: (req: Req): Rollback => {
-      // No chat, no cache entry to patch: nothing to roll back.
-      if (!chatId) return () => {};
-      const [ids, status, extra] = resolve(req);
-      return optimisticallyResolve(chatId, ids, status, extra);
-    },
-    onError: (err: unknown, req: Req, rollback: Rollback | undefined) => {
-      rollback?.();
-      if (isApprovalNotActionable(err)) dropNotActionable(chatId, resolve(req)[0], err);
-    },
+    // A write that failed was already rolled back, and the transport reported it.
+    mutate: (req) => void run(req).catch(() => undefined),
+    mutateAsync: run,
+    isPending,
   };
+}
+
+function useChatDecisions(chatId: string | undefined) {
+  const { approve, deny, approveMany, denyMany, busy } = useApprovalActions(chatId, { onNotActionable: tellNotActionable });
+  return { approve, deny, approveMany, denyMany, busy };
 }
 
 /** Approve one approval in a chat: `mutate({ requestId, actionTaken? })`. */
 export function useApproveToolRequest(chatId?: string) {
-  return useApprove(
-    optimistic(chatId, (req: { requestId?: string; actionTaken?: string }) => [
-      [req.requestId ?? ""],
-      ApprovalStatus.APPROVED,
-      { actionTaken: req.actionTaken },
-    ]),
-  );
+  const { approve, busy } = useChatDecisions(chatId);
+  const run = useCallback((req: { requestId?: string; actionTaken?: string }) => approve(req.requestId ?? "", { actionTaken: req.actionTaken }), [approve]);
+  return decision(run, busy);
 }
 
 /** Deny one approval in a chat: `mutate({ requestId, denialReason?, actionTaken? })`. */
 export function useDenyToolRequest(chatId?: string) {
-  return useDeny(
-    optimistic(chatId, (req: { requestId?: string; denialReason?: string; actionTaken?: string }) => [
-      [req.requestId ?? ""],
-      ApprovalStatus.DENIED,
-      { denialReason: req.denialReason, actionTaken: req.actionTaken },
-    ]),
+  const { deny, busy } = useChatDecisions(chatId);
+  const run = useCallback(
+    (req: { requestId?: string; denialReason?: string; actionTaken?: string }) =>
+      deny(req.requestId ?? "", { denialReason: req.denialReason, actionTaken: req.actionTaken }),
+    [deny],
   );
+  return decision(run, busy);
 }
 
 /** Approve several of a chat's approvals: `mutate({ requestIds, actionTaken? })`. */
 export function useBatchApproveInChat(chatId?: string) {
-  return useBatchApprove(
-    optimistic(chatId, (req: { requestIds?: string[]; actionTaken?: string }) => [
-      req.requestIds ?? [],
-      ApprovalStatus.APPROVED,
-      { actionTaken: req.actionTaken },
-    ]),
-  );
+  const { approveMany, busy } = useChatDecisions(chatId);
+  const run = useCallback((req: { requestIds?: string[]; actionTaken?: string }) => approveMany(req.requestIds ?? [], { actionTaken: req.actionTaken }), [approveMany]);
+  return decision(run, busy);
 }
 
 /** Deny several of a chat's approvals: `mutate({ requestIds, denialReason?, actionTaken? })`. */
 export function useBatchDenyInChat(chatId?: string) {
-  return useBatchDeny(
-    optimistic(chatId, (req: { requestIds?: string[]; denialReason?: string; actionTaken?: string }) => [
-      req.requestIds ?? [],
-      ApprovalStatus.DENIED,
-      { denialReason: req.denialReason, actionTaken: req.actionTaken },
-    ]),
+  const { denyMany, busy } = useChatDecisions(chatId);
+  const run = useCallback(
+    (req: { requestIds?: string[]; denialReason?: string; actionTaken?: string }) =>
+      denyMany(req.requestIds ?? [], { denialReason: req.denialReason, actionTaken: req.actionTaken }),
+    [denyMany],
   );
+  return decision(run, busy);
+}
+
+/**
+ * Decide approvals that belong to no open chat: an inbox row holds approvals of
+ * every chat, so there is no list to flip, and a decision that lost to the
+ * approval's own end rejects for the row to show "Already handled".
+ */
+export function useInboxApprovalActions(): ApprovalActions & { busy: boolean } {
+  return useApprovalActions(undefined);
 }
 
 /**
@@ -288,7 +192,8 @@ export function pendingApprovalBatch(chatId: string): ApprovalBatchPlan<Approval
  * whatever is pending by the time the person confirms: an approval raised
  * after the confirmation opened was not read. Same contract as
  * useBatchApproveInChat: optimistic, rolled back on error, and the service's
- * reads invalidated once the server has recorded it.
+ * reads invalidated once the server has recorded it. An approval that ended
+ * on its own is dropped with a notice, not thrown.
  */
 export async function approveAllPendingApprovals(chatId: string, requestIds: readonly string[]): Promise<void> {
   const shown = new Set(requestIds);
@@ -297,16 +202,16 @@ export async function approveAllPendingApprovals(chatId: string, requestIds: rea
     .map((a) => a.id);
   if (pendingIds.length === 0) return;
 
-  const rollback = optimisticallyResolve(chatId, pendingIds, ApprovalStatus.APPROVED);
+  const { approveMany } = createApprovalActions({
+    client: reliantClient,
+    queryClient,
+    chatId,
+    onNotActionable: tellNotActionable,
+  });
   try {
-    await client.batchApprove({ requestIds: pendingIds });
+    await approveMany(pendingIds);
   } catch (err) {
-    rollback();
-    if (isApprovalNotActionable(err)) {
-      dropNotActionable(chatId, pendingIds, err);
-      return;
-    }
+    if (isApprovalNotActionable(err)) return;
     throw err;
   }
-  void queryClient.invalidateQueries({ queryKey: approvalServiceKeys.all });
 }

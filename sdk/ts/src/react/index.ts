@@ -7,12 +7,20 @@
 export { ReliantProvider, setDefaultReliantClient, useReliantClient } from "./context.js";
 export { useChat, useThread, type UseChatOptions, type UseChatResult, type UseThreadResult } from "./useChat.js";
 export { useRun, type UseRunResult } from "./useRun.js";
-export { useApprovals, type UseApprovalsOptions, type UseApprovalsResult } from "./useApprovals.js";
+export {
+  useApprovalActions,
+  useApprovals,
+  type UseApprovalActionsOptions,
+  type UseApprovalActionsResult,
+  type UseApprovalsOptions,
+  type UseApprovalsResult,
+} from "./useApprovals.js";
 export {
   ApprovalStatus,
   ApprovalType,
   applyApprovalUpdate,
   approvalStatusFromFeed,
+  createApprovalActions,
   approvalsFromCache,
   isApprovalNotActionable,
   notActionableMessage,
@@ -20,6 +28,7 @@ export {
   upsertApproval,
   type Approval,
   type ApprovalActions,
+  type ApprovalActionsOptions,
   type ApprovalFields,
 } from "./approvals.js";
 export { useQuestions, type UseQuestionsOptions, type UseQuestionsResult } from "./useQuestions.js";

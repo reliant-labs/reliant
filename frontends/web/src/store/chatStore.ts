@@ -8,7 +8,7 @@ import {
   ChatState,
   AgentMessageKind,
 } from "../gen/reliant/v1/chat_pb";
-import { ApprovalType, type Approval } from "../gen/reliant/v1/approval_pb";
+import type { Approval } from "../gen/reliant/v1/approval_pb";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import {
   foldToolResultImages,
@@ -115,7 +115,7 @@ import {
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
-import { approvalsFromCache, approvalStatusFromFeed, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
+import { applyApprovalUpdate, approvalsFromCache } from "../hooks/approval-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
 import { invalidatePlanTasks } from "../hooks/task-queries";
@@ -168,22 +168,6 @@ function getGlobalUpdatesStore() {
 /** Called once from globalUpdatesStore after it finishes initializing. */
 export function initGlobalUpdatesStoreRef(mod: typeof import("./globalUpdatesStore")) {
   _globalUpdatesStoreModule = mod;
-}
-
-/**
- * What a streamed approval carries besides its status. Only the fields the
- * update actually has: a status-only update (approved, denied) is merged over
- * the cached approval and must not blank its title.
- */
-function approvalFields(update: ToolApprovalUpdate): ApprovalFields {
-  const fields: ApprovalFields = {};
-  if (update.title) fields.title = update.title;
-  // ApprovalCreate sends the name; Approve/Deny echo the row's enum value.
-  const kind: unknown = update.approval_type;
-  if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approvalType = ApprovalType.WORKFLOW_STEP;
-  if (kind === "tool_call" || kind === ApprovalType.TOOL_CALL) fields.approvalType = ApprovalType.TOOL_CALL;
-  if (update.batch_id) fields.batchId = update.batch_id;
-  return fields;
 }
 
 // ============================================================================
@@ -3430,19 +3414,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // usePendingApprovals derives "pending" from the same list via a
         // client-side select, so one list upsert updates both. The patch IS
         // the sync; no invalidate/refetch round-trip.
-        allApprovals.forEach((approvalUpdate) => {
-          upsertApprovalInCache(chatId, {
-            id: approvalUpdate.id,
-            chatId: approvalUpdate.chat_id,
-            entityId: approvalUpdate.content_block_id || approvalUpdate.entity_id,
-            status: approvalStatusFromFeed(approvalUpdate.status),
-            denialReason: approvalUpdate.denial_reason,
-            createdAt: approvalUpdate.created_at,
-            resolvedAt: approvalUpdate.resolved_at ?? approvalUpdate.responded_at,
-            actionTaken: approvalUpdate.action_taken, // Which action was clicked
-            ...approvalFields(approvalUpdate),
-          });
-        });
+        allApprovals.forEach((approvalUpdate) => applyApprovalUpdate(chatId, approvalUpdate));
 
         // Question updates patch the chat's pending-question list (server
         // data), read via usePendingQuestions. A "pending" event adds that
