@@ -141,6 +141,12 @@ generate:
         - name: sdk-go-gen
           command: [scripts/proto-generate-atomic.sh, buf.gen.sdk-go.yaml, sdk/go/gen]
           writes: [sdk/go/gen]
+        # The app's gen/reliant/v1 does not generate the public protos (buf.gen.yaml
+        # routes them into the SDK); this re-exports the pinned SDK's package from
+        # gen/reliant/v1 so the app's imports are unchanged.
+        - name: sdk-aliases
+          command: [go, run, ./tools/sdkalias]
+          writes: [gen/reliant/v1/sdk_alias.pb.go]
         - name: yaml-bindings
           command: [go, generate, ./internal/workflow/yaml]
           writes: [internal/workflow/yaml/bindings_generated.go]

@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -816,7 +817,7 @@ func (x *RecoveryInboxItem) GetTargetDaemonId() string {
 type InboxApproval struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	ApprovalId   string                 `protobuf:"bytes,1,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
-	ApprovalType ApprovalType           `protobuf:"varint,2,opt,name=approval_type,json=approvalType,proto3,enum=reliant.v1.ApprovalType" json:"approval_type,omitempty"`
+	ApprovalType v1.ApprovalType        `protobuf:"varint,2,opt,name=approval_type,json=approvalType,proto3,enum=reliant.v1.ApprovalType" json:"approval_type,omitempty"`
 	// The approval's title.
 	Title string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
 	// Approval.batch_id: the approvals the run raised together. The Inbox
@@ -863,11 +864,11 @@ func (x *InboxApproval) GetApprovalId() string {
 	return ""
 }
 
-func (x *InboxApproval) GetApprovalType() ApprovalType {
+func (x *InboxApproval) GetApprovalType() v1.ApprovalType {
 	if x != nil {
 		return x.ApprovalType
 	}
-	return ApprovalType_APPROVAL_TYPE_UNSPECIFIED
+	return v1.ApprovalType(0)
 }
 
 func (x *InboxApproval) GetTitle() string {
@@ -1020,7 +1021,7 @@ func (x *InboxWaitingForMachine) GetDaemonName() string {
 
 type InboxAutomationFailing struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
-	Health *TriggerHealth         `protobuf:"bytes,1,opt,name=health,proto3" json:"health,omitempty"`
+	Health *v1.TriggerHealth      `protobuf:"bytes,1,opt,name=health,proto3" json:"health,omitempty"`
 	// The run to open: the newest launched firing's chat, when it still exists.
 	LastRunChatId *string `protobuf:"bytes,2,opt,name=last_run_chat_id,json=lastRunChatId,proto3,oneof" json:"last_run_chat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1057,7 +1058,7 @@ func (*InboxAutomationFailing) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *InboxAutomationFailing) GetHealth() *TriggerHealth {
+func (x *InboxAutomationFailing) GetHealth() *v1.TriggerHealth {
 	if x != nil {
 		return x.Health
 	}
@@ -1080,7 +1081,7 @@ type InboxAutomationDefinitionBroken struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The broken version: path, machine, branch, commit, content hash and the
 	// error.
-	Definition *TriggerEventDefinition `protobuf:"bytes,1,opt,name=definition,proto3" json:"definition,omitempty"`
+	Definition *v1.TriggerEventDefinition `protobuf:"bytes,1,opt,name=definition,proto3" json:"definition,omitempty"`
 	// The enabled automations whose firings it refuses, by name.
 	Automations   []*InboxRefusedAutomation `protobuf:"bytes,2,rep,name=automations,proto3" json:"automations,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -1117,7 +1118,7 @@ func (*InboxAutomationDefinitionBroken) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *InboxAutomationDefinitionBroken) GetDefinition() *TriggerEventDefinition {
+func (x *InboxAutomationDefinitionBroken) GetDefinition() *v1.TriggerEventDefinition {
 	if x != nil {
 		return x.Definition
 	}
@@ -1187,7 +1188,7 @@ func (x *InboxRefusedAutomation) GetTriggerName() string {
 type InboxAutomationNeedsSetup struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// What is missing, one entry per workflow input, in input-name order.
-	Issues        []*TriggerSetupIssue `protobuf:"bytes,1,rep,name=issues,proto3" json:"issues,omitempty"`
+	Issues        []*v1.TriggerSetupIssue `protobuf:"bytes,1,rep,name=issues,proto3" json:"issues,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1222,7 +1223,7 @@ func (*InboxAutomationNeedsSetup) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *InboxAutomationNeedsSetup) GetIssues() []*TriggerSetupIssue {
+func (x *InboxAutomationNeedsSetup) GetIssues() []*v1.TriggerSetupIssue {
 	if x != nil {
 		return x.Issues
 	}
@@ -2166,10 +2167,10 @@ var file_reliant_v1_inbox_proto_goTypes = []any{
 	(*CleanupStorageRequest)(nil),           // 23: reliant.v1.CleanupStorageRequest
 	(*CleanupStorageResponse)(nil),          // 24: reliant.v1.CleanupStorageResponse
 	(*CleanupStorageResult)(nil),            // 25: reliant.v1.CleanupStorageResult
-	(ApprovalType)(0),                       // 26: reliant.v1.ApprovalType
-	(*TriggerHealth)(nil),                   // 27: reliant.v1.TriggerHealth
-	(*TriggerEventDefinition)(nil),          // 28: reliant.v1.TriggerEventDefinition
-	(*TriggerSetupIssue)(nil),               // 29: reliant.v1.TriggerSetupIssue
+	(v1.ApprovalType)(0),                    // 26: reliant.v1.ApprovalType
+	(*v1.TriggerHealth)(nil),                // 27: reliant.v1.TriggerHealth
+	(*v1.TriggerEventDefinition)(nil),       // 28: reliant.v1.TriggerEventDefinition
+	(*v1.TriggerSetupIssue)(nil),            // 29: reliant.v1.TriggerSetupIssue
 	(*DiskVolume)(nil),                      // 30: reliant.v1.DiskVolume
 	(*ProcessReport)(nil),                   // 31: reliant.v1.ProcessReport
 }
@@ -2218,9 +2219,7 @@ func file_reliant_v1_inbox_proto_init() {
 	if File_reliant_v1_inbox_proto != nil {
 		return
 	}
-	file_reliant_v1_approval_proto_init()
 	file_reliant_v1_tools_daemon_proto_init()
-	file_reliant_v1_trigger_proto_init()
 	file_reliant_v1_inbox_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_inbox_proto_msgTypes[2].OneofWrappers = []any{
 		(*InboxItem_Approval)(nil),

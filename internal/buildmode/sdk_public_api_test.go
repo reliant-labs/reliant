@@ -12,10 +12,12 @@ import (
 	"strings"
 	"testing"
 
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"gopkg.in/yaml.v3"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	sdkv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 )
 
 // The public API is the rpcs listed in proto/public-api.txt, and nothing else.
@@ -24,7 +26,7 @@ import (
 //   - proto/public-api.txt, the allowlist (modelled on control-plane's),
 //   - buf.gen.sdk-go.yaml, whose inputs and M mappings decide which protos
 //     are generated into sdk/go, and whose Connect plugin filters by `types:`,
-//   - the generated tree in sdk/go/gen,
+//   - the generated tree in sdk/go/gen and gen/,
 //   - the module boundary: sdk/go imports nothing from the app, and the app
 //     reaches the SDK only by a published version, never a replace.
 //
@@ -400,8 +402,8 @@ func mappedFiles(p bufPlugin) map[string]bool {
 // routes exactly those into the SDK (so its messages and clients agree on where
 // a message lives), and its Connect plugin's `types:` are exactly the exported
 // rpcs (so a withheld rpc has no client in the published module). The app's
-// buf.gen.yaml routes nothing into the SDK: the app keeps its own gen/ until
-// it moves onto the SDK by version.
+// buf.gen.yaml routes exactly the same files into the SDK, so the app imports
+// them from there and never generates a second copy.
 func TestBufGenMatchesThePublicAPI(t *testing.T) {
 	t.Parallel()
 	root := repoRoot(t)
@@ -445,8 +447,15 @@ func TestBufGenMatchesThePublicAPI(t *testing.T) {
 	}
 
 	for _, p := range readBufGen(t, root, "buf.gen.yaml").Plugins {
-		if tool := goPlugin(p); tool != "" && len(mappedFiles(p)) > 0 {
-			t.Errorf("buf.gen.yaml: %s routes %v into the SDK; the app must not import sdk/go/gen yet", tool, sorted(mappedFiles(p)))
+		tool := goPlugin(p)
+		if tool == "" {
+			continue
+		}
+		if got, want := sorted(mappedFiles(p)), sorted(files); !reflect.DeepEqual(got, want) {
+			t.Errorf("buf.gen.yaml: %s (out %q) routes %v into the SDK, want exactly the public files %v", tool, p.Out, got, want)
+		}
+		if tool == "protoc-gen-connect-go" && len(p.Types) > 0 {
+			t.Errorf("buf.gen.yaml: the app's protoc-gen-connect-go entry filters by `types:`; the app's handlers need every rpc (the SDK's filtered clients are %s's)", sdkBufGen)
 		}
 	}
 
@@ -501,13 +510,25 @@ func TestGeneratedTreeMatchesThePublicAPI(t *testing.T) {
 		t.Errorf("sdk/go/gen/reliant/v1 holds %v, want the public files %v (run `task generate:forge`)", sorted(gotPB), sorted(wantPB))
 	}
 
-	// App messages: the app still generates every proto into gen/ itself. The
-	// SDK's copies are a second registration of the public files, which is
-	// safe only while no binary links both (the app does not import sdk/go).
+	// App messages: everything else, and none of the above. A file generated
+	// into both trees registers its proto twice and panics every binary at init.
+	appPB, _ := filepath.Glob(filepath.Join(root, "gen/reliant/v1/*.pb.go"))
+	for _, f := range appPB {
+		name := strings.TrimSuffix(filepath.Base(f), ".pb.go")
+		if name == "sdk_alias" {
+			continue // tools/sdkalias's re-export of the SDK's names, not a proto
+		}
+		if wantPB[name] {
+			t.Errorf("gen/reliant/v1/%s.pb.go duplicates a public proto that sdk/go/gen already generates; the app must import the SDK's", name)
+		}
+	}
 	for name := range protos {
 		short := base(name)
+		if wantPB[short] {
+			continue
+		}
 		if _, err := os.Stat(filepath.Join(root, "gen/reliant/v1", short+".pb.go")); err != nil {
-			t.Errorf("%s has no gen/reliant/v1/%s.pb.go (run `task generate:forge`)", name, short)
+			t.Errorf("%s is not public and has no gen/reliant/v1/%s.pb.go (run `task generate:forge`)", name, short)
 		}
 	}
 
@@ -530,6 +551,31 @@ func TestGeneratedTreeMatchesThePublicAPI(t *testing.T) {
 	}
 	if !reflect.DeepEqual(sorted(gotProc), sorted(public)) {
 		t.Errorf("the SDK's generated clients expose\n  %v\nbut %s exports\n  %v\n(run `task generate:forge`)", sorted(gotProc), publicAPIFile, sorted(public))
+	}
+}
+
+// TestSDKHasOneRegistrationOfEachPublicProto is the init-panic guard, at
+// runtime: this test binary links the app's generated package and the SDK's, so
+// a double registration would have panicked before main. What is checked is that
+// the type a caller gets from the app's import path IS the SDK's type, so a
+// *Run crosses between the two without conversion.
+func TestSDKHasOneRegistrationOfEachPublicProto(t *testing.T) {
+	t.Parallel()
+
+	var viaApp *reliantv1.Run = &sdkv1.Run{Id: "x"}
+	if got := reflect.TypeOf(viaApp).Elem().PkgPath(); got != sdkPkgPath {
+		t.Fatalf("reliantv1.Run lives in %q, want %q: the app has its own copy", got, sdkPkgPath)
+	}
+	if _, err := protoregistry.GlobalFiles.FindFileByPath("reliant/v1/run.proto"); err != nil {
+		t.Fatalf("run.proto is not registered: %v", err)
+	}
+	// A proto that stays in the app resolves too, and refers to the SDK's types.
+	fd, err := protoregistry.GlobalFiles.FindFileByPath("reliant/v1/inbox.proto")
+	if err != nil {
+		t.Fatalf("inbox.proto is not registered: %v", err)
+	}
+	if fd.Imports().Len() == 0 {
+		t.Fatal("inbox.proto imports nothing, so it cannot show the app resolving the SDK's files")
 	}
 }
 

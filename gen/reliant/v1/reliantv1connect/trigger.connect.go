@@ -10,7 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 	context "context"
 	errors "errors"
-	v1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	http "net/http"
 	strings "strings"
 )

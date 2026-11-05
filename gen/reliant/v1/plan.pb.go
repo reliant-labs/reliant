@@ -11,6 +11,7 @@ package reliantv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -85,7 +86,7 @@ type Plan struct {
 	ChatId        string                 `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
 	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
 	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Status        PlanStatus             `protobuf:"varint,5,opt,name=status,proto3,enum=reliant.v1.PlanStatus" json:"status,omitempty"`
+	Status        v1.PlanStatus          `protobuf:"varint,5,opt,name=status,proto3,enum=reliant.v1.PlanStatus" json:"status,omitempty"`
 	Complexity    PlanComplexity         `protobuf:"varint,6,opt,name=complexity,proto3,enum=reliant.v1.PlanComplexity" json:"complexity,omitempty"`
 	CreatedAt     string                 `protobuf:"bytes,7,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     string                 `protobuf:"bytes,8,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
@@ -152,11 +153,11 @@ func (x *Plan) GetDescription() string {
 	return ""
 }
 
-func (x *Plan) GetStatus() PlanStatus {
+func (x *Plan) GetStatus() v1.PlanStatus {
 	if x != nil {
 		return x.Status
 	}
-	return PlanStatus_PLAN_STATUS_UNSPECIFIED
+	return v1.PlanStatus(0)
 }
 
 func (x *Plan) GetComplexity() PlanComplexity {
@@ -193,7 +194,7 @@ type CreatePlanRequest struct {
 	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
 	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
 	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Status        PlanStatus             `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.PlanStatus" json:"status,omitempty"`
+	Status        v1.PlanStatus          `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.PlanStatus" json:"status,omitempty"`
 	Complexity    PlanComplexity         `protobuf:"varint,5,opt,name=complexity,proto3,enum=reliant.v1.PlanComplexity" json:"complexity,omitempty"`
 	ProjectId     *string                `protobuf:"bytes,6,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -251,11 +252,11 @@ func (x *CreatePlanRequest) GetDescription() string {
 	return ""
 }
 
-func (x *CreatePlanRequest) GetStatus() PlanStatus {
+func (x *CreatePlanRequest) GetStatus() v1.PlanStatus {
 	if x != nil {
 		return x.Status
 	}
-	return PlanStatus_PLAN_STATUS_UNSPECIFIED
+	return v1.PlanStatus(0)
 }
 
 func (x *CreatePlanRequest) GetComplexity() PlanComplexity {
@@ -503,7 +504,7 @@ type UpdatePlanRequest struct {
 	PlanId        string                 `protobuf:"bytes,1,opt,name=plan_id,json=planId,proto3" json:"plan_id,omitempty"`
 	Title         *string                `protobuf:"bytes,2,opt,name=title,proto3,oneof" json:"title,omitempty"`
 	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
-	Status        *PlanStatus            `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.PlanStatus,oneof" json:"status,omitempty"`
+	Status        *v1.PlanStatus         `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.PlanStatus,oneof" json:"status,omitempty"`
 	Complexity    *PlanComplexity        `protobuf:"varint,5,opt,name=complexity,proto3,enum=reliant.v1.PlanComplexity,oneof" json:"complexity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -560,11 +561,11 @@ func (x *UpdatePlanRequest) GetDescription() string {
 	return ""
 }
 
-func (x *UpdatePlanRequest) GetStatus() PlanStatus {
+func (x *UpdatePlanRequest) GetStatus() v1.PlanStatus {
 	if x != nil && x.Status != nil {
 		return *x.Status
 	}
-	return PlanStatus_PLAN_STATUS_UNSPECIFIED
+	return v1.PlanStatus(0)
 }
 
 func (x *UpdatePlanRequest) GetComplexity() PlanComplexity {
@@ -1038,7 +1039,7 @@ var file_reliant_v1_plan_proto_goTypes = []any{
 	(*ListPlanTasksResponse)(nil),      // 13: reliant.v1.ListPlanTasksResponse
 	(*ListPlansByProjectRequest)(nil),  // 14: reliant.v1.ListPlansByProjectRequest
 	(*ListPlansByProjectResponse)(nil), // 15: reliant.v1.ListPlansByProjectResponse
-	(PlanStatus)(0),                    // 16: reliant.v1.PlanStatus
+	(v1.PlanStatus)(0),                 // 16: reliant.v1.PlanStatus
 	(*Task)(nil),                       // 17: reliant.v1.Task
 	(*TaskDependency)(nil),             // 18: reliant.v1.TaskDependency
 }
@@ -1082,7 +1083,6 @@ func file_reliant_v1_plan_proto_init() {
 	if File_reliant_v1_plan_proto != nil {
 		return
 	}
-	file_reliant_v1_common_proto_init()
 	file_reliant_v1_task_proto_init()
 	file_reliant_v1_plan_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_plan_proto_msgTypes[1].OneofWrappers = []any{}

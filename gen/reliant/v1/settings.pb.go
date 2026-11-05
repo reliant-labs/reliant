@@ -11,6 +11,7 @@ package reliantv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1563,9 +1564,9 @@ type GetPreferencesResponse struct {
 	// Default planning mode setting for new chats (defaults to false)
 	DefaultPlanningMode bool `protobuf:"varint,9,opt,name=default_planning_mode,json=defaultPlanningMode,proto3" json:"default_planning_mode,omitempty"`
 	// Default scope for saving MCP server configurations
-	DefaultMcpScope ConfigScope `protobuf:"varint,10,opt,name=default_mcp_scope,json=defaultMcpScope,proto3,enum=reliant.v1.ConfigScope" json:"default_mcp_scope,omitempty"`
+	DefaultMcpScope v1.ConfigScope `protobuf:"varint,10,opt,name=default_mcp_scope,json=defaultMcpScope,proto3,enum=reliant.v1.ConfigScope" json:"default_mcp_scope,omitempty"`
 	// Default scope for saving workflow definitions
-	DefaultWorkflowScope ConfigScope `protobuf:"varint,11,opt,name=default_workflow_scope,json=defaultWorkflowScope,proto3,enum=reliant.v1.ConfigScope" json:"default_workflow_scope,omitempty"`
+	DefaultWorkflowScope v1.ConfigScope `protobuf:"varint,11,opt,name=default_workflow_scope,json=defaultWorkflowScope,proto3,enum=reliant.v1.ConfigScope" json:"default_workflow_scope,omitempty"`
 	// Default workflow for new chats (e.g., "builtin://agent")
 	DefaultWorkflow string `protobuf:"bytes,12,opt,name=default_workflow,json=defaultWorkflow,proto3" json:"default_workflow,omitempty"`
 	// Hide builtin workflows from workflow hub (defaults to false)
@@ -1659,18 +1660,18 @@ func (x *GetPreferencesResponse) GetDefaultPlanningMode() bool {
 	return false
 }
 
-func (x *GetPreferencesResponse) GetDefaultMcpScope() ConfigScope {
+func (x *GetPreferencesResponse) GetDefaultMcpScope() v1.ConfigScope {
 	if x != nil {
 		return x.DefaultMcpScope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
-func (x *GetPreferencesResponse) GetDefaultWorkflowScope() ConfigScope {
+func (x *GetPreferencesResponse) GetDefaultWorkflowScope() v1.ConfigScope {
 	if x != nil {
 		return x.DefaultWorkflowScope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
 func (x *GetPreferencesResponse) GetDefaultWorkflow() string {
@@ -1722,9 +1723,9 @@ type UpdatePreferencesRequest struct {
 	// Default planning mode setting for new chats
 	DefaultPlanningMode *bool `protobuf:"varint,9,opt,name=default_planning_mode,json=defaultPlanningMode,proto3,oneof" json:"default_planning_mode,omitempty"`
 	// Default scope for saving MCP server configurations
-	DefaultMcpScope *ConfigScope `protobuf:"varint,10,opt,name=default_mcp_scope,json=defaultMcpScope,proto3,enum=reliant.v1.ConfigScope,oneof" json:"default_mcp_scope,omitempty"`
+	DefaultMcpScope *v1.ConfigScope `protobuf:"varint,10,opt,name=default_mcp_scope,json=defaultMcpScope,proto3,enum=reliant.v1.ConfigScope,oneof" json:"default_mcp_scope,omitempty"`
 	// Default scope for saving workflow definitions
-	DefaultWorkflowScope *ConfigScope `protobuf:"varint,11,opt,name=default_workflow_scope,json=defaultWorkflowScope,proto3,enum=reliant.v1.ConfigScope,oneof" json:"default_workflow_scope,omitempty"`
+	DefaultWorkflowScope *v1.ConfigScope `protobuf:"varint,11,opt,name=default_workflow_scope,json=defaultWorkflowScope,proto3,enum=reliant.v1.ConfigScope,oneof" json:"default_workflow_scope,omitempty"`
 	// Default workflow for new chats (e.g., "builtin://agent")
 	DefaultWorkflow *string `protobuf:"bytes,12,opt,name=default_workflow,json=defaultWorkflow,proto3,oneof" json:"default_workflow,omitempty"`
 	// Hide builtin workflows from workflow hub
@@ -1814,18 +1815,18 @@ func (x *UpdatePreferencesRequest) GetDefaultPlanningMode() bool {
 	return false
 }
 
-func (x *UpdatePreferencesRequest) GetDefaultMcpScope() ConfigScope {
+func (x *UpdatePreferencesRequest) GetDefaultMcpScope() v1.ConfigScope {
 	if x != nil && x.DefaultMcpScope != nil {
 		return *x.DefaultMcpScope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
-func (x *UpdatePreferencesRequest) GetDefaultWorkflowScope() ConfigScope {
+func (x *UpdatePreferencesRequest) GetDefaultWorkflowScope() v1.ConfigScope {
 	if x != nil && x.DefaultWorkflowScope != nil {
 		return *x.DefaultWorkflowScope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
 func (x *UpdatePreferencesRequest) GetDefaultWorkflow() string {
@@ -5696,7 +5697,7 @@ var file_reliant_v1_settings_proto_goTypes = []any{
 	nil,                                         // 81: reliant.v1.GetPreferencesResponse.AdditionalEntry
 	nil,                                         // 82: reliant.v1.UpdatePreferencesRequest.AdditionalEntry
 	nil,                                         // 83: reliant.v1.ConfigError.DetailsEntry
-	(ConfigScope)(0),                            // 84: reliant.v1.ConfigScope
+	(v1.ConfigScope)(0),                         // 84: reliant.v1.ConfigScope
 	(*ProviderAccount)(nil),                     // 85: reliant.v1.ProviderAccount
 }
 var file_reliant_v1_settings_proto_depIdxs = []int32{
@@ -5815,7 +5816,6 @@ func file_reliant_v1_settings_proto_init() {
 	if File_reliant_v1_settings_proto != nil {
 		return
 	}
-	file_reliant_v1_common_proto_init()
 	file_reliant_v1_provider_account_proto_init()
 	file_reliant_v1_settings_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_settings_proto_msgTypes[1].OneofWrappers = []any{}
