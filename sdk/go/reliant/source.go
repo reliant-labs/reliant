@@ -6,6 +6,7 @@ package reliant
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -20,9 +21,9 @@ import (
 // It is a cursor poll of the same durable per-session feed the web app streams;
 // a streaming source can replace it without touching the engine.
 //
-// With a scope it follows ONE run of the session (see runScope): the feed,
-// the root and the gates are narrowed to that run's execution subtree. Without
-// one it follows the session's newest run, as FollowSession promises.
+// It follows ONE run of the session (see runScope): the feed, the root and the
+// gates are narrowed to that run's execution subtree. FollowSession's scope is
+// the session's current run, pinned before any history replays.
 type chatSource struct {
 	chat      reliantv1connect.ChatServiceClient
 	runs      *RunsClient
@@ -40,7 +41,7 @@ func (s *chatSource) Updates(ctx context.Context, sinceSeq int64) ([]follow.RawU
 		return nil, sinceSeq, err
 	}
 	updates := make([]follow.RawUpdate, 0, len(resp.Msg.GetUpdates()))
-	reread := false
+	var poll pollState
 	for _, u := range resp.Msg.GetUpdates() {
 		createdAt, err := time.Parse(time.RFC3339, u.GetCreatedAt())
 		if err != nil {
@@ -52,12 +53,17 @@ func (s *chatSource) Updates(ctx context.Context, sinceSeq int64) ([]follow.RawU
 			Data:      []byte(u.GetData()),
 			CreatedAt: createdAt,
 		}
-		if s.scope != nil {
-			raw = s.narrow(ctx, raw, &reread)
-		}
-		updates = append(updates, raw)
+		updates = append(updates, s.narrow(ctx, raw, &poll))
 	}
 	return updates, resp.Msg.GetLatestSequence(), nil
+}
+
+// pollState bounds narrow's extra reads to one of each per poll.
+type pollState struct {
+	treeRead bool
+	// treeEmpty is true when this poll's tree read showed no run at all.
+	treeEmpty     bool
+	approvalsRead bool
 }
 
 // scopedPayload is what narrow reads of an update to attribute it to a run.
@@ -70,39 +76,61 @@ type scopedPayload struct {
 }
 
 // narrow keeps an update of the followed run and blanks the type of any other,
-// so the engine skips it but still pages past its sequence. A workflow or
-// thread the scope does not know yet triggers one tree re-read per poll: a
-// child workflow started since the last read.
-func (s *chatSource) narrow(ctx context.Context, u follow.RawUpdate, reread *bool) follow.RawUpdate {
+// so the engine skips it but still pages past its sequence. A workflow, thread
+// or gate the scope does not know yet triggers one tree re-read per poll (a
+// child workflow started since the last read), and an approval it does not
+// know one read of the session's approvals.
+func (s *chatSource) narrow(ctx context.Context, u follow.RawUpdate, poll *pollState) follow.RawUpdate {
 	var p scopedPayload
 	if err := json.Unmarshal(u.Data, &p); err != nil {
 		return u // not ours to judge: the engine drops what it cannot parse
 	}
+	isStatus := strings.Contains(u.Type, "WORKFLOW_STATUS")
 	known := func() bool {
 		switch {
 		case strings.Contains(u.Type, "NODE_EXECUTION"):
 			return s.scope.ids[p.WorkflowID]
-		case strings.Contains(u.Type, "WORKFLOW_STATUS"):
+		case isStatus:
 			// A child workflow announces itself before any tree read shows it.
 			if !s.scope.ids[p.WorkflowID] && p.ParentWorkflowID != "" && s.scope.ids[p.ParentWorkflowID] {
 				s.scope.ids[p.WorkflowID] = true
 			}
 			return s.scope.ids[p.WorkflowID]
 		case strings.Contains(u.Type, "QUESTION"):
-			return s.scope.owns(Gate{ID: p.QuestionID, ThreadID: p.ThreadID})
+			// A question's resolution names the workflow that raised it but not
+			// its thread, so the workflow is what attributes it.
+			g := Gate{ID: p.QuestionID, ThreadID: p.ThreadID, RunID: p.WorkflowID}
+			if !s.scope.owns(g) {
+				return false
+			}
+			s.scope.gates[g.ID] = true
+			return true
 		case strings.Contains(u.Type, "APPROVAL"):
-			// An approval update names no workflow or thread: it is the run's
-			// once the run's pending gates included it (Pending, every poll),
-			// and the engine's reconciler surfaces it from there meanwhile.
+			// An approval update names no workflow or thread: the session's
+			// approval list does, and attributes it (see learnApprovals).
 			return s.scope.gates[p.ID]
 		}
 		return true // a type the engine does not surface
 	}
 	ok := known()
-	if !ok && !*reread && (strings.Contains(u.Type, "NODE_EXECUTION") || strings.Contains(u.Type, "QUESTION")) {
-		*reread = true
+	if !ok && !poll.treeRead && !strings.Contains(u.Type, "APPROVAL") {
+		poll.treeRead = true
 		if roots, err := s.runs.sessionTree(ctx, s.sessionID, reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_BASIC); err == nil {
 			s.scope.load(roots)
+			poll.treeEmpty = len(roots) == 0
+			ok = known()
+		}
+	}
+	// A session with no run in its tree yet: its first top-level workflow is
+	// the run being followed, as no older one exists to be confused with it.
+	if !ok && !s.scope.pinned() && poll.treeEmpty && isStatus && p.ParentWorkflowID == "" && p.WorkflowID != "" {
+		s.scope.pin(p.WorkflowID)
+		s.scope.newest = true
+		ok = true
+	}
+	if !ok && !poll.approvalsRead && strings.Contains(u.Type, "APPROVAL") {
+		poll.approvalsRead = true
+		if s.learnApprovals(ctx) == nil {
 			ok = known()
 		}
 	}
@@ -113,7 +141,7 @@ func (s *chatSource) narrow(ctx context.Context, u follow.RawUpdate, reread *boo
 	// The followed run's own lifecycle rows are its root's, even when the run is
 	// a child workflow: dropping the parent is what makes its terminal end the
 	// follow, as the engine ends on a terminal with no parent.
-	if strings.Contains(u.Type, "WORKFLOW_STATUS") && p.WorkflowID == s.scope.runID && p.ParentWorkflowID != "" {
+	if isStatus && p.WorkflowID == s.scope.runID && p.ParentWorkflowID != "" {
 		var m map[string]json.RawMessage
 		if err := json.Unmarshal(u.Data, &m); err == nil {
 			delete(m, "parent_workflow_id")
@@ -125,6 +153,25 @@ func (s *chatSource) narrow(ctx context.Context, u follow.RawUpdate, reread *boo
 	return u
 }
 
+// learnApprovals attributes the session's approvals, resolved ones included,
+// by the workflow each names, so an approval's historical rows replay on the
+// run that raised it before any pending-list read could have seen it.
+func (s *chatSource) learnApprovals(ctx context.Context) error {
+	if !s.scope.pinned() {
+		return errors.New("no run pinned yet")
+	}
+	a, err := s.gates.approvals.ListApprovalsByChat(ctx, connect.NewRequest(&reliantv1.ListApprovalsByChatRequest{ChatId: s.sessionID}))
+	if err != nil {
+		return err
+	}
+	for _, ap := range a.Msg.GetApprovals() {
+		if g := (Gate{ID: ap.GetId(), RunID: ap.GetWorkflowId()}); s.scope.owns(g) {
+			s.scope.gates[g.ID] = true
+		}
+	}
+	return nil
+}
+
 func (s *chatSource) Root(ctx context.Context) (follow.RootState, error) {
 	// Only root status is read, so the default BASIC view is enough; FULL would
 	// ship every step row of the session.
@@ -132,15 +179,9 @@ func (s *chatSource) Root(ctx context.Context) (follow.RootState, error) {
 	if err != nil {
 		return follow.RootState{}, err
 	}
-	var root *reliantv1.WorkflowExecution
-	switch {
-	case s.scope != nil:
-		// The followed run's own execution, wherever it sits in the session:
-		// an older root, the newest, or a child workflow of either.
-		root = s.scope.load(roots)
-	case len(roots) > 0:
-		root = roots[0] // newest first
-	}
+	// The followed run's own execution, wherever it sits in the session: an
+	// older root, the newest, or a child workflow of either.
+	root := s.scope.load(roots)
 	if root == nil {
 		return follow.RootState{}, nil
 	}
@@ -160,9 +201,7 @@ func (s *chatSource) Root(ctx context.Context) (follow.RootState, error) {
 // transient failure here never wedges a follow.
 func (s *chatSource) Pending(ctx context.Context) ([]follow.PendingGate, error) {
 	gates, err := s.gates.pending(ctx, s.sessionID)
-	if s.scope != nil {
-		gates = s.scope.filter(gates)
-	}
+	gates = s.scope.filter(gates)
 	out := make([]follow.PendingGate, 0, len(gates))
 	for _, g := range gates {
 		out = append(out, follow.PendingGate{

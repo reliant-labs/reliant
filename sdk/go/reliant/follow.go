@@ -81,16 +81,21 @@ func (r *RunsClient) Follow(ctx context.Context, runID string, opts FollowOption
 
 // FollowSession is [RunsClient.Follow] for a run you hold the session id of:
 // the chat_id on a [TriggerEvent], or the id `reliant workflow run` prints as
-// the execution id. It follows the session's current run.
+// the execution id. It follows the session's current run: the newest when it
+// attaches, or the first to start when the session has none yet. An earlier
+// run's rows are not that run's, so its verdict never ends this follow.
 func (r *RunsClient) FollowSession(ctx context.Context, sessionID string, opts FollowOptions) (*Follow, error) {
 	if sessionID == "" {
 		return nil, r.c.fail("runs.followSession", ErrInvalidArgument, "session id is required")
 	}
-	return r.followSession(ctx, sessionID, sessionID, nil, opts)
+	scope := newSessionScope()
+	if roots, err := r.sessionTree(ctx, sessionID, reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_BASIC); err == nil {
+		scope.load(roots) // pins the current run; else the first poll that sees one does
+	}
+	return r.followSession(ctx, sessionID, sessionID, scope, opts)
 }
 
-// followSession follows one run of the session when scope is set, else the
-// session's newest run.
+// followSession follows the one run of the session that scope selects.
 func (r *RunsClient) followSession(ctx context.Context, executionID, sessionID string, scope *runScope, opts FollowOptions) (*Follow, error) {
 	buf := opts.Buffer
 	if buf <= 0 {

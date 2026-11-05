@@ -19,9 +19,12 @@ import (
 // workflows. Everything the session reports (its update feed, its pending
 // questions and approvals, its execution tree) spans all of them, so a call
 // about ONE run has to select that run's subtree, or it reports another run's
-// verdict or gates under this run's id. The session-wide methods
-// (FollowSession, StatusSession, PendingInSession) deliberately do not.
+// verdict or gates under this run's id. StatusSession and PendingInSession
+// deliberately span the session; FollowSession follows the session's current
+// run, so it pins one (see newSessionScope).
 type runScope struct {
+	// runID is empty while a session scope is unpinned: the session had no run
+	// yet when the follow attached, and the first one it shows is pinned.
 	runID string
 	// ids are the workflow executions of the subtree: the run's and every child
 	// workflow under it, including ones learned from the feed after the last
@@ -39,18 +42,40 @@ type runScope struct {
 }
 
 func newRunScope(runID string) *runScope {
+	s := newSessionScope()
+	s.pin(runID)
+	return s
+}
+
+// newSessionScope is the scope of a session's current run, not yet known: the
+// first tree read that shows a root pins the newest one, so an older run's
+// rows (its green terminal above all) never stand in for the current run's.
+func newSessionScope() *runScope {
 	return &runScope{
-		runID:   runID,
-		ids:     map[string]bool{runID: true},
+		ids:     map[string]bool{},
 		threads: map[string]bool{},
 		gates:   map[string]bool{},
 	}
 }
 
+func (s *runScope) pin(runID string) {
+	s.runID = runID
+	s.ids[runID] = true
+}
+
+func (s *runScope) pinned() bool { return s.runID != "" }
+
 // load finds the run in the session's roots and adds its subtree to the scope.
 // It returns the run's execution, or nil when the tree does not hold it (yet).
-// What was learned earlier is kept: a tree read never shrinks the scope.
+// What was learned earlier is kept: a tree read never shrinks the scope. An
+// unpinned scope pins the newest root.
 func (s *runScope) load(roots []*reliantv1.WorkflowExecution) *reliantv1.WorkflowExecution {
+	if !s.pinned() {
+		if len(roots) == 0 || roots[0].GetId() == "" {
+			return nil
+		}
+		s.pin(roots[0].GetId())
+	}
 	for i, root := range roots {
 		if ex := findExecution(root, s.runID); ex != nil {
 			s.addTree(ex)
