@@ -1,4 +1,6 @@
 import { useCallback, useState, type ReactNode } from "react";
+import type { JourneyId } from "@/components/Onboarding/tourParam";
+import { readLandingJourney } from "@/lib/landingAttribution";
 import { useNavigate } from "@tanstack/react-router";
 import { Github, Loader2, MessageSquare, Rocket } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -15,6 +17,15 @@ import { ProvisioningGate } from "../ProvisioningGate";
 import { useCommitLaunchPlan } from "../useCommitLaunchPlan";
 import type { LaunchPlan, OnboardingIntent, StepProps } from "../types";
 
+/**
+ * The start a landing-page journey points at: "Explore a forge app" is
+ * building one, "Use AI workflows" starts from a chat (where workflows run).
+ * It only PRESELECTS — that card leads — and never answers for the user.
+ */
+export function intentForJourney(journey: JourneyId | undefined): "build_app" | "chat" {
+  return journey === "workflows" ? "chat" : "build_app";
+}
+
 export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
   const navigate = useNavigate();
   const completeOnboardingMutation = useCompleteOnboarding();
@@ -22,6 +33,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
   // Which choice is in flight, so its card shows the spinner; false when idle.
   const [busy, setBusy] = useState<false | OnboardingIntent>(false);
   const [error, setError] = useState<string | null>(null);
+  const [preferred] = useState(() => intentForJourney(readLandingJourney()));
   // The commit point. Onboarding creates nothing until this runs, and it runs
   // once, here, after the server has confirmed onboarding — not from an effect
   // and not from a step observing a state change.
@@ -113,6 +125,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
       <div className="space-y-6">
         <ProvisioningGate
           commit={commit}
+          compute={plan.compute}
           onContinue={leave}
           onRetry={() => void retry(plan)}
         />
@@ -133,7 +146,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <ChoiceCard
-          primary
+          primary={preferred === "build_app"}
           icon={<Rocket className="h-5 w-5" />}
           title="Build an app"
           tag="Fastest"
@@ -153,6 +166,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
           testId="onboarding-choice-github"
         />
         <ChoiceCard
+          primary={preferred === "chat"}
           icon={<MessageSquare className="h-5 w-5" />}
           title="Just chat"
           description="Ask questions, research and write. A project is there when you need one."

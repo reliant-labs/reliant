@@ -19,6 +19,8 @@ interface OnboardingMultiSpotlightProps {
   onNext: () => void;
   onBack?: () => void;
   onSkipAll: () => void;
+  /** Enter / → and ← navigation; off while a required action is pending. */
+  keyboardNav?: boolean;
 }
 
 interface TargetRect {
@@ -184,6 +186,7 @@ export function OnboardingMultiSpotlight({
   onNext,
   onBack,
   onSkipAll: _onSkipAll,
+  keyboardNav = true,
 }: OnboardingMultiSpotlightProps) {
   // ESC no longer ends the tour — onSkipAll is accepted for interface
   // compatibility but unused. Skip happens via the nav bar button.
@@ -333,6 +336,7 @@ export function OnboardingMultiSpotlight({
   // ESC intentionally does nothing — it must not end the tour. The user can
   // skip explicitly via the "Skip tour" button in OnboardingNavBar.
   useEffect(() => {
+    if (!keyboardNav) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Enter" || e.key === "ArrowRight") {
         e.stopPropagation();
@@ -347,7 +351,7 @@ export function OnboardingMultiSpotlight({
 
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [onNext, onBack]);
+  }, [onNext, onBack, keyboardNav]);
 
   const content = (
     <div

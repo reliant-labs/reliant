@@ -172,6 +172,9 @@ type TerminalOutputEvent struct {
 	Closed    bool   // true when the terminal session has closed
 	ExitCode  int32  // meaningful when Closed is true
 	Error     string // non-empty on error
+	// Overflow is set, with Error, on the event that ends a session whose
+	// output a hop could not deliver in time (TerminalOutputQueue).
+	Overflow bool
 }
 
 // ProcessOutputEvent represents a chunk of process output.

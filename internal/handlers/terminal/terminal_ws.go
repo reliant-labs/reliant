@@ -39,6 +39,11 @@ const (
 	// wsDrainCloseGrace bounds how long a connection the server is closing
 	// for shutdown waits for the browser's answering close frame.
 	wsDrainCloseGrace = 2 * time.Second
+	// wsWriteTimeout bounds one frame written by the output pump. Past it the
+	// browser is not reading, and the connection ends (the browser
+	// reconnects) instead of the pump blocking behind it while the output
+	// hops behind the pump fill up.
+	wsWriteTimeout = 15 * time.Second
 )
 
 var wsUpgrader = websocket.Upgrader{
@@ -654,38 +659,119 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		// that writes data frames: gorilla allows one concurrent writer.
 		pongCh := make(chan struct{}, 1)
 
-		// Output pump: daemon -> WebSocket
+		// Output pump: daemon -> WebSocket. Every chunk already queued goes
+		// out in one frame (coalesceOutput), in order. Each write is bounded
+		// by wsWriteTimeout: a browser that takes nothing for that long is
+		// gone, and the connection ends rather than the pump blocking forever
+		// behind it.
 		go func() {
 			defer wg.Done()
+			// carry holds the start of a UTF-8 character whose remaining
+			// bytes are still to come (splitIncompleteUTF8).
+			var carry []byte
+			// pending is an event coalesceOutput read but did not take.
+			var pending *toolexec.TerminalOutputEvent
+			write := func(msg wsMessage) bool {
+				if err := writeWSJSONWithin(conn, msg, wsWriteTimeout); err != nil {
+					logging.WarnContext(ctx, "[TerminalWS] Write to the browser failed; ending the session",
+						append([]any{"error", err, "type", msg.Type}, logFields...)...)
+					endSession(outcomeClientGone, nil)
+					return false
+				}
+				return true
+			}
+			// closeFromServer ends the connection once this pump has ended
+			// the session: nothing else would. The input pump's read only
+			// returns when the browser closes or the pong deadline passes,
+			// and with the ping pump stopped that was up to wsPongTimeout
+			// (45s) — a browser told "reconnecting" sat on a dead socket
+			// that long, and one whose shell exited never got the 1000 it
+			// reads as "Session ended". 1000 for an exit; anything else
+			// makes the browser reconnect. The read deadline bounds the
+			// wait for the browser's answering close frame, as the drain's
+			// does.
+			closeFromServer := func(code int, reason string) {
+				deadline := time.Now().Add(wsDrainCloseGrace)
+				_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, reason), deadline)
+				_ = conn.SetReadDeadline(deadline)
+			}
+			// flushCarry sends bytes held for a character that will now
+			// never be completed, before the session's last message.
+			flushCarry := func() {
+				if len(carry) > 0 {
+					write(wsMessage{Type: "output", Data: string(carry)})
+					carry = nil
+				}
+			}
 			for {
-				select {
-				case <-ctx.Done():
+				evt := pending
+				pending = nil
+				if evt == nil {
+					var ok bool
+					select {
+					case <-ctx.Done():
+						return
+					case <-pongCh:
+						if !write(wsMessage{Type: wsServerPong}) {
+							return
+						}
+						continue
+					case evt, ok = <-outputCh:
+						if !ok {
+							flushCarry()
+							endSession(outcomeOutputEnded, nil)
+							closeFromServer(websocket.CloseInternalServerErr, "terminal output ended")
+							return
+						}
+					}
+				}
+				if evt.Overflow {
+					flushCarry()
+					// No code: the browser prints it and reconnects.
+					write(wsMessage{Type: "error", Data: evt.Error})
+					endSession(outcomeOutputOverflow, nil)
+					closeFromServer(websocket.CloseInternalServerErr, "terminal output fell behind")
 					return
-				case <-pongCh:
-					writeWSJSON(conn, wsMessage{Type: wsServerPong})
-				case evt, ok := <-outputCh:
-					if !ok {
-						endSession(outcomeOutputEnded, nil)
+				}
+				if evt.Error != "" {
+					flushCarry()
+					write(wsMessage{Type: "error", Data: evt.Error})
+					endSession(outcomeDaemonError, nil)
+					closeFromServer(websocket.CloseInternalServerErr, "terminal session error")
+					return
+				}
+				if evt.Closed {
+					flushCarry()
+					write(wsMessage{
+						Type: "exit",
+						Data: fmt.Sprintf("Process exited with code %d", evt.ExitCode),
+					})
+					sess.shellExited(evt.ExitCode)
+					endSession(outcomeShellExited, nil)
+					closeFromServer(websocket.CloseNormalClosure, "shell exited")
+					return
+				}
+				if len(evt.Data) == 0 {
+					continue
+				}
+				frame := append(carry, evt.Data...)
+				frame, next, closed := coalesceOutput(frame, outputCh, wsOutputFrameMax)
+				pending = next
+				frame, carry = splitIncompleteUTF8(frame)
+				// carry aliases frame's backing array; copy it before the
+				// next frame is built on top of it.
+				carry = append([]byte(nil), carry...)
+				if len(frame) > 0 {
+					sess.output(ctx, len(frame))
+					if !write(wsMessage{Type: "output", Data: string(frame)}) {
 						return
 					}
-					if evt.Error != "" {
-						writeWSJSON(conn, wsMessage{Type: "error", Data: evt.Error})
-						endSession(outcomeDaemonError, nil)
-						return
-					}
-					if evt.Closed {
-						writeWSJSON(conn, wsMessage{
-							Type: "exit",
-							Data: fmt.Sprintf("Process exited with code %d", evt.ExitCode),
-						})
-						sess.shellExited(evt.ExitCode)
-						endSession(outcomeShellExited, nil)
-						return
-					}
-					if len(evt.Data) > 0 {
-						sess.output(ctx, len(evt.Data))
-						writeWSJSON(conn, wsMessage{Type: "output", Data: string(evt.Data)})
-					}
+				}
+				if closed {
+					flushCarry()
+					endSession(outcomeOutputEnded, nil)
+					closeFromServer(websocket.CloseInternalServerErr, "terminal output ended")
+					return
 				}
 			}
 		}()
@@ -772,6 +858,19 @@ func writeWSJSON(conn *websocket.Conn, msg wsMessage) {
 	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 		logging.Debug("[TerminalWS] Failed to write WS message", "error", err)
 	}
+}
+
+// writeWSJSONWithin is writeWSJSON for the output pump: the write must finish
+// within timeout, and its error is returned.
+func writeWSJSONWithin(conn *websocket.Conn, msg wsMessage, timeout time.Duration) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	if err := conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		return err
+	}
+	return conn.WriteMessage(websocket.TextMessage, data)
 }
 
 // writeWSError sends an error message to the browser and logs it at ERROR

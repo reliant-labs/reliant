@@ -1,27 +1,62 @@
 package tools_daemon
 
 import (
+	"errors"
 	"fmt"
+	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// dispatchTerminalEvent sends a terminal output event to all subscribers for the session.
+// terminalOutputSendTimeout bounds how long dispatchTerminalEvent waits for a
+// subscriber with a full queue. The wait runs on the daemon's receive loop,
+// so it holds up the rest of that daemon's traffic, and through gRPC flow
+// control backpressures the daemon's PTY reads — which is what makes the
+// stream lossless. The subscriber is the NATS forwarder, whose publish is a
+// buffered write: one that cannot take a chunk for this long is a stalled
+// process, and its session ends with an overflow error rather than stalling
+// the daemon further. A variable so tests can shrink it.
+var terminalOutputSendTimeout = 2 * time.Second
+
+// dispatchTerminalEvent sends a terminal output event to all subscribers for
+// the session, in order and without loss: it waits for a full subscriber (see
+// terminalOutputSendTimeout), and a subscriber still full after that is
+// unregistered and its session ended with an overflow error.
 func (c *daemonConnection) dispatchTerminalEvent(evt *toolexec.TerminalOutputEvent) {
 	c.terminalSubsMu.Lock()
 	subs := c.terminalSubs[evt.SessionID]
 	// Copy slice to release lock quickly.
-	subsCopy := make([]chan *toolexec.TerminalOutputEvent, len(subs))
+	subsCopy := make([]*toolexec.TerminalOutputQueue, len(subs))
 	copy(subsCopy, subs)
 	c.terminalSubsMu.Unlock()
 
-	for _, ch := range subsCopy {
-		select {
-		case ch <- evt:
-		default:
-			// Subscriber is slow; drop to avoid blocking the receive loop.
+	for _, sub := range subsCopy {
+		if err := sub.Send(evt); errors.Is(err, toolexec.ErrTerminalOutputOverflow) {
+			c.removeTerminalSub(evt.SessionID, sub)
+			observability.TerminalOutputOverflowTotal.WithLabelValues("gateway").Inc()
+			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Terminal output subscriber fell behind; ending the session",
+				"session_id", evt.SessionID, "user_id", c.userID, "daemon_id", c.daemonID,
+				"timeout", terminalOutputSendTimeout)
 		}
+	}
+}
+
+// removeTerminalSub unregisters sub from sessionID's subscribers.
+func (c *daemonConnection) removeTerminalSub(sessionID string, sub *toolexec.TerminalOutputQueue) {
+	c.terminalSubsMu.Lock()
+	defer c.terminalSubsMu.Unlock()
+	subs := c.terminalSubs[sessionID]
+	for i, s := range subs {
+		if s == sub {
+			c.terminalSubs[sessionID] = append(subs[:i], subs[i+1:]...)
+			break
+		}
+	}
+	if len(c.terminalSubs[sessionID]) == 0 {
+		delete(c.terminalSubs, sessionID)
 	}
 }
 
@@ -46,8 +81,8 @@ func (c *daemonConnection) dispatchProcessOutputEvent(evt *toolexec.ProcessOutpu
 func (c *daemonConnection) closeAllSubscribers() {
 	c.terminalSubsMu.Lock()
 	for sessionID, subs := range c.terminalSubs {
-		for _, ch := range subs {
-			close(ch)
+		for _, sub := range subs {
+			sub.Close()
 		}
 		delete(c.terminalSubs, sessionID)
 	}
@@ -98,13 +133,13 @@ func (s *Service) SubscribeTerminalOutput(userID, daemonID string, sessionID str
 		return nil, nil, err
 	}
 
-	ch := make(chan *toolexec.TerminalOutputEvent, 64)
+	sub := toolexec.NewTerminalOutputQueue(sessionID, toolexec.TerminalOutputQueueCapacity, terminalOutputSendTimeout)
 
-	// Register the subscriber channel BEFORE sending the subscribe message so no
+	// Register the subscriber BEFORE sending the subscribe message so no
 	// dispatched output can be dropped between the daemon starting its pump and
-	// the channel being registered.
+	// the subscriber being registered.
 	conn.terminalSubsMu.Lock()
-	conn.terminalSubs[sessionID] = append(conn.terminalSubs[sessionID], ch)
+	conn.terminalSubs[sessionID] = append(conn.terminalSubs[sessionID], sub)
 	conn.terminalSubsMu.Unlock()
 
 	// Send the terminal-output-subscribe message to the daemon. This is what
@@ -120,37 +155,17 @@ func (s *Service) SubscribeTerminalOutput(userID, daemonID string, sessionID str
 	}
 	if err := s.sendToDaemon(userID, daemonID, subMsg); err != nil {
 		// Roll back the registration on failure.
-		conn.terminalSubsMu.Lock()
-		subs := conn.terminalSubs[sessionID]
-		for i, sub := range subs {
-			if sub == ch {
-				conn.terminalSubs[sessionID] = append(subs[:i], subs[i+1:]...)
-				break
-			}
-		}
-		if len(conn.terminalSubs[sessionID]) == 0 {
-			delete(conn.terminalSubs, sessionID)
-		}
-		conn.terminalSubsMu.Unlock()
+		conn.removeTerminalSub(sessionID, sub)
+		sub.Close()
 		return nil, nil, fmt.Errorf("send terminal output subscribe: %w", err)
 	}
 
 	unsub := func() {
-		conn.terminalSubsMu.Lock()
-		defer conn.terminalSubsMu.Unlock()
-		subs := conn.terminalSubs[sessionID]
-		for i, sub := range subs {
-			if sub == ch {
-				conn.terminalSubs[sessionID] = append(subs[:i], subs[i+1:]...)
-				break
-			}
-		}
-		if len(conn.terminalSubs[sessionID]) == 0 {
-			delete(conn.terminalSubs, sessionID)
-		}
+		conn.removeTerminalSub(sessionID, sub)
+		sub.Close()
 	}
 
-	return ch, unsub, nil
+	return sub.C(), unsub, nil
 }
 
 // SubscribeProcessOutput registers a subscriber for process output.

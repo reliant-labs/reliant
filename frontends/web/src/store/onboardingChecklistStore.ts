@@ -34,6 +34,7 @@ import type {
   ChecklistItemId,
   ChecklistPanelState,
 } from "../components/Onboarding/types";
+import { tourEvents } from "../components/Onboarding/tourEvents";
 import { useProjectStore } from "./projectStore";
 import { getEventBus } from "../lib/events";
 import { chatKeys, getCachedChatList } from "../hooks/chat-queries";
@@ -314,6 +315,9 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       const newItems = new Set(completedItems);
       newItems.add(itemId);
       set({ completedItems: newItems });
+      // A journey step can wait on this (advanceOn: { kind: "event",
+      // event: "checklist:itemCompleted" }); free when none is listening.
+      tourEvents.emit("checklist:itemCompleted", { item: itemId });
 
       const serialized = serializeItems(newItems);
       writeLocal(LOCAL_KEYS.COMPLETED_ITEMS, serialized);

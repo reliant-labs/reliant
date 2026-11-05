@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Check, Loader2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authServeCommand } from "@/lib/cli-commands";
+import { CommandBlock } from "@/components/CommandBlock";
 import {
   describeTerminal,
   ReliantDownloadOptions,
@@ -194,11 +195,6 @@ export function OAuthHelperPanel({
     </button>
   );
 
-  const codeBlockClass = cn(
-    "block select-all rounded-md border border-border/40 bg-background px-3 py-2 font-mono break-all",
-    codeText,
-  );
-
   // Whether to show the manual install command. In Electron we hide it once the
   // CLI is confirmed installed (we show a confirmation line instead); everywhere
   // else we always show it.
@@ -315,7 +311,11 @@ export function OAuthHelperPanel({
               <p className="text-xs text-muted-foreground">
                 {terminalHowToOpen}
               </p>
-              <code className={codeBlockClass}>{authServeCommand()}</code>
+              <CommandBlock
+                command={authServeCommand()}
+                label="sign-in helper command"
+                codeClassName={codeText}
+              />
             </div>
           </div>
         )}

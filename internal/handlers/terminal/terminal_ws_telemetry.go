@@ -63,6 +63,7 @@ const (
 	outcomeShellExited    = "shell_exited"    // the shell exited; terminal.exit_code says how
 	outcomeDaemonError    = "daemon_error"    // the daemon reported an error on the output stream
 	outcomeOutputEnded    = "output_ended"    // the daemon's output stream ended without an exit
+	outcomeOutputOverflow = "output_overflow" // an output hop fell behind; the session ended rather than lose bytes
 	outcomeInputFailed    = "input_failed"    // forwarding input or a resize to the daemon failed
 	outcomeServerDraining = "server_draining" // this server is shutting down (close 1012)
 )
@@ -75,6 +76,7 @@ var errorOutcomes = map[string]bool{
 	outcomeCreateFailed:    true,
 	outcomeSubscribeFailed: true,
 	outcomeDaemonError:     true,
+	outcomeOutputOverflow:  true,
 	outcomeInputFailed:     true,
 }
 

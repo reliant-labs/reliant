@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
 import { loadConfig } from "@/lib/config_gen";
+import { CommandBlock } from "@/components/CommandBlock";
 
 /**
  * "How do I get Reliant onto this machine?" — the single answer, shared by
@@ -299,7 +300,7 @@ export function ReliantDownloadOptions({
           <a
             href={primaryDownload.url}
             className={cn(
-              "flex w-full items-center justify-center gap-2 rounded-lg bg-sky-600 font-semibold text-white shadow-sm shadow-sky-600/20 transition-colors hover:bg-sky-500",
+              "no-color flex w-full items-center justify-center gap-2 rounded-lg bg-sky-600 font-semibold text-white shadow-sm shadow-sky-600/20 transition-colors hover:bg-sky-500",
               compact ? "py-2.5 text-xs" : "py-3 text-sm",
             )}
           >
@@ -320,7 +321,7 @@ export function ReliantDownloadOptions({
                 <a
                   key={link.url}
                   href={link.url}
-                  className="flex items-center justify-between rounded px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                  className="no-color flex items-center justify-between rounded px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
                 >
                   <span>{link.label}</span>
                   <span className="text-sky-500">Download</span>
@@ -336,7 +337,7 @@ export function ReliantDownloadOptions({
             <a
               key={link.url}
               href={link.url}
-              className="flex items-center justify-between rounded border border-border/40 px-3 py-2 text-xs text-foreground transition-colors hover:bg-muted/50"
+              className="no-color flex items-center justify-between rounded border border-border/40 px-3 py-2 text-xs text-foreground transition-colors hover:bg-muted/50"
             >
               <span>{link.label}</span>
               <span className="text-sky-500">Download</span>
@@ -365,9 +366,10 @@ export function ReliantDownloadOptions({
               ? "On macOS, you can install via Homebrew instead:"
               : "Or install via Homebrew:"}
           </span>
-          <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
-            {HOMEBREW_CASK_INSTALL}
-          </code>
+          <CommandBlock
+            command={HOMEBREW_CASK_INSTALL}
+            label="Homebrew install command"
+          />
         </div>
       ) : null}
     </div>

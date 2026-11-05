@@ -13,6 +13,43 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.8.19" description="November 5, 2026">
+### Workflow secrets, lossless terminals, plan changes and onboarding journeys
+
+Workflows can declare secrets that authenticate a step's request without ever appearing in its output. Terminal output is no longer dropped, and a slow machine no longer resets every open terminal. Machine subscribers can change plan in the app, with today's prorated charge shown first. Onboarding becomes two guided journeys, the settings menu is regrouped, and the Workflows list is decluttered. The dashboard panel editor builds every panel kind and style, and the observability console shows each session's device, client and app version.
+
+#### Added
+
+- **workflows: declare secrets by name and environment; they authenticate a step's request through a credential slot and never appear in text a step can print or return** [#2037](https://github.com/reliant-labs/reliant/pull/2037)
+- **web: existing machine subscribers change plan in the app, with today's prorated charge shown before they confirm** [#2151](https://github.com/reliant-labs/reliant/pull/2151)
+- **web: onboarding offers two guided journeys, "Use AI workflows" and "Explore a forge app", from a picker** [#2206](https://github.com/reliant-labs/reliant/pull/2206)
+- **web: the dashboard panel editor builds every panel kind and display style the renderer draws** [#2152](https://github.com/reliant-labs/reliant/pull/2152)
+- **observability: sessions, traces and errors show device, client and app version; filter by browser, OS and build** [#2167](https://github.com/reliant-labs/reliant/pull/2167)
+- **sdk: @reliantlabs/sdk, a TypeScript client for Reliant's API; the web app's live streams now run on it** [#2196](https://github.com/reliant-labs/reliant/pull/2196)
+
+#### Changed
+
+- **web: the settings menu is regrouped into Account, AI, Connections, Machines & projects, Preferences and a collapsed Advanced group** [#2216](https://github.com/reliant-labs/reliant/pull/2216)
+- **web: the Workflows list shows each ready-made Autopilot workflow once and hides columns with no values** [#2217](https://github.com/reliant-labs/reliant/pull/2217)
+- **web: the execution-mode selector no longer lists "auto"; it stays the default** [#2203](https://github.com/reliant-labs/reliant/pull/2203)
+- **chat: chats with many sub-agents open faster: their spawn links read a chat-scoped index** [#2161](https://github.com/reliant-labs/reliant/pull/2161)
+- **docs: who can decide an approval, including the shared-key limitation of self-hosted API-key mode** [#2183](https://github.com/reliant-labs/reliant/pull/2183)
+- **docs: Deploy without an account (forge env deploy --claimable)** [#2213](https://github.com/reliant-labs/reliant/pull/2213)
+
+#### Fixed
+
+- **terminal: output is never dropped silently, so TUIs no longer render garbage; bursts go out in fewer frames** [#2210](https://github.com/reliant-labs/reliant/pull/2210)
+- **web: a slow wake probe on a busy machine no longer replaces every open terminal with a new shell** [#2209](https://github.com/reliant-labs/reliant/pull/2209)
+- **web: the file tree no longer re-reads paths it cannot list on every file change** [#2207](https://github.com/reliant-labs/reliant/pull/2207)
+- **daemon: a command the machine cannot fork says the process table is full** [#2185](https://github.com/reliant-labs/reliant/pull/2185)
+- **daemon: a project whose pinned forge is too old no longer re-runs that forge on every config poll** [#2208](https://github.com/reliant-labs/reliant/pull/2208)
+- **web: a 401 that does not reject an API key no longer signs the API-key session out** [#2182](https://github.com/reliant-labs/reliant/pull/2182)
+- **web: a refused telemetry read shows the server's reason instead of blaming the user's role** [#2186](https://github.com/reliant-labs/reliant/pull/2186)
+- **web: onboarding download buttons read as enabled, commands have copy buttons, providers show their logos, and machine start states are accurate** [#2202](https://github.com/reliant-labs/reliant/pull/2202)
+- **security: bump golang.org/x/net (HTML parsing in the fetch tool) and dompurify** [#2115](https://github.com/reliant-labs/reliant/pull/2115)
+
+</Update>
+
 <Update label="v1.8.18" description="November 4, 2026">
 ### Faster chat opens, person-only approvals, terminals on the chat's machine
 

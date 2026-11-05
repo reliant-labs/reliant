@@ -244,7 +244,7 @@ describe("commitLaunchPlan — ordering", () => {
     );
 
     expect(deps.createDaemon).toHaveBeenCalledTimes(1);
-    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("complete");
+    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("starting");
   });
 });
 
@@ -280,7 +280,7 @@ describe("commitLaunchPlan — partial failure", () => {
     const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
 
     expect(result.status).toBe("partial");
-    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("complete");
+    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("starting");
     expect(taskNamed(result.tasks, "grant_ai_access").status).toBe("failed");
   });
 
@@ -609,7 +609,7 @@ describe("commitLaunchPlan — anonymous account", () => {
     const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
 
     expect(deps.createDaemon).toHaveBeenCalledTimes(1);
-    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("complete");
+    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("starting");
   });
 
   it("leaves a signed-in user's cloud commit unchanged", async () => {

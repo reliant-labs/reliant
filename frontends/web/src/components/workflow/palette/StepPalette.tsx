@@ -377,6 +377,7 @@ function StepPaletteBody({
         aria-selected={active}
         aria-describedby={unconnected && !notAvailable ? `${ids}-connect-hint` : undefined}
         data-palette-row={item.kind}
+        data-palette-item={item.kind === "builtin" ? item.type : item.kind === "builtin-trigger" ? item.source : undefined}
         onMouseMove={() => {
           if (!active) setActiveIndex(rowIndex);
         }}
@@ -476,6 +477,7 @@ function StepPaletteBody({
         role="dialog"
         aria-modal="true"
         aria-label={kind === "trigger" ? "Add a trigger" : "Add a step"}
+        data-tour="step-palette"
         className="relative flex max-h-[70vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl"
       >
         <div className="flex items-center gap-2 border-b border-border px-4 py-3">

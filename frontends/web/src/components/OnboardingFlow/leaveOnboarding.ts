@@ -27,18 +27,20 @@
  */
 import { logger } from "@/lib/logger";
 import { trackEvent } from "@/lib/analytics";
-import { ONBOARDING_STEPS as TOUR_STEPS } from "@/components/Onboarding/constants";
+import { TOUR_PICKER } from "@/components/Onboarding/tourParam";
 import { START_APP } from "@/components/Apps/appStart";
 import { stepsViewedCount } from "./analytics";
 import type { OnboardingIntent } from "./types";
 
 /**
- * The first step of the post-onboarding guided tour.
+ * What finishing onboarding opens: the journey picker ("Explore a forge app" /
+ * "Use AI workflows"), preselected from the landing page's `?journey=` when it
+ * carried one. Picking starts that journey's tour.
  *
- * `?tour=<id>` is the ONLY thing that starts the tour (see useTourNavigation),
+ * `?tour=` is the ONLY thing that starts the tour (see useTourNavigation),
  * so an exit that drops it ends the tour before it renders.
  */
-export const TOUR_FIRST_STEP_ID = TOUR_STEPS[0].id;
+export const TOUR_ENTRY_PARAM = TOUR_PICKER;
 
 /**
  * Why the user is leaving. Exhaustive by construction — a new way out means a
@@ -105,7 +107,7 @@ export function onboardingExitTarget(
     case "completed_cloud_gate_continue":
       return {
         to: "/",
-        search: landing === "build_app" ? { tour: TOUR_FIRST_STEP_ID, start: START_APP } : { tour: TOUR_FIRST_STEP_ID },
+        search: landing === "build_app" ? { tour: TOUR_ENTRY_PARAM, start: START_APP } : { tour: TOUR_ENTRY_PARAM },
       };
     case "already_complete":
     case "returning_user_heal":
@@ -115,7 +117,8 @@ export function onboardingExitTarget(
       // unauthenticated user eventually, but there is a render gap in which
       // this route's own "needs onboarding" logic re-asserts itself and puts
       // the user straight back here.
-      return { to: "/auth", search: { redirect: undefined } };
+      // `tour: undefined`: the root route otherwise carries `?tour=` along.
+      return { to: "/auth", search: { redirect: undefined, tour: undefined } };
   }
 }
 

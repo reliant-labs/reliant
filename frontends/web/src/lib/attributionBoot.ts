@@ -6,6 +6,8 @@
  * it starts. A bare import, for the same reason as browser-log-boot: imports
  * evaluate in order. See lib/landingAttribution.ts for what and why.
  */
-import { holdLandingAttribution } from "./landingAttribution";
+import { holdLandingAttribution, holdLandingJourney } from "./landingAttribution";
 
 holdLandingAttribution();
+// The landing picker's `?journey=` choice, held the same way (no consent gate).
+holdLandingJourney();

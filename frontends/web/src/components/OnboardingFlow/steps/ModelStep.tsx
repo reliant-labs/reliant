@@ -24,6 +24,7 @@ import {
   resolveOAuthFlow,
   type RedirectOAuthProvider,
 } from "@/lib/oauth-providers";
+import { ProviderLogo } from "@/components/icons/ProviderLogo";
 import { OAuthHelperPanel } from "@/components/OAuthHelperPanel";
 import { CopilotDevicePanel } from "@/components/CopilotDevicePanel";
 import { useWalletOverview } from "@/hooks/useReliantAIQueries";
@@ -480,13 +481,14 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                   copilotOAuth.reset();
                 }}
                 className={cn(
-                  "rounded-lg border px-3 py-2 text-left transition-colors",
+                  "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-left transition-colors",
                   item.id === selectedProvider
                     ? "border-primary bg-primary/10 ring-2 ring-primary/20"
                     : "border-border/40 bg-background hover:bg-muted/60",
                 )}
               >
-                <span className="block text-sm font-medium text-foreground">
+                <ProviderLogo provider={item.id} size="lg" />
+                <span className="block min-w-0 text-sm font-medium text-foreground">
                   {item.name}
                 </span>
               </button>

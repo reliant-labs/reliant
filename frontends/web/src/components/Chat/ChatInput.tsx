@@ -69,7 +69,8 @@ import { questionForThread } from "../../lib/pendingQuestions";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
-import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
+import { getInputDefault, getInputEnumValues, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
+import { isSelectorHidden } from "../../lib/executionMode";
 import { isRequiredInput } from "../workflow/run/runWorkflowValues";
 import {
   adoptServerParams,
@@ -759,7 +760,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       if (!workflowInputs) return [];
       const result: [string, InputDef][] = [];
       for (const [name, schema] of Object.entries(workflowInputs)) {
-        if (getInputUI(schema) === "toolbar") {
+        if (getInputUI(schema) === "toolbar" && !isSelectorHidden(getInputEnumValues(schema))) {
           result.push([name, schema]);
         }
       }
@@ -2107,12 +2108,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             name={paramName}
                             schema={schema}
                             value={workflowParams[paramName] ?? getInputDefault(schema)}
-                            onChange={(value) =>
-                              handleWorkflowParamsChange({
-                                ...workflowParams,
-                                [paramName]: value,
-                              })
-                            }
+                            onChange={(value) => {
+                              // `undefined` resets the param: drop the key so its default applies.
+                              const { [paramName]: _previous, ...rest } = workflowParams;
+                              handleWorkflowParamsChange(value === undefined ? rest : { ...rest, [paramName]: value });
+                            }}
                             disabled={disabled || !isMessagingAllowed}
                             isStreaming={false}
                           />

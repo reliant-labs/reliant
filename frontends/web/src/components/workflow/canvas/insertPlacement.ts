@@ -172,6 +172,35 @@ export function resolveAnchor({ pending, nodes, edges, selectedNodeId }: Resolve
   return { kind: "after", nodeId: anchorNode.id, sourceHandle: defaultSourceHandle(anchorNode, edges) };
 }
 
+/** How an insert was anchored, as the tour's `workflow:nodeAdded` signal names it. */
+export type InsertHow = "splice" | "output" | "selection" | "end";
+
+/**
+ * Name the anchor `resolveAnchor` picked: a "+" on an edge (splice, with the
+ * node the edge led into) or on an output, the selection, or the end of the
+ * main path (also a free placement on an empty canvas).
+ */
+export function describeInsert(
+  anchor: InsertAnchor | null,
+  pending: InsertAnchor | null,
+  { nodes, edges, selectedNodeId }: Omit<ResolveAnchorArgs, "pending">,
+): { anchor: InsertHow; spliceTarget?: string } {
+  if (!anchor) return { anchor: "end" };
+  if (anchor === pending) {
+    if (anchor.kind === "splice") return { anchor: "splice", spliceTarget: edges.find((e) => e.id === anchor.edgeId)?.target };
+    return { anchor: "output" };
+  }
+  const selected = anchor.kind === "after" && (selectedNodeId === anchor.nodeId || nodes.some((n) => n.selected && n.id === anchor.nodeId));
+  return { anchor: selected ? "selection" : "end" };
+}
+
+/** The workflow step type a canvas node stands for: its step's `type`, or "switch" for a Switch. */
+export function stepTypeOfNode(node: Node): string {
+  const step = (node.data as { step?: { type?: string } } | undefined)?.step;
+  if (step?.type) return step.type;
+  return (node.type ?? "").replace(/Node$/, "");
+}
+
 interface Rect extends XYPosition, Size {}
 
 function rectOf(node: Node): Rect {

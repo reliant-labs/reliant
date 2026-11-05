@@ -87,9 +87,15 @@ export default defineConfig({
     __WORKTREE_NAME__: JSON.stringify(getWorktreeName()),
   },
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-    },
+    // @reliantlabs/sdk is a workspace member, built from source here: the app
+    // never needs its dist/. Its generated protos ("#gen/*") resolve to this
+    // app's own src/gen, so there is ONE copy of every message and service
+    // descriptor in the bundle.
+    alias: [
+      { find: "@", replacement: path.resolve(__dirname, "./src") },
+      { find: "@reliantlabs/sdk/client", replacement: path.resolve(__dirname, "../../sdk/ts/src/client/index.ts") },
+      { find: /^#gen\/(.*)\.js$/, replacement: path.resolve(__dirname, "./src/gen/$1") },
+    ],
   },
   // Absolute base: the app is served at the domain root (app.reliantlabs.io) with
   // history routing + SPA fallback. Relative "./" breaks fresh loads/refreshes on
@@ -168,6 +174,10 @@ export default defineConfig({
     exclude: ['monaco-editor'],
   },
   server: {
+    // The SDK is a sibling workspace member compiled from source, outside this
+    // directory (and outside pnpm's workspace root, which is where vite's
+    // default stops).
+    fs: { allow: [path.resolve(__dirname, "../..")] },
     host: "127.0.0.1",
     // PORT wins over FRONTEND_PORT.
     //
@@ -271,6 +281,9 @@ export default defineConfig({
     // Read by src/test/setup.ts, which configures Testing Library with it.
     env: { RELIANT_ASYNC_UTIL_TIMEOUT_MS: String(asyncUtilTimeout) },
     setupFiles: "./src/test/setup.ts",
+    // The default (this directory) plus @reliantlabs/sdk's own tests: the app
+    // compiles the SDK from source, so one `vitest run` judges both.
+    include: ["**/*.{test,spec}.?(c|m)[jt]s?(x)", "../../sdk/ts/src/**/*.test.ts"],
     exclude: [
       "**/node_modules/**",
       "**/dist/**",

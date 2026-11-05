@@ -32,6 +32,7 @@ import { workflowDisplayName } from "@/lib/workflowDisplayName";
 import { useProjectStore } from "@/store/projectStore";
 import Modal from "../../forge-ui/modal";
 import { useWorkflowDefinition } from "../../workflow/useWorkflowDefinition";
+import { currentTourParam, enableTourNote } from "../../Onboarding/journeys/workflowsTour";
 import { DeclaredAutomationForm } from "./DeclaredAutomationForm";
 import { InlineAutomationForm } from "./InlineAutomationForm";
 import type { OpenAutomationDialogOptions } from "./openAutomationDialog";
@@ -179,6 +180,7 @@ function ForWorkflow({
         declaredTrigger={declaredTrigger}
         onEnabled={(result) => onSaved?.(result.results.flatMap((r) => (r.activation ? [r.activation] : [])))}
         onUseCustom={onCustomChange ? () => onCustomChange(true) : undefined}
+        tourNote={enableTourNote(currentTourParam())}
       />
     );
   }

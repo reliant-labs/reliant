@@ -15,6 +15,7 @@ import { getStepRef, getStepInline } from '../../../types/workflow'
 import type { WorkflowExecution } from '../../Chat/ExecutionSidebar/types'
 import type { LoopIterationInfo } from './useExecutionStatus'
 import { useWorkspaceStateStore } from '../../../store/workspaceStateStore'
+import { tourEvents } from '../../Onboarding/tourEvents'
 
 export function getCollapsedLoopNodeIds(nodeId: string, expandedIds: string[]): string[] {
   const descendantPrefix = `${nodeId}:`
@@ -115,6 +116,7 @@ export function useExpandedLoops(
     if (expandedLoopsRef.current.has(nodeId)) {
       return
     }
+    tourEvents.emit('workflow:loopExpanded', { nodeId })
     
     // Loop properties live inside the proto args oneof — use accessors
     const subWorkflowRef = getStepRef(loopStep)

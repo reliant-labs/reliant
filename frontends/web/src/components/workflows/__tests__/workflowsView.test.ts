@@ -264,6 +264,28 @@ describe("workflowsView", () => {
     expect(workflowsView({ workflows: all, invalid, triggers: [], q: "review" }).readyMade).toEqual([]);
   });
 
+  it("lists a ready-made automation once: in the strip, not also as a table row, until it is on or the list is narrowed", () => {
+    const declared = [{ name: "pr-opened" }] as unknown as WorkflowResponse["triggers"];
+    const autopilot = { ...wf("builtin://autopilot-pr-review", "builtin"), automationOnly: true, triggers: declared };
+    const all = [...workflows, ...listed([autopilot])];
+    const rowNames = (view: ReturnType<typeof workflowsView>) => view.rows.map((row) => row.workflow.name);
+
+    const fresh = workflowsView({ workflows: all, invalid, triggers: [] });
+    expect(fresh.readyMade.map((r) => r.workflow.name)).toEqual(["builtin://autopilot-pr-review"]);
+    expect(rowNames(fresh)).not.toContain("builtin://autopilot-pr-review");
+    // The rest of the built-ins are untouched.
+    expect(names(fresh).builtin).toEqual(["builtin://agent", "builtin://planner"]);
+
+    // Once it is on, the strip lets go of it and the table is where it lives.
+    const on = workflowsView({ workflows: all, invalid, triggers: [trigger("a1", "builtin://autopilot-pr-review")] });
+    expect(on.readyMade).toEqual([]);
+    expect(rowNames(on)).toContain("builtin://autopilot-pr-review");
+
+    // Narrowing empties the strip, so Built-in and search still find it.
+    expect(rowNames(workflowsView({ workflows: all, invalid, triggers: [], show: "builtin" }))).toContain("builtin://autopilot-pr-review");
+    expect(rowNames(workflowsView({ workflows: all, invalid, triggers: [], q: "review" }))).toEqual(["builtin://autopilot-pr-review"]);
+  });
+
   it("says when a search or filter leaves nothing", () => {
     expect(workflowsView({ workflows, invalid, triggers: [], q: "zzz" }).noMatches).toBe(true);
     expect(workflowsView({ workflows, invalid: [], triggers: [], show: "failed" }).noMatches).toBe(true);

@@ -127,6 +127,8 @@ export interface DeclaredAutomationFormProps {
   onEnabled?: (result: EnableWorkflowResult) => void;
   /** "Need a different trigger?": the same workflow, with a WHEN of its own. */
   onUseCustom?: (projectId: string) => void;
+  /** One line above the footer while a tour is open on this dialog (the workflows journey's W6). */
+  tourNote?: React.ReactNode;
 }
 
 interface Override {
@@ -217,6 +219,7 @@ export function DeclaredAutomationForm({
   declaredTrigger,
   onEnabled,
   onUseCustom,
+  tourNote,
 }: DeclaredAutomationFormProps) {
   const ids = useId();
   const fid = (key: string) => `${ids}-${key.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
@@ -543,17 +546,24 @@ export function DeclaredAutomationForm({
   let section = 0;
 
   const footer = (
-    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <p className={cn("text-xs", showSummary ? "text-danger-ink" : "text-muted-foreground")} data-testid="setup-footer-summary">
-        {footerText}
-      </p>
-      <div className="flex gap-2 max-sm:w-full">
-        <Button type="button" variant="outline" onClick={onClose} className="max-sm:hidden">
-          {verdict?.kind === "partial" ? "Close" : "Cancel"}
-        </Button>
-        <Button type="submit" form={fid("form")} variant="primary" loading={saving} className="max-sm:w-full">
-          {primaryLabel}
-        </Button>
+    <div className="space-y-2">
+      {tourNote && (
+        <p className="text-xs text-foreground" data-testid="setup-tour-note">
+          {tourNote}
+        </p>
+      )}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className={cn("text-xs", showSummary ? "text-danger-ink" : "text-muted-foreground")} data-testid="setup-footer-summary">
+          {footerText}
+        </p>
+        <div className="flex gap-2 max-sm:w-full">
+          <Button type="button" variant="outline" onClick={onClose} className="max-sm:hidden">
+            {verdict?.kind === "partial" ? "Close" : "Cancel"}
+          </Button>
+          <Button type="submit" form={fid("form")} variant="primary" loading={saving} className="max-sm:w-full">
+            {primaryLabel}
+          </Button>
+        </div>
       </div>
     </div>
   );

@@ -901,7 +901,7 @@ func TestSweepStaleConnectionsRemovesHalfOpenAndFiresListeners(t *testing.T) {
 		lastReceived:      baseTime.Add(-5 * time.Minute),
 		sendCh:            make(chan *reliantv1.ServerMessage, 4),
 		done:              make(chan struct{}),
-		terminalSubs:      make(map[string][]chan *toolexec.TerminalOutputEvent),
+		terminalSubs:      make(map[string][]*toolexec.TerminalOutputQueue),
 		processOutputSubs: make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 
@@ -914,7 +914,7 @@ func TestSweepStaleConnectionsRemovesHalfOpenAndFiresListeners(t *testing.T) {
 		lastReceived:      baseTime,
 		sendCh:            make(chan *reliantv1.ServerMessage, 4),
 		done:              make(chan struct{}),
-		terminalSubs:      make(map[string][]chan *toolexec.TerminalOutputEvent),
+		terminalSubs:      make(map[string][]*toolexec.TerminalOutputQueue),
 		processOutputSubs: make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 
@@ -971,7 +971,7 @@ func TestSweepStaleConnectionsSkipsRecentlyRegistered(t *testing.T) {
 		lastActivity:      baseTime.Add(-30 * time.Second),
 		sendCh:            make(chan *reliantv1.ServerMessage, 1),
 		done:              make(chan struct{}),
-		terminalSubs:      make(map[string][]chan *toolexec.TerminalOutputEvent),
+		terminalSubs:      make(map[string][]*toolexec.TerminalOutputQueue),
 		processOutputSubs: make(map[string][]chan *toolexec.ProcessOutputEvent),
 	}
 	svc.mu.Lock()

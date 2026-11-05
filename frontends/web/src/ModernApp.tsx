@@ -244,10 +244,17 @@ function App() {
       setShowFileBrowserLocal(true);
     };
     window.addEventListener("open-file-browser", handleOpenFileBrowser);
+    // The onboarding outro collapses the panels it just explained
+    // (Onboarding/journeys/layoutActions.ts). Persisted, like a user's toggle.
+    const handleCloseFileBrowser = () => {
+      setShowFileBrowser(false);
+    };
+    window.addEventListener("close-file-browser", handleCloseFileBrowser);
     return () => {
       window.removeEventListener("open-file-browser", handleOpenFileBrowser);
+      window.removeEventListener("close-file-browser", handleCloseFileBrowser);
     };
-  }, []);
+  }, [setShowFileBrowser]);
 
   // Auto-activate viewers when files are open but no viewer is active
   useEffect(() => {
