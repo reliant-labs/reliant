@@ -2,17 +2,16 @@
 package cmd
 
 import (
-	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/execfollow"
+	"github.com/reliant-labs/reliant/sdk/go/reliant"
 )
 
 // followFlags are the follow-related flags shared by `workflow follow` and
@@ -98,153 +97,69 @@ func runWorkflowFollow(cmd *cobra.Command, executionID string, flags *followFlag
 		return err
 	}
 
-	engine := &execfollow.Engine{
-		Source:      newChatUpdateSource(conn.httpClient(), conn.ServerURL, executionID),
-		ExecutionID: executionID,
-		Out:         cmd.OutOrStdout(),
-		Log:         cmd.ErrOrStderr(),
-		Hooks:       hooks,
-		Interval:    flags.interval,
-		Timeout:     flags.timeout,
-		Tail:        flags.tail,
-		ExitOnGate:  flags.exitOnGate,
-	}
-
-	code, err := engine.Run(cmd.Context())
+	client, err := conn.sdkClient()
 	if err != nil {
 		return err
 	}
-	if code != execfollow.ExitSuccess {
-		os.Exit(code)
+
+	res, err := followExecution(cmd, client, executionID, followSettings{
+		opts: reliant.FollowOptions{
+			Interval:   flags.interval,
+			Timeout:    flags.timeout,
+			Tail:       flags.tail,
+			StopOnGate: flags.exitOnGate,
+		},
+		out:   cmd.OutOrStdout(),
+		hooks: hooks,
+	})
+	if err != nil {
+		return err
+	}
+	if res.ExitCode != execfollow.ExitSuccess {
+		os.Exit(res.ExitCode)
 	}
 	return nil
 }
 
-// chatUpdateSource adapts ChatService (GetChatUpdates + GetWorkflowExecutions)
-// plus QuestionService/ApprovalService (open-gate reconciliation) to the
-// execfollow.Source interface. This is a cursor-based poll of the same durable
-// per-chat update feed the web UI streams; the richer
-// StreamingService.StreamUserUpdates surface can replace it without touching
-// the engine.
-type chatUpdateSource struct {
-	client   reliantv1connect.ChatServiceClient
-	question reliantv1connect.QuestionServiceClient
-	approval reliantv1connect.ApprovalServiceClient
-	chatID   string
+// followSettings is what the CLI layers over the SDK's follow: where the event
+// stream is written, how an event is rendered, and the --hook commands.
+type followSettings struct {
+	opts reliant.FollowOptions
+	// out receives one line per event; nil writes none.
+	out io.Writer
+	// render formats an event for out; nil writes the canonical NDJSON line.
+	// Hooks always receive the NDJSON form.
+	render func(execfollow.Event) string
+	hooks  []execfollow.Hook
 }
 
-// newChatUpdateSource builds the follow/watch source with every client the
-// engine needs: the chat update feed plus the question/approval surfaces used
-// to reconcile a gate that is already open when the follower attaches.
-func newChatUpdateSource(httpClient connect.HTTPClient, server, chatID string) *chatUpdateSource {
-	return &chatUpdateSource{
-		client:   reliantv1connect.NewChatServiceClient(httpClient, server),
-		question: reliantv1connect.NewQuestionServiceClient(httpClient, server),
-		approval: reliantv1connect.NewApprovalServiceClient(httpClient, server),
-		chatID:   chatID,
-	}
-}
-
-func (s *chatUpdateSource) Updates(ctx context.Context, sinceSeq int64) ([]execfollow.RawUpdate, int64, error) {
-	resp, err := s.client.GetChatUpdates(ctx, connect.NewRequest(&reliantv1.GetChatUpdatesRequest{
-		ChatId:   s.chatID,
-		SinceSeq: sinceSeq,
-	}))
+// followExecution follows the chat/execution id through the SDK and relays its
+// events the way the CLI always has: the NDJSON line (or rendered text) to out,
+// then the matching hooks. The exit code, the false-green verdict and gate
+// reconciliation are the SDK engine's.
+func followExecution(cmd *cobra.Command, client *reliant.Client, executionID string, set followSettings) (reliant.FollowResult, error) {
+	set.opts.Log = cmd.ErrOrStderr()
+	f, err := client.Runs.FollowSession(cmd.Context(), executionID, set.opts)
 	if err != nil {
-		return nil, sinceSeq, err
+		return reliant.FollowResult{}, err
 	}
+	defer f.Close()
 
-	updates := make([]execfollow.RawUpdate, 0, len(resp.Msg.GetUpdates()))
-	for _, u := range resp.Msg.GetUpdates() {
-		createdAt, err := time.Parse(time.RFC3339, u.GetCreatedAt())
+	runner := &execfollow.HookRunner{Stderr: cmd.ErrOrStderr()}
+	for ev := range f.Events() {
+		line, err := json.Marshal(ev)
 		if err != nil {
-			createdAt = time.Now().UTC()
+			fmt.Fprintf(cmd.ErrOrStderr(), "reliant: failed to encode event: %v\n", err)
+			continue
 		}
-		updates = append(updates, execfollow.RawUpdate{
-			Seq:       u.GetSequenceNumber(),
-			Type:      u.GetUpdateType(),
-			Data:      []byte(u.GetData()),
-			CreatedAt: createdAt,
-		})
-	}
-	return updates, resp.Msg.GetLatestSequence(), nil
-}
-
-func (s *chatUpdateSource) Root(ctx context.Context) (execfollow.RootState, error) {
-	// Only root status is read, so the default BASIC view is enough; FULL would
-	// ship every step row of the chat.
-	resp, err := s.client.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{
-		ChatId: s.chatID,
-	}))
-	if err != nil {
-		return execfollow.RootState{}, err
-	}
-
-	roots := resp.Msg.GetAllRootWorkflows()
-	if len(roots) == 0 {
-		return execfollow.RootState{}, nil
-	}
-	root := roots[0] // newest first
-
-	return execfollow.RootState{
-		Found:  true,
-		Status: chatWorkflowStatusString(root),
-		// The verdict rides along so a follower attaching AFTER the run ended
-		// still learns that it did not pass — the terminal event it would have
-		// carried is long gone from the tail it is watching.
-		Outcome: root.GetOutcome(),
-	}, nil
-}
-
-// Pending reports the gates currently awaiting input so the engine can surface
-// a question/approval that was already open when the follower attached (or
-// whose edge update it missed). Errors are non-fatal to the engine — it logs
-// and retries next poll — so a transient failure here never wedges a follow.
-func (s *chatUpdateSource) Pending(ctx context.Context) ([]execfollow.PendingGate, error) {
-	var gates []execfollow.PendingGate
-
-	// Every thread's question: spawned agents each park on their own.
-	if q, err := s.question.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
-		ChatId: &s.chatID,
-	})); err == nil {
-		for _, qi := range q.Msg.GetQuestions() {
-			gates = append(gates, execfollow.PendingGate{
-				Kind:     execfollow.GateQuestion,
-				ID:       qi.GetQuestionId(),
-				StepID:   qi.GetStepId(),
-				ThreadID: qi.GetThreadId(),
-				Metadata: qi.GetMetadata(),
-			})
-		}
-	} else {
-		return nil, err
-	}
-
-	if a, err := s.approval.ListApprovalsByChat(ctx, connect.NewRequest(&reliantv1.ListApprovalsByChatRequest{
-		ChatId: s.chatID,
-	})); err == nil {
-		for _, ap := range a.Msg.GetApprovals() {
-			if ap.GetStatus() != reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING {
-				continue
+		if set.out != nil {
+			if set.render != nil {
+				fmt.Fprintf(set.out, "%s\n", set.render(ev))
+			} else {
+				fmt.Fprintf(set.out, "%s\n", line)
 			}
-			gates = append(gates, execfollow.PendingGate{
-				Kind:  execfollow.GateApproval,
-				ID:    ap.GetId(),
-				Title: ap.GetTitle(),
-			})
 		}
-	} else {
-		return gates, err
+		runner.Run(cmd.Context(), set.hooks, ev, line)
 	}
-
-	return gates, nil
-}
-
-// chatWorkflowStatusString renders a workflow's lifecycle as the lowercase
-// state names used on the NDJSON stream ("completed", "failed", ...). The
-// vocabulary is unchanged from when this derived the name from a single enum;
-// core.WorkflowStatus.Label produces the same strings, so the stream contract
-// holds. "expired" is no longer among them — nothing ever produced it.
-func chatWorkflowStatusString(wf *reliantv1.WorkflowExecution) string {
-	return core.WorkflowStatus{State: wf.GetState(), StopReason: wf.GetStopReason()}.Label()
+	return f.Wait()
 }

@@ -91,6 +91,19 @@ func (f *superviseChatService) TerminateChat(_ context.Context, req *connect.Req
 	return connect.NewResponse(&reliantv1.TerminateChatResponse{Success: true, Message: "terminated"}), nil
 }
 
+// superviseRunService serves the run-control rpcs the supervision verbs use.
+// A run id is the root workflow's id, which is the chat id the CLI is given, so
+// cancelling it is terminating that chat.
+type superviseRunService struct {
+	reliantv1connect.UnimplementedRunServiceHandler
+	chat *superviseChatService
+}
+
+func (f *superviseRunService) CancelRun(_ context.Context, req *connect.Request[reliantv1.CancelRunRequest]) (*connect.Response[reliantv1.CancelRunResponse], error) {
+	f.chat.terminatedChatID = req.Msg.GetRunId()
+	return connect.NewResponse(&reliantv1.CancelRunResponse{Success: true, Message: "terminated"}), nil
+}
+
 // --- harness -------------------------------------------------------------
 
 // superviseHarness wires a temp CLI config context at a fake server and runs
@@ -119,6 +132,8 @@ func newSuperviseHarness(t *testing.T) *superviseHarness {
 	mux.Handle(p2, h2)
 	p3, h3 := reliantv1connect.NewApprovalServiceHandler(h.approval)
 	mux.Handle(p3, h3)
+	p4, h4 := reliantv1connect.NewRunServiceHandler(&superviseRunService{chat: h.chat})
+	mux.Handle(p4, h4)
 	h.server = httptest.NewServer(mux)
 	t.Cleanup(h.server.Close)
 
@@ -655,11 +670,12 @@ func jsonString(s string) string {
 	return string(b)
 }
 
-// TestBuildStatusNode_GatesAreThreadScoped is `workflow status`'s half of the
+// TestStatusNodes_GatesAreThreadScoped is `workflow status`'s half of the
 // per-thread fix: a thread parked on a signal keeps the stored status RUNNING,
 // so without the question's thread id every node in a fanned-out run reads
-// RUNNING whether it is working or waiting on a human.
-func TestBuildStatusNode_GatesAreThreadScoped(t *testing.T) {
+// RUNNING whether it is working or waiting on a human. It runs the real command,
+// so it holds the whole path: the pending question's thread id to the node tree.
+func TestStatusNodes_GatesAreThreadScoped(t *testing.T) {
 	child := func(node, thread string) *reliantv1.WorkflowExecution {
 		return &reliantv1.WorkflowExecution{
 			WorkflowName:    "thread:" + node,
@@ -669,7 +685,9 @@ func TestBuildStatusNode_GatesAreThreadScoped(t *testing.T) {
 			CreatedAt:       "2026-07-26T12:00:00Z",
 		}
 	}
-	root := &reliantv1.WorkflowExecution{
+	h := newSuperviseHarness(t)
+	h.chat.root = &reliantv1.WorkflowExecution{
+		Id:           "chat-1",
 		WorkflowName: "builtin://forge-one-shot",
 		Thread:       "thread-root",
 		State:        reliantv1.WorkflowState_WORKFLOW_STATE_ACTIVE,
@@ -679,13 +697,23 @@ func TestBuildStatusNode_GatesAreThreadScoped(t *testing.T) {
 			child("review", "thread-other"),
 		},
 	}
-	gateByThread := map[string]string{"thread-gated": "review_checkpoint"}
+	meta := `{"type":"ask_user","questions":[{"question":"ok?","options":[]}]}`
+	q := askUserQuestion("q-1", "review_checkpoint", meta)
+	q.ThreadId = "thread-gated"
+	h.question.pending = []*reliantv1.QuestionInfo{q}
 
-	var nodes []statusNode
-	for _, c := range root.GetChildren() {
-		nodes = append(nodes, buildStatusNode(c, gateByThread))
+	stdout, _, err := h.run(t, "", "workflow", "status", "chat-1", "--json")
+	if err != nil {
+		t.Fatalf("status failed: %v", err)
 	}
-
+	var report statusReport
+	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
+		t.Fatalf("status output not JSON: %v (%s)", err, stdout)
+	}
+	nodes := report.Nodes
+	if len(nodes) != 3 {
+		t.Fatalf("nodes = %+v", nodes)
+	}
 	if nodes[0].Gate != "review_checkpoint" {
 		t.Errorf("build_mvp gate = %q, want review_checkpoint", nodes[0].Gate)
 	}
