@@ -9,7 +9,6 @@ import Tag from "@/components/forge-ui/tag";
 import { useServiceOverview } from "@/hooks/observability-queries";
 import type { AlertInstance } from "@/services/controlPlane/observability/alertingTypes";
 import type { ObsScope, Workload } from "@/services/controlPlane/observability/types";
-import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { ENV_KEY } from "../Observability/attributes";
 import { formatBytes, formatCores, formatDuration, formatPercent, formatRate } from "../Observability/format";
@@ -18,6 +17,7 @@ import { ObsAsOf, ObsError, ObsLoadingRows } from "../Observability/ObsStates";
 import { INK_LINK, Panel } from "../Releases/releaseParts";
 import { worstUsage } from "./workloadModel";
 import { UsageMeter } from "./workloadParts";
+import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
 
 type HealthRow = { key: string; row: ReturnType<typeof serviceRows>[number] };
 
@@ -33,6 +33,11 @@ export function ProcessHealth({ scope, range, workloads, alerts, envNameOf, work
   const showEnv = scope?.envIds.length === 0;
   const groupBy = useMemo(() => showEnv ? [ENV_KEY] : [], [showEnv]);
   const overview = useServiceOverview(scope, range, [], groupBy);
+  // Its own read, state and Retry (tileState.tsx): never hidden by the
+  // workload read, and its rows stay through a failed refresh.
+  const failed = !!overview.error && !keepsStaleResult(overview.error, overview.data);
+  const stale = !!overview.error && !failed;
+  const retry = () => void overview.refetch({ cancelRefetch: false });
   const rows = useMemo(() => {
     // An ungrouped single-env health row carries no env label. Constrain both
     // joins by immutable environment IDs before the name-based model sees it.
@@ -86,8 +91,8 @@ export function ProcessHealth({ scope, range, workloads, alerts, envNameOf, work
   return <Panel title="Process health" flush testId="observability-services">
     <p className="px-4 pt-3 text-sm text-ink-muted">Deployed processes (service.name), not RPC services. Open a process to investigate.</p>
     {overview.data && <div className="px-4"><ObsAsOf updatedAt={overview.dataUpdatedAt} /></div>}
-    {overview.isLoading ? <ObsLoadingRows /> : overview.error && !keepsLastResult(overview.error, overview.data) ?
-      <div className="p-4"><ObsError error={overview.error} subject={scope?.projectId ?? ""} onRetry={() => void overview.refetch()} /></div> : rows.length === 0 ?
+    {overview.isLoading ? <ObsLoadingRows /> : failed ?
+      <div className="p-4" data-testid="process-health-error"><ObsError error={overview.error} subject={scope?.projectId ?? ""} onRetry={retry} retrying={overview.isFetching} /></div> : rows.length === 0 ?
       <p className="px-4 py-6 text-sm text-ink-muted" data-testid="observability-no-services">No process sent telemetry in this window.</p> :
       <DataTable<HealthRow>
         flush
@@ -102,5 +107,7 @@ export function ProcessHealth({ scope, range, workloads, alerts, envNameOf, work
           "data-tone": row.tone,
         })}
       />}
+    {!failed && <PartialNote sections={overview.data?.unavailableSections ?? []} onRetry={retry} retrying={overview.isFetching} testId="process-health-partial" />}
+    {stale && <StaleNote onRetry={retry} retrying={overview.isFetching} testId="process-health-stale" />}
   </Panel>;
 }

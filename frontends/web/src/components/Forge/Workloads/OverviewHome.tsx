@@ -25,6 +25,11 @@
  * one answer, so they agree with each other and with the scope's switch
  * costing no request. Health is the server's verdict (workloadModel.ts).
  *
+ * EACH TILE ITS OWN STATE (tileState.tsx). A failed or slow read costs only
+ * the tiles it feeds — never the page below it — and each such tile has its
+ * own Retry; a tile with data keeps it through a failed refresh; a partial
+ * answer names the figures it lacks.
+ *
  * This component knows nothing about routing: the hrefs, the scope and the
  * URL's search state come in as props, so the preview and the tests mount it
  * on fixtures.
@@ -42,7 +47,6 @@ import Tag from "@/components/forge-ui/tag";
 import { useAlerts, useObservabilityOrg, useWorkloads } from "@/hooks/observability-queries";
 import { useProjectReleases } from "@/hooks/release-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
-import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { ObsScope, Workload } from "@/services/controlPlane/observability/types";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { frontendsInScope } from "@/services/forge/frontends";
@@ -93,6 +97,7 @@ import { exitPhrase, jobFailurePhrase } from "./plainHealth";
 import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
 import { ProcessHealth } from "./ProcessHealth";
+import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
 
 export interface OverviewSearch {
   q?: string;
@@ -215,6 +220,14 @@ export function OverviewHome({
 
   const loading = envsLoading || org.isLoading || listed.isLoading;
   const notSetUp = !!listed.error && obsErrorKind(listed.error) === "not-set-up";
+  // Each tile draws its own state (tileState.tsx): a failed workload read costs
+  // only the tiles it feeds, a failed refresh keeps the last result on screen,
+  // and Retry refetches this one query, joining a fetch already in flight.
+  const workloadsFailed = !!listed.error && !keepsStaleResult(listed.error, listed.data);
+  const workloadsStale = !!listed.error && !workloadsFailed;
+  const missing = listed.data?.unavailableSections ?? [];
+  const servicesMissing = missing.filter((section) => section !== "jobs");
+  const retryWorkloads = () => void listed.refetch({ cancelRefetch: false });
   const where = all ? "all environments" : env;
   const unhealthy = services.filter(needsAttention).length;
 
@@ -289,7 +302,7 @@ export function OverviewHome({
   const windowWords = RANGE_LABELS[range].toLowerCase();
 
   return (
-    <div className="space-y-8" data-testid="overview" data-state={loading ? "loading" : listed.error ? "error" : "ready"}>
+    <div className="space-y-8" data-testid="overview" data-state={loading ? "loading" : workloadsFailed ? "error" : "ready"}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">{header}{listed.data && <ObsAsOf updatedAt={listed.dataUpdatedAt} />}</div>
         <div className="pt-1">{rangeControl}</div>
@@ -309,7 +322,7 @@ export function OverviewHome({
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
           {deploys}
-          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error && !keepsLastResult(listed.error, listed.data)} scopedHref={hrefs.scoped} />
+          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={workloadsFailed} scopedHref={hrefs.scoped} />
           {unrecorded ? (
             <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-muted" data-testid="overview-unrecorded-env">
               Reliant has no record of <span className="font-medium text-ink">{env}</span>, so nothing it runs is reported here. Once it is deployed through Reliant, its
@@ -321,7 +334,7 @@ export function OverviewHome({
               <NeedsAttention
                 items={attention}
                 loading={loading}
-                failed={!!listed.error && !keepsLastResult(listed.error, listed.data)}
+                failed={workloadsFailed}
                 where={where}
                 showEnv={all}
                 hrefOf={(item) => (item.workload ? hrefs.workload(item.workload, item.envName) : hrefs.alerts)}
@@ -340,8 +353,6 @@ export function OverviewHome({
 
       {notSetUp ? (
         <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
-      ) : listed.error && !keepsLastResult(listed.error, listed.data) ? (
-        <ObsError error={listed.error} subject={project} onRetry={() => void listed.refetch()} retrying={listed.isFetching} />
       ) : (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center gap-2" data-testid="overview-toolbar">
@@ -383,6 +394,11 @@ export function OverviewHome({
           </div>
 
           <Panel title="Services" meta="Long-running workloads. CPU and memory against their limits." flush testId="overview-services">
+            {workloadsFailed ? (
+              <div className="p-4" data-testid="overview-services-error">
+                <ObsError error={listed.error} subject={project} onRetry={retryWorkloads} retrying={listed.isFetching} />
+              </div>
+            ) : (
             <ServicesTable
               rows={visible}
               loading={loading}
@@ -408,11 +424,14 @@ export function OverviewHome({
                 )
               }
             />
+            )}
             {listed.data?.truncated && (
               <p className="border-t border-border px-4 py-2.5 text-xs text-ink-muted" data-testid="overview-services-truncated">
                 Showing the first 500 workloads.
               </p>
             )}
+            {!workloadsFailed && <PartialNote sections={servicesMissing} onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-services-partial" />}
+            {workloadsStale && <StaleNote onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-services-stale" />}
           </Panel>
 
           {!unrecorded && <ProcessHealth
@@ -426,13 +445,23 @@ export function OverviewHome({
           />}
 
           <Panel title="Jobs" meta="Migrations, provisioning and scheduled jobs. The latest run of each." flush testId="overview-jobs">
-            <JobsTable
-              rows={jobs}
-              loading={loading}
-              showEnv={all}
-              hrefs={hrefs}
-              empty={<>No job has run in {where} in the {windowWords}. Migrations and provisioning jobs appear here after the next deploy that runs them.</>}
-            />
+            {workloadsFailed ? (
+              <div className="p-4" data-testid="overview-jobs-error">
+                <ObsError error={listed.error} subject={project} onRetry={retryWorkloads} retrying={listed.isFetching} />
+              </div>
+            ) : missing.includes("jobs") ? (
+              // Never "no job has run": the jobs were not read.
+              <PartialNote sections={["jobs"]} onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-jobs-partial" />
+            ) : (
+              <JobsTable
+                rows={jobs}
+                loading={loading}
+                showEnv={all}
+                hrefs={hrefs}
+                empty={<>No job has run in {where} in the {windowWords}. Migrations and provisioning jobs appear here after the next deploy that runs them.</>}
+              />
+            )}
+            {workloadsStale && <StaleNote onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-jobs-stale" />}
             {listed.data?.jobsTruncated && (
               <p className="border-t border-border px-4 py-2.5 text-xs text-ink-muted" data-testid="overview-jobs-truncated">
                 Built from the newest 200 runs in the {windowWords}; older runs are not counted.
@@ -780,7 +809,7 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
     <Panel title="Recent releases" meta="Latest builds and where they run now" actions={<RailLink href={hrefs.releases}>All</RailLink>} testId="overview-recent-releases">
       {releases.isLoading ? (
         <div className="h-24 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading releases" />
-      ) : releases.error ? (
+      ) : releases.error && !releases.data ? (
         <p className="text-xs text-ink-muted">Releases could not be read right now.</p>
       ) : recent.length === 0 ? (
         <p className="text-xs text-ink-muted">No release has been cut yet. The first reliant forge env deploy cuts one.</p>
