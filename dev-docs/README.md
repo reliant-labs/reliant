@@ -17,3 +17,4 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `human-only-approvals-verification.md` — post-deploy check that real app sessions and OAuth-client tokens classify correctly for human-only approvals.
 - `dashboard-postgres-panels.md` — post-deploy check for dashboard postgres panels (`AppDatabaseService`), and how to roll them back.
 - `design/mobile-chat-redesign.md` — mobile and tablet chat thread redesign: one top bar, inline composer, status slot, parity map.
+- `design/terminal-reattach.md` — keeping a terminal's shell across a reconnect: attach, detached-session reaper, offset replay (proposal).
