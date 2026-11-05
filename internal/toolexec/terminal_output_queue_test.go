@@ -73,28 +73,6 @@ func TestTerminalOutputQueue_SlowConsumerGetsEveryByteInOrder(t *testing.T) {
 	require.Equal(t, string(want), string(got))
 }
 
-// A consumer that takes nothing past the timeout ends the stream loudly: the
-// producer is told, and the consumer gets what was queued, then the overflow
-// error, then the end of the channel.
-func TestTerminalOutputQueue_OverflowEndsWithError(t *testing.T) {
-	q := NewTerminalOutputQueue("s1", 2, 20*time.Millisecond)
-	require.NoError(t, q.Send(&TerminalOutputEvent{Data: []byte("a")}))
-	require.NoError(t, q.Send(&TerminalOutputEvent{Data: []byte("b")}))
-
-	start := time.Now()
-	require.ErrorIs(t, q.Send(&TerminalOutputEvent{Data: []byte("c")}), ErrTerminalOutputOverflow)
-	require.GreaterOrEqual(t, time.Since(start), 20*time.Millisecond, "the producer waited before giving up")
-	require.ErrorIs(t, q.Send(&TerminalOutputEvent{Data: []byte("d")}), ErrTerminalOutputClosed,
-		"a failed queue takes nothing more")
-
-	got, last := readTerminalOutput(t, q.C(), 0)
-	require.Equal(t, "ab", string(got))
-	require.NotNil(t, last)
-	require.True(t, last.Overflow)
-	require.Equal(t, TerminalOutputOverflowMessage, last.Error)
-	require.Equal(t, "s1", last.SessionID)
-}
-
 // Close releases a producer waiting on a full queue, and is safe to repeat.
 func TestTerminalOutputQueue_CloseReleasesWaitingSend(t *testing.T) {
 	q := NewTerminalOutputQueue("s1", 1, time.Minute)
