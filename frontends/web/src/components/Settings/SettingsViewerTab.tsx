@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense, lazy, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, Suspense, lazy, useRef, useMemo } from "react";
 import { SettingsHeader } from "./SettingsHeader";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
 import {
@@ -29,6 +29,17 @@ export function SettingsViewerTab({ section, onSectionChange, onClose }: Setting
   const containerRef = useRef<HTMLDivElement>(null);
   const navigationRef = useRef<HTMLDivElement>(null);
   const chrome = useTitleBarChrome();
+  const pendingFocus = useRef<SettingsSection | null>(null);
+
+  const focusSection = useCallback((id: SettingsSection) => {
+    const button = navigationRef.current?.querySelector<HTMLButtonElement>(`button[data-section-id="${id}"]`);
+    button?.focus();
+    return Boolean(button);
+  }, []);
+
+  useEffect(() => {
+    if (pendingFocus.current === section && focusSection(section)) pendingFocus.current = null;
+  }, [section, focusSection]);
 
   // Same order as SettingsNavigation sidebar (single source: settingsSections)
   const visibleSections = useMemo(
@@ -72,8 +83,9 @@ export function SettingsViewerTab({ section, onSectionChange, onClose }: Setting
         const newSection = visibleSections[newIndex];
         if (newSection) {
           onSectionChange(newSection);
-          const buttons = navigationRef.current.querySelectorAll<HTMLButtonElement>("nav button");
-          buttons[newIndex]?.focus();
+          // Advanced's buttons only exist once it is open, which the new
+          // section does by itself: focus them after it renders if need be.
+          if (!focusSection(newSection)) pendingFocus.current = newSection;
         }
       }
     };
@@ -82,7 +94,7 @@ export function SettingsViewerTab({ section, onSectionChange, onClose }: Setting
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
     };
-  }, [section, visibleSections, onSectionChange]);
+  }, [section, visibleSections, onSectionChange, focusSection]);
 
   // Detect width and collapse sidebar when narrow
   useEffect(() => {
@@ -119,7 +131,7 @@ export function SettingsViewerTab({ section, onSectionChange, onClose }: Setting
           <div aria-hidden="true" className="h-10 shrink-0" style={chrome.dragRegionStyle} />
         )}
         <SettingsHeader onClose={onClose} isCollapsed={isCollapsed} {...chrome} />
-        <div ref={navigationRef} className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={navigationRef} className="flex min-h-0 flex-1 flex-col">
           <SettingsNavigation
             activeSection={section}
             onSectionChange={onSectionChange}
