@@ -15,7 +15,7 @@ import React, { useEffect, useRef, useState } from "react";
  * Readers could not tell a set filter from an unset one. Here:
  *
  * - the label is ink, not muted: a filter is a control, not a caption;
- * - a SET filter is filled with the primary tint (border, background and
+ * - a SET filter is filled with the accent tint (border, background and
  *   text), so the state reads at a glance;
  * - a chip can say how many rows it keeps (`count`), and a menu's options say
  *   theirs, so the reader knows what a click will do before making it;
@@ -27,18 +27,18 @@ import React, { useEffect, useRef, useState } from "react";
  */
 
 const BASE =
-  "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
-/** The two states: an unset filter is a plain control, a set one is filled with the primary tint. */
+/** The two states: an unset filter is a plain control, a set one is filled with the accent tint. */
 export function filterChipClass(on: boolean): string {
-  return `${BASE} ${on ? "border-primary/50 bg-primary/10 font-medium text-primary-ink" : "border-border bg-surface text-ink hover:bg-ink/5"}`;
+  return `${BASE} ${on ? "border-accent/50 bg-accent/10 font-medium text-accent-ink" : "border-border bg-surface text-ink hover:bg-ink/5"}`;
 }
 
 function Count({ value, on }: { value: number; on: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={`min-w-[1.25rem] rounded-full px-1.5 text-center text-2xs leading-4 tabular-nums ${on ? "bg-primary/15 text-primary-ink" : "bg-ink/5 text-ink-muted"}`}
+      className={`min-w-[1.25rem] rounded-full px-1.5 text-center text-2xs leading-4 tabular-nums ${on ? "bg-accent/15 text-accent-ink" : "bg-ink/5 text-ink-muted"}`}
     >
       {value.toLocaleString()}
     </span>
@@ -78,7 +78,7 @@ export function FilterBar({ label, active = 0, onClear, trailing, className, tes
         <button
           type="button"
           onClick={onClear}
-          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-primary-ink hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-xs font-medium text-accent-ink hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           data-testid={testId ? `${testId}-clear` : undefined}
         >
           Clear filters
@@ -104,7 +104,7 @@ export interface FilterSearchProps {
 export function FilterSearch({ value, onChange, placeholder, label, testId, className }: FilterSearchProps) {
   return (
     <label
-      className={`flex h-8 min-w-56 items-center gap-1.5 rounded-md border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring ${value ? "border-primary/50" : "border-border"} ${className ?? ""}`}
+      className={`flex h-8 min-w-56 items-center gap-1.5 rounded-md border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-accent ${value ? "border-accent/50" : "border-border"} ${className ?? ""}`}
     >
       <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" aria-hidden="true">
         <circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
@@ -213,7 +213,7 @@ export function FilterMenu({ label, value, options, onChange, testId }: FilterMe
           type="button"
           onClick={() => onChange(undefined)}
           aria-label={`Clear ${label.toLowerCase()} filter`}
-          className="inline-flex h-8 w-7 items-center justify-center rounded-r-md border border-l-0 border-primary/50 bg-primary/10 text-primary-ink hover:bg-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex h-8 w-7 items-center justify-center rounded-r-md border border-l-0 border-accent/50 bg-accent/10 text-accent-ink hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           data-testid={testId ? `${testId}-clear` : undefined}
         >
           <Cross />
@@ -234,7 +234,7 @@ export function FilterMenu({ label, value, options, onChange, testId }: FilterMe
                   setOpen(false);
                   onChange(option.value || undefined);
                 }}
-                className={`flex h-8 w-full items-center justify-between gap-3 rounded-md px-2 text-left text-sm hover:bg-ink/5 ${checked ? "font-medium text-primary-ink" : option.value ? "text-ink" : "text-ink-muted"}`}
+                className={`flex h-8 w-full items-center justify-between gap-3 rounded-md px-2 text-left text-sm hover:bg-ink/5 ${checked ? "font-medium text-accent-ink" : option.value ? "text-ink" : "text-ink-muted"}`}
               >
                 {option.label}
                 {option.count !== undefined && (
