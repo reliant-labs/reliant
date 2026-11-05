@@ -137,6 +137,18 @@ describe("the Overview's tiles", () => {
     expect(screen.getByTestId("overview-jobs-partial")).toHaveTextContent("Jobs did not arrive in time");
     expect(screen.queryByTestId("overview-jobs-empty")).toBeNull();
   });
+
+  it("the Services tile names every missing workload section, not only CPU and memory", async () => {
+    const base = createWorkloadsFixtureApi();
+    const sections = ["warnings", "replicas", "restarts", "terminations", "history", "versions"];
+    renderOverview({
+      obs: { ...base, listWorkloads: async (req) => ({ ...(await base.listWorkloads(req)), unavailableSections: sections }) },
+    });
+    const note = await screen.findByTestId("overview-services-partial");
+    expect(note).toHaveTextContent("Warnings, replicas, restarts, last exits, health history and versions did not arrive in time");
+    // None of them is jobs, so the Jobs tile draws its table.
+    expect(screen.queryByTestId("overview-jobs-partial")).toBeNull();
+  });
 });
 
 describe("tile state", () => {
