@@ -57,11 +57,15 @@ fi
 # owner_approved <label>: the PR carries <label> and an owner was the last to apply it.
 owner_approved() {
   [ -n "${CI_PR:-}" ] && [ -n "$repo" ] || return 1
-  local has actor
+  local has actors actor
   has="$("$GH" api "repos/$repo/issues/$CI_PR/labels" --jq "[.[] | select(.name == \"$1\")] | length" 2>/dev/null || echo 0)"
   [ "$has" -gt 0 ] 2>/dev/null || return 1
-  actor="$("$GH" api --paginate "repos/$repo/issues/$CI_PR/events" \
-    --jq ".[] | select(.event == \"labeled\" and .label.name == \"$1\") | .actor.login" 2>/dev/null | tail -1)"
+  # Capture the whole paginated history and refuse on any failure: called as an `if`
+  # condition, errexit is off here, and a page gh failed to read may hold a later
+  # removal and re-application by someone else, so a partial history is no approval.
+  actors="$("$GH" api --paginate "repos/$repo/issues/$CI_PR/events" \
+    --jq ".[] | select(.event == \"labeled\" and .label.name == \"$1\") | .actor.login" 2>/dev/null)" || return 1
+  actor="$(tail -1 <<<"$actors")"
   [ -n "$actor" ] && tr ', ' '\n\n' <<<"$OWNERS" | grep -qxF "$actor"
 }
 
@@ -84,12 +88,24 @@ changed() { git diff --name-only --diff-filter="${2:-ACMRD}" "$base" HEAD -- "$1
 
 case "${1:-}" in
   proto)
-    [ -f buf.yaml ] || { echo "check-compat: no buf.yaml; nothing to judge"; exit 0; }
+    if [ ! -f buf.yaml ]; then
+      # Fail closed: deleting the configuration must not switch the check off for
+      # a base that publishes proto under it.
+      if git cat-file -e "$base:buf.yaml" 2>/dev/null; then
+        refuse breaking:approved "buf.yaml, which ${base:0:12} has, was removed, so its proto cannot be judged" \
+          "Keep buf.yaml (and the proto under it); deprecate what should go instead of removing it (the proto-breaking skill)."
+        exit
+      fi
+      echo "check-compat: no buf.yaml here or at ${base:0:12}; nothing to judge"; exit 0
+    fi
     if [ -z "$(changed proto)$(changed buf.yaml)" ]; then echo "check-compat: proto unchanged since ${base:0:12}"; exit 0; fi
     command -v buf >/dev/null || die "buf is not on PATH (task tools installs the pinned one)"
     old="$(mktemp -d)"; trap 'rm -rf "$old"' EXIT
     # The base's tree, not `.git#ref=`: buf cannot clone a linked worktree's .git file.
-    git archive "$base" -- buf.yaml $(git ls-tree --name-only "$base" -- buf.lock proto) | tar -x -C "$old"
+    # A read loop, not mapfile: macOS's bash is 3.2.
+    base_paths=()
+    while IFS= read -r p; do base_paths+=("$p"); done < <(git ls-tree --name-only "$base" -- buf.lock proto)
+    git archive "$base" -- buf.yaml ${base_paths[@]+"${base_paths[@]}"} | tar -x -C "$old"
     if out="$(buf breaking --against "$old" 2>&1)"; then
       echo "check-compat: proto is wire-compatible with ${base:0:12}"; exit 0
     fi

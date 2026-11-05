@@ -35,10 +35,27 @@ grep -q '(#6)' "$T.err" || { echo "FAIL: footer refusal does not name #6"; fail=
 expect v1.6.0 0 --allow-breaking
 expect v1.6.0 0 --breaking-since HEAD
 expect "" 3 --breaking-since HEAD~1
+c "fix(pkg): x (#6b)" -m "API-BREAK: codemod=x"
+expect "" 3 --base-rev HEAD~1
 c "feat: mentions BREAKING CHANGE: in prose only (#7)"
 expect v1.6.0 0 --base-rev HEAD~1
 expect "" 2 --base v9
 
+# A release of a later commit refuses an older head; a tag beside the head's history
+# (a release train's pin commit) is still the last release; a version already taken
+# by other source refuses.
+c "fix: y (#8)"; g tag v1.6.0
+expect v1.6.1 0 --head HEAD                    # the head itself is the base
+expect "" 4 --head HEAD~1                      # an older head: a descendant shipped
+grep -q 'v1.6.0' "$T.err" || { echo "FAIL: descendant refusal does not name v1.6.0"; fail=1; }
+expect v1.6.1 0 --head HEAD~1 --no-older-check # the release train's opt-out
+c "fix: z (#9)"
+g checkout -q -b pin HEAD; c "chore(rc): pin (#10)"; g tag v1.6.1   # the release, beside main
+g checkout -q main; c "feat: after the release (#11)"
+expect v1.7.0 0                                # counts from v1.6.1, on the pin commit
+g checkout -q -b side2 HEAD~3; c "feat: again (#12)"; g checkout -q main
+expect "" 4 --base v1.5.0 --head side2 --allow-breaking   # computes v1.6.0, already another commit's
+grep -q 'v1.6.0 is already released' "$T.err" || { echo "FAIL: collision refusal does not name v1.6.0"; fail=1; }
 # A git log that fails after both ends resolve (a history object is missing) is a
 # git error, never a silent patch.
 B="$T/broken"; mkdir "$B"
