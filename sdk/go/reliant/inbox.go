@@ -48,6 +48,9 @@ type ListInbox struct {
 const (
 	inboxFirstFetch = 100
 	inboxMaxFetch   = 10000
+	// inboxTruncatedToken is the iterator's page token after a response still
+	// truncated at inboxMaxFetch; the fetch it triggers returns ErrTruncated.
+	inboxTruncatedToken = "truncated"
 )
 
 // List lists the inbox in the server's priority order: items that block a run
@@ -58,12 +61,18 @@ const (
 // off (or inboxMaxFetch items), so it yields everything a filter matches. Kind
 // and automation filters are applied here, after the server's cut, which is
 // why the walk does not stop at the first response.
+//
+// An inbox still cut off at inboxMaxFetch items is not presented as complete:
+// the iterator yields the items it has, then ends with [ErrTruncated].
 func (i *InboxClient) List(ctx context.Context, f ListInbox) *Iter[*InboxItem] {
 	want := map[InboxItemKind]bool{}
 	for _, k := range f.Kinds {
 		want[k] = true
 	}
-	return newIter(ctx, f.Limit, func(ctx context.Context, _ string) ([]*InboxItem, string, error) {
+	return newIter(ctx, f.Limit, func(ctx context.Context, token string) ([]*InboxItem, string, error) {
+		if token == inboxTruncatedToken {
+			return nil, "", i.c.fail("inbox.list", ErrTruncated, "the inbox holds more than %d items; the rest were not listed", inboxMaxFetch)
+		}
 		limit := int32(inboxFirstFetch)
 		if f.Limit > 0 && f.Kinds == nil && f.Automation == "" && f.Limit < inboxFirstFetch {
 			limit = int32(f.Limit) // nothing is dropped client-side: ask for no more than is used
@@ -88,6 +97,11 @@ func (i *InboxClient) List(ctx context.Context, f ListInbox) *Iter[*InboxItem] {
 						continue
 					}
 					out = append(out, it)
+				}
+				if resp.Msg.GetTruncated() && !enough {
+					// Cut off at inboxMaxFetch: yield these, then fail the
+					// walk on the next fetch so the caller sees the gap.
+					return out, inboxTruncatedToken, nil
 				}
 				return out, "", nil
 			}

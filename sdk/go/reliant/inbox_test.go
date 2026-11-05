@@ -116,6 +116,23 @@ func TestInboxListFilterSeesPastTheServersCut(t *testing.T) {
 	}
 }
 
+// An inbox still cut off at the most the client asks for is not presented as
+// complete: the items arrive, then the walk ends with ErrTruncated.
+func TestInboxListReportsTruncationAtTheCap(t *testing.T) {
+	all := inboxItems(3)
+	f := &fake{listInbox: func(r *reliantv1.ListInboxRequest) (*reliantv1.ListInboxResponse, error) {
+		return &reliantv1.ListInboxResponse{Items: all, Truncated: true}, nil
+	}}
+	c, _ := f.start(t)
+	got, err := c.Inbox.List(context.Background(), ListInbox{}).All()
+	if len(got) != len(all) {
+		t.Fatalf("got %d items, want the %d the server returned", len(got), len(all))
+	}
+	if !errors.Is(err, ErrTruncated) {
+		t.Fatalf("err = %v, want ErrTruncated", err)
+	}
+}
+
 func TestInboxListErrorIsWrapped(t *testing.T) {
 	f := &fake{listInbox: func(*reliantv1.ListInboxRequest) (*reliantv1.ListInboxResponse, error) {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("scope"))

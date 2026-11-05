@@ -62,7 +62,7 @@ Lists (`Runs.List`, `Triggers.List`, `Triggers.Events`) return an `*Iter` that
 follows page tokens lazily. Failures are `*reliant.Error`; branch on
 `errors.Is(err, reliant.ErrNotFound)` and friends (`ErrUnauthenticated`,
 `ErrPermissionDenied`, `ErrUnavailable`, `ErrInvalidArgument`,
-`ErrFailedPrecondition`, `ErrAmbiguous`, `ErrNotApplied`).
+`ErrFailedPrecondition`, `ErrAmbiguous`, `ErrNotApplied`, `ErrTruncated`).
 
 ## "Did it succeed?"
 
