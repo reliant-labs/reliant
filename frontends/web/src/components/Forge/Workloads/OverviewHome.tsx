@@ -31,9 +31,10 @@
  */
 
 import { useMemo, type CSSProperties, type ReactNode } from "react";
-import { ArrowRight, Boxes, RotateCcw, Search } from "lucide-react";
+import { ArrowRight, Boxes, RotateCcw } from "lucide-react";
 
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
+import { FilterBar, FilterChip, FilterMenu, FilterSearch } from "@/components/forge-ui/filter_bar";
 import Link from "@/components/forge-ui/link";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import PageHeader from "@/components/forge-ui/page_header";
@@ -90,7 +91,7 @@ import {
   type StripEnv,
 } from "./workloadModel";
 import { exitPhrase, jobFailurePhrase } from "./plainHealth";
-import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
+import { HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
 import { ProcessHealth } from "./ProcessHealth";
 
@@ -223,8 +224,19 @@ export function OverviewHome({
   const empty = !envsLoading && envs.length === 0;
   // An empty list from a failed read says nothing about what is deployed.
   const unread = empty && !!envsUnread;
+  const rangeControl = (
+    <VariableSelect
+      id="overview-range"
+      label="time"
+      value={range}
+      options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
+      onChange={(value) => onSearch({ range: value === OVERVIEW_RANGE ? undefined : (value as RangePreset) })}
+    />
+  );
+  // One compact row: the title, its counts inline, the window on the right.
   const header = (
     <PageHeader
+      density="compact"
       title="Overview"
       meta={
         unread ? undefined : empty ? (
@@ -237,25 +249,18 @@ export function OverviewHome({
               {services.length} {services.length === 1 ? "service" : "services"} and {jobs.length} {jobs.length === 1 ? "job" : "jobs"} in {where}
             </span>
             {unhealthy > 0 && <Status tone="warning" label={`${unhealthy} need${unhealthy === 1 ? "s" : ""} attention`} />}
+            {listed.data && <ObsAsOf updatedAt={listed.dataUpdatedAt} />}
           </>
         )
       }
+      controls={empty ? undefined : rangeControl}
       className="mb-0"
-    />
-  );
-  const rangeControl = (
-    <VariableSelect
-      id="overview-range"
-      label="time"
-      value={range}
-      options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
-      onChange={(value) => onSearch({ range: value === OVERVIEW_RANGE ? undefined : (value as RangePreset) })}
     />
   );
 
   if (empty) {
     return (
-      <div className="space-y-6" data-testid="overview" data-state={unread ? "unread" : "empty"}>
+      <div className="space-y-4" data-testid="overview" data-state={unread ? "unread" : "empty"}>
         {header}
         {deploys}
         {envsUnread ? (
@@ -289,11 +294,8 @@ export function OverviewHome({
   const windowWords = RANGE_LABELS[range].toLowerCase();
 
   return (
-    <div className="space-y-8" data-testid="overview" data-state={loading ? "loading" : listed.error ? "error" : "ready"}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">{header}{listed.data && <ObsAsOf updatedAt={listed.dataUpdatedAt} />}</div>
-        <div className="pt-1">{rangeControl}</div>
-      </div>
+    <div className="space-y-6" data-testid="overview" data-state={loading ? "loading" : listed.error ? "error" : "ready"}>
+      {header}
 
       {!unrecorded && (
         <FrontendsPanel
@@ -344,43 +346,30 @@ export function OverviewHome({
         <ObsError error={listed.error} subject={project} onRetry={() => void listed.refetch()} retrying={listed.isFetching} />
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2" data-testid="overview-toolbar">
-            <label className="flex h-8 min-w-64 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
-              <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span className="sr-only">Filter services</span>
-              <input
-                value={search.q ?? ""}
-                onChange={(event) => onSearch({ q: event.target.value || undefined })}
-                placeholder="Filter services"
-                className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none"
-                data-testid="overview-filter"
-              />
-            </label>
-            <ChipMenu
-              label="Kind"
-              value={search.kind}
-              options={kindsOf(services).map((kind) => ({ value: kind, label: KIND_LABEL[kind] }))}
-              onChange={(kind) => onSearch({ kind: kind as KindFilter | undefined })}
-              testId="overview-chip-kind"
-            />
-            <Chip
+          <FilterBar
+            label="Filter services"
+            active={[search.q, search.status, search.kind].filter(Boolean).length}
+            onClear={() => onSearch({ q: undefined, status: undefined, kind: undefined })}
+            testId="overview-toolbar"
+          >
+            <FilterSearch value={search.q ?? ""} onChange={(q) => onSearch({ q: q || undefined })} placeholder="Filter services" testId="overview-filter" />
+            <FilterChip
               on={search.status === "attention"}
+              count={filterServices(services, { ...search, status: "attention" }).length}
               onClick={() => onSearch({ status: search.status ? undefined : "attention" })}
               testId="overview-chip-status"
               title={search.status ? "Show every service" : "Show only the services that need attention"}
             >
-              Status: {search.status ? "needs attention" : "all"}
-            </Chip>
-            {filtered && (
-              <button
-                type="button"
-                onClick={() => onSearch({ q: undefined, status: undefined, kind: undefined })}
-                className="inline-flex h-7 items-center rounded-md px-2 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink"
-              >
-                Clear
-              </button>
-            )}
-          </div>
+              Needs attention
+            </FilterChip>
+            <FilterMenu
+              label="Kind"
+              value={search.kind}
+              options={kindsOf(services).map((kind) => ({ value: kind, label: KIND_LABEL[kind], count: filterServices(services, { ...search, kind }).length }))}
+              onChange={(kind) => onSearch({ kind: kind as KindFilter | undefined })}
+              testId="overview-chip-kind"
+            />
+          </FilterBar>
 
           <Panel title="Services" meta="Long-running workloads. CPU and memory against their limits." flush testId="overview-services">
             <ServicesTable

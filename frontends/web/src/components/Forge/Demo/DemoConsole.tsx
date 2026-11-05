@@ -169,8 +169,9 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
               brandCollapsed={<ProjectMonogram name={FIXTURE_PROJECT} />}
             >
               <DemoBanner shell={shell} />
-              <div className="space-y-6" data-testid="forge-demo">
-                <PageHeader title={OBS_VIEW_LABELS[view]} meta={<span>{env === ENV_ALL ? "All environments" : env}</span>} className="mb-0" />
+              <div className="space-y-4" data-testid="forge-demo">
+                {/* One compact row; the top bar's scope control says which environments. */}
+                <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
                 <ObservabilityPanel place={PLACE} search={{ ...search, view }} navigate={navigateObs} />
               </div>
             </ConsoleShell>

@@ -104,7 +104,7 @@ describe("the list", () => {
     await ready();
     await user.type(screen.getByTestId("releases-filter"), "fluxobserve");
     expect(screen.getAllByTestId(/^release-row-/)).toHaveLength(1);
-    await user.click(screen.getByRole("button", { name: "Clear" }));
+    await user.click(screen.getByRole("button", { name: /^Clear filters/ }));
     expect(harness.current().q).toBeUndefined();
 
     await user.click(screen.getByTestId("releases-chip-status"));

@@ -21,16 +21,16 @@
  */
 
 import { useMemo, useState, type ReactNode } from "react";
-import { ChevronDown, Search, Tag as TagIcon } from "lucide-react";
+import { Tag as TagIcon } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
+import { FilterBar, FilterChip, FilterMenu, FilterSearch } from "@/components/forge-ui/filter_bar";
 import Link from "@/components/forge-ui/link";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import Mono from "@/components/forge-ui/mono";
 import PageHeader from "@/components/forge-ui/page_header";
 import { useDoraMetrics, useObservabilityOrg } from "@/hooks/observability-queries";
-import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { cn } from "@/lib/utils";
 
 import { formatPerDay, formatSpan } from "../Observability/deliveryScope";
@@ -189,6 +189,11 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
 
   const authors = model ? authorsOf(model.rows) : [];
   const filtered = !!(search.q || search.author || search.status);
+  /** How many rows a menu option keeps: the other filters as they are, this one set to the option. */
+  const countWith = (change: { author?: string; status?: StatusFilter }) =>
+    model
+      ? filterRows(model.rows, { env, everyRelease, query: search.q ?? "", author: search.author, status: search.status, ...change }).length
+      : 0;
 
   return (
     <div className="space-y-6" data-testid="releases" data-state={loading ? "loading" : "ready"}>
@@ -204,52 +209,45 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
       )}
 
       <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2" data-testid="releases-toolbar">
-          <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
-            <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span className="sr-only">Filter releases</span>
-            <input
-              value={search.q ?? ""}
-              onChange={(event) => onSearch({ q: event.target.value || undefined })}
-              placeholder="Filter by version, sha or subject"
-              className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none"
-              data-testid="releases-filter"
-            />
-          </label>
+        <FilterBar
+          label="Filter releases"
+          active={[search.q, search.author, search.status].filter(Boolean).length}
+          onClear={() => onSearch({ q: undefined, author: undefined, status: undefined })}
+          testId="releases-toolbar"
+        >
+          <FilterSearch
+            value={search.q ?? ""}
+            onChange={(q) => onSearch({ q: q || undefined })}
+            placeholder="Filter by version, sha or subject"
+            label="Filter releases"
+            className="min-w-72"
+            testId="releases-filter"
+          />
           {env !== ENV_ALL && (
-            <Chip
+            <FilterChip
               on={!search.every}
               onClick={() => onSearch({ every: search.every ? undefined : true })}
               testId="releases-chip-env"
               title={search.every ? `Show only the releases that ran in ${env}` : `Showing the releases that ran in ${env}. Click to show every release.`}
             >
               Ran in {env}
-            </Chip>
+            </FilterChip>
           )}
-          <ChipMenu
+          <FilterMenu
             label="Author"
             value={search.author}
-            options={authors.map((author) => ({ value: author, label: author }))}
+            options={authors.map((author) => ({ value: author, label: author, count: countWith({ author }) }))}
             onChange={(author) => onSearch({ author })}
             testId="releases-chip-author"
           />
-          <ChipMenu
+          <FilterMenu
             label="Status"
             value={search.status}
-            options={(Object.keys(STATUS_FILTER_LABELS) as StatusFilter[]).map((status) => ({ value: status, label: STATUS_FILTER_LABELS[status] }))}
+            options={(Object.keys(STATUS_FILTER_LABELS) as StatusFilter[]).map((status) => ({ value: status, label: STATUS_FILTER_LABELS[status], count: countWith({ status }) }))}
             onChange={(status) => onSearch({ status: status as StatusFilter | undefined })}
             testId="releases-chip-status"
           />
-          {filtered && (
-            <button
-              type="button"
-              onClick={() => onSearch({ q: undefined, author: undefined, status: undefined })}
-              className="inline-flex h-7 items-center rounded-md px-2 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink"
-            >
-              Clear
-            </button>
-          )}
-        </div>
+        </FilterBar>
 
         <ReleaseTable
           model={model}
@@ -522,99 +520,6 @@ function PipelineSkeleton() {
           <div className="h-3 w-24 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
         </div>
       ))}
-    </div>
-  );
-}
-
-// ── Toolbar chips ───────────────────────────────────────────────────────────
-
-const CHIP =
-  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-/** Solid border on the surface fill, as the mockup's chips; a set filter reads in ink with a stronger border. */
-const chipState = (on: boolean) => (on ? "border-ink-subtle text-ink" : "border-border text-ink-muted hover:border-ink-subtle hover:text-ink");
-
-function Chip({ on, onClick, children, title, testId }: { on: boolean; onClick: () => void; children: ReactNode; title?: string; testId?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      title={title}
-      data-testid={testId}
-      className={cn(CHIP, chipState(on))}
-    >
-      {children}
-    </button>
-  );
-}
-
-function ChipMenu({
-  label,
-  value,
-  options,
-  onChange,
-  testId,
-}: {
-  label: string;
-  value?: string;
-  options: { value: string; label: string }[];
-  onChange: (value: string | undefined) => void;
-  testId?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const escapeLayer = useEscapeLayer(open, () => setOpen(false));
-  const current = options.find((option) => option.value === value);
-  return (
-    <div
-      className="relative"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
-      }}
-    >
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((prev) => !prev)}
-        data-testid={testId}
-        className={cn(CHIP, chipState(!!current))}
-      >
-        {current ? `${label}: ${current.label}` : label}
-        <ChevronDown className="h-3 w-3" aria-hidden="true" />
-      </button>
-      {open && (
-        <div role="menu" {...escapeLayer} className="absolute left-0 top-8 z-50 min-w-44 rounded-lg border border-border bg-surface p-1 shadow-md">
-          {options.length === 0 && <div className="px-2 py-1.5 text-xs text-ink-muted">Nothing to filter by</div>}
-          {current && (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                setOpen(false);
-                onChange(undefined);
-              }}
-              className="flex h-8 w-full items-center rounded-md px-2 text-left text-sm text-ink-muted hover:bg-ink/5 hover:text-ink"
-            >
-              Any {label.toLowerCase()}
-            </button>
-          )}
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={option.value === value}
-              onClick={() => {
-                setOpen(false);
-                onChange(option.value);
-              }}
-              className={cn("flex h-8 w-full items-center rounded-md px-2 text-left text-sm text-ink hover:bg-ink/5", option.value === value && "font-medium")}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

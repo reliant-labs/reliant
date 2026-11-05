@@ -3,17 +3,14 @@
 /**
  * The small pieces the Overview and the workload page share: the health
  * verdict as a dot and a word, the release a workload runs (and how that is
- * known), a usage meter against the limit, and the toolbar chips.
+ * known), a usage meter against the limit. (The toolbar chips are
+ * forge-ui/filter_bar, the console's one filter-bar standard.)
  */
-
-import { useState, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
 import Modal from "@/components/forge-ui/modal";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import type { ResourceUsage, Workload } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 import { shortDigest, type ForgeHostedWorkload } from "@/services/forge/topology";
@@ -210,70 +207,6 @@ export function UsageMeter({ usage, format, what }: { usage: ResourceUsage | nul
       <span className={cn("text-xs tabular-nums", hot ? "text-warning-ink" : "text-ink-muted")}>{formatPercent(share)}</span>
       <span className="sr-only">{label}</span>
     </span>
-  );
-}
-
-// ── Toolbar chips (the Releases list's, in the same shape) ─────────────────
-
-const CHIP =
-  "inline-flex h-7 items-center gap-1 rounded-full border bg-surface px-2.5 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-const chipState = (on: boolean) => (on ? "border-ink-subtle text-ink" : "border-border text-ink-muted hover:border-ink-subtle hover:text-ink");
-
-export function Chip({ on, onClick, children, title, testId }: { on: boolean; onClick: () => void; children: ReactNode; title?: string; testId?: string }) {
-  return (
-    <button type="button" onClick={onClick} aria-pressed={on} title={title} data-testid={testId} className={cn(CHIP, chipState(on))}>
-      {children}
-    </button>
-  );
-}
-
-export function ChipMenu({
-  label,
-  value,
-  options,
-  onChange,
-  testId,
-}: {
-  label: string;
-  value?: string;
-  options: { value: string; label: string }[];
-  onChange: (value: string | undefined) => void;
-  testId?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const escapeLayer = useEscapeLayer(open, () => setOpen(false));
-  const current = options.find((option) => option.value === value);
-  return (
-    <div
-      className="relative"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
-      }}
-    >
-      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((prev) => !prev)} data-testid={testId} className={cn(CHIP, chipState(!!current))}>
-        {label}: {current ? current.label : "all"}
-        <ChevronDown className="h-3 w-3" aria-hidden="true" />
-      </button>
-      {open && (
-        <div role="menu" {...escapeLayer} className="absolute left-0 top-8 z-50 min-w-44 rounded-lg border border-border bg-surface p-1 shadow-md">
-          {[{ value: "", label: "All" }, ...options].map((option) => (
-            <button
-              key={option.value || "all"}
-              type="button"
-              role="menuitemradio"
-              aria-checked={(option.value || undefined) === value}
-              onClick={() => {
-                setOpen(false);
-                onChange(option.value || undefined);
-              }}
-              className={cn("flex h-8 w-full items-center rounded-md px-2 text-left text-sm text-ink hover:bg-ink/5", (option.value || undefined) === value && "font-medium")}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   );
 }
 
