@@ -9,35 +9,40 @@ vi.mock("@/services/controlPlane/config", () => ({
 }));
 
 import { getVisibleSettingsSectionIds } from "../SettingsNavigation";
+import { SETTINGS_SECTION_IDS } from "../../../routeSchemas";
 
 describe("SettingsNavigation order", () => {
   // Vitest runs with import.meta.env.DEV true, so Developer is listed here;
   // the production case is the test below.
-  it("groups the nav as Account · AI · Workflows · Machines & code · App, leading with the default section", () => {
+  it("groups the nav as Account · AI · Connections · Machines & projects · Preferences · Advanced, with About last as the footer", () => {
     expect(getVisibleSettingsSectionIds()).toEqual([
       "account",
       "billing",
       "member-permissions",
+      "privacy",
       "ai",
+      "integrations",
+      "git-connections",
       "mcp",
+      "machines",
+      "projects",
+      "appearance",
+      "chat-editor",
+      "notifications",
+      "shortcuts",
       "prompts",
       "presets",
       "automations",
-      "machines",
-      "tokens",
-      "git-connections",
-      "integrations",
-      "projects",
       "branches",
-      "appearance",
-      "chat-editor",
+      "tokens",
       "browser",
-      "notifications",
-      "shortcuts",
-      "privacy",
-      "about",
       "developer",
+      "about",
     ]);
+  });
+
+  it("keeps every section reachable: the same ids as before, regrouped", () => {
+    expect([...getVisibleSettingsSectionIds()].sort()).toEqual([...SETTINGS_SECTION_IDS].sort());
   });
 
   it("lists Developer only in a dev build", async () => {

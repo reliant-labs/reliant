@@ -273,7 +273,15 @@ export function workflowsView({
   const byRecentRun = (a: WorkflowListRow, b: WorkflowListRow) =>
     (lastRuns?.get(b.workflow.name)?.createdAt ?? 0) - (lastRuns?.get(a.workflow.name)?.createdAt ?? 0) || byName(a, b);
 
+  // The ready-made strip already offers these; listing them again as rows
+  // shows each Autopilot workflow twice. Narrowing (search, a filter chip)
+  // empties the strip, so `show=builtin` still lists them.
+  const narrowed = Boolean(query) || Boolean(show);
+  const readyMade = narrowed ? [] : readyMadeToOffer([...visible].sort(byName));
+  const offered = new Set(readyMade);
+
   const inShow = [...visible, ...orphans]
+    .filter((row) => !offered.has(row))
     .filter(searchHit)
     .filter((row) => showMatches(row, show))
     .sort(sort === "recent" ? byRecentRun : byName);
@@ -300,7 +308,6 @@ export function workflowsView({
 
   const visibleInvalid = !show || show === "failed" ? searchedInvalid : [];
   const shown = sections.reduce((total, section) => total + section.rows.length, 0) + visibleInvalid.length + buildingBlocks.length;
-  const narrowed = Boolean(query) || Boolean(show);
   return {
     sections,
     rows: sections.flatMap((section) => section.rows),
@@ -309,7 +316,7 @@ export function workflowsView({
     invalidTriggers,
     buildingBlocks,
     noMatches: narrowed && shown === 0 && workflows.length + invalid.length + orphans.length > 0,
-    readyMade: narrowed ? [] : readyMadeToOffer([...visible].sort(byName)),
+    readyMade,
   };
 }
 

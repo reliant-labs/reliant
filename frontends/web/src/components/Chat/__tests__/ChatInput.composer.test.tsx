@@ -18,6 +18,7 @@ import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useProjectStore } from "../../../store/projectStore";
 import { useAttachmentStore } from "../../../store/attachmentStore";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
+import { useChatParamsStore } from "../../../store/chatParamsStore";
 import { foldCount } from "../composerPriority";
 
 globalThis.ResizeObserver ??= class {
@@ -103,6 +104,7 @@ beforeEach(() => {
   useWorkspaceStateStore.getState().clearNewChatDraft(PROJECT_ID);
   useAttachmentStore.setState({ attachments: new Map() as never });
   slash.action.mockReset();
+  useChatParamsStore.getState().clearTempNewChatParams();
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -218,6 +220,22 @@ describe("⊕ sheet", () => {
     fireEvent.click(screen.getByTestId("send-button"));
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     expect(onSend.mock.calls[0][3]).toMatchObject({ mode: "plan" });
+  });
+
+  it("picking the active mode again drops the override from the send", async () => {
+    const onSend = vi.fn().mockResolvedValue(undefined);
+    renderWithQuery(<ChatInput onSend={onSend} />);
+    fireEvent.click(screen.getByRole("button", { name: "Chat options" }));
+    fireEvent.click(screen.getByTestId("options-settings-row"));
+    fireEvent.click(screen.getByRole("button", { name: "plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "plan" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+
+    type("go");
+    fireEvent.click(screen.getByTestId("send-button"));
+    await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+    // No literal "auto" and no stale "plan": the workflow's default applies.
+    expect(onSend.mock.calls[0][3] ?? {}).not.toHaveProperty("mode");
   });
 
   it("pages to the model, whose pick the send carries", async () => {

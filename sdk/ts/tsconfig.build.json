@@ -1,0 +1,18 @@
+{
+  "//": "The PUBLISHED artifact: nodenext, so every relative import must carry its .js extension, as real Node ESM requires. No tests, no Node types: the shipped code reaches no Node API.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "emitDeclarationOnly": false,
+    "tsBuildInfoFile": null,
+    "outDir": "dist",
+    "rootDir": "src",
+    "declaration": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "sourceMap": true,
+    "inlineSources": true,
+    "types": []
+  },
+  "exclude": ["src/**/*.test.ts", "src/test/**"]
+}

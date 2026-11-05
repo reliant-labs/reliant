@@ -65,6 +65,7 @@ import {
   ComputeSubscriptionCheckout,
   type ComputePlanOption,
 } from "@/components/Billing/ComputeSubscriptionCheckout";
+import { MachinePlanChange } from "@/components/Billing/MachinePlanChange";
 // The machine list, its derivation, and the uniform facts beneath it — shared
 // with the onboarding compute step so one choice has one presentation.
 import { MachinePricingLine, PlanTiles, commonPlanHours } from "@/components/Billing/PlanTiles";
@@ -1262,6 +1263,16 @@ function PlansTab() {
             description="Compute plans are not configured for this environment yet."
           />
         )
+      ) : checkoutPlanId && currentPlanId ? (
+        /* An existing subscriber changes plan rather than buying a second
+           one: an upgrade is charged the prorated difference now, a
+           downgrade waits for the next billing period. The resize and disk
+           modals' "See plans" land here too. */
+        <MachinePlanChange
+          planId={checkoutPlanId}
+          onDone={handleCheckoutDone}
+          onCancel={() => setCheckoutPlanId(null)}
+        />
       ) : checkoutPlanId ? (
         /* The checkout REPLACES the list rather than sitting above it.
         

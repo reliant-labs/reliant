@@ -69,8 +69,11 @@ export type OwnPurposeUsage =
   | { status: "not-deployed" | "loading" | "error" }
   | { status: "ready"; buckets: LLMBucket[]; note: string; completeness: "complete" | "partial" | "unknown" };
 
-export function useOwnManagedPurposeUsage(req: OwnLLMUsageRequest): OwnPurposeUsage & { refresh: () => void; fetching: boolean } {
-  const q = useGetLLMUsage({ ...llmUsageDates(req.startMs, req.endMs), groupBy: LLMUsageGroupBy.LLM_USAGE_GROUP_BY_PURPOSE, authMode: WIRE_AUTH_MODE.managed }, OPTIONS);
+export function useOwnManagedPurposeUsage(
+  req: OwnLLMUsageRequest,
+  { enabled = true }: { enabled?: boolean } = {},
+): OwnPurposeUsage & { refresh: () => void; fetching: boolean } {
+  const q = useGetLLMUsage({ ...llmUsageDates(req.startMs, req.endMs), groupBy: LLMUsageGroupBy.LLM_USAGE_GROUP_BY_PURPOSE, authMode: WIRE_AUTH_MODE.managed }, { ...OPTIONS, enabled });
   const control = { refresh: () => void q.refetch(), fetching: q.isFetching };
   if (unimplemented(q.error)) return { status: "not-deployed", ...control };
   if (q.isError) return { status: "error", ...control };

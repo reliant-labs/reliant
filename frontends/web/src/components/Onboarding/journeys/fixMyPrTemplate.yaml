@@ -1,0 +1,71 @@
+# The workflows journey's seed (journeys-spec.md §2.1): imported as the user's
+# own draft by "Fix my PR (guided)" in New workflow. It is deliberately
+# incomplete — the user draws review -> fix_until_green (W2) and adds the
+# Approval before merge (W4) — so it imports as a draft with "unreachable"
+# findings until they do. `name:` and `title:` are replaced at import with the
+# name the user chose and its slug (fixMyPr.ts fixMyPrName).
+# cmd/reliant/cmd/onboarding_template_test.go validates it, before and after
+# the tour's edits.
+name: fix-my-pr
+title: Fix my PR
+description: Review a pull request, fix it until the tests pass, and ask before merging.
+inputs:
+  pr:
+    type: string
+    default: ""
+    description: The pull request to work on, as a number or URL. Empty means the current branch's PR.
+  test_command:
+    type: string
+    default: "make test"
+    description: The command that says whether the tests pass.
+entry: [review]
+nodes:
+  - id: review
+    type: workflow
+    ref: builtin://agent
+    thread:
+      inject:
+        role: user
+        content: |
+          Review pull request {{inputs.pr}} against its base branch. List the problems you find,
+          then fix the small ones on the PR's branch.
+  - id: fix_until_green
+    type: loop
+    passthrough: [test_command]
+    while: outputs.exit_code != 0 && iter.iteration < 3
+    inline:
+      entry: [fix]
+      outputs:
+        exit_code: "{{nodes.test.exit_code}}"
+      nodes:
+        - id: fix
+          type: workflow
+          ref: builtin://agent
+          thread:
+            mode: inherit
+            inject: { role: user, content: "Make `{{inputs.test_command}}` pass. If it already passes, stop." }
+        - id: test
+          type: run
+          timeout: 30m
+          command: "{{inputs.test_command}}"
+      edges:
+        - from: fix
+          default: test
+  - id: merge
+    type: workflow
+    ref: builtin://agent
+    thread:
+      inject: { role: user, content: "The tests pass. Merge the pull request with a squash merge." }
+  - id: report
+    type: workflow
+    ref: builtin://agent
+    thread:
+      inject: { role: user, content: "The tests still fail after 3 tries. Say what fails and why, then stop." }
+edges:
+  # review -> fix_until_green is left out on purpose: the user draws it in W2.
+  - from: fix_until_green
+    cases:
+      - to: merge
+        label: tests pass
+        condition: nodes.fix_until_green.exit_code == 0
+    default: report

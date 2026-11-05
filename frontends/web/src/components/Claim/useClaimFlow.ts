@@ -76,6 +76,8 @@ import {
 import { useAuthStore } from "@/store/authStore";
 
 import { useGoToBilling } from "@/hooks/useGoToBilling";
+import { isForgeShell } from "@/lib/shell";
+import { consolePath } from "@/components/Forge/Console/paths";
 
 import { UPGRADE_STILL_REQUIRED_MESSAGE } from "./claimCopy";
 import { claimSituation, type ClaimSituation } from "./claimSituation";
@@ -163,6 +165,13 @@ export function useClaimFlow(): ClaimFlow {
         // a surprise. Reversible by subscribing (the /apps banner says so).
         ...(paused ? { pausedSite: paused.name, kept: paused.kept } : {}),
       };
+      // The forge shell lands in the claimed app's console: it has no
+      // onboarding to protect the user from, and the console is its home.
+      // A paused site still goes to /apps, whose banner says what happened.
+      if (isForgeShell() && project && !paused) {
+        void navigate({ href: consolePath(project, { kind: "overview" }), replace: true });
+        return;
+      }
       void navigate({ to: "/apps", search, replace: true });
     },
     [navigate],

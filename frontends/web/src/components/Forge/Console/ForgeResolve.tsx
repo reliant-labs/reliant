@@ -41,6 +41,8 @@ import { useProjectStore, type Project } from "@/store/projectStore";
 import { fetchProjects, useProject } from "@/hooks/project-queries";
 
 import { ForgeProjectPicker } from "../ForgeProjectPicker";
+import { isForgeShell } from "@/lib/shell";
+import { APPS_PATH } from "./paths";
 
 export interface ForgeResolveProps {
   /** A Reliant project id, from the URL. */
@@ -53,7 +55,22 @@ export interface ForgeResolveProps {
 
 type Ladder = { state: "resolving" } | { state: "project"; projectId: string } | { state: "none" };
 
-export function ForgeResolve({ project, forgeProject, target }: ForgeResolveProps) {
+export function ForgeResolve(props: ForgeResolveProps) {
+  return isForgeShell() ? <ForgeShellResolve {...props} /> : <ReliantResolve {...props} />;
+}
+
+/**
+ * The forge shell (lib/shell.ts) has no Reliant projects and no daemon, so
+ * there is no ladder: a forge project name is the console, and anything else
+ * (a Reliant project id from an old link, nothing at all) is the Apps list —
+ * the control plane's own picker.
+ */
+function ForgeShellResolve({ forgeProject, target }: ForgeResolveProps) {
+  const named = forgeProject?.trim() || undefined;
+  return <Redirect href={named ? target(named) : APPS_PATH} />;
+}
+
+function ReliantResolve({ project, forgeProject, target }: ForgeResolveProps) {
   const named = forgeProject?.trim() || undefined;
   const restoreLastProject = useProjectStore((state) => state.restoreLastProject);
   const [ladder, setLadder] = useState<Ladder>({ state: "resolving" });

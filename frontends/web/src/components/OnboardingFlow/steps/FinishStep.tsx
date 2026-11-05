@@ -67,6 +67,7 @@ export function FinishStep({ plan, updatePlan, onBack }: StepProps) {
       <div className="space-y-6">
         <ProvisioningGate
           commit={commit}
+          compute={plan.compute}
           onContinue={goToChat}
           onRetry={() => void retry(plan)}
         />

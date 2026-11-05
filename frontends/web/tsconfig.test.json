@@ -31,7 +31,7 @@
     "noEmit": true,
     "types": ["vitest/globals", "node"]
   },
-  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.gen.json" }],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.gen.json" }, { "path": "../../sdk/ts" }],
   "include": [
     "src/**/__tests__/**/*",
     "src/**/*.test.*",

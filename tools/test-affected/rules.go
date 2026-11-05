@@ -54,8 +54,9 @@ var forgeInputs = []string{
 	"**/*_gen.json", "**/*_gen.ndjson", "**/*_gen.k",
 	"gen/**", "frontends/web/src/gen/**", "pkg/config/**", "deploy/**",
 	".forge/hashes.json", ".forge/scaffolded.json", ".forge/disowned.json",
-	// generate.hooks: controlplane-client.
+	// generate.hooks: controlplane-client, sdk-ts-gen.
 	"proto-vendor/**", "buf.gen.controlplane.yaml", "scripts/proto-generate-atomic.sh",
+	"buf.gen.sdk-ts.yaml", "sdk/ts/src/gen/**",
 	"tools/protoc-gen-es/package.json", "tools/protoc-gen-es/package-lock.json",
 	// generate.hooks: the go:generate outputs, the manifest schemas, and the
 	// integration projections' specs, upstream schema and catalog output.
@@ -229,6 +230,9 @@ var rules = []rule{
 			"frontends/web/package.json", "frontends/web/pnpm-lock.yaml", "frontends/web/pnpm-workspace.yaml", "frontends/web/.nvmrc",
 			"frontends/web/vite.config.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
 			"frontends/web/src/test/setup.ts",
+			// frontends/web installs sdk/ts as a workspace member: its manifest is
+			// part of web's lockfile and dependency graph.
+			"sdk/ts/package.json",
 		},
 		full:   []lane{laneWeb},
 		reason: "web build/test configuration or dependencies changed (every vitest file runs through it)",
@@ -246,7 +250,7 @@ var rules = []rule{
 		// lane for it cost three merge-queue gates the whole web suite.
 		id: "global-config",
 		patterns: []string{
-			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml",
+			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml", "buf.gen.sdk-ts.yaml",
 		},
 		full:   []lane{laneForgeGen},
 		reason: "buf's generation configuration changed: the generated code must match it",
@@ -292,6 +296,16 @@ var rules = []rule{
 		noGraph:  true,
 		dbFan:    true,
 		note:     "reaches only DB-backed tests",
+	},
+	{
+		// @reliantlabs/sdk is a workspace member of frontends/web and the web app
+		// compiles it from source (vite and tsc alias it), so a change to it can
+		// change any vitest file; its own tests run in the web lane too
+		// (frontends/web/vite.config.ts test.include).
+		id:       "sdk-ts",
+		patterns: []string{"sdk/ts/**"},
+		full:     []lane{laneWeb},
+		reason:   "@reliantlabs/sdk changed: the web app compiles it from source, and the web lane runs its tests",
 	},
 	{
 		id:       "web-source",

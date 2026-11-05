@@ -60,6 +60,14 @@ type source struct {
 
 	resolutions sync.Map // projectRoot -> resolution
 	outputs     sync.Map // cache key -> []byte
+	failures    sync.Map // cache key -> failedOutput
+}
+
+// failedOutput is a command line set the pinned forge refused, reused for
+// failedResolutionTTL like a failed resolution.
+type failedOutput struct {
+	at  time.Time
+	err error
 }
 
 type resolution struct {
@@ -114,10 +122,22 @@ func (s *source) Pinned(root, command string) (forgecli.PinnedForge, bool, error
 // (Fingerprint). Kept in memory, and on disk for a module version, which
 // never changes; a linked checkout's key moves with every edit, so its output
 // is kept in memory only.
+//
+// A failure is kept in memory for failedResolutionTTL. Most are permanent (a
+// pin older than the command: `unknown flag: --json`), and the daemon asks
+// for the framework guide on every config poll of every project, so an
+// uncached failure ran the pinned forge once per project every few seconds
+// for as long as the daemon lived (a loaded machine, 2026-11-05: ~16 such
+// projects, each a forge process on every poll).
 func (s *source) Output(pf forgecli.PinnedForge, dir, name string, tries ...[]string) ([]byte, error) {
 	memKey := pf.Key + "\x00" + name
 	if v, ok := s.outputs.Load(memKey); ok {
 		return v.([]byte), nil
+	}
+	if v, ok := s.failures.Load(memKey); ok {
+		if f := v.(failedOutput); time.Since(f.at) < failedResolutionTTL {
+			return nil, f.err
+		}
 	}
 	diskDir := ""
 	if strings.HasPrefix(pf.Key, "pin:") && s.CacheDir != nil {
@@ -139,8 +159,10 @@ func (s *source) Output(pf forgecli.PinnedForge, dir, name string, tries ...[]st
 		}
 	}
 	if err != nil {
+		s.failures.Store(memKey, failedOutput{at: time.Now(), err: err})
 		return nil, err
 	}
+	s.failures.Delete(memKey)
 	s.outputs.Store(memKey, out)
 	if diskDir != "" {
 		writeAtomic(diskDir, name, out)

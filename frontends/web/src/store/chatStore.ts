@@ -2418,7 +2418,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           (u): u is NodeExecutionUpdate => u.update_type === "node_execution",
         );
         // Handle refetch signals from the chat stream (e.g., workflow_executions, plan_tasks)
-        // After convertChatUpdateData, the JSON data is spread into the update object,
+        // After decodeChatUpdate (the SDK), the JSON data is spread into the update object,
         // so { type: "workflow_executions" } becomes a top-level field.
         for (const u of updates) {
           if (u.update_type === "refetch") {

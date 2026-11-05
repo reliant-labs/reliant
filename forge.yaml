@@ -131,6 +131,11 @@ generate:
         - name: controlplane-client
           command: [scripts/proto-generate-atomic.sh, buf.gen.controlplane.yaml, gen/controlplane, frontends/web/src/gen/controlplane]
           writes: [gen/controlplane, frontends/web/src/gen/controlplane]
+        # The TypeScript SDK's generated protobuf subset (@reliantlabs/sdk),
+        # from buf.gen.sdk-ts.yaml. Replaced wholesale, only after buf succeeds.
+        - name: sdk-ts-gen
+          command: [scripts/proto-generate-atomic.sh, buf.gen.sdk-ts.yaml, sdk/ts/src/gen]
+          writes: [sdk/ts/src/gen]
         - name: yaml-bindings
           command: [go, generate, ./internal/workflow/yaml]
           writes: [internal/workflow/yaml/bindings_generated.go]

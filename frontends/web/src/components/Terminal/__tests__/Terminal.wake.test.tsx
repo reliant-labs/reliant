@@ -154,7 +154,7 @@ vi.mock("../../../hooks/useDaemonWait", () => ({
   useDaemonWait: () => ({ state: null, elapsedMs: 0, daemon: null, retryNow: () => {} }),
 }));
 
-import { Terminal } from "../Terminal";
+import { Terminal, WAKE_PROBE_ATTEMPTS, WAKE_PROBE_TIMEOUT } from "../Terminal";
 
 const refreshMock = vi.fn();
 
@@ -253,13 +253,74 @@ describe("Terminal wake recovery", () => {
     expect(first.pings).toBe(1);
     expect(sockets.length).toBe(1);
 
+    // One silent probe is not enough: the socket is asked again.
     await act(async () => {
-      vi.advanceTimersByTime(4_500);
+      vi.advanceTimersByTime(WAKE_PROBE_TIMEOUT + 100);
+    });
+    await flushConnect();
+    expect(first.pings).toBe(2);
+    expect(sockets.length).toBe(1);
+    expect(first.readyState).toBe(FakeWebSocket.OPEN);
+
+    // Silent twice in a row: the socket is dead, and is replaced.
+    await act(async () => {
+      vi.advanceTimersByTime(WAKE_PROBE_TIMEOUT + 100);
     });
     await flushConnect();
 
+    expect(WAKE_PROBE_ATTEMPTS).toBe(2);
     expect(sockets.length).toBe(2);
     expect(first.readyState).toBe(FakeWebSocket.CLOSED);
+  });
+
+  // On a saturated machine a pong took more than the old 4s, and every
+  // terminal on the page was replaced at once, each with a new shell
+  // (2026-11-05). A slow answer must keep the socket.
+  it("keeps a socket whose pong is slower than one probe", async () => {
+    expect(WAKE_PROBE_TIMEOUT).toBeGreaterThanOrEqual(10_000);
+    const first = await mountConnected();
+
+    await sleepAndWake();
+    expect(first.pings).toBe(1);
+
+    // The first probe times out; the answer comes during the second.
+    await act(async () => {
+      vi.advanceTimersByTime(WAKE_PROBE_TIMEOUT + 100);
+    });
+    expect(first.pings).toBe(2);
+    await act(async () => {
+      vi.advanceTimersByTime(WAKE_PROBE_TIMEOUT / 2);
+    });
+    await act(async () => {
+      first.pong();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(3 * WAKE_PROBE_TIMEOUT);
+    });
+    await flushConnect();
+
+    expect(sockets.length).toBe(1);
+    expect(first.readyState).toBe(FakeWebSocket.OPEN);
+    expect(first.pings).toBe(2);
+  });
+
+  it("keeps a socket that answers within the probe, even after the old 4s", async () => {
+    const first = await mountConnected();
+
+    await sleepAndWake();
+    await act(async () => {
+      vi.advanceTimersByTime(6_000);
+    });
+    await act(async () => {
+      first.pong();
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(3 * WAKE_PROBE_TIMEOUT);
+    });
+    await flushConnect();
+
+    expect(sockets.length).toBe(1);
+    expect(first.pings).toBe(1);
   });
 
   it("keeps an OPEN socket that answers the probe", async () => {

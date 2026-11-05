@@ -172,6 +172,8 @@ export function CustomEdge({
                 aria-label={insertLabel}
                 title={insertLabel}
                 data-testid={`edge-insert-${id}`}
+                data-edge-source={source}
+                data-edge-target={target}
                 onClick={(event) => {
                   event.stopPropagation()
                   insert.openPaletteAt({ kind: 'splice', edgeId: id })

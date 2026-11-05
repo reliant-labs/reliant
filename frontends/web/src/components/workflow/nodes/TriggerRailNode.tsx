@@ -248,6 +248,7 @@ function DeclaredCard({ rail, line, compact }: { rail: TriggerRailContextValue; 
             onClick={stop(() => rail.onActivateDeclared(line.index))}
             disabled={!rail.canAddTrigger || unsaved}
             aria-label={`Activate ${name}`}
+            data-tour="activate-trigger"
             className={cn(
               nodeControlClass,
               "absolute bottom-2 right-2.5 rounded-md border border-border bg-background px-1.5 py-0.5 text-xs font-medium text-primary-ink transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",
@@ -387,6 +388,7 @@ export const TriggerRailNode = memo(({ data, selected }: TriggerRailNodeProps) =
             onClick={stop(() => rail.onAddTrigger())}
             disabled={!rail.canAddTrigger && !rail.canEditDefinition}
             aria-label="Add trigger"
+            data-tour="add-trigger"
             className={cn(
               nodeControlClass,
               "flex w-full items-center gap-2 rounded-lg border border-dashed border-border px-2.5 py-1.5 text-xs font-medium text-primary-ink transition-colors hover:border-primary/60 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",

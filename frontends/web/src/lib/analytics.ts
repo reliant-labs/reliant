@@ -16,6 +16,7 @@ import { privacyConsent } from "../hooks/privacy-queries";
 import { track } from "@reliantlabs/forge-web-runtime";
 import { isDev } from "./constants";
 import { clickstackEnabled } from "./telemetryEndpoint";
+import { getShell } from "./shell";
 
 /** Starts every product event's ClickStack name, on web and backend alike. */
 export const PRODUCT_EVENT_PREFIX = "product.";
@@ -69,7 +70,9 @@ function sendToClickstack(
   metadata?: Record<string, string | number | boolean>,
 ): void {
   try {
-    const props: Record<string, string | number | boolean> = {};
+    // Which product the event happened in (lib/shell.ts). A default, so a
+    // caller that names its own `surface` keeps it.
+    const props: Record<string, string | number | boolean> = { surface: getShell() };
     if (metadata) {
       for (const [key, value] of Object.entries(metadata)) {
         props[toSnakeCaseKey(key)] = value;

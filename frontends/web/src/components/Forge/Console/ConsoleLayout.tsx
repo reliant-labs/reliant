@@ -38,6 +38,8 @@ import { isQueued, queuedOnLabel } from "@/services/forge/live";
 import { useAuthStore } from "@/store/authStore";
 import { useProjectStore, type Project } from "@/store/projectStore";
 import { useProjects } from "@/hooks/project-queries";
+import { isForgeShell } from "@/lib/shell";
+import { ForgeMark } from "@/components/ForgeShell/ForgeBrand";
 
 import { ForgeCloseButton } from "../ForgeHeader";
 import { ObsQuotaBanner } from "../Observability/ObsStates";
@@ -93,13 +95,16 @@ export function ConsoleLayout() {
 
   // ── 1. The Reliant project. ──
   // `listed` once the project list has answered (or failed): until then a
-  // forge name matches nothing only because nothing is loaded yet.
+  // forge name matches nothing only because nothing is loaded yet. The forge
+  // shell has no Reliant projects (useProjects is off there): the forge name
+  // in the URL is the whole scope, and nothing is waited for.
+  const forgeShell = isForgeShell();
   const { projects, isLoading: listing } = useProjects();
-  const listed = projects.length > 0 || !listing;
+  const listed = forgeShell || projects.length > 0 || !listing;
   const currentProject = useProjectStore((state) => state.currentProject);
   const selectProject = useProjectStore((state) => state.selectProject);
 
-  const match = listed ? projectDeclaring(forgeProject, projects, currentProject) : null;
+  const match = listed && !forgeShell ? projectDeclaring(forgeProject, projects, currentProject) : null;
   useEffect(() => {
     if (match && match.id !== currentProject?.id) void selectProject(match);
   }, [match, currentProject?.id, selectProject]);
@@ -241,7 +246,15 @@ export function ConsoleLayout() {
       onToggleCollapsed={toggleCollapsed}
       brand={
         <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}>
-          <ForgeCloseButton onClose={onClose} />
+          {/* The forge shell has no app to close back to: its mark leads
+              home (the Apps list), and Reliant is a link in its own chrome. */}
+          {forgeShell ? (
+            <a href={APPS_PATH} aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-testid="forge-shell-home">
+              <ForgeMark className="h-6 w-6" />
+            </a>
+          ) : (
+            <ForgeCloseButton onClose={onClose} />
+          )}
           <ConsoleProjectSwitcher
             forgeProject={forgeProject}
             onSelect={(app) => void navigate({ href: switchTarget(app, page) })}

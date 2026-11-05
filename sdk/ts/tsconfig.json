@@ -1,0 +1,23 @@
+{
+  "//": "Typechecks the sources in place, tests included, and emits declarations only: composite, so frontends/web can reference this project and read its declarations. tsconfig.build.json emits the published dist/.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "composite": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./node_modules/.tmp/tsc",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": { "#gen/*": ["./src/gen/*"] }
+  },
+  "include": ["src/**/*.ts"]
+}

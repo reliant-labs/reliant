@@ -32,6 +32,8 @@ import { useAuthStore } from "@/store/authStore";
 
 import { ObsQuotaBanner } from "../Observability/ObsStates";
 import { ForgeCloseButton } from "../ForgeHeader";
+import { isForgeShell } from "@/lib/shell";
+import { ForgeMark } from "@/components/ForgeShell/ForgeBrand";
 import { orgPageOf, type OrgPage } from "../Console/paths";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { OrgShell } from "./OrgShell";
@@ -95,7 +97,14 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
       onToggleCollapsed={toggleCollapsed}
       brand={
         <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}>
-          <ForgeCloseButton onClose={onClose} />
+          {/* The forge shell has nothing to close back to: its mark leads home. */}
+          {isForgeShell() ? (
+            <a href="/apps" aria-label="Forge by Reliant: all apps" className="rounded-md p-0.5" data-testid="forge-shell-home">
+              <ForgeMark className="h-6 w-6" />
+            </a>
+          ) : (
+            <ForgeCloseButton onClose={onClose} />
+          )}
           <div className="flex h-8 min-w-0 flex-1 items-center gap-2 px-1.5 text-sm font-semibold text-ink">
             <OrgMark />
             <span className="min-w-0 flex-1 truncate">Console</span>

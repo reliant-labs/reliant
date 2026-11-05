@@ -56,8 +56,14 @@ const WS_MAX_RECONNECT_ATTEMPTS = 10;
 const DAEMON_OFFLINE_RETRY_DELAY = 30000;
 // How long an OPEN socket gets to answer a liveness ping after the page wakes.
 // A laptop that slept can leave the browser holding a dead socket in OPEN state
-// until TCP notices, minutes later; a live one answers in a round trip.
-const WAKE_PROBE_TIMEOUT = 4000;
+// until TCP notices, minutes later; a live one answers in a round trip — but on
+// a saturated machine that round trip took longer than the 4s this used to be,
+// and every terminal of the page was replaced at once, each with a new shell
+// (research/2026-11-04-terminal-incident.md).
+export const WAKE_PROBE_TIMEOUT = 10_000;
+// Pings an OPEN socket gets after a wake before it is replaced: one silence can
+// be a slow server, two in a row is a dead socket. Replacing it costs the shell.
+export const WAKE_PROBE_ATTEMPTS = 2;
 // Wake signals arrive in bursts (visibilitychange, pageshow, online within one
 // wake); act on the first.
 const WAKE_DEDUPE_WINDOW = 1000;
@@ -1013,13 +1019,31 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, chatId,
 
       const ws = wsRef.current;
       if (state === "connected" && ws?.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "ping" }));
-        probeTimerRef.current = setTimeout(() => {
-          probeTimerRef.current = null;
-          if (connectionStateRef.current !== "connected" || wsRef.current !== ws) return;
-          logger.warn("[Terminal] Liveness ping unanswered after wake, replacing socket", { sessionId, reason });
-          reconnectNow(reason);
-        }, WAKE_PROBE_TIMEOUT);
+        // Anything the server sends clears probeTimerRef (ws.onmessage), so
+        // a timer that fires saw nothing at all for WAKE_PROBE_TIMEOUT.
+        const probe = (attempt: number) => {
+          ws.send(JSON.stringify({ type: "ping" }));
+          probeTimerRef.current = setTimeout(() => {
+            probeTimerRef.current = null;
+            if (connectionStateRef.current !== "connected" || wsRef.current !== ws) return;
+            if (attempt < WAKE_PROBE_ATTEMPTS && ws.readyState === WebSocket.OPEN) {
+              logger.warn("[Terminal] Liveness ping unanswered after wake, asking again", {
+                sessionId,
+                reason,
+                attempt,
+              });
+              probe(attempt + 1);
+              return;
+            }
+            logger.warn("[Terminal] Liveness ping unanswered after wake, replacing socket", {
+              sessionId,
+              reason,
+              attempts: attempt,
+            });
+            reconnectNow(reason);
+          }, WAKE_PROBE_TIMEOUT);
+        };
+        probe(1);
         return;
       }
 

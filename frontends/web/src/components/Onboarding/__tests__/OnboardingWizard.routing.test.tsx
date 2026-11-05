@@ -5,8 +5,9 @@
  * Skip step / End tour, the end card (Finish, Try the other journey) and the
  * outro's onComplete hook, and the retired tour's ids.
  *
- * Runs against the shipped placeholder journeys:
- *   workflows: wf-open (click/route, autoAdvance) → wf-library (route-bound)
+ * Runs against the shipped journeys:
+ *   workflows: wf-new (signal + route, autoAdvance) → … → wf-machines (route)
+ *              → wf-automations (page-bound) → wf-params
  *              → wf-outro-layout (Reliant-only outro, collapses panels)
  *   forge:     fg-console → … → fg-done (journeys/forge.tsx; its own test covers it)
  */
@@ -52,7 +53,7 @@ const tourStoreState = vi.hoisted(() => ({
     contexts: {},
     lastJourney: null,
     journeys: {
-      workflows: { version: 1, current: null, completedOlder: false },
+      workflows: { version: 2, current: null, completedOlder: false },
       forge: { version: 1, current: null, completedOlder: false },
     },
   },
@@ -186,6 +187,12 @@ vi.mock("../../../store/projectStore", () => {
   };
 });
 
+// The workflows journey's Automations step says whether the user turned Fix
+// my PR on, from the triggers query.
+vi.mock("../../../hooks/trigger-queries", () => ({
+  useTriggers: () => ({ data: [] }),
+}));
+
 vi.mock("../../../lib/analytics", () => ({
   trackEvent: vi.fn(),
 }));
@@ -212,6 +219,8 @@ import { trackEvent } from "../../../lib/analytics";
 import { holdLandingJourney } from "../../../lib/landingAttribution";
 import { layoutActions } from "../journeys/layoutActions";
 import { __resetJourneyAnalytics } from "../journeyAnalytics";
+import { tourEvents } from "../tourEvents";
+import { retainTourParam } from "../tourParam";
 
 // ─── Test router ─────────────────────────────────────────────────────────────
 
@@ -227,6 +236,9 @@ function makeRouter(initialEntries: string[], Wizard: React.ComponentType<any>) 
         React.createElement(Outlet),
         React.createElement(Wizard)
       ),
+    // As in routes.tsx: `?tour=` survives navigations that don't clear it, so
+    // every tour exit asserted below must clear it explicitly.
+    search: { middlewares: [retainTourParam as never] },
   });
   const route = (path: string, testId: string) =>
     createRoute({
@@ -238,6 +250,8 @@ function makeRouter(initialEntries: string[], Wizard: React.ComponentType<any>) 
   const tree = rootRoute.addChildren([
     route("/", "index"),
     route("/workflows/library", "workflow-hub-page"),
+    route("/workflow/$workflowName", "workflow-builder-page"),
+    route("/settings/machines", "machines-page"),
     route("/apps", "apps-page"),
     // The forge journey's page (its steps open the demo console).
     route("/forge/demo", "forge-demo"),
@@ -288,9 +302,9 @@ describe("journey engine (OnboardingWizard)", () => {
   });
 
   it("opens the retired single tour's ids at their successor journey", async () => {
-    renderAt("/?tour=chat-and-sidebars");
-    expect(await screen.findByText(/1 \/ 3/)).toBeInTheDocument();
-    expect(screen.getAllByText("Workflows").length).toBeGreaterThan(0);
+    renderAt("/workflows/library?tour=chat-and-sidebars");
+    expect(await screen.findByText(/1 \/ 10/)).toBeInTheDocument();
+    expect(screen.getAllByText("Start a workflow").length).toBeGreaterThan(0);
   });
 
   describe("the picker", () => {
@@ -324,10 +338,10 @@ describe("journey engine (OnboardingWizard)", () => {
     });
 
     it("offers Resume when a tour was ended mid-way", async () => {
-      tourStoreState.state = { ...tourStoreState.state, resumeStep: "workflows:wf-library" };
+      tourStoreState.state = { ...tourStoreState.state, resumeStep: "workflows:wf-automations" };
       const router = renderAt("/?tour=pick:menu");
       await userEvent.click(await screen.findByTestId("journey-resume"));
-      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-library"));
+      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-automations"));
       expect(router.state.location.pathname).toBe("/workflows/library");
     });
 
@@ -342,62 +356,67 @@ describe("journey engine (OnboardingWizard)", () => {
 
   describe("a page-bound step", () => {
     it("off its page, renders an Open card that goes there keeping the tour", async () => {
-      const router = renderAt("/?tour=workflows:wf-library");
+      const router = renderAt("/?tour=workflows:wf-automations");
       await userEvent.click(await screen.findByRole("button", { name: /open workflows/i }));
       await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/library"));
-      expect(tourParam(router)).toBe("workflows:wf-library");
+      expect(tourParam(router)).toBe("workflows:wf-automations");
     });
 
     it("on its page, renders the spotlight", async () => {
-      renderAt("/workflows/library?tour=workflows:wf-library");
-      expect(await screen.findByText(/2 \/ 3/)).toBeInTheDocument();
+      renderAt("/workflows/library?tour=workflows:wf-automations");
+      expect(await screen.findByText(/8 \/ 10/)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /open workflows/i })).toBeNull();
     });
   });
 
   describe("an action-gated step (advanceOn)", () => {
     it("hides Next until the action, then moves on by itself (autoAdvance)", async () => {
-      const router = renderAt("/?tour=workflows:wf-open");
-      await screen.findByText(/1 \/ 3/);
+      const router = renderAt("/workflows/library?tour=workflows:wf-new");
+      await screen.findByText(/1 \/ 10/);
       expect(screen.queryByRole("button", { name: /^next/i })).toBeNull();
-      expect(screen.getByRole("button", { name: /skip step/i })).toBeInTheDocument();
-      expect(screen.getByText(/click workflows to continue/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /create it for me/i })).toBeInTheDocument();
+      expect(screen.getByText(/click new workflow, then create workflow/i)).toBeInTheDocument();
 
-      // The action: reaching the Workflows area (route condition).
-      await router.navigate({ to: "/workflows/library", search: { tour: "workflows:wf-open" } } as any);
-      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-library"), { timeout: 3000 });
+      // The action: the guided draft exists, and the builder opened on it.
+      tourEvents.emit("workflow:draftCreated", { slug: "fix-my-pr", draftId: "d1", start: "tour-fix-my-pr" });
+      await router.navigate({
+        to: "/workflow/$workflowName",
+        params: { workflowName: "fix-my-pr" },
+        search: { tour: "workflows:wf-new" },
+      } as any);
+      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-edge"), { timeout: 3000 });
       expect(trackEvent).toHaveBeenCalledWith(
         "journey_step_completed",
-        expect.objectContaining({ journey: "workflows", step: "wf-open", via: "action" }),
+        expect.objectContaining({ journey: "workflows", step: "wf-new", via: "action", signal: "draft_created" }),
       );
     });
 
     it("already satisfied on entry: shows Next with a check, without moving on", async () => {
-      renderAt("/workflows/library?tour=workflows:wf-open");
+      renderAt("/settings/machines?tour=workflows:wf-machines");
       expect(await screen.findByRole("button", { name: /^next/i })).toBeInTheDocument();
       expect(screen.getByText("Done")).toBeInTheDocument();
     });
 
     it("Skip step moves on and records it as skipped", async () => {
-      const router = renderAt("/?tour=workflows:wf-open");
+      const router = renderAt("/workflow/fix-my-pr?tour=workflows:wf-loop");
       await userEvent.click(await screen.findByRole("button", { name: /skip step/i }));
-      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-library"));
-      expect(tourStoreState.state.skipStep).toHaveBeenCalledWith("workflows:wf-open");
+      await waitFor(() => expect(tourParam(router)).toBe("workflows:wf-branch"));
+      expect(tourStoreState.state.skipStep).toHaveBeenCalledWith("workflows:wf-loop");
       expect(trackEvent).toHaveBeenCalledWith(
         "journey_step_completed",
-        expect.objectContaining({ step: "wf-open", via: "skip" }),
+        expect.objectContaining({ step: "wf-loop", via: "skip" }),
       );
     });
   });
 
   describe("ending a journey", () => {
-    const lastStepUrl = "/workflows/library?tour=workflows:wf-outro-layout";
+    const lastStepUrl = "/project/project-1?tour=workflows:wf-outro-layout";
 
     it("the last step offers Finish and Try the other journey, and no End tour", async () => {
       renderAt(lastStepUrl);
       expect(await screen.findByRole("button", { name: /finish/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /try the other journey/i })).toBeInTheDocument();
-      expect(screen.getByText(/3 \/ 3/)).toBeInTheDocument();
+      expect(screen.getByText(/10 \/ 10/)).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: /end tour/i })).toBeNull();
     });
 
@@ -411,7 +430,7 @@ describe("journey engine (OnboardingWizard)", () => {
       expect(trackEvent).toHaveBeenCalledWith("journey_completed", expect.objectContaining({ journey: "workflows" }));
       expect(trackEvent).toHaveBeenCalledWith(
         "onboarding_completed",
-        expect.objectContaining({ journey: "workflows", totalSteps: 3 }),
+        expect.objectContaining({ journey: "workflows", totalSteps: 10 }),
       );
     });
 
@@ -426,13 +445,21 @@ describe("journey engine (OnboardingWizard)", () => {
       );
     });
 
-    it("End tour records the journey skipped and where it ended, for Resume", async () => {
-      const router = renderAt("/workflows/library?tour=workflows:wf-library");
+    it("a journey with no finish target leaves a builder page for the chat with ?tour= cleared", async () => {
+      const router = renderAt("/workflow/fix-my-pr?tour=workflows:wf-loop");
       await userEvent.click(await screen.findByRole("button", { name: /end tour/i }));
       await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
-      expect(tourStoreState.state.setResumeStep).toHaveBeenCalledWith("workflows:wf-library");
+      expect(tourParam(router)).toBeUndefined();
+    });
+
+    it("End tour records the journey skipped and where it ended, for Resume", async () => {
+      const router = renderAt("/workflows/library?tour=workflows:wf-automations");
+      await userEvent.click(await screen.findByRole("button", { name: /end tour/i }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/project/project-1"));
+      expect(tourParam(router)).toBeUndefined();
+      expect(tourStoreState.state.setResumeStep).toHaveBeenCalledWith("workflows:wf-automations");
       expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "skipped");
-      expect(trackEvent).toHaveBeenCalledWith("journey_skipped", expect.objectContaining({ journey: "workflows", step: "wf-library" }));
+      expect(trackEvent).toHaveBeenCalledWith("journey_skipped", expect.objectContaining({ journey: "workflows", step: "wf-automations" }));
     });
   });
 });

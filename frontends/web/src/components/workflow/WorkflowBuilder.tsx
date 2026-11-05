@@ -118,12 +118,13 @@ import { toolCallsDefaultForEdge } from "./executeToolsDefaults";
 import { CanvasInsertProvider, useCanvasInsertion } from "./canvas/CanvasInsertContext";
 import { NodeOutputAddButtons } from "./canvas/NodeOutputAddButtons";
 import { SelectionActions } from "./canvas/SelectionActions";
-import { buildFlowEdge, readableStepId, withNodeAriaLabels } from "./canvas/insertPlacement";
+import { buildFlowEdge, readableStepId, stepTypeOfNode, withNodeAriaLabels } from "./canvas/insertPlacement";
+import { tourEvents } from "../Onboarding/tourEvents";
 import { getNodeDisplayName } from "../../lib/node-metadata";
 import { DeclaredTriggerPanel } from "./config/DeclaredTriggerPanel";
 import { useTriggers } from "../../hooks/trigger-queries";
 import { declaredRailLines } from "../../lib/triggerRail";
-import { describeDeclaredSource, findingsForTrigger, type DeclaredTrigger } from "../../lib/declaredTriggers";
+import { describeDeclaredSource, findingsForTrigger, sourceCase, type DeclaredTrigger } from "../../lib/declaredTriggers";
 import { describeSchedule } from "../../lib/cronText";
 import { useAddTrigger, type PersonalTriggerDraft } from "./hooks/useAddTrigger";
 import { ConnectIntegrationDialog, type ConnectIntegrationTarget } from "./connections/ConnectIntegrationDialog";
@@ -769,6 +770,7 @@ function WorkflowBuilderInner({
       const newEdge = buildFlowEdge(sourceNode, targetId, sourceHandle);
 
       setEdges((eds) => [...eds, newEdge]);
+      tourEvents.emit("workflow:edgeConnected", { sourceId, targetId, sourceHandle });
 
       // Wiring Run LLM Tool Calls after a Call LLM fills in which calls it
       // runs — the one value that step nearly always takes.
@@ -810,6 +812,7 @@ function WorkflowBuilderInner({
       return;
     }
     setSelectedNodeId(node.id);
+    tourEvents.emit("workflow:nodeSelected", { nodeId: node.id, type: stepTypeOfNode(node) });
   }, []);
 
   // "Take me to this problem": select its step, open its panel, and ask the
@@ -1726,6 +1729,7 @@ function WorkflowBuilderInner({
       const index = (workflow.triggers ?? []).length;
       setHasModifications(true);
       setWorkflow((w) => ({ ...w, triggers: [...(w.triggers ?? []), trigger] }));
+      tourEvents.emit("workflow:triggerDeclared", { name: trigger.name ?? "", source: sourceCase(trigger) ?? "" });
       if (catalogRef) setDeclaredCatalogRefs((prev) => ({ ...prev, [trigger.name ?? ""]: catalogRef }));
       setPaletteOpen(false);
       handleEditDeclared(index);
@@ -2085,6 +2089,7 @@ function WorkflowBuilderInner({
                     setChatPanelOpen(false);
                   }}
                   className={headerButtonClass}
+                  data-tour="workflow-inputs"
                 >
                   <Settings2 className="w-4 h-4" />
                   Inputs

@@ -125,6 +125,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
       <div className="space-y-6">
         <ProvisioningGate
           commit={commit}
+          compute={plan.compute}
           onContinue={leave}
           onRetry={() => void retry(plan)}
         />

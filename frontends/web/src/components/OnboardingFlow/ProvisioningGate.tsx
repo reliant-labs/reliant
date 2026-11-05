@@ -14,18 +14,31 @@
  * legible ("AI access ready / your machine couldn't start") instead of a
  * blank wait.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
-import { DaemonConnectingGate } from "./DaemonConnectingGate";
+import { DaemonConnectingGate, type DaemonConnectingPhase } from "./DaemonConnectingGate";
 import { ACCOUNT_REQUIRED_MACHINE_COPY } from "@/lib/accountRequired";
 import { isSafeReturnTo } from "@/lib/returnTo";
 import type { CommitResult, CommitTask } from "./commitLaunchPlan";
+import { isCloudCompute, type ComputeChoice } from "./types";
 
 function currentUrl(): string | undefined {
   const here = `${window.location.pathname}${window.location.search}`;
   return isSafeReturnTo(here) ? here : undefined;
+}
+
+/** A stable, distinct key per commit result: each retry is a new attempt. */
+const attemptKeys = new WeakMap<CommitResult, number>();
+let nextAttemptKey = 0;
+function commitAttemptKey(commit: CommitResult): number {
+  let key = attemptKeys.get(commit);
+  if (key === undefined) {
+    key = nextAttemptKey++;
+    attemptKeys.set(commit, key);
+  }
+  return key;
 }
 
 const TASK_LABELS: Record<CommitTask["name"], string> = {
@@ -38,49 +51,111 @@ interface ProvisioningGateProps {
   /** Dismiss the gate. Enabled on `complete` AND on `partial`. */
   onContinue: () => void;
   /**
+   * The compute the plan chose. When it is given and is not hosted, this gate
+   * never renders machine-provisioning copy or the cloud connecting gate: a
+   * user running their own daemon must not be told we are starting a machine
+   * for them. Omitted means "trust the commit".
+   */
+  compute?: ComputeChoice;
+  /**
    * Re-run the commit. Wired to an explicit button and nothing else — a commit
    * that retried itself would be a billable call firing without a user asking.
    */
   onRetry?: () => void;
 }
 
-function TaskRow({ task }: { task: CommitTask }) {
+function TaskRow({
+  task,
+  machinePhase,
+}: {
+  task: CommitTask;
+  machinePhase: DaemonConnectingPhase;
+}) {
   if (task.status === "skipped") return null;
 
+  // A machine the commit REQUESTED is not a machine that is up. The row turns
+  // into a check only when the daemon gate has seen it ACTIVE, and into a
+  // cross when that gate gave up — so the checklist and the live status below
+  // it can never disagree.
+  let status = task.status;
+  let detail = task.detail;
+  if (task.name === "provision_daemon" && task.status === "starting") {
+    if (machinePhase === "connected") {
+      status = "complete";
+      detail = "Your machine is connected.";
+    } else if (machinePhase === "failed") {
+      status = "failed";
+      detail = "Your machine didn't connect. You can retry below.";
+    }
+  }
+
   const icon =
-    task.status === "complete" ? (
-      <Check className="h-4 w-4 text-emerald-500" />
-    ) : task.status === "failed" ? (
+    status === "complete" ? (
+      <Check className="h-4 w-4 text-emerald-500" data-testid="task-done-icon" />
+    ) : status === "failed" ? (
       <X className="h-4 w-4 text-destructive" />
     ) : (
-      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      <Loader2
+        className="h-4 w-4 animate-spin text-muted-foreground"
+        data-testid="task-spinner"
+      />
     );
 
   return (
-    <li className="flex items-start gap-2 text-left">
+    <li
+      className="flex items-start gap-2 text-left"
+      data-testid={`task-${task.name}`}
+      data-status={status}
+    >
       <span className="mt-0.5 flex-shrink-0">{icon}</span>
       <span className="min-w-0">
         <span
           className={cn(
             "block text-sm font-medium",
-            task.status === "failed" ? "text-destructive-ink" : "text-foreground",
+            status === "failed" ? "text-destructive-ink" : "text-foreground",
           )}
         >
           {TASK_LABELS[task.name]}
         </span>
-        <span className="block text-xs text-muted-foreground">
-          {task.detail}
-        </span>
+        <span className="block text-xs text-muted-foreground">{detail}</span>
       </span>
     </li>
   );
 }
 
 export function ProvisioningGate({
-  commit,
+  commit: rawCommit,
   onContinue,
+  compute,
   onRetry,
 }: ProvisioningGateProps) {
+  // The cloud-provisioning surface is only for hosted compute. If the plan is
+  // local, drop the machine task outright rather than narrate a machine we
+  // are not starting.
+  const hosted = compute === undefined || isCloudCompute(compute);
+  const commit = useMemo<CommitResult>(
+    () =>
+      hosted
+        ? rawCommit
+        : {
+            ...rawCommit,
+            daemonId: undefined,
+            tasks: rawCommit.tasks.filter((t) => t.name !== "provision_daemon"),
+          },
+    [hosted, rawCommit],
+  );
+  // The machine's phase belongs to ONE commit. A retry hands this gate a new
+  // commit result, and the old attempt's `failed` (often its five-minute
+  // timeout) must not carry over to it — so the phase is recorded against the
+  // commit it was observed for, and reads `connecting` for any other.
+  const [observed, setObserved] = useState<{
+    commit: CommitResult;
+    phase: DaemonConnectingPhase;
+  } | null>(null);
+  const machinePhase: DaemonConnectingPhase =
+    observed?.commit === commit ? observed.phase : "connecting";
+  // Disables the re-provision button between the click and the new commit.
+  const [retryingFor, setRetryingFor] = useState<CommitResult | null>(null);
   // Hides the modal once the user has linked and the re-run is in flight; a
   // new commit result replaces `commit`, so this resets with the next ask.
   const [linkedFor, setLinkedFor] = useState<CommitResult | null>(null);
@@ -89,7 +164,8 @@ export function ProvisioningGate({
   const visibleTasks = commit.tasks.filter((t) => t.status !== "skipped");
   const daemonTask = commit.tasks.find((t) => t.name === "provision_daemon");
   const waitingOnMachine =
-    daemonTask?.status === "complete" && Boolean(commit.daemonId);
+    (daemonTask?.status === "complete" || daemonTask?.status === "starting") &&
+    Boolean(commit.daemonId);
 
   // A commit that asked for nothing has nothing to show, and nothing to ask.
   // The local + own-key path should neither watch a checklist of work that did
@@ -146,7 +222,7 @@ export function ProvisioningGate({
 
       <ul className="mx-auto max-w-[42ch] space-y-3">
         {visibleTasks.map((task) => (
-          <TaskRow key={task.name} task={task} />
+          <TaskRow key={task.name} task={task} machinePhase={machinePhase} />
         ))}
       </ul>
 
@@ -154,10 +230,35 @@ export function ProvisioningGate({
           gate that already knows how to narrate that wait, including the
           three-minute clone and the wedged image pull. */}
       {waitingOnMachine ? (
-        <DaemonConnectingGate
-          daemonRef={commit.daemonId}
-          onContinue={onContinue}
-        />
+        <div className="space-y-2">
+          {/* Keyed on the commit: a re-provisioned machine is a new attempt,
+              with its own elapsed clock and its own five-minute budget. */}
+          <DaemonConnectingGate
+            key={commitAttemptKey(commit)}
+            daemonRef={commit.daemonId}
+            onContinue={onContinue}
+            onPhaseChange={(phase) => setObserved({ commit, phase })}
+          />
+          {/* The daemon gate's own Retry only re-reads the machine's status.
+              A machine that failed to start, or never came up, needs the
+              commit run again — an explicit click, never automatic, because
+              it re-issues CreateDaemon. */}
+          {machinePhase === "failed" && onRetry ? (
+            <button
+              type="button"
+              disabled={retryingFor === commit}
+              onClick={() => {
+                setRetryingFor(commit);
+                onRetry();
+              }}
+              className="w-full rounded-lg border border-border/40 bg-background py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+            >
+              {retryingFor === commit
+                ? "Starting your machine again…"
+                : "Start your machine again"}
+            </button>
+          ) : null}
+        </div>
       ) : (
         <div className="space-y-2">
           {/* Continue is enabled on PARTIAL as well as COMPLETE. They paid and

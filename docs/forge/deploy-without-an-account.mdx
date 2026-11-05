@@ -1,0 +1,148 @@
+---
+title: "Deploy without an account"
+description: "How to deploy a static site, a Vite or Next.js app, or a Go API with Postgres with no account: forge env deploy prod --claimable, the claim link, the limits and the exit codes"
+---
+
+Any coding agent that can run a shell command can put a project online with no Reliant account, token or card. `forge env deploy prod --claimable` builds the project, publishes it to [Reliant hosting](/forge/hosting) under a temporary anonymous identity, and prints a live URL and a **claim link**. The deploy stays online for 72 hours. If someone opens the claim link and signs up (free) in that time, the deploy becomes theirs.
+
+It's meant for the moment someone says "deploy this", "give me a URL" or "put this online" in a project with no hosting yet. If you're already signed in to Reliant, deploy to your own account instead: see [Environments & deploys](/forge/environments-and-deploys).
+
+## Get forge
+
+You don't need to install anything if you have Node 18 or later:
+
+```bash
+npx -y @reliantlabs/forge version
+```
+
+Wherever a command on this page says `forge`, you can write `npx -y @reliantlabs/forge` instead. To install the binary:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/reliant-labs/forge/main/install.sh | sh   # to ~/.local/bin
+brew install reliant-labs/reliant/forge                                                 # or Homebrew
+```
+
+`--claimable` needs forge v1.0.15 or later.
+
+## Deploy an existing Vite or Next.js app
+
+Run this at the app's root, where its `package.json` is:
+
+```bash
+forge project new --in-place --kind site --name my-site   # adds forge.yaml and deploy/kcl/; your files are untouched
+git add -A && git commit -m "Add forge deploy config"     # so the release records a commit
+forge env deploy prod --claimable --plan-only             # checks locally and asks the platform; creates nothing
+forge env deploy prod --claimable                         # build, publish, print the URL and the claim link
+```
+
+A Next.js app must build as a static export: set `output: "export"` in `next.config.*`. `forge lint --static-export` lists, with file and line, anything an export can't serve, such as a dynamic route without `generateStaticParams`, a server action or `cookies()`. An app that needs a server at request time can't use this path.
+
+To deploy a folder of plain HTML, first add a `package.json` with `"scripts": {"build": "vite build"}` and `vite` as a devDependency, run `npm install`, then follow the steps above.
+
+## Deploy a new static site
+
+```bash
+forge project new my-site --kind site                           # a Next.js static export
+forge project new my-site --kind site --frontend-kind vite-spa  # or a Vite single-page app
+cd my-site
+forge env deploy prod --claimable
+```
+
+## Deploy a Go API with Postgres
+
+This path needs Go, and Docker to build the service image:
+
+```bash
+forge project new notes-app --service notes --claimable   # add --frontend web for a site beside the API
+cd notes-app
+```
+
+`--claimable` sizes prod to fit the no-account plan.
+
+<Warning>
+Don't name the project `api`. The hosted service workload is already called `api`, and a database with the same name is refused.
+</Warning>
+
+Before you deploy, give the API at least one entity: a message marked `// forge:entity` in `proto/services/notes/v1/*.proto`. Then generate, check and deploy:
+
+```bash
+forge scaffold                          # migrations, CRUD RPCs, handlers, ORM, tests
+forge lint --quiet && go build ./...
+forge env deploy prod --claimable --plan-only
+forge env deploy prod --claimable
+```
+
+[Adding a feature](/forge/adding-features) covers entities, RPCs and migrations.
+
+## What the deploy prints
+
+The deploy runs without prompting, because `--claimable` implies `--yes`. It ends with the URL, the time it goes offline, and the claim link. With `--json`, it prints one document with `ok`, `exit_code` and a `claim` object: `state`, `url`, `claim_url`, `expires_at`, `purge_after`, `no_outbound_internet` and `agent_instructions`.
+
+```bash
+forge env status prod --claimable   # print the URL and the claim link again
+```
+
+To deploy again after a change, run the same command. You keep the same URL and the same claim link, and the expiry doesn't move.
+
+If you're an agent, give the user the URL and the claim link, and tell them when it expires. For example:
+
+```text
+It's live at <url>. This deploy isn't tied to any account yet: it goes offline
+at <expires_at> and is deleted 7 days later. To keep it, open this link and
+sign up (free): <claim_url>. Treat the link like a password: whoever opens it
+first owns the deploy.
+```
+
+Never put the claim link anywhere public: an issue, a pull request, a commit, a log or a README.
+
+## What claiming gives you
+
+Opening the claim link signs you up for free, or signs you in, and moves the deploy into your account:
+
+- The deploy stops expiring. Later deploys run as you: `forge login`, then `forge env deploy prod` without `--claimable`.
+- A static site stays free: one hosted static site per account, under the [static free tier](/forge/hosting#billing).
+- A backend gets its outbound internet back. A service and its managed Postgres need [paid app hosting](/forge/hosting#billing) to keep running long term.
+
+## Limits
+
+| Limit | Detail |
+|---|---|
+| Shape | One static site, or one service (1 replica, at most 125m CPU / 128 MiB) with its migration job and one managed Postgres (256 MiB of data on a 1 GiB volume, no backups), plus an optional static site |
+| Refused | Workers, cron jobs, a second service or database, custom domains, remote builds. `--plan-only` names each one and the KCL change that fixes it |
+| Not included | Object storage (`forge.Bucket`) |
+| Lifetime | Live for 72 hours, then suspended (offline, data kept), then deleted 7 days later unless claimed |
+| Outbound internet | **None for an unclaimed service.** It answers requests and uses its own database, but every call out of it fails: payments, webhooks, email, model APIs, package downloads, and DNS for any name outside the cluster. A static site isn't affected, because its requests come from the browser. The block ends when the deploy is claimed |
+| Rate limits | A few starts per hour per network, a few live deploys per device, and a platform-wide cap |
+
+The no-outbound-internet rule is the platform, not a bug in your app, so don't debug it or work around it. An app that calls an outside API at startup won't come up until the deploy is claimed.
+
+## When it's refused
+
+Every refusal is a non-zero exit with a stable `reason` in the `--json` document:
+
+| Exit | Reason | Meaning | What to do |
+|---|---|---|---|
+| 1 | `claimable_signed_in` | A credential resolves: you ran `forge login`, or `$FORGE_CREDENTIAL_HELPER` is set, as inside Reliant | Drop `--claimable` and deploy to your account |
+| 4 | `claimable_ineligible` | The environment doesn't fit the limits above | Apply each fix it names, then run `--plan-only` again |
+| 4 | `claimable_unavailable` | The platform isn't taking anonymous deploys right now (`unavailable_cause`) | Nothing is wrong with your project. Try later, or sign in |
+| 4 | `claimable_throttled` | A rate limit (`throttle_scope`, `retry_at`) | Wait until `retry_at`. Don't retry in a loop: forge never retries on its own |
+| 4 | `claimable_claimed` | Someone already claimed this deploy | `forge login`, then deploy without `--claimable` |
+
+An unclaimed deploy is never held for billing, so exit 7 doesn't occur.
+
+## Adding file uploads
+
+File uploads use a `forge.Bucket` (the S3 API, with MinIO in `forge env up dev`) and presigned URLs from `forge/pkg/blobstore`, so the browser sends the file straight to storage. They need forge v1.0.16 or later and an account: claim the deploy or sign in first, because the no-account plan doesn't include object storage.
+
+1. In `deploy/kcl/dev/main.k`, turn on the scaffolded MinIO and name the bucket:
+
+   ```kcl
+   _object_storage = True
+   _buckets: [forge.Bucket] = [forge.Bucket {name = "uploads", runtime = _minio}]
+   ```
+
+2. In prod, declare the bucket on Reliant hosting, `forge.Bucket {name = "uploads", runtime = forge.OnHosted {}}`, or on your own S3, R2 or GCS bucket with `forge.BucketOnS3 {...}`.
+3. Hand the service its connection in `deploy/kcl/workloads.k`, with `env = forge.bucket_env("UPLOADS", "uploads")`. Then read it through the typed config.
+4. In a handler, presign the upload with `PresignPut`. The browser PUTs the file to that URL, and the handler confirms it with `Stat`.
+
+`forge skill load storage/blobstore` has the whole flow, with the handler and browser code.

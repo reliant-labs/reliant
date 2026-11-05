@@ -294,7 +294,7 @@ func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.
 			lastActivity:      base, // the gateway's heartbeat just went out
 			lastReceived:      lastReceived,
 			done:              make(chan struct{}),
-			terminalSubs:      make(map[string][]chan *toolexec.TerminalOutputEvent),
+			terminalSubs:      make(map[string][]*toolexec.TerminalOutputQueue),
 			processOutputSubs: make(map[string][]chan *toolexec.ProcessOutputEvent),
 		}
 	}

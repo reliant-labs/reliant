@@ -10,6 +10,7 @@ import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useEventBus } from "@/lib/event-context";
 import { getControlPlaneURL } from "@/lib/constants";
 import { machineDisplayName } from "@/lib/machineName";
+import { CommandBlock } from "@/components/CommandBlock";
 import {
   authLogoutCommand,
   daemonStartCommand,
@@ -71,11 +72,7 @@ function StepHeading({ index, title, tone = "neutral" }: { index: number; title:
 
 /** A command to paste, selectable in one click (the same treatment as the start command). */
 function CommandLine({ command }: { command: string }) {
-  return (
-    <code className="block select-all break-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
-      {command}
-    </code>
-  );
+  return <CommandBlock command={command} label="command" />;
 }
 
 type Approval =
