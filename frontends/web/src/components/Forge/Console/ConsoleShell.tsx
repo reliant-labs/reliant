@@ -72,6 +72,12 @@ export interface ConsoleNavInput {
   dashboardTitle?: string;
   /** Omitted/unknown keeps useful views visible; false means a definite empty read. */
   optionalViews?: { sessions: boolean; profiles: boolean };
+  /**
+   * Where a row (and a crumb) links. Default: the page's console path,
+   * carrying the scope. The forge demo (Forge/Demo) keeps every link on its
+   * own route.
+   */
+  linkTo?: (target: ConsolePage) => string;
 }
 
 export interface ConsoleNavDashboard {
@@ -86,11 +92,11 @@ export const NAV_STARRED_MAX = 3;
 const icon = (Icon: typeof Home) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
 /** The nav rows for `page` — pure, so the IA is testable without rendering. */
-export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews }: ConsoleNavInput): {
+export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, starred = [], optionalViews, linkTo }: ConsoleNavInput): {
   items: SidebarNavItem[];
   footer: SidebarNavItem[];
 } {
-  const href = (target: ConsolePage) => withSearch(consolePath(project, target), { env });
+  const href = linkTo ?? ((target: ConsolePage) => withSearch(consolePath(project, target), { env }));
   const is = (kind: ConsolePage["kind"]) => page.kind === kind;
   const row = (label: string, target: ConsolePage, rowIcon: ReactNode, extra: Partial<SidebarNavItem> = {}): SidebarNavItem => ({
     label,
@@ -169,14 +175,20 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
 }
 
 /** The breadcrumb trail for `page`, after the project. The last crumb is the page itself. */
-export function consoleCrumbs(project: string, page: ConsolePage, env: string, dashboardTitle?: string): { label: string; href?: string }[] {
-  const href = (target: ConsolePage) => withSearch(consolePath(project, target), { env });
+export function consoleCrumbs(
+  project: string,
+  page: ConsolePage,
+  env: string,
+  dashboardTitle?: string,
+  linkTo?: (target: ConsolePage) => string
+): { label: string; href?: string }[] {
+  const href = linkTo ?? ((target: ConsolePage) => withSearch(consolePath(project, target), { env }));
   switch (page.kind) {
     case "overview":
       return [{ label: "Overview" }];
     case "workload":
       // The workload's environment is pinned by its path: the trail leads back to the Overview scoped to it.
-      return [{ label: "Overview", href: withSearch(consolePath(project, { kind: "overview" }), { env: page.env }) }, { label: page.name }];
+      return [{ label: "Overview", href: linkTo ? linkTo({ kind: "overview" }) : withSearch(consolePath(project, { kind: "overview" }), { env: page.env }) }, { label: page.name }];
     case "releases":
       return [{ label: "Releases" }];
     case "release":
@@ -239,7 +251,7 @@ export function ConsoleShell({
   ...nav
 }: ConsoleShellProps) {
   const { items, footer } = buildConsoleNav(nav);
-  const crumbs = consoleCrumbs(nav.project, nav.page, nav.env, nav.dashboardTitle);
+  const crumbs = consoleCrumbs(nav.project, nav.page, nav.env, nav.dashboardTitle, nav.linkTo);
 
   return (
     /*
@@ -247,7 +259,8 @@ export function ConsoleShell({
      * resolves to reliant's primary action colour; outside it, to reliant's
      * muted hover tint (src/index.css).
      */
-    <div className="forge-ui h-dvh w-full" data-testid="forge-shell">
+    // data-tour: the forge journey spotlights the nav (`[data-tour='forge-console'] #sidebar-layout-nav`).
+    <div className="forge-ui h-dvh w-full" data-testid="forge-shell" data-tour="forge-console">
       <SidebarLayout
         navLabel={nav.project}
         brand={brand}
@@ -262,7 +275,7 @@ export function ConsoleShell({
           <>
             <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
               <Link
-                href={withSearch(consolePath(nav.project, { kind: "overview" }), { env: nav.env })}
+                href={nav.linkTo ? nav.linkTo({ kind: "overview" }) : withSearch(consolePath(nav.project, { kind: "overview" }), { env: nav.env })}
                 className="truncate hover:text-ink"
               >
                 {nav.project}

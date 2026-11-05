@@ -83,12 +83,24 @@ export type AskSubject =
  */
 export type AskIntent = "investigate" | "fix";
 
+/** How the reader's agent spells the forge CLI: Reliant's bundled `reliant forge`, or a standalone `forge`. Same commands. */
+export type AskCli = "reliant forge" | "forge";
+
 export interface AskContext {
   /** The forge project's name (forge.yaml), when the console knows it. */
   forgeProject?: string;
   /** Every environment of the project, offered when a subject's own is unknown. */
   envChoices?: readonly string[];
   intent?: AskIntent;
+  /** The CLI the commands name. Default "reliant forge". */
+  cli?: AskCli;
+  /**
+   * Who reads the prompt. "reliant" (default): a Reliant chat that has a
+   * workspace of its own. "external": the reader's own agent (Claude Code,
+   * Codex, Cursor), pasted from the handoff sheet — the prompt then claims no
+   * workspace or branch, because there is none.
+   */
+  host?: "reliant" | "external";
 }
 
 /** The placeholder a command carries when the environment is unknown. */
@@ -111,7 +123,9 @@ function oneLine(value: string, max = 120): string {
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
 }
 
-const cmd = (...words: string[]) => `\`${["reliant", "forge", "obs", ...words].join(" ")}\``;
+const cliOf = (ctx: AskContext): AskCli => ctx.cli ?? "reliant forge";
+
+const cmd = (ctx: AskContext, ...words: string[]) => `\`${[cliOf(ctx), "obs", ...words].join(" ")}\``;
 
 function where(subject: AskSubject, ctx: AskContext): string {
   const project = ctx.forgeProject ? ` (forge project ${oneLine(ctx.forgeProject, 80)})` : "";
@@ -136,14 +150,14 @@ function versionsLine(first: string | undefined, last: string | undefined): stri
 function issuePrompt(subject: Extract<AskSubject, { kind: "issue" }>, ctx: AskContext): string {
   const id = shellWord(subject.issueId);
   const env = envArg(subject);
-  const trace = subject.latestTraceId ? ` (its latest event's trace: ${cmd("trace", shellWord(subject.latestTraceId), env)})` : "";
-  return `Issue ${id}${where(subject, ctx)}.${versionsLine(subject.firstVersion, subject.lastVersion)}\n\n${FETCH}, starting with ${cmd("issue", id, env)}${trace}.`;
+  const trace = subject.latestTraceId ? ` (its latest event's trace: ${cmd(ctx, "trace", shellWord(subject.latestTraceId), env)})` : "";
+  return `Issue ${id}${where(subject, ctx)}.${versionsLine(subject.firstVersion, subject.lastVersion)}\n\n${FETCH}, starting with ${cmd(ctx, "issue", id, env)}${trace}.`;
 }
 
 function tracePrompt(subject: Extract<AskSubject, { kind: "trace" }>, ctx: AskContext): string {
   const id = shellWord(subject.traceId);
   const env = envArg(subject);
-  return `Trace ${id}${where(subject, ctx)}.\n\n${FETCH}, starting with ${cmd("trace", id, env)} (its logs: ${cmd("logs", env, "--trace", id)}).`;
+  return `Trace ${id}${where(subject, ctx)}.\n\n${FETCH}, starting with ${cmd(ctx, "trace", id, env)} (its logs: ${cmd(ctx, "logs", env, "--trace", id)}).`;
 }
 
 function alertPrompt(subject: Extract<AskSubject, { kind: "alert" }>, ctx: AskContext): string {
@@ -152,12 +166,12 @@ function alertPrompt(subject: Extract<AskSubject, { kind: "alert" }>, ctx: AskCo
   const state = subject.state ? `\n${subject.state === "firing" ? "Firing" : "Pending"}${subject.sinceMs ? ` since ${new Date(subject.sinceMs).toISOString()}` : ""}.` : "";
   return (
     `Alert rule ${rule}${subject.fingerprint ? ` (fingerprint ${shellWord(subject.fingerprint)})` : ""}${where(subject, ctx)}.${state}\n\n` +
-    `${FETCH}: ${cmd("status", env, "--json", "--fields", "alerts")} lists what is firing, and ` +
-    `${cmd("alerts", "check", "--env", env, "--rule", rule, "--sql")} prints the rule's expression.`
+    `${FETCH}: ${cmd(ctx, "status", env, "--json", "--fields", "alerts")} lists what is firing, and ` +
+    `${cmd(ctx, "alerts", "check", "--env", env, "--rule", rule, "--sql")} prints the rule's expression.`
   );
 }
 
-const forgeCmd = (...words: string[]) => `\`${["reliant", "forge", ...words].join(" ")}\``;
+const forgeCmd = (ctx: AskContext, ...words: string[]) => `\`${[cliOf(ctx), ...words].join(" ")}\``;
 
 function workloadPrompt(subject: Extract<AskSubject, { kind: "workload" }>, ctx: AskContext): string {
   const name = shellWord(subject.name);
@@ -167,9 +181,9 @@ function workloadPrompt(subject: Extract<AskSubject, { kind: "workload" }>, ctx:
   const state = subject.job ? `: its latest run ${verdict || "needs attention"}` : verdict ? ` is ${verdict}` : " needs attention";
   const release = subject.release ? `\nIt runs release ${oneLine(subject.release, 80)}.` : "";
   const read = subject.job
-    ? `${cmd("workloads", env, "--service", name, "--jobs", "all")} lists its runs and why the last one failed`
-    : `${cmd("workloads", env, "--service", name)} says why (restarts, the last termination reason, the latest warning)`;
-  return `${what} ${name}${where(subject, ctx)}${state}.${release}\n\n${FETCH}: ${read}, and ${cmd("logs", env, shellWord(`service:${subject.name}`), "--since", "1h")} has its recent logs.`;
+    ? `${cmd(ctx, "workloads", env, "--service", name, "--jobs", "all")} lists its runs and why the last one failed`
+    : `${cmd(ctx, "workloads", env, "--service", name)} says why (restarts, the last termination reason, the latest warning)`;
+  return `${what} ${name}${where(subject, ctx)}${state}.${release}\n\n${FETCH}: ${read}, and ${cmd(ctx, "logs", env, shellWord(`service:${subject.name}`), "--since", "1h")} has its recent logs.`;
 }
 
 function releasePrompt(subject: Extract<AskSubject, { kind: "release" }>, ctx: AskContext): string {
@@ -178,8 +192,8 @@ function releasePrompt(subject: Extract<AskSubject, { kind: "release" }>, ctx: A
   const verdict = subject.verdict === "fail" ? " Its health check says it made things worse." : subject.verdict === "inconclusive" ? " Its health check could not prove it good." : "";
   return (
     `Release ${version}${where(subject, ctx)}.${verdict}\n\n` +
-    `${FETCH}: ${cmd("check", env, "--release", version, "--json")} compares the window after it with the window before, and ` +
-    `${cmd("changes", env, "--since", "24h")} lists what else changed around it.`
+    `${FETCH}: ${cmd(ctx, "check", env, "--release", version, "--json")} compares the window after it with the window before, and ` +
+    `${cmd(ctx, "changes", env, "--since", "24h")} lists what else changed around it.`
   );
 }
 
@@ -189,15 +203,15 @@ function deployFailedPrompt(subject: Extract<AskSubject, { kind: "deploy-failed"
   const version = subject.version ? `\nIt was deploying ${oneLine(subject.version, 80)}.` : "";
   return (
     `A deploy${run} failed${where(subject, ctx)}.${version}\n\n` +
-    `${FETCH}: ${forgeCmd("env", "status", env)} shows the bound release, the rollout and its gates, and ` +
-    `${cmd("changes", env, "--since", "24h")} lists the failed deploy with what changed before it.`
+    `${FETCH}: ${forgeCmd(ctx, "env", "status", env)} shows the bound release, the rollout and its gates, and ` +
+    `${cmd(ctx, "changes", env, "--since", "24h")} lists the failed deploy with what changed before it.`
   );
 }
 
 function sessionPrompt(subject: Extract<AskSubject, { kind: "session" }>, ctx: AskContext): string {
   const id = shellWord(subject.sessionId);
   const env = envArg(subject);
-  return `Browser session ${id}${where(subject, ctx)} hit errors.\n\n${FETCH}, starting with ${cmd("session", id, env)}: its failed requests and errors carry trace ids for ${cmd("trace", "<id>", env)}.`;
+  return `Browser session ${id}${where(subject, ctx)} hit errors.\n\n${FETCH}, starting with ${cmd(ctx, "session", id, env)}: its failed requests and errors carry trace ids for ${cmd(ctx, "trace", "<id>", env)}.`;
 }
 
 function deployPrompt(subject: Extract<AskSubject, { kind: "deploy" }>, ctx: AskContext): string {
@@ -208,7 +222,7 @@ function deployPrompt(subject: Extract<AskSubject, { kind: "deploy" }>, ctx: Ask
     : `an environment${ctx.envChoices?.length ? ` (one of ${ctx.envChoices.map((name) => oneLine(name, 80)).join(", ")})` : ""}; ask me which before deploying`;
   return (
     `Deploy this app${project} to ${target}.\n\n` +
-    `From the project's checkout, run ${forgeCmd("env", "deploy", env)}. Then prove it is good with ${forgeCmd("obs", "check", env, "--wait", "--json")} and tell me what it says. ` +
+    `From the project's checkout, run ${forgeCmd(ctx, "env", "deploy", env)}. Then prove it is good with ${forgeCmd(ctx, "obs", "check", env, "--wait", "--json")} and tell me what it says. ` +
     `If the environment is not set up yet, or the deploy is queued on billing, say what it needs instead of working around it.`
   );
 }
@@ -253,7 +267,7 @@ function cliPredicates(flag: string, predicates: readonly Predicate[], prefix = 
  * else (a formula, a ratio, a regex filter, a distinct count) returns null, and
  * the prompt falls back to running the panel's own JSON.
  */
-export function metricsQueryCommand(panel: Panel, env: string, since: string): string | null {
+export function metricsQueryCommand(panel: Panel, env: string, since: string, ctx: AskContext = {}): string | null {
   const [series] = panel.series;
   if (panel.signal !== "metrics" || panel.series.length !== 1 || !series.field || panel.formula || panel.ratio) return null;
   if (!["line", "number", "table", "bar"].includes(panel.kind)) return null;
@@ -262,7 +276,7 @@ export function metricsQueryCommand(panel: Panel, env: string, since: string): s
   const seriesFilters = cliPredicates("--where", series.where ?? [], "A:");
   if (!agg || !filters || !seriesFilters || (panel.groupBy ?? []).length > 3) return null;
   const groups = (panel.groupBy ?? []).flatMap((key) => ["--group-by", shellWord(key)]);
-  return cmd("metrics", "query", env, shellWord(series.field), "--agg", agg, ...groups, ...filters, ...seriesFilters, "--since", since);
+  return cmd(ctx, "metrics", "query", env, shellWord(series.field), "--agg", agg, ...groups, ...filters, ...seriesFilters, "--since", since);
 }
 
 function panelPrompt(subject: Extract<AskSubject, { kind: "panel" }>, ctx: AskContext): string {
@@ -274,10 +288,10 @@ function panelPrompt(subject: Extract<AskSubject, { kind: "panel" }>, ctx: AskCo
   const spec = JSON.stringify(panelQuery(panel));
   const query = spec.length <= MAX_PANEL_SPEC_CHARS ? `Query: ${spec}` : `Query: too long to quote; read panel ${shellWord(panel.id)} from the dashboard.`;
 
-  const exact = subject.env ? metricsQueryCommand(panel, env, since) : null;
+  const exact = subject.env ? metricsQueryCommand(panel, env, since, ctx) : null;
   const run = exact
     ? `${exact} runs this panel's query`
-    : `save the Query above as panel.json and run ${cmd("query", env, "--panel", "panel.json", "--since", since)}, or read the raw signal with ${cmd(RAW_VERB[panel.signal] ?? "query", env, "--since", since)}`;
+    : `save the Query above as panel.json and run ${cmd(ctx, "query", env, "--panel", "panel.json", "--since", since)}, or read the raw signal with ${cmd(ctx, RAW_VERB[panel.signal] ?? "query", env, "--since", since)}`;
   return `${head}\n${query}\n\n${FETCH}: ${run}.`;
 }
 
@@ -291,17 +305,22 @@ const FIX =
   "Find the root cause, make the smallest correct change, add a test that fails without it, and run the tests that cover it. " +
   "Finish with the root cause, the change, and how you verified it.";
 
+/** FIX for the reader's own agent: it has no workspace of its own to claim, so it is told to branch. */
+const FIX_EXTERNAL =
+  "Then fix it on a new branch: find the root cause, make the smallest correct change, add a test that fails without it, " +
+  "run the tests that cover it, and report the root cause, the change and how you verified it.";
+
 const FIX_ALERT = " If the rule is what is wrong (a threshold or expression that doesn't match how the service really behaves), fix the rule where the project declares it, in its KCL, rather than the service.";
 
 /** The instruction an intent adds, after the subject and how to read it. */
-function intentLine(subject: AskSubject, intent: AskIntent | undefined): string {
-  if (intent === "investigate") return `\n\n${INVESTIGATE}`;
-  if (intent === "fix") return `\n\n${FIX}${subject.kind === "alert" ? FIX_ALERT : ""}`;
+function intentLine(subject: AskSubject, ctx: AskContext): string {
+  if (ctx.intent === "investigate") return `\n\n${INVESTIGATE}`;
+  if (ctx.intent === "fix") return `\n\n${ctx.host === "external" ? FIX_EXTERNAL : FIX}${subject.kind === "alert" ? FIX_ALERT : ""}`;
   return "";
 }
 
 export function buildAskReliantPrompt(subject: AskSubject, ctx: AskContext = {}): string {
-  return subjectPrompt(subject, ctx) + intentLine(subject, ctx.intent);
+  return subjectPrompt(subject, ctx) + intentLine(subject, ctx);
 }
 
 function subjectPrompt(subject: AskSubject, ctx: AskContext): string {
@@ -332,6 +351,82 @@ function subjectPrompt(subject: AskSubject, ctx: AskContext): string {
     case "deploy":
       return deployPrompt(subject, ctx);
   }
+}
+
+// ── The handoff sheet's commands ─────────────────────────────────────────────
+
+/** One command the handoff sheet offers to copy, as the reader's shell runs it. */
+export interface AskAgentCommand {
+  /** The CLI verb, for analytics (`obs issue`, `env status`). */
+  verb: string;
+  command: string;
+}
+
+const plain = (ctx: AskContext, verb: string, ...args: string[]): AskAgentCommand => ({
+  verb,
+  command: [cliOf(ctx), verb, ...args].join(" "),
+});
+
+/**
+ * The commands that read a subject, for the reader to run themselves (the
+ * handoff sheet's "Or run it yourself"): the same verbs, spelled the same way,
+ * as the prompt quotes. `obs profile` is never offered: it reads only a local
+ * ClickStack (`forge env up`), not a hosted environment.
+ */
+export function askAgentCommands(subject: AskSubject, ctx: AskContext = {}): AskAgentCommand[] {
+  const env = envArg(subject);
+  switch (subject.kind) {
+    case "issue": {
+      const id = shellWord(subject.issueId);
+      const trace = subject.latestTraceId ? shellWord(subject.latestTraceId) : null;
+      return [
+        plain(ctx, "obs issue", id, env),
+        ...(trace ? [plain(ctx, "obs trace", trace, env), plain(ctx, "obs logs", env, "--trace", trace)] : []),
+      ];
+    }
+    case "trace": {
+      const id = shellWord(subject.traceId);
+      return [plain(ctx, "obs trace", id, env), plain(ctx, "obs logs", env, "--trace", id)];
+    }
+    case "alert":
+      return [
+        plain(ctx, "obs status", env, "--json", "--fields", "alerts"),
+        plain(ctx, "obs alerts check", "--env", env, "--rule", shellWord(subject.rule), "--sql"),
+      ];
+    case "workload": {
+      const name = shellWord(subject.name);
+      return [
+        subject.job ? plain(ctx, "obs workloads", env, "--service", name, "--jobs", "all") : plain(ctx, "obs workloads", env, "--service", name),
+        plain(ctx, "obs logs", env, shellWord(`service:${subject.name}`), "--since", "1h"),
+      ];
+    }
+    case "release":
+      return [plain(ctx, "obs check", env, "--release", shellWord(subject.version), "--json"), plain(ctx, "obs changes", env, "--since", "24h")];
+    case "deploy-failed":
+      return [plain(ctx, "env status", env), plain(ctx, "obs changes", env, "--since", "24h")];
+    case "session":
+      return [plain(ctx, "obs session", shellWord(subject.sessionId), env)];
+    case "deploy":
+      return [plain(ctx, "env deploy", env), plain(ctx, "obs check", env, "--wait", "--json")];
+    case "panel": {
+      const since = SINCE[subject.window];
+      const exact = subject.env ? metricsQueryCommand(subject.panel, env, since, ctx) : null;
+      return exact
+        ? [{ verb: "obs metrics query", command: exact.slice(1, -1) }]
+        : [plain(ctx, RAW_VERB[subject.panel.signal] ? `obs ${RAW_VERB[subject.panel.signal]}` : "obs query", env, "--since", since)];
+    }
+    case "graph":
+      return [];
+  }
+}
+
+/**
+ * Gives the reader's agent forge's playbook: the skill that teaches the obs
+ * verbs, and forge's MCP server (introspection, skills, lint, generate; `obs`
+ * itself runs in the agent's shell).
+ */
+export function askAgentPlaybook(cli: AskCli = "reliant forge"): string[] {
+  return [`${cli} skill load observability/query`, `claude mcp add forge -- ${cli} mcp`, `codex mcp add forge -- ${cli} mcp`];
 }
 
 /**

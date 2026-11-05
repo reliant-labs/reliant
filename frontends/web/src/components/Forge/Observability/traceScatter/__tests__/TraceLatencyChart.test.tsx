@@ -55,8 +55,8 @@ describe("trace latency chart", () => {
     const plotted = dots();
     expect(plotted).toHaveLength(40);
     expect(new Set(plotted.map((d) => d.id)).size).toBe(40);
-    // The fixture fails every ninth trace from the fifth: 4, 13, 22, 31.
-    expect(plotted.filter((d) => d.status === "error")).toHaveLength(4);
+    // The fixture fails the toured trace (0) and every ninth from the fifth: 4, 13, 22, 31.
+    expect(plotted.filter((d) => d.status === "error")).toHaveLength(5);
     const errorDot = screen.getByTestId("obs-trace-latency-dots").querySelector('circle[data-status="error"]');
     expect(errorDot).toHaveClass("fill-danger");
     expect(screen.getByTestId("obs-trace-latency-dots").querySelector('circle[data-status="ok"]')).toHaveClass("fill-info");
@@ -70,15 +70,15 @@ describe("trace latency chart", () => {
     for (const k of ["p50", "p95", "p99"]) expect(within(histogram).getByTestId(`obs-trace-latency-${k}`)).toHaveTextContent(k);
     const buckets = within(histogram).getAllByTestId("obs-trace-latency-bucket");
     const sum = (key: "data-ok" | "data-error") => buckets.reduce((n, b) => n + Number(b.getAttribute(key)), 0);
-    expect(sum("data-ok")).toBe(36);
-    expect(sum("data-error")).toBe(4);
+    expect(sum("data-ok")).toBe(35);
+    expect(sum("data-error")).toBe(5);
   });
 
   it("describes the plot in words for a screen reader", async () => {
     renderPanel(createFixtureApi(), { view: "traces" });
     await screen.findAllByTestId("obs-trace-row");
     expect(screen.getByTestId("obs-trace-latency-plot").querySelector("figcaption")).toHaveTextContent(
-      /40 traces plotted by start time and root-span latency, 4 with errors\. Median .+, p95 .+, p99 .+\./
+      /40 traces plotted by start time and root-span latency, 5 with errors\. Median .+, p95 .+, p99 .+\./
     );
   });
 

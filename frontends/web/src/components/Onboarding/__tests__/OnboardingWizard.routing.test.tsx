@@ -8,7 +8,7 @@
  * Runs against the shipped placeholder journeys:
  *   workflows: wf-open (click/route, autoAdvance) → wf-library (route-bound)
  *              → wf-outro-layout (Reliant-only outro, collapses panels)
- *   forge:     fg-open-apps (click) → fg-instrumented (card)
+ *   forge:     fg-console → … → fg-done (journeys/forge.tsx; its own test covers it)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
@@ -239,6 +239,8 @@ function makeRouter(initialEntries: string[], Wizard: React.ComponentType<any>) 
     route("/", "index"),
     route("/workflows/library", "workflow-hub-page"),
     route("/apps", "apps-page"),
+    // The forge journey's page (its steps open the demo console).
+    route("/forge/demo", "forge-demo"),
     // Where finishing the tour lands the user (chatRouteAfterTour).
     route("/project/$projectId", "project-chat"),
   ]);
@@ -300,7 +302,7 @@ describe("journey engine (OnboardingWizard)", () => {
       expect(screen.getByTestId("journey-card-workflows")).toHaveAttribute("aria-pressed", "false");
 
       await userEvent.click(screen.getByRole("button", { name: /start tour/i }));
-      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-open-apps"));
+      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-console"));
       expect(trackEvent).toHaveBeenCalledWith(
         "journey_selected",
         expect.objectContaining({ journey: "forge", source: "landing" }),
@@ -416,7 +418,7 @@ describe("journey engine (OnboardingWizard)", () => {
     it("Try the other journey completes this one and starts the other", async () => {
       const router = renderAt(lastStepUrl);
       await userEvent.click(await screen.findByRole("button", { name: /try the other journey/i }));
-      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-open-apps"));
+      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-console"));
       expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "completed");
       expect(trackEvent).toHaveBeenCalledWith(
         "journey_selected",

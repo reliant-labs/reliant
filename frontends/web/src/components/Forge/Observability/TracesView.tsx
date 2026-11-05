@@ -764,6 +764,7 @@ function TraceTable({
                   data-index={item.index}
                   ref={narrow ? virtualizer.measureElement : undefined}
                   data-testid="obs-trace-row"
+                  data-trace-id={trace.traceId}
                 >
                   {row.getAllCells().map((cell) =>
                     cell.column.id === "rootOperation" ? (

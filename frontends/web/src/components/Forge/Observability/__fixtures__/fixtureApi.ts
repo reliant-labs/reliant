@@ -149,7 +149,43 @@ function health(name: string, window: TimeWindow, base: number, errorShare: numb
   };
 }
 
+/**
+ * What the CreateOrder trace (FIXTURE_TRACE_ID, fixtureTrace) logged: one line
+ * per step of the story its waterfall tells, on the span that logged it, so
+ * "Logs for this trace" reads that request across both services.
+ */
+const TRACE_LOGS: { spanId: string; at: number; severity: Severity; severityText: string; service: string; body: string }[] = [
+  { spanId: "a1", at: 0.5, severity: "info", severityText: "INFO", service: "api", body: "CreateOrder started" },
+  { spanId: "c1", at: 70.3, severity: "warn", severityText: "WARN", service: "api", body: "payments Charge attempt 1 failed, retrying" },
+  { spanId: "c2", at: 146.7, severity: "error", severityText: "ERROR", service: "api", body: "payments Charge failed: context deadline exceeded" },
+  { spanId: "d1", at: 181.0, severity: "info", severityText: "INFO", service: "worker", body: "orders.created processed, inventory updated" },
+];
+
+function traceLogs(window: TimeWindow): LogRecord[] {
+  // fixtureTrace starts the trace a minute before the window's end.
+  const t0 = window.endMs - 60_000;
+  return TRACE_LOGS.map((line) => ({
+    id: `fixture:trace-${line.spanId}`,
+    timeMs: t0 + line.at,
+    severity: line.severity,
+    severityText: line.severityText,
+    service: line.service,
+    body: line.body,
+    traceId: FIXTURE_TRACE_ID,
+    spanId: line.spanId,
+    attributes: { "rpc.method": "CreateOrder", procedure: `/${PROCEDURE("CreateOrder")}`, "http.status_code": line.severity === "error" ? "503" : "200" },
+    resource: { "service.name": line.service, "k8s.pod.name": `${line.service}-7d9f8c-x0`, "deployment.environment.name": "prod" },
+    source: "",
+    operatorData: false,
+  }));
+}
+
+/** The log lines of a window, newest first: generated traffic, plus what the toured trace logged. */
 function logs(window: TimeWindow, count: number): LogRecord[] {
+  return [...generatedLogs(window, count), ...traceLogs(window)].sort((a, b) => b.timeMs - a.timeMs);
+}
+
+function generatedLogs(window: TimeWindow, count: number): LogRecord[] {
   const random = rng(7);
   const levels: [Severity, string][] = [
     ["info", "INFO"],
@@ -177,7 +213,8 @@ function logs(window: TimeWindow, count: number): LogRecord[] {
       severityText,
       service,
       body: messages[pick],
-      traceId: traced ? (i === 0 ? FIXTURE_TRACE_ID : `${(i * 2654435761).toString(16).padStart(8, "0")}b34da6a3ce929d0e0e4736`.slice(0, 32)) : "",
+      // Never FIXTURE_TRACE_ID: that trace's lines are traceLogs', which match its spans.
+      traceId: traced ? `${((i + 1) * 2654435761).toString(16).padStart(10, "0")}b34da6a3ce929d0e0e4736` : "",
       spanId: traced ? `00f067aa0ba902b${i % 10}` : "",
       attributes: { "rpc.method": RPCS[i % RPCS.length], procedure: `/${PROCEDURE(RPCS[i % RPCS.length])}`, "http.status_code": severity === "error" ? "503" : "200" },
       resource: { "service.name": service, "k8s.pod.name": `${service}-7d9f8c-x${i % 3}`, "deployment.environment.name": "prod" },
@@ -191,7 +228,8 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
   const random = rng(11);
   return Array.from({ length: count }, (_, i) => {
     const rpc = RPCS[i % RPCS.length];
-    const failed = i % 9 === 4;
+    // Trace 0 is the one the forge journey opens: its detail has two failed spans, so it is listed as failing.
+    const failed = i === 0 || i % 9 === 4;
     // The root span's own duration; every fifth trace has async work that outlives it.
     const root = Math.round((rpc === "ListOrders" ? 180 : 40) * (0.5 + random() * 2) * 100) / 100;
     return {
@@ -211,10 +249,17 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
       // A browser started every other trace: its client and the build that made the call.
       client: i % 2 === 0 ? FIXTURE_CLIENTS[(i / 2) % FIXTURE_CLIENTS.length] : NO_CLIENT,
       frontendVersion: i % 2 === 0 ? (i % 4 === 0 ? "v1.8.3" : "1.8.16") : "",
-      backendBuilds: [
-        { service: "api", version: i % 6 === 0 ? "v1.7.91" : "v1.7.92" },
-        { service: "worker", version: "v1.7.92" },
-      ],
+      // Trace 0 ran on v1.8.3 everywhere, as its spans and the issue it belongs to say.
+      backendBuilds:
+        i === 0
+          ? [
+              { service: "api", version: "v1.8.3" },
+              { service: "worker", version: "v1.8.3" },
+            ]
+          : [
+              { service: "api", version: i % 6 === 0 ? "v1.7.91" : "v1.7.92" },
+              { service: "worker", version: "v1.7.92" },
+            ],
       source: "",
       operatorData: false,
     };
@@ -235,7 +280,8 @@ export function fixtureTrace(traceId: string, now: number): Trace {
     status: "ok",
     statusMessage: "",
     attributes: { "rpc.system": "connect_rpc" },
-    resource: { "service.name": service, "service.version": "v1.7.15" },
+    // v1.8.3: the release the trace's issue (iss-orders-deadline) is new in.
+    resource: { "service.name": service, "service.version": "v1.8.3" },
     events: [],
     source: "",
     operatorData: false,
