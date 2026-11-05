@@ -20,7 +20,7 @@ import {
   getInputUI,
 } from "../../../lib/inputHelpers";
 import type { Preset } from "../../../hooks/preset-queries";
-import { AUTO_MODE, isSelectorHidden, selectableOptions } from "../../../lib/executionMode";
+import { isSelectorHidden, selectableOptions } from "../../../lib/executionMode";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -217,9 +217,16 @@ export function ChatSettingsPopover({
     [modelKey, values, onChange],
   );
 
+  // `undefined` resets the mode: the key leaves `values`, so the workflow's
+  // default (or a preset's mode) applies again.
   const handleModeChange = useCallback(
-    (mode: string) => {
+    (mode: string | undefined) => {
       if (!modeKey) return;
+      if (mode === undefined) {
+        const { [modeKey]: _reset, ...rest } = values;
+        onChange(rest);
+        return;
+      }
       onChange({ ...values, [modeKey]: mode });
     },
     [modeKey, values, onChange],
@@ -334,7 +341,7 @@ export function ChatSettingsPopover({
                     return (
                       <button
                         key={mode}
-                        onClick={() => handleModeChange(isSelected ? AUTO_MODE : mode)}
+                        onClick={() => handleModeChange(isSelected ? undefined : mode)}
                         className={cn(
                           "flex-1 px-2.5 py-1.5 rounded-md border text-xs font-medium text-center transition-all capitalize touch:min-h-[44px]",
                           isSelected

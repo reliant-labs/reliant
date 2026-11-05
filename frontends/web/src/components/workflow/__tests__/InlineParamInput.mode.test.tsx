@@ -39,12 +39,13 @@ describe("InlineParamInput execution mode", () => {
     expect(first.onChange).toHaveBeenLastCalledWith("plan");
   });
 
-  it("returns to auto when the active mode is picked again", async () => {
+  it("resets to the parameter's default when the active mode is picked again", async () => {
     const { pill, onChange } = renderPill("plan");
     expect(pill).toHaveTextContent("Plan");
     await userEvent.click(pill);
     await userEvent.click(screen.getAllByRole("button", { name: "Plan" }).at(-1)!);
-    expect(onChange).toHaveBeenLastCalledWith("auto");
+    // A reset, not the literal "auto": the host drops the key.
+    expect(onChange).toHaveBeenLastCalledWith(undefined);
   });
 
   it("still lists auto in an enum that is not an execution mode", async () => {

@@ -2108,12 +2108,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             name={paramName}
                             schema={schema}
                             value={workflowParams[paramName] ?? getInputDefault(schema)}
-                            onChange={(value) =>
-                              handleWorkflowParamsChange({
-                                ...workflowParams,
-                                [paramName]: value,
-                              })
-                            }
+                            onChange={(value) => {
+                              // `undefined` resets the param: drop the key so its default applies.
+                              const { [paramName]: _previous, ...rest } = workflowParams;
+                              handleWorkflowParamsChange(value === undefined ? rest : { ...rest, [paramName]: value });
+                            }}
                             disabled={disabled || !isMessagingAllowed}
                             isStreaming={false}
                           />

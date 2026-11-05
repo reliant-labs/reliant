@@ -164,7 +164,8 @@ interface InlineEnumInputProps {
   displayName: string;
   schema: InputDef;
   value: string;
-  onChange: (value: string) => void;
+  /** `undefined` resets an execution mode to the parameter's default. */
+  onChange: (value: string | undefined) => void;
   disabled?: boolean;
   isStreaming?: boolean;
   className?: string;
@@ -258,7 +259,7 @@ function InlineEnumInput({
                 <button
                   key={option}
                   onClick={() => {
-                    onChange(isMode && isSelected ? AUTO_MODE : option);
+                    onChange(isMode && isSelected ? undefined : option);
                     setIsOpen(false);
                   }}
                   className={cn(
