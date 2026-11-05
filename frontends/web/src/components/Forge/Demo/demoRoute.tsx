@@ -3,12 +3,7 @@
 /**
  * `/forge/demo` as a route either shell mounts: Reliant under its
  * authenticated layout (routes.tsx), the forge shell (forge.reliantlabs.io)
- * on its root, public, with `/demo` redirecting to it:
- *
- *   buildForgeShellTree({
- *     Guard,
- *     extraRoutes: (root) => [createForgeDemoRoute(() => root), createForgeDemoRedirectRoute(() => root)],
- *   })
+ * on its root, public, with `/demo` redirecting to it (buildForgeShellTree).
  *
  * The page itself (DemoConsole) is its own lazy chunk, fixtures included, so
  * neither shell pays for it until it is opened.
