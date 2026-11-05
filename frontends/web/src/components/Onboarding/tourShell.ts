@@ -97,6 +97,21 @@ export function localStorageTourStorage(storageKey: string): TourStorage {
   };
 }
 
+/**
+ * Progress for this page load only, in memory: the public demo starts the tour
+ * on every visit and never remembers a finish. `kind: "local"`, so Reliant's
+ * settings-only side effects stay off.
+ */
+export function memoryTourStorage(): TourStorage {
+  const data = new Map<string, string>();
+  return {
+    kind: "local",
+    get: async (key) => data.get(key),
+    set: async (key, value) => void data.set(key, value),
+    delete: async (key) => void data.delete(key),
+  };
+}
+
 let storage: TourStorage = settingsTourStorage;
 
 export function setTourStorage(next: TourStorage): void {

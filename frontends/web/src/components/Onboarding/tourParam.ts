@@ -31,7 +31,7 @@ export function otherJourney(journey: JourneyId): JourneyId {
 }
 
 /** Where a journey choice came from, for `journey_selected`. */
-export type JourneySource = "landing" | "picker" | "menu";
+export type JourneySource = "landing" | "picker" | "menu" | "demo";
 
 /** The `?tour=` value that opens the picker. */
 export const TOUR_PICKER = "pick";
