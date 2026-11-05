@@ -6,6 +6,7 @@ package reliant
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -117,9 +118,43 @@ func TestTokenIsNotSentToAnotherHost(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _ = c.Runs.Get(context.Background(), "r1") // the redirect target answers 200 non-Connect: an error is expected
-	if v, _ := leaked.Load().(string); v != "" {
-		t.Fatalf("the redirect target received Authorization %q", v)
+	if _, err := c.Runs.Get(context.Background(), "r1"); err == nil {
+		t.Fatal("a redirect off the base origin was followed")
+	}
+	if v, ok := leaked.Load().(string); ok {
+		t.Fatalf("the redirect target was reached (Authorization %q): a redirect off the origin must not be sent", v)
+	}
+}
+
+// net/http re-sends a request's headers on a redirect to the same host even
+// from https to http. An API call must not follow one: the token would cross
+// the network in the clear.
+func TestTokenIsNotSentOnAnHTTPSDowngrade(t *testing.T) {
+	var conns atomic.Int32
+	home := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://"+r.Host+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	home.Config.ConnState = func(_ net.Conn, st http.ConnState) {
+		if st == http.StateNew {
+			conns.Add(1)
+		}
+	}
+	home.StartTLS()
+	defer home.Close()
+
+	c, err := New(WithBaseURL(home.URL), WithToken(testToken), WithHTTPClient(home.Client()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = c.Runs.Get(context.Background(), "r1")
+	if err == nil {
+		t.Fatal("an https-to-http redirect was followed")
+	}
+	if strings.Contains(err.Error(), testToken) {
+		t.Fatalf("the error carries the token: %v", err)
+	}
+	if n := conns.Load(); n != 1 {
+		t.Fatalf("the client opened %d connections to the server, want 1: the plain-http redirect was sent", n)
 	}
 }
 

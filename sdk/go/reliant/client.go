@@ -177,10 +177,8 @@ func New(opts ...Option) (*Client, error) {
 	}
 	u, _ := url.Parse(base)
 	authed := &http.Client{
-		Transport: &authTransport{next: next, host: u.Host, scheme: u.Scheme, source: source},
-		// Redirects are followed by net/http, which re-runs the transport for
-		// the new URL; authTransport sends the token only to the base host.
-		CheckRedirect: hc.CheckRedirect,
+		Transport:     &authTransport{next: next, host: u.Host, scheme: u.Scheme, source: source},
+		CheckRedirect: sameOrigin(u.Scheme, u.Host, hc.CheckRedirect),
 		Jar:           hc.Jar,
 		Timeout:       hc.Timeout,
 	}
@@ -240,6 +238,26 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// sameOrigin refuses a redirect off the validated origin (scheme and host)
+// before net/http sends it, then defers to the caller's own policy. net/http
+// re-sends a request's headers on a same-host redirect even from https to
+// http, so an API call must never follow one off the origin it was validated
+// for: the redirected request is not sent at all.
+func sameOrigin(scheme, host string, next func(*http.Request, []*http.Request) error) func(*http.Request, []*http.Request) error {
+	return func(req *http.Request, via []*http.Request) error {
+		if req.URL.Scheme != scheme || req.URL.Host != host {
+			return fmt.Errorf("reliant: refusing a redirect off %s://%s: a token never leaves the server it was issued for", scheme, host)
+		}
+		if next != nil {
+			return next(req, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("reliant: stopped after 10 redirects")
+		}
+		return nil
+	}
+}
+
 // authTransport adds the bearer token and the User-Agent.
 type authTransport struct {
 	next   http.RoundTripper
@@ -249,9 +267,15 @@ type authTransport struct {
 }
 
 func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// The token goes to the server it was issued for and nowhere else: a
-	// redirect to another host must not carry it.
+	// The token goes to the server it was issued for and nowhere else. A
+	// request for another origin (sameOrigin refuses redirects, so only a
+	// caller's own use of the HTTP client gets here) carries no Authorization,
+	// whoever set it.
 	if req.URL.Host != t.host || req.URL.Scheme != t.scheme {
+		if req.Header.Get("Authorization") != "" {
+			req = req.Clone(req.Context())
+			req.Header.Del("Authorization")
+		}
 		return t.next.RoundTrip(req)
 	}
 	token, err := t.source(req.Context())
