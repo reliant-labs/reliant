@@ -18,6 +18,13 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
 
+// Synthetic bearer fixtures: no server ever issued them; the tests only check
+// the CLI sends them through unchanged.
+const (
+	fakeLoginToken  = "rlat_FAKE_login_fixture_not_a_credential"
+	fakeDaemonToken = "rlat_FAKE_daemon_fixture_not_a_credential"
+)
+
 // These pin what the CLI prints and returns for the verbs that ride the SDK
 // client: the words, the exit-0 declines and the one-page event list are the
 // CLI's contract, whichever client is underneath.
@@ -76,7 +83,7 @@ func newRunControlHarness(t *testing.T) (*superviseHarness, *fakeRunService) {
 	mux.Handle(p, h)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	loginFor(t, srv.URL, "rlat_test000000000000000000000000000")
+	loginFor(t, srv.URL, fakeLoginToken)
 	t.Setenv(envServerURL, srv.URL)
 	return &superviseHarness{server: srv, chat: &superviseChatService{}, question: &fakeQuestionService{}, approval: &fakeApprovalService{}}, runs
 }
@@ -224,7 +231,7 @@ func newTriggerHarness(t *testing.T) (*superviseHarness, *fakeTriggerService) {
 	mux.Handle(p, h)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	loginFor(t, srv.URL, "rlat_test000000000000000000000000000")
+	loginFor(t, srv.URL, fakeLoginToken)
 	t.Setenv(envServerURL, srv.URL)
 	return &superviseHarness{server: srv, chat: &superviseChatService{}, question: &fakeQuestionService{}, approval: &fakeApprovalService{}}, trig
 }
@@ -310,7 +317,7 @@ func TestSDKClientSendsTheConnectionsBearer(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	conn := &connection{ServerURL: srv.URL, Token: "rlat_daemonpat0000000000000000000000"}
+	conn := &connection{ServerURL: srv.URL, Token: fakeDaemonToken}
 	client, err := conn.sdkClient()
 	require.NoError(t, err)
 	_, _ = client.Triggers.Get(context.Background(), "x")
@@ -319,7 +326,7 @@ func TestSDKClientSendsTheConnectionsBearer(t *testing.T) {
 	defer mu.Unlock()
 	require.NotEmpty(t, got)
 	for _, a := range got {
-		assert.Equal(t, "Bearer rlat_daemonpat0000000000000000000000", a)
+		assert.Equal(t, "Bearer "+fakeDaemonToken, a)
 	}
 	assert.False(t, strings.Contains(strings.Join(got, ""), "rlat_x"))
 }
