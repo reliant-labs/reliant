@@ -99,6 +99,16 @@ func runConformance(t *testing.T, a Authority) {
 		require.Equal(t, fat.SetOf(fat.ScopeDaemonConnect, fat.ScopeObsRead), old.Scopes)
 	})
 
+	t.Run("inbox, approvals and questions scopes mint and introspect", func(t *testing.T) {
+		// The self-hosted CHECK must admit each scope the interceptor gates on.
+		for _, s := range []fat.Scope{fat.ScopeInboxRead, fat.ScopeInboxManage, fat.ScopeApprovalsDecide, fat.ScopeQuestionsAnswer} {
+			m := mint(t, MintRequest{UserID: user, Name: "scope-" + string(s), Scopes: []fat.Scope{s}})
+			p, err := a.Introspect(ctx, m.Plaintext)
+			require.NoError(t, err, "scope %s", s)
+			require.Equal(t, fat.SetOf(s), p.Scopes, "scope %s", s)
+		}
+	})
+
 	t.Run("mint then introspect", func(t *testing.T) {
 		m := mint(t, MintRequest{UserID: user, Name: "ci", Scopes: []fat.Scope{fat.ScopeReliantAPI}})
 		require.True(t, fat.HasFormat(m.Plaintext))
