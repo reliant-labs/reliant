@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { ChatMessage } from "../ChatMessage";
 import { ApprovalSchema, ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
+import { AttachmentSchema } from "../../../gen/reliant/v1/chat_pb";
 import type { Approval } from "../../../gen/reliant/v1/approval_pb";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../types/chat";
 import type { Message } from "../../../types/chat";
@@ -176,7 +177,7 @@ describe("ChatMessage slice", () => {
   it("answer keeps attachments", () => {
     const message = assistant([text(0, "Here."), tool(1, "bash", "call-bash"), text(2, "File attached.")], {
       attachments: [
-        { id: "att-9", filename: "report.pdf", size: BigInt(10), mimeType: "application/pdf", url: "/r" },
+        create(AttachmentSchema, { id: "att-9", filename: "report.pdf", size: BigInt(10), mimeType: "application/pdf", url: "/r" }),
       ],
     });
     render(<ChatMessage message={message} chatId="chat-1" slice={slice("answer", [2])} />);
@@ -187,7 +188,7 @@ describe("ChatMessage slice", () => {
   it("an answer with no segments still renders the message's attachments, and nothing else", () => {
     const message = assistant([text(0, "Working."), tool(1, "bash", "call-bash")], {
       attachments: [
-        { id: "att-9", filename: "report.pdf", size: BigInt(10), mimeType: "application/pdf", url: "/r" },
+        create(AttachmentSchema, { id: "att-9", filename: "report.pdf", size: BigInt(10), mimeType: "application/pdf", url: "/r" }),
       ],
     });
     render(<ChatMessage message={message} chatId="chat-1" slice={slice("answer", [])} />);

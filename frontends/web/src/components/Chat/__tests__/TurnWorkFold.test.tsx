@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TurnWorkFold } from "../TurnWorkFold";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../types/chat";
-import type { Message } from "../../../types/chat";
+import type { Message } from "../../../gen/reliant/v1/chat_pb";
 import type { TurnWork } from "../thread-views/simplifiedTurns";
 
 vi.mock("../ChatMessage", () => ({

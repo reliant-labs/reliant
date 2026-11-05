@@ -7,6 +7,9 @@ import {
   MessageSchema,
   type Message,
 } from "../../../gen/reliant/v1/chat_pb";
+
+/** Message fields a fixture may override (a protobuf init, not a full message). */
+type MessageExtra = Omit<Partial<Message>, "$typeName" | "$unknown">;
 import { buildSimplifiedTimeline, createSegmentReader } from "./simplifiedTurns";
 
 type Block = { t: string } | { call: string };
@@ -21,7 +24,7 @@ function msg(
   id: string,
   role: MessageRole,
   blocks: Block[],
-  extra: Partial<Message> = {},
+  extra: MessageExtra = {},
 ): Message {
   return create(MessageSchema, {
     id,
@@ -42,7 +45,7 @@ function msg(
   });
 }
 
-const asst = (id: string, blocks: Block[], extra: Partial<Message> = {}) =>
+const asst = (id: string, blocks: Block[], extra: MessageExtra = {}) =>
   msg(id, MessageRole.ASSISTANT, blocks, extra);
 
 function row(message: Message, thread = "t1"): Item {
