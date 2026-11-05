@@ -15,7 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createElement, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
-import type { DescService } from "@bufbuild/protobuf";
+import type { DescMethodServerStreaming, DescService } from "@bufbuild/protobuf";
 import type { Transport } from "@connectrpc/connect";
 import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
 import { TokenService } from "@/gen/reliant/v1/token_pb";
@@ -295,7 +295,9 @@ describe("a shell's own transport", () => {
       await connectClient(SettingsService).listSettings({});
       expect(sent).toHaveLength(0);
 
-      const method = StreamingService.methods.find((m) => m.methodKind === "server_streaming")!;
+      const method = StreamingService.methods.find(
+        (m): m is DescMethodServerStreaming => m.methodKind === "server_streaming",
+      )!;
       await expect(
         transport.stream(method, undefined, undefined, undefined, (async function* () {})(), undefined),
       ).rejects.toThrow("stream reached the shell transport");
