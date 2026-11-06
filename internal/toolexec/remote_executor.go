@@ -384,8 +384,17 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	if req.RunStep {
 		contextMap[RunStepContextKey] = true
 	}
+	if sel := req.DaemonSelector; sel != nil && (sel.ID != "" || sel.Name != "") {
+		contextMap[RunMachineContextKey] = map[string]interface{}{"id": sel.ID, "name": sel.Name}
+	}
 	return contextMap
 }
+
+// RunMachineContextKey is the context-map key carrying the run's daemon
+// selector (its id or name) to the executing tool (rctx.ToolContext.RunMachine),
+// so a tool that reports "the machine this run executes on" names the machine
+// the run's override routed it to, not the chat's default.
+const RunMachineContextKey = "run_machine"
 
 // RunStepContextKey is the context-map key carrying ToolRequest.RunStep to the
 // executing tool (rctx.ToolContext.RunStep). The context map is built here,

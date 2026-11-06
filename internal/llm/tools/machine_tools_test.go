@@ -180,3 +180,30 @@ func TestListMachinesMarksTheRunsOwnMachine(t *testing.T) {
 	require.Contains(t, resp.Content, "cicd (id cicd-id), managed, suspended, xl")
 	require.Contains(t, resp.Content, "default (id default-id), managed, ready, xl — this run executes on it")
 }
+
+// A run whose workflow pins `daemon: cicd` executes there, whatever the
+// chat's own machine is: list_machines marks cicd, and stop spares cicd.
+// The selector may name the machine by id or by name.
+func TestRunMachineFollowsTheRunsDaemonOverride(t *testing.T) {
+	own := "default-id"
+	store := triggerCallerStore{chat: &db.Chat{UserID: "owner", ActiveDaemonID: &own}}
+	for _, sel := range []rctx.RunMachine{{ID: "cicd-id"}, {Name: "cicd"}, {Name: "cicd-id"}} {
+		t.Run(sel.ID+sel.Name, func(t *testing.T) {
+			ctx := machineToolCtx(automationpolicy.Execution{})
+			ctx.RunMachine = sel
+			resp, err := NewListMachinesTool(store, &fakeMachines{}).Run(ctx, ToolCall{ID: "call", Name: ToolListMachines, Input: `{}`})
+			require.NoError(t, err)
+			require.Contains(t, resp.Content, "cicd (id cicd-id), managed, suspended, xl — this run executes on it")
+			require.NotContains(t, resp.Content, "default (id default-id), managed, ready, xl — this run executes on it")
+
+			f := &fakeMachines{}
+			resp, err = NewManageMachineTool(store, f).Run(ctx, ToolCall{ID: "call", Name: ToolManageMachine, Input: `{"machine_id":"cicd-id","action":"stop"}`})
+			require.NoError(t, err)
+			require.True(t, resp.IsError, resp.Content)
+			require.Contains(t, resp.Content, "would stop this run")
+			for _, c := range f.calls {
+				require.NotEqual(t, "stop", c.op)
+			}
+		})
+	}
+}

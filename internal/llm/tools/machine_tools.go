@@ -111,7 +111,7 @@ func (l *listMachinesTool) Execute(ctx *rctx.ToolContext, _ ListMachinesParams) 
 		return NewTextResponse("The user has no machines."), nil
 	}
 	sort.SliceStable(list, func(i, j int) bool { return list[i].Name < list[j].Name })
-	own := runMachineID(caller)
+	own := runMachineID(ctx, caller, list)
 	var b strings.Builder
 	fmt.Fprintf(&b, "%d machine(s):\n", len(list))
 	for _, m := range list {
@@ -212,8 +212,28 @@ func machineApprovalHash(action, machineID, size string) string {
 	return "machine:" + hex.EncodeToString(sum[:])
 }
 
-// runMachineID is the machine the calling run executes on, or "".
-func runMachineID(caller *runCaller) string {
+// runMachineID is the machine the calling run executes on, or "": the machine
+// its daemon selector routes it to (a workflow or node `daemon:` override), by
+// id, or by a name matched against machines; otherwise the chat's active
+// machine. A selector naming no machine in machines says nothing.
+func runMachineID(ctx *rctx.ToolContext, caller *runCaller, machines []MachineSummary) string {
+	if ctx != nil {
+		if sel := ctx.RunMachine; sel.ID != "" {
+			return sel.ID
+		} else if sel.Name != "" {
+			// An id outranks a name, as the router resolves it.
+			for _, m := range machines {
+				if m.ID == sel.Name {
+					return m.ID
+				}
+			}
+			for _, m := range machines {
+				if m.Name == sel.Name {
+					return m.ID
+				}
+			}
+		}
+	}
 	if caller == nil || caller.chat == nil || caller.chat.ActiveDaemonID == nil {
 		return ""
 	}
@@ -337,7 +357,13 @@ func (t *machineTypedTool) Execute(ctx *rctx.ToolContext, p ManageMachineParams)
 	}
 	switch action {
 	case "stop":
-		if id == runMachineID(caller) {
+		var machines []MachineSummary
+		if ctx.RunMachine.ID == "" && ctx.RunMachine.Name != "" {
+			// A name resolves against the user's machines; a failed list
+			// leaves the chat's machine as the guard.
+			machines, _ = o.controller.ListMachines(ctx.Context, caller.userID)
+		}
+		if id == runMachineID(ctx, caller, machines) {
 			return NewTextErrorResponse("This run executes on machine " + id + "; stopping it would stop this run. Nothing changed."), nil
 		}
 		if err := o.controller.StopMachine(ctx.Context, caller.userID, id); err != nil {

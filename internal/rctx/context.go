@@ -86,6 +86,19 @@ type ToolContext struct {
 	// (toolexec.ToolRequest.RunStep, which only the run-step executor sets),
 	// never from tool input, so a model cannot claim it.
 	RunStep bool
+
+	// RunMachine is the machine the server routed this call's run to, as the
+	// run's daemon selector names it (a workflow or node `daemon:`): an exact
+	// id, or a name that may also be an id. Zero when the run had no selector
+	// and its calls go to the chat's default machine. Set only from the
+	// request's server-built context (toolexec.RunMachineContextKey).
+	RunMachine RunMachine
+}
+
+// RunMachine names the machine a run's selector routes it to.
+type RunMachine struct {
+	ID   string
+	Name string
 }
 
 // NewToolContext creates a context for V2 tool execution
