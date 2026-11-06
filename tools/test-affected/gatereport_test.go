@@ -20,7 +20,7 @@ func TestMergeGateBudgetContract(t *testing.T) {
 	if err = json.Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}
-	want := gateBudgets{Wall: 300, Steps: map[string]int{"plan": 25, "npm-r": 60, "pnpm-frontends-web": 60, "npm-electron": 60, "npm-tools-protoc-gen-es": 15, "generate": 60, "docs": 60, "plan-2": 20, "build": 45, "test": 120, "typecheck": 120, "lint": 60, "proto": 15, "vet": 60, "migsafety": 10, "migorder": 15}}
+	want := gateBudgets{Wall: 300, Steps: map[string]int{"plan": 25, "npm-r": 60, "pnpm-frontends-web": 60, "npm-electron": 60, "npm-tools-protoc-gen-es": 15, "generate": 60, "prewarm": 60, "docs": 60, "plan-2": 20, "build": 45, "test": 120, "typecheck": 120, "lint": 60, "proto": 15, "vet": 60, "migsafety": 10, "migorder": 15}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("budget changed: got %+v want %+v; fix slow checks or move them to the release gate; do not raise the 300s target", got, want)
 	}
