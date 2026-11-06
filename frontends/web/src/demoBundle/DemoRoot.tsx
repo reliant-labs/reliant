@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The forge demo bundle's root (main.demo.tsx): the demo shell's router under
+ * The forge demo bundle's root (demoBundle/main.tsx): the demo shell's router under
  * the app's query client and error boundary. No auth provider, no settings
  * hydration, no daemon: the demo shell has nothing to sign in to.
  */

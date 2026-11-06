@@ -7,14 +7,14 @@
 // FIRST and SECOND for the same reasons as in main.tsx: console capture before
 // anything can log, and the runtime config (config.js) checked before any
 // module reads it.
-import "./lib/browser-log-boot";
-import "./lib/configGuard";
+import "../lib/browser-log-boot";
+import "../lib/configGuard";
 
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
-import "./index.css";
+import "../index.css";
 
-import { DemoRoot } from "./demoBundle/DemoRoot";
+import { DemoRoot } from "./DemoRoot";
 
 createRoot(document.getElementById("root")!).render(<DemoRoot />);

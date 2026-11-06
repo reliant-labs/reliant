@@ -3,7 +3,7 @@ reliant's `demo` environment: demo.reliantlabs.io, the public forge demo.
 
 ONE HOSTED STATIC SITE AND NOTHING ELSE. `forge-demo` is a second build of
 frontends/web (vite.config.ts's demo target: entry demo.html →
-src/main.demo.tsx), containing the forge console's pages, the demo's mock
+src/demoBundle/main.tsx), containing the forge console's pages, the demo's mock
 transport and sample data, the tour and "How this app was built", and none of
 Reliant's chat, onboarding, sign-in, Supabase, daemon or settings code
 (vite-plugin-demo-bundle.ts fails the build if any of it arrives). It calls no

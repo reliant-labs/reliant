@@ -303,7 +303,7 @@ const appConfig: ViteUserConfig = {
 // ── The forge demo: a second build of this package ──────────────────────────
 //
 // demo.reliantlabs.io serves the forge demo and nothing else: entry demo.html
-// → src/main.demo.tsx, which mounts the demo shell's routes (demoShellRoutes.tsx).
+// → src/demoBundle/main.tsx, which mounts the demo shell's routes (demoShellRoutes.tsx).
 // It builds to dist-demo/, with demo.html published as its index.html, and
 // vite-plugin-demo-bundle.ts fails the build if a Reliant-only module (chat,
 // onboarding, auth, Supabase, daemon, settings) reaches it. Modules with a
