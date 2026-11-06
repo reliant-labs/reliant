@@ -42,9 +42,10 @@ func TestRetirementTreeRejectsProtectedDescendants(t *testing.T) {
 
 // recordInstall writes the record a package manager leaves in the
 // node_modules it populated: npm's hidden lockfile naming npmPaths (relative
-// to node_modules' parent, "node_modules/pkg"), and pnpm's .modules.yaml and
-// .pnpm/lock.yaml when pnpm is set.
-func recordInstall(t *testing.T, nodeModules string, pnpm bool, npmPaths ...string) {
+// to node_modules' parent, "node_modules/pkg"), and, when pnpm is non-nil,
+// pnpm's .modules.yaml and a .pnpm/lock.yaml whose snapshots are the keys in
+// pnpm ("@scope/name@1.0.0").
+func recordInstall(t *testing.T, nodeModules string, pnpm []string, npmPaths ...string) {
 	t.Helper()
 	packages := map[string]any{"": map[string]string{"name": "app"}}
 	for _, p := range npmPaths {
@@ -55,9 +56,13 @@ func recordInstall(t *testing.T, nodeModules string, pnpm bool, npmPaths ...stri
 		t.Fatal(err)
 	}
 	write(t, filepath.Join(nodeModules, ".package-lock.json"), string(b))
-	if pnpm {
+	if pnpm != nil {
+		lock := "lockfileVersion: '9.0'\n\nsnapshots:\n"
+		for _, key := range pnpm {
+			lock += "\n  '" + key + "': {}\n"
+		}
 		write(t, filepath.Join(nodeModules, ".modules.yaml"), "layoutVersion: 5\n")
-		write(t, filepath.Join(nodeModules, ".pnpm", "lock.yaml"), "lockfileVersion: '9.0'\n")
+		write(t, filepath.Join(nodeModules, ".pnpm", "lock.yaml"), lock)
 	}
 }
 
@@ -68,18 +73,22 @@ func recordInstall(t *testing.T, nodeModules string, pnpm bool, npmPaths ...stri
 // in a package.json-bearing directory no install recorded.
 func TestRetirementTreeInstalledPackageContent(t *testing.T) {
 	pkgs := map[string]string{
-		"npm":    "node_modules/pkg",
-		"scoped": "node_modules/@scope/lib",
-		"pnpm":   "node_modules/.pnpm/@protobufjs+utf8@1.1.2/node_modules/@protobufjs/utf8",
-		"nested": "node_modules/outer/node_modules/inner",
+		"npm":        "node_modules/pkg",
+		"scoped":     "node_modules/@scope/lib",
+		"pnpm":       "node_modules/.pnpm/@protobufjs+utf8@1.1.2/node_modules/@protobufjs/utf8",
+		"pnpm-peers": "node_modules/.pnpm/react-dom@18.2.0_react@18.2.0/node_modules/react-dom",
+		"nested":     "node_modules/outer/node_modules/inner",
 	}
 	for name, pkg := range pkgs {
 		t.Run(name, func(t *testing.T) {
 			root := retirementFixture(t)
-			if name == "pnpm" {
-				recordInstall(t, filepath.Join(root, "node_modules"), true)
-			} else {
-				recordInstall(t, filepath.Join(root, "node_modules"), false, pkg, "node_modules/outer")
+			switch name {
+			case "pnpm":
+				recordInstall(t, filepath.Join(root, "node_modules"), []string{"@protobufjs/utf8@1.1.2"})
+			case "pnpm-peers":
+				recordInstall(t, filepath.Join(root, "node_modules"), []string{"react-dom@18.2.0(react@18.2.0)", "react@18.2.0"})
+			default:
+				recordInstall(t, filepath.Join(root, "node_modules"), nil, pkg, "node_modules/outer")
 			}
 			write(t, filepath.Join(root, pkg, "package.json"), `{"name":"x"}`)
 			for _, rel := range []string{"tests/data/fixture.bin", "test/.env", "samples/demo.sqlite", "lib/secrets/index.js"} {
@@ -107,26 +116,31 @@ func TestRetirementTreeInstalledPackageContent(t *testing.T) {
 	// Each hold case: the protected file, and how node_modules is recorded.
 	for _, hold := range []struct {
 		rel  string
-		pnpm bool
+		pnpm []string
 		npm  []string
 	}{
-		{"node_modules/data/only-copy.csv", false, []string{"node_modules/lib"}},                // node_modules' own data/
-		{"node_modules/pkg/data/only-copy.csv", false, []string{"node_modules/pkg"}},            // pkg has no package.json
-		{"node_modules/@scope/data/only-copy.csv", false, []string{"node_modules/@scope/data"}}, // a scope directory is no package
-		{"node_modules/.cache/secrets/token", true, []string{"node_modules/.cache"}},            // a tool cache, not a package
-		{"node_modules/pkg/package.json/data/x.csv", false, []string{"node_modules/pkg"}},       // a directory is no manifest
+		{"node_modules/data/only-copy.csv", nil, []string{"node_modules/lib"}},                // node_modules' own data/
+		{"node_modules/pkg/data/only-copy.csv", nil, []string{"node_modules/pkg"}},            // pkg has no package.json
+		{"node_modules/@scope/data/only-copy.csv", nil, []string{"node_modules/@scope/data"}}, // a scope directory is no package
+		{"node_modules/.cache/secrets/token", []string{}, []string{"node_modules/.cache"}},    // a tool cache, not a package
+		{"node_modules/pkg/package.json/data/x.csv", nil, []string{"node_modules/pkg"}},       // a directory is no manifest
 		// A package.json proves nothing: a hand-kept package no install
 		// recorded holds, whether node_modules has a record or none.
-		{"node_modules/mine/data/only-copy.csv", false, []string{"node_modules/lib"}},
-		{"node_modules/mine/.env", false, nil},
+		{"node_modules/mine/data/only-copy.csv", nil, []string{"node_modules/lib"}},
+		{"node_modules/mine/.env", nil, nil},
 		// pnpm's store shape without pnpm's record, or a store entry that is
 		// not the package its id names.
-		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", false, []string{"node_modules/lib"}},
-		{"node_modules/.pnpm/other@1.0.0/node_modules/mine/data/only-copy.csv", true, nil},
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", nil, []string{"node_modules/lib"}},
+		{"node_modules/.pnpm/other@1.0.0/node_modules/mine/data/only-copy.csv", []string{"other@1.0.0", "mine@1.0.0"}, nil},
+		// Both pnpm markers present, but the lockfile does not name the
+		// package, or names it at another version.
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", []string{"lib@1.0.0"}, nil},
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/.env", []string{}, nil},
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", []string{"mine@2.0.0", "mine@1.0.0-beta"}, nil},
 	} {
 		t.Run("holds/"+hold.rel, func(t *testing.T) {
 			root := retirementFixture(t)
-			if hold.npm != nil || hold.pnpm {
+			if hold.npm != nil || hold.pnpm != nil {
 				recordInstall(t, filepath.Join(root, "node_modules"), hold.pnpm, hold.npm...)
 			}
 			write(t, filepath.Join(root, "node_modules/lib/package.json"), `{"name":"lib"}`)

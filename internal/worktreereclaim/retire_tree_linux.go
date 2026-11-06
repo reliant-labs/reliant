@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"gopkg.in/yaml.v3"
 )
 
 // retirementTree pins an inspected checkout's directory, never a pathname
@@ -97,10 +98,13 @@ type installRecord struct {
 	// hidden lockfile ("node_modules/pkg", "node_modules/a/node_modules/b"),
 	// without workspace links.
 	npm map[string]bool
-	// pnpm: node_modules/.modules.yaml and node_modules/.pnpm/lock.yaml are
-	// both regular files, so .pnpm/ is pnpm's virtual store, which nothing
-	// but pnpm writes.
-	pnpm bool
+	// pnpm: the packages node_modules/.pnpm/lock.yaml, pnpm's hidden
+	// lockfile, names ("name@version", the version escaped as pnpm names
+	// its virtual-store directories), present only when
+	// node_modules/.modules.yaml is a regular file too. A virtual-store
+	// directory is an installed package only when this names its name and
+	// version: the store's shape alone is something anyone can make.
+	pnpm map[string]bool
 }
 
 // maxInstallRecordBytes bounds the hidden lockfile read; a larger one is no
@@ -128,10 +132,55 @@ func readInstallRecord(dir *os.File) installRecord {
 			}
 		}
 	}
-	_, modules := readRecordFile(dir, ".modules.yaml", false)
-	_, lock := readRecordFile(dir, ".pnpm/lock.yaml", false)
-	rec.pnpm = modules && lock
+	if _, ok := readRecordFile(dir, ".modules.yaml", false); ok {
+		if b, ok := readRecordFile(dir, ".pnpm/lock.yaml", true); ok {
+			rec.pnpm = pnpmLockPackages(b)
+		}
+	}
 	return rec
+}
+
+// pnpmLockPackages is the set of "name@version" that a pnpm lockfile names
+// in its packages and snapshots (lockfile v6+: "/name@1.0.0(peer@2.0.0)",
+// "name@1.0.0"), the version escaped as pnpmStoreEscape does. A malformed
+// lockfile names nothing. Older (v5, "/name/1.0.0") keys name nothing either,
+// so their packages keep the never-list's hold.
+func pnpmLockPackages(b []byte) map[string]bool {
+	var lock struct {
+		Packages  map[string]yaml.Node `yaml:"packages"`
+		Snapshots map[string]yaml.Node `yaml:"snapshots"`
+	}
+	if yaml.Unmarshal(b, &lock) != nil {
+		return nil
+	}
+	names := map[string]bool{}
+	for _, keys := range []map[string]yaml.Node{lock.Packages, lock.Snapshots} {
+		for key := range keys {
+			key = strings.TrimPrefix(key, "/")
+			key, _, _ = strings.Cut(key, "(")
+			at := strings.LastIndex(key, "@")
+			if at <= 0 {
+				continue
+			}
+			version, _, _ := strings.Cut(pnpmStoreEscape(key[at+1:]), "_")
+			if version == "" {
+				continue
+			}
+			names[key[:at]+"@"+version] = true
+		}
+	}
+	return names
+}
+
+// pnpmStoreEscape replaces the characters pnpm replaces with "+" when it
+// names a virtual-store directory after a package id.
+func pnpmStoreEscape(s string) string {
+	return strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`\/:*?"<>|`, r) {
+			return '+'
+		}
+		return r
+	}, s)
 }
 
 // readRecordFile opens name beneath dir without following any symlink and
@@ -220,9 +269,17 @@ func (t *retirementTree) installedPackage(rel string, children []os.DirEntry, re
 		return true
 	}
 	// pnpm: node_modules/.pnpm/<id>/node_modules/<name>, where <id> is the
-	// package's own name ("/" as "+") at a version.
-	return rec.pnpm && len(under) == 4+len(strings.Split(name, "/")) && under[1] == ".pnpm" && under[3] == "node_modules" &&
-		strings.HasPrefix(under[2], strings.ReplaceAll(name, "/", "+")+"@")
+	// package's own name ("/" as "+") at a version (and, after "_", its peer
+	// suffix), and pnpm's lockfile names that name at that version.
+	if len(under) != 4+len(strings.Split(name, "/")) || under[1] != ".pnpm" || under[3] != "node_modules" {
+		return false
+	}
+	rest, ok := strings.CutPrefix(under[2], strings.ReplaceAll(name, "/", "+")+"@")
+	if !ok {
+		return false
+	}
+	version, _, _ := strings.Cut(rest, "_")
+	return version != "" && rec.pnpm[name+"@"+version]
 }
 
 func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEntry, int64, time.Time, error) {

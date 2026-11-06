@@ -80,7 +80,7 @@ func TestShed_InstalledPackageContentIsNotUserData(t *testing.T) {
 	f, w, p := shedFixture(t)
 	// npm's layout, recorded in its hidden lockfile, and pnpm's
 	// content-addressed layout with a scope, in pnpm's virtual store.
-	recordInstall(t, p["modules"], true, "node_modules/pkg")
+	recordInstall(t, p["modules"], []string{"@protobufjs/utf8@1.1.2"}, "node_modules/pkg")
 	write(t, filepath.Join(p["modules"], "pkg", "package.json"), `{"name":"pkg"}`)
 	write(t, filepath.Join(p["modules"], "pkg", "tests", "data", "fixture.bin"), "package content")
 	scoped := filepath.Join(p["modules"], ".pnpm", "@protobufjs+utf8@1.1.2", "node_modules", "@protobufjs", "utf8")
@@ -121,7 +121,7 @@ func TestShed_HoldsWhatItCannotProveRegenerableAndIdle(t *testing.T) {
 			case "protected-unrecorded-package":
 				// A package.json-bearing directory the install's record does
 				// not name may be a person's: its data/ holds.
-				recordInstall(t, p["modules"], false, "node_modules/lib")
+				recordInstall(t, p["modules"], nil, "node_modules/lib")
 				write(t, filepath.Join(p["modules"], "pkg", "package.json"), `{"name":"pkg"}`)
 				write(t, filepath.Join(p["modules"], "pkg", "data", "only-copy.csv"), "only copy")
 			case "fresh":
