@@ -168,6 +168,9 @@ let resolved: AppShell | null = null;
 /** This page load's shell. */
 export function getShell(): AppShell {
   if (resolved) return resolved;
+  // The forge demo's own bundle (demo.html, vite.config.ts) is the demo shell
+  // on every host. The app's build defines "app", so this folds away there.
+  if (__WEB_TARGET__ === "demo") return (resolved = "demo");
   if (typeof window === "undefined") return "reliant";
   let storage: Storage | null = null;
   try {

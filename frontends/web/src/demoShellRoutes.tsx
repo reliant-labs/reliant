@@ -5,15 +5,20 @@
  *   /forge/demo     the forge demo console on sample data (Forge/Demo), free
  *                   to explore: a toast offers the guided tour (DemoTourToast)
  *                   and each view has a one-time tip (Demo/tips)
+ *   /forge/…        the forge console: every page the forge shell mounts
+ *                   (forgeConsoleRoutes.tsx, forgeConsolePages.ts), so every
+ *                   tab of its nav opens, on the demo transport's sample data
  *   /demo           → /forge/demo, keeping the query
  *   /               → /forge/demo, keeping the query (`?tour=`, `rid`, `utm_*`)
  *   anything else   → /forge/demo, keeping the query
  *
- * Deliberately tiny, and a tree of its own rather than a flag on the forge
- * shell's: there is no /auth, /oauth, /claim or console route here, so nothing
- * on this host can sign in, and therefore nothing can change anything — by
- * construction, beside the read-only layer the console carries
- * (Observability/readOnlyApi.ts). No ActiveOrgBinding (an org call) and no
+ * A tree of its own rather than a flag on the forge shell's: there is no
+ * /auth, /oauth or /claim route here, so nothing on this host can sign in.
+ * The console's pages sit under a pathless `_authenticated` layout with NO
+ * guard: the pages read their params and search by route id
+ * (`/_authenticated/_forge/forge/p/$project/…`, as forgeShellRoutes.tsx
+ * explains), and every RPC they make is answered by the demo's transport
+ * (demoShellBoot.ts), which refuses writes. No ActiveOrgBinding and no
  * landing-journey handoff: the toast offers the tour.
  */
 
@@ -24,9 +29,11 @@ import { bootDemoShell } from './components/Forge/Demo/demoShellBoot'
 import { DemoTourToast } from './components/Forge/Demo/DemoTourToast'
 import { DemoTips } from './components/Forge/Demo/tips'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute, FORGE_DEMO_PATH } from './components/Forge/Demo/demoRoute'
+import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
+import { forgeConsolePages } from './forgeConsolePages'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
 import { PageVisitTracker } from './components/PageVisitTracker'
-import { ModalLayer } from './components/Modals/ModalLayer'
+import { ObsReadOnlyProvider } from './components/Forge/Observability/obsReadOnly'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
 import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundary'
 import { SurfaceProvider } from './lib/surfaceContext'
@@ -37,20 +44,25 @@ const entry = captureForgeEntry()
 // Before anything renders the tour: forge copy, memory-only progress, anonymous telemetry.
 bootDemoShell()
 
+const READ_ONLY = { readOnly: true, reason: 'Read-only demo' } as const
+
 function DemoRootShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   return (
     <SurfaceProvider surface="desktop">
-      <div data-shell="demo" data-pathname={pathname} className="contents">
-        <PageVisitTracker firstVisitProps={entry} />
-        <Outlet />
-        <ModalLayer />
-        <Toaster />
-        <NewBuildPrompt />
-        <JourneyTour />
-        <DemoTips />
-        <DemoTourToast />
-      </div>
+      {/* Every page's write controls disabled, with this reason (obsReadOnly.tsx). */}
+      <ObsReadOnlyProvider value={READ_ONLY}>
+        <div data-shell="demo" data-pathname={pathname} className="contents">
+          <PageVisitTracker firstVisitProps={entry} />
+          <Outlet />
+          {/* No ModalLayer: its modals are Reliant's (API key, upgrade, out of date). */}
+          <Toaster />
+          <NewBuildPrompt />
+          <JourneyTour />
+          <DemoTips />
+          <DemoTourToast />
+        </div>
+      </ObsReadOnlyProvider>
     </SurfaceProvider>
   )
 }
@@ -80,11 +92,19 @@ export function buildDemoShellTree() {
     },
   })
 
+  // The console, unguarded: the id is the one the shared pages read by.
+  const consoleLayoutRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    id: '_authenticated',
+    component: Outlet,
+  })
+
   return rootRoute.addChildren([
     indexRoute,
     elsewhereRoute,
     createForgeDemoRoute(() => rootRoute),
     createForgeDemoRedirectRoute(() => rootRoute),
+    consoleLayoutRoute.addChildren([createForgeConsoleRoutes(() => consoleLayoutRoute, forgeConsolePages)]),
   ])
 }
 
