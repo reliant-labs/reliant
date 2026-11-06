@@ -852,7 +852,13 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 				return
 			}
 			openErr = AugmentAPIError(openErr)
-			logging.ErrorContext(ctx, "[Codex] Stream error", "error", openErr)
+			// WARN, not ERROR: one attempt's failure is not the call's. The error goes
+			// back to call_llm, which retries the activity and fails over, and a
+			// call that fails for good reaches the user as the run's error. A
+			// provider-side reset ("server_is_overloaded", an HTTP/2 INTERNAL_ERROR
+			// from the peer) was an ERROR issue per attempt. Matches the Anthropic
+			// driver.
+			logging.WarnContext(ctx, "[Codex] Stream error", "error", openErr)
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: openErr}
 			return
 		}
@@ -978,7 +984,13 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 
 		if err := stream.Err(); err != nil {
 			err = AugmentAPIError(err)
-			logging.ErrorContext(ctx, "[Codex] Stream error", "error", err)
+			// WARN, not ERROR: one attempt's failure is not the call's. The error goes
+			// back to call_llm, which retries the activity and fails over, and a
+			// call that fails for good reaches the user as the run's error. A
+			// provider-side reset ("server_is_overloaded", an HTTP/2 INTERNAL_ERROR
+			// from the peer) was an ERROR issue per attempt. Matches the Anthropic
+			// driver.
+			logging.WarnContext(ctx, "[Codex] Stream error", "error", err)
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
 			return
 		}
