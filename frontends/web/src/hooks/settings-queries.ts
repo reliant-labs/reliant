@@ -113,9 +113,15 @@ export function useProviderStatuses() {
  * GetProviderStatuses for an imperative caller, through the hook's cache
  * entry: concurrent callers share one RPC, and the answer lands where
  * useProviderStatuses and the onboarding checklist read it.
+ *
+ * `retry: false`, like the readers below: the API-key setup check and the
+ * onboarding checklist each decide what a failure means, and the query
+ * client's retry ladder would only delay that decision.
  */
 export function fetchProviderStatuses(staleTime = 0): Promise<GetProviderStatusesResponse> {
-  return queryClient.fetchQuery(settingsServiceQueries.getProviderStatuses({}, { staleTime }));
+  return queryClient.fetchQuery(
+    settingsServiceQueries.getProviderStatuses({}, { staleTime, retry: false }),
+  );
 }
 
 /** A provider credential changed (a sign-in, a key, a sync): refetch the statuses. */

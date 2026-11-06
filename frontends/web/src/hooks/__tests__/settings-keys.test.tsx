@@ -11,6 +11,7 @@
  *  - settingsServiceKeys.all reaches config health.
  */
 
+import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -24,6 +25,7 @@ import { addProviderApiKey } from "../provider-account-queries";
 import {
   batchUpsertSettings,
   completeClaudeOAuth,
+  fetchProviderStatuses,
   fetchSettings,
   readBrowserPreferences,
   updateShortcuts,
@@ -154,6 +156,22 @@ describe("SettingsService keys", () => {
     await addProviderApiKey("anthropic", "sk-ant");
 
     await waitFor(() => expect(statuses.result.current.data?.providers[0]?.configured).toBe(true));
+  });
+
+  it("an imperative provider-status read fails once, without the retry ladder", async () => {
+    setTransport(
+      mockTransport({
+        "SettingsService.GetProviderStatuses": () => {
+          count("GetProviderStatuses");
+          // Unavailable is retryable under the app's default predicate, so
+          // only the read's own retry: false keeps this to one request.
+          throw new ConnectError("down", Code.Unavailable);
+        },
+      }),
+    );
+
+    await expect(fetchProviderStatuses()).rejects.toThrow("down");
+    expect(calls.GetProviderStatuses).toBe(1);
   });
 
   it("an imperative settings read shares the hook's entry, and a batch upsert refetches it", async () => {
