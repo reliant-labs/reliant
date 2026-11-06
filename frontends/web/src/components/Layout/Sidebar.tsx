@@ -41,6 +41,7 @@ import {
   Activity,
   MessageCircleQuestion,
   Loader2,
+  FolderInput,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -92,6 +93,7 @@ import {
 } from "../../store/activityStore";
 
 import { archiveWorktree } from "../../hooks/worktree-actions";
+import { MoveChatToProjectDialog } from "../Chat/MoveChatToProjectDialog";
 
 const CHAT_HEADER_ACTION_BUTTON_CLASS =
   "flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-ring";
@@ -1066,6 +1068,7 @@ function SidebarComponent({
   >(null);
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState("");
+  const [movingChatId, setMovingChatId] = useState<string | null>(null);
 
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1370,6 +1373,11 @@ function SidebarComponent({
         onClick: () => {
           handleRenameChat(chatId);
         },
+      },
+      {
+        label: "Move to project…",
+        icon: <FolderInput className="w-4 h-4" />,
+        onClick: () => setMovingChatId(chatId),
       },
       {
         label: "Copy Chat ID",
@@ -2236,6 +2244,9 @@ function SidebarComponent({
             });
           }}
         />
+      )}
+      {movingChatId && (
+        <MoveChatToProjectDialog chatId={movingChatId} open onClose={() => setMovingChatId(null)} />
       )}
       {/* Render complete */}
     </div>

@@ -243,6 +243,8 @@ type (
 	Message                                  = sdk.Message
 	MessageRole                              = sdk.MessageRole
 	MessageSender                            = sdk.MessageSender
+	MoveChatToProjectRequest                 = sdk.MoveChatToProjectRequest
+	MoveChatToProjectResponse                = sdk.MoveChatToProjectResponse
 	OutputStreamType                         = sdk.OutputStreamType
 	PauseChatRequest                         = sdk.PauseChatRequest
 	PauseChatResponse                        = sdk.PauseChatResponse
@@ -363,6 +365,7 @@ type (
 	ToolExecutionStatus                      = sdk.ToolExecutionStatus
 	ToolRequest                              = sdk.ToolRequest
 	ToolResponse                             = sdk.ToolResponse
+	ToolResponseMedia                        = sdk.ToolResponseMedia
 	ToolResultAck                            = sdk.ToolResultAck
 	Trigger                                  = sdk.Trigger
 	TriggerChange                            = sdk.TriggerChange
