@@ -13,7 +13,7 @@ func TestCheck(t *testing.T) {
 		url string
 		ok  bool
 	}{
-		// Prod, e2e and dev-k8s: control-plane's admin-server Service.
+		// Prod, e2e and dev-k8s: control-plane's platform-api Service.
 		{"http://admin-server.control-plane-prod.svc.cluster.local:8090", true},
 		{"http://admin-server.control-plane-prod.svc:8090", true},
 		{"http://ADMIN-SERVER.control-plane-prod.SVC.cluster.local.:8090", true},

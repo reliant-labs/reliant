@@ -7,7 +7,7 @@
  * Packaged-only regressions are the reason this file exists. In dev the
  * renderer is same-origin and the Vite proxy sends `/reliant.v1.*` to
  * reliant-api, so a service routed at the wrong host still works by accident.
- * The packaged app dials absolute URLs, where admin-server answers
+ * The packaged app dials absolute URLs, where platform-api answers
  * `/reliant.v1.DaemonRegistryService/*` with HTTP 200 from a DIFFERENT
  * database ("you have no daemon") and does not serve TokenService at all.
  */

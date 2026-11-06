@@ -444,7 +444,7 @@ const injectReliantConfig = async () => {
      * the Electron app now runs a local daemon that bridges to the cloud.
      */
     const buildConfig = (status, info) => {
-      // apiUrl         = daemon --server URL (admin-server in cloud-dev, the
+      // apiUrl         = daemon --server URL (platform-api in cloud-dev, the
       //                  build-config-injected hosted endpoint in packaged
       //                  commercial builds). Renderer code that reads
       //                  RELIANT_CONFIG.apiUrl for non-grpc purposes still
@@ -463,7 +463,7 @@ const injectReliantConfig = async () => {
         grpcUrl: rendererApiUrl,
         apiUrl: apiUrl,
         gatewayUrl: status?.gatewayUrl || '',
-        // controlPlaneURL = the admin-server origin (billing, coupons,
+        // controlPlaneURL = the platform-api origin (billing, coupons,
         // /api/proxy-session). getControlPlaneURL() in frontends/web/src/lib/constants.ts
         // prefers THIS over the build-time VITE_CONTROL_PLANE_API_URL, so
         // injecting it at runtime lets a config change reach the app without

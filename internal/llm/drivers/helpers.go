@@ -206,7 +206,7 @@ func accountDriverConfig(ctx context.Context, userID string, acct *core.AccountW
 		case "openrouter":
 			cfg.BaseURL = "https://openrouter.ai/api/v1"
 		case "reliant":
-			// Reliant routes to the admin-server proxy via RELIANT_API_BASE_URL.
+			// Reliant routes to the platform-api proxy via RELIANT_API_BASE_URL.
 			cfg.BaseURL = ResolveReliantBaseURL(secret)
 		}
 	}

@@ -43,7 +43,7 @@ forge env config dev --json | jq -r '.workloads[].env.DATABASE_URL // empty' | s
 | `frontend_reliant-web.log` | The same, for control-plane's stack — Electron's renderer AND a plain browser tab | control-plane's |
 | `reliant-electron-main.log` | Electron MAIN process only (Node side: window lifecycle, daemon spawn, IPC). Not the UI. | control-plane's (`-D electron=1`) |
 | `reliant-electron.log` | The `npm run dev:electron` process's own stdout, as captured by forge | control-plane's |
-| `admin-server.log` | Admin/proxy, auth, billing, **coupons**, daemon create, CompleteOnboarding | control-plane's |
+| `admin-server.log` | platform-api (control-plane's public API; the file keeps its old name until the deploy rename ships): proxy, auth, billing, **coupons**, daemon create, CompleteOnboarding | control-plane's |
 
 Host infrastructure (reliant's stack) logs to its own data dir:
 `.forge/hostinfra/<name>/<engine>.log`.

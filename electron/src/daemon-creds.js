@@ -847,8 +847,8 @@ const NOOP_LOGGER = { debug() {}, info() {}, warn() {}, error() {} };
  * `apiUrl` is the daemon's --server origin: it KEYS daemon.json and must
  * match what the Go daemon looks up. `mintApiUrl` is where TokenService is
  * served — reliant's api-server. The two are the same host in a packaged
- * build, but distinct in cloud-dev, where --server is admin-server and
- * admin-server does not serve reliant.v1.TokenService. Defaults to `apiUrl`.
+ * build, but distinct in cloud-dev, where --server is platform-api and
+ * platform-api does not serve reliant.v1.TokenService. Defaults to `apiUrl`.
  *
  * `authUrl` + `authAnonKey` identify the GoTrue provider for the refresh.
  * When either is missing the refresh is disabled and behavior degrades to
