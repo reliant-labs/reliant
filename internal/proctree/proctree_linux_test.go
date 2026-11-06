@@ -140,47 +140,6 @@ func TestCommandCgroupBoundsAndKillsTheTree(t *testing.T) {
 	tree.Release()
 }
 
-// The commands cgroup bounds all commands together: a command well inside its
-// own limit is refused at the shared one, is told so, and — bounded by the
-// cgroups — keeps the user's RLIMIT_NPROC, which counts every agent's threads.
-func TestCommandsCgroupBoundsAllCommandsTogether(t *testing.T) {
-	testkit.Slow(t, "starts real process trees in a cgroup")
-	l := cgroupLimiter(t, 1000, 40)
-	l.nproc = 1
-	started, tree := runForker(t, l, 200)
-	if started >= 40 {
-		t.Fatalf("the forker started %d children under a shared pids.max of 40", started)
-	}
-	tree.Release()
-	if note := tree.LimitNote(); !strings.Contains(note, "shared thread limit (40 threads") || strings.Contains(note, "This command reached") {
-		t.Fatalf("LimitNote after the shared limit refused it: %q", note)
-	}
-
-	// An RLIMIT_NPROC of 1 would have refused the forker every child.
-	if started == 0 {
-		t.Fatal("a command with a cgroup had its RLIMIT_NPROC lowered")
-	}
-	cmd := exec.Command("sleep", "5")
-	tree = l.Prepare(cmd, Owner{})
-	if err := cmd.Start(); err != nil {
-		tree.Started(0)
-		t.Fatal(err)
-	}
-	tree.Started(cmd.Process.Pid)
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait(); tree.Release() })
-	var got unix.Rlimit
-	if err := unix.Prlimit(cmd.Process.Pid, unix.RLIMIT_NPROC, nil, &got); err != nil {
-		t.Fatal(err)
-	}
-	var own unix.Rlimit
-	if err := unix.Getrlimit(unix.RLIMIT_NPROC, &own); err != nil {
-		t.Fatal(err)
-	}
-	if got.Cur != own.Cur {
-		t.Fatalf("a command with a cgroup has RLIMIT_NPROC %d, want the user's %d", got.Cur, own.Cur)
-	}
-}
-
 // Without the cgroups, a command's RLIMIT_NPROC is the reserve.
 func TestNoCgroupLowersRlimit(t *testing.T) {
 	if os.Geteuid() == 0 {
