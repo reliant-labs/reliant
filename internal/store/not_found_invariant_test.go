@@ -52,7 +52,7 @@ func TestByKeyMissIsClassifiedNotFound(t *testing.T) {
 		{name: "GetModelEndpoint", read: call(func() (any, error) { return store.GetModelEndpoint(ctx, db, user, missing) }), sentinel: core.ErrModelEndpointNotFound},
 		{name: "GetUserProviderAccountSealed", read: call(func() (any, error) { return store.GetUserProviderAccountSealed(ctx, db, user, missing) }), sentinel: core.ErrProviderAccountNotFound},
 		{name: "GetConnectionSecrets", read: call(func() (any, error) { return store.GetConnectionSecrets(ctx, db, user, missing) }), sentinel: core.ErrConnectionNotFound},
-		{name: "GetPlanByThreadID", read: call(func() (any, error) { return store.GetPlanByThreadID(ctx, db, missing) }), sentinel: core.ErrPlanNotFound, noRows: true},
+		{name: "GetPlanByThreadID", read: call(func() (any, error) { return store.GetPlanByThreadID(ctx, db, missing) }), sentinel: core.ErrPlanNotFound},
 
 		// Hand-written reads with no sentinel of their own.
 		{name: "GetProject", read: call(func() (any, error) { return store.GetProject(ctx, db, missing) })},
