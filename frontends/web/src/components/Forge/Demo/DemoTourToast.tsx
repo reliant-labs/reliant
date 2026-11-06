@@ -26,7 +26,7 @@ import { isPhoneViewport } from "@/lib/mobileRedirect";
 
 import { InstallForgeLink } from "./DemoCta";
 import { DemoCorner } from "./DemoCorner";
-import { FORGE_ONE_LINER } from "./demoCopy";
+import { FORGE_SHORT } from "./demoCopy";
 import { demoSession, useDemoSession } from "./demoSession";
 
 export function DemoTourToast() {
@@ -80,7 +80,7 @@ export function DemoTourToast() {
           </button>
         </div>
         <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          {FORGE_ONE_LINER} This is the console it gives every app, on sample data. Look around, or take a two-minute tour.
+          {FORGE_SHORT} This is the console it gives every app, on sample data. Look around, or take a two-minute tour.
         </p>
         <div className="mt-3 flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
           <span className="mr-auto text-xs">

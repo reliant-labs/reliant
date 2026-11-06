@@ -12,7 +12,10 @@ in its own change.
 | `journeys/workflows.tsx`, `journeys/forge.tsx` | **Content.** Yours to replace. |
 | `journeys/signals.ts` | The tour signals (typed events) steps can wait on. Add yours here. |
 | `journeys/layoutActions.ts` | Workspace panel actions for `onEnter` / `onComplete`. |
-| `journeys/registry.ts` | Validation, ordering, `?tour=` resolution. |
+| `journeys/registry.ts` | Validation, ordering, `?tour=` resolution. Builds in the forge journey only. |
+| `journeys/catalog.ts` | Registers the workflows journey and Reliant's end-of-tour hooks. The Reliant and forge shells import it; the forge demo's bundle doesn't. |
+| `calloutPlacement.ts` | Where a spotlight's card goes so it never covers its target. |
+| `TourControls.tsx` | A step's own controls inside its card (`controls: "callout"`). |
 | `types.ts` | `Journey`, `JourneyStep`, `AdvanceOn`, … The schema below is defined here. |
 | `advanceOn.ts` | Required actions (`advanceOn`) and `phases`. |
 | `useTourNavigation.ts` | Moving between steps, finishing, skipping, analytics. |
@@ -52,8 +55,34 @@ export const workflowsJourney: Journey = {
   elsewhere: { label: "Try AI workflows in Reliant", href: () => `${reliantAppOrigin()}/?journey=workflows` }, // lib/shell.ts: runtime config APP_URL
   isAvailable: () => true,          // e.g. a feature flag
   reshowAfterVersionBump: true,     // default true
+  controls: "bar",                  // or "callout"; see "Controls"
 };
 ```
+
+**Registering content.** `registry.ts` imports the forge journey itself. The
+workflows journey's content pulls in Reliant's workflow hooks and stores, so
+it is registered by `journeys/catalog.ts` (`registerJourney`), which the
+Reliant and forge shells import for its effects. Until then (in the forge
+demo's bundle, always) `workflows` is `WORKFLOWS_ELSEWHERE`: no steps, never
+available, only its `elsewhere` link for the end card. A test keeps the
+placeholder's version, title and link equal to the real journey's. The
+Reliant-only end of a tour (land on the chat, ask for an API key) is
+installed the same way, through `setReliantTourHooks` (tourShell.ts).
+
+**Controls.** How a step's controls are drawn:
+- `"bar"` (default): the bottom nav bar, with progress, Back, Skip step,
+  Next and End tour.
+- `"callout"`: no bar and no Skip step. Each card carries the step count, one
+  small **Exit tour**, and **Next** only where nothing is pending. A required
+  action shows its `actionHint` as one line in the card, and the tour moves on
+  as soon as the action is done (`autoAdvance` defaults to true; set it false
+  to hold the step, e.g. to read what the action opened). So put an action
+  step's explanation in its description, before the action, or on the next
+  step. ← still goes back. A spotlight's card is placed beside its target
+  first (right, left, then below, above), flipped to whichever side has room,
+  and never over the target unless no side can hold it
+  (`calloutPlacement.ts`, tested by a sweep). A multi-spotlight keeps its
+  labels and adds a centred card for the copy and controls.
 
 **Versioning.** Each journey records its outcome per version, under
 `onboarding.tour.<id>.v<version>.completed`, with the value `completed`,
@@ -79,14 +108,15 @@ export const workflowsJourney: Journey = {
 | `target` | CSS selector to spotlight. Prefer `[data-tour='…']`; see "Anchors". No target (and no `targets`) means a centred card. |
 | `targets` | Multi-spotlight: several labelled targets (`{selector, label, description}`). |
 | `type` | `spotlight` / `multi-spotlight` / `card`. Inferred from `target` / `targets`. |
-| `tooltipPosition`, `tooltipPadding`, `spotlightConfig` | Placement. Keep the card off its target; `auto` already picks a free side. |
+| `tooltipPosition`, `tooltipPadding`, `spotlightConfig` | Placement. A preferred side; the card flips to a side with room and never covers its target (`calloutPlacement.ts`). |
 | `copyByShell` | `{ forge: { description: … } }`: per-shell title / description / target. |
 | `shell` | `"reliant"` / `"forge"` / `"both"` (default). A step that doesn't match is left out. |
 | `isAvailable` | The step's `when`: `() => boolean`, read at navigation time. False leaves the step out (Next / Back skip it and it isn't counted). |
 | `route` | The page the step lives on; see below. |
 | `phases` | Sub-targets within one step; see below. |
 | `advanceOn` | The step's **required action**; see below. |
-| `autoAdvance` | Once the action is done, move on by itself after 600 ms. Default false: show a check and Next. |
+| `card` | `{ wide?, modal? }` for a step with no target: `wide` gives the card room (a player), `modal` locks the page's scroll and takes the backdrop's clicks. No spotlight either way. |
+| `autoAdvance` | Once the action is done, move on by itself after 600 ms. Default false (`"bar"`) or true (`"callout"`). |
 | `afterAction` | Extra copy appended once the action is done ("Copy something to try it."). |
 | `actionHint` | Nav-bar text while waiting ("Drag Review to the loop"). Announced to screen readers. |
 | `showNext` | Keep Next visible while the action is pending. Default false. |
@@ -97,7 +127,8 @@ export const workflowsJourney: Journey = {
 | `onEnter` | Runs once when the step opens (e.g. `layoutActions.showSidebar`). |
 | `onComplete` | Runs once when the user leaves the step forward: Next, the action, Skip step or Finish. It doesn't run on Back or End tour. |
 
-Every card has **Skip step** (until the action is done) and **End tour**.
+With the bar, every card has **Skip step** (until the action is done) and
+**End tour**; with `"callout"`, only **Exit tour**, which works the same way.
 - End tour records the journey as skipped at this version, and remembers the
   step in `onboarding.journey_resume`. The picker then offers "Resume where you
   left off".
@@ -299,36 +330,51 @@ by ForgeShell/landingJourney.ts:
 
 The public demo host (`demo.reliantlabs.io`, the `demo` shell,
 `demoShellRoutes.tsx`) boots the tour as the forge shell does, but with
-`memoryTourStorage()`: nothing is remembered. `Forge/Demo/DemoAutoStart`
-starts the forge journey once per page load (`source: "demo"`), unless the URL
-already names a forge step. The forge journey runs its own cut there, chosen
-with `isAvailable` (`lib/demoTour.ts`, runtime config `DEMO_TOUR`):
+`memoryTourStorage()`: nothing is remembered. It **opens on the console**,
+free to explore:
+- `Forge/Demo/DemoTourToast` offers the tour in the bottom-right corner (Take
+  the guided tour / Explore on my own). It never starts the tour itself. A
+  dismissed toast stays dismissed for the browser session
+  (`Forge/Demo/demoSession.ts`, sessionStorage), and an open tour (a deep
+  link, the banner's "Guided tour") counts as an answer.
+- `Forge/Demo/tips` shows a short tip the first time each console view is
+  opened (Overview, Traces, a trace, Logs, Profiles, Issues, Releases,
+  Environments, Secrets, Domains, Dashboards, Alerts). Each says what the view
+  is, how it connects to the rest of forge, and what an agent does with it
+  (the command). Once per view per session, with Got it and Exit tips. Tips
+  are off while the tour is open, and they wait for the toast to be answered.
+
+The forge journey runs its own cut there, chosen with `isAvailable`
+(`lib/demoTour.ts`, runtime config `DEMO_TOUR`):
 
 | Step | Reliant / forge shell | demo, `short` (default) | demo, `full` |
 |---|---|---|---|
-| fg-console | ✓ | ✓ | ✓ |
-| fg-built (how this app was built: the recorded forge run, `?section=built`) | | ✓ | ✓ |
-| fg-instrumented (fg-built makes its point on the demo) | ✓ | | |
+| fg-intro (what forge is, Install forge) | ✓ | ✓ | ✓ |
+| fg-console | ✓ | | ✓ |
+| fg-instrumented | ✓ | | ✓ |
 | fg-trace | ✓ | ✓ | ✓ |
-| fg-hops, fg-inside (between and inside services) | | ✓ | ✓ |
+| fg-hops (between services) | ✓ | ✓ | ✓ |
+| fg-inside (inside a service) | | ✓ | ✓ |
 | fg-logs | ✓ | ✓ | ✓ |
 | fg-profile | ✓ | | ✓ |
 | fg-graph | | | ✓ |
 | fg-issue | ✓ | ✓ | ✓ |
 | fg-oncall | ✓ | | ✓ |
-| fg-agent (what a coding agent reads) | | ✓ | ✓ |
-| fg-ask, fg-done | ✓ | ✓ | ✓ |
-| **steps** | 9 | 10 | 13 |
+| fg-agent (what a coding agent reads) | | | ✓ |
+| fg-ask | ✓ | ✓ | ✓ |
+| fg-built (the recorded forge run, a wide modal card) | | ✓ | ✓ |
+| fg-done | ✓ | ✓ | ✓ |
+| **steps** | 11 | 9 | 15 |
 
-Keep the short cut at ten or fewer: an auto-started tour has to earn each
-step (`forgeJourney.test.tsx` pins it). `finish` returns null on the demo
-host, so the visitor stays on the console.
+The short cut takes the best moments only; each view's tip covers the rest.
+`forgeJourney.test.tsx` pins it. `finish` returns null on the demo host, so
+the visitor stays on the console.
 
 ## Analytics (through `trackEvent`)
 
 | Event | Props |
 |---|---|
-| `journey_selected` | `journey, source: landing\|picker\|menu, version` (+ `from_journey` from the end card, `resumed`) |
+| `journey_selected` | `journey, source: landing\|picker\|menu\|demo, version` (+ `from_journey` from the end card, `resumed`) |
 | `journey_step_viewed` | `journey, step, version, step_index, total_steps` |
 | `journey_step_completed` | `journey, step, version, via: action\|next\|skip, duration_ms, signal?` |
 | `journey_completed` | `journey, version, duration_ms` |

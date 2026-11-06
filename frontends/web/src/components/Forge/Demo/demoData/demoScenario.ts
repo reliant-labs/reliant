@@ -47,6 +47,8 @@ import type { AttributeOp, LogRecord, ObsScope, Severity, Span, TimeWindow, Trac
 
 import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
 import { FIXTURE_SIGNALS } from "../../Observability/__fixtures__/fixtureSignals";
+import { consoleScenarioHandlers } from "./consoleScenario";
+import { defaultHandlers, withMessageRequests } from "./demoServiceDefaults";
 
 const SERVICE = ObservabilityService.typeName;
 const rpc = (method: string) => `${SERVICE}/${method}`;
@@ -290,5 +292,8 @@ export function createDemoScenario(fixtures: ObservabilityApi = createFixtureApi
       });
     },
   };
-  return { name: "demo", handlers: handlers as unknown as MockScenario["handlers"] };
+  // Dispatch, most specific first: the tour's encoded reads (above), the console's story
+  // (consoleScenario.ts: Releases, Environments, Secrets, Domains, Activity), then forge's
+  // generated defaults for every other read of the console's services (demoServiceDefaults.ts).
+  return { name: "demo", handlers: withMessageRequests({ ...defaultHandlers(), ...consoleScenarioHandlers(), ...handlers }) as unknown as MockScenario["handlers"] };
 }

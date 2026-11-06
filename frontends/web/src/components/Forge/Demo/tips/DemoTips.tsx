@@ -12,7 +12,8 @@
  *    back.
  *  - "Got it" closes this one; "Exit tips" turns them all off for the session.
  *  - Off while the guided tour is open (its cards say the same, and would
- *    stack), and nothing is marked shown meanwhile.
+ *    stack), and while the tour toast still waits for an answer (one card
+ *    at a time on arrival); nothing is marked shown meanwhile.
  *  - It covers nothing it talks about: no spotlight, no dimming, just a card
  *    in the corner the toast shares (DemoCorner).
  *
@@ -25,6 +26,7 @@ import { Bot, Lightbulb, X } from "lucide-react";
 
 import { parseTourParam } from "@/components/Onboarding/tourParam";
 import { trackEvent } from "@/lib/analytics";
+import { isPhoneViewport } from "@/lib/mobileRedirect";
 
 import { DemoCorner } from "../DemoCorner";
 import { demoSession, useDemoSession } from "../demoSession";
@@ -36,11 +38,13 @@ export function DemoTips() {
   const search = (location.search ?? {}) as Record<string, unknown>;
   const key = demoTipKey(location.pathname, search);
   const tourOpen = !!parseTourParam(search.tour);
-  const { tipsDisabled } = useDemoSession();
+  const { tipsDisabled, toastDismissed } = useDemoSession();
+  // The toast (DemoTourToast) asks first; phones never get it.
+  const toastWaiting = !toastDismissed && !isPhoneViewport();
   const [shown, setShown] = useState<DemoTipKey | null>(null);
 
   useEffect(() => {
-    if (tourOpen || tipsDisabled) {
+    if (tourOpen || tipsDisabled || toastWaiting) {
       setShown(null);
       return;
     }
@@ -51,7 +55,7 @@ export function DemoTips() {
     } else {
       setShown((open) => (open === key ? open : null));
     }
-  }, [key, tourOpen, tipsDisabled]);
+  }, [key, tourOpen, tipsDisabled, toastWaiting]);
 
   if (!shown) return null;
   const tip = DEMO_TIPS[shown];
@@ -84,7 +88,7 @@ export function DemoTips() {
         <p className="mt-2 flex gap-1.5 text-xs leading-relaxed text-muted-foreground" data-testid="demo-tip-agent">
           <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>
-            {tip.agent.before} <code className="rounded bg-surface-sunken px-1 py-0.5 font-mono text-[11px] text-ink">{tip.agent.command}</code>
+            {tip.agent.before} <code className="rounded bg-surface-sunken px-1 py-0.5 font-mono text-2xs text-ink">{tip.agent.command}</code>
             {tip.agent.after}
           </span>
         </p>

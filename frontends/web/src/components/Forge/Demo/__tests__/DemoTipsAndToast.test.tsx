@@ -8,7 +8,8 @@
  *  - The toast: start or dismiss; a dismissed toast stays dismissed for the
  *    session; it hides while a tour is open.
  *  - Tips: once per view per session; "Got it" closes one, "Exit tips" all;
- *    off while the tour is open; every listed view has one, and the copy has
+ *    off while the tour is open or the toast still waits for an answer;
+ *    every listed view has one, and the copy has
  *    an agent line with a command on every tip.
  *  - The copy never says "new in release": releases are connected, not news.
  */
@@ -112,6 +113,9 @@ describe("the tour toast", () => {
 });
 
 describe("the view tips", () => {
+  // The toast asks first; these start with it answered.
+  beforeEach(() => demoSession.dismissToast());
+
   it("names a tip for every view the owner listed, on the demo console and at the console's real paths", () => {
     const cases: [string, Record<string, unknown>, DemoTipKey | null][] = [
       ["/forge/demo", {}, "overview"],
@@ -184,15 +188,12 @@ describe("the view tips", () => {
     await waitFor(() => expect(tip()).toBe("traces"));
   });
 
-  it("sits with the toast in one corner stack, the tip above it", async () => {
+  it("waits for the toast: one card at a time on arrival, then the view's tip", async () => {
+    resetDemoSessionForTests();
     renderDemo("/forge/demo");
-    await screen.findByTestId("demo-tour-toast");
+    fireEvent.click(await screen.findByTestId("demo-tour-toast-dismiss"));
     await waitFor(() => expect(tip()).toBe("overview"));
-    const corner = document.getElementById("forge-demo-corner")!;
-    const [tipSlot, toastSlot] = [screen.getByTestId("demo-tip").parentElement!, screen.getByTestId("demo-tour-toast").parentElement!];
-    expect(tipSlot.parentElement).toBe(corner);
-    expect(toastSlot.parentElement).toBe(corner);
-    expect(Number(tipSlot.style.order)).toBeLessThan(Number(toastSlot.style.order));
+    expect(screen.getByTestId("demo-tip").parentElement!.parentElement).toBe(document.getElementById("forge-demo-corner"));
   });
 });
 

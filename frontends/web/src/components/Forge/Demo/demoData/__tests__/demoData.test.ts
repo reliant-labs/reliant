@@ -101,14 +101,14 @@ describe("the demo scenario, through the console's real client", () => {
 });
 
 describe("the demo transport", () => {
-  it("refuses every write before the scenario sees it, and reads Lists/Gets/Searches/Queries", async () => {
+  it("refuses every write before the scenario sees it, and reads Lists/Gets/Searches/Queries and the like", async () => {
     const client = createClient(IssuesService, createDemoTransport({ source: "fixtures", url: "" }));
     await expect(client.updateIssueStatus({ issueId: "x" } as never)).rejects.toSatisfy(
       (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
     );
-    // A read the scenario does not serve yet is Unimplemented, not a silent empty answer.
-    await expect(client.listIssues({} as never)).rejects.toSatisfy((err: unknown) => err instanceof ConnectError && err.code === Code.Unimplemented);
-    expect(["ListTraces", "GetTrace", "SearchLogs", "QueryPanel"].every((name) => isDemoRead({ name }))).toBe(true);
+    // A read the story says nothing about gets forge's generated default (demoServiceDefaults.ts).
+    await expect(client.listIssues({} as never)).resolves.toBeDefined();
+    expect(["ListTraces", "GetTrace", "SearchLogs", "QueryPanel", "CompareReleases", "WatchDeploy", "StreamLogs", "PlanDeploy"].every((name) => isDemoRead({ name }))).toBe(true);
     expect(["UpdateIssueStatus", "CreateSilence", "SaveDashboard", "MarkNotificationsRead"].some((name) => isDemoRead({ name }))).toBe(false);
   });
 
