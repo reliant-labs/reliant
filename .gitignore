@@ -338,11 +338,13 @@ frontends/web/data
 # logs, failed-generate snapshots — except the records forge keeps as project
 # decisions: the scaffold birth ledger (a scaffold deleted on purpose stays
 # deleted; forge's CI workflows are, because reliant's CI is pr-ci.yml) and the
-# disown / hash records.
+# disown / hash records, and the applied-migration-playbook record that
+# `forge project upgrade apply <id>` writes (dev-docs/forge-upgrade.md, step 4).
 .forge/*
 !.forge/scaffolded/
 !.forge/disowned.json
 !.forge/hashes/
+!.forge/migrations.json
 
 # deploy/kcl/<env>/main.k's FileSecrets store (`forge env up dev` generates
 # secrets/dev.yaml: AUTH_API_KEY, RELIANT_VAULT_KEY). Never committed.
