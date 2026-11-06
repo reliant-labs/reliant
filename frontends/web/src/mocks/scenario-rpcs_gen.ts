@@ -281,7 +281,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ProjectService
-  // forge:hash=e3062948eade5fc5df224c6b97b3f5d624b305b48e216012f0dd3e13a2a48f8f
+  // forge:hash=4cdf43c57810610941de72e957d87ee2328b2d27e2747b16cc418547faa4e85c
   & {
     "reliant.v1.ProjectService/CreateProject"?: (req: import("@/gen/reliant/v1/project_pb").CreateProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").CreateProjectResponseSchema>>;
     "reliant.v1.ProjectService/ListProjects"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectsResponseSchema>>;
@@ -306,6 +306,8 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ProjectService/ListRepositoriesForDaemon"?: (req: import("@/gen/reliant/v1/project_pb").ListRepositoriesForDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListRepositoriesForDaemonResponseSchema>>;
     "reliant.v1.ProjectService/PullProjectOnDaemon"?: (req: import("@/gen/reliant/v1/project_pb").PullProjectOnDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").PullProjectOnDaemonResponseSchema>>;
     "reliant.v1.ProjectService/RemoveProjectFromDaemon"?: (req: import("@/gen/reliant/v1/project_pb").RemoveProjectFromDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").RemoveProjectFromDaemonResponseSchema>>;
+    "reliant.v1.ProjectService/AttachProjectToDaemon"?: (req: import("@/gen/reliant/v1/project_pb").AttachProjectToDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").AttachProjectToDaemonResponseSchema>>;
+    "reliant.v1.ProjectService/DetachProjectFromDaemon"?: (req: import("@/gen/reliant/v1/project_pb").DetachProjectFromDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").DetachProjectFromDaemonResponseSchema>>;
     "reliant.v1.ProjectService/RecloneProjectOnDaemon"?: (req: import("@/gen/reliant/v1/project_pb").RecloneProjectOnDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").RecloneProjectOnDaemonResponseSchema>>;
   }
 

@@ -1083,7 +1083,14 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	if path == "" {
 		return fmt.Errorf("path cannot be empty")
 	}
-	return store.RecordProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID, path, defaultBranch)
+	// Recording the checkout ends a detachment of the pair, in the same
+	// transaction: a pair never has both (project_daemon_detachment.go).
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.RecordProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID, path, defaultBranch); err != nil {
+			return err
+		}
+		return store.ClearProjectDaemonDetachment(ctx, r.ORM(), projectID, daemonID)
+	})
 }
 
 // UpsertQueuedProjectDaemon records a clone that is queued but has not run.
@@ -1102,7 +1109,12 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 		// the project would sit in "installing" forever.
 		return fmt.Errorf("request ID cannot be empty for a queued clone")
 	}
-	return store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID); err != nil {
+			return err
+		}
+		return store.ClearProjectDaemonDetachment(ctx, r.ORM(), projectID, daemonID)
+	})
 }
 
 // ResolveQueuedProjectDaemon applies the outcome the daemon reported.

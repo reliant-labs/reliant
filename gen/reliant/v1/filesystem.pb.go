@@ -2112,8 +2112,13 @@ func (x *ReplaceResult) GetError() string {
 }
 
 type ListDirectoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          *string                `protobuf:"bytes,1,opt,name=path,proto3,oneof" json:"path,omitempty"` // Absolute path to list. Unset (or empty) means the home directory.
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Path  *string                `protobuf:"bytes,1,opt,name=path,proto3,oneof" json:"path,omitempty"` // Absolute path to list. Unset (or empty) means the home directory.
+	// The machine to browse, one of the caller's daemons. Unset (or empty)
+	// browses the user's default machine, as before this field existed. A
+	// machine that is not the caller's is NotFound; one that is offline is
+	// Unavailable, saying so.
+	DaemonId      *string `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2151,6 +2156,13 @@ func (*ListDirectoryRequest) Descriptor() ([]byte, []int) {
 func (x *ListDirectoryRequest) GetPath() string {
 	if x != nil && x.Path != nil {
 		return *x.Path
+	}
+	return ""
+}
+
+func (x *ListDirectoryRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
 	}
 	return ""
 }
@@ -2284,8 +2296,11 @@ func (x *DirectoryEntry) GetIsSymlink() bool {
 }
 
 type CreateDirectoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // Absolute path of the directory to create (mkdir -p).
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Path  string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // Absolute path of the directory to create (mkdir -p).
+	// The machine to create it on, one of the caller's daemons. Unset (or
+	// empty) uses the user's default machine, as before this field existed.
+	DaemonId      *string `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2323,6 +2338,13 @@ func (*CreateDirectoryRequest) Descriptor() ([]byte, []int) {
 func (x *CreateDirectoryRequest) GetPath() string {
 	if x != nil {
 		return x.Path
+	}
+	return ""
+}
+
+func (x *CreateDirectoryRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
 	}
 	return ""
 }
@@ -2724,10 +2746,13 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\"\n" +
 	"\freplacements\x18\x02 \x01(\x05R\freplacements\x12\x18\n" +
 	"\asuccess\x18\x03 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05error\"8\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\"h\n" +
 	"\x14ListDirectoryRequest\x12\x17\n" +
-	"\x04path\x18\x01 \x01(\tH\x00R\x04path\x88\x01\x01B\a\n" +
-	"\x05_path\"a\n" +
+	"\x04path\x18\x01 \x01(\tH\x00R\x04path\x88\x01\x01\x12 \n" +
+	"\tdaemon_id\x18\x02 \x01(\tH\x01R\bdaemonId\x88\x01\x01B\a\n" +
+	"\x05_pathB\f\n" +
+	"\n" +
+	"_daemon_id\"a\n" +
 	"\x15ListDirectoryResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x124\n" +
 	"\aentries\x18\x02 \x03(\v2\x1a.reliant.v1.DirectoryEntryR\aentries\"\x97\x01\n" +
@@ -2737,9 +2762,12 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\fis_directory\x18\x03 \x01(\bR\visDirectory\x12\x1b\n" +
 	"\tis_hidden\x18\x04 \x01(\bR\bisHidden\x12\x1d\n" +
 	"\n" +
-	"is_symlink\x18\x05 \x01(\bR\tisSymlink\",\n" +
+	"is_symlink\x18\x05 \x01(\bR\tisSymlink\"\\\n" +
 	"\x16CreateDirectoryRequest\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"-\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12 \n" +
+	"\tdaemon_id\x18\x02 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"-\n" +
 	"\x17CreateDirectoryResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\"\xaa\x01\n" +
 	"\x15GetFilePreviewRequest\x12\x1d\n" +
@@ -2906,6 +2934,7 @@ func file_reliant_v1_filesystem_proto_init() {
 	file_reliant_v1_filesystem_proto_msgTypes[20].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[24].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[27].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[30].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[32].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=690e757c0c252ef5e31c172657e730b3c3f5ba0a2053e44566f8c02ef9a3c6f6
+// forge:hash=8cb2429cf1d6c218d47305d24470417eeffcc2f508d53566a5e4b2108c0fdd63
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -28,36 +28,38 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetDaemonFunc                        func(context.Context, string) (*db.Daemon, error)
-	UpsertDaemonFunc                     func(context.Context, *db.Daemon) error
-	GetDaemonStorageStateFunc            func(context.Context, string) (string, error)
-	SetDaemonStorageStateFunc            func(context.Context, string, string) error
-	SetDaemonLocalModelsFunc             func(context.Context, string, string) error
-	UpsertDaemonAttachmentFunc           func(context.Context, *db.DaemonAttachment) error
-	RenewDaemonAttachmentFunc            func(context.Context, *db.DaemonAttachment) (bool, error)
-	ReleaseDaemonAttachmentFunc          func(context.Context, string, time.Time) error
-	UpdateDaemonAttachmentPortsFunc      func(context.Context, string, []uint32) error
-	UpdateDaemonAttachmentMemoryFunc     func(context.Context, string, int64, int64, bool) error
-	GetProjectByPathAndUserFunc          func(context.Context, string, string) (*db.Project, error)
-	CreateProjectFunc                    func(context.Context, *db.Project) error
-	ResolveQueuedProjectDaemonFunc       func(context.Context, string, string) error
-	SyncProjectConfigSnapshotFunc        func(context.Context, *db.ProjectConfigRecord, bool) (bool, error)
-	GetProjectMachineCatalogPushedAtFunc func(context.Context, string, string) (time.Time, error)
-	CreateUserUpdateFunc                 func(context.Context, *db.UserUpdate) error
-	EmitUserRefetchFunc                  func(context.Context, string, db.RefetchType, db.RefetchOpts) error
-	SetProjectForgeNameFunc              func(context.Context, string, string, string) (bool, error)
-	ListProjectsFunc                     func(context.Context, db.ProjectFilters) ([]*db.Project, error)
-	ListProjectDaemonsForDaemonFunc      func(context.Context, string) ([]*core.ProjectDaemon, error)
-	StartQueuedProjectDaemonClonesFunc   func(context.Context, string) error
-	UpsertProjectDaemonFunc              func(context.Context, string, string, string, *string) error
-	MarkProjectDaemonInstalledFunc       func(context.Context, string, string) error
-	FailProjectDaemonInstallFunc         func(context.Context, string, string, string) error
-	GetProjectByRemoteURLAndUserFunc     func(context.Context, string, string) (*db.Project, error)
-	UpdateProjectFunc                    func(context.Context, *db.Project, string) error
-	ListMachinePoolsForUserFunc          func(context.Context, string) ([]*db.MachinePool, error)
-	ListReposByProjectFunc               func(context.Context, string) ([]*core.Repo, error)
-	UpsertQueuedProjectDaemonFunc        func(context.Context, string, string, string, *string, string) error
-	ListDaemonsByUserIDFunc              func(context.Context, string) ([]*db.Daemon, error)
+	GetDaemonFunc                             func(context.Context, string) (*db.Daemon, error)
+	UpsertDaemonFunc                          func(context.Context, *db.Daemon) error
+	GetDaemonStorageStateFunc                 func(context.Context, string) (string, error)
+	SetDaemonStorageStateFunc                 func(context.Context, string, string) error
+	SetDaemonLocalModelsFunc                  func(context.Context, string, string) error
+	UpsertDaemonAttachmentFunc                func(context.Context, *db.DaemonAttachment) error
+	RenewDaemonAttachmentFunc                 func(context.Context, *db.DaemonAttachment) (bool, error)
+	ReleaseDaemonAttachmentFunc               func(context.Context, string, time.Time) error
+	UpdateDaemonAttachmentPortsFunc           func(context.Context, string, []uint32) error
+	UpdateDaemonAttachmentMemoryFunc          func(context.Context, string, int64, int64, bool) error
+	GetProjectByPathAndUserFunc               func(context.Context, string, string) (*db.Project, error)
+	GetProjectWithUserCheckFunc               func(context.Context, string, string) (*db.Project, error)
+	CreateProjectFunc                         func(context.Context, *db.Project) error
+	ResolveQueuedProjectDaemonFunc            func(context.Context, string, string) error
+	SyncProjectConfigSnapshotFunc             func(context.Context, *db.ProjectConfigRecord, bool) (bool, error)
+	GetProjectMachineCatalogPushedAtFunc      func(context.Context, string, string) (time.Time, error)
+	CreateUserUpdateFunc                      func(context.Context, *db.UserUpdate) error
+	EmitUserRefetchFunc                       func(context.Context, string, db.RefetchType, db.RefetchOpts) error
+	SetProjectForgeNameFunc                   func(context.Context, string, string, string) (bool, error)
+	ListProjectsFunc                          func(context.Context, db.ProjectFilters) ([]*db.Project, error)
+	ListProjectDaemonsForDaemonFunc           func(context.Context, string) ([]*core.ProjectDaemon, error)
+	StartQueuedProjectDaemonClonesFunc        func(context.Context, string) error
+	UpsertProjectDaemonFunc                   func(context.Context, string, string, string, *string) error
+	MarkProjectDaemonInstalledFunc            func(context.Context, string, string) error
+	FailProjectDaemonInstallFunc              func(context.Context, string, string, string) error
+	GetProjectByRemoteURLAndUserFunc          func(context.Context, string, string) (*db.Project, error)
+	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
+	UpdateProjectFunc                         func(context.Context, *db.Project, string) error
+	ListMachinePoolsForUserFunc               func(context.Context, string) ([]*db.MachinePool, error)
+	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
+	UpsertQueuedProjectDaemonFunc             func(context.Context, string, string, string, *string, string) error
+	ListDaemonsByUserIDFunc                   func(context.Context, string) ([]*db.Daemon, error)
 }
 
 // GetDaemon records the call and delegates to GetDaemonFunc when set.
@@ -157,6 +159,15 @@ func (m *MockRepository) GetProjectByPathAndUser(ctx context.Context, path strin
 		return m.GetProjectByPathAndUserFunc(ctx, path, userID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetProjectByPathAndUser")
+}
+
+// GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.
+func (m *MockRepository) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error) {
+	m.Recorder.Record("GetProjectWithUserCheck", ctx, id, userID)
+	if m.GetProjectWithUserCheckFunc != nil {
+		return m.GetProjectWithUserCheckFunc(ctx, id, userID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWithUserCheck")
 }
 
 // CreateProject records the call and delegates to CreateProjectFunc when set.
@@ -285,6 +296,15 @@ func (m *MockRepository) GetProjectByRemoteURLAndUser(ctx context.Context, remot
 	return nil, contractkit.MockNotSet("MockRepository", "GetProjectByRemoteURLAndUser")
 }
 
+// ListProjectDaemonDetachmentsForDaemon records the call and delegates to ListProjectDaemonDetachmentsForDaemonFunc when set.
+func (m *MockRepository) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
+	m.Recorder.Record("ListProjectDaemonDetachmentsForDaemon", ctx, daemonID)
+	if m.ListProjectDaemonDetachmentsForDaemonFunc != nil {
+		return m.ListProjectDaemonDetachmentsForDaemonFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonDetachmentsForDaemon")
+}
+
 // UpdateProject records the call and delegates to UpdateProjectFunc when set.
 func (m *MockRepository) UpdateProject(ctx context.Context, project *db.Project, userID string) error {
 	m.Recorder.Record("UpdateProject", ctx, project, userID)
@@ -334,7 +354,7 @@ func (m *MockRepository) ListDaemonsByUserID(ctx context.Context, userID string)
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockProjectReconcileStore
-// forge:hash=b7da3fce95f46934d196bb13626fbfe5846b2ecdff4c0c7f1545651812bc1b69
+// forge:hash=812217764ca28fbbc5dc6a34923f74fc3aa8788a3148a55622d61bd38fe095c3
 
 // MockProjectReconcileStore is a test mock for the ProjectReconcileStore interface.
 //
@@ -344,14 +364,15 @@ var _ Repository = (*MockRepository)(nil)
 // "MockProjectReconcileStore.<Method>Func not set" error.
 type MockProjectReconcileStore struct {
 	contractkit.Recorder
-	ListProjectsFunc                   func(context.Context, db.ProjectFilters) ([]*db.Project, error)
-	ListProjectDaemonsForDaemonFunc    func(context.Context, string) ([]*core.ProjectDaemon, error)
-	StartQueuedProjectDaemonClonesFunc func(context.Context, string) error
-	UpsertProjectDaemonFunc            func(context.Context, string, string, string, *string) error
-	MarkProjectDaemonInstalledFunc     func(context.Context, string, string) error
-	FailProjectDaemonInstallFunc       func(context.Context, string, string, string) error
-	GetProjectByRemoteURLAndUserFunc   func(context.Context, string, string) (*db.Project, error)
-	UpdateProjectFunc                  func(context.Context, *db.Project, string) error
+	ListProjectsFunc                          func(context.Context, db.ProjectFilters) ([]*db.Project, error)
+	ListProjectDaemonsForDaemonFunc           func(context.Context, string) ([]*core.ProjectDaemon, error)
+	StartQueuedProjectDaemonClonesFunc        func(context.Context, string) error
+	UpsertProjectDaemonFunc                   func(context.Context, string, string, string, *string) error
+	MarkProjectDaemonInstalledFunc            func(context.Context, string, string) error
+	FailProjectDaemonInstallFunc              func(context.Context, string, string, string) error
+	GetProjectByRemoteURLAndUserFunc          func(context.Context, string, string) (*db.Project, error)
+	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
+	UpdateProjectFunc                         func(context.Context, *db.Project, string) error
 }
 
 // ListProjects records the call and delegates to ListProjectsFunc when set.
@@ -415,6 +436,15 @@ func (m *MockProjectReconcileStore) GetProjectByRemoteURLAndUser(ctx context.Con
 		return m.GetProjectByRemoteURLAndUserFunc(ctx, remoteURL, userID)
 	}
 	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "GetProjectByRemoteURLAndUser")
+}
+
+// ListProjectDaemonDetachmentsForDaemon records the call and delegates to ListProjectDaemonDetachmentsForDaemonFunc when set.
+func (m *MockProjectReconcileStore) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
+	m.Recorder.Record("ListProjectDaemonDetachmentsForDaemon", ctx, daemonID)
+	if m.ListProjectDaemonDetachmentsForDaemonFunc != nil {
+		return m.ListProjectDaemonDetachmentsForDaemonFunc(ctx, daemonID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "ListProjectDaemonDetachmentsForDaemon")
 }
 
 // UpdateProject records the call and delegates to UpdateProjectFunc when set.

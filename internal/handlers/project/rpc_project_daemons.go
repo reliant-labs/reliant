@@ -177,11 +177,25 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 	// skipped both — they were repositories, whose directories only a clone
 	// may create — and the log was the first place anyone looked for why the
 	// new machine had no houndersclub directory.
-	var healed, skippedRepository, skippedElsewhere int
+	// A project the user detached from this machine stays off it: its folder
+	// is still there or deliberately gone, and either way not the heal's to
+	// make. Unreadable, nothing is healed — creating a directory is the
+	// irreversible direction.
+	detachments, err := s.deps.Repo.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	if err != nil {
+		logging.Warn("project-dir-heal: failed to read the machine's detached projects", "error", err, "userID", userID, "daemonID", daemonID)
+		return nil
+	}
+	detached := make(map[string]bool, len(detachments))
+	for _, d := range detachments {
+		detached[d.ProjectID] = true
+	}
+	var healed, skippedRepository, skippedElsewhere, skippedDetached int
 	defer func() {
 		logging.Info("project-dir-heal: done",
 			"userID", userID, "daemonID", daemonID, "projects", len(projects),
-			"mkdir", healed, "skipped_repository", skippedRepository, "skipped_elsewhere", skippedElsewhere)
+			"mkdir", healed, "skipped_repository", skippedRepository, "skipped_elsewhere", skippedElsewhere,
+			"skipped_detached", skippedDetached)
 	}()
 	for _, project := range projects {
 		// Judged with ospath because the mkdir runs on the daemon, not here.
@@ -189,6 +203,10 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 		// belonging to a Windows daemon, so their directories were never
 		// created and the skip left no trace.
 		if project == nil {
+			continue
+		}
+		if detached[project.ID] {
+			skippedDetached++
 			continue
 		}
 		if !projectDirIsHealable(project) {
@@ -294,6 +312,33 @@ func projectDaemonToProto(pd *db.ProjectDaemon) *reliantv1.ProjectDaemon {
 	if pd.DefaultBranch != nil {
 		out.DefaultBranch = pd.DefaultBranch
 	}
+	if pd.VerifiedAt != nil {
+		verified := pd.VerifiedAt.UTC().Format(time.RFC3339)
+		out.VerifiedAt = &verified
+	}
+	return out
+}
+
+// machineNames names each machine once per response: a project list names
+// the same few machines over and over.
+type machineNames struct {
+	s     *Service
+	names map[string]string
+}
+
+func (s *Service) newMachineNames() *machineNames {
+	return &machineNames{s: s, names: map[string]string{}}
+}
+
+// proto is row as the wire carries it, its machine named.
+func (m *machineNames) proto(ctx context.Context, row *core.ProjectDaemon) *reliantv1.ProjectDaemon {
+	name, ok := m.names[row.DaemonID]
+	if !ok {
+		name = strings.Trim(m.s.machineName(ctx, row.DaemonID), `"`)
+		m.names[row.DaemonID] = name
+	}
+	out := projectDaemonToProto(row)
+	out.DaemonName = name
 	return out
 }
 
@@ -331,11 +376,12 @@ func (s *Service) ListProjectDaemonsForDaemon(
 	// Filter by ownership: a project_daemons row is only visible to a user
 	// if the underlying project belongs to them.
 	out := make([]*reliantv1.ProjectDaemon, 0, len(rows))
+	names := s.newMachineNames()
 	for _, pd := range rows {
 		if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, pd.ProjectID, userID); err != nil {
 			continue
 		}
-		out = append(out, projectDaemonToProto(pd))
+		out = append(out, names.proto(ctx, pd))
 	}
 
 	return connect.NewResponse(&reliantv1.ListProjectDaemonsForDaemonResponse{
@@ -361,13 +407,14 @@ func (s *Service) ListProjectDaemons(
 	}
 
 	out := make([]*reliantv1.ProjectDaemon, 0)
+	names := s.newMachineNames()
 	for _, p := range projects {
 		rows, err := s.deps.Repo.ListProjectDaemonsForProject(ctx, p.ID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list project_daemons"))
 		}
 		for _, pd := range rows {
-			out = append(out, projectDaemonToProto(pd))
+			out = append(out, names.proto(ctx, pd))
 		}
 	}
 
@@ -379,7 +426,10 @@ func (s *Service) ListProjectDaemons(
 // MarkProjectInstalled records that a project has a clone on a daemon. The
 // project must belong to the calling user; the daemon_id is trusted because
 // the user-facing flow that calls this just successfully cloned through the
-// gateway, which already authenticated the daemon binding.
+// gateway, which already authenticated the daemon binding. It checks nothing
+// on the machine and is kept that way for the released clients that call it
+// right after a clone; attaching a folder the user names is
+// AttachProjectToDaemon, which does check.
 func (s *Service) MarkProjectInstalled(
 	ctx context.Context,
 	req *connect.Request[reliantv1.MarkProjectInstalledRequest],

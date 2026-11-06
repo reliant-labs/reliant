@@ -38,6 +38,9 @@ type Repository interface {
 	// config it pushes. GetProjectMachineCatalogPushedAt reads the one column
 	// the staleness check needs, never the whole (large) record.
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
+	// GetProjectWithUserCheck resolves the project of the machine's own
+	// checkout at a path (ensureOwnedProjectForPath).
+	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	CreateProject(ctx context.Context, project *db.Project) error
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
 	SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool) (bool, error)
@@ -73,6 +76,9 @@ type ProjectReconcileStore interface {
 	MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error
 	FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error
 	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*db.Project, error)
+	// ListProjectDaemonDetachmentsForDaemon is what the user detached from
+	// the machine: a folder there is left unrecorded (DetachProjectFromDaemon).
+	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
 	// UpdateProject also serves projectfacts.ReconcileGitRepo.
 	projectfacts.ProjectUpdater
 }
