@@ -69,16 +69,53 @@ func TestShed_LiveIdleWorktreeShedsRegenerableOutputOnly(t *testing.T) {
 	}
 }
 
+// Installed packages ship names the never-list reserves for user data
+// (@protobufjs/utf8 has tests/data, tsconfig-paths lib/__tests__/data, in
+// nearly every frontend's tree). Inside a package an install put there, they
+// are the package's content and shed with the rest; before this, one such
+// directory held every node_modules on the machine.
+func TestShed_InstalledPackageContentIsNotUserData(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "real git worktree fixture")
+	f, w, p := shedFixture(t)
+	// npm/yarn layout, and pnpm's content-addressed layout with a scope.
+	write(t, filepath.Join(p["modules"], "pkg", "package.json"), `{"name":"pkg"}`)
+	write(t, filepath.Join(p["modules"], "pkg", "tests", "data", "fixture.bin"), "package content")
+	scoped := filepath.Join(p["modules"], ".pnpm", "@protobufjs+utf8@1.1.2", "node_modules", "@protobufjs", "utf8")
+	write(t, filepath.Join(scoped, "package.json"), `{"name":"@protobufjs/utf8"}`)
+	write(t, filepath.Join(scoped, "tests", "data", "utf8.txt"), "package content")
+	write(t, filepath.Join(scoped, "tests", ".env"), "package content")
+	got := f.r.Reconcile(context.Background(), Request{Worktrees: []Worktree{w}}).Results[0]
+	if got.Outcome != OutcomeLocked || exists(p["modules"]) {
+		t.Fatalf("node_modules with installed package content was not shed: %+v", got)
+	}
+	if !exists(p["unique"]) || !exists(w.Path) {
+		t.Fatal("the work in the worktree was touched")
+	}
+	if b, err := os.ReadFile(p["store"]); err != nil || string(b) != "shared content" {
+		t.Fatalf("a hard link target outside the tree was touched: %q %v", b, err)
+	}
+}
+
 func TestShed_HoldsWhatItCannotProveRegenerableAndIdle(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "real git worktree fixtures")
-	for _, kind := range []string{"protected", "fresh", "in-use", "process-use", "keep", "no-floor", "nested-repo"} {
+	for _, kind := range []string{"protected", "protected-not-a-package", "protected-beside-packages", "fresh", "in-use", "process-use", "keep", "no-floor", "nested-repo"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			f, w, p := shedFixture(t)
 			switch kind {
 			case "protected":
 				write(t, filepath.Join(p["modules"], "pkg", ".env"), "only secret")
+			case "protected-not-a-package":
+				// package.json as a directory is not a package manifest.
+				write(t, filepath.Join(p["modules"], "pkg", "package.json", "x"), "not a manifest")
+				write(t, filepath.Join(p["modules"], "pkg", "data", "only-copy.csv"), "only copy")
+			case "protected-beside-packages":
+				// node_modules' own data/, next to an installed package, is
+				// no package's content.
+				write(t, filepath.Join(p["modules"], "lib", "package.json"), `{"name":"lib"}`)
+				write(t, filepath.Join(p["modules"], "data", "only-copy.csv"), "only copy")
 			case "fresh":
 				now := f.r.now()
 				if err := os.Chtimes(p["module"], now, now); err != nil {

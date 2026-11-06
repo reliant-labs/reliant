@@ -37,6 +37,71 @@ func TestRetirementTreeRejectsProtectedDescendants(t *testing.T) {
 		})
 	}
 }
+
+// A never-listed name inside a package an install put in node_modules is that
+// package's content (packages ship tests/data, .env fixtures, *.db samples),
+// both when the whole checkout is inspected and when node_modules alone is.
+// The same names anywhere else still hold.
+func TestRetirementTreeInstalledPackageContent(t *testing.T) {
+	pkgs := map[string]string{
+		"npm":    "node_modules/pkg",
+		"scoped": "node_modules/@scope/lib",
+		"pnpm":   "node_modules/.pnpm/@protobufjs+utf8@1.1.2/node_modules/@protobufjs/utf8",
+		"nested": "node_modules/outer/node_modules/inner",
+	}
+	for name, pkg := range pkgs {
+		t.Run(name, func(t *testing.T) {
+			root := retirementFixture(t)
+			write(t, filepath.Join(root, pkg, "package.json"), `{"name":"x"}`)
+			for _, rel := range []string{"tests/data/fixture.bin", "test/.env", "samples/demo.sqlite", "lib/secrets/index.js"} {
+				write(t, filepath.Join(root, pkg, rel), "package content")
+			}
+			if name == "nested" {
+				write(t, filepath.Join(root, "node_modules/outer/package.json"), `{"name":"outer"}`)
+			}
+			for _, inspect := range []struct {
+				what string
+				path string
+				fn   func(context.Context, string) (*retirementTree, error)
+			}{{"checkout", root, inspectRetirementTree}, {"node_modules", filepath.Join(root, "node_modules"), inspectRegenerableTree}} {
+				tree, err := inspect.fn(context.Background(), inspect.path)
+				if err != nil {
+					t.Fatalf("%s: installed package content held the tree: %v", inspect.what, err)
+				}
+				if err := tree.validate(context.Background()); err != nil {
+					t.Fatalf("%s: validate: %v", inspect.what, err)
+				}
+				tree.close()
+			}
+		})
+	}
+	for _, rel := range []string{
+		"node_modules/data/only-copy.csv",          // node_modules' own data/
+		"node_modules/pkg/data/only-copy.csv",      // pkg has no package.json
+		"node_modules/@scope/data/only-copy.csv",   // a scope directory is no package
+		"node_modules/.cache/secrets/token",        // a tool cache, not a package
+		"node_modules/pkg/package.json/data/x.csv", // a directory is no manifest
+	} {
+		t.Run("holds/"+rel, func(t *testing.T) {
+			root := retirementFixture(t)
+			write(t, filepath.Join(root, "node_modules/lib/package.json"), `{"name":"lib"}`)
+			write(t, filepath.Join(root, rel), "preserved")
+			for _, inspect := range []struct {
+				path string
+				fn   func(context.Context, string) (*retirementTree, error)
+			}{{root, inspectRetirementTree}, {filepath.Join(root, "node_modules"), inspectRegenerableTree}} {
+				tree, err := inspect.fn(context.Background(), inspect.path)
+				if tree != nil {
+					tree.close()
+				}
+				if err == nil {
+					t.Fatalf("%s: protected descendant authorized", inspect.path)
+				}
+			}
+		})
+	}
+}
+
 func TestRetirementTreeMutationAndContainment(t *testing.T) {
 	for _, kind := range []string{"new-protected", "new-file", "file-replaced", "ancestor-symlink", "root-symlink", "cancel"} {
 		t.Run(kind, func(t *testing.T) {

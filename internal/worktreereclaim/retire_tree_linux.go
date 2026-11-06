@@ -82,12 +82,47 @@ func retirementSame(a, b unix.Stat_t) bool {
 func retirementIdentity(a, b unix.Stat_t) bool {
 	return a.Dev == b.Dev && a.Ino == b.Ino && a.Mode == b.Mode
 }
+
+// installedPackage reports whether the directory at rel (tree-relative; ""
+// is the tree's root, named t.name) is a package a package manager installed:
+// it sits directly in a node_modules directory, or in an @scope directory that
+// does, and holds a package.json file. Everything inside one is the install's
+// output, reproduced from the lockfile, so a name on the never-list there
+// (`data`, `.env`, `*.db`, `secrets`) is the package's own content and not
+// the user's data. Packages ship such names routinely: @protobufjs/utf8 has
+// tests/data and tsconfig-paths lib/__tests__/data, and one of them is in
+// nearly every frontend's tree, so the never-list held every node_modules shed
+// and every whole retirement of a checkout with an install (2026-11-06: zero
+// sheds in 3,730 live-row reconciles on one machine with 108 GiB of
+// node_modules). A never-listed name anywhere else in node_modules (its own
+// data/, or a directory with no package.json) still holds.
+func (t *retirementTree) installedPackage(rel string, children []os.DirEntry) bool {
+	parts := splitSegments(rel)
+	if t.subtree && t.name == "node_modules" {
+		parts = append([]string{t.name}, parts...)
+	}
+	n := len(parts)
+	switch {
+	case n >= 2 && parts[n-2] == "node_modules" && !strings.HasPrefix(parts[n-1], "@"):
+	case n >= 3 && parts[n-3] == "node_modules" && strings.HasPrefix(parts[n-2], "@"):
+	default:
+		return false
+	}
+	for _, c := range children {
+		if c.Name() == "package.json" && c.Type().IsRegular() {
+			return true
+		}
+	}
+	return false
+}
+
 func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEntry, int64, time.Time, error) {
 	entries := map[string]retirementEntry{}
 	var bytes int64
 	var newest time.Time
-	var visit func(*os.File, string) error
-	visit = func(dir *os.File, rel string) error {
+	var visit func(*os.File, string, bool) error
+	// inPackage: dir is inside an installed package (installedPackage).
+	visit = func(dir *os.File, rel string, inPackage bool) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -113,6 +148,7 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 		if len(children) > maxStripWalk {
 			return errors.New("retirement directory budget exceeded")
 		}
+		inPackage = inPackage || t.installedPackage(rel, children)
 		for _, child := range children {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -125,7 +161,7 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 			if rel != "" {
 				path = rel + "/" + name
 			}
-			if neverListed(path) {
+			if !inPackage && neverListed(path) {
 				return fmt.Errorf("protected descendant: %s", path)
 			}
 			if name == ".git" && (rel != "" || t.subtree) {
@@ -153,7 +189,7 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 					err = errors.New("directory identity changed")
 				}
 				if err == nil {
-					err = visit(childDir, path)
+					err = visit(childDir, path, inPackage)
 				}
 				childDir.Close()
 				if err != nil {
@@ -198,7 +234,7 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 		}
 		return nil
 	}
-	if err := visit(t.root, ""); err != nil {
+	if err := visit(t.root, "", false); err != nil {
 		return nil, 0, time.Time{}, err
 	}
 	return entries, bytes, newest, nil
