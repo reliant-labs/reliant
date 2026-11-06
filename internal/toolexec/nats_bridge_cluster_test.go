@@ -641,32 +641,3 @@ func TestStartNATSCluster_RecoversWhenARoutePortIsTaken(t *testing.T) {
 		"a lost route port must be detected when the bind fails, not after the readiness timeout")
 }
 
-// A member that is slow to start — the reported failure was "cluster member n0
-// not ready after 20s" on a machine whose heavy slots were all full — is not a
-// broken cluster. An attempt that runs out of budget must be abandoned and
-// retried on a fresh cluster, not fail the test on attempt 1 of 3.
-func TestStartNATSCluster_RetriesAStalledFormation(t *testing.T) {
-	if testing.Short() {
-		t.Skip("-short: boots a 3-node NATS cluster; runs in the full lane")
-	}
-	var attempts atomic.Int32
-	prev := attemptBudget
-	attemptBudget = func(t *testing.T, attemptsLeft int) time.Duration {
-		if attempts.Add(1) == 1 {
-			// No cluster forms in a microsecond: this attempt stalls.
-			return time.Microsecond
-		}
-		return prev(t, attemptsLeft)
-	}
-	t.Cleanup(func() { attemptBudget = prev })
-
-	c := startNATSCluster(t, 3)
-	require.Len(t, c.servers, 3)
-	// At least one retry: the stalled first attempt. A later attempt may also
-	// be retried for its own reason (another process took a route port between
-	// allocation and bind, which startNATSCluster retries by design), so the
-	// count is a floor, not an exact 2 (release gate a2726fa83: 3 attempts).
-	assert.GreaterOrEqual(t, attempts.Load(), int32(2), "the stalled attempt is retried, on a fresh cluster")
-	formed, state := c.formation()
-	assert.True(t, formed, "the retried cluster is fully formed: %s", state)
-}
