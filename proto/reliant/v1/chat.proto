@@ -534,6 +534,32 @@ service ChatService {
       }
     };
   }
+
+  // MoveChatToProject moves an idle chat to another of the caller's projects.
+  // The chat keeps its history; its next turn runs in the new project's main
+  // checkout, on a machine that has the project (daemon_id when given, else the
+  // chat's machine when it has the project, else the project's default
+  // machine). A hidden note on the chat's root thread tells the model where it
+  // moved from and to, since earlier messages name the old checkout's paths.
+  //
+  // Refused (FAILED_PRECONDITION) while the chat has a run in progress, is
+  // waiting for an answer, is paused or has a message queued for its machine,
+  // and for an archived chat. A chat in a branch workspace is refused unless
+  // leave_workspace is set: the workspace belongs to the old project and stays
+  // there. Moving a chat to the project it is already in returns it unchanged.
+  rpc MoveChatToProject(MoveChatToProjectRequest) returns (MoveChatToProjectResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "move"
+        target: {
+          kind: "chat"
+          id: "chat_id"
+          label: "response.chat.title"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
 }
 
 // Chat represents a conversation
@@ -1637,5 +1663,24 @@ message SetChatDaemonRequest {
 
 // SetChatDaemonResponse confirms the daemon was set.
 message SetChatDaemonResponse {
+  Chat chat = 1;
+}
+
+// MoveChatToProjectRequest names the chat and the project to move it to.
+message MoveChatToProjectRequest {
+  string chat_id = 1;
+  // The project to move the chat to. It must be the caller's.
+  string project_id = 2;
+  // The machine the chat runs on in the new project. It must be the caller's
+  // and have the project installed. Unset: the chat's current machine when it
+  // has the project, else the project's default machine.
+  optional string daemon_id = 3;
+  // Required for a chat in a branch workspace: the workspace stays with the
+  // old project, and the chat continues in the new project's main checkout.
+  bool leave_workspace = 4;
+}
+
+// MoveChatToProjectResponse is the moved chat.
+message MoveChatToProjectResponse {
   Chat chat = 1;
 }
