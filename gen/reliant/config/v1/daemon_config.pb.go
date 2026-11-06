@@ -152,11 +152,11 @@ type DaemonConfig struct {
 	// hatch for a daemon whose image has no browser.
 	ChromeBrowserUrl string `protobuf:"bytes,17,opt,name=chrome_browser_url,json=chromeBrowserUrl,proto3" json:"chrome_browser_url,omitempty"`
 	// The disk guard's thresholds (internal/diskguard), each a percentage of
-	// a volume used ("90", "95%") or "off". Past reclaim_at the daemon runs its
+	// a volume used ("80", "95%") or "off". Past reclaim_at the daemon runs its
 	// reclaimers; past refuse_at it refuses new heavy commands. Strings because
 	// "off" is a value. A value the guard cannot read is logged and that
 	// threshold keeps its default: a misconfigured guard never stops the
-	// daemon. Unset: 90 and 95.
+	// daemon. Unset: 80 and 95; a reclaim then runs until the volume is under 70%.
 	DiskReclaimAt string `protobuf:"bytes,20,opt,name=disk_reclaim_at,json=diskReclaimAt,proto3" json:"disk_reclaim_at,omitempty"`
 	DiskRefuseAt  string `protobuf:"bytes,21,opt,name=disk_refuse_at,json=diskRefuseAt,proto3" json:"disk_refuse_at,omitempty"`
 	// The commands the daemon queues behind the machine's heavy slots: each a
@@ -673,7 +673,7 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x12chrome_browser_url\x18\x11 \x01(\tBh\x82\xce\x18d\n" +
 	"\x1aRELIANT_CHROME_BROWSER_URL*FDevTools URL of an already-running browser for the chrome-devtools MCPR\x10chromeBrowserUrl\x12\x93\x01\n" +
 	"\x0fdisk_reclaim_at\x18\x14 \x01(\tBk\x82\xce\x18g\n" +
-	"\x17RELIANT_DISK_RECLAIM_AT*LDisk use (percent, or off) past which the daemon reclaims space (default 90)R\rdiskReclaimAt\x12\x98\x01\n" +
+	"\x17RELIANT_DISK_RECLAIM_AT*LDisk use (percent, or off) past which the daemon reclaims space (default 80)R\rdiskReclaimAt\x12\x98\x01\n" +
 	"\x0edisk_refuse_at\x18\x15 \x01(\tBr\x82\xce\x18n\n" +
 	"\x16RELIANT_DISK_REFUSE_AT*TDisk use (percent, or off) past which the daemon refuses heavy commands (default 95)R\fdiskRefuseAt\x12\xe4\x02\n" +
 	"\x0eheavy_commands\x18\x16 \x03(\tB\xbc\x02\x82\xce\x18\xb7\x02\n" +

@@ -63,8 +63,8 @@ const (
 	// EmergencyFreeFloor is the free space on the volume holding the Go cache
 	// below which a trim by a forge without the floor is allowed anyway: a
 	// full disk fails every build, which is worse than one retryable build.
-	// It is far below the pressure thresholds (2 GiB, or 90% full with under
-	// 20 GiB free) on purpose: pressure alone is the normal state of this
+	// It is far below the pressure thresholds (2 GiB, 85% full, or under
+	// 50 GiB free) on purpose: pressure alone is the normal state of this
 	// machine and must not defeat the guard. Scaled down to an eighth of a
 	// volume smaller than 8 GiB.
 	EmergencyFreeFloor = GiB
