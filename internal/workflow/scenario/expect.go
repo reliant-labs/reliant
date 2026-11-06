@@ -149,6 +149,22 @@ func toolResultOutput(event SimulatedEvent) map[string]interface{} {
 	return result
 }
 
+func completedMatchesFailed(expected ExpectedOutcome, got string) bool {
+	return expected == OutcomeCompleted && got == string(OutcomeFailed)
+}
+
+// CompletedOverFailedWarning is the warning for a scenario that expects
+// `outcome: completed` of a run whose graph declared it failed. Empty when the
+// expectation does not have that shape.
+func CompletedOverFailedWarning(expect *Expectation, execution *ExecutionDetails) string {
+	if expect == nil || !completedMatchesFailed(expect.Outcome, execution.Outcome) {
+		return ""
+	}
+	return fmt.Sprintf("expect.outcome is \"completed\" but the run ended at node %q, which declares "+
+		"outcome: failure, so the run FAILED; it still matches for compatibility — assert "+
+		"`outcome: failed` to pin the verdict", execution.OutcomeNode)
+}
+
 // CheckExpectations compares execution results against expectations and returns
 // one message per mismatch (empty means the expectation held).
 //
@@ -160,9 +176,24 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 	// Check outcome
 	if expect.Outcome != "" {
 		expectedOutcome := string(expect.Outcome)
-		if execution.Outcome != expectedOutcome {
-			mismatches = append(mismatches,
-				fmt.Sprintf("expected outcome %q but got %q", expectedOutcome, execution.Outcome))
+		// A run that ends at a node declaring `outcome: failure` reports
+		// "failed". Before the runner observed that verdict it reported
+		// "completed", and scenarios written then assert `completed` on such
+		// paths; they keep matching (the run did complete its graph), and
+		// CompletedOverFailedWarning tells their author to assert `failed`.
+		if execution.Outcome != expectedOutcome && !completedMatchesFailed(expect.Outcome, execution.Outcome) {
+			msg := fmt.Sprintf("expected outcome %q but got %q", expectedOutcome, execution.Outcome)
+			// Say why, here: the mismatch line is all a text report prints,
+			// and the cause otherwise appeared only in --json.
+			switch {
+			case execution.Error != nil && execution.Error.Node != "":
+				msg += fmt.Sprintf(" (node %q: %s)", execution.Error.Node, execution.Error.Message)
+			case execution.Error != nil && execution.Error.Message != "":
+				msg += fmt.Sprintf(" (%s)", execution.Error.Message)
+			case execution.OutcomeNode != "":
+				msg += fmt.Sprintf(" (node %q declares outcome: failure)", execution.OutcomeNode)
+			}
+			mismatches = append(mismatches, msg)
 		}
 	}
 
@@ -247,10 +278,8 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 			continue
 		}
 		if !deepEqual(expectedValue, actualValue) {
-			expectedJSON, _ := json.Marshal(expectedValue)
-			actualJSON, _ := json.Marshal(actualValue)
 			mismatches = append(mismatches,
-				fmt.Sprintf("workflow output %q: expected %s but got %s", path, expectedJSON, actualJSON))
+				fmt.Sprintf("workflow output %q: %s", path, valueMismatch(expectedValue, actualValue)))
 		}
 	}
 
@@ -275,10 +304,8 @@ func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []strin
 
 				// Deep compare values
 				if !deepEqual(expectedValue, actualValue) {
-					expectedJSON, _ := json.Marshal(expectedValue)
-					actualJSON, _ := json.Marshal(actualValue)
 					mismatches = append(mismatches,
-						fmt.Sprintf("node %q field %q: expected %s but got %s", nodeID, field, expectedJSON, actualJSON))
+						fmt.Sprintf("node %q field %q: %s", nodeID, field, valueMismatch(expectedValue, actualValue)))
 				}
 			}
 		}
@@ -318,31 +345,90 @@ func outputKeys(outputs map[string]interface{}) []string {
 	return keys
 }
 
-// deepEqual compares two values for equality, handling JSON number type issues
+// deepEqual compares an expected value from scenario YAML with an observed one,
+// at every depth, as JSON values: numbers compare by value (YAML's 1750 is an
+// int, the runtime's is a float64 after CEL or structpb), maps compare key by
+// key (whatever their Go key and element types), and lists element by element
+// (a []map[string]interface{} equals the same []interface{}). Map comparison
+// is exact — every key on both sides — at nested levels; node_outputs and
+// outputs are partial only in which top-level fields they name.
 func deepEqual(expected, actual interface{}) bool {
-	// Handle numeric comparisons (JSON numbers may be float64)
-	if reflect.TypeOf(expected) != reflect.TypeOf(actual) {
-		// Try numeric comparison
-		expNum, expOk := toFloat64(expected)
-		actNum, actOk := toFloat64(actual)
-		if expOk && actOk {
-			return expNum == actNum
+	if expNum, ok := toFloat64(expected); ok {
+		actNum, ok := toFloat64(actual)
+		return ok && expNum == actNum
+	}
+	if expMap, ok := asStringKeyedMap(expected); ok {
+		actMap, ok := asStringKeyedMap(actual)
+		if !ok || len(expMap) != len(actMap) {
+			return false
 		}
+		for k, ev := range expMap {
+			av, present := actMap[k]
+			if !present || !deepEqual(ev, av) {
+				return false
+			}
+		}
+		return true
+	}
+	if expList, ok := asSlice(expected); ok {
+		actList, ok := asSlice(actual)
+		if !ok || len(expList) != len(actList) {
+			return false
+		}
+		for i := range expList {
+			if !deepEqual(expList[i], actList[i]) {
+				return false
+			}
+		}
+		return true
 	}
 	return reflect.DeepEqual(expected, actual)
 }
 
-// toFloat64 converts a numeric value to float64
+// valueMismatch formats an expected/actual pair for a mismatch message. When
+// the two print as the same JSON — a type difference deepEqual does not
+// forgive, such as the string "1" against the number 1 nested in a list —
+// the Go types are added, so the message never reads "expected X but got X".
+func valueMismatch(expected, actual interface{}) string {
+	expectedJSON, _ := json.Marshal(expected)
+	actualJSON, _ := json.Marshal(actual)
+	msg := fmt.Sprintf("expected %s but got %s", expectedJSON, actualJSON)
+	if string(expectedJSON) == string(actualJSON) {
+		msg += fmt.Sprintf(" (same JSON, different types: expected %T, got %T)", expected, actual)
+	}
+	return msg
+}
+
+// toFloat64 converts any Go numeric value to float64.
 func toFloat64(v interface{}) (float64, bool) {
 	switch n := v.(type) {
 	case int:
 		return float64(n), true
+	case int8:
+		return float64(n), true
+	case int16:
+		return float64(n), true
+	case int32:
+		return float64(n), true
 	case int64:
+		return float64(n), true
+	case uint:
+		return float64(n), true
+	case uint8:
+		return float64(n), true
+	case uint16:
+		return float64(n), true
+	case uint32:
+		return float64(n), true
+	case uint64:
 		return float64(n), true
 	case float64:
 		return n, true
 	case float32:
 		return float64(n), true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
 	default:
 		return 0, false
 	}

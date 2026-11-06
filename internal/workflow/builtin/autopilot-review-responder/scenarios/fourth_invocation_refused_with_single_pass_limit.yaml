@@ -108,7 +108,7 @@ events:
     data:
       id: 11
 expect:
-  outcome: completed
+  outcome: failed
   completed:
   - rounds.plan
   - rounds.capped_label

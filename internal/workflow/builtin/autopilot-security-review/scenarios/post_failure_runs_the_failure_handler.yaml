@@ -36,7 +36,7 @@ events:
     black_box: true
     output: {status: posted}
 expect:
-  outcome: completed
+  outcome: failed
   completed: [post_failed]
   not_reached: [posted]
   on_failure:

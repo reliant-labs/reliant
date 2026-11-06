@@ -45,7 +45,7 @@ events:
     black_box: true
     output: {"recheck_found": 0, "other_live_lease": false}
 expect:
-  outcome: completed
+  outcome: failed
   completed: [rounds.publish, rounds.outcome, rounds.blocked_label, rounds.release]
   node_outputs:
     rounds.outcome: {kind: blocked}

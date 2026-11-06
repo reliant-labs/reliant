@@ -11,7 +11,7 @@ events:
   - node: file.created
     output: {"is_error": true, "content": "GitHub validation failed"}
 expect:
-  outcome: completed
+  outcome: failed
   completed: [file.created, file.create_failed, problems, ended_failed]
   not_reached: [file.lease, file.agent]
   # No issue exists for the alert: the run is FAILED. on-call posts nothing to GitHub; the handler only

@@ -74,6 +74,7 @@ type WorkflowTestSuite struct {
 // existing `suite.NewTestWorkflowEnvironment()` call picks up the harness
 // timeout without changing.
 func (s *WorkflowTestSuite) NewTestWorkflowEnvironment() *testsuite.TestWorkflowEnvironment {
+	WarmUp()
 	env := s.WorkflowTestSuite.NewTestWorkflowEnvironment()
 	env.SetWorkerOptions(WorkerOptions(worker.Options{}))
 	return env
