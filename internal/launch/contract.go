@@ -39,6 +39,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -399,6 +400,20 @@ type WorkflowStore interface {
 type PinnedWorkflowResolver interface {
 	WorkflowResolver
 	GetPinnedProjectCatalog(ctx context.Context, pin string) (*db.PinnedCatalog, bool, error)
+}
+
+// WorkflowProvenanceReader and MachineNamer are the reads a trigger's
+// definition is attributed with (triggers.describeDefinition asks its store
+// for them by assertion): which machine synced the file, and that machine's
+// name. The per-request resolver (requestResolver) serves both, memoized,
+// when the store it wraps does (#2283).
+type WorkflowProvenanceReader interface {
+	ProjectWorkflowProvenance(ctx context.Context, projectID string) ([]config.WorkflowProvenance, error)
+}
+
+// MachineNamer names a machine for display: see WorkflowProvenanceReader.
+type MachineNamer interface {
+	MachineDisplayName(ctx context.Context, daemonID string) string
 }
 
 // WorkflowResolver looks up the workflow definition and presets a spec names.
