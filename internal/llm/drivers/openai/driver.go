@@ -1099,7 +1099,10 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 		}
 
 		if err := stream.Err(); err != nil {
-			logging.ErrorContext(ctx, "[OpenAI Responses] Stream error", "error", err)
+			// WARN, not ERROR: one attempt's failure is not the call's. call_llm
+			// retries and fails over, and a call that fails for good reaches the
+			// user as the run's error. Matches the Anthropic and Codex drivers.
+			logging.WarnContext(ctx, "[OpenAI Responses] Stream error", "error", err)
 			eventChan <- llm.DriverEvent{Type: llm.EventError, Error: err}
 			return
 		}
