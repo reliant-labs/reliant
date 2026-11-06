@@ -204,11 +204,13 @@ type BackgroundManager struct {
 }
 
 // portScanGate is the state of refreshPortsGated: mu is held while a scan
-// runs, and lastAll is when the last scan of EVERY process finished. Both are
-// touched only with mu held.
+// runs, and lastAll is when the last scan of EVERY process finished (touched
+// only with mu held). scan is the OS scan it runs, refreshPortsBatch when nil;
+// a per-manager field so a test can count scans without a package global.
 type portScanGate struct {
 	mu      sync.Mutex
 	lastAll time.Time
+	scan    func([]*BackgroundProcess)
 }
 
 // portScanFreshness is how long a scan of every process answers for the next
@@ -218,9 +220,6 @@ type portScanGate struct {
 // 100 answered exec.bg_list in 2.9s p50 and timed out (5s) 240 times in a day.
 // A port list a second old is as good as a new one for showing a dev server.
 const portScanFreshness = time.Second
-
-// scanPorts is the scan refreshPortsGated runs; a var so a test can count it.
-var scanPorts = refreshPortsBatch
 
 var (
 	bgManager     *BackgroundManager
@@ -944,19 +943,25 @@ func (p *BackgroundProcess) refreshPorts() {
 //     and the caller reads the ports the processes already hold (at most one
 //     scan old). A list never queues behind someone else's scan;
 //   - a scan of every process (all) that finished within portScanFreshness
-//     answers for any caller;
-//   - otherwise it scans. Only a scan of every process counts as fresh for
-//     the next caller: a subset's scan says nothing about the rest.
+//     answers for the next listing of every process, and only for it: a
+//     subset listing (by session, chat or worktree) may hold processes the
+//     earlier listing never saw, so it always scans its own processes;
+//   - otherwise it scans. A subset's scan says nothing about the rest, so it
+//     never counts as fresh for a listing of every process.
 func (m *BackgroundManager) refreshPortsGated(processes []*BackgroundProcess, all bool) {
 	g := &m.portScan
 	if !g.mu.TryLock() {
 		return
 	}
 	defer g.mu.Unlock()
-	if !g.lastAll.IsZero() && m.now().Sub(g.lastAll) < portScanFreshness {
+	if all && !g.lastAll.IsZero() && m.now().Sub(g.lastAll) < portScanFreshness {
 		return
 	}
-	scanPorts(processes)
+	scan := g.scan
+	if scan == nil {
+		scan = refreshPortsBatch
+	}
+	scan(processes)
 	if all {
 		g.lastAll = m.now()
 	}
