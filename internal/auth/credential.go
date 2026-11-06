@@ -4,6 +4,7 @@ package auth
 import (
 	"context"
 
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -111,4 +112,66 @@ func article(c Credential) string {
 	default:
 		return "a "
 	}
+}
+
+// ReasonMachineCredentialCannotDecide is the error reason of an approval
+// decision refused because the access token is bound to a machine (a daemon).
+const ReasonMachineCredentialCannotDecide = "machine_credential_cannot_decide"
+
+// ScopeMissing is the refusal of a credential that lacks scope: PermissionDenied
+// with reason scope_missing and the scope named in the error metadata.
+func ScopeMissing(scope fat.Scope) error {
+	return svcerr.WithMetadata(
+		svcerr.WithReason(svcerr.PermissionDenied("this credential lacks the "+string(scope)+" scope"), fat.ReasonScopeMissing),
+		fat.ScopesHeader, fat.ScopesHeaderValue([]fat.Scope{scope}))
+}
+
+// MachineCredentialRefusal is the refusal of an approval decision made with a
+// machine-bound token.
+func MachineCredentialRefusal() error {
+	return svcerr.WithReason(svcerr.PermissionDenied(
+		"This credential belongs to a machine (a daemon), and a machine never decides an approval, "+
+			"whatever scopes it holds. Decide it in the Reliant app or with a token you minted for yourself."),
+		ReasonMachineCredentialCannotDecide)
+}
+
+// MachineBound reports whether p is a credential a machine holds: bound to a
+// resource (a daemon, a port, a connector, an environment), holding every scope
+// (a daemon credential's wildcard), or carrying a daemon scope. A run executes
+// with such a credential, so it must never decide the approvals of its own
+// run, whatever scopes it holds; an unbound daemon:connect token is the
+// registration PAT of a machine.
+func MachineBound(p *fat.Principal) bool {
+	return p != nil && (p.Resource != nil || p.AllScopes ||
+		p.Scopes.Has(fat.ScopeDaemonConnect) || p.Scopes.Has(fat.ScopeDaemonResume))
+}
+
+// RequireApprovalDecider is the one gate on deciding an approval. It admits:
+//
+//   - a person: CredentialSession, and CredentialSharedKey (see RequirePerson);
+//   - an access token that holds approvals:decide AS A GRANTED SCOPE and is not
+//     bound to a machine.
+//
+// reliant:api does NOT stand in for approvals:decide here, even though
+// Set.Permits implies the inbox scopes elsewhere: every token minted before
+// approvals:decide existed, a workflow's included, stays refused. A token
+// bound to a machine is refused even when it holds approvals:decide
+// (ReasonMachineCredentialCannotDecide), and the check runs before the scope
+// check so a daemon credential's wildcard scopes never reach it. Every other
+// credential is refused as RequirePerson refuses it.
+func RequireApprovalDecider(ctx context.Context, action string) error {
+	if CredentialFromContext(ctx) != CredentialAccessToken {
+		return RequirePerson(ctx, action)
+	}
+	p, ok := MachineTokenFromContext(ctx)
+	if !ok {
+		return RequirePerson(ctx, action) // an access token with no principal: fail closed
+	}
+	if MachineBound(p) {
+		return MachineCredentialRefusal()
+	}
+	if !p.Scopes.Has(fat.ScopeApprovalsDecide) {
+		return ScopeMissing(fat.ScopeApprovalsDecide)
+	}
+	return nil
 }

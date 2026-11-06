@@ -260,9 +260,11 @@ func denialReasonOr(reason *string, fallback string) string {
 // chat they belong to, how many it resolved and how many it skipped as
 // already resolved.
 //
-// Only a person decides an approval: the caller's credential must be one no
-// agent, daemon or script holds (auth.RequirePerson), or nothing is read or
-// written. Owning the chat is not enough, because an agent's shell holds the
+// Only a person, or a token granted approvals:decide explicitly, decides an
+// approval (auth.RequireApprovalDecider), or nothing is read or written. This
+// is the authority; the interceptor's scope check in front of it is a first
+// gate. reliant:api is refused, and so is any token bound to a machine, scope
+// or not. Owning the chat is not enough, because an agent's shell holds the
 // owner's CLI login, and an approval it could answer itself — a release-gate
 // waiver, a promotion — would gate nothing (reliant #2123).
 //
@@ -278,8 +280,8 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 	if userID, ok := auth.GetUserIDFromContext(ctx); !ok || userID == "" {
 		return "", 0, 0, svcerr.Unauthenticated("user ID not found in context")
 	}
-	if err := auth.RequirePerson(ctx, "decide an approval"); err != nil {
-		logging.WarnContext(ctx, "[Approval] Refused a decision made with a credential software can hold",
+	if err := auth.RequireApprovalDecider(ctx, "decide an approval"); err != nil {
+		logging.WarnContext(ctx, "[Approval] Refused a decision made with a credential that may not decide",
 			"credential", auth.CredentialFromContext(ctx).String(), "approvalIDs", ids)
 		return "", 0, 0, err
 	}
