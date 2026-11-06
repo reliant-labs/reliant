@@ -168,6 +168,10 @@ func (e *LocalToolExecutor) executeTool(
 	// A workflow run step, marked by the server (ToolRequest.RunStep). Read
 	// from the context map only — never from toolInput, which a model writes.
 	toolContext.RunStep, _ = contextMap[RunStepContextKey].(bool)
+	if machine, ok := contextMap[RunMachineContextKey].(map[string]interface{}); ok {
+		toolContext.RunMachine.ID, _ = machine["id"].(string)
+		toolContext.RunMachine.Name, _ = machine["name"].(string)
+	}
 
 	// Decode the project's nested repos so tools with a `repo` param can
 	// resolve it to a workspace-relative path. Absent when single-repo.
