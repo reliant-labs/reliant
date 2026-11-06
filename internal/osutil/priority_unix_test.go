@@ -51,6 +51,43 @@ func TestLowerChildPriorityLeavesNicerChild(t *testing.T) {
 	}
 }
 
+// A group whose members straddle ChildNiceValue is lowered per member: the
+// one already nicer keeps its niceness (a group-wide setpriority would raise
+// it back to ChildNiceValue), and the less nice one is lowered (where the
+// process table lists group members).
+func TestLowerChildPriorityMixedGroup(t *testing.T) {
+	skipIfNicerThanChild(t)
+	leader := startSleeper(t)
+	startMember := func() *exec.Cmd {
+		cmd := exec.Command("sleep", "30")
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pgid: leader.Process.Pid}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+		return cmd
+	}
+	lessNice, nicer := startMember(), startMember()
+	const nicerValue = 19
+	if err := syscall.Setpriority(syscall.PRIO_PROCESS, nicer.Process.Pid, nicerValue); err != nil {
+		t.Fatalf("setpriority(member, %d): %v", nicerValue, err)
+	}
+	if err := LowerChildPriority(leader.Process.Pid); err != nil {
+		t.Fatal(err)
+	}
+	if got := niceOf(t, leader.Process.Pid); got != ChildNiceValue {
+		t.Fatalf("leader nice = %d, want %d", got, ChildNiceValue)
+	}
+	if got := niceOf(t, nicer.Process.Pid); got != nicerValue {
+		t.Fatalf("nicer member nice = %d, want it left at %d", got, nicerValue)
+	}
+	if _, ok := GroupMembers(leader.Process.Pid); ok {
+		if got := niceOf(t, lessNice.Process.Pid); got != ChildNiceValue {
+			t.Fatalf("less nice member nice = %d, want %d", got, ChildNiceValue)
+		}
+	}
+}
+
 func TestLowerChildPriorityOptOut(t *testing.T) {
 	skipIfAlreadyAtChildNice(t)
 	keepChildPriorityForTest(t)
