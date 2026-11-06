@@ -253,8 +253,10 @@ func (j *BackgroundJournal) removeLocked(id string) {
 
 // loadRecordsLocked reads every record in the journal, deleting what is past
 // retention, over the record bound, unreadable, or a leftover temp file. The
-// survivors come back newest first.
-func (j *BackgroundJournal) loadRecordsLocked() ([]journalRecord, error) {
+// survivors come back newest first. protectRunning keeps every "running"
+// record outside the bound; Restore passes false, since no process this
+// daemon could still be tracking has been journaled yet.
+func (j *BackgroundJournal) loadRecordsLocked(protectRunning bool) ([]journalRecord, error) {
 	entries, err := os.ReadDir(j.dir)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -297,28 +299,44 @@ func (j *BackgroundJournal) loadRecordsLocked() ([]journalRecord, error) {
 			_ = os.Remove(filepath.Join(j.dir, name))
 		}
 	}
-	sort.Slice(records, func(a, b int) bool { return records[a].StartTime.After(records[b].StartTime) })
-	if len(records) > journalMaxRecords {
-		for _, rec := range records[journalMaxRecords:] {
-			// A running process's record is never dropped for count alone.
-			if rec.Status == "running" {
-				continue
-			}
-			j.removeLocked(rec.ID)
+	// The bound: with protectRunning, every running record is kept (a live
+	// process's record is never dropped for count alone) and the newest ended
+	// records fill what is left of journalMaxRecords; otherwise the newest
+	// journalMaxRecords are kept, whatever their status. Either way an ended
+	// record is never kept over a newer ended one.
+	sort.SliceStable(records, func(a, b int) bool {
+		if !records[a].StartTime.Equal(records[b].StartTime) {
+			return records[a].StartTime.After(records[b].StartTime)
 		}
-		kept := records[:journalMaxRecords]
-		for _, rec := range records[journalMaxRecords:] {
+		return records[a].ID < records[b].ID
+	})
+	room := journalMaxRecords
+	if protectRunning {
+		for _, rec := range records {
 			if rec.Status == "running" {
-				kept = append(kept, rec)
+				room--
 			}
 		}
-		records = kept
 	}
-	return records, nil
+	kept := records[:0]
+	for _, rec := range records {
+		switch {
+		case protectRunning && rec.Status == "running":
+		case room > 0:
+			room--
+		default:
+			j.removeLocked(rec.ID)
+			continue
+		}
+		kept = append(kept, rec)
+	}
+	return kept, nil
 }
 
+// pruneLocked applies retention and the bound while the daemon runs: a
+// "running" record there may be a live process, so it is kept.
 func (j *BackgroundJournal) pruneLocked() error {
-	_, err := j.loadRecordsLocked()
+	_, err := j.loadRecordsLocked(true)
 	return err
 }
 
@@ -356,7 +374,10 @@ func (j *BackgroundJournal) Restore(m *BackgroundManager, restartedAt time.Time)
 	if err := os.MkdirAll(j.dir, 0o700); err != nil {
 		return 0, err
 	}
-	records, err := j.loadRecordsLocked()
+	// Restore runs before this daemon journals anything (installBackgroundJournal
+	// sets the callback after it), so every "running" record here is one the
+	// restart lost — about to become stale — and the bound applies to it.
+	records, err := j.loadRecordsLocked(false)
 	if err != nil {
 		return 0, err
 	}

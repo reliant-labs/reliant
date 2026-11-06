@@ -5,6 +5,7 @@ package shell
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,6 +150,92 @@ func TestBackgroundJournal_Retention(t *testing.T) {
 	for _, name := range []string{"old-0000.json", "old-0000.out"} {
 		if _, err := os.Stat(filepath.Join(dir, name)); !os.IsNotExist(err) {
 			t.Fatalf("%s survived retention (err=%v)", name, err)
+		}
+	}
+}
+
+// TestBackgroundJournal_RecordBound: past journalMaxRecords, a prune while the
+// daemon runs keeps every running record and fills the rest of the bound with
+// the newest ended ones — never an older ended record over a newer one — and a
+// restore, where no running record is live any more, keeps exactly the newest
+// journalMaxRecords.
+func TestBackgroundJournal_RecordBound(t *testing.T) {
+	dir := t.TempDir()
+	base := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	journal := NewBackgroundJournal(dir)
+	journal.now = func() time.Time { return base }
+
+	// 120 ended records, newest at i=0, and 10 running ones older than all of
+	// them, so a newest-first cut alone would drop every running record.
+	const ended, running = 120, 10
+	id := func(kind string, i int) string { return fmt.Sprintf("%s-%04d", kind, i) }
+	for i := 0; i < ended; i++ {
+		start := base.Add(-time.Duration(i+1) * time.Minute)
+		end := start.Add(time.Second)
+		if err := journal.recordStart(&BackgroundProcess{ID: id("ended", i), Status: "completed", StartTime: start, EndTime: &end}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < running; i++ {
+		start := base.Add(-time.Duration(ended+i+1) * time.Minute)
+		if err := journal.recordStart(&BackgroundProcess{ID: id("running", i), Status: "running", StartTime: start}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exists := func(id string) bool {
+		_, err := os.Stat(filepath.Join(dir, id+".json"))
+		return err == nil
+	}
+
+	journal.mu.Lock()
+	err := journal.pruneLocked()
+	journal.mu.Unlock()
+	if err != nil {
+		t.Fatalf("prune: %v", err)
+	}
+	for i := 0; i < running; i++ {
+		if !exists(id("running", i)) {
+			t.Fatalf("prune dropped running record %s", id("running", i))
+		}
+	}
+	keptEnded := journalMaxRecords - running
+	for i := 0; i < ended; i++ {
+		if got, want := exists(id("ended", i)), i < keptEnded; got != want {
+			t.Fatalf("after prune, ended record %d exists=%v; want %v (the newest %d ended are kept)", i, got, want, keptEnded)
+		}
+	}
+
+	// Add ended records back so the journal is over the bound again, then
+	// restore: the running records are now lost processes, and the bound is
+	// strict.
+	for i := keptEnded; i < ended; i++ {
+		start := base.Add(-time.Duration(i+1) * time.Minute)
+		end := start.Add(time.Second)
+		if err := journal.recordStart(&BackgroundProcess{ID: id("ended", i), Status: "completed", StartTime: start, EndTime: &end}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := newTestBGManager()
+	n, err := journal.Restore(m, base)
+	if err != nil || n != journalMaxRecords {
+		t.Fatalf("Restore = %d, %v; want %d", n, err, journalMaxRecords)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := 0
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".json") {
+			records++
+		}
+	}
+	if records != journalMaxRecords {
+		t.Fatalf("journal holds %d records after restore; want %d", records, journalMaxRecords)
+	}
+	for i := 0; i < ended; i++ {
+		if got, want := exists(id("ended", i)), i < journalMaxRecords; got != want {
+			t.Fatalf("after restore, ended record %d exists=%v; want %v", i, got, want)
 		}
 	}
 }
