@@ -1,0 +1,18 @@
+package reader
+
+import (
+	"testing"
+
+	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	"example.com/cescratch/internal/handlers/testonly"
+)
+
+// reader's tests import testonly; reader's code does not. testonly gets bare
+// kinds, so this connect.CodeOf becomes svcerr.Code.
+func TestTestonlyCode(t *testing.T) {
+	if got := svcerr.Code(testonly.Missing()); got != connect.CodeNotFound {
+		t.Fatalf("Missing: %v", got)
+	}
+}
