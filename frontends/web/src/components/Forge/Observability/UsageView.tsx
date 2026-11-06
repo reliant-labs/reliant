@@ -18,7 +18,7 @@ import type { GetObservabilityUsageResponse } from "@/gen/controlplane/services/
 import { useObsBillingUsage } from "@/hooks/observability-billing-queries";
 import { ObservabilityUsageDetails, Loading } from "@/components/Settings/cloud/usage/ObservabilityUsageDetails";
 import { BillingUnavailable } from "@/components/Settings/cloud/usage/ObservabilityLimits";
-import { at, dollars, gb, usageStateSentence } from "@/components/Settings/cloud/usage/observabilityBillingModel";
+import { at, dollars, gb, ESTIMATED_SPLIT_NOTE, usageStateSentence } from "@/components/Settings/cloud/usage/observabilityBillingModel";
 
 import Card, { CardHeader, CardInset } from "@/components/forge-ui/card";
 import { useObservabilityUsage } from "@/hooks/observability-queries";
@@ -66,7 +66,7 @@ export function UsageView({ orgId, subject = "" }: { orgId: string | null; subje
   if (!usage.data) return <BillingUnavailable label="Observability billing" />;
   return <section aria-label="Observability usage and limits" className="space-y-4">
     <ObservabilityMonth usage={usage.data} />
-    <ObservabilityUsageDetails orgId={orgId} />
+    <ObservabilityUsageDetails orgId={orgId} estimatedSplit={usage.data.exempt} />
   </section>;
 }
 
@@ -86,6 +86,7 @@ export function ObservabilityMonth({ usage: u }: { usage: GetObservabilityUsageR
     <p className="mt-2 text-xs text-ink-muted">{u.measuredThrough ? `Measured through ${at(u.measuredThrough)} (updated hourly; may lag by about 75 minutes).` : "No fully metered hour yet. Usage is not current; the first reading usually arrives within about 75 minutes."}</p>
     <p className="mt-2 text-sm">Browser: {gb(u.browserBilledBytes)} of {gb(u.browserCapBytes)} billable; {gb(u.browserBytes > u.browserBilledBytes ? u.browserBytes - u.browserBilledBytes : 0n)} more kept free.</p>
     <p className="mt-2 text-xs text-ink-muted">Customer metadata: {gb(u.metadataBytes)}, included above. Period: {at(u.periodStart)} to {at(u.periodEnd)} (exclusive).</p>
+    {u.exempt && <p className="mt-2 text-xs text-ink-muted" data-testid="obs-billing-estimated">{ESTIMATED_SPLIT_NOTE}</p>}
     <a className="mt-3 inline-block text-sm text-primary-ink underline" href="/settings/billing?tab=limits#observability">Usage & limits in Billing & usage</a>
   </Card>;
 }
@@ -206,7 +207,7 @@ export function UsagePanel({ usage: u }: { usage: ObservabilityUsage }) {
 
       {topServices.length > 0 && (
         <Card>
-          <CardHeader title="By service" description="The largest contributors, by signal." />
+          <CardHeader title="By service" description={u.exempt ? "The largest contributors, by signal. Estimated: weighted by row count, because this organization is not billed." : "The largest contributors, by signal."} />
           <ul className="divide-y divide-border/60" data-testid="obs-usage-services">
             {topServices.map((s) => (
               <Row key={`${s.service}/${s.signal}`} label={s.service || "(no service name)"} hint={SIGNAL_LABELS[s.signal]} bytes={s.billedBytes} />
