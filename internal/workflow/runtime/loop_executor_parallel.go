@@ -587,6 +587,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 					return result
 				}
 
+				inlineOutput = publishWorkflowNodeOutputs(gCtx, step.Node, inlineOutput)
 				iterNodeOutputs[step.Node.GetId()] = inlineOutput
 
 				// Execute save_message if configured

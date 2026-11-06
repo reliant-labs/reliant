@@ -2830,6 +2830,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				}
 
 				// Store output for edge routing
+				running.Output = publishWorkflowNodeOutputs(ctx, running.Node, running.Output)
 				nodeOutputStore.Set(running.StepID, running.Output)
 
 				// Execute save_message if configured on the workflow node
