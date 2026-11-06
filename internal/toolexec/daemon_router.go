@@ -8,6 +8,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/errreason"
+	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
 // ErrDaemonPending means a daemon record exists for this user (it was
@@ -321,6 +322,60 @@ type ToolExecutionResponse struct {
 	// connection the response arrived on. A backgrounded call records it: the
 	// process lives in that daemon's memory, and a user can have several.
 	DaemonID string `json:"daemon_id,omitempty"`
+	// Media is the result's images and documents (ToolResponse.media), which
+	// the worker persists so the model receives them. Empty from a gateway or
+	// daemon that predates it.
+	Media []ToolResponseMedia `json:"media,omitempty"`
+}
+
+// ToolResponseMedia is one binary part of a daemon tool result on the
+// gateway-to-worker hop. Data is base64 in JSON.
+type ToolResponseMedia struct {
+	MIMEType string `json:"mime_type"`
+	Data     []byte `json:"data"`
+	Path     string `json:"path,omitempty"`
+}
+
+// MediaFromProto converts a daemon ToolResponse's media for the worker hop.
+func MediaFromProto(parts []*reliantv1.ToolResponseMedia) []ToolResponseMedia {
+	if len(parts) == 0 {
+		return nil
+	}
+	out := make([]ToolResponseMedia, 0, len(parts))
+	for _, p := range parts {
+		if p == nil || len(p.GetData()) == 0 {
+			continue
+		}
+		out = append(out, ToolResponseMedia{MIMEType: p.GetMimeType(), Data: p.GetData(), Path: p.GetPath()})
+	}
+	return out
+}
+
+// MediaToProto converts a tool's binary parts for the daemon's ToolResponse.
+func MediaToProto(parts []message.BinaryContent) []*reliantv1.ToolResponseMedia {
+	if len(parts) == 0 {
+		return nil
+	}
+	out := make([]*reliantv1.ToolResponseMedia, 0, len(parts))
+	for _, p := range parts {
+		if len(p.Data) == 0 {
+			continue
+		}
+		out = append(out, &reliantv1.ToolResponseMedia{MimeType: p.MIMEType, Data: p.Data, Path: p.Path})
+	}
+	return out
+}
+
+// binaryParts is the response's media as the tool result's BinaryParts.
+func (r *ToolExecutionResponse) binaryParts() []message.BinaryContent {
+	if len(r.Media) == 0 {
+		return nil
+	}
+	out := make([]message.BinaryContent, 0, len(r.Media))
+	for _, m := range r.Media {
+		out = append(out, message.BinaryContent{Path: m.Path, MIMEType: m.MIMEType, Data: m.Data})
+	}
+	return out
 }
 
 // DaemonRouter abstracts all daemon-bound operations behind a transport-agnostic interface.

@@ -2093,6 +2093,7 @@ func (d *daemonClient) toolResponse(requestID string, result *toolexec.Execution
 			ErrorMessage: result.ErrorMessage,
 			ErrorCode:    result.ErrorCode,
 			Backgrounded: result.Backgrounded,
+			Media:        toolexec.MediaToProto(result.BinaryParts),
 		}},
 	}
 }

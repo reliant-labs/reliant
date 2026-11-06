@@ -611,5 +611,9 @@ func (o *resultOutbox) expireLocked(now time.Time) {
 // messageSize approximates a held result's memory: its payload strings.
 func messageSize(msg *reliantv1.DaemonMessage) int {
 	r := msg.GetToolResponse()
-	return len(r.GetContent()) + len(r.GetMetadata()) + len(r.GetErrorMessage()) + 64
+	size := len(r.GetContent()) + len(r.GetMetadata()) + len(r.GetErrorMessage()) + 64
+	for _, m := range r.GetMedia() {
+		size += len(m.GetData()) + len(m.GetMimeType()) + len(m.GetPath())
+	}
+	return size
 }

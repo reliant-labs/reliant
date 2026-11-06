@@ -507,6 +507,7 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		Backgrounded: resp.Backgrounded,
 		Content:      capLLMToolContent(content),
 		Metadata:     resp.Metadata,
+		BinaryParts:  resp.binaryParts(),
 		// A transport failure the gateway answered for — the daemon's
 		// connection dropped under the request, or the gateway was too busy
 		// to deliver it — is a reply, but not from the daemon: it proves

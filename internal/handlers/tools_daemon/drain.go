@@ -142,6 +142,7 @@ func (s *Service) routeToolResponse(conn *daemonConnection, tr *reliantv1.ToolRe
 		ErrorMessage: tr.ErrorMessage,
 		ErrorCode:    tr.ErrorCode,
 		Backgrounded: tr.Backgrounded,
+		Media:        toolexec.MediaFromProto(tr.GetMedia()),
 		// The connection's identity is gateway-assigned, never asserted by
 		// the daemon, so it is the trustworthy answer to "which machine ran
 		// this".
