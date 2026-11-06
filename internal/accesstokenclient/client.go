@@ -140,6 +140,7 @@ func (out introspectResponse) principal() (*fat.Principal, error) {
 		OrgID:        out.OrgID,
 		ActingUserID: out.ActingUserID,
 		Scopes:       scopes,
+		AllScopes:    out.AllScopes, // a daemon's wildcard: auth.MachineBound refuses it
 		Ephemeral:    out.Ephemeral,
 		ExpiresAt:    out.ExpiresAt,
 	}

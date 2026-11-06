@@ -36,6 +36,22 @@ type scopeRow struct {
 	need      fat.Scope
 }
 
+// decisionProcedures are the four rpcs that decide an approval. They need
+// approvals:decide GRANTED: reliant:api does not satisfy them.
+var decisionProcedures = []string{
+	reliantv1connect.ApprovalServiceApproveProcedure, reliantv1connect.ApprovalServiceDenyProcedure,
+	reliantv1connect.ApprovalServiceBatchApproveProcedure, reliantv1connect.ApprovalServiceBatchDenyProcedure,
+}
+
+func isDecision(procedure string) bool {
+	for _, p := range decisionProcedures {
+		if p == procedure {
+			return true
+		}
+	}
+	return false
+}
+
 var runTriggerRows = []scopeRow{
 	{reliantv1connect.RunServiceStartRunProcedure, fat.ScopeRunsStart},
 	{reliantv1connect.RunServiceGetRunProcedure, fat.ScopeRunsRead},
@@ -67,8 +83,8 @@ var runTriggerRows = []scopeRow{
 	{reliantv1connect.TriggerServiceDraftAutomationProcedure, ""},
 }
 
-// inboxRows is the inbox slice. Approvals are listed with need "": their
-// decisions stay on reliant:api until approvals:decide is decided.
+// inboxRows is the inbox slice. The approval decisions need approvals:decide,
+// granted explicitly (enforceRows treats them apart: reliant:api is refused).
 var inboxRows = []scopeRow{
 	{reliantv1connect.InboxServiceListInboxProcedure, fat.ScopeInboxRead},
 	{reliantv1connect.InboxServiceDismissInboxItemProcedure, fat.ScopeInboxManage},
@@ -81,10 +97,10 @@ var inboxRows = []scopeRow{
 	{reliantv1connect.QuestionServiceListAsyncQuestionsProcedure, ""},
 
 	{reliantv1connect.ApprovalServiceListApprovalsByChatProcedure, ""},
-	{reliantv1connect.ApprovalServiceApproveProcedure, ""},
-	{reliantv1connect.ApprovalServiceDenyProcedure, ""},
-	{reliantv1connect.ApprovalServiceBatchApproveProcedure, ""},
-	{reliantv1connect.ApprovalServiceBatchDenyProcedure, ""},
+	{reliantv1connect.ApprovalServiceApproveProcedure, fat.ScopeApprovalsDecide},
+	{reliantv1connect.ApprovalServiceDenyProcedure, fat.ScopeApprovalsDecide},
+	{reliantv1connect.ApprovalServiceBatchApproveProcedure, fat.ScopeApprovalsDecide},
+	{reliantv1connect.ApprovalServiceBatchDenyProcedure, fat.ScopeApprovalsDecide},
 }
 
 // wrongScope is a scope that does not permit need, nor satisfy an unmapped rpc.
@@ -93,6 +109,15 @@ func wrongScope(need fat.Scope) fat.Scope {
 		return fat.ScopeTriggersFire
 	}
 	return fat.ScopeRunsRead
+}
+
+func mintResource(t *testing.T, authority *tokenauthority.Memory, res *fat.Resource, scopes ...fat.Scope) string {
+	t.Helper()
+	m, err := authority.MintForUser(context.Background(), tokenauthority.MintRequest{
+		UserID: "user-tok", Name: "bound", Scopes: scopes, Resource: res,
+	})
+	require.NoError(t, err)
+	return m.Plaintext
 }
 
 type scopeHarness struct {
@@ -207,9 +232,18 @@ func enforceRows(t *testing.T, rows []scopeRow, every []fat.Scope) {
 			t.Run("web session is admitted", func(t *testing.T) {
 				require.True(t, h.call(t, row.procedure, h.session).admitted())
 			})
-			t.Run("reliant:api token is admitted", func(t *testing.T) {
-				require.True(t, h.call(t, row.procedure, reliantAPI).admitted())
-			})
+			if isDecision(row.procedure) {
+				t.Run("reliant:api token is refused scope_missing", func(t *testing.T) {
+					res := h.call(t, row.procedure, reliantAPI)
+					require.Equal(t, "permission_denied", res.code)
+					require.Equal(t, fat.ReasonScopeMissing, res.reason)
+					require.Equal(t, string(fat.ScopeApprovalsDecide), res.scopes)
+				})
+			} else {
+				t.Run("reliant:api token is admitted", func(t *testing.T) {
+					require.True(t, h.call(t, row.procedure, reliantAPI).admitted())
+				})
+			}
 
 			wanted := row.need
 			if wanted == "" {
@@ -283,7 +317,7 @@ func TestScopeForProcedureMatchesTable(t *testing.T) {
 		}
 		require.Equal(t, want, ScopeForProcedure(row.procedure), row.procedure)
 	}
-	require.Len(t, procedureScopes, 21, "an entry beyond the 21 documented rpcs widens what a narrow token reaches")
+	require.Len(t, procedureScopes, 25, "an entry beyond the 25 documented rpcs widens what a narrow token reaches")
 }
 
 // Every rpc of the inbox, question and approval services has a row, so a new
@@ -309,18 +343,45 @@ func TestInboxTableCoversEveryRPC(t *testing.T) {
 	}
 }
 
-// approvals:decide does not reach the decisions yet: a token holding it, with
-// every other new scope, still cannot approve or deny.
-func TestApprovalDecisionsStayOnReliantAPI(t *testing.T) {
+// The credential matrix of the four decision rpcs at the interceptor, the first
+// gate (the handler is the authority: approval_person_test.go).
+func TestApprovalDecisionsNeedExplicitApprovalsDecide(t *testing.T) {
 	h := newScopeHarness(t)
-	tok := h.mint(t, fat.ScopeApprovalsDecide, fat.ScopeInboxManage, fat.ScopeQuestionsAnswer)
-	for _, p := range []string{
-		reliantv1connect.ApprovalServiceApproveProcedure, reliantv1connect.ApprovalServiceDenyProcedure,
-		reliantv1connect.ApprovalServiceBatchApproveProcedure, reliantv1connect.ApprovalServiceBatchDenyProcedure,
-	} {
-		res := h.call(t, p, tok)
-		require.Equal(t, "permission_denied", res.code, p)
-		require.Equal(t, string(fat.ScopeReliantAPI), res.scopes, p)
+	daemon := &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-1"}
+	mintBound := func(scopes ...fat.Scope) string {
+		return mintResource(t, h.authority, daemon, scopes...)
+	}
+
+	for _, p := range decisionProcedures {
+		t.Run(strings.TrimPrefix(p, "/reliant.v1."), func(t *testing.T) {
+			for name, tc := range map[string]struct {
+				bearer string
+				code   string // "" = admitted
+				reason string
+			}{
+				"session":                           {bearer: h.session},
+				"approvals:decide":                  {bearer: h.mint(t, fat.ScopeApprovalsDecide)},
+				"approvals:decide with the inbox":   {bearer: h.mint(t, fat.ScopeApprovalsDecide, fat.ScopeInboxManage, fat.ScopeQuestionsAnswer)},
+				"reliant:api":                       {bearer: h.mint(t, fat.ScopeReliantAPI), code: "permission_denied", reason: fat.ReasonScopeMissing},
+				"reliant:api with approvals:decide": {bearer: h.mint(t, fat.ScopeReliantAPI, fat.ScopeApprovalsDecide)},
+				"wrong scope":                       {bearer: h.mint(t, fat.ScopeInboxManage, fat.ScopeQuestionsAnswer, fat.ScopeRunsControl), code: "permission_denied", reason: fat.ReasonScopeMissing},
+				"daemon-bound reliant:api":          {bearer: mintBound(fat.ScopeReliantAPI), code: "permission_denied", reason: auth.ReasonMachineCredentialCannotDecide},
+				"daemon-bound approvals:decide":     {bearer: mintBound(fat.ScopeApprovalsDecide), code: "permission_denied", reason: auth.ReasonMachineCredentialCannotDecide},
+				"daemon credential, every scope":    {bearer: mintBound(fat.ScopeDaemonConnect, fat.ScopeReliantAPI, fat.ScopeApprovalsDecide), code: "permission_denied", reason: auth.ReasonMachineCredentialCannotDecide},
+				"daemon PAT (daemon:connect)":       {bearer: h.mint(t, fat.ScopeDaemonConnect, fat.ScopeApprovalsDecide), code: "permission_denied", reason: auth.ReasonMachineCredentialCannotDecide},
+				"daemon PAT, no API scope":          {bearer: mintBound(fat.ScopeDaemonConnect), code: "unauthenticated"},
+			} {
+				t.Run(name, func(t *testing.T) {
+					res := h.call(t, p, tc.bearer)
+					if tc.code == "" {
+						require.True(t, res.admitted(), "got %+v", res)
+						return
+					}
+					require.Equal(t, tc.code, res.code, "%+v", res)
+					require.Equal(t, tc.reason, res.reason)
+				})
+			}
+		})
 	}
 }
 

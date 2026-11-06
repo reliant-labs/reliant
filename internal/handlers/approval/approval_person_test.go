@@ -2,15 +2,20 @@ package approval_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	approval "github.com/reliant-labs/reliant/internal/handlers/approval"
@@ -62,10 +67,21 @@ func asCaller(c auth.Credential) context.Context {
 	return auth.WithCredential(auth.WithUser(context.Background(), "test-user", "authenticated", ""), c)
 }
 
-// An approval means a person decided it (reliant #2123): a credential an agent
-// or a script can hold — the CLI login and API tokens, an OAuth client's
-// token, or a context nothing classified — is refused before anything is read
-// or written, on every RPC that resolves one, even for the chat's owner.
+// asToken is a context authenticated by the access token p, as the auth
+// interceptor leaves it.
+func asToken(p *fat.Principal) context.Context {
+	return auth.WithMachineToken(asCaller(auth.CredentialAccessToken), p)
+}
+
+func principal(res *fat.Resource, scopes ...fat.Scope) *fat.Principal {
+	return &fat.Principal{TokenID: "tok-1", ActingUserID: "test-user", Scopes: fat.SetOf(scopes...), Resource: res}
+}
+
+// An approval means a person decided it, or a token granted approvals:decide
+// explicitly (reliant #2123): a credential an agent or a script can hold — the
+// CLI login and API tokens, an OAuth client's token, or a context nothing
+// classified — is refused before anything is read or written, on every RPC that
+// resolves one, even for the chat's owner.
 func TestDecisionsRefuseCredentialsSoftwareHolds(t *testing.T) {
 	t.Parallel()
 	for _, cred := range []auth.Credential{auth.CredentialAccessToken, auth.CredentialOAuthClient, auth.CredentialUnknown} {
@@ -118,4 +134,89 @@ func TestListApprovalsAcceptsAnAccessToken(t *testing.T) {
 	_, err := svc.ListApprovalsByChat(asCaller(auth.CredentialAccessToken),
 		connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}))
 	require.NoError(t, err)
+}
+
+// The credential matrix of the decision rpcs, at the handler: the authority,
+// whatever the interceptor in front of it did.
+func TestDecisionsCredentialMatrix(t *testing.T) {
+	t.Parallel()
+	daemon := &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-1"}
+	cases := []struct {
+		name   string
+		ctx    context.Context
+		reason string // "" = allowed
+		scopes string // the scope_missing header
+	}{
+		{"session", asCaller(auth.CredentialSession), "", ""},
+		{"shared key", asCaller(auth.CredentialSharedKey), "", ""},
+		{"approvals:decide", asToken(principal(nil, fat.ScopeApprovalsDecide)), "", ""},
+		{"approvals:decide with other scopes", asToken(principal(nil, fat.ScopeApprovalsDecide, fat.ScopeInboxManage, fat.ScopeRunsControl)), "", ""},
+		{"reliant:api", asToken(principal(nil, fat.ScopeReliantAPI)), fat.ReasonScopeMissing, "approvals:decide"},
+		{"wrong scope", asToken(principal(nil, fat.ScopeInboxManage, fat.ScopeQuestionsAnswer)), fat.ReasonScopeMissing, "approvals:decide"},
+		{"daemon-bound reliant:api", asToken(principal(daemon, fat.ScopeReliantAPI)), auth.ReasonMachineCredentialCannotDecide, ""},
+		{"daemon-bound approvals:decide", asToken(principal(daemon, fat.ScopeApprovalsDecide)), auth.ReasonMachineCredentialCannotDecide, ""},
+		{"daemon PAT", asToken(principal(nil, fat.ScopeDaemonConnect, fat.ScopeApprovalsDecide)), auth.ReasonMachineCredentialCannotDecide, ""},
+		{"wildcard daemon credential", asToken(&fat.Principal{ActingUserID: "test-user", AllScopes: true, Scopes: fat.SetOf(fat.ScopeApprovalsDecide, fat.ScopeReliantAPI)}), auth.ReasonMachineCredentialCannotDecide, ""},
+		{"access token with no principal", asCaller(auth.CredentialAccessToken), auth.ReasonPersonRequired, ""},
+		{"oauth client", asCaller(auth.CredentialOAuthClient), auth.ReasonPersonRequired, ""},
+	}
+	for _, tc := range cases {
+		for _, d := range decisions {
+			t.Run(tc.name+"/"+d.name, func(t *testing.T) {
+				t.Parallel()
+				repo := personRepo()
+				svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo}))
+
+				err := d.call(svc, tc.ctx)
+
+				if tc.reason == "" {
+					require.NoError(t, err)
+					require.NotZero(t, repo.CallCount("UpdateApprovalStatus"))
+					return
+				}
+				require.Error(t, err)
+				require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "err = %v", err)
+				ce := svcerr.ToConnect(err)
+				require.Equal(t, tc.reason, ce.Meta().Get(svcerr.ReasonHeader))
+				require.Equal(t, tc.scopes, ce.Meta().Get(fat.ScopesHeader))
+				require.Zero(t, repo.CallCount("GetApproval"), "nothing is read for a refused caller")
+				require.Zero(t, repo.CallCount("UpdateApprovalStatus"), "nothing is written for a refused caller")
+			})
+		}
+	}
+}
+
+// An unbound wildcard (a daemon's credential) whose resolved scopes hold
+// approvals:decide and no daemon scope is refused as a machine on the
+// production path: the principal the control-plane introspection adapter
+// builds must keep the wildcard marker the gate reads.
+func TestDecisionsRefuseAnIntrospectedWildcard(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"active":true,"tokenId":"tok-1","orgId":"org-1","actingUserId":"test-user",
+			"scopes":["approvals:decide","reliant:api"],"allScopes":true}`))
+	}))
+	t.Cleanup(srv.Close)
+	client := accesstokenclient.New(accesstokenclient.Deps{BaseURL: srv.URL, Sign: func() (string, error) { return "signed", nil }})
+	p, err := client.Introspect(context.Background(), fat.Prefix+strings.Repeat("A1b2", 8))
+	require.NoError(t, err)
+	require.Nil(t, p.Resource)
+	require.True(t, p.Scopes.Has(fat.ScopeApprovalsDecide))
+	require.False(t, p.Scopes.Has(fat.ScopeDaemonConnect) || p.Scopes.Has(fat.ScopeDaemonResume))
+
+	for _, d := range decisions {
+		t.Run(d.name, func(t *testing.T) {
+			t.Parallel()
+			repo := personRepo()
+			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo}))
+
+			err := d.call(svc, asToken(p))
+
+			require.Error(t, err)
+			require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "err = %v", err)
+			require.Equal(t, auth.ReasonMachineCredentialCannotDecide, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+			require.Zero(t, repo.CallCount("UpdateApprovalStatus"), "nothing is written for a refused caller")
+		})
+	}
 }

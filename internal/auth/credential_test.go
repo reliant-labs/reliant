@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"testing"
 	"time"
 
@@ -90,5 +91,26 @@ func TestRequirePerson(t *testing.T) {
 				t.Errorf("reason = %q, want %q", got, ReasonPersonRequired)
 			}
 		})
+	}
+}
+
+func TestMachineBound(t *testing.T) {
+	daemon := &fat.Resource{Kind: fat.ResourceDaemon, ID: "d"}
+	for name, tc := range map[string]struct {
+		p    *fat.Principal
+		want bool
+	}{
+		"nil":               {nil, false},
+		"reliant:api":       {&fat.Principal{Scopes: fat.SetOf(fat.ScopeReliantAPI)}, false},
+		"approvals:decide":  {&fat.Principal{Scopes: fat.SetOf(fat.ScopeApprovalsDecide)}, false},
+		"daemon-bound":      {&fat.Principal{Scopes: fat.SetOf(fat.ScopeReliantAPI), Resource: daemon}, true},
+		"environment-bound": {&fat.Principal{Scopes: fat.SetOf(fat.ScopeReliantAPI), Resource: &fat.Resource{Kind: fat.ResourceEnvironment, ID: "e"}}, true},
+		"wildcard":          {&fat.Principal{Scopes: fat.SetOf(fat.ScopeReliantAPI), AllScopes: true}, true},
+		"daemon:connect":    {&fat.Principal{Scopes: fat.SetOf(fat.ScopeDaemonConnect)}, true},
+		"daemon:resume":     {&fat.Principal{Scopes: fat.SetOf(fat.ScopeDaemonResume)}, true},
+	} {
+		if got := MachineBound(tc.p); got != tc.want {
+			t.Errorf("%s: MachineBound = %v, want %v", name, got, tc.want)
+		}
 	}
 }
