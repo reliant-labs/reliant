@@ -23,6 +23,8 @@ func TestForgeScopes_IsEveryControlPlaneCapability(t *testing.T) {
 		// forge credential either.
 		fat.ScopeRunsStart, fat.ScopeRunsRead, fat.ScopeRunsControl,
 		fat.ScopeTriggersFire, fat.ScopeTriggersManage,
+		fat.ScopeInboxRead, fat.ScopeInboxManage,
+		fat.ScopeApprovalsDecide, fat.ScopeQuestionsAnswer,
 		// A port share: forge refuses it on a daemon binding.
 		fat.ScopeProxyPort,
 		// Token administration: reserved to a signed-in person.

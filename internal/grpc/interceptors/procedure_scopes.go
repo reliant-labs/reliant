@@ -20,6 +20,13 @@ import (
 // including the trigger reads that have no narrow scope yet (GetTrigger,
 // ListTriggers, ListTriggerEvents, GetLaunchEvent, ResolveTriggerSenders,
 // ListReplayEvents, PreviewReplay) and DraftAutomation.
+//
+// The inbox slice (forge pkg/accesstoken/inbox.go) is mapped the same way:
+// ListInbox (which is also the counts call, limit 0) needs inbox:read,
+// Dismiss and Restore need inbox:manage, ResolveQuestion needs
+// questions:answer. Approve, Deny, BatchApprove and BatchDeny are NOT mapped:
+// approvals:decide is pending an owner decision, so they need reliant:api, as
+// do CleanupStorage and ForgetStorageWorktree (they manage a machine).
 var procedureScopes = map[string]fat.Scope{
 	reliantv1connect.RunServiceStartRunProcedure:           fat.ScopeRunsStart,
 	reliantv1connect.RunServiceGetRunProcedure:             fat.ScopeRunsRead,
@@ -40,6 +47,11 @@ var procedureScopes = map[string]fat.Scope{
 	reliantv1connect.TriggerServiceRotateWebhookTokenProcedure: fat.ScopeTriggersManage,
 	reliantv1connect.TriggerServiceEnableWorkflowProcedure:     fat.ScopeTriggersManage,
 	reliantv1connect.TriggerServiceDisableWorkflowProcedure:    fat.ScopeTriggersManage,
+
+	reliantv1connect.InboxServiceListInboxProcedure:          fat.ScopeInboxRead,
+	reliantv1connect.InboxServiceDismissInboxItemProcedure:   fat.ScopeInboxManage,
+	reliantv1connect.InboxServiceRestoreInboxItemProcedure:   fat.ScopeInboxManage,
+	reliantv1connect.QuestionServiceResolveQuestionProcedure: fat.ScopeQuestionsAnswer,
 }
 
 // ScopeForProcedure is the scope a machine credential needs for procedure:
