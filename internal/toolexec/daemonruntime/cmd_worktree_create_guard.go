@@ -101,12 +101,21 @@ func lockCreatePath(ctx context.Context, path string) (func(), error) {
 	}
 }
 
+// lockNewCheckout locks a checkout worktree.create made for its worktree id.
+// A variable so a test can make it fail the way an expired context does.
+var lockNewCheckout = worktreereclaim.LockCheckout
+
 // finishedCreate answers a create that an earlier attempt of the same request
-// already finished: checkout is a registered worktree of the project on the
-// requested branch, locked for this request's worktree id (the lock is the
-// last thing a successful create writes, so a checkout locked for this id was
-// made by this request). ok is false for anything else, which the handler
-// creates as usual.
+// already made: checkout is a registered worktree of the project on the
+// requested branch, either locked for this request's worktree id (the lock is
+// the last thing a successful create writes, so a checkout locked for this id
+// was made by this request) or not locked at all. An unlocked one is what an
+// attempt leaves when `git worktree add` finished but the lock could not be
+// written (its finish context ran out): the path is this request's alone
+// (worktreeCreatePath), so it is adopted and locked now; a failed lock is
+// answered as an error, never as success. A checkout locked for anything
+// else, "initializing" included, is not this request's. ok is false when no
+// checkout is adopted, which the handler creates as usual.
 func finishedCreate(ctx context.Context, req worktreeCreateRequest, checkout string) (worktreeCreateResponse, bool) {
 	if req.WorktreeID == "" {
 		return worktreeCreateResponse{}, false
@@ -124,11 +133,25 @@ func finishedCreate(ctx context.Context, req worktreeCreateRequest, checkout str
 		if !sameCheckoutPath(wt.Path, checkout) {
 			continue
 		}
-		if wt.Prunable || wt.Branch != req.Branch || !wt.Locked || wt.LockReason != worktreereclaim.LockReason(req.WorktreeID) {
+		if wt.Prunable || wt.Branch != req.Branch {
+			return worktreeCreateResponse{}, false
+		}
+		if wt.Locked && wt.LockReason != worktreereclaim.LockReason(req.WorktreeID) {
 			return worktreeCreateResponse{}, false
 		}
 		if req.ExpectedHead != "" && wt.Head != req.ExpectedHead {
 			return worktreeCreateResponse{}, false
+		}
+		if !wt.Locked {
+			if err := lockNewCheckout(ctx, checkout, req.WorktreeID); err != nil {
+				logging.WarnContext(ctx, "worktree.create found an earlier attempt's unlocked checkout but could not lock it",
+					"worktree_path", checkout, "worktree_id", req.WorktreeID, "error", err)
+				return worktreeCreateResponse{
+					Error:        fmt.Sprintf("an earlier attempt made this checkout but it could not be locked for its worktree; retry to finish it: %v", err),
+					WorktreePath: checkout,
+				}, true
+			}
+			syncNewCheckout(ctx, req.ProjectPath, checkout, req.Branch)
 		}
 		base := req.BaseBranch
 		if base == "" {

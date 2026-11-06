@@ -375,12 +375,19 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 
 	// Mark the checkout reliant-owned. forge's storage reaper skips locked
 	// worktrees, so this lock is what protects a clean, idle, pushed checkout
-	// from being removed under an active chat. Failing to lock is not fatal to
-	// creation: the reconcile pass locks every active worktree on its next run.
+	// from being removed under an active chat, and it is how a re-sent request
+	// knows the checkout is its own (finishedCreate). So success is reported
+	// only once the lock holds. A checkout left unlocked here (the finish
+	// context ran out, git failed) is kept, not taken back: a re-send of this
+	// request adopts it and locks it then (finishedCreate).
 	if req.WorktreeID != "" {
-		if err := worktreereclaim.LockCheckout(ctx, worktreePath, req.WorktreeID); err != nil {
-			logging.WarnContext(ctx, "worktree created but not locked; reconcile will retry",
+		if err := lockNewCheckout(ctx, worktreePath, req.WorktreeID); err != nil {
+			logging.WarnContext(ctx, "worktree created but not locked; a re-sent request adopts it",
 				"worktree_path", worktreePath, "error", err)
+			return json.Marshal(worktreeCreateResponse{
+				Error:        fmt.Sprintf("the checkout was made but could not be locked for its worktree; retry to finish it: %v", err),
+				WorktreePath: worktreePath,
+			})
 		}
 	}
 	syncNewCheckout(ctx, req.ProjectPath, worktreePath, req.Branch)

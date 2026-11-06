@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,6 +60,55 @@ func TestWorktreeCreate_ResentRequestAnswersWithTheFirstAttemptsCheckout(t *test
 	// A DIFFERENT worktree asking for the same checkout path is not a
 	// re-send: it is refused, never handed someone else's checkout.
 	req["worktree_id"] = "wt-resend-2"
+	require.False(t, createFor(t, req).Success)
+}
+
+// `git worktree add` finished but the finish context ran out before the
+// worktree-id lock was written. The create must not report success, and must
+// leave the checkout for a re-send, which adopts and locks the same checkout
+// instead of failing on the branch it holds. Not parallel: it swaps
+// lockNewCheckout, and parallel tests start only after this one returns.
+func TestWorktreeCreate_LockLostToAnExpiredFinishIsRecoveredByTheResend(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
+	projectPath := diagnoseRepo(t)
+	workspaceID := uniqueWorkspaceID(t, "ws-lock-expired")
+	req := map[string]any{
+		"project_path": projectPath,
+		"workspace_id": workspaceID,
+		"name":         "lockexp",
+		"branch":       "feat/lock-expired",
+		"base_branch":  "main",
+		"worktree_id":  "wt-lock-expired",
+	}
+	expired := func(ctx context.Context, checkout, worktreeID string) error {
+		ctx, cancel := context.WithDeadline(ctx, time.Now().Add(-time.Second))
+		defer cancel()
+		return worktreereclaim.LockCheckout(ctx, checkout, worktreeID)
+	}
+	lockNewCheckout = expired
+	t.Cleanup(func() { lockNewCheckout = worktreereclaim.LockCheckout })
+
+	first := createFor(t, req)
+	require.False(t, first.Success, "a checkout that is not locked for its worktree must not be reported as made")
+	checkout := testWorktreePath(t, workspaceID)
+	head := gitOutIn(t, checkout, "rev-parse", "HEAD")
+	list := guardWorktrees(t, projectPath)
+	require.Contains(t, list, "branch refs/heads/feat/lock-expired", "the finished checkout is kept for the re-send")
+	require.NotContains(t, list, worktreereclaim.LockReason("wt-lock-expired"))
+
+	// A re-send whose lock fails again still does not report success.
+	require.False(t, createFor(t, req).Success)
+
+	lockNewCheckout = worktreereclaim.LockCheckout
+	again := createFor(t, req)
+	require.True(t, again.Success, "the re-send must adopt the unlocked checkout: %s", again.Error)
+	require.Equal(t, head, gitOutIn(t, checkout, "rev-parse", "HEAD"))
+	list = guardWorktrees(t, projectPath)
+	require.Equal(t, 1, strings.Count(list, "branch refs/heads/feat/lock-expired"))
+	require.Contains(t, list, "locked "+worktreereclaim.LockReason("wt-lock-expired"))
+
+	// Once locked, a different worktree asking for the path is refused.
+	req["worktree_id"] = "wt-lock-expired-2"
 	require.False(t, createFor(t, req).Success)
 }
 
