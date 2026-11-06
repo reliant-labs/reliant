@@ -54,7 +54,7 @@ import { TraceDetail } from "./TraceDetail";
 import { TraceLatencyChart } from "./traceScatter/TraceLatencyChart";
 import { inRegion, pointsOf, type TraceRegion } from "./traceScatter/traceScatterModel";
 import { parseLatParam } from "./Home/SignalTiles";
-import { operationName } from "./traceTitle";
+import { operationName, rootSpanQuery } from "./traceTitle";
 import { UserIdFilter } from "./UserIdFilter";
 import { useRovingFocus } from "./useRovingFocus";
 import DataTable, { STACK, type DataTableColumn } from "@/components/forge-ui/data_table";
@@ -164,7 +164,7 @@ function TraceList({
   const filters: TraceFilters = useMemo(
     () => ({
       range,
-      rootSpanName,
+      rootSpanName: rootSpanQuery(rootSpanName),
       services: service ? [service] : [],
       errorsOnly,
       minDurationMs: Math.max(MIN_DURATION_MS[minDuration ?? ""] ?? 0, band ? Math.floor(band.loMs) : 0),
@@ -469,7 +469,7 @@ function TraceToolbar({
             type="search"
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder="Root operation contains, e.g. GetUser or orders.v1.OrdersService/"
+            placeholder="Root operation contains, e.g. ChatService.SendMessage or GetUser"
             aria-invalid={filterError ? true : undefined}
             aria-describedby={filterError ? "obs-trace-query-error" : undefined}
             className={cn(

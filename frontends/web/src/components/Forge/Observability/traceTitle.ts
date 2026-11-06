@@ -60,6 +60,24 @@ export function operationName(name: string, attributes: Record<string, string> =
   return verb ? `${verb} ${shown}` : shown;
 }
 
+// The readable `Service.Method` a reader copies from the list: a dotted
+// package prefix allowed, the service named `<Name>Service`.
+const READABLE_RPC = /^((?:[A-Za-z_]\w*\.)*[A-Z]\w*Service)\.([A-Za-z_]\w*)$/;
+
+/**
+ * What the root-operation filter sends for what the reader typed. The list
+ * titles an RPC `ChatService.SendMessage` (operationName), but the server
+ * matches the stored name, `reliant.v1.ChatService/SendMessage` or a browser's
+ * `POST /reliant.v1.ChatService/SendMessage`, as a substring: typing the title
+ * found nothing. A `Service.Method` is sent as `Service/Method`, which is a
+ * substring of every stored spelling; anything else is sent as typed.
+ */
+export function rootSpanQuery(typed: string): string {
+  const q = typed.trim();
+  const rpc = READABLE_RPC.exec(q);
+  return rpc ? `${rpc[1]}/${rpc[2]}` : q;
+}
+
 // `Service.Method` when `name` is a procedure. A package (`reliant.v1.`) makes
 // it one; without a package, only a PascalCase `<Name>Service/<Method>` does,
 // so `GET /v1/items` stays a path.
