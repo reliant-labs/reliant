@@ -68,6 +68,11 @@ async function page() {
 }
 
 describe("settings section routes", () => {
+  it("keeps Projects at the stable /settings/projects deep link", async () => {
+    const router = renderAt("/settings/projects");
+    expect(await page()).toMatchObject({ section: "projects" });
+    expect(router.state.location.pathname).toBe("/settings/projects");
+  });
   it("renders a known section", async () => {
     renderAt("/settings/mcp");
     expect(await page()).toMatchObject({ section: "mcp" });

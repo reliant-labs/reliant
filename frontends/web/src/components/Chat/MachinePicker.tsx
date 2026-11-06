@@ -40,6 +40,7 @@ export interface MachinePickerProject {
    * be: a plain folder has nothing to clone from.
    */
   onSetUp?: (daemonId: string) => Promise<void>;
+  onUseFolder?: (daemonId: string) => void;
   /** A failed set-up, in words; the caller owns the copy (describeCloneError). */
   describeError?: (err: unknown, machineName: string) => string;
 }
@@ -229,6 +230,12 @@ export function MachinePicker({
               <Download className="h-3 w-3 shrink-0" aria-hidden="true" />
             )}
             <span className="truncate">{action}</span>
+          </button>
+        )}
+        {project?.onUseFolder && (
+          <button type="button" className="mt-1.5 block rounded-md px-2 py-1 text-primary-ink hover:bg-muted"
+            onClick={() => { setIsOpen(false); project.onUseFolder?.(option.value); }}>
+            Use a folder on {option.label}…
           </button>
         )}
         {error && (
