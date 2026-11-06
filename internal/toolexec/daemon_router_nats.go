@@ -21,7 +21,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonliveness"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
@@ -1041,12 +1040,10 @@ func (r *NATSDaemonRouter) SendToolExecutionBackground(ctx context.Context, user
 // "no daemon connected".
 func daemonRequestError(op string, err error) error {
 	if err == nats.ErrNoResponders {
-		// The reason is set on the wire error itself as well: this one is
-		// returned as a *connect.Error, which some paths hand to the client
-		// without svcerr.ToConnect reading the chain.
-		ce := connect.NewError(connect.CodeUnavailable, errDaemonNotConnected)
-		ce.Meta().Set(svcerr.ReasonHeader, errreason.DaemonNotConnected)
-		return ce
+		// Returned as a *connect.Error, which some paths hand to the client
+		// without svcerr.ToConnect reading the chain; ToConnect puts the
+		// reason on it.
+		return svcerr.ToConnect(errDaemonNotConnected)
 	}
 	if errors.Is(err, nats.ErrTimeout) {
 		return fmt.Errorf("%s via NATS failed: %w: %w", op, ErrDaemonTimeout, err)

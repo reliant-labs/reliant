@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
@@ -41,7 +39,7 @@ func (f forwarder) Dispatch(
 ) error {
 	payload, err := json.Marshal(req)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal %s request: %w", commandType, err))
+		return svcerr.Wrap(svcerr.WithCause(svcerr.Internal(fmt.Sprintf("marshal %s request failed", commandType)), err))
 	}
 
 	respBytes, err := f.sender.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
@@ -50,7 +48,7 @@ func (f forwarder) Dispatch(
 	}
 
 	if err := json.Unmarshal(respBytes, resp); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal %s response: %w", commandType, err))
+		return svcerr.Wrap(svcerr.WithCause(svcerr.Internal(fmt.Sprintf("unmarshal %s response failed", commandType)), err))
 	}
 	return nil
 }

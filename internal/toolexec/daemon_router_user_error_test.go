@@ -10,6 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -36,6 +37,9 @@ func TestDaemonResolutionErrorsAreUserErrors(t *testing.T) {
 	assert.True(t, IsNoDaemon(fmt.Errorf("x: %w", ErrNoDaemon)))
 	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(notConnected))
 	assert.Equal(t, "unavailable: no daemon connected for user", notConnected.Error())
+	var wire *connect.Error
+	require.ErrorAs(t, notConnected, &wire)
+	assert.Equal(t, errreason.DaemonNotConnected, wire.Meta().Get(svcerr.ReasonHeader), "the reason rides the *connect.Error itself")
 	assert.True(t, daemonoffline.IsError(notConnected), "the daemon-offline marker must survive")
 	assert.Contains(t, ErrDaemonPending.Error(), daemonoffline.ErrorSubstring)
 

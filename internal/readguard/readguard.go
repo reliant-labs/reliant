@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/proto"
@@ -250,7 +251,7 @@ func runSafely(ctx context.Context, run func(context.Context) (connect.AnyRespon
 		if p := recover(); p != nil {
 			logging.ErrorContext(ctx, "[ReadGuard] list handler panicked", "panic", p, "stack", string(debug.Stack()))
 			resp = nil
-			err = connect.NewError(connect.CodeInternal, errors.New("internal server error"))
+			err = svcerr.ToConnect(svcerr.Internal(svcerr.InternalMessage))
 		}
 	}()
 	return run(ctx)
@@ -272,10 +273,9 @@ func (g *guard) refuse(ctx context.Context, userID string, proc Procedure, why s
 	logging.WarnContext(ctx, "[ReadGuard] refused a list read: the user has too many running",
 		"userID", userID, "procedure", proc.Name(), "reason", why,
 		"perUser", g.cfg.PerUser, "queue", g.cfg.Queue)
-	err := connect.NewError(connect.CodeResourceExhausted,
-		errors.New("too many list requests at once; retry shortly"))
-	err.Meta().Set("Retry-After", strconv.Itoa(int(max(g.cfg.RetryAfter.Round(time.Second), time.Second)/time.Second)))
-	return err
+	retryAfter := strconv.Itoa(int(max(g.cfg.RetryAfter.Round(time.Second), time.Second) / time.Second))
+	return svcerr.ToConnect(svcerr.WithMetadata(
+		svcerr.ResourceExhausted("too many list requests at once; retry shortly"), "Retry-After", retryAfter))
 }
 
 // annotate records on the request's span how the guard answered it.
