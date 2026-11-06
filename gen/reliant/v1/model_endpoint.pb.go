@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -96,7 +97,7 @@ type ModelEndpoint struct {
 	Models []*ModelEndpointModel `protobuf:"bytes,9,rep,name=models,proto3" json:"models,omitempty"`
 	// Most recent probe outcome, refreshed on create/update/test and
 	// periodically by the server.
-	Probe         *LocalModelEndpoint `protobuf:"bytes,10,opt,name=probe,proto3" json:"probe,omitempty"`
+	Probe         *v1.LocalModelEndpoint `protobuf:"bytes,10,opt,name=probe,proto3" json:"probe,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -194,7 +195,7 @@ func (x *ModelEndpoint) GetModels() []*ModelEndpointModel {
 	return nil
 }
 
-func (x *ModelEndpoint) GetProbe() *LocalModelEndpoint {
+func (x *ModelEndpoint) GetProbe() *v1.LocalModelEndpoint {
 	if x != nil {
 		return x.Probe
 	}
@@ -866,7 +867,7 @@ func (*TestModelEndpointRequest_Draft) isTestModelEndpointRequest_Target() {}
 
 type TestModelEndpointResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Probe *LocalModelEndpoint    `protobuf:"bytes,1,opt,name=probe,proto3" json:"probe,omitempty"`
+	Probe *v1.LocalModelEndpoint `protobuf:"bytes,1,opt,name=probe,proto3" json:"probe,omitempty"`
 	// Round-trip time of the probe, for the UI.
 	LatencyMs     int64 `protobuf:"varint,2,opt,name=latency_ms,json=latencyMs,proto3" json:"latency_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -903,7 +904,7 @@ func (*TestModelEndpointResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_model_endpoint_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *TestModelEndpointResponse) GetProbe() *LocalModelEndpoint {
+func (x *TestModelEndpointResponse) GetProbe() *v1.LocalModelEndpoint {
 	if x != nil {
 		return x.Probe
 	}
@@ -1032,7 +1033,7 @@ var file_reliant_v1_model_endpoint_proto_goTypes = []any{
 	(*TestModelEndpointRequest)(nil),    // 12: reliant.v1.TestModelEndpointRequest
 	(*TestModelEndpointResponse)(nil),   // 13: reliant.v1.TestModelEndpointResponse
 	nil,                                 // 14: reliant.v1.ModelEndpointInput.HeadersEntry
-	(*LocalModelEndpoint)(nil),          // 15: reliant.v1.LocalModelEndpoint
+	(*v1.LocalModelEndpoint)(nil),       // 15: reliant.v1.LocalModelEndpoint
 }
 var file_reliant_v1_model_endpoint_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.ModelEndpoint.route:type_name -> reliant.v1.ModelEndpointRoute
@@ -1070,7 +1071,6 @@ func file_reliant_v1_model_endpoint_proto_init() {
 	if File_reliant_v1_model_endpoint_proto != nil {
 		return
 	}
-	file_reliant_v1_tools_daemon_proto_init()
 	file_reliant_v1_model_endpoint_proto_msgTypes[1].OneofWrappers = []any{}
 	file_reliant_v1_model_endpoint_proto_msgTypes[4].OneofWrappers = []any{}
 	file_reliant_v1_model_endpoint_proto_msgTypes[11].OneofWrappers = []any{

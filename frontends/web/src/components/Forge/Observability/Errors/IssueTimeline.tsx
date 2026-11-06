@@ -13,8 +13,7 @@
  * box so nothing typed is lost.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
-import { useRouter } from "@tanstack/react-router";
+import { useMemo, useRef, useState } from "react";
 import { CheckCircle2, CircleDot, MessageSquare, MessageSquareText, Pencil, Trash2, UserRound } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
@@ -29,11 +28,11 @@ import {
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { IssueComment, IssueTimelineEntry } from "@/services/controlPlane/observability/issuesTypes";
-import { loadRunContext } from "@/components/runs/loadRunContext";
-import { toast } from "@/lib/toast-manager";
+import { useOpenRun } from "@/components/runs/useOpenRun";
 
 import { formatAgo, formatWhen } from "../format";
 import { ObsLoadingRows } from "../ObsStates";
+import { useObsReadOnly } from "../obsReadOnly";
 import { CommentBody } from "./CommentBody";
 import {
   actorName,
@@ -64,6 +63,7 @@ export function IssueTimeline({ issueId, orgId }: { issueId: string; orgId: stri
   // The issue the timeline is of: the one asked for, or the issue it was merged into.
   const timelineIssueId = pages?.[0]?.issueId ?? issueId;
   const myRole = members.data?.callerRole ?? undefined;
+  const { readOnly } = useObsReadOnly();
   const now = Date.now();
 
   return (
@@ -92,8 +92,8 @@ export function IssueTimeline({ issueId, orgId }: { issueId: string; orgId: stri
               timelineIssueId={timelineIssueId}
               viewedIssueId={issueId}
               now={now}
-              canEdit={entry.body.kind === "comment" && canEditComment(entry.body.comment, me.data)}
-              canDelete={entry.body.kind === "comment" && canDeleteComment(entry.body.comment, me.data, myRole)}
+              canEdit={!readOnly && entry.body.kind === "comment" && canEditComment(entry.body.comment, me.data)}
+              canDelete={!readOnly && entry.body.kind === "comment" && canDeleteComment(entry.body.comment, me.data, myRole)}
             />
           ))}
         </ol>
@@ -190,20 +190,7 @@ function TimelineRow({
 }
 
 /** Open a chat from the console: select its project and workspace, then go to the project's chat screen. */
-export function useOpenChat(): (chatId: string) => Promise<void> {
-  const router = useRouter({ warn: false });
-  return useCallback(
-    async (chatId: string) => {
-      try {
-        const chat = await loadRunContext(chatId);
-        await router?.navigate({ to: "/project/$projectId", params: { projectId: chat.projectId }, search: {} });
-      } catch (error) {
-        void toast.error(error);
-      }
-    },
-    [router]
-  );
-}
+export const useOpenChat = useOpenRun;
 
 function ChatLink({ chatId, label }: { chatId: string; label: string }) {
   const open = useOpenChat();
@@ -349,11 +336,13 @@ function CommentEntry({
 
 function CommentComposer({ issueId, disabled }: { issueId: string; disabled: boolean }) {
   const add = useAddIssueComment();
+  // The demo: the box stays, read-only, saying comments are off (obsReadOnly.tsx).
+  const { readOnly, reason } = useObsReadOnly();
   const [body, setBody] = useState("");
   const sending = useRef(false);
   const empty = !body.trim();
   const submit = () => {
-    if (empty || disabled || sending.current) return;
+    if (empty || disabled || readOnly || sending.current) return;
     // Lock before mutate: a second keyboard/form event can arrive before React renders pending.
     sending.current = true;
     const sent = body;
@@ -387,12 +376,13 @@ function CommentComposer({ issueId, disabled }: { issueId: string; disabled: boo
         }}
         rows={3}
         maxLength={COMMENT_MAX_LENGTH}
-        placeholder="Add a comment. Markdown works; raw HTML is ignored."
+        readOnly={readOnly}
+        placeholder={readOnly ? "Comments are off in the demo." : "Add a comment. Markdown works; raw HTML is ignored."}
         className={TEXTAREA}
         data-testid="obs-comment-box"
       />
       <div className="flex items-center gap-2">
-        <Button type="submit" size="sm" variant="primary" leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />} disabled={empty || disabled || add.isPending} loading={add.isPending} data-testid="obs-comment-submit">
+        <Button type="submit" size="sm" variant="primary" leftIcon={<CheckCircle2 className="h-3.5 w-3.5" />} disabled={empty || disabled || readOnly || add.isPending} title={readOnly ? reason : undefined} loading={add.isPending} data-testid="obs-comment-submit">
           Comment
         </Button>
         <span className="text-2xs text-ink-muted">⌘/Ctrl+Enter sends</span>

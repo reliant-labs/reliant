@@ -48,6 +48,7 @@ import { placeEnvironments, type ObsEnvironment, type ObsPlace } from "./obsPlac
 import { ALERTS_TABS, type AlertsTab, type ObsNavigate } from "./obsSearch";
 import { ExploreLink } from "./Metrics/ExploreLink";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
+import { useObsReadOnly } from "./obsReadOnly";
 
 export const ALERTS_TAB_LABELS: Record<AlertsTab, string> = {
   firing: "Firing",
@@ -98,7 +99,9 @@ export function AlertsView({ orgId, place, envIds, range, tab, rule, navigate }:
   const alerts = useAlerts(orgId, serverEnv);
   const firing = useMemo(() => (alerts.data ?? []).filter((a) => inView(a.envId)), [alerts.data, envIds]); // eslint-disable-line react-hooks/exhaustive-deps
   const rules = useMemo(() => declaredRules(environments), [environments]);
-  const [readOnly, setReadOnly] = useState(false);
+  // The demo starts read-only (obsReadOnly.tsx); elsewhere a refused write makes it so.
+  const demo = useObsReadOnly();
+  const [readOnly, setReadOnly] = useState(demo.readOnly);
   const [silencing, setSilencing] = useState<AlertInstance | null>(null);
   const envName = (id: string) => placeEnvironments(place).find((env) => env.id === id)?.name ?? id;
 
@@ -145,7 +148,7 @@ export function AlertsView({ orgId, place, envIds, range, tab, rule, navigate }:
         {readOnly && (
           <p className="inline-flex items-center gap-1.5 text-xs text-ink-muted" role="status" data-testid="obs-alerts-read-only">
             <Lock className="h-3.5 w-3.5" aria-hidden="true" />
-            You can view alerting. Changing receivers and silences needs an organization admin.
+            {demo.readOnly ? "This is a demo: silences and receivers are read-only." : "You can view alerting. Changing receivers and silences needs an organization admin."}
           </p>
         )}
       </div>

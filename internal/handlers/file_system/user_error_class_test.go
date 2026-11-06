@@ -28,6 +28,20 @@ func TestFsProxyDaemonError_MachineStateIsAUserError(t *testing.T) {
 	assert.Equal(t, svcerr.ClassServer, svcerr.Classify(fsProxyDaemonError("fs.get_tree", errors.New("decode tree: unexpected EOF"))))
 }
 
+// A preview of a file that is not on the machine is the state of the user's
+// disk: NotFound, a user error, with the daemon's words. fs.preview_info says
+// "file not found: <path>", not ENOENT's text; as Internal it was an ERROR on
+// the server and a browser issue for every click on a path from a chat that
+// the machine does not have (prod, 2026-11-05: ".../~/projects/growth/...").
+func TestFsProxyDaemonError_PreviewOfAMissingFileIsNotFound(t *testing.T) {
+	err := toolexec.DaemonReportedFailure("fs.preview_info", "file not found: /home/workspace/projects/x/~/notes/post.md")
+	mapped := fsProxyDaemonError("fs.preview_info", err)
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(mapped))
+	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(mapped))
+	assert.Contains(t, mapped.Error(), "file not found: /home/workspace/projects/x/~/notes/post.md")
+	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err), "the router's error itself logs at the user level in every component chain")
+}
+
 // levelRecorder keeps the level of every record logged through it.
 type levelRecorder struct{ levels []slog.Level }
 

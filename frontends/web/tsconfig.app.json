@@ -39,6 +39,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@reliantlabs/sdk/client": ["../../sdk/ts/src/client/index.ts"],
+      "@reliantlabs/sdk/react": ["../../sdk/ts/src/react/index.ts"],
       "#gen/*": ["./src/gen/*"]
     }
   },

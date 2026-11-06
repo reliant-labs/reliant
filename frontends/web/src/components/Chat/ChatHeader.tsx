@@ -22,6 +22,8 @@ import {
   Terminal,
   Workflow,
   ArrowLeft,
+  Check,
+  ListCollapse,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useChat } from "../../hooks/chat-queries";
@@ -35,6 +37,7 @@ import { ChildRunsStrip } from "../runs/ChildRunsStrip";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { useChatActions } from "./useChatActions";
 import { useThreadNavigation } from "./useThreadNavigation";
+import { setChatThreadMode, useChatThreadMode } from "./thread-views/useChatThreadMode";
 
 interface ChatHeaderProps {
   chatId: string | null;
@@ -79,6 +82,8 @@ export function ChatHeader({
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
   const actions = useChatActions(chatId, propWorktreeId);
+  const { mode: threadMode } = useChatThreadMode();
+  const isSimplified = threadMode === "simplified";
 
   // Get threads from messages with workflow metadata for better names. ThreadTabs
   // filters spawn-origin threads at the render boundary; keep the full list here
@@ -257,6 +262,19 @@ export function ChatHeader({
                           {isWorkflowViewerOpen ? "Hide" : "Show"} Workflow
                         </button>
                       )}
+
+                      <button
+                        onClick={() => {
+                          setChatThreadMode(isSimplified ? "detailed" : "simplified");
+                          setIsMenuOpen(false);
+                        }}
+                        aria-pressed={isSimplified}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                      >
+                        <ListCollapse className="h-4 w-4" />
+                        <span className="flex-1">Simplified view</span>
+                        {isSimplified && <Check className="h-4 w-4 text-primary-ink" aria-hidden />}
+                      </button>
 
                       {actions.openTerminal && (
                         <button

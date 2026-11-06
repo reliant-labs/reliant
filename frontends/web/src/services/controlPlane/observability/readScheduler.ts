@@ -3,13 +3,13 @@
 /**
  * The console's ONE admission queue for observability reads.
  *
- * control-plane lets a console user run SIX observability reads at once per org
- * (obsratelimit.DefaultMaxInFlight), waits two seconds for a slot, then refuses
- * with `in_flight_limit`. Every read that takes one of those slots (see
+ * control-plane lets a console user run SERVER_READ_CAP observability reads at
+ * once per org (obsratelimit.DefaultMaxInFlight), waits a few seconds for a
+ * slot, then refuses with `in_flight_limit`. Every read that takes one of those slots (see
  * obsClient's READ_SLOT_RPCS) goes through this queue, whichever view asked: a
  * dashboard of twenty panels, the metrics explorer, logs, traces, the service
  * graph. It starts at most OBS_READ_CONCURRENCY at a time, first come first
- * served, and leaves the rest of the server's cap for other tabs and devices.
+ * served within a priority, and leaves the rest of the server's cap for other tabs and devices.
  *
  * ONE scheduler per page, not per view or per QueryClient: the cap is per
  * user, so every consumer must draw on the same budget or they starve each
@@ -33,15 +33,38 @@
  *  2. A hidden page starts nothing new. The tab being read goes first, rather
  *     than queueing behind every dashboard opened in a background tab; a
  *     hidden page's reads start when it is shown. Reads already running finish.
+ *
+ * ── PRIORITY ────────────────────────────────────────────────────────────────
+ *
+ * A read is "visible" (a tile on screen asked for it: a mount, a range change,
+ * a Retry) or "background" (a poll, a prefetch: nobody is waiting on it). The
+ * queue starts every waiting visible read before any background one, and
+ * background reads never hold more than OBS_READ_CONCURRENCY -
+ * VISIBLE_READ_RESERVE slots, so a tile that mounts while polls are running
+ * still finds a slot free. On 2026-11-05 the Overview fired five reads into
+ * four slots, and two of them held theirs for up to 15s: the rest of the page
+ * waited behind them, "requests don't fire right away".
  */
 
 import { browserSlotGate, perTabGate, type SlotGate } from "./crossTabSlots";
 
 /** control-plane's per-user, per-org concurrent-read cap (obsratelimit.DefaultMaxInFlight). */
-export const SERVER_READ_CAP = 6;
+export const SERVER_READ_CAP = 10;
 
-/** At or below the server's cap, for the whole browser (crossTabSlots; per tab without Web Locks); the difference is headroom for the user's other devices. */
-export const OBS_READ_CONCURRENCY = 4;
+/**
+ * Below the server's cap, for the whole browser (crossTabSlots; per tab without
+ * Web Locks); the difference is headroom for the user's other devices. The
+ * reads share one HTTP/2 connection to admin.reliantapi.com, so the browser's
+ * per-host connection limit does not bound them; the server's cap does. It was
+ * 4 against a cap of 6, and the Overview alone fires 5.
+ */
+export const OBS_READ_CONCURRENCY = 8;
+
+/** The slots background reads (polls, prefetches) leave free for visible ones. */
+export const VISIBLE_READ_RESERVE = 2;
+
+/** Whether someone is looking at the read's answer (see PRIORITY above). */
+export type ReadPriority = "visible" | "background";
 
 interface Entry {
   task: (signal: AbortSignal) => Promise<unknown>;
@@ -49,6 +72,7 @@ interface Entry {
   reject: (reason: unknown) => void;
   signal: AbortSignal | undefined;
   onAbort: (() => void) | undefined;
+  priority: ReadPriority;
 }
 
 /** Whether the page is hidden, and a way to hear when that changes (document visibility, injectable for tests). */
@@ -73,14 +97,20 @@ export interface ReadSchedulerOptions {
 }
 
 export class ReadScheduler {
-  private readonly queue: Entry[] = [];
+  /** Waiting reads, first come first served within a priority. */
+  private readonly queues: Record<ReadPriority, Entry[]> = { visible: [], background: [] };
   private running = 0;
+  private runningBackground = 0;
   private readonly maxConcurrent: number;
+  private readonly maxBackground: number;
   private readonly gate: SlotGate;
   private readonly visibility: PageVisibility | undefined;
 
   constructor(maxConcurrent: number = OBS_READ_CONCURRENCY, options: ReadSchedulerOptions = {}) {
     this.maxConcurrent = Math.max(1, maxConcurrent);
+    // With one or two slots there is nothing to reserve: background reads may
+    // use one, so they are never starved outright.
+    this.maxBackground = Math.max(1, this.maxConcurrent - VISIBLE_READ_RESERVE);
     this.gate = options.gate ?? perTabGate;
     this.visibility = options.visibility;
     // Shown again: start what waited while the page was hidden.
@@ -88,52 +118,58 @@ export class ReadScheduler {
   }
 
   get stats(): { running: number; queued: number } {
-    return { running: this.running, queued: this.queue.length };
+    return { running: this.running, queued: this.queues.visible.length + this.queues.background.length };
   }
 
   /**
    * Runs `task` when a slot is free. `signal` cancels it: a queued task leaves
    * the queue without ever starting, a running one is aborted (it receives the
    * signal) and gives its slot back at once. Either way the returned promise
-   * rejects with the signal's reason.
+   * rejects with the signal's reason. `priority` orders it (see PRIORITY).
    */
-  run<T>(task: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+  run<T>(task: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal, priority: ReadPriority = "visible"): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       if (signal?.aborted) {
         reject(signal.reason);
         return;
       }
-      const entry: Entry = { task, resolve: resolve as (value: unknown) => void, reject, signal, onAbort: undefined };
+      const queue = this.queues[priority];
+      const entry: Entry = { task, resolve: resolve as (value: unknown) => void, reject, signal, onAbort: undefined, priority };
       if (signal) {
         entry.onAbort = () => {
-          const at = this.queue.indexOf(entry);
+          const at = queue.indexOf(entry);
           if (at >= 0) {
-            this.queue.splice(at, 1);
+            queue.splice(at, 1);
             reject(signal.reason);
           }
         };
         signal.addEventListener("abort", entry.onAbort, { once: true });
       }
-      this.queue.push(entry);
+      queue.push(entry);
       this.pump();
     });
   }
 
   private pump(): void {
     if (this.visibility?.hidden()) return;
-    while (this.running < this.maxConcurrent && this.queue.length > 0) {
-      this.start(this.queue.shift()!);
+    while (this.running < this.maxConcurrent) {
+      const next =
+        this.queues.visible.shift() ?? (this.runningBackground < this.maxBackground ? this.queues.background.shift() : undefined);
+      if (!next) return;
+      this.start(next);
     }
   }
 
   private start(entry: Entry): void {
     this.running++;
+    if (entry.priority === "background") this.runningBackground++;
     const { signal } = entry;
     let released = false;
     const release = (deferPump = false) => {
       if (released) return;
       released = true;
       this.running--;
+      if (entry.priority === "background") this.runningBackground--;
       if (signal && entry.onAbort) signal.removeEventListener("abort", entry.onAbort);
       // Leaving a page aborts its reads one after another: the next queued read must not start in
       // the gap before its own abort lands, so an abort frees the slot now and pumps a microtask later.
@@ -177,6 +213,28 @@ export class ReadScheduler {
       }
     );
   }
+}
+
+let background = false;
+
+/**
+ * Runs `start` with every read it makes synchronously marked "background":
+ * a prefetch (queryClient.prefetchQuery inside it) waits behind the reads a
+ * person is looking at. Polls are background reads already (quotaStore.runAsPoll).
+ */
+export function runAsBackground<T>(start: () => T): T {
+  const was = background;
+  background = true;
+  try {
+    return start();
+  } finally {
+    background = was;
+  }
+}
+
+/** Whether the read being made now is a background one (runAsBackground). */
+export function isBackgroundRead(): boolean {
+  return background;
 }
 
 let shared: ReadScheduler | null = null;

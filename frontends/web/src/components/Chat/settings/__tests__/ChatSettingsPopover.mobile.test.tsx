@@ -108,6 +108,13 @@ describe("anchored placement", () => {
     expect(screen.getByRole("button", { name: "plan" }).className).toContain("bg-primary");
   });
 
+  it("offers default to drop a mode override", async () => {
+    const onChange = vi.fn();
+    render(<ChatSettingsPopover {...shell(embedded)} embedded={embedded} isOpen onClose={vi.fn()} inputs={inputs} values={{ mode: "plan", goal: "ship" }} onChange={onChange} />);
+    await userEvent.click(screen.getByRole("button", { name: "default" }));
+    expect(onChange).toHaveBeenLastCalledWith({ goal: "ship" });
+  });
+
   it("keeps multi-enum mode-like inputs in More Settings and writes arrays", async () => {
     const onChange = vi.fn();
     render(<ChatSettingsPopover {...shell(embedded)} embedded={embedded} isOpen onClose={vi.fn()} inputs={{ modes: setInputMulti(inputs.mode, true) }} values={{ modes: ["auto"] }} onChange={onChange} />);

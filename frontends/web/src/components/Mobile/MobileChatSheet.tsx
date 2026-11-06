@@ -24,6 +24,7 @@ import {
   Download,
   FolderGit2,
   GitBranch,
+  ListCollapse,
   Loader2,
   Pencil,
   PieChart,
@@ -38,6 +39,7 @@ import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { useChatActions } from "../Chat/useChatActions";
 import { WorkspaceRecoveryMenuItems } from "../Chat/WorkspaceRecoveryMenuItems";
 import type { ThreadInfo } from "../Chat/thread-views";
+import { setChatThreadMode, useChatThreadMode } from "../Chat/thread-views/useChatThreadMode";
 import { MOBILE_ROW, MobileCardGroup, MobileRowIcon } from "./MobileChrome";
 import { contextUsageRatio, type ContextUsage } from "./MobileChatTopBar";
 
@@ -111,6 +113,7 @@ export function MobileChatSheet({
   const actions = useChatActions(chatId, worktreeId);
   const [renameDraft, setRenameDraft] = useState<string | null>(null);
   const [showThreads, setShowThreads] = useState(false);
+  const isSimplified = useChatThreadMode().mode === "simplified";
 
   // Every row that hands off to somewhere else closes the sheet first.
   const closeThen = (action: () => unknown) => () => {
@@ -277,6 +280,16 @@ export function MobileChatSheet({
         </MobileCardGroup>
 
         <MobileCardGroup>
+          <button
+            type="button"
+            onClick={closeThen(() => setChatThreadMode(isSimplified ? "detailed" : "simplified"))}
+            aria-pressed={isSimplified}
+            className={MOBILE_ROW}
+          >
+            <MobileRowIcon icon={ListCollapse} />
+            <RowText label="Simplified view" detail="Collapse tool work into one fold" />
+            {isSimplified && <Check className="h-4 w-4 shrink-0 text-primary-ink" aria-hidden />}
+          </button>
           <button type="button" onClick={closeThen(actions.exportChat)} className={MOBILE_ROW}>
             <MobileRowIcon icon={Download} />
             <RowText label="Export chat" />

@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -844,7 +845,7 @@ func (x *ChatUserUpdates) GetUpdates() []*UserUpdateData {
 // ChatSyncSnapshot provides the initial sync with pre-assembled messages.
 type ChatSyncSnapshot struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	Messages       []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`                                    // Assembled messages with content blocks
+	Messages       []*v1.Message          `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`                                    // Assembled messages with content blocks
 	OtherUpdates   []*ChatUpdateData      `protobuf:"bytes,2,rep,name=other_updates,json=otherUpdates,proto3" json:"other_updates,omitempty"`        // Non-message updates (approvals, threads, etc.)
 	LatestSequence int64                  `protobuf:"varint,3,opt,name=latest_sequence,json=latestSequence,proto3" json:"latest_sequence,omitempty"` // Latest sequence number for tracking
 	Total          int32                  `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`                                         // Total message count
@@ -889,7 +890,7 @@ func (*ChatSyncSnapshot) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_streaming_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ChatSyncSnapshot) GetMessages() []*Message {
+func (x *ChatSyncSnapshot) GetMessages() []*v1.Message {
 	if x != nil {
 		return x.Messages
 	}
@@ -2139,7 +2140,7 @@ var file_reliant_v1_streaming_proto_goTypes = []any{
 	nil,                              // 23: reliant.v1.NodeExecutionState.MetadataEntry
 	nil,                              // 24: reliant.v1.WorkflowExecutionState.ParamsEntry
 	nil,                              // 25: reliant.v1.WorkflowExecutionState.OutputsEntry
-	(*Message)(nil),                  // 26: reliant.v1.Message
+	(*v1.Message)(nil),               // 26: reliant.v1.Message
 }
 var file_reliant_v1_streaming_proto_depIdxs = []int32{
 	11, // 0: reliant.v1.ChatStreamEvent.snapshot:type_name -> reliant.v1.ChatSyncSnapshot
@@ -2182,7 +2183,6 @@ func file_reliant_v1_streaming_proto_init() {
 	if File_reliant_v1_streaming_proto != nil {
 		return
 	}
-	file_reliant_v1_chat_proto_init()
 	file_reliant_v1_streaming_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_streaming_proto_msgTypes[1].OneofWrappers = []any{
 		(*ChatStreamEvent_Snapshot)(nil),

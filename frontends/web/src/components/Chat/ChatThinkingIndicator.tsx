@@ -7,6 +7,7 @@ import {
   WAITING_FOR_MACHINE,
 } from "../../lib/daemon-wait";
 import { formatWaitElapsed } from "../../lib/chatMachineNotice";
+import { useLiveTurnFoldShown } from "./thread-views/liveTurnContext";
 import { 
   useIsThreadActive,
   useChatCurrentActivity,
@@ -61,6 +62,7 @@ export function ChatThinkingIndicator({
   onStop,
 }: ChatThinkingIndicatorProps) {
   const [thinkingMessage, setThinkingMessage] = useState("Thinking");
+  const liveFoldShown = useLiveTurnFoldShown();
 
   // Use thread activity store for per-thread active checks. A run held for
   // its machine is not RUNNING, so the thread store reports nothing active —
@@ -118,6 +120,13 @@ export function ChatThinkingIndicator({
   // Don't render if not active
   // Exception: if no chatId, show indicator (loading state)
   if (chatId && !isActive) {
+    return null;
+  }
+
+  // The simplified thread's live fold is already this turn's status line.
+  // Step aside unless there is something only this line says: a stall (with
+  // Run status / Stop) or a wait on the machine.
+  if (liveFoldShown && !stillWorking && !waitingOnMachine) {
     return null;
   }
 

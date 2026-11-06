@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1609,8 +1610,8 @@ func (x *RefreshLocalModelsRequest) GetDaemonId() string {
 }
 
 type RefreshLocalModelsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocalModels   *LocalModelInventory   `protobuf:"bytes,1,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	LocalModels   *v1.LocalModelInventory `protobuf:"bytes,1,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1645,7 +1646,7 @@ func (*RefreshLocalModelsResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{28}
 }
 
-func (x *RefreshLocalModelsResponse) GetLocalModels() *LocalModelInventory {
+func (x *RefreshLocalModelsResponse) GetLocalModels() *v1.LocalModelInventory {
 	if x != nil {
 		return x.LocalModels
 	}
@@ -1708,8 +1709,8 @@ func (x *SetLocalModelEndpointsRequest) GetBaseUrls() []string {
 }
 
 type SetLocalModelEndpointsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	LocalModels   *LocalModelInventory   `protobuf:"bytes,1,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	LocalModels   *v1.LocalModelInventory `protobuf:"bytes,1,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1744,7 +1745,7 @@ func (*SetLocalModelEndpointsResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{30}
 }
 
-func (x *SetLocalModelEndpointsResponse) GetLocalModels() *LocalModelInventory {
+func (x *SetLocalModelEndpointsResponse) GetLocalModels() *v1.LocalModelInventory {
 	if x != nil {
 		return x.LocalModels
 	}
@@ -1752,13 +1753,13 @@ func (x *SetLocalModelEndpointsResponse) GetLocalModels() *LocalModelInventory {
 }
 
 type DaemonInfo struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	DaemonId string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
-	UserId   string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Hostname string                 `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	Platform string                 `protobuf:"bytes,4,opt,name=platform,proto3" json:"platform,omitempty"`
-	Status   DaemonStatus           `protobuf:"varint,5,opt,name=status,proto3,enum=reliant.v1.DaemonStatus" json:"status,omitempty"`
-	Projects []*DiscoveredProject   `protobuf:"bytes,6,rep,name=projects,proto3" json:"projects,omitempty"`
+	state    protoimpl.MessageState  `protogen:"open.v1"`
+	DaemonId string                  `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	UserId   string                  `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Hostname string                  `protobuf:"bytes,3,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Platform string                  `protobuf:"bytes,4,opt,name=platform,proto3" json:"platform,omitempty"`
+	Status   DaemonStatus            `protobuf:"varint,5,opt,name=status,proto3,enum=reliant.v1.DaemonStatus" json:"status,omitempty"`
+	Projects []*v1.DiscoveredProject `protobuf:"bytes,6,rep,name=projects,proto3" json:"projects,omitempty"`
 	// When the daemon's current stream attached, and when it last showed
 	// activity on it. Both come from the attachment lease, so both are unset
 	// while nothing is attached — "last connected" is deliberately NOT retained
@@ -1826,7 +1827,7 @@ type DaemonInfo struct {
 	// daemon has never published one. The inventory is kept while the daemon is
 	// offline so the UI can show what WOULD be available; callers gate on
 	// `status` before offering a model for use.
-	LocalModels *LocalModelInventory `protobuf:"bytes,21,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
+	LocalModels *v1.LocalModelInventory `protobuf:"bytes,21,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
 	// The name the owner gave the machine ("default", "gpu-box"), mirrored from
 	// the control plane, which owns it. Empty until the control plane reports
 	// one (a build with no control plane, or a daemon that registered before
@@ -1845,7 +1846,7 @@ type DaemonInfo struct {
 	// that was full is still full when the machine resumes — so read
 	// disk.reported_at_ms before treating it as current. Unset when the daemon
 	// has never reported one.
-	Disk *DiskReport `protobuf:"bytes,23,opt,name=disk,proto3" json:"disk,omitempty"`
+	Disk *v1.DiskReport `protobuf:"bytes,23,opt,name=disk,proto3" json:"disk,omitempty"`
 	// The build the attached daemon reported when it registered, from the same
 	// attachment lease as the memory telemetry: present only while the daemon is
 	// attached, and empty/zero both for a daemon that predates the fields and for
@@ -1936,7 +1937,7 @@ func (x *DaemonInfo) GetStatus() DaemonStatus {
 	return DaemonStatus_DAEMON_STATUS_UNSPECIFIED
 }
 
-func (x *DaemonInfo) GetProjects() []*DiscoveredProject {
+func (x *DaemonInfo) GetProjects() []*v1.DiscoveredProject {
 	if x != nil {
 		return x.Projects
 	}
@@ -2041,7 +2042,7 @@ func (x *DaemonInfo) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *DaemonInfo) GetLocalModels() *LocalModelInventory {
+func (x *DaemonInfo) GetLocalModels() *v1.LocalModelInventory {
 	if x != nil {
 		return x.LocalModels
 	}
@@ -2055,7 +2056,7 @@ func (x *DaemonInfo) GetName() string {
 	return ""
 }
 
-func (x *DaemonInfo) GetDisk() *DiskReport {
+func (x *DaemonInfo) GetDisk() *v1.DiskReport {
 	if x != nil {
 		return x.Disk
 	}
@@ -2356,9 +2357,9 @@ var file_reliant_v1_daemon_registry_proto_goTypes = []any{
 	nil,                                    // 36: reliant.v1.ResolveDaemonRequest.LabelsEntry
 	nil,                                    // 37: reliant.v1.DaemonInfo.LabelsEntry
 	(*timestamppb.Timestamp)(nil),          // 38: google.protobuf.Timestamp
-	(*LocalModelInventory)(nil),            // 39: reliant.v1.LocalModelInventory
-	(*DiscoveredProject)(nil),              // 40: reliant.v1.DiscoveredProject
-	(*DiskReport)(nil),                     // 41: reliant.v1.DiskReport
+	(*v1.LocalModelInventory)(nil),         // 39: reliant.v1.LocalModelInventory
+	(*v1.DiscoveredProject)(nil),           // 40: reliant.v1.DiscoveredProject
+	(*v1.DiskReport)(nil),                  // 41: reliant.v1.DiskReport
 }
 var file_reliant_v1_daemon_registry_proto_depIdxs = []int32{
 	33, // 0: reliant.v1.RenameMachineResponse.daemon:type_name -> reliant.v1.DaemonInfo
@@ -2428,7 +2429,6 @@ func file_reliant_v1_daemon_registry_proto_init() {
 	if File_reliant_v1_daemon_registry_proto != nil {
 		return
 	}
-	file_reliant_v1_tools_daemon_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

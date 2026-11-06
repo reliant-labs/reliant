@@ -171,7 +171,12 @@ describe("the budget is active time", () => {
     // One report for the incident, with the active age AND the wall age, so
     // a frozen tab is never again read as a slow server.
     expect(reporting.reportFailure).toHaveBeenCalledTimes(1);
-    expect(reporting.reportFailure.mock.calls[0][0]).toContain("UpdateSetting:10s (70s wall)");
+    const [message, context] = reporting.reportFailure.mock.calls[0];
+    expect(context["rpc.in_flight"]).toContain("UpdateSetting:10s (70s wall)");
+    // The message is the issue's identity: only the method and its budget,
+    // never the in-flight snapshot, which differs on every timeout.
+    expect(message).toBe("rpc-timeout: UpdateSetting after 10000ms");
+    expect(context["rpc.method"]).toBe("UpdateSetting");
     // The timed-out call is not ALSO an exception report (ELECTRON-8X).
     expect(reporting.reportError).not.toHaveBeenCalled();
   });

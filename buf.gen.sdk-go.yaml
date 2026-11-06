@@ -32,6 +32,8 @@ inputs:
       - proto/reliant/v1/trigger.proto
       - proto/reliant/v1/approval.proto
       - proto/reliant/v1/question.proto
+      - proto/reliant/v1/inbox.proto
+      - proto/reliant/v1/tools_daemon.proto
 plugins:
   - local: [go, tool, protoc-gen-go]
     strategy: all
@@ -46,6 +48,8 @@ plugins:
       - Mreliant/v1/trigger.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
       - Mreliant/v1/approval.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
       - Mreliant/v1/question.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/inbox.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/tools_daemon.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
 
   - local: [go, tool, protoc-gen-connect-go]
     strategy: all
@@ -60,6 +64,8 @@ plugins:
       - Mreliant/v1/trigger.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
       - Mreliant/v1/approval.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
       - Mreliant/v1/question.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/inbox.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/tools_daemon.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
     types:
       - reliant.v1.RunService
       - reliant.v1.TriggerService.GetTrigger
@@ -72,3 +78,6 @@ plugins:
       - reliant.v1.QuestionService.ListPendingQuestions
       - reliant.v1.QuestionService.ResolveQuestion
       - reliant.v1.ApprovalService.ListApprovalsByChat
+      - reliant.v1.InboxService.ListInbox
+      - reliant.v1.InboxService.DismissInboxItem
+      - reliant.v1.InboxService.RestoreInboxItem

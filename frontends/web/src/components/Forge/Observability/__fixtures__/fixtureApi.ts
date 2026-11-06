@@ -24,7 +24,7 @@ import { createSessionsFixture, type SessionsFixtureOptions } from "./fixtureSes
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardDatabase, DatabasePanelResult, QueryDatabasePanelInput } from "@/services/controlPlane/observability/appDatabaseApi";
-import { fixtureGraph, fixtureCatalog } from "./fixtureGraph";
+import { fixtureGraph, fixtureCatalog, fixtureShopGraph } from "./fixtureGraph";
 import type {
   AttributeValueCount,
   Dashboard,
@@ -161,10 +161,15 @@ const TRACE_LOGS: { spanId: string; at: number; severity: Severity; severityText
   { spanId: "d1", at: 181.0, severity: "info", severityText: "INFO", service: "worker", body: "orders.created processed, inventory updated" },
 ];
 
-function traceLogs(window: TimeWindow): LogRecord[] {
+/** With `crossService` (the demo console): inventory's own line, on the hop fixtureTrace adds (e1–e3). */
+const CROSS_SERVICE_TRACE_LOGS: typeof TRACE_LOGS = [
+  { spanId: "e2", at: 174.5, severity: "info", severityText: "INFO", service: "inventory", body: "reserved 2 items for order ord_7Q2K" },
+];
+
+function traceLogs(window: TimeWindow, crossService = false): LogRecord[] {
   // fixtureTrace starts the trace a minute before the window's end.
   const t0 = window.endMs - 60_000;
-  return TRACE_LOGS.map((line) => ({
+  return (crossService ? [...TRACE_LOGS, ...CROSS_SERVICE_TRACE_LOGS] : TRACE_LOGS).map((line) => ({
     id: `fixture:trace-${line.spanId}`,
     timeMs: t0 + line.at,
     severity: line.severity,
@@ -181,8 +186,8 @@ function traceLogs(window: TimeWindow): LogRecord[] {
 }
 
 /** The log lines of a window, newest first: generated traffic, plus what the toured trace logged. */
-function logs(window: TimeWindow, count: number): LogRecord[] {
-  return [...generatedLogs(window, count), ...traceLogs(window)].sort((a, b) => b.timeMs - a.timeMs);
+function logs(window: TimeWindow, count: number, crossService = false): LogRecord[] {
+  return [...generatedLogs(window, count), ...traceLogs(window, crossService)].sort((a, b) => b.timeMs - a.timeMs);
 }
 
 function generatedLogs(window: TimeWindow, count: number): LogRecord[] {
@@ -224,7 +229,7 @@ function generatedLogs(window: TimeWindow, count: number): LogRecord[] {
   });
 }
 
-function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
+function traceSummaries(window: TimeWindow, count: number, crossService = false): TraceSummary[] {
   const random = rng(11);
   return Array.from({ length: count }, (_, i) => {
     const rpc = RPCS[i % RPCS.length];
@@ -240,9 +245,10 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
       startMs: window.endMs - (i + 1) * 9_000,
       durationMs: root + (i % 5 === 0 ? 120 : 0),
       rootDurationMs: root,
-      spanCount: 4 + (i % 5),
+      spanCount: i === 0 && crossService ? FIXTURE_CROSS_SERVICE_SPAN_COUNT : 4 + (i % 5),
       errorCount: failed ? 1 : 0,
-      services: ["api", "worker"],
+      // With crossService, trace 0's detail also crosses into inventory (fixtureTrace e1–e3).
+      services: i === 0 && crossService ? ["api", "worker", "inventory"] : ["api", "worker"],
       userId: i % 4 === 3 ? "" : `u_${8812 + (i % 3)}`,
       sessionId: i % 2 === 0 ? `sess-${(i * 7919 + 4099).toString(16).padStart(6, "0")}` : "",
       ...(i % 2 === 0 ? { country: "DE", region: "Land Berlin", city: "Berlin" } : { country: "", region: "", city: "" }),
@@ -255,6 +261,7 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
           ? [
               { service: "api", version: "v1.8.3" },
               { service: "worker", version: "v1.8.3" },
+              ...(crossService ? [{ service: "inventory", version: "v1.8.3" }] : []),
             ]
           : [
               { service: "api", version: i % 6 === 0 ? "v1.7.91" : "v1.7.92" },
@@ -266,8 +273,26 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
   });
 }
 
-/** One trace: an rpc that calls the database twice and enqueues work a worker picks up, with one failed span. */
-export function fixtureTrace(traceId: string, now: number): Trace {
+/** How many spans fixtureTrace has with `crossService`: its summary (trace 0) says the same. */
+export const FIXTURE_CROSS_SERVICE_SPAN_COUNT = 14;
+
+/**
+ * One trace: an rpc that calls the database twice and enqueues work a worker
+ * picks up, with one failed span.
+ *
+ * With `crossService` (the demo console, createFixtureApi's option of the same
+ * name) it also carries the instrumentation forge generates between and
+ * within services, which the demo's fg-hops / fg-inside steps point at:
+ *
+ *   a2      api        the generated per-method decorator (`orders.CreateOrder`)
+ *   d3 → e1            the worker's Connect client → inventory's server span:
+ *                      the trace crossed a service over HTTP headers
+ *   e2, e3  inventory  its method decorator and its `UPDATE stock`
+ *
+ * Without it the trace is exactly what it was, span for span: the waterfall
+ * tests pin its rows.
+ */
+export function fixtureTrace(traceId: string, now: number, { crossService = false }: { crossService?: boolean } = {}): Trace {
   const t0 = now - 60_000;
   const span = (spanId: string, parentSpanId: string, name: string, service: string, start: number, duration: number, extra: Partial<Span> = {}): Span => ({
     spanId,
@@ -304,8 +329,22 @@ export function fixtureTrace(traceId: string, now: number): Trace {
       span("b4", "a1", "nats publish orders.created", "api", 150.0, 0.8, { kind: "producer" }),
       span("d1", "b4", "orders.created process", "worker", 152.3, 28.7, { kind: "consumer" }),
       span("d2", "d1", "UPDATE inventory", "worker", 155.0, 21.4, { attributes: { "db.system": "postgresql", "db.operation": "UPDATE" } }),
+      ...(crossService ? crossServiceSpans(span) : []),
     ],
   };
+}
+
+/** fixtureTrace's `crossService` spans (journeys/forge.tsx fg-hops, fg-inside). */
+function crossServiceSpans(span: (spanId: string, parentSpanId: string, name: string, service: string, start: number, duration: number, extra?: Partial<Span>) => Span): Span[] {
+  return [
+    span("a2", "a1", "orders.CreateOrder", "api", 1.0, 180.6, { kind: "internal", attributes: { "forge.method.id": "orders.v1.OrdersService/CreateOrder" } }),
+    span("d3", "d1", "inventory.v1.InventoryService/Reserve", "worker", 156.0, 19.6, { kind: "client", attributes: { "rpc.system": "connect_rpc", "rpc.service": "inventory.v1.InventoryService", "rpc.method": "Reserve" } }),
+    span("e1", "d3", "inventory.v1.InventoryService/Reserve", "inventory", 156.8, 18.2, { kind: "server", attributes: { "rpc.system": "connect_rpc", "rpc.method": "Reserve", "http.status_code": "200" } }),
+    span("e2", "e1", "inventory.Reserve", "inventory", 157.0, 17.7, { kind: "internal", attributes: { "forge.method.id": "inventory.v1.InventoryService/Reserve" } }),
+    span("e3", "e2", "UPDATE stock", "inventory", 157.5, 16.7, {
+      attributes: { "db.system": "postgresql", "db.operation": "UPDATE", "db.query.text": "UPDATE stock SET reserved = reserved + ? WHERE sku = ? AND available >= ?" },
+    }),
+  ];
 }
 
 function rpcPanels(rpc: string): Panel[] {
@@ -1010,6 +1049,10 @@ export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureO
   /** An environment that has sent nothing. */
   empty?: boolean;
   graphUnknown?: boolean;
+  /** "shop": the demo's service graph (fixtureShopGraph), the app the journey's trace crosses. Default: the graph tests' fixtureGraph. */
+  graph?: "shop";
+  /** The toured trace crosses into inventory (fixtureTrace's `crossService`), with its log line and summary to match. The demo console's. */
+  crossService?: boolean;
   /** DEV-only negative cases for catalog review regressions. */
   graphReview?: "retained-denied" | "retained-unavailable" | "rpc-201" | "artifacts-21" | "unsupported";
   /** Called for each RPC, with its request — tests assert on what was asked. */
@@ -1037,7 +1080,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
   const delivery = createDeliveryFixture(options, call);
   return {
     currentOrgId: async () => FIXTURE_ORG,
-    getServiceGraph: (req) => call("GetServiceGraph", req, () => fixtureGraph(options.empty, options.graphUnknown)),
+    getServiceGraph: (req) => call("GetServiceGraph", req, () => (options.graph === "shop" ? fixtureShopGraph(req.window) : fixtureGraph(options.empty, options.graphUnknown))),
     getServiceGraphCatalog: (req) => call("GetServiceGraphCatalog", req, () => {
       catalogCalls++;
       if (options.graphReview === "unsupported") throw new ConnectError("unknown procedure", Code.Unimplemented);
@@ -1074,7 +1117,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
     searchLogs: (req) =>
       call("SearchLogs", req, () => {
         if (options.empty) return { records: [], nextCursor: "" };
-        let records = logs(req.window, 60);
+        let records = logs(req.window, 60, options.crossService);
         if (req.services.length) records = records.filter((r) => req.services.includes(r.service));
         if (req.severities.length) records = records.filter((r) => req.severities.includes(r.severity));
         if (req.traceId) records = records.filter((r) => r.traceId === req.traceId);
@@ -1084,7 +1127,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
     listTraces: (req) =>
       call("ListTraces", req, () => {
         if (options.empty) return { traces: [], nextCursor: "", red: null, redGroups: [] };
-        let traces = traceSummaries(req.window, 40);
+        let traces = traceSummaries(req.window, 40, options.crossService);
         if (req.rootSpanName) traces = traces.filter((t) => t.rootOperation.includes(req.rootSpanName));
         if (req.errorsOnly) traces = traces.filter((t) => t.errorCount > 0);
         if (req.minDurationMs) traces = traces.filter((t) => t.durationMs >= req.minDurationMs);
@@ -1114,7 +1157,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
           }));
         return { traces: traces.slice(0, req.limit), nextCursor: "", red, redGroups };
       }),
-    getTrace: (req) => call("GetTrace", req, () => fixtureTrace(req.traceId, req.window.endMs)),
+    getTrace: (req) => call("GetTrace", req, () => fixtureTrace(req.traceId, req.window.endMs, { crossService: options.crossService })),
     queryPanel: (req) =>
       call("QueryPanel", req, () => {
         const { panel } = req;

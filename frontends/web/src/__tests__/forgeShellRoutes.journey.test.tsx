@@ -7,7 +7,7 @@
  * <JourneyTour /> on every page, the public demo included.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
@@ -44,6 +44,18 @@ function renderShell(path: string) {
   render(<RouterProvider router={router} />);
   return router;
 }
+
+// The router loads every matched route's code-split chunk before it renders
+// the guard above them, and the first import of the console's chunks is a
+// module transform that can outlast a findBy timeout on a loaded machine, so
+// pay it once up front.
+beforeAll(async () => {
+  await Promise.all([
+    import("@/components/Forge/ForgeLayout"),
+    import("@/components/Forge/Console/ConsoleLayout"),
+    import("@/components/Forge/Overview/EnvironmentsPage"),
+  ]);
+}, 60_000);
 
 afterEach(() => {
   window.localStorage.clear();

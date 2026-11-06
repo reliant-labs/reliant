@@ -3,7 +3,7 @@
  *
  * Reads and writes the exact same `settingsSync` keys as desktop
  * `AppearanceSettings` (`THEME`, `FONT`, `EDITOR_FONT`, `FONT_SIZE`,
- * `CHAT_TIMELINE_VARIANT`, `WORKFLOW_VIEWER_DEFAULT_MODE`,
+ * `CHAT_TIMELINE_VARIANT`, `CHAT_THREAD_MODE`, `WORKFLOW_VIEWER_DEFAULT_MODE`,
  * `SPAWN_DISPLAY_MODE` via `SpawnDisplaySettings`) plus `useUIStore`'s
  * `showHiddenFiles`, so a change here is the same persisted preference
  * desktop shows — only the control shape (rows/sheets vs. selects/grids)
@@ -37,6 +37,7 @@ import {
   type SpawnDisplayMode,
 } from "../Settings/SpawnDisplaySettings";
 import { FONT_SIZE_MAP, applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
+import { DEFAULT_CHAT_THREAD_MODE, parseChatThreadMode, type ChatThreadModePreference } from "../Chat/thread-views/useChatThreadMode";
 import {
   MobileSegmentedRow,
   MobileSelectRow,
@@ -78,6 +79,12 @@ const CHAT_TIMELINE_OPTIONS: Array<{ value: ChatTimelineVariant; label: string }
   { value: "minimal", label: "Minimal" },
 ];
 
+const CHAT_THREAD_OPTIONS: Array<{ value: ChatThreadModePreference; label: string }> = [
+  { value: "simplified", label: "Simplified" },
+  { value: "auto", label: "Auto" },
+  { value: "detailed", label: "Detailed" },
+];
+
 function readPref<T extends string>(key: string, fallback: T): T {
   return settingsSync.getSetting(key as any, fallback) as T;
 }
@@ -104,6 +111,7 @@ export function MobileAppearancePanel() {
   const [useCodeFont, setUseCodeFont] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<FontSize>(DEFAULT_FONT_SIZE as FontSize);
   const [chatTimelineVariant, setChatTimelineVariant] = useState<ChatTimelineVariant>("compact");
+  const [chatThreadMode, setChatThreadMode] = useState<ChatThreadModePreference>(DEFAULT_CHAT_THREAD_MODE);
   const [workflowViewerDefaultMode, setWorkflowViewerDefaultMode] = useState<"inline" | "side">("side");
   const [spawnDisplayMode, setSpawnDisplayMode] = useState<SpawnDisplayMode>("preview");
   const [isLoaded, setIsLoaded] = useState(false);
@@ -133,6 +141,7 @@ export function MobileAppearancePanel() {
       setUseCodeFont(savedEditorFont !== "default");
       setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE) as FontSize);
       setChatTimelineVariant(readPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact"));
+      setChatThreadMode(parseChatThreadMode(readPref(SETTINGS_KEYS.CHAT_THREAD_MODE, DEFAULT_CHAT_THREAD_MODE)));
       setWorkflowViewerDefaultMode(readPref(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, "side"));
       setSpawnDisplayMode(getSpawnDisplayMode());
       setIsLoaded(true);
@@ -197,6 +206,15 @@ export function MobileAppearancePanel() {
       window.dispatchEvent(new CustomEvent("appearance-updated"));
     }
   }, [chatTimelineVariant, isLoaded]);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    // Unset already means the default; don't write it just for opening the page.
+    if (chatThreadMode === DEFAULT_CHAT_THREAD_MODE && !settingsSync.getSetting(SETTINGS_KEYS.CHAT_THREAD_MODE, "")) return;
+    if (persistPref(SETTINGS_KEYS.CHAT_THREAD_MODE, chatThreadMode)) {
+      window.dispatchEvent(new CustomEvent("appearance-updated"));
+    }
+  }, [chatThreadMode, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -298,6 +316,16 @@ export function MobileAppearancePanel() {
         value={chatTimelineVariant}
         onChange={(v) => setChatTimelineVariant(v as ChatTimelineVariant)}
         options={CHAT_TIMELINE_OPTIONS}
+      />
+
+      <MobileSettingsSectionTitle
+        title="Chat thread"
+        description="Auto shows a simplified thread on phones and narrow windows."
+      />
+      <MobileSegmentedRow
+        value={chatThreadMode}
+        onChange={(v) => setChatThreadMode(v as ChatThreadModePreference)}
+        options={CHAT_THREAD_OPTIONS}
       />
 
       <MobileSettingsSectionTitle

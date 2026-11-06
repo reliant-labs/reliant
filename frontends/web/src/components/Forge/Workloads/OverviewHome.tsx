@@ -25,29 +25,33 @@
  * one answer, so they agree with each other and with the scope's switch
  * costing no request. Health is the server's verdict (workloadModel.ts).
  *
+ * EACH TILE ITS OWN STATE (tileState.tsx). A failed or slow read costs only
+ * the tiles it feeds — never the page below it — and each such tile has its
+ * own Retry; a tile with data keeps it through a failed refresh; a partial
+ * answer names the figures it lacks.
+ *
  * This component knows nothing about routing: the hrefs, the scope and the
  * URL's search state come in as props, so the preview and the tests mount it
  * on fixtures.
  */
 
 import { useMemo, type CSSProperties, type ReactNode } from "react";
-import { ArrowRight, Boxes, RotateCcw, Search } from "lucide-react";
+import { ArrowRight, Boxes, RotateCcw } from "lucide-react";
 
-import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
+import { FilterBar, FilterChip, FilterMenu, FilterSearch } from "@/components/forge-ui/filter_bar";
 import Link from "@/components/forge-ui/link";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import { useAlerts, useObservabilityOrg, useWorkloads } from "@/hooks/observability-queries";
+import { useAlerts, useObservabilityOrg, useServiceOverview, useWorkloads } from "@/hooks/observability-queries";
 import { useProjectReleases } from "@/hooks/release-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
-import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { ObsScope, Workload } from "@/services/controlPlane/observability/types";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { frontendsInScope } from "@/services/forge/frontends";
 import type { ForgeHostedWorkload } from "@/services/forge/topology";
-import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { RANGE_LABELS, RANGE_PRESETS, resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { DeployStatusUnread, type DeployStatusUnreadState } from "../Console/DeployStatusUnread";
@@ -55,44 +59,39 @@ import { ENV_ALL } from "../Console/envScope";
 import { consolePath, withSearch } from "../Console/paths";
 import { AskReliantMenu, DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import type { AskSubject } from "../Observability/AskReliant/askReliantPrompt";
+import { ENV_KEY } from "../Observability/attributes";
 import { VariableSelect } from "../Observability/Dashboards/parts";
-import { formatAgo, formatBytes, formatCores } from "../Observability/format";
 import { promotionIsSuspect, type RollbackTarget } from "../Promote/rollback";
 import { HealthStrip } from "../Observability/Home/HealthStrip";
-import { ObsAsOf, ObsError, ObsNotSetUp } from "../Observability/ObsStates";
+import { latParam, SessionsTile, TracesTile } from "../Observability/Home/SignalTiles";
+import { ObsError, ObsNotSetUp, ObsAsOf } from "../Observability/ObsStates";
 import { Ago, INK_BUTTON, INK_LINK, Panel } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import {
-  HEALTH_STATUS,
-  JOB_STATUS,
   KIND_LABEL,
   attentionItems,
   filterServices,
   formatAge,
-  formatSeconds,
   jobRows,
   kindsOf,
-  lastExitOf,
   needsAttention,
   previewsCell,
-  replicasShort,
-  replicasText,
   serviceRows,
   stripCell,
-  worstUsage,
   OVERVIEW_RANGE,
   type AttentionItem,
   type JobRow,
   type KindFilter,
-  type ServiceRow,
   type StatusFilter,
   type StripCell,
   type StripEnv,
 } from "./workloadModel";
-import { exitPhrase, jobFailurePhrase } from "./plainHealth";
-import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
+import { SkeletonRows } from "./workloadParts";
 import { FrontendList, FrontendsEmpty, FrontendsLoading } from "../Frontends/FrontendList";
+import { JobTimeline } from "./JobTimeline";
 import { ProcessHealth } from "./ProcessHealth";
+import { ServiceCards, type RedLookup } from "./ServiceCards";
+import { PartialNote, StaleNote, keepsStaleResult } from "./tileState";
 
 export interface OverviewSearch {
   q?: string;
@@ -195,6 +194,19 @@ export function OverviewHome({
   const services = useMemo(() => serviceRows(workloads, env, envs), [workloads, env, envs]);
   const jobs = useMemo(() => (all ? allJobs : allJobs.filter((row) => row.envName === env)), [allJobs, all, env]);
   const visible = useMemo(() => filterServices(services, search), [services, search]);
+  // Every run in scope, for the jobs' timeline; the window it is drawn over.
+  const jobRuns = useMemo(() => (listed.data?.jobs ?? []).filter((run) => all || run.envName === env), [listed.data, all, env]);
+  const jobWindow = useMemo(() => resolveWindow(range), [range, listed.dataUpdatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The service cards' requests: the same GetServiceOverview read (scope, window, group-by) Processes makes, so one cached answer.
+  const redGroupBy = useMemo(() => (kpiScope?.envIds.length === 0 ? [ENV_KEY] : []), [kpiScope]);
+  const red = useServiceOverview(kpiScope, range, [], redGroupBy);
+  const redLookup = useMemo<RedLookup>(() => {
+    const byKey = new Map(red.data?.services.map((health) => [`${health.group[ENV_KEY] ?? ""}/${health.name}`, health] as const) ?? []);
+    return { loading: red.isLoading, of: (name, envName) => byKey.get(`${redGroupBy.length ? envName : ""}/${name}`) };
+  }, [red.data, red.isLoading, redGroupBy]);
+  const obsHref = (view: "traces" | "sessions", extra: Record<string, unknown> = {}) =>
+    withSearch(consolePath(project, { kind: "obs-view", view }), { env, range, ...extra });
 
   const projectEnvIds = useMemo(() => new Set(envs.map((candidate) => candidate.id)), [envs]);
   const firing = useMemo(
@@ -215,6 +227,14 @@ export function OverviewHome({
 
   const loading = envsLoading || org.isLoading || listed.isLoading;
   const notSetUp = !!listed.error && obsErrorKind(listed.error) === "not-set-up";
+  // Each tile draws its own state (tileState.tsx): a failed workload read costs
+  // only the tiles it feeds, a failed refresh keeps the last result on screen,
+  // and Retry refetches this one query, joining a fetch already in flight.
+  const workloadsFailed = !!listed.error && !keepsStaleResult(listed.error, listed.data);
+  const workloadsStale = !!listed.error && !workloadsFailed;
+  const missing = listed.data?.unavailableSections ?? [];
+  const servicesMissing = missing.filter((section) => section !== "jobs");
+  const retryWorkloads = () => void listed.refetch({ cancelRefetch: false });
   const where = all ? "all environments" : env;
   const unhealthy = services.filter(needsAttention).length;
 
@@ -223,8 +243,19 @@ export function OverviewHome({
   const empty = !envsLoading && envs.length === 0;
   // An empty list from a failed read says nothing about what is deployed.
   const unread = empty && !!envsUnread;
+  const rangeControl = (
+    <VariableSelect
+      id="overview-range"
+      label="time"
+      value={range}
+      options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
+      onChange={(value) => onSearch({ range: value === OVERVIEW_RANGE ? undefined : (value as RangePreset) })}
+    />
+  );
+  // One compact row: the title, its counts inline, the window on the right.
   const header = (
     <PageHeader
+      density="compact"
       title="Overview"
       meta={
         unread ? undefined : empty ? (
@@ -237,25 +268,18 @@ export function OverviewHome({
               {services.length} {services.length === 1 ? "service" : "services"} and {jobs.length} {jobs.length === 1 ? "job" : "jobs"} in {where}
             </span>
             {unhealthy > 0 && <Status tone="warning" label={`${unhealthy} need${unhealthy === 1 ? "s" : ""} attention`} />}
+            {listed.data && <ObsAsOf updatedAt={listed.dataUpdatedAt} />}
           </>
         )
       }
+      controls={empty ? undefined : rangeControl}
       className="mb-0"
-    />
-  );
-  const rangeControl = (
-    <VariableSelect
-      id="overview-range"
-      label="time"
-      value={range}
-      options={RANGE_PRESETS.map((preset) => ({ value: preset, label: RANGE_LABELS[preset] }))}
-      onChange={(value) => onSearch({ range: value === OVERVIEW_RANGE ? undefined : (value as RangePreset) })}
     />
   );
 
   if (empty) {
     return (
-      <div className="space-y-6" data-testid="overview" data-state={unread ? "unread" : "empty"}>
+      <div className="space-y-4" data-testid="overview" data-state={unread ? "unread" : "empty"}>
         {header}
         {deploys}
         {envsUnread ? (
@@ -289,11 +313,8 @@ export function OverviewHome({
   const windowWords = RANGE_LABELS[range].toLowerCase();
 
   return (
-    <div className="space-y-8" data-testid="overview" data-state={loading ? "loading" : listed.error ? "error" : "ready"}>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">{header}{listed.data && <ObsAsOf updatedAt={listed.dataUpdatedAt} />}</div>
-        <div className="pt-1">{rangeControl}</div>
-      </div>
+    <div className="space-y-6" data-testid="overview" data-state={loading ? "loading" : workloadsFailed ? "error" : "ready"}>
+      {header}
 
       {!unrecorded && (
         <FrontendsPanel
@@ -309,7 +330,7 @@ export function OverviewHome({
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
           {deploys}
-          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error && !keepsLastResult(listed.error, listed.data)} scopedHref={hrefs.scoped} />
+          <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={workloadsFailed} scopedHref={hrefs.scoped} />
           {unrecorded ? (
             <p className="rounded-lg border border-dashed border-border bg-surface px-4 py-5 text-sm text-ink-muted" data-testid="overview-unrecorded-env">
               Reliant has no record of <span className="font-medium text-ink">{env}</span>, so nothing it runs is reported here. Once it is deployed through Reliant, its
@@ -321,7 +342,7 @@ export function OverviewHome({
               <NeedsAttention
                 items={attention}
                 loading={loading}
-                failed={!!listed.error && !keepsLastResult(listed.error, listed.data)}
+                failed={workloadsFailed}
                 where={where}
                 showEnv={all}
                 hrefOf={(item) => (item.workload ? hrefs.workload(item.workload, item.envName) : hrefs.alerts)}
@@ -338,58 +359,67 @@ export function OverviewHome({
         </aside>
       </div>
 
+      {!unrecorded && !notSetUp && (
+        // Each tile reads, loads, fails and retries on its own (SignalTiles).
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2" data-testid="overview-signals">
+          <TracesTile
+            scope={kpiScope}
+            range={range}
+            band={{ href: (band) => obsHref("traces", { lat: latParam(band) }) }}
+            all={{ href: () => obsHref("traces") }}
+          />
+          <SessionsTile scope={kpiScope} range={range} session={{ href: (id) => obsHref("sessions", { session: id }) }} all={{ href: () => obsHref("sessions") }} />
+        </div>
+      )}
+
       {notSetUp ? (
         <ObsNotSetUp subject={project} topic="overview" env={all ? undefined : env} />
-      ) : listed.error && !keepsLastResult(listed.error, listed.data) ? (
-        <ObsError error={listed.error} subject={project} onRetry={() => void listed.refetch()} retrying={listed.isFetching} />
       ) : (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2" data-testid="overview-toolbar">
-            <label className="flex h-8 min-w-64 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
-              <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span className="sr-only">Filter services</span>
-              <input
-                value={search.q ?? ""}
-                onChange={(event) => onSearch({ q: event.target.value || undefined })}
-                placeholder="Filter services"
-                className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink-muted focus:outline-none"
-                data-testid="overview-filter"
-              />
-            </label>
-            <ChipMenu
-              label="Kind"
-              value={search.kind}
-              options={kindsOf(services).map((kind) => ({ value: kind, label: KIND_LABEL[kind] }))}
-              onChange={(kind) => onSearch({ kind: kind as KindFilter | undefined })}
-              testId="overview-chip-kind"
-            />
-            <Chip
+          <FilterBar
+            label="Filter services"
+            active={[search.q, search.status, search.kind].filter(Boolean).length}
+            onClear={() => onSearch({ q: undefined, status: undefined, kind: undefined })}
+            testId="overview-toolbar"
+          >
+            <FilterSearch value={search.q ?? ""} onChange={(q) => onSearch({ q: q || undefined })} placeholder="Filter services" testId="overview-filter" />
+            <FilterChip
               on={search.status === "attention"}
+              count={filterServices(services, { ...search, status: "attention" }).length}
               onClick={() => onSearch({ status: search.status ? undefined : "attention" })}
               testId="overview-chip-status"
               title={search.status ? "Show every service" : "Show only the services that need attention"}
             >
-              Status: {search.status ? "needs attention" : "all"}
-            </Chip>
-            {filtered && (
-              <button
-                type="button"
-                onClick={() => onSearch({ q: undefined, status: undefined, kind: undefined })}
-                className="inline-flex h-7 items-center rounded-md px-2 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink"
-              >
-                Clear
-              </button>
-            )}
-          </div>
+              Needs attention
+            </FilterChip>
+            <FilterMenu
+              label="Kind"
+              value={search.kind}
+              options={kindsOf(services).map((kind) => ({ value: kind, label: KIND_LABEL[kind], count: filterServices(services, { ...search, kind }).length }))}
+              onChange={(kind) => onSearch({ kind: kind as KindFilter | undefined })}
+              testId="overview-chip-kind"
+            />
+          </FilterBar>
 
-          <Panel title="Services" meta="Long-running workloads. CPU and memory against their limits." flush testId="overview-services">
-            <ServicesTable
+          <section className="space-y-2" aria-labelledby="overview-services-heading" data-testid="overview-services">
+            <h2 id="overview-services-heading" className="text-sm font-medium text-ink">
+              Services
+              <span className="ml-2 text-xs font-normal text-ink-muted">Long-running workloads: health, requests, and CPU and memory against their limits</span>
+            </h2>
+            {workloadsFailed ? (
+              <div className="rounded-lg border border-border bg-surface p-4" data-testid="overview-services-error">
+                <ObsError error={listed.error} subject={project} onRetry={retryWorkloads} retrying={listed.isFetching} />
+              </div>
+            ) : (
+            <div data-testid="overview-services-table">
+            <ServiceCards
               rows={visible}
               loading={loading}
               showEnv={all}
               windowShort={range}
               hosted={hosted}
               hrefs={hrefs}
+              red={redLookup}
               empty={
                 filtered ? (
                   <>
@@ -408,12 +438,16 @@ export function OverviewHome({
                 )
               }
             />
+            </div>
+            )}
             {listed.data?.truncated && (
-              <p className="border-t border-border px-4 py-2.5 text-xs text-ink-muted" data-testid="overview-services-truncated">
+              <p className="text-xs text-ink-muted" data-testid="overview-services-truncated">
                 Showing the first 500 workloads.
               </p>
             )}
-          </Panel>
+            {!workloadsFailed && <PartialNote sections={servicesMissing} onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-services-partial" />}
+            {workloadsStale && <StaleNote onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-services-stale" />}
+          </section>
 
           {!unrecorded && <ProcessHealth
             scope={kpiScope}
@@ -425,14 +459,26 @@ export function OverviewHome({
             logsHref={(name) => withSearch(consolePath(project, { kind: "obs-view", view: "logs" }), { env, range, service: name, severity: "error,fatal" })}
           />}
 
-          <Panel title="Jobs" meta="Migrations, provisioning and scheduled jobs. The latest run of each." flush testId="overview-jobs">
-            <JobsTable
-              rows={jobs}
-              loading={loading}
-              showEnv={all}
-              hrefs={hrefs}
-              empty={<>No job has run in {where} in the {windowWords}. Migrations and provisioning jobs appear here after the next deploy that runs them.</>}
-            />
+          <Panel title="Jobs" meta="Migrations, provisioning and scheduled jobs: every run in the window" flush testId="overview-jobs">
+            {workloadsFailed ? (
+              <div className="p-4" data-testid="overview-jobs-error">
+                <ObsError error={listed.error} subject={project} onRetry={retryWorkloads} retrying={listed.isFetching} />
+              </div>
+            ) : missing.includes("jobs") ? (
+              // Never "no job has run": the jobs were not read.
+              <PartialNote sections={["jobs"]} onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-jobs-partial" />
+            ) : (
+              <JobTimeline
+                rows={jobs}
+                runs={jobRuns}
+                window={jobWindow}
+                loading={loading}
+                showEnv={all}
+                hrefs={hrefs}
+                empty={<>No job has run in {where} in the {windowWords}. Migrations and provisioning jobs appear here after the next deploy that runs them.</>}
+              />
+            )}
+            {workloadsStale && <StaleNote onRetry={retryWorkloads} retrying={listed.isFetching} testId="overview-jobs-stale" />}
             {listed.data?.jobsTruncated && (
               <p className="border-t border-border px-4 py-2.5 text-xs text-ink-muted" data-testid="overview-jobs-truncated">
                 Built from the newest 200 runs in the {windowWords}; older runs are not counted.
@@ -780,7 +826,7 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
     <Panel title="Recent releases" meta="Latest builds and where they run now" actions={<RailLink href={hrefs.releases}>All</RailLink>} testId="overview-recent-releases">
       {releases.isLoading ? (
         <div className="h-24 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading releases" />
-      ) : releases.error ? (
+      ) : releases.error && !releases.data ? (
         <p className="text-xs text-ink-muted">Releases could not be read right now.</p>
       ) : recent.length === 0 ? (
         <p className="text-xs text-ink-muted">No release has been cut yet. The first reliant forge env deploy cuts one.</p>
@@ -815,228 +861,5 @@ function RecentReleases({ project, envs, hrefs }: { project: string; envs: Strip
         </ol>
       )}
     </Panel>
-  );
-}
-
-// ── Tables ──────────────────────────────────────────────────────────────────
-
-type ServiceTableRow = { key: string; w: ServiceRow };
-type JobTableRow = { key: string; row: JobRow };
-
-/** An unobserved workload has no figures: its cells say so with a dash. */
-const NONE = <span className="text-ink-muted">—</span>;
-
-function ServicesTable({
-  rows,
-  loading,
-  showEnv,
-  windowShort,
-  hosted,
-  hrefs,
-  empty,
-}: {
-  rows: ServiceRow[];
-  loading: boolean;
-  showEnv: boolean;
-  windowShort: string;
-  hosted: HostedByEnv;
-  hrefs: OverviewHrefs;
-  empty: ReactNode;
-}) {
-  const columns: DataTableColumn<ServiceTableRow>[] = [
-    {
-      key: "name",
-      header: "Name",
-      render: (_, { w }) => (
-        <>
-          <span className="font-medium">{w.workload}</span>
-          {!w.unobserved && KIND_LABEL[w.kind] && <span className="ml-2 text-xs text-ink-muted">{KIND_LABEL[w.kind]}</span>}
-        </>
-      ),
-    },
-    ...(showEnv ? [{ key: "env", header: "Environment", render: (_: unknown, { w }: ServiceTableRow) => <Tag>{w.envName}</Tag> }] : []),
-    {
-      key: "status",
-      header: "Status",
-      render: (_, { w }) =>
-        w.unobserved ? (
-          <span title={w.healthReason}>
-            <Status tone="neutral" label="Unobserved" />
-          </span>
-        ) : (
-          <HealthStatus workload={w} />
-        ),
-    },
-    {
-      key: "ready",
-      header: "Ready",
-      numeric: true,
-      render: (_, { w }) => (w.unobserved ? NONE : <span className={cn(replicasShort(w) && "text-warning-ink")}>{replicasText(w)}</span>),
-    },
-    {
-      key: "version",
-      header: "Version",
-      interactive: true,
-      render: (_, { w }) =>
-        w.unobserved ? NONE : <WorkloadRelease workload={w} releaseHref={hrefs.release} hosted={hosted.get(w.envName)?.get(w.workload) ?? null} />,
-    },
-    {
-      key: "restarts",
-      header: `Restarts ${windowShort}`,
-      numeric: true,
-      render: (_, { w }) => {
-        if (w.unobserved) return NONE;
-        if (!w.restartsInWindow) return <span className="text-ink-muted">0</span>;
-        const exit = lastExitOf(w);
-        const status = HEALTH_STATUS[w.health];
-        return (
-          <>
-            {w.restartsInWindow}
-            {exit && (
-              <span
-                className={cn("ml-1", status.tone === "danger" ? "text-danger-ink" : status.tone === "warning" ? "text-warning-ink" : "text-ink-muted")}
-                title={exit.atMs ? `Last exited ${new Date(exit.atMs).toLocaleString()}` : undefined}
-              >
-                · {exitPhrase(exit.reason)}
-              </span>
-            )}
-          </>
-        );
-      },
-    },
-    {
-      key: "cpu",
-      header: "CPU",
-      render: (_, { w }) => (w.unobserved ? NONE : <UsageMeter usage={worstUsage(w, "cpu")} format={formatCores} what="CPU" />),
-    },
-    {
-      key: "memory",
-      header: "Memory",
-      render: (_, { w }) => (w.unobserved ? NONE : <UsageMeter usage={worstUsage(w, "memory")} format={formatBytes} what="Memory" />),
-    },
-  ];
-  return (
-    <div data-testid="overview-services-table">
-      <DataTable<ServiceTableRow>
-        flush
-        stacked
-        ariaLabel="Services"
-        columns={columns}
-        data={rows.map((w) => ({ key: `${w.envName}/${w.workload}`, w }))}
-        loading={loading}
-        pageSize={4}
-        emptyMessage={<span data-testid="overview-services-empty">{empty}</span>}
-        getRowKey={(r) => r.key}
-        // A workload a self-managed environment's render declares and nothing
-        // has observed has no page to open: there is nothing observed to show.
-        getRowHref={({ w }) => (w.unobserved ? undefined : hrefs.workload(w.workload, w.envName))}
-        getRowDetail={({ w }) =>
-          w.unobserved ? (
-            <span className="text-xs text-ink-muted">Declared by {w.envName}&apos;s last recorded render; nothing reports from it.</span>
-          ) : undefined
-        }
-        getRowProps={({ w }) => ({
-          "data-testid": `overview-service-${w.workload}${showEnv ? `-${w.envName}` : ""}`,
-          "data-health": w.unobserved ? "unobserved" : w.health,
-        })}
-      />
-    </div>
-  );
-}
-
-function JobsTable({ rows, loading, showEnv, hrefs, empty }: { rows: JobRow[]; loading: boolean; showEnv: boolean; hrefs: OverviewHrefs; empty: ReactNode }) {
-  const columns: DataTableColumn<JobTableRow>[] = [
-    {
-      key: "name",
-      header: "Name",
-      render: (_, { row }) => (
-        <>
-          <span className="font-medium" title={row.latest.name}>
-            {row.workload}
-          </span>
-          {row.runs > 1 && (
-            <span className="ml-2 text-xs text-ink-muted">
-              {row.runs} runs{row.failedRuns ? `, ${row.failedRuns} failed` : ""}
-            </span>
-          )}
-        </>
-      ),
-    },
-    ...(showEnv ? [{ key: "env", header: "Environment", render: (_: unknown, { row }: JobTableRow) => <Tag>{row.envName}</Tag> }] : []),
-    {
-      key: "result",
-      header: "Result",
-      render: (_, { row }) => {
-        const job = row.latest;
-        const status = JOB_STATUS[job.result];
-        return (
-          <span className="inline-flex items-center gap-1.5">
-            <Status tone={status.tone} label={status.label} />
-            {job.result === "failed" && job.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(job.reason)}</span>}
-          </span>
-        );
-      },
-    },
-    {
-      key: "release",
-      header: "Ran in release",
-      interactive: true,
-      render: (_, { row }) =>
-        row.latest.releaseVersion ? (
-          <Link href={hrefs.release(row.latest.releaseVersion)} className={INK_LINK} title={row.latest.releaseVersion}>
-            {shortVersion(row.latest.releaseVersion)}
-          </Link>
-        ) : (
-          <span className="text-ink-muted">unknown</span>
-        ),
-    },
-    {
-      key: "duration",
-      header: "Duration",
-      numeric: true,
-      render: (_, { row }) =>
-        row.latest.durationSeconds ? (
-          formatSeconds(row.latest.durationSeconds)
-        ) : (
-          <span className="text-ink-muted">{row.latest.result === "running" ? "running" : "—"}</span>
-        ),
-    },
-    {
-      key: "finished",
-      header: "Finished",
-      className: "text-ink-muted",
-      render: (_, { row }) => {
-        const job = row.latest;
-        return job.finishedAtMs ? (
-          <time dateTime={new Date(job.finishedAtMs).toISOString()} title={new Date(job.finishedAtMs).toLocaleString()}>
-            {formatAgo(job.finishedAtMs)}
-          </time>
-        ) : job.result === "running" ? (
-          "not yet"
-        ) : (
-          "not observed"
-        );
-      },
-    },
-  ];
-  return (
-    <div data-testid="overview-jobs-table">
-      <DataTable<JobTableRow>
-        flush
-        stacked
-        ariaLabel="Jobs"
-        columns={columns}
-        data={rows.map((row) => ({ key: row.key, row }))}
-        loading={loading}
-        pageSize={2}
-        emptyMessage={<span data-testid="overview-jobs-empty">{empty}</span>}
-        getRowKey={(r) => r.key}
-        getRowHref={({ row }) => hrefs.workload(row.workload, row.envName)}
-        getRowProps={({ row }) => ({
-          "data-testid": `overview-job-${row.workload}${showEnv ? `-${row.envName}` : ""}`,
-          "data-result": row.latest.result,
-        })}
-      />
-    </div>
   );
 }

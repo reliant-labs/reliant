@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createChatState, reduceChat } from "./chat-reducer.js";
+import type { Logger } from "./logger.js";
 import type { ChatState } from "./chat-state.js";
 import { decodeChatUpdate } from "./decode.js";
 import type { ChatUpdate } from "./events.js";
+import type { Message } from "./types.js";
 import {
   approvalData,
   CHAT,
@@ -301,5 +303,186 @@ describe("decodeChatUpdate", () => {
 describe("textMessage fixture", () => {
   it("is a complete message", () => {
     expect(textMessage("m", 2, 1, "t").streamingState).toBe(2);
+  });
+});
+
+// ── What a host can rely on beyond the fold itself ──────────────────────────
+
+const spyLog = () => {
+  const log = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  return log as typeof log & Logger;
+};
+
+const toolResult = (id: string, callId: string, seq: number, content: string, isError = false) =>
+  updateData(ChatUpdateType.MESSAGE, seq, id, {
+    message: {
+      id,
+      chat_id: CHAT,
+      role: 4,
+      seq,
+      thread: "",
+      streaming_state: 2,
+      content_blocks: [{ id: `${id}-r0`, type: 3, index: 0, tool_call_id: callId, tool_name: "bash", content, is_error: isError }],
+    },
+  });
+
+describe("a message of another chat", () => {
+  it("is dropped, and reported", () => {
+    const log = spyLog();
+    const foreign = updateData(ChatUpdateType.MESSAGE, 2, "m-x", {
+      message: { id: "m-x", chat_id: "some-other-chat", role: 2, seq: 2, thread: "", streaming_state: 2, content_blocks: [{ id: "b", type: 1, index: 0, content: "theirs" }] },
+    });
+    const s = reduceChat(
+      fresh(),
+      { kind: "updates", updates: decode(messageData(1, "m-1", "mine"), foreign), cursor: 2n },
+      { ...env, log },
+    );
+    expect(texts(s)).toEqual(["mine"]);
+    expect(log.warn).toHaveBeenCalledWith("Dropping message from wrong chat", expect.objectContaining({ messageId: "m-x" }));
+  });
+});
+
+describe("a re-delivered tool result", () => {
+  const seeded = () => apply(fresh(), toolResult("t-1", "call-1", 5, "real output"));
+
+  it("keeps the first copy and says nothing when the copy is identical, but counts it once per batch", () => {
+    const log = spyLog();
+    const s = reduceChat(
+      seeded(),
+      { kind: "updates", updates: decode(toolResult("t-1b", "call-1", 6, "real output"), toolResult("t-2", "call-2", 7, "new")), cursor: 9n },
+      { ...env, log },
+    );
+    expect(s.toolResults["call-1"]!.content).toBe("real output");
+    expect(s.toolResults["call-2"]!.content).toBe("new");
+    expect(log.warn).not.toHaveBeenCalled();
+    expect(log.debug).toHaveBeenCalledWith("Dropped re-delivered tool results", expect.objectContaining({ alreadyRecorded: 1 }));
+  });
+
+  it("warns once, in aggregate, when the copy differs, and still keeps the first", () => {
+    const log = spyLog();
+    const s = reduceChat(
+      seeded(),
+      { kind: "updates", updates: decode(toolResult("t-stub", "call-1", 6, "ERROR: stub", true)), cursor: 9n },
+      { ...env, log },
+    );
+    expect(s.toolResults["call-1"]).toMatchObject({ content: "real output" });
+    expect(log.warn).toHaveBeenCalledTimes(1);
+    expect(log.warn.mock.calls[0]![1]).toMatchObject({ count: 1, toolCallIds: ["call-1"] });
+  });
+
+  it("hands back the very same index when a batch adds no result", () => {
+    const before = seeded();
+    const after = apply(before, messageData(8, "m-8", "chat"));
+    expect(after.toolResults).toBe(before.toolResults);
+  });
+});
+
+describe("what keeps its identity", () => {
+  it("the streaming record, when a batch changes no placeholder", () => {
+    const live = apply(fresh(), deltaData("message_start"), deltaData("content_block_start"), deltaData("content_block_delta", { delta: "hi" }));
+    const after = apply(live, messageData(5, "m-5", "unrelated", 1));
+    expect(after.streaming).toBe(live.streaming);
+  });
+});
+
+describe("info notices", () => {
+  it("keep the order they arrived in, warnings and infos interleaved", () => {
+    const notice = (type: ChatUpdateType, seq: number, id: string) =>
+      updateData(type, seq, id, { id, chat_id: CHAT, message: id, timestamp: "2026-01-01T00:00:00.000Z" });
+    const s = apply(
+      fresh(),
+      notice(ChatUpdateType.WARNING, 1, "w1"),
+      notice(ChatUpdateType.INFO, 2, "i1"),
+      notice(ChatUpdateType.WARNING, 3, "w2"),
+    );
+    expect(s.info.map((i) => i.id)).toEqual(["w1", "i1", "w2"]);
+  });
+});
+
+describe("a snapshot told to keep the streaming placeholders", () => {
+  const live = () => apply(fresh(), deltaData("message_start"), deltaData("content_block_start"), deltaData("content_block_delta", { delta: "working" }));
+
+  it("drops them by default: a snapshot carries no ephemeral deltas", () => {
+    expect(streamingText(snapshot(live(), messageData(1, "m-1", "one", 1)))).toBe("");
+  });
+
+  it("leaves them for a host that settles an idle chat itself", () => {
+    // A user message: a complete assistant message would retire the thread's placeholder on its own.
+    const s = reduceChat(live(), { kind: "snapshot", updates: decode(messageData(1, "m-1", "one", 1)), cursor: 10n, keepStreaming: true }, env);
+    expect(streamingText(s)).toBe("working");
+    expect(texts(s)).toEqual(["one"]);
+  });
+});
+
+describe("an older page of history", () => {
+  const held = () => snapshot(fresh(), messageData(6, "m-6", "six"), messageData(7, "m-7", "seven"));
+  const messagesOf = (...data: unknown[]) =>
+    decode(...data).map((u) => (u as unknown as { message: Message }).message);
+  const olderPage = (s: ChatState, ids: Array<[string, number]>, extra: { hasMore?: boolean } = {}) =>
+    reduceChat(
+      s,
+      {
+        kind: "olderPage",
+        messages: messagesOf(...ids.map(([id, seq]) => messageData(seq, id, id))),
+        errors: [],
+        total: 9,
+        hasMore: extra.hasMore ?? true,
+      },
+      env,
+    );
+
+  it("is prepended in canonical order, and the paging cursor only moves backward", () => {
+    const s = olderPage(held(), [["m-4", 4], ["m-5", 5]]);
+    expect(texts(s)).toEqual(["m-4", "m-5", "six", "seven"]);
+    expect(s.pagination).toEqual({ total: 9, hasMore: true, oldestSeq: 4 });
+  });
+
+  it("never replaces what is held: a message the chat already has stays as it is", () => {
+    const s = olderPage(held(), [["m-6", 6], ["m-5", 5]], { hasMore: false });
+    expect(texts(s)).toEqual(["m-5", "six", "seven"]);
+    expect(s.pagination?.hasMore).toBe(false);
+  });
+
+  it("joins the page's tool results to the index without overwriting one already held", () => {
+    const withResult = apply(held(), toolResult("t-1", "call-1", 8, "held"));
+    const withOlder = reduceChat(
+      withResult,
+      {
+        kind: "olderPage",
+        messages: messagesOf(toolResult("t-0", "call-1", 3, "older copy"), toolResult("t-00", "call-0", 2, "only here")),
+        errors: [],
+        total: 9,
+        hasMore: true,
+      },
+      env,
+    );
+    expect(withOlder.toolResults["call-1"]!.content).toBe("held");
+    expect(withOlder.toolResults["call-0"]!.content).toBe("only here");
+  });
+
+  it("merges the page's errors by id, keeping a newer attempt the stream already delivered", () => {
+    const errorUpdate = (id: string, message: string, sequence_number: number) => ({
+      update_type: "error" as const,
+      id,
+      chat_id: CHAT,
+      activity_type: "a",
+      activity_id: "x",
+      error_message: message,
+      timestamp: "2026-01-01T00:00:00.000Z",
+      sequence_number,
+    });
+    const withLive = reduceChat(held(), { kind: "updates", updates: [errorUpdate("e1", "newer", 50)], cursor: 8n }, env);
+    const s = reduceChat(
+      withLive,
+      {
+        kind: "olderPage",
+        messages: [],
+        errors: [errorUpdate("e1", "older", 40), errorUpdate("e0", "history", 10)],
+        total: 9,
+        hasMore: true,
+      },
+      env,
+    );
+    expect(s.errors.map((e) => [e.id, e.error_message])).toEqual([["e1", "newer"], ["e0", "history"]]);
   });
 });

@@ -154,7 +154,7 @@ describe("the URL round trip", () => {
     expect([...OBS_SEARCH_KEYS].sort()).toEqual(
       [
         "alerts", "apps", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
-        "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
+        "lat", "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
         "issue", "istatus", "platform", "isort", "assignee",
         "session", "t", "user", "rsession", "browser", "os", "fe", "be", "build", "cursor",
         "declared", "internal", "rpcId", "rpcService",

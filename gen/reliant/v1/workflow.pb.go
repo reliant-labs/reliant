@@ -11,6 +11,7 @@ package reliantv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -120,7 +121,7 @@ type WorkflowListItem struct {
 	AutomationOnly bool `protobuf:"varint,21,opt,name=automation_only,json=automationOnly,proto3" json:"automation_only,omitempty"`
 	// The definition's declared `triggers:` (its WHEN), so a list can show the
 	// ones the caller has not activated yet.
-	Triggers      []*WorkflowTrigger `protobuf:"bytes,22,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	Triggers      []*v1.WorkflowTrigger `protobuf:"bytes,22,rep,name=triggers,proto3" json:"triggers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -281,7 +282,7 @@ func (x *WorkflowListItem) GetAutomationOnly() bool {
 	return false
 }
 
-func (x *WorkflowListItem) GetTriggers() []*WorkflowTrigger {
+func (x *WorkflowListItem) GetTriggers() []*v1.WorkflowTrigger {
 	if x != nil {
 		return x.Triggers
 	}
@@ -1105,11 +1106,11 @@ type SaveWorkflowRequest struct {
 	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required: project ID
 	Workflow  *Workflow              `protobuf:"bytes,2,opt,name=workflow,proto3" json:"workflow,omitempty"`                    // Workflow definition to save
 	// Field 3 removed (was publish)
-	Scope           ConfigScope `protobuf:"varint,4,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`                      // Where to save: global, project, or worktree
-	WorktreeId      *string     `protobuf:"bytes,5,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`                 // Required if scope is worktree
-	ExpectedVersion *int64      `protobuf:"varint,8,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"` // OCC: expected version number - fails if workflow was modified since
-	SourcePath      *string     `protobuf:"bytes,9,opt,name=source_path,json=sourcePath,proto3,oneof" json:"source_path,omitempty"`                 // If set, write YAML back to this file (for project workflow edits)
-	DraftId         *string     `protobuf:"bytes,10,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"`                         // If provided, update this draft by ID (allows renames)
+	Scope           v1.ConfigScope `protobuf:"varint,4,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`                      // Where to save: global, project, or worktree
+	WorktreeId      *string        `protobuf:"bytes,5,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`                 // Required if scope is worktree
+	ExpectedVersion *int64         `protobuf:"varint,8,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"` // OCC: expected version number - fails if workflow was modified since
+	SourcePath      *string        `protobuf:"bytes,9,opt,name=source_path,json=sourcePath,proto3,oneof" json:"source_path,omitempty"`                 // If set, write YAML back to this file (for project workflow edits)
+	DraftId         *string        `protobuf:"bytes,10,opt,name=draft_id,json=draftId,proto3,oneof" json:"draft_id,omitempty"`                         // If provided, update this draft by ID (allows renames)
 	// Intent. DRAFT stores as-is; COMPLETE validates and rejects on errors;
 	// UNSPECIFIED keeps the current status (new workflows start as drafts), so
 	// re-saving a complete workflow is gated like COMPLETE.
@@ -1162,11 +1163,11 @@ func (x *SaveWorkflowRequest) GetWorkflow() *Workflow {
 	return nil
 }
 
-func (x *SaveWorkflowRequest) GetScope() ConfigScope {
+func (x *SaveWorkflowRequest) GetScope() v1.ConfigScope {
 	if x != nil {
 		return x.Scope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
 func (x *SaveWorkflowRequest) GetWorktreeId() string {
@@ -1325,7 +1326,7 @@ type ImportWorkflowRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`               // Required: project ID
 	YamlContent   []byte                 `protobuf:"bytes,2,opt,name=yaml_content,json=yamlContent,proto3" json:"yaml_content,omitempty"`         // YAML file content
-	Scope         ConfigScope            `protobuf:"varint,3,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`           // Where to import: global, project, or worktree
+	Scope         v1.ConfigScope         `protobuf:"varint,3,opt,name=scope,proto3,enum=reliant.v1.ConfigScope" json:"scope,omitempty"`           // Where to import: global, project, or worktree
 	WorktreeId    *string                `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`      // Required if scope is worktree
 	Overwrite     bool                   `protobuf:"varint,5,opt,name=overwrite,proto3" json:"overwrite,omitempty"`                               // If true, overwrite existing workflow with same slug
 	Status        WorkflowDraftStatus    `protobuf:"varint,6,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"` // Intent; same semantics as SaveWorkflowRequest.status
@@ -1377,11 +1378,11 @@ func (x *ImportWorkflowRequest) GetYamlContent() []byte {
 	return nil
 }
 
-func (x *ImportWorkflowRequest) GetScope() ConfigScope {
+func (x *ImportWorkflowRequest) GetScope() v1.ConfigScope {
 	if x != nil {
 		return x.Scope
 	}
-	return ConfigScope_CONFIG_SCOPE_UNSPECIFIED
+	return v1.ConfigScope(0)
 }
 
 func (x *ImportWorkflowRequest) GetWorktreeId() string {
@@ -2533,9 +2534,9 @@ var file_reliant_v1_workflow_proto_goTypes = []any{
 	nil,                                   // 28: reliant.v1.WorkflowListItem.OutputsEntry
 	(*Node)(nil),                          // 29: reliant.v1.Node
 	(*Edge)(nil),                          // 30: reliant.v1.Edge
-	(*WorkflowTrigger)(nil),               // 31: reliant.v1.WorkflowTrigger
+	(*v1.WorkflowTrigger)(nil),            // 31: reliant.v1.WorkflowTrigger
 	(*Workflow)(nil),                      // 32: reliant.v1.Workflow
-	(ConfigScope)(0),                      // 33: reliant.v1.ConfigScope
+	(v1.ConfigScope)(0),                   // 33: reliant.v1.ConfigScope
 	(*Input)(nil),                         // 34: reliant.v1.Input
 }
 var file_reliant_v1_workflow_proto_depIdxs = []int32{
@@ -2608,8 +2609,6 @@ func file_reliant_v1_workflow_proto_init() {
 	if File_reliant_v1_workflow_proto != nil {
 		return
 	}
-	file_reliant_v1_common_proto_init()
-	file_reliant_v1_trigger_proto_init()
 	file_reliant_v1_workflow_v2_proto_init()
 	file_reliant_v1_workflow_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[3].OneofWrappers = []any{}

@@ -129,6 +129,20 @@ func (s *gatewaySession) backlog() int {
 // runSender is the single goroutine that drains sendCh and writes to the
 // bidi stream. This serialises writes (required — stream.Send is not
 // thread-safe) without blocking producers on I/O.
+//
+// A Send that fails never leaves the session half-alive. Before, runSender
+// just returned: the stream stayed registered and its read half kept going,
+// but nothing drained sendCh, so every message after it — command responses,
+// terminal output, heartbeats — queued into nothing until the liveness check
+// noticed the unacknowledged heartbeat ~95s later. Every terminal and tool on
+// the machine was dead for that long (prod, 2026-11-05 16:01:00-16:02:35: one
+// message with invalid UTF-8 in a string field). Now:
+//
+//   - a message that failed because a string field holds invalid UTF-8
+//     (proto3 rejects it at marshal time, before anything is written) is
+//     repaired and sent again;
+//   - any other failure, or a repaired message that still fails, retires the
+//     stream at once, so the daemon redials instead of waiting out liveness.
 func (s *gatewaySession) runSender(stream messageSender) {
 	defer close(s.sendDone)
 	for {
@@ -137,8 +151,16 @@ func (s *gatewaySession) runSender(stream messageSender) {
 			if msg == nil {
 				return
 			}
-			if err := stream.Send(msg); err != nil {
-				logging.Warn(logPrefix+" runSender: stream.Send failed", "error", err)
+			err := stream.Send(msg)
+			if err != nil && repairUTF8(msg.ProtoReflect()) {
+				logging.Error(logPrefix+" runSender: a message carried invalid UTF-8; sending it repaired",
+					"message", fmt.Sprintf("%T", msg.GetMessage()), "error", err)
+				err = stream.Send(msg)
+			}
+			if err != nil {
+				logging.Warn(logPrefix+" runSender: stream.Send failed; ending the session to reconnect", "error", err)
+				s.end() // producers stop queueing into a queue nobody drains
+				s.retireNow()
 				return
 			}
 		case <-s.done:

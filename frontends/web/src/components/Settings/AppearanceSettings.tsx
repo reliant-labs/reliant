@@ -5,6 +5,7 @@ import { ColorSchemeSelector } from "./ColorSchemeSelector";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 import { FONT_SIZE_MAP, applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 import { applyThemeMode, parseThemeMode, type ThemeMode } from "../../lib/themeMode";
+import { CHAT_THREAD_MODE_CHOICES, DEFAULT_CHAT_THREAD_MODE, parseChatThreadMode, type ChatThreadModePreference } from "../Chat/thread-views/useChatThreadMode";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import {
   ChoiceGroup,
@@ -32,6 +33,8 @@ const CHAT_TIMELINE_VARIANTS: readonly Choice<ChatTimelineVariant>[] = [
   { value: "card", label: "Card", description: "Stronger message grouping and separation" },
   { value: "minimal", label: "Minimal", description: "Reduced chrome for dense timelines" },
 ];
+
+const CHAT_THREAD_CHOICES: readonly Choice<ChatThreadModePreference>[] = CHAT_THREAD_MODE_CHOICES;
 
 const FONT_SIZE_LABELS: Record<FontSize, string> = {
   xs: "Extra small",
@@ -62,6 +65,7 @@ export function AppearanceSettings() {
   const [useCodeFont, setUseCodeFont] = useState<boolean>(false);
   const [fontSize, setFontSize] = useState<FontSize>(DEFAULT_FONT_SIZE as FontSize);
   const [chatTimelineVariant, setChatTimelineVariant] = useState<ChatTimelineVariant>("compact");
+  const [chatThreadMode, setChatThreadModeState] = useState<ChatThreadModePreference>(DEFAULT_CHAT_THREAD_MODE);
   // Bumped by Reset so the colour-scheme picker re-reads the stored scheme.
   const [schemeKey, setSchemeKey] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -79,6 +83,7 @@ export function AppearanceSettings() {
       setUseCodeFont(savedEditorFont !== "default");
       setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE) as FontSize);
       setChatTimelineVariant(readPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact"));
+      setChatThreadModeState(parseChatThreadMode(readPref(SETTINGS_KEYS.CHAT_THREAD_MODE, DEFAULT_CHAT_THREAD_MODE)));
       setIsLoaded(true);
     })();
 
@@ -138,6 +143,15 @@ export function AppearanceSettings() {
     }
   }, [chatTimelineVariant, isLoaded]);
 
+  useEffect(() => {
+    if (!isLoaded) return;
+    // Unset already means the default; don't write it just for opening the page.
+    if (chatThreadMode === DEFAULT_CHAT_THREAD_MODE && !settingsSync.getSetting(SETTINGS_KEYS.CHAT_THREAD_MODE, "")) return;
+    if (persistPref(SETTINGS_KEYS.CHAT_THREAD_MODE, chatThreadMode)) {
+      window.dispatchEvent(new CustomEvent("appearance-updated"));
+    }
+  }, [chatThreadMode, isLoaded]);
+
   const resetToDefaults = () => {
     chooseTheme("system");
     settingsSync.setSetting(SETTINGS_KEYS.COLOR_SCHEME, DEFAULT_COLOR_SCHEME).catch(console.error);
@@ -148,6 +162,7 @@ export function AppearanceSettings() {
     setUseCodeFont(false);
     setFontSize(DEFAULT_FONT_SIZE as FontSize);
     setChatTimelineVariant("compact");
+    setChatThreadModeState(DEFAULT_CHAT_THREAD_MODE);
   };
 
   // Don't render until settings are loaded
@@ -264,6 +279,19 @@ export function AppearanceSettings() {
               value={chatTimelineVariant}
               choices={CHAT_TIMELINE_VARIANTS}
               onChange={setChatTimelineVariant}
+              className="sm:grid-cols-3"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <span id="appearance-chat-thread" className="text-sm font-medium block">
+              Chat thread
+            </span>
+            <ChoiceGroup
+              label="Chat thread"
+              value={chatThreadMode}
+              choices={CHAT_THREAD_CHOICES}
+              onChange={setChatThreadModeState}
               className="sm:grid-cols-3"
             />
           </div>

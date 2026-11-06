@@ -52,15 +52,21 @@ func (s *Service) ListQueuedAgentMessages(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list queued messages"))
 	}
 
-	messages := make([]*reliantv1.QueuedAgentMessage, len(queued))
-	for i, msg := range queued {
-		messages[i] = &reliantv1.QueuedAgentMessage{
+	messages := make([]*reliantv1.QueuedAgentMessage, 0, len(queued))
+	for _, msg := range queued {
+		// An LLM-only row (an async ask_user answer) is shown on its question
+		// card; in the pending strip it would read as something the user
+		// typed and could cancel.
+		if msg.DisplayStyle != nil && *msg.DisplayStyle == int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN) {
+			continue
+		}
+		messages = append(messages, &reliantv1.QueuedAgentMessage{
 			Id:          msg.ID,
 			Body:        msg.Body,
 			CreatedAt:   msg.CreatedAt.Format(time.RFC3339),
 			SenderKind:  msg.Kind,
 			Attachments: msg.Attachments,
-		}
+		})
 	}
 
 	return connect.NewResponse(&reliantv1.ListQueuedAgentMessagesResponse{

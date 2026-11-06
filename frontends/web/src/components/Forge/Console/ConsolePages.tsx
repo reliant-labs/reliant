@@ -22,7 +22,6 @@ import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import Link from "@/components/forge-ui/link";
 import PageHeader, { type PageHeaderAction } from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import Tag from "@/components/forge-ui/tag";
 import { useObservabilityOrg } from "@/hooks/observability-queries";
 import type { LiveEnv } from "@/services/forge/live";
 import type { RosterEnv } from "@/services/forge/roster";
@@ -43,23 +42,19 @@ import { OBS_NAV_LABELS } from "./paths";
 // ── Shared pieces ───────────────────────────────────────────────────────────
 
 /** The scope, as the page header's meta line states it. */
-function ScopeMeta({ children }: { children?: ReactNode }) {
-  const { env } = useForgeConsole();
-  return (
-    <>
-      {env === ENV_ALL ? <span>All environments</span> : <Tag>{env}</Tag>}
-      {children}
-    </>
-  );
-}
-
+/**
+ * A console page's header: one compact row (forge-ui PageHeader, "compact").
+ * It never repeats the environment scope: the top bar's scope control is the
+ * one place that says it, and a second line saying "All environments" under
+ * every title was empty space above every page.
+ */
 function Header({ title, meta, actions }: { title: string; meta?: ReactNode; actions?: PageHeaderAction[] }) {
-  return <PageHeader title={title} meta={meta ?? <ScopeMeta />} actions={actions} className="mb-0" />;
+  return <PageHeader density="compact" title={title} meta={meta} actions={actions} className="mb-0" />;
 }
 
 function Page({ testId, children }: { testId: string; children: ReactNode }) {
   return (
-    <div className="space-y-6" data-testid={testId}>
+    <div className="space-y-4" data-testid={testId}>
       {children}
     </div>
   );

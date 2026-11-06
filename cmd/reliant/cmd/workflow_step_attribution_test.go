@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/sdk/go/reliant"
 )
 
 // A run with two phases, both running builtin://get-it-right, is the shape
@@ -69,6 +70,13 @@ func twoPhaseRun() *reliantv1.WorkflowExecution {
 			},
 		},
 	}
+}
+
+// summarizeSteps is the SDK's step attribution (reliant.SummarizeSteps) as the
+// status report carries it: the assertions below hold the behaviour the CLI has
+// always had, now produced by the SDK.
+func summarizeSteps(root *reliantv1.WorkflowExecution) []statusStepGroup {
+	return toStatusStepGroups(reliant.SummarizeSteps(root))
 }
 
 // groupFor finds one node thread's steps, failing loudly when the derived set

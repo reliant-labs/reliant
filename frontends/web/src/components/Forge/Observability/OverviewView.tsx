@@ -32,6 +32,7 @@ import { groupLabel } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
 import { signalState, useSignalsIndex, type SignalsIndex } from "./serviceSignals";
+import { latParam, SessionsTile, TracesTile } from "./Home/SignalTiles";
 
 /** An error rate at or above this reads as a problem, and is drawn in the destructive tone. */
 export const ERROR_RATE_ALERT = 0.05;
@@ -75,6 +76,7 @@ export function OverviewView({
   }
 
   return (
+    <div className="space-y-4">
     <Card padding="none" className="overflow-hidden" data-testid="obs-overview">
       <ObsAsOf updatedAt={overview.dataUpdatedAt} />
       <DataTable<ServiceRow>
@@ -89,6 +91,22 @@ export function OverviewView({
         getRowProps={({ health, group }) => ({ "data-testid": group ? `obs-service-${health.name}-${group}` : `obs-service-${health.name}` })}
       />
     </Card>
+    {/* What the requests took, and who was in the app: each tile its own read (Home/SignalTiles). */}
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2" data-testid="obs-overview-signals">
+      <TracesTile
+        scope={scope}
+        range={range}
+        band={{ onOpen: (band) => navigate({ view: "traces", lat: latParam(band), trace: undefined, service: undefined }) }}
+        all={{ onOpen: () => navigate({ view: "traces", trace: undefined, service: undefined }) }}
+      />
+      <SessionsTile
+        scope={scope}
+        range={range}
+        session={{ onOpen: (id) => navigate({ view: "sessions", session: id, service: undefined }) }}
+        all={{ onOpen: () => navigate({ view: "sessions", service: undefined }) }}
+      />
+    </div>
+    </div>
   );
 }
 

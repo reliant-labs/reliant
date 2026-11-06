@@ -31,7 +31,7 @@ import { useApps } from "@/hooks/apps-queries";
 import { useAlerts, useObservabilityOrg } from "@/hooks/observability-queries";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
-import { isDeployed, isLive, primaryLink, type AppEnv, type AppSummary } from "@/services/forge/apps";
+import { isDeployed, isLive, isNeverDeployed, primaryLink, type AppEnv, type AppSummary } from "@/services/forge/apps";
 
 import { consolePath } from "../Forge/Console/paths";
 import { AreaShell } from "../Layout/AreaShell";
@@ -208,7 +208,7 @@ function SiteCell({ app, deploysKnown }: { app: AppSummary; deploysKnown: boolea
   if (app.envs.some((env) => env.loading)) {
     return <span className="inline-block h-3 w-40 animate-pulse rounded bg-ink/5 align-middle motion-reduce:animate-none" aria-label="Loading" />;
   }
-  const why = !deploysKnown ? "Unavailable" : isDeployed(app) ? "No public site" : "Not deployed yet";
+  const why = isDeployed(app) ? "No public site" : deploysKnown && isNeverDeployed(app) ? "Not deployed yet" : "Unavailable";
   return (
     <span
       className="text-ink-muted"
@@ -263,7 +263,8 @@ function EnvChip({ env, firing }: { env: AppEnv; firing: number }) {
     );
   }
   const health = envHealth(env.verdict, firing);
-  const facts = [health.label, env.release || "not deployed yet"].join(" · ");
+  const release = env.release || (env.unread ? "release unknown" : "not deployed yet");
+  const facts = [health.label, release].join(" · ");
   return (
     <span title={`${env.name}: ${facts}`} data-testid={`app-env-${env.name}`} data-verdict={env.verdict} data-firing={firing || undefined}>
       <Status tone={health.tone} label={env.name} size="sm" />
@@ -271,7 +272,7 @@ function EnvChip({ env, firing }: { env: AppEnv; firing: number }) {
         <span className="ml-1 text-xs text-ink-muted" data-testid={`app-env-${env.name}-alerts`}>
           <span className="sr-only">: </span>
           {health.label}
-          <span className="sr-only"> · {env.release || "not deployed yet"}</span>
+          <span className="sr-only"> · {release}</span>
         </span>
       ) : (
         <span className="sr-only">: {facts}</span>
@@ -281,7 +282,7 @@ function EnvChip({ env, firing }: { env: AppEnv; firing: number }) {
 }
 
 function LastDeployCell({ app, deploysKnown }: { app: AppSummary; deploysKnown: boolean }) {
-  if (!app.lastDeployedAt) return <span>{deploysKnown ? "Never" : "—"}</span>;
+  if (!app.lastDeployedAt) return <span>{deploysKnown && isNeverDeployed(app) ? "Never" : "—"}</span>;
   return (
     <time dateTime={app.lastDeployedAt} title={formatAbsoluteTime(app.lastDeployedAt)} className="tabular-nums">
       {formatRelativeTime(app.lastDeployedAt)}

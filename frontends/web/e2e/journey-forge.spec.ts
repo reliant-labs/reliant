@@ -3,8 +3,8 @@ import { expect, test, type Page, type Request, type Route } from '@playwright/t
 import { mockAppsBackend } from './appsMocks';
 
 // The forge journey ("Explore a forge app", Onboarding/journeys/forge.tsx) on
-// the demo console (/forge/demo, fixture data), walked end to end in BOTH
-// shells it runs in:
+// the demo console (/forge/demo, fixture data), walked end to end in the
+// shells it runs in (the public demo host's own cut is at the bottom):
 //
 //   Reliant      the shell picked by hostname (no ?shell override), signed in
 //                (appsMocks.ts), the demo under Reliant's authenticated layout;
@@ -204,5 +204,112 @@ test.describe('the forge journey in the forge shell', () => {
     await page.goto('/forge/demo?tour=workflows:wf-new', { waitUntil: 'domcontentloaded' });
     await expect(page.locator("[data-tour='forge-console']")).toBeVisible(LOADED);
     await expect(navBar(page)).toHaveCount(0);
+  });
+});
+
+// The public demo host (demo.reliantlabs.io, lib/shell.ts `demo`), picked here
+// with ?shell=demo: the tour starts by itself on every load, its short cut is
+// ten steps (DEMO_TOUR=short), every write is off, and the page reaches no
+// other origin — its Connect transport is forge's mock transport
+// (Forge/Demo/demoData), so not even the sample data's reads leave the browser.
+test.describe('the forge journey on the demo host', () => {
+  async function openDemo(page: Page, path = '/?shell=demo') {
+    const origin = new URL(test.info().project.use.baseURL ?? 'http://localhost:5173').origin;
+    const config = { CONTROL_PLANE_API_URL: origin, APP_URL: RELIANT_ORIGIN, DEMO_TOUR: 'short' };
+    await page.route('**/config.js', (route) =>
+      route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.__FORGE_CONFIG__ = ${JSON.stringify(config)};` }),
+    );
+    const log = recordRequests(page);
+    await page.goto(path, { waitUntil: 'domcontentloaded' });
+    return { log, origin };
+  }
+
+  const atDemoStep = async (page: Page, n: number, title: string) => {
+    await expect(navBar(page)).toContainText(`${n} / 10`, LOADED);
+    await expect(navBar(page)).toContainText(title);
+  };
+
+  test('starts the tour on load, walks ten steps on sample data, and reaches no other origin', async ({ page }) => {
+    const { log, origin } = await openDemo(page);
+
+    await expect(page).toHaveURL(/\/forge\/demo\?/, LOADED);
+    expect(new URL(page.url()).searchParams.get('tour')).toBe('forge:fg-console');
+    await expect(page.locator("[data-shell='demo']")).toHaveCount(1);
+    await atDemoStep(page, 1, "A forge app's console");
+    await next(page);
+
+    await atDemoStep(page, 2, 'Instrumented from the start');
+    await next(page);
+
+    await atDemoStep(page, 3, 'One request, end to end');
+    await page.locator(`[data-testid='obs-trace-row'][data-trace-id='${TRACE_ID}']`).click();
+    await expect(page.getByTestId('trace-waterfall')).toBeVisible();
+    await next(page);
+
+    await atDemoStep(page, 4, 'Across services');
+    await page.locator("[data-testid='trace-span-row'][data-span-id='e1']").click();
+    await expect(page).toHaveURL(/span=e1/);
+    await expect(page.getByTestId('span-details')).toContainText('inventory');
+    await next(page);
+
+    await atDemoStep(page, 5, 'Inside a service');
+    await next(page);
+
+    await atDemoStep(page, 6, 'What that request logged');
+    await page.getByTestId('trace-logs').click();
+    await expect(page.getByTestId('obs-logs-trace-scope')).toBeVisible();
+    await next(page);
+
+    await atDemoStep(page, 7, 'Errors, grouped');
+    await page.getByTestId(`obs-issue-${ISSUE_ID}`).click();
+    await expect(page.getByTestId('obs-issue-header')).toBeVisible();
+    // Read-only: triage, assignee and comments are off, saying why.
+    await expect(page.getByTestId('obs-issue-resolve')).toBeDisabled();
+    await expect(page.getByTestId('obs-issue-resolve')).toHaveAttribute('title', 'Read-only demo');
+    await expect(page.getByTestId('obs-issue-assignee-pick')).toBeDisabled();
+    await expect(page.getByTestId('obs-comment-box')).toHaveAttribute('placeholder', 'Comments are off in the demo.');
+    await next(page);
+
+    await atDemoStep(page, 8, 'What your agent reads');
+    await expect(page.getByTestId('tour-commands').first()).toContainText(`forge obs trace ${TRACE_ID} prod`);
+    await next(page);
+
+    await atDemoStep(page, 9, 'Ask an agent about it');
+    await page.getByTestId('ask-reliant-actions').getByTestId('ask-agent').click();
+    await page.getByRole('dialog', { name: 'Ask an agent' }).getByRole('button', { name: 'Done' }).click();
+    await next(page);
+
+    await atDemoStep(page, 10, 'Try it on your app');
+    await expect(page.getByTestId('demo-cta-end_card')).toBeVisible();
+    await navBar(page).getByRole('button', { name: /^Finish/ }).click();
+    // Nowhere to go: the console stays, the tour closes.
+    await expect(page).toHaveURL(/\/forge\/demo/);
+    expect(page.url()).not.toContain('tour=');
+
+    // Zero requests to any other origin, and no RPC at all (the mock transport answers in the page).
+    expect(log.urls.filter((url) => !url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:'))).toEqual([]);
+    expect(log.urls.filter((url) => /\/(reliant|controlplane)\.v1\./.test(url))).toEqual([]);
+    expect(log.sockets).toEqual([]);
+  });
+
+  test('every path lands on the demo; the banner offers Install forge and Sign up', async ({ page }) => {
+    await openDemo(page, '/auth?shell=demo');
+    await expect(page).toHaveURL(/\/forge\/demo/, LOADED);
+    await expect(page.getByRole('heading', { name: /sign in/i })).toHaveCount(0);
+    const banner = page.getByTestId('forge-demo-banner');
+    await expect(banner).toContainText('Nothing you click here changes anything.');
+    await expect(banner.getByTestId('forge-demo-exit')).toHaveCount(0);
+    await expect(banner.getByTestId('demo-cta-signup')).toHaveAttribute('href', /\/auth\?utm_source=demo&utm_medium=banner/);
+    await banner.getByTestId('demo-cta-install').click();
+    await expect(page.getByTestId('demo-install-sheet')).toContainText('brew install reliant-labs/reliant/forge');
+  });
+
+  test('a deep link keeps its step; a reload starts the tour again (nothing is remembered)', async ({ page }) => {
+    await openDemo(page, '/forge/demo?shell=demo&view=traces&tour=forge:fg-trace');
+    await atDemoStep(page, 3, 'One request, end to end');
+    await navBar(page).getByRole('button', { name: /End tour/ }).click();
+    await expect(navBar(page)).toHaveCount(0);
+    await page.goto('/forge/demo', { waitUntil: 'domcontentloaded' });
+    await atDemoStep(page, 1, "A forge app's console");
   });
 });

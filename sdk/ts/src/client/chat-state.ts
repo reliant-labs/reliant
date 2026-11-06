@@ -16,6 +16,7 @@ import type {
   ToolApprovalUpdate,
   WorkflowStatusUpdate,
 } from "./events.js";
+import type { Logger } from "./logger.js";
 import type { ToolResultsByCallId } from "./tool-results.js";
 import type { Message, ToolCallState } from "./types.js";
 
@@ -57,14 +58,26 @@ export interface ChatState {
 }
 
 export type ChatAction =
-  /** The initial sync of a subscription: replaces the chat's state. */
-  | { kind: "snapshot"; updates: ChatUpdate[]; cursor: bigint }
+  /**
+   * The initial sync of a subscription: replaces the chat's state. A snapshot
+   * carries no ephemeral deltas, so by default it also drops the in-flight
+   * placeholders (a missed finalize would otherwise leave one on screen).
+   * `keepStreaming` leaves them for a host that knows better, e.g. one that
+   * knows the run is still going and clears them itself when it is idle.
+   */
+  | { kind: "snapshot"; updates: ChatUpdate[]; cursor: bigint; keepStreaming?: boolean }
   /** A replay or live batch. `cursor` is the stream's cursor after the batch. */
   | { kind: "updates"; updates: ChatUpdate[]; cursor: bigint }
   /** How much history exists beyond the snapshot's window. */
   | { kind: "pagination"; pagination: MessagePaginationInfo }
   /** The main thread's context usage, for the compaction indicator. */
   | { kind: "contextUsage"; contextUsage: ContextUsageInfo }
+  /**
+   * A page of history older than what the chat holds, fetched by the host
+   * (ChatSession.loadOlder does). Prepended, never replacing: the newer messages
+   * stay, and `oldestSeq` can only move backward.
+   */
+  | { kind: "olderPage"; messages: Message[]; errors: ErrorUpdate[]; total: number; hasMore: boolean }
   /** The server finished the initial sync. */
   | { kind: "caughtUp"; cursor: bigint }
   /** A message the user sent that no server row describes yet. */
@@ -78,4 +91,6 @@ export type ChatAction =
 export interface ReduceEnv {
   /** ISO timestamp of now; stamps a streaming placeholder and an inferred cancel. */
   now?: () => string;
+  /** Where the reducer reports what it set aside (a frame of another chat, a re-delivered tool result). Silent by default; never changes the result. */
+  log?: Logger;
 }

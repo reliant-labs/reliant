@@ -247,6 +247,11 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 	if role == 0 {
 		return nil, false, fmt.Errorf("role cannot be unspecified")
 	}
+	// An LLM-only delivery (an async ask_user answer) is the model's input and
+	// shown elsewhere, on the question card, so it is saved hidden.
+	if displayStyle == nil && reliantv1.MessageRole(role) == reliantv1.MessageRole_MESSAGE_ROLE_USER {
+		displayStyle = QueuedDisplayStyle(ctx)
+	}
 
 	// A message's workflow_id must name the workflow running THIS thread.
 	//
@@ -328,6 +333,18 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 			WorkflowID:      workflowID,
 			CreatedAt:       now,
 			UpdatedAt:       now,
+		}
+		// A user-role message an agent sent through the human's send path
+		// (send_to_run) names its sender, so it is never shown as the human's.
+		origin, attributed := MessageOriginFrom(ctx)
+		attributed = attributed && reliantv1.MessageRole(role) == reliantv1.MessageRole_MESSAGE_ROLE_USER
+		if attributed {
+			kind := origin.Kind
+			msg.SenderThreadID = &origin.ThreadID
+			msg.SenderKind = &kind
+			if origin.Subject != "" {
+				msg.SenderSubject = &origin.Subject
+			}
 		}
 
 		if once {
@@ -475,6 +492,9 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 			// Omitting it here delivers the message with displayStyle
 			// undefined, so it renders live and only disappears on reload.
 			DisplayStyle: displayStyle,
+		}
+		if attributed {
+			updateData.Sender = NewMessageSenderPayload(origin.ThreadID, r.SenderTitle(txCtx, origin.ThreadID), origin.Kind, origin.Subject)
 		}
 
 		updateDataJSON, err := updateData.Marshal()

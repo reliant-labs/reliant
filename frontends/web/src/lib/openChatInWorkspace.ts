@@ -57,6 +57,18 @@ export function beginWorkspaceOpen(): () => boolean {
 }
 
 /**
+ * A fence that yields to, but never supersedes, an open: true until the next
+ * {@link beginWorkspaceOpen}. For background defaults (select main when nothing
+ * is selected) that run beside a user's open. Beginning an epoch there cancels
+ * the open in flight: a chat header resolving main mid-click left the sidebar
+ * on the old workspace until the chat was clicked again.
+ */
+export function observeWorkspaceOpen(): () => boolean {
+  const epoch = openEpoch;
+  return () => epoch === openEpoch;
+}
+
+/**
  * Resolves once the chat is selected AND its worktree context is current and
  * recorded. Selection itself happens before the first await.
  */

@@ -35,6 +35,9 @@ var (
 	// ErrNotApplied: the server answered, and said it did not do what was
 	// asked (success=false). The message says why.
 	ErrNotApplied = errors.New("reliant: not applied")
+	// ErrTruncated: a list walk yielded what it could, but the server still
+	// cut the list short at the most the client asks for, so items are missing.
+	ErrTruncated = errors.New("reliant: truncated")
 )
 
 // Error is a failed call. Op names the operation, in the client's own words

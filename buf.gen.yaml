@@ -52,20 +52,62 @@ inputs:
 # byte-identical: these plugins write one file per proto file either way.
 # internal/buildmode/buf_plugin_pins_test.go fails on a plugin without it.
 plugins:
-  # Generate Go protobuf code
+  # Generate Go protobuf code. Two Go homes, one registration each:
+  #
+  #   - gen/                the app's own protos, exactly as before.
+  #   - sdk/go/gen/         the PUBLIC protos (proto/public-api.txt and the
+  #                         files they import). They are generated once, into
+  #                         the SDK module, and the app imports them from there:
+  #                         the same file registered by two Go packages panics
+  #                         at init, so the app must not carry a second copy.
+  #
+  # paths=import + module= place a file by the import path it is generated
+  # under, so the M lines below are what move a file into the SDK; the protos
+  # keep their go_package, which forge reads to name the app's own packages.
+  # The public files land in sdk/go/gen, byte-identical to what
+  # buf.gen.sdk-go.yaml writes there (same plugin, same M lines); that template
+  # also writes the SDK's filtered Connect clients.
+  #
+  # The app links the SDK at the version go.mod pins, NOT this tree's
+  # sdk/go: a change to a public proto reaches the app only when the pin moves
+  # (sdk/go/README.md, "Changing the SDK"). gen/reliant/v1/sdk_alias.pb.go
+  # (hook sdk-aliases in forge.yaml) re-exports the pinned SDK package under the
+  # old import path. internal/buildmode's sdk_public_api_test.go keeps this
+  # list, public-api.txt and the generated tree in step.
   - local: [go, tool, protoc-gen-go]
     strategy: all
-    out: gen
+    out: .
     opt:
-      - paths=source_relative
+      - paths=import
+      - module=github.com/reliant-labs/reliant
+      - Mreliant/v1/common.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/worktree.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/chat.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/run.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/trigger.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/approval.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/question.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/inbox.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/tools_daemon.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
 
   # Generate Connect-Go service code. Matches the connectrpc.com/connect
-  # runtime in go.mod by construction: it is the same module.
+  # runtime in go.mod by construction: it is the same module. The app gets
+  # every service, whole (handlers need every rpc); the types it names for the
+  # public files come from the SDK package through the same M mapping.
   - local: [go, tool, protoc-gen-connect-go]
     strategy: all
     out: gen
     opt:
       - paths=source_relative
+      - Mreliant/v1/common.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/worktree.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/chat.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/run.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/trigger.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/approval.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/question.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/inbox.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/tools_daemon.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
 
   # Generate TypeScript protobuf code for web
   - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-v2.15.0/bin/protoc-gen-es]

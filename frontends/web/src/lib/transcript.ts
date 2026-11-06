@@ -7,7 +7,7 @@
  * lines of them is almost never what someone means by "copy the conversation".
  */
 
-import { ContentBlockType, MessageRole } from "../gen/reliant/v1/chat_pb";
+import { AgentMessageKind, ContentBlockType, MessageRole } from "../gen/reliant/v1/chat_pb";
 import type { Message } from "../api/client";
 
 /** Extract the plain-text prose from a message, ignoring tool traffic. */
@@ -50,7 +50,9 @@ export function formatTranscript(
 
   for (const message of messages) {
     const label = message.sender
-      ? `Message from ${message.sender.title || "another agent"}`
+      ? message.sender.kind === AgentMessageKind.RUN_MESSAGE
+        ? `Message from run ${message.sender.title || "another run"}`
+        : `Message from ${message.sender.title || "another agent"}`
       : roleLabel(message.role);
     if (!label) continue;
 

@@ -279,6 +279,8 @@ export function TraceWaterfall({
                   aria-label={`${span.service} ${span.name}, starts at ${formatDuration(offset)}, takes ${formatDuration(span.durationMs)}${isError ? ", failed" : ""}`}
                   tabIndex={item.index === activeIndex ? 0 : -1}
                   data-span-index={item.index}
+                  data-span-id={span.spanId}
+                  data-span-service={span.service}
                   data-testid="trace-span-row"
                   onClick={() => {
                     setActive(item.index);

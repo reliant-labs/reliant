@@ -23,6 +23,19 @@ plugins:
       - reliant.v1.StreamingService
       - reliant.v1.BackgroundService.StreamProcessOutput
       - reliant.v1.ChatService.SendMessage
+      # What /react drives besides the stream: transcript paging and the run
+      # controls, the gates (approvals and questions), the inbox and run reads.
+      - reliant.v1.ChatService.ListMessages
+      - reliant.v1.ChatService.PauseChat
+      - reliant.v1.ChatService.ResumeChat
+      - reliant.v1.ChatService.InterruptThread
+      - reliant.v1.ApprovalService
+      - reliant.v1.QuestionService
+      - reliant.v1.InboxService.ListInbox
+      - reliant.v1.InboxService.DismissInboxItem
+      - reliant.v1.InboxService.RestoreInboxItem
+      - reliant.v1.RunService.GetRun
+      - reliant.v1.RunService.CancelRun
       # Enums the typed events name directly (events.ts).
       - reliant.v1.NodeExecutionEventType
       - reliant.v1.WorkflowExecutionEventType

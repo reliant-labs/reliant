@@ -65,7 +65,7 @@ func MachineTokenFromContext(ctx context.Context) (*fat.Principal, bool) {
 }
 
 // ErrAccessTokenNotAPI reports an access token that is live but does not
-// carry reliant:api — a daemon credential, an LLM key or a connector
+// carry reliant:api (or a runs/triggers slice of it) — a daemon credential, an LLM key or a connector
 // credential presented to the API. A credential rejection: the caller must use
 // a different token, not retry.
 var ErrAccessTokenNotAPI = fmt.Errorf("%w: access token does not grant reliant:api", ErrInvalidToken)
@@ -77,7 +77,26 @@ var ErrAccessTokenNotAPI = fmt.Errorf("%w: access token does not grant reliant:a
 // An inactive token is ErrInvalidToken (a credential rejection); an
 // introspection failure is returned as-is (NOT a rejection — the auth layer
 // reports it as Unavailable).
+//
+// This is the strict form, for surfaces with no per-procedure scope policy.
+// A narrow runs/triggers token is refused here; the Connect interceptor uses
+// ClaimsForAccessToken and enforces the scope per rpc.
 func ClaimsForAPIToken(ctx context.Context, introspector AccessTokenIntrospector, token string) (*JWTClaims, *fat.Principal, error) {
+	claims, p, err := ClaimsForAccessToken(ctx, introspector, token)
+	if err != nil {
+		return nil, nil, err
+	}
+	if !p.Scopes.Has(fat.ScopeReliantAPI) {
+		return nil, nil, ErrAccessTokenNotAPI
+	}
+	return claims, p, nil
+}
+
+// ClaimsForAccessToken authenticates an `rlat_` that may be narrow: it must be
+// live, act as a user, and hold reliant:api or one of the runs and triggers
+// scopes (fat.RunsAndTriggersScopes). Which rpcs the token may reach is the
+// caller's job (interceptors.RequireProcedureScope); this only admits it.
+func ClaimsForAccessToken(ctx context.Context, introspector AccessTokenIntrospector, token string) (*JWTClaims, *fat.Principal, error) {
 	p, err := introspector.Introspect(ctx, token)
 	if err != nil {
 		if errors.Is(err, ErrAccessTokenInactive) {
@@ -85,10 +104,23 @@ func ClaimsForAPIToken(ctx context.Context, introspector AccessTokenIntrospector
 		}
 		return nil, nil, err
 	}
-	if !p.Scopes.Permits(fat.ScopeReliantAPI) || p.ActingUserID == "" {
+	if p.ActingUserID == "" || !holdsAPIScope(p.Scopes) {
 		return nil, nil, ErrAccessTokenNotAPI
 	}
 	return &JWTClaims{Sub: p.ActingUserID, Role: "authenticated", Credential: CredentialAccessToken}, p, nil
+}
+
+// holdsAPIScope reports whether scopes grant reliant:api or a slice of it.
+func holdsAPIScope(scopes fat.Set) bool {
+	if scopes.Has(fat.ScopeReliantAPI) {
+		return true
+	}
+	for _, s := range fat.RunsAndTriggersScopes {
+		if scopes.Has(s) {
+			return true
+		}
+	}
+	return false
 }
 
 // ErrAccessTokenInactive is the sentinel an introspector wraps for a token

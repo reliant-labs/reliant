@@ -11,6 +11,7 @@ package reliantv1
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -1818,7 +1819,7 @@ func (x *InitializeProjectResponse) GetInitialized() bool {
 type FileChange struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Path            string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Status          FileChangeStatus       `protobuf:"varint,2,opt,name=status,proto3,enum=reliant.v1.FileChangeStatus" json:"status,omitempty"`
+	Status          v1.FileChangeStatus    `protobuf:"varint,2,opt,name=status,proto3,enum=reliant.v1.FileChangeStatus" json:"status,omitempty"`
 	Diff            string                 `protobuf:"bytes,3,opt,name=diff,proto3" json:"diff,omitempty"`
 	Content         string                 `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
 	OriginalContent string                 `protobuf:"bytes,5,opt,name=original_content,json=originalContent,proto3" json:"original_content,omitempty"`
@@ -1864,11 +1865,11 @@ func (x *FileChange) GetPath() string {
 	return ""
 }
 
-func (x *FileChange) GetStatus() FileChangeStatus {
+func (x *FileChange) GetStatus() v1.FileChangeStatus {
 	if x != nil {
 		return x.Status
 	}
-	return FileChangeStatus_FILE_CHANGE_STATUS_UNSPECIFIED
+	return v1.FileChangeStatus(0)
 }
 
 func (x *FileChange) GetDiff() string {
@@ -3758,7 +3759,7 @@ var file_reliant_v1_project_proto_goTypes = []any{
 	(*RemoveProjectFromDaemonResponse)(nil),     // 52: reliant.v1.RemoveProjectFromDaemonResponse
 	(*RecloneProjectOnDaemonRequest)(nil),       // 53: reliant.v1.RecloneProjectOnDaemonRequest
 	(*RecloneProjectOnDaemonResponse)(nil),      // 54: reliant.v1.RecloneProjectOnDaemonResponse
-	(FileChangeStatus)(0),                       // 55: reliant.v1.FileChangeStatus
+	(v1.FileChangeStatus)(0),                    // 55: reliant.v1.FileChangeStatus
 }
 var file_reliant_v1_project_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.ProjectDaemon.install_state:type_name -> reliant.v1.ProjectInstallState
@@ -3839,7 +3840,6 @@ func file_reliant_v1_project_proto_init() {
 	if File_reliant_v1_project_proto != nil {
 		return
 	}
-	file_reliant_v1_common_proto_init()
 	file_reliant_v1_project_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[1].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[2].OneofWrappers = []any{}

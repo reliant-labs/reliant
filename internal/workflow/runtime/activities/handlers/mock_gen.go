@@ -292,7 +292,7 @@ func (m *MockMessageRepairStore) GetToolCallResultForMessage(ctx context.Context
 var _ MessageRepairStore = (*MockMessageRepairStore)(nil)
 
 // forge:section MockLLMHistoryStore
-// forge:hash=1301717547c3671133b377686000bfc7192c8336264e9259f422d8e7bfbeeb2e
+// forge:hash=b8160599604b47558c253dddfa1bef5ebe952d73e58206264aef85546686702a
 
 // MockLLMHistoryStore is a test mock for the LLMHistoryStore interface.
 //
@@ -307,6 +307,7 @@ type MockLLMHistoryStore struct {
 	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
+	SenderTitleFunc                                func(context.Context, string) *string
 	CreateWorkflowFunc                             func(context.Context, *db.Workflow) error
 	UpdateThreadWorkflowFunc                       func(context.Context, string, string) (*db.Thread, error)
 	CreateContextWindowFunc                        func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -390,6 +391,15 @@ func (m *MockLLMHistoryStore) GetRootThread(ctx context.Context, conversationID 
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockLLMHistoryStore", "GetRootThread")
+}
+
+// SenderTitle records the call and delegates to SenderTitleFunc when set.
+func (m *MockLLMHistoryStore) SenderTitle(ctx context.Context, threadID string) *string {
+	m.Recorder.Record("SenderTitle", ctx, threadID)
+	if m.SenderTitleFunc != nil {
+		return m.SenderTitleFunc(ctx, threadID)
+	}
+	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -1068,7 +1078,7 @@ func (m *MockApprovalResolveStore) ResolvePendingApproval(ctx context.Context, i
 var _ ApprovalResolveStore = (*MockApprovalResolveStore)(nil)
 
 // forge:section MockCallLLMStore
-// forge:hash=05aa2029b9bc9b346816568fab3614aa5e2337c4154f61a585ec185a22c4b9f8
+// forge:hash=76f2060e0f86a72a587b996e710894b521cfd51702538cd5c7159a185c4651aa
 
 // MockCallLLMStore is a test mock for the CallLLMStore interface.
 //
@@ -1101,6 +1111,7 @@ type MockCallLLMStore struct {
 	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
+	SenderTitleFunc                                func(context.Context, string) *string
 	CreateWorkflowFunc                             func(context.Context, *db.Workflow) error
 	UpdateThreadWorkflowFunc                       func(context.Context, string, string) (*db.Thread, error)
 	CreateContextWindowFunc                        func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -1354,6 +1365,15 @@ func (m *MockCallLLMStore) GetRootThread(ctx context.Context, conversationID str
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockCallLLMStore", "GetRootThread")
+}
+
+// SenderTitle records the call and delegates to SenderTitleFunc when set.
+func (m *MockCallLLMStore) SenderTitle(ctx context.Context, threadID string) *string {
+	m.Recorder.Record("SenderTitle", ctx, threadID)
+	if m.SenderTitleFunc != nil {
+		return m.SenderTitleFunc(ctx, threadID)
+	}
+	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -1940,7 +1960,7 @@ func (m *MockCleanupStore) UpsertToolCall(ctx context.Context, call *core.ToolCa
 var _ CleanupStore = (*MockCleanupStore)(nil)
 
 // forge:section MockCompactStore
-// forge:hash=9d4d2a5ed2fd39592e33165c50b85896c345f0d6c6c3e03e0a421bd6ad940262
+// forge:hash=9c11261c5237ce6678396d3b65e2fb9eb77022b1790ee648af895b8f21b62cbd
 
 // MockCompactStore is a test mock for the CompactStore interface.
 //
@@ -1958,6 +1978,7 @@ type MockCompactStore struct {
 	CreateThreadFunc                               func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
+	SenderTitleFunc                                func(context.Context, string) *string
 	CreateWorkflowFunc                             func(context.Context, *db.Workflow) error
 	UpdateThreadWorkflowFunc                       func(context.Context, string, string) (*db.Thread, error)
 	CreateContextWindowFunc                        func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -2068,6 +2089,15 @@ func (m *MockCompactStore) GetRootThread(ctx context.Context, conversationID str
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockCompactStore", "GetRootThread")
+}
+
+// SenderTitle records the call and delegates to SenderTitleFunc when set.
+func (m *MockCompactStore) SenderTitle(ctx context.Context, threadID string) *string {
+	m.Recorder.Record("SenderTitle", ctx, threadID)
+	if m.SenderTitleFunc != nil {
+		return m.SenderTitleFunc(ctx, threadID)
+	}
+	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -3888,7 +3918,7 @@ func (m *MockQuestionResolveStore) EmitQuestionUpdate(ctx context.Context, chatI
 var _ QuestionResolveStore = (*MockQuestionResolveStore)(nil)
 
 // forge:section MockSaveMessageStore
-// forge:hash=e48ef1767f1ca8de36308a22cc779e99aafd5bb9e68d35681fdcc8db86c297bd
+// forge:hash=04ed6c264bcb4508361b2f611cfda5b083453059cab35531dee93afc7889a4fb
 
 // MockSaveMessageStore is a test mock for the SaveMessageStore interface.
 //
@@ -3904,6 +3934,7 @@ type MockSaveMessageStore struct {
 	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
+	SenderTitleFunc                                func(context.Context, string) *string
 	CreateWorkflowFunc                             func(context.Context, *db.Workflow) error
 	UpdateThreadWorkflowFunc                       func(context.Context, string, string) (*db.Thread, error)
 	CreateContextWindowFunc                        func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -3994,6 +4025,15 @@ func (m *MockSaveMessageStore) GetRootThread(ctx context.Context, conversationID
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockSaveMessageStore", "GetRootThread")
+}
+
+// SenderTitle records the call and delegates to SenderTitleFunc when set.
+func (m *MockSaveMessageStore) SenderTitle(ctx context.Context, threadID string) *string {
+	m.Recorder.Record("SenderTitle", ctx, threadID)
+	if m.SenderTitleFunc != nil {
+		return m.SenderTitleFunc(ctx, threadID)
+	}
+	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -4370,7 +4410,7 @@ func (m *MockThreadStatusStore) CreateChatUpdate(ctx context.Context, chatID str
 var _ ThreadStatusStore = (*MockThreadStatusStore)(nil)
 
 // forge:section MockUsageLimitWaitStore
-// forge:hash=159dfb12178763723b8b50f82f796c3ae7ed130cbedbe2eb0b313353a541de56
+// forge:hash=60ad80930c6af5bf62320f3d4654ff120fc955641ab577a7f83cdc9d1745189b
 
 // MockUsageLimitWaitStore is a test mock for the UsageLimitWaitStore interface.
 //
@@ -4387,6 +4427,7 @@ type MockUsageLimitWaitStore struct {
 	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
+	SenderTitleFunc                                func(context.Context, string) *string
 	CreateWorkflowFunc                             func(context.Context, *db.Workflow) error
 	UpdateThreadWorkflowFunc                       func(context.Context, string, string) (*db.Thread, error)
 	CreateContextWindowFunc                        func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
@@ -4486,6 +4527,15 @@ func (m *MockUsageLimitWaitStore) GetRootThread(ctx context.Context, conversatio
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockUsageLimitWaitStore", "GetRootThread")
+}
+
+// SenderTitle records the call and delegates to SenderTitleFunc when set.
+func (m *MockUsageLimitWaitStore) SenderTitle(ctx context.Context, threadID string) *string {
+	m.Recorder.Record("SenderTitle", ctx, threadID)
+	if m.SenderTitleFunc != nil {
+		return m.SenderTitleFunc(ctx, threadID)
+	}
+	return nil
 }
 
 // CreateWorkflow records the call and delegates to CreateWorkflowFunc when set.
@@ -4868,7 +4918,7 @@ func (m *MockWorkflowCheckpointStore) UpsertWorkflowCheckpoint(ctx context.Conte
 var _ WorkflowCheckpointStore = (*MockWorkflowCheckpointStore)(nil)
 
 // forge:section MockWorkflowStatusStore
-// forge:hash=abe3390717c42010eb368839a877006ca9367a14c23dc48e162e9f1c36720dc2
+// forge:hash=a53ea0aa7eb20435fda28655db2837a6270cf92899384acd48dab83f8a5edeff
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -4910,6 +4960,7 @@ type MockWorkflowStatusStore struct {
 	CreateThreadFunc                               func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
+	SenderTitleFunc                                func(context.Context, string) *string
 	CreateContextWindowFunc                        func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
 	GetContextWindowFunc                           func(context.Context, string) (*db.ContextWindow, error)
 	GetLatestContextWindowFunc                     func(context.Context, string) (*db.ContextWindow, error)
@@ -5246,6 +5297,15 @@ func (m *MockWorkflowStatusStore) GetRootThread(ctx context.Context, conversatio
 		return m.GetRootThreadFunc(ctx, conversationID)
 	}
 	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "GetRootThread")
+}
+
+// SenderTitle records the call and delegates to SenderTitleFunc when set.
+func (m *MockWorkflowStatusStore) SenderTitle(ctx context.Context, threadID string) *string {
+	m.Recorder.Record("SenderTitle", ctx, threadID)
+	if m.SenderTitleFunc != nil {
+		return m.SenderTitleFunc(ctx, threadID)
+	}
+	return nil
 }
 
 // CreateContextWindow records the call and delegates to CreateContextWindowFunc when set.

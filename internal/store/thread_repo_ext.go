@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -136,6 +137,34 @@ func ListThreadsByIDs(ctx context.Context, db orm.Context, ids []string) ([]*cor
 		return nil, fmt.Errorf("failed to list threads by id: %w", err)
 	}
 	return threadsFromRows(rows), nil
+}
+
+// SenderTitlesByThreadIDs maps each sender thread id to the heading a message
+// from it is shown under: the thread's own title, or, for a chat's untitled
+// main thread (a run messaging another run), the chat's title. A thread with
+// neither is absent.
+func SenderTitlesByThreadIDs(ctx context.Context, db orm.Context, ids []string) (map[string]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var rows []struct {
+		ID    string `bun:"id"`
+		Title string `bun:"title"`
+	}
+	err := db.Bun().NewRaw(`SELECT t.id, COALESCE(NULLIF(t.title, ''),
+	        CASE WHEN t.parent_thread_id IS NULL THEN NULLIF(c.title, '') END, '') AS title
+	    FROM threads t JOIN chats c ON c.id = t.chat_id
+	    WHERE t.id = ANY(?::text[])`, pgdialect.Array(ids)).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sender titles: %w", err)
+	}
+	titles := make(map[string]string, len(rows))
+	for _, row := range rows {
+		if row.Title != "" {
+			titles[row.ID] = row.Title
+		}
+	}
+	return titles, nil
 }
 
 // ListChildThreads returns the threads forked directly from parentThreadID,

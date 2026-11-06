@@ -52,6 +52,15 @@ export   QuestionService/ResolveQuestion
 partial  ApprovalService
 export   ApprovalService/ListApprovalsByChat
 
+# --- Inbox: what is waiting on the caller. -----------------------------------
+# CleanupStorage and ForgetStorageWorktree manage the machine and stay out.
+# inbox.proto imports tools_daemon.proto, so that file's MESSAGE types are
+# generated into the SDK too; none of ToolsDaemonService's rpcs is public.
+partial  InboxService
+export   InboxService/ListInbox
+export   InboxService/DismissInboxItem
+export   InboxService/RestoreInboxItem
+
 withhold AccountService           # not part of the first public surface
 withhold AttachmentService        # not part of the first public surface
 withhold BackgroundService        # daemon-facing wiring
@@ -62,7 +71,6 @@ withhold DaemonService            # daemon-facing wiring
 withhold DaemonRegistryService    # daemon-facing wiring
 withhold FileSystemService        # daemon-facing wiring
 withhold ForgeService             # not part of the first public surface
-withhold InboxService             # not part of the first public surface
 withhold MCPService               # not part of the first public surface
 withhold MessageService           # not part of the first public surface
 withhold ModelEndpointService     # not part of the first public surface

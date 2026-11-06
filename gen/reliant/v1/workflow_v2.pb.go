@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	v1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -8122,7 +8123,7 @@ type Workflow struct {
 	// CEL filter and input mapping. A declaration is inert until a trigger row
 	// activates it (TriggerDefinition.workflow_trigger), which supplies whose
 	// run it is and where it executes.
-	Triggers []*WorkflowTrigger `protobuf:"bytes,15,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	Triggers []*v1.WorkflowTrigger `protobuf:"bytes,15,rep,name=triggers,proto3" json:"triggers,omitempty"`
 	// Title is the human-facing display name ("Get It Right"). The `name` stays
 	// the stable identifier that refs, saved chats and the CLI address; Title is
 	// presentation only, so it can change without breaking any of them. When
@@ -8296,7 +8297,7 @@ func (x *Workflow) GetTransitionTo() string {
 	return ""
 }
 
-func (x *Workflow) GetTriggers() []*WorkflowTrigger {
+func (x *Workflow) GetTriggers() []*v1.WorkflowTrigger {
 	if x != nil {
 		return x.Triggers
 	}
@@ -9650,7 +9651,7 @@ var file_reliant_v1_workflow_v2_proto_goTypes = []any{
 	nil,                             // 122: reliant.v1.Workflow.SecretsEntry
 	(*structpb.Struct)(nil),         // 123: google.protobuf.Struct
 	(*structpb.Value)(nil),          // 124: google.protobuf.Value
-	(*WorkflowTrigger)(nil),         // 125: reliant.v1.WorkflowTrigger
+	(*v1.WorkflowTrigger)(nil),      // 125: reliant.v1.WorkflowTrigger
 }
 var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	8,   // 0: reliant.v1.CelStringList.literal:type_name -> reliant.v1.StringList
@@ -9906,7 +9907,6 @@ func file_reliant_v1_workflow_v2_proto_init() {
 		return
 	}
 	file_reliant_v1_annotations_proto_init()
-	file_reliant_v1_trigger_proto_init()
 	file_reliant_v1_workflow_v2_proto_msgTypes[0].OneofWrappers = []any{
 		(*CelString_Literal)(nil),
 		(*CelString_Expr)(nil),
