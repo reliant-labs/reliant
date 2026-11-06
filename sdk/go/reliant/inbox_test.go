@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"reflect"
 	"slices"
 	"testing"
@@ -243,23 +242,22 @@ func TestApprovalsListForRunKeepsOnlyThatRunsApprovals(t *testing.T) {
 	}
 }
 
-// The clients have no way to decide an approval or manage a machine, and the
-// generated clients carry no such procedure either.
-func TestNoDecisionOrMachineMethods(t *testing.T) {
+// Nothing here manages a machine, and the generated clients carry no such
+// procedure. Deciding approvals is public (behind approvals:decide).
+func TestNoMachineMethods(t *testing.T) {
 	for _, v := range []any{&ApprovalsClient{}, &InboxClient{}, &GatesClient{}} {
 		ty := reflect.TypeOf(v)
-		for _, name := range []string{"Approve", "Deny", "BatchApprove", "BatchDeny", "CleanupStorage", "ForgetStorageWorktree"} {
+		for _, name := range []string{"CleanupStorage", "ForgetStorageWorktree"} {
 			if _, ok := ty.MethodByName(name); ok {
 				t.Errorf("%s has a %s method", ty, name)
 			}
 		}
 	}
-	var _ = reliantv1connect.NewApprovalServiceClient(http.DefaultClient, "http://x")
 	for _, ty := range []reflect.Type{
 		reflect.TypeOf((*reliantv1connect.ApprovalServiceClient)(nil)).Elem(),
 		reflect.TypeOf((*reliantv1connect.InboxServiceClient)(nil)).Elem(),
 	} {
-		for _, name := range []string{"Approve", "Deny", "BatchApprove", "BatchDeny", "CleanupStorage", "ForgetStorageWorktree"} {
+		for _, name := range []string{"CleanupStorage", "ForgetStorageWorktree"} {
 			if _, ok := ty.MethodByName(name); ok {
 				t.Errorf("generated %s has a %s method", ty.Name(), name)
 			}

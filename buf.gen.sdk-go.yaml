@@ -78,6 +78,10 @@ plugins:
       - reliant.v1.QuestionService.ListPendingQuestions
       - reliant.v1.QuestionService.ResolveQuestion
       - reliant.v1.ApprovalService.ListApprovalsByChat
+      - reliant.v1.ApprovalService.Approve
+      - reliant.v1.ApprovalService.Deny
+      - reliant.v1.ApprovalService.BatchApprove
+      - reliant.v1.ApprovalService.BatchDeny
       - reliant.v1.InboxService.ListInbox
       - reliant.v1.InboxService.DismissInboxItem
       - reliant.v1.InboxService.RestoreInboxItem

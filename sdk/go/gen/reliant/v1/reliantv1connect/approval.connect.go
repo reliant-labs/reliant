@@ -38,12 +38,34 @@ const (
 	// ApprovalServiceListApprovalsByChatProcedure is the fully-qualified name of the ApprovalService's
 	// ListApprovalsByChat RPC.
 	ApprovalServiceListApprovalsByChatProcedure = "/reliant.v1.ApprovalService/ListApprovalsByChat"
+	// ApprovalServiceApproveProcedure is the fully-qualified name of the ApprovalService's Approve RPC.
+	ApprovalServiceApproveProcedure = "/reliant.v1.ApprovalService/Approve"
+	// ApprovalServiceDenyProcedure is the fully-qualified name of the ApprovalService's Deny RPC.
+	ApprovalServiceDenyProcedure = "/reliant.v1.ApprovalService/Deny"
+	// ApprovalServiceBatchApproveProcedure is the fully-qualified name of the ApprovalService's
+	// BatchApprove RPC.
+	ApprovalServiceBatchApproveProcedure = "/reliant.v1.ApprovalService/BatchApprove"
+	// ApprovalServiceBatchDenyProcedure is the fully-qualified name of the ApprovalService's BatchDeny
+	// RPC.
+	ApprovalServiceBatchDenyProcedure = "/reliant.v1.ApprovalService/BatchDeny"
 )
 
 // ApprovalServiceClient is a client for the reliant.v1.ApprovalService service.
 type ApprovalServiceClient interface {
 	// ListApprovalsByChat lists all pending approvals for a chat
 	ListApprovalsByChat(context.Context, *connect.Request[v1.ListApprovalsByChatRequest]) (*connect.Response[v1.ListApprovalsByChatResponse], error)
+	// Approve approves a pending approval request (signals workflow to continue).
+	Approve(context.Context, *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error)
+	// Deny denies a pending approval request (cancels workflow)
+	Deny(context.Context, *connect.Request[v1.DenyRequest]) (*connect.Response[v1.DenyResponse], error)
+	// BatchApprove approves several approvals of one chat at once: every
+	// listed approval that is still pending. One already decided (on another
+	// surface) is skipped and not counted; FAILED_PRECONDITION only when none
+	// of them was pending.
+	BatchApprove(context.Context, *connect.Request[v1.BatchApproveRequest]) (*connect.Response[v1.BatchApproveResponse], error)
+	// BatchDeny denies several approvals of one chat at once, with
+	// BatchApprove's rules for approvals already decided.
+	BatchDeny(context.Context, *connect.Request[v1.BatchDenyRequest]) (*connect.Response[v1.BatchDenyResponse], error)
 }
 
 // NewApprovalServiceClient constructs a client for the reliant.v1.ApprovalService service. By
@@ -63,12 +85,40 @@ func NewApprovalServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(approvalServiceMethods.ByName("ListApprovalsByChat")),
 			connect.WithClientOptions(opts...),
 		),
+		approve: connect.NewClient[v1.ApproveRequest, v1.ApproveResponse](
+			httpClient,
+			baseURL+ApprovalServiceApproveProcedure,
+			connect.WithSchema(approvalServiceMethods.ByName("Approve")),
+			connect.WithClientOptions(opts...),
+		),
+		deny: connect.NewClient[v1.DenyRequest, v1.DenyResponse](
+			httpClient,
+			baseURL+ApprovalServiceDenyProcedure,
+			connect.WithSchema(approvalServiceMethods.ByName("Deny")),
+			connect.WithClientOptions(opts...),
+		),
+		batchApprove: connect.NewClient[v1.BatchApproveRequest, v1.BatchApproveResponse](
+			httpClient,
+			baseURL+ApprovalServiceBatchApproveProcedure,
+			connect.WithSchema(approvalServiceMethods.ByName("BatchApprove")),
+			connect.WithClientOptions(opts...),
+		),
+		batchDeny: connect.NewClient[v1.BatchDenyRequest, v1.BatchDenyResponse](
+			httpClient,
+			baseURL+ApprovalServiceBatchDenyProcedure,
+			connect.WithSchema(approvalServiceMethods.ByName("BatchDeny")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // approvalServiceClient implements ApprovalServiceClient.
 type approvalServiceClient struct {
 	listApprovalsByChat *connect.Client[v1.ListApprovalsByChatRequest, v1.ListApprovalsByChatResponse]
+	approve             *connect.Client[v1.ApproveRequest, v1.ApproveResponse]
+	deny                *connect.Client[v1.DenyRequest, v1.DenyResponse]
+	batchApprove        *connect.Client[v1.BatchApproveRequest, v1.BatchApproveResponse]
+	batchDeny           *connect.Client[v1.BatchDenyRequest, v1.BatchDenyResponse]
 }
 
 // ListApprovalsByChat calls reliant.v1.ApprovalService.ListApprovalsByChat.
@@ -76,10 +126,42 @@ func (c *approvalServiceClient) ListApprovalsByChat(ctx context.Context, req *co
 	return c.listApprovalsByChat.CallUnary(ctx, req)
 }
 
+// Approve calls reliant.v1.ApprovalService.Approve.
+func (c *approvalServiceClient) Approve(ctx context.Context, req *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error) {
+	return c.approve.CallUnary(ctx, req)
+}
+
+// Deny calls reliant.v1.ApprovalService.Deny.
+func (c *approvalServiceClient) Deny(ctx context.Context, req *connect.Request[v1.DenyRequest]) (*connect.Response[v1.DenyResponse], error) {
+	return c.deny.CallUnary(ctx, req)
+}
+
+// BatchApprove calls reliant.v1.ApprovalService.BatchApprove.
+func (c *approvalServiceClient) BatchApprove(ctx context.Context, req *connect.Request[v1.BatchApproveRequest]) (*connect.Response[v1.BatchApproveResponse], error) {
+	return c.batchApprove.CallUnary(ctx, req)
+}
+
+// BatchDeny calls reliant.v1.ApprovalService.BatchDeny.
+func (c *approvalServiceClient) BatchDeny(ctx context.Context, req *connect.Request[v1.BatchDenyRequest]) (*connect.Response[v1.BatchDenyResponse], error) {
+	return c.batchDeny.CallUnary(ctx, req)
+}
+
 // ApprovalServiceHandler is an implementation of the reliant.v1.ApprovalService service.
 type ApprovalServiceHandler interface {
 	// ListApprovalsByChat lists all pending approvals for a chat
 	ListApprovalsByChat(context.Context, *connect.Request[v1.ListApprovalsByChatRequest]) (*connect.Response[v1.ListApprovalsByChatResponse], error)
+	// Approve approves a pending approval request (signals workflow to continue).
+	Approve(context.Context, *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error)
+	// Deny denies a pending approval request (cancels workflow)
+	Deny(context.Context, *connect.Request[v1.DenyRequest]) (*connect.Response[v1.DenyResponse], error)
+	// BatchApprove approves several approvals of one chat at once: every
+	// listed approval that is still pending. One already decided (on another
+	// surface) is skipped and not counted; FAILED_PRECONDITION only when none
+	// of them was pending.
+	BatchApprove(context.Context, *connect.Request[v1.BatchApproveRequest]) (*connect.Response[v1.BatchApproveResponse], error)
+	// BatchDeny denies several approvals of one chat at once, with
+	// BatchApprove's rules for approvals already decided.
+	BatchDeny(context.Context, *connect.Request[v1.BatchDenyRequest]) (*connect.Response[v1.BatchDenyResponse], error)
 }
 
 // NewApprovalServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -95,10 +177,42 @@ func NewApprovalServiceHandler(svc ApprovalServiceHandler, opts ...connect.Handl
 		connect.WithSchema(approvalServiceMethods.ByName("ListApprovalsByChat")),
 		connect.WithHandlerOptions(opts...),
 	)
+	approvalServiceApproveHandler := connect.NewUnaryHandler(
+		ApprovalServiceApproveProcedure,
+		svc.Approve,
+		connect.WithSchema(approvalServiceMethods.ByName("Approve")),
+		connect.WithHandlerOptions(opts...),
+	)
+	approvalServiceDenyHandler := connect.NewUnaryHandler(
+		ApprovalServiceDenyProcedure,
+		svc.Deny,
+		connect.WithSchema(approvalServiceMethods.ByName("Deny")),
+		connect.WithHandlerOptions(opts...),
+	)
+	approvalServiceBatchApproveHandler := connect.NewUnaryHandler(
+		ApprovalServiceBatchApproveProcedure,
+		svc.BatchApprove,
+		connect.WithSchema(approvalServiceMethods.ByName("BatchApprove")),
+		connect.WithHandlerOptions(opts...),
+	)
+	approvalServiceBatchDenyHandler := connect.NewUnaryHandler(
+		ApprovalServiceBatchDenyProcedure,
+		svc.BatchDeny,
+		connect.WithSchema(approvalServiceMethods.ByName("BatchDeny")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ApprovalService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ApprovalServiceListApprovalsByChatProcedure:
 			approvalServiceListApprovalsByChatHandler.ServeHTTP(w, r)
+		case ApprovalServiceApproveProcedure:
+			approvalServiceApproveHandler.ServeHTTP(w, r)
+		case ApprovalServiceDenyProcedure:
+			approvalServiceDenyHandler.ServeHTTP(w, r)
+		case ApprovalServiceBatchApproveProcedure:
+			approvalServiceBatchApproveHandler.ServeHTTP(w, r)
+		case ApprovalServiceBatchDenyProcedure:
+			approvalServiceBatchDenyHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -110,4 +224,20 @@ type UnimplementedApprovalServiceHandler struct{}
 
 func (UnimplementedApprovalServiceHandler) ListApprovalsByChat(context.Context, *connect.Request[v1.ListApprovalsByChatRequest]) (*connect.Response[v1.ListApprovalsByChatResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ApprovalService.ListApprovalsByChat is not implemented"))
+}
+
+func (UnimplementedApprovalServiceHandler) Approve(context.Context, *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ApprovalService.Approve is not implemented"))
+}
+
+func (UnimplementedApprovalServiceHandler) Deny(context.Context, *connect.Request[v1.DenyRequest]) (*connect.Response[v1.DenyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ApprovalService.Deny is not implemented"))
+}
+
+func (UnimplementedApprovalServiceHandler) BatchApprove(context.Context, *connect.Request[v1.BatchApproveRequest]) (*connect.Response[v1.BatchApproveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ApprovalService.BatchApprove is not implemented"))
+}
+
+func (UnimplementedApprovalServiceHandler) BatchDeny(context.Context, *connect.Request[v1.BatchDenyRequest]) (*connect.Response[v1.BatchDenyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ApprovalService.BatchDeny is not implemented"))
 }

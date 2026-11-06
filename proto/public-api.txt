@@ -18,9 +18,9 @@
 #
 # NEVER publish (the test refuses them even if listed): the activation rpcs
 # (EnableWorkflow, DisableWorkflow, SetTriggerEnabled, CreateTrigger,
-# UpdateTrigger, DeleteTrigger, RotateWebhookToken), approval decisions
-# (Approve, Deny, BatchApprove, BatchDeny), token minting (TokenService), the
-# chat's daemon wiring (SetChatDaemon) and every daemon-facing service.
+# UpdateTrigger, DeleteTrigger, RotateWebhookToken), token minting
+# (TokenService), the chat's daemon wiring (SetChatDaemon) and every
+# daemon-facing service.
 #
 # Stability: PauseRun, ResumeRun and InterruptRun are beta (their semantics
 # are still settling); the rest is stable within reliant.v1.
@@ -48,9 +48,14 @@ partial  QuestionService
 export   QuestionService/ListPendingQuestions
 export   QuestionService/ResolveQuestion
 
-# Reads only. Approve and Deny need a person and are never public.
+# Owner decision (2026-11-06): the SDK may decide approvals. The server requires
+# the approvals:decide scope and refuses a token bound to a machine (daemon).
 partial  ApprovalService
 export   ApprovalService/ListApprovalsByChat
+export   ApprovalService/Approve
+export   ApprovalService/Deny
+export   ApprovalService/BatchApprove
+export   ApprovalService/BatchDeny
 
 # --- Inbox: what is waiting on the caller. -----------------------------------
 # CleanupStorage and ForgetStorageWorktree manage the machine and stay out.
