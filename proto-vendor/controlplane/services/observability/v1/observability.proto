@@ -1055,6 +1055,13 @@ message GetServiceOverviewResponse {
   repeated ServiceOverview services = 1;
   // Width of one trend bucket.
   int32 trend_step_seconds = 2;
+  // The parts of the answer that are missing because their statement failed
+  // or did not finish within the read's deadline: "red" (request rate, errors
+  // and latency), "logs" (error_log_count) and "trend" (request_trend and
+  // error_trend). Empty when the answer is complete. The rest of the answer
+  // is exact; a missing part reads as absent, never as zero. A client shows
+  // what arrived and says which part did not.
+  repeated string unavailable_sections = 3;
 }
 
 message ServiceOverview {
@@ -1218,6 +1225,14 @@ message ListWorkloadsResponse {
   // more matched.
   repeated WorkloadJob jobs = 3;
   bool jobs_truncated = 4;
+  // The parts of the answer that are missing because their statement failed
+  // or did not finish within the read's deadline: "usage" (CPU and memory),
+  // "replicas", "restarts", "terminations", "warnings", "history"
+  // (health_since), "jobs" and "versions" (service_version). Empty when the
+  // answer is complete. A client shows what arrived and says which part did
+  // not, instead of failing the whole Overview: the server keeps reading a
+  // missing part and serves it to the next request (a retry or the poll).
+  repeated string unavailable_sections = 5;
 }
 
 message Workload {
@@ -1553,10 +1568,21 @@ message VersionChange {
 // as-is (protojson, camelCase names).
 
 message QueryPanelRequest {
+  // A request names the panel it runs one of two ways: the panel itself, or a
+  // reference to a dashboard panel the control plane ships.
+  option (buf.validate.message).oneof = {
+    fields: [
+      "panel",
+      "panel_ref"
+    ]
+    required: true
+  };
+
   // The scope's environments, services and filters apply as the dashboard's
   // filters.
   QueryScope scope = 1 [(buf.validate.field).required = true];
-  Panel panel = 2 [(buf.validate.field).required = true];
+  // The panel to run. Exactly one of panel and panel_ref.
+  Panel panel = 2;
   // Extra predicates ANDed to every series of the panel (the dashboard's other
   // filter dropdowns, e.g. deployment.environment.name). Same vocabulary as
   // Panel.where.
@@ -1572,6 +1598,32 @@ message QueryPanelRequest {
   // and no data. The panel is still validated and the scope still checked.
   // A metrics panel looks up each series' metric to choose its statement.
   bool explain = 6;
+  // Runs a panel of a dashboard the control plane ships
+  // (deploy/observability/dashboards/<dashboard>.json, embedded in the server
+  // at build time), by id, instead of a panel the caller sends: the server
+  // substitutes the panel it holds, its SQL or series and its unit, so a
+  // caller that reuses a dashboard's definition cannot drift from it. It runs
+  // whether or not an environment's release recorded the dashboard (what
+  // GetDashboards serves). Everything else is as for `panel`: the scope's
+  // org, environments and time range, filters, group_by, step_seconds and
+  // explain apply, under the same admission (membership, or an obs:read
+  // credential of the org) and the same guardrails. An unknown dashboard or
+  // panel id is NotFound. Exactly one of panel and panel_ref.
+  PanelRef panel_ref = 7;
+}
+
+// A panel of a dashboard the control plane ships, by id.
+message PanelRef {
+  // The dashboard's id, e.g. "product-usage".
+  string dashboard_id = 1 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
+  // The panel's id within the dashboard, e.g. "engagement-headline".
+  string panel_id = 2 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 128
+  }];
 }
 
 // One statement a panel compiles to, as ClickHouse receives it: the SQL with
@@ -1669,6 +1721,10 @@ message QueryPanelResponse {
   // midnight UTC and a client labels it as that calendar date, never converts it
   // to its own zone. Empty when the first column is a DateTime (instants).
   string bucket_timezone = 19;
+  // With QueryPanelRequest.panel_ref: the panel the server ran, as it holds it
+  // (a sql panel's statement included), so a caller can record exactly what
+  // its numbers came from. Unset when the request sent the panel itself.
+  Panel panel = 20;
 }
 
 // What one PanelSeriesResult of a metrics panel measures, so a client can

@@ -759,7 +759,11 @@ function TraceTable({
         {/* Not a DataTable: it is virtualized (spacer rows) with roving focus,
             which DataTable does not do. It stacks on a phone with DataTable's
             own STACK classes, so the two layouts cannot drift apart. */}
-        <table className={cn("w-full table-fixed text-sm", STACK.table)} data-testid="obs-trace-table">
+        {/* The fixed columns sum to 65rem; the root operation (the row's
+            button) takes the rest. min-w keeps it 16rem wide: narrower, the
+            table scrolls sideways instead of squeezing the operation, the one
+            column a reader opens a trace by, to nothing. */}
+        <table className={cn("w-full table-fixed text-sm md:min-w-[81rem]", STACK.table)} data-testid="obs-trace-table">
           <caption className="sr-only">Traces from {subject}. Activate a root operation to open its waterfall.</caption>
           <colgroup className="max-md:hidden">
             <col className="w-36" />

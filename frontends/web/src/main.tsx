@@ -30,6 +30,7 @@ import { STARTUP_SPINNER_MARKUP } from "./components/icons/StartupSpinnerMark";
 
 import { monacoManager } from "./lib/monacoManager";
 import { shouldPreloadMonaco } from "./lib/monacoPreload";
+import { isDemoShell } from "./lib/shell";
 import { waitForConfig, isConfigReady } from "./lib/configReady";
 // globalDataStore prefetch is now called from AuthGuard after authentication
 
@@ -89,7 +90,8 @@ if (!isConfigReady()) {
 // /oauth/consent — see lib/monacoPreload for why each is excluded. Reading the
 // pathname rather than the router is deliberate: this runs before React
 // mounts, and the predicate is pure.
-if (shouldPreloadMonaco(window.location.pathname)) {
+// The public demo host has no editor and must reach no other origin (the CDN).
+if (!isDemoShell() && shouldPreloadMonaco(window.location.pathname)) {
   logger.info('[Main] 🚀 Pre-initializing Monaco Editor (background)...');
   monacoManager.getMonaco().catch((error) => {
     logger.error('[Main] ❌ Monaco pre-initialization FAILED:', error);

@@ -31,7 +31,12 @@
  * pins move together with it.
  */
 
-import { loadStripe, type Stripe } from "@stripe/stripe-js";
+// The `pure` entry: Stripe.js loads when getStripe() first runs (a checkout),
+// not as a side effect of importing this module. The main entry injects
+// js.stripe.com on import, on every page of every shell, the public demo's
+// included, which must reach no other origin.
+import { loadStripe } from "@stripe/stripe-js/pure";
+import type { Stripe } from "@stripe/stripe-js";
 import { loadConfig } from "@/lib/config_gen";
 
 let stripePromise: Promise<Stripe | null> | null = null;
