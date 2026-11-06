@@ -1,7 +1,7 @@
 {
   "name": "@reliantlabs/sdk",
   "version": "0.1.0",
-  "description": "The Reliant SDK for TypeScript: a framework-free client for Reliant's chat and run streams (transport, a reconnecting stream that resumes by sequence number, typed events, a pure reducer, retry-safe sends). Versioned with Reliant's API.",
+  "description": "The Reliant SDK for TypeScript: a framework-free client for Reliant's chat and run streams (transport, a reconnecting stream that resumes by sequence number, typed events, a pure reducer, retry-safe sends), and React hooks over it (chat, thread, run, approvals, questions, inbox). Versioned with Reliant's API.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -29,6 +29,10 @@
       "types": "./dist/client/index.d.ts",
       "default": "./dist/client/index.js"
     },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
     "./package.json": "./package.json"
   },
   "imports": {
@@ -44,18 +48,36 @@
     "@bufbuild/protobuf": "^2.5.0",
     "@connectrpc/connect": "^2.0.0",
     "@opentelemetry/api": "^1.9.0",
-    "@reliantlabs/forge-web-runtime": "^0.12.0 || ^0.13.0"
+    "@reliantlabs/forge-web-runtime": "^0.12.0 || ^0.13.0",
+    "@tanstack/react-query": "^5.62.0",
+    "react": "^18.3.0 || ^19.0.0"
   },
   "devDependencies": {
     "@bufbuild/protobuf": "^2.10.0",
     "@connectrpc/connect": "^2.1.1",
     "@opentelemetry/api": "^1.9.1",
     "@reliantlabs/forge-web-runtime": "^0.13.0",
+    "@tanstack/react-query": "^5.100.9",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.0",
     "@types/node": "^24.3.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "jsdom": "^26.1.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
     "typescript": "~5.8.3",
     "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=22"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "@tanstack/react-query": {
+      "optional": true
+    }
   }
 }

@@ -8,12 +8,10 @@ import {
   ChatState,
   AgentMessageKind,
 } from "../gen/reliant/v1/chat_pb";
-import { ApprovalType, type Approval } from "../gen/reliant/v1/approval_pb";
+import type { Approval } from "../gen/reliant/v1/approval_pb";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import {
-  foldToolResultImages,
   foldToolResultMessage,
-  resolvedToolResultFromBlock,
   getProcessedMessage,
 } from "../lib/messageProcessor";
 import { sortMessagesForDisplay } from "../lib/messageOrder";
@@ -24,18 +22,15 @@ import {
   stripChatMarker,
 } from "../lib/chatMarkers";
 import {
-  applyHistoricalErrors,
-  applyLogSlice,
-  applyToolCallStateUpdates,
-  bySequenceNumber,
-  isAbortedFinalizeReason,
   mergeActiveThreads,
-  mergeMessages,
-  resolveStreamingBase,
-  settleCancelledStreamBlocks,
   snapshotReplacesMessages,
-  toolStatusSurvivesStreamAbort,
 } from "../lib/chatStreamReducers";
+import {
+  createChatState,
+  reduceChat,
+  type ChatState as SdkChatState,
+  type Logger as SdkLogger,
+} from "@reliantlabs/sdk/client";
 
 import { reportError } from "@/lib/errorReporting";
 
@@ -115,7 +110,7 @@ import {
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
-import { approvalsFromCache, approvalStatusFromFeed, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
+import { applyApprovalUpdate, approvalsFromCache } from "../hooks/approval-queries";
 import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
 import { invalidatePlanTasks } from "../hooks/task-queries";
@@ -168,22 +163,6 @@ function getGlobalUpdatesStore() {
 /** Called once from globalUpdatesStore after it finishes initializing. */
 export function initGlobalUpdatesStoreRef(mod: typeof import("./globalUpdatesStore")) {
   _globalUpdatesStoreModule = mod;
-}
-
-/**
- * What a streamed approval carries besides its status. Only the fields the
- * update actually has: a status-only update (approved, denied) is merged over
- * the cached approval and must not blank its title.
- */
-function approvalFields(update: ToolApprovalUpdate): ApprovalFields {
-  const fields: ApprovalFields = {};
-  if (update.title) fields.title = update.title;
-  // ApprovalCreate sends the name; Approve/Deny echo the row's enum value.
-  const kind: unknown = update.approval_type;
-  if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approvalType = ApprovalType.WORKFLOW_STEP;
-  if (kind === "tool_call" || kind === ApprovalType.TOOL_CALL) fields.approvalType = ApprovalType.TOOL_CALL;
-  if (update.batch_id) fields.batchId = update.batch_id;
-  return fields;
 }
 
 // ============================================================================
@@ -455,59 +434,104 @@ function clearStreamingBuffersForChat(chatId: string): void {
 }
 
 // ============================================================================
-// Workflow event-log reducers
+// The fold: @reliantlabs/sdk's reduceChat
 //
-// errorEvents / infoEvents / runOutputs / nodeExecutions are stream-only
-// ephemeral logs: appended live, replaced wholesale on a snapshot (isSnapshot),
-// and deduped by a per-type key. The pure reducers live in
-// lib/chatStreamReducers.ts; behavior is pinned by
-// chatStore.streamEvents.test.ts.
+// processChatStreamUpdates hands a batch to the SDK's pure reducer, which owns
+// the stream protocol's rules (snapshot replaces, replay merges; deltas build
+// a placeholder under the pre-allocated message id until the persisted message
+// or a finalize marker retires it; a delta naming a finalized id is a stale
+// tail; a stopped stream settles its unfinished tools; results join their calls
+// first-write-wins; the event logs dedupe). The store is the app's holding of
+// the state it returns: the transcript lives in the React Query message cache,
+// the rest in the slices below.
 // ============================================================================
 
-/** Errors dedup by id (replace in place); snapshot replaces the whole list. */
-const applyErrorUpdates = (
-  existing: ErrorUpdate[],
-  updates: ErrorUpdate[],
-  isSnapshot: boolean,
-): ErrorUpdate[] =>
-  applyLogSlice(existing, updates, isSnapshot, { key: (e) => e.id });
+const EMPTY_TOOL_RESULTS: ToolResultsByCallId = {};
+const EMPTY_STREAMING: Readonly<Record<string, Message>> = {};
+const EMPTY_FINALIZED: ReadonlySet<string> = new Set();
+
+/** The reducer's diagnostics, on the app's logger. */
+const reducerLog: SdkLogger = {
+  debug: (message, meta) => logger.debug(`[ChatStore] ${message}`, meta),
+  info: (message, meta) => logger.info(`[ChatStore] ${message}`, meta),
+  warn: (message, meta) => logger.warn(`[ChatStore] ${message}`, meta),
+  error: (message, meta) => logger.error(`[ChatStore] ${message}`, meta),
+};
+
+const REDUCE_ENV = { now: () => new Date().toISOString(), log: reducerLog };
 
 /**
- * Info notifications dedup by id, but a re-delivery keeps the ORIGINAL
- * timestamp so its place in the timeline stays stable.
+ * The chat's stream state, assembled from the store's slices and the message
+ * cache. A slice the chat has none of is a shared empty value, so a batch that
+ * does not touch it hands back the very same one and the commit can see that.
  */
-const applyInfoUpdates = (
-  existing: InfoUpdate[],
-  updates: InfoUpdate[],
-  isSnapshot: boolean,
-): InfoUpdate[] =>
-  applyLogSlice(existing, updates, isSnapshot, {
-    key: (e) => e.id,
-    merge: (prev, next) => ({ ...next, timestamp: prev.timestamp || next.timestamp }),
-  });
+function chatStateOf(chatId: string): SdkChatState {
+  const s = useChatStore.getState();
+  return {
+    ...createChatState(chatId, { syncPending: false }),
+    messages: getMessagesFromCache(chatId) as unknown as SdkChatState["messages"],
+    toolResults: s.toolResultsByCallId[chatId] ?? EMPTY_TOOL_RESULTS,
+    toolCalls: s.toolCallStates[chatId] ?? new Map(),
+    streaming: (s.streamingMessages[chatId] as Record<string, Message> | undefined) ?? EMPTY_STREAMING,
+    finalizedStreamIds: s.finalizedStreamIds[chatId] ?? EMPTY_FINALIZED,
+    errors: s.errorEvents[chatId] ?? [],
+    info: s.infoEvents[chatId] ?? [],
+    runOutputs: s.runOutputs[chatId] ?? [],
+    nodeExecutions: s.nodeExecutions[chatId] ?? [],
+  };
+}
 
-/** Run outputs dedup by unique_activity_id, then sort by sequence_number. */
-const applyRunOutputUpdates = (
-  existing: RunOutputUpdate[],
-  updates: RunOutputUpdate[],
-  isSnapshot: boolean,
-): RunOutputUpdate[] =>
-  applyLogSlice(existing, updates, isSnapshot, {
-    key: (r) => r.unique_activity_id || "",
-    sort: bySequenceNumber,
-  });
+/** An assistant message id whose stream has ended: a delta stamped with it is a stale tail. */
+function isFinalizedStreamId(chatId: string, id: string | undefined): boolean {
+  if (!id) return false;
+  if (useChatStore.getState().finalizedStreamIds[chatId]?.has(id)) return true;
+  return getMessagesFromCache(chatId).some(
+    (m) => m.id === id && m.role === MessageRole.ASSISTANT && isProtoMessageComplete(m),
+  );
+}
 
-/** Node executions dedup by node_id + event_type, then sort by sequence_number. */
-const applyNodeExecutionUpdates = (
-  existing: NodeExecutionUpdate[],
-  updates: NodeExecutionUpdate[],
-  isSnapshot: boolean,
-): NodeExecutionUpdate[] =>
-  applyLogSlice(existing, updates, isSnapshot, {
-    // Per run: two runs of one workflow share every node id.
-    key: (n) => `${n.workflow_id}:${n.node_id}:${n.event_type}`,
-    sort: bySequenceNumber,
-  });
+/** A streamed message as the app holds it: string enums kept, attachments normalized. */
+function convertProtoMessage(protoMsg: ProtoMessageUpdate["message"]): Message {
+  return {
+    ...protoMsg,
+    attachments: normalizeMessageAttachments(protoMsg.attachments),
+    contentBlocks: (protoMsg.contentBlocks || []).map((b) => ({ ...b, type: b.type })),
+  } as Message;
+}
+
+/**
+ * Commit a coalesced batch of content deltas for one thread. bufferStreamingDeltas
+ * already deferred this onto an animation frame (or the background-tab watchdog),
+ * so the whole batch is exactly one state commit and this runs synchronously: a
+ * second rAF here would cost a frame of latency and never run at all on the
+ * watchdog path in a backgrounded tab.
+ */
+function flushBufferedDeltas(chatId: string, deltas: StreamingDelta[], thread: string | undefined): void {
+  // A stale flush: the buffer was cleared (a complete message arrived).
+  if (!hasStreamingBuffer(chatId, thread)) {
+    logger.debug("[Streaming] Skipping stale buffered flush - buffer was cleared", {
+      chatId: chatId.slice(0, 8),
+      thread: thread?.slice(0, 8),
+    });
+    return;
+  }
+  // Finalization can land between buffering and flush: a marker (or a persisted
+  // message) that arrived in the interim retires the buffered tail.
+  const flushable = deltas.filter((d) => !isFinalizedStreamId(chatId, d.message_id));
+  if (flushable.length === 0) {
+    logger.debug("[Streaming] Skipping buffered flush - deltas finalized before flush", {
+      chatId: chatId.slice(0, 8),
+      thread: thread?.slice(0, 8),
+    });
+    return;
+  }
+  const before = chatStateOf(chatId);
+  const after = reduceChat(before, { kind: "updates", updates: flushable, cursor: before.cursor }, REDUCE_ENV);
+  if (after.streaming === before.streaming) return;
+  useChatStore.setState((s) => ({
+    streamingMessages: { ...s.streamingMessages, [chatId]: after.streaming as Record<string, Message> },
+  }));
+}
 
 // Coalesce streaming content deltas onto one animation frame per thread.
 // Returns the deltas the caller must process immediately.
@@ -2137,33 +2161,46 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // cursor, i.e. we just consumed the remainder. Serve it, then stop.
       const reachedStart = older.length < OLDER_MESSAGES_PAGE_SIZE;
 
-      // Build this page's tool-result index and MERGE it into the chat's index
-      // (never replace — the newer messages already rendered depend on their
-      // own entries). Same shape as the loadMessages pre-pass.
-      const state = get();
-      const pageToolResults: ToolResultsByCallId = {
-        ...(state.toolResultsByCallId[chatId] || {}),
-      };
-      for (const message of older) {
-        if (message.role !== MessageRole.TOOL) continue;
-        foldToolResultMessage(message, pageToolResults);
-      }
+      // The page is folded by the SDK's reducer like any other history: it is
+      // prepended (the newer messages already rendered stay), its tool results
+      // join the chat's index without replacing an entry the newer messages
+      // depend on, and its own errors merge by id without replacing a newer
+      // attempt the snapshot or the stream already delivered.
+      const pageErrors = (response.errors || []).flatMap((e): ErrorUpdate[] => {
+        try {
+          const data = JSON.parse(e.dataJson || "{}") as Omit<ErrorUpdate, "sequence_number">;
+          return [{ ...data, update_type: "error", sequence_number: Number(e.sequenceNumber) }];
+        } catch {
+          return [];
+        }
+      });
+      const before = chatStateOf(chatId);
+      const after = reduceChat(
+        before,
+        {
+          kind: "olderPage",
+          messages: older as unknown as SdkChatState["messages"],
+          errors: pageErrors,
+          total: response.total,
+          hasMore: !reachedStart,
+        },
+        REDUCE_ENV,
+      );
 
       // Warm the processMessage memo before the prepend commits, so the newly
       // inserted rows render from cached parses instead of parsing during the
       // scroll that requested them.
-      const approvals =
-        approvalsFromCache(chatId);
+      const approvals = approvalsFromCache(chatId);
       for (const message of older) {
-        getProcessedMessage(message, pageToolResults, approvals);
+        getProcessedMessage(message, after.toolResults, approvals);
       }
 
-      set({
-        toolResultsByCallId: {
-          ...state.toolResultsByCallId,
-          [chatId]: pageToolResults,
-        },
-      });
+      set((state) => ({
+        toolResultsByCallId: { ...state.toolResultsByCallId, [chatId]: after.toolResults },
+        ...(after.errors === before.errors
+          ? {}
+          : { errorEvents: { ...state.errorEvents, [chatId]: after.errors } }),
+      }));
 
       // prependMessagesCache recomputes oldestSeq from the merged list, so
       // the next page's cursor moves strictly backward.
@@ -2177,27 +2214,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         loaded: older.length,
         reachedStart,
       });
-
-      // The page's own errors: the snapshot carries only the errors of its
-      // window, so an older error arrives with the history it belongs to and
-      // renders at its place in the timeline. Merged by id, never replacing a
-      // newer attempt the snapshot or the stream already delivered.
-      const pageErrors = (response.errors || []).flatMap((e): ErrorUpdate[] => {
-        try {
-          const data = JSON.parse(e.dataJson || "{}") as Omit<ErrorUpdate, "sequence_number">;
-          return [{ ...data, update_type: "error", sequence_number: Number(e.sequenceNumber) }];
-        } catch {
-          return [];
-        }
-      });
-      if (pageErrors.length > 0) {
-        set((s) => ({
-          errorEvents: {
-            ...s.errorEvents,
-            [chatId]: applyHistoricalErrors(s.errorEvents[chatId] || [], pageErrors),
-          },
-        }));
-      }
 
       return !reachedStart;
     } catch (error) {
@@ -2219,1288 +2235,306 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
   // Process chat detail events from the per-chat stream.
   // Called by globalUpdatesStore when per-chat events arrive.
+  //
+  // What a batch DOES to the chat — the transcript, the tool results, the live
+  // tool statuses, the streaming placeholders, the finalized-id set and the
+  // error / info / output logs — is @reliantlabs/sdk's reduceChat. This action
+  // assembles the chat's state from the store's slices, runs the batch through
+  // it, commits the result, and does what only the app does around it:
+  // coalescing content deltas onto an animation frame, the refetch signals, the
+  // error-marker routing (the upgrade modal), and projecting approvals,
+  // questions and threads into the caches the UI reads them from.
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot = false) => {
-    // Helper to process streaming deltas and build/update a temporary streaming message
-    const processStreamingDeltas = (
-      deltas: StreamingDelta[],
-      currentMsg: Message | null,
-    ): Message | null => {
-      let contentBlocks: Array<ContentBlock & { status?: string }> = [];
-      let streamCancelled = false;
+    // Refetch signals from the chat stream (e.g. workflow_executions,
+    // plan_tasks). After decodeChatUpdate the JSON data is spread into the
+    // update, so { type: "workflow_executions" } is a top-level field.
+    for (const u of updates) {
+      if (u.update_type !== "refetch") continue;
+      const refetchType = (u as unknown as { type: string }).type as RefetchType;
+      if (!refetchType) continue;
+      triggerRefetch(refetchType, chatId);
+      // The plan and its tasks are on the generated hooks: the signal marks
+      // their reads stale directly.
+      if (refetchType === "plan_tasks") invalidatePlanTasks();
+    }
 
-      let thread = currentMsg?.thread;
-      for (const delta of deltas) {
-        if (delta.thread) {
-          thread = delta.thread;
-          break;
+    // Messages of another chat never belong here: a stale frame from a chat
+    // the stream has since left must not contaminate this one.
+    const messageUpdates = updates
+      .filter((u): u is ProtoMessageUpdate => u.update_type === "message" && "message" in u)
+      .map((u) => u.message)
+      .filter((msg) => {
+        if (msg.chatId && msg.chatId !== chatId) {
+          logger.warn("[ChatStore] Dropping message from wrong chat", {
+            expectedChatId: chatId.slice(0, 8),
+            actualChatId: msg.chatId.slice(0, 8),
+            messageId: msg.id?.slice(0, 8),
+          });
+          return false;
         }
-      }
+        return true;
+      });
+    const messages: Message[] = messageUpdates.map(convertProtoMessage);
 
-      // Delta identity: all deltas in a thread group carry the same
-      // pre-allocated message id. Capture it so the placeholder can adopt the
-      // real id instead of a fabricated streaming-temp-* one.
-      let deltaMessageId: string | undefined;
-      for (const delta of deltas) {
-        if (delta.message_id) {
-          deltaMessageId = delta.message_id;
-          break;
-        }
-      }
+    const approvalUpdates = updates.filter((u): u is ToolApprovalUpdate => u.update_type === "approval");
+    const threadUpdates = updates.filter((u): u is ActiveThreadUpdate => u.update_type === "thread");
+    const workflowStatusUpdates = updates.filter((u): u is WorkflowStatusUpdate => u.update_type === "workflow_status");
+    const errorUpdates = updates.filter((u): u is ErrorUpdate => u.update_type === "error");
+    const infoUpdates = updates.filter((u): u is InfoUpdate => u.update_type === "info" || u.update_type === "warning");
+    const runOutputUpdates = updates.filter((u): u is RunOutputUpdate => u.update_type === "run_output");
+    const nodeExecutionUpdates = updates.filter((u): u is NodeExecutionUpdate => u.update_type === "node_execution");
+    const questionUpdates = updates.filter((u): u is QuestionUpdate => u.update_type === "question");
+    const toolCallUpdates = updates.filter((u): u is ToolCallUpdate => u.update_type === "tool_call");
+    const rawStreamingDeltas = updates.filter((u): u is StreamingDelta => u.update_type === "streaming_delta");
+    // Emitted exactly once per allocated assistant message id when its stream
+    // ends (success/abort/cancel), riding the persisted+sequenced channel.
+    const streamFinalizedUpdates = updates.filter((u): u is StreamFinalizedUpdate => u.update_type === "stream_finalized");
 
-      if (currentMsg && currentMsg.contentBlocks) {
-        contentBlocks = [...currentMsg.contentBlocks] as Array<ContentBlock & { status?: string }>;
-      }
+    // THE DROP RULE, for the frame buffer: a delta stamped with a finalized id
+    // is a stale tail and must not even be buffered. (The reducer applies the
+    // same rule to what it is handed; this one keeps the buffer clean.)
+    const batchFinalizedIds = new Set<string>();
+    for (const u of streamFinalizedUpdates) if (u.message_id) batchFinalizedIds.add(u.message_id);
+    const isFinalizedId = (id: string | undefined): boolean => isFinalizedStreamId(chatId, id);
+    const liveStreamingDeltas = rawStreamingDeltas.filter(
+      (d) => !(isFinalizedId(d.message_id) || (d.message_id ? batchFinalizedIds.has(d.message_id) : false)),
+    );
 
-      for (const delta of deltas) {
-        if (delta.delta_type === "message_start") {
-          // A CallLLM retry re-streams the same message id from block 0. Reset
-          // the placeholder's blocks so stale attempt-N content doesn't linger
-          // beside the fresh attempt's blocks.
-          contentBlocks = [];
-          continue;
-        }
+    // Content deltas are coalesced onto one animation frame per thread; what
+    // comes back is what must be folded now.
+    const streamingDeltas = bufferStreamingDeltas(chatId, liveStreamingDeltas, (deltas, thread) =>
+      flushBufferedDeltas(chatId, deltas, thread),
+    );
 
-        if (
-          delta.delta_type === "thinking_block_start" ||
-          delta.delta_type === "thinking_block_delta"
-        ) {
-          continue;
-        }
+    // PERFORMANCE: a batch of only streaming deltas that were all buffered has
+    // nothing to commit; the buffered flush will.
+    const hasNonStreamingUpdates =
+      messages.length > 0 ||
+      approvalUpdates.length > 0 ||
+      threadUpdates.length > 0 ||
+      workflowStatusUpdates.length > 0 ||
+      errorUpdates.length > 0 ||
+      infoUpdates.length > 0 ||
+      runOutputUpdates.length > 0 ||
+      nodeExecutionUpdates.length > 0 ||
+      toolCallUpdates.length > 0 ||
+      // stream_finalized markers must reach the commit below so the
+      // finalized-id set is seeded and any matching placeholder retired.
+      streamFinalizedUpdates.length > 0;
+    if (!hasNonStreamingUpdates && rawStreamingDeltas.length > 0 && streamingDeltas.length === 0) return;
 
-        if (delta.delta_type === "content_block_start") {
-          contentBlocks[delta.block_index] = {
-            id: "",
-            type: ContentBlockType.TEXT,
-            index: delta.block_index,
-            content: "",
-          };
-        } else if (delta.delta_type === "content_block_delta") {
-          if (contentBlocks[delta.block_index]) {
-            const block = contentBlocks[delta.block_index];
-            contentBlocks[delta.block_index] = {
-              ...block,
-              content: (block.content || "") + (delta.delta || ""),
-            };
-          }
-        } else if (delta.delta_type === "tool_use_start") {
-          if (delta.tool_call) {
-            contentBlocks[delta.block_index] = {
-              id: "",
-              type: ContentBlockType.TOOL_CALL,
-              index: delta.block_index,
-              toolCallId: delta.tool_call.id,
-              toolName: delta.tool_call.name,
-            };
-          }
-        } else if (delta.delta_type === "tool_use_stop") {
-          // Tool call complete - full input will come in the complete message
-        } else if (delta.delta_type === "tool_cancelled") {
-          if (delta.tool_call) {
-            const existingBlock = contentBlocks[delta.block_index];
-            if (existingBlock && existingBlock.type === ContentBlockType.TOOL_CALL) {
-              (existingBlock as ContentBlock & { status?: string }).status = "cancelled";
-            } else {
-              contentBlocks[delta.block_index] = {
-                id: "",
-                type: ContentBlockType.TOOL_CALL,
-                index: delta.block_index,
-                toolCallId: delta.tool_call.id,
-                toolName: delta.tool_call.name,
-                status: "cancelled",
-              } as ContentBlock & { status?: string };
-            }
-          }
-        } else if (delta.delta_type === "stream_cancelled") {
-          logger.debug(
-            "[Streaming] Stream cancelled, marking unfinished tools as cancelled",
-          );
-          streamCancelled = true;
-          // Only tools that never reached an outcome. `block.status` alone
-          // cannot answer that: nothing ever writes "completed" onto a
-          // streaming block (tool_use_stop is a no-op, and success arrives on
-          // the separate toolCallStates channel), so the old `!block.status`
-          // test was true for finished tools too and cancelled all of them.
-          const settled = useChatStore.getState().toolCallStates[chatId];
-          for (const block of contentBlocks) {
-            if (!block || block.type !== ContentBlockType.TOOL_CALL) continue;
-            if (block.status) continue;
-            const status = block.toolCallId
-              ? settled?.get(block.toolCallId)?.status
-              : undefined;
-            if (status === "completed" || status === "failed") continue;
-            block.status = "cancelled";
-          }
-        }
-      }
+    if (workflowStatusUpdates.length > 0) {
+      logger.debug("[WorkflowStatus] Chat stream updates received", {
+        chatId: chatId.slice(0, 8),
+        count: workflowStatusUpdates.length,
+        statuses: workflowStatusUpdates.map((u) => u.status),
+      });
+    }
 
-      const compactBlocks = contentBlocks.filter(
-        (block: unknown) => block !== undefined && block !== null,
+    const cachedMessages = getMessagesFromCache(chatId);
+    if (isSnapshot) {
+      logger.info(
+        snapshotReplacesMessages(cachedMessages, messages)
+          ? "[ChatStore] Snapshot: replacing messages for chat"
+          : "[ChatStore] Snapshot: merging (preserving loaded older pages)",
+        { chatId: chatId.slice(0, 8), snapshotCount: messages.length, previousCount: cachedMessages.length },
       );
+    }
 
-      // A tail of deltas from an already-finalized stream (deltas race the
-      // final message on a separate server channel) must not fabricate an
-      // empty placeholder: without a block-starting delta and without an
-      // existing streaming message there is nothing to display.
-      if (!currentMsg && compactBlocks.length === 0) {
-        return null;
+    // Fold. The deltas the reducer sees are the ones to act on now, preceded by
+    // the stale tails it drops itself but reads for the abort pass (a marker
+    // can ride the same batch as the deltas it ends). The state that only the
+    // app projects elsewhere (approvals, questions, threads) is not handed in.
+    // The batch keeps its server order: what the adapter hands over is the
+    // stream as it arrived, minus what it holds back, never regrouped by kind.
+    // Deltas buffered by an EARLIER batch and released by this one came first.
+    const before = chatStateOf(chatId);
+    const liveSet = new Set<StreamingDelta>(liveStreamingDeltas);
+    const releasedNow = new Set<StreamingDelta>(streamingDeltas);
+    const convertedByUpdate = new Map<ProtoMessageUpdate["message"], Message>(
+      messageUpdates.map((msg, i) => [msg, messages[i]!]),
+    );
+    const inBatch = new Set<ChatUpdate>(updates);
+    const folded: ChatUpdate[] = streamingDeltas.filter((d) => !inBatch.has(d));
+    for (const u of updates) {
+      switch (u.update_type) {
+        case "message": {
+          const message = "message" in u ? convertedByUpdate.get((u as ProtoMessageUpdate).message) : undefined;
+          if (message) folded.push({ update_type: "message", message } as unknown as ChatUpdate);
+          break;
+        }
+        case "streaming_delta":
+          // A stale tail is read for the abort pass; a live delta goes in only
+          // if the frame buffer released it now (the rest flush on the frame).
+          if (!liveSet.has(u as StreamingDelta) || releasedNow.has(u as StreamingDelta)) folded.push(u);
+          break;
+        case "tool_call":
+        case "error":
+        case "info":
+        case "warning":
+        case "run_output":
+        case "node_execution":
+        case "stream_finalized":
+          folded.push(u);
+          break;
       }
-
-      const normalizedThread = normalizeThreadKey(chatId, thread);
-      // Placeholder identity: prefer the server's pre-allocated message id, then
-      // an existing placeholder's id, then the legacy thread-keyed sentinel.
-      // With a real id present the fabricated streaming-temp-* id — and the
-      // phantom it enabled — is gone.
-      const streamingId =
-        deltaMessageId || currentMsg?.id || `streaming-temp-${normalizedThread}`;
-
-      const streamingMsg: Message = {
-        id: streamingId,
-        chatId: currentMsg?.chatId || "",
-        role: MessageRole.ASSISTANT,
-        contentBlocks: compactBlocks,
-        createdAt: currentMsg?.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        streamingState: streamCancelled ? StreamingState.COMPLETE : StreamingState.STREAMING,
-        seq: currentMsg?.seq ?? BigInt(999999),
-        thread: thread || "",
-        sequenceNumber: BigInt(0),
-        attachments: currentMsg?.attachments || [],
-      };
-
-      return streamingMsg;
-    };
-
-    // --- Begin processing updates (delivered from globalUpdatesStore) ---
-
-    // Process all updates as received - if there are duplicates or ordering issues,
-    // that's a backend bug that should be fixed rather than masked with client-side logic
-    // Proto messages come wrapped in ProtoMessageUpdate from sync snapshots
-    // Extract the inner proto Message objects
-        const rawMessageUpdates = updates
-          .filter((u): u is ProtoMessageUpdate => u.update_type === "message" && "message" in u)
-          .map((u) => u.message);
-
-        // GUARD: Filter out messages that don't belong to this chat.
-        // This prevents cross-chat contamination if the stream delivers
-        // stale messages from a previously-subscribed chat.
-        const messageUpdates = rawMessageUpdates.filter((msg) => {
-          if (msg.chatId && msg.chatId !== chatId) {
-            logger.warn("[ChatStore] Dropping message from wrong chat", {
-              expectedChatId: chatId.slice(0, 8),
-              actualChatId: msg.chatId.slice(0, 8),
-              messageId: msg.id?.slice(0, 8),
-            });
-            return false;
-          }
-          return true;
-        });
-
-        const approvalUpdates = updates.filter(
-          (u): u is ToolApprovalUpdate => u.update_type === "approval",
-        );
-        const threadUpdates = updates.filter(
-          (u): u is ActiveThreadUpdate => u.update_type === "thread",
-        );
-        const workflowStatusUpdates = updates.filter(
-          (u): u is WorkflowStatusUpdate => u.update_type === "workflow_status",
-        );
-        const errorUpdates = updates.filter(
-          (u): u is ErrorUpdate => u.update_type === "error",
-        );
-        const infoUpdates = updates.filter(
-          (u): u is InfoUpdate =>
-            u.update_type === "info" || u.update_type === "warning",
-        );
-        const runOutputUpdates = updates.filter(
-          (u): u is RunOutputUpdate => u.update_type === "run_output",
-        );
-        const nodeExecutionUpdates = updates.filter(
-          (u): u is NodeExecutionUpdate => u.update_type === "node_execution",
-        );
-        // Handle refetch signals from the chat stream (e.g., workflow_executions, plan_tasks)
-        // After decodeChatUpdate (the SDK), the JSON data is spread into the update object,
-        // so { type: "workflow_executions" } becomes a top-level field.
-        for (const u of updates) {
-          if (u.update_type === "refetch") {
-            const refetchType = (u as unknown as { type: string }).type as RefetchType;
-            if (refetchType) {
-              triggerRefetch(refetchType, chatId);
-              // The plan and its tasks are on the generated hooks: the
-              // signal marks their reads stale directly.
-              if (refetchType === "plan_tasks") invalidatePlanTasks();
-            }
-          }
-        }
-
-        // Extract question updates
-        const questionUpdates = updates.filter(
-          (u): u is QuestionUpdate => u.update_type === "question",
-        );
-
-        // Extract tool_call updates directly from the updates array
-        // FIXED in migration 038: Tool calls now come as update_type='tool_call'
-        // Previously they were incorrectly emitted as update_type='message' and
-        // were duplicated in message content_blocks. Now they come only once.
-        const toolCallUpdates = updates.filter((u) => {
-          return u.update_type === "tool_call";
-        }) as ToolCallUpdate[];
-
-        // Extract streaming_delta updates (real-time LLM output)
-        // These are sent as the LLM generates content, before complete messages are saved
-        const rawStreamingDeltas = updates.filter(
-          (u): u is StreamingDelta => u.update_type === "streaming_delta",
-        );
-
-        // Extract stream_finalized markers (delta identity protocol). Emitted
-        // exactly once per allocated assistant message id when its stream ends
-        // (success/abort/cancel), riding the persisted+sequenced channel.
-        const streamFinalizedUpdates = updates.filter(
-          (u): u is StreamFinalizedUpdate => u.update_type === "stream_finalized",
-        );
-
-        // Ids finalized by THIS batch's markers — not yet committed to state, so
-        // union them into the drop check for the same-batch marker+tail case.
-        const batchFinalizedIds = new Set<string>();
-        // Ids whose stream STOPPED (cancelled/aborted) rather than completed. A
-        // cancelled step persists nothing and is re-dispatched, so no message
-        // row will ever arrive to replace the placeholder — its unfinished tool
-        // blocks have to be settled here or they render as "executing" forever.
-        const batchAbortedIds = new Set<string>();
-        // Threads named by an aborting marker. The legacy id-less delta path
-        // builds a `streaming-temp-*` placeholder, so the marker's message id
-        // matches nothing; the thread is the only handle onto it.
-        const abortedThreadKeys = new Set<string>();
-        for (const u of streamFinalizedUpdates) {
-          if (u.message_id) batchFinalizedIds.add(u.message_id);
-          if (!isAbortedFinalizeReason(u.reason)) continue;
-          if (u.message_id) batchAbortedIds.add(u.message_id);
-          abortedThreadKeys.add(normalizeThreadKey(chatId, u.thread));
-        }
-
-        // Delta identity: an assistant message id is "finalized" once its stream
-        // ended. Reads live state each call (so the buffered-flush path sees a
-        // finalization that landed after buffering), plus a persisted-message
-        // backstop for old-server skew. Deltas without a message_id never match.
-        const isFinalizedId = (id: string | undefined): boolean => {
-          if (!id) return false;
-          if (get().finalizedStreamIds[chatId]?.has(id)) return true;
-          return getMessagesFromCache(chatId).some(
-            (m) =>
-              m.id === id &&
-              m.role === MessageRole.ASSISTANT &&
-              isProtoMessageComplete(m),
-          );
-        };
-
-        // THE DROP RULE: a delta stamped with a finalized id is a stale tail —
-        // drop it BEFORE buffering so it can never fabricate a placeholder. This
-        // is what makes the phantom-at-end-of-chat impossible when message_id is
-        // present. Id-less deltas (old servers) pass through to the legacy path.
-        const liveStreamingDeltas = rawStreamingDeltas.filter(
-          (d) =>
-            !(
-              isFinalizedId(d.message_id) ||
-              (d.message_id ? batchFinalizedIds.has(d.message_id) : false)
-            ),
-        );
-
-        // Commit a coalesced batch of content deltas for one thread.
-        //
-        // bufferStreamingDeltas already deferred this onto an animation frame
-        // (or the background-tab watchdog), so the whole batch becomes exactly
-        // one state commit and this body runs synchronously — a second rAF
-        // here would cost an extra frame of latency and, worse, would never
-        // run at all on the watchdog path in a backgrounded tab.
-        const handleBufferedFlush = (
-          bufferedDeltas: StreamingDelta[],
-          thread: string | undefined,
-        ) => {
-          // FIX 1: Guard against stale flushes - skip if buffer was cleared (complete message arrived)
-          if (!hasStreamingBuffer(chatId, thread)) {
-            logger.debug(
-              "[Streaming] Skipping stale buffered flush - buffer was cleared",
-              {
-                chatId: chatId.slice(0, 8),
-                thread: thread?.slice(0, 8),
-              },
-            );
-            return;
-          }
-
-          // Delta identity: finalization can land between buffering and flush.
-          // Re-apply the drop rule here so a marker (or persisted message) that
-          // arrived in the interim retires the buffered tail instead of
-          // flushing a placeholder for an already-finalized id.
-          const flushDeltas = bufferedDeltas.filter(
-            (d) => !isFinalizedId(d.message_id),
-          );
-          if (flushDeltas.length === 0) {
-            logger.debug(
-              "[Streaming] Skipping buffered flush - deltas finalized before flush",
-              {
-                chatId: chatId.slice(0, 8),
-                thread: thread?.slice(0, 8),
-              },
-            );
-            return;
-          }
-
-          // Process buffered deltas asynchronously (they were delayed by the coalescing frame)
-          const threadKey = normalizeThreadKey(chatId, thread);
-          const currentStreamingMsg = resolveStreamingBase(
-            get().streamingMessages[chatId],
-            threadKey,
-          );
-
-          const flushedMsg = processStreamingDeltas(
-            flushDeltas,
-            currentStreamingMsg,
-          );
-          if (flushedMsg) {
-            set((s) => ({
-              streamingMessages: {
-                ...s.streamingMessages,
-                [chatId]: {
-                  ...(s.streamingMessages[chatId] || {}),
-                  [threadKey]: flushedMsg,
-                },
-              },
-            }));
-          }
-        };
-
-        const streamingDeltas = bufferStreamingDeltas(
-          chatId,
-          liveStreamingDeltas,
-          handleBufferedFlush,
-        );
-
-        // Convert ToolCallUpdate to ToolExecutionStateUpdate format
-        // for internal state tracking (UI expects this format).
-        //
-        // Keyed by the LLM tool-call id — the same id the cards look up by
-        // (ToolExecution/ChatMessage read toolCall.id). It is stable across the
-        // whole call lifetime; a content-block UUID is not, because the
-        // assistant message is persisted (minting fresh block UUIDs) BEFORE
-        // tools execute, so every post-persistence status would be filed under
-        // an id no reader ever asks for.
-        const toolExecutionUpdates: ToolExecutionStateUpdate[] =
-          toolCallUpdates.map((toolCall) => {
-            const toolUpdate = {
-              update_type: "tool_execution_state" as const,
-              id: toolCall.tool_call_id,
-              chat_id: chatId,
-              tool_call_id: toolCall.tool_call_id,
-              tool_name: toolCall.tool_name,
-              status: toolCall.status,
-              node_id: toolCall.node_id || "",
-              sequence_number: toolCall.sequence_number || 0,
-              timestamp:
-                toolCall.requested_at ||
-                toolCall.started_at ||
-                toolCall.completed_at ||
-                new Date().toISOString(),
-              child_workflow_id: toolCall.child_workflow_id,
-            } as ToolExecutionStateUpdate;
-
-            return toolUpdate;
-          });
-
-        // Also extract tool_cancelled events from streaming deltas
-        // These represent streaming tool calls that were cancelled mid-stream
-        // (they don't have content_block_ids, so we use the tool_call.id from the LLM)
-        const cancelledToolUpdates: ToolExecutionStateUpdate[] = streamingDeltas
-          .filter((d) => d.delta_type === "tool_cancelled" && d.tool_call)
-          .map((delta) => ({
-            update_type: "tool_execution_state" as const,
-            id: delta.tool_call!.id, // Use LLM's tool_call ID
-            chat_id: chatId,
-            tool_call_id: delta.tool_call!.id,
-            tool_name: delta.tool_call!.name,
-            status: "cancelled" as const,
-            node_id: "",
-            sequence_number: delta.sequence_number || 0,
-            timestamp: new Date().toISOString(),
-          }));
-
-        // Combine both types of tool execution updates
-        const allToolExecutionUpdates = [
-          ...toolExecutionUpdates,
-          ...cancelledToolUpdates,
-        ];
-
-        // Use approval updates directly without conversion
-        const allApprovals = approvalUpdates;
-
-        // PERFORMANCE: Early return if we received ONLY streaming deltas that got fully buffered
-        // This prevents triggering the expensive main set() call when there's nothing meaningful to update
-        const hasNonStreamingUpdates =
-          messageUpdates.length > 0 ||
-          allApprovals.length > 0 ||
-          threadUpdates.length > 0 ||
-          workflowStatusUpdates.length > 0 ||
-          errorUpdates.length > 0 ||
-          infoUpdates.length > 0 ||
-          runOutputUpdates.length > 0 ||
-          nodeExecutionUpdates.length > 0 ||
-          toolCallUpdates.length > 0 ||
-          allToolExecutionUpdates.length > 0 ||
-          // stream_finalized markers must reach the commit below so the
-          // finalized-id set is seeded and any matching placeholder retired.
-          streamFinalizedUpdates.length > 0;
-
-        // If we only have raw streaming deltas and they all got buffered (no immediate deltas),
-        // skip the main state update - the buffered flush will handle it later
-        if (
-          !hasNonStreamingUpdates &&
-          rawStreamingDeltas.length > 0 &&
-          streamingDeltas.length === 0
-        ) {
-          return;
-        }
-
-        // Process streaming deltas to build temporary streaming messages per thread
-        // These are applied to temporary messages that get replaced when complete messages arrive
-        // NOTE: We don't call set() here - we'll include it in the main state update below
-        const processedStreamingMsgs = new Map<string, Message>(); // threadKey -> Message
-        if (streamingDeltas.length > 0) {
-          // Group deltas by thread for processing
-          const deltasByThread = new Map<
-            string | undefined,
-            StreamingDelta[]
-          >();
-          for (const delta of streamingDeltas) {
-            const thread = delta.thread;
-            if (!deltasByThread.has(thread)) {
-              deltasByThread.set(thread, []);
-            }
-            deltasByThread.get(thread)!.push(delta);
-          }
-
-          // Process each thread's deltas
-          const chatStreaming = get().streamingMessages[chatId] || {};
-          for (const [thread, threadDeltas] of deltasByThread) {
-            const threadKey = normalizeThreadKey(chatId, thread);
-            const currentStreamingMsg = resolveStreamingBase(
-              chatStreaming,
-              threadKey,
-            );
-
-            const processedMsg = processStreamingDeltas(
-              threadDeltas,
-              currentStreamingMsg,
-            );
-
-            if (processedMsg) {
-              processedStreamingMsgs.set(threadKey, processedMsg);
-            }
-          }
-        }
-
-        // Cross-match tool results with tool calls across all messages
-        // First pass: collect all tool_results from tool messages in this
-        // update batch into a normalized index keyed by tool_call_id. Tool
-        // results arrive as separate TOOL-role messages; rather than embedding
-        // them into the assistant message's TOOL_CALL blocks (a second join on
-        // top of processMessage's internal one), we merge them into a per-chat
-        // index and let processMessage resolve call→result at read time.
-        // messageUpdates are proto Message objects (camelCase fields).
-        //
-        // tool_call_results.tool_call_id is a PRIMARY KEY at rest (migration
-        // 20260801010000), so two TOOL messages carrying the same
-        // tool_call_id are the same result re-delivered (retry / overlapping
-        // snapshot), not a genuine second result. First write wins: keep
-        // whichever copy we saw first and warn instead of silently
-        // overwriting with what should be an identical re-delivery.
-        const batchToolResults: ToolResultsByCallId = {};
-        const batchToolResultSourceMsgId: Record<string, string> = {};
-        let inBatchDuplicateCount = 0;
-        messageUpdates.forEach((protoMsg) => {
-          if (protoMsg.role === MessageRole.TOOL) {
-            protoMsg.contentBlocks.forEach((block) => {
-              if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
-                const existingMsgId = batchToolResultSourceMsgId[block.toolCallId];
-                if (existingMsgId !== undefined) {
-                  // Re-delivery within one batch is expected traffic (a resync
-                  // snapshot overlapping live results), so it is counted, not
-                  // logged per occurrence — see the aggregate below.
-                  inBatchDuplicateCount++;
-                  return;
-                }
-                batchToolResultSourceMsgId[block.toolCallId] = protoMsg.id;
-                batchToolResults[block.toolCallId] = resolvedToolResultFromBlock(block);
-              }
-            });
-
-            // Images the tool produced ride along on the same TOOL message as
-            // sibling IMAGE blocks. They are folded in a second pass so the
-            // first-write-wins dedup above stays exactly as it was: only the
-            // message that actually won a tool_call_id contributes its images.
-            foldToolResultImages(protoMsg, batchToolResults, batchToolResultSourceMsgId);
-          }
-        });
-
-        // Convert proto Message to frontend Message with string enum fields
-        const convertProtoMsg = (protoMsg: any): Message => {
-          const converted: Message = {
-            ...protoMsg,
-            role: typeof protoMsg.role === 'string' ? protoMsg.role : protoMsg.role,
-            streamingState: typeof protoMsg.streamingState === 'string' ? protoMsg.streamingState : protoMsg.streamingState,
-            displayStyle: protoMsg.displayStyle,
-            attachments: normalizeMessageAttachments(protoMsg.attachments),
-            contentBlocks: (protoMsg.contentBlocks || []).map((b: any) => ({
-              ...b,
-              type: b.type,
-            })),
-          };
-          return converted;
-        };
-
-        const messages: Message[] = messageUpdates.map(convertProtoMsg);
-
-        // Threads whose stream finalized in this batch (a complete assistant
-        // message arrived). Computed once here and captured by the set()
-        // closure below; also used after set() to clear streaming buffers.
-        const completedThreads = new Set<string>();
-        messages.forEach((m) => {
-          if (m.role === MessageRole.ASSISTANT && isProtoMessageComplete(m)) {
-            completedThreads.add(normalizeThreadKey(chatId, m.thread));
-          }
-        });
-
-        // Delta identity: assistant message ids finalized by THIS batch, from
-        // both channels — persisted stream_finalized markers and every complete
-        // persisted assistant message (redundancy + old-server skew).
-        const newlyFinalizedIds = new Set<string>(batchFinalizedIds);
-        messages.forEach((m) => {
-          if (m.role === MessageRole.ASSISTANT && isProtoMessageComplete(m) && m.id) {
-            newlyFinalizedIds.add(m.id);
-          }
-        });
-
-        // The Chat object is homed in the React Query cache, not here — a
-        // snapshot arriving before the chat is loaded no longer needs a
-        // fabricated placeholder. Messages are stored independently below;
-        // the real Chat lands via the detail/list query.
-        //
-        // Everything below is computed synchronously (no awaits between this
-        // read and the set() that commits, and batches are synchronous), then
-        // committed in ONE set(), with the external-store / RQ-cache side
-        // effects applied after the commit.
-        const state = get();
-
-        // SNAPSHOT vs INCREMENTAL: snapshot replaces the list (cross-chat /
-        // stale contamination guard), incremental upserts by id. Current
-        // messages come from the RQ cache (single source of truth); reads are
-        // synchronous and setQueryData commits synchronously, so this sees the
-        // latest merged array — same freshness the old get()-based read had.
-        const cachedMessages = getMessagesFromCache(chatId);
-        // A reconnect snapshot that would destroy already-loaded older pages is
-        // merged instead of replacing (see snapshotReplacesMessages). The
-        // tool-result index below must follow the SAME decision.
-        const snapshotReplaces =
-          isSnapshot && snapshotReplacesMessages(cachedMessages, messages);
-        if (isSnapshot) {
-          logger.info(
-            snapshotReplaces
-              ? "[ChatStore] Snapshot: replacing messages for chat"
-              : "[ChatStore] Snapshot: merging (preserving loaded older pages)",
-            {
-              chatId: chatId.slice(0, 8),
-              snapshotCount: messages.length,
-              previousCount: cachedMessages.length,
-            },
-          );
-        }
-        let updatedMessages = mergeMessages(
-          cachedMessages,
-          messages,
-          isSnapshot,
-        );
-
-        // Merge this batch's tool results into the per-chat normalized
-        // index. Results arrive as their own TOOL messages, often in a later
-        // batch than the assistant tool call — carrying them in a chat-level
-        // index (rather than re-embedding into already-stored assistant
-        // blocks) is what makes "late results" attach on the next read
-        // without mutating the assistant message.
-        //
-        // Cleared only when the snapshot actually REPLACED the message list —
-        // the index is scoped to the messages it serves. Clearing it while
-        // older pages survive would strand their tool calls with no results.
-        //
-        // Same first-write-wins rule as the in-batch collision above: a
-        // tool_call_id already present from a prior batch means this batch's
-        // copy is a re-delivery (retry / reconnect snapshot overlapping a
-        // live result), not a new result — the PK at rest guarantees at most
-        // one real result per call. Keep the existing entry rather than risk
-        // clobbering real output with a re-delivered error stub.
-        //
-        // Re-delivery is the steady state, not an anomaly: every gap-resync
-        // re-sends a window of up to 200 messages, so warning per occurrence
-        // produced bursts of hundreds of synchronous IPC calls inside a single
-        // frame. Only a re-delivery whose CONTENT DIFFERS from the stored copy
-        // is genuinely suspicious (that is the clobbering case the warning was
-        // added to catch); identical re-deliveries are counted and reported
-        // once per batch at debug level.
-        const existingToolResults = snapshotReplaces
-          ? {}
-          : state.toolResultsByCallId[chatId] || {};
-        let redeliveredCount = 0;
-        const conflictingToolCallIds: string[] = [];
-        for (const toolCallId of Object.keys(batchToolResults)) {
-          if (toolCallId in existingToolResults) {
-            const existing = existingToolResults[toolCallId];
-            const incoming = batchToolResults[toolCallId];
-            if (
-              existing.content !== incoming.content ||
-              existing.is_error !== incoming.is_error
-            ) {
-              conflictingToolCallIds.push(toolCallId);
-            }
-            redeliveredCount++;
-            delete batchToolResults[toolCallId];
-          }
-        }
-        if (conflictingToolCallIds.length > 0) {
-          // The real signal: a second, DIFFERENT result for a call whose
-          // tool_call_id is a primary key at rest. First write still wins.
-          logger.warn(
-            "[ChatStore] Tool result re-delivered with different content — keeping existing",
-            {
-              chatId: chatId.slice(0, 8),
-              count: conflictingToolCallIds.length,
-              toolCallIds: conflictingToolCallIds.slice(0, 5),
-            },
-          );
-        }
-        if (redeliveredCount > 0 || inBatchDuplicateCount > 0) {
-          logger.debug("[ChatStore] Dropped re-delivered tool results", {
-            chatId: chatId.slice(0, 8),
-            alreadyRecorded: redeliveredCount,
-            duplicatesInBatch: inBatchDuplicateCount,
-          });
-        }
-        // A batch that adds no result keeps the index's identity. Every
-        // rendered ChatMessage subscribes to it and re-parses its content when
-        // it changes reference, so a fresh copy per batch re-processed the
-        // whole visible transcript on every streaming delta.
-        const updatedToolResults: ToolResultsByCallId =
-          Object.keys(batchToolResults).length === 0
-            ? existingToolResults
-            : { ...existingToolResults, ...batchToolResults };
-
-        // Gather all streaming messages: newly processed ones merged with existing ones
-        // Thread-aware: each thread can have its own streaming message
-        const existingChatStreaming =
-          state.streamingMessages[chatId] || {};
-        const mergedStreamingMsgs = new Map<string, Message>();
-
-        // Start with existing streaming messages
-        for (const [threadKey, msg] of Object.entries(
-          existingChatStreaming,
-        )) {
-          if (msg) {
-            mergedStreamingMsgs.set(threadKey, msg);
-          }
-        }
-
-        // Override with newly processed streaming messages
-        for (const [threadKey, msg] of processedStreamingMsgs) {
-          mergedStreamingMsgs.set(threadKey, msg);
-        }
-
-        // completedThreads (threads finalized in this batch) is computed
-        // once above and captured here.
-        // If we received complete messages, handle streaming cleanup for those threads
-        if (completedThreads.size > 0) {
-          logger.debug(
-            "[Streaming] Complete messages received, cleaning up streaming for threads",
-            {
-              chatId: chatId.slice(0, 8),
-              completedThreads: [...completedThreads].map((t) =>
-                t.slice(0, 8),
-              ),
-            },
-          );
-
-          // For each completed thread, handle cancelled tool preservation and remove streaming
-          for (const threadKey of completedThreads) {
-            // The slice only ever holds the ephemeral placeholder for this
-            // thread; preserve any tool calls it captured as cancelled.
-            const streamingMsg = mergedStreamingMsgs.get(threadKey);
-            if (streamingMsg) {
-              const streamingBlocks = streamingMsg.contentBlocks || [];
-              const cancelledBlocks = streamingBlocks.filter(
-                (block: ContentBlock & { status?: string }) =>
-                  block.type === ContentBlockType.TOOL_CALL &&
-                  block.status === "cancelled",
-              );
-
-              if (cancelledBlocks.length > 0) {
-                logger.debug(
-                  "[Streaming] Preserving cancelled tool calls from streaming message",
-                  {
-                    chatId: chatId.slice(0, 8),
-                    thread: threadKey.slice(0, 8),
-                    cancelledCount: cancelledBlocks.length,
-                  },
-                );
-
-                // Merge the cancelled blocks into the message they were
-                // STREAMED UNDER — the one whose id the placeholder carries.
-                //
-                // Matching on thread alone grafts them onto every complete
-                // assistant message in the thread, including turns written
-                // long afterwards. That is how one cancelled tool call came to
-                // re-render on every subsequent turn: each new assistant
-                // message that arrived matched the filter and collected the
-                // same orphaned card. It survived only in the client's merged
-                // copy, so a reload — which refetches the untouched server
-                // rows — appeared to "fix" it.
-                //
-                // Delta identity makes the correct target exact: the
-                // placeholder's id is the pre-allocated id CallLLM streamed
-                // under and the id persistInterruptedTurn saves the partial
-                // as, so the blocks rejoin their own turn or nothing.
-                const streamedUnderId = streamingMsg.id;
-                updatedMessages = updatedMessages.map((msg) => {
-                  const msgThreadKey = normalizeThreadKey(
-                    chatId,
-                    msg.thread,
-                  );
-                  if (
-                    msg.role === MessageRole.ASSISTANT &&
-                    isProtoMessageComplete(msg) &&
-                    msgThreadKey === threadKey &&
-                    msg.id === streamedUnderId
-                  ) {
-                    // Dedup by TOOL CALL ID, not block id.
-                    //
-                    // A streaming block is created by the tool_use_start
-                    // delta with `id: ""` — it has no block id, because the
-                    // block row does not exist until the message is
-                    // persisted. So `existingIds.has(cb.id)` compared "" to
-                    // real uuids, never matched, and appended the ephemeral
-                    // card to the persisted message every time. The result was
-                    // a duplicate tool call stuck at "Preparing…" forever,
-                    // hanging below the real ones: the persisted copy carried
-                    // its input and completed, while the streaming copy had
-                    // neither and rendered as preparing.
-                    //
-                    // tool_call_id is the identifier both copies share, and it
-                    // is what every other consumer pairs calls and results on.
-                    const existingToolCallIds = new Set(
-                      (msg.contentBlocks || [])
-                        .filter((b) => b.type === ContentBlockType.TOOL_CALL)
-                        .map((b) => b.toolCallId)
-                        .filter((id): id is string => !!id),
-                    );
-                    const newCancelledBlocks = cancelledBlocks.filter(
-                      (cb: ContentBlock) =>
-                        !!cb.toolCallId && !existingToolCallIds.has(cb.toolCallId),
-                    );
-                    if (newCancelledBlocks.length > 0) {
-                      return {
-                        ...msg,
-                        contentBlocks: [
-                          ...(msg.contentBlocks || []),
-                          ...newCancelledBlocks,
-                        ],
-                      };
-                    }
-                  }
-                  return msg;
-                });
-              }
-            }
-
-            // Remove streaming message for this completed thread
-            mergedStreamingMsgs.delete(threadKey);
-          }
-        }
-
-        // Delta identity: retire any placeholder whose id was finalized this
-        // batch. The completedThreads path above only fires when a COMPLETE
-        // assistant message arrives; a stream that finalized via an
-        // aborted/cancelled marker (no persisted message) leaves the placeholder
-        // behind unless we delete it by id here. Keyed by placeholder identity,
-        // so it also catches a thread mismatch between marker and placeholder.
-        // A stream that STOPPED (pause/interrupt) names a message id that will
-        // never become a row: the cancelled step is all-or-nothing and gets
-        // re-dispatched, so nothing durable arrives to describe what its tool
-        // calls did. Retiring the placeholder alone is not enough — the tool's
-        // live status stays "executing" in toolCallStates, and the card reads
-        // that before it reads anything else (ToolExecution's currentStatus
-        // resolution), so the cancelled tool keeps spinning against a chat that
-        // has already stopped. Settle those blocks to "cancelled" and publish
-        // the same status on the tool-state channel every card reads.
-        // Fold this batch's tool statuses BEFORE deciding what the abort has to
-        // settle: a "completed" riding the same batch as the finalize marker
-        // must protect its tool from being repainted as cancelled.
-        const toolCallStatesBeforeAbort = applyToolCallStateUpdates(
-          state.toolCallStates[chatId] || new Map(),
-          allToolExecutionUpdates,
-          chatId,
-        );
-
-        const abortSettledToolUpdates: ToolExecutionStateUpdate[] = [];
-        const settledAbortedThreadKeys = new Set<string>();
-        if (abortedThreadKeys.size > 0 || batchAbortedIds.size > 0) {
-          for (const [threadKey, msg] of [...mergedStreamingMsgs]) {
-            if (!msg) continue;
-            // Match by id when the server stamped one, else by thread — the
-            // legacy id-less path has only a fabricated streaming-temp-* id.
-            const matches =
-              batchAbortedIds.has(msg.id) || abortedThreadKeys.has(threadKey);
-            if (!matches) continue;
-
-            const { message: settledMsg, cancelledToolCallIds } =
-              settleCancelledStreamBlocks(msg, toolCallStatesBeforeAbort);
-
-            for (const toolCallId of cancelledToolCallIds) {
-              const known = toolCallStatesBeforeAbort.get(toolCallId);
-              abortSettledToolUpdates.push({
-                update_type: "tool_execution_state",
-                id: toolCallId,
-                chat_id: chatId,
-                tool_call_id: toolCallId,
-                tool_name: known?.toolName || "",
-                status: "cancelled",
-                node_id: "",
-                sequence_number: 0,
-                timestamp: new Date().toISOString(),
-                // Deduced from the stream ending, not reported by the server.
-                // A tool already past the point of no return still finishes,
-                // and that real outcome must be allowed to correct this.
-                inferred: true,
-              });
-            }
-
-            logger.debug("[Streaming] Settling cancelled stream placeholder", {
-              chatId: chatId.slice(0, 8),
-              thread: threadKey.slice(0, 8),
-              messageId: msg.id,
-              cancelledTools: cancelledToolCallIds.length,
-            });
-
-            // The placeholder is the ONLY record of this stream — no message
-            // row is coming. Keep it, now settled, so the user can still see
-            // what was in flight when they stopped the chat, instead of the
-            // blocks vanishing. Blocks that carry nothing to show are dropped.
-            const hasVisibleContent = (settledMsg.contentBlocks || []).some(
-              (block) =>
-                block.type === ContentBlockType.TOOL_CALL ||
-                (block.content || "").length > 0,
-            );
-            if (hasVisibleContent) {
-              mergedStreamingMsgs.set(threadKey, settledMsg);
-            } else {
-              mergedStreamingMsgs.delete(threadKey);
-            }
-            // Settled here, so the retire-by-id pass below must leave it alone.
-            settledAbortedThreadKeys.add(threadKey);
-          }
-        }
-
-        // The marker can also ride the SAME batch as the deltas it ends, which
-        // the placeholder walk above cannot reach: those deltas name an id this
-        // batch finalizes, so THE DROP RULE retires them as a stale tail and no
-        // placeholder is ever built for them. The tool status they published is
-        // still in the map though, so without this the card reads "executing"
-        // for a stream that is already over — the same forever-spinning tool,
-        // reached by a different door.
-        //
-        // Scoped to the tool calls those dropped deltas actually named, so a
-        // tool belonging to some other thread that happens to share the batch
-        // is untouched: cancelling one tool must never take its siblings down
-        // with it.
-        if (batchAbortedIds.size > 0) {
-          const alreadySettled = new Set(
-            abortSettledToolUpdates.map((u) => u.tool_call_id),
-          );
-          for (const delta of rawStreamingDeltas) {
-            const toolCallId = delta.tool_call?.id;
-            if (!toolCallId || !delta.message_id) continue;
-            if (!batchAbortedIds.has(delta.message_id)) continue;
-            if (alreadySettled.has(toolCallId)) continue;
-
-            const known = toolCallStatesBeforeAbort.get(toolCallId);
-            if (toolStatusSurvivesStreamAbort(known?.status)) continue;
-
-            alreadySettled.add(toolCallId);
-            abortSettledToolUpdates.push({
-              update_type: "tool_execution_state",
-              id: toolCallId,
-              chat_id: chatId,
-              tool_call_id: toolCallId,
-              tool_name: known?.toolName || delta.tool_call?.name || "",
-              status: "cancelled",
-              node_id: "",
-              sequence_number: 0,
-              timestamp: new Date().toISOString(),
-              // Deduced from the stream ending — see the sibling push above.
-              inferred: true,
-            });
-          }
-        }
-
-        // Retire any placeholder whose id was finalized this batch. The
-        // completedThreads path above only fires when a COMPLETE assistant
-        // message arrives; a stream finalized by a marker alone leaves the
-        // placeholder behind unless we delete it by id here. Keyed by
-        // placeholder identity, so it also catches a thread mismatch between
-        // marker and placeholder.
-        //
-        // Skips a thread the abort pass just settled: there, the marker's
-        // message will NEVER be persisted, so the settled placeholder is the
-        // only surviving record of the stream and deleting it would take the
-        // cancelled tool cards off screen with it.
-        if (newlyFinalizedIds.size > 0) {
-          for (const [threadKey, msg] of [...mergedStreamingMsgs]) {
-            if (settledAbortedThreadKeys.has(threadKey)) continue;
-            if (msg && newlyFinalizedIds.has(msg.id)) {
-              logger.debug("[Streaming] Retiring placeholder for finalized id", {
-                chatId: chatId.slice(0, 8),
-                thread: threadKey.slice(0, 8),
-                messageId: msg.id,
-              });
-              mergedStreamingMsgs.delete(threadKey);
-            }
-          }
-        }
-
-        // The in-flight streaming placeholder lives ONLY in the
-        // streamingMessages slice (written below), never in the persisted
-        // messages array. The render layer composes the two at display time
-        // (see ChatContainer). This keeps persisted
-        // messages as server-truth and the ephemeral placeholder as the sole
-        // owner of in-progress content — no double-storage, no
-        // streaming-temp bookkeeping in the messages array.
-
-        // Canonical order (oldest first): chat-global seq — see
-        // lib/messageOrder.ts.
-        updatedMessages = sortMessagesForDisplay(updatedMessages, chatId);
-
-        // Note: activity updates come through the global stream and are
-        // handled by activityStore, so we don't need to fetch status separately
-        // when threads complete.
-
-        // Process error updates
-        // Errors dedup by id (see applyErrorUpdates). One activity's retry
-        // series shares a single id, so attempts 1..N update ONE row in place
-        // and the badge advances instead of stacking three rows for one
-        // failure. Distinct failures still carry distinct ids.
-        // Errors are sorted by timestamp in the timeline so they appear
-        // in chronological order alongside messages.
-        // On snapshot: start fresh to avoid stale/duplicate events from previous subscription
-        const updatedErrorEvents = applyErrorUpdates(
-          state.errorEvents[chatId] || [],
-          errorUpdates,
-          isSnapshot,
-        );
-        // Route on any chat-error marker tail planted by the workflow /
-        // driver (RELIANT_MANAGED_QUOTA_EXHAUSTED, RELIANT_DAEMON_OFFLINE_HALT,
-        // …). Live-only side effects (modal pop) skip the snapshot path;
-        // marker-stripping is idempotent and runs in both modes so the
-        // rendered timeline is clean either way. Kept in the orchestrator
-        // because it's a side effect, not part of the pure log reduction.
-        errorUpdates.forEach((errorUpdate) =>
-          routeChatErrorMarker(errorUpdate, isSnapshot),
-        );
-
-        const updatedInfoEvents = applyInfoUpdates(
-          state.infoEvents[chatId] || [],
-          infoUpdates,
-          isSnapshot,
-        );
-
-        const updatedRunOutputs = applyRunOutputUpdates(
-          state.runOutputs[chatId] || [],
-          runOutputUpdates,
-          isSnapshot,
-        );
-
-        const updatedNodeExecutions = applyNodeExecutionUpdates(
-          state.nodeExecutions[chatId] || [],
-          nodeExecutionUpdates,
-          isSnapshot,
-        );
-
-        if (workflowStatusUpdates.length > 0) {
-          logger.debug(
-            "[WorkflowStatus] Chat stream updates received",
-            {
-              chatId: chatId.slice(0, 8),
-              count: workflowStatusUpdates.length,
-              statuses: workflowStatusUpdates.map((u) => u.status),
-            },
-          );
-        }
-
-        // Process tool execution state updates (dedup by tool_call_id, guard
-        // terminal statuses). The batch's own updates were already folded above
-        // (toolCallStatesBeforeAbort) so the abort pass could see them; all
-        // that remains is the cancellations that pass produced.
-        const updatedToolCallStates =
-          abortSettledToolUpdates.length > 0
-            ? applyToolCallStateUpdates(
-                toolCallStatesBeforeAbort,
-                abortSettledToolUpdates,
-                chatId,
-              )
-            : toolCallStatesBeforeAbort;
-
-        // NOTE: chat activity is NOT updated here.
-        // It is handled by handleChatActivityChanged() in globalUpdatesStore.ts
-        // via the global user update stream, which populates activityStore.
-        // Activity state is read from activityStore (single source of truth).
-
-        // Pre-parse message content so the render layer reads from the
-        // reference-keyed processMessage memo without reparsing, and drive
-        // the real-time task side effects below. Rendering invalidation is
-        // handled by the memo itself (keyed on message / tool-result index /
-        // approvals references), so there is no store-side parsed cache to
-        // keep in sync — we just warm the memo and run the side effects.
-        const messagesToProcess = [
-          ...messages, // New/updated messages from this WebSocket update
-        ];
-
-        // Also process streaming messages if present (all threads)
-        for (const streamingMsg of processedStreamingMsgs.values()) {
-          messagesToProcess.push(streamingMsg);
-        }
-
-        // CRITICAL (late results): a tool result usually arrives in a LATER
-        // batch than the assistant tool call it belongs to. That assistant
-        // message is already stored (not in this batch's `messages`). The
-        // render memo picks up the new tool-result index reference on its
-        // own, but the task side effects below only run for messages we
-        // process here — so queue the already-stored assistant messages whose
-        // calls this batch's results resolve, or a task tool's late result
-        // would be missed.
-        const batchResultCallIds = Object.keys(batchToolResults);
-        if (batchResultCallIds.length > 0) {
-          const alreadyQueued = new Set(messagesToProcess.map((m) => m.id));
-          const resolvedIds = new Set(batchResultCallIds);
-          for (const msg of updatedMessages) {
-            if (msg.role !== MessageRole.ASSISTANT) continue;
-            if (alreadyQueued.has(msg.id)) continue;
-            const owns = (msg.contentBlocks || []).some(
-              (block) =>
-                block.type === ContentBlockType.TOOL_CALL &&
-                block.toolCallId != null &&
-                resolvedIds.has(block.toolCallId),
-            );
-            if (owns) {
-              messagesToProcess.push(msg);
-              alreadyQueued.add(msg.id);
-            }
-          }
-        }
-
-        const newState = {
-          toolResultsByCallId: {
-            ...state.toolResultsByCallId,
-            [chatId]: updatedToolResults,
-          },
-          errorEvents: { ...state.errorEvents, [chatId]: updatedErrorEvents },
-          infoEvents: { ...state.infoEvents, [chatId]: updatedInfoEvents },
-          runOutputs: { ...state.runOutputs, [chatId]: updatedRunOutputs },
-          nodeExecutions: {
-            ...state.nodeExecutions,
-            [chatId]: updatedNodeExecutions,
-          },
-          toolCallStates: {
-            ...state.toolCallStates,
-            [chatId]: updatedToolCallStates,
-          },
-          // NOTE: chat activity is NOT updated here.
-          // It is handled by handleChatActivityChanged() in globalUpdatesStore.ts
-          // via the global user update stream, which populates activityStore.
-          // NOTE: contextUsage is NOT touched here — it arrives via
-          // handleChatContextUsage (onContextUsage callback), not via
-          // message updates.
-          // Update streaming messages state (thread-aware):
-          // - For completed threads: remove their streaming messages
-          // - For active threads: update with newly processed streaming messages
-          // Only update if there are actual changes (avoid creating new object references unnecessarily)
-          streamingMessages: (() => {
-            const hasStreamingChanges =
-              processedStreamingMsgs.size > 0 ||
-              completedThreads.size > 0 ||
-              // A finalize marker with no persisted message can still retire a
-              // placeholder by id — that mutates mergedStreamingMsgs too.
-              newlyFinalizedIds.size > 0;
-            if (!hasStreamingChanges) {
-              // No streaming changes - preserve existing state reference
-              return state.streamingMessages;
-            }
-            // Convert mergedStreamingMsgs Map to object for state
-            const newChatStreaming = Object.fromEntries(mergedStreamingMsgs);
-            return {
+    }
+    const after = reduceChat(
+      before,
+      isSnapshot
+        ? { kind: "snapshot", updates: folded, cursor: before.cursor, keepStreaming: true }
+        : { kind: "updates", updates: folded, cursor: before.cursor },
+      REDUCE_ENV,
+    );
+
+    // Route on any chat-error marker tail planted by the workflow / driver
+    // (RELIANT_MANAGED_QUOTA_EXHAUSTED, RELIANT_DAEMON_OFFLINE_HALT, …).
+    // Live-only side effects (the modal) skip a snapshot; marker-stripping is
+    // idempotent and runs in both modes so the timeline is clean either way.
+    // It edits the update in place, and the state holds that same update.
+    errorUpdates.forEach((errorUpdate) => routeChatErrorMarker(errorUpdate, isSnapshot));
+
+    const state = get();
+
+    // Commit the Zustand slices in one shot. A slice a batch does not touch
+    // keeps its identity: every rendered ChatMessage subscribes to the
+    // tool-result index and re-parses when it changes reference.
+    set({
+      toolResultsByCallId: { ...state.toolResultsByCallId, [chatId]: after.toolResults },
+      errorEvents: { ...state.errorEvents, [chatId]: after.errors },
+      infoEvents: { ...state.infoEvents, [chatId]: after.info },
+      runOutputs: { ...state.runOutputs, [chatId]: after.runOutputs },
+      nodeExecutions: { ...state.nodeExecutions, [chatId]: after.nodeExecutions },
+      toolCallStates: { ...state.toolCallStates, [chatId]: after.toolCalls as Map<string, ToolCallState> },
+      // NOTE: chat activity is NOT updated here — handleChatActivityChanged()
+      // in globalUpdatesStore.ts populates activityStore from the global
+      // stream. Nor is contextUsage: it arrives via handleChatContextUsage.
+      streamingMessages:
+        after.streaming === before.streaming
+          ? state.streamingMessages
+          : {
               ...state.streamingMessages,
-              [chatId]:
-                Object.keys(newChatStreaming).length > 0
-                  ? newChatStreaming
-                  : undefined,
-            };
-          })(),
-          // Delta identity: seed the finalized-id set. A REPLACING snapshot
-          // replaces it too (snapshot semantics — the snapshot dedups markers
-          // by entity_id, so it carries one marker per finalized message);
-          // incremental — and a merging reconnect snapshot, which keeps
-          // messages whose markers it does not re-carry — UNIONS.
-          finalizedStreamIds: (() => {
-            if (newlyFinalizedIds.size === 0 && !isSnapshot) {
-              return state.finalizedStreamIds;
-            }
-            const base = snapshotReplaces
-              ? new Set<string>()
-              : new Set(state.finalizedStreamIds[chatId] || []);
-            for (const id of newlyFinalizedIds) base.add(id);
-            return {
-              ...state.finalizedStreamIds,
-              [chatId]: base,
-            };
-          })(),
-        };
-
-        // Commit the Zustand slices in one shot. All inputs were computed
-        // synchronously above from get() — nothing can have changed since.
-        set(newState);
-
-        // ---- External writes (post-commit) ----
-        // Everything below writes to stores OTHER than this one (RQ caches,
-        // threadActivityStore). They run after the Zustand commit
-        // but in the same synchronous task, so React batches all of it into
-        // one render — same observable ordering as before.
-
-        // Commit the freshly-merged messages array to the RQ cache (the
-        // single source of truth). snapshot-replace / incremental-upsert /
-        // optimistic-user replacement / canonical sort were all applied to
-        // `updatedMessages` above.
-        setMessagesInCache(chatId, updatedMessages);
-
-        // Self-heal a stranded streaming placeholder.
-        //
-        // A tool call whose input never finished streaming renders as
-        // "Preparing..." forever (the renderers key that off
-        // `input === undefined`). Cancelling a chat at exactly the moment a
-        // tool call was streaming leaves one behind, and until now the ONLY
-        // thing that cleared it was the IDLE activity-changed handler — a
-        // transient event. Miss it once (cancel raced it, the tab was closed,
-        // the event landed before this chat was open) and the placeholder
-        // outlived every reload, because a snapshot rebuilds the transcript
-        // but never touched the streaming slice.
-        //
-        // A snapshot for a chat the server reports as NOT running is
-        // authoritative that nothing is streaming: the transcript just
-        // arrived in full, and anything still sitting in the streaming slice
-        // is a tail that will never be completed. Dropping it here gives
-        // every already-stuck chat a second chance on its next load, instead
-        // of requiring the one event it already missed.
-        if (isSnapshot) {
-          const activity = useActivityStore.getState().activities.get(chatId);
-          const chatIsIdle = !isBusyActivity(activity);
-          if (chatIsIdle && get().streamingMessages[chatId]) {
-            logger.info(
-              "[Streaming] Snapshot for an idle chat — dropping stranded streaming placeholder",
-              { chatId: chatId.slice(0, 8) },
-            );
-            get().clearStreamingState(chatId);
-          }
-          // A snapshot carries no node state and replaced the live node
-          // events: an open run-status view re-reads where its run stands,
-          // or the events the snapshot skipped past would be missing.
-          void queryClient.invalidateQueries({
-            queryKey: chatServiceKeys.getWorkflowNodeExecutions({ chatId }),
-          });
-        }
-
-        // Keep any open thread-scoped reader (a spawn preview, a selected
-        // thread) current. Only this batch's messages are fanned out, not the
-        // whole merged array: the thread caches own their own history, and
-        // the stream's job is to add to it.
-        fanOutMessagesToThreadCaches(chatId, messages);
-
-        // Approval updates from the stream patch the React Query cache
-        // directly (setQueryData, no refetch) — approvals are server data
-        // owned by the cache, read via useApprovals/usePendingApprovals.
-        // usePendingApprovals derives "pending" from the same list via a
-        // client-side select, so one list upsert updates both. The patch IS
-        // the sync; no invalidate/refetch round-trip.
-        allApprovals.forEach((approvalUpdate) => {
-          upsertApprovalInCache(chatId, {
-            id: approvalUpdate.id,
-            chatId: approvalUpdate.chat_id,
-            entityId: approvalUpdate.content_block_id || approvalUpdate.entity_id,
-            status: approvalStatusFromFeed(approvalUpdate.status),
-            denialReason: approvalUpdate.denial_reason,
-            createdAt: approvalUpdate.created_at,
-            resolvedAt: approvalUpdate.resolved_at ?? approvalUpdate.responded_at,
-            actionTaken: approvalUpdate.action_taken, // Which action was clicked
-            ...approvalFields(approvalUpdate),
-          });
-        });
-
-        // Question updates patch the chat's pending-question list (server
-        // data), read via usePendingQuestions. A "pending" event adds that
-        // question; "resolved" removes THAT question only — other threads'
-        // questions are still waiting on the user. An async question (asked
-        // without waiting) patches the timeline's async list instead.
-        for (const qu of questionUpdates) {
-          applyQuestionUpdate(chatId, qu);
-        }
-
-        // Thread updates live in threadActivityStore (not chatStore). Merge
-        // is pure; this is the store write.
-        if (threadUpdates.length > 0) {
-          const threadActivityState = useThreadActivityStore.getState();
-          threadActivityState.setThreads(
-            chatId,
-            mergeActiveThreads(
-              threadActivityState.threads[chatId] || [],
-              threadUpdates,
-            ),
-          );
-        }
-
-        // Pre-parse message content so the render layer reads from the
-        // reference-keyed processMessage memo without reparsing. Rendering
-        // invalidation is handled by the memo itself (keyed on message /
-        // tool-result index / approvals references), so there is no
-        // store-side parsed cache to keep in sync.
-        //
-        // Approvals live in the React Query cache; read the current list
-        // (including this batch's upserts above) to embed approval status
-        // into processed tool calls.
-        const approvalsForProcessing =
-          approvalsFromCache(chatId);
-        messagesToProcess.forEach((message) => {
-          getProcessedMessage(message, updatedToolResults, approvalsForProcessing);
-        });
-
-        // CRITICAL FIX: Clear streaming buffers when complete messages arrive
-        // This prevents buffer flush timeouts from firing after complete messages
-        // and recreating partial streaming messages that overwrite complete ones
-        // Thread-aware: only clear buffers for threads that received complete messages
-        if (completedThreads.size > 0) {
-          for (const threadKey of completedThreads) {
-            clearStreamingBuffer(chatId, threadKey);
-          }
-          logger.debug(
-            "[Streaming] Cleared streaming buffers for completed threads",
-            {
-              chatId: chatId.slice(0, 8),
-              threads: [...completedThreads].map((t) =>
-                t.slice(0, 8),
-              ),
+              [chatId]: Object.keys(after.streaming).length > 0 ? (after.streaming as Record<string, Message>) : undefined,
             },
-          );
-        }
-  },
+      finalizedStreamIds:
+        after.finalizedStreamIds === before.finalizedStreamIds
+          ? state.finalizedStreamIds
+          : { ...state.finalizedStreamIds, [chatId]: after.finalizedStreamIds as Set<string> },
+    });
 
+    // ---- External writes (post-commit) ----
+    // Everything below writes to stores OTHER than this one (RQ caches,
+    // threadActivityStore). They run after the commit but in the same
+    // synchronous task, so React batches all of it into one render.
+
+    // The merged, canonically ordered transcript, to the RQ cache (the single
+    // source of truth for a chat's messages).
+    setMessagesInCache(chatId, after.messages as unknown as Message[]);
+
+    // Self-heal a stranded streaming placeholder. A tool call whose input never
+    // finished streaming renders as "Preparing..." forever, and cancelling at
+    // exactly that moment leaves one behind that outlives every reload (a
+    // snapshot rebuilds the transcript but never touched the streaming slice).
+    // A snapshot for a chat the server reports as NOT running is authoritative
+    // that nothing is streaming: whatever is still in the slice is a tail that
+    // will never complete.
+    if (isSnapshot) {
+      const activity = useActivityStore.getState().activities.get(chatId);
+      const chatIsIdle = !isBusyActivity(activity);
+      if (chatIsIdle && get().streamingMessages[chatId]) {
+        logger.info("[Streaming] Snapshot for an idle chat — dropping stranded streaming placeholder", {
+          chatId: chatId.slice(0, 8),
+        });
+        get().clearStreamingState(chatId);
+      }
+      // A snapshot carries no node state and replaced the live node events: an
+      // open run-status view re-reads where its run stands, or the events the
+      // snapshot skipped past would be missing.
+      void queryClient.invalidateQueries({
+        queryKey: chatServiceKeys.getWorkflowNodeExecutions({ chatId }),
+      });
+    }
+
+    // Keep any open thread-scoped reader (a spawn preview, a selected thread)
+    // current. Only this batch's messages are fanned out, not the whole merged
+    // array: the thread caches own their own history, and the stream's job is
+    // to add to it.
+    fanOutMessagesToThreadCaches(chatId, messages);
+
+    // Approval updates patch the React Query cache directly (setQueryData, no
+    // refetch): approvals are server data owned by the cache, read via
+    // useApprovals / usePendingApprovals, which derives "pending" from the same
+    // list, so one upsert updates both.
+    approvalUpdates.forEach((approvalUpdate) => applyApprovalUpdate(chatId, approvalUpdate));
+
+    // Question updates patch the chat's pending-question list: "pending" adds
+    // that question; "resolved" removes THAT question only — other threads'
+    // questions are still waiting. An async question patches the timeline's
+    // async list instead.
+    for (const qu of questionUpdates) applyQuestionUpdate(chatId, qu);
+
+    // Thread updates live in threadActivityStore (not chatStore).
+    if (threadUpdates.length > 0) {
+      const threadActivityState = useThreadActivityStore.getState();
+      threadActivityState.setThreads(
+        chatId,
+        mergeActiveThreads(threadActivityState.threads[chatId] || [], threadUpdates),
+      );
+    }
+
+    // Warm the reference-keyed processMessage memo so the render layer reads
+    // parses instead of making them. Rendering invalidation is the memo's own
+    // (keyed on message / tool-result index / approvals references), so there
+    // is no store-side parsed cache to keep in sync.
+    const messagesToProcess: Message[] = [...messages];
+    for (const [threadKey, placeholder] of Object.entries(after.streaming)) {
+      if (before.streaming[threadKey] !== placeholder) messagesToProcess.push(placeholder as unknown as Message);
+    }
+
+    // A tool result usually arrives in a LATER batch than the assistant tool
+    // call it belongs to. That assistant message is already stored (not in this
+    // batch's `messages`): warm the ones whose calls this batch's results
+    // resolve.
+    if (after.toolResults !== before.toolResults) {
+      const resolvedIds = new Set(
+        Object.keys(after.toolResults).filter((id) => before.toolResults[id] !== after.toolResults[id]),
+      );
+      if (resolvedIds.size > 0) {
+        const alreadyQueued = new Set(messagesToProcess.map((m) => m.id));
+        for (const msg of after.messages as unknown as Message[]) {
+          if (msg.role !== MessageRole.ASSISTANT || alreadyQueued.has(msg.id)) continue;
+          const owns = (msg.contentBlocks || []).some(
+            (block) =>
+              block.type === ContentBlockType.TOOL_CALL &&
+              block.toolCallId != null &&
+              resolvedIds.has(block.toolCallId),
+          );
+          if (owns) {
+            messagesToProcess.push(msg);
+            alreadyQueued.add(msg.id);
+          }
+        }
+      }
+    }
+    // Approvals live in the React Query cache; read the current list
+    // (including this batch's upserts above) to embed approval status into
+    // processed tool calls.
+    const approvalsForProcessing = approvalsFromCache(chatId);
+    messagesToProcess.forEach((message) => {
+      getProcessedMessage(message, after.toolResults, approvalsForProcessing);
+    });
+
+    // A complete assistant message ends its thread's stream. Clear that
+    // thread's frame buffer, or a flush timer firing after the message would
+    // recreate a partial placeholder over the complete message.
+    const completedThreads = new Set<string>();
+    for (const m of messages) {
+      if (m.role === MessageRole.ASSISTANT && isProtoMessageComplete(m)) {
+        completedThreads.add(normalizeThreadKey(chatId, m.thread));
+      }
+    }
+    for (const threadKey of completedThreads) clearStreamingBuffer(chatId, threadKey);
+  },
 
   // Remove the in-flight streaming placeholder and buffers for a chat. The
   // activity-IDLE event (persisted + gap-protected) is the authoritative

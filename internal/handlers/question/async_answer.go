@@ -116,6 +116,9 @@ func (s *Service) resolveAsyncQuestion(
 // main thread. A nil error means a send path accepted it.
 func (s *Service) deliverAsyncAnswer(ctx context.Context, chat *db.Chat, question *db.Question, answer string) error {
 	ctx = threadwake.WithoutQuestionYield(ctx)
+	// The agent gets the answer as a message; the user sees it on the
+	// question's card, never as a user bubble of words they did not type.
+	ctx = db.WithLLMOnlyDelivery(ctx)
 	mainThread := chat.MainThreadID()
 	asker := question.ThreadID
 	if asker == "" || asker == chat.ID {
@@ -185,6 +188,7 @@ func (s *Service) queueBehindBlockingQuestion(ctx context.Context, chat *db.Chat
 		Body:         body,
 		Status:       core.AgentMessageStatusQueued,
 		CreatedAt:    time.Now(),
+		DisplayStyle: db.QueuedDisplayStyle(ctx),
 	}); err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to queue the answer"))
 	}

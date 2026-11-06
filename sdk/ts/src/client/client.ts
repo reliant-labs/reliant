@@ -1,7 +1,8 @@
 // createReliantClient: the entry point. A transport, and the streams and
 // calls that ride on it.
 
-import { createClient } from "@connectrpc/connect";
+import type { DescService } from "@bufbuild/protobuf";
+import { createClient, type Client, type Transport } from "@connectrpc/connect";
 import { BackgroundService } from "#gen/reliant/v1/background_pb.js";
 import { ChatService } from "#gen/reliant/v1/chat_pb.js";
 import { StreamingService } from "#gen/reliant/v1/streaming_pb.js";
@@ -26,6 +27,10 @@ export interface ReliantClientOptions
 type Own<O, K extends keyof O = never> = Omit<O, keyof StreamEnvironment | "client" | K>;
 
 export interface ReliantClient {
+  /** The Connect transport every call and stream of this client rides on. */
+  readonly transport: Transport;
+  /** A typed client for one Reliant service on that transport (what the React hooks call through). */
+  service<S extends DescService>(service: S): Client<S>;
   /** Open a chat: its stream, its state, and sends. */
   chat(options: Omit<ChatSessionOptions, "chatId" | "env" | "chats" | "streaming"> & { chatId: string }): ChatSession;
   readonly streams: {
@@ -53,6 +58,8 @@ export function createReliantClient(options: ReliantClientOptions): ReliantClien
   const chats = () => createClient(ChatService, transport);
 
   return {
+    transport,
+    service: (service) => createClient(service, transport),
     chat: (o) => new ChatSession({ ...o, env, chats, streaming }),
     streams: {
       user: (o) => new UserStream({ ...env, ...o, client: streaming }),

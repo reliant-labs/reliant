@@ -220,6 +220,11 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 				Content:     m.Body,
 				Attachments: m.Attachments,
 			}
+			// A row queued LLM-only (an async ask_user answer, shown on its
+			// question card) is delivered hidden, as it was queued.
+			if m.DisplayStyle != nil {
+				opts.DisplayStyle = *m.DisplayStyle
+			}
 			if m.Kind != core.AgentMessageKindHumanMessage {
 				opts.SenderThreadID = m.FromThreadID
 				opts.SenderKind = m.Kind
@@ -312,6 +317,11 @@ func (a *DrainAgentMessagesActivity) buildEnvelope(ctx context.Context, queued [
 			fmt.Fprintf(&b, "\n%d. <agent_result agent_id=%q status=\"failed\">", i+1, m.FromThreadID)
 		case core.AgentMessageKindHumanMessage:
 			fmt.Fprintf(&b, "\n%d. <message from=\"user\" queued_at=%q>", i+1, queuedAt)
+		case core.AgentMessageKindRunMessage:
+			// Another top-level run (send_to_run), not the user and not a
+			// sub-agent. Its main thread's id is its run id, which is what
+			// send_to_run takes to answer it.
+			fmt.Fprintf(&b, "\n%d. <message from_run=%q queued_at=%q>", i+1, m.FromThreadID, queuedAt)
 		default:
 			from := a.senderLabel(ctx, m.FromThreadID)
 			if m.Subject != "" {

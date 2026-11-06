@@ -7971,7 +7971,8 @@
             "AGENT_MESSAGE_KIND_COMPLETION",
             "AGENT_MESSAGE_KIND_CANCELLED",
             "AGENT_MESSAGE_KIND_FAILED",
-            "AGENT_MESSAGE_KIND_HUMAN_MESSAGE"
+            "AGENT_MESSAGE_KIND_HUMAN_MESSAGE",
+            "AGENT_MESSAGE_KIND_RUN_MESSAGE"
           ],
           "reliant.v1.ChatActivity": [
             "CHAT_ACTIVITY_IDLE",
@@ -8088,7 +8089,8 @@
             2,
             3,
             4,
-            5
+            5,
+            6
           ],
           "reliant.v1.ChatActivity": [
             0,
@@ -17122,7 +17124,8 @@
             "AGENT_MESSAGE_KIND_COMPLETION",
             "AGENT_MESSAGE_KIND_CANCELLED",
             "AGENT_MESSAGE_KIND_FAILED",
-            "AGENT_MESSAGE_KIND_HUMAN_MESSAGE"
+            "AGENT_MESSAGE_KIND_HUMAN_MESSAGE",
+            "AGENT_MESSAGE_KIND_RUN_MESSAGE"
           ],
           "reliant.v1.ContentBlockType": [
             "CONTENT_BLOCK_TYPE_UNSPECIFIED",
@@ -17172,7 +17175,8 @@
             2,
             3,
             4,
-            5
+            5,
+            6
           ],
           "reliant.v1.ContentBlockType": [
             0,
@@ -30426,7 +30430,8 @@
             "AGENT_MESSAGE_KIND_COMPLETION",
             "AGENT_MESSAGE_KIND_CANCELLED",
             "AGENT_MESSAGE_KIND_FAILED",
-            "AGENT_MESSAGE_KIND_HUMAN_MESSAGE"
+            "AGENT_MESSAGE_KIND_HUMAN_MESSAGE",
+            "AGENT_MESSAGE_KIND_RUN_MESSAGE"
           ],
           "reliant.v1.ChatUpdateType": [
             "CHAT_UPDATE_TYPE_UNSPECIFIED",
@@ -30547,7 +30552,8 @@
             2,
             3,
             4,
-            5
+            5,
+            6
           ],
           "reliant.v1.ChatUpdateType": [
             0,

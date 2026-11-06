@@ -94,6 +94,7 @@ export default defineConfig({
     alias: [
       { find: "@", replacement: path.resolve(__dirname, "./src") },
       { find: "@reliantlabs/sdk/client", replacement: path.resolve(__dirname, "../../sdk/ts/src/client/index.ts") },
+      { find: "@reliantlabs/sdk/react", replacement: path.resolve(__dirname, "../../sdk/ts/src/react/index.ts") },
       { find: /^#gen\/(.*)\.js$/, replacement: path.resolve(__dirname, "./src/gen/$1") },
     ],
   },
@@ -283,7 +284,7 @@ export default defineConfig({
     setupFiles: "./src/test/setup.ts",
     // The default (this directory) plus @reliantlabs/sdk's own tests: the app
     // compiles the SDK from source, so one `vitest run` judges both.
-    include: ["**/*.{test,spec}.?(c|m)[jt]s?(x)", "../../sdk/ts/src/**/*.test.ts"],
+    include: ["**/*.{test,spec}.?(c|m)[jt]s?(x)", "../../sdk/ts/src/**/*.test.{ts,tsx}"],
     exclude: [
       "**/node_modules/**",
       "**/dist/**",

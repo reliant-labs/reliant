@@ -25,6 +25,9 @@ type Repository interface {
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	GetThreadWithParent(ctx context.Context, id string) (*db.Thread, *string, error)
 	GetRootThread(ctx context.Context, conversationID string) (*db.Thread, error)
+	// SenderTitle is the heading for a message from threadID: its title, or
+	// the run's for another run's untitled main thread (db.Repo.SenderTitle).
+	SenderTitle(ctx context.Context, threadID string) *string
 
 	// Workflow operations
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error

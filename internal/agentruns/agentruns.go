@@ -27,6 +27,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -168,11 +169,19 @@ func (r *Runs) CancelRun(ctx context.Context, userID, chatID string) error {
 // DeliverToRun saves a message to a live run's root thread and wakes it, with
 // RunService.SignalRun's semantics: only a live run receives anything, and a
 // run that is not live reports Delivered=false rather than being started.
-func (r *Runs) DeliverToRun(ctx context.Context, userID, chatID, message string) (tools.RunDelivery, error) {
+func (r *Runs) DeliverToRun(ctx context.Context, userID, chatID, message string, from tools.RunSender) (tools.RunDelivery, error) {
 	if r.api == nil {
 		return tools.RunDelivery{}, errors.New("no run service is configured")
 	}
-	resp, err := r.api.SignalRun(asOwner(ctx, userID), connect.NewRequest(&reliantv1.SignalRunRequest{
+	// SignalRun is the human's send path. The origin on the context makes the
+	// message the sending run's wherever that path saves or queues it; a
+	// context value, not a request field, so no client can claim to be a run.
+	ctx = db.WithMessageOrigin(asOwner(ctx, userID), db.MessageOrigin{
+		ThreadID: from.ThreadID,
+		Kind:     core.AgentMessageKindRunMessage,
+		Subject:  from.Subject,
+	})
+	resp, err := r.api.SignalRun(ctx, connect.NewRequest(&reliantv1.SignalRunRequest{
 		RunId: chatID,
 		Messages: []*reliantv1.InputMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,

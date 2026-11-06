@@ -13,6 +13,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/sdk/go/reliant"
 )
 
@@ -105,10 +106,11 @@ func ExampleRunsClient_List() {
 		log.Fatal(err)
 	}
 
+	since := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	it := c.Runs.List(ctx, reliant.ListRuns{
 		Workflow:      []string{"builtin://agent"},
 		DisplayStates: []reliant.RunDisplayState{reliantv1.RunDisplayState_RUN_DISPLAY_STATE_FAILED},
-		StartedAfter:  time.Now().Add(-24 * time.Hour),
+		StartedAfter:  since,
 		Limit:         20,
 	})
 	for it.Next() {
@@ -155,6 +157,13 @@ func ExampleRunsClient_Cancel() {
 	}
 }
 
+// askOperator puts a question's prompts to a person (a chat message, a pager,
+// a form) and returns what they chose. The SDK supplies no default answer:
+// answering unblocks the run, so the decision is the operator's.
+func askOperator(prompts []reliant.Prompt) ([]reliant.Answer, error) {
+	return nil, errors.New("deliver the prompts to a person and return their choices")
+}
+
 func ExampleGatesClient_Answer() {
 	ctx := context.Background()
 	c, err := reliant.FromEnv()
@@ -183,15 +192,10 @@ func ExampleGatesClient_Answer() {
 	for _, g := range gates {
 		switch g.Kind {
 		case reliant.GateQuestion:
-			var answers []reliant.Answer
-			for _, p := range g.Prompts {
-				a := reliant.Answer{Question: p.Question}
-				if len(p.Options) > 0 {
-					a.Selected = p.Options[:1] // the first option's exact label
-				} else {
-					a.Freetext = "yes"
-				}
-				answers = append(answers, a)
+			// Answer only with what a person chose. Never fill in a default.
+			answers, err := askOperator(g.Prompts)
+			if err != nil {
+				log.Fatal(err)
 			}
 			if err := c.Gates.Answer(ctx, g.ID, answers); err != nil {
 				log.Fatal(err)
@@ -215,9 +219,14 @@ func ExampleTriggersClient_Fire() {
 		log.Fatal(err)
 	}
 
-	// The firing is asynchronous: look for its event until it settles.
-	for deadline := time.Now().Add(time.Minute); time.Now().Before(deadline); time.Sleep(2 * time.Second) {
-		events := c.Triggers.Events(ctx, fired.TriggerID, reliant.EventFilter{Limit: 10})
+	// The firing is asynchronous: look for its event until it settles, and
+	// treat running out of time as a failure, not as success.
+	waitCtx, cancel := context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+	tick := time.NewTicker(2 * time.Second)
+	defer tick.Stop()
+	for {
+		events := c.Triggers.Events(waitCtx, fired.TriggerID, reliant.EventFilter{Limit: 10})
 		for events.Next() {
 			ev := events.Value()
 			if ev.GetFireWorkflowId() != fired.FireWorkflowID {
@@ -239,7 +248,12 @@ func ExampleTriggersClient_Fire() {
 			}
 		}
 		if err := events.Err(); err != nil {
-			log.Fatal(err)
+			log.Fatalf("the firing did not settle: %v", err) // includes the deadline
+		}
+		select {
+		case <-tick.C:
+		case <-waitCtx.Done():
+			log.Fatalf("the firing did not settle within a minute: %v", waitCtx.Err())
 		}
 	}
 }
@@ -339,4 +353,129 @@ func Example_retry() {
 		log.Fatal(err)
 	}
 	fmt.Println(run.GetDisplayState())
+}
+
+func ExampleClient_HTTPClient() {
+	c, err := reliant.FromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// A generated Connect client for a public procedure the wrappers do not
+	// cover, on the same authenticated HTTP client.
+	runs := reliantv1connect.NewRunServiceClient(c.HTTPClient(), c.BaseURL())
+	_ = runs
+}
+
+func ExampleWithInsecureHTTP() {
+	// A self-hosted server on a network you trust, reached over plain http.
+	// The token is readable by anyone on the path, so the default refuses it.
+	c, err := reliant.New(
+		reliant.WithBaseURL("http://reliant.internal:8080"),
+		reliant.WithToken(os.Getenv("RELIANT_TOKEN")),
+		reliant.WithInsecureHTTP(),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = c
+}
+
+func ExampleFollowOptions() {
+	ctx := context.Background()
+	c, err := reliant.FromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Log receives the follow's own diagnostics (a poll that failed and will
+	// be retried); the run's events still arrive on Events.
+	f, err := c.Runs.Follow(ctx, "run-id", reliant.FollowOptions{Log: os.Stderr})
+	if err != nil {
+		log.Fatal(err)
+	}
+	res, err := f.Wait()
+	fmt.Println(res.Succeeded, err)
+}
+
+func ExampleRunsClient_ResumeWithResult() {
+	ctx := context.Background()
+	c, err := reliant.FromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	res, err := c.Runs.ResumeWithResult(ctx, "run-id")
+	if err != nil {
+		log.Fatal(err) // the call itself failed
+	}
+	if res.Declined {
+		// The server answered but did not resume the run. Show its message;
+		// do not infer a reason from it.
+		fmt.Println("not resumed:", res.Message)
+		return
+	}
+	fmt.Println("resumed as", res.Run.GetId()) // may differ from the id you passed
+
+	msg, err := c.Runs.CancelWithResult(ctx, res.Run.GetId())
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(msg.Message)
+}
+
+func ExampleInboxClient_List() {
+	ctx := context.Background()
+	c, err := reliant.FromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// The cheap call, for a badge: counts only, no items.
+	n, err := c.Inbox.Counts(ctx, "")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(n.Blocking, "items are holding a run")
+
+	var seen []string
+	it := c.Inbox.List(ctx, reliant.ListInbox{
+		Kinds: []reliant.InboxItemKind{reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING},
+		Limit: 50,
+	})
+	for it.Next() {
+		item := it.Value()
+		fmt.Println(item.GetKind(), item.GetTriggerName(), item.GetWaitingSince())
+		seen = append(seen, item.GetItemId())
+	}
+	if err := it.Err(); errors.Is(err, reliant.ErrTruncated) {
+		fmt.Println("the inbox is longer than the client will fetch; narrow the filter")
+	} else if err != nil {
+		log.Fatal(err)
+	}
+
+	// Dismissing hides an item. It does not resolve an approval or a question:
+	// the run keeps waiting.
+	if err := c.Inbox.Dismiss(ctx, seen...); err != nil {
+		log.Fatal(err)
+	}
+	if err := c.Inbox.Restore(ctx, seen...); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func ExampleApprovalsClient_ListForRun() {
+	ctx := context.Background()
+	c, err := reliant.FromEnv()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	approvals, err := c.Approvals.ListForRun(ctx, "run-id")
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, a := range approvals {
+		fmt.Println(a.GetId(), a.GetTitle(), a.GetStatus())
+	}
 }

@@ -87,6 +87,8 @@ plugins:
       - Mreliant/v1/trigger.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
       - Mreliant/v1/approval.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
       - Mreliant/v1/question.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/inbox.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/tools_daemon.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
 
   # Generate Connect-Go service code. Matches the connectrpc.com/connect
   # runtime in go.mod by construction: it is the same module. The app gets
@@ -104,6 +106,8 @@ plugins:
       - Mreliant/v1/trigger.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
       - Mreliant/v1/approval.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
       - Mreliant/v1/question.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/inbox.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
+      - Mreliant/v1/tools_daemon.proto=github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1;reliantv1
 
   # Generate TypeScript protobuf code for web
   - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-v2.15.0/bin/protoc-gen-es]

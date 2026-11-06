@@ -926,13 +926,7 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 		updateData.TokenCount = &opts.TokenCount
 	}
 	if opts.SenderThreadID != "" {
-		var title *string
-		if t, err := s.repo.GetThread(ctx, opts.SenderThreadID); err != nil {
-			slog.WarnContext(ctx, "[SaveMessage] Failed to load sender thread for chat_update; sending it untitled",
-				"error", err, "sender_thread_id", opts.SenderThreadID, "message_id", messageID)
-		} else if t != nil {
-			title = t.Title
-		}
+		title := s.repo.SenderTitle(ctx, opts.SenderThreadID)
 		updateData.Sender = db.NewMessageSenderPayload(opts.SenderThreadID, title, opts.SenderKind, opts.SenderSubject)
 	}
 

@@ -43,6 +43,7 @@ export const SETTINGS_KEYS = {
 
   // Chat timeline display settings
   CHAT_TIMELINE_VARIANT: "appearance.chatTimelineVariant",
+  CHAT_THREAD_MODE: "appearance.chatThreadMode",
   
   // Notification settings
   NOTIFICATIONS_ENABLED: "notifications.enabled",
