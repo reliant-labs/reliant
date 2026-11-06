@@ -60,7 +60,12 @@ func (s *Service) GetGitToken(
 		return nil, svcerr.WithReason(svcerr.FailedPrecondition(
 			"your "+provider+" connection expired; reconnect it in Reliant"), reasonGitNeedsReconnect)
 	case err != nil:
-		slog.ErrorContext(ctx, "git token unavailable", "user_id", userID, "provider", provider, "outcome", "unavailable")
+		// WARN: gitcredentialclient's component log layer already recorded
+		// this failure at ERROR, and the RPC log layer records the
+		// Unavailable below. A third ERROR line here was the same failure
+		// counted again. The cause stays out of this line: it may quote
+		// upstream text (TestGetGitToken_NeverLogsToken).
+		slog.WarnContext(ctx, "git token unavailable", "user_id", userID, "provider", provider, "outcome", "unavailable")
 		return nil, svcerr.WithCause(svcerr.Unavailable("git token service unavailable; retry"), err)
 	}
 
