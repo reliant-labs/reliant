@@ -18,7 +18,7 @@
  *   demo     the public forge demo (demoShellRoutes.tsx): ONE route,
  *            `/forge/demo`, on sample data, read-only, the forge tour started
  *            on every visit. No sign-in, no account, no control-plane call.
- *            Telemetry service `forge-demo`.
+ *            Telemetry service `reliant-forge-demo`.
  *   reliant  everything else, unchanged.
  *
  * A dev override exists so a shell can be looked at without DNS:

@@ -22,7 +22,9 @@ pin in control-plane would have to move in lockstep with go.mod's (that repo's
 pin-coherence checks), which is exactly the coupling a demo must not have.
 
 THE DOMAIN is a control-plane resource bound to this env's frontend, not spec
-(`forge domain bind demo.reliantlabs.io --env demo --target forge-demo`).
+(`forge domain bind demo.reliantlabs.io --env demo --target forge-demo`). The cutover
+from control-plane's prod/reliant-web, its checks and its rollback:
+dev-docs/forge-demo-cutover.md.
 """
 
 import forge
@@ -36,7 +38,7 @@ _runtime_config = {
     DEMO_DATA_SOURCE = "fixtures"
     DEMO_DATA_URL = ""
     # Browser telemetry to the platform's same-origin ingest for this site,
-    # filed under service forge-demo (lib/telemetry.ts). What it records about
+    # filed under service reliant-forge-demo, frontend forge-demo (lib/telemetry.ts). What it records about
     # an anonymous visitor is DEMO_TELEMETRY's ("replay": page and tour events
     # and masked session replay; "analytics": events only; "off"); a browser
     # sending Do Not Track or Global Privacy Control is never recorded.

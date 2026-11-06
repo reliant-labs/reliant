@@ -99,8 +99,13 @@ runs:
         # promotion WAS recorded, and `recorded.id` is exactly what the gate
         # step below needs. A red rollout is when the evidence trail matters
         # most, so the code is captured rather than aborting the step here.
-        forge "${args[@]}" > deploy.json
-        code=$?
+        # `|| code=$?`, not a bare call then `code=$?`: `shell: bash` runs
+        # with errexit (`bash -eo pipefail`), so a nonzero forge would end
+        # the script before the outputs below were written, and the evidence
+        # step (which needs promotion-id) would be skipped.
+        # .github/scripts/forge-deploy-action.test.mjs runs this under -e.
+        code=0
+        forge "${args[@]}" > deploy.json || code=$?
         {
           echo "promotion-id=$(jq -r '.recorded.id // empty' deploy.json 2>/dev/null)"
           echo "exit-code=$code"
