@@ -34,9 +34,10 @@ import { cn } from "@/lib/utils";
 
 import type { ObsEnvironment } from "./obsPlace";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
+import { CONTROL_FIELD } from "../controlStyles";
 
 const FIELD =
-  "h-8 w-full rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
+  `${CONTROL_FIELD} h-8 w-full px-2 text-sm disabled:opacity-60`;
 
 /** The receiver every organization has; notifications land in the console. */
 export const INAPP_RECEIVER = "reliant-inapp";

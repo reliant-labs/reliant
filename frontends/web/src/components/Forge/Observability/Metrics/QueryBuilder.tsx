@@ -28,6 +28,7 @@ import { BUTTON_SMALL, Segmented } from "../Dashboards/parts";
 import { allowedAggs, defaultSeriesFor, type ChartKind } from "./model/explorerState";
 import { seriesLabel } from "./model/metricSemantics";
 import { attributeField, fieldLabel } from "./seriesView";
+import { CONTROL_FIELD } from "../../controlStyles";
 
 /** Most series a panel holds (dashspec), so most rows. */
 export const MAX_SERIES = 10;
@@ -88,7 +89,7 @@ export interface QueryBuilderProps {
 }
 
 const SELECT =
-  "h-7 min-w-0 rounded-md border border-border bg-surface-sunken px-1.5 text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  `${CONTROL_FIELD} h-7 min-w-0 px-1.5 text-xs`;
 
 export function QueryBuilder({ panel, chart, catalog, attributes, scope, range, onPanel, onChart }: QueryBuilderProps) {
   const entryOf = (name: string | undefined) => catalog.find((m) => m.name === name);

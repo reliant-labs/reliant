@@ -62,6 +62,7 @@ import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 import { hasClient, type ServiceBuild } from "@/services/controlPlane/observability/client";
 import { clientLabel, ClientSummary } from "./Client";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "./ClientFilters";
+import { CONTROL_FIELD } from "../controlStyles";
 
 const features = tableFeatures({
   rowSortingFeature,
@@ -473,8 +474,8 @@ function TraceToolbar({
             aria-invalid={filterError ? true : undefined}
             aria-describedby={filterError ? "obs-trace-query-error" : undefined}
             className={cn(
-              "h-8 w-full rounded-md border bg-surface-sunken pl-8 pr-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              filterError ? "border-danger" : "border-border"
+              `${CONTROL_FIELD} h-8 w-full pl-8 pr-3 font-mono text-sm placeholder:font-sans`,
+              filterError && "border-danger"
             )}
             data-testid="obs-trace-query"
           />
@@ -499,7 +500,7 @@ function TraceToolbar({
         id="obs-min-duration"
         value={minDuration ?? ""}
         onChange={(event) => navigate({ minDuration: event.target.value || undefined }, { replace: true })}
-        className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={`${CONTROL_FIELD} h-8 px-2 text-sm`}
         data-testid="obs-min-duration"
       >
         <option value="">Any duration</option>

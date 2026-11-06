@@ -60,6 +60,7 @@ import { NewDashboardDialog, SaveCopyDialog, envScopeOf } from "./dialogs";
 import { PanelBody } from "./PanelBody";
 import { BUTTON_PRIMARY, INK_LINK, Menu, StarButton } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
+import { toggleTone } from "../../controlStyles";
 
 /** The list's own view: absent is the Overview (when the app has one). */
 export type DashboardsView = "all";
@@ -606,7 +607,7 @@ function updatedOf(d: DashboardSummary): string {
   return at ? formatAgo(at) : "—";
 }
 
-const CHIP = "inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-md border px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const CHIP = "inline-flex h-8 items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function Toolbar({
   search,
@@ -626,10 +627,10 @@ function Toolbar({
   appFilter?: DashboardsAppFilter;
   onClear: () => void;
 }) {
-  const chip = (on: boolean) => cn(CHIP, on ? "border-ink/40 bg-ink/8 text-ink" : "border-border bg-surface text-ink-muted hover:text-ink");
+  const chip = (on: boolean) => cn(CHIP, toggleTone(on));
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="dashboards-toolbar">
-      <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
+      <label className="flex h-8 min-w-72 items-center gap-1.5 rounded-md border border-border-strong bg-surface px-2.5 text-ink-muted focus-within:ring-2 focus-within:ring-ring">
         <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
         <span className="sr-only">Search dashboards</span>
         <input

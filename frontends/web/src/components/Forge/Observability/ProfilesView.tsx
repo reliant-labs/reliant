@@ -25,6 +25,7 @@ import { formatBytes, formatCount, formatDuration } from "./format";
 import { ServiceSelect, shortId } from "./LogsView";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows } from "./ObsStates";
+import { CONTROL_FIELD } from "../controlStyles";
 
 export function ProfilesView({
   scope,
@@ -69,7 +70,7 @@ export function ProfilesView({
           id="obs-profile-type"
           value={type.id}
           onChange={(event) => navigate({ profileType: event.target.value }, { replace: true })}
-          className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
+          className={`${CONTROL_FIELD} h-8 px-2 text-sm touch:h-[44px]`}
           data-testid="obs-profile-type"
         >
           {types.map((candidate) => (

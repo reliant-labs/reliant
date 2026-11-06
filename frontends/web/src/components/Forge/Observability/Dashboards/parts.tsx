@@ -19,11 +19,12 @@ import { cn } from "@/lib/utils";
 
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, ICON_BUTTON, INK_LINK } from "../../Releases/releaseParts";
 import { SOURCE_LABELS } from "./dashboardModel";
+import { SEGMENTED, segmentTone } from "../../controlStyles";
 
 export { BUTTON_PRIMARY, BUTTON_SECONDARY, ICON_BUTTON, INK_LINK };
 
 export const BUTTON_SMALL =
-  "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border-strong bg-surface px-2.5 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 /** A star toggle. The colour is the warning token on purpose: a star is a mark, not a status or an action. */
 export function StarButton({
@@ -99,8 +100,8 @@ export function Segmented<T extends string>({
   disabledReason?: Partial<Record<T, string>>;
 }) {
   return (
-    <span role="group" aria-label={label} className="inline-flex items-center rounded-md border border-border bg-surface p-0.5" data-testid={testId}>
-      <span className="px-1.5 text-xs text-ink-muted" aria-hidden="true">
+    <span role="group" aria-label={label} className={SEGMENTED} data-testid={testId}>
+      <span className="mr-0.5 border-r border-border px-1.5 text-xs font-medium text-ink-muted" aria-hidden="true">
         {label}
       </span>
       {options.map((option) => {
@@ -116,7 +117,7 @@ export function Segmented<T extends string>({
             data-value={option.value}
             className={cn(
               "h-6 rounded px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-              value === option.value ? "bg-ink/8 font-medium text-ink" : "text-ink-muted hover:text-ink"
+              segmentTone(value === option.value)
             )}
           >
             {option.label}
@@ -142,7 +143,7 @@ export function VariableSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <label htmlFor={id} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-surface pl-2 text-xs focus-within:ring-2 focus-within:ring-ring">
+    <label htmlFor={id} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-strong bg-surface pl-2 text-xs focus-within:ring-2 focus-within:ring-ring">
       <span className="text-ink-muted">{label}</span>
       <span className="relative inline-flex items-center">
         <select

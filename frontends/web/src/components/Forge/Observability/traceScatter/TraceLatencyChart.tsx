@@ -55,6 +55,7 @@ import {
   type TracePoint,
   type TraceRegion,
 } from "./traceScatterModel";
+import { SEGMENTED, segmentTone } from "../../controlStyles";
 
 /** Plot geometry, CSS pixels. The scatter and histogram share TOP and PLOT_HEIGHT, so their latency axes line up. */
 const TOP = 10;
@@ -104,7 +105,7 @@ export function TraceLatencyChart(props: TraceLatencyChartProps) {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Legend />
-          <div role="group" aria-label="Latency axis" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
+          <div role="group" aria-label="Latency axis" className={SEGMENTED}>
             {(["linear", "log"] as const).map((s) => (
               <button
                 key={s}
@@ -114,7 +115,7 @@ export function TraceLatencyChart(props: TraceLatencyChartProps) {
                 data-testid={`obs-trace-latency-scale-${s}`}
                 className={cn(
                   "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:min-h-[44px]",
-                  s === scale ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+                  segmentTone(s === scale)
                 )}
               >
                 {s === "linear" ? "Linear" : "Log"}

@@ -27,7 +27,7 @@ import { shortVersion, type ChecksSummary, type EnvCell, type ReleaseEnv, type R
 const BUTTON =
   "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50";
 export const BUTTON_PRIMARY = `${BUTTON} border border-accent bg-accent text-on-accent hover:bg-accent-hover`;
-export const BUTTON_SECONDARY = `${BUTTON} border border-border bg-surface text-ink hover:bg-ink/5`;
+export const BUTTON_SECONDARY = `${BUTTON} border border-border-strong bg-surface text-ink hover:bg-ink/5`;
 /**
  * A link in running text: ink with a quiet underline, never the accent (
  * the accent marks the primary action, focus and selection only). `no-color`
