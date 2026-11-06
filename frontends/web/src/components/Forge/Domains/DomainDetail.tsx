@@ -36,6 +36,7 @@ import {
   DOMAIN_STATE_EXPLANATIONS,
   DOMAIN_STATE_NEXT_STEPS,
   bindingSummary,
+  domainIsStuck,
   type ForgeDomain,
 } from "@/services/forge/domains";
 
@@ -99,7 +100,7 @@ export function DomainDetail({
         >
           <span className="flex items-center gap-1.5 text-xs font-medium text-danger-ink">
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-            What went wrong
+            {domainIsStuck(domain) ? "Stuck" : "What went wrong"}
           </span>
           {/* The checker's own words. See the header comment. */}
           <p className="break-words text-xs text-danger-ink">{domain.lastError}</p>

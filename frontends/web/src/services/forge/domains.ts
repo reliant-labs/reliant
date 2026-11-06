@@ -211,7 +211,7 @@ export const DOMAIN_STATE_EXPLANATIONS: Record<DomainState, string> = {
   verifying:
     "The DNS resolves to Reliant, and we are confirming you own the domain by reading the TXT record.",
   issuing:
-    "Ownership is confirmed. A TLS certificate is being obtained from Let's Encrypt.",
+    "Ownership is confirmed. A TLS certificate is being issued for this hostname; it goes live on its own once it is.",
   live: "Serving over HTTPS with a valid certificate.",
   failed: "The last attempt did not succeed. This is retryable.",
   conflict:
@@ -229,7 +229,8 @@ export const DOMAIN_STATE_NEXT_STEPS: Record<DomainState, string> = {
     "Add these records at your DNS provider. We check automatically, every few minutes — you do not need to stay on this page.",
   verifying:
     "Nothing to do. Keep the records published; they are re-checked on every pass.",
-  issuing: "Nothing to do. This usually finishes within a minute or two.",
+  issuing:
+    "Nothing to do. Issuing a certificate usually takes 15–60 minutes. Until then, visitors see a \"being set up\" page.",
   live: "Keep the records published. Removing them fails the next check and stops the domain serving.",
   failed: "Fix what the error describes, then check again.",
   conflict:
@@ -248,6 +249,48 @@ export const DOMAIN_STATE_NEXT_STEPS: Record<DomainState, string> = {
  */
 export function domainIsConverging(state: DomainState): boolean {
   return state === "pending-dns" || state === "verifying" || state === "issuing";
+}
+
+/** How long issuing a certificate usually takes, as the console says it. */
+export const ISSUING_ETA = "usually 15–60 min";
+
+/**
+ * The one line a domain's ROW says under its badge: where it is in setup, or
+ * why it is stuck. Null when the badge already says everything.
+ *
+ * `last_error` on a domain that is past DNS (issuing, or live with a rebind
+ * that will not publish) means the platform is stuck on it, and the row says
+ * so in those words, quoting the server verbatim (see DomainDetail). On a
+ * domain still waiting on DNS it is the checker's note about the tenant's
+ * records — the normal middle of setup, so it is shown without alarm.
+ */
+export interface DomainStatusLine {
+  tone: "muted" | "danger";
+  text: string;
+}
+
+export function domainStatusLine(domain: Pick<ForgeDomain, "state" | "lastError">): DomainStatusLine | null {
+  const error = domain.lastError.trim();
+  switch (domain.state) {
+    case "issuing":
+      return error
+        ? { tone: "danger", text: `Stuck: ${error}` }
+        : { tone: "muted", text: `Issuing certificate — ${ISSUING_ETA}` };
+    case "live":
+      return error ? { tone: "danger", text: `Stuck: ${error}` } : null;
+    case "failed":
+      return error ? { tone: "danger", text: error } : null;
+    case "pending-dns":
+    case "verifying":
+      return error ? { tone: "muted", text: error } : null;
+    default:
+      return null;
+  }
+}
+
+/** Whether a domain's last_error means the PLATFORM is stuck on it (see domainStatusLine). */
+export function domainIsStuck(domain: Pick<ForgeDomain, "state" | "lastError">): boolean {
+  return (domain.state === "issuing" || domain.state === "live") && domain.lastError.trim() !== "";
 }
 
 /** One line: where this domain points. */
