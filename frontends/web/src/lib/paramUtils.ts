@@ -68,6 +68,9 @@ export function nestChangedParams(
     ),
     groupNames
   );
+  for (const group of groupsTouched) {
+    if (!(group in wholeGroups)) wholeGroups[group] = null;
+  }
   return { ...patch, ...wholeGroups };
 }
 
@@ -188,14 +191,27 @@ export function adoptServerParams(
   return { params, synced: baseline };
 }
 
-/** The keys of `local` that differ from the baseline: what a push would carry. */
+/** Apply an acknowledged patch without keeping deletion tombstones in the baseline. */
+export function applyParamPatch(
+  baseline: Record<string, unknown>,
+  patch: Record<string, unknown>
+): Record<string, unknown> {
+  const next = { ...baseline };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) delete next[key];
+    else next[key] = value;
+  }
+  return next;
+}
+
+/** Changed keys, including explicit null tombstones for removed overrides. */
 export function unsyncedParams(
   local: Record<string, unknown>,
   synced: Record<string, unknown>
 ): Record<string, unknown> {
   const changed: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(local)) {
-    if (!paramValuesEqual(synced[key], value)) changed[key] = value;
+  for (const key of new Set([...Object.keys(local), ...Object.keys(synced)])) {
+    if (!paramValuesEqual(synced[key], local[key])) changed[key] = local[key] ?? null;
   }
   return changed;
 }
