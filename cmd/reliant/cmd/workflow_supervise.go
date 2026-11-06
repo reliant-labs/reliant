@@ -1187,24 +1187,6 @@ func truncate(s string, n int) string {
 	return s[:n-1] + "…"
 }
 
-// durationMs computes elapsed milliseconds between two RFC3339 timestamps,
-// returning 0 when either is missing or unparseable.
-func durationMs(start, end string) int64 {
-	if start == "" || end == "" {
-		return 0
-	}
-	s, err1 := time.Parse(time.RFC3339, start)
-	e, err2 := time.Parse(time.RFC3339, end)
-	if err1 != nil || err2 != nil {
-		return 0
-	}
-	d := e.Sub(s).Milliseconds()
-	if d < 0 {
-		return 0
-	}
-	return d
-}
-
 func humanDuration(ms int64) string {
 	d := time.Duration(ms) * time.Millisecond
 	if d < time.Minute {

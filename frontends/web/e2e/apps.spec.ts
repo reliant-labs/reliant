@@ -88,6 +88,9 @@ test.describe('Apps', () => {
     test("links to the app's live URLs", async ({ page }) => {
       await mockAppsBackend(page);
       await page.goto(`/m/chats/${DEPLOY_CHAT.id}`);
+      // The simplified thread folds the turn's tool work into one line; the
+      // card is in the shell call it folds.
+      await page.getByRole('button', { name: /^Worked for/ }).click({ timeout: 15_000 });
       const card = page.getByTestId('deployed-app-card');
       await expect(card).toBeVisible({ timeout: 15_000 });
       await expect(card).toHaveAttribute('data-env', 'prod');

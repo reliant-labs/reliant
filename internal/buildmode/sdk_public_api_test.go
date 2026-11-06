@@ -558,7 +558,8 @@ func TestGeneratedTreeMatchesThePublicAPI(t *testing.T) {
 func TestSDKHasOneRegistrationOfEachPublicProto(t *testing.T) {
 	t.Parallel()
 
-	var viaApp *reliantv1.Run = &sdkv1.Run{Id: "x"}
+	// A return, not a conversion: it compiles only when the two are one type.
+	viaApp := func() *reliantv1.Run { return &sdkv1.Run{Id: "x"} }()
 	if got := reflect.TypeOf(viaApp).Elem().PkgPath(); got != sdkPkgPath {
 		t.Fatalf("reliantv1.Run lives in %q, want %q: the app has its own copy", got, sdkPkgPath)
 	}

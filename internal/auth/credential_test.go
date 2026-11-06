@@ -2,11 +2,11 @@ package auth
 
 import (
 	"context"
-	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 

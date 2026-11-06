@@ -33,9 +33,9 @@ const (
 	cpRemote = "git@github.com:reliant-labs/control-plane.git"
 )
 
-// notConnected is what a pinned command to a machine with no NATS responder
+// errNotConnected is what a pinned command to a machine with no NATS responder
 // fails with.
-var notConnected = errors.New("daemon command forge.topology failed: unavailable: no daemon connected for user")
+var errNotConnected = errors.New("daemon command forge.topology failed: unavailable: no daemon connected for user")
 
 type fallbackProject struct {
 	id        string
@@ -113,7 +113,7 @@ func fallbackRepo(projects ...fallbackProject) *MockRepository {
 func asleep(ids ...string) map[string]error {
 	out := map[string]error{}
 	for _, id := range ids {
-		out[id] = notConnected
+		out[id] = errNotConnected
 	}
 	return out
 }
