@@ -312,12 +312,18 @@ func enableUndoContext(ctx context.Context) (context.Context, context.CancelFunc
 // revert failed too: the trigger is running, whatever the write's error says.
 type leftEnabledError struct {
 	cause, revert error
+	// settings is an update whose previous settings could not be put back,
+	// rather than an enable that could not be switched back off.
+	settings bool
 }
 
 func (e *leftEnabledError) Error() string { return e.cause.Error() }
 func (e *leftEnabledError) Unwrap() error { return e.cause }
 
 func (e *leftEnabledError) message() string {
+	if e.settings {
+		return "Saving failed (" + connectMessage(e.cause) + ") and this trigger's previous settings could not be put back: " + connectMessage(e.revert) + " It is enabled; check its settings, or disable it from Automations if it should not run."
+	}
 	return "Enabling failed (" + connectMessage(e.cause) + ") but the trigger is enabled and could not be switched back off: " + connectMessage(e.revert) + " Disable it from Automations if it should not run."
 }
 
@@ -383,6 +389,13 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 		undoCtx, cancel := enableUndoContext(ctx)
 		defer cancel()
 		if revertErr := s.restoreActivation(undoCtx, &prev); revertErr != nil {
+			// The restore can fail after it wrote, or before: the row may hold
+			// either settings, and is running if it is on.
+			if cur, getErr := s.deps.Repo.GetTrigger(undoCtx, prev.ID); getErr != nil || cur.Enabled {
+				logging.ErrorContext(ctx, "could not restore a trigger whose update failed; it is still running",
+					"trigger_id", prev.ID, "error", err, "revert_error", revertErr)
+				return &leftEnabledError{cause: err, revert: revertErr, settings: true}
+			}
 			logging.WarnContext(ctx, "restoring a trigger whose update failed did not complete",
 				"trigger_id", prev.ID, "error", err, "revert_error", revertErr)
 		}
