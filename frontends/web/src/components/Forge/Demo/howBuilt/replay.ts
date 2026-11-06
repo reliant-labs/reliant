@@ -39,7 +39,16 @@ export type ReplayAction =
   | { type: "step" }
   | { type: "restart" };
 
-export const initialReplay = (speed: Speed = 2): ReplayState => ({ step: 0, shown: 0, playing: false, speed });
+/** The speed it starts at: brisk, about 15 s for the whole run. */
+export const DEFAULT_SPEED: Speed = 4;
+
+export const initialReplay = (speed: Speed = DEFAULT_SPEED): ReplayState => ({ step: 0, shown: 0, playing: false, speed });
+
+/** The end of the run, every step on screen, paused: what a reader who asked for reduced motion sees first. */
+export function finalReplay(cast: ScaffoldCast, speed: Speed = DEFAULT_SPEED): ReplayState {
+  const last = cast.steps.length - 1;
+  return { step: last, shown: eventCount(cast.steps[last]), playing: false, speed };
+}
 
 /** How many events a step has, for `shown`: an edit step counts as one. */
 export function eventCount(step: CastStep): number {

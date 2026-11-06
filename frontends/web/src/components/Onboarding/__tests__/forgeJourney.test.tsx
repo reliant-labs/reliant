@@ -79,30 +79,30 @@ describe("the forge journey", () => {
     expect(forgeJourney.shells).toBeUndefined();
   });
 
-  it("is ten steps or fewer on the demo host: how it was built in place of fg-instrumented, no profile or on-call; across and inside services, and what an agent reads", () => {
+  it("is ten steps or fewer on the demo host: no profile, on-call or agent card; across and inside services; how it was built last, before the end card", () => {
     resetShellForTests("demo");
     expect(active()).toEqual([
       "fg-console",
-      "fg-built",
+      "fg-instrumented",
       "fg-trace",
       "fg-hops",
       "fg-inside",
       "fg-logs",
       "fg-issue",
-      "fg-agent",
       "fg-ask",
+      "fg-built",
       "fg-done",
     ]);
     expect(active().length).toBeLessThanOrEqual(10);
   });
 
-  it("is every step on the demo host with DEMO_TOUR=full, the graph included, fg-built in place of fg-instrumented", () => {
+  it("is every step on the demo host with DEMO_TOUR=full, the graph and the agent card included", () => {
     resetShellForTests("demo");
     setRuntimeConfig({ DEMO_TOUR: "full" });
-    expect(active()).toEqual(forgeJourney.steps.map((s) => s.id).filter((id) => id !== "fg-instrumented"));
+    expect(active()).toEqual(forgeJourney.steps.map((s) => s.id));
     expect(active()).toEqual([
       "fg-console",
-      "fg-built",
+      "fg-instrumented",
       "fg-trace",
       "fg-hops",
       "fg-inside",
@@ -113,6 +113,7 @@ describe("the forge journey", () => {
       "fg-oncall",
       "fg-agent",
       "fg-ask",
+      "fg-built",
       "fg-done",
     ]);
   });
@@ -126,21 +127,23 @@ describe("the forge journey", () => {
     expect(step("fg-done").target).toBeUndefined();
   });
 
-  it("opens How this app was built at fg-built, on the replay, and closes it at every other step", () => {
-    expect(openSearch("fg-built")).toMatchObject({ section: "built" });
-    expect(step("fg-built").target).toBe("[data-testid='scaffold-replay']");
-    expect(conditionsOf(step("fg-built"))).toEqual([]);
-    for (const s of forgeJourney.steps.filter((candidate) => candidate.route && candidate.id !== "fg-built")) {
+  it("shows How this app was built at fg-built as a wide modal card with no spotlight, and closes the page section at every step", () => {
+    const built = step("fg-built");
+    // No target: the engine draws a centred card, no highlight cutout; the card holds the player.
+    expect(built.target).toBeUndefined();
+    expect(built.targets).toBeUndefined();
+    expect(built.card).toEqual({ wide: true, modal: true });
+    expect(conditionsOf(built)).toEqual([]);
+    for (const s of forgeJourney.steps.filter((candidate) => candidate.route)) {
       const search = openSearch(s.id);
       expect("section" in search && search.section === undefined, s.id).toBe(true);
     }
-    // Shown on the demo host only, where it replaces fg-instrumented.
+    // The demo host only, and the last step before the end card.
     resetShellForTests("reliant");
-    expect(step("fg-built").isAvailable?.()).toBe(false);
-    expect(step("fg-instrumented").isAvailable?.()).toBe(true);
+    expect(built.isAvailable?.()).toBe(false);
     resetShellForTests("demo");
-    expect(step("fg-built").isAvailable?.()).toBe(true);
-    expect(step("fg-instrumented").isAvailable?.()).toBe(false);
+    expect(built.isAvailable?.()).toBe(true);
+    expect(active().slice(-2)).toEqual(["fg-built", "fg-done"]);
   });
 
   it("finishes on forge's Apps in Reliant and the project picker in the forge shell", () => {

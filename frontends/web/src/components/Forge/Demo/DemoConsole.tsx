@@ -51,6 +51,7 @@ import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadO
 import { createDemoApi } from "./demoData/demoApi";
 import { DemoBanner } from "./DemoBanner";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
+import { HowBuiltLink } from "./howBuilt/HowBuiltLink";
 
 // The recorded forge run and its fixtures: a chunk of their own, loaded when the section opens.
 const HowThisAppWasBuilt = lazy(() => import("./howBuilt/HowThisAppWasBuilt"));
@@ -122,6 +123,12 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
   const leaveBuilt = useCallback(() => {
     void navigate({ to: ".", search: ((prev: Record<string, unknown>) => ({ ...prev, section: undefined })) as never } as never);
   }, [navigate]);
+  const openBuilt = useCallback(() => {
+    void navigate({
+      to: ".",
+      search: ((prev: Record<string, unknown>) => ({ ...prev, section: DEMO_SECTION_BUILT, trace: undefined, span: undefined, issue: undefined })) as never,
+    } as never);
+  }, [navigate]);
 
   return (
     <AskAgentModeProvider mode="handoff" cli={shell === "forge" ? "forge" : "reliant forge"} demo>
@@ -162,6 +169,8 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                       {/* One compact row; the top bar's scope control says which environments. */}
                       <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
                       <ObservabilityPanel place={PLACE} search={{ ...search, view }} navigate={navigateObs} />
+                      {/* Last on the page, after the console's views. */}
+                      <HowBuiltLink onOpen={openBuilt} />
                     </>
                   )}
                 </div>

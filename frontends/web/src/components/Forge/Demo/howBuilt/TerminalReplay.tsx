@@ -5,6 +5,10 @@
  * pause, speed, Step (finish this command, or show the whole next one),
  * Restart, and a Copy button on every command and every proto you write.
  *
+ * It plays once by itself, at 4×, when it first scrolls into view
+ * (IntersectionObserver), then offers Replay. With prefers-reduced-motion it
+ * never animates on its own: it opens on the finished run, with Play.
+ *
  * Written here rather than adding asciinema-player: the cast is ours, its
  * output is plain text (the recorder strips colour), and all it needs is a
  * timer over replay.ts. A standard .cast for asciinema is one call away
@@ -19,23 +23,63 @@ import Button from "@/components/forge-ui/button";
 import { cn } from "@/lib/utils";
 
 import { promptOf, type CastStep, type ScaffoldCast } from "./fixtures";
-import { delayToNext, eventCount, formatSeconds, initialReplay, isComplete, outputOf, replayReducer, SPEEDS, type ReplayState } from "./replay";
+import { delayToNext, eventCount, finalReplay, formatSeconds, initialReplay, isComplete, outputOf, replayReducer, SPEEDS, type ReplayState } from "./replay";
 
 export interface TerminalReplayProps {
   cast: ScaffoldCast;
-  /** Start playing on mount. Default false: the visitor presses Play. */
+  /**
+   * Play once by itself when the player first scrolls into view (default
+   * true). Never for a reader who asked for reduced motion: they get the
+   * finished run and a Play button.
+   */
   autoPlay?: boolean;
   className?: string;
 }
 
-export function TerminalReplay({ cast, autoPlay = false, className }: TerminalReplayProps) {
+/** How much of the player must be on screen before it starts by itself. */
+const VISIBLE = 0.4;
+
+function prefersReducedMotion(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+}
+
+export function TerminalReplay({ cast, autoPlay = true, className }: TerminalReplayProps) {
+  const [reduced] = useState(prefersReducedMotion);
   const [state, dispatch] = useReducer(
     (current: ReplayState, action: Parameters<typeof replayReducer>[2]) => replayReducer(cast, current, action),
     undefined,
-    () => ({ ...initialReplay(), playing: autoPlay })
+    () => (reduced ? finalReplay(cast) : initialReplay())
   );
+  // Whether it has played (by itself or on request): the finished run then offers Replay, not Play.
+  const [played, setPlayed] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
   const screen = useRef<HTMLDivElement>(null);
   const done = isComplete(cast, state);
+
+  // Once, when it first comes into view. A pause or a scroll away and back never restarts it.
+  useEffect(() => {
+    if (!autoPlay || reduced) return;
+    const start = () => {
+      setPlayed(true);
+      dispatch({ type: "play" });
+    };
+    const el = root.current;
+    if (!el || typeof IntersectionObserver === "undefined") {
+      start();
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          observer.disconnect();
+          start();
+        }
+      },
+      { threshold: VISIBLE }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [autoPlay, reduced]);
 
   // One timer at a time: the wait before the next event or step, at this speed.
   useEffect(() => {
@@ -56,16 +100,19 @@ export function TerminalReplay({ cast, autoPlay = false, className }: TerminalRe
   }, [state.step, state.shown]);
 
   return (
-    <div className={cn("overflow-hidden rounded-lg border border-border", className)} data-testid="scaffold-replay">
+    <div ref={root} className={cn("overflow-hidden rounded-lg border border-border", className)} data-testid="scaffold-replay" data-reduced-motion={reduced || undefined}>
       <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-muted px-3 py-2">
         <Button
           size="sm"
           variant="primary"
-          leftIcon={state.playing ? <Pause /> : <Play />}
-          onClick={() => dispatch({ type: state.playing ? "pause" : "play" })}
+          leftIcon={state.playing ? <Pause /> : done && played ? <RotateCcw /> : <Play />}
+          onClick={() => {
+            if (!state.playing) setPlayed(true);
+            dispatch({ type: state.playing ? "pause" : "play" });
+          }}
           data-testid="replay-toggle"
         >
-          {state.playing ? "Pause" : done ? "Play again" : state.step === 0 && state.shown === 0 ? "Play" : "Resume"}
+          {state.playing ? "Pause" : done ? (played ? "Replay" : "Play") : state.step === 0 && state.shown === 0 ? "Play" : "Resume"}
         </Button>
         <Button size="sm" variant="outline" leftIcon={<SkipForward />} onClick={() => dispatch({ type: "step" })} disabled={done} data-testid="replay-step">
           Step

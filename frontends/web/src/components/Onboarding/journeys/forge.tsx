@@ -9,12 +9,12 @@
  *
  * The public demo host (demo.reliantlabs.io, lib/shell.ts `demo`) starts it on
  * every visit, so it runs a SHORTER, different cut there (DEMO_TOUR, default
- * `short`, at most ten steps): how the app was built (fg-built, the recorded
- * forge run, in place of fg-instrumented), no profile or on-call step, and
- * instead the instrumentation forge writes between services (fg-hops) and
- * inside one (fg-inside), and what a coding agent reads (fg-agent).
- * DEMO_TOUR=full adds the service graph (fg-graph) and puts the profile and
- * on-call steps back.
+ * `short`, at most ten steps): no profile or on-call step, and instead the
+ * instrumentation forge writes between services (fg-hops) and inside one
+ * (fg-inside), and last, before the end card, how the app was built (fg-built:
+ * the recorded forge run, in a modal card of its own). DEMO_TOUR=full adds the
+ * service graph (fg-graph) and what a coding agent reads (fg-agent), and puts
+ * the profile and on-call steps back.
  *
  * It runs unchanged in both shells. Nothing here needs a daemon, a chat or a
  * signed-in user: every step's target is fixture data, every required action
@@ -26,11 +26,13 @@
  * chunk. A test pins them to the fixture's.
  */
 
-import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "../../Forge/Demo/demoPath";
+import { lazy, Suspense } from "react";
+
+import { FORGE_DEMO_PATH } from "../../Forge/Demo/demoPath";
 import { trackEvent } from "../../../lib/analytics";
 import { isForgeUIEnabled } from "../../../lib/forgeFeature";
 import { isDemoShell } from "../../../lib/shell";
-import { notOnDemo, notOnShortDemo, onDemo, onDemoFull } from "../../../lib/demoTour";
+import { notOnShortDemo, onDemo, onDemoFull } from "../../../lib/demoTour";
 import { DemoCta } from "../../Forge/Demo/DemoCta";
 import type { Journey, JourneyRoute, RouteTarget } from "../types";
 import { TourCommands } from "./TourCommand";
@@ -43,6 +45,9 @@ export const DEMO_ISSUE_ID = "iss-orders-deadline";
 export const DEMO_INVENTORY_SPAN_ID = "e1";
 /** In that trace: the api's CreateOrder method span, one SELECT, and the worker's consumer span (fg-inside). */
 export const DEMO_INSIDE_SPAN_IDS = { method: "a2", query: "b1", worker: "d1" } as const;
+
+/** fg-built's view: the recorded forge run. Its own chunk, so the fixtures stay out of the main one. */
+const BuiltTourStep = lazy(() => import("../../Forge/Demo/howBuilt/BuiltTourStep"));
 
 const AUTOPILOT_PATH = "/workflows/library/builtin%3A%2F%2Fautopilot-oncall";
 const RELIANT_APP_URL = "https://app.reliantlabs.io";
@@ -143,36 +148,12 @@ export const forgeJourney: Journey = {
       route: demo({ view: "overview", ...CLOSED }),
     },
     {
-      id: "fg-built",
-      title: "How this app was built",
-      description: (
-        <>
-          <p>
-            This app&apos;s code started as one forge command and a few lines of proto. Press Play to watch the real run: forge made the
-            project, then <code>forge scaffold</code> turned each proto message into a migration, an ORM, handlers, React hooks and tests.
-          </p>
-          <p className="mt-2">
-            Nobody added tracing by hand. forge wired OpenTelemetry into the server, its Connect handlers and clients, the database driver
-            and the browser, and wrote the dashboards and alerts. Below the terminal, every file it wrote is counted, and you can follow
-            one entity from its proto to its test.
-          </p>
-        </>
-      ),
-      // The demo host only. It takes the place of fg-instrumented there: the same claim, with the files to back it.
-      isAvailable: onDemo,
-      target: "[data-testid='scaffold-replay']",
-      tooltipPosition: "bottom",
-      route: demo({ view: "overview", section: DEMO_SECTION_BUILT, ...CLOSED }),
-    },
-    {
       id: "fg-instrumented",
       title: "Instrumented from the start",
       description:
         "Nobody added tracing to this app by hand. forge writes the code at every boundary it owns: the Connect handlers and clients, a wrapper around each service package, and the database driver. It also ships helpers that carry a trace across NATS and Temporal. Each of these opens a span and passes the trace on, and every log line gets the trace id. Services also push a CPU profile about once a minute. The rate, errors and latency here come from those spans.",
       target: "[data-testid='obs-overview']",
       route: demo({ view: "overview", ...CLOSED }),
-      // Not on the demo host: fg-built makes the same point there, from the recorded run.
-      isAvailable: notOnDemo,
     },
     {
       id: "fg-trace",
@@ -350,8 +331,9 @@ export const forgeJourney: Journey = {
       title: "What your agent reads",
       description: <WhatYourAgentReads cli="reliant forge" />,
       copyByShell: { forge: { description: <WhatYourAgentReads cli="forge" /> } },
-      // The demo host only: how forge helps the model.
-      isAvailable: onDemo,
+      // The demo host's full tour only (DEMO_TOUR=full): the short tour makes room for fg-built, whose card
+      // already says what forge gives an agent, and fg-ask hands the issue to one.
+      isAvailable: onDemoFull,
     },
     {
       id: "fg-ask",
@@ -373,6 +355,21 @@ export const forgeJourney: Journey = {
       afterAction: "Copy something to try it.",
       actionHint: "Click Ask an agent",
       signal: "ask_agent_opened",
+    },
+    {
+      id: "fg-built",
+      title: "How this app was built",
+      // The recorded forge run as the step's own view: a wide modal card holding the player (no spotlight, the
+      // page behind scroll-locked), so the player can't be scrolled out from under the step. It plays by itself.
+      description: (
+        <Suspense fallback={<p>Loading the recorded run…</p>}>
+          <BuiltTourStep />
+        </Suspense>
+      ),
+      card: { wide: true, modal: true },
+      // The demo host only: the last thing before the end card.
+      isAvailable: onDemo,
+      route: demo({ view: "overview", ...CLOSED }),
     },
     {
       id: "fg-done",

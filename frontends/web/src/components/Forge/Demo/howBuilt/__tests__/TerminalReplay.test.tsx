@@ -99,7 +99,7 @@ describe("<TerminalReplay>", () => {
   const advance = (ms: number) => act(() => void vi.advanceTimersByTime(ms));
 
   it("plays at its speed, and pauses", () => {
-    render(<TerminalReplay cast={CAST} />);
+    render(<TerminalReplay cast={CAST} autoPlay={false} />);
     expect(screenText()).toContain("~ $ forge project new shop");
     expect(screenText()).not.toContain("one");
     fireEvent.click(screen.getByTestId("replay-speed-1"));
@@ -115,7 +115,7 @@ describe("<TerminalReplay>", () => {
   });
 
   it("steps through, command by command, and shows how long each really took", () => {
-    render(<TerminalReplay cast={CAST} />);
+    render(<TerminalReplay cast={CAST} autoPlay={false} />);
     fireEvent.click(screen.getByTestId("replay-step"));
     expect(screenText()).toContain("one\ntwo");
     expect(screen.getByTestId("replay-step-0")).toHaveTextContent("30s");
@@ -126,13 +126,14 @@ describe("<TerminalReplay>", () => {
     expect(screenText()).toContain("~/shop $ forge scaffold");
     expect(screenText()).toContain("done");
     expect(screen.getByTestId("replay-step")).toBeDisabled();
-    expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Play again");
+    // Stepped to the end, never played: Play (from the top), not Replay.
+    expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Play");
     fireEvent.click(screen.getByTestId("replay-restart"));
     expect(screenText()).not.toContain("one");
   });
 
   it("copies exactly the command, or the proto you write", async () => {
-    render(<TerminalReplay cast={CAST} />);
+    render(<TerminalReplay cast={CAST} autoPlay={false} />);
     await act(async () => {
       fireEvent.click(within(screen.getByTestId("replay-step-0")).getByRole("button", { name: "Copy forge project new shop" }));
     });
@@ -146,19 +147,110 @@ describe("<TerminalReplay>", () => {
     expect(writeText).toHaveBeenLastCalledWith("message A {}\n");
   });
 
+  describe("by itself", () => {
+    /** A stand-in IntersectionObserver the test drives: `show()` reports the player on screen. */
+    let observers: { callback: IntersectionObserverCallback; disconnected: boolean }[];
+    const show = () =>
+      act(() => {
+        for (const o of observers.filter((o) => !o.disconnected)) o.callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver);
+      });
+    const reducedMotion = (reduce: boolean) =>
+      vi.stubGlobal("matchMedia", (query: string) => ({ matches: reduce && query.includes("prefers-reduced-motion"), media: query, addEventListener() {}, removeEventListener() {} }));
+
+    beforeEach(() => {
+      observers = [];
+      vi.stubGlobal(
+        "IntersectionObserver",
+        class {
+          entry: { callback: IntersectionObserverCallback; disconnected: boolean };
+          constructor(callback: IntersectionObserverCallback) {
+            this.entry = { callback, disconnected: false };
+            observers.push(this.entry);
+          }
+          observe() {}
+          disconnect() {
+            this.entry.disconnected = true;
+          }
+        }
+      );
+      reducedMotion(false);
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    const playToEnd = () => {
+      for (let i = 0; i < 40 && screen.getByTestId("replay-toggle").textContent === "Pause"; i++) advance(500);
+    };
+
+    it("starts when it comes into view, at 4×, plays once, then offers Replay", () => {
+      render(<TerminalReplay cast={CAST} />);
+      advance(5_000);
+      // Not on screen yet: nothing played.
+      expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Play");
+      expect(screenText()).not.toContain("one");
+      show();
+      expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Pause");
+      expect(screen.getByTestId("replay-speed-4")).toHaveAttribute("aria-pressed", "true");
+      advance(125); // 0.5 s at 4×
+      expect(screenText()).toContain("one");
+      playToEnd();
+      expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Replay");
+      expect(screenText()).toContain("done");
+      // Once: it watches no more, so scrolling back does not start it again.
+      expect(observers.every((o) => o.disconnected)).toBe(true);
+      advance(10_000);
+      expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Replay");
+      // Replay plays it again from the top.
+      fireEvent.click(screen.getByTestId("replay-toggle"));
+      expect(screenText()).not.toContain("one");
+      expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Pause");
+    });
+
+    it("keeps pause, speed and copy while it plays by itself", async () => {
+      render(<TerminalReplay cast={CAST} />);
+      show();
+      fireEvent.click(screen.getByTestId("replay-speed-1"));
+      advance(500);
+      expect(screenText()).toContain("one");
+      fireEvent.click(screen.getByTestId("replay-toggle"));
+      advance(10_000);
+      expect(screenText()).not.toContain("two");
+      await act(async () => {
+        fireEvent.click(within(screen.getByTestId("replay-step-0")).getByRole("button", { name: "Copy forge project new shop" }));
+      });
+      expect(writeText).toHaveBeenLastCalledWith("forge project new shop");
+    });
+
+    it("with reduced motion: shows the finished run, never animates by itself, and offers Play", () => {
+      reducedMotion(true);
+      render(<TerminalReplay cast={CAST} />);
+      expect(screen.getByTestId("scaffold-replay")).toHaveAttribute("data-reduced-motion", "true");
+      // Every step, in full, at once.
+      expect(screenText()).toContain("one\ntwo");
+      expect(screenText()).toContain("message A {}");
+      expect(screenText()).toContain("done");
+      expect(observers).toHaveLength(0);
+      advance(10_000);
+      expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Play");
+      // Play is the visitor's choice: then it plays from the top.
+      fireEvent.click(screen.getByTestId("replay-toggle"));
+      expect(screenText()).not.toContain("one");
+      expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Pause");
+    });
+  });
+
   it("plays the committed recording to its end", () => {
     const { cast } = scaffoldFixtures();
     render(<TerminalReplay cast={cast} autoPlay />);
     const total = cast.steps.reduce((n, s) => n + (s.kind === "command" ? s.duration : EDIT_HOLD + 0.3), 0);
     // One timer fires per advance (the next is set after the render), so step until it ends; at the
-    // default 2× that takes no more than half the played length.
+    // default 4× that takes no more than a quarter of the played length.
     let elapsed = 0;
-    while (screen.getByTestId("replay-toggle").textContent !== "Play again" && elapsed < total * 1000) {
+    while (screen.getByTestId("replay-toggle").textContent !== "Replay" && elapsed < total * 1000) {
       advance(100);
       elapsed += 100;
     }
-    expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Play again");
-    expect(elapsed).toBeLessThanOrEqual((total / 2) * 1000 + 100 * eventsIn(cast));
+    expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Replay");
+    expect(elapsed).toBeLessThanOrEqual((total / 4) * 1000 + 100 * eventsIn(cast));
     expect(screenText()).toMatch(/All \d+ gating linters passed/);
     expect(screen.getAllByTestId("replay-command").map((el) => el.textContent)).toEqual(
       cast.steps.flatMap((s) => (s.kind === "command" ? [s.command] : []))

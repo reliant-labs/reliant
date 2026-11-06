@@ -12,6 +12,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { CATEGORY_COPY, CHAIN_COPY, NAMED_PATHS } from "../copy";
 import { scaffoldFixtures } from "../fixtures";
+import { BuiltTourStep } from "../BuiltTourStep";
 import { HowThisAppWasBuilt } from "../HowThisAppWasBuilt";
 import { summarize } from "../ScaffoldPanel";
 
@@ -84,6 +85,19 @@ describe("<HowThisAppWasBuilt>", () => {
     render(<HowThisAppWasBuilt onBack={onBack} />);
     fireEvent.click(screen.getByTestId("how-built-back"));
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("<BuiltTourStep> (the tour's card)", () => {
+  it("holds the player and the manifest's totals, and points at the full breakdown", () => {
+    render(<BuiltTourStep />);
+    expect(screen.getByTestId("scaffold-replay")).toBeInTheDocument();
+    const t = manifest.totals;
+    expect(screen.getByTestId("built-tour-totals")).toHaveTextContent(
+      `You write ${n(t.you_wrote_lines)} lines of proto. forge writes ${n(t.forge_lines)} lines across ${n(t.files)} files`
+    );
+    expect(screen.getByTestId("built-tour-totals")).toHaveTextContent("How this app was built");
+    expect(allPaths).toContain("AGENTS.md");
   });
 });
 

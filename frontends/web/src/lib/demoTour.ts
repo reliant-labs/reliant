@@ -23,9 +23,6 @@ export function demoTour(): DemoTour {
 /** On the demo host. */
 export const onDemo = (): boolean => isDemoShell();
 
-/** Everywhere but the demo host: a step a demo-only one replaces there. */
-export const notOnDemo = (): boolean => !isDemoShell();
-
 /** On the demo host with the full tour. */
 export const onDemoFull = (): boolean => isDemoShell() && demoTour() === "full";
 

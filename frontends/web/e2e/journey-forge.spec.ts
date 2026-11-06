@@ -251,12 +251,7 @@ test.describe('the forge journey on the demo host', () => {
     await atDemoStep(page, 1, "A forge app's console");
     await next(page);
 
-    await atDemoStep(page, 2, 'How this app was built');
-    await expect(page).toHaveURL(/section=built/);
-    // The recorded forge run: play it a moment, and the panel counts what it wrote.
-    await page.getByTestId('replay-toggle').click();
-    await expect(page.getByTestId('replay-screen')).toContainText('forge project new shop');
-    await expect(page.getByTestId('scaffold-headline')).toContainText(/You wrote \d+ lines of proto/);
+    await atDemoStep(page, 2, 'Instrumented from the start');
     await next(page);
 
     await atDemoStep(page, 3, 'One request, end to end');
@@ -288,13 +283,22 @@ test.describe('the forge journey on the demo host', () => {
     await expect(page.getByTestId('obs-comment-box')).toHaveAttribute('placeholder', 'Comments are off in the demo.');
     await next(page);
 
-    await atDemoStep(page, 8, 'What your agent reads');
-    await expect(page.getByTestId('tour-commands').first()).toContainText(`forge obs trace ${TRACE_ID} prod`);
-    await next(page);
-
-    await atDemoStep(page, 9, 'Ask an agent about it');
+    await atDemoStep(page, 8, 'Ask an agent about it');
     await page.getByTestId('ask-reliant-actions').getByTestId('ask-agent').click();
     await page.getByRole('dialog', { name: 'Ask an agent' }).getByRole('button', { name: 'Done' }).click();
+    await next(page);
+
+    // Last before the end card: the recorded forge run, in a modal card of its own (no spotlight), the page
+    // behind held still. It plays by itself.
+    await atDemoStep(page, 9, 'How this app was built');
+    const card = page.getByRole('dialog', { name: 'How this app was built' });
+    await expect(card.getByTestId('scaffold-replay')).toBeVisible();
+    await expect(card.getByTestId('replay-toggle')).toHaveText('Pause', LOADED);
+    await expect(card.getByTestId('replay-screen')).toContainText('forge project new shop');
+    await expect(card.getByTestId('built-tour-totals')).toContainText(/You write \d+ lines of proto/);
+    // The step's own card (no target), not a spotlight over the page.
+    await expect(card).toHaveAttribute('data-testid', 'tour-card');
+    expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden');
     await next(page);
 
     await atDemoStep(page, 10, 'Try it on your app');

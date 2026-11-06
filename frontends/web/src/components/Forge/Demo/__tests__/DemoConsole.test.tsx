@@ -118,6 +118,12 @@ describe("the forge demo console", () => {
     fireEvent.click(screen.getByTestId("how-built-back"));
     await waitFor(() => expect(search(router).section).toBeUndefined());
     expect(await screen.findByTestId("obs-overview")).toBeInTheDocument();
+    // It is also last on the page, after the console's view.
+    const link = screen.getByTestId("how-built-link");
+    expect(screen.getByTestId("obs-overview").compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(link);
+    await waitFor(() => expect(search(router).section).toBe("built"));
+    expect(await screen.findByTestId("scaffold-replay")).toBeInTheDocument();
     expectNothingTouched();
   }, 30_000);
 
