@@ -1,7 +1,7 @@
 /**
  * Settings → Providers, account-aware: the account list (desktop and mobile
- * variants), exception-first rows (a healthy account is one line; a limited,
- * nearly limited or signed-out one opens itself), rename / pause / reorder /
+ * variants), collapsed rows (every account is one line until the user opens
+ * it; a limited or signed-out one says why on that line), rename / pause / reorder /
  * remove through ProviderAccountService, and the list-query gate.
  *
  * ProviderAccountService is answered at the transport (test/providerAccountTransport),
@@ -204,22 +204,32 @@ describe("account rows", () => {
     expect(a.getByRole("img", { name: "Weekly 60% used" })).toBeInTheDocument();
   });
 
-  it("opens a limited or signed-out account by itself and says what is wrong in one sentence", () => {
+  it("keeps a limited or signed-out account collapsed, says what is wrong on its line, and opens on click", async () => {
     renderList([alice, bob, carol, dave]);
 
     const b = within(rowFor("bob@work.example"));
-    expect(rowFor("bob@work.example")).toHaveAttribute("data-expanded", "true");
+    expect(rowFor("bob@work.example")).toHaveAttribute("data-expanded", "false");
     expect(b.getByTestId("account-status")).toHaveTextContent(/^Limited: 5-hour cap · back /);
     expect(b.getByTestId("account-plan")).toHaveTextContent("Pro");
-    expect(within(detailFor("bob@work.example")).getByRole("progressbar")).toBeInTheDocument();
+    expect(b.getByTestId("usage-meters")).toBeInTheDocument();
+    expect(() => detailFor("bob@work.example")).toThrow(/not expanded/);
 
     expect(within(rowFor("carol@example.com")).getByTestId("account-status")).toHaveTextContent("Paused");
     expect(rowFor("carol@example.com")).toHaveAttribute("data-expanded", "false");
 
+    // Reconnect is on the collapsed row: no need to open it to sign back in.
     const d = within(rowFor("dave@example.com"));
-    expect(rowFor("dave@example.com")).toHaveAttribute("data-expanded", "true");
+    expect(rowFor("dave@example.com")).toHaveAttribute("data-expanded", "false");
     expect(d.getByTestId("account-status")).toHaveTextContent("Needs sign-in");
     expect(d.getByRole("button", { name: "Reconnect" })).toBeInTheDocument();
+    expect(() => detailFor("dave@example.com")).toThrow(/not expanded/);
+
+    await expand("bob@work.example");
+    expect(rowFor("bob@work.example")).toHaveAttribute("data-expanded", "true");
+    expect(within(detailFor("bob@work.example")).getByRole("progressbar")).toBeInTheDocument();
+
+    await expand("dave@example.com");
+    expect(rowFor("dave@example.com")).toHaveAttribute("data-expanded", "true");
     expect(within(detailFor("dave@example.com")).getByText("The sign-in expired.")).toBeInTheDocument();
   });
 
@@ -245,6 +255,7 @@ describe("account rows", () => {
 
   it("captions usage 'as of N min ago' once it is stale, and not while fresh", async () => {
     renderList([alice, bob]);
+    await expand("bob@work.example");
     expect(within(detailFor("bob@work.example")).getByText("as of 30 min ago")).toBeInTheDocument();
     await expand("alice@example.com");
     expect(within(detailFor("alice@example.com")).queryByText(/^as of /)).not.toBeInTheDocument();
@@ -259,7 +270,7 @@ describe("account rows", () => {
     expect(screen.getByText("Usage unknown")).toBeInTheDocument();
   });
 
-  it("colors bars amber from 80% and red when the window benched the account", () => {
+  it("colors bars amber from 80% and red when the window benched the account", async () => {
     const hot = account({
       id: "h",
       email: "h@x.example",
@@ -270,8 +281,11 @@ describe("account rows", () => {
       ],
     });
     renderList([hot, bob]);
-    // At 80% the account is near its limit, so it opens by itself.
-    expect(rowFor("h@x.example")).toHaveAttribute("data-expanded", "true");
+    // Near its limit at 80%, the account still starts collapsed; its meters carry the tone.
+    expect(rowFor("h@x.example")).toHaveAttribute("data-expanded", "false");
+    expect(rowFor("bob@work.example")).toHaveAttribute("data-expanded", "false");
+    await expand("h@x.example");
+    await expand("bob@work.example");
     const h = within(detailFor("h@x.example")).getAllByRole("progressbar");
     expect(h[0]).toHaveAttribute("data-tone", "ok");
     expect(h[1]).toHaveAttribute("data-tone", "warn");
