@@ -98,13 +98,14 @@ type installRecord struct {
 	// hidden lockfile ("node_modules/pkg", "node_modules/a/node_modules/b"),
 	// without workspace links.
 	npm map[string]bool
-	// pnpm: the packages node_modules/.pnpm/lock.yaml, pnpm's hidden
-	// lockfile, names ("name@version", the version escaped as pnpm names
-	// its virtual-store directories), present only when
-	// node_modules/.modules.yaml is a regular file too. A virtual-store
-	// directory is an installed package only when this names its name and
-	// version: the store's shape alone is something anyone can make.
-	pnpm map[string]bool
+	// pnpm: the virtual-store directory names (node_modules/.pnpm/<id>)
+	// that the package ids node_modules/.pnpm/lock.yaml, pnpm's hidden
+	// lockfile, names map to, each to its package's name; present only
+	// when node_modules/.modules.yaml is a regular file too. A
+	// virtual-store directory is an installed package only when this
+	// names that exact directory for that package: the store's shape
+	// alone is something anyone can make.
+	pnpm map[string]string
 }
 
 // maxInstallRecordBytes bounds the hidden lockfile read; a larger one is no
@@ -140,12 +141,13 @@ func readInstallRecord(dir *os.File) installRecord {
 	return rec
 }
 
-// pnpmLockPackages is the set of "name@version" that a pnpm lockfile names
-// in its packages and snapshots (lockfile v6+: "/name@1.0.0(peer@2.0.0)",
-// "name@1.0.0"), the version escaped as pnpmStoreEscape does. A malformed
-// lockfile names nothing. Older (v5, "/name/1.0.0") keys name nothing either,
-// so their packages keep the never-list's hold.
-func pnpmLockPackages(b []byte) map[string]bool {
+// pnpmLockPackages maps the virtual-store directory name of every package id
+// a pnpm lockfile names in its packages and snapshots (lockfile v6+:
+// "/name@1.0.0(peer@2.0.0)", "name@1.0.0") to the package's name. A
+// malformed lockfile names nothing. Older (v5, "/name/1.0.0") keys, local
+// ("file:") ids and ids whose directory pnpm hashes name nothing either, so
+// their packages keep the never-list's hold.
+func pnpmLockPackages(b []byte) map[string]string {
 	var lock struct {
 		Packages  map[string]yaml.Node `yaml:"packages"`
 		Snapshots map[string]yaml.Node `yaml:"snapshots"`
@@ -153,23 +155,92 @@ func pnpmLockPackages(b []byte) map[string]bool {
 	if yaml.Unmarshal(b, &lock) != nil {
 		return nil
 	}
-	names := map[string]bool{}
+	dirs := map[string]string{}
 	for _, keys := range []map[string]yaml.Node{lock.Packages, lock.Snapshots} {
 		for key := range keys {
-			key = strings.TrimPrefix(key, "/")
-			key, _, _ = strings.Cut(key, "(")
-			at := strings.LastIndex(key, "@")
-			if at <= 0 {
-				continue
+			if name, dir, ok := pnpmStoreDir(key); ok {
+				dirs[dir] = name
 			}
-			version, _, _ := strings.Cut(pnpmStoreEscape(key[at+1:]), "_")
-			if version == "" {
-				continue
-			}
-			names[key[:at]+"@"+version] = true
 		}
 	}
-	return names
+	return dirs
+}
+
+// pnpmMaxStoreDir is the longest virtual-store directory name pnpm writes
+// unhashed (its virtual-store-dir-max-length default).
+const pnpmMaxStoreDir = 120
+
+// pnpmStoreDir is the package name in the lockfile key key and the
+// virtual-store directory pnpm names after it, as pnpm's depPathToFilename
+// does: the id with \/:*?"<>| as "+", and its peer suffix
+// ("(a@1)(b@2(c@3))") with the closing ")" dropped and every "(", ")" and
+// ")(" as "_". A key that is not "<name>@<version>" followed by an optional
+// balanced, non-empty peer suffix, or whose directory pnpm hashes (too long,
+// or not lowercase), is not ok.
+func pnpmStoreDir(key string) (name, dir string, ok bool) {
+	key = strings.TrimPrefix(key, "/")
+	if strings.HasPrefix(key, "file:") {
+		return "", "", false
+	}
+	id, peers := key, ""
+	if i := strings.IndexByte(key, '('); i >= 0 {
+		id, peers = key[:i], key[i:]
+	}
+	at := -1
+	if len(id) > 1 {
+		at = strings.IndexByte(id[1:], '@') + 1
+	}
+	if at <= 0 || at == len(id)-1 || strings.ContainsRune(id, ')') {
+		return "", "", false
+	}
+	if !pnpmPeersWellFormed(peers) {
+		return "", "", false
+	}
+	var b strings.Builder
+	b.WriteString(pnpmStoreEscape(id))
+	peers = strings.TrimSuffix(pnpmStoreEscape(peers), ")")
+	for i := 0; i < len(peers); i++ {
+		switch {
+		case peers[i] == ')' && i+1 < len(peers) && peers[i+1] == '(':
+			b.WriteByte('_')
+			i++
+		case peers[i] == '(' || peers[i] == ')':
+			b.WriteByte('_')
+		default:
+			b.WriteByte(peers[i])
+		}
+	}
+	dir = b.String()
+	if len(dir) > pnpmMaxStoreDir || dir != strings.ToLower(dir) {
+		return "", "", false
+	}
+	return id[:at], dir, true
+}
+
+// pnpmPeersWellFormed reports whether peers is empty or a sequence of
+// balanced groups "(peer@version...)", each naming something: nothing
+// outside the groups, and no empty group.
+func pnpmPeersWellFormed(peers string) bool {
+	depth := 0
+	for i := 0; i < len(peers); i++ {
+		switch peers[i] {
+		case '(':
+			if i+1 < len(peers) && (peers[i+1] == ')' || peers[i+1] == '(') {
+				return false
+			}
+			depth++
+		case ')':
+			if depth == 0 {
+				return false
+			}
+			depth--
+		default:
+			if depth == 0 {
+				return false
+			}
+		}
+	}
+	return depth == 0
 }
 
 // pnpmStoreEscape replaces the characters pnpm replaces with "+" when it
@@ -268,18 +339,14 @@ func (t *retirementTree) installedPackage(rel string, children []os.DirEntry, re
 	if rec.npm[strings.Join(under, "/")] {
 		return true
 	}
-	// pnpm: node_modules/.pnpm/<id>/node_modules/<name>, where <id> is the
-	// package's own name ("/" as "+") at a version (and, after "_", its peer
-	// suffix), and pnpm's lockfile names that name at that version.
+	// pnpm: node_modules/.pnpm/<dir>/node_modules/<name>, where <dir> is
+	// exactly the directory pnpm names after a package id its lockfile
+	// names, and that id is of the package <name>.
 	if len(under) != 4+len(strings.Split(name, "/")) || under[1] != ".pnpm" || under[3] != "node_modules" {
 		return false
 	}
-	rest, ok := strings.CutPrefix(under[2], strings.ReplaceAll(name, "/", "+")+"@")
-	if !ok {
-		return false
-	}
-	version, _, _ := strings.Cut(rest, "_")
-	return version != "" && rec.pnpm[name+"@"+version]
+	pkg, ok := rec.pnpm[under[2]]
+	return ok && pkg == name
 }
 
 func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEntry, int64, time.Time, error) {

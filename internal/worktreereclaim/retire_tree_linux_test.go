@@ -137,6 +137,13 @@ func TestRetirementTreeInstalledPackageContent(t *testing.T) {
 		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", []string{"lib@1.0.0"}, nil},
 		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/.env", []string{}, nil},
 		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", []string{"mine@2.0.0", "mine@1.0.0-beta"}, nil},
+		// The lockfile names the package and version, but not the exact
+		// id the store directory is named after: a suffix it does not
+		// name, another peer set, or a malformed peer suffix.
+		{"node_modules/.pnpm/mine@1.0.0_evil/node_modules/mine/data/only-copy.csv", []string{"mine@1.0.0"}, nil},
+		{"node_modules/.pnpm/mine@1.0.0_react@18.2.0/node_modules/mine/data/only-copy.csv", []string{"mine@1.0.0", "mine@1.0.0(react@17.0.0)"}, nil},
+		{"node_modules/.pnpm/mine@1.0.0_react@18.2.0/node_modules/mine/data/only-copy.csv", []string{"mine@1.0.0(react@18.2.0", "mine@1.0.0(react@18.2.0)x"}, nil},
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", []string{"mine@1.0.0_evil"}, nil},
 	} {
 		t.Run("holds/"+hold.rel, func(t *testing.T) {
 			root := retirementFixture(t)
@@ -144,7 +151,7 @@ func TestRetirementTreeInstalledPackageContent(t *testing.T) {
 				recordInstall(t, filepath.Join(root, "node_modules"), hold.pnpm, hold.npm...)
 			}
 			write(t, filepath.Join(root, "node_modules/lib/package.json"), `{"name":"lib"}`)
-			for _, dir := range []string{"node_modules/mine", "node_modules/.pnpm/mine@1.0.0/node_modules/mine", "node_modules/.pnpm/other@1.0.0/node_modules/mine"} {
+			for _, dir := range []string{"node_modules/mine", "node_modules/.pnpm/mine@1.0.0/node_modules/mine", "node_modules/.pnpm/other@1.0.0/node_modules/mine", "node_modules/.pnpm/mine@1.0.0_evil/node_modules/mine", "node_modules/.pnpm/mine@1.0.0_react@18.2.0/node_modules/mine"} {
 				if strings.HasPrefix(hold.rel, dir+"/") {
 					write(t, filepath.Join(root, dir, "package.json"), `{"name":"mine"}`)
 				}
@@ -341,5 +348,34 @@ func TestRegenerableTreeRemovesTheDirectoryAndHoldsLikeRetirement(t *testing.T) 
 				t.Fatal("held content authorized")
 			}
 		})
+	}
+}
+
+// pnpmStoreDir names a lockfile key's virtual-store directory as pnpm does,
+// and refuses keys that are not a package id with a well-formed peer suffix
+// or whose directory pnpm hashes.
+func TestPnpmStoreDir(t *testing.T) {
+	for _, c := range []struct{ key, name, dir string }{
+		{"mine@1.0.0", "mine", "mine@1.0.0"},
+		{"/mine@1.0.0", "mine", "mine@1.0.0"},
+		{"@scope/lib@1.0.0", "@scope/lib", "@scope+lib@1.0.0"},
+		{"react-dom@18.2.0(react@18.2.0)", "react-dom", "react-dom@18.2.0_react@18.2.0"},
+		{"a@1.0.0(@types/react@18.0.0)(react@18.2.0)", "a", "a@1.0.0_@types+react@18.0.0_react@18.2.0"},
+		{"a@1.0.0(b@2.0.0(c@3.0.0))(c@3.0.0)", "a", "a@1.0.0_b@2.0.0_c@3.0.0__c@3.0.0"},
+		{"mine@1.0.0_evil", "mine", "mine@1.0.0_evil"},
+	} {
+		name, dir, ok := pnpmStoreDir(c.key)
+		if !ok || name != c.name || dir != c.dir {
+			t.Errorf("pnpmStoreDir(%q) = %q, %q, %v; want %q, %q", c.key, name, dir, ok, c.name, c.dir)
+		}
+	}
+	for _, key := range []string{
+		"", "mine", "@scope/lib", "mine@", "/mine/1.0.0", "file:../mine",
+		"mine@1.0.0(react@18.2.0", "mine@1.0.0(react@18.2.0)x", "mine@1.0.0()", "mine@1.0.0)(",
+		"Mine@1.0.0", "mine@1.0.0(" + strings.Repeat("p", 120) + "@1.0.0)",
+	} {
+		if name, dir, ok := pnpmStoreDir(key); ok {
+			t.Errorf("pnpmStoreDir(%q) = %q, %q; want not ok", key, name, dir)
+		}
 	}
 }
