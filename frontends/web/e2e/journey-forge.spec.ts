@@ -251,7 +251,12 @@ test.describe('the forge journey on the demo host', () => {
     await atDemoStep(page, 1, "A forge app's console");
     await next(page);
 
-    await atDemoStep(page, 2, 'Instrumented from the start');
+    await atDemoStep(page, 2, 'How this app was built');
+    await expect(page).toHaveURL(/section=built/);
+    // The recorded forge run: play it a moment, and the panel counts what it wrote.
+    await page.getByTestId('replay-toggle').click();
+    await expect(page.getByTestId('replay-screen')).toContainText('forge project new shop');
+    await expect(page.getByTestId('scaffold-headline')).toContainText(/You wrote \d+ lines of proto/);
     await next(page);
 
     await atDemoStep(page, 3, 'One request, end to end');

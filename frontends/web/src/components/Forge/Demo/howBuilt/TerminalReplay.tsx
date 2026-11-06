@@ -1,0 +1,172 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * A small terminal player for the recorded forge run (fixtures.ts): play and
+ * pause, speed, Step (finish this command, or show the whole next one),
+ * Restart, and a Copy button on every command and every proto you write.
+ *
+ * Written here rather than adding asciinema-player: the cast is ours, its
+ * output is plain text (the recorder strips colour), and all it needs is a
+ * timer over replay.ts. A standard .cast for asciinema is one call away
+ * (toAsciicast). Each command shows how long it really took, since waits play
+ * shortened.
+ */
+
+import { useEffect, useReducer, useRef, useState } from "react";
+import { Check, Copy, Pause, Play, RotateCcw, SkipForward } from "lucide-react";
+
+import Button from "@/components/forge-ui/button";
+import { cn } from "@/lib/utils";
+
+import { promptOf, type CastStep, type ScaffoldCast } from "./fixtures";
+import { delayToNext, eventCount, formatSeconds, initialReplay, isComplete, outputOf, replayReducer, SPEEDS, type ReplayState } from "./replay";
+
+export interface TerminalReplayProps {
+  cast: ScaffoldCast;
+  /** Start playing on mount. Default false: the visitor presses Play. */
+  autoPlay?: boolean;
+  className?: string;
+}
+
+export function TerminalReplay({ cast, autoPlay = false, className }: TerminalReplayProps) {
+  const [state, dispatch] = useReducer(
+    (current: ReplayState, action: Parameters<typeof replayReducer>[2]) => replayReducer(cast, current, action),
+    undefined,
+    () => ({ ...initialReplay(), playing: autoPlay })
+  );
+  const screen = useRef<HTMLDivElement>(null);
+  const done = isComplete(cast, state);
+
+  // One timer at a time: the wait before the next event or step, at this speed.
+  useEffect(() => {
+    if (!state.playing) return;
+    const delay = delayToNext(cast, state);
+    if (delay === null) {
+      dispatch({ type: "pause" });
+      return;
+    }
+    const timer = setTimeout(() => dispatch({ type: "tick" }), delay * 1000);
+    return () => clearTimeout(timer);
+  }, [cast, state]);
+
+  // Keep the newest output in view, as a terminal does.
+  useEffect(() => {
+    const el = screen.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [state.step, state.shown]);
+
+  return (
+    <div className={cn("overflow-hidden rounded-lg border border-border", className)} data-testid="scaffold-replay">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-muted px-3 py-2">
+        <Button
+          size="sm"
+          variant="primary"
+          leftIcon={state.playing ? <Pause /> : <Play />}
+          onClick={() => dispatch({ type: state.playing ? "pause" : "play" })}
+          data-testid="replay-toggle"
+        >
+          {state.playing ? "Pause" : done ? "Play again" : state.step === 0 && state.shown === 0 ? "Play" : "Resume"}
+        </Button>
+        <Button size="sm" variant="outline" leftIcon={<SkipForward />} onClick={() => dispatch({ type: "step" })} disabled={done} data-testid="replay-step">
+          Step
+        </Button>
+        <Button size="sm" variant="ghost" leftIcon={<RotateCcw />} onClick={() => dispatch({ type: "restart" })} data-testid="replay-restart">
+          Restart
+        </Button>
+        <div className="ml-auto flex items-center gap-1" role="group" aria-label="Speed">
+          {SPEEDS.map((speed) => (
+            <button
+              key={speed}
+              type="button"
+              aria-pressed={state.speed === speed}
+              onClick={() => dispatch({ type: "speed", speed })}
+              className={cn(
+                "rounded px-2 py-0.5 font-mono text-xs",
+                state.speed === speed ? "bg-ink text-surface" : "text-ink-muted hover:text-ink"
+              )}
+              data-testid={`replay-speed-${speed}`}
+            >
+              {speed}×
+            </button>
+          ))}
+        </div>
+      </div>
+      <div
+        ref={screen}
+        role="log"
+        aria-label="Recorded terminal session"
+        className="h-80 overflow-y-auto bg-[var(--code-bg)] px-3 py-2 font-mono text-xs leading-relaxed text-[var(--code-fg)]"
+        data-testid="replay-screen"
+      >
+        {cast.steps.slice(0, state.step + 1).map((step, index) => (
+          <ReplayStep key={index} index={index} step={step} shown={index < state.step ? eventCount(step) : state.shown} />
+        ))}
+        {done && <p className="mt-2 text-ink-muted">{`${promptOf(cast.steps[cast.steps.length - 1].cwd)}`}</p>}
+      </div>
+      <p className="border-t border-border bg-surface-muted px-3 py-1.5 text-xs text-ink-muted">
+        Recorded with forge {cast.forge_version}. The output is as forge printed it; long waits play shorter.
+      </p>
+    </div>
+  );
+}
+
+function ReplayStep({ step, shown, index }: { step: CastStep; shown: number; index: number }) {
+  if (step.kind === "edit") {
+    if (shown === 0) return null;
+    return (
+      <div className="my-2" data-testid={`replay-step-${index}`} data-kind="edit">
+        <div className="flex items-center gap-2 text-ink-muted">
+          <span className="min-w-0 flex-1"># You write, in {step.path} (replacing forge&apos;s TODO line):</span>
+          <CopyButton text={step.text} label={`the proto for ${step.path}`} />
+        </div>
+        <pre className="whitespace-pre-wrap border-l-2 border-primary pl-2 text-[var(--code-fg)]">{step.text}</pre>
+      </div>
+    );
+  }
+  const output = outputOf(step, shown);
+  return (
+    <div className="mt-1" data-testid={`replay-step-${index}`} data-kind="command">
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 whitespace-pre-wrap break-all">
+          <span className="text-ink-muted">{promptOf(step.cwd)}</span>
+          <span className="font-semibold" data-testid="replay-command">
+            {step.command}
+          </span>
+        </span>
+        <span className="shrink-0 text-ink-muted" title="How long it really took">
+          {formatSeconds(step.real_seconds)}
+        </span>
+        <CopyButton text={step.command} label={step.command} />
+      </div>
+      {output && <pre className="whitespace-pre-wrap break-words">{output}</pre>}
+    </div>
+  );
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      return; // No clipboard: the text is on screen to select.
+    }
+    setCopied(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      aria-label={copied ? `Copied ${label}` : `Copy ${label}`}
+      title={copied ? "Copied" : "Copy"}
+      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-ink-muted hover:text-ink"
+      data-testid="replay-copy"
+    >
+      {copied ? <Check className="h-3 w-3" aria-hidden="true" /> : <Copy className="h-3 w-3" aria-hidden="true" />}
+    </button>
+  );
+}

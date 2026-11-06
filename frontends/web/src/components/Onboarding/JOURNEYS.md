@@ -306,7 +306,10 @@ with `isAvailable` (`lib/demoTour.ts`, runtime config `DEMO_TOUR`):
 
 | Step | Reliant / forge shell | demo, `short` (default) | demo, `full` |
 |---|---|---|---|
-| fg-console, fg-instrumented, fg-trace | ✓ | ✓ | ✓ |
+| fg-console | ✓ | ✓ | ✓ |
+| fg-built (how this app was built: the recorded forge run, `?section=built`) | | ✓ | ✓ |
+| fg-instrumented (fg-built makes its point on the demo) | ✓ | | |
+| fg-trace | ✓ | ✓ | ✓ |
 | fg-hops, fg-inside (between and inside services) | | ✓ | ✓ |
 | fg-logs | ✓ | ✓ | ✓ |
 | fg-profile | ✓ | | ✓ |
