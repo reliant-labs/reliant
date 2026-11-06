@@ -27,8 +27,9 @@ type Router interface {
 
 // Repository is the database capability this service needs: resolve a
 // project id to its row, enforcing that the caller owns it; find the
-// project's checkout on each of the caller's machines; and record forge's
-// name for the project when a topology report carries one.
+// project's checkout on each of the caller's machines, and the caller's other
+// projects declaring the same forge project; and record forge's name for the
+// project when a topology report carries one.
 //
 // A narrow dependency is what makes the handler testable without a database —
 // which is what lets the secret-safety and reachability tests run as plain
@@ -36,6 +37,10 @@ type Router interface {
 type Repository interface {
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
+	// ListProjects lists the caller's projects: a read whose machine is not
+	// reachable is asked of another checkout of the same forge project
+	// (forgeFallbackTargets), which may belong to another of them.
+	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
 	// Installs is each machine's checkout of the project (project_daemons)
 	// and who owns each machine (daemonplacement.ProjectCheckout).
 	daemonplacement.Installs
