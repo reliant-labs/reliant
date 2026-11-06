@@ -89,8 +89,8 @@ test.describe('Apps', () => {
       await mockAppsBackend(page);
       await page.goto(`/m/chats/${DEPLOY_CHAT.id}`);
       // The simplified thread folds the turn's tool work into one line; the
-      // card is in the shell call it folds.
-      await page.getByRole('button', { name: /^Worked for/ }).click({ timeout: 15_000 });
+      // deploy's card is its outcome, so it stays on screen with the fold shut.
+      await expect(page.getByRole('button', { name: /^Worked for/ })).toHaveAttribute('aria-expanded', 'false', { timeout: 15_000 });
       const card = page.getByTestId('deployed-app-card');
       await expect(card).toBeVisible({ timeout: 15_000 });
       await expect(card).toHaveAttribute('data-env', 'prod');
@@ -99,6 +99,9 @@ test.describe('Apps', () => {
         'href',
         'https://bright-otter.reliantapps.dev',
       );
+      // Opening the fold shows the shell call, not a second card.
+      await page.getByRole('button', { name: /^Worked for/ }).click();
+      await expect(page.getByTestId('deployed-app-card')).toHaveCount(1);
       await card.getByTestId('deployed-app-open').click();
       await expect(page).toHaveURL(/\/forge\/p\/storefront/);
     });
