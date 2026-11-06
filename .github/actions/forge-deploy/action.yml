@@ -1,0 +1,126 @@
+# forge env deploy + gate — a composite action VENDORED into this repository
+# (owner ruling Q5).
+#
+# Vendored, not published: a repo-local action is versioned WITH the project's
+# forge pin, so a forge flag rename cannot break a pipeline that pinned a
+# separately published action. It is yours: edit freely.
+#
+# THE WHOLE DEPLOY IS ONE COMMAND, and that is the point of the four env verbs
+# (docs/adr/env-verbs.md). `forge env deploy <env>` RECORDS the promotion
+# (compare-and-set always on), has it APPLIED, and WAITS for health — in that
+# order, in one process, with the wait on by default. So this action has no
+# promote step, no "does this env converge its own promotions" probe and no
+# separate wait: all three were folded into the verb, which decides who applies
+# from what the env DECLARES rather than from a flag CI has to get right.
+#
+# What is left is the part that is genuinely CI's job:
+#   1. DEPLOY — one command, whose exit code IS the gate
+#   2. RECORD the outcome as rollout evidence on the promotion the deploy
+#      wrote, pass or fail
+#   3. SUMMARIZE the document into the job summary
+#
+# EXIT CODES ARE THE CONTROL FLOW. The deploy's code is this step's code:
+#   0 ok · 1 failed (bad release / DEGRADED) · 2 could not determine · 3 conflict
+#   (someone else moved the env — stop, do not retry) · 4 refused (rollout in
+#   flight / pinned — wait and retry) · 5 plan_unconfirmed (the plan was printed
+#   and nobody approved it — NOTHING was promoted; add --yes) · 6 superseded ·
+#   8 still rolling out at the deadline (retry the WAIT, not the deploy)
+#
+# 5 USED TO MEAN THE TIMEOUT, which is now 8. The confirmation gate took 5
+# because it is the one outcome that must be impossible to misread as success.
+# This action passes --yes, so a correctly configured pipeline never sees it.
+name: forge env deploy + gate
+description: Deploy a release to an environment (record + apply + wait) and record the evidence.
+
+inputs:
+  env:
+    description: Environment to deploy.
+    required: true
+  version:
+    description: Release version. Omit when deploying --from another environment.
+    required: false
+    default: ""
+  from:
+    description: Deploy exactly what this environment runs (same control plane only).
+    required: false
+    default: ""
+  from-promotion:
+    description: With from, the source promotion captured earlier; refused (exit 3) if the source moved.
+    required: false
+    default: ""
+  expect-current:
+    description: The env's promotion id captured before an approval wait, or "unbound"; refused (exit 3) if it moved.
+    required: false
+    default: ""
+  gates:
+    description: Space-separated gate JSON files frozen onto the promotion as pre-deploy evidence.
+    required: false
+    default: ""
+  timeout:
+    description: Whole health-gate budget.
+    required: false
+    default: 15m
+
+outputs:
+  promotion-id:
+    description: The promotion this run wrote (or the existing one, for an idempotent retry).
+    value: ${{ steps.deploy.outputs.promotion-id }}
+  phase:
+    description: Whether the deploy's health gate passed, as its exit code.
+    value: ${{ steps.deploy.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - id: deploy
+      shell: bash
+      env:
+        ENV: ${{ inputs.env }}
+        VERSION: ${{ inputs.version }}
+        FROM: ${{ inputs.from }}
+        FROM_PROMOTION: ${{ inputs.from-promotion }}
+        EXPECT_CURRENT: ${{ inputs.expect-current }}
+        GATES: ${{ inputs.gates }}
+        TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        set -uo pipefail
+        args=(env deploy "$ENV")
+        [ -n "$VERSION" ] && args+=("$VERSION")
+        # CI has no TTY; --yes is "I read the plan", and the plan is printed
+        # into this job's log before the write. Without it forge exits 5,
+        # plan_unconfirmed, having written no promotion.
+        args+=(--json --yes --timeout "$TIMEOUT")
+        [ -n "$FROM" ] && args+=(--from "$FROM")
+        [ -n "$FROM_PROMOTION" ] && args+=(--from-promotion "$FROM_PROMOTION")
+        [ -n "$EXPECT_CURRENT" ] && args+=(--expect-current "$EXPECT_CURRENT")
+        for g in $GATES; do args+=(--gate "$g"); done
+        # The document is written even when the deploy is REFUSED (exit 3/4)
+        # and when the WAIT goes red (1/5/6) — in the latter case the
+        # promotion WAS recorded, and `recorded.id` is exactly what the gate
+        # step below needs. A red rollout is when the evidence trail matters
+        # most, so the code is captured rather than aborting the step here.
+        forge "${args[@]}" > deploy.json
+        code=$?
+        {
+          echo "promotion-id=$(jq -r '.recorded.id // empty' deploy.json 2>/dev/null)"
+          echo "exit-code=$code"
+        } >> "$GITHUB_OUTPUT"
+        exit "$code"
+
+    - name: Record the rollout as evidence
+      # always(): a degraded, timed-out or superseded rollout is evidence too.
+      # `gate record --from` maps the document's exit_code to a status — 1 is
+      # the only `failed`; 2/3/4/5/8 are `error` and 6 is `skipped` — so a slow
+      # rollout never appends a false "the release failed" gate.
+      if: always() && steps.deploy.outputs.promotion-id != ''
+      shell: bash
+      env:
+        ENV: ${{ inputs.env }}
+        PROMOTION_ID: ${{ steps.deploy.outputs.promotion-id }}
+      run: forge gate record "$ENV" --promotion "$PROMOTION_ID" --from deploy.json --name rollout
+
+    - name: Summary
+      if: always()
+      shell: bash
+      run: |
+        [ -s deploy.json ] && forge ci summarize deploy.json >> "$GITHUB_STEP_SUMMARY" || true
