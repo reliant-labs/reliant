@@ -91,6 +91,15 @@ export const ERROR_REASONS = [
   "obs_query_quota_soft",
   /** A console user already has the server's cap of observability reads running; the RetryInfo detail says when to try again. */
   "in_flight_limit",
+  // ── control-plane: application databases (AppDatabaseService: forge db query, the data browser) ──
+  /** An audited environment's read arrived without confirm_env_id and a reason. */
+  "confirmation_required",
+  /** The control plane has no way to reach the database (no hosted placement, an undialable external database). */
+  "datasource_unreachable",
+  /** The per-principal query budget is spent; RetryInfo / Retry-After says when to try again. */
+  "rate_limited",
+  /** A read from this principal is already in flight for the environment. */
+  "query_in_flight",
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */
   "git_credential_not_connected",

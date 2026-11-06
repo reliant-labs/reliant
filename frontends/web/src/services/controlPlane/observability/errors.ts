@@ -300,6 +300,80 @@ export function releaseHealthRetry(failureCount: number, error: unknown): boolea
 }
 
 /**
+ * What a data browser read (AppDatabaseService: ListBrowsableDatabases,
+ * DescribeDatabase, BrowseTable) failure means. The service header's
+ * admission order, read for the person in front of it:
+ *
+ *   not-configured  Unimplemented (a control plane from before the browser)
+ *                   or Unavailable "not configured": explained, never retried.
+ *   denied          PermissionDenied: no db:query grant, a deny policy, a
+ *                   machine credential on an audited environment, or another
+ *                   org's environment. The page names the db:query grant.
+ *   confirmation    FailedPrecondition, reason confirmation_required: the
+ *                   environment is audited and the read carried no reason.
+ *                   The page asks for one; never shown as a fault.
+ *   unreachable     FailedPrecondition otherwise (datasource_unreachable, no
+ *                   managed database): a fact about the environment.
+ *   not-found       NotFound: no such environment, database or readable table
+ *                   (the server words them alike, on purpose).
+ *   busy            ResourceExhausted (rate_limited, query_in_flight).
+ *   too-slow        DeadlineExceeded: the statement ran out of time; a filter
+ *                   on an indexed column usually fixes it.
+ *   invalid         InvalidArgument: a filter value the column's type cannot
+ *                   take, or a column that is not readable. The server's
+ *                   words are the useful part.
+ *   unavailable     everything else: the database or the control plane did
+ *                   not answer.
+ */
+export type DataBrowserErrorKind =
+  | "not-configured"
+  | "denied"
+  | "confirmation"
+  | "unreachable"
+  | "not-found"
+  | "busy"
+  | "too-slow"
+  | "invalid"
+  | "unavailable";
+
+export function dataBrowserErrorKind(error: unknown): DataBrowserErrorKind {
+  if (notOnThisServer(error)) return "not-configured";
+  if (!(error instanceof ConnectError)) return "unavailable";
+  switch (error.code) {
+    case Code.PermissionDenied:
+    case Code.Unauthenticated:
+      return "denied";
+    case Code.FailedPrecondition:
+      return hasErrorReason(error, "confirmation_required") ? "confirmation" : "unreachable";
+    case Code.NotFound:
+      return "not-found";
+    case Code.ResourceExhausted:
+      return "busy";
+    case Code.DeadlineExceeded:
+      return "too-slow";
+    case Code.InvalidArgument:
+      return "invalid";
+    default:
+      return "unavailable";
+  }
+}
+
+/**
+ * Retry only what clears by itself: a read already in flight (paced by the
+ * server's Retry-After, at most a few times: every BrowseTable is an audit
+ * row) and one transport blip. Every other answer was given on purpose.
+ */
+export function dataBrowserRetry(failureCount: number, error: unknown): boolean {
+  const kind = dataBrowserErrorKind(error);
+  if (kind === "busy") return hasErrorReason(error, "query_in_flight") && failureCount < 3;
+  return kind === "unavailable" && failureCount < 1;
+}
+
+export function dataBrowserRetryDelay(failureCount: number, error: unknown): number {
+  return retryAfterMs(error) ?? Math.min(DEFAULT_BASE_MS * 2 ** failureCount, DEFAULT_CAP_MS);
+}
+
+/**
  * What a RumService failure means. Sessions add two answers:
  *
  *   not-configured  Unimplemented (a control plane from before sessions) or

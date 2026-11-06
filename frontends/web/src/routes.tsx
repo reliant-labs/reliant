@@ -108,6 +108,8 @@ const MetricsExplorerPreview = lazyRoute(
   () => import('./components/Forge/Observability/Metrics/__preview__/MetricsExplorerPreview'), 'default')
 const ReleasesPreview = lazyRoute(
   () => import('./components/Forge/Releases/__preview__/ReleasesPreview'), 'default')
+const DataPreview = lazyRoute(
+  () => import('./components/Forge/Data/__preview__/DataPreview'), 'default')
 const WorkloadsPreview = lazyRoute(
   () => import('./components/Forge/Workloads/__preview__/WorkloadsPreview'), 'default')
 const SettingsPage = lazyRoute(
@@ -190,6 +192,8 @@ const ForgeConsoleDashboardsPage = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardsPage')
 const ForgeConsoleDashboardPage = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage')
+const ForgeConsoleDataPage = lazyRoute(
+  () => import('./components/Forge/Data/DataPage'), 'DataPage')
 const ForgeConsoleSecretsPage = lazyRoute(
   () => import('./components/Forge/Console/ConsolePages'), 'SecretsPage')
 const ForgeConsoleActivityPage = lazyRoute(
@@ -612,6 +616,15 @@ const forgeWorkloadsPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><WorkloadsPreview /></DevOnlyRoute>,
 })
 
+// The data browser (databases, tables, a grid, a row and its Related), inside
+// the real console chrome, against the fixture shop — every state in every
+// scheme, no backend.
+const forgeDataPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-data-preview',
+  component: () => <DevOnlyRoute><DataPreview /></DevOnlyRoute>,
+})
+
 const forgeDashboardsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-dashboards-preview',
@@ -746,6 +759,7 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   observabilityView: gated(ForgeConsoleObservabilityViewPage),
   dashboards: gated(ForgeConsoleDashboardsPage),
   dashboard: gated(ForgeConsoleDashboardPage),
+  data: gated(ForgeConsoleDataPage),
   environments: gated(ForgeEnvironmentsPage),
   environment: gated(ForgeEnvPage),
   secrets: gated(ForgeConsoleSecretsPage),
@@ -974,6 +988,7 @@ const routeTree = rootRoute.addChildren([
   consolePrimitivesPreviewRoute,
   forgeReleasesPreviewRoute,
   forgeWorkloadsPreviewRoute,
+  forgeDataPreviewRoute,
   forgeDashboardsPreviewRoute,
   forgeMetricsPreviewRoute,
   projectRootRedirectRoute,
