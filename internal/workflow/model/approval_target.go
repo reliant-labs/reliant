@@ -7,6 +7,23 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
+// PermissionApprovalsDecide is the one value of a workflow's `permissions:`
+// today: its steps may approve or deny requests through ApprovalService.
+const PermissionApprovalsDecide = "approvals:decide"
+
+// WorkflowPermissions are the values `permissions:` accepts.
+var WorkflowPermissions = []string{PermissionApprovalsDecide}
+
+// DeclaresPermission reports whether wf lists permission.
+func DeclaresPermission(wf *reliantv1.Workflow, permission string) bool {
+	for _, p := range wf.GetPermissions() {
+		if p == permission {
+			return true
+		}
+	}
+	return false
+}
+
 const approvalServicePath = "reliant.v1.approvalservice/"
 
 // approvalDecideMethods are the ApprovalService rpcs that decide an approval,
