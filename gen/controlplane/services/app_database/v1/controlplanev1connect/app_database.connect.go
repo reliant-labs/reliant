@@ -82,22 +82,29 @@ type AppDatabaseServiceClient interface {
 	// cannot reach is still listed, with reachable false and unreachable_reason
 	// saying why, because the environment declares it.
 	//
-	// ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3), Unavailable
-	// (browsing is not configured on this server).
+	// ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3),
+	// FailedPrecondition reason "shape_unknown" (the environment has not
+	// recorded what it deploys yet, so its databases are not known),
+	// Unavailable (browsing is not configured on this server).
 	ListBrowsableDatabases(context.Context, *connect.Request[v1.ListBrowsableDatabasesRequest]) (*connect.Response[v1.ListBrowsableDatabasesResponse], error)
 	// DescribeDatabase returns the tables and views forge_ro may SELECT in one
 	// database, each with the columns it may read, its primary key, its foreign
 	// keys and the foreign keys of readable tables that point at it (what the
 	// row page's Related section lists). Read by live introspection on every
-	// call; nothing is cached.
+	// call; BrowseTable then compiles against that reading for up to a minute.
 	//
-	// ERRORS: every step of the data browser's admission except the table half
-	// of step 6. InvalidArgument when a bound is out of range.
+	// ERRORS: every step of the data browser's admission except step 9.
+	// InvalidArgument when a bound is out of range.
 	DescribeDatabase(context.Context, *connect.Request[v1.DescribeDatabaseRequest]) (*connect.Response[v1.DescribeDatabaseResponse], error)
 	// BrowseTable returns one page of one table or view: the chosen columns,
 	// filtered, sorted and paged, compiled into one parameterised SELECT. It also
 	// serves the row page (a primary-key eq filter, limit 1) and the Related
 	// counts (a foreign-key eq filter with count ESTIMATED or EXACT).
+	//
+	// The request is checked against a description of the database at most a
+	// minute old (the one DescribeDatabase last read, or a fresh one); a table
+	// the description does not know is looked up live once before it is
+	// refused.
 	//
 	// ERRORS: every step of the data browser's admission. InvalidArgument when a
 	// bound is out of range; a column (in columns, filters or sort) forge_ro
@@ -228,22 +235,29 @@ type AppDatabaseServiceHandler interface {
 	// cannot reach is still listed, with reachable false and unreachable_reason
 	// saying why, because the environment declares it.
 	//
-	// ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3), Unavailable
-	// (browsing is not configured on this server).
+	// ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3),
+	// FailedPrecondition reason "shape_unknown" (the environment has not
+	// recorded what it deploys yet, so its databases are not known),
+	// Unavailable (browsing is not configured on this server).
 	ListBrowsableDatabases(context.Context, *connect.Request[v1.ListBrowsableDatabasesRequest]) (*connect.Response[v1.ListBrowsableDatabasesResponse], error)
 	// DescribeDatabase returns the tables and views forge_ro may SELECT in one
 	// database, each with the columns it may read, its primary key, its foreign
 	// keys and the foreign keys of readable tables that point at it (what the
 	// row page's Related section lists). Read by live introspection on every
-	// call; nothing is cached.
+	// call; BrowseTable then compiles against that reading for up to a minute.
 	//
-	// ERRORS: every step of the data browser's admission except the table half
-	// of step 6. InvalidArgument when a bound is out of range.
+	// ERRORS: every step of the data browser's admission except step 9.
+	// InvalidArgument when a bound is out of range.
 	DescribeDatabase(context.Context, *connect.Request[v1.DescribeDatabaseRequest]) (*connect.Response[v1.DescribeDatabaseResponse], error)
 	// BrowseTable returns one page of one table or view: the chosen columns,
 	// filtered, sorted and paged, compiled into one parameterised SELECT. It also
 	// serves the row page (a primary-key eq filter, limit 1) and the Related
 	// counts (a foreign-key eq filter with count ESTIMATED or EXACT).
+	//
+	// The request is checked against a description of the database at most a
+	// minute old (the one DescribeDatabase last read, or a fresh one); a table
+	// the description does not know is looked up live once before it is
+	// refused.
 	//
 	// ERRORS: every step of the data browser's admission. InvalidArgument when a
 	// bound is out of range; a column (in columns, filters or sort) forge_ro

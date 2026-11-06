@@ -103,22 +103,28 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/app_data
 //   5. audited environment without confirm_env_id equal to environment_id and
 //      a reason: FailedPrecondition, reason "confirmation_required". The
 //      console asks once per tab session and sends both on every call.
-//   6. unknown database, or (BrowseTable) a table forge_ro cannot read:
-//      NotFound. A table that exists but is not readable looks the same as
-//      one that does not exist.
+//   6. unknown database: NotFound.
 //   7. the control plane has no way to reach the database (no hosted
 //      placement, an external database it cannot dial): FailedPrecondition,
 //      reason "datasource_unreachable".
 //   8. per-principal budget (shared with QueryDatabase): ResourceExhausted,
 //      reason "rate_limited", with Retry-After; too many reads in flight for
-//      this principal on this environment: ResourceExhausted, reason
-//      "query_in_flight".
-//   9. at run time: DeadlineExceeded, reason "statement_timeout"; Unavailable
+//      this principal on this environment (a few, so a row page's Related
+//      counts run together; separate from QueryDatabase's one):
+//      ResourceExhausted, reason "query_in_flight".
+//   9. (BrowseTable) a table forge_ro cannot read: NotFound. A table that
+//      exists but is not readable looks the same as one that does not exist.
+//      It is judged against the database's description, which is a read of
+//      its catalog and so runs inside the budget.
+//  10. at run time: DeadlineExceeded, reason "statement_timeout"; Unavailable
 //      when the database does not answer.
-// DescribeDatabase and BrowseTable are each audited like QueryDatabase: an
-// audit_log row per call (with the structured request in place of SQL, and the
-// reason) and a typed activity event, so every page view of an audited
-// environment is recorded with why.
+// DescribeDatabase and BrowseTable each write ONE audit_log row per call, like
+// QueryDatabase, with the structured request, the statements as run and their
+// bound values, and the reason; a counted page runs two statements and is
+// still one row. DescribeDatabase also records a typed activity event, so the
+// feed shows who opened which database of an audited environment and why;
+// BrowseTable records none (a page view is not a feed line), and its audit
+// rows are the per-read record.
 service AppDatabaseService {
   option (forge.v1.service) = {
     name: "AppDatabaseService"
@@ -178,8 +184,10 @@ service AppDatabaseService {
   // cannot reach is still listed, with reachable false and unreachable_reason
   // saying why, because the environment declares it.
   //
-  // ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3), Unavailable
-  // (browsing is not configured on this server).
+  // ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3),
+  // FailedPrecondition reason "shape_unknown" (the environment has not
+  // recorded what it deploys yet, so its databases are not known),
+  // Unavailable (browsing is not configured on this server).
   rpc ListBrowsableDatabases(ListBrowsableDatabasesRequest) returns (ListBrowsableDatabasesResponse) {
     // A read: the console's hook is a query, not a mutation.
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -190,10 +198,10 @@ service AppDatabaseService {
   // database, each with the columns it may read, its primary key, its foreign
   // keys and the foreign keys of readable tables that point at it (what the
   // row page's Related section lists). Read by live introspection on every
-  // call; nothing is cached.
+  // call; BrowseTable then compiles against that reading for up to a minute.
   //
-  // ERRORS: every step of the data browser's admission except the table half
-  // of step 6. InvalidArgument when a bound is out of range.
+  // ERRORS: every step of the data browser's admission except step 9.
+  // InvalidArgument when a bound is out of range.
   rpc DescribeDatabase(DescribeDatabaseRequest) returns (DescribeDatabaseResponse) {
     // A read: the console's hook is a query. Each call still writes its
     // audit_log row and activity event, which no caller observes.
@@ -220,29 +228,22 @@ service AppDatabaseService {
   // serves the row page (a primary-key eq filter, limit 1) and the Related
   // counts (a foreign-key eq filter with count ESTIMATED or EXACT).
   //
+  // The request is checked against a description of the database at most a
+  // minute old (the one DescribeDatabase last read, or a fresh one); a table
+  // the description does not know is looked up live once before it is
+  // refused.
+  //
   // ERRORS: every step of the data browser's admission. InvalidArgument when a
   // bound is out of range; a column (in columns, filters or sort) forge_ro
   // cannot read in the table; a filter whose values do not fit its op; or a
   // value Postgres cannot convert to the column's type.
   rpc BrowseTable(BrowseTableRequest) returns (BrowseTableResponse) {
     // A read: the console's hook is a query. Each call still writes its
-    // audit_log row and activity event, which no caller observes.
+    // audit_log row, which no caller observes.
     option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
-      activity: {
-        verb: "browse_table"
-        target: {
-          kind: "table"
-          id: "response.table"
-        }
-        env: "environment_id"
-        detail: [
-          "reason",
-          "response.database",
-          "response.duration_ms"
-        ]
-      }
+      activity: {none: "a page view: every call writes its audit_log row (with the reason), and the feed's one line per opened database is DescribeDatabase's"}
     };
   }
 }
@@ -309,6 +310,11 @@ message DatabaseColumn {
 // DatabaseRow is one result row: one JSON value per column.
 message DatabaseRow {
   repeated google.protobuf.Value values = 1;
+  // The 0-based indexes, into values, of the cells cut at 4 KiB. A cut
+  // cell's text also ends with a "…[truncated: N of M bytes shown]" marker.
+  // Not yet filled: the query layer counts cut cells but does not say which
+  // they are, so this is empty until it does; read the marker meanwhile.
+  repeated int32 truncated_cells = 2;
 }
 
 message QueryDatabasePanelRequest {
@@ -580,8 +586,11 @@ enum DatabaseTableKind {
 // DatabaseTableColumn is one column of a DatabaseTable.
 message DatabaseTableColumn {
   string name = 1;
-  // The Postgres type name, as in DatabaseColumn: "int8", "text",
-  // "timestamptz", "_text" for an array.
+  // The column's declared type as Postgres prints it (format_type), with
+  // its modifiers: "bigint", "character varying(40)", "timestamp with time
+  // zone", "text[]", an enum's name. For display: it is the spelling a
+  // person reads, not DatabaseColumn's internal name ("int8") that a
+  // BrowseTable result column carries.
   string pg_type = 2;
   bool nullable = 3;
   // COMMENT ON COLUMN, or empty.
@@ -752,4 +761,11 @@ message BrowseTableResponse {
   string table = 10;
   // Which server answered: "ro" (a read replica) or "rw" (the primary).
   string replica = 11;
+  // The response-size cap cut the page short of limit: fewer rows came back
+  // than asked for although more match (has_more is set too). Continue from
+  // next_offset, not offset + limit.
+  bool truncated = 12;
+  // The offset of the next page: the request's offset plus the rows
+  // returned. Meaningful when has_more is set.
+  int64 next_offset = 13;
 }
