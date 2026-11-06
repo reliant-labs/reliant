@@ -36,12 +36,16 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 			}
 			cmd := model.CelStringRaw(model.GetRunArgs(n).GetCommand())
 			c.checkUndeclaredTools(path, cmd)
+			if model.TargetsApprovalDecision(cmd) {
+				c.addApprovalDecider(path)
+			}
 			if !g.onFailure && !trivialCommand(cmd) && !c.reads.reads(id, "exit_code") {
 				c.add(RuleRunExitCodeUnread, path, "nothing reads this node's exit_code, so a failed command routes like a successful one",
 					fmt.Sprintf("branch on nodes.%s.exit_code (an edge case, or a condition downstream)", id))
 			}
 			c.checkFetch(path, n, cmd)
 		case model.NodeTypeAction:
+			c.checkApprovalDecider(path, n)
 			if !g.onFailure && !c.reads.reads(id, "is_error") {
 				c.add(RuleActionErrorUnread, path, "nothing reads this node's is_error, so a failed call routes like a successful one",
 					fmt.Sprintf("branch on nodes.%s.is_error, or allow it with the reason the failure does not matter", id))
@@ -267,6 +271,25 @@ func (c *checker) checkFetch(path string, n *reliantv1.Node, cmd string) {
 			}
 		}
 	}
+}
+
+// checkApprovalDecider: an http/request@1 step aimed at ApprovalService's
+// approve or deny rpcs. The credential it carries is opaque here, so the
+// target is the signal; any Reliant token that permits approvals:decide
+// (reliant:api included) can decide.
+func (c *checker) checkApprovalDecider(path string, n *reliantv1.Node) {
+	a := n.GetAction()
+	if a == nil || strings.TrimSpace(model.CelStringRaw(a.GetUses())) != "http/request@1" {
+		return
+	}
+	if model.TargetsApprovalDecision(model.ActionURL(a)) {
+		c.addApprovalDecider(path)
+	}
+}
+
+func (c *checker) addApprovalDecider(path string) {
+	c.add(RuleApprovalDecider, path, "this step calls Reliant's ApprovalService to approve or deny, so the workflow can decide approvals, including its own run's, with the token it holds",
+		"if that is the intent, allow it with the reason; otherwise remove the step. Enabling the automation always shows its owner an approval card for this")
 }
 
 func joinContinuations(s string) string { return strings.ReplaceAll(s, "\\\n", " ") }

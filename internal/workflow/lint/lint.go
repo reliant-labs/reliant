@@ -96,6 +96,7 @@ const (
 	RuleSlotUnboundedWait      = "slot-unbounded-wait"
 	RuleSharedCheckoutFetch    = "shared-checkout-fetch"
 	RuleSecretLiteral          = "secret-literal"
+	RuleApprovalDecider        = "approval-decider"
 	RuleAutomationUntriggered  = "automation-only-untriggered"
 	RuleRequiresUndeclaredTool = "requires-undeclared-tool"
 	RuleTimeoutIgnored         = "timeout-ignored"
@@ -123,6 +124,7 @@ var rules = []Rule{
 	rule(RuleSlotUnboundedWait, SeverityError, "A workflow with concurrency.max_running has a step (its own, or a child's) that can run without bound (a run node with no timeout, a loop with no bound), so one run can hold a slot forever."),
 	rule(RuleSharedCheckoutFetch, SeverityError, "A run step fetches into the shared project checkout's own refs or tags, racing every other step that does (a warning when the directory is not provably the checkout)."),
 	rule(RuleSecretLiteral, SeverityError, "A secret is written into the definition instead of being read through a credential."),
+	rule(RuleApprovalDecider, SeverityWarning, "A step calls Reliant's ApprovalService to approve or deny, so this workflow can decide approvals (including the ones that gate it) with whatever token it holds."),
 	rule(RuleAutomationUntriggered, SeverityWarning, "automation_only: true with no triggers: no chat can start it and nothing else will."),
 	rule(RuleRequiresUndeclaredTool, SeverityWarning, "A triggered workflow's command calls an external tool (gh, task, jq, …) its requires.tools does not list, so preflight cannot check it."),
 	rule(RuleScenarioNone, SeverityWarning, "The workflow has no scenarios."),

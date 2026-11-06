@@ -90,6 +90,10 @@ or work in a private clone. The one step designated to update the shared checkou
 
 **Error.** A token, key or password is written into the definition: a GitHub, Slack, AWS or API key, a private key, a bearer token, or a secret-named `env:` set to a literal. Remove it, revoke it, and read it through a credential: `credentials: inherit` on a `run` node, an action's `connection:`, or a hosted secret.
 
+### approval-decider
+
+**Warning.** A step calls Reliant's `ApprovalService` to approve or deny (`/reliant.v1.ApprovalService/Approve`, `Deny`, `BatchApprove` or `BatchDeny`), from an `http/request@1` node or a `run` node's command. The workflow can then decide approvals, including the ones raised by its own run, with whatever token it holds. Lint cannot see what a saved connection or hosted secret contains, so it treats any Reliant token that permits `approvals:decide` (`reliant:api` included) as able to decide. Enabling an automation whose workflow has such a step always shows its owner an approval card, whatever the automation-approvals setting, and keeps that card out of Approve all. If deciding approvals is the intent, allow the finding with the reason.
+
 ### automation-only-untriggered
 
 **Warning.** `automation_only: true` turns off starting the workflow from a chat. With no `triggers:` either, nothing will start it. Declare its triggers, or drop `automation_only`.

@@ -6,6 +6,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func lit(s string) *pb.CelString  { return &pb.CelString{Value: &pb.CelString_Literal{Literal: s}} }
@@ -27,6 +28,11 @@ func TestNodeCapabilities(t *testing.T) {
 		{"action on an event-chosen connection", action(&pb.ActionArgs{Uses: lit("github/create_issue@1"), Connection: expr("{{ inputs.event_conn }}")}), []string{"connection:dynamic"}},
 		{"unauthenticated http request", action(&pb.ActionArgs{Uses: lit("http/request@1")}), nil},
 		{"hosted use grant", action(&pb.ActionArgs{Uses: lit("http/request@1"), HostedUse: lit("grant_trader")}), []string{"secret:hosted_use/grant_trader"}},
+		{"http step to ApprovalService Approve", action(&pb.ActionArgs{Uses: lit("http/request@1"), With: map[string]*structpb.Value{"url": structpb.NewStringValue("https://api.reliantlabs.io/reliant.v1.ApprovalService/Approve")}}), []string{"approvals:decide"}},
+		{"hosted http step to ApprovalService BatchDeny", action(&pb.ActionArgs{Uses: lit("http/request@1"), HostedUse: lit("g1"), With: map[string]*structpb.Value{"url": structpb.NewStringValue("https://api.reliantlabs.io/reliant.v1.ApprovalService/BatchDeny")}}), []string{"secret:hosted_use/g1", "approvals:decide"}},
+		{"http step to ApprovalService with a templated rpc", action(&pb.ActionArgs{Uses: lit("http/request@1"), With: map[string]*structpb.Value{"url": structpb.NewStringValue("https://api.reliantlabs.io/reliant.v1.ApprovalService/{{ inputs.event_conn }}")}}), []string{"approvals:decide"}},
+		{"http step to ApprovalService List does not decide", action(&pb.ActionArgs{Uses: lit("http/request@1"), With: map[string]*structpb.Value{"url": structpb.NewStringValue("https://api.reliantlabs.io/reliant.v1.ApprovalService/ListApprovals")}}), nil},
+		{"shell step that curls Approve", run(&pb.RunArgs{Command: lit("curl -X POST $API/reliant.v1.ApprovalService/Approve"), Credentials: "none"}), []string{"approvals:decide"}},
 		{"shell step inherits credentials", run(&pb.RunArgs{Command: lit("npm test")}), []string{"secret:machine_credentials"}},
 		{"shell step without credentials", run(&pb.RunArgs{Command: lit("npm test"), Credentials: "none"}), nil},
 		{"fixed prod deploy", run(&pb.RunArgs{Command: lit("reliant forge env deploy prod --yes"), Credentials: "none"}), []string{"deploy:prod"}},

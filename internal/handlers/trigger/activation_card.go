@@ -395,6 +395,8 @@ func (c activationCard) tools() string {
 			add("the machine's credentials")
 		case strings.HasPrefix(item, "secret:hosted_use/"):
 			add("hosted credential " + strings.TrimPrefix(item, "secret:hosted_use/"))
+		case item == approvalsDecideCapability:
+			add("approve or deny requests on your behalf")
 		case strings.HasPrefix(item, "deploy:"):
 			add("a deploy to " + strings.TrimPrefix(item, "deploy:"))
 		case item == "connection:github/git_publish":
