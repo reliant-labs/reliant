@@ -17,6 +17,10 @@
  * masked, media blocked, no canvas, no request/response bodies, no query
  * strings on fetch/XHR URLs. consoleCapture is off here because console output
  * can hold chat content.
+ *
+ * The SDK records any Error passed to console.error regardless. A
+ * console.error about an RPC failure the transport already reported, or
+ * decided not to, goes around it (keepHandledRpcFailuresOutOfSdk).
  */
 
 import { disableTelemetry, setTelemetryUser } from "@reliantlabs/forge-web-runtime";
@@ -36,6 +40,7 @@ import { isDev } from "./constants";
 import { reportFirstLaunch } from "./appFirstLaunch";
 import { dropLandingAttribution, readLandingAttribution } from "./landingAttribution";
 import { reportError } from "./errorReporting";
+import { isRpcFailureDecided } from "./handledRpcFailures";
 import { clickstackEnabled } from "./telemetryEndpoint";
 import { SERVICE_NAME } from "./otel_gen";
 import { getShell, type AppShell } from "./shell";
@@ -236,6 +241,35 @@ async function stampClientAttributes(
   client?.setGlobalAttributes(attributes);
 }
 
+/**
+ * Route a console.error that names an RPC failure the transport already
+ * decided on (lib/handledRpcFailures.ts) around the SDK, to `beneathSdk`, so
+ * it is logged but not recorded as an exception a second time. Every other
+ * call goes through the SDK as before, so an error nothing handled is still
+ * recorded — and so is an uncaught RPC failure, which reaches the SDK through
+ * "unhandledrejection", not console.error.
+ *
+ * Installed outermost, after the SDK and the runtime's own console tap.
+ * Returns the undo.
+ */
+export function keepHandledRpcFailuresOutOfSdk(
+  beneathSdk: (...args: unknown[]) => void,
+): () => void {
+  const throughSdk = console.error;
+  const filtered = function (this: unknown, ...args: unknown[]): void {
+    if (args.some(isRpcFailureDecided)) {
+      beneathSdk.apply(console, args);
+      return;
+    }
+    throughSdk.apply(this, args);
+  };
+  console.error = filtered;
+  return () => {
+    if (console.error === filtered) console.error = throughSdk;
+  };
+}
+
+let undoRpcConsoleFilter: (() => void) | null = null;
 let started: Promise<boolean> | null = null;
 let unsubscribeConsent: (() => void) | null = null;
 let withdrawing = false;
@@ -352,9 +386,14 @@ async function start(): Promise<boolean> {
     }
   }
 
+  // console.error as it is before the SDK wraps it (the logger's redirect):
+  // where a handled RPC failure's console line goes instead of the SDK.
+  const beneathSdk = console.error;
   const running = await initBrowserTelemetry(config);
   if (!running) return false;
   if (handoff) dropLandingAttribution();
+  undoRpcConsoleFilter?.();
+  undoRpcConsoleFilter = keepHandledRpcFailuresOutOfSdk(beneathSdk);
 
   unsubscribeConsent = subscribePrivacyConsent(onConsentChange);
   // The subscription does not replay the current consent, and initBrowserTelemetry
@@ -422,6 +461,8 @@ export function reportErrorToTelemetry(
 /** Test seam: forget that telemetry started. */
 export function resetTelemetryForTests(): void {
   started = null;
+  undoRpcConsoleFilter?.();
+  undoRpcConsoleFilter = null;
   unsubscribeConsent?.();
   unsubscribeConsent = null;
   withdrawing = false;
