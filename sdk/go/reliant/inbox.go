@@ -176,8 +176,16 @@ type Approval = reliantv1.Approval
 // ApprovalStatus is where an [Approval] stands.
 type ApprovalStatus = reliantv1.ApprovalStatus
 
-// ApprovalsClient reads approvals. It cannot decide them: approving and
-// denying are not part of this API. Get one from [Client.Approvals].
+// ApprovalsClient reads approvals and decides them. Get one from
+// [Client.Approvals].
+//
+// Reading needs reliant:api. Deciding (Approve, Deny, BatchApprove,
+// BatchDeny) needs the approvals:decide scope GRANTED EXPLICITLY on the token:
+// reliant:api does not stand in for it, so a token minted for runs, triggers or
+// the inbox cannot approve anything. A token bound to a machine (a daemon
+// credential, which is what a run executes with) is refused even when it holds
+// approvals:decide. The refusals are [ErrScopeMissing] (Error.Scopes names the
+// scope) and [ErrMachineCredential]; both are also [ErrPermissionDenied].
 type ApprovalsClient struct {
 	c         *Client
 	approvals reliantv1connect.ApprovalServiceClient
@@ -223,4 +231,114 @@ func (a *ApprovalsClient) ListForRun(ctx context.Context, runID string) ([]*Appr
 		}
 	}
 	return out, nil
+}
+
+// Decision is what the server said about a single approval it decided.
+type Decision struct {
+	// Message is the server's own words about it; empty when it said none.
+	Message string
+}
+
+// BatchDecision is the outcome of a batch decision.
+type BatchDecision struct {
+	// Decided is how many approvals the call approved (or denied). Approvals
+	// that were already resolved are skipped, not counted, and not an error
+	// unless none was still pending ([ErrApprovalNotPending]).
+	Decided int
+	// ChatID is the chat every approval in the batch belongs to.
+	ChatID string
+	// Message is the server's summary, e.g. "Approved 2 requests; 1 already
+	// resolved, skipped".
+	Message string
+}
+
+// DecideOptions refines a decision.
+type DecideOptions struct {
+	// ActionTaken names which of the approval's action buttons was chosen
+	// (e.g. "Deploy Now"); empty records none.
+	ActionTaken string
+	// Reason is, for a denial, why. Ignored when approving. Empty lets the
+	// server record its default.
+	Reason string
+}
+
+func optString(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+// Approve approves one pending approval and signals the run waiting on it.
+//
+// It needs the approvals:decide scope granted explicitly; reliant:api is not
+// enough, and a machine-bound token is refused whatever it holds (see
+// [ApprovalsClient]). Approving an approval already resolved is
+// [ErrApprovalNotPending]; an unknown id, or one in a chat the caller does not
+// own, is [ErrNotFound].
+func (a *ApprovalsClient) Approve(ctx context.Context, approvalID string, opt DecideOptions) (Decision, error) {
+	const op = "approvals.approve"
+	if approvalID == "" {
+		return Decision{}, a.c.fail(op, ErrInvalidArgument, "approval id is required")
+	}
+	resp, err := a.approvals.Approve(ctx, connect.NewRequest(&reliantv1.ApproveRequest{RequestId: approvalID, ActionTaken: optString(opt.ActionTaken)}))
+	if err != nil {
+		return Decision{}, a.c.wrap(op, err)
+	}
+	if err := a.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+		return Decision{}, err
+	}
+	return Decision{Message: resp.Msg.GetMessage()}, nil
+}
+
+// Deny denies one pending approval. The same scope and refusals as
+// [ApprovalsClient.Approve] apply.
+func (a *ApprovalsClient) Deny(ctx context.Context, approvalID string, opt DecideOptions) (Decision, error) {
+	const op = "approvals.deny"
+	if approvalID == "" {
+		return Decision{}, a.c.fail(op, ErrInvalidArgument, "approval id is required")
+	}
+	resp, err := a.approvals.Deny(ctx, connect.NewRequest(&reliantv1.DenyRequest{RequestId: approvalID, DenialReason: optString(opt.Reason), ActionTaken: optString(opt.ActionTaken)}))
+	if err != nil {
+		return Decision{}, a.c.wrap(op, err)
+	}
+	if err := a.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+		return Decision{}, err
+	}
+	return Decision{Message: resp.Msg.GetMessage()}, nil
+}
+
+// BatchApprove approves every listed approval that is still pending, in one
+// transaction. All of them must belong to one chat. The same scope and
+// refusals as [ApprovalsClient.Approve] apply.
+func (a *ApprovalsClient) BatchApprove(ctx context.Context, approvalIDs []string, opt DecideOptions) (BatchDecision, error) {
+	const op = "approvals.batchApprove"
+	if len(approvalIDs) == 0 {
+		return BatchDecision{}, a.c.fail(op, ErrInvalidArgument, "at least one approval id is required")
+	}
+	resp, err := a.approvals.BatchApprove(ctx, connect.NewRequest(&reliantv1.BatchApproveRequest{RequestIds: approvalIDs, ActionTaken: optString(opt.ActionTaken)}))
+	if err != nil {
+		return BatchDecision{}, a.c.wrap(op, err)
+	}
+	if err := a.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+		return BatchDecision{}, err
+	}
+	return BatchDecision{Decided: int(resp.Msg.GetApproved()), ChatID: resp.Msg.GetChatId(), Message: resp.Msg.GetMessage()}, nil
+}
+
+// BatchDeny denies every listed approval that is still pending. See
+// [ApprovalsClient.BatchApprove].
+func (a *ApprovalsClient) BatchDeny(ctx context.Context, approvalIDs []string, opt DecideOptions) (BatchDecision, error) {
+	const op = "approvals.batchDeny"
+	if len(approvalIDs) == 0 {
+		return BatchDecision{}, a.c.fail(op, ErrInvalidArgument, "at least one approval id is required")
+	}
+	resp, err := a.approvals.BatchDeny(ctx, connect.NewRequest(&reliantv1.BatchDenyRequest{RequestIds: approvalIDs, DenialReason: optString(opt.Reason), ActionTaken: optString(opt.ActionTaken)}))
+	if err != nil {
+		return BatchDecision{}, a.c.wrap(op, err)
+	}
+	if err := a.c.applied(op, resp.Msg.GetSuccess(), resp.Msg.GetMessage()); err != nil {
+		return BatchDecision{}, err
+	}
+	return BatchDecision{Decided: int(resp.Msg.GetDenied()), ChatID: resp.Msg.GetChatId(), Message: resp.Msg.GetMessage()}, nil
 }

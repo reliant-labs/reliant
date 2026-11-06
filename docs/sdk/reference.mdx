@@ -56,6 +56,7 @@ A run's progress is the update feed of the session it lives in, and its open gat
 | `QuestionService/ListPendingQuestions` | `Gates.Pending` | Lists the pending questions in a session, oldest first, each naming the thread that asked. |
 | `QuestionService/ResolveQuestion` | `Gates.Answer` | Answers a pending question. |
 | `ApprovalService/ListApprovalsByChat` | `Gates.Pending`, `Approvals.List`, `Approvals.ListForRun` | Lists a session's approvals. Reading only. |
+| `ApprovalService/Approve`, `Deny`, `BatchApprove`, `BatchDeny` | `Approvals.Approve`, `Approvals.Deny`, `Approvals.BatchApprove`, `Approvals.BatchDeny` | Decides approvals. Needs `approvals:decide` granted explicitly (`reliant:api` is not enough); a machine-bound token is refused. |
 
 ## Inbox
 
@@ -87,7 +88,6 @@ Every other procedure on this page, including the trigger reads, the chat reads,
 | Withheld | Why |
 |---|---|
 | Enabling, disabling, creating, updating or deleting a trigger (`EnableWorkflow`, `DisableWorkflow`, `SetTriggerEnabled`, `CreateTrigger`, `UpdateTrigger`, `DeleteTrigger`) and `RotateWebhookToken` | They decide whether an automation runs at all, as whom and where. The `triggers:manage` scope guards them on the server; see [scopes](/sdk/overview#scopes). |
-| Approving or denying (`Approve`, `Deny`, `BatchApprove`, `BatchDeny`) | An approval means a person said yes. |
 | Minting tokens (`TokenService`) | A token never mints a token. |
 | Binding a chat to a machine (`SetChatDaemon`), the inbox's machine-storage actions (`CleanupStorage`, `ForgetStorageWorktree`) and every service a machine uses to talk to Reliant | They wire up or change infrastructure, not your code. |
 
