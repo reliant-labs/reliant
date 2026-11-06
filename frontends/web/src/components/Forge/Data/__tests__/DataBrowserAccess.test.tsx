@@ -1,0 +1,109 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * Policy and the audited environment's confirmation: nothing is read in an
+ * audited environment until the reader gives a reason, once per tab session,
+ * in a dialog naming the environment; every read then carries confirm_env_id
+ * and the reason. A deny policy and an empty environment say what they are.
+ */
+
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Code } from "@connectrpc/connect";
+
+import { createDataFixtureApi } from "../__fixtures__/fixtureDataApi";
+import { readAccess, writeAccess } from "../dataAccess-model";
+import { browseCalls, PROD, renderBrowser, STAGING } from "./dataTestUtils";
+
+vi.mock("@tanstack/react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-router")>()),
+  useNavigate: () => vi.fn(),
+}));
+
+afterEach(() => window.sessionStorage.clear());
+
+const described = (api: ReturnType<typeof createDataFixtureApi>) => api.calls.filter((call) => call.method === "describeDatabase");
+
+describe("an audited environment", () => {
+  it("asks for a reason, naming the environment, before reading anything", async () => {
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", table: "public.orders" }, PROD);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Reading prod's data is audited");
+    expect(screen.getByTestId("data-access-confirm")).toHaveTextContent("Read prod's data");
+    expect(screen.getByTestId("data-access-confirm")).toBeDisabled();
+    expect(described(api)).toHaveLength(0);
+    expect(browseCalls(api)).toHaveLength(0);
+
+    await userEvent.type(screen.getByTestId("data-access-reason"), "Investigating #4412");
+    fireEvent.click(screen.getByTestId("data-access-confirm"));
+
+    await waitFor(() => expect(screen.getByTestId("data-grid")).toHaveAttribute("data-state", "ready"));
+    const access = { confirmEnvId: "env-prod", reason: "Investigating #4412" };
+    expect(described(api)[0]!.req).toMatchObject({ environmentId: "env-prod", database: "shop", access });
+    expect(browseCalls(api).at(-1)).toMatchObject({ access });
+    expect(readAccess("env-prod")).toEqual(access);
+    expect(screen.getByTestId("data-reason")).toHaveTextContent("Reading as: Investigating #4412");
+  });
+
+  it("asks once per tab session: a kept reason is sent without asking", async () => {
+    writeAccess("env-prod", "Kept");
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", table: "public.users" }, PROD);
+    await waitFor(() => expect(screen.getByTestId("data-grid")).toHaveAttribute("data-state", "ready"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(browseCalls(api)[0]).toMatchObject({ access: { confirmEnvId: "env-prod", reason: "Kept" } });
+  });
+
+  it("waits, with a way back to the question, when the reader cancels", async () => {
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop" }, PROD);
+    await screen.findByRole("dialog");
+    fireEvent.click(screen.getByTestId("data-access-cancel"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByTestId("data-needs-reason")).toHaveTextContent("prod is audited: reads need a reason");
+    expect(described(api)).toHaveLength(0);
+    fireEvent.click(screen.getByTestId("data-give-reason"));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("asks again when the server says the confirmation is missing", async () => {
+    writeAccess("env-prod", "Stale");
+    const api = createDataFixtureApi({ onlyShop: true, fail: { method: "describeDatabase", code: Code.FailedPrecondition, reason: "confirmation_required" } });
+    renderBrowser(api, { db: "shop" }, PROD);
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Reading prod's data is audited");
+    expect(readAccess("env-prod")).toBeNull();
+  });
+
+  it("never asks in an open environment", async () => {
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", table: "public.orders" }, STAGING);
+    await waitFor(() => expect(screen.getByTestId("data-grid")).toHaveAttribute("data-state", "ready"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(browseCalls(api)[0]).not.toHaveProperty("access");
+  });
+});
+
+describe("policies and empty environments", () => {
+  it("explains a deny policy and reads nothing", async () => {
+    const api = createDataFixtureApi({ onlyShop: true, policy: { "env-staging": "deny" } });
+    renderBrowser(api, { db: "shop" }, STAGING);
+    const denied = await screen.findByTestId("data-policy-deny");
+    expect(denied).toHaveTextContent("staging doesn't allow reading its data");
+    expect(denied).toHaveTextContent("forge.DataAccess");
+    expect(screen.getByTestId("data-policy")).toHaveAttribute("data-policy", "deny");
+    expect(described(api)).toHaveLength(0);
+  });
+
+  it("opens a readable database over an unreachable one listed first", async () => {
+    const view = renderBrowser(createDataFixtureApi(), {}, STAGING);
+    await waitFor(() => expect(view.search().db).toBe("shop"));
+    expect(within(screen.getByTestId("data-databases")).getByTestId("data-db-analytics")).toBeDisabled();
+  });
+
+  it("says when an environment declares no database", async () => {
+    renderBrowser(createDataFixtureApi({ noDatabases: true }), {}, STAGING);
+    expect(await screen.findByTestId("data-no-databases")).toHaveTextContent("staging has no databases");
+  });
+});

@@ -17,6 +17,7 @@
  *       /releases, /releases/$version
  *       /observability/$view
  *       /observability/dashboards, /observability/dashboards/$kind/$key
+ *       /data                               the data browser (the scope's databases)
  *       /environments, /environments/$env
  *       /secrets, /domains, /activity
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
@@ -32,6 +33,7 @@ import {
   forgeConsoleActivitySearchSchema,
   forgeConsoleDashboardSearchSchema,
   forgeConsoleDashboardsSearchSchema,
+  forgeConsoleDataSearchSchema,
   forgeConsoleEnvSearchSchema,
   forgeConsoleObsSearchSchema,
   forgeConsoleOverviewSearchSchema,
@@ -60,6 +62,8 @@ export interface ForgeConsoleComponents {
   /** Observability › Dashboards, and one dashboard. */
   dashboards: RouteComponent
   dashboard: RouteComponent
+  /** Data: the scoped environment's databases, read-only. */
+  data: RouteComponent
   environments: RouteComponent
   environment: RouteComponent
   secrets: RouteComponent
@@ -208,6 +212,13 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     },
     component: components.dashboard,
   })
+  // The data browser: the scoped environment's databases (components/Forge/Data).
+  const dataRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'data',
+    validateSearch: forgeConsoleDataSearchSchema,
+    component: components.data,
+  })
   const environmentsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'environments',
@@ -275,6 +286,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       observabilityViewRoute,
       dashboardsRoute,
       dashboardRoute,
+      dataRoute,
       environmentsRoute,
       environmentRoute,
       secretsRoute,

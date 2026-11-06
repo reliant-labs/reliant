@@ -54,6 +54,7 @@ import {
   ObservabilityViewPage,
   SecretsPage,
 } from "../Console/ConsolePages";
+import { DataPage } from "../Data/DataPage";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import {
@@ -438,6 +439,7 @@ function buildRouter(path: string) {
     observabilityView: ObservabilityViewPage,
     dashboards: DashboardsPage,
     dashboard: DashboardPage,
+    data: DataPage,
     environments: EnvironmentsPage,
     environment: ForgeEnvPage,
     secrets: SecretsPage,
