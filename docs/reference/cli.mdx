@@ -596,7 +596,7 @@ reliant auth token create [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--name` | `string` | - | Label for the token, e.g. ci-deploy (required) |
-| `--scope` | `strings` | - | Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api) |
+| `--scope` | `stringSlice` | `[]` | Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api) |
 
 ---
 
