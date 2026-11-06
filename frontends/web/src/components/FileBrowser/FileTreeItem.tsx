@@ -265,7 +265,7 @@ export const FileTreeItem = memo(function FileTreeItem({
       const fullPath = `${basePath}/${newItemName.trim()}`;
       
       if (creatingInline === "file") {
-        await createFile(fullPath);
+        await createFile(fullPath, "", worktreeId);
         
         // Open the newly created file in viewer tab
         if (currentProject?.id) {
@@ -287,7 +287,7 @@ export const FileTreeItem = memo(function FileTreeItem({
           }, 100);
         }
       } else {
-        await createFolder(fullPath);
+        await createFolder(fullPath, worktreeId);
       }
       
       // Reset inline creation state
