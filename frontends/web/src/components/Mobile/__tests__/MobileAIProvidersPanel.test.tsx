@@ -17,9 +17,6 @@ const MOBILE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const mocks = vi.hoisted(() => ({
   refetchModels: vi.fn(),
-  updateProvider: vi.fn(),
-  deleteProvider: vi.fn(),
-  validateProviderAPIKey: vi.fn(),
   getPreferences: vi.fn(),
   updatePreferences: vi.fn(),
   provisionManagedKey: vi.fn(),
@@ -28,16 +25,6 @@ const mocks = vi.hoisted(() => ({
   antigravityStart: vi.fn(),
   copilotStart: vi.fn(),
   copilotReset: vi.fn(),
-}));
-
-vi.mock("../../../api/client", () => ({
-  api: {
-    settings: {
-      updateProvider: mocks.updateProvider,
-      deleteProvider: mocks.deleteProvider,
-      validateProviderAPIKey: mocks.validateProviderAPIKey,
-    },
-  },
 }));
 
 vi.mock("../../../store/globalDataStore", () => ({
@@ -91,9 +78,6 @@ function renderPanel() {
 
 beforeEach(() => {
   mocks.refetchModels.mockReset().mockResolvedValue(undefined);
-  mocks.updateProvider.mockReset().mockResolvedValue({});
-  mocks.deleteProvider.mockReset().mockResolvedValue({});
-  mocks.validateProviderAPIKey.mockReset();
   mocks.getPreferences.mockReset().mockResolvedValue({});
   mocks.updatePreferences.mockReset().mockResolvedValue({});
   mocks.provisionManagedKey.mockReset().mockResolvedValue({});

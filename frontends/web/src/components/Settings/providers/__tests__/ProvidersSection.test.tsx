@@ -45,9 +45,6 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("../../../../api/client", () => ({
-  api: { settings: { validateProviderAPIKey: mocks.validateProviderAPIKey } },
-}));
 vi.mock("../../../../lib/settingsPersistence", () => ({
   readSetting: vi.fn().mockResolvedValue({ status: "missing" }),
   upsertStringSetting: vi.fn(),
@@ -140,6 +137,10 @@ beforeEach(() => {
       ...providerAccountHandlers({ listAccounts: mocks.listAccounts, addApiKey: mocks.addApiKey }),
       "SettingsService.GetPreferences": () => ({}),
       "SettingsService.GetProviderStatuses": () => ({ providers: [] }),
+      "SettingsService.ValidateProviderAPIKey": (req) => {
+        const r = req as { provider: string; apiKey: string };
+        return mocks.validateProviderAPIKey(r.provider, r.apiKey);
+      },
     }),
   );
 });

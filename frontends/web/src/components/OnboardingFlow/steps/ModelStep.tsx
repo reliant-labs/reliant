@@ -9,7 +9,8 @@ import {
   Loader2,
   XCircle,
 } from "lucide-react";
-import { api } from "@/api/client";
+import { addProviderApiKey } from "@/hooks/provider-account-queries";
+import { useValidateProviderAPIKey } from "@/hooks/settings-service-hooks_gen";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import {
@@ -197,14 +198,11 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     enabled: isRedirectOAuthProvider(provider.usesOAuth),
   });
 
-  const validateKeyMutation = useMutation({
-    mutationFn: ({ providerId, key }: { providerId: string; key: string }) =>
-      api.settings.validateProviderAPIKey(providerId, key),
-  });
+  const validateKeyMutation = useValidateProviderAPIKey();
 
   const saveKeyMutation = useMutation({
     mutationFn: ({ providerId, key }: { providerId: string; key: string }) =>
-      api.settings.updateProvider(providerId, key),
+      addProviderApiKey(providerId, key),
   });
 
   const saving = saveKeyMutation.isPending;
@@ -392,8 +390,8 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
 
     try {
       const validation = await validateKeyMutation.mutateAsync({
-        providerId: selectedProvider,
-        key: apiKey.trim(),
+        provider: selectedProvider,
+        apiKey: apiKey.trim(),
       });
       if (!validation.valid) {
         setValidationResult({

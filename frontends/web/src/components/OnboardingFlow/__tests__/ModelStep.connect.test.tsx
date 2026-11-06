@@ -40,8 +40,13 @@ vi.mock("@/hooks", () => ({
   useOAuthAvailability: () => ({ available: true, loading: false, recheck: vi.fn() }),
 }));
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
-vi.mock("@/api/client", () => ({
-  api: { settings: { updateProvider: mocks.updateProvider, validateProviderAPIKey: mocks.validateProviderAPIKey } },
+vi.mock("@/hooks/provider-account-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/provider-account-queries")>()),
+  addProviderApiKey: mocks.updateProvider,
+}));
+vi.mock("@/hooks/settings-service-hooks_gen", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/settings-service-hooks_gen")>()),
+  useValidateProviderAPIKey: () => ({ mutateAsync: mocks.validateProviderAPIKey }),
 }));
 vi.mock("@/lib/events", () => ({
   getEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
@@ -79,7 +84,7 @@ function renderStep() {
 describe("ModelStep connect", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.updateProvider.mockResolvedValue({ message: "API key added" });
+    mocks.updateProvider.mockResolvedValue({ created: true });
     mocks.validateProviderAPIKey.mockResolvedValue({ valid: true, message: "ok" });
   });
 
@@ -131,6 +136,7 @@ describe("ModelStep connect", () => {
     fireEvent.click(screen.getByRole("button", { name: /save key and start/i }));
 
     await waitFor(() => expect(onNext).toHaveBeenCalledTimes(1));
+    expect(mocks.validateProviderAPIKey).toHaveBeenCalledWith({ provider: "anthropic", apiKey: "sk-ant-test-key" });
     expect(mocks.updateProvider).toHaveBeenCalledWith("anthropic", "sk-ant-test-key");
     expect(updatePlan).toHaveBeenCalledTimes(1);
   });

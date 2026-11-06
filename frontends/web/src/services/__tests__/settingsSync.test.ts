@@ -6,13 +6,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { SettingsSyncService, SETTINGS_KEYS } from '../settingsSync';
 
 // Mock apiClient
-vi.mock('../../api/client', () => ({
-  apiClient: {
-    get: vi.fn(),
-    post: vi.fn(),
-    put: vi.fn(),
-    delete: vi.fn(),
-  },
+vi.mock('../../hooks/settings-queries', () => ({
+  fetchSettings: vi.fn().mockResolvedValue({ settings: [] }),
+  batchUpsertSettings: vi.fn().mockResolvedValue([]),
+  deleteSetting: vi.fn().mockResolvedValue({}),
 }));
 
 // Mock localStorage for test environment

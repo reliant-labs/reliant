@@ -9,21 +9,8 @@ import { renderWithQuery as render } from "../../../test/renderWithQuery";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  getProviders: vi.fn(),
   refetchModels: vi.fn(),
-  updateProvider: vi.fn(),
-  validateProviderAPIKey: vi.fn(),
   provisionManagedKey: vi.fn(),
-}));
-
-vi.mock("../../../api/client", () => ({
-  api: {
-    settings: {
-      getProviders: mocks.getProviders,
-      updateProvider: mocks.updateProvider,
-      validateProviderAPIKey: mocks.validateProviderAPIKey,
-    },
-  },
 }));
 
 vi.mock("../../../store/globalDataStore", () => ({

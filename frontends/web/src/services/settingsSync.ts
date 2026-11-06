@@ -6,8 +6,9 @@
  * persistence to both storage layers.
  */
 
-import type { Setting } from "../api/settings-grpc";
-import { api } from "../api/client";
+import { create } from "@bufbuild/protobuf";
+import { SettingSchema, type Setting } from "../gen/reliant/v1/settings_pb";
+import { deleteSetting as deleteStoredSetting, fetchSettings } from "../hooks/settings-queries";
 import { waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
 import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
@@ -85,7 +86,7 @@ export class SettingsSyncService {
       try {
         // Fetch all appearance settings from the database (via gRPC)
         logger.info('[SettingsSync] Fetching settings from database...');
-        const response = await api.settings.listSettings();
+        const response = await fetchSettings();
         
         const settings = response.settings || [];
         logger.info(`[SettingsSync] Received ${settings.length} total settings from database`);
@@ -258,7 +259,7 @@ export class SettingsSyncService {
       this.removeFromCache(key);
 
       // Remove from database (via gRPC)
-      await api.settings.deleteSetting(key);
+      await deleteStoredSetting(key);
     } catch (error) {
       console.error(`[SettingsSync] Failed to delete setting ${key}:`, error);
       throw error;
@@ -299,7 +300,7 @@ export class SettingsSyncService {
     const result: Record<string, string> = {};
 
     try {
-      const response = await api.settings.listSettings();
+      const response = await fetchSettings();
       
       const settings = response.settings || [];
       
@@ -343,18 +344,13 @@ export class SettingsSyncService {
    */
   updateCache(key: string, value: string): void {
     const existing = this.settingsCache.get(key);
-    if (existing) {
-      this.settingsCache.set(key, { ...existing, value, updated_at: new Date().toISOString() });
-    } else {
-      this.settingsCache.set(key, {
-        id: '',
-        key,
-        value,
-        value_type: 'string',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      });
-    }
+    const now = new Date().toISOString();
+    this.settingsCache.set(
+      key,
+      existing
+        ? { ...existing, value, updatedAt: now }
+        : create(SettingSchema, { key, value, valueType: "string", createdAt: now, updatedAt: now }),
+    );
   }
 
   /**

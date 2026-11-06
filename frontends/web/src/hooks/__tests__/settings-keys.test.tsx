@@ -6,6 +6,8 @@
  *  - an imperative reader (readBrowserPreferences) shares the hook's entry;
  *  - a provider-credential write (an OAuth completion, a key added from the
  *    single-credential view) refetches useProviderStatuses;
+ *  - a settings or shortcuts write from outside React refetches the mounted
+ *    read of what it changed;
  *  - settingsServiceKeys.all reaches config health.
  */
 
@@ -14,14 +16,27 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ReactNode } from "react";
 
-import { settingsGrpc } from "@/api/settings-grpc";
 import { setTransport } from "@/lib/connect";
 import { queryClient } from "@/lib/query-client";
 import { mockTransport } from "@/lib/test-utils";
 import { useAuthStore } from "@/store/authStore";
 import { addProviderApiKey } from "../provider-account-queries";
-import { readBrowserPreferences, usePreferences, useProviderStatuses, useUpdatePreferences } from "../settings-queries";
-import { settingsServiceKeys, useGetConfigHealth } from "../settings-service-hooks_gen";
+import {
+  batchUpsertSettings,
+  completeClaudeOAuth,
+  fetchSettings,
+  readBrowserPreferences,
+  updateShortcuts,
+  usePreferences,
+  useProviderStatuses,
+  useUpdatePreferences,
+} from "../settings-queries";
+import {
+  settingsServiceKeys,
+  useGetConfigHealth,
+  useGetShortcuts,
+  useListSettings,
+} from "../settings-service-hooks_gen";
 
 function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -29,6 +44,8 @@ function wrapper({ children }: { children: ReactNode }) {
 
 let archiveMode: string;
 let configured: boolean;
+let stored: Array<{ key: string; value: string }>;
+let shortcuts: string;
 const calls: Record<string, number> = {};
 const count = (rpc: string) => {
   calls[rpc] = (calls[rpc] ?? 0) + 1;
@@ -37,6 +54,8 @@ const count = (rpc: string) => {
 beforeEach(() => {
   archiveMode = "ask_me";
   configured = false;
+  stored = [];
+  shortcuts = "{}";
   for (const k of Object.keys(calls)) delete calls[k];
   useAuthStore.setState({ session: { access_token: "t" } as never });
   setTransport(
@@ -64,6 +83,23 @@ beforeEach(() => {
         return { created: true };
       },
       "ProviderAccountService.ListProviderAccounts": () => ({ accounts: [] }),
+      "SettingsService.ListSettings": () => {
+        count("ListSettings");
+        return { settings: stored, total: stored.length };
+      },
+      "SettingsService.BatchUpsertSettings": (req) => {
+        const r = req as { settings: Array<{ key: string; value: string }> };
+        stored = [...stored, ...r.settings];
+        return { settings: r.settings };
+      },
+      "SettingsService.GetShortcuts": () => {
+        count("GetShortcuts");
+        return { shortcuts };
+      },
+      "SettingsService.UpdateShortcuts": (req) => {
+        shortcuts = (req as { shortcuts: string }).shortcuts;
+        return { success: true };
+      },
       "SettingsService.GetConfigHealth": () => {
         count("GetConfigHealth");
         return { errors: [], errorCount: 0, warningCount: 0 };
@@ -106,7 +142,7 @@ describe("SettingsService keys", () => {
     const statuses = renderHook(() => useProviderStatuses(), { wrapper });
     await waitFor(() => expect(statuses.result.current.data?.providers[0]?.configured).toBe(false));
 
-    await settingsGrpc.completeClaudeOAuth("code", "verifier", "http://cb", "state");
+    await completeClaudeOAuth({ code: "code", codeVerifier: "verifier", redirectUri: "http://cb", state: "state" });
 
     await waitFor(() => expect(statuses.result.current.data?.providers[0]?.configured).toBe(true));
   });
@@ -118,6 +154,26 @@ describe("SettingsService keys", () => {
     await addProviderApiKey("anthropic", "sk-ant");
 
     await waitFor(() => expect(statuses.result.current.data?.providers[0]?.configured).toBe(true));
+  });
+
+  it("an imperative settings read shares the hook's entry, and a batch upsert refetches it", async () => {
+    const list = renderHook(() => useListSettings({}), { wrapper });
+    await waitFor(() => expect(calls.ListSettings).toBe(1));
+
+    const fetched = await fetchSettings();
+    expect(fetched.settings).toEqual([]);
+    expect(calls.ListSettings).toBe(2);
+
+    await batchUpsertSettings([{ key: "appearance.theme", value: "dark" }]);
+    await waitFor(() => expect(list.result.current.data?.settings.map((s) => s.key)).toEqual(["appearance.theme"]));
+  });
+
+  it("a shortcuts write refetches the mounted shortcuts", async () => {
+    const read = renderHook(() => useGetShortcuts({}), { wrapper });
+    await waitFor(() => expect(read.result.current.data?.shortcuts).toBe("{}"));
+
+    await updateShortcuts('{"a":{"currentBinding":"mod+k"}}');
+    await waitFor(() => expect(read.result.current.data?.shortcuts).toBe('{"a":{"currentBinding":"mod+k"}}'));
   });
 
   it("settingsServiceKeys.all reaches config health", async () => {

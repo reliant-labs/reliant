@@ -1,10 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/api/settings-grpc", () => ({
-  settingsGrpc: {
-    completeCodexOAuth: vi.fn(),
-    completeClaudeOAuth: vi.fn(),
-  },
+vi.mock("@/hooks/settings-queries", () => ({
+  completeCodexOAuth: vi.fn(),
+  completeClaudeOAuth: vi.fn(),
 }));
 
 vi.mock("@/lib/oauth-local", () => ({

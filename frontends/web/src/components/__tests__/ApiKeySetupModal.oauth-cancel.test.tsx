@@ -1,4 +1,5 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, screen } from '@testing-library/react'
+import { renderWithQuery as render } from '@/test/renderWithQuery'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const codexCancelMock = vi.fn()
@@ -21,15 +22,6 @@ vi.mock('@/hooks', () => ({
     reset: vi.fn(),
   }),
   useOAuthAvailability: () => ({ available: true, loading: false, recheck: vi.fn() }),
-}))
-
-vi.mock('@/api/client', () => ({
-  api: {
-    settings: {
-      validateProviderAPIKey: vi.fn(),
-      updateProvider: vi.fn(),
-    },
-  },
 }))
 
 vi.mock('@/lib/logger', () => ({

@@ -30,19 +30,11 @@ import {
 
 const getShortcuts = vi.hoisted(() => vi.fn(async () => ({ shortcuts: "{}" })));
 
-vi.mock("../../../api/client", async (importOriginal) => {
-  const original = await importOriginal<Record<string, unknown>>();
-  return {
-    ...original,
-    api: {
-      ...(original.api as Record<string, unknown>),
-      settings: {
-        getShortcuts,
-        updateShortcuts: vi.fn(async () => ({ message: "" })),
-      },
-    },
-  };
-});
+vi.mock("../../../hooks/settings-queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../hooks/settings-queries")>()),
+  fetchShortcuts: async () => (await getShortcuts()).shortcuts,
+  updateShortcuts: vi.fn(async () => ({ success: true, message: "" })),
+}));
 
 // The chat search reads chats through React Query; its own tests cover it.
 vi.mock("../../Layout/ChatSearch", () => ({

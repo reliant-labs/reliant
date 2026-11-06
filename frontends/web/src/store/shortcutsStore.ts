@@ -15,7 +15,7 @@
 // =============================================================================
 
 import { create } from "zustand";
-import { api } from "../api/client";
+import { fetchShortcuts, updateShortcuts } from "../hooks/settings-queries";
 import { logger } from "../lib/logger";
 import { isPackagedRendererOrigin } from "../lib/protocol";
 import { parseBinding } from "../lib/keyboard/chord";
@@ -241,7 +241,7 @@ async function persist(shortcuts: Record<string, ShortcutDefinition>) {
       overrides[id] = { currentBinding: shortcut.currentBinding };
     }
   }
-  await api.settings.updateShortcuts(JSON.stringify(overrides));
+  await updateShortcuts(JSON.stringify(overrides));
 }
 
 export const useShortcutsStore = create<ShortcutsState>()((set, get) => ({
@@ -284,12 +284,12 @@ export const useShortcutsStore = create<ShortcutsState>()((set, get) => ({
         }
       }
 
-      const response = await api.settings.getShortcuts();
+      const shortcuts = await fetchShortcuts();
       let saved: Record<string, { currentBinding?: string | null }> = {};
 
-      if (response.shortcuts && response.shortcuts !== "{}") {
+      if (shortcuts && shortcuts !== "{}") {
         try {
-          saved = JSON.parse(response.shortcuts);
+          saved = JSON.parse(shortcuts);
         } catch (error) {
           logger.error("Failed to parse shortcuts from backend", error);
         }

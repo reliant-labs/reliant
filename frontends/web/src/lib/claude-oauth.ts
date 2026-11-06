@@ -1,5 +1,5 @@
 import { reportError, reportFailure } from '@/lib/errorReporting'
-import { settingsGrpc, type SignInOutcome } from '@/api/settings-grpc'
+import { completeClaudeOAuth, type SignInOutcome } from '@/hooks/settings-queries'
 import { startOAuthViaDaemon, startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
 import { isAbort } from '@/lib/oauth-abort'
@@ -116,13 +116,13 @@ export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Prom
     }
 
     // Exchange code for tokens via the authenticated backend
-    const result = await settingsGrpc.completeClaudeOAuth(
-      oauthResp.code,
+    const result = await completeClaudeOAuth({
+      code: oauthResp.code,
       codeVerifier,
-      oauthResp.redirectUri,
+      redirectUri: oauthResp.redirectUri,
       state,
-      options.accountId
-    )
+      accountId: options.accountId,
+    })
 
     if (result.success) {
       return { ok: true, message: result.message || 'Claude connected successfully', outcome: result }

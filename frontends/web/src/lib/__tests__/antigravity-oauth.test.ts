@@ -1,9 +1,7 @@
 import { vi } from 'vitest'
 
-vi.mock('@/api/settings-grpc', () => ({
-  settingsGrpc: {
-    completeAntigravityOAuth: vi.fn(),
-  },
+vi.mock('@/hooks/settings-queries', () => ({
+  completeAntigravityOAuth: vi.fn(),
 }))
 
 vi.mock('@/lib/oauth-local', async (importOriginal) => ({
@@ -11,7 +9,7 @@ vi.mock('@/lib/oauth-local', async (importOriginal) => ({
   startOAuthViaDaemon: vi.fn(),
 }))
 
-import { settingsGrpc } from '@/api/settings-grpc'
+import { completeAntigravityOAuth } from '@/hooks/settings-queries'
 import { startOAuthViaDaemon } from '@/lib/oauth-local'
 import {
   ANTIGRAVITY_OAUTH_STATE_PREFIX,
@@ -51,7 +49,7 @@ const setCryptoMock = () => {
 }
 
 describe('runAntigravityOAuthFlow', () => {
-  const completeAntigravityOAuthMock = vi.mocked(settingsGrpc.completeAntigravityOAuth)
+  const completeAntigravityOAuthMock = vi.mocked(completeAntigravityOAuth)
   const startOAuthViaDaemonMock = vi.mocked(startOAuthViaDaemon)
 
   beforeEach(() => {
@@ -126,12 +124,12 @@ describe('runAntigravityOAuthFlow', () => {
     ).toBe(true)
 
     // The wire contract carries NO state — code, verifier and redirect only.
-    expect(completeAntigravityOAuthMock).toHaveBeenCalledWith(
-      'test-code',
-      expect.any(String),
-      'http://127.0.0.1:9999/callback',
-      undefined,
-    )
+    expect(completeAntigravityOAuthMock).toHaveBeenCalledWith({
+      code: 'test-code',
+      codeVerifier: expect.any(String),
+      redirectUri: 'http://127.0.0.1:9999/callback',
+      accountId: undefined,
+    })
   })
 
   it('names the reconnect target on the exchange, and asks Google to pick an account only when adding', async () => {
@@ -139,14 +137,14 @@ describe('runAntigravityOAuthFlow', () => {
     completeAntigravityOAuthMock.mockResolvedValue({ success: true, message: 'Connected', created: false })
 
     await runAntigravityOAuthFlow({ accountId: 'acct-7' })
-    expect(completeAntigravityOAuthMock.mock.calls[0][3]).toBe('acct-7')
+    expect(completeAntigravityOAuthMock.mock.calls[0][0].accountId).toBe('acct-7')
     const reconnectUrl = new URL(captured().replace('{redirect_uri}', 'http://placeholder'))
     expect(reconnectUrl.searchParams.get('prompt')).toBe('consent')
 
     completeAntigravityOAuthMock.mockClear()
     const captured2 = echoStateDaemon()
     await runAntigravityOAuthFlow({ prompt: 'select_account' })
-    expect(completeAntigravityOAuthMock.mock.calls[0][3]).toBeUndefined()
+    expect(completeAntigravityOAuthMock.mock.calls[0][0].accountId).toBeUndefined()
     const addUrl = new URL(captured2().replace('{redirect_uri}', 'http://placeholder'))
     expect(addUrl.searchParams.get('prompt')).toBe('select_account consent')
   })
