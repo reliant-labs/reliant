@@ -18,7 +18,7 @@ import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observabili
 import { RELEASE_TABS, STATUS_FILTERS } from "./components/Forge/Releases/releaseModel";
 import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from "./components/Forge/Workloads/workloadModel";
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
-import { DATA_PAGE_SIZES, type DataSearch } from "./components/Forge/Data/dataUrl-model";
+import { DATA_PAGE_SIZES, MAX_OFFSET, type DataSearch } from "./components/Forge/Data/dataUrl-model";
 import { HEALTH_WINDOWS } from "./services/controlPlane/observability/deliveryTypes";
 import { ISSUE_PLATFORMS, ISSUE_SORTS } from "./services/controlPlane/observability/issuesTypes";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
@@ -558,11 +558,12 @@ export const forgeConsoleSecretsSearchSchema = z.object({
 
 /**
  * Data (components/Forge/Data): the scope, and the browser's view — which
- * database, which table, its filters, sort, visible columns and page, and the
- * open row. Every view is a link someone can send ("look at this chat"). The
- * token grammar of `f`, `sort` and `row` is Data/dataUrl-model.ts's; here
- * only the shape is checked, and a key that does not fit is dropped rather
- * than failing the route.
+ * database, which table, its filters, sort, visible columns, the first row
+ * shown (`offset`; a legacy `page` still opens) and the open row. Every
+ * view is a link someone can send ("look at this chat"). The token grammar
+ * of `f`, `sort` and `row` is Data/dataUrl-model.ts's; here only the shape is
+ * checked, and a key that does not fit is dropped rather than failing the
+ * route.
  */
 const textListParam = z.array(z.union([z.string(), z.number().transform(String)])).optional().catch(undefined);
 
@@ -573,6 +574,8 @@ export const forgeConsoleDataSearchSchema = z.object({
   f: textListParam,
   sort: textListParam,
   cols: textListParam,
+  offset: z.number().int().nonnegative().max(MAX_OFFSET).optional().catch(undefined),
+  // Legacy: a page number from a link made before `offset`, read as (page-1)*size.
   page: z.number().int().positive().optional().catch(undefined),
   size: z
     .number()

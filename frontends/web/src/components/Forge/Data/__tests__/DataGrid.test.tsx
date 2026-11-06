@@ -61,7 +61,11 @@ describe("the grid", () => {
     const api = createDataFixtureApi({ onlyShop: true });
     renderBrowser(api, { db: "shop", table: "public.orders" });
     await gridReady();
-    expect(headers()).toEqual(["Open row", "idint8", "user_iduuid", "statustext", "total_centsint8", "notestext", "metadatajsonb", "created_attimestamptz"]);
+    // Headers say the DESCRIBED type, shortened; the full spelling is the title.
+    expect(headers()).toEqual(["Open row", "idbigint", "user_iduuid", "statustext", "total_centsbigint", "notestext", "metadatajsonb", "created_attimestamptz"]);
+    expect(screen.getByTestId("data-sort-created_at").title).toContain("created_at · timestamp with time zone");
+    // Alignment follows the RESULT type ("int8"), never compared with the described "bigint".
+    expect(screen.getByTestId("data-sort-total_cents")).toHaveClass("justify-end");
     const rows = screen.getAllByTestId("data-row");
     expect(rows).toHaveLength(50);
     expect(within(rows[0]!).getAllByRole("cell")[1]).toHaveTextContent("1000");
@@ -122,7 +126,7 @@ describe("the grid", () => {
     expect(screen.getAllByTestId("data-filter-chip").map((chip) => chip.textContent)).toEqual(["status in (paid, shipped)", "notes is not NULL"]);
     for (const row of screen.getAllByTestId("data-row")) expect(["paid", "shipped"]).toContain(within(row).getAllByRole("cell")[3]!.textContent);
 
-    // LIKE is offered on text only.
+    // LIKE is offered on text only (a described type: "bigint" is not).
     await userEvent.click(screen.getByTestId("data-filter-add"));
     await userEvent.selectOptions(screen.getByTestId("data-filter-column"), "total_cents");
     expect(within(screen.getByTestId("data-filter-op")).queryByText("matches (any case)")).not.toBeInTheDocument();
@@ -135,15 +139,20 @@ describe("the grid", () => {
     await gridReady();
     expect(screen.getByTestId("data-page-prev")).toBeDisabled();
     fireEvent.click(screen.getByTestId("data-page-next"));
-    expect(view.search().page).toBe(2);
+    expect(view.search().offset).toBe(50);
     await waitFor(() => expect(browseCalls(api).at(-1)).toMatchObject({ offset: 50, limit: 50 }));
+    await waitFor(() => expect(screen.getByTestId("data-range")).toHaveTextContent("Rows 51–100"));
 
+    // A new page size keeps the first row on screen.
     await userEvent.selectOptions(screen.getByTestId("data-page-size"), "200");
-    expect(view.search()).toEqual({ db: "shop", table: "public.orders", size: 200 });
-    view.go({ db: "shop", table: "public.orders", size: 200, page: 2 });
+    expect(view.search()).toEqual({ db: "shop", table: "public.orders", offset: 50, size: 200 });
+    view.go({ db: "shop", table: "public.orders", size: 200, offset: 200 });
     // The last page: no next, and the total is exact.
     await waitFor(() => expect(screen.getByTestId("data-range")).toHaveTextContent("Rows 201–230 of 230"));
     expect(screen.getByTestId("data-page-next")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("data-page-prev"));
+    // Back a page size, to the first row (an offset of 0 leaves the URL).
+    expect(view.search().offset).toBeUndefined();
   });
 
   it("counts exactly on request, and says when the count stopped at the server's cap", async () => {
@@ -189,8 +198,76 @@ describe("the grid", () => {
     fireEvent.click(screen.getByTestId("data-column-metadata"));
     expect(view.search().cols).toEqual(["user_id", "status", "total_cents", "notes", "created_at"]);
     await waitFor(() => expect(browseCalls(api).at(-1)).toMatchObject({ columns: ["user_id", "status", "total_cents", "notes", "created_at", "id"] }));
-    await waitFor(() => expect(headers()).toEqual(["Open row", "user_iduuid", "statustext", "total_centsint8", "notestext", "created_attimestamptz"]));
+    await waitFor(() => expect(headers()).toEqual(["Open row", "user_iduuid", "statustext", "total_centsbigint", "notestext", "created_attimestamptz"]));
     expect(searchOf(within(screen.getAllByTestId("data-row")[0]!).getByTestId("data-row-open").getAttribute("href")).row).toBe("1000");
+  });
+
+  it("pages from next_offset when the server cut a page short, skipping nothing", async () => {
+    // A cap that fits about 7 order rows of JSON per response.
+    const api = createDataFixtureApi({ onlyShop: true, responseByteCap: 1500 });
+    const view = renderBrowser(api, { db: "shop", table: "public.orders" });
+    await gridReady();
+    const shown = screen.getAllByTestId("data-row").length;
+    expect(shown).toBeGreaterThan(1);
+    expect(shown).toBeLessThan(50);
+    expect(screen.getByTestId("data-page-cut")).toHaveTextContent(`The server cut this page at ${shown} of 50 rows`);
+    expect(screen.getByTestId("data-page-cut")).toHaveTextContent(`Next continues from row ${shown + 1}`);
+    expect(screen.getByTestId("data-range")).toHaveTextContent(`Rows 1–${shown}`);
+
+    fireEvent.click(screen.getByTestId("data-page-next"));
+    // offset + rows returned, not offset + limit.
+    expect(view.search().offset).toBe(shown);
+    await waitFor(() => expect(browseCalls(api).at(-1)).toMatchObject({ offset: shown, limit: 50 }));
+    await waitFor(() => expect(within(screen.getAllByTestId("data-row")[0]!).getAllByRole("cell")[1]).toHaveTextContent(String(1000 + shown)));
+    expect(screen.getByTestId("data-range")).toHaveTextContent(`Rows ${shown + 1}–`);
+  });
+
+  it("opens an old page= link on the rows it meant, and writes it as an offset on the next change", async () => {
+    const api = createDataFixtureApi({ onlyShop: true });
+    const view = renderBrowser(api, { db: "shop", table: "public.orders", page: 3, size: 25 });
+    await gridReady();
+    expect(browseCalls(api).at(-1)).toMatchObject({ offset: 50, limit: 25 });
+    expect(screen.getByTestId("data-range")).toHaveTextContent("Rows 51–75");
+    fireEvent.click(screen.getByTestId("data-page-next"));
+    expect(view.search()).toEqual({ db: "shop", table: "public.orders", offset: 75, size: 25 });
+  });
+
+  it("marks a cell the server cut at 4 KiB by its marker, with truncated_cells still empty", async () => {
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", table: "public.users", f: ["email.eq.user2@example.com"] });
+    await gridReady();
+    const profile = within(screen.getAllByTestId("data-row")[0]!).getAllByRole("cell").find((td) => td.dataset.column === "profile")!;
+    expect(profile).toHaveAttribute("data-server-cut", "true");
+    expect(within(profile).getByTestId("data-cell-cut")).toHaveTextContent("cut");
+    // Only the cut cell: its neighbours are whole.
+    expect(screen.getAllByTestId("data-cell-cut")).toHaveLength(1);
+
+    fireEvent.click(within(profile).getByTestId("data-cell"));
+    const popover = await screen.findByTestId("data-cell-popover");
+    expect(within(popover).getByTestId("data-cell-cut-note")).toHaveTextContent(/Cut by the server: 4,096 of [\d,]+ bytes shown/);
+    // The marker is the note's job, not part of the value; a cut json value is shown as the text that arrived.
+    expect(within(popover).getByTestId("data-cell-full").textContent).not.toContain("[truncated:");
+    expect(within(popover).getByTestId("data-cell-full").textContent!.startsWith('{"plan":')).toBe(true);
+    expect(within(popover).getByTestId("data-cell-copy")).toHaveTextContent("Copy what's shown");
+  });
+
+  it("marks the cells truncated_cells names, by their index into the result's columns", async () => {
+    // A server that names cut cells: here index 0 of the result (email), a cell with no marker in its text.
+    const fixture = createDataFixtureApi({ onlyShop: true });
+    const api = {
+      ...fixture,
+      browseTable: async (...args: Parameters<typeof fixture.browseTable>) => {
+        const page = await fixture.browseTable(...args);
+        return { ...page, truncatedCells: page.rows.map(() => [0]) };
+      },
+    };
+    renderBrowser(api, { db: "shop", table: "public.users", f: ["email.eq.user5@example.com"], cols: ["email", "name"] });
+    await gridReady();
+    const cut = screen.getAllByTestId("data-cell-cut");
+    expect(cut).toHaveLength(1);
+    expect(cut[0]!.closest("td")).toHaveAttribute("data-column", "email");
+    fireEvent.click(within(cut[0]!.closest("td")!).getByTestId("data-cell"));
+    expect(await screen.findByTestId("data-cell-cut-note")).toHaveTextContent("Cut by the server at 4 KiB: the rest of this value is not readable here.");
   });
 
   it("gives a view no row links, and says why", async () => {
@@ -212,8 +289,8 @@ describe("the grid", () => {
   it("designs its empty states: no match, and a page past the end", async () => {
     const view = renderBrowser(createDataFixtureApi({ onlyShop: true }), { db: "shop", table: "public.orders", f: ["status.eq.lost"] });
     expect(await screen.findByTestId("data-empty-filtered")).toHaveTextContent("No rows match these filters");
-    view.go({ db: "shop", table: "public.orders", page: 99 });
-    expect(await screen.findByTestId("data-empty-page")).toHaveTextContent("Nothing on page 99");
+    view.go({ db: "shop", table: "public.orders", offset: 4900 });
+    expect(await screen.findByTestId("data-empty-page")).toHaveTextContent("Nothing past row 4,900");
   });
 
   it("names the db:query grant when the caller may not read", async () => {

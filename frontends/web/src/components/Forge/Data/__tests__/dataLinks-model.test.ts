@@ -133,11 +133,16 @@ describe("counts", () => {
     expect(totalLabel(page({ hasMore: false, rows: [], total: 120, totalIsEstimate: true }), 500)).toBe("~120");
   });
 
-  it("says a Related count: none exactly, one exactly, more as an estimate never below what was seen", () => {
-    expect(relatedCountLabel({ rows: [], hasMore: false, total: 4 })).toEqual({ label: "None", none: true });
-    expect(relatedCountLabel({ rows: [[1]], hasMore: false, total: 0 })).toEqual({ label: "1", none: false });
-    expect(relatedCountLabel({ rows: [[1]], hasMore: true, total: 0 })).toEqual({ label: "~2", none: false });
-    expect(relatedCountLabel({ rows: [[1]], hasMore: true, total: 1500 })).toEqual({ label: "~1.5k", none: false });
+  it("says a Related count exactly, or as the server's cap with a plus", () => {
+    const exact = (over: Partial<Parameters<typeof relatedCountLabel>[0]>) => ({ rows: [[1]], hasMore: true, total: null, totalIsLowerBound: false, ...over });
+    expect(relatedCountLabel(exact({ rows: [], hasMore: false, total: 0 }))).toEqual({ label: "0", n: 0, none: true });
+    expect(relatedCountLabel(exact({ hasMore: false, total: 1 }))).toEqual({ label: "1", n: 1, none: false });
+    expect(relatedCountLabel(exact({ total: 1234 }))).toEqual({ label: "1,234", n: 1234, none: false });
+    // The server's cap: at least this many.
+    expect(relatedCountLabel(exact({ total: 10_000, totalIsLowerBound: true }))).toEqual({ label: "10,000+", n: 10_000, none: false });
+    // A response with no total says what the one row proves.
+    expect(relatedCountLabel(exact({ rows: [], hasMore: false }))).toEqual({ label: "0", n: 0, none: true });
+    expect(relatedCountLabel(exact({}))).toEqual({ label: "1+", n: 2, none: false });
   });
 });
 

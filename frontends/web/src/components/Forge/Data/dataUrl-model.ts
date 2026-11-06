@@ -15,7 +15,14 @@
  *   sort   one token each, in priority order: `<column>.asc` / `<column>.desc`
  *          (absent: the primary key ascending, the server's default)
  *   cols   the visible columns, in order (absent: every readable column)
- *   page   1-based page number (absent: 1)
+ *   offset rows skipped before the page (absent: 0). An offset, not a page
+ *          number, because the server may cut a page short of its size to
+ *          keep the response small: the next page starts at its next_offset,
+ *          which no page number can say. So a link opens on exactly the rows
+ *          it was copied from.
+ *   page   LEGACY, read only: a 1-based page number from a link made before
+ *          `offset`; it means offset (page-1)*size, and the first change to
+ *          the grid writes it as `offset`.
  *   size   rows per page, one of DATA_PAGE_SIZES (absent: 50)
  *   row    the open row's primary-key values, in key order, as a comma list
  *          (`\,` a comma, `\\` a backslash): `42`, or `org-1,42` for a
@@ -42,13 +49,15 @@ export interface DataSearch {
   f?: string[];
   sort?: string[];
   cols?: string[];
+  offset?: number;
+  /** Legacy: read as offset (page-1)*size, never written. */
   page?: number;
   size?: number;
   row?: string;
 }
 
 /** Every DataSearch key: what a link out of the browser carries, and what leaving it clears. */
-export const DATA_SEARCH_KEYS = ["db", "table", "f", "sort", "cols", "page", "size", "row"] as const satisfies readonly (keyof DataSearch)[];
+export const DATA_SEARCH_KEYS = ["db", "table", "f", "sort", "cols", "offset", "page", "size", "row"] as const satisfies readonly (keyof DataSearch)[];
 
 export interface DataFilter {
   column: string;
@@ -94,11 +103,16 @@ export function opSpec(op: BrowseOp): FilterOpSpec {
   return OP_SPECS.get(op)!;
 }
 
-/** Postgres text-ish types: what LIKE and ILIKE accept. */
-const TEXT_TYPES = new Set(["text", "varchar", "bpchar", "char", "name", "citext"]);
+const TEXT_TYPES = new Set(["text", "character varying", "varchar", "character", "char", "bpchar", "name", "citext"]);
 
-export function isTextType(pgType: string): boolean {
-  return TEXT_TYPES.has(pgType);
+/**
+ * Whether a DESCRIBED type (DescribeDatabase's spelling: "text",
+ * "character varying(40)", "character(3)", "citext") is text, which is what
+ * LIKE and ILIKE accept. An array ("text[]") is not.
+ */
+export function isTextType(described: string): boolean {
+  const base = described.trim().replace(/\(\d+\)$/, "");
+  return TEXT_TYPES.has(base);
 }
 
 // ── Escaping ────────────────────────────────────────────────────────────────
@@ -253,18 +267,27 @@ export function pageSizeOf(search: DataSearch): number {
   return (DATA_PAGE_SIZES as readonly number[]).includes(search.size ?? -1) ? search.size! : DEFAULT_PAGE_SIZE;
 }
 
-export function pageOf(search: DataSearch): number {
-  const page = search.page ?? 1;
-  return Number.isInteger(page) && page >= 1 ? page : 1;
-}
-
+/** The rows skipped before the page: the URL's offset, else a legacy page number's, within what the server serves. */
 export function offsetOf(search: DataSearch): number {
-  return Math.min((pageOf(search) - 1) * pageSizeOf(search), MAX_OFFSET);
+  if (search.offset !== undefined) {
+    return Number.isInteger(search.offset) && search.offset > 0 ? Math.min(search.offset, MAX_OFFSET) : 0;
+  }
+  const page = search.page ?? 1;
+  return Number.isInteger(page) && page > 1 ? Math.min((page - 1) * pageSizeOf(search), MAX_OFFSET) : 0;
 }
 
-/** The last page the server will serve: its offset cap, in pages of this size. */
-export function lastServablePage(size: number): number {
-  return Math.floor(MAX_OFFSET / size) + 1;
+/**
+ * Where Previous goes: a page size back, never below 0. A page before this one
+ * may have been cut short, so going back can show a few rows again; it never
+ * skips one.
+ */
+export function previousOffset(offset: number, size: number): number {
+  return Math.max(0, offset - size);
+}
+
+/** Whether the server will serve a page at `offset` (it refuses past MAX_OFFSET). */
+export function servable(offset: number): boolean {
+  return offset <= MAX_OFFSET;
 }
 
 // ── The request ─────────────────────────────────────────────────────────────
@@ -294,31 +317,39 @@ export function browseRequestOf(search: DataSearch, table: DbTable, ctx: BrowseC
 
 /**
  * The search to navigate to after a change to the grid. Anything that changes
- * WHICH rows match (filters, sort, page size) goes back to page 1; a table
- * change also clears the columns, the row and the table's own state.
+ * WHICH rows match (filters, sort) goes back to the first row; a page size
+ * change keeps the first row on screen; a table change also clears the
+ * columns, the row and the table's own state. A legacy `page` is written as
+ * the offset it means.
  */
 export function patchSearch(search: DataSearch, patch: Partial<DataSearch>): DataSearch {
-  const next: DataSearch = { ...search, ...patch };
-  if ("table" in patch && patch.table !== search.table) {
+  const current: DataSearch = { ...search };
+  if (current.page !== undefined) {
+    if (current.offset === undefined) current.offset = offsetOf(current);
+    delete current.page;
+  }
+  const next: DataSearch = { ...current, ...patch };
+  delete next.page;
+  if ("table" in patch && patch.table !== current.table) {
     next.f = patch.f;
     next.sort = patch.sort;
     next.cols = patch.cols;
-    next.page = patch.page;
+    next.offset = patch.offset;
     next.row = patch.row;
-  } else if ("f" in patch || "sort" in patch || "size" in patch) {
-    next.page = patch.page;
+  } else if ("f" in patch || "sort" in patch) {
+    next.offset = patch.offset;
   }
-  if ("db" in patch && patch.db !== search.db) {
+  if ("db" in patch && patch.db !== current.db) {
     next.table = patch.table;
     next.f = patch.f;
     next.sort = patch.sort;
     next.cols = patch.cols;
-    next.page = patch.page;
+    next.offset = patch.offset;
     next.row = patch.row;
   }
   for (const key of DATA_SEARCH_KEYS) {
     const value = next[key];
-    if (value === undefined || (Array.isArray(value) && value.length === 0) || (key === "page" && value === 1) || (key === "size" && value === DEFAULT_PAGE_SIZE)) {
+    if (value === undefined || (Array.isArray(value) && value.length === 0) || (key === "offset" && value === 0) || (key === "size" && value === DEFAULT_PAGE_SIZE)) {
       delete next[key];
     }
   }

@@ -57,14 +57,23 @@ describe("the row page", () => {
     const items = await screen.findByTestId("data-related-public.order_items.order_items_order_id_fkey");
     const invoices = screen.getByTestId("data-related-billing.invoices.invoices_order_id_fkey");
     expect(items).toHaveTextContent("order_id → id");
-    // Order 1004 has two items (an estimate past the first row) and, still pending, no invoice.
-    await waitFor(() => expect(within(items).getByTestId("data-related-count")).toHaveTextContent("~2 rows"));
+    // Order 1004 has two items, counted exactly, and, still pending, no invoice.
+    await waitFor(() => expect(within(items).getByTestId("data-related-count")).toHaveTextContent("2 rows"));
+    expect(within(items).getByTestId("data-related-count")).not.toHaveTextContent("~");
     await waitFor(() => expect(within(invoices).getByTestId("data-related-count")).toHaveTextContent("none"));
     expect(searchOf(within(items).getByTestId("data-related-link").getAttribute("href"))).toEqual({ db: "shop", table: "public.order_items", f: ["order_id.eq.1004"] });
 
-    const counts = browseCalls(api).filter((req) => req.limit === 1 && req.count === "estimated");
+    const counts = browseCalls(api).filter((req) => req.limit === 1 && req.count === "exact");
     expect(counts.map((req) => req.table).sort()).toEqual(["billing.invoices", "public.order_items"]);
-    expect(counts[0]).toMatchObject({ limit: 1, count: "estimated" });
+    expect(counts[0]).toMatchObject({ limit: 1, count: "exact" });
+  });
+
+  it("says a Related count past the server's cap as at least that many", async () => {
+    // A cap of 10 stands in for the server's 10,000; user 3 has 625 events.
+    renderBrowser(createDataFixtureApi({ onlyShop: true, exactCap: 10 }), { db: "shop", table: "public.users", row: fixtureUserId(3) });
+    await ready();
+    const events = await screen.findByTestId("data-related-public.events.events_user_id_fkey");
+    await waitFor(() => expect(within(events).getByTestId("data-related-count")).toHaveTextContent("10+ rows"));
   });
 
   it("fires the Related counts at most RELATED_CONCURRENCY at a time", async () => {
@@ -74,7 +83,7 @@ describe("the row page", () => {
     await ready();
     expect(screen.getAllByTestId("data-related-count")).toHaveLength(12);
     await waitFor(() => expect(screen.getAllByTestId("data-related-count").every((el) => !el.querySelector("[aria-label='Counting']"))).toBe(true), { timeout: 3000 });
-    expect(browseCalls(api).filter((req) => req.count === "estimated")).toHaveLength(12);
+    expect(browseCalls(api).filter((req) => req.count === "exact")).toHaveLength(12);
     expect(api.maxInFlight).toBe(RELATED_CONCURRENCY);
   });
 

@@ -15,7 +15,7 @@ import type { DbColumn } from "@/services/controlPlane/observability/appDatabase
 import { cn } from "@/lib/utils";
 
 import { CONTROL_FIELD } from "../controlStyles";
-import { typeLabel } from "./dataCells-model";
+import { shortTypeLabel } from "./dataCells-model";
 
 export function ColumnPicker({ columns, visible, onChange }: { columns: DbColumn[]; visible: string[]; onChange: (cols: string[] | undefined) => void }) {
   const [query, setQuery] = useState("");
@@ -68,7 +68,7 @@ export function ColumnPicker({ columns, visible, onChange }: { columns: DbColumn
                   data-testid={`data-column-${c.name}`}
                 />
                 <span className="min-w-0 flex-1 truncate font-mono text-xs text-ink">{c.name}</span>
-                <span className="shrink-0 font-mono text-2xs text-ink-muted">{typeLabel(c.pgType)}</span>
+                <span className="shrink-0 font-mono text-2xs text-ink-muted">{shortTypeLabel(c.pgType)}</span>
               </label>
             </li>
           ))}

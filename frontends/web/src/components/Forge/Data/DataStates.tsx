@@ -19,6 +19,7 @@ const KIND_ICON: Record<DataBrowserErrorKind, ReactNode> = {
   "not-configured": <Database className="h-4 w-4" />,
   denied: <Lock className="h-4 w-4" />,
   confirmation: <Lock className="h-4 w-4" />,
+  "shape-unknown": <Database className="h-4 w-4" />,
   unreachable: <PlugZap className="h-4 w-4" />,
   "not-found": <SearchX className="h-4 w-4" />,
   busy: <Timer className="h-4 w-4" />,
@@ -47,6 +48,16 @@ function errorCopy(kind: DataBrowserErrorKind, env: string, subject: string): { 
       };
     case "confirmation":
       return { title: `${env} is audited`, body: "Every read here needs a reason, and this one was sent without one." };
+    case "shape-unknown":
+      return {
+        title: `${env}'s databases aren't known yet`,
+        body: (
+          <>
+            Reliant learns which databases an environment has, and who may read them, from its recorded release. {env} has none yet:
+            deploy it once (<code className="font-mono text-ink">reliant forge env deploy {env}</code>) and they appear here.
+          </>
+        ),
+      };
     case "unreachable":
       return {
         title: `Reliant can't reach ${subject}`,
@@ -100,7 +111,7 @@ export function DataError({
     <div data-testid={testId} data-kind={kind}>
       <StateFrame
         testId={`${testId}-${kind}`}
-        tone={kind === "busy" ? "neutral" : "error"}
+        tone={kind === "busy" || kind === "shape-unknown" ? "neutral" : "error"}
         icon={KIND_ICON[kind]}
         title={copy.title}
         actions={

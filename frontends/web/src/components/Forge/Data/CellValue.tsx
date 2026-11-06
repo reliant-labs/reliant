@@ -9,14 +9,14 @@
  */
 
 import { useState } from "react";
-import { Check, Copy, ExternalLink } from "lucide-react";
+import { Check, Copy, ExternalLink, Scissors } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Link from "@/components/forge-ui/link";
 import Popover from "@/components/forge-ui/popover";
 import { cn } from "@/lib/utils";
 
-import { cellDisplay, typeLabel, type CellDisplay } from "./dataCells-model";
+import { cellDisplay, cutNote, type CellDisplay } from "./dataCells-model";
 import type { DbCell } from "@/services/controlPlane/observability/appDatabaseApi";
 
 /** SQL NULL: a mark, never text that could be a value. */
@@ -41,6 +41,31 @@ export function CellPreview({ display, numeric }: { display: CellDisplay; numeri
     >
       {display.short === "" ? <span className="font-sans italic text-ink-subtle">empty</span> : display.short}
     </span>
+  );
+}
+
+/** A cell the server cut at 4 KiB: what is shown is not the whole value. */
+export function CutMark() {
+  return (
+    <span
+      className="inline-flex shrink-0 items-center gap-0.5 rounded border border-warning-border px-1 font-sans text-2xs leading-4 text-warning-ink"
+      title="Cut by the server at 4 KiB"
+      data-testid="data-cell-cut"
+    >
+      <Scissors className="h-2.5 w-2.5" aria-hidden="true" />
+      cut
+    </span>
+  );
+}
+
+/** The sentence under a cut value: how much arrived, and that the rest is not here. */
+export function CutNote({ display }: { display: CellDisplay }) {
+  if (!display.serverCut) return null;
+  return (
+    <p className="flex items-start gap-1.5 text-xs text-warning-ink" data-testid="data-cell-cut-note">
+      <Scissors className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+      {cutNote(display.serverCut)}
+    </p>
   );
 }
 
@@ -80,7 +105,12 @@ export function FullValue({ display, testId }: { display: CellDisplay; testId?: 
 export interface OpenCell {
   key: string;
   column: string;
-  pgType: string;
+  /** The result column's internal type ("int8"): how the value reads. */
+  resultType: string;
+  /** The described type ("bigint"): what the header says. */
+  describedType: string;
+  /** The row's truncated_cells names this cell. */
+  flaggedCut: boolean;
   value: DbCell;
   /** Where the referenced row is, for a foreign-key cell. */
   link?: { href: string; label: string };
@@ -90,7 +120,7 @@ export interface OpenCell {
 /** The grid's one popover, over the open cell. */
 export function CellPopover({ cell, onClose }: { cell: OpenCell | null; onClose: () => void }) {
   if (!cell) return null;
-  const display = cellDisplay(cell.value, cell.pgType);
+  const display = cellDisplay(cell.value, cell.resultType, cell.flaggedCut);
   return (
     <Popover
       open
@@ -102,11 +132,13 @@ export function CellPopover({ cell, onClose }: { cell: OpenCell | null; onClose:
       <div data-testid="data-cell-popover">
         <div className="mb-2 flex items-center justify-between gap-2">
           <p className="min-w-0 truncate text-xs text-ink-muted">
-            <span className="font-mono font-medium text-ink">{cell.column}</span> · {typeLabel(cell.pgType)}
+            <span className="font-mono font-medium text-ink">{cell.column}</span>
+            {cell.describedType && <> · {cell.describedType}</>}
           </p>
-          {display.kind !== "null" && <CopyButton text={display.full} testId="data-cell-copy" />}
+          {display.kind !== "null" && <CopyButton text={display.full} label={display.serverCut ? "Copy what's shown" : "Copy"} testId="data-cell-copy" />}
         </div>
         <FullValue display={display} testId="data-cell-full" />
+        <CutNote display={display} />
         {cell.link && (
           <Link href={cell.link.href} className="mt-2 inline-flex items-center gap-1 text-xs text-primary-ink hover:underline" data-testid="data-cell-link">
             <ExternalLink className="h-3 w-3" aria-hidden="true" />

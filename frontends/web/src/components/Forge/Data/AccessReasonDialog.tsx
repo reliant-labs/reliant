@@ -43,7 +43,7 @@ export function AccessReasonDialog({
       open={open}
       onClose={onCancel}
       title={`Reading ${env}'s data is audited`}
-      description={`Every table you open and every page you read in ${env} is recorded in the audit log and the project's Activity, with your name and this reason. It's asked once for this tab.`}
+      description={`Every page you read in ${env} is recorded in the audit log with your name and this reason, and opening a database shows in the project's Activity. It's asked once for this tab.`}
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -78,7 +78,7 @@ export function AccessReasonDialog({
           data-testid="data-access-reason"
         />
         <p className="text-xs text-ink-muted">
-          Teammates see it in Activity next to each read. {reason.length > REASON_MAX - 50 ? `${REASON_MAX - reason.length} characters left.` : ""}
+          Teammates see it in Activity and the audit log. {reason.length > REASON_MAX - 50 ? `${REASON_MAX - reason.length} characters left.` : ""}
         </p>
       </form>
     </Modal>
