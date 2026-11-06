@@ -464,7 +464,7 @@ function ToolExecutionComponent({
       ? toolDurationMs(toolCall.durableStartedAt, toolCall.durableCompletedAt)
       : null;
   const durationLabel = durationMs !== null ? formatToolDuration(durationMs) : null;
-  const actionVerb = toolActionVerb(toolCall.name, isCompleted || hasFailed || isCancelled ? "done" : "live");
+  const actionVerb = toolActionVerb(toolCall.name, isCompleted || hasFailed || isCancelled ? "done" : "live", toolCall.input);
   // A shell call that deployed a forge app links to what it deployed
   // (Apps/DeployedAppCard), unless the container already shows that card.
   const deployCardShownOutside = useContext(DeployCardShownOutside);

@@ -28,6 +28,7 @@ import {
   workflowStoppedBecause,
 } from "../../../lib/workflowLifecycle";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
+import { toolActionVerb } from "../../../lib/toolAction";
 import { cn } from "../../../lib/utils";
 import { logger } from "../../../lib/logger";
 import { compareMessagesWithinThread } from "../../../lib/messageOrder";
@@ -273,7 +274,9 @@ function SpawnPreview({ ctx }: ToolContentProps) {
           if (detail.length > MAX_DETAIL_LENGTH) detail = detail.slice(0, MAX_DETAIL_LENGTH) + "\u2026";
           toolCalls.push({
             name: block.toolName,
-            displayName: formatToolName(block.toolName),
+            displayName: formatToolName(block.toolName).startsWith("spawn")
+              ? toolActionVerb(block.toolName, hasResult ? "done" : "live", block.input) ?? formatToolName(block.toolName)
+              : formatToolName(block.toolName),
             completed: hasResult && !isError,
             failed: isError,
             detail,

@@ -125,7 +125,7 @@ export function ChatEditorSettings() {
           <h3 id="chat-editor-spawn" className="text-sm font-semibold">
             Sub-agents
           </h3>
-          <p className="text-xs text-muted-foreground mt-1">How a spawned agent's thread shows in the timeline.</p>
+          <p className="text-xs text-muted-foreground mt-1">How a sub-agent's conversation appears in the timeline.</p>
         </div>
         <ChoiceGroup
           label="Sub-agent display"
