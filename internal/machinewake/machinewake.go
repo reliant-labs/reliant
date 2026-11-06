@@ -160,8 +160,8 @@ func (e *wakingError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 // the machine so the client can say which one is waking. It is still a user
 // error; the class is carried onto the fresh error, which drops the chain.
 func (e *wakingError) connectError() *connect.Error {
-	cerr := connect.NewError(connect.CodeUnavailable, svcerr.WithClass(errors.New(e.Error()), svcerr.ClassUser))
-	cerr.Meta().Set(svcerr.ReasonHeader, errreason.DaemonWaking)
+	cerr := svcerr.ToConnect(svcerr.WithReason(
+		svcerr.WithClass(svcerr.Unavailable(e.Error()), svcerr.ClassUser), errreason.DaemonWaking))
 	if detail, err := connect.NewErrorDetail(&reliantv1.DaemonWaking{DaemonId: e.daemonID}); err == nil {
 		cerr.AddDetail(detail)
 	}
