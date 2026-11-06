@@ -448,6 +448,7 @@ const (
 	AgentMessageKind_AGENT_MESSAGE_KIND_FAILED                                 = sdk.AgentMessageKind_AGENT_MESSAGE_KIND_FAILED
 	AgentMessageKind_AGENT_MESSAGE_KIND_HUMAN_MESSAGE                          = sdk.AgentMessageKind_AGENT_MESSAGE_KIND_HUMAN_MESSAGE
 	AgentMessageKind_AGENT_MESSAGE_KIND_MESSAGE                                = sdk.AgentMessageKind_AGENT_MESSAGE_KIND_MESSAGE
+	AgentMessageKind_AGENT_MESSAGE_KIND_RUN_MESSAGE                            = sdk.AgentMessageKind_AGENT_MESSAGE_KIND_RUN_MESSAGE
 	AgentMessageKind_AGENT_MESSAGE_KIND_UNSPECIFIED                            = sdk.AgentMessageKind_AGENT_MESSAGE_KIND_UNSPECIFIED
 	ApprovalStatus_APPROVAL_STATUS_APPROVED                                    = sdk.ApprovalStatus_APPROVAL_STATUS_APPROVED
 	ApprovalStatus_APPROVAL_STATUS_CANCELLED                                   = sdk.ApprovalStatus_APPROVAL_STATUS_CANCELLED
