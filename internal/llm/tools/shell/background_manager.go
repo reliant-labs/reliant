@@ -197,7 +197,30 @@ type BackgroundManager struct {
 	idleReap atomic.Int64
 	// reapKick wakes the reaper early: a workspace archived needs no wait.
 	reapKick chan struct{}
+
+	// portScan serializes the OS port scans of the listing getters
+	// (refreshPortsGated).
+	portScan portScanGate
 }
+
+// portScanGate is the state of refreshPortsGated: mu is held while a scan
+// runs, and lastAll is when the last scan of EVERY process finished. Both are
+// touched only with mu held.
+type portScanGate struct {
+	mu      sync.Mutex
+	lastAll time.Time
+}
+
+// portScanFreshness is how long a scan of every process answers for the next
+// listing. The process monitor scans every 2s, and every exec.bg_list (the
+// web's process list, polled) scanned again on top of it, so a busy machine
+// ran several `ps -A` + `lsof` pairs at once: on 2026-11-05 a machine at load
+// 100 answered exec.bg_list in 2.9s p50 and timed out (5s) 240 times in a day.
+// A port list a second old is as good as a new one for showing a dev server.
+const portScanFreshness = time.Second
+
+// scanPorts is the scan refreshPortsGated runs; a var so a test can count it.
+var scanPorts = refreshPortsBatch
 
 var (
 	bgManager     *BackgroundManager
@@ -914,6 +937,31 @@ func (p *BackgroundProcess) refreshPorts() {
 	p.outputMu.Unlock()
 }
 
+// refreshPortsGated is refreshPortsBatch for the listing getters, so they
+// never run two OS scans at once and never repeat a fresh one:
+//
+//   - a scan already running answers for this caller too: it returns at once
+//     and the caller reads the ports the processes already hold (at most one
+//     scan old). A list never queues behind someone else's scan;
+//   - a scan of every process (all) that finished within portScanFreshness
+//     answers for any caller;
+//   - otherwise it scans. Only a scan of every process counts as fresh for
+//     the next caller: a subset's scan says nothing about the rest.
+func (m *BackgroundManager) refreshPortsGated(processes []*BackgroundProcess, all bool) {
+	g := &m.portScan
+	if !g.mu.TryLock() {
+		return
+	}
+	defer g.mu.Unlock()
+	if !g.lastAll.IsZero() && m.now().Sub(g.lastAll) < portScanFreshness {
+		return
+	}
+	scanPorts(processes)
+	if all {
+		g.lastAll = m.now()
+	}
+}
+
 // refreshPortsBatch refreshes the port list of many processes using a fixed
 // number of subprocesses, rather than one OS scan per process.
 //
@@ -990,8 +1038,9 @@ func (m *BackgroundManager) GetProcessesBySession(sessionID string) []*Backgroun
 	// Update port information for running processes. Done outside the map
 	// lock: refreshPortsBatch takes each process's own outputMu, which is what
 	// actually guards Status/Ports/cmd. Batched because the OS scan is the
-	// expensive part and it does not need to be repeated per process.
-	refreshPortsBatch(processes)
+	// expensive part and it does not need to be repeated per process; gated
+	// (refreshPortsGated) so callers never run two scans at once.
+	m.refreshPortsGated(processes, false)
 
 	return processes
 }
@@ -1010,8 +1059,9 @@ func (m *BackgroundManager) GetProcessesByChat(chatID string) []*BackgroundProce
 	// Update port information for running processes. Done outside the map
 	// lock: refreshPortsBatch takes each process's own outputMu, which is what
 	// actually guards Status/Ports/cmd. Batched because the OS scan is the
-	// expensive part and it does not need to be repeated per process.
-	refreshPortsBatch(processes)
+	// expensive part and it does not need to be repeated per process; gated
+	// (refreshPortsGated) so callers never run two scans at once.
+	m.refreshPortsGated(processes, false)
 
 	return processes
 }
@@ -1030,8 +1080,9 @@ func (m *BackgroundManager) GetProcessesByWorktree(worktreeID string) []*Backgro
 	// Update port information for running processes. Done outside the map
 	// lock: refreshPortsBatch takes each process's own outputMu, which is what
 	// actually guards Status/Ports/cmd. Batched because the OS scan is the
-	// expensive part and it does not need to be repeated per process.
-	refreshPortsBatch(processes)
+	// expensive part and it does not need to be repeated per process; gated
+	// (refreshPortsGated) so callers never run two scans at once.
+	m.refreshPortsGated(processes, false)
 
 	return processes
 }
@@ -1048,8 +1099,9 @@ func (m *BackgroundManager) GetAllProcesses() []*BackgroundProcess {
 	// Update port information for running processes. Done outside the map
 	// lock: refreshPortsBatch takes each process's own outputMu, which is what
 	// actually guards Status/Ports/cmd. Batched because the OS scan is the
-	// expensive part and it does not need to be repeated per process.
-	refreshPortsBatch(processes)
+	// expensive part and it does not need to be repeated per process; gated
+	// (refreshPortsGated) so callers never run two scans at once.
+	m.refreshPortsGated(processes, true)
 
 	return processes
 }
