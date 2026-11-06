@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 function preview(content: string, filePath = '/repo/docs/readme.md', worktreeId: string | undefined = 'wt') {
-  return render(<MarkdownFilePreview content={content} filePath={filePath} worktreeId={worktreeId} />);
+  return render(<MarkdownFilePreview content={content} filePath={filePath} worktreeId={worktreeId} worktreePath="/repo" />);
 }
 
 describe('MarkdownFilePreview', () => {
@@ -54,12 +54,39 @@ describe('MarkdownFilePreview', () => {
     expect(mocks.openLink).toHaveBeenCalledWith('mailto:hi@example.com', 'wt');
   });
 
-  it('keeps relative input paths relative and handles malformed links gracefully', () => {
+  it('resolves relative document paths inside the root and handles malformed links gracefully', () => {
     preview('[Sibling](../other.md) [Malformed](bad%ZZ.md)', 'docs/readme.md');
     fireEvent.click(screen.getByText('Sibling'));
-    expect(mocks.openFile).toHaveBeenCalledWith({ path: 'other.md', fullPath: 'other.md', isAbsolute: false }, 'wt');
+    expect(mocks.openFile).toHaveBeenCalledWith({ path: '/repo/other.md', fullPath: '/repo/other.md', isAbsolute: true }, 'wt');
     fireEvent.click(screen.getByText('Malformed'));
     expect(screen.getByRole('status').textContent).toContain('Unable');
+  });
+
+  it.each([
+    '/etc/passwd', '/other-workspace/private.png', '/repo-sibling/private.png',
+    '../../private.png', '../%2e%2e/private.png', '%2fetc%2fpasswd',
+    '/repo/../private.png', '../../../repo-sibling/private.png',
+  ])('blocks local link and image escapes: %s', (path) => {
+    const { container } = preview(`[Escape](${path})\n\n![Private](${path})`);
+    fireEvent.click(screen.getByText('Escape'));
+    expect(mocks.openFile).not.toHaveBeenCalled();
+    expect(mocks.blob).not.toHaveBeenCalled();
+    expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByRole('status')).toHaveTextContent('Unable to open this link');
+  });
+
+  it('fails closed for local references when the worktree root is unknown', () => {
+    render(<MarkdownFilePreview content={'[Local](next.md)\n\n![Local image](image.png)'} filePath="/repo/readme.md" worktreeId="wt" />);
+    fireEvent.click(screen.getByText('Local'));
+    expect(mocks.openFile).not.toHaveBeenCalled();
+    expect(mocks.blob).not.toHaveBeenCalled();
+  });
+
+  it('does not grant a document outside the worktree access to local references', () => {
+    preview('[Local](/repo/next.md)\n\n![Private](private.png)', '/other/readme.md');
+    fireEvent.click(screen.getByText('Local'));
+    expect(mocks.openFile).not.toHaveBeenCalled();
+    expect(mocks.blob).not.toHaveBeenCalled();
   });
 
   it('assigns stable unique heading anchors and scrolls only within its document', () => {
@@ -77,7 +104,7 @@ describe('MarkdownFilePreview', () => {
     const { rerender, unmount } = preview('![Diagram](../assets/a%20b.png)');
     await waitFor(() => expect(screen.getByRole('img').getAttribute('src')).toBe('blob:preview'));
     expect(mocks.blob).toHaveBeenCalledWith('/repo/assets/a b.png', 'wt');
-    rerender(<MarkdownFilePreview content="![Next](next.png)" filePath="/repo/docs/readme.md" worktreeId="wt2" />);
+    rerender(<MarkdownFilePreview content="![Next](next.png)" filePath="/repo/docs/readme.md" worktreeId="wt2" worktreePath="/repo" />);
     await waitFor(() => expect(mocks.blob).toHaveBeenCalledWith('/repo/docs/next.png', 'wt2'));
     await waitFor(() => expect(screen.getByRole('img').getAttribute('src')).toBe('blob:preview'));
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);

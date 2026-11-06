@@ -10,6 +10,7 @@ export interface MarkdownFilePreviewProps {
   content: string;
   filePath: string;
   worktreeId?: string;
+  worktreePath?: string;
 }
 
 // Document URLs are not chat text: no bare-image rewriting or code-path detection.
@@ -21,13 +22,20 @@ function safeUrl(url: string, image = false): string {
   return !scheme || ['http:', 'https:', ...(image ? [] : ['mailto:'])].includes(scheme) ? url : '';
 }
 
-function localPath(url: string, filePath: string): string | undefined {
+function localPath(url: string, filePath: string, worktreePath?: string): string | undefined {
+  // A document is untrusted input: never infer its authority from its own path.
+  // Without a known worktree root, local links and images fail closed.
+  if (!worktreePath?.startsWith('/')) return undefined;
+  const root = worktreePath.replace(/\/+$/, '') || '/';
+  const withinRoot = (path: string) => root === '/' || path === root || path.startsWith(`${root}/`);
+  const documentPath = filePath.startsWith('/') ? filePath : `${root}/${filePath}`;
+  if (!withinRoot(documentPath)) return undefined;
   try {
     const path = decodeURIComponent(url.split(/[?#]/)[0]);
     // Decoding must not smuggle control characters into the daemon path.
     // eslint-disable-next-line no-control-regex
     if (!path || /[\u0000-\u001f\u007f\\]/.test(path)) return undefined;
-    const joined = path.startsWith('/') ? path : `${filePath.slice(0, filePath.lastIndexOf('/') + 1)}${path}`;
+    const joined = path.startsWith('/') ? path : `${documentPath.slice(0, documentPath.lastIndexOf('/') + 1)}${path}`;
     const parts: string[] = [];
     for (const part of joined.split('/')) {
       if (!part || part === '.') continue;
@@ -35,7 +43,8 @@ function localPath(url: string, filePath: string): string | undefined {
       else if (part === '..' && joined.startsWith('/')) continue;
       else parts.push(part);
     }
-    return `${joined.startsWith('/') ? '/' : ''}${parts.join('/')}`;
+    const resolved = `/${parts.join('/')}`;
+    return withinRoot(resolved) ? resolved : undefined;
   } catch {
     return undefined;
   }
@@ -46,11 +55,11 @@ function headingText(node: HeadingNode): string {
   return node.value ?? node.children?.map(headingText).join('') ?? '';
 }
 
-function DocumentImage({ src, alt, title, filePath, worktreeId }: {
-  src?: string; alt?: string; title?: string; filePath: string; worktreeId?: string;
+function DocumentImage({ src, alt, title, filePath, worktreeId, worktreePath }: {
+  src?: string; alt?: string; title?: string; filePath: string; worktreeId?: string; worktreePath?: string;
 }) {
   const external = !!src && /^https?:/i.test(src);
-  const path = src && !external ? localPath(src, filePath) : undefined;
+  const path = src && !external ? localPath(src, filePath, worktreePath) : undefined;
   const [loaded, setLoaded] = useState<{ path: string; worktreeId?: string; url: string }>();
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -79,7 +88,7 @@ function DocumentImage({ src, alt, title, filePath, worktreeId }: {
 }
 
 /** Read-only document semantics, deliberately independent of the chat renderer. */
-export function MarkdownFilePreview({ content, filePath, worktreeId }: MarkdownFilePreviewProps) {
+export function MarkdownFilePreview({ content, filePath, worktreeId, worktreePath }: MarkdownFilePreviewProps) {
   const openFile = useFileOpener();
   const root = useRef<HTMLElement>(null);
   const prefix = useId();
@@ -120,14 +129,14 @@ export function MarkdownFilePreview({ content, filePath, worktreeId }: MarkdownF
               } else if (/^(https?:|mailto:)/i.test(href)) {
                 void openLink(href, worktreeId).catch(() => setLinkError(true));
               } else {
-                const path = localPath(href, filePath);
+                const path = worktreeId ? localPath(href, filePath, worktreePath) : undefined;
                 if (!path) { setLinkError(true); return; }
                 try { openFile({ path, fullPath: path, isAbsolute: path.startsWith('/') }, worktreeId); }
                 catch { setLinkError(true); }
               }
             }}>{children}</a>;
           },
-          img: ({ src, alt, title }) => <DocumentImage key={`${filePath}:${worktreeId}:${src}`} src={src} alt={alt} title={title} filePath={filePath} worktreeId={worktreeId} />,
+          img: ({ src, alt, title }) => <DocumentImage key={`${filePath}:${worktreeId}:${src}`} src={src} alt={alt} title={title} filePath={filePath} worktreeId={worktreeId} worktreePath={worktreePath} />,
           table: ({ children }) => <div className="overflow-x-auto"><table>{children}</table></div>,
         }}
       >{content}</ReactMarkdown>

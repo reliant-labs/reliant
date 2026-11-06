@@ -1065,7 +1065,12 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
             aria-label="Markdown preview"
             className={cn("h-full overflow-auto", !showingMarkdownPreview && "hidden")}
           >
-            <MarkdownFilePreview content={content} filePath={file.path} worktreeId={effectiveWorktreeId} />
+            <MarkdownFilePreview
+              content={content}
+              filePath={file.path}
+              worktreeId={effectiveWorktreeId}
+              worktreePath={effectiveWorktree && effectiveWorktree.id === effectiveWorktreeId ? effectiveWorktree.path : undefined}
+            />
           </div>
         )}
         </>
