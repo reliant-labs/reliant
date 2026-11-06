@@ -242,6 +242,26 @@ describe("buildSimplifiedTimeline", () => {
     expect(out[1]).toBe(event);
   });
 
+  it.each([false, true])("keeps cross-thread completion metadata outside both adjacent folds (typed=%s)", (typed) => {
+    const event = notice('spawn "research" completed', {
+      thread: "other-thread",
+      ...(typed ? { sender: create(MessageSenderSchema, { threadId: "child", kind: AgentMessageKind.COMPLETION }) } : {}),
+    });
+    // Its timeline workflow is the parent, but the durable message belongs
+    // elsewhere. It must remain a boundary rather than join either fold.
+    const out = build([
+      row(asst("before", [{ call: "c1" }], { thread: "t1" })),
+      event,
+      row(asst("after", [{ call: "c2" }], { thread: "t1" })),
+    ]);
+    expect(out[1]).toBe(event);
+    const folds = out.filter((item) => item.type === "work");
+    expect(folds).toHaveLength(2);
+    for (const fold of folds) {
+      if (fold.type === "work") expect(fold.work.events).toBeUndefined();
+    }
+  });
+
   it("keeps attachments visible on a message that only contributes work", () => {
     const a1 = asst("a1", [{ call: "c1" }], {
       attachments: [{ id: "att" } as never],

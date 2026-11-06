@@ -246,7 +246,11 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     const item = items[i];
     if (item.type === "message") {
       const m = item as { message: Message; workflow: { thread: string } };
-      if (end > start && m.workflow.thread === thread && isRoutineActivityMessage(m.message)) {
+      // A completion must belong to this turn in both representations. The
+      // timeline workflow can be an aggregate parent while the message still
+      // names a different thread; never hide that cross-thread notice.
+      const sameThread = m.workflow.thread === thread && (!m.message.thread || m.message.thread === thread);
+      if (end > start && sameThread && isRoutineActivityMessage(m.message)) {
         routine.add(i);
         end = i + 1;
         continue;
