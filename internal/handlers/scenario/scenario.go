@@ -3,12 +3,13 @@ package scenario
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -215,23 +216,23 @@ func (s *Service) CreateScenario(
 		now := time.Now().UTC()
 		dbScenario := &db.WorkflowScenario{
 			ID:              uuid.New().String(),
-			WorkflowDraftID: sql.NullString{String: *workflowDraftID, Valid: true},
+			WorkflowDraftID: ptr.Of(*workflowDraftID),
 			UserID:          userID,
 			Name:            req.Msg.Scenario.Name,
-			Description:     sql.NullString{String: req.Msg.Scenario.Description, Valid: req.Msg.Scenario.Description != ""},
+			Description:     ptr.StringIfNotEmpty(req.Msg.Scenario.Description),
 			Events:          string(scenarioYAML),
 			CreatedAt:       now,
 			UpdatedAt:       now,
 		}
 
 		if result != nil {
-			dbScenario.LastRunAt = sql.NullTime{Time: now, Valid: true}
-			dbScenario.LastRunStatus = sql.NullString{String: string(result.Status), Valid: true}
+			dbScenario.LastRunAt = ptr.Of(now)
+			dbScenario.LastRunStatus = ptr.Of(string(result.Status))
 			resultJSON, err := result.ToJSON()
 			if err != nil {
 				return nil, svcerr.WrapOr(err, svcerr.Internal("failed to marshal result"))
 			}
-			dbScenario.LastRunResult = sql.NullString{String: resultJSON, Valid: true}
+			dbScenario.LastRunResult = ptr.Of(resultJSON)
 		}
 
 		if err := s.deps.Repo.CreateWorkflowScenario(ctx, dbScenario); err != nil {
@@ -363,8 +364,8 @@ func (s *Service) RunScenario(
 			}
 
 			// Get the workflow
-			if dbScenario.WorkflowDraftID.Valid {
-				draft, err := s.deps.Repo.GetWorkflowDraft(ctx, dbScenario.WorkflowDraftID.String)
+			if dbScenario.WorkflowDraftID != nil {
+				draft, err := s.deps.Repo.GetWorkflowDraft(ctx, *dbScenario.WorkflowDraftID)
 				if err != nil {
 					return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 				}
@@ -660,15 +661,9 @@ func scenarioToProto(s *db.WorkflowScenario) (*reliantv1.Scenario, error) {
 		UpdatedAt: s.UpdatedAt.Format(time.RFC3339),
 	}
 
-	if s.WorkflowDraftID.Valid {
-		proto.WorkflowDraftId = s.WorkflowDraftID.String
-	}
-	if s.Description.Valid {
-		proto.Description = s.Description.String
-	}
-	if s.LastRunStatus.Valid {
-		proto.LastRunStatus = s.LastRunStatus.String
-	}
+	proto.WorkflowDraftId = ptr.From(s.WorkflowDraftID)
+	proto.Description = ptr.From(s.Description)
+	proto.LastRunStatus = ptr.From(s.LastRunStatus)
 
 	// Parse the full scenario YAML and convert to proto
 	var scenario wfscenario.Scenario
@@ -685,9 +680,9 @@ func scenarioToProto(s *db.WorkflowScenario) (*reliantv1.Scenario, error) {
 	}
 
 	// Parse last run result from JSON
-	if s.LastRunResult.Valid {
+	if s.LastRunResult != nil {
 		var result reliantv1.ScenarioResult
-		if err := json.Unmarshal([]byte(s.LastRunResult.String), &result); err != nil {
+		if err := json.Unmarshal([]byte(*s.LastRunResult), &result); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal last run result: %w", err)
 		}
 		proto.LastRunResult = &result

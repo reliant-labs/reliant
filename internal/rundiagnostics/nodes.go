@@ -12,6 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/reliant-labs/reliant/internal/ptr"
+
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -38,18 +40,18 @@ func Nodes(rows []*core.StepExecution) []*pb.RunNodeExecution {
 	scanBudget := TextBudget
 	for _, row := range rows {
 		n := &pb.RunNodeExecution{Id: row.ID, WorkflowId: row.WorkflowID,
-			NodeId: row.StepID, NodePath: row.NodePath.String, Activity: row.ActivityName,
-			Status: "completed", Attempt: row.Attempt.Int32,
+			NodeId: row.StepID, NodePath: ptr.From(row.NodePath), Activity: row.ActivityName,
+			Status: "completed", Attempt: ptr.From(row.Attempt),
 			CompletedAt: row.CreatedAt.Format(time.RFC3339Nano)}
-		if row.DurationMs.Valid {
-			n.DurationMs = &row.DurationMs.Int64
-			n.StartedAt = row.CreatedAt.Add(-time.Duration(row.DurationMs.Int64) * time.Millisecond).Format(time.RFC3339Nano)
+		if row.DurationMs != nil {
+			n.DurationMs = row.DurationMs
+			n.StartedAt = row.CreatedAt.Add(-time.Duration(*row.DurationMs) * time.Millisecond).Format(time.RFC3339Nano)
 		}
-		if row.LoopNodeID.Valid {
-			n.LoopNodeId = row.LoopNodeID.String
+		if row.LoopNodeID != nil {
+			n.LoopNodeId = *row.LoopNodeID
 		}
-		if row.LoopIteration.Valid {
-			iteration := int32(row.LoopIteration.Int64)
+		if row.LoopIteration != nil {
+			iteration := int32(*row.LoopIteration)
 			n.LoopIteration = &iteration
 		}
 		var output struct {
@@ -61,20 +63,21 @@ func Nodes(rows []*core.StepExecution) []*pb.RunNodeExecution {
 			Message string `json:"message"`
 			Omitted bool   `json:"_diagnostic_omitted"`
 		}
-		if len(row.OutputJSON.String) > ScanLimit || len(row.OutputJSON.String) > scanBudget {
+		outputJSON := ptr.From(row.OutputJSON)
+		if len(outputJSON) > ScanLimit || len(outputJSON) > scanBudget {
 			output.Omitted = true
 		} else {
-			scanBudget -= len(row.OutputJSON.String)
-			_ = json.Unmarshal([]byte(row.OutputJSON.String), &output)
+			scanBudget -= len(outputJSON)
+			_ = json.Unmarshal([]byte(outputJSON), &output)
 		}
-		if row.ExitCode.Valid {
-			code := int32(row.ExitCode.Int64)
+		if row.ExitCode != nil {
+			code := int32(*row.ExitCode)
 			n.ExitCode = &code
 		}
 		switch {
 		case row.ActivityName == "SkippedStep" || output.Skipped:
 			n.Status = "skipped"
-		case row.ErrorMessage.String != "" || row.Success.Valid && !row.Success.Bool || row.ExitCode.Valid && row.ExitCode.Int64 != 0:
+		case ptr.From(row.ErrorMessage) != "" || row.Success != nil && !*row.Success || row.ExitCode != nil && *row.ExitCode != 0:
 			n.Status = "failed"
 		}
 		if strings.HasSuffix(row.ActivityName, "ExecuteRunStep") || n.ExitCode != nil {
@@ -84,7 +87,7 @@ func Nodes(rows []*core.StepExecution) []*pb.RunNodeExecution {
 				n.StdoutTail = "[output omitted: safe diagnostic limit]"
 			}
 		}
-		errorText := row.ErrorMessage.String
+		errorText := ptr.From(row.ErrorMessage)
 		if len(errorText) > ScanLimit || len(errorText) > scanBudget {
 			errorText = "[error omitted: safe diagnostic limit]"
 		} else {

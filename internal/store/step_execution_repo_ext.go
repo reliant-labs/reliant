@@ -10,7 +10,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
 
@@ -30,17 +29,17 @@ func InsertStepExecution(ctx context.Context, db orm.Context, exec *core.StepExe
 		WorkflowID:    exec.WorkflowID,
 		StepID:        exec.StepID,
 		ActivityName:  exec.ActivityName,
-		OutputJSON:    nullStringPtr(exec.OutputJSON),
-		ExitCode:      nullInt64Ptr(exec.ExitCode),
+		OutputJSON:    exec.OutputJSON,
+		ExitCode:      exec.ExitCode,
 		Success:       successFlag(exec.Success),
-		DurationMs:    nullInt64Ptr(exec.DurationMs),
+		DurationMs:    exec.DurationMs,
 		CreatedAt:     exec.CreatedAt,
-		LoopNodeID:    nullStringPtr(exec.LoopNodeID),
-		LoopIteration: nullInt64Ptr(exec.LoopIteration),
-		InputJSON:     nullStringPtr(exec.InputJSON),
-		ErrorMessage:  nullStringPtr(exec.ErrorMessage),
-		Attempt:       nullInt32Ptr(exec.Attempt),
-		NodePath:      nullStringPtr(exec.NodePath),
+		LoopNodeID:    exec.LoopNodeID,
+		LoopIteration: exec.LoopIteration,
+		InputJSON:     exec.InputJSON,
+		ErrorMessage:  exec.ErrorMessage,
+		Attempt:       exec.Attempt,
+		NodePath:      exec.NodePath,
 	})
 }
 
@@ -336,13 +335,13 @@ func scanChatStepExecutions(ctx context.Context, q *bun.RawQuery) ([]*core.ChatS
 			WorkflowID:     row.WorkflowID,
 			StepID:         row.StepID,
 			ActivityName:   row.ActivityName,
-			ExitCode:       toNullInt64(row.ExitCode),
-			Success:        toNullBool(row.Success),
-			DurationMs:     toNullInt64(row.DurationMs),
-			LoopNodeID:     toNullString(row.LoopNodeID),
-			LoopIteration:  toNullInt64(row.LoopIteration),
+			ExitCode:       row.ExitCode,
+			Success:        successBool(row.Success),
+			DurationMs:     row.DurationMs,
+			LoopNodeID:     row.LoopNodeID,
+			LoopIteration:  row.LoopIteration,
 			CreatedAt:      row.CreatedAt,
-			SavedMessageID: toNullString(row.SavedMessageID),
+			SavedMessageID: row.SavedMessageID,
 			OutputJSON:     row.OutputJSON,
 		}
 	}
@@ -363,88 +362,40 @@ func stepExecutionToCore(row *StepExecution) *core.StepExecution {
 		WorkflowID:     row.WorkflowID,
 		StepID:         row.StepID,
 		ActivityName:   row.ActivityName,
-		OutputJSON:     toNullString(row.OutputJSON),
-		ExitCode:       toNullInt64(row.ExitCode),
-		Success:        toNullBool(row.Success),
-		DurationMs:     toNullInt64(row.DurationMs),
-		LoopNodeID:     toNullString(row.LoopNodeID),
-		LoopIteration:  toNullInt64(row.LoopIteration),
+		OutputJSON:     row.OutputJSON,
+		ExitCode:       row.ExitCode,
+		Success:        successBool(row.Success),
+		DurationMs:     row.DurationMs,
+		LoopNodeID:     row.LoopNodeID,
+		LoopIteration:  row.LoopIteration,
 		CreatedAt:      row.CreatedAt,
-		SavedMessageID: toNullString(row.SavedMessageID),
-		InputJSON:      toNullString(row.InputJSON),
-		ErrorMessage:   toNullString(row.ErrorMessage),
-		Attempt:        toNullInt32(row.Attempt),
-		NodePath:       toNullString(row.NodePath),
+		SavedMessageID: row.SavedMessageID,
+		InputJSON:      row.InputJSON,
+		ErrorMessage:   row.ErrorMessage,
+		Attempt:        row.Attempt,
+		NodePath:       row.NodePath,
 	}
 }
 
 // successFlag stores a step's success as the column's 0/1 bigint.
-func successFlag(success sql.NullBool) *int64 {
-	if !success.Valid {
+func successFlag(success *bool) *int64 {
+	if success == nil {
 		return nil
 	}
 	var v int64
-	if success.Bool {
+	if *success {
 		v = 1
 	}
 	return &v
 }
 
-// toNullBool reads the 0/1 success flag back.
-func toNullBool(v *int64) sql.NullBool {
+// successBool reads the 0/1 success flag back.
+func successBool(v *int64) *bool {
 	if v == nil {
-		return sql.NullBool{}
-	}
-	return sql.NullBool{Bool: *v != 0, Valid: true}
-}
-
-func nullStringPtr(v sql.NullString) *string {
-	if !v.Valid {
 		return nil
 	}
-	return &v.String
-}
-
-func nullInt64Ptr(v sql.NullInt64) *int64 {
-	if !v.Valid {
-		return nil
-	}
-	return &v.Int64
-}
-
-func nullInt32Ptr(v sql.NullInt32) *int32 {
-	if !v.Valid {
-		return nil
-	}
-	return &v.Int32
-}
-
-func toNullString(v *string) sql.NullString {
-	if v == nil {
-		return sql.NullString{}
-	}
-	return sql.NullString{String: *v, Valid: true}
-}
-
-func toNullInt64(v *int64) sql.NullInt64 {
-	if v == nil {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: *v, Valid: true}
-}
-
-func toNullTime(v *time.Time) sql.NullTime {
-	if v == nil {
-		return sql.NullTime{}
-	}
-	return sql.NullTime{Time: *v, Valid: true}
-}
-
-func toNullInt32(v *int32) sql.NullInt32 {
-	if v == nil {
-		return sql.NullInt32{}
-	}
-	return sql.NullInt32{Int32: *v, Valid: true}
+	b := *v != 0
+	return &b
 }
 
 // StepExecutionExtra carries fields on StepExecution that are NOT columns — computed

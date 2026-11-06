@@ -2,13 +2,13 @@ package tools
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/reliant/internal/threads"
 
@@ -19,7 +19,7 @@ import (
 )
 
 func TestGetRunNodeOutput(t *testing.T) {
-	rows := []*db.StepExecution{{ID: "a", WorkflowID: "root", StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 2, Valid: true}, DurationMs: sql.NullInt64{Int64: 53, Valid: true}, OutputJSON: sql.NullString{String: `{"stdout":"building","stderr":"password=hidden\ncompile failed"}`, Valid: true}}}
+	rows := []*db.StepExecution{{ID: "a", WorkflowID: "root", StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: ptr.Of(int64(2)), DurationMs: ptr.Of(int64(53)), OutputJSON: ptr.Of(`{"stdout":"building","stderr":"password=hidden\ncompile failed"}`)}}
 	var b strings.Builder
 	writeRunNodes(&b, rundiagnostics.Nodes(rows), true, false)
 	require.Contains(t, b.String(), "gate [failed] (workflow root, attempt 0, 53 ms, exit 2)")
@@ -57,7 +57,7 @@ func TestGetRunExecuteIncludesNodeMetadata(t *testing.T) {
 	}
 	repo.ListRunNodeExecutionsFunc = func(_ context.Context, id string, limit int) ([]*db.StepExecution, error) {
 		require.Equal(t, root, id)
-		return []*db.StepExecution{{ID: "step", StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 2, Valid: true}, OutputJSON: sql.NullString{String: `{"stderr":"token=hidden"}`, Valid: true}}}, nil
+		return []*db.StepExecution{{ID: "step", StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: ptr.Of(int64(2)), OutputJSON: ptr.Of(`{"stderr":"token=hidden"}`)}}, nil
 	}
 	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
 	require.NoError(t, err)
@@ -143,13 +143,13 @@ func TestRunNodesEmptyIsExplicit(t *testing.T) {
 // it wrote as the error.
 func TestGetRunShowsNestedNodesAndTheDeclaringNode(t *testing.T) {
 	rows := []*db.StepExecution{
-		{ID: "s", WorkflowID: "root", StepID: "stopped", ActivityName: "SaveMessage", Attempt: sql.NullInt32{Int32: 1, Valid: true},
-			Success:      sql.NullBool{Bool: false, Valid: true},
-			ErrorMessage: sql.NullString{String: "declared the run's outcome: failure", Valid: true},
-			OutputJSON:   sql.NullString{String: `{"message":"Review did not finish: Bearer abcdefghijklmnop"}`, Valid: true}},
-		{ID: "c", WorkflowID: "root", StepID: "confirm", ActivityName: "GitHubAction", Success: sql.NullBool{Bool: true, Valid: true}},
-		{ID: "l", WorkflowID: "root", StepID: "call_llm", NodePath: sql.NullString{String: "review.agent_loop.call_llm", Valid: true},
-			ActivityName: "CallLLM", Success: sql.NullBool{Bool: true, Valid: true}, LoopIteration: sql.NullInt64{Int64: 3, Valid: true}},
+		{ID: "s", WorkflowID: "root", StepID: "stopped", ActivityName: "SaveMessage", Attempt: ptr.Of(int32(1)),
+			Success:      ptr.Of(false),
+			ErrorMessage: ptr.Of("declared the run's outcome: failure"),
+			OutputJSON:   ptr.Of(`{"message":"Review did not finish: Bearer abcdefghijklmnop"}`)},
+		{ID: "c", WorkflowID: "root", StepID: "confirm", ActivityName: "GitHubAction", Success: ptr.Of(true)},
+		{ID: "l", WorkflowID: "root", StepID: "call_llm", NodePath: ptr.Of("review.agent_loop.call_llm"),
+			ActivityName: "CallLLM", Success: ptr.Of(true), LoopIteration: ptr.Of(int64(3))},
 	}
 	var b strings.Builder
 	writeRunNodes(&b, rundiagnostics.Nodes(rows), false, false)

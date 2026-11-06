@@ -3,9 +3,10 @@ package chat
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -26,7 +27,7 @@ func recordedStep(stepID, activity, nodePath string, at time.Time) *db.StepExecu
 		CreatedAt:    at,
 	}
 	if nodePath != "" {
-		step.NodePath = sql.NullString{String: nodePath, Valid: true}
+		step.NodePath = ptr.Of(nodePath)
 	}
 	return step
 }
@@ -46,14 +47,14 @@ func TestListStepExecutions_ReturnsTheNodesFullRecord(t *testing.T) {
 	base := time.Now().UTC()
 
 	failed := recordedStep("summarize", "CallLLM", "summarize", base)
-	failed.InputJSON = sql.NullString{String: `{"system_prompt":"Summarize #42"}`, Valid: true}
-	failed.ErrorMessage = sql.NullString{String: "provider returned 400", Valid: true}
-	failed.Attempt = sql.NullInt32{Int32: 1, Valid: true}
-	failed.Success = sql.NullBool{Bool: false, Valid: true}
+	failed.InputJSON = ptr.Of(`{"system_prompt":"Summarize #42"}`)
+	failed.ErrorMessage = ptr.Of("provider returned 400")
+	failed.Attempt = ptr.Of(int32(1))
+	failed.Success = ptr.Of(false)
 
 	retried := recordedStep("summarize", "CallLLM", "summarize", base.Add(time.Millisecond))
 	retried.OutputJSON = stepOutput(`{"response_text":"done","tool_calls":[{"name":"view"}]}`)
-	retried.Attempt = sql.NullInt32{Int32: 2, Valid: true}
+	retried.Attempt = ptr.Of(int32(2))
 
 	seedWorkflowWithSteps(t, repo, ctx, chatID, chatID, nil, []*db.StepExecution{
 		failed,
