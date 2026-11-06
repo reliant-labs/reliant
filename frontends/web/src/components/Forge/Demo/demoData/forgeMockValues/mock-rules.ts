@@ -1,7 +1,8 @@
-// VENDORED from forge#1874 (web-runtime/src/mock-rules.ts at forge 9a3be5934), unchanged but
-// for the import path below. DELETE this directory on the web-runtime bump that
-// ships it, and import from @reliantlabs/forge-web-runtime/mock-transport instead
-// (forgeMockCompat.ts says the same for the engine's other additions).
+// VENDORED from forge web-runtime/src/mock-rules.ts: #1874 as merged (7ec47147b) plus
+// forge#1878 (6f12b77e6: echoed values and oneof cases meet the response's
+// rules; unbuildable patterns throw). Unchanged but for the import path below.
+// DELETE this directory on the web-runtime release that ships both, and import
+// from @reliantlabs/forge-web-runtime/mock-transport (see forgeMockCompat.ts).
 
 // Part of @reliantlabs/forge-web-runtime — the web twin of forge/pkg.
 //

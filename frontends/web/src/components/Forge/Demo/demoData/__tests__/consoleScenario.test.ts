@@ -11,12 +11,14 @@
  *  - Secrets are names only: nothing that looks like a value is on the wire.
  *  - The story matches the observability fixtures: prod runs v1.8.3, the
  *    release the CreateOrder issue first appeared in.
+ *  - Nothing outside shop: a read naming another project or environment gets an
+ *    empty answer, from the story's handlers and from the generated defaults.
  *  - Every read of every console service is answered (the story, or forge's
  *    generated defaults), and every write is refused before any handler.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DescService } from "@bufbuild/protobuf";
+import { create, equals, type DescMessage, type DescService } from "@bufbuild/protobuf";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
@@ -33,6 +35,7 @@ import { listSecrets } from "@/services/forge/secretStore";
 
 import { DEMO_DOMAINS, DEMO_ENVS, DEMO_PROJECT, DEMO_RELEASES, DEMO_SECRETS, DEMO_WORKLOADS, consoleScenarioHandlers } from "../consoleScenario";
 import { DEMO_DEFAULT_SERVICES } from "../demoServiceDefaults";
+import { outsideDemo } from "../demoScope";
 import { createDemoTransport, isDemoRead } from "../demoTransport";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../../../Observability/__fixtures__/fixtureApi";
 
@@ -189,5 +192,97 @@ describe("every console read is answered; every write is refused", () => {
       }
     }
     expect(writes).toBeGreaterThan(20);
+  });
+});
+
+describe("nothing outside shop", () => {
+  const client = async <S extends DescService>(service: S) => createClient(service, (await import("@/lib/connect")).transport);
+  const OTHER_ENV = "env-other-prod";
+
+  it("the story's environment handlers answer nothing for another project's environment", async () => {
+    const deploy = await client(DeployService);
+    expect((await deploy.getEnvironment({ environmentId: OTHER_ENV })).environment).toBeUndefined();
+    expect((await deploy.getEnvironmentShape({ environmentId: OTHER_ENV })).declaredShape).toBeUndefined();
+    expect((await deploy.getStatus({ environmentId: OTHER_ENV })).deployments).toEqual([]);
+    expect((await deploy.getStatus({ environmentId: "env-prod", deploymentId: "dep-other-api" })).deployments).toEqual([]);
+    expect((await deploy.getStatus({ environmentId: "env-prod", deploymentId: "dep-prod-api" })).deployments.map((d) => d.deployment?.name)).toEqual(["api"]);
+    expect((await deploy.listPromotions({ environmentId: OTHER_ENV })).promotions).toEqual([]);
+    expect((await deploy.getRollout({ environmentId: OTHER_ENV, promotionId: "promo-prod-v183" })).rollout).toBeUndefined();
+    expect((await deploy.listConvergences({ environmentId: OTHER_ENV })).convergences).toEqual([]);
+    const secrets = await client(SecretStoreService);
+    expect((await secrets.listSecrets({ environmentId: OTHER_ENV })).secrets).toEqual([]);
+    expect((await secrets.getSecretVersions({ environmentId: OTHER_ENV, name: "DATABASE_URL" })).summary).toBeUndefined();
+    const { DomainService } = await import("@/gen/controlplane/services/domain/v1/domain_pb");
+    expect((await (await client(DomainService)).listDomainBindings({ environmentId: OTHER_ENV })).bindings).toEqual([]);
+  });
+
+  it("the story's project handlers answer nothing for another project", async () => {
+    const deploy = await client(DeployService);
+    expect((await deploy.getLiveView({ project: "other" })).environments).toEqual([]);
+    expect((await deploy.listEnvironments({ project: "other" })).environments).toEqual([]);
+    expect((await deploy.listReleases({ project: "other" })).releases).toEqual([]);
+    expect((await deploy.listReleases({ project: DEMO_PROJECT, promotedToEnvironmentId: OTHER_ENV })).releases).toEqual([]);
+    expect((await deploy.getRelease({ project: "other", version: "v1.8.3" })).release).toBeUndefined();
+    expect((await deploy.compareReleases({ project: "other", fromVersion: "v1.8.2", toVersion: "v1.8.3" })).to).toBeUndefined();
+    expect((await deploy.compareReleases({ project: DEMO_PROJECT, environmentId: OTHER_ENV, fromVersion: "v1.8.2", toVersion: "v1.8.3" })).to).toBeUndefined();
+    expect((await listActivity({ orgId: "org-demo", projectId: "other", envIds: [] })).events).toEqual([]);
+    expect((await listActivity({ orgId: "org-demo", projectId: DEMO_PROJECT, envIds: [OTHER_ENV] })).events).toEqual([]);
+    // And shop's, named: still answered.
+    expect((await deploy.getRelease({ project: DEMO_PROJECT, version: "v1.8.3" })).release?.version).toBe("v1.8.3");
+    const prodOnly = await listActivity({ orgId: "org-demo", projectId: DEMO_PROJECT, envIds: ["env-prod"] });
+    expect(prodOnly.events.length).toBeGreaterThan(0);
+    expect(prodOnly.events.every((e) => e.env?.id === "env-prod")).toBe(true);
+  });
+
+  it("every read of every console service, story or default, is empty when it names another project or environment", async () => {
+    const t = (await import("@/lib/connect")).transport;
+    /** The request with every project / environment field it has (top level or one message down) set to another app's. */
+    function foreign(input: DescMessage, depth = 0): Record<string, unknown> | null {
+      const out: Record<string, unknown> = {};
+      let named = false;
+      for (const f of input.fields) {
+        if (f.oneof) continue;
+        if (f.fieldKind === "scalar" && /^project(_id)?$/.test(f.name)) [out[f.localName], named] = ["other-app", true];
+        else if (f.fieldKind === "scalar" && /(^|_)(environment_id|env_id)$/.test(f.name)) [out[f.localName], named] = [OTHER_ENV, true];
+        else if (f.fieldKind === "list" && /(^|_)(environment_ids|env_ids)$/.test(f.name)) [out[f.localName], named] = [[OTHER_ENV], true];
+        else if (f.fieldKind === "message" && depth < 1) {
+          const inner = foreign(f.message, depth + 1);
+          if (inner) [out[f.localName], named] = [inner, true];
+        }
+      }
+      return named ? out : null;
+    }
+    let scoped = 0;
+    for (const service of DEMO_DEFAULT_SERVICES) {
+      const c = createClient(service, t) as unknown as Record<string, (req: object) => Promise<object>>;
+      for (const method of service.methods.filter((m) => m.methodKind === "unary" && isDemoRead(m))) {
+        const req = foreign(method.input);
+        if (!req) continue;
+        expect(outsideDemo(method.input, create(method.input, req as never)), `${service.typeName}/${method.name}`).toBe(true);
+        const res = await c[method.localName](req);
+        expect(equals(method.output, res as never, create(method.output)), `${service.typeName}/${method.name}`).toBe(true);
+        scoped++;
+      }
+    }
+    expect(scoped).toBeGreaterThan(30);
+  });
+
+  it("a secret's versions only in an environment that holds it: PAYMENTS_WEBHOOK_SECRET is not in dev", async () => {
+    expect(DEMO_SECRETS.find((s) => s.name === "PAYMENTS_WEBHOOK_SECRET")?.set).not.toContain("env-dev");
+    const secrets = await client(SecretStoreService);
+    const dev = await secrets.getSecretVersions({ environmentId: "env-dev", name: "PAYMENTS_WEBHOOK_SECRET" });
+    expect(dev.summary).toBeUndefined();
+    expect(dev.versions).toEqual([]);
+    const prod = await secrets.getSecretVersions({ environmentId: "env-prod", name: "PAYMENTS_WEBHOOK_SECRET" });
+    expect(prod.summary?.name).toBe("PAYMENTS_WEBHOOK_SECRET");
+    expect(prod.versions.length).toBe(1);
+    // And the listing agrees with the versions, per environment.
+    for (const env of DEMO_ENVS) {
+      const listed = new Set((await secrets.listSecrets({ environmentId: env.id })).secrets.map((s) => s.name));
+      for (const s of DEMO_SECRETS) {
+        const versions = await secrets.getSecretVersions({ environmentId: env.id, name: s.name });
+        expect(!!versions.summary, `${env.name} ${s.name}`).toBe(listed.has(s.name));
+      }
+    }
   });
 });

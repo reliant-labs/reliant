@@ -1,7 +1,8 @@
-// VENDORED from forge#1874 (web-runtime/src/mock-values.ts at forge 9a3be5934), unchanged but
-// for the import path below. DELETE this directory on the web-runtime bump that
-// ships it, and import from @reliantlabs/forge-web-runtime/mock-transport instead
-// (forgeMockCompat.ts says the same for the engine's other additions).
+// VENDORED from forge web-runtime/src/mock-values.ts: #1874 as merged (7ec47147b) plus
+// forge#1878 (6f12b77e6: echoed values and oneof cases meet the response's
+// rules; unbuildable patterns throw). Unchanged but for the import path below.
+// DELETE this directory on the web-runtime release that ships both, and import
+// from @reliantlabs/forge-web-runtime/mock-transport (see forgeMockCompat.ts).
 
 // Part of @reliantlabs/forge-web-runtime — the web twin of forge/pkg.
 //
@@ -59,7 +60,15 @@
 // request always gets the same answer, and a field added to a message does not
 // reshuffle the others. Scalar fields that the REQUEST also carries (by name
 // and type) echo the request — `GetWorkload{id}` answers that id, and a filter
-// field reads back as filtered — except paging and query controls.
+// field reads back as filtered — except paging and query controls. An echoed
+// value is still a value the engine emits, so it must pass the RESPONSE
+// field's rules; one that does not is generated instead. A oneof case the
+// request selected is the case the response's same-named oneof takes, when it
+// has a member of that name.
+//
+// A string the rules cannot be met for (a pattern the cheap generator cannot
+// build, or rules that contradict one another) throws, naming the field,
+// rather than emit a value the server's protovalidate would reject.
 import {
   create,
   isMessage,
@@ -77,6 +86,7 @@ import {
 } from "@bufbuild/protobuf";
 import {
   rulesOf,
+  type EnumRules,
   type FieldRules,
   type NumRules,
   type StrFormat,
@@ -356,10 +366,28 @@ function stringByName(
   return `${kebab(listItem ? singularOf(name) : name)}-${n}`;
 }
 
-/** The smallest string matching a cheap regex, or undefined when it is not cheap. */
+/** RE2's leading inline flags (`(?i)`, `(?s)`, `(?m)`), which JavaScript spells as RegExp flags. */
+const INLINE_FLAGS = /^\(\?([ims]+)\)/;
+
+/**
+ * A protovalidate (RE2) pattern as a JavaScript RegExp, leading inline flags
+ * included. Null when JavaScript cannot express it.
+ */
+function patternRegExp(pattern: string): RegExp | null {
+  const m = INLINE_FLAGS.exec(pattern);
+  let flags = "u";
+  for (const f of m?.[1] ?? "") if (!flags.includes(f)) flags += f;
+  try {
+    return new RegExp(m ? pattern.slice(m[0].length) : pattern, flags);
+  } catch {
+    return null;
+  }
+}
+
+/** A string matching a cheap regex, or undefined when it is not cheap. */
 function fromPattern(pattern: string, rng: Rng): string | undefined {
   let i = 0;
-  const src = pattern;
+  const src = pattern.replace(INLINE_FLAGS, "");
 
   type Node = () => string;
 
@@ -439,7 +467,10 @@ function fromPattern(pattern: string, rng: Rng): string | undefined {
       if (e === "d") return () => String(rng.int(0, 9));
       if (e === "w") return () => String.fromCharCode(rng.int(97, 122));
       if (e === "s") return () => " ";
-      if (/[A-Za-z]/.test(e)) return undefined; // \b, \p{..}, ...: not cheap
+      // Word boundaries match no characters: emit none, and let the final
+      // test against the whole pattern decide.
+      if (e === "b" || e === "B") return () => "";
+      if (/[A-Za-z]/.test(e)) return undefined; // \p{..}, \A, ...: not cheap
       return () => e;
     }
     i++;
@@ -494,8 +525,10 @@ function fromPattern(pattern: string, rng: Rng): string | undefined {
     return () => rng.pick(branches)();
   };
 
+  const re = patternRegExp(pattern);
+  // An RE2 construct JavaScript does not accept: not cheap.
+  if (!re) return undefined;
   try {
-    const re = new RegExp(pattern, "u");
     const node = alternation();
     if (!node || i < src.length) return undefined;
     for (let attempt = 0; attempt < 8; attempt++) {
@@ -503,9 +536,78 @@ function fromPattern(pattern: string, rng: Rng): string | undefined {
       if (re.test(s)) return s;
     }
   } catch {
-    // An RE2 construct JavaScript does not accept: not cheap.
+    // A construct the walk above misreads: not cheap.
   }
   return undefined;
+}
+
+/** What a `format` rule accepts, as cheap checks of the shapes `formatted` emits and servers accept. */
+const IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
+const IPV6 = /^(?=.*:)[0-9a-f:]{2,39}$/i;
+const HOSTNAME =
+  /^(?=.{1,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$/i;
+const FORMAT_CHECKS: Record<StrFormat, (s: string) => boolean> = {
+  email: (s) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s),
+  uri: (s) => /^[a-z][a-z0-9+.-]*:\S+$/i.test(s),
+  hostname: (s) => HOSTNAME.test(s),
+  address: (s) => HOSTNAME.test(s) || IPV4.test(s) || IPV6.test(s),
+  hostAndPort: (s) => {
+    const m = /^(.+):(\d{1,5})$/.exec(s);
+    return !!m && HOSTNAME.test(m[1]!) && Number(m[2]) <= 65535;
+  },
+  ip: (s) => IPV4.test(s) || IPV6.test(s),
+  ipv4: (s) => IPV4.test(s),
+  ipv6: (s) => IPV6.test(s),
+  ipPrefix: (s) => {
+    const m = /^(.+)\/(\d{1,3})$/.exec(s);
+    return !!m && ((IPV4.test(m[1]!) && Number(m[2]) <= 32) || (IPV6.test(m[1]!) && Number(m[2]) <= 128));
+  },
+  uuid: (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s),
+  tuuid: (s) => /^[0-9a-f]{32}$/i.test(s),
+  ulid: (s) => /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(s),
+};
+
+/** Whether `s` meets every string rule the engine reads. A pattern JavaScript cannot express is never met. */
+function satisfiesStr(s: string, r: StrRules): boolean {
+  if (r.const !== undefined) return s === r.const;
+  if (r.in?.length && !r.in.includes(s)) return false;
+  if (r.notIn?.includes(s)) return false;
+  const len = [...s].length;
+  if (r.len !== undefined && len !== r.len) return false;
+  if (r.minLen !== undefined && len < r.minLen) return false;
+  if (r.maxLen !== undefined && len > r.maxLen) return false;
+  if (r.prefix && !s.startsWith(r.prefix)) return false;
+  if (r.suffix && !s.endsWith(r.suffix)) return false;
+  if (r.contains && !s.includes(r.contains)) return false;
+  if (r.format && !FORMAT_CHECKS[r.format](s)) return false;
+  if (r.pattern) {
+    const re = patternRegExp(r.pattern);
+    if (!re || !re.test(s)) return false;
+  }
+  return true;
+}
+
+/** Whether `v` meets a number's rules; gt above lt is protovalidate's exclusive range (outside the band). */
+function satisfiesNum(v: number, r: NumRules): boolean {
+  if (!Number.isFinite(v)) return false;
+  if (r.const !== undefined) return v === r.const;
+  if (r.in?.length && !r.in.includes(v)) return false;
+  if (r.notIn?.includes(v)) return false;
+  const lo = r.gt ?? r.gte;
+  const hi = r.lt ?? r.lte;
+  const lowOk = (r.gt === undefined || v > r.gt) && (r.gte === undefined || v >= r.gte);
+  const highOk = (r.lt === undefined || v < r.lt) && (r.lte === undefined || v <= r.lte);
+  if (lo !== undefined && hi !== undefined && lo > hi) return lowOk || highOk;
+  return lowOk && highOk;
+}
+
+/** Whether `v` is one of the enum's values and meets its rules. */
+function satisfiesEnum(e: DescEnum, v: number, r: EnumRules | undefined): boolean {
+  if (!e.values.some((d) => d.number === v)) return false;
+  if (!r) return true;
+  if (r.const !== undefined) return v === r.const;
+  if (r.in?.length && !r.in.includes(v)) return false;
+  return !r.notIn?.includes(v);
 }
 
 function applyStringRules(
@@ -513,19 +615,14 @@ function applyStringRules(
   rules: StrRules,
   rng: Rng,
   n: number,
+  where: string,
 ): string {
   if (rules.const !== undefined) return rules.const;
   if (rules.in?.length) return rng.pick(rules.in);
   let s = value;
   if (rules.format) s = formatted(rules.format, rng, n);
-  if (rules.pattern) {
-    let ok = false;
-    try {
-      ok = new RegExp(rules.pattern, "u").test(s);
-    } catch {
-      ok = true; // not JavaScript-parsable: leave the value alone
-    }
-    if (!ok) s = fromPattern(rules.pattern, rng) ?? s;
+  if (rules.pattern && !patternRegExp(rules.pattern)?.test(s)) {
+    s = fromPattern(rules.pattern, rng) ?? s;
   }
   if (rules.prefix && !s.startsWith(rules.prefix)) s = rules.prefix + s;
   if (rules.suffix && !s.endsWith(rules.suffix)) s = s + rules.suffix;
@@ -539,7 +636,30 @@ function applyStringRules(
   } else if (min !== undefined && chars.length < min) {
     s = s + "x".repeat(min - chars.length);
   }
-  return s;
+  if (satisfiesStr(s, rules)) return s;
+  // The steps above can undo one another (a pattern's string cut to
+  // max_len): look among the pattern's strings for one that meets them all.
+  if (rules.pattern) {
+    for (let attempt = 0; attempt < 32; attempt++) {
+      const candidate = fromPattern(rules.pattern, rng);
+      if (candidate === undefined) break;
+      if (satisfiesStr(candidate, rules)) return candidate;
+    }
+  }
+  const said = [
+    rules.pattern !== undefined && `pattern ${JSON.stringify(rules.pattern)}`,
+    rules.format && `format ${rules.format}`,
+    rules.len !== undefined && `len ${rules.len}`,
+    rules.minLen !== undefined && `min_len ${rules.minLen}`,
+    rules.maxLen !== undefined && `max_len ${rules.maxLen}`,
+    rules.prefix && `prefix ${JSON.stringify(rules.prefix)}`,
+    rules.suffix && `suffix ${JSON.stringify(rules.suffix)}`,
+    rules.contains && `contains ${JSON.stringify(rules.contains)}`,
+  ].filter(Boolean);
+  throw new Error(
+    `mock values: ${where} has string rules no generated value satisfies (${said.join(", ")}); ` +
+      "answer it from a scenario (mockService) or a mockFactory",
+  );
 }
 
 // ── Numbers ─────────────────────────────────────────────────────────────
@@ -723,6 +843,8 @@ interface Ctx {
   baseTime: number;
   stack: readonly string[];
   echo: ReadonlyMap<string, Echo>;
+  /** The request's selected oneof cases: oneof name → member field name. */
+  cases: ReadonlyMap<string, string>;
   factories: ReadonlyMap<string, MockFactory<DescMessage>>;
 }
 
@@ -742,16 +864,30 @@ const ordinal = (ctx: Ctx, rng: Rng) =>
 /** Schemas the engine has walked, so `patch` can rebuild a nested message. */
 const knownSchemas = new Map<string, DescMessage>();
 
-function collectEcho(schema: DescMessage, message: Message): Map<string, Echo> {
+function collectEcho(
+  schema: DescMessage,
+  message: Message,
+): { echo: Map<string, Echo>; cases: Map<string, string> } {
   const out = new Map<string, Echo>();
+  const cases = new Map<string, string>();
   const walk = (
     desc: DescMessage,
     msg: Record<string, unknown>,
     depth: number,
   ) => {
     for (const f of desc.fields) {
-      if (f.oneof) continue;
-      const v = msg[f.localName];
+      let v: unknown;
+      if (f.oneof) {
+        // A oneof member is echoed only when it is the selected case.
+        const selected = msg[f.oneof.localName] as
+          | { case?: string; value?: unknown }
+          | undefined;
+        if (selected?.case !== f.localName) continue;
+        if (!cases.has(f.oneof.name)) cases.set(f.oneof.name, f.name);
+        v = selected.value;
+      } else {
+        v = msg[f.localName];
+      }
       if (v == null) continue;
       if (f.fieldKind === "scalar") {
         if (f.scalar === ScalarType.BOOL || f.scalar === ScalarType.BYTES)
@@ -769,7 +905,7 @@ function collectEcho(schema: DescMessage, message: Message): Map<string, Echo> {
     }
   };
   walk(schema, message as unknown as Record<string, unknown>, 0);
-  return out;
+  return { echo: out, cases };
 }
 
 function echoFor(
@@ -811,12 +947,17 @@ function scalarValue(
   const rng = rngAt(ctx, name);
   const n = ordinal(ctx, rng);
   const echo = echoFor(ctx, name, scalar);
-  if (echo) return coerceScalar(scalar, echo.value, longAsString);
+  if (echo) {
+    const v = coerceScalar(scalar, echo.value, longAsString);
+    if (echoMeetsRules(scalar, v, rules)) return v;
+  }
 
   switch (scalar) {
     case ScalarType.STRING: {
       const s = stringByName(name, owner, n, rng, ctx.index >= 0);
-      return rules?.str ? applyStringRules(s, rules.str, rng, n) : s;
+      return rules?.str
+        ? applyStringRules(s, rules.str, rng, n, `${owner.typeName}.${name}`)
+        : s;
     }
     case ScalarType.BOOL: {
       if (rules?.bool !== undefined) return rules.bool;
@@ -857,9 +998,7 @@ function scalarValue(
       return rng.next() < (likely ? 0.85 : rare ? 0.15 : 0.5);
     }
     case ScalarType.BYTES: {
-      const b = rules?.bytes;
-      const len =
-        b?.len ?? Math.max(b?.minLen ?? 0, Math.min(b?.maxLen ?? 16, 16));
+      const len = bytesLength(owner, name, rules?.bytes);
       const out = new Uint8Array(len);
       for (let k = 0; k < len; k++) out[k] = rng.int(0, 255);
       return out;
@@ -891,6 +1030,41 @@ function scalarValue(
   }
 }
 
+/**
+ * Length of a generated bytes value: 16 unless the rules say otherwise.
+ * Bounds no value can satisfy throw, naming the field, rather than emit a
+ * value the server's protovalidate would reject.
+ */
+function bytesLength(
+  owner: DescMessage,
+  name: string,
+  b: FieldRules["bytes"],
+): number {
+  const min = Math.max(b?.len ?? 0, b?.minLen ?? 0);
+  const max = Math.min(b?.len ?? Infinity, b?.maxLen ?? Infinity);
+  if (min > max)
+    throw new Error(
+      `mock values: ${owner.typeName}.${name} has bytes rules no value satisfies ` +
+        `(len ${b?.len ?? "-"}, min_len ${b?.minLen ?? "-"}, max_len ${b?.maxLen ?? "-"})`,
+    );
+  return Math.min(Math.max(16, min), max);
+}
+
+/** Whether an echoed request value may stand in the response: it fits the field's type and meets its rules. */
+function echoMeetsRules(
+  scalar: ScalarType,
+  v: unknown,
+  rules: FieldRules | undefined,
+): boolean {
+  if (scalar === ScalarType.STRING) {
+    return !rules?.str || satisfiesStr(String(v), rules.str);
+  }
+  const num = Number(v);
+  const limits = INT_LIMITS[scalar];
+  if (limits && (num < limits[0] || num > limits[1])) return false;
+  return !rules?.num || satisfiesNum(num, rules.num);
+}
+
 function coerceScalar(
   scalar: ScalarType,
   v: unknown,
@@ -912,7 +1086,8 @@ function enumValue(
   ctx: Ctx,
 ): number {
   const echo = echoFor(ctx, name, undefined, e.typeName);
-  if (echo) return echo.value as number;
+  if (echo && satisfiesEnum(e, echo.value as number, rules?.enm))
+    return echo.value as number;
   const r = rules?.enm;
   if (r?.const !== undefined) return r.const;
   let values = e.values.map((v) => v.number);
@@ -1205,9 +1380,16 @@ function buildMessage(desc: DescMessage, ctx: Ctx): MessageShape<DescMessage> {
     if (member.kind === "oneof") {
       const fields = member.fields;
       if (fields.length === 0) continue;
-      const pick = fields[
-        rngAt(here, `${member.name}#case`).int(0, fields.length - 1)
-      ] as DescField;
+      // The case the request selected, when this oneof has a member of that
+      // name; otherwise one chosen by the seed.
+      const requested = here.cases.get(member.name);
+      const pick =
+        (requested !== undefined
+          ? fields.find((f) => f.name === requested)
+          : undefined) ??
+        (fields[
+          rngAt(here, `${member.name}#case`).int(0, fields.length - 1)
+        ] as DescField);
       const value = singular(pick, desc, rulesOf(pick), here, -1, false);
       if (value !== undefined)
         init[member.localName] = { case: pick.localName, value };
@@ -1247,7 +1429,13 @@ function buildMessage(desc: DescMessage, ctx: Ctx): MessageShape<DescMessage> {
         if (field.mapKey === ScalarType.STRING) {
           key = `${stem}-${i + 1}`;
           if (r?.keys?.str)
-            key = applyStringRules(key, r.keys.str, mrng, i + 1);
+            key = applyStringRules(
+              key,
+              r.keys.str,
+              mrng,
+              i + 1,
+              `${desc.typeName}.${field.name} (map key)`,
+            );
         } else if (field.mapKey === ScalarType.BOOL) {
           if (i > 1) break;
           key = String(i === 0);
@@ -1262,6 +1450,7 @@ function buildMessage(desc: DescMessage, ctx: Ctx): MessageShape<DescMessage> {
                 r?.values?.str ?? {},
                 rngAt(at, "value"),
                 i + 1,
+                `${desc.typeName}.${field.name} (map value)`,
               )
             : singular(field, desc, r?.values, at, i, false);
         if (v !== undefined) out[key] = v;
@@ -1342,7 +1531,9 @@ function buildValue<Desc extends DescMessage>(
     now,
     baseTime: now,
     stack: [schema.typeName],
-    echo: echo ? collectEcho(echo.schema, echo.message) : new Map(),
+    ...(echo
+      ? collectEcho(echo.schema, echo.message)
+      : { echo: new Map(), cases: new Map() }),
     factories: new Map(
       (options.factories ?? []).map((f) => [f.schema.typeName, f]),
     ),

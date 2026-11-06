@@ -42,9 +42,9 @@ import { DomainService } from "@/gen/controlplane/services/domain/v1/domain_pb";
 import { SecretAuthorKind, SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 
 import { completed } from "./demoServiceDefaults";
+import { DEMO_ENVS, DEMO_PROJECT, demoEnvId, inDemoProject, type DemoEnvId } from "./demoScope";
 import { mockService, type MockHandlers } from "./forgeMockValues/mock-values";
 
-export const DEMO_PROJECT = "shop";
 const REPO = "github.com/acme/shop";
 const FORGE_VERSION = "v1.0.17";
 
@@ -55,13 +55,9 @@ const DAY = 24 * HOUR;
 /** `ms` ago, from this page load. */
 const ago = (ms: number, now = Date.now()): Timestamp => timestampFromMs(now - ms);
 
-export const DEMO_ENVS = [
-  { id: "env-dev", name: "dev" },
-  { id: "env-staging", name: "staging" },
-  { id: "env-prod", name: "prod" },
-] as const;
+export { DEMO_ENVS, DEMO_PROJECT };
 
-type EnvId = (typeof DEMO_ENVS)[number]["id"];
+type EnvId = DemoEnvId;
 
 /** The releases, newest first: what each changed, and when it was cut. */
 export const DEMO_RELEASES = [
@@ -570,8 +566,10 @@ function activity(): MessageInitShape<typeof ActivityEventSchema>[] {
 
 // ── Handlers ────────────────────────────────────────────────────────────────
 
-const envIdOf = (id: string): EnvId | undefined => DEMO_ENVS.find((e) => e.id === id)?.id;
-const forProject = (project: string | undefined) => !project || project === DEMO_PROJECT;
+// Scope, in every handler as well as around them all (demoScope.ts scopedToDemo): an environment
+// id that is not one of shop's, or a project that is not shop, gets nothing.
+const envIdOf = demoEnvId;
+const forProject = inDemoProject;
 
 /**
  * The story's overrides, by "pkg.Service/Method": what shop's console says.
@@ -605,7 +603,7 @@ export function consoleScenarioHandlers(): MockHandlers {
           environments: forProject(req.project) ? DEMO_ENVS.map(environment) : [],
         }),
         getEnvironment: (req) => {
-          const env = DEMO_ENVS.find((e) => e.id === req.environmentId);
+          const env = DEMO_ENVS.find((e) => e.id === envIdOf(req.environmentId));
           return env
             ? {
                 environment: environment(env),
@@ -627,17 +625,23 @@ export function consoleScenarioHandlers(): MockHandlers {
         getStatus: (req) => {
           const id = envIdOf(req.environmentId);
           if (!id) return {};
+          // One deployment when the request names one: only shop's, in this environment.
+          const rows = deployments(id).filter((d) => !req.deploymentId || d.deployment.id === req.deploymentId);
+          if (rows.length === 0) return {};
           return {
-            deployments: deployments(id),
+            deployments: rows,
             currentPromotion: promotion(id, RUNNING[id], PROMOTED_FROM[id]),
             environmentVerdict: DeployVerdict.CONVERGED,
             observedAt: ago(2 * MINUTE),
           };
         },
         listReleases: (req) => ({
-          releases: forProject(req.project) ? DEMO_RELEASES.map(release).slice(0, req.limit && req.limit > 0 ? req.limit : undefined) : [],
+          releases:
+            forProject(req.project) && (!req.promotedToEnvironmentId || envIdOf(req.promotedToEnvironmentId))
+              ? DEMO_RELEASES.map(release).slice(0, req.limit && req.limit > 0 ? req.limit : undefined) : [],
         }),
         getRelease: (req) => {
+          if (!forProject(req.project)) return {};
           const index = DEMO_RELEASES.findIndex((r) => r.version === req.version);
           if (index < 0) return {};
           const version = DEMO_RELEASES[index].version;
@@ -684,6 +688,7 @@ export function consoleScenarioHandlers(): MockHandlers {
           };
         },
         compareReleases: (req) => {
+          if (!forProject(req.project) || (req.environmentId && !envIdOf(req.environmentId))) return {};
           const to = DEMO_RELEASES.findIndex((r) => r.version === req.toVersion);
           const from = DEMO_RELEASES.findIndex((r) => r.version === req.fromVersion);
           if (to < 0 || from < 0) return {};
@@ -717,8 +722,10 @@ export function consoleScenarioHandlers(): MockHandlers {
           };
         },
         getSecretVersions: (req) => {
+          // Only a secret this environment holds a value for: names never cross environments.
+          const id = envIdOf(req.environmentId);
           const s = DEMO_SECRETS.find((candidate) => candidate.name === req.name);
-          if (!s) return {};
+          if (!id || !s || !(s.set as readonly string[]).includes(id)) return {};
           return {
             summary: {
               name: s.name,
@@ -750,14 +757,19 @@ export function consoleScenarioHandlers(): MockHandlers {
           return { domain: d ? domain(d) : undefined };
         },
         listDomainBindings: (req) => ({
-          bindings: DEMO_DOMAINS.filter((d) => !req.environmentId || d.env === req.environmentId).map((d) => domain(d).binding),
+          bindings: DEMO_DOMAINS.filter((d) => !req.environmentId || d.env === envIdOf(req.environmentId)).map((d) => domain(d).binding),
         }),
       }),
     ),
     ...completed(
       ActivityService,
       mockService(ActivityService, {
-        listActivity: () => ({ events: activity() }),
+        listActivity: (req) => {
+          const scope = req.scope;
+          if (!forProject(scope?.projectId) || scope?.envIds.some((id) => !envIdOf(id))) return { events: [] };
+          const envs = scope?.envIds.length ? new Set(scope.envIds) : null;
+          return { events: activity().filter((e) => !envs || (e.env && envs.has(String(e.env.id)))) };
+        },
       }),
     ),
   };
