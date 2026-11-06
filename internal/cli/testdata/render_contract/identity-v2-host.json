@@ -1,0 +1,301 @@
+{
+  "output": {
+    "applier": null,
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "data_access": {
+      "db_query": "open"
+    },
+    "databases": [],
+    "env": "dev",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "identity": {
+      "applications": [
+        {
+          "kind": "native_broker",
+          "login_uri": null,
+          "logout_uris": null,
+          "name": "dev:api",
+          "redirect_uris": null,
+          "workload": "api"
+        }
+      ],
+      "consumers": [
+        {
+          "application": "dev:api",
+          "deliver_only": null,
+          "fields": null,
+          "omit": null,
+          "workload": "api"
+        }
+      ],
+      "deliveries": [],
+      "dev_mail": "mail",
+      "domain": null,
+      "login": {
+        "mode": "native"
+      },
+      "machine_users": [],
+      "managed_secrets": null,
+      "methods": [
+        "password",
+        "passkey",
+        "magic_link"
+      ],
+      "name": "identity",
+      "owner_role": "owner",
+      "owners": [
+        "dev@acme.test"
+      ],
+      "project_name": null,
+      "public": null,
+      "roles": [
+        {
+          "display_name": null,
+          "group": null,
+          "key": "owner",
+          "members": null,
+          "members_from": "console"
+        }
+      ],
+      "runtime": "host",
+      "seed_users": [],
+      "share_with": null,
+      "signup": {
+        "domains": null,
+        "mode": "open",
+        "role": null
+      },
+      "smtp": null,
+      "social": [
+        {
+          "client_id": "dev.apps.googleusercontent.com",
+          "client_id_secret": null,
+          "client_secret_secret": "GOOGLE_CLIENT_SECRET",
+          "scopes": [
+            "openid",
+            "profile",
+            "email"
+          ],
+          "type": "google"
+        }
+      ]
+    },
+    "image_tag": "latest",
+    "infra": [
+      {
+        "data_dir": null,
+        "database": "postgres",
+        "engine": "postgres",
+        "idp_database": "zitadel",
+        "idp_database_port": null,
+        "idp_masterkey": "MasterkeyNeedsToHave32Characters",
+        "idp_pat_path": ".forge/idp/pat.txt",
+        "idp_steps_file": "idp-steps.yaml",
+        "name": "pg",
+        "nats_monitor_port": null,
+        "password": "postgres",
+        "port": 5432,
+        "temporal_namespaces": null,
+        "temporal_ui_port": null,
+        "user": "postgres",
+        "version": null
+      },
+      {
+        "data_dir": null,
+        "database": "postgres",
+        "engine": "zitadel",
+        "idp_database": "zitadel",
+        "idp_database_port": 5432,
+        "idp_masterkey": "MasterkeyNeedsToHave32Characters",
+        "idp_pat_path": ".forge/idp/pat.txt",
+        "idp_steps_file": "idp-steps.yaml",
+        "name": "idp",
+        "nats_monitor_port": null,
+        "password": "postgres",
+        "port": 8098,
+        "temporal_namespaces": null,
+        "temporal_ui_port": null,
+        "user": "postgres",
+        "version": null
+      },
+      {
+        "data_dir": null,
+        "database": "postgres",
+        "engine": "mailpit",
+        "idp_database": "zitadel",
+        "idp_database_port": null,
+        "idp_masterkey": "MasterkeyNeedsToHave32Characters",
+        "idp_pat_path": ".forge/idp/pat.txt",
+        "idp_steps_file": "idp-steps.yaml",
+        "name": "mail",
+        "nats_monitor_port": null,
+        "password": "postgres",
+        "port": 1025,
+        "temporal_namespaces": null,
+        "temporal_ui_port": null,
+        "user": "postgres",
+        "version": null
+      }
+    ],
+    "kubeconfig_secrets": [],
+    "lifecycle": "local",
+    "manifest_owners": [],
+    "manifests": [],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "acme",
+        "image": "acme",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "air_config": null,
+          "delve_port": 2345,
+          "listen_ports": [
+            8080
+          ],
+          "runner": "binary",
+          "type": "host",
+          "working_dir": null
+        },
+        "spec": {
+          "args": [
+            "server"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "JWT_AUDIENCE",
+              "secretRef": {
+                "key": "AUDIENCE",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "JWT_ISSUER",
+              "secretRef": {
+                "key": "ISSUER",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "JWT_JWKS_SNAPSHOT",
+              "secretRef": {
+                "key": "JWKS",
+                "name": "forge-identity-identity",
+                "optional": true
+              }
+            },
+            {
+              "name": "JWT_ROLES_CLAIM",
+              "value": "auto"
+            },
+            {
+              "name": "OIDC_SCOPES",
+              "secretRef": {
+                "key": "SCOPES",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "OIDC_CLIENT_ID",
+              "secretRef": {
+                "key": "DEV_API_CLIENT_ID",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "OIDC_REDIRECT_URI",
+              "secretRef": {
+                "key": "DEV_API_REDIRECT_URI",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "IDP_BROKER_TOKEN",
+              "secretRef": {
+                "key": "DEV_API_BROKER_TOKEN",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "IDP_BASE",
+              "secretRef": {
+                "key": "ISSUER",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "IDP_LOGIN_URI",
+              "secretRef": {
+                "key": "DEV_API_LOGIN_URI",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "IDP_LOGIN_POLICY",
+              "secretRef": {
+                "key": "LOGIN_POLICY",
+                "name": "forge-identity-identity",
+                "optional": true
+              }
+            }
+          ],
+          "image": "",
+          "kind": "service",
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}
