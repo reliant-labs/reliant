@@ -159,6 +159,24 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		req.Branch = fmt.Sprintf("worktree/%s-%d", req.Name, time.Now().Unix())
 	}
 
+	// The request fixes the checkout's path, so every attempt at it — a
+	// re-send after a dropped connection included — runs one at a time, and
+	// one that finds an earlier attempt finished answers with its checkout
+	// (cmd_worktree_create_guard.go).
+	worktreePath, err := worktreeCreatePath(req.WorkspaceID, req.SubPath)
+	if err != nil {
+		return json.Marshal(worktreeCreateResponse{Error: err.Error()})
+	}
+	unlockPath, err := lockCreatePath(ctx, worktreePath)
+	if err != nil {
+		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf(
+			"an earlier attempt at this checkout (%s) was still running when this one ran out of time", worktreePath)})
+	}
+	defer unlockPath()
+	if done, ok := finishedCreate(ctx, req, worktreePath); ok {
+		return json.Marshal(done)
+	}
+
 	// Only a base the caller named is theirs to fix if it does not resolve;
 	// one detected below that fails is our bug (diagnoseWorktreeAdd).
 	baseSupplied := req.BaseBranch != ""
@@ -227,18 +245,10 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
-	// Resolve the on-disk worktree path:
-	//   <HOME>/.reliant/worktrees/<workspace_id>[/<sub_path>]
-	// A sub_path of "" puts the checkout at the workspace root itself
-	// (single-repo project).
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf("failed to get home directory: %v", err)})
-	}
-	worktreePath := filepath.Join(homeDir, ".reliant", "worktrees", req.WorkspaceID)
-	if req.SubPath != "" {
-		worktreePath = filepath.Join(worktreePath, req.SubPath)
-	}
+	// Whether the checkout's directory predates this call decides what a
+	// failure may take back: only a directory this call made is wholly ours.
+	_, statErr := os.Lstat(worktreePath)
+	preExisted := !errors.Is(statErr, fs.ErrNotExist)
 
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0755); err != nil {
@@ -255,6 +265,12 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	branchCheckCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", req.Branch)
 	branchCheckCmd.Dir = req.ProjectPath
 	branchExists := branchCheckCmd.Run() == nil
+	// The branch a failed or abandoned create may delete again: only one
+	// this call is about to make.
+	createdBranch := ""
+	if !reuseLocal && !branchExists {
+		createdBranch = req.Branch
+	}
 
 	// Create the git worktree. A new branch starts from the resolved start
 	// point with --no-track: a base taken from origin is a starting commit,
@@ -287,11 +303,14 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		// to that worktree then failed with "no workspace path to scope this
 		// request to", which reads as a database problem and is not one.
 		//
-		// Removed only when EMPTY. git may have written a partial checkout
-		// before failing, and in a --force flow the directory can predate this
-		// call entirely; deleting a non-empty directory here could destroy
-		// work this function did not create. An empty directory is
-		// unambiguously ours and unambiguously useless.
+		// A checkout directory this call made is taken back whole, with its
+		// registration and the branch this call made: git may have written a
+		// partial checkout before failing, and a `git worktree add` killed at
+		// the deadline leaves its registration locked "initializing", which
+		// holds the branch against every later create
+		// (cmd_worktree_create_guard.go). A directory that predates this call
+		// (a --force flow) is removed only when EMPTY: deleting a non-empty
+		// one could destroy work this function did not create.
 		//
 		// BOTH levels are swept, because MkdirAll above creates
 		// filepath.Dir(worktreePath), not worktreePath itself:
@@ -313,7 +332,11 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 				_ = os.Remove(dir)
 			}
 		}
-		removeIfEmpty(worktreePath)
+		if preExisted {
+			removeIfEmpty(worktreePath)
+		} else {
+			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
+		}
 		if parent := filepath.Dir(worktreePath); parent != worktreePath {
 			removeIfEmpty(parent)
 		}
@@ -324,6 +347,21 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 			ErrorCode:   code,
 			ErrorDetail: detail,
 		})
+	}
+
+	// The caller's deadline passed while git ran. The daemon's deadline is
+	// the caller's measured from later, so the caller has already given up:
+	// it marked the workspace failed and will never learn this path, and an
+	// unclaimed checkout would hold the branch against the user's retry.
+	if ctx.Err() != nil && !preExisted {
+		abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
+		if parent := filepath.Dir(worktreePath); parent != worktreePath {
+			if entries, rerr := os.ReadDir(parent); rerr == nil && len(entries) == 0 {
+				_ = os.Remove(parent)
+			}
+		}
+		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf(
+			"the checkout finished after its caller stopped waiting (%v), so it was removed again; try again", ctx.Err())})
 	}
 
 	if req.ExpectedHead != "" {
@@ -347,6 +385,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 				"worktree_path", worktreePath, "error", err)
 		}
 	}
+	syncNewCheckout(ctx, req.ProjectPath, worktreePath, req.Branch)
 
 	// A new workspace waits on this whole command; say how long git took, so
 	// a slow create can be told apart from a slow copy (worktree.copy_paths

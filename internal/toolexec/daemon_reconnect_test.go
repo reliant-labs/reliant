@@ -604,3 +604,20 @@ type gatewayFailureRouter struct {
 func (r *gatewayFailureRouter) SendToolRequestSync(context.Context, string, *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	return &ToolExecutionResponse{IsError: true, ErrorCode: r.code, ErrorMessage: "daemon connection interrupted"}, nil
 }
+
+// workspacecreate cannot import this package (it is imported by it), so it
+// recognizes a dropped connection by ConnectionInterrupted(). Both shapes the
+// error reaches a caller in must answer it: the gateway's sentinel wrapped,
+// and the interruption rebuilt from a reply's error code.
+func TestConnectionInterrupted_IsRecognizableWithoutThisPackage(t *testing.T) {
+	type marker interface{ ConnectionInterrupted() bool }
+	for name, err := range map[string]error{
+		"sentinel, wrapped": fmt.Errorf("%w while waiting for command %q response", ErrDaemonConnectionInterrupted, "worktree.create"),
+		"rebuilt from a reply": fmt.Errorf("daemon command %q failed: %w", "worktree.create",
+			interruption("daemon connection interrupted while waiting for command \"worktree.create\" response")),
+	} {
+		var m marker
+		require.True(t, errors.As(err, &m) && m.ConnectionInterrupted(), name)
+		require.ErrorIs(t, err, ErrDaemonConnectionInterrupted, name)
+	}
+}

@@ -248,7 +248,11 @@ func IsTransportErrorCode(code string) bool {
 // gateway wraps it; the bridge carries it to the requester as
 // ErrorCodeDaemonInterrupted, and the router decides from the request whether
 // asking again after the reconnect is safe (see daemon_reconnect.go).
-var ErrDaemonConnectionInterrupted = errors.New("daemon connection interrupted")
+//
+// It is an interruption, so it and every interruption rebuilt from a reply
+// say ConnectionInterrupted(): a package toolexec imports (workspacecreate)
+// recognizes it by that method, since it cannot name this variable.
+var ErrDaemonConnectionInterrupted error = interruption("daemon connection interrupted")
 
 // ErrNotDispatched marks a tool request failure that proves the request never
 // reached a daemon: no machine resolved, or NATS had no responder for every

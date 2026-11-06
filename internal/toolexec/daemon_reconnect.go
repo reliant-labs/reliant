@@ -345,6 +345,15 @@ var reissuableDaemonCommands = map[string]bool{
 	"exec.bg_list":        true,
 	// Touching twice is touching once.
 	"exec.bg_touch": true,
+	// A write, but one whose second attempt is the first's answer: the daemon
+	// runs attempts at one checkout path one at a time, and an attempt that
+	// finds the checkout an earlier one made for the same worktree id answers
+	// with it (daemonruntime finishedCreate). Not sending it again left the
+	// finished checkout orphaned, holding its branch against the user's retry
+	// (prod 2026-11-06). A daemon from before that check fails the second
+	// attempt on its own branch, which is what the first attempt's lost answer
+	// already was.
+	"worktree.create": true,
 }
 
 // interruption is ErrDaemonConnectionInterrupted in the gateway's own words,
@@ -353,3 +362,7 @@ type interruption string
 
 func (e interruption) Error() string        { return string(e) }
 func (e interruption) Is(target error) bool { return target == ErrDaemonConnectionInterrupted }
+
+// ConnectionInterrupted marks the error for a consumer that cannot import
+// this package (see ErrDaemonConnectionInterrupted).
+func (interruption) ConnectionInterrupted() bool { return true }

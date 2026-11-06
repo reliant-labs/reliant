@@ -388,9 +388,10 @@ func checkoutGone(checkout, root string) bool {
 // locked one. Here a registration is pruned only when its checkout is TRULY
 // gone (checkoutGone) and it is reliant's: under the worktree root, or locked
 // with a reliant lock reason. A lock with an empty reason — a crash during
-// `git worktree lock` — counts as reliant's only under the root. Any other
-// lock (a user's, or git's own "initializing" during `worktree add`) is
-// reported and left alone.
+// `git worktree lock` — counts as reliant's only under the root, and so does
+// git's own "initializing" lock once it is older than MinAge (a dead `git
+// worktree add`, see deadWorktreeAdd). Any other lock (a user's, or an add
+// still in flight) is reported and left alone.
 func repairRegistration(ctx context.Context, adminDir string, opts RepairOptions, rep *RepairReport) {
 	name := filepath.Base(adminDir)
 	checkout := checkoutOf(adminDir)
@@ -407,9 +408,11 @@ func repairRegistration(ctx context.Context, adminDir string, opts RepairOptions
 	gone := false
 	if checkout == "" {
 		// A torn admin dir with no gitdir file: git cannot say whose it is.
-		// Old enough, and not mid-`worktree add` (locked "initializing").
+		// Old enough, and not mid-`worktree add` (locked "initializing" less
+		// than MinAge ago).
 		info, err := os.Stat(adminDir)
-		gone = err == nil && opts.Now().Sub(info.ModTime()) >= opts.MinAge && (!locked || reason == "" || ReliantLock(reason))
+		gone = err == nil && opts.Now().Sub(info.ModTime()) >= opts.MinAge &&
+			(!locked || reason == "" || ReliantLock(reason) || deadWorktreeAdd(lockPath, reason, opts))
 		underRoot = true
 		if !gone {
 			return
@@ -422,7 +425,8 @@ func repairRegistration(ctx context.Context, adminDir string, opts RepairOptions
 			return
 		}
 		ours := underRoot || ReliantLock(reason)
-		if locked && !ReliantLock(reason) && (reason != "" || !underRoot) {
+		if locked && !ReliantLock(reason) && (reason != "" || !underRoot) &&
+			!(underRoot && deadWorktreeAdd(lockPath, reason, opts)) {
 			ours = false
 		}
 		if !ours {
@@ -452,6 +456,25 @@ func repairRegistration(ctx context.Context, adminDir string, opts RepairOptions
 	removeEmptyPseudoRefs(adminDir, opts, rep)
 	restoreEmptyHEAD(ctx, adminDir, checkout, opts, rep)
 	repairIndex(ctx, adminDir, checkout, opts, rep)
+}
+
+// gitAddLockReason is the lock `git worktree add` writes on the registration
+// it is creating, and removes once the checkout is populated.
+const gitAddLockReason = "initializing"
+
+// deadWorktreeAdd reports whether a registration's lock is a `git worktree
+// add` that died: git writes "initializing" into the lock, creates the
+// checkout directory a moment later, and removes the lock when it is done. So
+// that lock on a checkout that is gone, older than MinAge, is an add that was
+// killed (a deadline, a VM restart) or whose checkout was removed after it
+// died. Left in place it holds the branch: every later add of that branch
+// fails with "already used by worktree" (prod 2026-11-06, cicd).
+func deadWorktreeAdd(lockPath, reason string, opts RepairOptions) bool {
+	if reason != gitAddLockReason {
+		return false
+	}
+	info, err := os.Stat(lockPath)
+	return err == nil && opts.Now().Sub(info.ModTime()) >= opts.MinAge
 }
 
 func removeEmptyPseudoRefs(gitDir string, opts RepairOptions, rep *RepairReport) {

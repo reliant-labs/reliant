@@ -33,7 +33,10 @@ type fakeMachine struct {
 	// failWith is what the failing repo's create answers; the zero value is
 	// the prod event, a base branch that does not exist.
 	failWith *checkoutResponse
-	copyErr  error
+	// sendErr, when set, is what the failing repo's create returns instead
+	// of an answer: the command never got one.
+	sendErr error
+	copyErr error
 }
 
 func (f *fakeMachine) Send(_ context.Context, cmd string, payload, resp any, _ int32) error {
@@ -48,6 +51,9 @@ func (f *fakeMachine) Send(_ context.Context, cmd string, payload, resp any, _ i
 		pp, _ := p["project_path"].(string)
 		out := resp.(*checkoutResponse)
 		if f.failRepo != "" && filepath.Base(pp) == f.failRepo {
+			if f.sendErr != nil {
+				return f.sendErr
+			}
 			if f.failWith != nil {
 				*out = *f.failWith
 				return nil

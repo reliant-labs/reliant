@@ -291,6 +291,35 @@ func TestRepair_RegistrationsOfGoneCheckoutsArePrunedOnlyWhenReliantOwnsThem(t *
 	}
 }
 
+// A `git worktree add` killed mid-checkout leaves its registration locked
+// "initializing"; once the checkout is gone it holds the branch for good, so
+// every later add of that branch fails (prod 2026-11-06). Past MinAge it is
+// pruned; inside MinAge it may be an add in flight and is left alone.
+func TestRepair_DeadWorktreeAddIsPrunedOnceOld(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
+	t.Parallel()
+	f := newFixture(t)
+	w := f.worktree("killed", "feat/killed")
+	admin := filepath.Join(f.project, ".git", "worktrees", "killed")
+	run(t, f.project, "worktree", "unlock", w.Path)
+	write(t, filepath.Join(admin, "locked"), gitAddLockReason+"\n")
+	if err := os.RemoveAll(w.Path); err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := RepairRepo(context.Background(), filepath.Join(f.project, ".git"), RepairOptions{WorktreeRoot: f.root})
+	if !exists(admin) || len(fresh.PrunedRegistrations) != 0 {
+		t.Fatalf("an add younger than MinAge may still be running, and was pruned: %+v", fresh)
+	}
+
+	rep := RepairRepo(context.Background(), filepath.Join(f.project, ".git"), repairOpts(f))
+	if exists(admin) || len(rep.PrunedRegistrations) != 1 || len(rep.SkippedRegistrations) != 0 {
+		t.Fatalf("report = %+v, want the dead add's registration pruned", rep)
+	}
+	// The branch is free again: a new checkout of it succeeds.
+	run(t, f.project, "worktree", "add", filepath.Join(f.root, "again"), "feat/killed")
+}
+
 func TestRepair_MissingRootPrunesNothing(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
