@@ -581,6 +581,12 @@ RELIANT_TOKEN.
 
 Re-running with the same --name replaces that token.
 
+--scope narrows the token to part of the API instead of all of it. Repeat it, or
+give a comma-separated list. Without it the token is reliant:api, the whole
+API. A narrow token reaches only the rpcs its scopes cover and gets
+PermissionDenied (scope_missing) on the rest. Valid scopes:
+reliant:api, runs:read, runs:start, runs:control, triggers:fire, triggers:manage, inbox:read, inbox:manage, approvals:decide, questions:answer.
+
 ```
 reliant auth token create [flags]
 ```
@@ -590,6 +596,7 @@ reliant auth token create [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--name` | `string` | - | Label for the token, e.g. ci-deploy (required) |
+| `--scope` | `strings` | - | Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api) |
 
 ---
 
