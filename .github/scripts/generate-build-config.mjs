@@ -66,7 +66,7 @@ const config = {
   RELIANT_SERVER_URL: endpoints.RELIANT_SERVER_URL || "",
   RELIANT_API_URL: endpoints.RELIANT_API_URL || "",
   RELIANT_GATEWAY_URL: endpoints.RELIANT_GATEWAY_URL || "",
-  // The control-plane (admin-server) origin. The preload injects this as
+  // The control-plane (platform-api) origin. The preload injects this as
   // window.RELIANT_CONFIG.controlPlaneURL, which the renderer's
   // getControlPlaneURL() prefers over the baked VITE_ value — so a packaged
   // app can reach the coupon/billing endpoints even though the renderer
@@ -145,7 +145,7 @@ if (!config.RELIANT_GATEWAY_URL) {
 // configured" on a user's machine, which is exactly what v1.7.5 did.
 if (!config.RELIANT_CONTROL_PLANE_URL) {
   console.error(
-    "build-config.js has no RELIANT_CONTROL_PLANE_URL. The packaged app would have no admin-server " +
+    "build-config.js has no RELIANT_CONTROL_PLANE_URL. The packaged app would have no platform-api " +
       "origin, and billing/coupon actions would throw 'Control plane API URL not configured'. " +
       "Fix it in control-plane deploy/kcl/lib/env.k (reliant_desktop_release_config).",
   );

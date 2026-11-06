@@ -13,7 +13,7 @@
  * + port-access RPCs the section needs on top.
  *
  * Daemon lifecycle + billing go through `getControlPlaneClient(...)`
- * (controlplane.v1 public, dials admin-server). Access tokens are not here:
+ * (controlplane.v1 public, dials platform-api). Access tokens are not here:
  * they are reliant.v1.TokenService on forge's generated hooks
  * (`hooks/token-queries.ts`).
  */

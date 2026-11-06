@@ -44,7 +44,7 @@ func (s *stubDaemonService) ResumeDaemon(
 
 // resumeRecorder serves a real Connect handler, so the client's wire format
 // and headers are exercised rather than approximated. Every other path 404s,
-// as on control-plane's admin-server, and is recorded.
+// as on control-plane's platform-api, and is recorded.
 func resumeRecorder(t *testing.T, resumed bool, errMsg string) (*httptest.Server, *stubDaemonService) {
 	t.Helper()
 	stub := &stubDaemonService{resumed: resumed, errMsg: errMsg}

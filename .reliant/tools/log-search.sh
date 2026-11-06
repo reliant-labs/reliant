@@ -9,7 +9,7 @@
 #
 # This checkout's stack writes reliant-api-server.log, reliant-temporal-worker.log,
 # daemon-gateway.log, reliant-migrate.log and frontend_web.log (the browser
-# console, as [browser:<level>] lines). control-plane's adds admin-server.log,
+# console, as [browser:<level>] lines). control-plane's adds admin-server.log (platform-api's log),
 # frontend_reliant-web.log, reliant-electron-main.log and more. A zero-hit grep
 # proves nothing until the file is live: `--where` shows each file's mtime (the
 # dev-logs skill has the full check).

@@ -2,7 +2,7 @@
 
 // Package daemonevents publishes daemon connect/disconnect lifecycle events
 // to NATS JetStream so that downstream consumers (e.g. the control-plane
-// admin-server) can mirror the connection state into their own
+// platform-api) can mirror the connection state into their own
 // `controlplane.daemons` table.
 //
 // The events are intentionally low-volume (one per connect/disconnect) and
@@ -33,7 +33,7 @@ import (
 
 const (
 	// StreamDaemonEvents is the JetStream stream that carries
-	// daemon-gateway → admin-server lifecycle events.
+	// daemon-gateway → platform-api lifecycle events.
 	StreamDaemonEvents = "DAEMON_EVENTS"
 
 	// SubjectDaemonEventsAll matches every daemon event subject.

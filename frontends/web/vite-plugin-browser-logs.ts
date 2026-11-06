@@ -9,7 +9,7 @@ import type { Plugin } from "vite";
  * `control-plane/.forge/logs/<env>/<name>.log`, and this Vite server is one of
  * those processes (`frontend_reliant-web.log`). So the sink is simply
  * `console.log` — forge does the rest, and browser lines land next to
- * admin-server, reliant-api-server and the temporal worker, in one directory,
+ * platform-api, reliant-api-server and the temporal worker, in one directory,
  * with one grep.
  *
  * An earlier version of this plugin wrote its own file under `data/`.

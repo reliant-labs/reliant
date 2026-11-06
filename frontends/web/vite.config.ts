@@ -220,7 +220,7 @@ export default defineConfig({
       // first-party from the browser's POV — no CORS, no per-port
       // bookkeeping. Vite fans out by proto service package:
       //
-      //   /controlplane.v1.* → admin-server   (cp-forge backend)
+      //   /controlplane.v1.* → platform-api   (cp-forge backend)
       //   /reliant.v1.*      → reliant-api    (this repo's backend)
       //
       // The two backends are HTTP/h2c Connect; ws:false avoids Vite

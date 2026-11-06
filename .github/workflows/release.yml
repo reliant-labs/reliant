@@ -114,7 +114,7 @@ jobs:
           node .github/scripts/validate-endpoint.mjs RELIANT_SERVER_URL "$RELIANT_SERVER_URL" --required
           node .github/scripts/validate-endpoint.mjs RELIANT_API_URL "$RELIANT_API_URL" --required
           node .github/scripts/validate-endpoint.mjs RELIANT_GATEWAY_URL "$RELIANT_GATEWAY_URL" --required
-          # The admin-server origin now travels with the release too, so it
+          # The platform-api origin now travels with the release too, so it
           # gets the same DNS + reachability check rather than only a
           # non-empty test — a dead domain passes "non-empty" (that is exactly
           # how api.reliant.so shipped).

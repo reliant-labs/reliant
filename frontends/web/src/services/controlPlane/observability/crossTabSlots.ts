@@ -8,7 +8,7 @@
  * next with `in_flight_limit` after a short wait. readScheduler keeps one page under
  * that cap, but a page is not a user: on 2026-11-01 the owner had nine console
  * tabs open — six dashboards opened at once — each running its own four reads,
- * and admin-server refused 28 of them in two minutes. Nothing bypassed a page's
+ * and platform-api refused 28 of them in two minutes. Nothing bypassed a page's
  * queue; the other tabs were simply other queues.
  *
  * So a read takes one of OBS_READ_CONCURRENCY named Web Locks before it goes

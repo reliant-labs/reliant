@@ -4,9 +4,9 @@
  * Every cloud service module (git, daemon, onboarding, billing, …) calls
  * `getControlPlaneClient(SomeService)`. It is `connectClient` from
  * src/lib/connect.ts: every `controlplane.v1.*` service routes to
- * control-plane's admin-server there, on the same interceptor chain every
+ * control-plane's platform-api there, on the same interceptor chain every
  * other transport in the app uses (timeout, auth, tracing, error logging,
- * upgrade modal, 401 recovery — minus x-daemon-last-seen, which admin-server's
+ * upgrade modal, 401 recovery — minus x-daemon-last-seen, which platform-api's
  * CORS preflight does not allow). A bespoke chain here is how a previous bug
  * shipped: this transport once had only auth + upgrade, and `Resume daemon`
  * failures surfaced as raw toasts instead of the UpgradeRequiredModal.

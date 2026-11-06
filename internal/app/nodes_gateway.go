@@ -210,7 +210,7 @@ type DaemonEventPublisherDeps struct {
 }
 
 // NewDaemonEventPublisher forwards daemon connect/disconnect (and the
-// connector's connect failures) to the control-plane admin-server through the
+// connector's connect failures) to the control-plane platform-api through the
 // DAEMON_EVENTS JetStream stream, so controlplane.daemons.status stays in sync
 // with reality. It ensures the stream first, within 10s.
 func NewDaemonEventPublisher(d DaemonEventPublisherDeps) (*daemonevents.Publisher, error) {

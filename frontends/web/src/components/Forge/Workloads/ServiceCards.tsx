@@ -5,7 +5,7 @@
  * shaped unlike the lists around it (Processes, compact lines; Jobs, a run
  * timeline), so the three never read as the same table again.
  *
- *   ▌admin-server  Deployment          ● Healthy
+ *   ▌platform-api  Deployment          ● Healthy
  *   ▌2/2 ready · 20261018.155157
  *   ▌37.1/s      0.8%      86ms
  *   ▌req/s       errors    p95

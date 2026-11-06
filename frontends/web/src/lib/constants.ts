@@ -135,9 +135,9 @@ export const getAppURL = (): string => {
 };
 
 /**
- * URL for the admin-server (control-plane) API.
+ * URL for the platform-api (control-plane) API.
  *
- * Points at admin-server, which owns endpoints like /api/proxy-session that
+ * Points at platform-api, which owns endpoints like /api/proxy-session that
  * mint workspace-proxy session tokens.
  *
  * Lookup order: window.RELIANT_CONFIG (Electron-injected) first, then the

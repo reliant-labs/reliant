@@ -5,7 +5,7 @@
  * model. The only file that knows its wire shape.
  *
  * WHAT IT IS. An environment's managed identity is a Zitadel instance the
- * control plane runs for it. admin-server relays every call to the identity
+ * control plane runs for it. platform-api relays every call to the identity
  * reconciler, which alone maps (org, environment) to an instance — no instance
  * id, key or secret ever reaches the browser, in either direction.
  *

@@ -10,10 +10,10 @@ import (
 
 const (
 	// reliantNeutralBaseURL is the fallback when RELIANT_API_BASE_URL is unset:
-	// a LOCAL admin-server on the port control-plane's KCL pins for it
+	// a LOCAL platform-api on the port control-plane's KCL pins for it
 	// (deploy/kcl/lib/ports.k ADMIN_SERVER_PORT = 8090).
 	//
-	// Loopback, and NOT the hosted admin-server — unlike CLIConfig's server
+	// Loopback, and NOT the hosted platform-api — unlike CLIConfig's server
 	// and gateway, whose defaults are the hosted endpoints so a `go install`
 	// CLI works out of the box. The difference is who reads this: CLIConfig
 	// configures the CLI/daemon a USER runs, while this is read
