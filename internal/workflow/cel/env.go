@@ -234,6 +234,10 @@ func Extensions() []cel.EnvOption {
 	return append(opts, celTrimFunctions()...)
 }
 
+// maxExactDoubleInt is 2^53, the largest magnitude below which every integer
+// has an exact float64.
+const maxExactDoubleInt = types.Int(1 << 53)
+
 // celMathIntOverloads gives math.ceil, math.floor, math.round and math.trunc
 // an int overload beside ext.Math's double one. A whole number crossing a node
 // boundary arrives as an int (node outputs are normalized so `n + 1` stays
@@ -241,11 +245,16 @@ func Extensions() []cel.EnvOption {
 // 1500 and `math.round(nodes.x.total)` failed with "no such overload:
 // math.round(int)". Rounding a whole number changes nothing; the result is
 // the double the double overload would return, so both forms read the same.
+// A double holds every integer only up to 2^53, so an int beyond that is an
+// error rather than a silently different number.
 func celMathIntOverloads() []cel.EnvOption {
 	asDouble := cel.UnaryBinding(func(v ref.Val) ref.Val {
 		i, ok := v.(types.Int)
 		if !ok {
 			return types.NoSuchOverloadErr()
+		}
+		if i > maxExactDoubleInt || i < -maxExactDoubleInt {
+			return types.NewErr("math: %d is beyond ±2^53 and has no exact double; use the int itself", int64(i))
 		}
 		return types.Double(float64(i))
 	})
