@@ -110,6 +110,9 @@ func TestIntrospect_WildcardSkipsScopesThisBinaryDoesNotKnow(t *testing.T) {
 		if len(p.Scopes) != 2 || !p.Scopes.Has(fat.ScopeDaemonConnect) || !p.Scopes.Has(fat.ScopeDeployWrite) {
 			t.Fatalf("wildcard scopes = %s", p.Scopes)
 		}
+		if !p.AllScopes {
+			t.Fatalf("the wildcard marker was dropped: %+v", p)
+		}
 	}
 }
 

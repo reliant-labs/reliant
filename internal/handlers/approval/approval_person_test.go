@@ -2,6 +2,9 @@ package approval_test
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -12,6 +15,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	approval "github.com/reliant-labs/reliant/internal/handlers/approval"
@@ -179,5 +183,40 @@ func TestDecisionsCredentialMatrix(t *testing.T) {
 				require.Zero(t, repo.CallCount("UpdateApprovalStatus"), "nothing is written for a refused caller")
 			})
 		}
+	}
+}
+
+// An unbound wildcard (a daemon's credential) whose resolved scopes hold
+// approvals:decide and no daemon scope is refused as a machine on the
+// production path: the principal the control-plane introspection adapter
+// builds must keep the wildcard marker the gate reads.
+func TestDecisionsRefuseAnIntrospectedWildcard(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"active":true,"tokenId":"tok-1","orgId":"org-1","actingUserId":"test-user",
+			"scopes":["approvals:decide","reliant:api"],"allScopes":true}`))
+	}))
+	t.Cleanup(srv.Close)
+	client := accesstokenclient.New(accesstokenclient.Deps{BaseURL: srv.URL, Sign: func() (string, error) { return "signed", nil }})
+	p, err := client.Introspect(context.Background(), fat.Prefix+strings.Repeat("A1b2", 8))
+	require.NoError(t, err)
+	require.Nil(t, p.Resource)
+	require.True(t, p.Scopes.Has(fat.ScopeApprovalsDecide))
+	require.False(t, p.Scopes.Has(fat.ScopeDaemonConnect) || p.Scopes.Has(fat.ScopeDaemonResume))
+
+	for _, d := range decisions {
+		t.Run(d.name, func(t *testing.T) {
+			t.Parallel()
+			repo := personRepo()
+			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo}))
+
+			err := d.call(svc, asToken(p))
+
+			require.Error(t, err)
+			require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "err = %v", err)
+			require.Equal(t, auth.ReasonMachineCredentialCannotDecide, svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader))
+			require.Zero(t, repo.CallCount("UpdateApprovalStatus"), "nothing is written for a refused caller")
+		})
 	}
 }
