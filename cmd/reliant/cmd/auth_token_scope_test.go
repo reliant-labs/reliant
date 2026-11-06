@@ -115,11 +115,51 @@ func TestAuthTokenCreate_InvalidScopeFailsBeforeAnyLogin(t *testing.T) {
 	}
 }
 
-func TestMissingScopes(t *testing.T) {
-	if got := missingScopes([]string{"runs:read", "triggers:fire"}, []string{"runs:read"}); !reflect.DeepEqual(got, []string{"triggers:fire"}) {
-		t.Errorf("got %v", got)
+func TestScopeDifference(t *testing.T) {
+	for _, tc := range []struct {
+		requested, granted, missing, extra []string
+	}{
+		{[]string{"runs:read", "triggers:fire"}, []string{"runs:read"}, []string{"triggers:fire"}, nil},
+		{[]string{"runs:read"}, []string{"runs:read", "reliant:api"}, nil, []string{"reliant:api"}},
+		{[]string{"runs:read"}, []string{"triggers:fire"}, []string{"runs:read"}, []string{"triggers:fire"}},
+		{[]string{"runs:read", "triggers:fire"}, []string{"triggers:fire", "runs:read"}, nil, nil},
+	} {
+		missing, extra := scopeDifference(tc.requested, tc.granted)
+		if !reflect.DeepEqual(missing, tc.missing) || !reflect.DeepEqual(extra, tc.extra) {
+			t.Errorf("scopeDifference(%v, %v) = missing %v, extra %v; want %v, %v", tc.requested, tc.granted, missing, extra, tc.missing, tc.extra)
+		}
 	}
-	if got := missingScopes([]string{"runs:read"}, []string{"runs:read", "extra"}); len(got) != 0 {
-		t.Errorf("got %v", got)
+}
+
+// A login that grants the narrow scope asked for plus a broader one must not
+// print the token: that token reaches more of the API than was asked for.
+func TestAuthTokenCreate_RefusesAGrantBroaderThanRequested(t *testing.T) {
+	isolateCLI(t)
+	withFakeLoginBrowser(t)
+	cp := newFakeCP(t, "rlat_BROADER000000000")
+	cp.grantScope = "runs:read reliant:api"
+
+	out, err := executeRoot(t, "auth", "token", "create", "--name", "ci", "--scope", "runs:read", "--server", cp.srv.URL)
+	if err == nil || !strings.Contains(err.Error(), "also granted reliant:api") || !strings.Contains(err.Error(), "revoke") {
+		t.Fatalf("want a refusal naming the extra scope; got %v\n%s", err, out)
+	}
+	if strings.Contains(out, "rlat_BROADER") {
+		t.Errorf("the broader token must not be printed:\n%s", out)
+	}
+}
+
+// A login that grants less than asked must not print the token either.
+func TestAuthTokenCreate_RefusesAGrantNarrowerThanRequested(t *testing.T) {
+	isolateCLI(t)
+	withFakeLoginBrowser(t)
+	cp := newFakeCP(t, "rlat_NARROWER00000000")
+	cp.grantScope = "runs:read"
+
+	out, err := executeRoot(t, "auth", "token", "create", "--name", "ci", "--scope", "runs:read,triggers:fire", "--server", cp.srv.URL)
+	if err == nil || !strings.Contains(err.Error(), "did not grant triggers:fire") {
+		t.Fatalf("want a refusal naming the missing scope; got %v\n%s", err, out)
+	}
+	if strings.Contains(out, "rlat_NARROWER") {
+		t.Errorf("the narrower token must not be printed:\n%s", out)
 	}
 }

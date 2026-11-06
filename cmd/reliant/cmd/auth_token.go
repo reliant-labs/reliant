@@ -91,17 +91,41 @@ func tokenScopesFromFlags(flags []string) ([]string, error) {
 	return out, nil
 }
 
-// missingScopes returns the requested scopes the login did not grant. A
-// control plane may grant less than asked (RFC 6749 3.3); a narrow token that
-// came back with less, or with another scope, is not the token asked for.
-func missingScopes(requested, granted []string) []string {
-	var out []string
+// scopeDifference compares the scopes a login granted with those requested.
+// missing are requested scopes it did not grant; extra are granted scopes
+// nobody asked for. A control plane may grant less than asked (RFC 6749 3.3),
+// and a token that came back with less, or with more, is not the token asked
+// for: more would hand automation access the person did not mean to give.
+func scopeDifference(requested, granted []string) (missing, extra []string) {
 	for _, r := range requested {
 		if !slices.Contains(granted, r) {
-			out = append(out, r)
+			missing = append(missing, r)
 		}
 	}
-	return out
+	for _, g := range granted {
+		if !slices.Contains(requested, g) && !slices.Contains(extra, g) {
+			extra = append(extra, g)
+		}
+	}
+	return missing, extra
+}
+
+// grantMismatch refuses a grant that is not exactly the requested scopes,
+// naming what is missing and what is extra; the token is not printed.
+func grantMismatch(requested, granted []string, tokenName string) error {
+	missing, extra := scopeDifference(requested, granted)
+	if len(missing) == 0 && len(extra) == 0 {
+		return nil
+	}
+	var why []string
+	if len(missing) > 0 {
+		why = append(why, "did not grant "+strings.Join(missing, ", "))
+	}
+	if len(extra) > 0 {
+		why = append(why, "also granted "+strings.Join(extra, ", ")+", which was not asked for")
+	}
+	return fmt.Errorf("the login %s (requested: %s; granted: %s); the token was not printed, revoke it with 'reliant auth token revoke %s'",
+		strings.Join(why, " and "), strings.Join(requested, ", "), strings.Join(granted, ", "), tokenName)
 }
 
 func newAuthTokenCreateCmd() *cobra.Command {
@@ -148,9 +172,10 @@ PermissionDenied (scope_missing) on the rest. Valid scopes:
 				return fmt.Errorf("minting token: %w", err)
 			}
 			// RFC 6749 3.3: a reply with no scope field means "as requested".
-			if missing := missingScopes(scopes, cred.Scopes); len(cred.Scopes) > 0 && len(missing) > 0 {
-				return fmt.Errorf("the login did not grant %s (granted: %s); the token was not printed, revoke it with 'reliant auth token revoke %s'",
-					strings.Join(missing, ", "), strings.Join(cred.Scopes, ", "), cliauth.ClientID+"@"+name)
+			if len(cred.Scopes) > 0 {
+				if err := grantMismatch(scopes, cred.Scopes, cliauth.ClientID+"@"+name); err != nil {
+					return err
+				}
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Token %q created\n", cliauth.ClientID+"@"+name)
