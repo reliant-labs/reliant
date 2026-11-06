@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -84,11 +85,13 @@ func TestGitReadSendsTheDirectoryProbeBesideTheRead(t *testing.T) {
 
 func TestGitReadThatAnswersDoesNotWaitForTheProbe(t *testing.T) {
 	t.Parallel()
+	var probeReturned atomic.Bool
 	router := readRouter(func(ctx context.Context, commandType string, _ []byte) ([]byte, error) {
 		switch commandType {
 		case "worktree.validate_path":
 			// A slow probe: it answers only once the request is over.
 			<-ctx.Done()
+			probeReturned.Store(true)
 			return nil, ctx.Err()
 		case "worktree.git_status":
 			return json.Marshal(map[string]any{"branch": "feature", "status": "clean"})
@@ -102,6 +105,7 @@ func TestGitReadThatAnswersDoesNotWaitForTheProbe(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.GetClean())
 	require.NoError(t, ctx.Err(), "the read waited for the probe")
+	assert.True(t, probeReturned.Load(), "the probe outlived the rpc")
 }
 
 func TestGitReadOfAMissingDirectoryReportsTheDirectory(t *testing.T) {

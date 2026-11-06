@@ -470,6 +470,12 @@ func (s *Service) validateWorktreeForGitOps(ctx context.Context, userID string, 
 //
 // The probe never wakes the machine and a failed send is no verdict: read's
 // own send wakes it, and reports that, so one request wakes a machine once.
+//
+// The probe never outlives the call: a read that succeeds cancels it and
+// waits for it to return. The router's send returns as soon as its context is
+// cancelled and tells the daemon to drop the command
+// (TestSendDaemonCommand_CancelReturnsAndCancelsOnTheDaemon in
+// internal/toolexec), so that wait costs no round trip.
 func (s *Service) gitReadOnDisk(ctx context.Context, userID string, worktree *db.Worktree, read func() error) error {
 	if worktree.DeletedAt != nil {
 		return errWorktreeArchived()
@@ -480,6 +486,8 @@ func (s *Service) gitReadOnDisk(ctx context.Context, userID string, worktree *db
 	go func() { verdict <- s.probeWorktreeDir(probeCtx, userID, worktree) }()
 	err := read()
 	if err == nil {
+		cancel()
+		<-verdict
 		return nil
 	}
 	if v := <-verdict; v != nil {

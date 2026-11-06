@@ -119,6 +119,65 @@ func TestSendDaemonCommand_CommandBudgetIsADaemonTimeout(t *testing.T) {
 	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err))
 }
 
+// The caller going away ends the send at once, well inside the command's
+// budget, and tells the daemon to drop the command it was sent: the worktree
+// reads cancel their directory probe once the read has answered
+// (gitReadOnDisk), and rely on this so the probe never outlives the rpc.
+func TestSendDaemonCommand_CancelReturnsAndCancelsOnTheDaemon(t *testing.T) {
+	nc := startPayloadTestNATS(t)
+	commands := make(chan []byte, 1)
+	cmdSub, err := nc.Subscribe(daemonSubject(daemonCommandSubject, "user-1", "daemon-1"), func(msg *nats.Msg) {
+		commands <- msg.Data // never answered
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cmdSub.Unsubscribe() })
+	cancels := make(chan []byte, 1)
+	cancelSub, err := nc.Subscribe(daemonSubject(toolCancelSubject, "user-1", "daemon-1"), func(msg *nats.Msg) {
+		cancels <- msg.Data
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cancelSub.Unsubscribe() })
+	require.NoError(t, nc.Flush())
+	router := NewNATSDaemonRouter(nc)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sent := make(chan error, 1)
+	go func() {
+		_, err := router.SendDaemonCommandToDaemon(ctx, "user-1", "daemon-1", "worktree.validate_path", []byte(`{"path":"/w"}`), 60000)
+		sent <- err
+	}()
+
+	var envelope struct {
+		RequestID string `json:"request_id"`
+	}
+	select {
+	case data := <-commands:
+		require.NoError(t, json.Unmarshal(data, &envelope))
+	case <-time.After(10 * time.Second):
+		t.Fatal("the daemon received no command")
+	}
+	cancel()
+
+	select {
+	case err := <-sent:
+		require.Error(t, err)
+		assert.Equal(t, svcerr.ClassCanceled, svcerr.Classify(err))
+	case <-time.After(10 * time.Second):
+		t.Fatal("the send did not return when its context was cancelled")
+	}
+	select {
+	case data := <-cancels:
+		var c struct {
+			RequestID string `json:"request_id"`
+		}
+		require.NoError(t, json.Unmarshal(data, &c))
+		assert.Equal(t, envelope.RequestID, c.RequestID)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the daemon was not told to drop the command")
+	}
+}
+
 // The caller going away is a cancellation, not a timeout.
 func TestSendDaemonCommand_CancelIsNotADaemonTimeout(t *testing.T) {
 	router := startSilentDaemon(t)
