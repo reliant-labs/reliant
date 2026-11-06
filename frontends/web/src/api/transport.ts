@@ -58,6 +58,7 @@ import {
   traceInterceptor,
 } from "@reliantlabs/forge-web-runtime/interceptors";
 import { reportError, reportFailure } from "../lib/errorReporting";
+import { noteRpcFailureDecided } from "../lib/handledRpcFailures";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
 import { upgradeInterceptor } from "./upgradeInterceptor";
@@ -383,6 +384,9 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     }
     return result;
   } catch (error) {
+    // Decided here, once: whatever a caller logs about it later is a log line
+    // (lib/handledRpcFailures.ts), not a second report.
+    noteRpcFailureDecided(error);
     const duration = Date.now() - startTime;
     const kind = classifyRpcFailure(error, {
       serviceTypeName: req.service.typeName,
@@ -409,6 +413,11 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     }
     if (kind === "machine-wait") {
       logger.info("[gRPC Client] Machine not serving yet", context);
+      throw error;
+    }
+    if (kind === "network") {
+      // No server answered; the SDK's fetch span records the failed request.
+      logger.warn("[gRPC Client] Network failure", context);
       throw error;
     }
     if (kind === "deadline") {

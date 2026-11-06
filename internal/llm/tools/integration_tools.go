@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/invopop/jsonschema"
@@ -303,6 +304,32 @@ func (t *integrationTool) RequiresPermission(_ *rctx.ToolContext, _ ToolCall) (b
 	return t.action.GetMutates(), nil
 }
 
+// repairModelInput gives integration tools the same input repair every
+// wrapped tool gets (ToolWrapper.Run): a number or boolean sent as a quoted
+// string ({"pull_number": "109"}), or an array/object sent as a JSON-encoded
+// string, is coerced to the type the schema declares before validation.
+// Without it the runner's own validator rejected the call as `type: 109 has
+// type "string", want "integer"` — a message in which the quotes that are
+// the problem do not appear, so the model repeated the same call.
+//
+// It validates against the model-facing schema, before bound values are
+// merged, exactly as ToolWrapper does; the runner still validates the merged
+// params against the full manifest schema afterwards.
+func (t *integrationTool) repairModelInput(input string) (string, error) {
+	if strings.TrimSpace(input) == "" {
+		return input, nil
+	}
+	schema := t.ParamSchema()
+	if schema == nil {
+		return input, nil
+	}
+	repaired, err := validateJSONSchemaWithRepair(t.Name(), normalizeModelInput(input, schema), schema)
+	if err != nil {
+		return "", fmt.Errorf("JSON Schema validation failed: %w", err)
+	}
+	return repaired, nil
+}
+
 func (t *integrationTool) Run(rc *rctx.ToolContext, call ToolCall) (ToolResponse, error) {
 	resolved, err := resolveBindings(t.bindings, nil, rc)
 	if err != nil {
@@ -310,6 +337,9 @@ func (t *integrationTool) Run(rc *rctx.ToolContext, call ToolCall) (ToolResponse
 	}
 	input, err := checkBoundKeys(t.Name(), call.Input, resolved)
 	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	if input, err = t.repairModelInput(input); err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}
 	if input, err = applyBindingsToInput(input, resolved); err != nil {

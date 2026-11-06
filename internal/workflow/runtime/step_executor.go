@@ -368,7 +368,10 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		e.execContext,
 	)
 	if err != nil {
-		e.logger.Error("Failed to evaluate step config", "error", err, "stepID", node.GetId())
+		// The workflow's own expression failed (a missing key, a CEL cost
+		// limit): the author's to fix, reported on the run through FailStep,
+		// not an operator's alert.
+		e.logger.Warn("Failed to evaluate step config", "error", err, "stepID", node.GetId())
 		return e.startFailedStep(node, event, err)
 	}
 
@@ -573,11 +576,32 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 			}
 		}
 
+		// A step whose own config cannot run fails the same way on every
+		// retry and resume: it ends the run (endsRunInsteadOfPausing), so the
+		// run's on_failure handler runs and an automation's slot is freed.
+		if configErr := stepConfigFailure(e.ctx, running.ActivityName, running.StepID, err); configErr != nil {
+			e.logger.Warn("[StepExecutor] Step config cannot run; ending the run",
+				"stepID", running.StepID,
+				"error", configErr,
+			)
+			return &StepEvent{
+				ID:             eventID,
+				WorkflowID:     e.workflowID,
+				ChatID:         e.chatID,
+				WorkflowName:   e.workflowName,
+				StepID:         running.StepID,
+				Error:          configErr,
+				RetryExhausted: true,
+			}
+		}
+
 		// All other errors after retry exhaustion (e.g., ApplicationError from
 		// rate limits, transient failures). These are retryable errors that
 		// exhausted Temporal's retry budget — mark as RetryExhausted so the
-		// workflow can auto-pause and retry on user resume.
-		e.logger.Error("[StepExecutor] Activity failed after retry exhaustion",
+		// workflow can auto-pause and retry on user resume. A warning: the
+		// activity reported its own failure (wrapActivity), and the run
+		// tells its owner it paused (WorkflowError, the Inbox).
+		e.logger.Warn("[StepExecutor] Activity failed after retry exhaustion",
 			"activityID", running.ActivityID,
 			"stepID", running.StepID,
 			"error", err,

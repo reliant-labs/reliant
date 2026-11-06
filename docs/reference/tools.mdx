@@ -2962,13 +2962,17 @@ WORKSPACE SCOPING:
   wait on, message, or stop them.
 
 TWO MODES:
-1. LISTING (omit agent_id): returns every sub-agent you spawned — agent_id,
+1. LISTING (omit agent_id): returns the sub-agents you spawned — agent_id,
    title, preset, status, elapsed time, last activity time, turn count, and
    whether it appears gated on a question or approval (best-effort — this
-   signal can be unavailable and is never a hard guarantee).
+   signal can be unavailable and is never a hard guarantee). Running agents
+   come first, newest first, then the most recent finished ones; each agent
+   is listed once however often it was resumed. status: "running" or
+   "finished" narrows the list.
 2. SINGLE AGENT (agent_id set): returns that agent's status and its LAST
    ASSISTANT MESSAGE — "is it done, and what did it say?" without cancelling
-   it.
+   it. An unambiguous prefix of the agent_id (at least 4 characters) works
+   here and in spawn_send and spawn_stop.
 
 WAITING:
 Set wait: true with agent_id to block server-side until that agent reaches a

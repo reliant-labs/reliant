@@ -2174,6 +2174,9 @@ func wrapActivity[TInput any, TOutput any](
 			case ctx.Err() != nil:
 				logger.Debug("[Workflow Runtime Registry] Activity failed",
 					"activity", name, "error", err, "category", category, "is_terminal", terminal)
+			case terminal && reportedOnTheRun(name, classified):
+				logger.Warn("[Workflow Runtime Registry] Activity failed",
+					"activity", name, "error", err, "category", category, "is_terminal", terminal)
 			case terminal:
 				logger.Error("[Workflow Runtime Registry] Activity failed",
 					"activity", name, "error", err, "category", category, "is_terminal", terminal)
@@ -2189,6 +2192,24 @@ func wrapActivity[TInput any, TOutput any](
 
 		return output, nil
 	}
+}
+
+// reportedOnTheRun reports whether a terminal activity failure is a verdict
+// about the user's workflow or machine rather than a fault in ours, so it is a
+// warning, not an error an operator is alerted to:
+//
+//   - FailStep: the workflow's own {{ }} expression or node config cannot run
+//     (a missing key, a CEL cost limit). The run fails with it and says so.
+//   - the run step's classified transport outcomes (RunStep* types): the
+//     user's machine never took the command, stopped answering, or the retry
+//     was refused because it may have run. The step's machine is the user's;
+//     the run reports which one and why.
+func reportedOnTheRun(activityName string, classified error) bool {
+	if activityName == failStepActivityName {
+		return true
+	}
+	var app *temporal.ApplicationError
+	return errors.As(classified, &app) && strings.HasPrefix(app.Type(), "RunStep")
 }
 
 // RegisterWithWorker registers all activities with a Temporal worker

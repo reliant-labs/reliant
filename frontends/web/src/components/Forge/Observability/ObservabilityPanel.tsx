@@ -84,6 +84,7 @@ import { SessionsView } from "./Sessions/SessionsView";
 import { TracesView } from "./TracesView";
 import { GraphView } from "./Graph/GraphView";
 import { NO_CLIENT_FILTERS } from "./ClientFilters";
+import { CONTROL_FIELD } from "../controlStyles";
 
 export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
@@ -208,7 +209,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             id="obs-range"
             value={range}
             onChange={(event) => navigate({ range: rangeOf(event.target.value) }, { replace: true })}
-            className="h-8 min-h-[32px] touch:h-11 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={`${CONTROL_FIELD} h-8 min-h-[32px] touch:h-11 px-2 text-sm`}
             data-testid="obs-range"
           >
             {RANGE_PRESETS.filter((preset) => (view !== "graph" && view !== "rpc") || preset === "15m" || preset === "1h" || preset === range).map((preset) => (

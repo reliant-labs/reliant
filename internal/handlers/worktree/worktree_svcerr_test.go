@@ -175,3 +175,43 @@ func TestPushWorktree_DaemonFailureClasses(t *testing.T) {
 		})
 	}
 }
+
+// git's refusal to stage a path it has neither on disk nor in the index — the
+// file is gone since the changes list showed it — is the user's worktree,
+// FailedPrecondition; any other refusal stays Internal (prod 2026-11-05,
+// e39fe2ca).
+func TestStageFiles_GitRefusalClasses(t *testing.T) {
+	t.Parallel()
+	for answer, code := range map[string]connect.Code{
+		"fatal: pathspec 'marketing/header.png' did not match any files": connect.CodeFailedPrecondition,
+		"fatal: Unable to create '.git/index.lock': Permission denied":   connect.CodeInternal,
+	} {
+		t.Run(answer, func(t *testing.T) {
+			t.Parallel()
+			store := ownedWorktreeRepo(t)
+			store.ListReposByProjectFunc = func(context.Context, string) ([]*core.Repo, error) { return nil, nil }
+			send := func(_ context.Context, _, commandType string, _ []byte, _ int32) ([]byte, error) {
+				switch commandType {
+				case "worktree.validate_path":
+					return json.Marshal(map[string]any{"exists": true})
+				case "worktree.stage":
+					return json.Marshal(map[string]any{"success": false, "error": answer})
+				}
+				return nil, fmt.Errorf("unexpected command %s", commandType)
+			}
+			router := &worktree.StubRouter{
+				SendDaemonCommandFunc: send,
+				SendDaemonCommandToDaemonFunc: func(ctx context.Context, userID, _, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+					return send(ctx, userID, commandType, payload, timeoutMs)
+				},
+			}
+			svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store, Router: router}))
+			_, err := svc.StageFiles(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.StageFilesRequest{
+				WorktreeId: ownWorktreeID, Files: []string{"marketing/header.png"},
+			}))
+			require.Error(t, err)
+			assert.Equal(t, code, svcerr.Code(err), "err = %v", err)
+			assert.Contains(t, svcerr.ToConnect(err).Message(), answer)
+		})
+	}
+}

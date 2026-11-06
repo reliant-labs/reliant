@@ -20,6 +20,7 @@ import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { cn } from "@/lib/utils";
 
 import { ENV_ALL, PLATFORM_SCOPE_LABEL, type ScopeOption } from "./envScope";
+import { segmentTone } from "../controlStyles";
 
 export interface EnvScopeControlProps {
   value: string;
@@ -87,7 +88,7 @@ export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv, pl
       onChange={(event) => choose(event.target.value)}
       data-testid="env-scope-select"
       className={cn(
-        "hidden h-[44px] max-w-36 shrink-0 truncate rounded-md border border-border bg-surface px-2 text-sm text-ink max-md:block",
+        "hidden h-[44px] max-w-36 shrink-0 truncate rounded-md border border-border-strong bg-surface px-2 text-sm text-ink max-md:block",
         pinnedEnv && "opacity-60"
       )}
     >
@@ -134,7 +135,7 @@ export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv, pl
             aria-pressed={value === option.name}
             onClick={() => choose(option.name)}
             data-testid={`env-scope-${option.name}`}
-            className={cn(segment, value === option.name ? "bg-ink/8 font-medium text-ink" : "text-ink-muted hover:text-ink")}
+            className={cn(segment, segmentTone(value === option.name))}
             title={option.recorded ? undefined : `${option.name} is declared in your checkout; Reliant has no record of it yet`}
           >
             {option.name}
@@ -146,7 +147,7 @@ export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv, pl
           aria-pressed={value === ENV_ALL}
           onClick={() => choose(ENV_ALL)}
           data-testid="env-scope-all"
-          className={cn(segment, value === ENV_ALL ? "bg-ink/8 font-medium text-ink" : "text-ink-muted hover:text-ink")}
+          className={cn(segment, segmentTone(value === ENV_ALL))}
         >
           All
         </button>
@@ -159,7 +160,7 @@ export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv, pl
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((open) => !open)}
               data-testid="env-scope-more"
-              className={cn(segment, inMenu ? "bg-ink/8 font-medium text-ink" : "text-ink-muted hover:text-ink")}
+              className={cn(segment, segmentTone(inMenu))}
             >
               {menuLabel}
               <ChevronDown className="h-3 w-3" aria-hidden="true" />

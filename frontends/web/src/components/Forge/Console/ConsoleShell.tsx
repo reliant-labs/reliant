@@ -257,10 +257,12 @@ export function ConsoleShell({
     /*
      * `forge-ui` is REQUIRED, not cosmetic: inside it forge's `accent` token
      * resolves to reliant's primary action colour; outside it, to reliant's
-     * muted hover tint (src/index.css).
+     * muted hover tint (src/index.css). `forge-console` raises the control
+     * edge to 3:1 so filters and toggles read as controls beside the charts
+     * (controlStyles.ts).
      */
     // data-tour: the forge journey spotlights the nav (`[data-tour='forge-console'] #sidebar-layout-nav`).
-    <div className="forge-ui h-dvh w-full" data-testid="forge-shell" data-tour="forge-console">
+    <div className="forge-ui forge-console h-dvh w-full" data-testid="forge-shell" data-tour="forge-console">
       <SidebarLayout
         navLabel={nav.project}
         brand={brand}

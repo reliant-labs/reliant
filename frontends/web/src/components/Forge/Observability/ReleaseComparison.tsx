@@ -52,6 +52,7 @@ import { formatAgo, formatBytes, formatCores, formatCount, formatDuration, forma
 import type { ObsNavigate } from "./obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows } from "./ObsStates";
 import { AskReliantActions } from "./AskReliant/AskReliant";
+import { SEGMENTED, segmentTone } from "../controlStyles";
 
 const WORKLOAD = "resource.attr.k8s.workload.name";
 
@@ -176,7 +177,7 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
       {back}
       <ComparisonHeader health={h} target={target} envName={envName} />
       <div className="flex flex-wrap items-center gap-3">
-        <div role="group" aria-label="Window on each side" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
+        <div role="group" aria-label="Window on each side" className={SEGMENTED}>
           {HEALTH_WINDOWS.map((w) => (
             <button
               key={w}
@@ -186,7 +187,7 @@ export function ReleaseComparison({ scope, subject, target, envName, width, back
               data-testid={`obs-compare-window-${w}`}
               className={cn(
                 "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                w === width ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+                segmentTone(w === width)
               )}
             >
               {w}

@@ -706,3 +706,69 @@ describe("initTelemetry: the landing attribution handoff", () => {
     expect(runtime.enableAttribution).not.toHaveBeenCalled();
   });
 });
+
+describe("a console.error about an RPC failure the transport already decided on", () => {
+  // The SDK records any Error passed to console.error. Stand in for its
+  // wrapper: the mocked init wraps console.error the way the SDK does.
+  function installSdkWrapper(recorded: unknown[][]) {
+    runtime.initBrowserTelemetry.mockImplementationOnce(async () => {
+      const inner = console.error;
+      console.error = (...args: unknown[]) => {
+        recorded.push(args);
+        inner(...args);
+      };
+      return true;
+    });
+  }
+
+  let original: typeof console.error;
+  let printed: unknown[][];
+  beforeEach(() => {
+    original = console.error;
+    printed = [];
+    console.error = (...args: unknown[]) => void printed.push(args);
+  });
+  afterEach(() => {
+    resetTelemetryForTests();
+    console.error = original;
+  });
+
+  it("is logged but not recorded by the SDK", async () => {
+    const { ConnectError, Code } = await import("@connectrpc/connect");
+    const { noteRpcFailureDecided } = await import("../handledRpcFailures");
+    const recorded: unknown[][] = [];
+    installSdkWrapper(recorded);
+    await initTelemetry();
+
+    // What the transport saw, and what the caller holds: the runtime's
+    // normalized error wrapping it.
+    const seen = new ConnectError("file not found: /w/post.md", Code.NotFound);
+    noteRpcFailureDecided(seen);
+    const held = new ConnectError("file not found: /w/post.md", Code.NotFound, undefined, undefined, seen);
+    console.error("Failed to fetch file preview info:", held);
+
+    expect(recorded).toEqual([]);
+    expect(printed).toEqual([["Failed to fetch file preview info:", held]]);
+  });
+
+  it("leaves every other console.error to the SDK", async () => {
+    const { ConnectError, Code } = await import("@connectrpc/connect");
+    const recorded: unknown[][] = [];
+    installSdkWrapper(recorded);
+    await initTelemetry();
+
+    const bug = new TypeError("Cannot read properties of undefined (reading 'id')");
+    const undecided = new ConnectError("stream reset", Code.Internal);
+    console.error("render failed:", bug);
+    console.error(undecided);
+
+    expect(recorded).toEqual([["render failed:", bug], [undecided]]);
+  });
+
+  it("is not installed when the SDK did not start", async () => {
+    runtime.initBrowserTelemetry.mockResolvedValueOnce(false);
+    const before = console.error;
+    await initTelemetry();
+    expect(console.error).toBe(before);
+  });
+});

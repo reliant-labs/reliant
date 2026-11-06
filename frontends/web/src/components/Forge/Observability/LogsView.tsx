@@ -38,6 +38,7 @@ import { severityParam, type ObsNavigate } from "./obsSearch";
 import { ObsAsOf, ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
 import { servicesFor, useSignalsIndex } from "./serviceSignals";
 import { useRovingFocus } from "./useRovingFocus";
+import { CONTROL_FIELD, toggleTone } from "../controlStyles";
 
 const features = tableFeatures({});
 const column = createColumnHelper<typeof features, LogRecord>();
@@ -232,8 +233,8 @@ function LogsToolbar({
               aria-invalid={queryError ? true : undefined}
               aria-describedby={queryError ? "obs-log-query-error" : undefined}
               className={cn(
-                "h-8 min-h-[32px] w-full rounded-md border bg-surface-sunken pl-8 pr-3 font-mono text-sm text-ink placeholder:font-sans placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                queryError ? "border-danger" : "border-border"
+                `${CONTROL_FIELD} h-8 min-h-[32px] w-full pl-8 pr-3 font-mono text-sm placeholder:font-sans`,
+                queryError && "border-danger"
               )}
               data-testid="obs-log-query"
             />
@@ -287,10 +288,8 @@ function LogsToolbar({
               onClick={() => toggleSeverity(severity)}
               data-testid={`obs-severity-${severity}`}
               className={cn(
-                "inline-flex h-8 min-h-[32px] touch:h-11 items-center rounded-full border px-3 text-xs capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                on
-                  ? "border-primary bg-primary/10 text-ink"
-                  : "border-border text-ink-muted hover:text-ink"
+                "inline-flex h-8 min-h-[32px] touch:h-11 items-center rounded-full px-3 text-xs capitalize transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                toggleTone(on)
               )}
             >
               {severity}
@@ -349,7 +348,7 @@ export function ServiceSelect({
         id={id}
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || undefined)}
-        className="h-8 min-h-[32px] rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
+        className={`${CONTROL_FIELD} h-8 min-h-[32px] px-2 text-sm touch:h-[44px]`}
         data-testid={id}
       >
         {includeAll && <option value="">All services</option>}

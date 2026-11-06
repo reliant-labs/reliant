@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { ENV_ALL } from "../../Console/envScope";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, INK_LINK } from "./parts";
 import { SLUG_PATTERN, slugify } from "./dashboardModel";
+import { CONTROL_FIELD } from "../../controlStyles";
 
 /** Which environments a new dashboard is about: the scope's one, or every one. */
 export function envScopeOf(choice: "scope" | "all", env: string, envIdOf: (name: string) => string | undefined): EnvScopeInput {
@@ -60,7 +61,7 @@ function Field({ label, hint, children, htmlFor }: { label: string; hint?: React
 }
 
 const INPUT =
-  "h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  `${CONTROL_FIELD} h-8 w-full px-2.5 text-sm`;
 
 function EnvChoice({ env, value, onChange }: { env: string; value: "scope" | "all"; onChange: (value: "scope" | "all") => void }) {
   const name = useId();

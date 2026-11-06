@@ -81,6 +81,7 @@ import { KindPicker } from "./KindPicker";
 import { PanelBody } from "./PanelBody";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON } from "./parts";
 import { MarkdownEditor, PostgresStatementEditor, SqlStatementEditor, type StatementRun } from "./StatementEditor";
+import { CONTROL_FIELD } from "../../controlStyles";
 
 export type DrawerMode = "add" | "edit" | "view";
 
@@ -108,7 +109,7 @@ export interface PanelDrawerProps {
 
 const UNIT_LABELS: Record<Unit, string> = { "": "none", count: "count", ms: "milliseconds", bytes: "bytes", percent: "percent", s: "seconds" };
 const INPUT =
-  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
+  `${CONTROL_FIELD} h-8 w-full min-w-0 px-2.5 text-sm disabled:opacity-60`;
 
 function useDebounced<T>(value: T, ms: number): T {
   const [settled, setSettled] = useState(value);

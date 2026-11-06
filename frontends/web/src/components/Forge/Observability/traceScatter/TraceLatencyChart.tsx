@@ -55,6 +55,7 @@ import {
   type TracePoint,
   type TraceRegion,
 } from "./traceScatterModel";
+import { SEGMENTED, segmentTone } from "../../controlStyles";
 
 /** Plot geometry, CSS pixels. The scatter and histogram share TOP and PLOT_HEIGHT, so their latency axes line up. */
 const TOP = 10;
@@ -104,7 +105,7 @@ export function TraceLatencyChart(props: TraceLatencyChartProps) {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Legend />
-          <div role="group" aria-label="Latency axis" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
+          <div role="group" aria-label="Latency axis" className={SEGMENTED}>
             {(["linear", "log"] as const).map((s) => (
               <button
                 key={s}
@@ -114,7 +115,7 @@ export function TraceLatencyChart(props: TraceLatencyChartProps) {
                 data-testid={`obs-trace-latency-scale-${s}`}
                 className={cn(
                   "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:min-h-[44px]",
-                  s === scale ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+                  segmentTone(s === scale)
                 )}
               >
                 {s === "linear" ? "Linear" : "Log"}
@@ -464,7 +465,8 @@ function LatencyHistogram({ buckets, y, pct }: { buckets: ReturnType<typeof hist
   const width = measured || 176;
   const barSpace = Math.max(20, width - HIST_RIGHT - 4);
   const max = Math.max(1, ...buckets.map((b) => b.ok + b.error));
-  const labelY = pct ? spreadLabels(PCT_KEYS.map((k) => y.toPx(pct[k]))) : [];
+  // 13px apart: a text-2xs label is 10px tall, and at 11 p95 and p99 touched when close.
+  const labelY = pct ? spreadLabels(PCT_KEYS.map((k) => y.toPx(pct[k])), 13) : [];
   return (
     <div ref={ref} className="min-w-0 border-l border-border" data-testid="obs-trace-latency-histogram">
       <svg width={width} height={HEIGHT} className="block" aria-hidden="true">
