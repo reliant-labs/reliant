@@ -23,9 +23,10 @@ import { cn } from "@/lib/utils";
 
 import { formatAgo, formatWhen } from "./format";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
+import { CONTROL_FIELD } from "../controlStyles";
 
 const FIELD =
-  "h-8 w-full rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  `${CONTROL_FIELD} h-8 w-full px-2 text-sm`;
 
 /** The label the server scopes every silence by; shown, never editable. */
 const ORG_MATCHER = "reliant_org_id";

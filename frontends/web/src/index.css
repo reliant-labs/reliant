@@ -288,6 +288,22 @@
   --accent-foreground: var(--primary-foreground);
 }
 
+/*
+ * THE CONSOLE'S CONTROL EDGE. The forge console (ConsoleShell, OrgShell,
+ * ForgeShellLayout) puts filters, toggles and selects directly above charts,
+ * and forge's control edge, `border-strong` (--input, 1.45-1.75:1 against the
+ * card), drew them as faintly as the chart's own frame. Inside the console it
+ * is muted ink at 80%: at least 3.2:1 against the page and the card in every
+ * scheme, light and dark (WCAG 1.4.11 non-text contrast; pinned by
+ * components/Settings/__tests__/consoleControlEdge.test.ts). Declared here,
+ * not in @theme: a var() inside a custom property resolves where it is
+ * declared, and --muted-foreground is inherited unchanged below this scope.
+ * Its vocabulary is components/Forge/controlStyles.ts.
+ */
+.forge-console {
+  --color-border-strong: hsl(var(--muted-foreground) / 0.8);
+}
+
 /* Animations */
 @layer utilities {
   @keyframes pulse-border {

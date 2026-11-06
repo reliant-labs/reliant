@@ -25,6 +25,7 @@ import { ObsError, ObsLoadingRows } from "../ObsStates";
 import { useExplainPanel } from "./explorerQueries";
 import { ExplorerChart } from "./ExplorerChart";
 import { sqlPanelStatement, unboundParams } from "./sqlPanel";
+import { CONTROL_FIELD } from "../../controlStyles";
 
 export interface SqlTabProps {
   /** The builder's (debounced) query; null when it cannot run yet. */
@@ -142,7 +143,7 @@ function SqlPanelEditor({ sqlPanel, scope, range, onOpenSql, onBack, subject }: 
         }}
         spellCheck={false}
         rows={Math.min(18, Math.max(6, draft.split("\n").length + 1))}
-        className="w-full rounded-md border border-border bg-surface-sunken px-3 py-2 font-mono text-xs text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className={`${CONTROL_FIELD} w-full px-3 py-2 font-mono text-xs`}
         data-testid="metrics-sql-editor"
       />
       <div className="flex flex-wrap items-center gap-2">

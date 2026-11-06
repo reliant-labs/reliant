@@ -61,6 +61,7 @@ import { formatDuration } from "../format";
 import { ReplayFeed, type ReplayFeedState } from "./replayFeed";
 import { confineReplayDocument, FULL_SNAPSHOT_REBUILT } from "./replayConfinement";
 import { formatOffset, noteReplayUnplayable, PARTIAL_GAP_MS, recordingStart } from "./sessionModel";
+import { SEGMENTED, segmentTone, toggleTone } from "../../controlStyles";
 
 /** The slice of rrweb's Replayer this player drives. */
 export interface ReplayerLike {
@@ -495,7 +496,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
             <span className="text-xs tabular-nums text-ink-muted" data-testid="replay-time">
               {formatOffset(offset)} / {formatOffset(spanEnd - startMs)}
             </span>
-            <div role="group" aria-label="Playback speed" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
+            <div role="group" aria-label="Playback speed" className={SEGMENTED}>
               {SPEEDS.map((value) => (
                 <button
                   key={value}
@@ -513,7 +514,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
               type="button"
               aria-pressed={skipInactive}
               onClick={() => changeSkip(!skipInactive)}
-              className={cn(chip(skipInactive), "inline-flex items-center gap-1 border border-border")}
+              className={cn("inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-ring", toggleTone(skipInactive))}
               data-testid="replay-skip-inactive"
               title="Fast-forward through stretches where the user did nothing"
             >
@@ -532,7 +533,7 @@ export function ReplayPlayer(props: ReplayPlayerProps) {
 function chip(active: boolean) {
   return cn(
     "rounded-md px-2 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+    segmentTone(active)
   );
 }
 

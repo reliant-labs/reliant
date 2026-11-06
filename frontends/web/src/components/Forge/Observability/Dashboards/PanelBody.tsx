@@ -105,7 +105,7 @@ function RetryButton({ query }: { query: PanelQuery }) {
   return (
     <button
       type="button"
-      className="mt-2 inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+      className="mt-2 inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-border-strong bg-surface px-2.5 text-xs font-medium text-ink transition-colors hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
       onClick={() => void query.refetch?.()}
       disabled={query.isFetching}
       data-testid="obs-panel-retry"
@@ -598,7 +598,7 @@ function SearchLink({ panel, href }: { panel: Panel; href?: string }) {
       {href && (
         <Link
           href={href}
-          className="no-color inline-flex h-7 items-center gap-1 rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink hover:bg-ink/5"
+          className="no-color inline-flex h-7 items-center gap-1 rounded-md border border-border-strong bg-surface px-2.5 text-xs font-medium text-ink hover:bg-ink/5"
         >
           Open in {toLogs ? "Logs" : "Traces"}
           <ArrowRight className="h-3 w-3" aria-hidden="true" />

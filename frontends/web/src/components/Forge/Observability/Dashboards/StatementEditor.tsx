@@ -33,9 +33,10 @@ import { unboundParams } from "../Metrics/sqlPanel";
 import { BUTTON_PRIMARY, BUTTON_SMALL } from "./parts";
 import { POSTGRES_DRAWS } from "./panelBuilder";
 import { QueryEditor, type QueryEditorHandle } from "./QueryEditor";
+import { CONTROL_FIELD } from "../../controlStyles";
 
 const INPUT =
-  "h-8 w-full min-w-0 rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
+  `${CONTROL_FIELD} h-8 w-full min-w-0 px-2.5 text-sm disabled:opacity-60`;
 
 export interface StatementRun {
   /** Reads the current statement into the preview. */

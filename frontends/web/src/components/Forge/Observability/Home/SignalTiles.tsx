@@ -125,7 +125,7 @@ function Retry({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }
       type="button"
       onClick={onRetry}
       disabled={retrying}
-      className="inline-flex h-7 items-center rounded-md border border-border bg-surface px-2.5 text-xs font-medium text-ink hover:bg-ink/5 disabled:opacity-60"
+      className="inline-flex h-7 items-center rounded-md border border-border-strong bg-surface px-2.5 text-xs font-medium text-ink hover:bg-ink/5 disabled:opacity-60"
     >
       {retrying ? "Retrying…" : "Try again"}
     </button>

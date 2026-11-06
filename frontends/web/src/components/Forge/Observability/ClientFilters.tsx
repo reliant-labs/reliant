@@ -14,6 +14,7 @@ import { X } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import { cn } from "@/lib/utils";
+import { CONTROL_FIELD } from "../controlStyles";
 
 export interface ClientFilterValues {
   browser?: string;
@@ -103,7 +104,7 @@ export function ClientFilters({
               onChange={(event) => setDraft((d) => ({ ...d, [field]: event.target.value }))}
               placeholder={LABEL[field]}
               className={cn(
-                "h-8 w-full rounded-md border border-border bg-surface-sunken px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                `${CONTROL_FIELD} h-8 w-full px-2.5 text-sm`,
                 (field === "fe" || field === "be" || field === "build") && "font-mono placeholder:font-sans"
               )}
               data-testid={inputId}
