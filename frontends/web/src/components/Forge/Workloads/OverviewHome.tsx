@@ -138,8 +138,8 @@ export interface OverviewHomeProps {
   /**
    * What the platform observes of each HOSTED environment's workloads
    * (DeployService.GetStatus), by environment name then workload name: the
-   * drift call ("wrong version") the telemetry cannot make. Empty for an
-   * environment Reliant does not place.
+   * drift call ("wrong version") the telemetry cannot make. For a
+   * self-managed environment, only what the platform serves for it (its sites).
    */
   hosted?: HostedByEnv;
   /** GetStatus has not answered for every hosted environment yet. */
@@ -496,8 +496,11 @@ export function OverviewHome({
 /**
  * The scope's frontends beside its services: the sites people open, each with
  * the address it is live at. Read from the GetStatus observations the page
- * already holds (`hosted`), so it costs no request of its own; omitted while a
- * scope that only self-managed environments covers has nothing Reliant hosts.
+ * already holds (`hosted`), so it costs no request of its own. A self-managed
+ * environment runs its services on a cluster the customer owns, but the
+ * platform may still serve its sites (control-plane's prod serves reliant-web),
+ * so it is covered too; a scope of only self-managed environments with no site
+ * omits the panel rather than inviting a frontend it may never have.
  */
 function FrontendsPanel({
   scope,
@@ -514,9 +517,9 @@ function FrontendsPanel({
   domains: DomainsState | undefined;
   domainsHref: string;
 }) {
-  const covered = envs.filter((candidate) => candidate.placed && (scope === ENV_ALL ? !candidate.preview : candidate.name === scope));
-  if (covered.length === 0) return null;
+  const covered = envs.filter((candidate) => (scope === ENV_ALL ? !candidate.preview : candidate.name === scope));
   const frontends = frontendsInScope(scope, envs, hosted, domains?.availability === "available" ? domains.domains : null);
+  if (frontends.length === 0 && !covered.some((candidate) => candidate.placed)) return null;
   return (
     <Panel title="Frontends" meta="Websites Reliant hosts, and the address each is live at." flush testId="overview-frontends">
       {loading && frontends.length === 0 ? (
