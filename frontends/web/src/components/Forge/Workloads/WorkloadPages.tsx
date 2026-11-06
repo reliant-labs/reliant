@@ -136,22 +136,26 @@ function useRollback(envs: readonly { id: string; name: string; release: string;
   return { rollback, dialog };
 }
 
-/** Each hosted environment's GetStatus observation, by environment name then workload name. */
+/**
+ * Each deployed environment's GetStatus observation, by environment name then
+ * workload name. Every kind is asked, self-managed included: its services run
+ * on the customer's cluster, but the sites the platform serves for it are
+ * deployments GetStatus reports, and the Frontends panel links them.
+ */
 function useHostedByEnv(envs: StripEnv[]): { hosted: HostedByEnv; loading: boolean } {
-  const hostedEnvs = useMemo(() => envs.filter((candidate) => candidate.placed), [envs]);
-  const statuses = useCloudEnvStatuses(hostedEnvs.map((candidate) => candidate.id));
-  const key = hostedEnvs.map((candidate) => `${candidate.id}:${statuses.get(candidate.id)?.data ? "1" : "0"}`).join(",");
-  const loading = hostedEnvs.some((candidate) => statuses.get(candidate.id)?.isLoading);
+  const statuses = useCloudEnvStatuses(envs.map((candidate) => candidate.id));
+  const key = envs.map((candidate) => `${candidate.id}:${statuses.get(candidate.id)?.data ? "1" : "0"}`).join(",");
+  const loading = envs.some((candidate) => statuses.get(candidate.id)?.isLoading);
   const hosted = useMemo(() => {
     const out = new Map<string, Map<string, ForgeHostedWorkload>>();
-    for (const candidate of hostedEnvs) {
+    for (const candidate of envs) {
       const workloads = statuses.get(candidate.id)?.data?.workloads ?? [];
       out.set(candidate.name, new Map(workloads.filter((w) => w.name).map((w) => [w.name!, w])));
     }
     return out;
     // `statuses` is a fresh Map per render; `key` changes when any status lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hostedEnvs, key]);
+  }, [envs, key]);
   return { hosted, loading };
 }
 
