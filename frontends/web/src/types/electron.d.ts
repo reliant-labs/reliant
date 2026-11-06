@@ -48,7 +48,8 @@ export interface ElectronAPI {
   showErrorDialog: (title: string, content: string) => Promise<void>;
   selectDirectory: () => Promise<string | null>;
   // The registry id of the daemon this desktop app runs (its `daemon-id`
-  // file), or null while it has none. Optional: a desktop build that does not
+  // file), read fresh for the current account/server, or null while it has
+  // none. Optional: a desktop build that does not
   // expose it leaves the renderer unable to tell which machine is this
   // computer, and lib/localMachine.ts then never offers the native folder
   // dialog for a machine (it could be another computer's folder).

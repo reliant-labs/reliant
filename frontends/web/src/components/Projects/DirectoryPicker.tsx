@@ -20,7 +20,7 @@ import {
 } from "../../hooks/file-system-service-hooks_gen";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { defaultMachineDaemon } from "../../lib/chatMachine";
-import { canUseNativeFolderDialog, useLocalDaemonId } from "../../lib/localMachine";
+import { canUseNativeFolderDialog, fetchLocalDaemonId, useLocalDaemonId } from "../../lib/localMachine";
 import { machineDisplayName } from "../../lib/machineName";
 import { toast } from "../../lib/toast-manager";
 import { cn } from "../../lib/utils";
@@ -70,7 +70,8 @@ export function DirectoryPicker({
   closeOnSelect = true,
 }: DirectoryPickerProps) {
   const { daemons } = useDaemonStatus();
-  const localDaemonId = useLocalDaemonId();
+  // The picker can stay mounted while closed; registration may finish later.
+  const localDaemonId = useLocalDaemonId(isOpen);
   // The machine being browsed: what the user picked here, else what the
   // caller opened the picker on. Reset to the caller's on every open.
   const [chosenDaemonId, setChosenDaemonId] = useState<string | undefined>(daemonId);
@@ -218,6 +219,9 @@ export function DirectoryPicker({
   // (lib/localMachine): a path from it is a path on that machine's disk.
   const nativeDialog = canUseNativeFolderDialog(selectedDaemonId, localDaemonId);
   const chooseWithSystemDialog = async () => {
+    // A cached render is not authority after an account/server change. Check
+    // again before opening, and discard a result if identity changed meanwhile.
+    if (!canUseNativeFolderDialog(selectedDaemonId, await fetchLocalDaemonId())) return;
     let path: string | null = null;
     try {
       path = await window.electronAPI!.selectDirectory();
@@ -225,7 +229,7 @@ export function DirectoryPicker({
       toast.error(err);
       return;
     }
-    if (!path) return;
+    if (!path || !canUseNativeFolderDialog(selectedDaemonId, await fetchLocalDaemonId())) return;
     onSelect(path, selectedDaemonId);
     if (closeOnSelect) onClose();
   };
