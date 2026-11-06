@@ -4,6 +4,7 @@ import { useListProjectDaemons, useDetachProjectFromDaemon, usePullProjectOnDaem
 import { createProjectFromRepo, type Project } from "@/hooks/project-queries";
 import { ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { daemonStatusLabel } from "@/components/Automations/daemonChoices";
+import { machineDisplayName } from "@/lib/machineName";
 import { AttachProjectFolderDialog } from "@/components/Projects/AttachProjectFolderDialog";
 import { MachineSelect } from "@/components/Projects/MachineSelect";
 import { describeMachineFolderError } from "@/components/Projects/machineFolderErrors";
@@ -51,7 +52,7 @@ export function ProjectMachines({ project }: { project: Project }) {
       {!rows.isLoading && !rows.error && installs.length === 0 && <p className="text-sm text-muted-foreground">No recorded machines. Add a machine to choose its folder.</p>}
       {installs.map((row) => {
         const daemon = daemons.find((d) => d.daemonId === row.daemonId);
-        const name = row.daemonName || daemon?.name || daemon?.hostname || row.daemonId;
+        const name = row.daemonName || machineDisplayName(daemon ?? { daemonId: row.daemonId });
         const installing = row.installState === ProjectInstallState.INSTALLING;
         return <div key={row.daemonId} className="border-t border-border/60 pt-3 space-y-1">
           <p className="text-sm font-medium">{name} <span className="font-normal text-muted-foreground">· {daemon ? daemonStatusLabel(daemon.status) : "status unknown"} · {installing ? "Installing" : row.installState === ProjectInstallState.FAILED ? "Failed" : "Installed"}</span></p>
