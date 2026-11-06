@@ -136,6 +136,11 @@ func fetchGitToken(ctx context.Context, cmd *cobra.Command, pin forgecred.Pin, p
 			last = fmt.Errorf("%s session was not accepted: %s", s.Kind, connect.CodeOf(err))
 		case connect.CodeDeadlineExceeded:
 			last = errors.New(deadlineMessage(gitCredentialTimeout))
+		case connect.CodeUnavailable:
+			// The server could not reach the control plane, or GitHub while
+			// renewing the token. Transient: say so, so the person retries
+			// instead of reconfiguring git.
+			last = errors.New("Reliant could not get your GitHub token right now (the token service is unavailable); retry in a minute") //nolint:staticcheck // ST1005: shown to the user verbatim, as a sentence.
 		default:
 			last = fmt.Errorf("asking Reliant for the git token: %s", connect.CodeOf(err))
 		}
