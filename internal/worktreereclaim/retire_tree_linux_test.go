@@ -4,9 +4,11 @@ package worktreereclaim
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -38,10 +40,32 @@ func TestRetirementTreeRejectsProtectedDescendants(t *testing.T) {
 	}
 }
 
-// A never-listed name inside a package an install put in node_modules is that
-// package's content (packages ship tests/data, .env fixtures, *.db samples),
-// both when the whole checkout is inspected and when node_modules alone is.
-// The same names anywhere else still hold.
+// recordInstall writes the record a package manager leaves in the
+// node_modules it populated: npm's hidden lockfile naming npmPaths (relative
+// to node_modules' parent, "node_modules/pkg"), and pnpm's .modules.yaml and
+// .pnpm/lock.yaml when pnpm is set.
+func recordInstall(t *testing.T, nodeModules string, pnpm bool, npmPaths ...string) {
+	t.Helper()
+	packages := map[string]any{"": map[string]string{"name": "app"}}
+	for _, p := range npmPaths {
+		packages[p] = map[string]string{"version": "1.0.0"}
+	}
+	b, err := json.Marshal(map[string]any{"name": "app", "lockfileVersion": 3, "packages": packages})
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(nodeModules, ".package-lock.json"), string(b))
+	if pnpm {
+		write(t, filepath.Join(nodeModules, ".modules.yaml"), "layoutVersion: 5\n")
+		write(t, filepath.Join(nodeModules, ".pnpm", "lock.yaml"), "lockfileVersion: '9.0'\n")
+	}
+}
+
+// A never-listed name inside a package an install put in node_modules, and
+// recorded there, is that package's content (packages ship tests/data, .env
+// fixtures, *.db samples), both when the whole checkout is inspected and when
+// node_modules alone is. The same names anywhere else still hold — including
+// in a package.json-bearing directory no install recorded.
 func TestRetirementTreeInstalledPackageContent(t *testing.T) {
 	pkgs := map[string]string{
 		"npm":    "node_modules/pkg",
@@ -52,6 +76,11 @@ func TestRetirementTreeInstalledPackageContent(t *testing.T) {
 	for name, pkg := range pkgs {
 		t.Run(name, func(t *testing.T) {
 			root := retirementFixture(t)
+			if name == "pnpm" {
+				recordInstall(t, filepath.Join(root, "node_modules"), true)
+			} else {
+				recordInstall(t, filepath.Join(root, "node_modules"), false, pkg, "node_modules/outer")
+			}
 			write(t, filepath.Join(root, pkg, "package.json"), `{"name":"x"}`)
 			for _, rel := range []string{"tests/data/fixture.bin", "test/.env", "samples/demo.sqlite", "lib/secrets/index.js"} {
 				write(t, filepath.Join(root, pkg, rel), "package content")
@@ -75,17 +104,39 @@ func TestRetirementTreeInstalledPackageContent(t *testing.T) {
 			}
 		})
 	}
-	for _, rel := range []string{
-		"node_modules/data/only-copy.csv",          // node_modules' own data/
-		"node_modules/pkg/data/only-copy.csv",      // pkg has no package.json
-		"node_modules/@scope/data/only-copy.csv",   // a scope directory is no package
-		"node_modules/.cache/secrets/token",        // a tool cache, not a package
-		"node_modules/pkg/package.json/data/x.csv", // a directory is no manifest
+	// Each hold case: the protected file, and how node_modules is recorded.
+	for _, hold := range []struct {
+		rel  string
+		pnpm bool
+		npm  []string
+	}{
+		{"node_modules/data/only-copy.csv", false, []string{"node_modules/lib"}},                // node_modules' own data/
+		{"node_modules/pkg/data/only-copy.csv", false, []string{"node_modules/pkg"}},            // pkg has no package.json
+		{"node_modules/@scope/data/only-copy.csv", false, []string{"node_modules/@scope/data"}}, // a scope directory is no package
+		{"node_modules/.cache/secrets/token", true, []string{"node_modules/.cache"}},            // a tool cache, not a package
+		{"node_modules/pkg/package.json/data/x.csv", false, []string{"node_modules/pkg"}},       // a directory is no manifest
+		// A package.json proves nothing: a hand-kept package no install
+		// recorded holds, whether node_modules has a record or none.
+		{"node_modules/mine/data/only-copy.csv", false, []string{"node_modules/lib"}},
+		{"node_modules/mine/.env", false, nil},
+		// pnpm's store shape without pnpm's record, or a store entry that is
+		// not the package its id names.
+		{"node_modules/.pnpm/mine@1.0.0/node_modules/mine/data/only-copy.csv", false, []string{"node_modules/lib"}},
+		{"node_modules/.pnpm/other@1.0.0/node_modules/mine/data/only-copy.csv", true, nil},
 	} {
-		t.Run("holds/"+rel, func(t *testing.T) {
+		t.Run("holds/"+hold.rel, func(t *testing.T) {
 			root := retirementFixture(t)
+			if hold.npm != nil || hold.pnpm {
+				recordInstall(t, filepath.Join(root, "node_modules"), hold.pnpm, hold.npm...)
+			}
 			write(t, filepath.Join(root, "node_modules/lib/package.json"), `{"name":"lib"}`)
-			write(t, filepath.Join(root, rel), "preserved")
+			for _, dir := range []string{"node_modules/mine", "node_modules/.pnpm/mine@1.0.0/node_modules/mine", "node_modules/.pnpm/other@1.0.0/node_modules/mine"} {
+				if strings.HasPrefix(hold.rel, dir+"/") {
+					write(t, filepath.Join(root, dir, "package.json"), `{"name":"mine"}`)
+				}
+			}
+			p := filepath.Join(root, hold.rel)
+			write(t, p, "preserved")
 			for _, inspect := range []struct {
 				path string
 				fn   func(context.Context, string) (*retirementTree, error)
@@ -97,6 +148,9 @@ func TestRetirementTreeInstalledPackageContent(t *testing.T) {
 				if err == nil {
 					t.Fatalf("%s: protected descendant authorized", inspect.path)
 				}
+			}
+			if b, err := os.ReadFile(p); err != nil || string(b) != "preserved" {
+				t.Fatalf("protected content touched: %q %v", b, err)
 			}
 		})
 	}

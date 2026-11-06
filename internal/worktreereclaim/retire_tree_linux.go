@@ -4,11 +4,13 @@ package worktreereclaim
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -83,46 +85,154 @@ func retirementIdentity(a, b unix.Stat_t) bool {
 	return a.Dev == b.Dev && a.Ino == b.Ino && a.Mode == b.Mode
 }
 
-// installedPackage reports whether the directory at rel (tree-relative; ""
-// is the tree's root, named t.name) is a package a package manager installed:
-// it sits directly in a node_modules directory, or in an @scope directory that
-// does, and holds a package.json file. Everything inside one is the install's
-// output, reproduced from the lockfile, so a name on the never-list there
-// (`data`, `.env`, `*.db`, `secrets`) is the package's own content and not
-// the user's data. Packages ship such names routinely: @protobufjs/utf8 has
-// tests/data and tsconfig-paths lib/__tests__/data, and one of them is in
-// nearly every frontend's tree, so the never-list held every node_modules shed
-// and every whole retirement of a checkout with an install (2026-11-06: zero
-// sheds in 3,730 live-row reconciles on one machine with 108 GiB of
-// node_modules). A never-listed name anywhere else in node_modules (its own
-// data/, or a directory with no package.json) still holds.
-func (t *retirementTree) installedPackage(rel string, children []os.DirEntry) bool {
+// installRecord is what a package manager wrote into the node_modules it
+// populated, naming the packages it put there. It is the proof that a
+// directory in node_modules is an install's output, reproduced from the
+// lockfile, rather than something a person put there: a package.json alone
+// proves nothing (anyone can keep a hand-made package, with its data/ or
+// .env, in node_modules). No record, or a record that does not name the
+// directory, keeps the never-list's hold.
+type installRecord struct {
+	// npm: the package paths in node_modules/.package-lock.json, npm's
+	// hidden lockfile ("node_modules/pkg", "node_modules/a/node_modules/b"),
+	// without workspace links.
+	npm map[string]bool
+	// pnpm: node_modules/.modules.yaml and node_modules/.pnpm/lock.yaml are
+	// both regular files, so .pnpm/ is pnpm's virtual store, which nothing
+	// but pnpm writes.
+	pnpm bool
+}
+
+// maxInstallRecordBytes bounds the hidden lockfile read; a larger one is no
+// record (the tree holds).
+const maxInstallRecordBytes = 64 << 20
+
+// readInstallRecord reads the install record of the node_modules directory
+// dir. Anything unreadable, oversized, malformed or not a regular file is no
+// record. The record files are themselves inventoried, so validate catches
+// one rewritten after inspection.
+func readInstallRecord(dir *os.File) installRecord {
+	var rec installRecord
+	if b, ok := readRecordFile(dir, ".package-lock.json", true); ok {
+		var lock struct {
+			Packages map[string]struct {
+				Link bool `json:"link"`
+			} `json:"packages"`
+		}
+		if json.Unmarshal(b, &lock) == nil {
+			rec.npm = map[string]bool{}
+			for p, e := range lock.Packages {
+				if !e.Link {
+					rec.npm[p] = true
+				}
+			}
+		}
+	}
+	_, modules := readRecordFile(dir, ".modules.yaml", false)
+	_, lock := readRecordFile(dir, ".pnpm/lock.yaml", false)
+	rec.pnpm = modules && lock
+	return rec
+}
+
+// readRecordFile opens name beneath dir without following any symlink and
+// reports whether it is a regular file, reading it when read is set.
+func readRecordFile(dir *os.File, name string, read bool) ([]byte, bool) {
+	f, err := retirementOpen(int(dir.Fd()), name, false)
+	if err != nil {
+		return nil, false
+	}
+	defer f.Close()
+	var st unix.Stat_t
+	if err := unix.Fstat(int(f.Fd()), &st); err != nil || st.Mode&unix.S_IFMT != unix.S_IFREG || st.Size > maxInstallRecordBytes {
+		return nil, false
+	}
+	if !read {
+		return nil, true
+	}
+	b, err := io.ReadAll(io.LimitReader(f, maxInstallRecordBytes+1))
+	if err != nil || len(b) > maxInstallRecordBytes {
+		return nil, false
+	}
+	return b, true
+}
+
+// segments is rel (tree-relative; "" is the tree's root) as path segments
+// from the tree's parent when the tree is a node_modules shed on its own, so
+// both inspections see the same "node_modules/..." path.
+func (t *retirementTree) segments(rel string) []string {
 	parts := splitSegments(rel)
 	if t.subtree && t.name == "node_modules" {
 		parts = append([]string{t.name}, parts...)
 	}
+	return parts
+}
+
+// installRoot reports whether the directory at rel is the outermost
+// node_modules on its path: the one a package manager writes its record into.
+func (t *retirementTree) installRoot(rel string) bool {
+	parts := t.segments(rel)
+	return len(parts) > 0 && slices.Index(parts, "node_modules") == len(parts)-1
+}
+
+// installedPackage reports whether the directory at rel is a package that
+// the install recorded in rec put there: it holds a package.json file, and
+// rec names it — npm's hidden lockfile lists its path, or it is a package in
+// pnpm's virtual store (.pnpm/<name>@<version>/node_modules/<name>).
+// Everything inside one is the install's output, reproduced from the
+// lockfile, so a name on the never-list there (`data`, `.env`, `*.db`,
+// `secrets`) is the package's own content and not the user's data. Packages
+// ship such names routinely: @protobufjs/utf8 has tests/data and
+// tsconfig-paths lib/__tests__/data, and one of them is in nearly every
+// frontend's tree, so the never-list held every node_modules shed and every
+// whole retirement of a checkout with an install (2026-11-06: zero sheds in
+// 3,730 live-row reconciles on one machine with 108 GiB of node_modules). A
+// never-listed name anywhere else in node_modules (its own data/, a directory
+// no record names, a package.json-bearing directory a person made) still
+// holds.
+func (t *retirementTree) installedPackage(rel string, children []os.DirEntry, rec *installRecord) bool {
+	if rec == nil {
+		return false
+	}
+	parts := t.segments(rel)
 	n := len(parts)
+	var name string
 	switch {
 	case n >= 2 && parts[n-2] == "node_modules" && !strings.HasPrefix(parts[n-1], "@"):
+		name = parts[n-1]
 	case n >= 3 && parts[n-3] == "node_modules" && strings.HasPrefix(parts[n-2], "@"):
+		name = parts[n-2] + "/" + parts[n-1]
 	default:
 		return false
 	}
+	manifest := false
 	for _, c := range children {
 		if c.Name() == "package.json" && c.Type().IsRegular() {
-			return true
+			manifest = true
+			break
 		}
 	}
-	return false
+	if !manifest {
+		return false
+	}
+	root := slices.Index(parts, "node_modules")
+	under := parts[root:]
+	if rec.npm[strings.Join(under, "/")] {
+		return true
+	}
+	// pnpm: node_modules/.pnpm/<id>/node_modules/<name>, where <id> is the
+	// package's own name ("/" as "+") at a version.
+	return rec.pnpm && len(under) == 4+len(strings.Split(name, "/")) && under[1] == ".pnpm" && under[3] == "node_modules" &&
+		strings.HasPrefix(under[2], strings.ReplaceAll(name, "/", "+")+"@")
 }
 
 func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEntry, int64, time.Time, error) {
 	entries := map[string]retirementEntry{}
 	var bytes int64
 	var newest time.Time
-	var visit func(*os.File, string, bool) error
-	// inPackage: dir is inside an installed package (installedPackage).
-	visit = func(dir *os.File, rel string, inPackage bool) error {
+	var visit func(*os.File, string, bool, *installRecord) error
+	// inPackage: dir is inside an installed package (installedPackage); rec:
+	// the install record of the node_modules dir is in, if any.
+	visit = func(dir *os.File, rel string, inPackage bool, rec *installRecord) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -148,7 +258,11 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 		if len(children) > maxStripWalk {
 			return errors.New("retirement directory budget exceeded")
 		}
-		inPackage = inPackage || t.installedPackage(rel, children)
+		if t.installRoot(rel) {
+			r := readInstallRecord(dir)
+			rec = &r
+		}
+		inPackage = inPackage || t.installedPackage(rel, children, rec)
 		for _, child := range children {
 			if err := ctx.Err(); err != nil {
 				return err
@@ -189,7 +303,7 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 					err = errors.New("directory identity changed")
 				}
 				if err == nil {
-					err = visit(childDir, path, inPackage)
+					err = visit(childDir, path, inPackage, rec)
 				}
 				childDir.Close()
 				if err != nil {
@@ -234,7 +348,7 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 		}
 		return nil
 	}
-	if err := visit(t.root, "", false); err != nil {
+	if err := visit(t.root, "", false, nil); err != nil {
 		return nil, 0, time.Time{}, err
 	}
 	return entries, bytes, newest, nil

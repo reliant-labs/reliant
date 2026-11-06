@@ -78,7 +78,9 @@ func TestShed_InstalledPackageContentIsNotUserData(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "real git worktree fixture")
 	f, w, p := shedFixture(t)
-	// npm/yarn layout, and pnpm's content-addressed layout with a scope.
+	// npm's layout, recorded in its hidden lockfile, and pnpm's
+	// content-addressed layout with a scope, in pnpm's virtual store.
+	recordInstall(t, p["modules"], true, "node_modules/pkg")
 	write(t, filepath.Join(p["modules"], "pkg", "package.json"), `{"name":"pkg"}`)
 	write(t, filepath.Join(p["modules"], "pkg", "tests", "data", "fixture.bin"), "package content")
 	scoped := filepath.Join(p["modules"], ".pnpm", "@protobufjs+utf8@1.1.2", "node_modules", "@protobufjs", "utf8")
@@ -100,7 +102,7 @@ func TestShed_InstalledPackageContentIsNotUserData(t *testing.T) {
 func TestShed_HoldsWhatItCannotProveRegenerableAndIdle(t *testing.T) {
 	t.Parallel()
 	heavyUnderShort(t, "real git worktree fixtures")
-	for _, kind := range []string{"protected", "protected-not-a-package", "protected-beside-packages", "fresh", "in-use", "process-use", "keep", "no-floor", "nested-repo"} {
+	for _, kind := range []string{"protected", "protected-not-a-package", "protected-beside-packages", "protected-unrecorded-package", "fresh", "in-use", "process-use", "keep", "no-floor", "nested-repo"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
 			f, w, p := shedFixture(t)
@@ -116,6 +118,12 @@ func TestShed_HoldsWhatItCannotProveRegenerableAndIdle(t *testing.T) {
 				// no package's content.
 				write(t, filepath.Join(p["modules"], "lib", "package.json"), `{"name":"lib"}`)
 				write(t, filepath.Join(p["modules"], "data", "only-copy.csv"), "only copy")
+			case "protected-unrecorded-package":
+				// A package.json-bearing directory the install's record does
+				// not name may be a person's: its data/ holds.
+				recordInstall(t, p["modules"], false, "node_modules/lib")
+				write(t, filepath.Join(p["modules"], "pkg", "package.json"), `{"name":"pkg"}`)
+				write(t, filepath.Join(p["modules"], "pkg", "data", "only-copy.csv"), "only copy")
 			case "fresh":
 				now := f.r.now()
 				if err := os.Chtimes(p["module"], now, now); err != nil {
