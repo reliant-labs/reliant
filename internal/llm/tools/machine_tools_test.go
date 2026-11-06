@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
@@ -18,9 +19,13 @@ type machineCall struct {
 type fakeMachines struct {
 	calls      []machineCall
 	activation string
+	listErr    error
 }
 
 func (f *fakeMachines) ListMachines(context.Context, string) ([]MachineSummary, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
 	return []MachineSummary{
 		{ID: "cicd-id", Name: "cicd", Type: "managed", State: "suspended", Size: "xl"},
 		{ID: "default-id", Name: "default", Type: "managed", State: "ready", Size: "xl"},
@@ -206,4 +211,17 @@ func TestRunMachineFollowsTheRunsDaemonOverride(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A selector naming the run's machine by name needs the machine list to
+// resolve; when listing fails, stop changes nothing rather than guess.
+func TestStopRefusesWhenTheRunsMachineNameCannotBeResolved(t *testing.T) {
+	ctx := machineToolCtx(automationpolicy.Execution{})
+	ctx.RunMachine = rctx.RunMachine{Name: "cicd"}
+	f := &fakeMachines{listErr: errors.New("control plane unavailable")}
+	resp, err := newTestMachineTool(f).Run(ctx, ToolCall{ID: "call", Name: ToolManageMachine, Input: `{"machine_id":"cicd-id","action":"stop"}`})
+	require.NoError(t, err)
+	require.True(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "Nothing changed")
+	require.Empty(t, f.calls)
 }

@@ -359,9 +359,14 @@ func (t *machineTypedTool) Execute(ctx *rctx.ToolContext, p ManageMachineParams)
 	case "stop":
 		var machines []MachineSummary
 		if ctx.RunMachine.ID == "" && ctx.RunMachine.Name != "" {
-			// A name resolves against the user's machines; a failed list
-			// leaves the chat's machine as the guard.
-			machines, _ = o.controller.ListMachines(ctx.Context, caller.userID)
+			// A name resolves against the user's machines. Without the list
+			// the guard cannot tell whether id is the run's own machine, so
+			// nothing is stopped.
+			list, err := o.controller.ListMachines(ctx.Context, caller.userID)
+			if err != nil {
+				return NewTextErrorResponse("Could not list the user's machines to check which one this run executes on: " + err.Error() + ". Nothing changed."), nil
+			}
+			machines = list
 		}
 		if id == runMachineID(ctx, caller, machines) {
 			return NewTextErrorResponse("This run executes on machine " + id + "; stopping it would stop this run. Nothing changed."), nil
