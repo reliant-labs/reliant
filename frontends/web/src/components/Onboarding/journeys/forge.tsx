@@ -154,6 +154,8 @@ export const forgeJourney: Journey = {
         "Nobody added tracing to this app by hand. forge writes the code at every boundary it owns: the Connect handlers and clients, a wrapper around each service package, and the database driver. It also ships helpers that carry a trace across NATS and Temporal. Each of these opens a span and passes the trace on, and every log line gets the trace id. Services also push a CPU profile about once a minute. The rate, errors and latency here come from those spans.",
       target: "[data-testid='obs-overview']",
       route: demo({ view: "overview", ...CLOSED }),
+      // No isAvailable on purpose: in every cut, the demo's included (owner, 2026-11-06). fg-built, at the end,
+      // does not replace it; the short demo makes room by leaving out fg-agent.
     },
     {
       id: "fg-trace",

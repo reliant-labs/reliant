@@ -1,7 +1,7 @@
 /**
  * The forge journey's content (journeys/forge.tsx, journeys-spec.md §3): its
  * nine steps in Reliant and the forge shell, the demo host's own cut of ten
- * (DEMO_TOUR=short) or thirteen (full), each step's required action against the URL or signal the spec
+ * (DEMO_TOUR=short) or fourteen (full), each step's required action against the URL or signal the spec
  * names (watchAdvance, against a fake router), where Skip lands, and the copy
  * that differs in the forge shell.
  */
@@ -94,6 +94,28 @@ describe("the forge journey", () => {
       "fg-done",
     ]);
     expect(active().length).toBeLessThanOrEqual(10);
+  });
+
+  it("keeps fg-instrumented second in every cut; the short demo stays at ten by leaving out fg-agent, not fg-instrumented", () => {
+    // Every cut the engine can run, counted from activeJourneySteps (what the nav bar's "n / total" shows).
+    const cuts: [string, () => void, number][] = [
+      ["reliant", () => resetShellForTests("reliant"), 9],
+      ["forge", () => resetShellForTests("forge"), 9],
+      ["demo short", () => resetShellForTests("demo"), 10],
+      ["demo full", () => (resetShellForTests("demo"), setRuntimeConfig({ DEMO_TOUR: "full" })), 14],
+    ];
+    expect(step("fg-instrumented").isAvailable).toBeUndefined();
+    for (const [name, enter, total] of cuts) {
+      setRuntimeConfig({});
+      enter();
+      expect(active()[1], name).toBe("fg-instrumented");
+      expect(active(), name).toHaveLength(total);
+      expect(new Set(active()).size, name).toBe(total);
+    }
+    resetShellForTests("demo");
+    setRuntimeConfig({});
+    expect(active()).not.toContain("fg-agent");
+    expect(step("fg-agent").isAvailable?.()).toBe(false);
   });
 
   it("is every step on the demo host with DEMO_TOUR=full, the graph and the agent card included", () => {
