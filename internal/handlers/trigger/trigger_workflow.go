@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -189,7 +190,14 @@ func (s *Service) EnableWorkflow(
 		if err := s.applyEnableStep(ctx, step, results[i], &undo); err != nil {
 			results[i].Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED
 			results[i].Message = connectMessage(err)
-			s.undoEnable(ctx, steps, results, undo)
+			var left *leftEnabledError
+			if errors.As(err, &left) {
+				results[i].Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED
+				results[i].Message = left.message()
+			}
+			undoCtx, cancel := enableUndoContext(ctx)
+			s.undoEnable(undoCtx, steps, results, undo)
+			cancel()
 			activity.Skip(ctx) // every write was undone: no "enable" event
 			return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Results: results}), nil
 		}
@@ -290,6 +298,29 @@ func sameJSON[M ~map[string]V, V any](a, b M) bool {
 	return errA == nil && errB == nil && bytes.Equal(ja, jb)
 }
 
+// enableUndoTimeout bounds putting an enable back. The undo runs on a context
+// detached from the request's: the commonest reason to undo is that the
+// request's deadline passed mid-write, and an undo on that dead context could
+// not run at all — the row stayed enabled while the result said it was not.
+const enableUndoTimeout = 30 * time.Second
+
+func enableUndoContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), enableUndoTimeout)
+}
+
+// leftEnabledError is a write that failed after it took effect, and whose
+// revert failed too: the trigger is running, whatever the write's error says.
+type leftEnabledError struct {
+	cause, revert error
+}
+
+func (e *leftEnabledError) Error() string { return e.cause.Error() }
+func (e *leftEnabledError) Unwrap() error { return e.cause }
+
+func (e *leftEnabledError) message() string {
+	return "Enabling failed (" + connectMessage(e.cause) + ") but the trigger is enabled and could not be switched back off: " + connectMessage(e.revert) + " Disable it from Automations if it should not run."
+}
+
 func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result *reliantv1.WorkflowTriggerResult, undo *[]func(context.Context) error) error {
 	if step.existing != nil && step.def != nil {
 		return s.applyActivationUpdate(ctx, step, result, undo)
@@ -299,7 +330,17 @@ func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result 
 		if err != nil {
 			// SetTriggerEnabled writes the row before it converges, so a
 			// failure can leave it on; put it back.
-			_, _ = s.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: false}))
+			undoCtx, cancel := enableUndoContext(ctx)
+			defer cancel()
+			if _, revertErr := s.SetTriggerEnabled(undoCtx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: false})); revertErr != nil {
+				// SetTriggerEnabled writes the row before it converges, so its
+				// error alone does not say whether the trigger is still on.
+				if cur, getErr := s.deps.Repo.GetTrigger(undoCtx, step.existing.ID); getErr != nil || cur.Enabled {
+					logging.ErrorContext(ctx, "could not switch off a trigger whose enable failed; it is still running",
+						"trigger_id", step.existing.ID, "error", err, "revert_error", revertErr)
+					return &leftEnabledError{cause: err, revert: revertErr}
+				}
+			}
 			return err
 		}
 		id := step.existing.ID
@@ -339,7 +380,12 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 	if err != nil {
 		// UpdateTrigger writes the row before it converges, so a failure
 		// can leave the new settings stored; put the old ones back.
-		_ = s.restoreActivation(ctx, &prev)
+		undoCtx, cancel := enableUndoContext(ctx)
+		defer cancel()
+		if revertErr := s.restoreActivation(undoCtx, &prev); revertErr != nil {
+			logging.WarnContext(ctx, "restoring a trigger whose update failed did not complete",
+				"trigger_id", prev.ID, "error", err, "revert_error", revertErr)
+		}
 		return err
 	}
 	*undo = append(*undo, func(ctx context.Context) error { return s.restoreActivation(ctx, &prev) })

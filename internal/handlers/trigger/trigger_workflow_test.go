@@ -173,6 +173,53 @@ nodes:
 	}
 }
 
+// A request whose deadline passes mid-write must still put back what it
+// wrote. The undo used to run on the request's dead context, so it could not
+// write at all: the trigger stayed enabled while its result said "failed", and
+// `reliant trigger activate` printed "nothing new is running".
+func TestEnableWorkflowUndoesAWriteWhenTheRequestDeadlinePassesMidWrite(t *testing.T) {
+	t.Parallel()
+
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", `name: triage
+triggers:
+  - name: nightly
+    schedule: {cron: "0 9 * * *"}
+    prompt: "y"
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`)
+	require.True(t, env.enable(t, env.enableRequest(nil)).Enabled)
+	_, err := env.svc.DisableWorkflow(env.ctx, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "triage"}))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(env.ctx)
+	defer cancel()
+	first := true
+	env.backend.mu.Lock()
+	env.backend.syncHook = func(syncCtx context.Context) error {
+		if first {
+			// The deadline passes after the row was written, mid-converge.
+			first = false
+			cancel()
+			return context.DeadlineExceeded
+		}
+		return syncCtx.Err()
+	}
+	env.backend.mu.Unlock()
+
+	resp, err := env.svc.EnableWorkflow(ctx, connect.NewRequest(env.enableRequest(nil)))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.Enabled)
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, outcomes(resp.Msg)["nightly"])
+	stored := env.storedTriggers(t)
+	require.Len(t, stored, 1)
+	assert.False(t, stored[0].Enabled, "a failed resume is switched back off, even after the request's deadline")
+}
+
 func TestEnableWorkflowResumesAPausedActivationAndKeepsItsSettings(t *testing.T) {
 	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
