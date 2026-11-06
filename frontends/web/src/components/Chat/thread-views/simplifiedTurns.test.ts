@@ -1,6 +1,8 @@
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 import {
+  AgentMessageKind,
+  MessageSenderSchema,
   ContentBlockType,
   DisplayStyle,
   MessageRole,
@@ -196,6 +198,48 @@ describe("buildSimplifiedTimeline", () => {
       "msg:a2",
       "msg:b2",
     ]);
+  });
+
+  const notice = (text = 'spawn "research" completed', extra: MessageExtra = {}) =>
+    row(msg("notice", MessageRole.SYSTEM, [{ t: text }], { displayStyle: DisplayStyle.INFO, ...extra }));
+
+  it.each(['spawn "research" completed', 'spawn "say \\"hello\\"" completed'])(
+    "retains exact legacy completion %s inside activity without fragmenting it", (text) => {
+      const event = notice(text);
+      const out = build([row(asst("a1", [{ call: "c1" }])), event, row(asst("a2", [{ call: "c2" }])), row(asst("answer", [{ t: "Done" }]))]);
+      expect(summarize(out)).toEqual(["work:work-a1[a1:0 a2:0]", "msg:answer:0"]);
+      expect(out[0].type === "work" && out[0].work.events).toEqual([
+        { type: "message", message: (event as Extract<Item, { type: "message" }>).message, afterPart: 1 },
+      ]);
+    },
+  );
+
+  it("uses typed success metadata and does not promote live narration after a notice", () => {
+    const event = notice("Result ready", { sender: create(MessageSenderSchema, { threadId: "child", kind: AgentMessageKind.COMPLETION }) });
+    const out = build([row(asst("a1", [{ t: "Investigating" }, { call: "c1" }])), event], true);
+    expect(summarize(out)).toEqual(["work:work-a1[a1:0,1]"]);
+    expect(out[0].type === "work" && out[0].work.events?.length).toBe(1);
+  });
+
+  it.each([
+    notice('spawn "research" failed'),
+    notice('spawn "research" cancelled'),
+    notice('Other operation completed'),
+    notice('spawn "research" completed', { displayStyle: DisplayStyle.WARNING }),
+    notice('spawn "research" completed', { sender: create(MessageSenderSchema, { threadId: "child", kind: AgentMessageKind.FAILED }) }),
+    row(msg("mail", MessageRole.USER, [{ t: "Need your approval" }], { sender: create(MessageSenderSchema, { threadId: "child", kind: AgentMessageKind.MESSAGE }) })),
+  ])("keeps attention and unclassified messages as boundaries %#", (event) => {
+    const out = build([row(asst("a1", [{ call: "c1" }])), event, row(asst("a2", [{ call: "c2" }]))]);
+    expect(out).toContain(event);
+    expect(out.filter((item) => item.type === "work")).toHaveLength(2);
+  });
+
+  it("preserves orphan, text-only, and other-thread notices by identity", () => {
+    const event = notice();
+    expect(build([event])[0]).toBe(event);
+    expect(build([row(asst("text", [{ t: "A conversational answer" }])), event])[1]).toBe(event);
+    const out = build([row(asst("other", [{ call: "c1" }]), "t2"), event]);
+    expect(out[1]).toBe(event);
   });
 
   it("keeps attachments visible on a message that only contributes work", () => {
