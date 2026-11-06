@@ -78,7 +78,9 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		}
 		p, err := launch.ResolveRunPreset(ctx, s.deps.Repo, user, def.ProjectId, name)
 		if err != nil {
-			return nil, refusedPrecondition("Could not resolve an activation preset for approval")
+			// Name what did not resolve (a preset name, never its values), so
+			// the caller can fix it instead of guessing which dependency.
+			return nil, refusedPrecondition(fmt.Sprintf("Could not resolve preset %q for approval", name))
 		}
 		snap.Presets[name] = p
 		raw, err := json.Marshal(p)
@@ -98,7 +100,9 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 		} // cycle detection: fingerprint once, no recursive expansion
 		w, err := launch.ResolveRunWorkflowOn(ctx, s.deps.Repo, launch.AutomationScope(user, def.ProjectId, def.DaemonId), ref)
 		if err != nil {
-			return nil, refusedPrecondition("Could not resolve a referenced workflow for approval")
+			// Resolved on the activation's own machine (def.DaemonId), not the
+			// caller's checkout. The ref is named; it is a name, not a value.
+			return nil, refusedPrecondition(fmt.Sprintf("Could not resolve referenced workflow %q on the activation's machine for approval", ref))
 		}
 		loaded[key] = w
 		snap.Workflows[key] = canonicalProto(w)
