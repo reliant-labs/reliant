@@ -16,7 +16,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=cedbb03a9c54158a5c0bf79e4ba89505bd11964e96322b41104652a461da2116
+// forge:hash=c5a475496219b99bf64314de413e64191fca5b3f101e1d63da4f761bfd660dad
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -31,7 +31,7 @@ type MockRepository struct {
 	GetMessageFunc                     func(context.Context, string) (*db.Message, error)
 	GetContentBlockByToolCallIDFunc    func(context.Context, string) (*db.MessageContentBlock, error)
 	GetWorkflowFunc                    func(context.Context, string) (*db.Workflow, error)
-	CompareAndSwapWorkflowStatusFunc   func(context.Context, string, db.WorkflowStatus, db.WorkflowStatus) (bool, error)
+	CancelStoppedSpawnFunc             func(context.Context, string) (bool, error)
 	GetToolCallFunc                    func(context.Context, string) (*db.ToolCall, error)
 	ListToolCallsByIDsFunc             func(context.Context, []string) ([]*db.ToolCall, error)
 	UpsertToolCallFunc                 func(context.Context, *db.ToolCall) error
@@ -84,13 +84,13 @@ func (m *MockRepository) GetWorkflow(ctx context.Context, id string) (*db.Workfl
 	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflow")
 }
 
-// CompareAndSwapWorkflowStatus records the call and delegates to CompareAndSwapWorkflowStatusFunc when set.
-func (m *MockRepository) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus db.WorkflowStatus, expectedStatus db.WorkflowStatus) (bool, error) {
-	m.Recorder.Record("CompareAndSwapWorkflowStatus", ctx, id, newStatus, expectedStatus)
-	if m.CompareAndSwapWorkflowStatusFunc != nil {
-		return m.CompareAndSwapWorkflowStatusFunc(ctx, id, newStatus, expectedStatus)
+// CancelStoppedSpawn records the call and delegates to CancelStoppedSpawnFunc when set.
+func (m *MockRepository) CancelStoppedSpawn(ctx context.Context, workflowID string) (bool, error) {
+	m.Recorder.Record("CancelStoppedSpawn", ctx, workflowID)
+	if m.CancelStoppedSpawnFunc != nil {
+		return m.CancelStoppedSpawnFunc(ctx, workflowID)
 	}
-	return false, contractkit.MockNotSet("MockRepository", "CompareAndSwapWorkflowStatus")
+	return false, contractkit.MockNotSet("MockRepository", "CancelStoppedSpawn")
 }
 
 // GetToolCall records the call and delegates to GetToolCallFunc when set.

@@ -2709,6 +2709,49 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 	return swapped, err
 }
 
+// CancelStoppedSpawn records that a spawn was told to stop: its workflow row
+// moves from active or paused (an explicit stop overrides a pause) to
+// cancelled, and its descendants and the threads of its whole subtree end with
+// it, in ONE commit. It reports whether the row moved; a spawn that already
+// settled on its own is left as it ended.
+//
+// The thread half is what makes this one call rather than a bare CAS. The
+// spawn's own loop cancels its thread when it unwinds, seconds later; a row
+// written cancelled before that left a terminal workflow over a running
+// thread, which the reconciler's ReapOrphanedThreads repaired and paged on as
+// a missed cascade (prod, 2026-10-30..11-04: every reap was a stopped spawn,
+// its thread reaped 1-60s before the loop's own write).
+func (r *Repo) CancelStoppedSpawn(ctx context.Context, workflowID string) (bool, error) {
+	if workflowID == "" {
+		return false, fmt.Errorf("workflow ID cannot be empty")
+	}
+	var swapped bool
+	err := r.RunTx(ctx, workflowStatusWrite, func(txCtx context.Context) error {
+		swapped = false
+		for _, from := range []WorkflowStatus{Active(), Paused()} {
+			ok, err := r.CompareAndSwapWorkflowStatus(txCtx, workflowID, Cancelled(), from)
+			if err != nil {
+				return err
+			}
+			if ok {
+				swapped = true
+				break
+			}
+		}
+		if !swapped {
+			return nil
+		}
+		if err := r.CascadeTerminalStatusToDescendants(txCtx, workflowID, StopReasonCancelled); err != nil {
+			return fmt.Errorf("cascade cancel to the descendants of spawn %s: %w", workflowID, err)
+		}
+		if err := r.CascadeTerminalStatusToThreadSubtree(txCtx, workflowID, StopReasonCancelled); err != nil {
+			return fmt.Errorf("cascade cancel to the threads of spawn %s: %w", workflowID, err)
+		}
+		return nil
+	})
+	return swapped, err
+}
+
 // MarkWorkflowStartFailed records that a PENDING workflow's start attempt
 // failed (Workflow.StartFailedAt). No chat-activity emit: the row is still
 // PENDING, so whether the chat is busy has not changed.

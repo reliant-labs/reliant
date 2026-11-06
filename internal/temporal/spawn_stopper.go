@@ -7,7 +7,6 @@ import (
 
 	"go.temporal.io/sdk/client"
 
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/threadcancel"
 )
@@ -17,13 +16,17 @@ import (
 // showing the spawn as still running.
 //
 // A one-method consumer-side interface: the stopper needs exactly one
-// compare-and-swap, and taking the whole repository would pull the database
-// layer into this package for it. It is spelled in terms of
-// core.WorkflowStatus, which db.WorkflowStatus aliases, so *db.Repo
-// satisfies it without either side knowing about the other. Nil is valid and
-// means "signal only" — the signal is the part that actually stops the work.
+// settlement, and taking the whole repository would pull the database layer
+// into this package for it. *db.Repo satisfies it. Nil is valid and means
+// "signal only" — the signal is the part that actually stops the work.
+//
+// CancelStoppedSpawn moves the row from active or paused to cancelled and ends
+// the spawn's subtree — its descendant workflows AND their threads — in the
+// same commit, reporting whether the row moved. A bare status CAS here left a
+// cancelled workflow over a running thread until the spawn's loop unwound,
+// and the reconciler reaped that thread and paged on it as a missed cascade.
 type SpawnWorkflowReconciler interface {
-	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus core.WorkflowStatus) (bool, error)
+	CancelStoppedSpawn(ctx context.Context, workflowID string) (bool, error)
 }
 
 // SpawnRef names the identities of the spawn to stop. Aliased from the
@@ -109,29 +112,22 @@ func (s *SpawnStopper) StopSpawn(ctx context.Context, chatID string, ref SpawnRe
 	return nil
 }
 
-// reconcile moves the spawn's workflows row to cancelled.
+// reconcile moves the spawn's workflows row to cancelled, with its subtree.
 //
 // childWorkflowID, NOT the child thread id. They diverge for a resumed spawn,
 // where the thread id names the ORIGINAL run's row — long since completed — so
-// CASing it swaps nothing from active/paused and the row that is actually
+// settling it moves nothing from active/paused and the row that is actually
 // executing stays active after a successful stop.
 //
-// CAS rather than a blind write so a spawn that settled terminally on its own
-// is never clobbered; PAUSED is covered too, because an explicit stop
-// overrides a pause.
+// A compare-and-swap rather than a blind write, so a spawn that settled
+// terminally on its own is never clobbered; PAUSED is covered too, because an
+// explicit stop overrides a pause.
 func (s *SpawnStopper) reconcile(ctx context.Context, childWorkflowID string) {
 	if s.reconciler == nil || childWorkflowID == "" {
 		return
 	}
-	for _, from := range []core.WorkflowStatus{core.Active(), core.Paused()} {
-		swapped, err := s.reconciler.CompareAndSwapWorkflowStatus(ctx, childWorkflowID, core.Cancelled(), from)
-		if err != nil {
-			logging.WarnContext(ctx, "Failed to reconcile stopped spawn's workflow status",
-				"childWorkflowID", childWorkflowID, "from", from, "error", err)
-			return
-		}
-		if swapped {
-			return
-		}
+	if _, err := s.reconciler.CancelStoppedSpawn(ctx, childWorkflowID); err != nil {
+		logging.WarnContext(ctx, "Failed to reconcile stopped spawn's workflow status",
+			"childWorkflowID", childWorkflowID, "error", err)
 	}
 }
