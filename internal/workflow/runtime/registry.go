@@ -1064,8 +1064,10 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		case terminal:
 			// Terminal errors stay at Error level: each is an issue — unless
 			// the error is classed as the user's, or as the other end going
-			// away (a machine that disconnected), which the error-class
-			// policy writes at INFO.
+			// away (a machine that disconnected), which the process logger's
+			// error-class policy (logging.withReporting, errclass.Library)
+			// lowers to INFO from the "error" attribute. Pinned by
+			// logging's TestWithReporting_TerminalActivityFailureLevelFollowsClass.
 			logging.ErrorContext(ctx, "[ActivityWrapper] Activity execution failed",
 				"activityType", activityType,
 				"activityID", activityID,
