@@ -1,3 +1,4 @@
+import { useContext } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TurnWorkFold } from "../TurnWorkFold";
@@ -5,13 +6,20 @@ import { ContentBlockType, MessageRole, StreamingState } from "../../../types/ch
 import type { Message } from "../../../gen/reliant/v1/chat_pb";
 import type { TurnWork } from "../thread-views/simplifiedTurns";
 
-vi.mock("../ChatMessage", () => ({
-  ChatMessage: ({ message, slice }: { message: Message; slice?: { role: string; segmentIndexes: number[] } }) => (
-    <div data-testid={`row-${slice?.role}`} data-message={message.id}>
-      {slice?.role}:{message.id}:{slice?.segmentIndexes.join(",")}
-    </div>
-  ),
-}));
+vi.mock("../ChatMessage", async () => {
+  const { DeployCardShownOutside } = await import("../../Apps/DeployedAppCard");
+  return {
+    ChatMessage: ({ message, slice }: { message: Message; slice?: { role: string; segmentIndexes: number[] } }) => (
+      <div
+        data-testid={`row-${slice?.role}`}
+        data-message={message.id}
+        data-deploy-card-outside={String(useContext(DeployCardShownOutside))}
+      >
+        {slice?.role}:{message.id}:{slice?.segmentIndexes.join(",")}
+      </div>
+    ),
+  };
+});
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useToolResultsByCallId: () => ({}),
@@ -88,6 +96,13 @@ describe("TurnWorkFold", () => {
     fireEvent.click(button);
     expect(screen.queryAllByTestId("row-work")).toHaveLength(0);
     expect(screen.getAllByTestId("row-work-surfaced")).toHaveLength(2);
+  });
+
+  it("leaves a deploy's card to the surfaced rows, so an open fold never shows it twice", () => {
+    render(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
+    fireEvent.click(screen.getByRole("button"));
+    for (const row of screen.getAllByTestId("row-work")) expect(row.dataset.deployCardOutside).toBe("true");
+    for (const row of screen.getAllByTestId("row-work-surfaced")) expect(row.dataset.deployCardOutside).toBe("false");
   });
 
   it("shows live text while streaming, collapsed, and ticks only then", () => {

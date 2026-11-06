@@ -16,6 +16,7 @@ import {
 import type { TurnWork } from "./thread-views/simplifiedTurns";
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useMinimumDwell } from "./useMinimumDwell";
+import { DeployCardShownOutside } from "../Apps/DeployedAppCard";
 
 interface TurnWorkFoldProps {
   work: TurnWork;
@@ -176,14 +177,17 @@ function TurnWorkFoldComponent({
 
       {expanded && (
         <div id={panelId} className="mt-1 space-y-1 pl-3" data-testid="turn-work-body">
-          {work.parts.map((part) => (
-            <ChatMessage
-              key={`${part.message.id}-work`}
-              message={part.message}
-              slice={{ segmentIndexes: part.segmentIndexes, role: "work" }}
-              {...common}
-            />
-          ))}
+          {/* A deploy's card is the surfaced row's, on screen open or closed. */}
+          <DeployCardShownOutside.Provider value={true}>
+            {work.parts.map((part) => (
+              <ChatMessage
+                key={`${part.message.id}-work`}
+                message={part.message}
+                slice={{ segmentIndexes: part.segmentIndexes, role: "work" }}
+                {...common}
+              />
+            ))}
+          </DeployCardShownOutside.Provider>
         </div>
       )}
 

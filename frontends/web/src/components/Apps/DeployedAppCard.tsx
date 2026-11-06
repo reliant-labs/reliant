@@ -11,10 +11,12 @@
  * status of that environment. Nothing is parsed out of forge's output.
  */
 
+import { createContext } from "react";
 import { ArrowRight, Clock, Rocket } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { useCloudEnvironments, useCloudEnvStatus } from "@/hooks/forge-queries";
+import { isShellTool } from "@/lib/toolFormatters";
 import { cn } from "@/lib/utils";
 import { appLinksOf, deployedEnvOf } from "@/services/forge/apps";
 import { useProjectStore } from "@/store/projectStore";
@@ -75,7 +77,27 @@ function exitCodeOf(content: string): number | null | "background" {
   }
 }
 
-export function DeployedAppCard({ deploy }: { deploy: ShellDeploy }) {
+/**
+ * True inside a container that shows its tool calls' deploy cards itself: the
+ * simplified thread's work fold keeps them on screen outside the fold, so the
+ * tool rows inside it leave theirs out and a card never shows twice.
+ */
+export const DeployCardShownOutside = createContext(false);
+
+/** The deploy a tool call made, or null: only a shell call deploys. */
+export function deployOfToolCall(
+  name: string,
+  input: Record<string, unknown> | string | undefined,
+  result: { content: string; is_error?: boolean } | undefined
+): ShellDeploy | null {
+  return isShellTool(name) ? deployOfShellCall(input, result) : null;
+}
+
+/**
+ * `standalone`: drawn on its own (a work fold's surfaced outcome) rather than
+ * as the footer of its tool call's box.
+ */
+export function DeployedAppCard({ deploy, standalone = false }: { deploy: ShellDeploy; standalone?: boolean }) {
   const navigate = useNavigate();
   const app = useProjectStore((state) => (state.currentProject?.forge_project_name ?? "").trim());
   const envs = useCloudEnvironments(app || null);
@@ -89,7 +111,10 @@ export function DeployedAppCard({ deploy }: { deploy: ShellDeploy }) {
 
   return (
     <div
-      className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/50 bg-background px-2.5 py-2"
+      className={cn(
+        "flex flex-wrap items-center gap-x-3 gap-y-1.5 bg-background px-2.5 py-2",
+        standalone ? "rounded-md border border-border" : "border-t border-border/50"
+      )}
       data-testid="deployed-app-card"
       data-env={deploy.env}
       data-state={deploy.queued ? "queued" : "deployed"}
