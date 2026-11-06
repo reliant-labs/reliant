@@ -24,11 +24,9 @@ import (
 const (
 	// Retry configuration.
 	//
-	// maxRetries bounds the statement-level retries outside a transaction
-	// (execContextWithRetry, queryContextWithRetry). A transaction's budget
-	// is its policy's (RunTx): orm.Serializable carries
-	// orm.DefaultTxMaxAttempts, which is maxRetries+1, sized from the same
-	// measurement below.
+	// maxRetries is the retry count orm.Serializable's attempt budget
+	// (orm.DefaultTxMaxAttempts == maxRetries+1, pinned by
+	// repo_runtx_retry_test.go) was sized from; RunTx spends that budget.
 	//
 	// maxRetries is sized for the contention the product actually generates,
 	// not for an idle database. Update sequences are allocated from ONE
@@ -666,94 +664,6 @@ func (w *WrappedDBTX) Close() error {
 
 func (w *WrappedDBTX) Ping(ctx context.Context) error {
 	return w.db.PingContext(ctx)
-}
-
-func (w *WrappedDBTX) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return w.execContextWithRetry(ctx, query, args...)
-}
-
-func (w *WrappedDBTX) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return w.queryContextWithRetry(ctx, query, args...)
-}
-
-func (w *WrappedDBTX) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return w.DB(ctx).QueryRowContext(ctx, query, args...)
-}
-
-// execContextWithRetry executes a query with automatic retry on lock errors.
-// Retries are skipped when inside a transaction — on Postgres, a failed statement
-// poisons the entire transaction so retrying individual statements is futile.
-// Transaction-level retries in RunTx handle recovery instead.
-func (w *WrappedDBTX) execContextWithRetry(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	// Skip statement-level retries when inside a transaction
-	if w.inTx(ctx) {
-		return w.DB(ctx).ExecContext(ctx, query, args...)
-	}
-
-	var lastErr error
-
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		result, err := w.DB(ctx).ExecContext(ctx, query, args...)
-		if err == nil {
-			return result, nil
-		}
-
-		// Check if error is retryable and we have retries left
-		if isRetryableError(err) && attempt < maxRetries {
-			lastErr = err
-			logging.DebugContext(ctx, "Database exec failed, retrying",
-				"attempt", attempt+1,
-				"maxRetries", maxRetries,
-				"error", err)
-			time.Sleep(calculateBackoff(attempt))
-			continue
-		}
-
-		return nil, err
-	}
-
-	if lastErr != nil {
-		return nil, errors.New("exec failed after retries: " + lastErr.Error())
-	}
-	return nil, errors.New("exec failed after retries")
-}
-
-// queryContextWithRetry executes a query with automatic retry on lock errors.
-// Retries are skipped when inside a transaction — on Postgres, a failed statement
-// poisons the entire transaction so retrying individual statements is futile.
-// Transaction-level retries in RunTx handle recovery instead.
-func (w *WrappedDBTX) queryContextWithRetry(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	// Skip statement-level retries when inside a transaction
-	if w.inTx(ctx) {
-		return w.DB(ctx).QueryContext(ctx, query, args...)
-	}
-
-	var lastErr error
-
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		rows, err := w.DB(ctx).QueryContext(ctx, query, args...)
-		if err == nil {
-			return rows, nil
-		}
-
-		// Check if error is retryable and we have retries left
-		if isRetryableError(err) && attempt < maxRetries {
-			lastErr = err
-			logging.DebugContext(ctx, "Database query failed, retrying",
-				"attempt", attempt+1,
-				"maxRetries", maxRetries,
-				"error", err)
-			time.Sleep(calculateBackoff(attempt))
-			continue
-		}
-
-		return nil, err
-	}
-
-	if lastErr != nil {
-		return nil, errors.New("query failed after retries: " + lastErr.Error())
-	}
-	return nil, errors.New("query failed after retries")
 }
 
 // ==================== Sequence-based Sync for WebSocket ====================
