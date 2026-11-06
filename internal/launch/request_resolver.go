@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -39,6 +40,8 @@ type requestResolver struct {
 	machinePresets     memo[[2]string, syncedJSON]
 	diagnostics        memo[[3]string, string]
 	pinnedCatalogs     memo[string, pinnedResult]
+	provenance         memo[string, []config.WorkflowProvenance]
+	machineNames       memo[string, string]
 }
 
 type syncedJSON struct {
@@ -127,6 +130,43 @@ func (r *requestResolver) GetPinnedProjectCatalog(ctx context.Context, pin strin
 		return pinnedResult{c, found}, err
 	})
 	return got.catalog, got.found, err
+}
+
+// workflowProvenanceStore and machineNamer are the reads a trigger's definition
+// is attributed with (triggers.describeDefinition asks its store for them by
+// assertion): which machine synced the file, and that machine's name.
+type workflowProvenanceStore interface {
+	ProjectWorkflowProvenance(ctx context.Context, projectID string) ([]config.WorkflowProvenance, error)
+}
+
+type machineNamer interface {
+	MachineDisplayName(ctx context.Context, daemonID string) string
+}
+
+// ProjectWorkflowProvenance serves the wrapped store's, once per project. A
+// store without it has no provenance: nil, as attribution reads a store that
+// cannot say.
+func (r *requestResolver) ProjectWorkflowProvenance(ctx context.Context, projectID string) ([]config.WorkflowProvenance, error) {
+	p, ok := r.inner.(workflowProvenanceStore)
+	if !ok {
+		return nil, nil
+	}
+	return r.provenance.get(projectID, func() ([]config.WorkflowProvenance, error) {
+		return p.ProjectWorkflowProvenance(ctx, projectID)
+	})
+}
+
+// MachineDisplayName serves the wrapped store's, once per machine; "" (no
+// name) from a store without it.
+func (r *requestResolver) MachineDisplayName(ctx context.Context, daemonID string) string {
+	n, ok := r.inner.(machineNamer)
+	if !ok {
+		return ""
+	}
+	name, _ := r.machineNames.get(daemonID, func() (string, error) {
+		return n.MachineDisplayName(ctx, daemonID), nil
+	})
+	return name
 }
 
 // memo is one read's answers by argument. The zero value is ready to use.
