@@ -64,6 +64,13 @@ func (s *Service) StageFiles(
 		return nil, daemonerr.Error("stage files", err)
 	}
 	if !stageResp.Success {
+		// A path git has neither on disk nor in the index — the file was
+		// deleted after the changes list showed it — is the state of the
+		// user's worktree, not a server failure. As Internal it was a browser
+		// issue per click (prod 2026-11-05, e39fe2ca: a .png that was gone).
+		if strings.Contains(stageResp.Error, "did not match any files") {
+			return nil, svcerr.FailedPrecondition(fmt.Sprintf("failed to stage files: %s", stageResp.Error))
+		}
 		return nil, svcerr.Internal(fmt.Sprintf("failed to stage files: %s", stageResp.Error))
 	}
 
