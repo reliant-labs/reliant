@@ -29,6 +29,10 @@ func (s *Service) resolveThreadResetParams(ctx context.Context, userID string, c
 	unavailable := func() error {
 		return svcerr.FailedPrecondition("This thread's default settings are unavailable in its current run. Choose an explicit value, or retry after starting a new run.")
 	}
+	// Inline children have database workflow IDs, not Temporal executions.
+	// The root's shared ChildWorkflowTracker owns their reset baselines:
+	// DynamicWorkflow registers this query; InlineWorkflowExecutor captures
+	// each baseline on that tracker under threadID before user overrides.
 	response, err := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, rootID, "get_thread_reset_inputs", threadID)
 	if err != nil {
 		if !hasExplicitReset {

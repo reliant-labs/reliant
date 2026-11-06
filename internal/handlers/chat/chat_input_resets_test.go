@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -11,15 +14,21 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
-	"testing"
 )
 
 type resetTemporalClient struct {
 	*startRecorder
 	baseline map[string]interface{}
+	rootID   string
+	queries  []*client.QueryWorkflowWithOptionsRequest
 }
 
 func (c *resetTemporalClient) QueryWorkflowWithOptions(_ context.Context, req *client.QueryWorkflowWithOptionsRequest) (*client.QueryWorkflowWithOptionsResponse, error) {
+	c.queries = append(c.queries, req)
+	// Inline children have DB identities, not independently queryable Temporal executions.
+	if req.WorkflowID != c.rootID {
+		return nil, fmt.Errorf("no Temporal execution for %q; only root %q exists", req.WorkflowID, c.rootID)
+	}
 	if req.QueryType == "get_thread_reset_inputs" {
 		return fakeQueryResponse(req, false, encodedInputs{c.baseline}, nil)
 	}
@@ -29,16 +38,44 @@ func (c *resetTemporalClient) QueryWorkflowWithOptions(_ context.Context, req *c
 func TestThreadResetUsesThreadBaselineNotRootPreset(t *testing.T) {
 	ctx, fx, repo, temporal, service := selectionFixture(t, db.Active())
 	before := setSelection(t, ctx, repo, fx.chatID, map[string]any{"mode": "manual"})
-	service.deps.Temporal = &resetTemporalClient{temporal, map[string]interface{}{"mode": "plan", "tools": []any{"thread-only"}}}
-	req := updateParams(fx.chatID, paramsOf(t, map[string]any{"mode": nil}))
-	req.Msg.ThreadId = &fx.rootThreadID
-	_, err := service.UpdateWorkflowParams(ctx, req)
+	// A real spawned thread must differ from the root: using rootThreadID here
+	// cannot distinguish a correct root query from an incorrect child query.
+	childID := uuid.NewString()
+	require.NotEqual(t, fx.rootThreadID, childID)
+	now := time.Now()
+	_, err := repo.CreateThread(ctx, &db.Thread{
+		ID: childID, ChatID: fx.chatID, ParentThreadID: &fx.rootThreadID,
+		Origin: db.ThreadOriginSpawn, Status: db.ThreadStatusRunning, CreatedAt: now,
+	})
 	require.NoError(t, err)
+	require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
+		ID: childID, ChatID: fx.chatID, Thread: childID,
+		WorkflowName: "builtin://agent", Status: db.Active(), CreatedAt: now,
+	}))
+	queryClient := &resetTemporalClient{
+		startRecorder: temporal, rootID: fx.rootThreadID,
+		baseline: map[string]interface{}{"mode": "plan", "tools": []any{"thread-only"}},
+	}
+	service.deps.Temporal = queryClient
+	req := updateParams(fx.chatID, paramsOf(t, map[string]any{"mode": nil}))
+	req.Msg.ThreadId = &childID
+	_, err = service.UpdateWorkflowParams(ctx, req)
+	require.NoError(t, err)
+	require.Len(t, queryClient.queries, 2)
+	assert.Equal(t, "get_thread_reset_inputs", queryClient.queries[0].QueryType)
+	assert.Equal(t, "get_thread_inputs", queryClient.queries[1].QueryType)
+	for _, query := range queryClient.queries {
+		assert.Equal(t, fx.rootThreadID, query.WorkflowID)
+		assert.Equal(t, []interface{}{childID}, query.Args)
+	}
 	require.Len(t, temporal.signals, 1)
-	assert.Equal(t, map[string]interface{}{"mode": "plan", "__thread": fx.rootThreadID, "__reset_keys": []string{"mode"}}, temporal.signals[0].Arg)
+	assert.Equal(t, fx.rootThreadID, temporal.signals[0].WorkflowID)
+	assert.Equal(t, workflow.SignalUpdateWorkflowState, temporal.signals[0].Name)
+	assert.Equal(t, map[string]interface{}{"mode": "plan", "__thread": childID, "__reset_keys": []string{"mode"}}, temporal.signals[0].Arg)
 	after, err := repo.GetChatSelection(ctx, fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, before.Version, after.Version)
+	assert.Equal(t, before.Params, after.Params)
 }
 
 func TestModeResetUsesPresetAndFreshSendRemovesStoredOverride(t *testing.T) {
