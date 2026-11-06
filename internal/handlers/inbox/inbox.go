@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
@@ -523,7 +524,12 @@ func (s *Service) declarationAutomations(ctx context.Context, lim readLimiter, s
 }
 
 func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) []*reliantv1.InboxItem {
-	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.deps.Repo})
+	// Every activation resolves its workflow, its children and presets, mostly
+	// against the same machine catalogs and account drafts: read each once
+	// for the whole list (launch.NewRequestResolver), as ListTriggers does.
+	// Prod ListInbox (2026-11-05, 22 activations): 13 catalog and 24 draft
+	// reads a call, p50 516ms, the most-called slow rpc of the web.
+	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: launch.NewRequestResolver(s.deps.Repo)})
 	var out []*reliantv1.InboxItem
 	broken := &brokenDefinitions{byKey: map[string]*reliantv1.InboxItem{}}
 	for _, t := range stored {
