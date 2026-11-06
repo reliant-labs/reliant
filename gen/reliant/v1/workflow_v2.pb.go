@@ -7402,12 +7402,16 @@ func (x *DeleteWorktreeOutput) GetDeleted() bool {
 
 // RunOutput is the output from run nodes (shell command execution).
 type RunOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ExitCode      int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
-	Stdout        string                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
-	Stderr        string                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
-	WorkingDir    string                 `protobuf:"bytes,4,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
-	LogFile       string                 `protobuf:"bytes,5,opt,name=log_file,json=logFile,proto3" json:"log_file,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ExitCode   int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Stdout     string                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr     string                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	WorkingDir string                 `protobuf:"bytes,4,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
+	LogFile    string                 `protobuf:"bytes,5,opt,name=log_file,json=logFile,proto3" json:"log_file,omitempty"`
+	// The machine cut stdout or stderr to the run step's output cap (128 KiB of
+	// stdout, half that of stderr): they are not the command's whole output,
+	// and text a workflow decodes (json.decode) may not decode.
+	Truncated     bool `protobuf:"varint,6,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7475,6 +7479,13 @@ func (x *RunOutput) GetLogFile() string {
 		return x.LogFile
 	}
 	return ""
+}
+
+func (x *RunOutput) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 // WorkflowOutput is the output from a workflow node (non-loop sub-workflow).
@@ -9393,14 +9404,15 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\arepo_id\x18\x06 \x01(\tR\x06repoId\x12\x16\n" +
 	"\x06status\x18\a \x01(\tR\x06status\"0\n" +
 	"\x14DeleteWorktreeOutput\x12\x18\n" +
-	"\adeleted\x18\x01 \x01(\bR\adeleted\"\x94\x01\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted\"\xb2\x01\n" +
 	"\tRunOutput\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\x03 \x01(\tR\x06stderr\x12\x1f\n" +
 	"\vworking_dir\x18\x04 \x01(\tR\n" +
 	"workingDir\x12\x19\n" +
-	"\blog_file\x18\x05 \x01(\tR\alogFile\"C\n" +
+	"\blog_file\x18\x05 \x01(\tR\alogFile\x12\x1c\n" +
+	"\ttruncated\x18\x06 \x01(\bR\ttruncated\"C\n" +
 	"\x0eWorkflowOutput\x121\n" +
 	"\aoutputs\x18\x01 \x01(\v2\x17.google.protobuf.StructR\aoutputs\"\xc5\x02\n" +
 	"\n" +

@@ -24,9 +24,9 @@ func runOnce(t *testing.T, result *toolexec.ToolResult) (stdout, stderr string, 
 	t.Helper()
 	exec := NewRemoteRunExecutor(&fixedToolExecutor{result: result})
 	exec.SetContext(RunExecutorContext{UserID: "u", ProjectPath: "/tmp/proj"})
-	stdout, stderr, exitCode, _, err = exec.ExecuteCommand(
+	got, err := exec.ExecuteCommand(
 		context.Background(), "reliant forge lint", "/tmp/proj", 300000, nil)
-	return stdout, stderr, exitCode, err
+	return got.Stdout, got.Stderr, got.ExitCode, err
 }
 
 // A lane that never ran is not a lane that failed.

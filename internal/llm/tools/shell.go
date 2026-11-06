@@ -198,6 +198,19 @@ const (
 	// literal timeout: above it at load, so the two must be one value.
 	MaxRunStepTimeout    = model.MaxRunStepTimeout
 	MaxShellOutputLength = 16000
+	// MaxRunStepOutputLength caps stdout of a workflow `run` node's command
+	// (stderr gets half), in place of MaxShellOutputLength. A run node's
+	// stdout is workflow data, not model context: workflows json.decode it,
+	// and the model's 16 KB cut a 19.8 KB JSON verdict into text that no
+	// longer decoded (control-plane pr-review, 2026-10-31). The bound is what
+	// a Temporal activity result carries comfortably: the run step returns
+	// stdout, stderr and their concatenation, well under the 512 KiB blob
+	// warning. A cut sets ShellResponseMetadata.Truncated, which the run node
+	// reports as `truncated`.
+	MaxRunStepOutputLength = 128 << 10
+	// MaxRunStepOutputSize is a run step's encoded-result budget, in place of
+	// MaxOutputSize (fitShellOutputToBudget, and the ToolWrapper's ceiling).
+	MaxRunStepOutputSize = 2*MaxRunStepOutputLength + MaxRunStepOutputLength/2
 )
 
 // ShellTimeoutUnit is the duration one unit of a shell call's `timeout`
@@ -614,8 +627,13 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	interrupted := result.TimedOut
 	outcome.completed(exitCode, result.DurationMs, interrupted)
 
-	// Apply custom output limits if specified
-	maxOutput := MaxShellOutputLength
+	// Apply custom output limits if specified. A run step's output is
+	// workflow data and gets the run step's larger caps; a model may not ask
+	// for them (max_output still applies to its own call).
+	maxOutput, outputBudget := MaxShellOutputLength, MaxOutputSize
+	if rctx.RunStep {
+		maxOutput, outputBudget = MaxRunStepOutputLength, MaxRunStepOutputSize
+	}
 	if params.MaxOutput > 0 {
 		maxOutput = params.MaxOutput
 	}
@@ -646,7 +664,7 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 	// tool_wrapper truncation head+tail-cuts the JSON *string*, corrupting the
 	// envelope (and appending a misleading "use offset parameter" hint the
 	// foreground shell tool doesn't support).
-	stdout, stderr = fitShellOutputToBudget(stdout, stderr, stdoutCap, stderrCap, exitCode, MaxOutputSize)
+	stdout, stderr = fitShellOutputToBudget(stdout, stderr, stdoutCap, stderrCap, exitCode, outputBudget)
 
 	wasTruncated := len(stdout) < originalStdoutSize || len(stderr) < originalStderrSize
 

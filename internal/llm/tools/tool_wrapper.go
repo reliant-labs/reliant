@@ -529,6 +529,13 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 
 	// Handle ToolResponse type
 	if response, ok := outputInterface.(ToolResponse); ok {
+		// A workflow run step's shell result is workflow data the shell tool
+		// already fitted to its own, larger budget (MaxRunStepOutputSize):
+		// cutting it to the model's ceiling here would corrupt the JSON
+		// envelope the run step decodes.
+		if rctx.RunStep && toolName == ShellToolName && len(response.Content) <= MaxRunStepOutputSize {
+			return response, nil
+		}
 		// Check and potentially truncate the content
 		if response.Content != "" {
 			originalSize := len(response.Content)

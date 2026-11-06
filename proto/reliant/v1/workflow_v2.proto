@@ -2020,6 +2020,10 @@ message RunOutput {
   string stderr = 3;
   string working_dir = 4;
   string log_file = 5;
+  // The machine cut stdout or stderr to the run step's output cap (128 KiB of
+  // stdout, half that of stderr): they are not the command's whole output,
+  // and text a workflow decodes (json.decode) may not decode.
+  bool truncated = 6;
 }
 
 // WorkflowOutput is the output from a workflow node (non-loop sub-workflow).
