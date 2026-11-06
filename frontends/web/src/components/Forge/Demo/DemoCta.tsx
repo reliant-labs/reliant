@@ -41,6 +41,27 @@ export function signupHref(placement: DemoCtaPlacement, live: boolean = FORGE_AP
   }
 }
 
+/** "Install forge" as a text link (the tour's intro, the toast), opening the same sheet. */
+export function InstallForgeLink({ placement, children = "Install forge" }: { placement: string; children?: React.ReactNode }) {
+  const [installing, setInstalling] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          trackEvent("demo_cta_clicked", { target: "install", placement });
+          setInstalling(true);
+        }}
+        className="font-medium text-primary-ink underline-offset-2 hover:underline"
+        data-testid={`install-forge-link-${placement}`}
+      >
+        {children}
+      </button>
+      <InstallForgeSheet open={installing} onClose={() => setInstalling(false)} />
+    </>
+  );
+}
+
 export function DemoCta({ placement, size = "sm" }: { placement: DemoCtaPlacement; size?: "sm" | "md" }) {
   const [installing, setInstalling] = useState(false);
   return (

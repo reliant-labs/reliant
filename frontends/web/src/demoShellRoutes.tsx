@@ -2,8 +2,9 @@
  * The demo shell's route tree: what the reliant-web bundle mounts on the demo
  * host (`demo.reliantlabs.io`, lib/shell.ts), in place of routes.tsx.
  *
- *   /forge/demo     the forge demo console on sample data (Forge/Demo), the
- *                   forge tour started on every visit (DemoAutoStart)
+ *   /forge/demo     the forge demo console on sample data (Forge/Demo), free
+ *                   to explore: a toast offers the guided tour (DemoTourToast)
+ *                   and each view has a one-time tip (Demo/tips)
  *   /demo           → /forge/demo, keeping the query
  *   /               → /forge/demo, keeping the query (`?tour=`, `rid`, `utm_*`)
  *   anything else   → /forge/demo, keeping the query
@@ -13,14 +14,15 @@
  * on this host can sign in, and therefore nothing can change anything — by
  * construction, beside the read-only layer the console carries
  * (Observability/readOnlyApi.ts). No ActiveOrgBinding (an org call) and no
- * landing-journey handoff: the tour starts by itself.
+ * landing-journey handoff: the toast offers the tour.
  */
 
 import { createRootRoute, createRoute, createRouter, Navigate, Outlet, redirect, useRouterState } from '@tanstack/react-router'
 
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
 import { bootDemoShell } from './components/Forge/Demo/demoShellBoot'
-import { DemoAutoStart } from './components/Forge/Demo/DemoAutoStart'
+import { DemoTourToast } from './components/Forge/Demo/DemoTourToast'
+import { DemoTips } from './components/Forge/Demo/tips'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute, FORGE_DEMO_PATH } from './components/Forge/Demo/demoRoute'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
 import { PageVisitTracker } from './components/PageVisitTracker'
@@ -46,7 +48,8 @@ function DemoRootShell() {
         <Toaster />
         <NewBuildPrompt />
         <JourneyTour />
-        <DemoAutoStart />
+        <DemoTips />
+        <DemoTourToast />
       </div>
     </SurfaceProvider>
   )

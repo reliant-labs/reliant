@@ -3,12 +3,12 @@
 /**
  * The demo shell (demo.reliantlabs.io): its route module boots the tour into
  * memory-only storage, the tree is one page — every path lands on
- * `/forge/demo`, query kept — and the forge tour starts once per page load,
- * never over a deep link, never from storage.
+ * `/forge/demo`, query kept — and it opens on the console: a toast offers the
+ * forge tour, which never starts by itself.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
 
 const tracked = vi.hoisted(() => [] as { event: string; props?: Record<string, unknown> }[]);
@@ -34,7 +34,7 @@ vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <div 
 vi.mock("@/components/Forge/Demo/demoData/demoTransport", () => ({ createDemoTransport: () => ({}) }));
 
 import { getTourShell, getTourStorage } from "@/components/Onboarding/tourShell";
-import { resetDemoAutoStartForTests } from "@/components/Forge/Demo/DemoAutoStart";
+import { resetDemoSessionForTests } from "@/components/Forge/Demo/demoSession";
 import { resetShellForTests } from "@/lib/shell";
 import { buildDemoShellTree } from "@/demoShellRoutes";
 
@@ -48,7 +48,7 @@ const searchOf = (router: ReturnType<typeof renderDemoShell>) => router.state.lo
 
 beforeEach(() => {
   resetShellForTests("demo");
-  resetDemoAutoStartForTests();
+  resetDemoSessionForTests();
   tracked.length = 0;
   window.localStorage.clear();
 });
@@ -99,33 +99,27 @@ describe("the demo shell's routes", () => {
   });
 });
 
-describe("the tour on every visit", () => {
-  it("starts the forge journey on load, from the demo source", async () => {
+describe("explore first: the tour is offered, never started", () => {
+  it("opens on the console with no tour, and a toast that offers it", async () => {
     const router = renderDemoShell("/");
     await screen.findByTestId("demo-console");
-    await waitFor(() => expect(searchOf(router).tour).toBe("forge:fg-console"));
-    expect(tracked).toContainEqual({ event: "demo_tour_autostarted", props: { deep_link: false } });
-    expect(tracked).toContainEqual(expect.objectContaining({ event: "journey_selected", props: expect.objectContaining({ source: "demo" }) }));
+    expect(await screen.findByTestId("demo-tour-toast")).toBeInTheDocument();
+    expect(searchOf(router).tour).toBeUndefined();
+    expect(tracked).toContainEqual({ event: "demo_tour_offered", props: {} });
   });
 
-  it("leaves a deep link alone", async () => {
+  it("starts the forge journey from the toast, from the demo source", async () => {
+    const router = renderDemoShell("/");
+    fireEvent.click(await screen.findByTestId("demo-tour-toast-start"));
+    await waitFor(() => expect(searchOf(router).tour).toBe("forge:fg-intro"));
+    expect(tracked).toContainEqual(expect.objectContaining({ event: "journey_selected", props: expect.objectContaining({ source: "demo" }) }));
+    expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
+  });
+
+  it("hides the toast over a deep link to a step, and leaves the link alone", async () => {
     const router = renderDemoShell("/forge/demo?view=traces&tour=forge:fg-trace");
     await screen.findByTestId("demo-console");
-    expect(tracked).toContainEqual({ event: "demo_tour_autostarted", props: { deep_link: true } });
+    expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
     expect(searchOf(router).tour).toBe("forge:fg-trace");
-  });
-
-  it("starts once per page load: a remount after the tour ended does not restart it", async () => {
-    const first = renderDemoShell("/");
-    await waitFor(() => expect(searchOf(first).tour).toBe("forge:fg-console"));
-    cleanup();
-    // Same page load (module state kept), the tour finished (no ?tour=): it stays closed.
-    const second = renderDemoShell("/forge/demo");
-    await screen.findByTestId("demo-console");
-    // render() flushes effects inside act, so the remount's DemoAutoStart has
-    // already run by now; it records demo_tour_autostarted before it would
-    // start the tour, so a single event proves it declined.
-    expect(tracked.filter((t) => t.event === "demo_tour_autostarted")).toHaveLength(1);
-    expect(searchOf(second).tour).toBeUndefined();
   });
 });

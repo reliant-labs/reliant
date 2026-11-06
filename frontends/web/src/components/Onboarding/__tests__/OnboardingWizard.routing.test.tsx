@@ -9,7 +9,7 @@
  *   workflows: wf-new (signal + route, autoAdvance) → … → wf-machines (route)
  *              → wf-automations (page-bound) → wf-params
  *              → wf-outro-layout (Reliant-only outro, collapses panels)
- *   forge:     fg-console → … → fg-done (journeys/forge.tsx; its own test covers it)
+ *   forge:     fg-intro → … → fg-done (journeys/forge.tsx; its own test covers it)
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import React from "react";
@@ -316,7 +316,7 @@ describe("journey engine (OnboardingWizard)", () => {
       expect(screen.getByTestId("journey-card-workflows")).toHaveAttribute("aria-pressed", "false");
 
       await userEvent.click(screen.getByRole("button", { name: /start tour/i }));
-      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-console"));
+      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-intro"));
       expect(trackEvent).toHaveBeenCalledWith(
         "journey_selected",
         expect.objectContaining({ journey: "forge", source: "landing" }),
@@ -437,7 +437,7 @@ describe("journey engine (OnboardingWizard)", () => {
     it("Try the other journey completes this one and starts the other", async () => {
       const router = renderAt(lastStepUrl);
       await userEvent.click(await screen.findByRole("button", { name: /try the other journey/i }));
-      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-console"));
+      await waitFor(() => expect(tourParam(router)).toBe("forge:fg-intro"));
       expect(tourStoreState.state.markTourCompleted).toHaveBeenCalledWith("workflows", "completed");
       expect(trackEvent).toHaveBeenCalledWith(
         "journey_selected",

@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 import { useUnmountSafeTimeout } from "../../hooks/useUnmountSafeTimeout";
+import { BELOW_FIRST, BESIDE_FIRST, placeCallout, type CalloutSide } from "./calloutPlacement";
 import type { SpotlightConfig } from "./types";
 
 // Store last known positions for smooth transitions between steps
@@ -43,6 +44,13 @@ interface OnboardingSpotlightProps {
    * the user.
    */
   blockOutside?: boolean;
+  /**
+   * The compact presentation (Journey.controls "callout"): the step's own
+   * controls inside the card (`footer`), the pending action's instruction
+   * (`hint`), no bottom bar to keep clear of, and the card beside the target
+   * rather than below it.
+   */
+  callout?: { footer: React.ReactNode; hint?: React.ReactNode };
 }
 
 interface Position {
@@ -89,75 +97,22 @@ const VIEWPORT_PADDING = 16;
 // Height reserved for the OnboardingNavBar at the bottom of the screen
 const NAV_BAR_CLEARANCE = 176;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(value, Math.max(min, max)));
-}
-
+/** Where the card goes: beside the target, never over it (calloutPlacement.ts). */
 function calculateTooltipPosition(
   rect: TargetRect,
   position: "top" | "bottom" | "left" | "right" | "auto",
   tooltipSize: ElementSize = DEFAULT_TOOLTIP_SIZE,
-  targetGap: number = 16
-): Position & { actualPosition: "top" | "bottom" | "left" | "right" } {
-  const viewportWidth = window.innerWidth;
-  const effectiveViewportBottom = Math.max(
-    VIEWPORT_PADDING,
-    window.innerHeight - NAV_BAR_CLEARANCE
+  targetGap: number = 16,
+  bottomReserve: number = NAV_BAR_CLEARANCE,
+  order: readonly CalloutSide[] = BELOW_FIRST
+): Position & { actualPosition: CalloutSide } {
+  const placed = placeCallout(
+    rect,
+    tooltipSize,
+    { width: window.innerWidth, height: window.innerHeight },
+    { preferred: position, order, gap: targetGap, margin: VIEWPORT_PADDING, bottomReserve }
   );
-  const tooltipWidth = tooltipSize.width;
-  const tooltipHeight = tooltipSize.height;
-
-  // Auto-detect best position
-  let actualPosition: "top" | "bottom" | "left" | "right" = position === "auto" ? "bottom" : position;
-  if (position === "auto") {
-    const spaceAbove = rect.top - VIEWPORT_PADDING;
-    const spaceBelow = effectiveViewportBottom - (rect.top + rect.height);
-    const spaceRight = viewportWidth - (rect.left + rect.width) - VIEWPORT_PADDING;
-    const spaceLeft = rect.left - VIEWPORT_PADDING;
-
-    // Prefer below, then above, then right, then left when there is enough room.
-    if (spaceBelow >= tooltipHeight + targetGap) {
-      actualPosition = "bottom";
-    } else if (spaceAbove >= tooltipHeight + targetGap) {
-      actualPosition = "top";
-    } else if (spaceRight >= tooltipWidth + targetGap) {
-      actualPosition = "right";
-    } else if (spaceLeft >= tooltipWidth + targetGap) {
-      actualPosition = "left";
-    } else if (Math.max(spaceBelow, spaceAbove) >= Math.max(spaceRight, spaceLeft)) {
-      actualPosition = spaceBelow >= spaceAbove ? "bottom" : "top";
-    } else {
-      actualPosition = spaceRight >= spaceLeft ? "right" : "left";
-    }
-  }
-
-  let top = 0;
-  let left = 0;
-
-  switch (actualPosition) {
-    case "top":
-      top = rect.top - tooltipHeight - targetGap;
-      left = rect.left + rect.width / 2 - tooltipWidth / 2;
-      break;
-    case "bottom":
-      top = rect.top + rect.height + targetGap;
-      left = rect.left + rect.width / 2 - tooltipWidth / 2;
-      break;
-    case "left":
-      top = rect.top + rect.height / 2 - tooltipHeight / 2;
-      left = rect.left - tooltipWidth - targetGap;
-      break;
-    case "right":
-      top = rect.top + rect.height / 2 - tooltipHeight / 2;
-      left = rect.left + rect.width + targetGap;
-      break;
-  }
-
-  // Clamp to viewport, reserving space at bottom for nav bar.
-  left = clamp(left, VIEWPORT_PADDING, viewportWidth - tooltipWidth - VIEWPORT_PADDING);
-  top = clamp(top, VIEWPORT_PADDING, effectiveViewportBottom - tooltipHeight - VIEWPORT_PADDING);
-
-  return { top, left, actualPosition };
+  return { top: placed.top, left: placed.left, actualPosition: placed.side };
 }
 
 export function OnboardingSpotlight({
@@ -175,7 +130,9 @@ export function OnboardingSpotlight({
   spotlightConfig,
   keyboardNav = true,
   blockOutside = false,
+  callout,
 }: OnboardingSpotlightProps) {
+  const compact = !!callout;
   // stepNumber/totalSteps are accepted for interface compatibility — the
   // OnboardingNavBar renders progress. onSkipAll is accepted but unused:
   // ESC no longer ends the tour; skipping happens via the nav bar button.
@@ -270,8 +227,12 @@ export function OnboardingSpotlight({
 
   useEffect(() => {
     if (!spotlightRect) return;
-    setTooltipPos(calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding));
-  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding]);
+    setTooltipPos(
+      compact
+        ? calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, 0, BESIDE_FIRST)
+        : calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding)
+    );
+  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, compact]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(measureTooltip);
@@ -491,9 +452,12 @@ export function OnboardingSpotlight({
         aria-live="polite"
         className={cn(
           "absolute rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl",
-          "transition-all duration-500 ease-out",
-          isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95"
+          "transition-all duration-500 ease-out motion-reduce:transition-none",
+          isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95",
+          compact && "pointer-events-auto"
         )}
+        data-testid="tour-callout"
+        data-side={tooltipPos.actualPosition}
         style={{
           top: tooltipPos.top,
           left: tooltipPos.left,
@@ -504,6 +468,8 @@ export function OnboardingSpotlight({
           {/* Title & Description */}
           <h3 className="text-lg font-semibold text-foreground mb-2.5 tracking-tight">{title}</h3>
           <div className="text-sm text-muted-foreground leading-relaxed">{description}</div>
+          {callout?.hint}
+          {callout?.footer}
         </div>
       </div>
     </div>

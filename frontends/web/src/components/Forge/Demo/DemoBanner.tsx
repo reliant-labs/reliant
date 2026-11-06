@@ -3,7 +3,7 @@
 /**
  * The demo console's banner: this is sample data, and changes are off.
  *
- *  - In every shell: "Restart the tour" (hidden while a step is open), and
+ *  - In every shell: "Guided tour" (hidden while a step is open), and
  *    "How this app was built" (the recorded forge run, `?section=built`).
  *  - Reliant and the forge shell: "Leave the demo" (forge's Apps / the project
  *    picker).
@@ -14,12 +14,12 @@
  */
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { FlaskConical, Hammer, RotateCcw } from "lucide-react";
+import { Compass, FlaskConical, Hammer } from "lucide-react";
 
 import { parseTourParam } from "@/components/Onboarding/tourParam";
 import type { TourShell } from "@/components/Onboarding/tourShell";
 import { useTourNavigation } from "@/components/Onboarding/useTourNavigation";
-import { PRIVACY_POLICY_URL } from "@/components/Settings/privacyLinks";
+import { PRIVACY_POLICY_URL } from "@/lib/privacyLinks";
 import { trackEvent } from "@/lib/analytics";
 import { browserOptedOut, demoTelemetry, demoTelemetryNotice } from "@/lib/demoTelemetry";
 import { isDemoShell } from "@/lib/shell";
@@ -73,8 +73,8 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
             }}
             data-testid="forge-demo-restart"
           >
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-            Restart the tour
+            <Compass className="h-3.5 w-3.5" aria-hidden="true" />
+            Guided tour
           </button>
         )}
         {search.section !== DEMO_SECTION_BUILT && (

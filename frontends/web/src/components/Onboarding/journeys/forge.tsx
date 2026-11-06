@@ -1,25 +1,29 @@
 /**
  * The "Explore a forge app" journey (journeys-spec.md §3).
  *
- * Nine steps through the forge demo console (`/forge/demo`,
- * components/Forge/Demo): a made-up app called shop, on fixture
- * observability data. It shows how forge instruments an app (a trace, its
- * logs, its CPU profile, the grouped error), then how an agent gets the
- * problem: an alert starting Autopilot on-call, and the Ask-an-agent handoff.
+ * A short, optional walk through the forge demo console (`/forge/demo`,
+ * components/Forge/Demo): a made-up app called shop, on sample observability
+ * data. It opens with what forge is, follows one failing request across three
+ * services, its logs and its grouped error, and ends with handing that error
+ * to an agent. Exploring on your own is the default: every console view has
+ * a one-time tip of its own (Forge/Demo/tips), so the tour only takes the
+ * best moments.
  *
- * The public demo host (demo.reliantlabs.io, lib/shell.ts `demo`) starts it on
- * every visit, so it runs a SHORTER, different cut there (DEMO_TOUR, default
- * `short`, at most ten steps): no profile or on-call step, and instead the
- * instrumentation forge writes between services (fg-hops) and inside one
- * (fg-inside), and last, before the end card, how the app was built (fg-built:
- * the recorded forge run, in a modal card of its own). DEMO_TOUR=full adds the
- * service graph (fg-graph) and what a coding agent reads (fg-agent), and puts
- * the profile and on-call steps back.
+ * Drawn with the compact controls (`controls: "callout"`): no bottom bar and
+ * no Skip step. Each card has its instruction and one small Exit tour, and a
+ * required action moves the tour on as soon as it's done, so an action
+ * step's explanation sits BEFORE the action, or on the step after it.
  *
- * It runs unchanged in both shells. Nothing here needs a daemon, a chat or a
- * signed-in user: every step's target is fixture data, every required action
- * is a URL change or a tour signal, and copy that differs (the CLI's name,
- * what Autopilot needs) is `copyByShell`.
+ * Cuts (isAvailable; lib/demoTour.ts, runtime config DEMO_TOUR):
+ *  - the public demo host, `short` (default), 9 steps: intro, trace, hops,
+ *    inside, logs, issue, ask, built (the recorded forge run, a dialog), done;
+ *  - the demo host, `full`: every step;
+ *  - Reliant and the forge shell, 11 steps: no fg-inside, fg-graph,
+ *    fg-agent or fg-built.
+ *
+ * Nothing here needs a daemon, a chat or a signed-in user: every target is
+ * sample data, every required action is a URL change or a tour signal, and
+ * copy that differs (the CLI's name, what Autopilot needs) is `copyByShell`.
  *
  * The ids below are the fixture's (Forge/Observability/__fixtures__); they are
  * repeated rather than imported so the fixtures stay out of the app's main
@@ -29,17 +33,18 @@
 import { lazy, Suspense } from "react";
 
 import { FORGE_DEMO_PATH } from "../../Forge/Demo/demoPath";
+import { FORGE_ONE_LINER, FORGE_REPO_URL, FORGE_WHAT_IT_DOES } from "../../Forge/Demo/demoCopy";
 import { trackEvent } from "../../../lib/analytics";
 import { isForgeUIEnabled } from "../../../lib/forgeFeature";
 import { isDemoShell } from "../../../lib/shell";
 import { notOnShortDemo, onDemo, onDemoFull } from "../../../lib/demoTour";
-import { DemoCta } from "../../Forge/Demo/DemoCta";
+import { DemoCta, InstallForgeLink } from "../../Forge/Demo/DemoCta";
 import type { Journey, JourneyRoute, RouteTarget } from "../types";
 import { TourCommands } from "./TourCommand";
 
 /** The CreateOrder trace the tour opens (FIXTURE_TRACE_ID): two failed payment calls, then the worker. */
 export const DEMO_TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
-/** The issue that trace belongs to: new in v1.8.3, its latest event is that trace. */
+/** The issue that trace belongs to: first seen in release v1.8.3, its latest event is that trace. */
 export const DEMO_ISSUE_ID = "iss-orders-deadline";
 /** In that trace: inventory's server span, the hop the worker made over Connect (fg-hops). */
 export const DEMO_INVENTORY_SPAN_ID = "e1";
@@ -73,6 +78,27 @@ function ExternalLink({ href, children, onClick }: { href: string; children: Rea
   );
 }
 
+/** "Your agent runs `…`": the one line on each step that says what an agent does with it. */
+function AgentLine({ children }: { children: React.ReactNode }) {
+  return <p className="mt-2 text-xs text-muted-foreground">{children}</p>;
+}
+
+function WhatIsForge() {
+  return (
+    <>
+      <p>{FORGE_ONE_LINER}</p>
+      <p className="mt-2">{FORGE_WHAT_IT_DOES}</p>
+      <p className="mt-2">
+        This is the console forge gives every app, for a sample app called shop. A few steps follow one failing request through it.
+      </p>
+      <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+        <InstallForgeLink placement="tour_intro" />
+        <ExternalLink href={FORGE_REPO_URL}>It&apos;s open source</ExternalLink>
+      </p>
+    </>
+  );
+}
+
 const ONCALL_LEAD =
   "Alerts, and new or regressed issues, can start an agent. The Autopilot on-call workflow listens for them.";
 
@@ -90,7 +116,8 @@ function TryOnYourApp({ cli }: { cli: string }) {
       </p>
       <TourCommands commands={tryCommands(cli)} />
       <p className="mt-3">
-        New to forge? <ExternalLink href={QUICK_START_URL}>Quick start</ExternalLink>
+        New to forge? <ExternalLink href={QUICK_START_URL}>Quick start</ExternalLink>. The rest of the console is yours to explore: each
+        view has a short tip the first time you open it.
       </p>
       {/* The public demo's way out: install it, or make an account. */}
       {isDemoShell() && (
@@ -124,13 +151,63 @@ function WhatYourAgentReads({ cli }: { cli: string }) {
   );
 }
 
+function Hops({ cli }: { cli: string }) {
+  return (
+    <>
+      <p>
+        Each bar is a span. The payment call timed out, was retried and failed: most of the 182 ms. Then the order event went over NATS to
+        the worker, which called inventory over Connect. That is one trace across three services, and neither service has tracing code:
+        forge&apos;s Connect client and server pass the trace in request headers, and its NATS helpers pass it in message headers.
+      </p>
+      <AgentLine>
+        Your agent runs <code>{cli} obs trace {DEMO_TRACE_ID.slice(0, 8)}… prod</code> and reads the same waterfall as a tree, with the
+        slowest path marked.
+      </AgentLine>
+      <p className="mt-2">Click Reserve on inventory, near the bottom.</p>
+    </>
+  );
+}
+
+function Logs({ cli }: { cli: string }) {
+  return (
+    <>
+      <p>
+        Every log line forge&apos;s logger writes carries its trace id, so one click gives you exactly what this request logged, in every
+        service, with no search to write.
+      </p>
+      <AgentLine>
+        Your agent gets the same lines with <code>{cli} obs logs prod --trace &lt;id&gt;</code>.
+      </AgentLine>
+      <p className="mt-2">Click Logs for this trace.</p>
+    </>
+  );
+}
+
+function Issue({ cli }: { cli: string }) {
+  return (
+    <>
+      <p>
+        Those logs show five lines from three services, ending in a deadline. forge groups errors like that one into issues. Because
+        forge also ships your releases, it knows which release each error first appeared in, and which commits in that release touched the
+        failing code.
+      </p>
+      <AgentLine>
+        Your agent runs <code>{cli} obs issue &lt;id&gt; prod</code>: the latest event, the release it first appeared in, and the suspect
+        commits.
+      </AgentLine>
+      <p className="mt-2">Open CreateOrder: context deadline exceeded.</p>
+    </>
+  );
+}
+
 export const forgeJourney: Journey = {
   id: "forge",
-  // v2: the demo console journey (v1 was the engine's two-step placeholder).
-  version: 2,
+  // v3: the short, optional tour with compact controls and the "What is forge?" intro (v2 was the 9-step console tour).
+  version: 3,
   title: "Explore a forge app",
   description:
-    "Walk through a running app's console: traces, logs and profiles, and how an alert hands a problem to an agent.",
+    "Walk through a running app's console: one request across three services, its logs and its error, and how an agent gets the problem.",
+  controls: "callout",
   // Settings → Developer can switch the forge UI off; that turns its tour off too. (On by default, and in the forge shell.)
   isAvailable: isForgeUIEnabled,
   // Reliant: forge's Apps (the bare /forge lands there). The forge shell: its project picker, which signs a visitor in first.
@@ -138,37 +215,39 @@ export const forgeJourney: Journey = {
   finish: (shell) => (shell === "reliant" ? { to: "/forge" } : isDemoShell() ? null : { to: "/apps" }),
   steps: [
     {
+      id: "fg-intro",
+      title: "What is forge?",
+      description: <WhatIsForge />,
+      route: demo({ view: "overview", ...CLOSED }),
+    },
+    {
       id: "fg-console",
       title: "A forge app's console",
       description:
-        "This is the console for shop, a sample forge app with an api and a worker in dev, staging and prod. Every forge project gets this console with environments, releases, domains, secrets and observability. The data here is made up.",
+        "Every forge project gets this console: environments, releases, domains, secrets and observability, in one place. shop has an api, a worker and an inventory service in dev, staging and prod. The data here is made up.",
       // The console's sidebar (forge-ui SidebarLayout's nav, inside ConsoleShell).
       target: "[data-tour='forge-console'] #sidebar-layout-nav",
       tooltipPosition: "right",
       route: demo({ view: "overview", ...CLOSED }),
+      // The demo host's short tour leaves it out: the console is there to explore, with a tip per view.
+      isAvailable: notOnShortDemo,
     },
     {
       id: "fg-instrumented",
       title: "Instrumented from the start",
       description:
-        "Nobody added tracing to this app by hand. forge writes the code at every boundary it owns: the Connect handlers and clients, a wrapper around each service package, and the database driver. It also ships helpers that carry a trace across NATS and Temporal. Each of these opens a span and passes the trace on, and every log line gets the trace id. Services also push a CPU profile about once a minute. The rate, errors and latency here come from those spans.",
+        "Nobody added tracing to this app by hand. forge writes the code at every boundary it owns: the Connect handlers and clients, a wrapper around each service package, and the database driver. It also ships helpers that carry a trace across NATS and Temporal. Every log line gets the trace id, and services push a CPU profile about once a minute. The rate, errors and latency here come from those spans.",
       target: "[data-testid='obs-overview']",
       route: demo({ view: "overview", ...CLOSED }),
+      // The demo host's short tour leaves it out: fg-hops and fg-inside show the same thing on a real trace.
+      isAvailable: notOnShortDemo,
     },
     {
       id: "fg-trace",
       title: "One request, end to end",
       description: "Open the CreateOrder trace at the top. It's the one with an error.",
+      target: `[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`,
       route: demo({ view: "traces", ...CLOSED }),
-      phases: [
-        { target: `[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}']` },
-        {
-          when: { kind: "element", selector: "[data-testid='trace-waterfall']" },
-          target: "[data-testid='trace-waterfall']",
-          description:
-            "Each bar is a span. The call to the payment provider timed out once, was retried, and failed, which is most of the 182 ms. The order event then went over a queue to the worker, which called the inventory service. All of that is one trace.",
-        },
-      ],
       advanceOn: { kind: "when", test: ({ location }) => location.search.trace === DEMO_TRACE_ID },
       actionHint: "Open the CreateOrder trace",
       signal: "trace_opened",
@@ -176,19 +255,10 @@ export const forgeJourney: Journey = {
     {
       id: "fg-hops",
       title: "Across services",
-      description: "This request crossed three services. Click Reserve on inventory, near the bottom.",
-      // The demo host only: the instrumentation forge writes BETWEEN services.
-      isAvailable: onDemo,
+      description: <Hops cli="reliant forge" />,
+      copyByShell: { forge: { description: <Hops cli="forge" /> } },
+      target: `[data-testid='trace-span-row'][data-span-id='${DEMO_INVENTORY_SPAN_ID}']`,
       route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
-      phases: [
-        { target: `[data-testid='trace-span-row'][data-span-id='${DEMO_INVENTORY_SPAN_ID}']` },
-        {
-          when: { kind: "element", selector: "[data-testid='span-details']" },
-          target: "[data-testid='span-details']",
-          description:
-            "The worker called inventory over Connect. forge's client added the trace context to the request headers, and inventory's server picked it up, so inventory's spans joined this trace with no tracing code in either service. The hop from the api to the worker went over NATS: forge's NATS helpers put the trace context in the message headers, and the worker carried on from it.",
-        },
-      ],
       advanceOn: { kind: "when", test: ({ location }) => location.search.span === DEMO_INVENTORY_SPAN_ID },
       actionHint: "Click Reserve on inventory",
       signal: "service_hop_opened",
@@ -199,39 +269,27 @@ export const forgeJourney: Journey = {
       description: (
         <>
           <p>
-            Inside the api, the RPC span holds a span for the CreateOrder method, one for each query, and one for the payment call. Each
-            layer is a span because forge owns that boundary, not because someone remembered to add one.
+            This is the CreateOrder method inside the api. The rows under it are its two queries, with the values replaced by ?, and the
+            payment call. Each layer is a span because forge owns that boundary, not because someone remembered to add one.
           </p>
           <p className="mt-2">
-            <code>forge lint --tracing</code> points out the places a trace would break, such as a log call without its context.
+            <code>forge lint --tracing</code> points out the places a trace would break, such as a log call without its context, so your
+            agent can&apos;t quietly break one either.
           </p>
         </>
       ),
       // The demo host only: the instrumentation forge writes WITHIN a service.
       isAvailable: onDemo,
+      target: `[data-testid='trace-span-row'][data-span-id='${DEMO_INSIDE_SPAN_IDS.method}']`,
       route: demo({ view: "traces", trace: DEMO_TRACE_ID, issue: undefined }),
-      targets: [
-        { selector: `[data-testid='trace-span-row'][data-span-id='${DEMO_INSIDE_SPAN_IDS.method}']`, label: "A method", description: "forge wraps every service package, so each method call is a span." },
-        { selector: `[data-testid='trace-span-row'][data-span-id='${DEMO_INSIDE_SPAN_IDS.query}']`, label: "A query", description: "The database driver makes a span for each statement, with the values replaced by ?." },
-        { selector: `[data-testid='trace-span-row'][data-span-id='${DEMO_INSIDE_SPAN_IDS.worker}']`, label: "A worker", description: "Each message the worker handles continues the trace that sent it." },
-      ],
     },
     {
       id: "fg-logs",
       title: "What that request logged",
-      description:
-        "Click Logs for this trace. Every log line carries its trace id, so you get exactly what this request logged across every service, without writing a search.",
+      description: <Logs cli="reliant forge" />,
+      copyByShell: { forge: { description: <Logs cli="forge" /> } },
       target: "[data-testid='trace-logs']",
       route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
-      phases: [
-        {},
-        {
-          when: { kind: "element", selector: "[data-testid='obs-logs-trace-scope']" },
-          target: "[data-testid='obs-logs-trace-scope']",
-          description:
-            "Five lines from three services: the order started, the first charge failed and was retried, the retry hit its deadline, the worker processed the order event, and inventory reserved the items.",
-        },
-      ],
       advanceOn: {
         kind: "when",
         test: ({ location }) => location.search.view === "logs" && location.search.trace === DEMO_TRACE_ID,
@@ -243,18 +301,14 @@ export const forgeJourney: Journey = {
       id: "fg-profile",
       title: "Where the CPU went",
       description:
-        "Click Flamegraph. Profiles are linked to traces, so this is the CPU the api spent inside that request. Each bar is a function, and wider means more time.",
+        "Profiles are linked to traces, so the flamegraph shows the CPU the api spent inside this request: each bar is a function, and wider means more time. Click Flamegraph.",
       target: "[data-testid='trace-flamegraph']",
       // Back to the trace: the flamegraph button is on it.
       route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
-      phases: [
-        {},
-        { when: { kind: "element", selector: "[data-testid='obs-profiles']" }, target: "[data-testid='obs-profiles']" },
-      ],
       advanceOn: { kind: "when", test: ({ location }) => location.search.view === "profiles" },
       actionHint: "Click Flamegraph",
       signal: "flamegraph_opened",
-      // The demo host's short tour leaves it out (DEMO_TOUR).
+      // The demo host's short tour leaves it out (DEMO_TOUR); the Profiles tip covers it.
       isAvailable: notOnShortDemo,
     },
     {
@@ -269,18 +323,11 @@ export const forgeJourney: Journey = {
     },
     {
       id: "fg-issue",
-      title: "Errors, grouped",
-      description: "forge groups errors into issues. Open CreateOrder: context deadline exceeded.",
+      title: "Errors, grouped by release",
+      description: <Issue cli="reliant forge" />,
+      copyByShell: { forge: { description: <Issue cli="forge" /> } },
+      target: `[data-testid='obs-issue-${DEMO_ISSUE_ID}']`,
       route: demo({ view: "errors", ...CLOSED }),
-      phases: [
-        { target: `[data-testid='obs-issue-${DEMO_ISSUE_ID}']` },
-        {
-          when: { kind: "element", selector: "[data-testid='obs-issue-header']" },
-          target: "[data-testid='obs-issue-header']",
-          description:
-            "It's new in release v1.8.3. Its latest event links back to the trace you just read, and the CLI can list the commits in that release that touched the failing code.",
-        },
-      ],
       advanceOn: { kind: "when", test: ({ location }) => location.search.issue === DEMO_ISSUE_ID },
       actionHint: "Open the CreateOrder issue",
       signal: "issue_opened",
@@ -323,7 +370,7 @@ export const forgeJourney: Journey = {
       },
       target: "[data-testid='obs-alerts-firing']",
       route: demo({ view: "alerts", ...CLOSED }),
-      // The demo host's short tour leaves it out (DEMO_TOUR).
+      // The demo host's short tour leaves it out (DEMO_TOUR); the Alerts tip covers it.
       isAvailable: notOnShortDemo,
     },
     {
@@ -331,28 +378,33 @@ export const forgeJourney: Journey = {
       title: "What your agent reads",
       description: <WhatYourAgentReads cli="reliant forge" />,
       copyByShell: { forge: { description: <WhatYourAgentReads cli="forge" /> } },
-      // The demo host's full tour only (DEMO_TOUR=full): the short tour makes room for fg-built, whose card
-      // already says what forge gives an agent, and fg-ask hands the issue to one.
+      // The demo host's full tour only (DEMO_TOUR=full): the short tour says it a line at a time, on each step.
       isAvailable: onDemoFull,
     },
     {
       id: "fg-ask",
-      title: "Ask an agent about it",
+      title: "Hand it to an agent",
       description:
         "On your own app, Investigate in chat opens a new chat with this issue written up, and Fix with agent starts one on its own branch. This is sample data, so here it shows what the agent is given: ids and the commands to fetch the rest. It's never the log text itself.",
       copyByShell: {
         forge: {
           description:
-            "Hand it to your own agent. Copy the prompt into Claude Code, Codex or Cursor. It holds ids and forge commands, not log text, so your agent fetches the details with its own login.",
+            "This issue is a good one to hand to your own agent: Claude Code, Codex or Cursor. Click Ask an agent. The prompt holds ids and forge commands, not log text, so your agent fetches the details with its own login.",
         },
       },
       route: demo({ view: "errors", issue: DEMO_ISSUE_ID, trace: undefined, span: undefined }),
       phases: [
         { target: "[data-testid='ask-reliant-actions']" },
-        { when: { kind: "element", selector: "[data-testid='ask-agent-sheet']" }, target: "[data-testid='ask-agent-sheet']" },
+        {
+          when: { kind: "element", selector: "[data-testid='ask-agent-sheet']" },
+          target: "[data-testid='ask-agent-sheet']",
+          description:
+            "Copy the prompt into your agent, or run the commands yourself. Or skip the copying: a Reliant workflow can do this for every new issue. The last line of the sheet says how.",
+        },
       ],
       advanceOn: { kind: "event", event: "askAgent:opened" },
-      afterAction: "Copy something to try it.",
+      // Held: the sheet it opens is the point of the step.
+      autoAdvance: false,
       actionHint: "Click Ask an agent",
       signal: "ask_agent_opened",
     },

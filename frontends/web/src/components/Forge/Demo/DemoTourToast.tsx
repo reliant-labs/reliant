@@ -1,0 +1,112 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * The public demo opens on the console, free to explore. This card in the
+ * bottom-right corner offers the guided tour instead of starting it:
+ *
+ *  - "Take the guided tour" starts the forge journey (source `demo`);
+ *  - the close button and "Explore on my own" dismiss it.
+ *
+ * Either way it stays gone for the rest of the session (demoSession.ts), and
+ * it never shows while a tour is open (a deep link to a step, a restart from
+ * the banner), which also counts as dismissing it. Phones don't get it: the
+ * tour defers there anyway ("Open this on a computer").
+ *
+ * Mounted once at the demo shell's root (demoShellRoutes.tsx).
+ */
+
+import { useEffect, useRef } from "react";
+import { useSearch } from "@tanstack/react-router";
+import { Compass, X } from "lucide-react";
+
+import { parseTourParam } from "@/components/Onboarding/tourParam";
+import { useTourNavigation } from "@/components/Onboarding/useTourNavigation";
+import { trackEvent } from "@/lib/analytics";
+import { isPhoneViewport } from "@/lib/mobileRedirect";
+
+import { InstallForgeLink } from "./DemoCta";
+import { DemoCorner } from "./DemoCorner";
+import { FORGE_ONE_LINER } from "./demoCopy";
+import { demoSession, useDemoSession } from "./demoSession";
+
+export function DemoTourToast() {
+  const { startJourney } = useTourNavigation();
+  const search = useSearch({ strict: false }) as { tour?: unknown };
+  const tourOpen = !!parseTourParam(search.tour);
+  const { toastDismissed } = useDemoSession();
+  const offered = useRef(false);
+  const visible = !toastDismissed && !tourOpen && !isPhoneViewport();
+
+  // A tour opened some other way answers the offer.
+  useEffect(() => {
+    if (tourOpen) demoSession.dismissToast();
+  }, [tourOpen]);
+
+  useEffect(() => {
+    if (!visible || offered.current) return;
+    offered.current = true;
+    trackEvent("demo_tour_offered", {});
+  }, [visible]);
+
+  if (!visible) return null;
+
+  const dismiss = (how: "close" | "explore") => {
+    trackEvent("demo_tour_toast_dismissed", { how });
+    demoSession.dismissToast();
+  };
+
+  return (
+    <DemoCorner order={2}>
+      <section
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby="demo-tour-toast-title"
+        className="rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-2xl"
+        data-testid="demo-tour-toast"
+      >
+        <div className="flex items-start gap-2">
+          <Compass className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <h2 id="demo-tour-toast-title" className="flex-1 text-sm font-semibold text-foreground">
+            Explore a forge app
+          </h2>
+          <button
+            type="button"
+            onClick={() => dismiss("close")}
+            aria-label="Dismiss"
+            className="-m-1 rounded p-1 text-muted-foreground hover:text-foreground"
+            data-testid="demo-tour-toast-close"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden="true" />
+          </button>
+        </div>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+          {FORGE_ONE_LINER} This is the console it gives every app, on sample data. Look around, or take a two-minute tour.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+          <span className="mr-auto text-xs">
+            <InstallForgeLink placement="toast" />
+          </span>
+          <button
+            type="button"
+            onClick={() => dismiss("explore")}
+            className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            data-testid="demo-tour-toast-dismiss"
+          >
+            Explore on my own
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              demoSession.dismissToast();
+              startJourney("forge", "demo");
+            }}
+            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            data-testid="demo-tour-toast-start"
+          >
+            Take the guided tour
+          </button>
+        </div>
+      </section>
+    </DemoCorner>
+  );
+}

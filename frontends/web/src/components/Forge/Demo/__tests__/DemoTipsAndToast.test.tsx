@@ -1,0 +1,227 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * Explore first (owner, 2026-11-06): the demo opens on the console, a toast
+ * offers the guided tour, and each console view shows a short tip the first
+ * time it is opened.
+ *
+ *  - The toast: start or dismiss; a dismissed toast stays dismissed for the
+ *    session; it hides while a tour is open.
+ *  - Tips: once per view per session; "Got it" closes one, "Exit tips" all;
+ *    off while the tour is open; every listed view has one, and the copy has
+ *    an agent line with a command on every tip.
+ *  - The copy never says "new in release": releases are connected, not news.
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
+
+const tracked = vi.hoisted(() => [] as { event: string; props?: Record<string, unknown> }[]);
+vi.mock("@/lib/analytics", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/analytics")>()),
+  trackEvent: (event: string, props?: Record<string, unknown>) => tracked.push({ event, props }),
+}));
+
+import { memoryTourStorage, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
+import { forgeJourney } from "@/components/Onboarding/journeys/forge";
+import { presentStep } from "@/components/Onboarding/journeys/registry";
+import { resetShellForTests } from "@/lib/shell";
+
+import { DemoTourToast } from "../DemoTourToast";
+import { demoSession, resetDemoSessionForTests } from "../demoSession";
+import { FORGE_ONE_LINER, FORGE_ONE_TOOL, FORGE_WHAT_IT_DOES } from "../demoCopy";
+import { DEMO_TIPS, DEMO_TIP_KEYS, DemoTips, demoTipKey, type DemoTipKey } from "../tips";
+
+function renderDemo(path: string) {
+  const root = createRootRoute({
+    component: () => (
+      <>
+        <Outlet />
+        <DemoTips />
+        <DemoTourToast />
+      </>
+    ),
+  });
+  const any = createRoute({ getParentRoute: () => root, path: "$", component: () => <div data-testid="page" />, validateSearch: (s: Record<string, unknown>) => s });
+  const router = createRouter({ routeTree: root.addChildren([any]), history: createMemoryHistory({ initialEntries: [path] }) });
+  render(<RouterProvider router={router} />);
+  const go = (to: string) =>
+    act(async () => {
+      await router.navigate({ href: to });
+    });
+  return { router, go };
+}
+
+const tip = () => screen.queryByTestId("demo-tip")?.getAttribute("data-tip") ?? null;
+
+beforeEach(() => {
+  resetShellForTests("demo");
+  setTourShell("forge");
+  setTourStorage(memoryTourStorage());
+  resetDemoSessionForTests();
+  tracked.length = 0;
+});
+
+afterEach(() => {
+  cleanup();
+  setTourShell(null);
+  resetShellForTests();
+});
+
+describe("the tour toast", () => {
+  it("offers the tour on arrival, without starting it", async () => {
+    const { router } = renderDemo("/forge/demo");
+    expect(await screen.findByTestId("demo-tour-toast")).toHaveTextContent("Take the guided tour");
+    expect((router.state.location.search as { tour?: string }).tour).toBeUndefined();
+    expect(tracked.filter((t) => t.event === "demo_tour_offered")).toHaveLength(1);
+  });
+
+  it("starts the forge journey, and is gone for the session", async () => {
+    const { router } = renderDemo("/forge/demo");
+    fireEvent.click(await screen.findByTestId("demo-tour-toast-start"));
+    await waitFor(() => expect((router.state.location.search as { tour?: string }).tour).toBe("forge:fg-intro"));
+    expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
+    expect(demoSession.get().toastDismissed).toBe(true);
+  });
+
+  it("stays dismissed for the session once dismissed, across remounts", async () => {
+    renderDemo("/forge/demo");
+    fireEvent.click(await screen.findByTestId("demo-tour-toast-dismiss"));
+    expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
+    expect(window.sessionStorage.getItem("forge-demo.session.v1")).toContain('"toastDismissed":true');
+    cleanup();
+    renderDemo("/forge/demo?view=traces");
+    await screen.findByTestId("page");
+    expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
+  });
+
+  it("the close button dismisses it too", async () => {
+    renderDemo("/forge/demo");
+    fireEvent.click(await screen.findByTestId("demo-tour-toast-close"));
+    expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
+    expect(demoSession.get().toastDismissed).toBe(true);
+  });
+
+  it("never shows over an open tour, and an open tour answers the offer", async () => {
+    renderDemo("/forge/demo?view=traces&tour=forge:fg-trace");
+    await screen.findByTestId("page");
+    expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
+    expect(demoSession.get().toastDismissed).toBe(true);
+  });
+});
+
+describe("the view tips", () => {
+  it("names a tip for every view the owner listed, on the demo console and at the console's real paths", () => {
+    const cases: [string, Record<string, unknown>, DemoTipKey | null][] = [
+      ["/forge/demo", {}, "overview"],
+      ["/forge/demo", { view: "traces" }, "traces"],
+      ["/forge/demo", { view: "traces", trace: "abc" }, "trace"],
+      ["/forge/demo", { view: "logs" }, "logs"],
+      ["/forge/demo", { view: "profiles" }, "profiles"],
+      ["/forge/demo", { view: "errors" }, "errors"],
+      ["/forge/demo", { view: "dashboards" }, "dashboards"],
+      ["/forge/demo", { view: "alerts" }, "alerts"],
+      ["/forge/demo", { section: "built" }, null],
+      ["/forge/p/shop", {}, "overview"],
+      ["/forge/p/shop/releases", {}, "releases"],
+      ["/forge/p/shop/releases/v1.8.3", {}, "releases"],
+      ["/forge/p/shop/environments", {}, "environments"],
+      ["/forge/p/shop/environments/prod", {}, "environments"],
+      ["/forge/p/shop/secrets", {}, "secrets"],
+      ["/forge/p/shop/domains", {}, "domains"],
+      ["/forge/p/shop/observability/traces", { trace: "abc" }, "trace"],
+      ["/forge/p/shop/observability/errors", {}, "errors"],
+      ["/forge/p/shop/observability/dashboards/release/abc", {}, "dashboards"],
+      ["/forge/p/shop/activity", {}, null],
+    ];
+    for (const [path, search, key] of cases) expect(demoTipKey(path, search), `${path} ${JSON.stringify(search)}`).toBe(key);
+    expect(new Set(cases.map(([, , key]) => key).filter(Boolean))).toEqual(new Set(DEMO_TIP_KEYS));
+  });
+
+  it("shows each view's tip once per session", async () => {
+    const { go } = renderDemo("/forge/demo?view=traces");
+    await waitFor(() => expect(tip()).toBe("traces"));
+    await go("/forge/demo?view=logs");
+    await waitFor(() => expect(tip()).toBe("logs"));
+    // Back to a view whose tip was shown: nothing, even though it was never dismissed.
+    await go("/forge/demo?view=traces");
+    await waitFor(() => expect(tip()).toBeNull());
+    await go("/forge/p/shop/releases");
+    await waitFor(() => expect(tip()).toBe("releases"));
+    cleanup();
+    // A remount in the same session remembers.
+    renderDemo("/forge/demo?view=logs");
+    await screen.findByTestId("page");
+    expect(tip()).toBeNull();
+    expect(tracked.filter((t) => t.event === "demo_tip_shown").map((t) => t.props?.tip)).toEqual(["traces", "logs", "releases"]);
+  });
+
+  it("Got it closes this tip; the next view still gets its own", async () => {
+    const { go } = renderDemo("/forge/demo?view=errors");
+    fireEvent.click(await screen.findByTestId("demo-tip-dismiss"));
+    expect(tip()).toBeNull();
+    await go("/forge/p/shop/secrets");
+    await waitFor(() => expect(tip()).toBe("secrets"));
+  });
+
+  it("Exit tips turns every tip off for the session", async () => {
+    const { go } = renderDemo("/forge/demo?view=errors");
+    fireEvent.click(await screen.findByTestId("demo-tips-exit"));
+    expect(tip()).toBeNull();
+    await go("/forge/p/shop/domains");
+    await screen.findByTestId("page");
+    expect(tip()).toBeNull();
+    expect(demoSession.get().tipsDisabled).toBe(true);
+  });
+
+  it("stays out of the guided tour's way, and marks nothing shown meanwhile", async () => {
+    const { go } = renderDemo("/forge/demo?view=traces&tour=forge:fg-trace");
+    await screen.findByTestId("page");
+    expect(tip()).toBeNull();
+    expect(demoSession.hasSeenTip("traces")).toBe(false);
+    await go("/forge/demo?view=traces");
+    await waitFor(() => expect(tip()).toBe("traces"));
+  });
+
+  it("sits with the toast in one corner stack, the tip above it", async () => {
+    renderDemo("/forge/demo");
+    await screen.findByTestId("demo-tour-toast");
+    await waitFor(() => expect(tip()).toBe("overview"));
+    const corner = document.getElementById("forge-demo-corner")!;
+    const [tipSlot, toastSlot] = [screen.getByTestId("demo-tip").parentElement!, screen.getByTestId("demo-tour-toast").parentElement!];
+    expect(tipSlot.parentElement).toBe(corner);
+    expect(toastSlot.parentElement).toBe(corner);
+    expect(Number(tipSlot.style.order)).toBeLessThan(Number(toastSlot.style.order));
+  });
+});
+
+describe("the demo's copy", () => {
+  const forbidden = /new in (release|v\d)/i;
+
+  it("gives every tip a title, a body, and an agent line that names a forge command", () => {
+    for (const key of DEMO_TIP_KEYS) {
+      const t = DEMO_TIPS[key];
+      expect(t.title, key).toBeTruthy();
+      expect(t.body.length, key).toBeGreaterThan(40);
+      expect(t.agent.before, key).toMatch(/agent/i);
+      expect(t.agent.command, key).toMatch(/^forge (obs|env|secret|domain) /);
+    }
+  });
+
+  it("never says an error is 'new in release …'; it says forge ships the releases", async () => {
+    const strings = [FORGE_ONE_LINER, FORGE_WHAT_IT_DOES, FORGE_ONE_TOOL, ...DEMO_TIP_KEYS.flatMap((k) => [DEMO_TIPS[k].title, DEMO_TIPS[k].body, DEMO_TIPS[k].agent.after])];
+    for (const s of strings) expect(s).not.toMatch(forbidden);
+    expect(DEMO_TIPS.errors.body).toMatch(/Because forge also ships your releases/);
+    // Every tour step, rendered, in each shell.
+    for (const shell of ["forge", "reliant"] as const) {
+      setTourShell(shell);
+      for (const step of forgeJourney.steps) {
+        const shown = presentStep(step);
+        const { container, unmount } = render(<>{shown.title}{shown.description}{step.phases?.map((p, i) => <div key={i}>{p.description}</div>)}</>);
+        expect(container.textContent ?? "", `${shell} ${step.id}`).not.toMatch(forbidden);
+        unmount();
+      }
+    }
+  });
+});

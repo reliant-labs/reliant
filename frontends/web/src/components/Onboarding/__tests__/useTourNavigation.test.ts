@@ -93,6 +93,8 @@ vi.mock("../../../store/apiKeySetupStore", () => ({
   },
 }));
 
+// The workflows journey's content is registered by the Reliant shells (journeys/catalog.ts).
+import "../journeys/catalog";
 import { useTourNavigation, type TourNavigation } from "../useTourNavigation";
 import { useTourStore, __resetTourSaveScheduler } from "../../../store/tourStore";
 import { trackEvent } from "../../../lib/analytics";
