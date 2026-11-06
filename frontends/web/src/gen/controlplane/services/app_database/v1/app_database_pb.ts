@@ -191,10 +191,10 @@ export type DatabaseRow = Message<"controlplane.v1.DatabaseRow"> & {
   values: Value[];
 
   /**
-   * The 0-based indexes, into values, of the cells cut at 4 KiB. A cut
-   * cell's text also ends with a "…[truncated: N of M bytes shown]" marker.
-   * Not yet filled: the query layer counts cut cells but does not say which
-   * they are, so this is empty until it does; read the marker meanwhile.
+   * The 0-based indexes, into values, of the cells cut at 4 KiB, ascending;
+   * empty when none was. A cut cell's text also ends with a
+   * "…[truncated: N of M bytes shown]" marker, for a reader that shows the
+   * text as is.
    *
    * @generated from field: repeated int32 truncated_cells = 2;
    */
@@ -1551,7 +1551,10 @@ export const BrowseCountSchema: GenEnum<BrowseCount> = /*@__PURE__*/
  *   6. unknown database: NotFound.
  *   7. the control plane has no way to reach the database (no hosted
  *      placement, an external database it cannot dial): FailedPrecondition,
- *      reason "datasource_unreachable".
+ *      reason "datasource_unreachable". An external database is reached as
+ *      its `reach` says: "direct" by a control plane running in its cluster,
+ *      with the role's password Secret mounted into it; "port_forward" is
+ *      listed and not reachable yet.
  *   8. per-principal budget (shared with QueryDatabase): ResourceExhausted,
  *      reason "rate_limited", with Retry-After; too many reads in flight for
  *      this principal on this environment (a few, so a row page's Related
@@ -1562,7 +1565,11 @@ export const BrowseCountSchema: GenEnum<BrowseCount> = /*@__PURE__*/
  *      It is judged against the database's description, which is a read of
  *      its catalog and so runs inside the budget.
  *  10. at run time: DeadlineExceeded, reason "statement_timeout"; Unavailable
- *      when the database does not answer.
+ *      when the database does not answer. For an external database, before
+ *      anything runs: FailedPrecondition, reason "credential_missing", when
+ *      its password Secret is not mounted on this control plane, and reason
+ *      "writable_role" when the role the route names can do more than read
+ *      (the server is asked; the declaration is not trusted).
  * DescribeDatabase and BrowseTable each write ONE audit_log row per call, like
  * QueryDatabase, with the structured request, the statements as run and their
  * bound values, and the reason; a counted page runs two statements and is

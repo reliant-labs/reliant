@@ -615,10 +615,10 @@ func (x *DatabaseColumn) GetPgType() string {
 type DatabaseRow struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Values []*structpb.Value      `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
-	// The 0-based indexes, into values, of the cells cut at 4 KiB. A cut
-	// cell's text also ends with a "…[truncated: N of M bytes shown]" marker.
-	// Not yet filled: the query layer counts cut cells but does not say which
-	// they are, so this is empty until it does; read the marker meanwhile.
+	// The 0-based indexes, into values, of the cells cut at 4 KiB, ascending;
+	// empty when none was. A cut cell's text also ends with a
+	// "…[truncated: N of M bytes shown]" marker, for a reader that shows the
+	// text as is.
 	TruncatedCells []int32 `protobuf:"varint,2,rep,packed,name=truncated_cells,json=truncatedCells,proto3" json:"truncated_cells,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
