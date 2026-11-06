@@ -82,7 +82,7 @@ type OutputSubscription struct {
 type BackgroundProcess struct {
 	ID         string     `json:"id"`
 	Command    string     `json:"command"`
-	Status     string     `json:"status"` // running, completed, failed, killed, killed_externally
+	Status     string     `json:"status"` // running, completed, failed, killed, killed_externally, stale
 	StartTime  time.Time  `json:"start_time"`
 	EndTime    *time.Time `json:"end_time,omitempty"`
 	ExitCode   *int       `json:"exit_code,omitempty"`
