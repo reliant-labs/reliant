@@ -13,7 +13,10 @@
 // the demo has no sample data for), which is a content gap, not a failure.
 //
 // CHROME: PLAYWRIGHT_CHROMIUM_EXECUTABLE (default /usr/bin/google-chrome).
+// SCREENSHOT_DIR=<dir> saves each page as <dir>/<path>.png.
 
+import fs from "node:fs";
+import nodePath from "node:path";
 import { chromium } from "playwright";
 
 const base = (process.argv[2] ?? "http://127.0.0.1:4173").replace(/\/$/, "");
@@ -68,6 +71,11 @@ try {
     const unavailable = (text.match(/Sample data isn't available/g) ?? []).length;
     if (path === "/" && landed.pathname !== "/forge/demo") problems.push(`/ landed on ${landed.pathname}, not /forge/demo`);
     if (!(await page.locator("[data-shell='demo']").count())) problems.push("no [data-shell=demo] root");
+    if (process.env.SCREENSHOT_DIR) {
+      fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
+      const name = path === "/" ? "root" : path.replace(/^\//, "").replace(/\//g, "_");
+      await page.screenshot({ path: nodePath.join(process.env.SCREENSHOT_DIR, `${name}.png`) });
+    }
     console.log(`${problems.length ? "FAIL" : "ok  "} ${path} → ${landed.pathname}${landed.search}${unavailable ? `  (${unavailable}× sample data unavailable)` : ""}`);
     for (const p of problems) console.log(`       ${p}`);
     failures.push(...problems.map((p) => `${path}: ${p}`));
