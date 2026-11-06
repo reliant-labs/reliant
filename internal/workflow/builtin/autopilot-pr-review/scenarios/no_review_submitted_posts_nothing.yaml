@@ -30,6 +30,6 @@ events:
       model: test-model
       tool_calls: []
 expect:
-  outcome: completed
+  outcome: failed
   completed: [review, no_review]
   not_reached: [decide, post, posted]

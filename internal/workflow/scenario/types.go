@@ -121,7 +121,9 @@ const (
 	OutcomeCompleted ExpectedOutcome = "completed"
 	// OutcomeError means the workflow terminated with an error.
 	OutcomeError ExpectedOutcome = "error"
-	// OutcomeFailed means the workflow failed (distinct from error - e.g., validation failure).
+	// OutcomeFailed means the workflow ran its graph to the end without an
+	// error but the graph declared the run failed: it reached a terminal node
+	// with `outcome: failure` (ExecutionDetails.OutcomeNode names it).
 	OutcomeFailed ExpectedOutcome = "failed"
 )
 
@@ -414,6 +416,7 @@ type ExecutionDetails struct {
 	NodesSkipped    []string                          `json:"nodes_skipped,omitempty"`   // Nodes skipped due to false conditions
 	NodeStates      map[string]NodeExecutionState     `json:"node_states,omitempty"`     // Explicit state for each node
 	Outcome         string                            `json:"outcome"`                   // "completed", "error", or "failed"
+	OutcomeNode     string                            `json:"outcome_node,omitempty"`    // For "failed": the terminal node declaring outcome: failure
 	Error           *ErrorDetails                     `json:"error,omitempty"`
 	DurationMs      int64                             `json:"duration_ms"`
 	NodeOutputs     map[string]map[string]interface{} `json:"node_outputs,omitempty"`     // Actual outputs from each node

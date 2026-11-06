@@ -35,7 +35,7 @@ events:
   - node: issue_comment_failed
     output: {"is_error": false, "data": {"id": 9}}
 expect:
-  outcome: completed
+  outcome: failed
   completed: [brief]
   node_outputs:
     brief:

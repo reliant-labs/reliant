@@ -34,7 +34,7 @@ events:
       tool_results: []
       thread_token_count: 100
 expect:
-  outcome: completed
+  outcome: failed
   reached:
     - build_app
     - stuck

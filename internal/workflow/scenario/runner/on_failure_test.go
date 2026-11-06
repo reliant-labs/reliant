@@ -126,7 +126,7 @@ func TestOnFailure_RunsForADeclaredFailureOutcome(t *testing.T) {
 	res := runYAMLScenario(t, onFailureOutcomeYAML, &scenario.Scenario{
 		Name: "verdict",
 		Expect: &scenario.Expectation{
-			Outcome: "completed",
+			Outcome: "failed",
 			OnFailure: &scenario.OnFailureExpectation{
 				Ran: boolPtr(true), NodeID: "gave_up", ErrorCode: "outcome",
 			},
