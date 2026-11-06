@@ -100,7 +100,8 @@ func TestRunStep_LongNodeOutlivesTheModelCap(t *testing.T) {
 	t.Run("run node with timeout 2h is not killed at 10 minutes", func(t *testing.T) {
 		run := NewRemoteRunExecutor(remote)
 		run.SetContext(RunExecutorContext{UserID: "u", ChatID: "c", ProjectID: "p", ProjectPath: dir})
-		stdout, stderr, exitCode, _, err := run.ExecuteCommand(context.Background(), command, dir, nodeTimeoutMs, nil)
+		result, err := run.ExecuteCommand(context.Background(), command, dir, nodeTimeoutMs, nil)
+		stdout, stderr, exitCode := result.Stdout, result.Stderr, result.ExitCode
 		require.NoError(t, err)
 		assert.Equal(t, 0, exitCode, "the step was stopped: stderr %q", stderr)
 		assert.Contains(t, stdout, "finished", "the command did not run to completion")
@@ -161,7 +162,8 @@ func TestRunStep_LongNodeOutlivesTheModelCap(t *testing.T) {
 		run := NewRemoteRunExecutor(remote)
 		run.SetContext(RunExecutorContext{UserID: "u", ChatID: "c", ProjectID: "p", ProjectPath: dir})
 		// A 2-minute node (0.12s here) running the "12-minute" command.
-		_, stderr, exitCode, _, err := run.ExecuteCommand(context.Background(), command, dir, int((2 * time.Minute).Milliseconds()), nil)
+		result, err := run.ExecuteCommand(context.Background(), command, dir, int((2 * time.Minute).Milliseconds()), nil)
+		stderr, exitCode := result.Stderr, result.ExitCode
 		require.NoError(t, err)
 		assert.Equal(t, daemon.TimeoutExitCode, exitCode)
 		assert.Contains(t, stderr, "step exceeded its 2-minute timeout")
