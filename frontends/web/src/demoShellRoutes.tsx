@@ -31,6 +31,7 @@ import { DemoTips } from './components/Forge/Demo/tips'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute, FORGE_DEMO_PATH } from './components/Forge/Demo/demoRoute'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
 import { forgeConsolePages } from './forgeConsolePages'
+import { DemoConsoleProviders } from './demoBundle/DemoConsoleProviders'
 import { JourneyTour } from './components/Onboarding/JourneyTour'
 import { PageVisitTracker } from './components/PageVisitTracker'
 import { ObsReadOnlyProvider } from './components/Forge/Observability/obsReadOnly'
@@ -92,11 +93,16 @@ export function buildDemoShellTree() {
     },
   })
 
-  // The console, unguarded: the id is the one the shared pages read by.
+  // The console, unguarded: the id is the one the shared pages read by. Its
+  // pages read the demo's Observability API from context (DemoConsoleProviders).
   const consoleLayoutRoute = createRoute({
     getParentRoute: () => rootRoute,
     id: '_authenticated',
-    component: Outlet,
+    component: () => (
+      <DemoConsoleProviders>
+        <Outlet />
+      </DemoConsoleProviders>
+    ),
   })
 
   return rootRoute.addChildren([
