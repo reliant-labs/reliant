@@ -25,11 +25,11 @@ func TestNextPressure(t *testing.T) {
 		want    bool
 	}{
 		// The incident volume: 40 GiB /dev/docker-data.
-		{"40G at 87% (5.2G free) does not assert", false, usageOf(40*GiB, 52*GiB/10), false},
-		{"40G at 90% asserts", false, usageOf(40*GiB, 4*GiB), true},
+		{"40G at 84% (6.4G free) does not assert", false, usageOf(40*GiB, 64*GiB/10), false},
+		{"40G at 85% asserts", false, usageOf(40*GiB, 6*GiB), true},
 		{"40G full asserts", false, usageOf(40*GiB, 0), true},
-		{"40G at 87% holds an asserted bit (hysteresis)", true, usageOf(40*GiB, 52*GiB/10), true},
-		{"40G at 84% clears", true, usageOf(40*GiB, 64*GiB/10), false},
+		{"40G at 82% holds an asserted bit (hysteresis)", true, usageOf(40*GiB, 72*GiB/10), true},
+		{"40G at 79% clears", true, usageOf(40*GiB, 84*GiB/10), false},
 		// The home volume that was fine all along.
 		{"157G at 21% does not assert", false, usageOf(157*GiB, 124*GiB), false},
 		// Small volumes: the 2 GiB floor.
@@ -37,8 +37,15 @@ func TestNextPressure(t *testing.T) {
 		{"10G with 2.5G free holds (clear floor is 3G)", true, usageOf(10*GiB, 25*GiB/10), true},
 		{"10G with 3.1G free clears", true, usageOf(10*GiB, 31*GiB/10), false},
 		{"1G tmpfs half empty is not permanently full", false, usageOf(1*GiB, GiB/2), false},
-		// Large volumes: the 20 GiB ceiling on the percentage rule.
-		{"1T laptop at 91% (90G free) does not assert", false, usageOf(1000*GiB, 90*GiB), false},
+		// Large volumes: 85% or under 50 GiB free, whichever comes first.
+		{"the 2026-11-06 machine: 629G at 86% asserts", false, usageOf(629*GiB, 88*GiB), true},
+		{"629G at 81% does not assert", false, usageOf(629*GiB, 120*GiB), false},
+		{"629G at 81% holds an asserted bit", true, usageOf(629*GiB, 120*GiB), true},
+		{"629G at 78% (138G free) clears", true, usageOf(629*GiB, 138*GiB), false},
+		{"2T volume at 80% (400G free) does not assert", false, usageOf(2000*GiB, 400*GiB), false},
+		{"2T volume with 45G free asserts on the free rule first", false, usageOf(2000*GiB, 45*GiB), true},
+		{"2T volume with 55G free holds until 60G free", true, usageOf(2000*GiB, 55*GiB), true},
+		{"1T laptop at 91% (90G free) asserts", false, usageOf(1000*GiB, 90*GiB), true},
 		{"1T laptop with 1.5G free asserts", false, usageOf(1000*GiB, 3*GiB/2), true},
 		{"unsized volume never asserts", false, Usage{}, false},
 		{"inodes at 96% assert with space free", false, Usage{TotalBytes: 40 * GiB, UsedBytes: 10 * GiB, FreeBytes: 30 * GiB, FilesTotal: 1000, FilesFree: 40}, true},

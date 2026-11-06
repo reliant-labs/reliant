@@ -36,22 +36,25 @@ const GiB uint64 = 1 << 30
 //     more), i.e. on exactly the 5–10 GiB docker volumes that are most at
 //     risk. A volume smaller than 8 GiB scales it to a quarter of itself, so a
 //     small tmpfs is not permanently "full".
-//   - PressureUsedFraction (90%) with PressureFreeCeiling (20 GiB): bigger
-//     volumes host bigger workloads, so they warn proportionally earlier; the
-//     ceiling keeps a 1 TB laptop at 91% (90 GB free) from raising a
-//     permanent alert — no build burst exhausts 20 GiB between two samples.
-//   - The clear thresholds sit a step below (85%, 1.5× the floor, 24 GiB),
-//     mirroring cgroupmem's 85/75 hysteresis: a cache filling and trimming
-//     around one line must not flap the banner.
+//   - PressureUsedFraction (85%) OR under PressureFreeCeiling (50 GiB) free,
+//     whichever comes first. The free rule only bites on a volume over
+//     ~333 GiB, where 15% is more than 50 GiB (lowFree): a shared cloud
+//     machine's 629 GB disk fills ~40 GB an hour under agent load, so 50 GiB
+//     is about an hour of runway, the time the reapers need to act. The old
+//     rule (90% AND under 20 GiB free) asserted that disk only at 97%, half
+//     an hour from full: on 2026-11-06 it sat at 86% with no pass hurried.
+//   - The clear thresholds sit a step below (80%, 1.5× the floor, and
+//     60 GiB or 20% free), mirroring cgroupmem's hysteresis: a cache filling
+//     and trimming around one line must not flap the banner.
 //   - Inodes: ENOSPC is also what a full inode table returns, and module
 //     caches are small-file heavy. Without this a "disk full" error next to
 //     "5 GB free" reads as a lie.
 const (
 	PressureFreeFloor         = 2 * GiB
-	PressureUsedFraction      = 0.90
-	PressureFreeCeiling       = 20 * GiB
-	PressureClearUsedFraction = 0.85
-	PressureClearFreeCeiling  = 24 * GiB
+	PressureUsedFraction      = 0.85
+	PressureFreeCeiling       = 50 * GiB
+	PressureClearUsedFraction = 0.80
+	PressureClearFreeCeiling  = 60 * GiB
 	InodePressureFraction     = 0.95
 	InodeClearFraction        = 0.90
 )
@@ -93,10 +96,18 @@ func freeFloor(total uint64) uint64 {
 	return min(PressureFreeFloor, total/4)
 }
 
+// lowFree is the free space under which a volume is short of room: ceiling,
+// or the share of the volume that the matching used fraction leaves free if
+// that is less (so on a volume under ~333 GiB the percentage alone decides).
+func lowFree(total, ceiling uint64, usedFraction float64) uint64 {
+	return min(ceiling, uint64(float64(total)*(1-usedFraction)))
+}
+
 // NextPressure is the pure hysteresis transition for one volume: assert at
-// free < floor, or used >= 90% with free < 20 GiB, or inodes >= 95%; once
-// asserted, hold until free >= 1.5×floor and (used < 85% or free >= 24 GiB)
-// and inodes < 90%. A volume with no size is never under pressure.
+// free < floor, or used >= 85%, or free < 50 GiB, or inodes >= 95%; once
+// asserted, hold until free >= 1.5×floor and used < 80% and free >= 60 GiB
+// (or 20% of a smaller volume) and inodes < 90%. A volume with no size is
+// never under pressure.
 func NextPressure(current bool, u Usage) bool {
 	if u.TotalBytes == 0 {
 		return false
@@ -104,10 +115,12 @@ func NextPressure(current bool, u Usage) bool {
 	floor := freeFloor(u.TotalBytes)
 	if current {
 		return u.FreeBytes < floor*3/2 ||
-			(u.UsedFraction() >= PressureClearUsedFraction && u.FreeBytes < PressureClearFreeCeiling) ||
+			u.UsedFraction() >= PressureClearUsedFraction ||
+			u.FreeBytes < lowFree(u.TotalBytes, PressureClearFreeCeiling, PressureClearUsedFraction) ||
 			(u.FilesTotal > 0 && u.InodeFraction() >= InodeClearFraction)
 	}
 	return u.FreeBytes < floor ||
-		(u.UsedFraction() >= PressureUsedFraction && u.FreeBytes < PressureFreeCeiling) ||
+		u.UsedFraction() >= PressureUsedFraction ||
+		u.FreeBytes < lowFree(u.TotalBytes, PressureFreeCeiling, PressureUsedFraction) ||
 		(u.FilesTotal > 0 && u.InodeFraction() >= InodePressureFraction)
 }

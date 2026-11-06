@@ -220,7 +220,7 @@ func (w *Watcher) cacheTrimConfig() CacheTrimConfig {
 }
 
 // TrimCaches is the entrypoint for a caller that needs disk space now — the
-// disk-pressure guard at 90%. It waits for any storage pass already running
+// disk-pressure guard (diskguard, from 80%). It waits for any storage pass already running
 // (the schedule's, a user's clean-up), then trims the native caches and runs
 // forge's reaper once, whatever the schedule's mode. urgent trims each native
 // cache to UrgentFactor of its budget, measures the module cache whatever its

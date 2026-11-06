@@ -419,7 +419,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=1761f6db8979a535906c5f20e6a84a8eb34222f40f64782343f1078fe61f5e20
+# forge:hash=a8e402cf901d34cf3dc88e8cd884f7d33b756ade4fb794220b4103d6f08f51a6
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -453,7 +453,7 @@ schema DaemonConfig:
     worktree_dir: str = ""
     # DevTools URL of an already-running browser for the chrome-devtools MCP
     chrome_browser_url: str = ""
-    # Disk use (percent, or off) past which the daemon reclaims space (default 90)
+    # Disk use (percent, or off) past which the daemon reclaims space (default 80)
     disk_reclaim_at: str = ""
     # Disk use (percent, or off) past which the daemon refuses heavy commands (default 95)
     disk_refuse_at: str = ""
