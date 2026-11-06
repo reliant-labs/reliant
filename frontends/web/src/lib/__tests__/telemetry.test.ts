@@ -59,7 +59,7 @@ vi.mock("../appBuild", () => ({
 import { holdLandingAttribution, LANDING_ATTRIBUTION_KEY } from "../landingAttribution";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { demoAppHost, forgeAppHost, resetShellForTests, resolveShell } from "../shell";
+import { forgeAppHost, resetShellForTests, resolveShell } from "../shell";
 import {
   buildTelemetryConfig,
   DEMO_SHELL_SERVICE_NAME,
@@ -584,9 +584,9 @@ describe("the demo host on the production config document", () => {
     OTEL_REPLAY: "true",
     OTEL_REPLAY_SAMPLE_POLICY: "new-user-funnel",
   };
-  const DEMO_KEYS = ["DEMO_APP_HOST", "DEMO_TELEMETRY", "DEMO_TOUR", "DEMO_DATA_SOURCE", "DEMO_DATA_URL"];
+  const DEMO_KEYS = ["DEMO_TELEMETRY", "DEMO_TOUR", "DEMO_DATA_SOURCE", "DEMO_DATA_URL"];
   const shellOn = (hostname: string) =>
-    resolveShell({ hostname, search: "", forgeHost: forgeAppHost(), demoHost: demoAppHost(), electron: false, storage: null });
+    resolveShell({ hostname, search: "", forgeHost: forgeAppHost(), electron: false, storage: null });
 
   it("lets a render carry every demo key, and the KCL runtime projection emits each", () => {
     // config_schema_gen.json is what control-plane's render admits keys by;
@@ -599,10 +599,9 @@ describe("the demo host on the production config document", () => {
     }
   });
 
-  it("resolves demo.reliantlabs.io to the demo shell and every other prod host as before", () => {
+  it("leaves the demo to its own build: every prod host of this bundle is Reliant or forge", () => {
     setRuntimeConfig(PROD_DOCUMENT);
-    expect(demoAppHost()).toBe("demo.reliantlabs.io");
-    expect(shellOn("demo.reliantlabs.io")).toBe("demo");
+    expect(shellOn("demo.reliantlabs.io")).toBe("reliant");
     expect(shellOn("forge.reliantlabs.io")).toBe("forge");
     expect(shellOn("app.reliantlabs.io")).toBe("reliant");
   });
@@ -617,9 +616,7 @@ describe("the demo host on the production config document", () => {
   });
 
   it("follows an override of the demo keys in the document", async () => {
-    setRuntimeConfig({ ...PROD_DOCUMENT, DEMO_APP_HOST: "https://demo.staging.test/", DEMO_TELEMETRY: "analytics" });
-    expect(shellOn("demo.staging.test")).toBe("demo");
-    expect(shellOn("demo.reliantlabs.io")).toBe("reliant");
+    setRuntimeConfig({ ...PROD_DOCUMENT, DEMO_TELEMETRY: "analytics" });
     resetShellForTests("demo");
     expect(await initTelemetry()).toBe(true);
     expect(lastConfig()).toMatchObject({ serviceName: "forge-demo", endpoint: "/_otel", replay: false });
