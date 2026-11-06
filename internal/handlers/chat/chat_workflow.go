@@ -75,14 +75,50 @@ func (s *Service) UpdateWorkflowParams(
 	// unchanged to the run: the old expansion to the full preset+default set
 	// reset a live run's model to the preset's tier on a Mode toggle, and
 	// overwrote a sub-agent's model, tools and skills with the root's preset.
-	stateUpdate, err := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, nil, req.Msg.Params)
+	params := req.Msg.Params
+	validationChat := chat
+	if threadScoped {
+		wf, err := s.deps.Repo.GetWorkflowByThread(ctx, chat.ID, *req.Msg.ThreadId)
+		if err != nil || wf == nil {
+			return nil, svcerr.FailedPrecondition("The thread's workflow is unavailable. Try again when it resumes.")
+		}
+		workflowName = wf.WorkflowName
+		// Never apply the root's preset or selection to a thread's reset or
+		// validation. Its own baseline is maintained by the runtime.
+		threadChat := *chat
+		threadChat.ID = ""
+		threadChat.SelectedPresets = nil
+		validationChat = &threadChat
+		params, err = s.resolveThreadResetParams(ctx, userID, chat, workflowName, workflowID, *req.Msg.ThreadId, params)
+		if err != nil {
+			return nil, err
+		}
+	}
+	stateUpdate, err := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, validationChat, workflowName, nil, params)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 
 	// Validate the run as it would be after the update (model selectors,
 	// required inputs) before anything is stored or signalled.
-	if validationErrors := s.launcher().ValidateStateUpdate(ctx, userID, chat, workflowName, chat.SelectedPresets, stateUpdate); len(validationErrors) > 0 {
+	var validationErrors []error
+	if threadScoped {
+		// Required thread inputs may come from node args, not schema defaults.
+		// Validate the actual thread plus the delta whenever it can answer.
+		var current map[string]interface{}
+		response, queryErr := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, workflowID, "get_thread_inputs", *req.Msg.ThreadId)
+		if queryErr == nil && response.Get(&current) == nil && current != nil {
+			for key, value := range stateUpdate {
+				current[key] = value
+			}
+			validationErrors = s.launcher().ValidateChatWorkflowInputs(ctx, userID, validationChat, workflowName, current)
+		} else {
+			validationErrors = s.launcher().ValidateStateUpdate(ctx, userID, validationChat, workflowName, nil, stateUpdate)
+		}
+	} else {
+		validationErrors = s.launcher().ValidateStateUpdate(ctx, userID, validationChat, workflowName, validationChat.SelectedPresets, stateUpdate)
+	}
+	if len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
 			errMsgs[i] = e.Error()
@@ -110,6 +146,16 @@ func (s *Service) UpdateWorkflowParams(
 		// are signalled and remembered by the run, never stored as the
 		// selection (which would hand the sub-agent's model to the next root run).
 		stateUpdate["__thread"] = *req.Msg.ThreadId
+		var resetKeys []string
+		for key, value := range req.Msg.Params {
+			if value.AsInterface() == nil {
+				resetKeys = append(resetKeys, key)
+			}
+		}
+		if len(resetKeys) > 0 {
+			sort.Strings(resetKeys)
+			stateUpdate["__reset_keys"] = resetKeys
+		}
 		if err := s.signalParamUpdate(ctx, workflowID, stateUpdate); err != nil {
 			return nil, err
 		}
