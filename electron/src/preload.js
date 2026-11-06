@@ -141,6 +141,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // (the post-sign-in reload) finds out without waiting for a poll.
   isDaemonConnected: () => ipcRenderer.invoke('daemon:is-connected'),
 
+  // Only the current instance's public registry id; no credential or path.
+  getLocalDaemonId: () => ipcRenderer.invoke('daemon:get-local-id'),
+
   // Fires when the local daemon's gateway stream comes up.
   //
   // Consumers should treat this as a REFETCH TRIGGER, not as data: the daemon

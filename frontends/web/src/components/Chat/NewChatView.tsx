@@ -43,6 +43,8 @@ import {
 import { daemonLabel } from "../Automations/daemonChoices";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { NewChatProjectChip } from "./NewChatProjectChip";
+import { AttachProjectFolderDialog } from "../Projects/AttachProjectFolderDialog";
+import { useCurrentMachineStore } from "../../store/currentMachineStore";
 import { MachinePicker } from "./MachinePicker";
 import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
 import { capabilities } from "@/services/controlPlane/capabilities";
@@ -162,6 +164,7 @@ export function NewChatView({
   // list means "none".
   const canPickMachine = useCapability("chatDaemonSelection");
   const [machineChoice, setMachineChoice] = useState<ChatMachineChoice | null>(null);
+  const [attachDaemonId, setAttachDaemonId] = useState<string | null>(null);
   const awaitingBundledDaemon = useBundledDaemonPending(hasMachine(daemons));
   // The machine a new chat lands on is the one the project is installed on
   // (research/CHAT_MACHINE_PLACEMENT.md), so the picker names that one.
@@ -234,6 +237,10 @@ export function NewChatView({
     : machine === DEFAULT_MACHINE
       ? defaultDaemon?.daemonId
       : machine;
+  useEffect(() => {
+    if (isFocused) useCurrentMachineStore.getState().setCurrentMachine(runsOnDaemonId ?? null);
+  }, [isFocused, runsOnDaemonId]);
+
   // Never a send that fails: a machine the project is not set up on (or is
   // still landing on) holds the composer, and says what to do.
   const placementBlock =
@@ -560,6 +567,7 @@ export function NewChatView({
                             name: currentProject.name,
                             placement,
                             onSetUp: setUpProjectOn,
+                            onUseFolder: setAttachDaemonId,
                             describeError: describeCloneError,
                           }
                         : undefined
@@ -814,6 +822,11 @@ export function NewChatView({
         </>
       )}
 
+      {attachDaemonId && currentProject && (
+        <AttachProjectFolderDialog open project={currentProject} daemonId={attachDaemonId} lockMachine
+          onClose={() => setAttachDaemonId(null)}
+          onAttached={({ daemonId }) => handleMachineChange(daemonId)} />
+      )}
       {showAddMachine && (
         <AddMachineSheet open onClose={() => setShowAddMachine(false)} onReady={() => refreshDaemons()} />
       )}

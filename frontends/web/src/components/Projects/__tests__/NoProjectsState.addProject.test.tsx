@@ -192,11 +192,11 @@ describe("first run — failed-only daemons", () => {
     expect(screen.getByTestId("add-machine-sheet")).toBeInTheDocument();
   });
 
-  it("explains why Open a folder is unavailable instead of hiding it", async () => {
+  it("offers machine selection even when the machine needs reconnecting", async () => {
     renderFirstRun();
     const open = await screen.findByTestId("add-project-open-folder");
-    expect(open).toBeDisabled();
-    expect(open).toHaveTextContent(/connect a machine first/i);
+    expect(open).toBeEnabled();
+    expect(open).toHaveTextContent(/choose a machine/i);
   });
 });
 
