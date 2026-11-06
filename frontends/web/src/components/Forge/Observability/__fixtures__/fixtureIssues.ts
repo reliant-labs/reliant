@@ -42,6 +42,8 @@ const HOUR = 60 * MIN;
 const DAY = 24 * HOUR;
 
 export interface IssuesFixtureOptions {
+  /** The demo console's busier app: three more issues across releases (DEMO_EXTRA_ISSUES). */
+  moreIssues?: boolean;
   /** "empty": no issues. "not-configured": a control plane from before issues (Unimplemented). */
   issues?: "ok" | "empty" | "not-configured";
   /** The first triage finds the issue changed by someone else (Aborted). */
@@ -222,6 +224,91 @@ export function fixtureIssueSeeds(t0: number): Seed[] {
   ];
 }
 
+/**
+ * The demo's busier app (`moreIssues`): a payments regression that v1.8.3
+ * brought back and v1.8.4 fixed, an inventory warning that has been there
+ * for weeks, and a browser error on the product page.
+ */
+export function demoExtraIssueSeeds(t0: number): Seed[] {
+  const base = {
+    fingerprint: "",
+    exceptionType: "",
+    firstRelease: "",
+    resolvedAtMs: 0,
+    resolvedVersion: "",
+    regressedAtMs: 0,
+    ignoredUntilMs: 0,
+    mergedInto: "",
+    symbolicated: true,
+  };
+  return [
+    {
+      ...base,
+      id: "iss-payments-idempotency",
+      platform: "server",
+      envId: "env-prod",
+      envName: "prod",
+      service: "payments",
+      fingerprint: "fp-payments-idempotency",
+      title: "Charge: duplicate idempotency key reused across retries",
+      culprit: "(*Client).Charge in internal/payments/client.go",
+      exceptionType: "payments.ErrDuplicateKey",
+      status: "resolved",
+      firstSeenMs: t0 - 16 * DAY,
+      firstVersion: "v1.7.3",
+      firstRelease: "v1.7.3",
+      regressedAtMs: t0 - 38 * MIN,
+      lastSeenMs: t0 - 22 * MIN,
+      lastVersion: "v1.8.3",
+      resolvedAtMs: t0 - 18 * MIN,
+      resolvedVersion: "v1.8.4",
+      assignee: userOf(FIXTURE_USERS.ada),
+      rate: 0.4,
+      affectedShare: 0.6,
+    },
+    {
+      ...base,
+      id: "iss-inventory-lock",
+      platform: "server",
+      envId: "env-prod",
+      envName: "prod",
+      service: "inventory",
+      fingerprint: "fp-inventory-lock",
+      title: "Reserve: could not obtain lock on row in relation \"stock\"",
+      culprit: "(*Store).Reserve in internal/inventory/store.go",
+      exceptionType: "*pgconn.PgError",
+      status: "unresolved",
+      firstSeenMs: t0 - 21 * DAY,
+      firstVersion: "v1.7.3",
+      firstRelease: "v1.7.3",
+      lastSeenMs: t0 - 7 * MIN,
+      lastVersion: "v1.8.3",
+      rate: 0.8,
+      affectedShare: 0.4,
+    },
+    {
+      ...base,
+      id: "iss-product-image",
+      platform: "browser",
+      envId: "env-prod",
+      envName: "prod",
+      service: "web",
+      fingerprint: "fp-product-image",
+      title: "Error: image failed to decode: /img/espresso-grinder@2x.webp",
+      culprit: "ProductGallery in src/pages/product/Gallery.tsx",
+      exceptionType: "Error",
+      status: "new",
+      firstSeenMs: t0 - 5 * HOUR,
+      firstVersion: "v1.8.2",
+      firstRelease: "v1.8.2",
+      lastSeenMs: t0 - 3 * MIN,
+      lastVersion: "v1.8.3",
+      rate: 2.5,
+      affectedShare: 0.12,
+    },
+  ];
+}
+
 const OPEN: IssueStatus[] = ["new", "unresolved", "regressed"];
 
 /** Hourly counts over `window`, from the issue's rate, only while it was being seen. */
@@ -319,7 +406,7 @@ export function createIssuesFixture(
 ): IssuesApi {
   const t0 = now();
   const mode = options.issues ?? "ok";
-  const seeds = mode === "empty" ? [] : fixtureIssueSeeds(t0);
+  const seeds = mode === "empty" ? [] : [...fixtureIssueSeeds(t0), ...(options.moreIssues ? demoExtraIssueSeeds(t0) : [])];
   if (options.mergedIssue) {
     const merged = seeds.find((s) => s.id === "iss-checkout-total");
     if (merged) merged.mergedInto = "iss-orders-deadline";

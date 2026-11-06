@@ -25,9 +25,9 @@ import { resetShellForTests } from "@/lib/shell";
 import { controlPlaneObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { setRuntimeConfig } from "@/test/runtimeConfig";
 
-import { createFixtureApi } from "../../../Observability/__fixtures__/fixtureApi";
 import { FIXTURE_SIGNALS } from "../../../Observability/__fixtures__/fixtureSignals";
 import { createDemoApi } from "../demoApi";
+import { createDemoFixtures } from "../busyApp";
 import { getDemoDataStatus, resetDemoDataStatusForTests } from "../demoDataStatus";
 import { DEMO_SCENARIO_RPCS, splitLogQuery } from "../demoScenario";
 import { createDemoTransport, demoDataConfig, isDemoRead } from "../demoTransport";
@@ -64,7 +64,7 @@ afterEach(() => {
 });
 
 describe("the demo scenario, through the console's real client", () => {
-  const fixtures = createFixtureApi({ signals: FIXTURE_SIGNALS, graph: "shop", crossService: true });
+  const fixtures = createDemoFixtures();
   const wire = controlPlaneObservabilityApi;
 
   it("answers ListTraces, GetTrace and SearchLogs exactly as the fixtures do", async () => {

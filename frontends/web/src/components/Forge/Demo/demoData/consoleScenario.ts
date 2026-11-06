@@ -10,7 +10,8 @@
  *   shop has an api, a worker, an inventory service and a static storefront,
  *   in dev, staging and prod (env-dev / env-staging / env-prod). prod and
  *   staging run v1.8.3, the release the CreateOrder deadline issue first
- *   appeared in; dev already runs v1.8.4, the fix.
+ *   appeared in (prod got it 40 minutes ago, the observability fixtures'
+ *   ledger marker, fixtureDelivery.ts); dev already runs v1.8.4, the fix.
  *
  * Overrides only: forge's generated service defaults answer every other read
  * (demoServiceDefaults.ts); these say what shop's console is ABOUT.
@@ -66,7 +67,7 @@ export const DEMO_RELEASES = [
     commit: "9c2e41d07a3f",
     subject: "fix(orders): give the payment call its own deadline and retry budget",
     author: "maya",
-    age: 3 * HOUR,
+    age: 30 * MINUTE,
     commits: [
       {
         sha: "9c2e41d07a3f",
@@ -85,7 +86,7 @@ export const DEMO_RELEASES = [
     commit: "e7d93a2b5c18",
     subject: "feat(orders): retry the payment charge once on a timeout",
     author: "jon",
-    age: 2 * DAY,
+    age: 26 * HOUR,
     commits: [
       {
         sha: "e7d93a2b5c18",
@@ -136,15 +137,15 @@ export const DEMO_RELEASES = [
 
 /** Which release each environment runs, and when it got it. */
 const RUNNING: Record<EnvId, { version: string; age: number; by: string }> = {
-  "env-dev": { version: "v1.8.4", age: 2.5 * HOUR, by: "maya" },
-  "env-staging": { version: "v1.8.3", age: 47 * HOUR, by: "jon" },
-  "env-prod": { version: "v1.8.3", age: 46 * HOUR, by: "jon" },
+  "env-dev": { version: "v1.8.4", age: 20 * MINUTE, by: "maya" },
+  "env-staging": { version: "v1.8.3", age: 3 * HOUR, by: "jon" },
+  "env-prod": { version: "v1.8.3", age: 40 * MINUTE, by: "jon" },
 };
 
 /** Earlier promotions, newest first (beyond the one running). */
 const HISTORY: Record<EnvId, { version: string; age: number; by: string }[]> = {
   "env-dev": [
-    { version: "v1.8.3", age: 2 * DAY, by: "jon" },
+    { version: "v1.8.3", age: 26 * HOUR, by: "jon" },
     { version: "v1.8.2", age: 6 * DAY, by: "priya" },
   ],
   "env-staging": [
@@ -491,7 +492,7 @@ function activity(): MessageInitShape<typeof ActivityEventSchema>[] {
   return [
     {
       id: "act-1",
-      at: ago(2.5 * HOUR),
+      at: ago(20 * MINUTE),
       actor: user("maya"),
       verb: "promote",
       target: { kind: "release", id: "v1.8.4", label: "v1.8.4" },
@@ -501,7 +502,7 @@ function activity(): MessageInitShape<typeof ActivityEventSchema>[] {
     },
     {
       id: "act-2",
-      at: ago(3 * HOUR),
+      at: ago(30 * MINUTE),
       actor: agent,
       verb: "cut",
       target: { kind: "release", id: "v1.8.4", label: "v1.8.4" },
@@ -511,7 +512,7 @@ function activity(): MessageInitShape<typeof ActivityEventSchema>[] {
     },
     {
       id: "act-3",
-      at: ago(20 * HOUR),
+      at: ago(35 * MINUTE),
       actor: user("jon"),
       verb: "assign",
       target: {
@@ -525,7 +526,7 @@ function activity(): MessageInitShape<typeof ActivityEventSchema>[] {
     },
     {
       id: "act-4",
-      at: ago(46 * HOUR),
+      at: ago(40 * MINUTE),
       actor: user("jon"),
       verb: "promote",
       target: { kind: "release", id: "v1.8.3", label: "v1.8.3" },
@@ -535,7 +536,7 @@ function activity(): MessageInitShape<typeof ActivityEventSchema>[] {
     },
     {
       id: "act-5",
-      at: ago(47 * HOUR),
+      at: ago(3 * HOUR),
       actor: user("jon"),
       verb: "promote",
       target: { kind: "release", id: "v1.8.3", label: "v1.8.3" },

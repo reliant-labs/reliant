@@ -45,8 +45,7 @@ import {
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { AttributeOp, LogRecord, ObsScope, Severity, Span, TimeWindow, TraceRed, TraceSummary } from "@/services/controlPlane/observability/types";
 
-import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
-import { FIXTURE_SIGNALS } from "../../Observability/__fixtures__/fixtureSignals";
+import { createDemoFixtures } from "./busyApp";
 import { consoleScenarioHandlers } from "./consoleScenario";
 import { DEMO_DEFAULT_SERVICES, defaultHandlers, withMessageRequests } from "./demoServiceDefaults";
 import { scopedToDemo } from "./demoScope";
@@ -199,7 +198,7 @@ const points = (timestamps: number[], values: (number | null)[]) =>
  * sample app by default). Each handler returns a proto message (create()),
  * as a server would.
  */
-export function createDemoScenario(fixtures: ObservabilityApi = createFixtureApi({ signals: FIXTURE_SIGNALS, graph: "shop", crossService: true })): MockScenario {
+export function createDemoScenario(fixtures: ObservabilityApi = createDemoFixtures()): MockScenario {
   const handlers = {
     [DEMO_SCENARIO_RPCS.listTraces]: async (req: ListTracesRequest) => {
       const scope = modelScope(req.scope);
