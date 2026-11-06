@@ -334,6 +334,11 @@ func outcomeOfProcess(info *daemon.ProcessStatusInfo) (status core.ToolCallStatu
 		// A kill is something someone did to the process, not an error it
 		// produced: the same reading CancelToolCall gives a user's stop.
 		return core.ToolCallStatusCancelled, "background process was killed", true
+	case "stale":
+		// A record the daemon restored after a restart that lost the process
+		// (shell/background_journal.go): the same fate as an id it has no
+		// record of at all.
+		return core.ToolCallStatusCancelled, processGoneMessage, true
 	default:
 		return core.ToolCallStatusFailed, fmt.Sprintf("background process ended (%s)", info.Status), true
 	}

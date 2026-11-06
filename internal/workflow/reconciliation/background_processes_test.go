@@ -366,3 +366,13 @@ func TestReconcile_HeldRunBackgroundWorkKeepsItsMachineAwake(t *testing.T) {
 		assert.Empty(t, run(t, true, time.Now().Add(-heldRunProcessMaxAge-time.Minute), "running"))
 	})
 }
+
+// TestOutcomeOfProcess_StaleIsGone: a record a daemon restored after a restart
+// that lost its process ("stale") closes the call exactly as an id the daemon
+// has no record of does.
+func TestOutcomeOfProcess_StaleIsGone(t *testing.T) {
+	status, message, ended := outcomeOfProcess(&daemon.ProcessStatusInfo{Status: "stale"})
+	assert.True(t, ended)
+	assert.Equal(t, core.ToolCallStatusCancelled, status)
+	assert.Equal(t, processGoneMessage, message)
+}

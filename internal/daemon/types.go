@@ -353,7 +353,9 @@ type ProcessInfo struct {
 	ID string `json:"id"`
 	// Command is the command that was executed.
 	Command string `json:"command"`
-	// Status is the process state: "running", "completed", "failed", or "killed".
+	// Status is the process state: "running", "completed", "failed",
+	// "killed", "killed_externally", or "stale" (a record restored after a
+	// daemon restart that lost the process).
 	Status string `json:"status"`
 	// ExitCode is the process exit code (nil if still running).
 	ExitCode *int `json:"exit_code,omitempty"`
@@ -436,18 +438,20 @@ type ProcessStatusRequest struct {
 type ProcessStatusResponse struct {
 	// Processes holds one entry per requested id the daemon is tracking.
 	Processes []ProcessStatusInfo `json:"processes"`
-	// Unknown lists requested ids the daemon has no record of. The registry
-	// is in-memory, so a daemon that restarted has forgotten every process
-	// it started before — and the restart killed them (KillAllRunning on
-	// shutdown), so an unknown id is a process that has ended.
+	// Unknown lists requested ids the daemon has no record of. A daemon
+	// restores the records its predecessor journaled (a process lost in the
+	// restart comes back "stale"), but an older daemon, or one whose journal
+	// was pruned or unwritable, has forgotten them — and the restart killed
+	// them (KillAllRunning on shutdown), so an unknown id is a process that
+	// has ended.
 	Unknown []string `json:"unknown,omitempty"`
 }
 
 // ProcessStatusInfo is one tracked process's lifecycle state.
 type ProcessStatusInfo struct {
 	ID string `json:"id"`
-	// Status is "running", "completed", "failed", "killed" or
-	// "killed_externally".
+	// Status is "running", "completed", "failed", "killed",
+	// "killed_externally" or "stale" (restored after a restart that lost it).
 	Status   string     `json:"status"`
 	ExitCode *int       `json:"exit_code,omitempty"`
 	EndTime  *time.Time `json:"end_time,omitempty"`

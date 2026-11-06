@@ -320,6 +320,12 @@ func Start(ctx context.Context, opts StartOptions) error {
 		}
 	}()
 
+	// Background-process records outlive the daemon: restore what the last
+	// one journaled, then journal this one's (shell/background_journal.go).
+	// Only after the claim above, so a second daemon that is about to be
+	// refused never rewrites the incumbent's records.
+	installBackgroundJournal(ctx, opts.BootstrapConfig.DataDir)
+
 	client, err := newDaemonClient(opts.BootstrapConfig, opts.Host, opts.Guards, mcp.WithChromeBrowserURL(opts.ChromeBrowserURL))
 	if err != nil {
 		return err
