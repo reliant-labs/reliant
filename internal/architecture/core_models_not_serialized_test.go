@@ -20,15 +20,22 @@ import (
 // map, or as a field of another struct — would change a persisted or public
 // payload. Every consumer projects them by hand (proto messages, the dev
 // tools' own report structs); this test keeps it that way by type-checking the
-// whole module, tests included, and failing on any call to a JSON, YAML, gob
+// whole module, tests included, and failing on any call to a YAML, XML, gob
 // or protojson encoder or decoder whose argument can contain one of the three.
 // It follows aliases (db.StepExecution), pointers, slices, maps and exported
 // struct fields not tagged json:"-".
+//
+// encoding/json is not on the list: the three models implement
+// json.Marshaler/Unmarshaler in the pre-pointer shape
+// (internal/db/core/legacy_json.go, pinned by legacy_json_test.go), so a value
+// that reaches encoding/json by any path — directly, behind an interface,
+// inside a wrapper — renders the old bytes. This guard keeps the other
+// encoders, which those methods do not cover, away from them.
 
 var serializedModels = map[string]bool{"StepExecution": true, "ChatStepExecution": true, "WorkflowScenario": true}
 
 var serializerPackages = []string{
-	"encoding/json", "encoding/gob", "encoding/xml",
+	"encoding/gob", "encoding/xml",
 	"gopkg.in/yaml", "go.yaml.in/yaml", "github.com/goccy/go-yaml", "sigs.k8s.io/yaml",
 	"google.golang.org/protobuf/encoding/protojson",
 }
@@ -87,6 +94,17 @@ func TestStepAndScenarioModelsAreNeverSerialized(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// packages.Load reports a package that failed to parse or type-check in
+	// its Errors, not in err; its calls would go unchecked.
+	var loadErrs []string
+	packages.Visit(pkgs, nil, func(p *packages.Package) {
+		for _, e := range p.Errors {
+			loadErrs = append(loadErrs, p.ID+": "+e.Error())
+		}
+	})
+	if len(loadErrs) > 0 {
+		t.Fatalf("packages failed to load, so their serializer calls were not checked:\n%s", strings.Join(loadErrs, "\n"))
+	}
 
 	found := map[string]bool{}
 	checked := 0
@@ -126,6 +144,6 @@ func TestStepAndScenarioModelsAreNeverSerialized(t *testing.T) {
 			out = append(out, k)
 		}
 		sort.Strings(out)
-		t.Fatalf("core step/scenario models reach a serializer; their JSON shape is no longer the pre-pointer sql.Null* one:\n%s", strings.Join(out, "\n"))
+		t.Fatalf("core step/scenario models reach a serializer; only encoding/json keeps their pre-pointer sql.Null* shape:\n%s", strings.Join(out, "\n"))
 	}
 }
