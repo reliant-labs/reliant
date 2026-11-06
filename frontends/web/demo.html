@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <!-- The forge demo (demo.reliantlabs.io): its own build of this package,
+       entry src/main.demo.tsx. `vite build --mode demo` emits it as
+       dist-demo/index.html (vite.config.ts). -->
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="forge demo" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- viewport-fit=cover: without it every env(safe-area-inset-*) the
+         mobile surface pads with resolves to 0, and a notched phone in
+         landscape or a home-screen web app draws under the notch.
+         interactive-widget=resizes-content: Chromium 108+ and Firefox 132+
+         then shrink the LAYOUT viewport (and so 100dvh) for the on-screen
+         keyboard, so the composer stays above it with no script. WebKit
+         ignores it; MobileLayout's visualViewport pinning covers iOS and is a
+         no-op where the layout viewport already matches. Keyboard detection
+         for this case lives in src/lib/responsiveGeometry.ts. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <!-- The default UI face (Geist, Latin subset) is preloaded by the build:
+         its file name is content-hashed (vite-plugin-preload-fonts.ts). -->
+    <title>forge demo · Reliant</title>
+    <!--
+      Runtime configuration for THIS environment: config.js assigns
+      window.__FORGE_CONFIG__, which src/lib/config_gen.ts reads. A blocking,
+      classic <script> in <head>, so the global exists before the module
+      bundle evaluates (a type="module" script is deferred: too late).
+
+      This is what lets one build promote between environments: nothing is
+      inlined at build time, and each environment serves its own config.js
+      beside the bundle. The hosted SPA gets it from the control plane after
+      every sync; the desktop app from its app:// handler; a dev server from
+      public/ (`forge generate`) or FORGE_RUNTIME_CONFIG_FILE (see the
+      config file's forgeRuntimeConfig plugin). %BASE_URL% is Vite's `base`.
+      A public-dir script without type="module" is never bundled.
+    -->
+    <script src="%BASE_URL%config.js"></script>
+    <script>
+      (function(){
+        try{
+          // Load and apply theme mode (light/dark) from localStorage before React hydration
+          // Check both the canonical key and legacy key for backwards compatibility
+          var savedTheme = localStorage.getItem('appearance.theme');
+          if (savedTheme === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else if (savedTheme === 'light') {
+            document.documentElement.classList.remove('dark');
+          } else {
+            // No saved theme - use system preference
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+              document.documentElement.classList.add('dark');
+            }
+          }
+          
+          // Load and apply color scheme from localStorage. A copy of
+          // COLOR_SCHEME_ATTR and DEFAULT_COLOR_SCHEME (src/lib/forgeTokens.ts),
+          // which this bootstrap cannot import; reliantSchemeDefault.test.ts
+          // holds the copies equal. Retired ids map to their replacement.
+          var savedScheme = localStorage.getItem('appearance.colorScheme') || 'reliant';
+          var schemeMap = {
+            'reliant': 'reliant',
+            'blue': 'professional-blue',
+            'neutral': 'refined-neutral',
+            'slate': 'slate',
+            'teal': 'modern-teal',
+            'purple': 'purple-classic',
+            'pure-black': 'pure-black',
+            'black': 'reliant',
+            'forest': 'modern-teal',
+            'pink': 'purple-classic',
+            'orange': 'refined-neutral',
+            'red': 'professional-blue'
+          };
+          document.documentElement.setAttribute('data-color-scheme', schemeMap[savedScheme] || 'reliant');
+          
+          // Load and apply font settings
+          var font = localStorage.getItem('appearance.font') || 'default';
+          var chatFont = localStorage.getItem('appearance.chatFont') || 'default';
+          var editorFont = localStorage.getItem('appearance.editorFont') || 'default';
+          // Keep in sync with DEFAULT_FONT_SIZE in src/lib/rootFontSize.ts.
+          // This bootstrap cannot import it (it runs before any module loads),
+          // and a mismatch shows up as a flash of the wrong size on cold load.
+          var fontSize = localStorage.getItem('appearance.fontSize') || 'lg';
+          
+          document.documentElement.dataset.font = font;
+          document.documentElement.dataset.chatFont = chatFont;
+          document.documentElement.dataset.editorFont = editorFont;
+          
+          // The mobile surface reads two steps larger at every preference
+          // level. Tailwind's scale is rem-based, so it resolves against this
+          // value: at the 14px desktop default, `text-sm` lands at 13.1px and
+          // `text-xs` at 11.4px, against ~17px for iOS body text. That is the
+          // single biggest reason the phone UI reads as a cramped web page
+          // rather than an app.
+          //
+          // Applied here rather than in React so there is no flash of
+          // small text before hydration. MobileLayout re-applies it on
+          // client-side navigation into and out of /m/*.
+          var fontSizeMap = { xs: '12px', sm: '13px', md: '14px', lg: '15px', xl: '16px' };
+          var mobileFontSizeMap = { xs: '14px', sm: '15px', md: '16px', lg: '17px', xl: '18px' };
+          var onMobileSurface =
+            window.location.pathname === '/m' ||
+            window.location.pathname.indexOf('/m/') === 0;
+          var sizeMap = onMobileSurface ? mobileFontSizeMap : fontSizeMap;
+          // Fallback pair is the 'lg' default resolved on each surface.
+          document.documentElement.style.fontSize = sizeMap[fontSize] || (onMobileSurface ? '17px' : '15px');
+          
+          // Mark that initial theme has been applied
+          window.__THEME_APPLIED__ = true;
+        }catch(e){
+          console.error('Failed to apply initial theme:', e);
+          // Fallback to defaults
+          document.documentElement.setAttribute('data-color-scheme', 'reliant');
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.demo.tsx"></script>
+  </body>
+</html>
