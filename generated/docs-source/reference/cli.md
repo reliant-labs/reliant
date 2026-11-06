@@ -1723,8 +1723,9 @@ a flag. The environment must already exist in this project.
 
 Inviting creates the account (or grants roles to an existing one) and, for an
 account with no credential yet, issues a one-time password-set code; reset
-issues one for any account. The code is emailed only where the environment
-declares smtp in KCL ('status' shows "Mail:"). Without smtp the control plane
+issues one for any account. The code is emailed where the instance can send
+mail ('status' shows "Mail:"): the environment declares smtp in KCL, or the
+control plane's platform delivery is on. Without mail the control plane
 refuses both rather than send nothing: pass --return-code to have the code
 handed back, and deliver it yourself through a channel you control. The code is
 a credential. There is no password option, seed account or implicit recipient.
