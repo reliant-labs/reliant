@@ -119,7 +119,10 @@ func (pc *PauseController) gaveUp() error {
 //   - the step's machine never took its command within the run step's own
 //     wait (types.RunStepMachineUnavailableErrType). That wait was the retry:
 //     a pause would only hold the run, and an automation's capacity slot, for
-//     a resume nobody may send.
+//     a resume nobody may send;
+//   - the step's own config cannot run (stepConfigFailedErrType): a resume
+//     re-evaluates the same definition over the same data and fails the
+//     same way.
 //
 // Every executor's pause site asks this first.
 func (pc *PauseController) endsRunInsteadOfPausing(stepID string, err error) error {
@@ -137,6 +140,9 @@ func (pc *PauseController) endsRunInsteadOfPausing(stepID string, err error) err
 			return temporal.NewNonRetryableApplicationError(
 				fmt.Sprintf("step %s failed: %s", stepID, appErr.Message()),
 				types.RunStepMachineUnavailableErrType, nil)
+		}
+		if appErr.Type() == stepConfigFailedErrType {
+			return appErr
 		}
 		e = appErr
 	}
