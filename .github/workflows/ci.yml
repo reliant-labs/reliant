@@ -145,12 +145,18 @@ jobs:
   migration-order:
     name: Migration order
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Includes cold toolchain/module setup, not just the seconds-long check.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: ./.github/actions/setup
+        with:
+          # This standalone git/filesystem tool needs neither the full
+          # application build cache nor embedded Postgres binaries.
+          go-build-cache: "false"
+          postgres-cache: "false"
       - name: New migrations are above main's newest
         env:
           EVENT_NAME: ${{ github.event_name }}
