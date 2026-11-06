@@ -163,7 +163,6 @@ function Hops({ cli }: { cli: string }) {
         Your agent runs <code>{cli} obs trace {DEMO_TRACE_ID.slice(0, 8)}… prod</code> and reads the same waterfall as a tree, with the
         slowest path marked.
       </AgentLine>
-      <p className="mt-2">Click Reserve on inventory, near the bottom.</p>
     </>
   );
 }
@@ -178,7 +177,6 @@ function Logs({ cli }: { cli: string }) {
       <AgentLine>
         Your agent gets the same lines with <code>{cli} obs logs prod --trace &lt;id&gt;</code>.
       </AgentLine>
-      <p className="mt-2">Click Logs for this trace.</p>
     </>
   );
 }
@@ -187,7 +185,7 @@ function Issue({ cli }: { cli: string }) {
   return (
     <>
       <p>
-        Those logs show five lines from three services, ending in a deadline. forge groups errors like that one into issues. Because
+        That deadline is an error, and forge groups errors into issues. Because
         forge also ships your releases, it knows which release each error first appeared in, and which commits in that release touched the
         failing code.
       </p>
@@ -195,7 +193,6 @@ function Issue({ cli }: { cli: string }) {
         Your agent runs <code>{cli} obs issue &lt;id&gt; prod</code>: the latest event, the release it first appeared in, and the suspect
         commits.
       </AgentLine>
-      <p className="mt-2">Open CreateOrder: context deadline exceeded.</p>
     </>
   );
 }
@@ -245,11 +242,11 @@ export const forgeJourney: Journey = {
     {
       id: "fg-trace",
       title: "One request, end to end",
-      description: "Open the CreateOrder trace at the top. It's the one with an error.",
+      description: "Every request to shop is a trace, and forge recorded each one without a line of tracing code. The CreateOrder trace at the top failed.",
       target: `[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`,
       route: demo({ view: "traces", ...CLOSED }),
       advanceOn: { kind: "when", test: ({ location }) => location.search.trace === DEMO_TRACE_ID },
-      actionHint: "Open the CreateOrder trace",
+      actionHint: "Open the CreateOrder trace at the top",
       signal: "trace_opened",
     },
     {
@@ -260,7 +257,7 @@ export const forgeJourney: Journey = {
       target: `[data-testid='trace-span-row'][data-span-id='${DEMO_INVENTORY_SPAN_ID}']`,
       route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
       advanceOn: { kind: "when", test: ({ location }) => location.search.span === DEMO_INVENTORY_SPAN_ID },
-      actionHint: "Click Reserve on inventory",
+      actionHint: "Click Reserve on inventory, near the bottom",
       signal: "service_hop_opened",
     },
     {
@@ -290,10 +287,21 @@ export const forgeJourney: Journey = {
       copyByShell: { forge: { description: <Logs cli="forge" /> } },
       target: "[data-testid='trace-logs']",
       route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
+      phases: [
+        {},
+        {
+          when: { kind: "element", selector: "[data-testid='obs-logs-trace-scope']" },
+          target: "[data-testid='obs-logs-table']",
+          description:
+            "Five lines from three services: the order started, the first charge failed and was retried, the retry hit its deadline, the worker processed the order event, and inventory reserved the items.",
+        },
+      ],
       advanceOn: {
         kind: "when",
         test: ({ location }) => location.search.view === "logs" && location.search.trace === DEMO_TRACE_ID,
       },
+      // Held: the next step is on another page, and the logs this opens are the point.
+      autoAdvance: false,
       actionHint: "Click Logs for this trace",
       signal: "trace_logs_opened",
     },
@@ -301,7 +309,7 @@ export const forgeJourney: Journey = {
       id: "fg-profile",
       title: "Where the CPU went",
       description:
-        "Profiles are linked to traces, so the flamegraph shows the CPU the api spent inside this request: each bar is a function, and wider means more time. Click Flamegraph.",
+        "Profiles are linked to traces, so the flamegraph shows the CPU the api spent inside this request: each bar is a function, and wider means more time.",
       target: "[data-testid='trace-flamegraph']",
       // Back to the trace: the flamegraph button is on it.
       route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
@@ -329,7 +337,7 @@ export const forgeJourney: Journey = {
       target: `[data-testid='obs-issue-${DEMO_ISSUE_ID}']`,
       route: demo({ view: "errors", ...CLOSED }),
       advanceOn: { kind: "when", test: ({ location }) => location.search.issue === DEMO_ISSUE_ID },
-      actionHint: "Open the CreateOrder issue",
+      actionHint: "Open CreateOrder: context deadline exceeded",
       signal: "issue_opened",
     },
     {
@@ -389,7 +397,7 @@ export const forgeJourney: Journey = {
       copyByShell: {
         forge: {
           description:
-            "This issue is a good one to hand to your own agent: Claude Code, Codex or Cursor. Click Ask an agent. The prompt holds ids and forge commands, not log text, so your agent fetches the details with its own login.",
+            "This issue is a good one to hand to your own agent: Claude Code, Codex or Cursor. The prompt holds ids and forge commands, not log text, so your agent fetches the details with its own login.",
         },
       },
       route: demo({ view: "errors", issue: DEMO_ISSUE_ID, trace: undefined, span: undefined }),

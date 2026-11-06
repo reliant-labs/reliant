@@ -74,7 +74,7 @@ describe("the forge journey's compact controls", () => {
 
   it("a required action: its instruction, no Next, no Skip, and the tour moves on once it's done", async () => {
     const router = renderTour("/forge/demo?view=traces&tour=forge:fg-trace");
-    expect(await screen.findByTestId("tour-action-hint")).toHaveTextContent("Open the CreateOrder trace");
+    expect(await screen.findByTestId("tour-action-hint")).toHaveTextContent("Open the CreateOrder trace at the top");
     expect(screen.queryByTestId("tour-next")).toBeNull();
     expect(screen.queryByText("Skip step")).toBeNull();
     expect(screen.getByTestId("tour-exit")).toBeInTheDocument();

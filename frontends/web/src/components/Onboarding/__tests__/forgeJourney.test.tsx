@@ -207,7 +207,8 @@ describe("the forge journey", () => {
       expect(onFire).not.toHaveBeenCalled();
       go({ view: "logs", trace: DEMO_TRACE_ID });
       expect(onFire).toHaveBeenCalledTimes(1);
-      expect(step("fg-logs").autoAdvance).toBeUndefined();
+      // Held: the next step is on another page, and the logs it opens are the point.
+      expect(step("fg-logs").autoAdvance).toBe(false);
       watcher.dispose();
     });
 

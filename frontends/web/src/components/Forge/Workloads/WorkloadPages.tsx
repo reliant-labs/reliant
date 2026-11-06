@@ -34,6 +34,7 @@ import { promoterOf } from "../Releases/releaseModel";
 import { OverviewHome, type HostedByEnv, type OverviewHrefs, type OverviewRollback, type OverviewSearch } from "./OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch, type WorkloadRollback } from "./WorkloadDetail";
 import type { StripEnv } from "./workloadModel";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 
 /** The roster's recorded, deployed environments as the Overview's strip needs them: prod first, previews last. */
 function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
@@ -233,15 +234,16 @@ export function WorkloadPage() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["observability"] }),
   });
   const runState = useSetWorkloadRunState();
+  const lock = useObsReadOnly();
   const placed = !!live && isPlacedKind(live.kind);
   const status = useCloudEnvStatus(placed ? live!.id : null);
   const actions = useMemo<WorkloadActions>(
     () => ({
       onRestart: () => restart.mutateAsync(live!.id),
       onSetRunState: (deploymentId, state) => runState.mutateAsync({ deploymentId, state }),
-      unavailableReason: live ? actionsUnavailableReason(live.kind, envName) : null,
+      unavailableReason: lock.readOnly ? (lock.reason ?? "Read-only") : live ? actionsUnavailableReason(live.kind, envName) : null,
     }),
-    [restart, runState, live, envName]
+    [restart, runState, live, envName, lock.readOnly, lock.reason]
   );
   // Whether the render declares this workload, for an unplaced env only: the
   // declared shape is fetched for this one environment.
