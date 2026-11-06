@@ -1521,6 +1521,24 @@ ipcMain.handle("daemon:is-connected", () => {
   return backendManager ? backendManager.isDaemonConnected() : false;
 });
 
+ipcMain.handle("daemon:get-local-id", (event) => {
+  // Like the find-bar IPC, accept only a window's own webContents, never an
+  // embedded browser. Also require its main frame and the configured app
+  // origin: untrusted content must not learn the desktop's instance identity.
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || window.isDestroyed() || window.webContents !== event.sender ||
+      !event.senderFrame || event.senderFrame !== event.sender.mainFrame) return null;
+  try {
+    const caller = new URL(event.senderFrame.url);
+    const expected = new URL(app.isPackaged ? APP_ORIGIN : DEV_URL);
+    // URL.origin is "null" for custom schemes; compare protocol and host.
+    if (caller.protocol !== expected.protocol || caller.host !== expected.host) return null;
+    return backendManager ? backendManager.getLocalDaemonId() : null;
+  } catch {
+    return null;
+  }
+});
+
 ipcMain.handle("get-backend-status", () => {
   return backendManager ? backendManager.getStatus() : { isRunning: false };
 });

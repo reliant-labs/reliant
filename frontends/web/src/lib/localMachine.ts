@@ -33,19 +33,22 @@ export async function fetchLocalDaemonId(): Promise<string | null> {
 
 /**
  * The daemon id of this computer's machine, once the desktop app has said;
- * null in the browser, while asking, and when it cannot say.
+ * null in the browser, while asking, and when it cannot say. Changing
+ * `refreshKey` (e.g. reopening a mounted picker) asks the current instance again.
+ * Actions must still revalidate: a rendered answer is only a UI hint.
  */
-export function useLocalDaemonId(): string | null {
+export function useLocalDaemonId(refreshKey?: unknown): string | null {
   const [id, setId] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
+    setId(null);
     void fetchLocalDaemonId().then((next) => {
       if (live) setId(next);
     });
     return () => {
       live = false;
     };
-  }, []);
+  }, [refreshKey]);
   return id;
 }
 
