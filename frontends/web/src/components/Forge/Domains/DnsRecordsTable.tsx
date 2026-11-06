@@ -67,16 +67,32 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 /**
+ * The edge's certificate authorization is a CNAME like the routing one, so
+ * type alone cannot tell them apart. The wire carries no role for a record,
+ * so it is recognised by what Google Certificate Manager issues:
+ * `_acme-challenge_<id>.<host>` → `<id>.authorize.certificatemanager.goog`.
+ */
+export function isCertAuthorizationRecord(record: Pick<DomainDnsRecord, "type" | "name" | "value">): boolean {
+  if (record.type.toUpperCase() !== "CNAME") return false;
+  const name = record.name.toLowerCase();
+  const value = record.value.toLowerCase().replace(/\.$/, "");
+  return name.startsWith("_acme-challenge") || value.endsWith(".authorize.certificatemanager.goog");
+}
+
+/**
  * Why this particular record exists, one line each.
  *
- * Keyed by TYPE rather than by name, because the type is what the server
- * sends and what the tenant's DNS form asks for. The TXT explanation is the
- * one that earns its place: tenants routinely publish the address record,
- * skip the token, and then cannot understand why a domain that plainly
- * resolves to Reliant will not verify.
+ * Keyed by TYPE, because the type is what the server sends and what the
+ * tenant's DNS form asks for, with the one exception above. The TXT
+ * explanation is the one that earns its place: tenants routinely publish
+ * the address record, skip the token, and then cannot understand why a
+ * domain that plainly resolves to Reliant will not verify.
  */
-function purposeOf(type: string): string {
-  switch (type.toUpperCase()) {
+export function purposeOf(record: Pick<DomainDnsRecord, "type" | "name" | "value">): string {
+  if (isCertAuthorizationRecord(record)) {
+    return "Lets Google issue the TLS certificate for this host at Reliant's CDN edge. Keep it: renewals need it.";
+  }
+  switch (record.type.toUpperCase()) {
     case "A":
       return "Points the domain at Reliant's load balancer. An apex domain needs an address record because it cannot hold a CNAME.";
     case "AAAA":
@@ -162,7 +178,7 @@ const RECORD_COLUMNS: DataTableColumn<RecordRow>[] = [
     header: "Value",
     className: WRAP,
     render: (_, { record }) => {
-      const purpose = purposeOf(record.type);
+      const purpose = purposeOf(record);
       return (
         <>
           <div className="flex items-start gap-1">
