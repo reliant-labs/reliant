@@ -3,6 +3,7 @@ package automationpolicy
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 
@@ -114,6 +115,10 @@ func (m ApprovalMode) Stricter(other ApprovalMode) ApprovalMode {
 //     shell step that inherits the machine's credentials
 //   - deploy: an unattended deploy step to a production environment, where the
 //     engine can read one from a fixed command
+//   - approvals:decide (no colon-suffix): a step that calls Reliant's
+//     ApprovalService to approve or deny. Gaining it always needs a card, even
+//     under ApprovalNever, because an automation that can decide approvals can
+//     decide the ones that gate itself.
 type Capabilities map[string]bool
 
 // Add records items; empty strings are ignored.
@@ -146,6 +151,10 @@ func (c Capabilities) Widened(base Capabilities) []string {
 	sort.Strings(out)
 	return out
 }
+
+// CapabilityApprovalsDecide is held by an activation whose workflow can decide
+// approvals.
+const CapabilityApprovalsDecide = "approvals:decide"
 
 // Operation is what an agent asked to do to an activation.
 type Operation int
@@ -185,6 +194,9 @@ func Decide(mode ApprovalMode, op Operation, base, next Capabilities) ApprovalDe
 	switch {
 	case op == OperationPause:
 		d.Reason = "Pausing only reduces an activation's power; applied without a card and recorded."
+	case mode == ApprovalNever && slices.Contains(d.Added, CapabilityApprovalsDecide):
+		d.CardRequired = true
+		d.Reason = "This change lets the activation approve or deny requests (" + CapabilityApprovalsDecide + "); that always needs a card, whatever automation approvals are set to."
 	case mode == ApprovalNever:
 		d.Reason = "Automation approvals are set to never; applied without a card and recorded."
 	case mode == ApprovalAlways:
