@@ -6,6 +6,7 @@ package scenario
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
 	"sort"
 	"strings"
@@ -353,9 +354,9 @@ func outputKeys(outputs map[string]interface{}) []string {
 // is exact — every key on both sides — at nested levels; node_outputs and
 // outputs are partial only in which top-level fields they name.
 func deepEqual(expected, actual interface{}) bool {
-	if expNum, ok := toFloat64(expected); ok {
-		actNum, ok := toFloat64(actual)
-		return ok && expNum == actNum
+	if expNum, ok := asNumber(expected); ok {
+		actNum, ok := asNumber(actual)
+		return ok && expNum.equal(actNum)
 	}
 	if expMap, ok := asStringKeyedMap(expected); ok {
 		actMap, ok := asStringKeyedMap(actual)
@@ -399,40 +400,73 @@ func valueMismatch(expected, actual interface{}) string {
 	return msg
 }
 
-// toFloat64 converts any Go numeric value to float64.
-func toFloat64(v interface{}) (float64, bool) {
+// number is a Go numeric value as deepEqual compares it: an integer kind is
+// held exactly (signed and unsigned alike, so uint64 values above 2^63 and
+// int64 values above 2^53 keep every bit), a float as float64.
+type number struct {
+	isInt bool
+	i     *big.Int
+	f     float64
+}
+
+// equal compares two integers exactly, and falls back to float64 only when
+// at least one side is a float — so distinct integers past float64's exact
+// range (2^53) never collapse to the same rounded value.
+func (n number) equal(o number) bool {
+	if n.isInt && o.isInt {
+		return n.i.Cmp(o.i) == 0
+	}
+	return n.float64() == o.float64()
+}
+
+func (n number) float64() float64 {
+	if n.isInt {
+		f, _ := new(big.Float).SetInt(n.i).Float64()
+		return f
+	}
+	return n.f
+}
+
+// asNumber converts any Go numeric value to a number.
+func asNumber(v interface{}) (number, bool) {
 	switch n := v.(type) {
 	case int:
-		return float64(n), true
+		return intNumber(int64(n)), true
 	case int8:
-		return float64(n), true
+		return intNumber(int64(n)), true
 	case int16:
-		return float64(n), true
+		return intNumber(int64(n)), true
 	case int32:
-		return float64(n), true
+		return intNumber(int64(n)), true
 	case int64:
-		return float64(n), true
+		return intNumber(n), true
 	case uint:
-		return float64(n), true
+		return uintNumber(uint64(n)), true
 	case uint8:
-		return float64(n), true
+		return uintNumber(uint64(n)), true
 	case uint16:
-		return float64(n), true
+		return uintNumber(uint64(n)), true
 	case uint32:
-		return float64(n), true
+		return uintNumber(uint64(n)), true
 	case uint64:
-		return float64(n), true
+		return uintNumber(n), true
 	case float64:
-		return n, true
+		return number{f: n}, true
 	case float32:
-		return float64(n), true
+		return number{f: float64(n)}, true
 	case json.Number:
+		if i, ok := new(big.Int).SetString(string(n), 10); ok {
+			return number{isInt: true, i: i}, true
+		}
 		f, err := n.Float64()
-		return f, err == nil
+		return number{f: f}, err == nil
 	default:
-		return 0, false
+		return number{}, false
 	}
 }
+
+func intNumber(i int64) number   { return number{isInt: true, i: big.NewInt(i)} }
+func uintNumber(u uint64) number { return number{isInt: true, i: new(big.Int).SetUint64(u)} }
 
 // checkOnFailureExpectation compares an `expect.on_failure` block with what the
 // run's handler did. A workflow with no handler has nothing observed, which is

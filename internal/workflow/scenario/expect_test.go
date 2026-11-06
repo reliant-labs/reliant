@@ -2,6 +2,8 @@
 package scenario
 
 import (
+	"encoding/json"
+	"math"
 	"strings"
 	"testing"
 )
@@ -34,6 +36,33 @@ func TestNodeOutputsCompareNumbersByValueAtEveryDepth(t *testing.T) {
 	got := CheckExpectations(expect, execution)
 	if len(got) != 1 || !strings.Contains(got[0], "1751") {
 		t.Fatalf("a different number must mismatch, got %v", got)
+	}
+}
+
+// Integers compare exactly, past float64's exact-integer range (2^53): two
+// distinct large IDs must not round to the same float64 and pass. A float on
+// either side still compares by float64 value.
+func TestDeepEqualComparesIntegersExactlyAround2To53(t *testing.T) {
+	cases := []struct {
+		name             string
+		expected, actual interface{}
+		want             bool
+	}{
+		{"uint64 2^53 vs 2^53+1", uint64(9007199254740992), uint64(9007199254740993), false},
+		{"int64 2^53+1 vs uint64 2^53", int64(9007199254740993), uint64(9007199254740992), false},
+		{"int 2^53+1 vs int64 2^53+1", 9007199254740993, int64(9007199254740993), true},
+		{"uint64 max vs uint64 max-1", uint64(math.MaxUint64), uint64(math.MaxUint64 - 1), false},
+		{"int -1 vs uint64 max", -1, uint64(math.MaxUint64), false},
+		{"json.Number 2^53+1 vs uint64 2^53", json.Number("9007199254740993"), uint64(9007199254740992), false},
+		{"json.Number 2^53+1 vs int64 2^53+1", json.Number("9007199254740993"), int64(9007199254740993), true},
+		{"int 1750 vs float64 1750", 1750, float64(1750), true},
+		{"json.Number 1.5 vs float64 1.5", json.Number("1.5"), 1.5, true},
+		{"int 1 vs float64 1.5", 1, 1.5, false},
+	}
+	for _, tc := range cases {
+		if got := deepEqual(tc.expected, tc.actual); got != tc.want {
+			t.Errorf("%s: deepEqual = %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }
 
