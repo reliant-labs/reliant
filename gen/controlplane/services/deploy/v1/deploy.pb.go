@@ -7266,7 +7266,11 @@ type ReportLocalSessionRequest struct {
 	BundleDigest string `protobuf:"bytes,6,opt,name=bundle_digest,json=bundleDigest,proto3" json:"bundle_digest,omitempty"`
 	// running | stopped. `stopped` stamps stopped_at, which is what separates a
 	// clean exit from a session that merely went quiet.
-	State         string `protobuf:"bytes,7,opt,name=state,proto3" json:"state,omitempty"`
+	State string `protobuf:"bytes,7,opt,name=state,proto3" json:"state,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,8,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7346,6 +7350,13 @@ func (x *ReportLocalSessionRequest) GetBundleDigest() string {
 func (x *ReportLocalSessionRequest) GetState() string {
 	if x != nil {
 		return x.State
+	}
+	return ""
+}
+
+func (x *ReportLocalSessionRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -8855,7 +8866,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x16ceiling_cpu_millicores\x18\x06 \x01(\x03R\x14ceilingCpuMillicores\x120\n" +
 	"\x14ceiling_memory_bytes\x18\a \x01(\x03R\x12ceilingMemoryBytes\x12.\n" +
 	"\x13ceiling_storage_gib\x18\b \x01(\x03R\x11ceilingStorageGib\x121\n" +
-	"\x05holds\x18\t \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holds\"\xb7\x02\n" +
+	"\x05holds\x18\t \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holds\"\xde\x02\n" +
 	"\x19ReportLocalSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x18\n" +
@@ -8866,7 +8877,9 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"provenance\x18\x05 \x01(\v2'.controlplane.v1.DeploySourceProvenanceR\n" +
 	"provenance\x12#\n" +
 	"\rbundle_digest\x18\x06 \x01(\tR\fbundleDigest\x12\x14\n" +
-	"\x05state\x18\a \x01(\tR\x05state\"[\n" +
+	"\x05state\x18\a \x01(\tR\x05state\x12\x1a\n" +
+	"\x06org_id\x18\b \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"[\n" +
 	"\x1aReportLocalSessionResponse\x12=\n" +
 	"\asession\x18\x01 \x01(\v2#.controlplane.v1.DeployLocalSessionR\asession\"\xdc\x03\n" +
 	"\x13ImportLedgerRequest\x12\x18\n" +
@@ -9503,6 +9516,7 @@ func file_services_deploy_v1_deploy_proto_init() {
 	file_services_deploy_v1_deploy_proto_msgTypes[94].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[96].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[99].OneofWrappers = []any{}
+	file_services_deploy_v1_deploy_proto_msgTypes[101].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[103].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[111].OneofWrappers = []any{}
 	type x struct{}
