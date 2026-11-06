@@ -67,8 +67,11 @@ func TestGetAllProcesses_RefreshesPortsWithOneBatchedScan(t *testing.T) {
 	defer m.KillAllRunning()
 	waitForRunning(t, m, 3)
 
-	// Install the counters only now, so process startup is not counted.
+	// Install the counters only now, so process startup is not counted, and
+	// move past the scan waitForRunning's listings made (portScanFreshness).
 	counts := installPortScanCounters(t)
+	later := time.Now().Add(time.Minute)
+	m.clock = func() time.Time { return later }
 
 	processes := m.GetAllProcesses()
 	if len(processes) != 3 {
