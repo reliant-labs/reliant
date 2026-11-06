@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -819,5 +820,41 @@ func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 	if want := seed.SequenceNumber + int64(rivalCommits) + 1; writer.SequenceNumber != want {
 		t.Fatalf("writer sequence = %d, want %d (the number after the last rival commit's)",
 			writer.SequenceNumber, want)
+	}
+}
+
+// A user update for a chat deleted after it was read is refused by the
+// chat_id foreign key. That is a chat with nothing left to announce, not a
+// transaction failure: chatDeletedUnder recognises it, so the announcement
+// and the state-change update say so at DEBUG instead of paging.
+func TestUserUpdateForADeletedChatIsRecognised(t *testing.T) {
+	t.Parallel()
+
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	gone := "chat-deleted-under-update"
+	err := repo.CreateUserUpdate(ctx, &UserUpdate{
+		UserID:     "test-user",
+		ChatID:     &gone,
+		UpdateType: UserUpdateChatStateChange,
+		EntityType: EntityTypeChat,
+		EntityID:   gone,
+		Data:       []byte(`{}`),
+	})
+	if err == nil {
+		t.Fatal("CreateUserUpdate for a chat that does not exist succeeded; want the chat_id foreign key to refuse it")
+	}
+	if !chatDeletedUnder(err) {
+		t.Fatalf("chatDeletedUnder(%v) = false; want the chat_id foreign-key violation recognised", err)
+	}
+	var outcome TxOutcome
+	if !errors.As(err, &outcome) {
+		t.Errorf("the refusal is not a TxOutcome, so RunTx logs it as \"Transaction failed\": %v", err)
+	}
+
+	if chatDeletedUnder(errors.New("insert or update on table \"user_updates\" violates foreign key constraint")) {
+		t.Error("chatDeletedUnder matched an error with no constraint: it must read the driver's constraint name, not text")
 	}
 }

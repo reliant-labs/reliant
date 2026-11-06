@@ -41,6 +41,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // Service admits or refuses one egress call.
@@ -87,6 +89,20 @@ type LimitedError struct {
 	RetryAfter time.Duration
 	// Host is the destination, set for ScopeHostConcurrency.
 	Host string
+}
+
+// ErrorClass implements svcerr.Classed. A per-account limit is the caller's
+// own volume — ResourceExhausted, a quota — so it is a user error, logged at
+// INFO wherever it surfaces; one burst of a user's parallel fetches was an
+// ERROR issue (prod 4cd5e603). The per-host cap is shared capacity, ours, so
+// it keeps no opinion and stays a server fault.
+func (e *LimitedError) ErrorClass() svcerr.Class {
+	switch e.Scope {
+	case ScopeUserRate, ScopeUserConcurrency:
+		return svcerr.ClassUser
+	default:
+		return svcerr.ClassNone
+	}
 }
 
 // RetryAfterSeconds is RetryAfter rounded up to whole seconds, at least 1.

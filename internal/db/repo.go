@@ -1129,6 +1129,11 @@ func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
 	callerSuppliedID := update.ID != ""
 	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if err := store.AppendUserUpdate(txCtx, r.ORM(), update, callerSuppliedID); err != nil {
+			if chatDeletedUnder(err) {
+				// Not a transaction failure: the caller decides (see
+				// chatDeletedUnder).
+				return chatGoneError{err}
+			}
 			return err
 		}
 		if r.onUserUpdate != nil {
@@ -1226,7 +1231,9 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 		Data:       dataJSON,
 	}
 
-	if err := r.CreateUserUpdate(ctx, userUpdate); err != nil {
+	if err := r.CreateUserUpdate(ctx, userUpdate); chatDeletedUnder(err) {
+		logging.DebugContext(ctx, "Chat deleted before its state change was announced", "chatID", chatID, "state", state)
+	} else if err != nil {
 		// Log but don't fail - the state update succeeded
 		logging.ErrorContext(ctx, "Failed to create user update for chat state change",
 			"error", err,

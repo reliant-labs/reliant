@@ -64,14 +64,10 @@ func (s *Service) StageFiles(
 		return nil, daemonerr.Error("stage files", err)
 	}
 	if !stageResp.Success {
-		// A path git has neither on disk nor in the index — the file was
-		// deleted after the changes list showed it — is the state of the
-		// user's worktree, not a server failure. As Internal it was a browser
-		// issue per click (prod 2026-11-05, e39fe2ca: a .png that was gone).
-		if strings.Contains(stageResp.Error, "did not match any files") {
-			return nil, svcerr.FailedPrecondition(fmt.Sprintf("failed to stage files: %s", stageResp.Error))
-		}
-		return nil, svcerr.Internal(fmt.Sprintf("failed to stage files: %s", stageResp.Error))
+		// git on the user's machine refused (a pathspec the index no longer
+		// has, an index lock): the repository's state, which the user sees
+		// in git's own words — not a server fault (prod b4d12d09).
+		return nil, svcerr.FailedPrecondition(fmt.Sprintf("failed to stage files: %s", stageResp.Error))
 	}
 
 	return connect.NewResponse(&reliantv1.StageFilesResponse{
@@ -125,7 +121,8 @@ func (s *Service) UnstageFiles(
 		return nil, daemonerr.Error("unstage files", err)
 	}
 	if !unstageResp.Success {
-		return nil, svcerr.Internal(fmt.Sprintf("failed to unstage files: %s", unstageResp.Error))
+		// git refused; see StageFiles.
+		return nil, svcerr.FailedPrecondition(fmt.Sprintf("failed to unstage files: %s", unstageResp.Error))
 	}
 
 	return connect.NewResponse(&reliantv1.UnstageFilesResponse{

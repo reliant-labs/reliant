@@ -167,3 +167,19 @@ func TestError_DaemonTextKeptTransportTextRedacted(t *testing.T) {
 		}
 	})
 }
+
+// A command whose machine connection closed under it is still Unavailable on
+// the wire — the client retries, as before — but it is the other end going
+// away, not a server fault, so the RPC edge logs it below ERROR.
+func TestError_InterruptedConnectionIsTheCanceledClass(t *testing.T) {
+	interrupted := fmt.Errorf("daemon command %q failed: %w", "worktree.validate_path", toolexec.ErrDaemonConnectionInterrupted)
+	err := Error("access the worktree directory", interrupted)
+
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
+	assert.Equal(t, "access the worktree directory failed", svcerr.ToConnect(err).Message())
+	assert.Equal(t, svcerr.ClassCanceled, svcerr.Classify(err))
+	assert.True(t, errors.Is(err, toolexec.ErrDaemonConnectionInterrupted))
+
+	other := Error("access the worktree directory", errors.New("nats: connection closed"))
+	assert.Equal(t, svcerr.ClassServer, svcerr.Classify(other), "any other transport failure stays a server fault")
+}

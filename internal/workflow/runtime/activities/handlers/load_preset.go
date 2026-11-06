@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/preset"
@@ -91,7 +92,11 @@ func (a *LoadPresetParamsActivity) Execute(ctx context.Context, input LoadPreset
 	logger.Warn("[LoadPresetParams] Preset not found",
 		"preset", input.PresetName,
 		"project_id", input.ProjectID)
-	return nil, fmt.Errorf("preset not found: %s", input.PresetName)
+	// The user's: a workflow names a preset their project does not define (a
+	// renamed or deleted preset). The run fails and says so; nobody operating
+	// the server can fix it, so it is a user error, not one ERROR issue per
+	// layer it passes (prod 595d7aeb, 7781d203, 23295ad3).
+	return nil, svcerr.WithClass(fmt.Errorf("preset not found: %s", input.PresetName), svcerr.ClassUser)
 }
 
 // launchRunMachine is the machine a chat's runs execute on (launch.RunMachine,
