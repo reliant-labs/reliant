@@ -376,7 +376,8 @@ func (s *Service) GetWorkflowExecutions(
 		// Degrade to a tree with no thread metadata rather than failing the
 		// read: a partial timeline beats an error page. Logged loudly because
 		// the symptom (spawned threads rendering inline) is otherwise
-		// unattributable; each workflow also logs its own missing thread.
+		// unattributable; it explains every missing thread, so the tree does
+		// not report them again.
 		logging.ErrorContext(ctx, "[WorkflowTree] Failed to list threads; thread origin will be empty and threads without a workflow row will be missing from the timeline",
 			"error", threadsErr, "chatID", req.Msg.ChatId)
 	}
@@ -425,6 +426,7 @@ func (s *Service) GetWorkflowExecutions(
 	for _, root := range roots {
 		allRootProtos = append(allRootProtos, tree.build(root))
 	}
+	tree.reportMissingThreads(ctx, req.Msg.ChatId, threadsErr)
 
 	// The tree above can only describe threads that a workflow row points at,
 	// and that is strictly fewer than the threads which exist. Fill the gap
@@ -680,6 +682,30 @@ type workflowTreeBuilder struct {
 	forkedThreads    map[string]bool
 	childrenByParent map[string][]*db.Workflow
 	stepsByWorkflow  map[string][]*db.ChatStepExecution
+	// missingThreads is every workflow thread build found no row for.
+	missingThreads []string
+}
+
+// reportMissingThreads logs, once for the whole tree, the workflow threads
+// that had no row in the chat's thread list. A failure here is NOT cosmetic:
+// Origin is what tells the UI a thread is a spawned sub-agent, and a spawn
+// whose origin is missing renders its entire transcript inline in the parent
+// chat. Swallowing it left that looking like a frontend bug for a long time,
+// so it stays an ERROR — unless the thread list itself failed to load, which
+// was already reported and explains every miss.
+func (b *workflowTreeBuilder) reportMissingThreads(ctx context.Context, chatID string, threadsErr error) {
+	if len(b.missingThreads) == 0 || threadsErr != nil {
+		return
+	}
+	sample := b.missingThreads
+	if len(sample) > 5 {
+		sample = sample[:5]
+	}
+	logging.ErrorContext(ctx, "[WorkflowTree] Failed to load thread for workflow; Origin will be empty and spawned threads will render inline",
+		"error", fmt.Errorf("%d workflow thread(s) not found in chat, e.g. %q", len(b.missingThreads), sample),
+		"missing", len(b.missingThreads),
+		"threads", sample,
+		"chatID", chatID)
 }
 
 // build recursively builds the workflow execution tree
@@ -707,19 +733,14 @@ func (b *workflowTreeBuilder) build(wf *db.Workflow) *reliantv1.WorkflowExecutio
 		proto.Outcome = wf.Outcome
 	}
 	// Populate Origin, ForkedFromThread, ParentThread, and ThreadTitle from the
-	// Thread table (single source of truth for thread identity).
-	//
-	// A failure here is NOT cosmetic: Origin is what tells the UI a thread is a
-	// spawned sub-agent, and a spawn whose origin is missing renders its entire
-	// transcript inline in the parent chat. Swallowing the error left that
-	// looking like a frontend bug for a long time, so it is logged loudly.
+	// Thread table (single source of truth for thread identity). A missing
+	// thread is reported by reportMissingThreads.
 	thread := b.threadsByID[wf.Thread]
 	if thread == nil {
-		logging.Error("[WorkflowTree] Failed to load thread for workflow; Origin will be empty and spawned threads will render inline",
-			"error", fmt.Errorf("thread %q not found in chat", wf.Thread),
-			"workflowID", wf.ID,
-			"thread", wf.Thread,
-			"chatID", wf.ChatID)
+		// Collected and reported once per tree (see reportMissingThreads),
+		// not once per workflow: one chat whose thread list did not load was
+		// 568 ERROR events, five per request (prod 48884f4d).
+		b.missingThreads = append(b.missingThreads, wf.Thread)
 	}
 	if thread != nil {
 		if thread.ParentThreadID != nil {

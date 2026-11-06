@@ -497,11 +497,11 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			return
 		case errors.Is(err, daemonplacement.ErrForeignChat):
 			sess.end(outcomeWorkspaceNotFound, nil)
-			writeWSError(ctx, conn, "chat not found", logFields...)
+			writeWSRefusal(ctx, conn, "chat not found", logFields...)
 			return
 		case errors.Is(err, daemonplacement.ErrForeignWorkspace):
 			sess.end(outcomeWorkspaceNotFound, nil)
-			writeWSError(ctx, conn, "worktree not found", logFields...)
+			writeWSRefusal(ctx, conn, "worktree not found", logFields...)
 			return
 		case err != nil:
 			sess.end(outcomePlacementFailed, err)
@@ -882,6 +882,17 @@ func writeWSError(ctx context.Context, conn *websocket.Conn, msg string, logFiel
 	writeWSJSON(conn, wsMessage{Type: "error", Data: msg})
 }
 
+// writeWSRefusal sends the browser an error for ids the caller may not use —
+// a chat or worktree that is not theirs, or not of the project they named —
+// and logs it at INFO. It is the browser's stale context (a tab still naming a
+// worktree of another project), refused correctly; nobody operating the server
+// can act on it. As an ERROR, one user's tab retrying every few seconds was 64
+// issue events in one afternoon (prod 51be6199, 2026-11-05).
+func writeWSRefusal(ctx context.Context, conn *websocket.Conn, msg string, logFields ...any) {
+	logging.InfoContext(ctx, "[TerminalWS] Refused", append([]any{"message", msg}, logFields...)...)
+	writeWSJSON(conn, wsMessage{Type: "error", Data: msg})
+}
+
 // terminalMachineStateLogWindow bounds how often one user's terminal logs the
 // same machine state. The browser retries a terminal it could not open every
 // 10–20 s for as long as the machine is down: one user's crash-looping machine
@@ -902,17 +913,20 @@ const terminalMachineNotAnswering = "not_answering"
 //
 //   - no_machine, starting_or_asleep, not_connected (NATS had no responder):
 //     the machine is not up. The UI already shows that; it is not an error.
+//   - not_connected also covers a connection that closed while terminal.create
+//     was in flight (toolexec.ErrDaemonConnectionInterrupted): the machine
+//     dropped and is redialling, and the browser retries.
 //   - not_answering: the machine is connected — NATS delivered the request to
 //     its live subscription — but did not answer in time
-//     (toolexec.ErrDaemonTimeout). Nothing the user did explains a connected
-//     daemon that cannot open a shell, so it stays an error.
+//     (toolexec.ErrDaemonTimeout): a saturated or stuck daemon. It is a WARN
+//     (see logTerminalMachineState).
 func terminalMachineState(err error) (state string, ok bool) {
 	switch {
 	case toolexec.IsNoDaemon(err):
 		return "no_machine", true
 	case toolexec.IsDaemonPending(err):
 		return "starting_or_asleep", true
-	case daemonerr.Unreachable(err):
+	case daemonerr.Unreachable(err), errors.Is(err, toolexec.ErrDaemonConnectionInterrupted):
 		return "not_connected", true
 	case toolexec.IsDaemonTimeout(err), errors.Is(err, context.DeadlineExceeded):
 		// The second: terminalCreateTimeout ended the wait somewhere the
@@ -944,10 +958,14 @@ func terminalMachineStateCode(state string) string {
 // names one.
 //
 // A machine that is not up is INFO. A connected machine that did not answer
-// is ERROR, but it is still one machine's state, said once per window rather
-// than once per browser retry: one such machine produced 24 "[TerminalWS]
-// Error" events in five minutes (ELECTRON-CZ, 2026-10-11) — four terminals,
-// each retrying every ~62s, the 30s timeout plus the browser's backoff.
+// is WARN: it is the state of the user's machine — a daemon too busy or stuck
+// to open a shell — which the browser shows, naming the machine, and retries.
+// Nobody operating the server can act on it, and as an ERROR it was an issue
+// that never stopped firing (prod a049e56b: 81 events in a week from two
+// users' busy machines). It is still said once per window rather than once
+// per browser retry: one such machine produced 24 "[TerminalWS] Error" events
+// in five minutes (ELECTRON-CZ, 2026-10-11) — four terminals, each retrying
+// every ~62s, the 30s timeout plus the browser's backoff.
 func logTerminalMachineState(ctx context.Context, router toolexec.DaemonRouter, userID, daemonID, state string, err error, logFields []any) {
 	suppressed, ok := terminalMachineStateLog.Allow(userID + "|" + state)
 	if !ok {
@@ -960,7 +978,7 @@ func logTerminalMachineState(ctx context.Context, router toolexec.DaemonRouter, 
 		}
 	}
 	if state == terminalMachineNotAnswering {
-		logging.ErrorContext(ctx, "[TerminalWS] Machine is connected but did not answer; the browser retries", fields...)
+		logging.WarnContext(ctx, "[TerminalWS] Machine is connected but did not answer; the browser retries", fields...)
 		return
 	}
 	logging.InfoContext(ctx, "[TerminalWS] Machine not ready; the browser shows it and retries", fields...)

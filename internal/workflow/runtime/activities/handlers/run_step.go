@@ -164,9 +164,17 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 			Output:   msg,
 			ExitCode: -1,
 			Duration: time.Since(startTime).Milliseconds(),
-		}, temporal.NewNonRetryableApplicationError(
+		}, temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("activity retry detected (attempt %d): the previous attempt may have started the shell command, refusing to re-execute it", attemptNumber),
-			runStepRetryRefusedErrType, nil)
+			runStepRetryRefusedErrType, temporal.ApplicationErrorOptions{
+				NonRetryable: true,
+				// Benign: refusing is the designed at-most-once outcome, not a
+				// fault — the run pauses and says why, and the user resumes
+				// it. What ended the previous attempt was reported there.
+				// Unclassified, each refusal was an ERROR issue (prod
+				// 48b45b13).
+				Category: temporal.ApplicationErrorCategoryBenign,
+			})
 	}
 
 	// Set default timeout if not provided (5 minutes)
