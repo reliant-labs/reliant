@@ -65,6 +65,31 @@ func TestSDKGoModStandsAlone(t *testing.T) {
 	if regexp.MustCompile(`(?m)^\s*(require\s+)?github\.com/reliant-labs/reliant\s+v`).Match(mod) {
 		t.Error("go.mod requires the app module: the SDK must not depend on what depends on it")
 	}
+	if regexp.MustCompile(`(?m)^\s*(require\s+)?github\.com/reliant-labs/forge\s+v`).Match(mod) {
+		t.Error("go.mod requires forge: the SDK must depend only on connect, protobuf and protovalidate (scripts/sdk-go-gen.sh strips the forgepb import)")
+	}
+}
+
+// TestGeneratedCodeImportsNoForge: the public protos carry forge.v1 options,
+// but the generated Go must not import the forgepb package that registers
+// them: that import is what would put forge in every consumer's module graph.
+func TestGeneratedCodeImportsNoForge(t *testing.T) {
+	err := filepath.WalkDir("gen", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return err
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if bytes.Contains(b, []byte("reliant-labs/forge")) {
+			t.Errorf("%s imports forge: regenerate with scripts/sdk-go-gen.sh (the sdk-go-gen hook), which strips the forgepb import", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestSDKBuildsAsAnExternalDependency(t *testing.T) {
@@ -115,11 +140,16 @@ func TestSDKBuildsAsAnExternalDependency(t *testing.T) {
 	}
 	run("build", "-o", os.DevNull, ".")
 
-	// The app module must not be in a consumer's graph at all: the SDK is the
-	// Apache-2.0 half, and the app depends on it, not the reverse.
+	// Neither the app module nor forge may be in a consumer's graph at all:
+	// the SDK is the Apache-2.0 half, the app depends on it, not the reverse,
+	// and a consumer must be free to use any forge version (or none).
 	for _, line := range strings.Split(run("list", "-m", "all"), "\n") {
-		if mod, _, _ := strings.Cut(line, " "); mod == strings.TrimSuffix(sdkModule, "/sdk/go") {
+		mod, _, _ := strings.Cut(line, " ")
+		if mod == strings.TrimSuffix(sdkModule, "/sdk/go") {
 			t.Errorf("a consumer of the SDK pulls in the app module: %q", line)
+		}
+		if mod == "github.com/reliant-labs/forge" {
+			t.Errorf("a consumer of the SDK pulls in forge: %q", line)
 		}
 	}
 }

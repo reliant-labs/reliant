@@ -63,7 +63,7 @@ var forgeInputs = []string{
 	"proto-vendor/**", "buf.gen.controlplane.yaml", "scripts/proto-generate-atomic.sh",
 	"buf.gen.sdk-ts.yaml", "sdk/ts/src/gen/**",
 	// generate.hooks: sdk-go-gen, sdk-aliases.
-	"buf.gen.sdk-go.yaml", "tools/sdkalias/**",
+	"buf.gen.sdk-go.yaml", "scripts/sdk-go-gen.sh", "tools/sdkalias/**",
 	"tools/protoc-gen-es/package.json", "tools/protoc-gen-es/package-lock.json",
 	// generate.hooks: the go:generate outputs, the manifest schemas, and the
 	// integration projections' specs, upstream schema and catalog output.

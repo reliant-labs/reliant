@@ -137,9 +137,10 @@ generate:
           command: [scripts/proto-generate-atomic.sh, buf.gen.sdk-ts.yaml, sdk/ts/src/gen]
           writes: [sdk/ts/src/gen]
         # The Go SDK's copy of the public protos (sdk/go/gen, its own module),
-        # from buf.gen.sdk-go.yaml. Replaced wholesale, only after buf succeeds.
+        # from buf.gen.sdk-go.yaml. Replaced wholesale, only after buf succeeds;
+        # the script then strips the forgepb import so the SDK needs no forge.
         - name: sdk-go-gen
-          command: [scripts/proto-generate-atomic.sh, buf.gen.sdk-go.yaml, sdk/go/gen]
+          command: [scripts/sdk-go-gen.sh]
           writes: [sdk/go/gen]
         # The app's gen/reliant/v1 does not generate the public protos (buf.gen.yaml
         # routes them into the SDK); this re-exports the pinned SDK's package from

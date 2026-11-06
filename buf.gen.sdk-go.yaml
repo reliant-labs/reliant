@@ -1,5 +1,6 @@
 # buf.gen.sdk-go.yaml - the Go SDK's generated protobuf code (sdk/go/gen), run
-# by the `sdk-go-gen` generate hook in forge.yaml.
+# by the `sdk-go-gen` generate hook in forge.yaml (scripts/sdk-go-gen.sh, which
+# also strips the forgepb import so the SDK module needs no forge).
 #
 # The SDK (sdk/go) is its own Go module, and the published copy of the PUBLIC
 # protos: the files proto/public-api.txt exports from, plus the reliant files

@@ -94,6 +94,11 @@ Additive within `reliant.v1`. The public protos are generated into `gen/` from
 the repository's `proto/` (`buf.gen.sdk-go.yaml`, run by `forge generate`), so
 the SDK cannot drift from the server it ships with.
 
+The module depends only on connect, protobuf and protovalidate: not on forge. The
+public protos carry `forge.v1` options, and `scripts/sdk-go-gen.sh` drops the
+`forgepb` import protoc-gen-go would add for them. The options stay in the
+descriptors, undecoded; a program that links forge itself decodes them as usual.
+
 The module has no tags yet. Require it at a commit of `main`, and Go resolves
 that to a pseudo-version through the module proxy:
 
