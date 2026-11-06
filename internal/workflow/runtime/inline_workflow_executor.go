@@ -961,6 +961,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					return nil, err
 				}
 				nid := node.GetId()
+				inlineOutput = publishWorkflowNodeOutputs(e.ctx, node, inlineOutput)
 				subNodeOutputs[nid] = inlineOutput
 
 				// Execute save_message if configured on the nested workflow node
