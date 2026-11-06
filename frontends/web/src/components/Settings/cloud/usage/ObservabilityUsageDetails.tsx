@@ -4,17 +4,18 @@ import Card, { CardHeader } from "@/components/forge-ui/card";
 import DataTable from "@/components/forge-ui/data_table";
 import type { GetObservabilityStorageResponse, UsageBucket } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { useObsBillingDays, useObsBillingLimits, useObsBillingStorage, useObsLimitHistory, useUpdateObsLimits } from "@/hooks/observability-billing-queries";
-import { at, dailyTotals, day, dollars, gb, monthNow, usageCsv } from "./observabilityBillingModel";
+import { at, dailyTotals, day, dollars, ESTIMATED_SPLIT_NOTE, gb, monthNow, usageCsv } from "./observabilityBillingModel";
 import { BillingUnavailable, ObservabilityFairUse, ObservabilityLimits } from "./ObservabilityLimits";
 import { ObservabilityCollectionPolicy } from "./ObservabilityCollectionPolicy";
 
-export function ObservabilityUsageDetails({ orgId }: { orgId: string }) {
+/** estimatedSplit: the org is billing-exempt, so its per-service split is row-weighted (ESTIMATED_SPLIT_NOTE). */
+export function ObservabilityUsageDetails({ orgId, estimatedSplit = false }: { orgId: string; estimatedSplit?: boolean }) {
   const storage = useObsBillingStorage(orgId);
   const limits = useObsBillingLimits(orgId);
   const update = useUpdateObsLimits(orgId);
   const history = useObsLimitHistory(orgId);
   return <>
-    <DailyUsage orgId={orgId} />
+    <DailyUsage orgId={orgId} estimatedSplit={estimatedSplit} />
     {storage.isPending ? <Loading label="Loading stored-now snapshot…" /> : storage.error || !storage.data ? <BillingUnavailable label="Stored-now snapshot" error={storage.error} retry={() => void storage.refetch()} /> : <StorageSnapshot storage={storage.data} />}
     {limits.isPending ? <Loading label="Loading observability limits…" /> : limits.error || !limits.data ? <BillingUnavailable label="Observability limits" error={limits.error} retry={() => void limits.refetch()} /> : <>
       <ObservabilityLimits key={orgId} orgId={orgId} limits={limits.data} save={request => update.mutateAsync(request)} reload={async () => { const result = await limits.refetch(); if (result.error) throw result.error; }} />
@@ -39,7 +40,7 @@ function historyValue(resource: string, value: string) {
   return value;
 }
 export function Loading({ label }: { label: string }) { return <p role="status" className="py-4 text-sm text-muted-foreground">{label}</p>; }
-function DailyUsage({ orgId }: { orgId: string }) {
+function DailyUsage({ orgId, estimatedSplit }: { orgId: string; estimatedSplit: boolean }) {
   const [month, setMonth] = useState(monthNow);
   const days = useObsBillingDays(orgId, month);
   const buckets = days.data?.pages.flatMap(page => page.buckets) ?? [];
@@ -51,6 +52,7 @@ function DailyUsage({ orgId }: { orgId: string }) {
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
   return <Card><CardHeader title="Daily ingestion" description="Selected month's UTC ingestion by signal and service. Billable bytes include data kept free above the spend cap; the included allowance is deducted before charging." />
+    {estimatedSplit && <p className="mb-3 text-xs text-muted-foreground" data-testid="obs-daily-estimated">{ESTIMATED_SPLIT_NOTE}</p>}
     <div className="mb-4 flex flex-wrap items-center gap-3 text-sm"><label>Month <input aria-label="Usage month" type="month" className="ml-2 rounded border border-border bg-background px-2 py-1" min={earliestMonth()} max={monthNow()} value={month} onChange={e => { if (/^\d{4}-\d{2}$/.test(e.target.value)) setMonth(e.target.value); }} /></label>
       <button type="button" className="text-primary-ink underline disabled:opacity-50" disabled={days.isPending || !!days.error || days.hasNextPage || days.isFetching} onClick={exportCsv}>Download CSV</button>
     </div>

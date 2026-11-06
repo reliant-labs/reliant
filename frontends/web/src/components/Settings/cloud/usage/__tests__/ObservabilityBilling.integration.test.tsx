@@ -10,8 +10,8 @@ import { GetObservabilityUsageResponseSchema, GetObservabilityLimitsResponseSche
 const legacy = vi.hoisted(() => vi.fn(() => ({ isLoading: false, data: null, error: new Error("Legacy read failed"), refetch: vi.fn() })));
 vi.mock("@/hooks/observability-queries", () => ({ useObservabilityUsage: legacy }));
 vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({ listOrgLimitChanges: async () => ({ changes: [], nextPageToken: "" }), listEnvironments: async () => ({ environments: [] }) }) }));
-function renderUsage(failure?: Code) {
-  const get = vi.fn(async () => { if (failure) throw new ConnectError("billing read", failure); return create(GetObservabilityUsageResponseSchema, { usedBytes: 20n * 1073741824n, allowanceBytes: 10n * 1073741824n, chargedCents: 250n, unchargedBytes: 1073741824n, spendCapCents: 5000n, rateCentsPerGb: "25", state: 1 }); });
+function renderUsage(failure?: Code, exempt = false) {
+  const get = vi.fn(async () => { if (failure) throw new ConnectError("billing read", failure); return create(GetObservabilityUsageResponseSchema, { usedBytes: 20n * 1073741824n, allowanceBytes: 10n * 1073741824n, chargedCents: 250n, unchargedBytes: 1073741824n, spendCapCents: 5000n, rateCentsPerGb: "25", state: 1, exempt }); });
   const api = { getObservabilityUsage: get, getObservabilityLimits: async () => create(GetObservabilityLimitsResponseSchema), getObservabilityStorage: async () => create(GetObservabilityStorageResponseSchema), listObservabilityUsage: async () => create(ListObservabilityUsageResponseSchema), updateObservabilityLimits: vi.fn() };
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   render(<QueryClientProvider client={cache}><ObservabilityBillingApiContext.Provider value={api}><UsageView orgId="org-a" /></ObservabilityBillingApiContext.Provider></QueryClientProvider>);
@@ -25,6 +25,12 @@ describe("shared billing view", () => {
     expect(await screen.findByText(/No stored-now snapshot available/)).toBeInTheDocument();
     expect(get).toHaveBeenCalledWith({ orgId: "org-a" });
     expect(legacy).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("obs-billing-estimated")).not.toBeInTheDocument();
+  });
+  it("says a billing-exempt org's split is estimated and its totals exact", async () => {
+    renderUsage(undefined, true);
+    expect(await screen.findByTestId("obs-billing-estimated")).toHaveTextContent(/weighted by row count.*totals per signal are exact/);
+    expect(await screen.findByTestId("obs-daily-estimated")).toBeInTheDocument();
   });
   it("undeployed endpoint is explicit and legacy fallback is read-only", async () => {
     renderUsage(Code.Unimplemented);
