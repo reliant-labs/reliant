@@ -312,6 +312,9 @@ export function releaseHealthRetry(failureCount: number, error: unknown): boolea
  *   confirmation    FailedPrecondition, reason confirmation_required: the
  *                   environment is audited and the read carried no reason.
  *                   The page asks for one; never shown as a fault.
+ *   shape-unknown   FailedPrecondition, reason shape_unknown: the environment
+ *                   has recorded no release shape yet, so which databases it
+ *                   has is not known. A deploy records it.
  *   unreachable     FailedPrecondition otherwise (datasource_unreachable, no
  *                   managed database): a fact about the environment.
  *   not-found       NotFound: no such environment, database or readable table
@@ -329,6 +332,7 @@ export type DataBrowserErrorKind =
   | "not-configured"
   | "denied"
   | "confirmation"
+  | "shape-unknown"
   | "unreachable"
   | "not-found"
   | "busy"
@@ -344,7 +348,8 @@ export function dataBrowserErrorKind(error: unknown): DataBrowserErrorKind {
     case Code.Unauthenticated:
       return "denied";
     case Code.FailedPrecondition:
-      return hasErrorReason(error, "confirmation_required") ? "confirmation" : "unreachable";
+      if (hasErrorReason(error, "confirmation_required")) return "confirmation";
+      return hasErrorReason(error, "shape_unknown") ? "shape-unknown" : "unreachable";
     case Code.NotFound:
       return "not-found";
     case Code.ResourceExhausted:

@@ -96,6 +96,8 @@ export const ERROR_REASONS = [
   "confirmation_required",
   /** The control plane has no way to reach the database (no hosted placement, an undialable external database). */
   "datasource_unreachable",
+  /** The environment has not recorded what it deploys yet, so its databases (and their policy) are not known. */
+  "shape_unknown",
   /** The per-principal query budget is spent; RetryInfo / Retry-After says when to try again. */
   "rate_limited",
   /** A read from this principal is already in flight for the environment. */

@@ -58,7 +58,18 @@ export interface DataFixtureOptions {
   exactCap?: number;
   /** This many more (empty) tables with a foreign key to public.users: a long Related section. */
   extraReferences?: number;
+  /**
+   * The response-size cap, in bytes of row JSON: a page whose rows pass it is
+   * cut (at least one row), with truncated set and next_offset where it
+   * stopped. Default: none.
+   */
+  responseByteCap?: number;
+  /** Fill truncated_cells for the cells cut at 4 KiB (the server leaves it empty until forge says which). Default false. */
+  flagCutCells?: boolean;
 }
+
+/** A cell the server returns is cut at this many bytes, with a marker (forge pkg/dbquery MaxCellBytes). */
+export const FIXTURE_CELL_CAP = 4096;
 
 export interface DataFixtureApi extends DataBrowserApi {
   calls: { method: string; req: unknown }[];
@@ -67,9 +78,27 @@ export interface DataFixtureApi extends DataBrowserApi {
 
 // ── The schema ──────────────────────────────────────────────────────────────
 
-const col = (name: string, pgType: string, extra: { nullable?: boolean; pk?: boolean; comment?: string } = {}) => ({
+/**
+ * The two spellings of each type, as the server sends them: DescribeDatabase
+ * says the declared type as Postgres prints it (format_type), a BrowseTable
+ * result column the internal name. The fixture declares a column by its
+ * internal name and describes it with the printed one.
+ */
+const DESCRIBED: Record<string, string> = {
+  int4: "integer",
+  int8: "bigint",
+  text: "text",
+  varchar: "character varying(255)",
+  uuid: "uuid",
+  jsonb: "jsonb",
+  timestamptz: "timestamp with time zone",
+  _text: "text[]",
+};
+const RESULT_TYPE = new Map(Object.entries(DESCRIBED).map(([internal, described]) => [described, internal]));
+
+const col = (name: string, internalType: string, extra: { nullable?: boolean; pk?: boolean; comment?: string } = {}) => ({
   name,
-  pgType,
+  pgType: DESCRIBED[internalType] ?? internalType,
   nullable: extra.nullable ?? false,
   comment: extra.comment ?? "",
   isPrimaryKey: extra.pk ?? false,
@@ -156,7 +185,7 @@ const SPECS: TableSpec[] = [
     comment: "People who signed up.",
     columns: [
       col("id", "uuid", { pk: true }),
-      col("email", "text"),
+      col("email", "varchar"),
       col("name", "text", { nullable: true }),
       col("profile", "jsonb", { nullable: true }),
       col("tags", "_text"),
@@ -190,7 +219,7 @@ function buildRows(): Record<string, Row[]> {
     id: fixtureUserId(i),
     email: `user${i}@example.com`,
     name: i % 7 === 3 ? null : `User ${i}`,
-    profile: i % 5 === 0 ? null : { plan: i % 3 === 0 ? "team" : "solo", locale: "en-US", flags: { beta: i % 2 === 0 }, bio: i === 1 ? "A long biography ".repeat(20).trim() : "" },
+    profile: i % 5 === 0 ? null : { plan: i % 3 === 0 ? "team" : "solo", locale: "en-US", flags: { beta: i % 2 === 0 }, bio: i === 1 ? "A long biography ".repeat(20).trim() : i === 2 ? "An essay. ".repeat(600).trim() : "" },
     tags: i % 4 === 0 ? ["early", "vip"] : [],
     created_at: iso(BASE_MS + i * 86_400_000),
     deleted_at: i === 9 ? iso(BASE_MS + 30 * 86_400_000) : null,
@@ -340,7 +369,7 @@ export function createDataFixtureApi(options: DataFixtureOptions = {}): DataFixt
       try {
         if (options.delayMs) await sleep(options.delayMs, opts.signal);
         if (options.fail?.method === "browseTable") throw reasonError(options.fail.message ?? "refused", options.fail.code, options.fail.reason);
-        return browse(tables, req, options.exactCap ?? 10_000);
+        return browse(tables, req, options);
       } finally {
         inFlight--;
       }
@@ -380,13 +409,26 @@ function tablesWith(extra: number): DbTable[] {
   ];
 }
 
-function browse(tables: DbTable[], req: BrowseInput, exactCap: number): BrowsePage {
+/** A cell as the server sends it: cut at FIXTURE_CELL_CAP bytes with forge's marker, as text, when its JSON is longer. */
+function capCell(value: DbCell): { value: DbCell; cut: boolean } {
+  if (value === null || typeof value === "number" || typeof value === "boolean") return { value, cut: false };
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.length <= FIXTURE_CELL_CAP) return { value, cut: false };
+  const shown = new TextDecoder().decode(bytes.slice(0, FIXTURE_CELL_CAP));
+  return { value: `${shown}…[truncated: ${FIXTURE_CELL_CAP} of ${bytes.length} bytes shown]`, cut: true };
+}
+
+function browse(tables: DbTable[], req: BrowseInput, options: DataFixtureOptions): BrowsePage {
+  const exactCap = options.exactCap ?? 10_000;
   const table = tables.find((t) => `${t.schema}.${t.name}` === req.table);
   if (!table) throw new ConnectError(`table ${req.table} not found`, Code.NotFound);
-  const types = new Map(table.columns.map((c) => [c.name, c.pgType]));
+  // Result columns carry the internal type name, not DescribeDatabase's spelling.
+  const types = new Map(table.columns.map((c) => [c.name, RESULT_TYPE.get(c.pgType) ?? c.pgType]));
   for (const name of [...req.columns, ...req.filters.map((f) => f.column), ...req.sort.map((s) => s.column)]) {
     if (!types.has(name)) throw new ConnectError(`column ${name} is not readable in ${req.table}`, Code.InvalidArgument);
   }
+  const columns = req.columns.length > 0 ? req.columns : table.columns.map((c) => c.name);
   let rows = rowsOf(req.table).filter((row) => req.filters.every((f) => matches(row, f, types.get(f.column)!)));
   const sort = req.sort.length > 0 ? req.sort : table.primaryKey.map((column) => ({ column, desc: false }));
   if (sort.length > 0) {
@@ -404,9 +446,21 @@ function browse(tables: DbTable[], req: BrowseInput, exactCap: number): BrowsePa
       return 0;
     });
   }
-  const columns = req.columns.length > 0 ? req.columns : table.columns.map((c) => c.name);
-  const page = rows.slice(req.offset, req.offset + req.limit);
+  let page = rows.slice(req.offset, req.offset + req.limit);
   const matched = rows.length;
+  // The response-size cap: stop before the row that passes it, keeping at least one.
+  let truncated = false;
+  if (options.responseByteCap !== undefined) {
+    let bytes = 0;
+    const kept: Row[] = [];
+    for (const row of page) {
+      bytes += JSON.stringify(columns.map((name) => row[name] ?? null)).length;
+      if (kept.length > 0 && bytes > options.responseByteCap) break;
+      kept.push(row);
+    }
+    truncated = kept.length < page.length;
+    page = kept;
+  }
   let total: number | null = null;
   let totalIsEstimate = false;
   let totalIsLowerBound = false;
@@ -418,10 +472,14 @@ function browse(tables: DbTable[], req: BrowseInput, exactCap: number): BrowsePa
     total = Math.min(matched, exactCap);
     totalIsLowerBound = matched > exactCap;
   }
+  const cells = page.map((row) => columns.map((name) => capCell(row[name] ?? null)));
   return {
     columns: columns.map((name) => ({ name, pgType: types.get(name)! })),
-    rows: page.map((row) => columns.map((name) => row[name] ?? null)),
+    rows: cells.map((row) => row.map((cell) => cell.value)),
+    truncatedCells: cells.map((row) => (options.flagCutCells ? row.flatMap((cell, i) => (cell.cut ? [i] : [])) : [])),
     hasMore: req.offset + page.length < matched,
+    truncated,
+    nextOffset: req.offset + page.length,
     total,
     totalIsEstimate,
     totalIsLowerBound,

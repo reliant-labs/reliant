@@ -188,15 +188,17 @@ export function totalLabel(page: Pick<BrowsePage, "total" | "totalIsEstimate" | 
 }
 
 /**
- * A Related count from a `limit 1, count ESTIMATED` read. No row is an exact
- * zero; otherwise the estimate, but never below what the read proved (one
- * row, and more when has_more).
+ * A Related count from a `limit 1, count EXACT` read: the exact number, or
+ * the server's cap with a plus ("10,000+") when it stopped counting. A
+ * response with no total (it counted nothing) says only what the one row
+ * read proves: none, 1, or "1+".
  */
-export function relatedCountLabel(page: Pick<BrowsePage, "total" | "hasMore" | "rows">): { label: string; none: boolean } {
-  if (page.rows.length === 0) return { label: "None", none: true };
-  const proven = page.rows.length + (page.hasMore ? 1 : 0);
-  const n = Math.max(page.total ?? 0, proven);
-  return { label: !page.hasMore ? "1" : formatCount(n, { estimate: true }), none: false };
+export function relatedCountLabel(page: Pick<BrowsePage, "total" | "totalIsLowerBound" | "hasMore" | "rows">): { label: string; n: number; none: boolean } {
+  if (page.total !== null) {
+    return { label: formatCount(page.total, { lowerBound: page.totalIsLowerBound }), n: page.total, none: page.total === 0 && !page.totalIsLowerBound };
+  }
+  if (page.rows.length === 0) return { label: "0", n: 0, none: true };
+  return { label: page.hasMore ? "1+" : "1", n: page.hasMore ? 2 : 1, none: false };
 }
 
 // ── Concurrency ─────────────────────────────────────────────────────────────

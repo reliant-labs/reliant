@@ -102,6 +102,14 @@ describe("policies and empty environments", () => {
     expect(within(screen.getByTestId("data-databases")).getByTestId("data-db-analytics")).toBeDisabled();
   });
 
+  it("says an environment with no recorded release has databases not known yet, not that they are unreachable", async () => {
+    renderBrowser(createDataFixtureApi({ fail: { method: "listBrowsableDatabases", code: Code.FailedPrecondition, reason: "shape_unknown" } }), {}, STAGING);
+    const error = await screen.findByTestId("data-databases-error");
+    expect(error).toHaveAttribute("data-kind", "shape-unknown");
+    expect(error).toHaveTextContent("staging's databases aren't known yet");
+    expect(error).toHaveTextContent("reliant forge env deploy staging");
+  });
+
   it("says when an environment declares no database", async () => {
     renderBrowser(createDataFixtureApi({ noDatabases: true }), {}, STAGING);
     expect(await screen.findByTestId("data-no-databases")).toHaveTextContent("staging has no databases");

@@ -26,9 +26,9 @@ import { dataBrowserErrorKind } from "@/services/controlPlane/observability/erro
 import { cn } from "@/lib/utils";
 
 import { CONTROL_FIELD } from "../controlStyles";
-import { CellPopover, CellPreview, type OpenCell } from "./CellValue";
+import { CellPopover, CellPreview, CutMark, type OpenCell } from "./CellValue";
 import { ColumnPicker } from "./ColumnPicker";
-import { cellDisplay, isNumericType, typeLabel } from "./dataCells-model";
+import { cellDisplay, isNumericType, shortTypeLabel } from "./dataCells-model";
 import { foreignKeysOf, foreignKeyTarget, qualifiedName, rowParamOf, rowRecord, totalLabel } from "./dataLinks-model";
 import { DataError, DataLoading, DataNote } from "./DataStates";
 import {
@@ -38,11 +38,11 @@ import {
   encodeFilter,
   encodeSort,
   filtersOf,
-  lastServablePage,
   nextSort,
   offsetOf,
-  pageOf,
   pageSizeOf,
+  previousOffset,
+  servable,
   visibleColumns,
   type DataSearch,
 } from "./dataUrl-model";
@@ -88,7 +88,6 @@ export function DataGrid({ env, database, table, tables, search, access, onSearc
   const visible = visibleColumns(search, table);
   const sort = effectiveSort(search, table);
   const size = pageSizeOf(search);
-  const pageNumber = pageOf(search);
   const offset = offsetOf(search);
 
   return (
@@ -146,7 +145,7 @@ export function DataGrid({ env, database, table, tables, search, access, onSearc
           <DataLoading rows={Math.min(size, 10)} testId="data-grid-loading" label={`Loading ${name}`} />
         </div>
       ) : page.rows.length === 0 ? (
-        <EmptyPage name={name} filtered={filters.length > 0} pageNumber={pageNumber} onClearFilters={() => onSearch({ f: [] })} onFirstPage={() => onSearch({ page: undefined })} />
+        <EmptyPage name={name} filtered={filters.length > 0} offset={offset} onClearFilters={() => onSearch({ f: [] })} onFirstPage={() => onSearch({ offset: undefined })} />
       ) : (
         <>
           <GridTable
@@ -159,24 +158,23 @@ export function DataGrid({ env, database, table, tables, search, access, onSearc
             onSort={(column, additive) => onSearch({ sort: nextSort(sort, column, table, additive).map(encodeSort) })}
             linkTo={linkTo}
           />
-          {page.hasMore && page.rows.length < size && (
+          {page.truncated && (
             <p className="text-xs text-ink-muted" data-testid="data-page-cut">
-              The server cut this page at {page.rows.length} of {size} rows to keep the response small, so Next skips {size - page.rows.length}. Show fewer
-              columns, or a smaller page size, to see every row.
+              The server cut this page at {page.rows.length.toLocaleString("en-US")} of {size.toLocaleString("en-US")} rows to keep the response small. Next
+              continues from row {(page.nextOffset + 1).toLocaleString("en-US")}, so nothing is skipped; fewer columns fit more rows on a page.
             </p>
           )}
         </>
       )}
 
-      {page && (page.rows.length > 0 || pageNumber > 1) && (
+      {page && (page.rows.length > 0 || offset > 0) && (
         <Pager
           page={page}
-          pageNumber={pageNumber}
           size={size}
-          offset={offset}
           count={count}
+          stale={query.isPlaceholderData}
           onExact={() => setExactFor(countScope)}
-          onPage={(next) => onSearch({ page: next === 1 ? undefined : next })}
+          onOffset={(next) => onSearch({ offset: next })}
           onSize={(next) => onSearch({ size: next })}
         />
       )}
@@ -187,25 +185,25 @@ export function DataGrid({ env, database, table, tables, search, access, onSearc
 function EmptyPage({
   name,
   filtered,
-  pageNumber,
+  offset,
   onClearFilters,
   onFirstPage,
 }: {
   name: string;
   filtered: boolean;
-  pageNumber: number;
+  offset: number;
   onClearFilters: () => void;
   onFirstPage: () => void;
 }) {
-  if (pageNumber > 1) {
+  if (offset > 0) {
     return (
       <DataNote
         testId="data-empty-page"
         icon={<SearchX className="h-4 w-4" />}
-        title={`Nothing on page ${pageNumber}`}
+        title={`Nothing past row ${offset.toLocaleString("en-US")}`}
         actions={
           <Button variant="outline" size="sm" onClick={onFirstPage}>
-            Back to page 1
+            Back to the first rows
           </Button>
         }
       >
@@ -257,7 +255,10 @@ function GridTable({
 }) {
   const [open, setOpen] = useState<OpenCell | null>(null);
   const meta = useMemo(() => new Map(table.columns.map((c) => [c.name, c])), [table.columns]);
+  // A column's place in the result, and its RESULT type (the internal name, "int8"): what a value reads as.
+  // The header shows the DESCRIBED type ("bigint"). The two spellings are never compared.
   const index = useMemo(() => new Map(page.columns.map((c, i) => [c.name, i])), [page.columns]);
+  const resultType = (name: string) => page.columns[index.get(name)!]?.pgType ?? "";
   const shown = visible.filter((name) => index.has(name));
   const hasKey = table.primaryKey.length > 0;
   const fkColumns = useMemo(() => new Set(table.foreignKeys.flatMap((fk) => fk.columns)), [table.foreignKeys]);
@@ -285,7 +286,8 @@ function GridTable({
               const column = meta.get(name);
               const at = sort.findIndex((s) => s.column === name);
               const direction = at >= 0 ? (sort[at]!.desc ? "descending" : "ascending") : undefined;
-              const numeric = isNumericType(column?.pgType ?? "");
+              const numeric = isNumericType(resultType(name));
+              const described = column?.pgType ?? "";
               return (
                 <th
                   key={name}
@@ -296,7 +298,7 @@ function GridTable({
                   <button
                     type="button"
                     onClick={(event) => onSort(name, event.shiftKey)}
-                    title={`${column?.comment ? `${column.comment}\n` : ""}Sort by ${name}${sort.length > 0 ? " (shift-click to add)" : ""}`}
+                    title={`${name} · ${described}${column?.comment ? `\n${column.comment}` : ""}\nSort by ${name}${sort.length > 0 ? " (shift-click to add)" : ""}`}
                     className={cn(
                       "flex w-full items-center gap-1.5 px-3 py-2 hover:bg-ink/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                       numeric && "justify-end"
@@ -306,7 +308,7 @@ function GridTable({
                     {column?.isPrimaryKey && <KeyRound className="h-3 w-3 shrink-0 text-ink-muted" aria-label="primary key" />}
                     {fkColumns.has(name) && <Link2 className="h-3 w-3 shrink-0 text-ink-muted" aria-label="foreign key" />}
                     <span className="font-mono text-xs font-medium text-ink">{name}</span>
-                    <span className="font-mono text-2xs text-ink-muted">{typeLabel(column?.pgType ?? page.columns[index.get(name)!]?.pgType ?? "")}</span>
+                    <span className="font-mono text-2xs text-ink-muted">{shortTypeLabel(described)}</span>
                     {direction && (
                       <span className="inline-flex items-center text-primary-ink" aria-hidden="true">
                         {direction === "ascending" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
@@ -322,6 +324,7 @@ function GridTable({
         <tbody>
           {page.rows.map((row, rowIndex) => {
             const record = rowRecord(page.columns, row);
+            const cutCells = new Set(page.truncatedCells[rowIndex] ?? []);
             const rowParam = hasKey ? rowParamOf(table, record) : null;
             return (
               <tr key={rowParam ?? rowIndex} className="group hover:bg-ink/5" data-testid="data-row">
@@ -343,7 +346,8 @@ function GridTable({
                   <GridCell
                     key={name}
                     name={name}
-                    pgType={meta.get(name)?.pgType ?? page.columns[index.get(name)!]?.pgType ?? ""}
+                    resultType={resultType(name)}
+                    flaggedCut={cutCells.has(index.get(name)!)}
                     value={row[index.get(name)!] ?? null}
                     target={fkColumns.has(name) ? fkTarget(table, tables, name, record) : null}
                     linkTo={linkTo}
@@ -351,7 +355,9 @@ function GridTable({
                       openCell(event, {
                         key: `${rowIndex}:${name}`,
                         column: name,
-                        pgType: meta.get(name)?.pgType ?? "",
+                        resultType: resultType(name),
+                        describedType: meta.get(name)?.pgType ?? "",
+                        flaggedCut: cutCells.has(index.get(name)!),
                         value: row[index.get(name)!] ?? null,
                         ...(link ? { link } : {}),
                       })
@@ -379,24 +385,26 @@ function fkTarget(table: DbTable, tables: DbTable[], column: string, record: Rea
 
 function GridCell({
   name,
-  pgType,
+  resultType,
+  flaggedCut,
   value,
   target,
   linkTo,
   onOpen,
 }: {
   name: string;
-  pgType: string;
+  resultType: string;
+  flaggedCut: boolean;
   value: DbCell;
   target: { target: DataSearch; label: string } | null;
   linkTo: (target: DataSearch) => string;
   onOpen: (event: MouseEvent<HTMLElement>, link?: { href: string; label: string }) => void;
 }) {
-  const display = cellDisplay(value, pgType);
-  const numeric = isNumericType(pgType);
+  const display = cellDisplay(value, resultType, flaggedCut);
+  const numeric = isNumericType(resultType);
   const href = target ? linkTo(target.target) : null;
   return (
-    <td className="max-w-[24rem] border-b border-border/60 px-0 py-0 align-top" data-column={name}>
+    <td className="max-w-[24rem] border-b border-border/60 px-0 py-0 align-top" data-column={name} data-server-cut={display.serverCut ? "true" : undefined}>
       {href ? (
         <div className="flex h-8 items-center gap-1 px-3">
           <Link href={href} className="min-w-0 truncate font-mono text-xs text-primary-ink hover:underline" title={target!.label} data-testid="data-fk-link">
@@ -419,11 +427,12 @@ function GridCell({
         <button
           type="button"
           onClick={(event) => onOpen(event)}
-          aria-label={`${name}: ${display.short}`}
-          className="flex h-8 w-full min-w-0 items-center px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          aria-label={`${name}: ${display.short}${display.serverCut ? " (cut by the server)" : ""}`}
+          className="flex h-8 w-full min-w-0 items-center gap-1.5 px-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           data-testid="data-cell"
         >
           <CellPreview display={display} numeric={numeric} />
+          {display.serverCut && <CutMark />}
         </button>
       )}
     </td>
@@ -432,27 +441,30 @@ function GridCell({
 
 function Pager({
   page,
-  pageNumber,
   size,
-  offset,
   count,
+  stale,
   onExact,
-  onPage,
+  onOffset,
   onSize,
 }: {
   page: BrowsePage;
-  pageNumber: number;
   size: number;
-  offset: number;
   count: BrowseCountMode;
+  /** The page on screen is the previous request's, kept while the next loads: paging from it would page from the wrong place. */
+  stale: boolean;
   onExact: () => void;
-  onPage: (page: number) => void;
+  onOffset: (offset: number) => void;
   onSize: (size: number) => void;
 }) {
-  const total = totalLabel(page, offset);
-  const first = page.rows.length > 0 ? offset + 1 : 0;
-  const last = offset + page.rows.length;
-  const atCap = pageNumber >= lastServablePage(size);
+  // Where the page on screen starts, from the page itself (next_offset is its
+  // offset plus its rows), so a placeholder kept while the next page loads
+  // still says its own rows.
+  const start = page.nextOffset - page.rows.length;
+  const total = totalLabel(page, start);
+  const first = page.rows.length > 0 ? start + 1 : 0;
+  const last = page.nextOffset;
+  const atCap = !servable(page.nextOffset);
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-muted" data-testid="data-pager">
       <p className="flex flex-wrap items-center gap-x-2" aria-live="polite">
@@ -476,7 +488,7 @@ function Pager({
             Count exactly
           </button>
         )}
-        {atCap && page.hasMore && <span>Pages past row 1,000,000 can&apos;t be read: narrow with a filter or a sort.</span>}
+        {atCap && page.hasMore && <span>Rows past 1,000,000 can&apos;t be read: narrow with a filter or a sort.</span>}
       </p>
       <div className="flex items-center gap-2">
         <label className="flex items-center gap-1.5">
@@ -494,13 +506,25 @@ function Pager({
             ))}
           </select>
         </label>
-        <Button variant="outline" size="xs" onClick={() => onPage(pageNumber - 1)} disabled={pageNumber <= 1} leftIcon={<ChevronLeft className="h-3 w-3" />} data-testid="data-page-prev">
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => onOffset(previousOffset(start, size))}
+          disabled={stale || start <= 0}
+          leftIcon={<ChevronLeft className="h-3 w-3" />}
+          data-testid="data-page-prev"
+        >
           Previous
         </Button>
-        <span className="tabular-nums" data-testid="data-page">
-          Page {pageNumber.toLocaleString("en-US")}
-        </span>
-        <Button variant="outline" size="xs" onClick={() => onPage(pageNumber + 1)} disabled={!page.hasMore || atCap} rightIcon={<ChevronRight className="h-3 w-3" />} data-testid="data-page-next">
+        {/* Next starts where this page ended: next_offset, which is not offset + size when the server cut the page short. */}
+        <Button
+          variant="outline"
+          size="xs"
+          onClick={() => onOffset(page.nextOffset)}
+          disabled={stale || !page.hasMore || atCap}
+          rightIcon={<ChevronRight className="h-3 w-3" />}
+          data-testid="data-page-next"
+        >
           Next
         </Button>
       </div>

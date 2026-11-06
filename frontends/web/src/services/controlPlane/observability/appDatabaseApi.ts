@@ -213,9 +213,20 @@ export interface BrowseInput {
 export type DbCell = JsonValue;
 
 export interface BrowsePage {
+  /**
+   * The result's columns. `pgType` is Postgres's internal name ("int8",
+   * "timestamptz", "_text"), NOT DbColumn.pgType's display spelling
+   * ("bigint", "timestamp with time zone"): never compare the two.
+   */
   columns: { name: string; pgType: string }[];
   rows: DbCell[][];
+  /** Per row, the 0-based indexes of the cells the server cut at 4 KiB. Empty until the server says (see dataCells-model cellCut). */
+  truncatedCells: number[][];
   hasMore: boolean;
+  /** The response-size cap cut the page short of its limit: continue from nextOffset, not offset + limit. */
+  truncated: boolean;
+  /** Where the next page starts: the request's offset plus the rows returned. */
+  nextOffset: number;
   /** Null when the request counted nothing. */
   total: number | null;
   totalIsEstimate: boolean;
@@ -338,7 +349,11 @@ export async function browseTable(req: BrowseInput, options: { signal?: AbortSig
   return {
     columns: res.columns.map((c) => ({ name: c.name, pgType: c.pgType })),
     rows: res.rows.map((r) => r.values.map((v) => toJson(ValueSchema, v))),
+    truncatedCells: res.rows.map((r) => [...r.truncatedCells]),
     hasMore: res.hasMore,
+    truncated: res.truncated,
+    // A server from before next_offset sends 0: the page's own end is the same number.
+    nextOffset: res.nextOffset > 0n ? Number(res.nextOffset) : req.offset + res.rows.length,
     total: res.total === undefined ? null : Number(res.total),
     totalIsEstimate: res.totalIsEstimate,
     totalIsLowerBound: res.totalIsLowerBound,

@@ -112,10 +112,11 @@ export function activityText(e: ActivityEvent): ActivityText {
         facts: env && db ? [db, ...facts] : facts,
       };
     }
-    // The data browser (AppDatabaseService DescribeDatabase / BrowseTable):
-    // "Ada opened the shop database on prod: <reason>", "Ada browsed
-    // public.orders in the shop database on prod: <reason>". The environment is
-    // part of the sentence, as for a query.
+    // The data browser (AppDatabaseService): "Ada opened the shop database on
+    // prod: <reason>". The environment is part of the sentence, as for a query.
+    // browse_table is phrased for the events a control plane recorded while
+    // BrowseTable declared it; the current one records none (a page view is an
+    // audit row, not a feed line).
     case "describe_database": {
       const db = e.target.id || e.target.label;
       return {

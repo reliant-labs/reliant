@@ -13,7 +13,7 @@ import { act, render } from "@testing-library/react";
 import { defaultParseSearch } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { DataBrowserApiProvider } from "@/services/controlPlane/observability/DataBrowserApiContext";
+import { DataBrowserApiProvider, type DataBrowserApi } from "@/services/controlPlane/observability/DataBrowserApiContext";
 
 import { withSearch } from "../../Console/paths";
 import type { DataFixtureApi } from "../__fixtures__/fixtureDataApi";
@@ -32,7 +32,7 @@ export function searchOf(href: string | null): DataSearch {
   return defaultParseSearch((href ?? "").slice((href ?? "").indexOf("?"))) as DataSearch;
 }
 
-export function renderBrowser(api: DataFixtureApi, initial: DataSearch = {}, env: { id: string; name: string } = STAGING) {
+export function renderBrowser(api: DataBrowserApi, initial: DataSearch = {}, env: { id: string; name: string } = STAGING) {
   const navigations: { search: DataSearch; replace: boolean }[] = [];
   let current = initial;
   let set: (next: DataSearch) => void = () => undefined;

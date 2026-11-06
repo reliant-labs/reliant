@@ -20,8 +20,8 @@ import Link from "@/components/forge-ui/link";
 import type { BrowseInput, DataAccessConfirmation, DbCell, DbForeignKey, DbTable } from "@/services/controlPlane/observability/appDatabaseApi";
 import { dataBrowserErrorKind } from "@/services/controlPlane/observability/errors";
 
-import { CopyButton, FullValue } from "./CellValue";
-import { cellDisplay, typeLabel } from "./dataCells-model";
+import { CopyButton, CutNote, FullValue } from "./CellValue";
+import { cellDisplay } from "./dataCells-model";
 import {
   RELATED_CONCURRENCY,
   createLimiter,
@@ -141,7 +141,17 @@ export function RowPage({ env, database, table, tables, rowParam, access, gridHr
           <Card padding="none" data-testid="data-row-fields">
             <dl className="divide-y divide-border/60">
               {query.data.columns.map((column, i) => (
-                <Field key={column.name} table={table} tables={tables} column={column.name} pgType={column.pgType} value={row![i] ?? null} record={record} linkTo={linkTo} />
+                <Field
+                  key={column.name}
+                  table={table}
+                  tables={tables}
+                  column={column.name}
+                  resultType={column.pgType}
+                  flaggedCut={query.data!.truncatedCells[0]?.includes(i) ?? false}
+                  value={row![i] ?? null}
+                  record={record}
+                  linkTo={linkTo}
+                />
               ))}
             </dl>
           </Card>
@@ -156,7 +166,8 @@ function Field({
   table,
   tables,
   column,
-  pgType,
+  resultType,
+  flaggedCut,
   value,
   record,
   linkTo,
@@ -164,18 +175,21 @@ function Field({
   table: DbTable;
   tables: DbTable[];
   column: string;
-  pgType: string;
+  /** The result column's internal type: how the value reads. The label shows the described type instead. */
+  resultType: string;
+  flaggedCut: boolean;
   value: DbCell;
   record: ReadonlyMap<string, DbCell>;
   linkTo: (target: DataSearch) => string;
 }) {
   const meta = table.columns.find((c) => c.name === column);
-  const display = cellDisplay(value, pgType);
+  const display = cellDisplay(value, resultType, flaggedCut);
   const references = foreignKeysOf(table, column).flatMap((fk) => {
     const target = foreignKeyTarget(fk, tables, record);
     return target ? [{ fk, href: linkTo(target) }] : [];
   });
-  const long = display.full.length > 80 || display.full.includes("\n");
+  const long = display.full.length > 80 || display.full.includes("\n") || !!display.serverCut;
+  const copyLabel = display.serverCut ? "Copy what's shown" : "Copy";
   return (
     <div className="grid grid-cols-1 gap-x-4 gap-y-1 px-4 py-2.5 sm:grid-cols-[minmax(10rem,14rem)_minmax(0,1fr)]" data-testid={`data-field-${column}`}>
       <dt className="min-w-0">
@@ -184,7 +198,7 @@ function Field({
           <span className="truncate font-mono text-xs font-medium text-ink">{column}</span>
         </span>
         <span className="font-mono text-2xs text-ink-muted">
-          {typeLabel(pgType)}
+          {meta?.pgType ?? ""}
           {meta && !meta.nullable ? " · not null" : ""}
         </span>
         {meta?.comment && <span className="block text-2xs text-ink-muted">{meta.comment}</span>}
@@ -210,7 +224,8 @@ function Field({
         ) : (
           <>
             <FullValue display={display} />
-            <CopyButton text={display.full} label="Copy" />
+            <CutNote display={display} />
+            <CopyButton text={display.full} label={copyLabel} />
           </>
         )}
         {references.map(({ fk, href }) => (
@@ -251,7 +266,7 @@ function Related({
         <p className="text-xs text-ink-muted">
           {entries.length === 0
             ? `No readable table has a foreign key to ${qualifiedName(table)}.`
-            : `Rows in other tables whose foreign keys point at this one. Counts are the planner's estimates.`}
+            : `Rows in other tables whose foreign keys point at this one.`}
         </p>
       </div>
       {entries.length > 0 && (
@@ -300,7 +315,8 @@ function RelatedEntry({
             sort: [],
             limit: 1,
             offset: 0,
-            count: "estimated",
+            // Exact, capped by the server at 10,000 (then "10,000+"): an estimate knows nothing of one foreign-key value.
+            count: "exact",
             ...(access ? { access } : {}),
           }
         : null,
@@ -326,7 +342,7 @@ function RelatedEntry({
             couldn&apos;t count
           </span>
         ) : label ? (
-          <span className={label.none ? "text-ink-muted" : "text-ink"}>{label.none ? "none" : `${label.label} ${label.label === "1" ? "row" : "rows"}`}</span>
+          <span className={label.none ? "text-ink-muted" : "text-ink"}>{label.none ? "none" : `${label.label} ${label.n === 1 ? "row" : "rows"}`}</span>
         ) : (
           <span className="inline-block h-3 w-10 animate-pulse rounded bg-border/60 align-middle motion-reduce:animate-none" aria-label="Counting" />
         )}

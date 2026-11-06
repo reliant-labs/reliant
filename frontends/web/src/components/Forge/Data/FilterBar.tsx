@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 
 import { CONTROL_FIELD } from "../controlStyles";
 import { FILTER_OPS, isTextType, opSpec, type DataFilter } from "./dataUrl-model";
-import { typeLabel } from "./dataCells-model";
+import { shortTypeLabel } from "./dataCells-model";
 
 export function filterLabel(filter: DataFilter): string {
   const spec = opSpec(filter.op);
@@ -140,7 +140,7 @@ export function FilterForm({ columns, onSubmit }: { columns: DbColumn[]; onSubmi
         >
           {columns.map((c) => (
             <option key={c.name} value={c.name}>
-              {c.name} ({typeLabel(c.pgType)})
+              {c.name} ({shortTypeLabel(c.pgType)})
             </option>
           ))}
         </select>
