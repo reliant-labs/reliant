@@ -54,7 +54,7 @@ func TestProjectConfigVersion(t *testing.T) {
 
 	// A write that leaves updated_at exactly where it was (another replica's
 	// clock, or a writer that does not touch it) still moves the version.
-	if _, err := repo.DB.ExecContext(ctx, `UPDATE project_configs SET project_skills_json = '[]', updated_at = updated_at WHERE project_id = $1`, "test-project"); err != nil {
+	if _, err := repo.DB.DB(ctx).ExecContext(ctx, `UPDATE project_configs SET project_skills_json = '[]', updated_at = updated_at WHERE project_id = $1`, "test-project"); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	if v3 := version(); v3 == v2 {

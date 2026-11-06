@@ -8,28 +8,26 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 )
 
-// One transaction, either layer.
+// One transaction, either entry point.
 //
-// The Repository (hand SQL) and internal/store (the forge ORM) run
-// on ONE pool and share ONE notion of "the transaction ctx carries": forge's.
-// Repo.RunTx opens its transaction through the ORM client (beginSharedTx)
-// and runs f under the ctx tx.Join hands it, so every generated delegate and
-// _repo_ext.go query called with that ctx joins it. In the other direction,
-// WrappedDBTX resolves each statement against the transaction forge carries
-// in ctx, so a Repository call made inside orm.Client.RunTx — or inside any
-// Repo.RunTx, which then joins rather than begins — runs in that
-// transaction. Without this a call through the other layer ran on the pool:
-// outside the transaction, and blocked forever on a row it had locked.
+// The Repository's queries are internal/store's (the forge ORM), on ONE pool,
+// and share ONE notion of "the transaction ctx carries": forge's. Repo.RunTx
+// opens its transaction through the ORM client (beginSharedTx) and runs f
+// under the ctx tx.Join hands it, so every generated delegate and
+// _repo_ext.go query called with that ctx joins it, and a Repo.RunTx inside
+// orm.Client.RunTx (or inside another Repo.RunTx) joins rather than begins.
 //
-// Repo.RunTx keeps its own attempt loop (isRetryableError, bounded by the
-// policy's attempt budget) and opens each attempt with the ORM's
-// non-retrying BeginDetached; orm.Client.RunTx retries 40001/40P01 only.
-// Whichever layer opens the transaction owns its retry policy, and a nested
-// RunTx of either kind joins it.
+// Repo.RunTx keeps its own attempt loop (isRetryableError: 40001 and 40P01
+// as pkg/orm retries, plus 23505, 25P02 and 40002; bounded by the policy's
+// attempt budget) and opens each attempt with the ORM's non-retrying
+// BeginDetached; orm.Client.RunTx retries 40001/40P01 only. Whichever opens
+// the transaction owns its retry policy, and a nested RunTx of either kind
+// joins it.
 
-// WrappedDBTX is the executor every hand-written Repository statement runs
-// on: the transaction ctx carries, or the pool, with statement-level retries
-// outside a transaction.
+// WrappedDBTX holds the Repository's pool and the forge ORM client over it:
+// the transaction Repo.RunTx opens and joins, DB(ctx) for a raw statement in
+// whatever transaction ctx carries (tests), and the detached
+// BeginTxWithOptions.
 type WrappedDBTX struct {
 	db *sql.DB
 	// orm is the forge ORM client over db. Its transactions are the
