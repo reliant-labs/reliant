@@ -11,6 +11,8 @@ export function useComposerUploads(attach: Attach, remove: Remove, session: stri
   const pending = useRef(new Map<number, { file: File; session: string; attach: Attach; remove: Remove }>());
   const activeSession = useRef(session);
   activeSession.current = session;
+  const generated = useRef(new Set<number>());
+  const completed = useRef(new Map<number, { session: string; id: string; remove: Remove }>());
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -18,6 +20,8 @@ export function useComposerUploads(attach: Attach, remove: Remove, session: stri
     return () => {
       mounted.current = false;
       entries.clear();
+      completed.current.forEach((entry) => entry.remove(entry.session, entry.id));
+      completed.current.clear();
     };
   }, []);
   const nextId = useRef(0);
@@ -31,6 +35,7 @@ export function useComposerUploads(attach: Attach, remove: Remove, session: stri
       const attachment = await entry.attach(entry.session, entry.file);
       if (!pending.current.has(id)) entry.remove(entry.session, attachment.id);
       else {
+        if (generated.current.has(id)) completed.current.set(id, { session: entry.session, id: attachment.id, remove: entry.remove });
         pending.current.delete(id);
         setUploads((rows) => rows.filter((row) => row.id !== id));
       }
@@ -42,6 +47,24 @@ export function useComposerUploads(attach: Attach, remove: Remove, session: stri
   };
   return {
     uploads: uploads.filter((upload) => upload.session === session),
+    // Synchronous ownership handle for reversible generated attachments.
+    enqueue: (file: File) => {
+      const id = ++nextId.current;
+      generated.current.add(id);
+      pending.current.set(id, { file, session, attach, remove });
+      setUploads((rows) => [...rows, { id, file, session, status: "uploading" }]);
+      void run(id);
+      return id;
+    },
+    discard: (id: number) => {
+      pending.current.delete(id);
+      setUploads((rows) => rows.filter((row) => row.id !== id));
+      const done = completed.current.get(id);
+      if (done) done.remove(done.session, done.id);
+      completed.current.delete(id);
+    },
+    attachmentId: (id: number) => completed.current.get(id)?.id,
+    forgetCompleted: (id: number) => { completed.current.delete(id); },
     hasPending: () => Array.from(pending.current.values()).some((entry) => entry.session === activeSession.current),
     add: async (targetSession: string, files: File[]) => {
       if (!mounted.current || targetSession !== activeSession.current) return;

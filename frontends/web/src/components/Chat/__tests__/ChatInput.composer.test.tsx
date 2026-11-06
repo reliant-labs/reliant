@@ -108,6 +108,46 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe("long paste send integration", () => {
+  it.each([true, false])("blocks while uploading and preserves send-owned IDs on settlement (%s)", async (success) => {
+    localStorage.clear();
+    const original = useAttachmentStore.getState().attachFile;
+    let finish!: () => void;
+    const attachFile = vi.fn((session: string, file: File) => new Promise<any>((resolve) => {
+      finish = () => {
+        const attachment = { id: "pasted-id", filename: file.name, mime_type: file.type, size: file.size, url: "" };
+        useAttachmentStore.setState({ attachments: new Map([[session, [attachment]]]) as never });
+        resolve(attachment);
+      };
+    }));
+    const originalRemove = useAttachmentStore.getState().removeAttachment;
+    const remove = vi.fn();
+    useAttachmentStore.setState({ attachFile, removeAttachment: remove });
+    try {
+      const onSend = success ? vi.fn().mockResolvedValue(undefined) : vi.fn().mockRejectedValue(new Error("response lost after commit"));
+      renderWithQuery(<ChatInput onSend={onSend} attachmentDraftId="paste-test" />);
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: { files: [], items: [], getData: () => "exact 😀\r\n".repeat(600) } });
+      act(() => { composer().dispatchEvent(event); });
+      expect(event.defaultPrevented).toBe(true);
+      expect(screen.getByTestId("send-button")).toBeDisabled();
+      await act(async () => { finish(); });
+      expect(screen.getByTestId("send-button")).toBeEnabled();
+      fireEvent.click(screen.getByTestId("send-button"));
+      await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+      expect(onSend.mock.calls[0][1]).toEqual(["pasted-id"]);
+      if (success) {
+        await waitFor(() => expect(screen.queryByText("Insert as text")).toBeNull());
+        expect(Object.keys(localStorage).filter((key) => key.startsWith("reliant:long-paste:"))).toEqual([]);
+      } else {
+        await waitFor(() => expect(screen.getByText("Upload attachment")).toBeInTheDocument());
+        fireEvent.click(screen.getByText("Remove"));
+      }
+      expect(remove).not.toHaveBeenCalled();
+    } finally { act(() => useAttachmentStore.setState({ attachFile: original, removeAttachment: originalRemove })); }
+  });
+});
+
 describe("action slot", () => {
   it("idle and empty: Send, disabled", () => {
     renderWithQuery(<ChatInput onSend={vi.fn()} />);
