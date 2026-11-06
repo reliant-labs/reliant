@@ -464,7 +464,8 @@ function LatencyHistogram({ buckets, y, pct }: { buckets: ReturnType<typeof hist
   const width = measured || 176;
   const barSpace = Math.max(20, width - HIST_RIGHT - 4);
   const max = Math.max(1, ...buckets.map((b) => b.ok + b.error));
-  const labelY = pct ? spreadLabels(PCT_KEYS.map((k) => y.toPx(pct[k]))) : [];
+  // 13px apart: a text-2xs label is 10px tall, and at 11 p95 and p99 touched when close.
+  const labelY = pct ? spreadLabels(PCT_KEYS.map((k) => y.toPx(pct[k])), 13) : [];
   return (
     <div ref={ref} className="min-w-0 border-l border-border" data-testid="obs-trace-latency-histogram">
       <svg width={width} height={HEIGHT} className="block" aria-hidden="true">
