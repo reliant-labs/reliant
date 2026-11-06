@@ -101,6 +101,38 @@ describe("trace list", () => {
     expect(await screen.findByText(/can't filter traces by browser yet/)).toBeInTheDocument();
   });
 
+  it("keeps a service's traces from one browser, whose rows carry no client of their own", async () => {
+    const api = createFixtureApi();
+    const real = api.listTraces.bind(api);
+    // Narrowed to a backend service, the rows are that service's spans: the
+    // browser span that names the client is not one of them, so a control
+    // plane that applied the filter answers with the client empty.
+    vi.spyOn(api, "listTraces").mockImplementation(async (req, options) => {
+      const result = await real({ ...req, browser: undefined }, options);
+      return { ...result, traces: result.traces.map((t) => ({ ...t, client: { ...t.client, browserName: "", osName: "" }, frontendVersion: "" })) };
+    });
+    renderPanel(api, { view: "traces", service: "api", browser: "Chrome" });
+    expect((await screen.findAllByTestId("obs-trace-row")).length).toBeGreaterThan(0);
+    expect(screen.queryByTestId("obs-error-filter-unsupported")).not.toBeInTheDocument();
+  });
+
+  it("finds a trace by the operation its row is titled with", async () => {
+    const user = userEvent.setup();
+    const api = createFixtureApi();
+    const listTraces = vi.spyOn(api, "listTraces");
+    const harness = renderPanel(api, { view: "traces" });
+    await screen.findAllByTestId("obs-trace-row");
+    await user.type(screen.getByTestId("obs-trace-query"), "ChatService.SendMessage{Enter}");
+    // The URL keeps what was typed; the server is sent a substring of the stored name.
+    expect(harness.current()).toMatchObject({ q: "ChatService.SendMessage" });
+    await waitFor(() =>
+      expect(listTraces).toHaveBeenLastCalledWith(
+        expect.objectContaining({ rootSpanName: "ChatService/SendMessage" }),
+        expect.objectContaining({ signal: expect.anything() })
+      )
+    );
+  });
+
   it("lists one browser session's traces, says so, and links back to it", async () => {
     const user = userEvent.setup();
     const api = createFixtureApi();
