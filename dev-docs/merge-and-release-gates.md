@@ -204,9 +204,13 @@ beside `tsc -b` (~2.3 GB) and the test links (~2.7 GB each) the gate reached
 `ubuntu-latest` runner has 16 GiB: it ran out, its agent died ("The runner has
 received a shutdown signal") and the job sat until its timeout, three times.
 So on a host under `MG_GEN_ALONE_GIB` (32) GiB, the smaller of physical memory
-and the cgroup's `memory.max`, `forge generate` runs first and alone with the
-whole CPU budget, and the other phases start when it is done. `MG_MEM_GIB=<n>`
-overrides the detected size.
+and the cgroup's `memory.max`, `forge generate` runs first with the whole CPU
+budget, and the other phases start when it is done. Only the `prewarm` phase
+runs beside it: it compiles (never links) the selected test packages, niced and
+at a quarter of the budget (each compile well under 1 GiB), so the test phase
+after generate only links and runs. In the merge queue generate averaged 313s
+and test 281s, one after the other, on 8 of 16 runs (2026-11-05/06).
+`MG_MEM_GIB=<n>` overrides the detected size.
 
 ### Direct importers only
 
