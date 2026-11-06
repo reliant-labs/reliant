@@ -1032,6 +1032,7 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"spawn_status": {
 		Bindable: map[string]struct{}{
+			"status":          {},
 			"timeout_seconds": {},
 			"wait":            {},
 		},

@@ -11,7 +11,7 @@ import (
 )
 
 type SpawnStopParams struct {
-	AgentID string `json:"agent_id" jsonschema:"required,description=The agent_id (thread id) of a sub-agent YOU spawned"`
+	AgentID string `json:"agent_id" jsonschema:"required,description=The agent_id (thread id) of a sub-agent YOU spawned. An unambiguous prefix of at least 4 characters is accepted."`
 	Reason  string `json:"reason,omitempty" jsonschema:"description=Why you are stopping it. Recorded in the log; the agent does not see it."`
 }
 
@@ -93,6 +93,11 @@ func (s *spawnStopTool) Execute(rctx *rctx.ToolContext, params SpawnStopParams) 
 	if params.AgentID == "" {
 		return NewTextErrorResponse("agent_id is required"), nil
 	}
+	resolved, err := resolveSpawnAgentID(rctx, s.repo, threadID, params.AgentID)
+	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	params.AgentID = resolved
 	if params.AgentID == threadID {
 		return NewTextErrorResponse("agent_id cannot be this thread itself — spawn_stop stops a sub-agent, not the caller"), nil
 	}
