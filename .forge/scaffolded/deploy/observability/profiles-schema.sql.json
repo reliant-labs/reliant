@@ -1,0 +1,1 @@
+{"declined":"reliant's dev stack runs no containers, no local ClickStack and no Zitadel IdP (forge HostInfra postgres/NATS/Temporal only; docker-compose.yml was deleted on purpose in #1539)"}
