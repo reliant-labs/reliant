@@ -513,7 +513,8 @@ type DeployServiceClient interface {
 	// ReportLocalSession upserts one `forge env up` worktree's presence.
 	//
 	// THE SECOND REPORTED-STATE EXCEPTION — see the service header. LOCAL
-	// environments only, enforced by the database rather than by this handler.
+	// environments only, enforced by the database (the handler checks the kind
+	// first only so the refusal names the mistake: FailedPrecondition).
 	//
 	// It must NEVER block `forge env up`. A developer whose network is down, or
 	// whose token has expired, keeps working — the session record is a courtesy
@@ -1496,7 +1497,8 @@ type DeployServiceHandler interface {
 	// ReportLocalSession upserts one `forge env up` worktree's presence.
 	//
 	// THE SECOND REPORTED-STATE EXCEPTION — see the service header. LOCAL
-	// environments only, enforced by the database rather than by this handler.
+	// environments only, enforced by the database (the handler checks the kind
+	// first only so the refusal names the mistake: FailedPrecondition).
 	//
 	// It must NEVER block `forge env up`. A developer whose network is down, or
 	// whose token has expired, keeps working — the session record is a courtesy

@@ -42,6 +42,15 @@ const (
 	// AppDatabaseServiceListDashboardDatabasesProcedure is the fully-qualified name of the
 	// AppDatabaseService's ListDashboardDatabases RPC.
 	AppDatabaseServiceListDashboardDatabasesProcedure = "/controlplane.v1.AppDatabaseService/ListDashboardDatabases"
+	// AppDatabaseServiceListBrowsableDatabasesProcedure is the fully-qualified name of the
+	// AppDatabaseService's ListBrowsableDatabases RPC.
+	AppDatabaseServiceListBrowsableDatabasesProcedure = "/controlplane.v1.AppDatabaseService/ListBrowsableDatabases"
+	// AppDatabaseServiceDescribeDatabaseProcedure is the fully-qualified name of the
+	// AppDatabaseService's DescribeDatabase RPC.
+	AppDatabaseServiceDescribeDatabaseProcedure = "/controlplane.v1.AppDatabaseService/DescribeDatabase"
+	// AppDatabaseServiceBrowseTableProcedure is the fully-qualified name of the AppDatabaseService's
+	// BrowseTable RPC.
+	AppDatabaseServiceBrowseTableProcedure = "/controlplane.v1.AppDatabaseService/BrowseTable"
 )
 
 // AppDatabaseServiceClient is a client for the controlplane.v1.AppDatabaseService service.
@@ -64,6 +73,37 @@ type AppDatabaseServiceClient interface {
 	// QueryDatabasePanel, without the database/placement steps for databases that
 	// are not enabled: those are simply absent.
 	ListDashboardDatabases(context.Context, *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error)
+	// ListBrowsableDatabases returns every database of the environment the data
+	// browser can offer: each managed and each external database, the policy a
+	// read of it runs under, and whether the control plane can reach it. Reads
+	// no rows and writes no audit row.
+	//
+	// Admission is the data browser's steps 1 to 3. A database the control plane
+	// cannot reach is still listed, with reachable false and unreachable_reason
+	// saying why, because the environment declares it.
+	//
+	// ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3), Unavailable
+	// (browsing is not configured on this server).
+	ListBrowsableDatabases(context.Context, *connect.Request[v1.ListBrowsableDatabasesRequest]) (*connect.Response[v1.ListBrowsableDatabasesResponse], error)
+	// DescribeDatabase returns the tables and views forge_ro may SELECT in one
+	// database, each with the columns it may read, its primary key, its foreign
+	// keys and the foreign keys of readable tables that point at it (what the
+	// row page's Related section lists). Read by live introspection on every
+	// call; nothing is cached.
+	//
+	// ERRORS: every step of the data browser's admission except the table half
+	// of step 6. InvalidArgument when a bound is out of range.
+	DescribeDatabase(context.Context, *connect.Request[v1.DescribeDatabaseRequest]) (*connect.Response[v1.DescribeDatabaseResponse], error)
+	// BrowseTable returns one page of one table or view: the chosen columns,
+	// filtered, sorted and paged, compiled into one parameterised SELECT. It also
+	// serves the row page (a primary-key eq filter, limit 1) and the Related
+	// counts (a foreign-key eq filter with count ESTIMATED or EXACT).
+	//
+	// ERRORS: every step of the data browser's admission. InvalidArgument when a
+	// bound is out of range; a column (in columns, filters or sort) forge_ro
+	// cannot read in the table; a filter whose values do not fit its op; or a
+	// value Postgres cannot convert to the column's type.
+	BrowseTable(context.Context, *connect.Request[v1.BrowseTableRequest]) (*connect.Response[v1.BrowseTableResponse], error)
 }
 
 // NewAppDatabaseServiceClient constructs a client for the controlplane.v1.AppDatabaseService
@@ -95,6 +135,27 @@ func NewAppDatabaseServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(appDatabaseServiceMethods.ByName("ListDashboardDatabases")),
 			connect.WithClientOptions(opts...),
 		),
+		listBrowsableDatabases: connect.NewClient[v1.ListBrowsableDatabasesRequest, v1.ListBrowsableDatabasesResponse](
+			httpClient,
+			baseURL+AppDatabaseServiceListBrowsableDatabasesProcedure,
+			connect.WithSchema(appDatabaseServiceMethods.ByName("ListBrowsableDatabases")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		describeDatabase: connect.NewClient[v1.DescribeDatabaseRequest, v1.DescribeDatabaseResponse](
+			httpClient,
+			baseURL+AppDatabaseServiceDescribeDatabaseProcedure,
+			connect.WithSchema(appDatabaseServiceMethods.ByName("DescribeDatabase")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		browseTable: connect.NewClient[v1.BrowseTableRequest, v1.BrowseTableResponse](
+			httpClient,
+			baseURL+AppDatabaseServiceBrowseTableProcedure,
+			connect.WithSchema(appDatabaseServiceMethods.ByName("BrowseTable")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -103,6 +164,9 @@ type appDatabaseServiceClient struct {
 	queryDatabase          *connect.Client[v1.QueryDatabaseRequest, v1.QueryDatabaseResponse]
 	queryDatabasePanel     *connect.Client[v1.QueryDatabasePanelRequest, v1.QueryDatabasePanelResponse]
 	listDashboardDatabases *connect.Client[v1.ListDashboardDatabasesRequest, v1.ListDashboardDatabasesResponse]
+	listBrowsableDatabases *connect.Client[v1.ListBrowsableDatabasesRequest, v1.ListBrowsableDatabasesResponse]
+	describeDatabase       *connect.Client[v1.DescribeDatabaseRequest, v1.DescribeDatabaseResponse]
+	browseTable            *connect.Client[v1.BrowseTableRequest, v1.BrowseTableResponse]
 }
 
 // QueryDatabase calls controlplane.v1.AppDatabaseService.QueryDatabase.
@@ -118,6 +182,21 @@ func (c *appDatabaseServiceClient) QueryDatabasePanel(ctx context.Context, req *
 // ListDashboardDatabases calls controlplane.v1.AppDatabaseService.ListDashboardDatabases.
 func (c *appDatabaseServiceClient) ListDashboardDatabases(ctx context.Context, req *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error) {
 	return c.listDashboardDatabases.CallUnary(ctx, req)
+}
+
+// ListBrowsableDatabases calls controlplane.v1.AppDatabaseService.ListBrowsableDatabases.
+func (c *appDatabaseServiceClient) ListBrowsableDatabases(ctx context.Context, req *connect.Request[v1.ListBrowsableDatabasesRequest]) (*connect.Response[v1.ListBrowsableDatabasesResponse], error) {
+	return c.listBrowsableDatabases.CallUnary(ctx, req)
+}
+
+// DescribeDatabase calls controlplane.v1.AppDatabaseService.DescribeDatabase.
+func (c *appDatabaseServiceClient) DescribeDatabase(ctx context.Context, req *connect.Request[v1.DescribeDatabaseRequest]) (*connect.Response[v1.DescribeDatabaseResponse], error) {
+	return c.describeDatabase.CallUnary(ctx, req)
+}
+
+// BrowseTable calls controlplane.v1.AppDatabaseService.BrowseTable.
+func (c *appDatabaseServiceClient) BrowseTable(ctx context.Context, req *connect.Request[v1.BrowseTableRequest]) (*connect.Response[v1.BrowseTableResponse], error) {
+	return c.browseTable.CallUnary(ctx, req)
 }
 
 // AppDatabaseServiceHandler is an implementation of the controlplane.v1.AppDatabaseService service.
@@ -140,6 +219,37 @@ type AppDatabaseServiceHandler interface {
 	// QueryDatabasePanel, without the database/placement steps for databases that
 	// are not enabled: those are simply absent.
 	ListDashboardDatabases(context.Context, *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error)
+	// ListBrowsableDatabases returns every database of the environment the data
+	// browser can offer: each managed and each external database, the policy a
+	// read of it runs under, and whether the control plane can reach it. Reads
+	// no rows and writes no audit row.
+	//
+	// Admission is the data browser's steps 1 to 3. A database the control plane
+	// cannot reach is still listed, with reachable false and unreachable_reason
+	// saying why, because the environment declares it.
+	//
+	// ERRORS: NotFound (steps 1, 2), PermissionDenied (step 3), Unavailable
+	// (browsing is not configured on this server).
+	ListBrowsableDatabases(context.Context, *connect.Request[v1.ListBrowsableDatabasesRequest]) (*connect.Response[v1.ListBrowsableDatabasesResponse], error)
+	// DescribeDatabase returns the tables and views forge_ro may SELECT in one
+	// database, each with the columns it may read, its primary key, its foreign
+	// keys and the foreign keys of readable tables that point at it (what the
+	// row page's Related section lists). Read by live introspection on every
+	// call; nothing is cached.
+	//
+	// ERRORS: every step of the data browser's admission except the table half
+	// of step 6. InvalidArgument when a bound is out of range.
+	DescribeDatabase(context.Context, *connect.Request[v1.DescribeDatabaseRequest]) (*connect.Response[v1.DescribeDatabaseResponse], error)
+	// BrowseTable returns one page of one table or view: the chosen columns,
+	// filtered, sorted and paged, compiled into one parameterised SELECT. It also
+	// serves the row page (a primary-key eq filter, limit 1) and the Related
+	// counts (a foreign-key eq filter with count ESTIMATED or EXACT).
+	//
+	// ERRORS: every step of the data browser's admission. InvalidArgument when a
+	// bound is out of range; a column (in columns, filters or sort) forge_ro
+	// cannot read in the table; a filter whose values do not fit its op; or a
+	// value Postgres cannot convert to the column's type.
+	BrowseTable(context.Context, *connect.Request[v1.BrowseTableRequest]) (*connect.Response[v1.BrowseTableResponse], error)
 }
 
 // NewAppDatabaseServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -167,6 +277,27 @@ func NewAppDatabaseServiceHandler(svc AppDatabaseServiceHandler, opts ...connect
 		connect.WithSchema(appDatabaseServiceMethods.ByName("ListDashboardDatabases")),
 		connect.WithHandlerOptions(opts...),
 	)
+	appDatabaseServiceListBrowsableDatabasesHandler := connect.NewUnaryHandler(
+		AppDatabaseServiceListBrowsableDatabasesProcedure,
+		svc.ListBrowsableDatabases,
+		connect.WithSchema(appDatabaseServiceMethods.ByName("ListBrowsableDatabases")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	appDatabaseServiceDescribeDatabaseHandler := connect.NewUnaryHandler(
+		AppDatabaseServiceDescribeDatabaseProcedure,
+		svc.DescribeDatabase,
+		connect.WithSchema(appDatabaseServiceMethods.ByName("DescribeDatabase")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	appDatabaseServiceBrowseTableHandler := connect.NewUnaryHandler(
+		AppDatabaseServiceBrowseTableProcedure,
+		svc.BrowseTable,
+		connect.WithSchema(appDatabaseServiceMethods.ByName("BrowseTable")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.AppDatabaseService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AppDatabaseServiceQueryDatabaseProcedure:
@@ -175,6 +306,12 @@ func NewAppDatabaseServiceHandler(svc AppDatabaseServiceHandler, opts ...connect
 			appDatabaseServiceQueryDatabasePanelHandler.ServeHTTP(w, r)
 		case AppDatabaseServiceListDashboardDatabasesProcedure:
 			appDatabaseServiceListDashboardDatabasesHandler.ServeHTTP(w, r)
+		case AppDatabaseServiceListBrowsableDatabasesProcedure:
+			appDatabaseServiceListBrowsableDatabasesHandler.ServeHTTP(w, r)
+		case AppDatabaseServiceDescribeDatabaseProcedure:
+			appDatabaseServiceDescribeDatabaseHandler.ServeHTTP(w, r)
+		case AppDatabaseServiceBrowseTableProcedure:
+			appDatabaseServiceBrowseTableHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -194,4 +331,16 @@ func (UnimplementedAppDatabaseServiceHandler) QueryDatabasePanel(context.Context
 
 func (UnimplementedAppDatabaseServiceHandler) ListDashboardDatabases(context.Context, *connect.Request[v1.ListDashboardDatabasesRequest]) (*connect.Response[v1.ListDashboardDatabasesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.ListDashboardDatabases is not implemented"))
+}
+
+func (UnimplementedAppDatabaseServiceHandler) ListBrowsableDatabases(context.Context, *connect.Request[v1.ListBrowsableDatabasesRequest]) (*connect.Response[v1.ListBrowsableDatabasesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.ListBrowsableDatabases is not implemented"))
+}
+
+func (UnimplementedAppDatabaseServiceHandler) DescribeDatabase(context.Context, *connect.Request[v1.DescribeDatabaseRequest]) (*connect.Response[v1.DescribeDatabaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.DescribeDatabase is not implemented"))
+}
+
+func (UnimplementedAppDatabaseServiceHandler) BrowseTable(context.Context, *connect.Request[v1.BrowseTableRequest]) (*connect.Response[v1.BrowseTableResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AppDatabaseService.BrowseTable is not implemented"))
 }
