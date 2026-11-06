@@ -21,6 +21,7 @@ import (
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -64,6 +65,26 @@ var runTriggerRows = []scopeRow{
 	{reliantv1connect.TriggerServiceListReplayEventsProcedure, ""},
 	{reliantv1connect.TriggerServicePreviewReplayProcedure, ""},
 	{reliantv1connect.TriggerServiceDraftAutomationProcedure, ""},
+}
+
+// inboxRows is the inbox slice. Approvals are listed with need "": their
+// decisions stay on reliant:api until approvals:decide is decided.
+var inboxRows = []scopeRow{
+	{reliantv1connect.InboxServiceListInboxProcedure, fat.ScopeInboxRead},
+	{reliantv1connect.InboxServiceDismissInboxItemProcedure, fat.ScopeInboxManage},
+	{reliantv1connect.InboxServiceRestoreInboxItemProcedure, fat.ScopeInboxManage},
+	{reliantv1connect.InboxServiceCleanupStorageProcedure, ""},
+	{reliantv1connect.InboxServiceForgetStorageWorktreeProcedure, ""},
+
+	{reliantv1connect.QuestionServiceResolveQuestionProcedure, fat.ScopeQuestionsAnswer},
+	{reliantv1connect.QuestionServiceListPendingQuestionsProcedure, ""},
+	{reliantv1connect.QuestionServiceListAsyncQuestionsProcedure, ""},
+
+	{reliantv1connect.ApprovalServiceListApprovalsByChatProcedure, ""},
+	{reliantv1connect.ApprovalServiceApproveProcedure, ""},
+	{reliantv1connect.ApprovalServiceDenyProcedure, ""},
+	{reliantv1connect.ApprovalServiceBatchApproveProcedure, ""},
+	{reliantv1connect.ApprovalServiceBatchDenyProcedure, ""},
 }
 
 // wrongScope is a scope that does not permit need, nor satisfy an unmapped rpc.
@@ -116,6 +137,15 @@ func newScopeHarness(t *testing.T) *scopeHarness {
 		func() (string, http.Handler) {
 			return reliantv1connect.NewChatServiceHandler(reliantv1connect.UnimplementedChatServiceHandler{}, opts)
 		},
+		func() (string, http.Handler) {
+			return reliantv1connect.NewInboxServiceHandler(reliantv1connect.UnimplementedInboxServiceHandler{}, opts)
+		},
+		func() (string, http.Handler) {
+			return reliantv1connect.NewQuestionServiceHandler(reliantv1connect.UnimplementedQuestionServiceHandler{}, opts)
+		},
+		func() (string, http.Handler) {
+			return reliantv1connect.NewApprovalServiceHandler(reliantv1connect.UnimplementedApprovalServiceHandler{}, opts)
+		},
 	} {
 		path, h := mount()
 		mux.Handle(path, h)
@@ -161,10 +191,18 @@ func (h *scopeHarness) call(t *testing.T, procedure, bearer string) scopeResult 
 func (r scopeResult) admitted() bool { return r.code == "unimplemented" }
 
 func TestRunAndTriggerRPCsEnforceTokenScopes(t *testing.T) {
+	enforceRows(t, runTriggerRows, fat.RunsAndTriggersScopes)
+}
+
+func TestInboxRPCsEnforceTokenScopes(t *testing.T) {
+	enforceRows(t, inboxRows, fat.InboxScopes)
+}
+
+func enforceRows(t *testing.T, rows []scopeRow, every []fat.Scope) {
 	h := newScopeHarness(t)
 	reliantAPI := h.mint(t, fat.ScopeReliantAPI)
 
-	for _, row := range runTriggerRows {
+	for _, row := range rows {
 		t.Run(strings.TrimPrefix(row.procedure, "/reliant.v1."), func(t *testing.T) {
 			t.Run("web session is admitted", func(t *testing.T) {
 				require.True(t, h.call(t, row.procedure, h.session).admitted())
@@ -185,7 +223,7 @@ func TestRunAndTriggerRPCsEnforceTokenScopes(t *testing.T) {
 			t.Run("narrow token with the wrong scope is refused scope_missing", func(t *testing.T) {
 				wrong := []fat.Scope{wrongScope(row.need)}
 				if row.need == "" {
-					wrong = fat.RunsAndTriggersScopes // every narrow scope together still is not reliant:api
+					wrong = every // every narrow scope together still is not reliant:api
 				}
 				res := h.call(t, row.procedure, h.mint(t, wrong...))
 				require.Equal(t, "permission_denied", res.code)
@@ -238,7 +276,63 @@ func TestScopeForProcedureMatchesTable(t *testing.T) {
 		}
 		require.Equal(t, want, ScopeForProcedure(row.procedure), row.procedure)
 	}
-	require.Len(t, procedureScopes, 17, "an entry beyond the 17 documented rpcs widens what a narrow token reaches")
+	for _, row := range inboxRows {
+		want := row.need
+		if want == "" {
+			want = fat.ScopeReliantAPI
+		}
+		require.Equal(t, want, ScopeForProcedure(row.procedure), row.procedure)
+	}
+	require.Len(t, procedureScopes, 21, "an entry beyond the 21 documented rpcs widens what a narrow token reaches")
+}
+
+// Every rpc of the inbox, question and approval services has a row, so a new
+// rpc cannot ship without a decision about its scope.
+func TestInboxTableCoversEveryRPC(t *testing.T) {
+	declared := map[string]bool{}
+	for _, sd := range []protoreflect.ServiceDescriptor{
+		reliantv1.File_reliant_v1_inbox_proto.Services().ByName("InboxService"),
+		reliantv1.File_reliant_v1_question_proto.Services().ByName("QuestionService"),
+		reliantv1.File_reliant_v1_approval_proto.Services().ByName("ApprovalService"),
+	} {
+		for i := 0; i < sd.Methods().Len(); i++ {
+			declared["/reliant.v1."+string(sd.Name())+"/"+string(sd.Methods().Get(i).Name())] = false
+		}
+	}
+	for _, row := range inboxRows {
+		_, ok := declared[row.procedure]
+		require.True(t, ok, "%s is in the table but not in the service", row.procedure)
+		declared[row.procedure] = true
+	}
+	for procedure, covered := range declared {
+		require.True(t, covered, "%s has no row in inboxRows: decide its scope", procedure)
+	}
+}
+
+// approvals:decide does not reach the decisions yet: a token holding it, with
+// every other new scope, still cannot approve or deny.
+func TestApprovalDecisionsStayOnReliantAPI(t *testing.T) {
+	h := newScopeHarness(t)
+	tok := h.mint(t, fat.ScopeApprovalsDecide, fat.ScopeInboxManage, fat.ScopeQuestionsAnswer)
+	for _, p := range []string{
+		reliantv1connect.ApprovalServiceApproveProcedure, reliantv1connect.ApprovalServiceDenyProcedure,
+		reliantv1connect.ApprovalServiceBatchApproveProcedure, reliantv1connect.ApprovalServiceBatchDenyProcedure,
+	} {
+		res := h.call(t, p, tok)
+		require.Equal(t, "permission_denied", res.code, p)
+		require.Equal(t, string(fat.ScopeReliantAPI), res.scopes, p)
+	}
+}
+
+// inbox:manage implies inbox:read (forge's Permits); read does not manage; the
+// scopes of the inbox do not reach runs.
+func TestInboxScopeImplications(t *testing.T) {
+	h := newScopeHarness(t)
+	require.True(t, h.call(t, reliantv1connect.InboxServiceListInboxProcedure, h.mint(t, fat.ScopeInboxManage)).admitted())
+	require.Equal(t, "permission_denied", h.call(t, reliantv1connect.InboxServiceDismissInboxItemProcedure, h.mint(t, fat.ScopeInboxRead)).code)
+	for _, s := range fat.InboxScopes {
+		require.Equal(t, "permission_denied", h.call(t, reliantv1connect.RunServiceGetRunProcedure, h.mint(t, s)).code, s)
+	}
 }
 
 // A narrow token is limited to its slice: every rpc outside it needs reliant:api.
