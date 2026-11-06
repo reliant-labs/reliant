@@ -118,6 +118,7 @@ import { MachinePricingReadinessPanel } from "@/components/Billing/MachinePricin
 import { exactCentsLabel, exactHours } from "@/lib/exact-rational";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatPrice } from "@/components/Billing/priceFormat";
+import { isSafeReturnTo } from "@/lib/returnTo";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -493,7 +494,7 @@ function BackToOrigin({ returnTo }: { returnTo?: string }) {
  * never protocol-relative (`//evil.com`). Undefined for anything else.
  */
 function sameOriginPath(returnTo: string | undefined): string | undefined {
-  return returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
+  return isSafeReturnTo(returnTo) ? returnTo : undefined;
 }
 
 // ── Shared bits ─────────────────────────────────────────────────────────
