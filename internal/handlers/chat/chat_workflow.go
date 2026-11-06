@@ -793,25 +793,17 @@ func (b *workflowTreeBuilder) build(wf *db.Workflow) *reliantv1.WorkflowExecutio
 				ActivityName: step.ActivityName,
 				CreatedAt:    step.CreatedAt.Format(time.RFC3339),
 			}
-			if step.SavedMessageID.Valid {
-				proto.Steps[i].SavedMessageId = &step.SavedMessageID.String
-			}
+			proto.Steps[i].SavedMessageId = step.SavedMessageID
 			proto.Steps[i].OutputJson = step.OutputJSON
-			if step.ExitCode.Valid {
-				exitCode := int32(step.ExitCode.Int64)
+			if step.ExitCode != nil {
+				exitCode := int32(*step.ExitCode)
 				proto.Steps[i].ExitCode = &exitCode
 			}
-			if step.Success.Valid {
-				proto.Steps[i].Success = &step.Success.Bool
-			}
-			if step.DurationMs.Valid {
-				proto.Steps[i].DurationMs = &step.DurationMs.Int64
-			}
-			if step.LoopNodeID.Valid {
-				proto.Steps[i].LoopNodeId = &step.LoopNodeID.String
-			}
-			if step.LoopIteration.Valid {
-				loopIter := int32(step.LoopIteration.Int64)
+			proto.Steps[i].Success = step.Success
+			proto.Steps[i].DurationMs = step.DurationMs
+			proto.Steps[i].LoopNodeId = step.LoopNodeID
+			if step.LoopIteration != nil {
+				loopIter := int32(*step.LoopIteration)
 				proto.Steps[i].LoopIteration = &loopIter
 			}
 		}

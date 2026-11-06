@@ -3,7 +3,6 @@ package handlers
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
@@ -325,12 +324,12 @@ func TestWorkflowStatus_FailureOutcomeMarksTheDeclaringNode(t *testing.T) {
 	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{ID: workflowID, ChatID: chatID, WorkflowName: "pr-review", Thread: chatID, Status: db.Active()}))
 	now := time.Now()
 	for i, row := range []*db.StepExecution{
-		{StepID: "call_llm-save", NodePath: sql.NullString{String: "review.agent_loop.call_llm", Valid: true}, ActivityName: "SaveMessage",
-			OutputJSON: sql.NullString{String: `{"message":{"text":"agent turn"}}`, Valid: true}},
-		{StepID: "stopped", ActivityName: "SaveMessage", OutputJSON: sql.NullString{String: `{"message":{"text":"Review did not finish: incomplete"}}`, Valid: true}},
+		{StepID: "call_llm-save", NodePath: ptr.Of("review.agent_loop.call_llm"), ActivityName: "SaveMessage",
+			OutputJSON: ptr.Of(`{"message":{"text":"agent turn"}}`)},
+		{StepID: "stopped", ActivityName: "SaveMessage", OutputJSON: ptr.Of(`{"message":{"text":"Review did not finish: incomplete"}}`)},
 	} {
 		row.ID, row.WorkflowID, row.CreatedAt = uuid.New().String(), workflowID, now.Add(time.Duration(i)*time.Millisecond)
-		row.Success = sql.NullBool{Bool: true, Valid: true}
+		row.Success = ptr.Of(true)
 		require.NoError(t, h.Repo().CreateStepExecution(ctx, row))
 	}
 	input := WorkflowStatusInput{ChatID: chatID, WorkflowID: workflowID, WorkflowName: "pr-review", Status: "completed",

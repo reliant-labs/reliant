@@ -2,9 +2,10 @@ package trigger
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -15,7 +16,7 @@ import (
 func TestTriggerProjectsMachineAndHistoricalLaunchNodeFailure(t *testing.T) {
 	repo := &MockRepository{ListRunNodeExecutionsFunc: func(_ context.Context, id string, limit int) ([]*db.StepExecution, error) {
 		require.Equal(t, "launched-chat", id, "never use the chat's later root workflow")
-		return []*db.StepExecution{{StepID: "gate", ExitCode: sql.NullInt64{Int64: 2, Valid: true}, ErrorMessage: sql.NullString{String: "build error api_key=secret", Valid: true}}}, nil
+		return []*db.StepExecution{{StepID: "gate", ExitCode: ptr.Of(int64(2)), ErrorMessage: ptr.Of("build error api_key=secret")}}, nil
 	}}
 	svc := &Service{deps: Deps{Repo: repo}}
 	chatID := "launched-chat"
