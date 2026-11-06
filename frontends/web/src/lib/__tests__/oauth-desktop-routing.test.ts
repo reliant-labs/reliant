@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/api/settings-grpc', () => ({
-  settingsGrpc: {
-    completeClaudeOAuth: vi.fn(),
-    completeCodexOAuth: vi.fn(),
-  },
+vi.mock('@/hooks/settings-queries', () => ({
+  completeClaudeOAuth: vi.fn(),
+  completeCodexOAuth: vi.fn(),
 }))
 
 vi.mock('@/lib/oauth-local', () => ({
@@ -12,7 +10,7 @@ vi.mock('@/lib/oauth-local', () => ({
   startOAuthViaLocalServer: vi.fn(),
 }))
 
-import { settingsGrpc } from '@/api/settings-grpc'
+import { completeClaudeOAuth, completeCodexOAuth } from '@/hooks/settings-queries'
 import { startOAuthViaDaemon } from '@/lib/oauth-local'
 import { runClaudeOAuthFlow } from '@/lib/claude-oauth'
 import { runCodexOAuthFlow } from '@/lib/codex-oauth'
@@ -87,11 +85,11 @@ describe.each([
     vi.clearAllMocks()
     setCryptoMock()
     capturedState = ''
-    vi.mocked(settingsGrpc.completeClaudeOAuth).mockResolvedValue({
+    vi.mocked(completeClaudeOAuth).mockResolvedValue({
       success: true,
       message: 'ok',
     } as never)
-    vi.mocked(settingsGrpc.completeCodexOAuth).mockResolvedValue({
+    vi.mocked(completeCodexOAuth).mockResolvedValue({
       success: true,
       message: 'ok',
     } as never)
@@ -172,9 +170,9 @@ describe.each([
     // reconstructed one fails with a mismatch.
     const exchange =
       label === 'Claude'
-        ? vi.mocked(settingsGrpc.completeClaudeOAuth)
-        : vi.mocked(settingsGrpc.completeCodexOAuth)
-    expect(exchange.mock.calls[0][2]).toBe('http://localhost:51000/callback')
+        ? vi.mocked(completeClaudeOAuth)
+        : vi.mocked(completeCodexOAuth)
+    expect(exchange.mock.calls[0][0].redirectUri).toBe('http://localhost:51000/callback')
   })
 
   it('falls back to the daemon RPC on builds without the bridge', async () => {

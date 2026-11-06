@@ -34,9 +34,6 @@ vi.mock("../../lib/settingsPersistence", () => ({
 // ─── Everything else the module graph drags in ───────────────────────────────
 
 const getProviders = vi.fn(async () => [] as unknown[]);
-vi.mock("../../api/client", () => ({
-  api: { settings: { getProviders: () => getProviders() } },
-}));
 
 // SettingsService is answered at the transport: the code under test reads
 // provider statuses / preferences through the generated hooks' cache entries.

@@ -254,32 +254,17 @@ export function useProviderAccountActions(): ProviderAccountActions {
 
 // --- Writes outside a component ---
 //
-// Settings' single-credential view (api.settings.updateProvider /
-// deleteProvider) adds and removes accounts imperatively. They invalidate the
-// same scope the generated mutations do, so the account list never shows what
-// they just changed as stale — and the provider statuses that view renders,
-// which GetProviderStatuses derives from the accounts.
+// The single-credential key entry (onboarding's model step, the API key setup
+// modal) adds an account imperatively. It invalidates the same scope the
+// generated mutations do, so the account list never shows what it just changed
+// as stale — and the provider statuses those views render, which
+// GetProviderStatuses derives from the accounts.
 
 /** Add an API key as a new account of the provider. The same key twice is one account. */
 export async function addProviderApiKey(provider: string, apiKey: string): Promise<{ created: boolean }> {
   try {
     const { created } = await client.addProviderAPIKey({ provider, apiKey });
     return { created };
-  } finally {
-    void queryClient.invalidateQueries({ queryKey: providerAccountServiceKeys.all });
-    invalidateProviderStatuses();
-  }
-}
-
-/** Remove every account of the provider (it becomes disconnected). */
-export async function disconnectProvider(provider: string): Promise<void> {
-  try {
-    const { accounts } = await client.listProviderAccounts({});
-    for (const account of accounts) {
-      if (account.provider === provider) {
-        await client.deleteProviderAccount({ accountId: account.id });
-      }
-    }
   } finally {
     void queryClient.invalidateQueries({ queryKey: providerAccountServiceKeys.all });
     invalidateProviderStatuses();

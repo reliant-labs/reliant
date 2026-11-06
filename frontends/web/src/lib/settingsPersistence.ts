@@ -1,4 +1,4 @@
-import { api } from "../api/client";
+import { batchUpsertSettings, deleteSetting } from "../hooks/settings-queries";
 import { getAuthTokenProvider } from "../api/authProvider";
 import { settingsSync } from "../services/settingsSync";
 import { logger } from "./logger";
@@ -103,7 +103,7 @@ async function flushWrites(batch: PendingWrites): Promise<void> {
       });
       return;
     }
-    await api.settings.batchUpsertSettings(settings);
+    await batchUpsertSettings(settings);
   } catch (error) {
     logger.error("[settingsPersistence] Failed to upsert settings batch", {
       keys: settings.map((s) => s.key),
@@ -141,7 +141,7 @@ export async function deleteSettingIfExists(key: string): Promise<void> {
   settingsSync.removeFromCache(key);
   if (!(await hasAuthToken())) return;
   try {
-    await api.settings.deleteSetting(key);
+    await deleteSetting(key);
   } catch {
     // Ignore missing setting or transient errors.
   }

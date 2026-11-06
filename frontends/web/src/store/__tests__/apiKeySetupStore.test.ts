@@ -1,13 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // --- Mocks -----------------------------------------------------------------
-// The store reaches into the api client, the auth/modal/checklist stores, and
+// The store reaches into the provider statuses, the auth/modal/checklist stores, and
 // (lazily) the onboarding service. We mock each so the tests exercise only the
 // credential-gating logic.
 
 const getProviders = vi.fn();
-vi.mock("../../api/client", () => ({
-  api: { settings: { getProviders: () => getProviders() } },
+vi.mock("../../hooks/settings-queries", () => ({
+  fetchProviderStatuses: async () => ({ providers: await getProviders() }),
 }));
 
 const provisionManagedKey = vi.fn();
@@ -66,10 +66,9 @@ const signedOut = { user: null, session: null };
 
 function providerStatus(overrides: Partial<{
   provider: string;
-  hasApiKey: boolean;
   configured: boolean;
 }>) {
-  return { provider: "reliant", hasApiKey: false, configured: false, ...overrides };
+  return { provider: "reliant", configured: false, ...overrides };
 }
 
 describe("apiKeySetupStore credential gating", () => {
@@ -145,7 +144,7 @@ describe("apiKeySetupStore credential gating", () => {
   it("treats an existing manual key as configured without self-healing", async () => {
     authState = signedIn;
     getProviders.mockResolvedValue([
-      providerStatus({ provider: "openai", hasApiKey: true }),
+      providerStatus({ provider: "openai", configured: true }),
     ]);
 
     await useApiKeySetupStore.getState().checkApiKeys();

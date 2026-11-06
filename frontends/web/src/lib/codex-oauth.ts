@@ -1,5 +1,5 @@
 import { reportError, reportFailure } from '@/lib/errorReporting'
-import { settingsGrpc, type SignInOutcome } from '@/api/settings-grpc'
+import { completeCodexOAuth, type SignInOutcome } from '@/hooks/settings-queries'
 import { startOAuthViaDaemon, startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
 import { isAbort } from '@/lib/oauth-abort'
@@ -133,12 +133,12 @@ export async function runCodexOAuthFlow(options: CodexOAuthOptions = {}): Promis
     }
 
     // Exchange code for tokens via the authenticated backend
-    const result = await settingsGrpc.completeCodexOAuth(
-      authCode,
+    const result = await completeCodexOAuth({
+      code: authCode,
       codeVerifier,
-      oauthResp.redirectUri,
-      options.accountId,
-    )
+      redirectUri: oauthResp.redirectUri,
+      accountId: options.accountId,
+    })
 
     if (result.success) {
       return { ok: true, message: result.message || 'Codex connected successfully', outcome: result }

@@ -21,14 +21,6 @@ import type { ReactNode } from "react";
 const getProviders = vi.fn(async () => [] as unknown[]);
 const getPreferences = vi.fn(async () => ({}) as Record<string, unknown>);
 
-vi.mock("../../api/client", () => ({
-  api: {
-    settings: {
-      getProviders: () => getProviders(),
-    },
-  },
-}));
-
 // SettingsService is answered at the transport: the code under test reads
 // provider statuses / preferences through the generated hooks' cache entries.
 import { setTransport } from "../../lib/connect";

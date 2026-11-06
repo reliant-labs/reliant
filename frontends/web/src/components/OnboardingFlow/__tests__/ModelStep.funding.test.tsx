@@ -78,10 +78,6 @@ vi.mock("@/hooks", () => ({
 
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
 
-vi.mock("@/api/client", () => ({
-  api: { settings: { updateProvider: vi.fn(), validateProvider: vi.fn() } },
-}));
-
 vi.mock("@/lib/events", () => ({
   getEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }));

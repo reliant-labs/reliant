@@ -23,15 +23,10 @@ const mocks = vi.hoisted(() => ({
   getToken: vi.fn().mockResolvedValue('token-abc'),
 }))
 
-vi.mock('../../api/client', () => ({
-  api: {
-    settings: {
-      createSetting: mocks.createSetting,
-      updateSetting: mocks.updateSetting,
-      batchUpsertSettings: mocks.batchUpsertSettings,
-      listSettings: mocks.listSettings,
-    },
-  },
+vi.mock('../../hooks/settings-queries', () => ({
+  batchUpsertSettings: mocks.batchUpsertSettings,
+  fetchSettings: mocks.listSettings,
+  deleteSetting: vi.fn().mockResolvedValue({}),
 }))
 
 // Writes now go through settingsPersistence, which gates on a token.

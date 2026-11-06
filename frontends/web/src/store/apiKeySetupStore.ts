@@ -6,7 +6,8 @@
  */
 
 import { create } from "zustand";
-import { api } from "../api/client";
+import type { ProviderStatus } from "../gen/reliant/v1/settings_pb";
+import { fetchProviderStatuses } from "../hooks/settings-queries";
 import { logger } from "../lib/logger";
 import { useModalStore } from "./modalStore";
 
@@ -31,8 +32,6 @@ const DISMISSED_KEY = "reliant.apiKeySetup.dismissed";
 
 const AUTO_MANAGED_PROVIDERS = new Set(["reliant"]);
 
-type ProviderStatus = Awaited<ReturnType<typeof api.settings.getProviders>>[number];
-
 /**
  * Match onboarding `detectCompletedItems` / checklist: key or OAuth-backed
  * provider. This is backend truth — a live session is NOT treated as
@@ -41,14 +40,14 @@ type ProviderStatus = Awaited<ReturnType<typeof api.settings.getProviders>>[numb
  * new account appear to have the Reliant provider configured.
  */
 function hasAnyProviderCredentials(providers: ProviderStatus[]): boolean {
-  return providers.some((p) => p.hasApiKey || p.configured);
+  return providers.some((p) => p.configured);
 }
 
 function hasAnyManualProviderCredentials(providers: ProviderStatus[]): boolean {
   return providers.some(
     (p) =>
       !AUTO_MANAGED_PROVIDERS.has((p.provider || "").toLowerCase()) &&
-      (p.hasApiKey || p.configured)
+      p.configured
   );
 }
 
@@ -89,7 +88,7 @@ async function loadProviderCredentials(): Promise<{
   hasAnyKey: boolean;
   hasAnyManualKey: boolean;
 }> {
-  const providers = await api.settings.getProviders();
+  const { providers } = await fetchProviderStatuses();
 
   return {
     providers,
@@ -194,7 +193,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
         hasAnyManualKey,
         providers: providers.map((p) => ({
           provider: p.provider,
-          hasKey: p.hasApiKey
+          hasKey: p.configured
         })),
       });
 

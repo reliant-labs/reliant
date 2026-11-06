@@ -7,7 +7,8 @@ import {
   XCircle,
 } from "lucide-react";
 import Modal from "./forge-ui/modal";
-import { api } from "../api/client";
+import { addProviderApiKey } from "../hooks/provider-account-queries";
+import { useValidateProviderAPIKey } from "../hooks/settings-service-hooks_gen";
 import { useApiKeySetupStore } from "../store/apiKeySetupStore";
 import { cn } from "../lib/utils";
 import { logger } from "../lib/logger";
@@ -156,6 +157,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
   } | null>(null);
   const [isValidating, setIsValidating] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const { mutateAsync: validateProviderAPIKey } = useValidateProviderAPIKey();
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
   const antigravityOAuth = useAntigravityOAuth();
@@ -307,10 +309,10 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     setValidationResult(null);
 
     try {
-      const result = await api.settings.validateProviderAPIKey(
-        selectedProvider,
-        apiKey.trim()
-      );
+      const result = await validateProviderAPIKey({
+        provider: selectedProvider,
+        apiKey: apiKey.trim(),
+      });
 
       if (result.valid) {
         setValidationResult({ valid: true, message: "API key looks valid." });
@@ -329,7 +331,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     } finally {
       setIsValidating(false);
     }
-  }, [apiKey, selectedProvider, provider.usesOAuth, handleConnectOAuth, handleConnectCopilot]);
+  }, [apiKey, selectedProvider, provider.usesOAuth, handleConnectOAuth, handleConnectCopilot, validateProviderAPIKey]);
 
   const handleSave = useCallback(async () => {
     if (!apiKey.trim()) {
@@ -342,10 +344,10 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
 
     try {
       // Validate first (server-side) to avoid saving obviously bad keys.
-      const validation = await api.settings.validateProviderAPIKey(
-        selectedProvider,
-        apiKey.trim()
-      );
+      const validation = await validateProviderAPIKey({
+        provider: selectedProvider,
+        apiKey: apiKey.trim(),
+      });
 
       if (!validation.valid) {
         setValidationResult({
@@ -358,7 +360,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
         return;
       }
 
-      await api.settings.updateProvider(selectedProvider, apiKey.trim());
+      await addProviderApiKey(selectedProvider, apiKey.trim());
 
       // Mark store as having a key so other ensure() calls stop prompting.
       useApiKeySetupStore.setState({ hasApiKey: true, showModal: false });
@@ -381,7 +383,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     } finally {
       setIsSaving(false);
     }
-  }, [apiKey, selectedProvider, onClose]);
+  }, [apiKey, selectedProvider, onClose, validateProviderAPIKey]);
 
   return (
     <Modal

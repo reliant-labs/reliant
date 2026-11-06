@@ -5,8 +5,8 @@
  *
  *  - an account action refetches the mounted list (it is a generated
  *    mutation, invalidating providerAccountServiceKeys.all);
- *  - the imperative single-credential writes (api.settings.updateProvider /
- *    deleteProvider) invalidate the same scope;
+ *  - the imperative single-credential write (addProviderApiKey) invalidates
+ *    the same scope;
  *  - providerAccountServiceKeys.all reaches the chat's account read too.
  */
 
@@ -23,7 +23,6 @@ import { accountToProto } from "@/test/providerAccountTransport";
 import type { ProviderAccount } from "@/types/providerAccount";
 import {
   addProviderApiKey,
-  disconnectProvider,
   useProviderAccountActions,
   useProviderAccounts,
 } from "../provider-account-queries";
@@ -114,14 +113,6 @@ describe("ProviderAccountService keys", () => {
 
     await act(() => addProviderApiKey("anthropic", "sk-ant"));
     await waitFor(() => expect(labels(list.result.current)).toEqual(["alice", "key"]));
-  });
-
-  it("disconnecting a provider refetches the list", async () => {
-    const list = renderHook(() => useProviderAccounts(), { wrapper });
-    await waitFor(() => expect(labels(list.result.current)).toEqual(["alice"]));
-
-    await act(() => disconnectProvider("claude"));
-    await waitFor(() => expect(labels(list.result.current)).toEqual([]));
   });
 
   it("providerAccountServiceKeys.all reaches the list and the chat's account", async () => {

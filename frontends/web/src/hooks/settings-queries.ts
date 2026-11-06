@@ -27,10 +27,24 @@ import type { MessageInitShape } from "@bufbuild/protobuf";
 import { ConfigScope } from "../gen/reliant/v1/common_pb";
 import {
   HiddenItemType,
+  SettingsService,
+  type CompleteAntigravityOAuthRequestSchema,
+  type CompleteClaudeOAuthRequestSchema,
+  type CompleteCodexOAuthRequestSchema,
+  type CompleteCodexOAuthResponse,
+  type DeleteSettingResponse,
   type GetPreferencesResponse,
   type GetProviderStatusesResponse,
+  type ListSettingsResponse,
+  type PollCopilotDeviceAuthRequestSchema,
+  type PollCopilotDeviceAuthResponse_Status,
+  type Setting,
+  type StartCopilotDeviceAuthResponse,
+  type SyncReliantProviderResponse,
   type UpdatePreferencesRequestSchema,
+  type UpdateShortcutsResponse,
 } from "../gen/reliant/v1/settings_pb";
+import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "@/store/authStore";
@@ -99,14 +113,187 @@ export function useProviderStatuses() {
  * GetProviderStatuses for an imperative caller, through the hook's cache
  * entry: concurrent callers share one RPC, and the answer lands where
  * useProviderStatuses and the onboarding checklist read it.
+ *
+ * `retry: false`, like the readers below: the API-key setup check and the
+ * onboarding checklist each decide what a failure means, and the query
+ * client's retry ladder would only delay that decision.
  */
 export function fetchProviderStatuses(staleTime = 0): Promise<GetProviderStatusesResponse> {
-  return queryClient.fetchQuery(settingsServiceQueries.getProviderStatuses({}, { staleTime }));
+  return queryClient.fetchQuery(
+    settingsServiceQueries.getProviderStatuses({}, { staleTime, retry: false }),
+  );
 }
 
 /** A provider credential changed (a sign-in, a key, a sync): refetch the statuses. */
 export function invalidateProviderStatuses(): void {
   void queryClient.invalidateQueries({ queryKey: providerStatusesKey() });
+}
+
+// --- Outside a component ---
+//
+// Stores, services and the OAuth flows run outside React, so the generated
+// hooks are out of reach. A read goes through the generated query options, so
+// it shares the hook's cache entry; a write calls the generated client and
+// invalidates what it made stale, by the generated keys. Both work on the
+// wire types: there is no second, hand-written shape of a setting.
+//
+// Reads here pass `retry: false`: each caller already decides what a failure
+// means (settingsSync retries on its own schedule, the shortcuts store falls
+// back to defaults), and the query client's retry ladder would only delay it.
+
+const settingsClient = connectClient(SettingsService);
+
+/** ListSettings, refetched, through the generated query's cache entry. */
+export function fetchSettings(projectId?: string): Promise<ListSettingsResponse> {
+  return queryClient.fetchQuery(
+    settingsServiceQueries.listSettings({ projectId }, { staleTime: 0, retry: false }),
+  );
+}
+
+/**
+ * Upsert many settings in ONE request. Server-side each entry has
+ * CreateSetting's upsert semantics, so callers do not need to know which keys
+ * already exist.
+ */
+export async function batchUpsertSettings(
+  settings: Array<{ key: string; value: string; valueType?: string }>,
+  projectId?: string,
+): Promise<Setting[]> {
+  if (settings.length === 0) return [];
+  const response = await settingsClient.batchUpsertSettings({
+    settings: settings.map((s) => ({ ...s, valueType: s.valueType ?? "string" })),
+    projectId,
+  });
+  void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.listSettings.all });
+  return response.settings;
+}
+
+export async function deleteSetting(key: string, projectId?: string): Promise<DeleteSettingResponse> {
+  const response = await settingsClient.deleteSetting({ key, projectId });
+  void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.listSettings.all });
+  return response;
+}
+
+/** The saved shortcut overrides (a JSON document), refetched. */
+export async function fetchShortcuts(): Promise<string> {
+  const response = await queryClient.fetchQuery(
+    settingsServiceQueries.getShortcuts({}, { staleTime: 0, retry: false }),
+  );
+  return response.shortcuts;
+}
+
+export async function updateShortcuts(shortcuts: string): Promise<UpdateShortcutsResponse> {
+  const response = await settingsClient.updateShortcuts({ shortcuts });
+  void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.getShortcuts.all });
+  return response;
+}
+
+/**
+ * Sync the Reliant provider API key from control-plane: mints or fetches the
+ * per-user rlat_ LLM key (llm:invoke) and persists it locally, so chat
+ * requests can use the reliant provider without manual configuration.
+ * Idempotent; `forceRotate` rotates the existing key on control-plane.
+ */
+export async function syncReliantProvider(forceRotate = false): Promise<SyncReliantProviderResponse> {
+  try {
+    return await settingsClient.syncReliantProvider({ forceRotate });
+  } finally {
+    invalidateProviderStatuses();
+  }
+}
+
+/**
+ * What a sign-in completion says happened to the account. Signing in to an
+ * upstream account that is already connected refreshes it (`created` false);
+ * signing in as someone other than the reconnect target saves a separate
+ * account and sets `identityMismatch`.
+ */
+export interface SignInOutcome {
+  success: boolean;
+  message: string;
+  created: boolean;
+  identityMismatch?: string;
+  /** The account's label (its detected email, else a name), for the confirmation line. */
+  accountLabel?: string;
+}
+
+type SignInResponse = Pick<
+  CompleteCodexOAuthResponse,
+  "success" | "message" | "created" | "identityMismatch" | "account"
+>;
+
+function signInOutcome(response: SignInResponse): SignInOutcome {
+  return {
+    success: response.success,
+    message: response.message,
+    created: response.created,
+    identityMismatch: response.identityMismatch || undefined,
+    accountLabel: response.account?.label || undefined,
+  };
+}
+
+/** Run a sign-in completion; whatever it did, the provider statuses are stale. */
+async function completeSignIn(call: () => Promise<SignInResponse>): Promise<SignInOutcome> {
+  try {
+    return signInOutcome(await call());
+  } finally {
+    invalidateProviderStatuses();
+  }
+}
+
+export function completeCodexOAuth(
+  req: MessageInitShape<typeof CompleteCodexOAuthRequestSchema>,
+): Promise<SignInOutcome> {
+  return completeSignIn(() => settingsClient.completeCodexOAuth(req));
+}
+
+export function completeClaudeOAuth(
+  req: MessageInitShape<typeof CompleteClaudeOAuthRequestSchema>,
+): Promise<SignInOutcome> {
+  return completeSignIn(() => settingsClient.completeClaudeOAuth(req));
+}
+
+/**
+ * Takes no `state`: Google's token endpoint does not want it echoed back on
+ * the exchange. State is still generated and verified in the browser against
+ * the redirect (lib/antigravity-oauth).
+ */
+export function completeAntigravityOAuth(
+  req: MessageInitShape<typeof CompleteAntigravityOAuthRequestSchema>,
+): Promise<SignInOutcome> {
+  return completeSignIn(() => settingsClient.completeAntigravityOAuth(req));
+}
+
+/**
+ * Begin the GitHub Copilot device-authorization flow: the user code to show,
+ * the verification URI to open, and the interval and expiry that govern
+ * pollCopilotDeviceAuth.
+ */
+export function startCopilotDeviceAuth(): Promise<StartCopilotDeviceAuthResponse> {
+  return settingsClient.startCopilotDeviceAuth({});
+}
+
+/** One poll of a Copilot device flow. On AUTHORIZED the backend has saved the credential. */
+export async function pollCopilotDeviceAuth(
+  req: MessageInitShape<typeof PollCopilotDeviceAuthRequestSchema>,
+): Promise<
+  Omit<SignInOutcome, "success" | "message"> & {
+    status: PollCopilotDeviceAuthResponse_Status;
+    errorMessage: string;
+  }
+> {
+  try {
+    const response = await settingsClient.pollCopilotDeviceAuth(req);
+    return {
+      status: response.status,
+      errorMessage: response.errorMessage,
+      created: response.created,
+      identityMismatch: response.identityMismatch || undefined,
+      accountLabel: response.account?.label || undefined,
+    };
+  } finally {
+    invalidateProviderStatuses();
+  }
 }
 
 // --- Preferences ---
