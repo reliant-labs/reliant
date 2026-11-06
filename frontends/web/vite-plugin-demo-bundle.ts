@@ -51,7 +51,7 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   { match: "src/components/App.tsx", why: "Reliant's app root" },
   { match: "src/components/Root.tsx", why: "Reliant's app root" },
   // Chat, workflows, the daemon and what runs on it.
-  { match: "src/components/Chat/", why: "Reliant chat", except: ["src/components/Chat/LightweightCodeViewer.tsx"] },
+  { match: "src/components/Chat/", why: "Reliant chat" },
   { match: "src/components/workflow/", why: "Reliant workflows" },
   { match: "src/components/workflows/", why: "Reliant workflows" },
   { match: "src/components/Automations/", why: "Reliant automations" },
@@ -79,8 +79,9 @@ export const RELIANT_ONLY: readonly ReliantOnlyRule[] = [
   { match: "src/components/Onboarding/ContextualTip", why: "Reliant onboarding" },
   { match: "src/components/Onboarding/journeys/workflows", why: "Reliant's workflows journey" },
   { match: "src/components/Onboarding/journeys/fixMyPr", why: "Reliant's workflows journey" },
+  { match: "src/components/Onboarding/journeys/catalog.ts", why: "Reliant's journeys and end-of-tour hooks" },
   // Settings, billing, orgs, projects: account pages.
-  { match: "src/components/Settings/", why: "Reliant settings", except: ["src/components/Settings/privacyLinks.ts", "src/components/Settings/providers/accountFormat.ts"] },
+  { match: "src/components/Settings/", why: "Reliant settings", except: ["src/components/Settings/providers/accountFormat.ts"] },
   { match: "src/components/Billing/", why: "billing" },
   { match: "src/components/Projects/", why: "Reliant projects", except: ["src/components/Projects/cloneTargets.ts"] },
   { match: "src/components/Claim/", why: "the forge shell's claim flow" },
@@ -98,30 +99,6 @@ export function reliantOnlyRule(moduleId: string, root: string, rules: readonly 
   const key = nm >= 0 ? rel.slice(nm) : rel;
   return rules.find((r) => (/\.[a-z]+$/.test(r.match) ? key === r.match : key.startsWith(r.match) && !r.except?.includes(key)));
 }
-
-/**
- * TEMPORARY substitutions (src/demoBundle/interim/README.md): for one importer
- * only, a Reliant-only import is answered by an interim stub until its owner
- * cuts it. Keyed by importer so the same module reached from anywhere else
- * still fails the guard. Paths relative to frontends/web.
- */
-export const INTERIM_SUBSTITUTES: readonly { importer: string; module: string; substitute: string }[] = [
-  {
-    importer: "src/components/Onboarding/journeys/registry.ts",
-    module: "src/components/Onboarding/journeys/workflows.tsx",
-    substitute: "src/demoBundle/interim/workflowsJourney.ts",
-  },
-  {
-    importer: "src/components/Onboarding/useTourNavigation.ts",
-    module: "src/store/chatStore.ts",
-    substitute: "src/demoBundle/interim/chatStore.ts",
-  },
-  {
-    importer: "src/components/Onboarding/useTourNavigation.ts",
-    module: "src/components/OnboardingFlow/useOnboardingComplete.ts",
-    substitute: "src/demoBundle/interim/useOnboardingComplete.ts",
-  },
-];
 
 /**
  * DEMO TWINS. A module `x.ts` with a sibling `x.demo.ts` is replaced by it in
@@ -144,23 +121,16 @@ export function twinOf(file: string): string | undefined {
   return undefined;
 }
 
-/** The demo build's substitutions: demo twins, then the interim stubs. */
+/** The demo build's substitutions: every module with a demo twin is replaced by it. */
 export function demoSubstitutes(): Plugin {
-  let root = "";
   return {
     name: "reliant:demo-substitutes",
     enforce: "pre",
-    configResolved(config) {
-      root = config.root;
-    },
     async resolveId(source, importer, options) {
       if (!importer) return null;
       const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
       if (!resolved || resolved.external) return resolved;
       const file = resolved.id.split("?")[0];
-      const rel = (id: string) => path.relative(root, id).split(path.sep).join("/");
-      const interim = INTERIM_SUBSTITUTES.find((s) => s.importer === rel(importer.split("?")[0]) && s.module === rel(file));
-      if (interim) return path.resolve(root, interim.substitute);
       const twin = twinOf(file);
       return twin ?? resolved;
     },
