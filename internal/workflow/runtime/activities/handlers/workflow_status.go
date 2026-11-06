@@ -3,9 +3,7 @@ package handlers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -242,7 +240,7 @@ func terminalWriteMustRetry(status string, err error) bool {
 	default:
 		return false
 	}
-	return !svcerr.IsNotFound(err) && !errors.Is(err, sql.ErrNoRows)
+	return !svcerr.IsNotFound(err)
 }
 
 // completionNotifies reports whether a ROOT completion should mark the chat

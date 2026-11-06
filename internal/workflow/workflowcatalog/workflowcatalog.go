@@ -11,12 +11,12 @@ package workflowcatalog
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"sync"
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
@@ -107,7 +107,7 @@ func (c *Catalog) checkUser(userID string) error {
 // far as this request can see.
 func (c *Catalog) GetProjectWorkflowsJSON(_ context.Context, projectID string) (*string, error) {
 	if projectID != c.projectID || projectID == "" {
-		return nil, sql.ErrNoRows
+		return nil, svcerr.NotFound("project config")
 	}
 	return c.projectWorkflows, c.projectErr
 }

@@ -2,11 +2,10 @@ package mcpconfig
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -55,7 +54,7 @@ func isNotFoundErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return true
 	}
 	return strings.Contains(strings.ToLower(err.Error()), "not found")

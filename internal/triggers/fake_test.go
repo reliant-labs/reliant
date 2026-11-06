@@ -3,11 +3,12 @@ package triggers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/google/uuid"
 
@@ -58,7 +59,7 @@ func (r *fakeRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if !r.daemons[id] {
-		return nil, sql.ErrNoRows
+		return nil, svcerr.NotFound("daemon")
 	}
 	return &db.Daemon{ID: id, UserID: "user-1"}, nil
 }

@@ -3,7 +3,6 @@ package preset
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -428,7 +427,7 @@ func (s *Service) loadPresetByNameFromDB(ctx context.Context, projectID, name st
 	// Try stored project presets first
 	if projectID != "" {
 		presetsJSON, err := s.deps.Repo.GetProjectPresetsJSON(ctx, projectID)
-		if err == nil || !errors.Is(err, sql.ErrNoRows) {
+		if err == nil || !svcerr.IsNotFound(err) {
 			if err == nil {
 				storedPresets, parseErr := cfg.ParseStoredPresets(presetsJSON)
 				if parseErr == nil {

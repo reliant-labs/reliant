@@ -2,15 +2,14 @@ package tools_daemon
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -487,7 +486,7 @@ func (s *Service) shouldApplyProjectConfigUpdate(ctx context.Context, projectID,
 
 	pushedAt, err := s.deps.Repo.GetProjectMachineCatalogPushedAt(ctx, projectID, daemonID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return true, nil
 		}
 		return false, err

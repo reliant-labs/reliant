@@ -3,7 +3,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1637,7 +1636,7 @@ func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectCon
 }
 
 // GetProjectConfigRecord reads the project's whole config record, or
-// sql.ErrNoRows, unwrapped. A caller that needs one part of it reads that
+// svcerr.NotFound. A caller that needs one part of it reads that
 // column instead (see store.GetProjectConfigRecord).
 func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*ProjectConfigRecord, error) {
 	if projectID == "" {
@@ -1647,7 +1646,7 @@ func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*P
 }
 
 // GetProjectWorkflowsJSON reads one column of the project config record: the
-// synced .reliant/workflows. It returns sql.ErrNoRows, unwrapped, when the
+// synced .reliant/workflows. It returns svcerr.NotFound when the
 // project has no record. Prefer it (and GetProjectPresetsJSON) to
 // GetProjectConfigRecord whenever that column is all a caller needs: the full
 // row carries every indexed skill body and can run to tens of MB.
@@ -1659,7 +1658,7 @@ func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*
 }
 
 // GetProjectPresetsJSON reads one column of the project config record: the
-// synced .reliant/presets. It returns sql.ErrNoRows, unwrapped, when the
+// synced .reliant/presets. It returns svcerr.NotFound when the
 // project has no record.
 func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
@@ -1669,7 +1668,7 @@ func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*st
 }
 
 // GetProjectMCPConfigsJSON reads one column of the project config record: the
-// stored scoped MCP configs. It returns sql.ErrNoRows, unwrapped, when the
+// stored scoped MCP configs. It returns svcerr.NotFound when the
 // project has no record.
 func (r *Repo) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
@@ -3871,7 +3870,7 @@ func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden b
 func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
 		deleted, err := store.RemoveWorkflowDraftBySlug(txCtx, r.ORM(), userID, slug)
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return nil
 		}
 		if err != nil {

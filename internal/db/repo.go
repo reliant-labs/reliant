@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -538,7 +539,7 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(
 			continue
 		}
 
-		// Non-retryable business errors (e.g. sql.ErrNoRows from a lookup
+		// Non-retryable business errors (e.g. a not-found from a lookup
 		// inside the tx, or a TxOutcome such as a declined launch) are
 		// expected control flow for callers — log them quietly so genuine
 		// transaction failures stand out.
@@ -583,7 +584,7 @@ type TxOutcome interface {
 // isExpectedTxOutcome reports whether a RunTx body's error is expected
 // control flow rather than a transaction failure.
 func isExpectedTxOutcome(err error) bool {
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) || errors.Is(err, orm.ErrNoRows) {
 		return true
 	}
 	var outcome TxOutcome
@@ -1162,7 +1163,7 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 		var wt *Worktree
 		if chat.WorktreeID != nil {
 			wt, err = r.GetWorktree(ctx, *chat.WorktreeID)
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			if err != nil && !svcerr.IsNotFound(err) {
 				return fmt.Errorf("get bound worktree: %w", err)
 			}
 		}

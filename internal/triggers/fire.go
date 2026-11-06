@@ -3,7 +3,6 @@ package triggers
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -193,7 +193,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	if trigger.NoMachine || trigger.MachinePoolID != "" {
 		// nothing to look up: a pool-bound trigger is placed at launch
 	} else if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
+		if !svcerr.IsNotFound(err) {
 			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
 		}
 		const detail = "trigger's daemon no longer exists; edit the trigger to choose another"

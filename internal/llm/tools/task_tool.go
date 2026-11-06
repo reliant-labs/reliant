@@ -2,15 +2,14 @@
 package tools
 
 import (
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -87,7 +86,7 @@ func (l *ListTasksTool) Execute(rctx *rctx.ToolContext, params ListTasksParams) 
 	// its parent used to delegate the work.
 	resolved, err := resolvePlanForRead(rctx.Context, l.repo, threadID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
 		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find plan for thread: %v", err)), nil
@@ -399,7 +398,7 @@ func (u *UpdateTaskTool) Execute(rctx *rctx.ToolContext, params UpdateTaskParams
 		// with the owning thread.
 		resolved, err := resolvePlanForRead(rctx.Context, u.repo, threadID)
 		if err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
+			if svcerr.IsNotFound(err) {
 				return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
 			}
 			return NewTextErrorResponse(fmt.Sprintf("Failed to find plan for ordinal lookup: %v", err)), nil

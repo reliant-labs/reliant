@@ -10,7 +10,7 @@ import (
 
 // GetProjectConfigPushedAt returns when the daemon pushed the project's
 // current config record (pushed_at), without reading any of its payload. It
-// returns sql.ErrNoRows, unwrapped, when the project has no record, like
+// returns svcerr.NotFound when the project has no record, like
 // GetProjectConfigRecord. See store.GetProjectConfigPushedAt.
 func (r *Repo) GetProjectConfigPushedAt(ctx context.Context, projectID string) (time.Time, error) {
 	if projectID == "" {
@@ -20,7 +20,7 @@ func (r *Repo) GetProjectConfigPushedAt(ctx context.Context, projectID string) (
 }
 
 // GetProjectScenariosJSON reads one column of the project config record: the
-// synced .reliant scenarios. It returns sql.ErrNoRows, unwrapped, when the
+// synced .reliant scenarios. It returns svcerr.NotFound when the
 // project has no record.
 func (r *Repo) GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
@@ -31,7 +31,7 @@ func (r *Repo) GetProjectScenariosJSON(ctx context.Context, projectID string) (*
 
 // GetProjectConfigVersion returns an opaque token that changes whenever the
 // project's config record is rewritten, without reading any of its payload.
-// It returns sql.ErrNoRows, unwrapped, when the project has no record, like
+// It returns svcerr.NotFound when the project has no record, like
 // GetProjectConfigRecord. See store.GetProjectConfigVersion for what the
 // token is made of and why.
 func (r *Repo) GetProjectConfigVersion(ctx context.Context, projectID string) (string, error) {

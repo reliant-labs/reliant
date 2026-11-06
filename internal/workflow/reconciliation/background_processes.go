@@ -3,12 +3,11 @@ package reconciliation
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -150,7 +149,7 @@ func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *
 // settleOwnedProcesses closes the calls whose process ran on daemonID.
 func (r *Reconciler) settleOwnedProcesses(ctx context.Context, stats *passStats, daemons BackgroundProcessDaemons, userID, daemonID string, calls []*db.BackgroundedProcessCall) int {
 	row, err := r.repo.GetDaemon(ctx, daemonID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		// The daemon was deleted, and its processes with it.
 		closed := 0
 		for _, call := range calls {

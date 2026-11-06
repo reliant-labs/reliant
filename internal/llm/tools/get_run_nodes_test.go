@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/threads"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -50,7 +52,9 @@ func TestGetRunExecuteIncludesNodeMetadata(t *testing.T) {
 	repo.GetChatFunc = func(_ context.Context, id string) (*db.Chat, error) {
 		return &db.Chat{ID: id, UserID: "owner", WorkflowID: &root}, nil
 	}
-	repo.GetLatestContextWindowFunc = func(context.Context, string) (*db.ContextWindow, error) { return nil, sql.ErrNoRows }
+	repo.GetLatestContextWindowFunc = func(context.Context, string) (*db.ContextWindow, error) {
+		return nil, svcerr.NotFound("context window")
+	}
 	repo.ListRunNodeExecutionsFunc = func(_ context.Context, id string, limit int) ([]*db.StepExecution, error) {
 		require.Equal(t, root, id)
 		return []*db.StepExecution{{ID: "step", StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 2, Valid: true}, OutputJSON: sql.NullString{String: `{"stderr":"token=hidden"}`, Valid: true}}}, nil
@@ -79,7 +83,9 @@ func TestGetRunReportsAUsageLimitWait(t *testing.T) {
 			UsageLimitProvider: "Claude subscription", UsageLimitResumesAt: &resumes,
 			RootStatus: db.WorkflowStatus{State: db.WorkflowStateActive}}, nil
 	}
-	repo.GetLatestContextWindowFunc = func(context.Context, string) (*db.ContextWindow, error) { return nil, sql.ErrNoRows }
+	repo.GetLatestContextWindowFunc = func(context.Context, string) (*db.ContextWindow, error) {
+		return nil, svcerr.NotFound("context window")
+	}
 	repo.ListRunNodeExecutionsFunc = func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }
 	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})
 	require.NoError(t, err)
@@ -108,7 +114,9 @@ func TestGetRunReportsWhyARunFailedBeforeItsFirstNode(t *testing.T) {
 		require.Equal(t, root, id)
 		return &db.Workflow{ID: id, FailureDetail: &reason}, nil
 	}
-	repo.GetLatestContextWindowFunc = func(context.Context, string) (*db.ContextWindow, error) { return nil, sql.ErrNoRows }
+	repo.GetLatestContextWindowFunc = func(context.Context, string) (*db.ContextWindow, error) {
+		return nil, svcerr.NotFound("context window")
+	}
 	repo.ListRunNodeExecutionsFunc = func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }
 
 	resp, err := (&getRunTool{repo: repo, threads: threads.NewService(repo)}).Execute(callerRC("caller", "tc"), GetRunParams{RunID: "target"})

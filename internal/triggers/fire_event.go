@@ -3,7 +3,6 @@ package triggers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +13,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -151,7 +151,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if trigger.NoMachine || trigger.MachinePoolID != "" {
 		// nothing to look up
 	} else if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
-		if !errors.Is(err, sql.ErrNoRows) {
+		if !svcerr.IsNotFound(err) {
 			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
 		}
 		const detail = "trigger's daemon no longer exists; edit the trigger to choose another"

@@ -3,8 +3,9 @@ package threads
 
 import (
 	"context"
-	"database/sql"
 	"errors"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // isEmptyThread reports whether err from GetLatestContextWindow means "this
@@ -21,7 +22,7 @@ import (
 //	    return []*db.Message{}, nil
 //	}
 //
-// That comment is only true for sql.ErrNoRows. The branch also swallowed
+// That comment is only true for a not-found. The branch also swallowed
 // context cancellation, and THAT is what produced the user-visible failure
 // this function was written for:
 //
@@ -58,11 +59,11 @@ func isEmptyThread(err error) bool {
 
 	// Cancellation is never emptiness. Checked explicitly and first: this is
 	// the case that caused the incident, and a wrapped cancellation must not
-	// reach the sql.ErrNoRows test below by some future accident of wrapping.
+	// reach the not-found test below by some future accident of wrapping.
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 
 	// The store wraps with %w, so errors.Is sees through the message.
-	return errors.Is(err, sql.ErrNoRows)
+	return svcerr.IsNotFound(err)
 }

@@ -3,11 +3,11 @@ package threads
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
@@ -100,9 +100,9 @@ func TestIsEmptyThread_ClassifiesOnlyNoRows(t *testing.T) {
 		want bool
 	}{
 		{"nil is empty", nil, true},
-		{"no rows is empty", sql.ErrNoRows, true},
+		{"not found is empty", svcerr.NotFound("context window"), true},
 		{"wrapped no rows is empty",
-			fmt.Errorf("failed to get latest context window: %w", sql.ErrNoRows), true},
+			fmt.Errorf("failed to get latest context window: %w", svcerr.NotFound("context window")), true},
 
 		// The incident cases.
 		{"cancellation is NOT empty", context.Canceled, false},

@@ -2,12 +2,13 @@ package streaming
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
@@ -48,12 +49,12 @@ func newCatchupChatRepo(latest int64) catchupChatRepo {
 }
 
 func (catchupChatRepo) GetLatestContextWindow(context.Context, string) (*db.ContextWindow, error) {
-	return nil, sql.ErrNoRows
+	return nil, svcerr.NotFound("thread")
 }
 
 // The main thread's row is read alongside its context-window walk.
 func (catchupChatRepo) GetThread(context.Context, string) (*db.Thread, error) {
-	return nil, sql.ErrNoRows
+	return nil, svcerr.NotFound("thread")
 }
 
 // streamingTestClient serves svc over h2c, as the API server does, and

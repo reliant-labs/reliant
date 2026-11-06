@@ -2,13 +2,12 @@ package mcp
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
@@ -188,7 +187,7 @@ func (s *Service) persistStoredMCPConfigScopes(
 
 	record, err := s.deps.Repo.GetProjectConfigRecord(ctx, projectID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return nil
 		}
 		return fmt.Errorf("failed to load stored MCP configuration snapshot: %w", err)
@@ -256,7 +255,7 @@ func (s *Service) persistGlobalScopeSnapshotAcrossProjects(
 
 		record, recErr := s.deps.Repo.GetProjectConfigRecord(ctx, project.ID)
 		if recErr != nil {
-			if errors.Is(recErr, sql.ErrNoRows) {
+			if svcerr.IsNotFound(recErr) {
 				continue
 			}
 			return fmt.Errorf("failed to load project config record for global MCP propagation (project_id=%s): %w", project.ID, recErr)
@@ -301,7 +300,7 @@ func (s *Service) readMCPConfigForScope(ctx context.Context, projectID string, s
 
 	mcpConfigs, err := s.deps.Repo.GetProjectMCPConfigsJSON(ctx, projectID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return &MCPConfigFile{MCPServers: make(map[string]MCPServerConfig)}, nil
 		}
 		return nil, fmt.Errorf("failed to load stored MCP configuration snapshot: %w", err)
@@ -328,7 +327,7 @@ func (s *Service) readMCPConfigForScope(ctx context.Context, projectID string, s
 func (s *Service) readMergedScopedServers(ctx context.Context, projectID string) (map[string]serverScopeConfig, error) {
 	mcpConfigs, err := s.deps.Repo.GetProjectMCPConfigsJSON(ctx, projectID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return map[string]serverScopeConfig{}, nil
 		}
 		return nil, fmt.Errorf("failed to load stored MCP configuration snapshot: %w", err)

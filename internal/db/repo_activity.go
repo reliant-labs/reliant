@@ -3,13 +3,12 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -101,7 +100,7 @@ func (r *Repo) announceChatActivity(ctx context.Context, chatID string, fixed *C
 	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		written = nil
 		chat, err := r.GetChat(txCtx, chatID)
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			logging.DebugContext(txCtx, "[ActivityEvent] chat is gone; no activity to announce", "chatID", chatID)
 			return nil
 		}

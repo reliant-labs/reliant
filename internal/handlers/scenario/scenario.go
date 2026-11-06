@@ -5,7 +5,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -31,8 +30,8 @@ import (
 
 // projectScenariosReader reads the synced project scenarios column of a
 // project's config record, and nothing else from it
-// (db.Repo.GetProjectScenariosJSON). It returns sql.ErrNoRows, unwrapped, when
-// the project has no record.
+// (db.Repo.GetProjectScenariosJSON). It returns svcerr.NotFound when the
+// project has no record.
 type projectScenariosReader interface {
 	GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error)
 }
@@ -41,7 +40,7 @@ type projectScenariosReader interface {
 var _ projectScenariosReader = (*db.Repo)(nil)
 
 // storedProjectScenarios returns the project's synced scenarios. A project
-// with no config record returns sql.ErrNoRows, unwrapped.
+// with no config record returns svcerr.NotFound.
 //
 // It reads the one column the scenario RPCs need. The whole config record
 // carries every skill body and repo memory the daemon indexed — 18 MB in
@@ -308,7 +307,7 @@ func (s *Service) RunScenario(
 
 			// Load the scenario from stored config
 			allScenarios, err := storedProjectScenarios(ctx, s.deps.Repo, project.ID)
-			if errors.Is(err, sql.ErrNoRows) {
+			if svcerr.IsNotFound(err) {
 				return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("project config not found: %s", project.ID))
 			}
 			if err != nil {
@@ -587,7 +586,7 @@ func (s *Service) ExportScenario(
 
 		// Load from stored config
 		allScenarios, err := storedProjectScenarios(ctx, s.deps.Repo, project.ID)
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return nil, svcerr.NotFound("project config")
 		}
 		if err != nil {
@@ -845,7 +844,7 @@ func discoverProjectScenariosFromDB(repo Repository, ctx context.Context, projec
 	}
 
 	allScenarios, err := storedProjectScenarios(ctx, repo, projectID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return nil, nil // No config record, no stored scenarios
 	}
 	if err != nil {

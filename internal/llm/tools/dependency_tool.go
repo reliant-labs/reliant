@@ -2,12 +2,11 @@
 package tools
 
 import (
-	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -275,7 +274,7 @@ func (t *ListReadyTasksTool) Execute(rctx *rctx.ToolContext, params ListReadyTas
 	// ready on the board it was spawned from.
 	resolved, err := resolvePlanForRead(rctx.Context, t.repo, threadID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return NewTextErrorResponse("No plan found for this thread."), nil
 		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find plan: %v", err)), nil

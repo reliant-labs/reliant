@@ -15,10 +15,10 @@ package workflowsource
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -179,7 +179,7 @@ func ProjectIndex(ctx context.Context, store ProjectStore, projectID string) (*w
 		return nil, nil
 	}
 	workflowsJSON, err := store.GetProjectWorkflowsJSON(ctx, projectID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return nil, nil
 	}
 	if err != nil {
@@ -257,7 +257,7 @@ func ProjectPresets(ctx context.Context, store interface {
 		warnUnsyncedMachine(ctx, projectID, daemonID, "presets")
 	}
 	presetsJSON, err := store.GetProjectPresetsJSON(ctx, projectID)
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return nil, nil
 	}
 	if err != nil {

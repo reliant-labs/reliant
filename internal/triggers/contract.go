@@ -38,7 +38,7 @@ type Repo interface {
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 
-	// GetDaemon reports a missing row as sql.ErrNoRows.
+	// GetDaemon reports a missing row as svcerr.NotFound.
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 
 	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error)
