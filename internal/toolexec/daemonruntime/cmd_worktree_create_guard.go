@@ -22,12 +22,12 @@ import (
 // What this file guards against, all seen on one cloud machine in prod
 // (2026-11-03..06, worktree.create taking 20-135s against a 2m budget):
 //
-//   - A create that answers after its caller gave up. The server marks the
-//     workspace FAILED and never learns the path, so the checkout is orphaned
-//     and holds its branch: the user's retry fails with "branch is already
-//     checked out at <the orphan>". The daemon's deadline is the caller's,
-//     measured from later, so a create whose context has ended has a caller
-//     that is gone: it takes its checkout back (abandonCheckout).
+//   - A create whose context ends after `git worktree add` finished. That is
+//     no proof its caller gave up (the caller's wait is not this context, and
+//     the answer can still reach it), so a finished checkout is never taken
+//     back: deleting one the server recorded as ACTIVE would lose the user's
+//     workspace. It is finished as usual, locked for its worktree id, so a
+//     re-sent request answers with it (finishedCreate).
 //   - A `git worktree add` killed at the deadline. git cannot clean up after
 //     SIGKILL, so it leaves a half-written checkout and a registration locked
 //     "initializing" that holds the branch for good. The handler removes both
@@ -45,17 +45,42 @@ import (
 // worktreeCreatePath is where worktree.create puts a checkout:
 // <HOME>/.reliant/worktrees/<workspace_id>[/<sub_path>]. A sub_path of ""
 // puts it at the workspace root itself (single-repo project).
+//
+// Both come from the request, and the path is locked, created and, on a
+// failed create, removed whole (abandonCheckout), so it must stay inside the
+// worktrees root: workspace_id is a relative path below the root
+// (<project>/<name>-<id>, worktreepath.WorkspaceDirName), sub_path a relative
+// path below the workspace, neither absolute nor climbing out with "..".
+// Anything else is refused before the disk is touched.
 func worktreeCreatePath(workspaceID, subPath string) (string, error) {
+	if !filepath.IsLocal(workspaceID) || filepath.Clean(workspaceID) == "." {
+		return "", fmt.Errorf("invalid workspace_id %q: must be a relative path below the worktrees directory", workspaceID)
+	}
+	if subPath != "" && !filepath.IsLocal(subPath) {
+		return "", fmt.Errorf("invalid sub_path %q: must be a relative path inside the workspace", subPath)
+	}
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	p := filepath.Join(homeDir, ".reliant", "worktrees", workspaceID)
+	worktrees := filepath.Join(homeDir, ".reliant", "worktrees")
+	root := filepath.Join(worktrees, workspaceID)
+	p := root
 	if subPath != "" {
-		p = filepath.Join(p, subPath)
+		p = filepath.Join(root, subPath)
+	}
+	if rel, err := filepath.Rel(root, p); err != nil || !filepath.IsLocal(rel) {
+		return "", fmt.Errorf("invalid sub_path %q: leaves the workspace directory", subPath)
+	}
+	if rel, err := filepath.Rel(worktrees, root); err != nil || !filepath.IsLocal(rel) || rel == "." {
+		return "", fmt.Errorf("invalid workspace_id %q: leaves the worktrees directory", workspaceID)
 	}
 	return p, nil
 }
+
+// worktreeFinishTimeout bounds finishing a checkout (head check, lock, fsync)
+// whose create's context ended after `git worktree add` succeeded.
+const worktreeFinishTimeout = 30 * time.Second
 
 // createPathLocks serializes worktree.create per checkout path: one channel of
 // capacity one per path this daemon process has created a checkout at. They

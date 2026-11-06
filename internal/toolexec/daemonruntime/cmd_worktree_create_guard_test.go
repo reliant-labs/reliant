@@ -131,6 +131,54 @@ func TestAbandonCheckout_RemovesAKilledAddsRegistration(t *testing.T) {
 	gitOutIn(t, projectPath, "worktree", "add", "-q", "-b", "feat/killed", filepath.Join(t.TempDir(), "retry"), "main")
 }
 
+// The checkout path is built from the request and a failed create removes it
+// whole, so a workspace_id or sub_path that leaves the workspace's directory
+// is refused before anything on disk is touched.
+func TestWorktreeCreate_RefusesAPathOutsideTheWorkspace(t *testing.T) {
+	t.Parallel()
+	home, err := os.UserHomeDir()
+	require.NoError(t, err)
+	victim := filepath.Join(home, "victim-"+uniqueWorkspaceID(t, "x"))
+	require.NoError(t, os.MkdirAll(victim, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(victim, "keep.txt"), []byte("x\n"), 0o644))
+	rel, err := filepath.Rel(filepath.Join(home, ".reliant", "worktrees", "ws"), victim)
+	require.NoError(t, err)
+
+	cases := []struct{ workspaceID, subPath string }{
+		{"ws", rel},
+		{"ws", victim},
+		{"ws", "repo/../../other"},
+		{"..", ""},
+		{".", "repo"},
+		{"ws/../..", ""},
+		{"proj/..", "repo"},
+		{"", "repo"},
+		{filepath.Dir(victim), ""},
+	}
+	for _, c := range cases {
+		_, err := worktreeCreatePath(c.workspaceID, c.subPath)
+		require.Error(t, err, "workspace_id=%q sub_path=%q", c.workspaceID, c.subPath)
+
+		resp := createFor(t, map[string]any{
+			"project_path": t.TempDir(),
+			"workspace_id": c.workspaceID,
+			"sub_path":     c.subPath,
+			"name":         "escape",
+			"branch":       "feat/escape",
+			"worktree_id":  "wt-escape",
+		})
+		require.False(t, resp.Success, "workspace_id=%q sub_path=%q", c.workspaceID, c.subPath)
+		_, err = os.Stat(filepath.Join(victim, "keep.txt"))
+		require.NoError(t, err, "a refused create touched %s", victim)
+	}
+
+	for _, ok := range []struct{ workspaceID, subPath string }{{"ws", ""}, {"ws", "repo"}, {"ws", "nested/repo"}, {"ws", "."}, {"ws/wt-1", "repo"}} {
+		p, err := worktreeCreatePath(ok.workspaceID, ok.subPath)
+		require.NoError(t, err, "workspace_id=%q sub_path=%q", ok.workspaceID, ok.subPath)
+		require.True(t, strings.HasPrefix(p, filepath.Join(home, ".reliant", "worktrees", "ws")), p)
+	}
+}
+
 // Attempts at one checkout path run one at a time; a waiter whose deadline
 // passes gives up rather than blocking past it.
 func TestLockCreatePath_SerializesAndHonorsTheDeadline(t *testing.T) {

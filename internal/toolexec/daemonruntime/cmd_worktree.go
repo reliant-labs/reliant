@@ -349,19 +349,17 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		})
 	}
 
-	// The caller's deadline passed while git ran. The daemon's deadline is
-	// the caller's measured from later, so the caller has already given up:
-	// it marked the workspace failed and will never learn this path, and an
-	// unclaimed checkout would hold the branch against the user's retry.
-	if ctx.Err() != nil && !preExisted {
-		abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
-		if parent := filepath.Dir(worktreePath); parent != worktreePath {
-			if entries, rerr := os.ReadDir(parent); rerr == nil && len(entries) == 0 {
-				_ = os.Remove(parent)
-			}
-		}
-		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf(
-			"the checkout finished after its caller stopped waiting (%v), so it was removed again; try again", ctx.Err())})
+	// The context ended while git ran, but git finished. That is not proof
+	// the caller gave up: its wait is not this context, and the answer can
+	// still reach it, so a finished checkout is never taken back here. It is
+	// finished as usual on a context of its own, so it is locked for its
+	// worktree id and a re-sent request finds it (finishedCreate).
+	if ctx.Err() != nil {
+		logging.WarnContext(ctx, "worktree.create finished its checkout after its deadline; answering anyway",
+			"worktree_path", worktreePath, "error", ctx.Err())
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), worktreeFinishTimeout)
+		defer cancel()
 	}
 
 	if req.ExpectedHead != "" {
@@ -585,15 +583,7 @@ type worktreeAdoptMoveResponse struct {
 }
 
 func workspaceCheckoutPath(workspaceID, subPath string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-	p := filepath.Join(home, ".reliant", "worktrees", workspaceID)
-	if subPath != "" {
-		p = filepath.Join(p, subPath)
-	}
-	return p, nil
+	return worktreeCreatePath(workspaceID, subPath)
 }
 
 func handleWorktreeAdoptMove(ctx context.Context, payload []byte) ([]byte, error) {
