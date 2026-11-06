@@ -613,10 +613,15 @@ func (x *DatabaseColumn) GetPgType() string {
 
 // DatabaseRow is one result row: one JSON value per column.
 type DatabaseRow struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Values        []*structpb.Value      `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Values []*structpb.Value      `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	// The 0-based indexes, into values, of the cells cut at 4 KiB. A cut
+	// cell's text also ends with a "…[truncated: N of M bytes shown]" marker.
+	// Not yet filled: the query layer counts cut cells but does not say which
+	// they are, so this is empty until it does; read the marker meanwhile.
+	TruncatedCells []int32 `protobuf:"varint,2,rep,packed,name=truncated_cells,json=truncatedCells,proto3" json:"truncated_cells,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DatabaseRow) Reset() {
@@ -652,6 +657,13 @@ func (*DatabaseRow) Descriptor() ([]byte, []int) {
 func (x *DatabaseRow) GetValues() []*structpb.Value {
 	if x != nil {
 		return x.Values
+	}
+	return nil
+}
+
+func (x *DatabaseRow) GetTruncatedCells() []int32 {
+	if x != nil {
+		return x.TruncatedCells
 	}
 	return nil
 }
@@ -1752,8 +1764,11 @@ func (x *DatabaseTable) GetReferencedBy() []*DatabaseForeignKey {
 type DatabaseTableColumn struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// The Postgres type name, as in DatabaseColumn: "int8", "text",
-	// "timestamptz", "_text" for an array.
+	// The column's declared type as Postgres prints it (format_type), with
+	// its modifiers: "bigint", "character varying(40)", "timestamp with time
+	// zone", "text[]", an enum's name. For display: it is the spelling a
+	// person reads, not DatabaseColumn's internal name ("int8") that a
+	// BrowseTable result column carries.
 	PgType   string `protobuf:"bytes,2,opt,name=pg_type,json=pgType,proto3" json:"pg_type,omitempty"`
 	Nullable bool   `protobuf:"varint,3,opt,name=nullable,proto3" json:"nullable,omitempty"`
 	// COMMENT ON COLUMN, or empty.
@@ -2212,7 +2227,14 @@ type BrowseTableResponse struct {
 	Database string `protobuf:"bytes,9,opt,name=database,proto3" json:"database,omitempty"`
 	Table    string `protobuf:"bytes,10,opt,name=table,proto3" json:"table,omitempty"`
 	// Which server answered: "ro" (a read replica) or "rw" (the primary).
-	Replica       string `protobuf:"bytes,11,opt,name=replica,proto3" json:"replica,omitempty"`
+	Replica string `protobuf:"bytes,11,opt,name=replica,proto3" json:"replica,omitempty"`
+	// The response-size cap cut the page short of limit: fewer rows came back
+	// than asked for although more match (has_more is set too). Continue from
+	// next_offset, not offset + limit.
+	Truncated bool `protobuf:"varint,12,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// The offset of the next page: the request's offset plus the rows
+	// returned. Meaningful when has_more is set.
+	NextOffset    int64 `protobuf:"varint,13,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2324,6 +2346,20 @@ func (x *BrowseTableResponse) GetReplica() string {
 	return ""
 }
 
+func (x *BrowseTableResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *BrowseTableResponse) GetNextOffset() int64 {
+	if x != nil {
+		return x.NextOffset
+	}
+	return 0
+}
+
 var File_services_app_database_v1_app_database_proto protoreflect.FileDescriptor
 
 const file_services_app_database_v1_app_database_proto_rawDesc = "" +
@@ -2354,9 +2390,10 @@ const file_services_app_database_v1_app_database_proto_rawDesc = "" +
 	"\bdatabase\x18\t \x01(\tR\bdatabase\"=\n" +
 	"\x0eDatabaseColumn\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
-	"\apg_type\x18\x02 \x01(\tR\x06pgType\"=\n" +
+	"\apg_type\x18\x02 \x01(\tR\x06pgType\"f\n" +
 	"\vDatabaseRow\x12.\n" +
-	"\x06values\x18\x01 \x03(\v2\x16.google.protobuf.ValueR\x06values\"\xae\x03\n" +
+	"\x06values\x18\x01 \x03(\v2\x16.google.protobuf.ValueR\x06values\x12'\n" +
+	"\x0ftruncated_cells\x18\x02 \x03(\x05R\x0etruncatedCells\"\xae\x03\n" +
 	"\x19QueryDatabasePanelRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1a\n" +
 	"\bdatabase\x18\x02 \x01(\tR\bdatabase\x12\x10\n" +
@@ -2489,7 +2526,7 @@ const file_services_app_database_v1_app_database_proto_rawDesc = "" +
 	"\n" +
 	"BrowseSort\x12\x16\n" +
 	"\x06column\x18\x01 \x01(\tR\x06column\x12\x12\n" +
-	"\x04desc\x18\x02 \x01(\bR\x04desc\"\xa7\x03\n" +
+	"\x04desc\x18\x02 \x01(\bR\x04desc\"\xe6\x03\n" +
 	"\x13BrowseTableResponse\x129\n" +
 	"\acolumns\x18\x01 \x03(\v2\x1f.controlplane.v1.DatabaseColumnR\acolumns\x120\n" +
 	"\x04rows\x18\x02 \x03(\v2\x1c.controlplane.v1.DatabaseRowR\x04rows\x12\x19\n" +
@@ -2503,7 +2540,10 @@ const file_services_app_database_v1_app_database_proto_rawDesc = "" +
 	"\bdatabase\x18\t \x01(\tR\bdatabase\x12\x14\n" +
 	"\x05table\x18\n" +
 	" \x01(\tR\x05table\x12\x18\n" +
-	"\areplica\x18\v \x01(\tR\areplicaB\b\n" +
+	"\areplica\x18\v \x01(\tR\areplica\x12\x1c\n" +
+	"\ttruncated\x18\f \x01(\bR\ttruncated\x12\x1f\n" +
+	"\vnext_offset\x18\r \x01(\x03R\n" +
+	"nextOffsetB\b\n" +
 	"\x06_total*\x8b\x01\n" +
 	"\x15BrowsableDatabaseKind\x12'\n" +
 	"#BROWSABLE_DATABASE_KIND_UNSPECIFIED\x10\x00\x12#\n" +
