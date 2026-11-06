@@ -13,6 +13,83 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.9.0" description="November 6, 2026">
+### 20 new features, 17 fixes and 24 other changes
+
+Every pull request merged since v1.8.19, grouped by its conventional-commit type.
+
+#### Added
+
+- **sdk: sdk/go as a standalone module (PR A): public protos, Go client, follow engine** [#2197](https://github.com/reliant-labs/reliant/pull/2197)
+- **web: forge journey — /forge/demo on fixture data, 9 steps, Ask-an-agent handoff** [#2218](https://github.com/reliant-labs/reliant/pull/2218)
+- **web: declutter the workflow builder (assistant closed unless new, header actions behind More)** [#2224](https://github.com/reliant-labs/reliant/pull/2224)
+- **web: new workspaces start with the terminal closed** [#2225](https://github.com/reliant-labs/reliant/pull/2225)
+- **web: forge shell runs the forge journey — public /forge/demo, JourneyTour, landing ?journey=** [#2227](https://github.com/reliant-labs/reliant/pull/2227)
+- **sdk: the app imports the Go SDK's protos and follow engine, pinned by version (PR B)** [#2222](https://github.com/reliant-labs/reliant/pull/2222)
+- **web: demo.reliantlabs.io shell — one route, read-only, tour on every visit, forge-demo analytics** [#2239](https://github.com/reliant-labs/reliant/pull/2239)
+- **release: propose the version the PR titles compute (feat → minor, else patch); refuse a breaking change** [#2241](https://github.com/reliant-labs/reliant/pull/2241)
+- **dashboards: draw a sql panel's rows as bars with display.style: bars** [#2245](https://github.com/reliant-labs/reliant/pull/2245)
+- **forge-console: services, processes and jobs in their own shapes on the Overview, plus traces and sessions tiles** [#2244](https://github.com/reliant-labs/reliant/pull/2244)
+- **ci: the merge gate fails a breaking proto change or an unapproved breaks-rollback migration** [#2246](https://github.com/reliant-labs/reliant/pull/2246)
+- **sdk: plain-http opt-in, follow log writer, resume needs-recovery, cancel/pause messages (R2 PR A)** [#2236](https://github.com/reliant-labs/reliant/pull/2236)
+- **web: demo data on forge's mock transport, cross-service fixtures, the demo host's ≤10-step tour, e2e** [#2253](https://github.com/reliant-labs/reliant/pull/2253)
+- **auth: enforce runs/triggers token scopes per rpc; auth token create --scope (R7)** [#2235](https://github.com/reliant-labs/reliant/pull/2235)
+- **sdk: Go SDK inbox and read-only approvals (PR A)** [#2258](https://github.com/reliant-labs/reliant/pull/2258)
+- **web: simplified chat thread — fold each agent turn's tool work into one line** [#2266](https://github.com/reliant-labs/reliant/pull/2266)
+- **sdk: the app uses the SDK's inbox and tools_daemon protos; pin sdk/go 6bd651353 (PR B)** [#2267](https://github.com/reliant-labs/reliant/pull/2267)
+- **auth: enforce inbox and question token scopes per rpc; pin forge a54d7bcc** [#2261](https://github.com/reliant-labs/reliant/pull/2261)
+- **sdk: Go SDK approval decisions behind approvals:decide (PR A)** [#2271](https://github.com/reliant-labs/reliant/pull/2271)
+- **auth: approval decisions need an explicit approvals:decide; machine-bound tokens refused** [#2274](https://github.com/reliant-labs/reliant/pull/2274)
+
+#### Changed
+
+- **terminology: say Workspace for worktrees/branches in the app and docs** [#2223](https://github.com/reliant-labs/reliant/pull/2223)
+- **web: a claim started on the forge origin finishes there (provider upgrade returns to the initiating origin)** [#2226](https://github.com/reliant-labs/reliant/pull/2226)
+- **toolexec: remove flaky TestTerminalOutputQueue_OverflowEndsWithError (flake:removed #2228)** [#2229](https://github.com/reliant-labs/reliant/pull/2229)
+- **tools_daemon: fmt.Fprintf into the want buffer (staticcheck QF1012)** [#2231](https://github.com/reliant-labs/reliant/pull/2231)
+- **web/e2e: Chat options lists manual and plan, not auto (#2203 removed auto from the selector)** [#2232](https://github.com/reliant-labs/reliant/pull/2232)
+- **sdk/go: compile-checked examples for the SDK guide (runs, gates, triggers, webhooks, errors)** [#2238](https://github.com/reliant-labs/reliant/pull/2238)
+- **pin: forge@10926048 (forge#1710 for cp #1947)** [#2242](https://github.com/reliant-labs/reliant/pull/2242)
+- **notes: reliant has launched; changes stay backwards compatible within major 1** [#2247](https://github.com/reliant-labs/reliant/pull/2247)
+- **console: 8 telemetry reads at once, visible tiles before polls; cancelled reads free their slot at once** [#2254](https://github.com/reliant-labs/reliant/pull/2254)
+- **forge: reliant always takes the newest forge; the upgrade procedure and its log** [#2255](https://github.com/reliant-labs/reliant/pull/2255)
+- **cli: workflow supervision and trigger reads ride the Go SDK (R2 PR B)** [#2257](https://github.com/reliant-labs/reliant/pull/2257)
+- **sdk: an SDK group: overview, Go guide, TypeScript guide, API reference (R6)** [#2237](https://github.com/reliant-labs/reliant/pull/2237)
+- **sdk/go: examples answer a gate with a person's choice, bound the trigger wait, and cover the new methods** [#2262](https://github.com/reliant-labs/reliant/pull/2262)
+- **web: chatStore folds the chat stream with the SDK's reduceChat (R4, PR 2 of 2)** [#2265](https://github.com/reliant-labs/reliant/pull/2265)
+- **sdk/react: useApprovals under a project scope shares the chat's session, and another scope does not** [#2251](https://github.com/reliant-labs/reliant/pull/2251)
+- **sdk/go: drop the forge module dependency** [#2270](https://github.com/reliant-labs/reliant/pull/2270)
+- **db: drop the Repository's dead statement executor and sqlc leftovers** [#2273](https://github.com/reliant-labs/reliant/pull/2273)
+- **web: move SettingsService callers onto the generated hooks; delete settings-grpc.ts** [#2275](https://github.com/reliant-labs/reliant/pull/2275)
+- **errors: build handler-edge Connect errors through svcerr** [#2277](https://github.com/reliant-labs/reliant/pull/2277)
+- **deps: pin forge 7ad8943c (identity v2: forge#1816, forge#1817)** [#2269](https://github.com/reliant-labs/reliant/pull/2269)
+- **db: match store misses with svcerr.IsNotFound, not sql.ErrNoRows** [#2276](https://github.com/reliant-labs/reliant/pull/2276)
+- **deps: pin sdk/go 9d2ac59c6 (no forge dependency #2270, approval decisions #2271)** [#2281](https://github.com/reliant-labs/reliant/pull/2281)
+- **inbox: ListInbox reads each workflow catalog and draft once, not once per activation** [#2283](https://github.com/reliant-labs/reliant/pull/2283)
+- **naming: say platform-api, not admin-server, in prose and comments** [#2285](https://github.com/reliant-labs/reliant/pull/2285)
+
+#### Fixed
+
+- **auth: decide forge #1757's runs/triggers scopes (pin forge 8b49eee3, widen access_tokens_scopes)** [#2205](https://github.com/reliant-labs/reliant/pull/2205)
+- **toolexec: a failed terminal output queue never holds its lock while waiting on the consumer** [#2230](https://github.com/reliant-labs/reliant/pull/2230)
+- **web: the Apps list counts self-managed environments as deployed** [#2234](https://github.com/reliant-labs/reliant/pull/2234)
+- **console: each Overview tile owns its state — one timeout never hides another; Retry keeps siblings; stale-while-revalidate** [#2240](https://github.com/reliant-labs/reliant/pull/2240)
+- **fs: a preview of a file that is not on the machine is NotFound, not Internal** [#2249](https://github.com/reliant-labs/reliant/pull/2249)
+- **web: rpc-timeout reports group by method, with the in-flight snapshot as an attribute** [#2248](https://github.com/reliant-labs/reliant/pull/2248)
+- **daemon: one unsendable message no longer leaves the gateway stream half-dead for 95s** [#2256](https://github.com/reliant-labs/reliant/pull/2256)
+- **release: sync semver-next.sh and check-compat.sh with forge's and control-plane's** [#2260](https://github.com/reliant-labs/reliant/pull/2260)
+- **web: switch the right sidebar to a chat's workspace on the first click** [#2263](https://github.com/reliant-labs/reliant/pull/2263)
+- **chat: run-to-run messages and async ask_user answers never render as the user's** [#2264](https://github.com/reliant-labs/reliant/pull/2264)
+- **skills: follow forge's split skills — FK fact from db/birth, forge skill descriptions spelled for the mount** [#2252](https://github.com/reliant-labs/reliant/pull/2252)
+- **web: let the execution-mode picker return to Default** [#2268](https://github.com/reliant-labs/reliant/pull/2268)
+- **forge: a forge-project read whose machine is asleep is asked of another checkout** [#2233](https://github.com/reliant-labs/reliant/pull/2233)
+- **web: describe the cert-authorization CNAME as TLS issuance, not routing** [#2279](https://github.com/reliant-labs/reliant/pull/2279)
+- **web: the forge console links the sites the platform serves for a self-managed environment** [#2280](https://github.com/reliant-labs/reliant/pull/2280)
+- **web: Domains page says how long issuing takes, and when a domain is stuck** [#2282](https://github.com/reliant-labs/reliant/pull/2282)
+- **token: a git token the control plane cannot supply is one ERROR, and the git helper says to retry** [#2286](https://github.com/reliant-labs/reliant/pull/2286)
+
+</Update>
+
 <Update label="v1.8.19" description="November 5, 2026">
 ### Workflow secrets, lossless terminals, plan changes and onboarding journeys
 
