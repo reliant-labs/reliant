@@ -287,9 +287,24 @@ func (c *checker) checkApprovalDecider(path string, n *reliantv1.Node) {
 	}
 }
 
+// addApprovalDecider reports a step that decides approvals. Once the workflow
+// declares permissions: [approvals:decide] the steps are covered and the
+// declaration itself is reported once (checkApprovalPermission).
 func (c *checker) addApprovalDecider(path string) {
+	if model.DeclaresPermission(c.wf, model.PermissionApprovalsDecide) {
+		return
+	}
 	c.add(RuleApprovalDecider, path, "this step calls Reliant's ApprovalService to approve or deny, so the workflow can decide approvals, including its own run's, with the token it holds",
-		"if that is the intent, allow it with the reason; otherwise remove the step. Enabling the automation always shows its owner an approval card for this")
+		"declare it with permissions: [approvals:decide] (hosted credentials that can decide approvals are refused without it), or remove the step; allow this finding with the reason if it is intended")
+}
+
+// checkApprovalPermission: the declaration is the grant of that power, so it
+// is a finding in itself, allowed at the permissions: key with the reason.
+func (c *checker) checkApprovalPermission() {
+	if model.DeclaresPermission(c.wf, model.PermissionApprovalsDecide) {
+		c.add(RuleApprovalDecider, "", "the workflow declares permissions: [approvals:decide]: it can approve or deny requests, including the ones its own run raises",
+			"allow it with the reason on the permissions: key if this is intended")
+	}
 }
 
 func joinContinuations(s string) string { return strings.ReplaceAll(s, "\\\n", " ") }

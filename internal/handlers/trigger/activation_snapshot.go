@@ -274,6 +274,10 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 				secretSummary, secretCaps := secretDeclarationDisclosure(w, values, k, tainted)
 				snap.Summary = append(snap.Summary, secretSummary...)
 				snap.Capabilities.Add(secretCaps...)
+				if model.DeclaresPermission(w, model.PermissionApprovalsDecide) {
+					snap.Summary = append(snap.Summary, "Permission approvals:decide: the workflow declares that its steps may approve or deny requests")
+					snap.Capabilities.Add(approvalsDecideCapability)
+				}
 				counts := map[string]int{}
 				for _, node := range w.GetNodes() {
 					counts[model.NodeType(node)]++
