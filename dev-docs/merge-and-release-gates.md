@@ -212,6 +212,24 @@ after generate only links and runs. In the merge queue generate averaged 313s
 and test 281s, one after the other, on 8 of 16 runs (2026-11-05/06).
 `MG_MEM_GIB=<n>` overrides the detected size.
 
+**Rollout check for the prewarm (reliant#2308).** It was estimated, not
+measured, so after it merges read the first 5 merge-queue runs (`merge-queue.yml`)
+whose summary carries the note `forge generate ran before the other phases,
+test packages compiled beside it`, and record for each, in the PR: the job's
+conclusion, the `memory peak` note (the gate's cgroup `memory.peak`, where the
+runner exposes it), and the `generate`, `prewarm` and `test` phase seconds and
+the wall time. It fails if any of them:
+
+- loses its runner ("The runner has received a shutdown signal", or the job
+  ends at its timeout without a summary);
+- peaks above 14 GiB of the runner's 16 GiB;
+- has a `test` phase no faster than the 281s baseline above, or a `generate`
+  phase more than 20% slower than its 313s.
+
+On a failure, revert the prewarm launch (the `phase prewarm prewarm_tests &`
+line and its `wait` in `scripts/merge-gate.sh`): generate then runs alone and
+serialized again, as before reliant#2308.
+
 ### Direct importers only
 
 A change to a hub package (`internal/logging`, `internal/observability`) reaches

@@ -483,6 +483,11 @@ if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; t
   git reset -q --hard; git clean -fdq
 fi
 [ -f "$L/notes" ] && while IFS= read -r n; do notes+=("$n"); done <"$L/notes"
+# The peak memory of the gate's cgroup (cgroup v2 memory.peak, where the host
+# has it), so the summary shows how close a small host came to its limit: the
+# rollout check of the prewarm beside a generate running alone reads it.
+cg_peak=$(cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup 2>/dev/null | head -n1)/memory.peak" 2>/dev/null || true)
+case "$cg_peak" in ''|*[!0-9]*) ;; *) notes+=("memory peak: $(awk -v b="$cg_peak" 'BEGIN { printf "%.1f", b / 1073741824 }') GiB of ${mem_gib} GiB (cgroup memory.peak)") ;; esac
 
 # ── fail closed: every phase the plan selected must have COMPLETED ────────
 # A selected lane that never ran (queued for a slot, cancelled, timed out, tool
