@@ -4,21 +4,23 @@
  * Which app shell this page load mounts: Reliant, the forge-branded shell, or
  * the public forge demo.
  *
- * One bundle, three shells. The reliant-web static site serves
- * `app.reliantlabs.io` (Reliant), the forge host (`forge.reliantlabs.io`,
- * runtime config FORGE_APP_HOST) and the demo host (`demo.reliantlabs.io`,
- * DEMO_APP_HOST): the document's HOSTNAME picks the shell, so the forge pages
- * are the same bytes in all three and ship with the same release.
+ * The reliant-web static site serves `app.reliantlabs.io` (Reliant) and the
+ * forge host (`forge.reliantlabs.io`, runtime config FORGE_APP_HOST): the
+ * document's HOSTNAME picks between those two shells, so the forge pages are
+ * the same bytes in both and ship with the same release. The public demo
+ * (`demo.reliantlabs.io`) is a build of its own (demo.html, the forge-demo
+ * frontend of the `demo` env), which is always the demo shell
+ * (`__WEB_TARGET__`); no host of this bundle mounts it.
  *
  *   forge    ForgeShell (forgeShellRoutes.tsx): the forge console,
  *            observability, environments, secrets, domains, releases and
  *            activity, plus claim, sites, usage & spend and a small settings
  *            area. Control-plane pages only: no daemon, no onboarding, no
  *            chats. Branded "Forge by Reliant", telemetry service `forge-web`.
- *   demo     the public forge demo (demoShellRoutes.tsx): ONE route,
- *            `/forge/demo`, on sample data, read-only, the forge tour started
- *            on every visit. No sign-in, no account, no control-plane call.
- *            Telemetry service `forge-demo`.
+ *   demo     the public forge demo (demoShellRoutes.tsx): the forge
+ *            console on sample data, read-only. No sign-in, no account, no
+ *            control-plane call. Telemetry service `forge-demo`. Its own
+ *            bundle; here only through the dev override below.
  *   reliant  everything else, unchanged.
  *
  * A dev override exists so a shell can be looked at without DNS:
@@ -44,9 +46,6 @@ const isShell = (value: string | null): value is AppShell => (SHELLS as readonly
 
 /** The forge app host when the runtime config names none. */
 export const DEFAULT_FORGE_APP_HOST = "forge.reliantlabs.io";
-
-/** The demo host when the runtime config names none. */
-export const DEFAULT_DEMO_APP_HOST = "demo.reliantlabs.io";
 
 /** Reliant's hosted origin when the runtime config names none (constants.ts DEFAULT_APP_URL). */
 const DEFAULT_RELIANT_APP_URL = "https://app.reliantlabs.io";
@@ -82,17 +81,6 @@ export function forgeAppHost(): string {
   return normalizeHost(configured) || DEFAULT_FORGE_APP_HOST;
 }
 
-/** The public demo's hostname: DEMO_APP_HOST, else the default. */
-export function demoAppHost(): string {
-  let configured = "";
-  try {
-    configured = loadConfig().DEMO_APP_HOST;
-  } catch {
-    // An invalid config document is configGuard's to report; fall back.
-  }
-  return normalizeHost(configured) || DEFAULT_DEMO_APP_HOST;
-}
-
 /** The forge console's public origin, for Reliant's "Open Forge console" link. */
 export function forgeAppOrigin(): string {
   return `https://${forgeAppHost()}`;
@@ -118,8 +106,6 @@ export interface ShellInputs {
   search: string;
   /** The forge app host (forgeAppHost()). */
   forgeHost: string;
-  /** The demo host (demoAppHost()). */
-  demoHost: string;
   /** True in the desktop app. */
   electron: boolean;
   storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
@@ -130,7 +116,7 @@ export interface ShellInputs {
  * `storage` (that is the point of the override: it outlives the query string,
  * which the router and sign-in redirects drop).
  */
-export function resolveShell({ hostname, search, forgeHost, demoHost, electron, storage }: ShellInputs): AppShell {
+export function resolveShell({ hostname, search, forgeHost, electron, storage }: ShellInputs): AppShell {
   if (electron) return "reliant";
 
   let param: string | null = null;
@@ -158,9 +144,7 @@ export function resolveShell({ hostname, search, forgeHost, demoHost, electron, 
   }
   if (isShell(stored)) return stored;
 
-  const host = normalizeHost(hostname);
-  if (host === demoHost) return "demo";
-  return host === forgeHost ? "forge" : "reliant";
+  return normalizeHost(hostname) === forgeHost ? "forge" : "reliant";
 }
 
 let resolved: AppShell | null = null;
@@ -182,7 +166,6 @@ export function getShell(): AppShell {
     hostname: window.location.hostname,
     search: window.location.search,
     forgeHost: forgeAppHost(),
-    demoHost: demoAppHost(),
     electron: !!window.electronAPI || !!window.RELIANT_CONFIG?.isElectron,
     storage,
   });
@@ -198,7 +181,7 @@ export function isForgeShell(): boolean {
   return getShell() !== "reliant";
 }
 
-/** True on the public demo host: one route, sample data, the tour on every load. */
+/** True in the public forge demo (its own bundle, or `?shell=demo` in dev). */
 export function isDemoShell(): boolean {
   return getShell() === "demo";
 }

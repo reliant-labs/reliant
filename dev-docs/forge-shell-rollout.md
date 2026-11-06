@@ -93,46 +93,29 @@ Each step undoes independently; do them in this order.
 
 After a rollback, re-run check 6 to confirm `app.reliantlabs.io` is unaffected.
 
-## Demo host (demo.reliantlabs.io)
+## The demo (demo.reliantlabs.io) is not this bundle
 
-The same bundle mounts a third shell, `demo`, on DEMO_APP_HOST (default
-`demo.reliantlabs.io`): one route, `/forge/demo`, on sample data, with every
-other path redirecting there and the forge tour started on every page load
-(`src/demoShellRoutes.tsx`, `lib/shell.ts`). It has no sign-in route, so it
-needs **no** control-plane CORS entry, **no** GoTrue redirect entry and no new
-static site: it is a third custom domain on `prod/reliant-web`.
+`demo.reliantlabs.io` is its own build and its own env: the `forge-demo`
+frontend of reliant's `demo` env (`deploy/kcl/demo/main.k`), built from
+`frontends/web/demo.html` (`npm run build:demo`, or `WEB_BUILD_TARGET=demo`,
+which is how forge builds it). That bundle is always the demo shell
+(`__WEB_TARGET__`, `lib/shell.ts`), mounts the forge console on sample data and
+contains no Reliant chat, onboarding, sign-in, Supabase, daemon or settings
+code (`vite-plugin-demo-bundle.ts` fails a build that would). No host of
+`prod/reliant-web` mounts the demo shell; `?shell=demo` still does, for a look
+in local dev.
 
-Runtime config (all defaults are the owner's, 2026-11-05):
+Its runtime config is the env's (`DEMO_DATA_SOURCE`, `DEMO_DATA_URL`,
+`DEMO_TELEMETRY`, `OTEL_ENDPOINT=/_otel`, `OTEL_REPLAY`); it names no API, no
+auth mode and no key. It needs no control-plane CORS entry and no GoTrue
+redirect entry: it calls no backend.
 
-| Key | Default | What it does |
-|---|---|---|
-| `DEMO_APP_HOST` | `demo.reliantlabs.io` | the host that mounts the demo shell |
-| `DEMO_TELEMETRY` | `replay` | `replay` / `analytics` / `off`, service `forge-demo`, `surface=demo`; never for a browser sending DNT or GPC |
-| `DEMO_TOUR` | `short` | `short` (≤ 10 steps) or `full` |
-| `DEMO_DATA_SOURCE` | `fixtures` | `fixtures`, or `remote` = the demo-data gateway at `DEMO_DATA_URL`, falling back to fixtures |
-| `DEMO_DATA_URL` | unset | the gateway's base URL (phase 2) |
-
-Owner actions, from `control-plane/` with the tenant-zero credential, after
-the release that carries the demo shell is live:
+Ship and bind it from a reliant checkout (owner, tenant-zero credential):
 
 ```bash
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain add  demo.reliantlabs.io --env prod
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain bind demo.reliantlabs.io --env prod --target reliant-web
-FORGE_ALLOW_VERSION_SKEW=1 reliant forge domain show demo.reliantlabs.io --env prod   # the exact records
+reliant forge env build demo --target forge-demo --release <v>
+reliant forge env deploy demo <v>
+reliant forge domain bind demo.reliantlabs.io --env demo --target forge-demo
+reliant forge domain show demo.reliantlabs.io --env demo
+node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 ```
-
-Then, in Cloudflare (zone `reliantlabs.io`), exactly what `show` prints: the
-`_reliant-challenge.demo` TXT (never delete it), the
-`_acme-challenge_<id>.demo` CNAME, and `demo` as a DNS-only (grey cloud)
-CNAME. Check with `reliant forge domain verify demo.reliantlabs.io --env prod`
-until LIVE.
-
-Checks, signed out: `/` lands on `/forge/demo?tour=forge:fg-console` with
-`data-shell="demo"` on the root; the tour makes no request to any other origin
-(with `DEMO_DATA_SOURCE=fixtures`); Resolve, assign and comment are disabled
-with "Read-only demo"; a `POST /_otel/…` answers 2xx and ClickStack shows
-`ServiceName='forge-demo'` page views.
-
-Rollback: `reliant forge domain unbind demo.reliantlabs.io --env prod` (or
-delete the `demo` CNAME). Reverting the shell code instead makes the host fall
-back to the Reliant shell.
