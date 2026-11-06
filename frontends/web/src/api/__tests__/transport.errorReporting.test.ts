@@ -195,3 +195,33 @@ describe("ELECTRON-74 end to end through connect-web", () => {
     expect(reporting.reportError).not.toHaveBeenCalled();
   });
 });
+
+describe("the network did not deliver the request (TypeError: Failed to fetch)", () => {
+  it("is logged, not reported", async () => {
+    const call = await chainFailingWith(() => new TypeError("Failed to fetch"));
+    await expect(call("reliant.v1.ChatService", "ListChats")).rejects.toMatchObject({
+      code: Code.Unavailable,
+    });
+    expect(reporting.reportError).not.toHaveBeenCalled();
+  });
+});
+
+describe("what a caller holds after the transport decided", () => {
+  // A caller's console.error of it must not be a second report
+  // (lib/handledRpcFailures.ts): reported or not, it was decided once.
+  it.each([
+    ["an expected failure it did not report", () => new ConnectError("file not found: /w/a.md", Code.NotFound)],
+    ["a failure it reported", () => new ConnectError("upstream connect error", Code.Unavailable)],
+  ])("is marked decided: %s", async (_name, failure) => {
+    const { isRpcFailureDecided } = await import("@/lib/handledRpcFailures");
+    const call = await chainFailingWith(failure);
+    const held = await call("reliant.v1.FileSystemService", "GetFilePreviewInfo").catch((e: unknown) => e);
+    expect(held).toBeInstanceOf(ConnectError);
+    expect(isRpcFailureDecided(held)).toBe(true);
+  });
+
+  it("does not mark an Error the transport never saw", async () => {
+    const { isRpcFailureDecided } = await import("@/lib/handledRpcFailures");
+    expect(isRpcFailureDecided(new ConnectError("stream reset", Code.Internal))).toBe(false);
+  });
+});

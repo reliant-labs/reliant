@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { classifyRpcFailure, isUnroutedProcedure } from "../rpcErrorPolicy";
+import { classifyRpcFailure, isFetchNetworkFailure, isUnroutedProcedure } from "../rpcErrorPolicy";
 
 const reliant = { serviceTypeName: "reliant.v1.ChatService", signalAborted: false };
 
@@ -100,5 +100,27 @@ describe("account_required", () => {
   it("is keyed on the reason, so a re-tuned status code still is not reported", () => {
     const internal = new ConnectError("x", Code.Internal, new Headers({ "x-forge-error-reason": "account_required" }));
     expect(classifyRpcFailure(internal, reliant)).toBe("account-required");
+  });
+});
+
+describe("fetch rejected before any server answered", () => {
+  it("is the user's network, in each browser's words", () => {
+    for (const message of [
+      "Failed to fetch",
+      "Failed to fetch (dash.reliantlabs.io)",
+      "NetworkError when attempting to fetch resource.",
+      "Load failed",
+    ]) {
+      expect(isFetchNetworkFailure(new TypeError(message))).toBe(true);
+      expect(classifyRpcFailure(new TypeError(message), reliant)).toBe("network");
+    }
+  });
+
+  it("does not excuse a TypeError an interceptor's own bug throws", () => {
+    const bug = new TypeError("Cannot read properties of undefined (reading 'headers')");
+    expect(isFetchNetworkFailure(bug)).toBe(false);
+    expect(classifyRpcFailure(bug, reliant)).toBe("report");
+    // Nor the message on anything but fetch's TypeError.
+    expect(classifyRpcFailure(new Error("Failed to fetch"), reliant)).toBe("report");
   });
 });

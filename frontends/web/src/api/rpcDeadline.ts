@@ -45,6 +45,7 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { Interceptor, UnaryRequest, UnaryResponse } from "@connectrpc/connect";
 import type { PageActivity, ResumeEvent } from "../lib/pageActivity";
+import { noteRpcFailureDecided } from "../lib/handledRpcFailures";
 
 /** A read with no answer after this long is hedged (see FAST_READS). */
 export const STALL_RETRY_MS = 4_000;
@@ -132,6 +133,9 @@ const clientAborts = new WeakSet<object>();
 function clientAbort(message: string, code: Code): ConnectError {
   const error = new ConnectError(message, code);
   clientAborts.add(error);
+  // Its one report, a timeout's, is onTimeout's; a caller's console line
+  // about it must not be another (lib/handledRpcFailures.ts).
+  noteRpcFailureDecided(error);
   return error;
 }
 
