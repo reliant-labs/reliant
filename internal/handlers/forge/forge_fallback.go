@@ -3,6 +3,7 @@ package forge
 
 import (
 	"context"
+	"regexp"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/daemonerr"
@@ -29,9 +30,11 @@ import (
 // So when the chosen machine is not reachable, a topology read is asked of the
 // next machine holding a checkout of the same forge project: the project's own
 // other checkouts first, then those of the caller's other projects that are the
-// same repository (the same git remote) AND declare the same forge.yaml name,
-// most recently active first. A forge name alone is not an identity: a fork or
-// an unrelated repo can declare it while targeting other clusters. Only "not
+// same github.com repository AND declare the same forge.yaml name, most
+// recently active first. A forge name alone is not an identity: a fork or an
+// unrelated repo can declare it while targeting other clusters. Nor is a git
+// remote off github.com (githubRepoOf): such a project is answered only by its
+// own checkouts. Only "not
 // reachable" (daemonerr.Unreachable) moves on; an answer, or any other
 // failure, is the answer. Each machine is asked at most once.
 //
@@ -79,7 +82,7 @@ func (s *Service) forgeReadDispatch(
 
 // forgeFallbackTargets is every checkout of project's forge project on the
 // caller's machines (its own, then those of the caller's projects with the
-// same git remote and forge name), in the order forgeReadDispatch asks them. Best effort: a
+// same GitHub repository and forge name), in the order forgeReadDispatch asks them. Best effort: a
 // failed read leaves fewer candidates, never an error, because the first
 // machine's failure is still the answer then.
 func (s *Service) forgeFallbackTargets(ctx context.Context, userID string, project *db.Project) []projectcheckout.Target {
@@ -87,8 +90,8 @@ func (s *Service) forgeFallbackTargets(ctx context.Context, userID string, proje
 	if err != nil {
 		logging.WarnContext(ctx, "forge: failed to list the project's checkouts", "error", err, "project_id", project.ID)
 	}
-	name, remote := forgeNameOf(project), remoteIdentity(project.RemoteURL)
-	if name == "" || remote == "" {
+	name, repo := forgeNameOf(project), githubRepoOf(project.RemoteURL)
+	if name == "" || repo == "" {
 		return targets
 	}
 	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID})
@@ -97,7 +100,7 @@ func (s *Service) forgeFallbackTargets(ctx context.Context, userID string, proje
 		return targets
 	}
 	for _, other := range projects {
-		if other == nil || other.ID == project.ID || forgeNameOf(other) != name || remoteIdentity(other.RemoteURL) != remote {
+		if other == nil || other.ID == project.ID || forgeNameOf(other) != name || githubRepoOf(other.RemoteURL) != repo {
 			continue
 		}
 		more, err := projectcheckout.Checkouts(ctx, s.deps.Repo, userID, other)
@@ -119,62 +122,60 @@ func forgeNameOf(project *db.Project) string {
 	return strings.TrimSpace(*project.ForgeProjectName)
 }
 
-// remoteIdentity is the repository a git remote URL names, in one form for
-// every spelling of it: "git@github.com:Org/Repo.git",
-// "ssh://git@github.com:22/org/repo" and "https://user:tok@github.com/org/repo/"
-// are all "github.com/org/repo". "" when there is no remote, so a project
-// without one never matches another.
+// githubRepoOf is the github.com repository a git remote URL names, as
+// "owner/repo" lower-cased, or "" when the remote is not one of the three
+// spellings GitHub documents for it:
 //
-// Only proven equivalences are folded: credentials, a trailing "/" or ".git",
-// the host's case, a scheme's default port, the scp-like and ssh:// spellings
-// of one ssh remote, and, on GitHub (githubHosts) alone, the transport and the
-// path's case. Anything else can name a different repository (another server
-// on another port or transport, or a case-sensitive host serving Team/App
-// beside team/app), so it is kept and such remotes never match: on any other
-// host, ssh://host/team/app and https://host/team/app stay distinct.
-func remoteIdentity(raw *string) string {
+//	https://[credentials@]github.com[:443]/owner/repo[.git][/]
+//	ssh://git@github.com[:22]/owner/repo[.git][/]
+//	git@github.com:owner/repo[.git][/]
+//
+// Only github.com is recognised because it is the one host whose repository
+// identity is global and proven: one namespace on every transport, owner and
+// repository names unique regardless of case. Any other remote — another
+// host, port, transport or ssh user, a self-hosted server whose hostname
+// resolves differently on another machine, a local path — cannot prove that
+// two checkouts are one repository, so such a project never borrows another
+// project's checkouts; only its own are asked.
+func githubRepoOf(raw *string) string {
 	if raw == nil {
 		return ""
 	}
 	s := strings.TrimSpace(*raw)
-	if s == "" {
+	var host, path string
+	switch {
+	case strings.HasPrefix(s, "https://"):
+		host, path, _ = strings.Cut(strings.TrimPrefix(s, "https://"), "/")
+		if i := strings.LastIndex(host, "@"); i >= 0 {
+			host = host[i+1:] // credentials never name the repository
+		}
+		host = strings.TrimSuffix(host, ":443")
+	case strings.HasPrefix(s, "ssh://"):
+		var user string
+		var ok bool
+		host, path, _ = strings.Cut(strings.TrimPrefix(s, "ssh://"), "/")
+		if user, host, ok = strings.Cut(host, "@"); !ok || user != "git" {
+			return ""
+		}
+		host = strings.TrimSuffix(host, ":22")
+	case strings.HasPrefix(s, "git@"):
+		var ok bool
+		if host, path, ok = strings.Cut(strings.TrimPrefix(s, "git@"), ":"); !ok {
+			return ""
+		}
+	default:
 		return ""
 	}
-	scheme := ""
-	if i := strings.Index(s, "://"); i >= 0 {
-		scheme, s = strings.ToLower(s[:i]), s[i+3:]
-	} else if i := strings.Index(s, ":"); i >= 0 && !strings.Contains(s[:i], "/") {
-		// scp-like: [user@]host:path is ssh. Its ":" never introduces a port.
-		scheme, s = "ssh", s[:i]+"/"+s[i+1:]
-	}
-	if scheme == "git+ssh" || scheme == "ssh+git" {
-		scheme = "ssh"
-	}
-	host, path, _ := strings.Cut(s, "/")
-	if i := strings.LastIndex(host, "@"); i >= 0 {
-		host = host[i+1:]
-	}
-	host = strings.ToLower(host)
-	if h, port, ok := strings.Cut(host, ":"); ok && port == defaultGitPorts[scheme] {
-		host = h
-	}
-	path = strings.TrimSuffix(strings.TrimRight(path, "/"), ".git")
-	path = strings.TrimRight(path, "/")
-	if host == "" || path == "" {
+	if !strings.EqualFold(host, "github.com") {
 		return ""
 	}
-	if githubHosts[host] {
-		return host + "/" + strings.ToLower(path)
+	path = strings.TrimSuffix(strings.TrimSuffix(path, "/"), ".git")
+	owner, repo, ok := strings.Cut(path, "/")
+	if !ok || !githubName.MatchString(owner) || !githubName.MatchString(repo) || owner[0] == '.' || repo == "." || repo == ".." {
+		return ""
 	}
-	// Elsewhere the transport is part of the identity: one hostname can run
-	// independent ssh and http(s) services, each with its own repositories.
-	return scheme + "://" + host + "/" + path
+	return strings.ToLower(owner + "/" + repo)
 }
 
-// defaultGitPorts is the port each git transport uses when a URL names none,
-// so "ssh://host:22/x" is the same remote as "ssh://host/x".
-var defaultGitPorts = map[string]string{"ssh": "22", "https": "443", "http": "80", "git": "9418"}
-
-// githubHosts are GitHub's hosts, known to serve one repository namespace on
-// every transport and to resolve a repository path regardless of case.
-var githubHosts = map[string]bool{"github.com": true, "www.github.com": true}
+// githubName is the character set of a GitHub owner or repository name.
+var githubName = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)

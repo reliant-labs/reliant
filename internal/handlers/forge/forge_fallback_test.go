@@ -285,9 +285,11 @@ func TestForgeService_ASameNamedProjectOfAnotherRepositoryNeverAnswers(t *testin
 	}
 }
 
-// A port other than the transport's default can be another server, and a host
-// other than GitHub can serve Team/App beside team/app: neither is folded into
-// the requested project's remote, so neither answers for it.
+// Off github.com a remote cannot prove two checkouts are one repository:
+// another port, transport, ssh user or path case can be another server's
+// repository, and one hostname can resolve to different servers on different
+// machines. So no remote off github.com borrows another project's checkouts,
+// not even one spelled identically.
 func TestForgeService_ARemoteThatMayBeAnotherRepositoryNeverAnswers(t *testing.T) {
 	for _, tc := range []struct{ name, requested, other string }{
 		{"another nondefault port", "ssh://git@git.example:2222/team/app.git", "ssh://git@git.example:2223/team/app.git"},
@@ -295,6 +297,11 @@ func TestForgeService_ARemoteThatMayBeAnotherRepositoryNeverAnswers(t *testing.T
 		{"another path case on a case-sensitive host", "git@git.example:Team/App.git", "git@git.example:team/app.git"},
 		{"ssh and https on one host, default ports", "ssh://git@git.example:22/team/app.git", "https://git.example:443/team/app.git"},
 		{"scp-like ssh and https on one host", "git@git.example:team/app.git", "https://git.example/team/app.git"},
+		{"another ssh user on one host", "git@git.example:team/app.git", "gitolite@git.example:team/app.git"},
+		{"one self-hosted remote spelled identically", "git@git.internal:team/app.git", "git@git.internal:team/app.git"},
+		{"one relative local path", "../app", "../app"},
+		{"github.com on a nondefault port", "ssh://git@github.com:2222/reliant-labs/control-plane.git", "git@github.com:reliant-labs/control-plane.git"},
+		{"another ssh user on github.com", "ssh://deploy@github.com/reliant-labs/control-plane.git", "git@github.com:reliant-labs/control-plane.git"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := fallbackRepo(
@@ -326,40 +333,50 @@ func TestForgeService_AProjectWithNoRemoteFallsBackOnlyToItsOwnCheckouts(t *test
 	assert.Equal(t, []string{"mac"}, router.asked)
 }
 
-func TestRemoteIdentity(t *testing.T) {
+func TestGitHubRepoOf(t *testing.T) {
 	str := func(s string) *string { return &s }
-	same := []string{
+	// GitHub's documented spellings of one repository.
+	for _, raw := range []string{
 		"git@github.com:reliant-labs/control-plane.git",
+		"git@github.com:reliant-labs/control-plane",
 		"https://github.com/reliant-labs/control-plane",
 		"https://github.com/Reliant-Labs/Control-Plane.git/",
-		"ssh://git@github.com:22/reliant-labs/control-plane.git",
+		"https://github.com:443/reliant-labs/control-plane.git",
 		"https://x-access-token:secret@github.com/reliant-labs/control-plane.git",
-		"  github.com/reliant-labs/control-plane  ",
+		"ssh://git@github.com/reliant-labs/control-plane.git",
+		"ssh://git@GitHub.com:22/reliant-labs/control-plane.git",
+		"  git@github.com:reliant-labs/control-plane.git\n",
+	} {
+		assert.Equal(t, "reliant-labs/control-plane", githubRepoOf(str(raw)), raw)
 	}
-	for _, raw := range same {
-		assert.Equal(t, "github.com/reliant-labs/control-plane", remoteIdentity(str(raw)), raw)
-	}
-	assert.Equal(t, "", remoteIdentity(nil))
-	assert.Equal(t, "", remoteIdentity(str("  ")))
-	assert.NotEqual(t, remoteIdentity(str("git@github.com:someone/control-plane.git")), remoteIdentity(str(same[0])))
+	assert.Equal(t, "someone/control-plane", githubRepoOf(str("git@github.com:someone/control-plane.git")))
 
-	// What may name another repository is never folded.
-	distinct := [][2]string{
-		// Two nondefault ports can be two servers.
-		{"ssh://git@git.example:2222/team/app.git", "ssh://git@git.example:2223/team/app.git"},
-		{"ssh://git@git.example:2222/team/app.git", "git@git.example:team/app.git"},
-		// A case-sensitive host can serve both.
-		{"https://git.example/Team/App.git", "https://git.example/team/app.git"},
-		{"git@gitlab.com:Team/App.git", "git@gitlab.com:team/app.git"},
-		// One host can run independent ssh and http(s) services.
-		{"ssh://git@git.example:22/team/app.git", "https://git.example:443/team/app.git"},
-		{"git@git.example:team/app.git", "https://git.example/team/app.git"},
-		{"http://git.example/team/app.git", "https://git.example/team/app.git"},
+	// Nothing else is recognised, so nothing else ever matches another project.
+	for _, raw := range []string{
+		"", "  ",
+		// Other hosts, however spelled.
+		"git@gitlab.com:team/app.git",
+		"https://git.example/team/app.git",
+		"ssh://git@git.example:22/team/app.git",
+		"git@github.com.evil.example:reliant-labs/control-plane.git",
+		"https://github.com@evil.example/reliant-labs/control-plane.git",
+		// github.com on another port, transport or ssh user.
+		"ssh://git@github.com:2222/reliant-labs/control-plane.git",
+		"https://github.com:8443/reliant-labs/control-plane.git",
+		"http://github.com/reliant-labs/control-plane.git",
+		"git://github.com/reliant-labs/control-plane.git",
+		"ssh://deploy@github.com/reliant-labs/control-plane.git",
+		"ssh://github.com/reliant-labs/control-plane.git",
+		"deploy@github.com:reliant-labs/control-plane.git",
+		// No scheme, local paths, and paths that are not owner/repo.
+		"github.com/reliant-labs/control-plane",
+		"../control-plane", "/srv/git/control-plane.git", "file:///srv/git/control-plane.git",
+		"https://github.com/reliant-labs",
+		"https://github.com/reliant-labs/control-plane/tree/main",
+		"https://github.com/reliant-labs/..",
+		"https://github.com/reliant-labs/control-plane?x=1",
+	} {
+		assert.Equal(t, "", githubRepoOf(str(raw)), raw)
 	}
-	for _, pair := range distinct {
-		assert.NotEqual(t, remoteIdentity(str(pair[0])), remoteIdentity(str(pair[1])), pair)
-	}
-	assert.Equal(t, remoteIdentity(str("ssh://git@Git.Example:22/team/app")), remoteIdentity(str("git@git.example:team/app.git")))
-	assert.Equal(t, remoteIdentity(str("git+ssh://git@git.example/team/app")), remoteIdentity(str("git@git.example:team/app.git")))
-	assert.Equal(t, remoteIdentity(str("https://git.example:443/team/app")), remoteIdentity(str("https://git.example/team/app.git")))
+	assert.Equal(t, "", githubRepoOf(nil))
 }
