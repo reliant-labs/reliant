@@ -132,22 +132,11 @@ func (r *requestResolver) GetPinnedProjectCatalog(ctx context.Context, pin strin
 	return got.catalog, got.found, err
 }
 
-// workflowProvenanceStore and machineNamer are the reads a trigger's definition
-// is attributed with (triggers.describeDefinition asks its store for them by
-// assertion): which machine synced the file, and that machine's name.
-type workflowProvenanceStore interface {
-	ProjectWorkflowProvenance(ctx context.Context, projectID string) ([]config.WorkflowProvenance, error)
-}
-
-type machineNamer interface {
-	MachineDisplayName(ctx context.Context, daemonID string) string
-}
-
 // ProjectWorkflowProvenance serves the wrapped store's, once per project. A
 // store without it has no provenance: nil, as attribution reads a store that
 // cannot say.
 func (r *requestResolver) ProjectWorkflowProvenance(ctx context.Context, projectID string) ([]config.WorkflowProvenance, error) {
-	p, ok := r.inner.(workflowProvenanceStore)
+	p, ok := r.inner.(WorkflowProvenanceReader)
 	if !ok {
 		return nil, nil
 	}
@@ -159,7 +148,7 @@ func (r *requestResolver) ProjectWorkflowProvenance(ctx context.Context, project
 // MachineDisplayName serves the wrapped store's, once per machine; "" (no
 // name) from a store without it.
 func (r *requestResolver) MachineDisplayName(ctx context.Context, daemonID string) string {
-	n, ok := r.inner.(machineNamer)
+	n, ok := r.inner.(MachineNamer)
 	if !ok {
 		return ""
 	}
