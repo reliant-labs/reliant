@@ -2,12 +2,13 @@ package streaming
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"connectrpc.com/connect"
 	natstest "github.com/nats-io/nats-server/v2/test"
@@ -121,15 +122,15 @@ func (r *snapshotGateRepo) GetUpdatesSince(context.Context, string, int64, int) 
 }
 
 // The snapshot reads the main thread's recent transcript through its context
-// window chain. sql.ErrNoRows is how the store reports a thread with no
+// window chain. svcerr.NotFound("thread") is how the store reports a thread with no
 // context window yet — an empty thread, which is what this chat is.
 func (r *snapshotGateRepo) GetLatestContextWindow(context.Context, string) (*db.ContextWindow, error) {
-	return nil, sql.ErrNoRows
+	return nil, svcerr.NotFound("thread")
 }
 
 // The main thread's row is read alongside its context-window walk.
 func (r *snapshotGateRepo) GetThread(context.Context, string) (*db.Thread, error) {
-	return nil, sql.ErrNoRows
+	return nil, svcerr.NotFound("thread")
 }
 
 // startTestNATS runs an in-process JetStream-enabled NATS server. JetStream is

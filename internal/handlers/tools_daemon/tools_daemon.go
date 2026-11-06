@@ -3,8 +3,6 @@ package tools_daemon
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -637,7 +635,7 @@ func isNotFoundErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return true
 	}
 	errText := strings.ToLower(err.Error())

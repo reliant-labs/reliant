@@ -2,8 +2,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -134,7 +132,7 @@ func (r *Repo) machineName(ctx context.Context, known map[string]string, daemonI
 	}
 	daemon, err := r.GetDaemon(ctx, daemonID)
 	if err != nil || daemon == nil {
-		if err != nil && !errors.Is(err, sql.ErrNoRows) && !svcerr.IsNotFound(err) {
+		if err != nil && !svcerr.IsNotFound(err) {
 			return daemonID
 		}
 		return daemonID + " (removed)"

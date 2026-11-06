@@ -3,14 +3,13 @@ package config
 import (
 	"container/list"
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"maps"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -18,7 +17,7 @@ import (
 // config record, read without the record's payload (db.Repo
 // GetProjectConfigVersion). The token must change whenever the record is
 // rewritten; it is compared for equality only. A project with no record
-// returns sql.ErrNoRows.
+// returns svcerr.NotFound.
 type StoredConfigVersions interface {
 	GetProjectConfigVersion(ctx context.Context, projectID string) (string, error)
 }
@@ -104,7 +103,7 @@ type loadFunc func(ctx context.Context) (*Config, int64, error)
 func (c *parsedConfigCache) get(ctx context.Context, projectID, key string, load loadFunc) (*Config, error) {
 	version, err := c.versions.GetProjectConfigVersion(ctx, projectID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			c.evict(key)
 			return notSyncedConfig(projectID), nil
 		}
@@ -141,7 +140,7 @@ func (c *parsedConfigCache) get(ctx context.Context, projectID, key string, load
 		return nil, ctx.Err()
 	case res := <-ch:
 		if res.Err != nil {
-			if errors.Is(res.Err, sql.ErrNoRows) {
+			if svcerr.IsNotFound(res.Err) {
 				// Deleted between the version read and the record read.
 				c.evict(key)
 				return notSyncedConfig(projectID), nil

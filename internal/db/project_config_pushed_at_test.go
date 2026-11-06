@@ -2,15 +2,15 @@ package db
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // TestProjectConfigPushedAtAndScenariosColumn: the narrow reads return exactly
 // what the full record carries, and report a project with no record the way
-// GetProjectConfigRecord does (sql.ErrNoRows, unwrapped), so the daemon sync's
+// GetProjectConfigRecord does (svcerr.NotFound), so the daemon sync's
 // "nothing stored yet — apply" and the scenario RPCs' NotFound keep working.
 func TestProjectConfigPushedAtAndScenariosColumn(t *testing.T) {
 	t.Parallel()
@@ -19,11 +19,11 @@ func TestProjectConfigPushedAtAndScenariosColumn(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	if _, err := repo.GetProjectConfigPushedAt(ctx, "test-project"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("no record: pushed_at err = %v; want sql.ErrNoRows", err)
+	if _, err := repo.GetProjectConfigPushedAt(ctx, "test-project"); !svcerr.IsNotFound(err) {
+		t.Fatalf("no record: pushed_at err = %v; want svcerr.NotFound", err)
 	}
-	if _, err := repo.GetProjectScenariosJSON(ctx, "test-project"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("no record: scenarios err = %v; want sql.ErrNoRows", err)
+	if _, err := repo.GetProjectScenariosJSON(ctx, "test-project"); !svcerr.IsNotFound(err) {
+		t.Fatalf("no record: scenarios err = %v; want svcerr.NotFound", err)
 	}
 
 	pushedAt := time.UnixMilli(1_700_000_123_456).UTC()

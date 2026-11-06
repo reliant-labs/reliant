@@ -4,11 +4,12 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"sort"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // These run the real SQL. The registry writes in daemon_registry.go carry
@@ -35,7 +36,7 @@ func mustGetDaemon(t *testing.T, repo *Repo, id string) *Daemon {
 func daemonExists(t *testing.T, repo *Repo, id string) bool {
 	t.Helper()
 	_, err := repo.GetDaemon(context.Background(), id)
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return false
 	}
 	if err != nil {

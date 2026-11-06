@@ -2,9 +2,9 @@ package db
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 func TestProjectMCPConfigsColumnRead(t *testing.T) {
@@ -25,7 +25,7 @@ func TestProjectMCPConfigsColumnRead(t *testing.T) {
 	if err != nil || got == nil || *got != mcp {
 		t.Fatalf("GetProjectMCPConfigsJSON = %v, %v; want %q", got, err, mcp)
 	}
-	if _, err := repo.GetProjectMCPConfigsJSON(ctx, "no-such-project"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("no record: err = %v; want sql.ErrNoRows", err)
+	if _, err := repo.GetProjectMCPConfigsJSON(ctx, "no-such-project"); !svcerr.IsNotFound(err) {
+		t.Fatalf("no record: err = %v; want svcerr.NotFound", err)
 	}
 }

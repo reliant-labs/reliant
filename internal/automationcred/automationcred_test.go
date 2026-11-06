@@ -3,8 +3,9 @@ package automationcred
 
 import (
 	"context"
-	"database/sql"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,7 @@ func (m memKeys) GetAutomationToken(_ context.Context, user, daemonID string) (s
 	if v, ok := m[user+"|"+daemonID]; ok {
 		return v, nil
 	}
-	return "", sql.ErrNoRows
+	return "", svcerr.NotFound("api key")
 }
 
 func TestBearerForOrder(t *testing.T) {

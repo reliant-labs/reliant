@@ -2,13 +2,12 @@ package threads
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -287,7 +286,7 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 		// here would run the create path on a poisoned transaction and
 		// surface a misleading 25P02 from whatever statement runs next.
 		_, err := s.repo.GetThread(txCtx, threadID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err != nil && !svcerr.IsNotFound(err) {
 			return fmt.Errorf("failed to check for existing thread: %w", err)
 		}
 		if err == nil {

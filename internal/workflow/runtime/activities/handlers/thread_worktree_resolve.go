@@ -3,12 +3,12 @@ package handlers
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -55,7 +55,7 @@ func (a *CreateWorkflowWithThreadActivity) resolveThreadWorktree(ctx context.Con
 					"Resume it without the worktree parameter, or spawn a new agent for the other workspace.",
 					input.ThreadID, row.Name, describeBinding(ctx, a.repo, bound)), nil
 			}
-		case err != nil && !errors.Is(err, sql.ErrNoRows):
+		case err != nil && !svcerr.IsNotFound(err):
 			return "", "", fmt.Errorf("load thread %s: %w", input.ThreadID, err)
 		}
 	}

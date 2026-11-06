@@ -2,8 +2,9 @@ package config
 
 import (
 	"context"
-	"database/sql"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/stretchr/testify/require"
 )
@@ -102,7 +103,7 @@ func TestParseRepoMemories(t *testing.T) {
 }
 
 func TestStoredConfigProvider_MissingStoredRecordReturnsDefaultConfig(t *testing.T) {
-	provider := NewStoredConfigProvider(&staticStore{err: sql.ErrNoRows})
+	provider := NewStoredConfigProvider(&staticStore{err: svcerr.NotFound("project config")})
 	cfg, err := provider.GetProjectConfig(context.Background(), ProjectRef{ProjectID: "missing"})
 	require.NoError(t, err)
 	require.NotNil(t, cfg)

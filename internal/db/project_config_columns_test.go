@@ -2,14 +2,14 @@ package db
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // TestProjectConfigColumnReads: the single-column reads return exactly the
 // column the full record would, and report a project with no record the same
-// way (sql.ErrNoRows, unwrapped), so callers that switched from
+// way (svcerr.NotFound), so callers that switched from
 // GetProjectConfigRecord keep their "nothing synced yet" handling.
 func TestProjectConfigColumnReads(t *testing.T) {
 	t.Parallel()
@@ -50,10 +50,10 @@ func TestProjectConfigColumnReads(t *testing.T) {
 		t.Fatalf("unsynced presets = %v, %v; want nil, nil", got, err)
 	}
 
-	if _, err := repo.GetProjectWorkflowsJSON(ctx, "no-such-project"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("no record: err = %v; want sql.ErrNoRows", err)
+	if _, err := repo.GetProjectWorkflowsJSON(ctx, "no-such-project"); !svcerr.IsNotFound(err) {
+		t.Fatalf("no record: err = %v; want svcerr.NotFound", err)
 	}
-	if _, err := repo.GetProjectPresetsJSON(ctx, "no-such-project"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("no record: err = %v; want sql.ErrNoRows", err)
+	if _, err := repo.GetProjectPresetsJSON(ctx, "no-such-project"); !svcerr.IsNotFound(err) {
+		t.Fatalf("no record: err = %v; want svcerr.NotFound", err)
 	}
 }

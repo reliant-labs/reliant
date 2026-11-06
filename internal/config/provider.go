@@ -2,12 +2,11 @@ package config
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"gopkg.in/yaml.v3"
 )
@@ -103,7 +102,7 @@ func (p *StoredConfigProvider) GetProjectConfig(ctx context.Context, ref Project
 	}
 
 	cfg, _, err := load(ctx)
-	if errors.Is(err, sql.ErrNoRows) {
+	if svcerr.IsNotFound(err) {
 		return notSyncedConfig(ref.ProjectID), nil
 	}
 	return cfg, err
@@ -123,12 +122,12 @@ func notSyncedConfig(projectID string) *Config {
 
 // load reads the project's stored record and parses it into a Config. size is
 // the record's payload in bytes, the cache's estimate of what the parsed
-// Config retains. A project with no record returns sql.ErrNoRows unwrapped.
+// Config retains. A project with no record returns svcerr.NotFound.
 func (p *StoredConfigProvider) load(ctx context.Context, ref ProjectRef) (cfg *Config, size int64, err error) {
 	projectID := ref.ProjectID
 	record, err := p.readRecord(ctx, ref)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if svcerr.IsNotFound(err) {
 			return nil, 0, err
 		}
 		return nil, 0, fmt.Errorf("failed to load stored config for project %s: %w", projectID, err)
