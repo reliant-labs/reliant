@@ -142,6 +142,37 @@ func TestWorktreeCreate_FailedAddTakesBackItsCheckoutAndBranch(t *testing.T) {
 	require.NotContains(t, guardRepoBranches(t, projectPath), "feat/failed-add", "branch left behind")
 }
 
+// A forced create resets an existing branch to the start point with -B. When
+// that checkout then fails, the branch is user data, not this call's: it was
+// there before, and it now sits at the start point only because -B put it
+// there. It must survive the take-back, though its tip equals the start point.
+func TestWorktreeCreate_ForcedFailedAddKeepsABranchThatPredatesIt(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
+	t.Parallel()
+	projectPath := diagnoseRepo(t)
+	gitOutIn(t, projectPath, "branch", "feat/predates", "main")
+	hooks := filepath.Join(t.TempDir(), "hooks")
+	require.NoError(t, os.MkdirAll(hooks, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-checkout"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
+	gitOutIn(t, projectPath, "config", "core.hooksPath", hooks)
+
+	workspaceID := uniqueWorkspaceID(t, "ws-forced-failed-add")
+	resp := createFor(t, map[string]any{
+		"project_path": projectPath,
+		"workspace_id": workspaceID,
+		"sub_path":     "repo",
+		"name":         "forced",
+		"branch":       "feat/predates",
+		"base_branch":  "main",
+		"force":        true,
+		"worktree_id":  "wt-forced-failed-add",
+	})
+	require.False(t, resp.Success, "the failing post-checkout hook must fail the create")
+
+	require.NotContains(t, guardWorktrees(t, projectPath), "feat/predates", "registration left behind")
+	require.Contains(t, guardRepoBranches(t, projectPath), "feat/predates", "a branch that predates the create was deleted")
+}
+
 // A checkout that predates the call is never taken back, nor a branch the
 // call did not make.
 func TestAbandonCheckout_KeepsABranchThatMoved(t *testing.T) {

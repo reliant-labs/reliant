@@ -266,9 +266,15 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	branchCheckCmd.Dir = req.ProjectPath
 	branchExists := branchCheckCmd.Run() == nil
 	// The branch a failed or abandoned create may delete again: only one
-	// this call is about to make.
+	// this call is about to make. -B (the Force path) resets an existing
+	// branch to the start point, so its tip matching the start point after a
+	// failure proves nothing about who made it; what decides is whether the
+	// local branch existed before git ran. That is asked of refs/heads/
+	// precisely, and only a clean "not found" (exit 1, git ran to the end)
+	// counts as absent: a check that could not run (a deadline, a git that
+	// failed) leaves the branch as someone else's.
 	createdBranch := ""
-	if !reuseLocal && !branchExists {
+	if !reuseLocal && !branchExists && localBranchAbsent(ctx, req.ProjectPath, req.Branch) {
 		createdBranch = req.Branch
 	}
 

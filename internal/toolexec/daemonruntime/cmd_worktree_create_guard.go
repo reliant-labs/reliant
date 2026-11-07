@@ -175,6 +175,18 @@ func sameCheckoutPath(a, b string) bool {
 	return errA == nil && errB == nil && ra == rb
 }
 
+// localBranchAbsent reports whether repoPath has no local branch named branch,
+// answering true only when git said so: `rev-parse --verify --quiet` exits 1
+// for a missing ref. Any other outcome (the ref exists, git could not run, the
+// context ended) is false, so a branch whose existence is unknown is never
+// treated as one this create made.
+func localBranchAbsent(ctx context.Context, repoPath, branch string) bool {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	cmd.Dir = repoPath
+	var exitErr *exec.ExitError
+	return errors.As(cmd.Run(), &exitErr) && exitErr.ExitCode() == 1
+}
+
 // worktreeAbandonTimeout bounds taking back one checkout. It runs on a
 // context of its own: the create's has usually ended by then.
 const worktreeAbandonTimeout = time.Minute
