@@ -238,7 +238,14 @@ gen_forge() {
     judge generate "$b" "$wt"
     return
   fi
-  (cd "$wt" && GOMAXPROCS=$gen_procs task generate:forge) || return 1
+  # FORGE_GENERATE_TIMINGS: forge prints each step's wall time when the run
+  # ends; the five slowest go into the summary, because generate.log stays on
+  # the runner and the queue's generate is its longest phase.
+  (cd "$wt" && GOMAXPROCS=$gen_procs FORGE_GENERATE_TIMINGS=1 task generate:forge) | tee "$L/generate.timings.raw"; local rc=${PIPESTATUS[0]}
+  sed -n '/generate step timings/,$p' "$L/generate.timings.raw" | sed -n '2,6p' | sed -E 's/^ +//; s/ +/ /g' | paste -sd ';' - | sed 's/;/; /g' |
+    sed 's/^/generate slowest steps: /' >>"$L/notes"
+  rm -f "$L/generate.timings.raw"
+  [ "$rc" = 0 ] || return 1
   judge generate "$b" "$wt" || return 1
   (cd "$wt" && GOMAXPROCS=$gen_procs "${forge[@]}" lint --no-fix --conventions) || { echo "forge lint --conventions failed"; return 1; }
 }
