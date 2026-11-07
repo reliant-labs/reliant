@@ -80,15 +80,15 @@ message ReliantWebConfig {
   }];
 
   // ── The public forge demo (the forge-demo bundle, demo.html) ───────────
-  // Deprecated: the host on which THIS bundle mounted the demo shell. The
-  // demo is its own build and env now (deploy/kcl/demo), so no host of this
-  // bundle is the demo; `?shell=demo` remains for local dev. Still accepted,
-  // so a config that sets it stays valid; nothing reads it. Removed only in
-  // a future major.
+  // Deprecated: the host on which THIS bundle mounts the demo shell. The
+  // demo is its own build and env now (deploy/kcl/demo), the supported path;
+  // this bundle still honours the key (lib/shell.ts) so a deployment that
+  // points the host at reliant-web keeps its demo. Removed only in a future
+  // major.
   string demo_app_host = 24 [deprecated = true, (forge.v1.config) = {
     env_var: "DEMO_APP_HOST"
     default_value: "demo.reliantlabs.io"
-    description: "Deprecated, read by nothing: this bundle no longer mounts the public forge demo on any host. The demo is its own build and env (deploy/kcl/demo, the forge-demo frontend). Accepted so an existing config stays valid."
+    description: "Deprecated: hostname on which this bundle still mounts the public forge demo (the demo shell), read-only on sample data. The supported demo is its own build and env (deploy/kcl/demo, the forge-demo frontend); this key keeps working until a future major."
   }];
 
   string demo_telemetry = 25 [(forge.v1.config) = {

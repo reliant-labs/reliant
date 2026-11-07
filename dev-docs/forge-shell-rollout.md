@@ -101,23 +101,24 @@ frontend of reliant's `demo` env (`deploy/kcl/demo/main.k`), built from
 which is how forge builds it). That bundle is always the demo shell
 (`__WEB_TARGET__`, `lib/shell.ts`), mounts the forge console on sample data and
 contains no Reliant chat, onboarding, sign-in, Supabase, daemon or settings
-code (`vite-plugin-demo-bundle.ts` fails a build that would). No host of
-`prod/reliant-web` mounts the demo shell; `?shell=demo` still does, for a look
-in local dev.
+code (`vite-plugin-demo-bundle.ts` fails a build that would). Once the domain is
+bound to the demo env, no request reaches `prod/reliant-web` on that host;
+`?shell=demo` still mounts the demo shell there, for a look in local dev.
 
 Its runtime config is the env's (`DEMO_DATA_SOURCE`, `DEMO_DATA_URL`,
 `DEMO_TELEMETRY`, `OTEL_ENDPOINT=/_otel`, `OTEL_REPLAY`); it names no API, no
 auth mode and no key. It needs no control-plane CORS entry and no GoTrue
 redirect entry: it calls no backend.
 
-`DEMO_APP_HOST` (proto field 24) is deprecated: `prod/reliant-web` still
-accepts it, so an existing config stays valid, but nothing reads it.
+`DEMO_APP_HOST` (proto field 24) is deprecated but still works:
+`prod/reliant-web` mounts the demo shell on that host, as before, so a
+deployment that still points the host at reliant-web keeps its demo (and the
+cutover keeps a rollback target). It is removed only in a future major.
 
-**Order.** This document's change (no host of `prod/reliant-web` mounts the
-demo shell) ships only AFTER the cutover below has passed its checks: until
-then, `prod/reliant-web` is the cutover's rollback target, and it must still
-serve the demo shell on that host. The full runbook, with every check, is
-`dev-docs/forge-demo-cutover.md`.
+**Order.** The cutover below moves the domain to the demo env and checks it.
+`prod/reliant-web` stays its rollback target throughout, because it still
+serves the demo shell on that host (`DEMO_APP_HOST`, deprecated). The full
+runbook, with every check, is `dev-docs/forge-demo-cutover.md`.
 
 Ship and bind it from a reliant checkout of `main` (owner, tenant-zero
 credential):
@@ -131,7 +132,7 @@ reliant forge domain show demo.reliantlabs.io --env demo
 node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 ```
 
-**Checks** (all must pass before the change above is released):
+**Checks** (all must pass before the cutover is called done):
 
 ```bash
 curl -sI https://demo.reliantlabs.io/ | grep -i 'via: 1.1 google'   # served through the edge
@@ -143,8 +144,8 @@ node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 **Rollback of the cutover** (if a check fails). The domain's verification and
 certificate belong to the domain, not to the binding, so moving it back is
 instant and needs no DNS change. It restores exactly what served before: the
-build `prod/reliant-web` runs, which still mounts the demo shell on this host as
-long as this change has not been released.
+build `prod/reliant-web` runs, which still mounts the demo shell on this host
+(`DEMO_APP_HOST`).
 
 ```bash
 cd ../control-plane
@@ -159,8 +160,3 @@ To roll back only the demo env's own release, deploy its previous release:
 `reliant forge env status demo` lists them, then
 `reliant forge env deploy demo <previous version>` (a static site has no
 migrations, so that is a complete rollback).
-
-**If this change was already released and the demo env then fails**, binding
-the domain back to `prod/reliant-web` serves the Reliant shell there, not the
-demo: roll back the demo env's release instead (above), or revert this change
-and release before binding back.
