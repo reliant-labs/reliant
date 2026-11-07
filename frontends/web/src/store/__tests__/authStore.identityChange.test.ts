@@ -50,6 +50,9 @@ vi.mock('@/lib/logger', () => ({
 
 const { queryClient } = await import('@/lib/query-client')
 const { useAuthStore } = await import('@/store/authStore')
+const { useGlobalDataStore } = await import('@/store/globalDataStore')
+const { useApiKeySetupStore } = await import('@/store/apiKeySetupStore')
+const { useOnboardingChecklistStore } = await import('@/store/onboardingChecklistStore')
 
 const sessionFor = (id: string) => ({ access_token: `t-${id}`, user: { id } }) as unknown as Session
 
@@ -201,5 +204,99 @@ describe('identity changes installed by a store action', () => {
     expect(resetMock).toHaveBeenCalled()
     expect(userAAnswer()).toBeUndefined()
     expect(useAuthStore.getState().user?.id).toBe('user-b')
+  })
+})
+
+// The singletons AuthInitializer fills once per user are user-scoped too: the
+// model list carries user A's local daemons, machine names and endpoints.
+describe('per-account startup state', () => {
+  it('is cleared before user B is installed over user A', async () => {
+    await signedInAs('user-a')
+    useGlobalDataStore.setState({
+      models: [
+        {
+          id: 'llama@local',
+          name: 'llama',
+          provider: 'local',
+          driverId: 'local',
+          local: {
+            daemonId: 'daemon-a',
+            machineName: 'a-laptop',
+            endpointId: 'ep-a',
+            endpointKind: 'ollama',
+            online: true,
+          },
+          capabilities: [],
+          tags: [],
+        },
+      ],
+      isInitialized: true,
+    })
+    useApiKeySetupStore.setState({ hasChecked: true, hasApiKey: true })
+    useOnboardingChecklistStore.setState({ welcomeShown: true, isInitialized: true })
+
+    let modelsWhenBInstalled: unknown[] | null = null
+    const unsubscribe = useAuthStore.subscribe((state) => {
+      if (state.user?.id === 'user-b' && modelsWhenBInstalled === null) {
+        modelsWhenBInstalled = useGlobalDataStore.getState().models
+      }
+    })
+    await auth.listener!('SIGNED_IN', sessionFor('user-b'))
+    unsubscribe()
+
+    expect(useAuthStore.getState().user?.id).toBe('user-b')
+    expect(modelsWhenBInstalled).toEqual([])
+    expect(useGlobalDataStore.getState().isInitialized).toBe(false)
+    expect(useApiKeySetupStore.getState().hasChecked).toBe(false)
+    expect(useApiKeySetupStore.getState().hasApiKey).toBeNull()
+    expect(useOnboardingChecklistStore.getState().welcomeShown).toBe(false)
+    expect(useOnboardingChecklistStore.getState().isInitialized).toBe(false)
+  })
+})
+
+// Adoptions are asynchronous (the cleanup awaits); overlapping ones must
+// leave the page on the identity storage moved to last.
+describe('overlapping identity changes', () => {
+  const deferred = () => {
+    let resolve!: () => void
+    const promise = new Promise<void>((r) => {
+      resolve = r
+    })
+    return { promise, resolve }
+  }
+
+  it('a later event wins over an earlier one still clearing state', async () => {
+    await signedInAs('user-a')
+    const blocked = deferred()
+    const cancel = vi.spyOn(queryClient, 'cancelQueries').mockImplementationOnce(() => blocked.promise)
+
+    const toB = auth.listener!('SIGNED_IN', sessionFor('user-b'))
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalled())
+    const toC = auth.listener!('SIGNED_IN', sessionFor('user-c'))
+
+    // B's cleanup finishes only after C was requested.
+    blocked.resolve()
+    await Promise.all([toB, toC])
+    cancel.mockRestore()
+
+    expect(useAuthStore.getState().user?.id).toBe('user-c')
+    expect(useAuthStore.getState().session?.access_token).toBe('t-user-c')
+  })
+
+  it('an action returning B does not overwrite C that storage moved to meanwhile', async () => {
+    await signedInAs('user-a')
+    auth.signInWithPassword.mockImplementation(async () => {
+      const b = sessionFor('user-b')
+      await auth.listener!('SIGNED_IN', b)
+      // Another host signs in as C through the shared cookie before the
+      // call returns B to the store action.
+      await auth.listener!('SIGNED_IN', sessionFor('user-c'))
+      return { data: { user: b.user, session: b }, error: null }
+    })
+
+    await useAuthStore.getState().signIn('b@example.com', 'pw')
+
+    expect(useAuthStore.getState().user?.id).toBe('user-c')
+    expect(useAuthStore.getState().session?.access_token).toBe('t-user-c')
   })
 })

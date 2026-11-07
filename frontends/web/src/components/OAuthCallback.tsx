@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { supabase } from "@/lib/supabase";
-import { useAuthStore } from "@/store/authStore";
+import { identityActionMark, useAuthStore } from "@/store/authStore";
 import { isSafeReturnTo } from "@/lib/returnTo";
 import { describeAuthError } from "@/lib/authErrors";
 import { logger } from "@/lib/logger";
@@ -118,6 +118,9 @@ export function OAuthCallback() {
         return;
       }
 
+      // Taken before the exchange: if storage moves to another user while it
+      // is in flight, that newer identity is installed, not this result.
+      const mark = identityActionMark();
       try {
         let user;
         let session;
@@ -186,7 +189,7 @@ export function OAuthCallback() {
         // Through the store's cleanup-aware gate: a different user's chats
         // and cached answers are cleared first, and nothing is installed
         // when that fails.
-        if (!(await installIdentity(user, session))) {
+        if (!(await installIdentity(user, session, mark))) {
           setError(
             useAuthStore.getState().authError ??
               "We couldn't finish signing you in. Please reload the page.",

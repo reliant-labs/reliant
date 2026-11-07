@@ -56,6 +56,7 @@ const installIdentity = vi.fn(async () => true)
 
 vi.mock('@/store/authStore', () => ({
   useAuthStore: () => ({ installIdentity }),
+  identityActionMark: () => 7,
 }))
 
 vi.mock('@/lib/logger', () => ({
@@ -106,7 +107,7 @@ describe('OAuthCallback — email confirmation link', () => {
     // The reported symptom was returning still-anonymous and hitting the same
     // modal. Setting the verified session is what breaks that loop.
     await waitFor(() =>
-      expect(installIdentity).toHaveBeenCalledWith(LINKED.user, LINKED.session),
+      expect(installIdentity).toHaveBeenCalledWith(LINKED.user, LINKED.session, 7),
     )
   })
 
