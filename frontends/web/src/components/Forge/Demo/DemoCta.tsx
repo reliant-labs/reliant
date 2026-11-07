@@ -51,7 +51,7 @@ export function InstallForgeLink({ placement, children = "Install forge" }: { pl
           tracked("install", placement);
           setInstalling(true);
         }}
-        className="min-h-11 font-medium text-primary-ink underline-offset-2 hover:underline sm:min-h-0"
+        className="min-h-[44px] font-medium text-primary-ink underline-offset-2 hover:underline sm:min-h-0"
         data-testid={`install-forge-link-${placement}`}
       >
         {children}
@@ -70,8 +70,8 @@ export function SignUpButton({ placement, size = "lg", className }: { placement:
       rel="noopener"
       onClick={() => tracked("signup", placement)}
       className={cn(
-        "no-color inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        size === "lg" ? "px-5 text-base sm:min-h-11" : "px-4 text-sm sm:min-h-9",
+        "no-color inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-primary font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        size === "lg" ? "px-5 text-base sm:min-h-[44px]" : "px-4 text-sm sm:min-h-9",
         className,
       )}
       data-testid="demo-cta-signup"
@@ -95,8 +95,8 @@ export function DemoCta({ placement, size = "lg" }: { placement: DemoCtaPlacemen
           setInstalling(true);
         }}
         className={cn(
-          "inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-ink/5",
-          size === "lg" ? "sm:min-h-11" : "sm:min-h-9",
+          "inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-border bg-surface px-3 text-sm font-medium text-ink hover:bg-ink/5",
+          size === "lg" ? "sm:min-h-[44px]" : "sm:min-h-9",
         )}
         data-testid="demo-cta-install"
       >

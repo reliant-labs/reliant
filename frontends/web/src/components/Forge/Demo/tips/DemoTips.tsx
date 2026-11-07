@@ -131,7 +131,7 @@ export function DemoTips() {
         <button
           type="button"
           onClick={start}
-          className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-popover px-3.5 text-sm font-medium text-foreground shadow-lg hover:bg-muted sm:min-h-9"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-border bg-popover px-3.5 text-sm font-medium text-foreground shadow-lg hover:bg-muted sm:min-h-9"
           data-testid="demo-page-tour-replay"
           data-tip={shownKey}
         >
@@ -158,7 +158,7 @@ export function DemoTips() {
             type="button"
             onClick={dismiss}
             aria-label="Dismiss"
-            className="-m-2 inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
+            className="-m-2 inline-flex h-[44px] w-[44px] items-center justify-center rounded text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>
@@ -179,7 +179,7 @@ export function DemoTips() {
               trackEvent("demo_tips_exited", { tip: shownKey });
               demoSession.disableTips();
             }}
-            className="mr-auto min-h-11 text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline sm:min-h-0"
+            className="mr-auto min-h-[44px] text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline sm:min-h-0"
             data-testid="demo-tips-exit"
           >
             Exit tips
@@ -187,7 +187,7 @@ export function DemoTips() {
           <button
             type="button"
             onClick={dismiss}
-            className="min-h-11 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted sm:min-h-8"
+            className="min-h-[44px] rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted sm:min-h-8"
             data-testid="demo-tip-dismiss"
           >
             Dismiss
@@ -195,7 +195,7 @@ export function DemoTips() {
           <button
             type="button"
             onClick={start}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 text-xs font-semibold text-primary-ink hover:bg-primary/15 sm:min-h-8"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border border-primary/40 bg-primary/10 px-3 text-xs font-semibold text-primary-ink hover:bg-primary/15 sm:min-h-8"
             data-testid="demo-page-tour-start"
           >
             <Compass className="h-3.5 w-3.5" aria-hidden="true" />

@@ -72,7 +72,7 @@ export function DemoTourToast() {
             type="button"
             onClick={() => dismiss("close")}
             aria-label="Dismiss"
-            className="-m-2 inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
+            className="-m-2 inline-flex h-[44px] w-[44px] items-center justify-center rounded text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
             data-testid="demo-tour-toast-close"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -88,7 +88,7 @@ export function DemoTourToast() {
           <button
             type="button"
             onClick={() => dismiss("explore")}
-            className="min-h-11 text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline sm:min-h-0"
+            className="min-h-[44px] text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline sm:min-h-0"
             data-testid="demo-tour-toast-dismiss"
           >
             Explore on my own
@@ -99,7 +99,7 @@ export function DemoTourToast() {
               demoSession.dismissToast();
               startJourney("forge", "demo");
             }}
-            className="min-h-11 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 sm:min-h-0"
+            className="min-h-[44px] rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 sm:min-h-0"
             data-testid="demo-tour-toast-start"
           >
             Take the guided tour

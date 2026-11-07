@@ -55,7 +55,7 @@ export interface TourControlsProps {
   skip?: { label: string; onClick: () => void };
 }
 
-const TAP = "min-h-11 sm:min-h-0";
+const TAP = "min-h-[44px] sm:min-h-0";
 
 export function TourControls({
   stepNumber,
