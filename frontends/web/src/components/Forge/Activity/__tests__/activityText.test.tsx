@@ -97,6 +97,38 @@ describe("issue triage", () => {
   });
 });
 
+describe("the storage browser", () => {
+  const opened = event({ verb: "open_bucket", target: { kind: "bucket", id: "uploads", label: "" }, detail: { reason: "checking an avatar" } });
+
+  it("says who opened which bucket on which environment and why", () => {
+    expect(activitySentence(opened)).toBe("Ada opened the uploads bucket on prod: checking an avatar");
+    expect(activityText(opened).facts).toEqual([]);
+    expect(activitySentence(event({ ...opened, env: null, detail: {} }))).toBe("Ada opened the uploads bucket");
+  });
+
+  it("says a file was downloaded, with its size, and never which file", () => {
+    const downloaded = event({
+      verb: "download_object",
+      via: "console",
+      target: { kind: "bucket", id: "uploads", label: "" },
+      // A key in the detail would be a server bug: the row must not render it.
+      detail: { reason: "checking an avatar", size: "1572864", key: "avatars/ada.png" },
+    });
+    expect(activitySentence(downloaded)).toBe("Ada downloaded a file from the uploads bucket on prod: checking an avatar");
+    expect(activityText(downloaded).facts).toEqual(["1.5 MiB"]);
+    render(
+      <ol>
+        <ActivityRow event={downloaded} now={T + 60_000} />
+      </ol>
+    );
+    const row = screen.getByTestId("activity-a1");
+    // The sentence names the environment: the row adds no second "in prod".
+    expect(row).toHaveTextContent("Ada downloaded a file from the uploads bucket on prod: checking an avatar1.5 MiB");
+    expect(row).not.toHaveTextContent("avatars/ada.png");
+    expect(activityText(event({ ...downloaded, detail: { size: "" } })).facts).toEqual([]);
+  });
+});
+
 describe("other verbs", () => {
   it("phrases the known ones, and shows an unknown token as words rather than guessing a tense", () => {
     expect(activityText(event({ verb: "promote" })).action).toBe("promoted");
