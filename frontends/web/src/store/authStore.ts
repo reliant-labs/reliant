@@ -64,6 +64,10 @@ const clearUserScopedState = async (): Promise<void> => {
   queryClient.clear()
 }
 
+// Set when an identity change needs clearUserScopedState() and it has not yet
+// succeeded. While set, the auth listener installs no session.
+let userScopedCleanupOwed = false
+
 /**
  * Where the identity provider should send the user back to.
  *
@@ -957,12 +961,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // A different identity (signed out, or another user signed in, often
         // on another host sharing the session cookie): clear the previous
         // user's state BEFORE adopting the next one.
+        //
+        // Fail closed: if the cleanup fails, adopt NO identity. The store
+        // goes signed out and the cleanup stays owed, so every later event
+        // (including one for the same next user) retries it before any
+        // session is installed over the previous user's state.
         const previousUserId = get().user?.id
         if (previousUserId && previousUserId !== session?.user?.id) {
+          userScopedCleanupOwed = true
+        }
+        if (userScopedCleanupOwed) {
           try {
             await clearUserScopedState()
+            userScopedCleanupOwed = false
           } catch (error) {
-            logger.error('[AuthStore] Clearing the previous user\'s state failed:', error)
+            logger.error('[AuthStore] Clearing the previous user\'s state failed; staying signed out:', error)
+            set({
+              user: null,
+              session: null,
+              authError:
+                'Your previous session could not be cleared from this page. Please reload the page to continue.',
+            })
+            setTelemetryUserId(null)
+            return
           }
         }
         set({

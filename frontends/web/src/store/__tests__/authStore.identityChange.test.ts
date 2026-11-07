@@ -79,6 +79,32 @@ describe('identity changes observed by the auth listener', () => {
     expect(useAuthStore.getState().user).toBeNull()
   })
 
+  it('adopts no identity while clearing the previous user\'s state fails', async () => {
+    await signedInAs('user-a')
+    resetMock.mockImplementationOnce(() => {
+      throw new Error('reset failed')
+    })
+
+    await auth.listener!('SIGNED_IN', sessionFor('user-b'))
+
+    expect(useAuthStore.getState().user).toBeNull()
+    expect(useAuthStore.getState().session).toBeNull()
+    expect(useAuthStore.getState().authError).toBeTruthy()
+    expect(queryClient.getQueryData(['onboarding', 'currentUser'])).toEqual({
+      id: 'user-a',
+      onboardingCompleted: true,
+    })
+
+    // The store is now signed out, but the cleanup is still owed: the next
+    // event for user B retries it before installing user B's session.
+    resetMock.mockClear()
+    await auth.listener!('TOKEN_REFRESHED', sessionFor('user-b'))
+
+    expect(resetMock).toHaveBeenCalled()
+    expect(queryClient.getQueryData(['onboarding', 'currentUser'])).toBeUndefined()
+    expect(useAuthStore.getState().user?.id).toBe('user-b')
+  })
+
   it('keeps them across a token refresh of the same user', async () => {
     await signedInAs('user-a')
 
