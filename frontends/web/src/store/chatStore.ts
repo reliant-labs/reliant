@@ -137,6 +137,7 @@ import { workflowExecutionsOfChat } from "../hooks/useWorkflowExecutions";
 import { chatServiceKeys } from "../hooks/chat-service-hooks_gen";
 import { DEFAULT_WORKFLOW } from "../hooks/settings-queries";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
+import { armChatOpen, beginChatOpen, leaveChatOpen } from "../lib/chatOpenInteraction";
 import {
   STREAMING_FLUSH_FALLBACK_MS,
 } from "../lib/constants";
@@ -1503,6 +1504,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return;
     }
 
+    // A real switch: the chat.open interaction runs from here to the frame
+    // after its timeline caught up (ChatPresenter). Started before anything
+    // below, so the RPCs this kicks off (the chat stream among them) are its
+    // children; a quicker second click supersedes it.
+    const cachedMessages = getMessagesFromCache(chat.id).length;
+    beginChatOpen(chat.id, {
+      "chat.cached": cachedMessages > 0,
+      "chat.cached_messages": cachedMessages,
+    });
+
     // Opening a different chat ABANDONS any pending new-chat compose, so its
     // scratch params die here.
     //
@@ -1619,6 +1630,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("subscribeToChatDetails-end");
     }
+    // The subscription is asserted, so whether the timeline is catching up
+    // now speaks for this open.
+    armChatOpen(chat.id);
 
     // The plan and its tasks, pending approvals and pending questions are
     // server data owned by the React Query cache: their hooks fetch them on
@@ -1665,6 +1679,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // The worktree context is managed by worktreeStore (single source of truth)
 
     if (activeChatId) {
+      // An open still in flight was abandoned, not slow.
+      leaveChatOpen(activeChatId);
       // Don't clean up the state, just deselect
       // State cleanup happens when chat is deleted or after timeout
       set({ activeChatId: null });

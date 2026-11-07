@@ -24,6 +24,7 @@ import {
   isTimelineCatchingUp,
 } from "../../lib/timelineCatchUp";
 import { useTimelineSync } from "../../store/chatStoreHooks";
+import { useChatOpenEnd } from "../../lib/chatOpenInteraction";
 import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
@@ -683,6 +684,16 @@ export const ChatPresenter = memo(function ChatPresenter({
     }
     catchUpOverlayWasVisibleRef.current = catchUpOverlayVisible;
   }, [catchUpOverlayVisible, scrollToBottom]);
+  // The chat.open interaction selectChat started for this chat ends on the
+  // frame after the timeline is usable: caught up, overlay lifted.
+  useChatOpenEnd(chatId, {
+    catchingUp: timelineCatchingUp,
+    overlayVisible: catchUpOverlayVisible,
+    syncAbandoned:
+      timelineSync.chatSyncPending &&
+      connectionStatus !== "connecting" &&
+      connectionStatus !== "connected",
+  });
 
   // Render the timeline
   const renderTimeline = () => (
