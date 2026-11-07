@@ -7,7 +7,14 @@ import { getAttachmentType, isFileTypeSupported, getUnsupportedFileMessage } fro
 
 interface AttachmentStore {
   attachments: Map<string, Attachment[]>;
+  /**
+   * True while any upload or replacement is in flight. The composer blocks
+   * send on it, so a send never captures an attachment a pending replacement
+   * is about to swap out. Derived from `inFlight`, never set directly: one
+   * operation settling must not clear it while another still runs.
+   */
   uploading: boolean;
+  inFlight: number;
   blobUrls: Map<string, string>;
 
   attachFile: (sessionId: string, file: File) => Promise<Attachment>;
@@ -67,167 +74,180 @@ function restoreDrafts(persisted: unknown): Map<string, Attachment[]> {
 export const useAttachmentStore = create<AttachmentStore>()(
   subscribeWithSelector(
     persist(
-      (set, get) => ({
-        attachments: new Map(),
-        uploading: false,
-        blobUrls: new Map(),
+      (set, get) => {
+        const beginUpload = () =>
+          set((state) => ({ inFlight: state.inFlight + 1, uploading: true }));
+        const endUpload = () =>
+          set((state) => {
+            const inFlight = Math.max(0, state.inFlight - 1);
+            return { inFlight, uploading: inFlight > 0 };
+          });
 
-        attachFile: async (sessionId: string, file: File) => {
-          // Check if file type is supported
-          if (!isFileTypeSupported(file.name)) {
-            const message = getUnsupportedFileMessage(file.name);
-            toast.error(message, { duration: 6000 });
-            throw new Error(message);
-          }
+        return {
+          attachments: new Map(),
+          uploading: false,
+          inFlight: 0,
+          blobUrls: new Map(),
 
-          set({ uploading: true });
+          attachFile: async (sessionId: string, file: File) => {
+            // Check if file type is supported
+            if (!isFileTypeSupported(file.name)) {
+              const message = getUnsupportedFileMessage(file.name);
+              toast.error(message, { duration: 6000 });
+              throw new Error(message);
+            }
 
-          try {
-            // The backend stores every upload's bytes and reads them at send time.
-            const attachment = await uploadAttachment(file);
+            beginUpload();
+
+            try {
+              // The backend stores every upload's bytes and reads them at send time.
+              const attachment = await uploadAttachment(file);
+
+              const newBlobUrls = new Map(get().blobUrls);
+              const blobUrl = localBlobUrl(file);
+              if (blobUrl) {
+                newBlobUrls.set(attachment.id, blobUrl);
+              }
+
+              // Add to attachments for this session
+              const currentAttachments = get().attachments.get(sessionId) || [];
+              const newAttachments = new Map(get().attachments);
+              newAttachments.set(sessionId, [...currentAttachments, attachment]);
+
+              set({
+                attachments: newAttachments,
+                blobUrls: newBlobUrls
+              });
+              endUpload();
+
+              return attachment;
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Failed to attach file';
+              endUpload();
+
+              toast.error(`Failed to attach ${file.name}: ${errorMessage}`, {
+                duration: 6000
+              });
+
+              throw error;
+            }
+          },
+
+          replaceAttachment: async (sessionId: string, attachmentId: string, file: File) => {
+            beginUpload();
+            let attachment: Attachment;
+            try {
+              attachment = await uploadAttachment(file);
+            } catch (error) {
+              endUpload();
+              const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+              toast.error(`Failed to save ${file.name}: ${errorMessage}`, { duration: 6000 });
+              throw error;
+            }
+
+            const current = get().attachments.get(sessionId) || [];
+            const index = current.findIndex((a) => a.id === attachmentId);
+            if (index === -1) {
+              endUpload();
+              deleteAttachment(attachment.id).catch((error) => {
+                logger.warn('Failed to delete superseded attachment:', attachment.id, error);
+              });
+              return undefined;
+            }
+
+            const next = [...current];
+            next[index] = attachment;
+            const newAttachments = new Map(get().attachments);
+            newAttachments.set(sessionId, next);
 
             const newBlobUrls = new Map(get().blobUrls);
-            const blobUrl = localBlobUrl(file);
-            if (blobUrl) {
-              newBlobUrls.set(attachment.id, blobUrl);
+            const oldBlobUrl = newBlobUrls.get(attachmentId);
+            if (oldBlobUrl) {
+              URL.revokeObjectURL(oldBlobUrl);
+              newBlobUrls.delete(attachmentId);
             }
+            const blobUrl = localBlobUrl(file);
+            if (blobUrl) newBlobUrls.set(attachment.id, blobUrl);
 
-            // Add to attachments for this session
-            const currentAttachments = get().attachments.get(sessionId) || [];
-            const newAttachments = new Map(get().attachments);
-            newAttachments.set(sessionId, [...currentAttachments, attachment]);
+            set({ attachments: newAttachments, blobUrls: newBlobUrls });
+            endUpload();
 
-            set({
-              attachments: newAttachments,
-              uploading: false,
-              blobUrls: newBlobUrls
+            deleteAttachment(attachmentId).catch((error) => {
+              logger.warn('Failed to delete replaced attachment from server:', attachmentId, error);
             });
-
             return attachment;
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Failed to attach file';
-            set({ uploading: false });
+          },
 
-            toast.error(`Failed to attach ${file.name}: ${errorMessage}`, {
-              duration: 6000
-            });
+          removeAttachment: (sessionId: string, attachmentId: string) => {
+            const currentAttachments = get().attachments.get(sessionId) || [];
+            const filteredAttachments = currentAttachments.filter(a => a.id !== attachmentId);
 
-            throw error;
-          }
-        },
-
-        replaceAttachment: async (sessionId: string, attachmentId: string, file: File) => {
-          set({ uploading: true });
-          let attachment: Attachment;
-          try {
-            attachment = await uploadAttachment(file);
-          } catch (error) {
-            set({ uploading: false });
-            const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-            toast.error(`Failed to save ${file.name}: ${errorMessage}`, { duration: 6000 });
-            throw error;
-          }
-
-          const current = get().attachments.get(sessionId) || [];
-          const index = current.findIndex((a) => a.id === attachmentId);
-          if (index === -1) {
-            set({ uploading: false });
-            deleteAttachment(attachment.id).catch((error) => {
-              logger.warn('Failed to delete superseded attachment:', attachment.id, error);
-            });
-            return undefined;
-          }
-
-          const next = [...current];
-          next[index] = attachment;
-          const newAttachments = new Map(get().attachments);
-          newAttachments.set(sessionId, next);
-
-          const newBlobUrls = new Map(get().blobUrls);
-          const oldBlobUrl = newBlobUrls.get(attachmentId);
-          if (oldBlobUrl) {
-            URL.revokeObjectURL(oldBlobUrl);
-            newBlobUrls.delete(attachmentId);
-          }
-          const blobUrl = localBlobUrl(file);
-          if (blobUrl) newBlobUrls.set(attachment.id, blobUrl);
-
-          set({ attachments: newAttachments, blobUrls: newBlobUrls, uploading: false });
-
-          deleteAttachment(attachmentId).catch((error) => {
-            logger.warn('Failed to delete replaced attachment from server:', attachmentId, error);
-          });
-          return attachment;
-        },
-
-        removeAttachment: (sessionId: string, attachmentId: string) => {
-          const currentAttachments = get().attachments.get(sessionId) || [];
-          const filteredAttachments = currentAttachments.filter(a => a.id !== attachmentId);
-
-          // Revoke blob URL to free memory
-          const blobUrl = get().blobUrls.get(attachmentId);
-          const newBlobUrls = new Map(get().blobUrls);
-          if (blobUrl) {
-            URL.revokeObjectURL(blobUrl);
-            newBlobUrls.delete(attachmentId);
-          }
-
-          const newAttachments = new Map(get().attachments);
-          if (filteredAttachments.length === 0) {
-            newAttachments.delete(sessionId);
-          } else {
-            newAttachments.set(sessionId, filteredAttachments);
-          }
-
-          // Single atomic state update for instant UI response
-          set({ attachments: newAttachments, blobUrls: newBlobUrls });
-
-          // Delete from server in background (fire-and-forget)
-          deleteAttachment(attachmentId).catch((error) => {
-            logger.warn('Failed to delete attachment from server:', attachmentId, error);
-          });
-        },
-
-        getAttachments: (sessionId: string) => {
-          return get().attachments.get(sessionId) || [];
-        },
-
-        clearAttachments: (sessionId: string) => {
-          const currentAttachments = get().attachments.get(sessionId) || [];
-          const newBlobUrls = new Map(get().blobUrls);
-
-          // Revoke blob URLs for all attachments in this session to free memory
-          for (const attachment of currentAttachments) {
-            const blobUrl = newBlobUrls.get(attachment.id);
+            // Revoke blob URL to free memory
+            const blobUrl = get().blobUrls.get(attachmentId);
+            const newBlobUrls = new Map(get().blobUrls);
             if (blobUrl) {
               URL.revokeObjectURL(blobUrl);
-              newBlobUrls.delete(attachment.id);
+              newBlobUrls.delete(attachmentId);
             }
-          }
 
-          const newAttachments = new Map(get().attachments);
-          newAttachments.delete(sessionId);
-          set({ attachments: newAttachments, blobUrls: newBlobUrls });
-        },
+            const newAttachments = new Map(get().attachments);
+            if (filteredAttachments.length === 0) {
+              newAttachments.delete(sessionId);
+            } else {
+              newAttachments.set(sessionId, filteredAttachments);
+            }
 
-        getBlobUrl: (attachmentId: string) => {
-          return get().blobUrls.get(attachmentId);
-        },
+            // Single atomic state update for instant UI response
+            set({ attachments: newAttachments, blobUrls: newBlobUrls });
 
-        reset: () => {
-          // Revoke all blob URLs to free memory
-          const { blobUrls } = get();
-          blobUrls.forEach((url) => {
-            URL.revokeObjectURL(url);
-          });
+            // Delete from server in background (fire-and-forget)
+            deleteAttachment(attachmentId).catch((error) => {
+              logger.warn('Failed to delete attachment from server:', attachmentId, error);
+            });
+          },
 
-          set({
-            attachments: new Map(),
-            uploading: false,
-            blobUrls: new Map(),
-          });
-        },
-      }),
+          getAttachments: (sessionId: string) => {
+            return get().attachments.get(sessionId) || [];
+          },
+
+          clearAttachments: (sessionId: string) => {
+            const currentAttachments = get().attachments.get(sessionId) || [];
+            const newBlobUrls = new Map(get().blobUrls);
+
+            // Revoke blob URLs for all attachments in this session to free memory
+            for (const attachment of currentAttachments) {
+              const blobUrl = newBlobUrls.get(attachment.id);
+              if (blobUrl) {
+                URL.revokeObjectURL(blobUrl);
+                newBlobUrls.delete(attachment.id);
+              }
+            }
+
+            const newAttachments = new Map(get().attachments);
+            newAttachments.delete(sessionId);
+            set({ attachments: newAttachments, blobUrls: newBlobUrls });
+          },
+
+          getBlobUrl: (attachmentId: string) => {
+            return get().blobUrls.get(attachmentId);
+          },
+
+          reset: () => {
+            // Revoke all blob URLs to free memory
+            const { blobUrls } = get();
+            blobUrls.forEach((url) => {
+              URL.revokeObjectURL(url);
+            });
+
+            set({
+              attachments: new Map(),
+              uploading: false,
+              inFlight: 0,
+              blobUrls: new Map(),
+            });
+          },
+        };
+      },
       {
         // Draft attachments survive a reload alongside the draft text
         // (workspace-state). Only metadata is kept: the bytes live on the

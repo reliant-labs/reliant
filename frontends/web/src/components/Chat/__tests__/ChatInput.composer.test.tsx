@@ -155,6 +155,8 @@ describe("long paste", () => {
       await waitFor(() => expect(screen.getByRole("button", { name: "Open pasted-text(2).txt" })).toBeInTheDocument());
       // No banner, no inline panel: the chips are the whole UI.
       expect(screen.queryByText(/Long paste attached/)).toBeNull();
+      // Send stays disabled until the upload queue settles; clicking earlier is a no-op.
+      await waitFor(() => expect(screen.getByTestId("send-button")).not.toBeDisabled());
       fireEvent.click(screen.getByTestId("send-button"));
       await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
       expect(onSend.mock.calls[0][1]).toEqual(["paste-1", "paste-2"]);

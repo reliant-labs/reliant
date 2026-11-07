@@ -66,6 +66,28 @@ describe("replaceAttachment", () => {
     expect(api.deleteAttachment).not.toHaveBeenCalledWith("a");
   });
 
+  it("keeps send blocked until the replacement settles, even when another upload finishes first", async () => {
+    useAttachmentStore.setState({ attachments: new Map([["s", [att("a")]]]) });
+    let finishReplace!: (a: ReturnType<typeof att>) => void;
+    api.uploadAttachment
+      .mockImplementationOnce(() => new Promise((resolve) => { finishReplace = resolve; }))
+      .mockResolvedValueOnce(att("b"));
+
+    const replacing = useAttachmentStore.getState().replaceAttachment("s", "a", new File(["edit"], "a.txt"));
+    await useAttachmentStore.getState().attachFile("s", new File(["b"], "b.txt"));
+    // The composer gates send on `uploading`: a send now would capture "a",
+    // which the pending replacement is about to swap out and delete.
+    expect(useAttachmentStore.getState().uploading).toBe(true);
+
+    finishReplace(att("a2", "a.txt"));
+    await replacing;
+    expect(useAttachmentStore.getState().uploading).toBe(false);
+    // What a send captures now is the committed edit, and it stays on the server.
+    expect(useAttachmentStore.getState().getAttachments("s").map((x) => x.id)).toEqual(["a2", "b"]);
+    expect(api.deleteAttachment).toHaveBeenCalledWith("a");
+    expect(api.deleteAttachment).not.toHaveBeenCalledWith("a2");
+  });
+
   it("keeps the old attachment when the upload fails", async () => {
     useAttachmentStore.setState({ attachments: new Map([["s", [att("a")]]]) });
     api.uploadAttachment.mockRejectedValue(new Error("offline"));
