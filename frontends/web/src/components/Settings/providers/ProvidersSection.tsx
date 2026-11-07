@@ -14,6 +14,7 @@ import { AccountList } from "./AccountList";
 import { AddProviderPicker, type ReliantOffer } from "./AddProviderPicker";
 import { ConnectPanel } from "./ConnectPanel";
 import { providerConfigs } from "./providerCatalog";
+import { ProviderLogo } from "../../icons/ProviderLogo";
 
 /**
  * Reliant credits as the picker and the empty state offer them: connected,
@@ -175,6 +176,7 @@ export function ProvidersSection({ variant = "desktop", pickerOpen, onPickerOpen
                     variant="outline"
                     size={variant === "mobile" ? "xl" : "md"}
                     className={variant === "mobile" ? "min-h-[44px]" : undefined}
+                    leftIcon={<ProviderLogo provider={id} />}
                     onClick={() => setStarting(id)}
                   >
                     Sign in with {providerConfigs[id].name}
@@ -186,6 +188,7 @@ export function ProvidersSection({ variant = "desktop", pickerOpen, onPickerOpen
                     size={variant === "mobile" ? "xl" : "md"}
                     className={variant === "mobile" ? "min-h-[44px]" : undefined}
                     loading={reliant.enabling}
+                    leftIcon={<ProviderLogo provider="reliant" />}
                     onClick={reliant.onEnable}
                   >
                     Use {reliant.balance} of Reliant credits

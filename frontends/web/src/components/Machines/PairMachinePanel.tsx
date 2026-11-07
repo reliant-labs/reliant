@@ -296,10 +296,13 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
           {!getControlPlaneURL() ? (
             // A deployment with no Reliant control plane has nothing to pair
             // through: the machine connects with an access token instead.
-            <p className="text-xs leading-relaxed text-muted-foreground" data-testid="pair-token-fallback">
-              This deployment has no Reliant control plane to pair through. Create an access token under Settings →
-              Access tokens, then run <code className="font-mono">reliant daemon start --token</code> and paste it.
-            </p>
+            <div className="space-y-2" data-testid="pair-token-fallback">
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                This deployment has no Reliant control plane to pair through. Create an access token under Settings →
+                Access tokens, then run this and paste it:
+              </p>
+              <CommandLine command="reliant daemon start --token" />
+            </div>
           ) : approval.kind === "confirm" || approval.kind === "deciding" ? (
             <div className="space-y-3 rounded-lg border border-border bg-card p-3" data-testid="pair-confirm">
               <div className="flex items-start gap-3">

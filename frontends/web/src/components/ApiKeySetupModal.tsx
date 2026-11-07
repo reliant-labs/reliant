@@ -21,6 +21,7 @@ import {
 } from "../hooks";
 import { OAuthHelperPanel } from "./OAuthHelperPanel";
 import { CopilotDevicePanel } from "./CopilotDevicePanel";
+import { ProviderLogo } from "./icons/ProviderLogo";
 import { getEventBus } from "../lib/events";
 import {
   REDIRECT_OAUTH_DISPLAY_NAMES,
@@ -419,12 +420,13 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
                 type="button"
                 onClick={() => handleProviderSelect(p.id)}
                 className={cn(
-                  "text-left px-3 py-2 rounded-lg border transition-colors",
+                  "flex items-center gap-2.5 text-left px-3 py-2 rounded-lg border transition-colors",
                   p.id === selectedProvider
                     ? "border-primary bg-primary/10 ring-2 ring-primary/30 shadow-sm"
                     : "border-border hover:bg-muted"
                 )}
               >
+                <ProviderLogo provider={p.id} />
                 <div className="text-sm font-medium">{p.name}</div>
               </button>
             ))}

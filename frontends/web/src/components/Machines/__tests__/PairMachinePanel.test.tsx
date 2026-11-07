@@ -49,6 +49,7 @@ vi.mock("@/services/controlPlane/pairing", async (importOriginal) => {
 });
 
 import { describeTerminal } from "@/components/ReliantDownloadOptions";
+import { expectEveryCommandCopyable } from "@/test/commandBlocks";
 import { PairMachinePanel } from "../PairMachinePanel";
 
 function setPlatform(platform: string) {
@@ -247,5 +248,18 @@ describe("a deployment with no control plane", () => {
     expect(screen.getByTestId("pair-token-fallback")).toHaveTextContent(/reliant daemon start --token/);
     expect(screen.queryByLabelText("Pairing code")).not.toBeInTheDocument();
     expect(screen.queryByTestId("pair-no-code-hint")).not.toBeInTheDocument();
+    expectEveryCommandCopyable(document.body);
+  });
+});
+
+describe("every command has a copy button", () => {
+  it.each([
+    ["add", "MacIntel"],
+    ["bootstrap", "Win32"],
+    ["reference", "Linux x86_64"],
+  ] as const)("in %s mode on %s", (mode, platform) => {
+    setPlatform(platform);
+    const { container } = render(<PairMachinePanel mode={mode} />);
+    expectEveryCommandCopyable(container);
   });
 });

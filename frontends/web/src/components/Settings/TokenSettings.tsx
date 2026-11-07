@@ -8,6 +8,7 @@ import { useCreateToken, useRevokeToken, useUpdateToken } from "../../hooks/toke
 import Input from "../forge-ui/input";
 import Button from "@/components/forge-ui/button";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { CommandBlock } from "../CommandBlock";
 
 // The permissions a daemon credential can carry. Mirrors the org-administration
 // half of forge/pkg/accesstoken plus daemon:connect, which every daemon token
@@ -177,9 +178,10 @@ export function TokenSettings() {
         <p className="text-xs text-muted-foreground mb-2">
           Use a token to connect a headless machine:
         </p>
-        <p className="text-sm font-mono">
-          echo "your-token" | reliant daemon start --token
-        </p>
+        <CommandBlock
+          command={'echo "your-token" | reliant daemon start --token'}
+          label="headless machine start command"
+        />
       </div>
 
       {/* New token reveal */}

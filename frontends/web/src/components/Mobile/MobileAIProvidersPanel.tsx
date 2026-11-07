@@ -17,6 +17,8 @@
 import { useMemo, useState } from "react";
 import { Info, Plus } from "lucide-react";
 import Button from "@/components/forge-ui/button";
+import { CommandBlock } from "@/components/CommandBlock";
+import { authServeCommand } from "@/lib/cli-commands";
 import { usePreferences, useProviderStatuses, useUpdatePreferences } from "../../hooks/settings-queries";
 import { ProvidersSection } from "../Settings/providers/ProvidersSection";
 import { MobileModelPreferences } from "./MobileModelPreferences";
@@ -40,11 +42,14 @@ export function MobileAIProvidersPanel() {
           never called just to decide whether to SHOW this text. */}
       <div className="mx-4 mb-4 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning-ink">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
-        <p>
-          Claude, ChatGPT and Google sign-in needs <code>reliant auth serve</code> running on a computer — a phone
-          can&apos;t start it. Connect those from desktop, or use GitHub Copilot, which signs in entirely on this
-          device.
-        </p>
+        <div className="min-w-0 flex-1 space-y-2">
+          <p>
+            Claude, ChatGPT and Google sign-in needs this running on a computer — a phone can&apos;t start it.
+            Connect those from desktop, or use GitHub Copilot, which signs in entirely on this device.
+          </p>
+          {/* Copyable so it can be sent to the computer that will run it. */}
+          <CommandBlock command={authServeCommand()} label="sign-in helper command" codeClassName="min-h-[44px] py-3" />
+        </div>
       </div>
 
       <div className="px-4">

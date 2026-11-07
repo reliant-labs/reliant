@@ -57,6 +57,9 @@ export function CommandBlock({
 
   return (
     <div
+      // The setup-surface inventory test (test/commandBlocks.ts) finds every
+      // command through this marker and checks its copy button.
+      data-command-block=""
       className={cn(
         "flex items-stretch overflow-hidden rounded-md border border-border/40 bg-background",
         className,

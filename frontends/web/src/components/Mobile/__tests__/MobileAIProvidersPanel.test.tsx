@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { expectEveryCommandCopyable } from "@/test/commandBlocks";
 
 const MOBILE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -107,6 +108,14 @@ describe("MobileAIProvidersPanel", () => {
     renderPanel();
     const notice = screen.getByText(/claude, chatgpt and google sign-in needs/i);
     expect(notice.textContent).toMatch(/github copilot/i);
+  });
+
+  it("gives the sign-in helper command a copy button, at a 44px touch height", () => {
+    const { container } = renderPanel();
+    expect(screen.getByRole("button", { name: "Copy sign-in helper command" })).toBeInTheDocument();
+    expect(container.querySelector("[data-command-block] code")).toHaveClass("min-h-[44px]");
+    expect(container.querySelector("[data-command-block] code")?.textContent).toMatch(/reliant auth serve$/);
+    expectEveryCommandCopyable(container);
   });
 
   it("offers the one Add provider entry point", () => {

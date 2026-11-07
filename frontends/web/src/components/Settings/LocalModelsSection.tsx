@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Check, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CommandBlock } from "../CommandBlock";
 import {
   useRefreshLocalModels,
   useSetLocalModelEndpoints,
@@ -67,32 +68,6 @@ function ModelRow({ model }: { model: LocalModelInfo }) {
   );
 }
 
-function CopyableCode({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard unavailable; the text is still selectable.
-    }
-  };
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-border/60 bg-card px-2.5 py-1.5">
-      <code className="min-w-0 flex-1 overflow-x-auto font-mono text-xs text-foreground">{code}</code>
-      <button
-        type="button"
-        aria-label="Copy command"
-        onClick={copy}
-        className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-      >
-        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      </button>
-    </div>
-  );
-}
-
 function OllamaContextFix({ smallestContext }: { smallestContext: number }) {
   const size = formatContextWindow(BigInt(smallestContext)).replace(" ctx", "");
   return (
@@ -106,7 +81,7 @@ function OllamaContextFix({ smallestContext }: { smallestContext: number }) {
         </li>
         <li className="space-y-1">
           <span>Or from the command line:</span>
-          <CopyableCode code="OLLAMA_CONTEXT_LENGTH=64000 ollama serve" />
+          <CommandBlock command="OLLAMA_CONTEXT_LENGTH=64000 ollama serve" label="Ollama context length command" />
         </li>
       </ul>
       <p className="mt-2 text-xs text-muted-foreground">
@@ -188,11 +163,10 @@ function GettingStarted({ managed }: { managed: boolean }) {
         <p>No local model server found on this machine. To get started, install Ollama and pull a model:</p>
       )}
       {!managed && (
-        <CardInset padding="sm">
-          <pre className="overflow-x-auto font-mono text-xs text-foreground">
-            {"brew install ollama\nollama pull qwen3"}
-          </pre>
-        </CardInset>
+        <div className="space-y-1.5">
+          <CommandBlock command="brew install ollama" label="Ollama install command" />
+          <CommandBlock command="ollama pull qwen3" label="model download command" />
+        </div>
       )}
       {!managed && <p>Reliant finds it automatically, or add its URL below.</p>}
     </div>
