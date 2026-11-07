@@ -116,7 +116,8 @@ type ResumeInput struct {
 	// fresh restart from the durable tool results (see
 	// ToolGrantsFromDurableState). Relaunched spawns keep their thread, and
 	// with it their grants.
-	ToolGrants map[string][]string `json:"tool_grants,omitempty"`
+	ToolGrants            map[string][]string `json:"tool_grants,omitempty"`
+	AmbientMemoryExcluded map[string]bool     `json:"ambient_memory_excluded,omitempty"`
 	// StoppedSpawns are the sub-agents that stopped on a failure in the
 	// predecessor and can still be resumed by a message (subagent_resume.go).
 	// Carried by a continue-as-new only; they are not relaunched, just
@@ -432,7 +433,8 @@ type ChildWorkflowTracker struct {
 	// this run (tool_capabilities.go). Each grant is also on its load_tool
 	// result's row, which is what a restart from the checkpoint rebuilds this
 	// from (ToolGrantsFromDurableState).
-	toolGrants map[string][]string
+	toolGrants            map[string][]string
+	ambientMemoryExcluded map[string]bool
 
 	// ── Resuming a stopped sub-agent (subagent_resume.go) ─────────────────
 
@@ -906,6 +908,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// tool results (ToolGrantsFromDurableState).
 	if input.Resume != nil {
 		childTracker.seedToolGrants(input.Resume.ToolGrants)
+		for thread, excluded := range input.Resume.AmbientMemoryExcluded {
+			if excluded {
+				childTracker.excludeAmbientMemory(thread)
+			}
+		}
 		// Likewise the sub-agents that stopped on a failure, which a message
 		// can still resume, and the params the user set on single threads.
 		childTracker.seedStoppedSpawns(input.Resume.StoppedSpawns)
@@ -2216,19 +2223,20 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					}
 
 					if initErr := initChildWorkflow(ChildWorkflowInitOpts{
-						Ctx:              ctx,
-						ChatID:           input.ChatID,
-						ParentWorkflowID: parentWorkflowID,
-						ChildWorkflowID:  workflowID, // Inline workflows use parent's workflow ID
-						ChildThreadID:    childExecCtx.Thread,
-						WorkflowName:     contract.WorkflowIdentity,
-						ThreadTitle:      childThreadTitle,
-						ThreadMode:       model.NodeThreadMode(evalResult),
-						ForkFromThread:   childExecCtx.ForkedFrom,
-						ParentThread:     thread, // Current execution's thread
-						SpawnedByNodeID:  step.Node.GetId(),
-						InjectMessage:    injectMsg,
-						Logger:           logger,
+						Ctx:                  ctx,
+						ChatID:               input.ChatID,
+						ParentWorkflowID:     parentWorkflowID,
+						ChildWorkflowID:      workflowID, // Inline workflows use parent's workflow ID
+						ChildThreadID:        childExecCtx.Thread,
+						ExcludeAmbientMemory: childExecCtx.ExcludeAmbientMemory || model.NodeThreadConfig(evalResult).GetExcludeAmbientMemory(),
+						WorkflowName:         contract.WorkflowIdentity,
+						ThreadTitle:          childThreadTitle,
+						ThreadMode:           model.NodeThreadMode(evalResult),
+						ForkFromThread:       childExecCtx.ForkedFrom,
+						ParentThread:         thread, // Current execution's thread
+						SpawnedByNodeID:      step.Node.GetId(),
+						InjectMessage:        injectMsg,
+						Logger:               logger,
 					}); initErr != nil {
 						logger.Error("[Workflow Runtime] Failed to initialize child workflow thread",
 							"stepID", step.Node.GetId(),
@@ -2451,18 +2459,19 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				if childThreadMode != model.ThreadModeInherit {
 					nodeID := step.Node.GetId()
 					if initErr := initChildWorkflow(ChildWorkflowInitOpts{
-						Ctx:              ctx,
-						ChatID:           input.ChatID,
-						ParentWorkflowID: parentWorkflowID,
-						ChildWorkflowID:  workflowID,
-						ChildThreadID:    childExecCtx.Thread,
-						WorkflowName:     childIdentity,
-						ThreadTitle:      &nodeID,
-						ThreadMode:       childThreadMode,
-						ForkFromThread:   childExecCtx.ForkedFrom,
-						ParentThread:     thread,
-						SpawnedByNodeID:  step.Node.GetId(),
-						Logger:           logger,
+						Ctx:                  ctx,
+						ChatID:               input.ChatID,
+						ParentWorkflowID:     parentWorkflowID,
+						ChildWorkflowID:      workflowID,
+						ChildThreadID:        childExecCtx.Thread,
+						ExcludeAmbientMemory: childExecCtx.ExcludeAmbientMemory || model.NodeThreadConfig(evalResult).GetExcludeAmbientMemory(),
+						WorkflowName:         childIdentity,
+						ThreadTitle:          &nodeID,
+						ThreadMode:           childThreadMode,
+						ForkFromThread:       childExecCtx.ForkedFrom,
+						ParentThread:         thread,
+						SpawnedByNodeID:      step.Node.GetId(),
+						Logger:               logger,
 					}); initErr != nil {
 						logger.Error("[Workflow Runtime] Failed to initialize router child thread",
 							"stepID", step.Node.GetId(),
@@ -3395,6 +3404,9 @@ func splitProtoToolCalls(toolCalls []*reliantv1.ToolCallMsg) protoToolCallSplit 
 // whole unattended run on a gate nobody will ever answer.
 func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]interface{} {
 	childInputs := map[string]interface{}{}
+	if excludesAmbientMemory(workflowInputs) {
+		childInputs[ambientMemoryInput] = true
+	}
 
 	mode := getModeFromInputs(workflowInputs)
 	if mode != "" {
@@ -3781,21 +3793,22 @@ func prepareSpawnInline(
 
 	var threadWorktreePath string
 	if err := initChildWorkflow(ChildWorkflowInitOpts{
-		Ctx:              ctx,
-		ChatID:           chatID,
-		ParentWorkflowID: parentWorkflowID,
-		ChildWorkflowID:  config.childWorkflowID,
-		ChildThreadID:    config.childThread,
-		WorkflowName:     targetWorkflow,
-		ThreadTitle:      ptr.StringIfNotEmpty(threadTitle),
-		ThreadMode:       threadMode,
-		ForkFromThread:   forkedFrom,
-		ParentThread:     parentThread,
-		Origin:           model.ThreadOriginSpawn,
-		Worktree:         config.worktree,
-		WorktreePath:     &threadWorktreePath,
-		InjectMessage:    injectMsg,
-		Logger:           logger,
+		Ctx:                  ctx,
+		ChatID:               chatID,
+		ParentWorkflowID:     parentWorkflowID,
+		ChildWorkflowID:      config.childWorkflowID,
+		ChildThreadID:        config.childThread,
+		ExcludeAmbientMemory: excludesAmbientMemory(workflowInputs),
+		WorkflowName:         targetWorkflow,
+		ThreadTitle:          ptr.StringIfNotEmpty(threadTitle),
+		ThreadMode:           threadMode,
+		ForkFromThread:       forkedFrom,
+		ParentThread:         parentThread,
+		Origin:               model.ThreadOriginSpawn,
+		Worktree:             config.worktree,
+		WorktreePath:         &threadWorktreePath,
+		InjectMessage:        injectMsg,
+		Logger:               logger,
 	}); err != nil {
 		var refusal *ChildInitRefusal
 		if errors.As(err, &refusal) {
@@ -3842,17 +3855,18 @@ func prepareSpawnInline(
 	}
 
 	childExecContext := &ExecutionContext{
-		WorkflowID:       config.childWorkflowID,
-		ChatID:           chatID,
-		WorkflowName:     targetWorkflow,
-		Thread:           config.childThread,
-		ThreadMode:       threadMode,
-		ThreadTitle:      threadTitle,
-		ForkedFrom:       forkedFrom,
-		ParentThread:     parentThread,
-		ProjectPath:      childProjectPath, // Inherits the parent's unless the thread has its own worktree
-		SpawnDepth:       parentSpawnDepth + 1,
-		ParentPermission: parentPermission,
+		WorkflowID:           config.childWorkflowID,
+		ChatID:               chatID,
+		WorkflowName:         targetWorkflow,
+		Thread:               config.childThread,
+		ThreadMode:           threadMode,
+		ThreadTitle:          threadTitle,
+		ForkedFrom:           forkedFrom,
+		ParentThread:         parentThread,
+		ProjectPath:          childProjectPath, // Inherits the parent's unless the thread has its own worktree
+		SpawnDepth:           parentSpawnDepth + 1,
+		ParentPermission:     parentPermission,
+		ExcludeAmbientMemory: excludesAmbientMemory(childInputs),
 		Parent: &ParentContext{
 			WorkflowID: parentWorkflowID,
 			StepPath:   "spawn_tool",
@@ -4508,6 +4522,10 @@ func prepareSpawnRelaunch(
 	if childInputs == nil {
 		childInputs = buildSpawnChildInputs(workflowInputs)
 	}
+	if excludesAmbientMemory(workflowInputs) {
+		childInputs = copyMap(childInputs)
+		childInputs[ambientMemoryInput] = true
+	}
 	threadTitle := config.title
 	if threadTitle == "" {
 		threadTitle = config.presetName
@@ -4525,16 +4543,17 @@ func prepareSpawnRelaunch(
 		childProjectPath = handoff.ProjectPath
 	}
 	childExecContext := &ExecutionContext{
-		WorkflowID:       config.childWorkflowID,
-		ChatID:           chatID,
-		WorkflowName:     spawnTargetWorkflow,
-		Thread:           config.childThread,
-		ThreadMode:       model.ThreadModeInherit,
-		ThreadTitle:      threadTitle,
-		ParentThread:     handoff.ParentThread,
-		ProjectPath:      childProjectPath,
-		SpawnDepth:       spawnDepth,
-		ParentPermission: parentPermission,
+		WorkflowID:           config.childWorkflowID,
+		ChatID:               chatID,
+		WorkflowName:         spawnTargetWorkflow,
+		Thread:               config.childThread,
+		ThreadMode:           model.ThreadModeInherit,
+		ThreadTitle:          threadTitle,
+		ParentThread:         handoff.ParentThread,
+		ProjectPath:          childProjectPath,
+		SpawnDepth:           spawnDepth,
+		ParentPermission:     parentPermission,
+		ExcludeAmbientMemory: excludesAmbientMemory(childInputs),
 		Parent: &ParentContext{
 			WorkflowID: handoff.ParentWorkflowID,
 			StepPath:   "spawn_tool",
@@ -4709,7 +4728,12 @@ func executeToolsWithSpawnSupport(
 		return regularToolsFuture
 	}
 
-	// Execute spawn tool calls inline and combine with regular tool results
+	// Execute spawn tool calls inline and combine with regular tool results.
+	// The execution policy is runtime-authored, not a model spawn argument.
+	if rtx.ExcludeAmbientMemory || childTracker.excludesAmbientMemory(rtx.Thread) {
+		workflowInputs = copyMap(workflowInputs)
+		workflowInputs[ambientMemoryInput] = true
+	}
 	var spawnConfigs []*spawnChildWorkflowConfig
 	var spawnParseErrors []interface{}
 	spawnToolCalls := split.spawnToolCalls

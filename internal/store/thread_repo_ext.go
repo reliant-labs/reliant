@@ -78,6 +78,43 @@ func GetThread(ctx context.Context, db orm.Context, id string) (*core.Thread, er
 	return threadFromRow(row), nil
 }
 
+// ResolveThreadAmbientMemoryExclusion reads the durable monotonic policy along
+// the thread's lineage, then latches an exclusion before any provider request.
+// A read/write error is returned: falling back to false would disclose memories.
+func ResolveThreadAmbientMemoryExclusion(ctx context.Context, db orm.Context, chatID, threadID string, requested bool) (bool, error) {
+	var row struct {
+		Excluded bool `bun:"excluded"`
+		Count    int  `bun:"count"`
+	}
+	err := db.Bun().NewRaw(`WITH RECURSIVE lineage AS (
+ SELECT id, parent_thread_id, exclude_ambient_memory FROM threads WHERE id = ?0 AND chat_id = ?1
+ UNION
+ SELECT t.id, t.parent_thread_id, t.exclude_ambient_memory
+ FROM threads t JOIN lineage p ON t.id = p.parent_thread_id
+ ) SELECT COALESCE(bool_or(exclude_ambient_memory), false) AS excluded, count(*) AS count FROM lineage`, threadID, chatID).Scan(ctx, &row)
+	if err != nil {
+		return false, fmt.Errorf("read thread memory exclusion: %w", err)
+	}
+	if row.Count == 0 {
+		return false, fmt.Errorf("read thread memory exclusion: thread not found")
+	}
+	if !requested && !row.Excluded {
+		return false, nil
+	}
+	result, err := db.Bun().NewRaw(`UPDATE threads SET exclude_ambient_memory = true WHERE id = ?0 AND chat_id = ?1`, threadID, chatID).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("persist thread memory exclusion: %w", err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if count != 1 {
+		return false, fmt.Errorf("persist thread memory exclusion: thread not found")
+	}
+	return true, nil
+}
+
 // GetRootThread returns the chat's root thread (the first with no parent); a
 // miss is a wrapped sql.ErrNoRows.
 func GetRootThread(ctx context.Context, db orm.Context, chatID string) (*core.Thread, error) {
@@ -359,34 +396,36 @@ func threadToRow(t *core.Thread) *Thread {
 		status = core.ThreadStatusRunning
 	}
 	return &Thread{
-		ID:              t.ID,
-		ChatID:          t.ChatID,
-		ParentThreadID:  t.ParentThreadID,
-		WorkflowID:      t.WorkflowID,
-		CreatedAt:       t.CreatedAt,
-		Title:           t.Title,
-		Origin:          origin,
-		OriginNodeID:    t.OriginNodeID,
-		Status:          &status,
-		CompletedAt:     t.CompletedAt,
-		ForkAtMessageID: t.ForkAtMessageID,
-		WorktreeID:      t.WorktreeID,
+		ID:                   t.ID,
+		ChatID:               t.ChatID,
+		ParentThreadID:       t.ParentThreadID,
+		WorkflowID:           t.WorkflowID,
+		CreatedAt:            t.CreatedAt,
+		Title:                t.Title,
+		Origin:               origin,
+		OriginNodeID:         t.OriginNodeID,
+		Status:               &status,
+		CompletedAt:          t.CompletedAt,
+		ForkAtMessageID:      t.ForkAtMessageID,
+		WorktreeID:           t.WorktreeID,
+		ExcludeAmbientMemory: t.ExcludeAmbientMemory,
 	}
 }
 
 func threadFromRow(row *Thread) *core.Thread {
 	t := &core.Thread{
-		ID:              row.ID,
-		ChatID:          row.ChatID,
-		ParentThreadID:  row.ParentThreadID,
-		ForkAtMessageID: row.ForkAtMessageID,
-		WorkflowID:      row.WorkflowID,
-		Title:           row.Title,
-		CreatedAt:       row.CreatedAt,
-		Origin:          row.Origin,
-		OriginNodeID:    row.OriginNodeID,
-		CompletedAt:     row.CompletedAt,
-		WorktreeID:      row.WorktreeID,
+		ID:                   row.ID,
+		ChatID:               row.ChatID,
+		ParentThreadID:       row.ParentThreadID,
+		ForkAtMessageID:      row.ForkAtMessageID,
+		WorkflowID:           row.WorkflowID,
+		Title:                row.Title,
+		CreatedAt:            row.CreatedAt,
+		Origin:               row.Origin,
+		OriginNodeID:         row.OriginNodeID,
+		CompletedAt:          row.CompletedAt,
+		WorktreeID:           row.WorktreeID,
+		ExcludeAmbientMemory: row.ExcludeAmbientMemory,
 	}
 	if row.Status != nil {
 		t.Status = *row.Status

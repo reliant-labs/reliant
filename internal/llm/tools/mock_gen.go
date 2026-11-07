@@ -1098,7 +1098,7 @@ func (m *MockgenerateVideoStore) GetChat(ctx context.Context, id string) (*db.Ch
 var _ generateVideoStore = (*MockgenerateVideoStore)(nil)
 
 // forge:section MockspawnStatusStore
-// forge:hash=6c70a375b811dcc07a5222584e48a0559c37714eb403a35a6d593a7053ea5d85
+// forge:hash=15d4514036aee226a2142d0055a975d221c2420470be2c40c910f5ec6ce60f36
 
 // MockspawnStatusStore is a test mock for the spawnStatusStore interface.
 //
@@ -1111,6 +1111,7 @@ type MockspawnStatusStore struct {
 	GetChatRowWithUserCheckFunc                    func(context.Context, string, string) (*db.ChatRow, error)
 	CreateThreadFunc                               func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
+	ResolveThreadAmbientMemoryExclusionFunc        func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
 	SenderTitleFunc                                func(context.Context, string) *string
@@ -1184,6 +1185,15 @@ func (m *MockspawnStatusStore) GetThread(ctx context.Context, id string) (*db.Th
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockspawnStatusStore", "GetThread")
+}
+
+// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
+func (m *MockspawnStatusStore) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
+	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
+	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
+		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
+	}
+	return false, contractkit.MockNotSet("MockspawnStatusStore", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.
@@ -1798,7 +1808,7 @@ func (m *MocklistRunsStore) GetChat(ctx context.Context, id string) (*db.Chat, e
 var _ listRunsStore = (*MocklistRunsStore)(nil)
 
 // forge:section MockgetRunStore
-// forge:hash=721914988975d3b8d66519ab61c59c166230927f36805f3b42f5970fb8f80b27
+// forge:hash=5cb8bac4f1694896b8661d636af0ddb1e9c6a7c6cfbd03e934558bad55d5ad69
 
 // MockgetRunStore is a test mock for the getRunStore interface.
 //
@@ -1811,6 +1821,7 @@ type MockgetRunStore struct {
 	GetChatRowWithUserCheckFunc                    func(context.Context, string, string) (*db.ChatRow, error)
 	CreateThreadFunc                               func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
+	ResolveThreadAmbientMemoryExclusionFunc        func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
 	SenderTitleFunc                                func(context.Context, string) *string
@@ -1880,6 +1891,15 @@ func (m *MockgetRunStore) GetThread(ctx context.Context, id string) (*db.Thread,
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockgetRunStore", "GetThread")
+}
+
+// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
+func (m *MockgetRunStore) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
+	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
+	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
+		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
+	}
+	return false, contractkit.MockNotSet("MockgetRunStore", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.

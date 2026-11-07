@@ -12,6 +12,8 @@ type RuntimeContext struct {
 	WorkflowID string `json:"workflow_id,omitempty"`
 	StepID     string `json:"step_id,omitempty"`
 	SessionID  string `json:"session_id,omitempty"`
+	// Excludes automatic saved memory only; never grants or revokes tools.
+	ExcludeAmbientMemory bool `json:"exclude_ambient_memory,omitempty"`
 
 	// AssistantMessageID is the pre-allocated id for the assistant message a
 	// call_llm activity will stream (delta identity protocol). Minted by the

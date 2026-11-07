@@ -23,7 +23,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=052d05f3d1615f74f7d0b9ec14d8bcbd026aa7d62b68cbe93359e448aa16a208
+// forge:hash=cfdd8c4f3acfe536962e40ce03e20e353a0571773727486958f0a3b9e8863a0e
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -94,6 +94,7 @@ type MockRepository struct {
 	CreateNumberedMessageFunc                      func(context.Context, *db.Message) error
 	CreateThreadFunc                               func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
+	ResolveThreadAmbientMemoryExclusionFunc        func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
 	SenderTitleFunc                                func(context.Context, string) *string
@@ -731,6 +732,15 @@ func (m *MockRepository) GetThread(ctx context.Context, id string) (*db.Thread, 
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetThread")
+}
+
+// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
+func (m *MockRepository) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
+	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
+	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
+		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
+	}
+	return false, contractkit.MockNotSet("MockRepository", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.

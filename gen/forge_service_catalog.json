@@ -38926,6 +38926,10 @@
               "name": "continue_turn",
               "kind": "message",
               "type_name": "reliant.v1.CelBool"
+            },
+            {
+              "name": "exclude_ambient_memory",
+              "kind": "bool"
             }
           ],
           "reliant.v1.CallLLMMessageInput": [
@@ -40919,6 +40923,10 @@
               "name": "inject",
               "kind": "message",
               "type_name": "reliant.v1.InjectConfig"
+            },
+            {
+              "name": "exclude_ambient_memory",
+              "kind": "bool"
             }
           ],
           "reliant.v1.ToolBoundParams": [

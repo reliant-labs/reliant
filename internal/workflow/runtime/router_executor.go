@@ -98,7 +98,7 @@ func NewRouterExecutor(
 
 // WithExecContext sets the execution context.
 func (r *RouterExecutor) WithExecContext(ctx *ExecutionContext) *RouterExecutor {
-	r.execContext = ctx
+	r.execContext = r.childTracker.ambientMemoryContext(ctx, r.evalResult)
 	return r
 }
 
@@ -309,6 +309,13 @@ func (r *RouterExecutor) executeNodeRouting(args *reliantv1.RouterArgs) (map[str
 		AssistantMessageID: preallocatedID,
 	}
 
+	rtx.ExcludeAmbientMemory = excludesAmbientMemory(r.workflowInputs) || r.childTracker.excludesAmbientMemory(rtx.Thread)
+	if r.execContext != nil {
+		rtx.ExcludeAmbientMemory = rtx.ExcludeAmbientMemory || r.execContext.ExcludeAmbientMemory
+	}
+	if rtx.ExcludeAmbientMemory {
+		r.childTracker.excludeAmbientMemory(rtx.Thread)
+	}
 	input := types.ActivityInput{
 		Runtime: rtx,
 		Node:    callLLMNode,
@@ -583,6 +590,13 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 		AssistantMessageID: preallocatedID,
 	}
 
+	rtx.ExcludeAmbientMemory = excludesAmbientMemory(r.workflowInputs) || r.childTracker.excludesAmbientMemory(rtx.Thread)
+	if r.execContext != nil {
+		rtx.ExcludeAmbientMemory = rtx.ExcludeAmbientMemory || r.execContext.ExcludeAmbientMemory
+	}
+	if rtx.ExcludeAmbientMemory {
+		r.childTracker.excludeAmbientMemory(rtx.Thread)
+	}
 	input := types.ActivityInput{
 		Runtime: rtx,
 		Node:    callLLMNode,
@@ -698,7 +712,8 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 	}
 	if prompt := strings.TrimSpace(r.decision.Prompt); prompt != "" {
 		syntheticThread = &reliantv1.ThreadConfig{
-			Mode: syntheticThread.GetMode(),
+			Mode:                 syntheticThread.GetMode(),
+			ExcludeAmbientMemory: syntheticThread.GetExcludeAmbientMemory(),
 			Inject: &reliantv1.InjectConfig{
 				Role:         &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: defaultInjectRole}},
 				Content:      &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: prompt}},

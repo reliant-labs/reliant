@@ -3477,6 +3477,11 @@ func (r *Repo) ListThreadsByIDs(ctx context.Context, ids []string) ([]*Thread, e
 	return store.ListThreadsByIDs(ctx, r.ORM(), ids)
 }
 
+// ResolveThreadAmbientMemoryExclusion fails closed on persistence errors.
+func (r *Repo) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
+	return store.ResolveThreadAmbientMemoryExclusion(ctx, r.ORM(), chatID, threadID, requested)
+}
+
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
