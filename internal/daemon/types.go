@@ -230,8 +230,10 @@ type RunCommandRequest struct {
 	// sandbox: the daemon user's files stay readable.
 	Credentials string `json:"credentials,omitempty"`
 	// WritableCheckouts are the shared project checkouts, or directories
-	// inside one, that a credentials-none command may write. Such a command
-	// otherwise sees every project checkout but its own read-only
+	// inside one, that a credentials-none command may write, and the
+	// hand-off directories inside the user's cache directory it writes for
+	// real. Such a command otherwise sees every project checkout but its own
+	// read-only, and writes the cache directories privately
 	// (internal/credsandbox). Relative paths are relative to WorkingDir. A
 	// daemon older than the field ignores it, and leaves every checkout
 	// writable as it always did.

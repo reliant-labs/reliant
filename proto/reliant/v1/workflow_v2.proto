@@ -1184,10 +1184,14 @@ message RunArgs {
   // every project checkout other than its own (the one holding its working
   // directory, and its Reliant worktree's) read-only, .git included, so it
   // cannot plant hooks, config or scripts that a later credentialed step runs.
-  // Relative paths are relative to the working directory. Ignored when the
-  // command has credentials; a daemon older than the field ignores it too.
+  // It also writes the user's cache directories (XDG_CACHE_HOME, ~/.cache)
+  // privately, so it cannot change what one step hands another there; a
+  // directory inside one named here (a hand-off this step writes for a later
+  // one) is written for real. Relative paths are relative to the working
+  // directory. Ignored when the command has credentials; a daemon older than
+  // the field ignores it too.
   repeated string writable_checkouts = 6 [(reliant) = {
-    description: "With credentials: none, the shared project checkouts the command may write. Every other checkout but its own is read-only to it"
+    description: "With credentials: none, the shared project checkouts, or hand-off directories under the cache directory, the command may write. Every other checkout but its own is read-only to it, and its cache writes are its own"
     example: "reliant"
     hidden: true
   }];
