@@ -19,8 +19,9 @@ import React from "react";
 // aborted the moment the next one started.
 //
 // These tests count requests at the transport — an aborted request is still a
-// request — with a response slow enough that the burst overlaps it, as the
-// real ~200ms one does.
+// request. Each response is held until the test answers it, so a burst always
+// overlaps the request in flight (the real one takes ~200ms), and ordering is
+// decided by events, never by sleeps or the clock.
 // ---------------------------------------------------------------------------
 
 const listDaemonsMock = vi.hoisted(() => vi.fn());
@@ -30,15 +31,37 @@ import { DAEMON_LIST_QUERY_KEY, invalidateDaemonList } from "../daemon-registry-
 import { setTransport } from "@/lib/connect";
 import { daemonRegistryTransport, seedDaemonList } from "@/test/daemonRegistry";
 
-const RESPONSE_MS = 30;
+/** Answers for the ListDaemons requests the test has not answered yet. */
+let unanswered: Array<() => void> = [];
 
 beforeEach(() => {
+  unanswered = [];
   listDaemonsMock.mockReset();
   listDaemonsMock.mockImplementation(
-    () => new Promise((resolve) => setTimeout(() => resolve({ daemons: [] }), RESPONSE_MS)),
+    () => new Promise((resolve) => unanswered.push(() => resolve({ daemons: [] }))),
   );
   setTransport(daemonRegistryTransport({ listDaemons: () => listDaemonsMock() }));
 });
+
+/** One macrotask turn: lets scheduled refetches start and promises settle. */
+const turn = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+
+/**
+ * Answer every request until the client stops asking: a few consecutive
+ * turns with nothing new to answer. What `listDaemonsMock` counts after this
+ * is everything the scenario ever sends.
+ */
+async function drain() {
+  for (let quiet = 0; quiet < 5; ) {
+    await turn();
+    if (unanswered.length > 0) {
+      unanswered.splice(0).forEach((answer) => answer());
+      quiet = 0;
+    } else {
+      quiet++;
+    }
+  }
+}
 
 afterEach(() => {
   cleanup();
@@ -82,8 +105,6 @@ function installElectronAPI() {
   return { api, fire: () => listeners.forEach((cb) => cb({})), listenerCount: () => listeners.size };
 }
 
-const settle = () => new Promise((r) => setTimeout(r, RESPONSE_MS * 4));
-
 describe("daemon list request bursts", () => {
   it("ten readers mounting on a warm cache ask the desktop app once and refetch once", async () => {
     // The workspace-restore shape: the list is cached, the readers remount,
@@ -95,7 +116,7 @@ describe("daemon list request bursts", () => {
     renderReaders(Wrapper, 10);
 
     await waitFor(() => expect(listDaemonsMock).toHaveBeenCalled());
-    await settle();
+    await drain();
     expect(api.isDaemonConnected).toHaveBeenCalledTimes(1);
     expect(listDaemonsMock).toHaveBeenCalledTimes(1);
   });
@@ -107,7 +128,7 @@ describe("daemon list request bursts", () => {
     renderReaders(Wrapper, 10);
 
     await waitFor(() => expect(listDaemonsMock).toHaveBeenCalled());
-    await settle();
+    await drain();
     expect(listDaemonsMock).toHaveBeenCalledTimes(1);
   });
 
@@ -124,7 +145,7 @@ describe("daemon list request bursts", () => {
     act(() => fire());
 
     await waitFor(() => expect(listDaemonsMock).toHaveBeenCalled());
-    await settle();
+    await drain();
     expect(listDaemonsMock).toHaveBeenCalledTimes(1);
   });
 
@@ -148,7 +169,7 @@ describe("daemon list request bursts", () => {
     for (let i = 0; i < 10; i++) invalidateDaemonList(client);
 
     await waitFor(() => expect(listDaemonsMock).toHaveBeenCalled());
-    await settle();
+    await drain();
     expect(listDaemonsMock).toHaveBeenCalledTimes(1);
   });
 
@@ -162,7 +183,6 @@ describe("daemon list request bursts", () => {
 
     invalidateDaemonList(client);
     await waitFor(() => expect(listDaemonsMock).toHaveBeenCalledTimes(1));
-    const firstStartedAt = Date.now();
 
     // Three signals while the first request is in flight.
     invalidateDaemonList(client);
@@ -171,9 +191,18 @@ describe("daemon list request bursts", () => {
     // Marked stale at once, so a reader mounting now does not trust it.
     expect(client.getQueryState(DAEMON_LIST_QUERY_KEY)?.isInvalidated).toBe(true);
 
+    // Nothing aborts or overtakes the request in flight while it is unanswered.
+    for (let i = 0; i < 5; i++) await turn();
+    expect(listDaemonsMock).toHaveBeenCalledTimes(1);
+
+    // Its answer cannot settle signals that arrived after it started: exactly
+    // one follow-up starts once it lands.
+    unanswered.splice(0).forEach((answer) => answer());
     await waitFor(() => expect(listDaemonsMock).toHaveBeenCalledTimes(2));
-    expect(Date.now() - firstStartedAt).toBeGreaterThanOrEqual(RESPONSE_MS - 5);
-    await settle();
+    await drain();
     expect(listDaemonsMock).toHaveBeenCalledTimes(2);
+    // The follow-up's result is the fresh state: nothing left it stale, so
+    // nothing fetches again.
+    expect(client.getQueryState(DAEMON_LIST_QUERY_KEY)?.isInvalidated).toBe(false);
   });
 });
