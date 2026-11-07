@@ -163,15 +163,25 @@ func TestWrap_CredentialedScratchIsHiddenFromCredentialsNone(t *testing.T) {
 	requireSandbox(t)
 	home := wrapHome(t)
 	scratch := filepath.Join(home, CredScratchRel)
+	plant := `mkdir -p '` + scratch + `/planted' && echo x > '` + scratch + `/planted/run.sh' && echo PLANTED-IN-RUN`
 
-	out := runWrapped(t, "none", home, home, `
+	// Before any credentialed command: absent, and sealed, so what a
+	// credentials-none command makes there does not outlive it.
+	out := runWrapped(t, "none", home, home, plant)
+	assert.Contains(t, out, "PLANTED-IN-RUN")
+	assert.NoDirExists(t, scratch, "a credentials-none command cannot be the one to make it")
+
+	// The first credentialed command makes it, private.
+	runWrapped(t, "inherit", home, home, "true")
+
+	out = runWrapped(t, "none", home, home, `
 ls '`+scratch+`' 2>&1; echo "ls-rc=$?"
 ls -a '`+filepath.Dir(scratch)+`'
 mkdir -p '`+scratch+`/planted' && echo x > '`+scratch+`/planted/run.sh' && echo PLANTED-IN-RUN
 cat '`+filepath.Join(home, ".reliant", "daemon.json")+`' 2>/dev/null || true
 `)
 	fi, err := os.Stat(scratch)
-	require.NoError(t, err, "the daemon creates it before any command runs")
+	require.NoError(t, err, "the daemon made it for the credentialed command")
 	assert.Equal(t, os.FileMode(0o700), fi.Mode().Perm())
 	assert.Contains(t, out, "No such file or directory")
 	assert.NotContains(t, out, "ls-rc=0", "credentials: none cannot list it")

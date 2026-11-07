@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -272,9 +273,11 @@ func sweepRunDirs(tmp string) {
 	}
 }
 
+// ownedByUs reports whether fi is this user's. A FileInfo without an owner
+// (never, from os.Lstat on Linux) is not.
 func ownedByUs(fi os.FileInfo) bool {
-	st, ok := fi.Sys().(*unix.Stat_t)
-	return !ok || int(st.Uid) == os.Getuid()
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	return ok && int(st.Uid) == os.Getuid()
 }
 
 // writeOwnerAt records pid, as this namespace's /proc names it, and its start

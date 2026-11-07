@@ -71,7 +71,6 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/reliant-labs/forge/pkg/credentials"
 
@@ -302,10 +301,21 @@ func CredScratchDir() string {
 // when the sandbox is in force for its credentials-none peers. A non-empty
 // refusal means the command must not run.
 func Wrap(cmd *exec.Cmd, credentials string, writable Writable) (refusal string) {
-	ensureCredScratch()
 	self, err := os.Executable()
 	if credentials != daemonpolicy.CredentialsNone {
-		signal := err == nil && Enabled() && Available(self) == nil
+		// The signal says the sandbox's version 2 holds here, which includes a
+		// scratch only credentialed commands can reach: it is made (and
+		// checked) only where the sandbox is in force, and without it there
+		// is no signal, so a step that needs one fails closed.
+		signal := false
+		if err == nil && Enabled() && Available(self) == nil {
+			if serr := ensureCredScratch(); serr != nil {
+				logging.Warn("credsandbox: the credentialed scratch directory could not be prepared, so this credentialed command gets no "+SignalEnv,
+					"path", CredScratchDir(), "error", serr)
+			} else {
+				signal = true
+			}
+		}
 		cmd.Env = withSignal(cmd.Env, signal)
 		return ""
 	}
@@ -353,36 +363,6 @@ func withSignal(env []string, signal bool) []string {
 		out = append(out, SignalEnv+"="+strconv.Itoa(SignalVersion))
 	}
 	return out
-}
-
-// ensureCredScratch creates CredScratchDir, mode 0700, and puts back one that is
-// not a directory of this user's: a link or file there was planted (by a
-// credentials-none command of a daemon older than the sandbox's version 2), and
-// a credentialed command must never write through it. The planted entry is
-// moved aside, not followed or removed.
-func ensureCredScratch() {
-	dir := CredScratchDir()
-	if dir == "" {
-		return
-	}
-	fi, err := os.Lstat(dir)
-	if err == nil && (!fi.IsDir() || !ownedByUs(fi)) {
-		aside := dir + ".untrusted-" + strconv.FormatInt(time.Now().UnixNano(), 10)
-		if renameErr := os.Rename(dir, aside); renameErr != nil {
-			logging.Warn("credsandbox: the credentialed scratch directory is not a directory of the daemon's user and could not be moved aside",
-				"path", dir, "error", renameErr)
-			return
-		}
-		logging.Warn("credsandbox: moved aside a credentialed scratch directory that was not the daemon's own", "path", dir, "moved_to", aside)
-		err = os.ErrNotExist
-	}
-	if err != nil {
-		if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
-			logging.Warn("credsandbox: creating the credentialed scratch directory", "path", dir, "error", mkErr)
-			return
-		}
-	}
-	_ = os.Chmod(dir, 0o700)
 }
 
 // ErrUnavailable wraps the reason this host refused the sandbox.

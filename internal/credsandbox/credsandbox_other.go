@@ -34,9 +34,12 @@ func Apply(*exec.Cmd, string, Plan) string {
 	return ""
 }
 
-// ownedByUs is true here: there is no sandbox to keep CredScratchDir from, and
-// no portable owner to compare.
-func ownedByUs(os.FileInfo) bool { return true }
+// ensureCredScratch is never reached here: Wrap prepares the credentialed
+// scratch only where the sandbox is in force (Available), which it never is on
+// this platform.
+func ensureCredScratch() error {
+	return errors.New("the credentials sandbox is implemented for Linux only")
+}
 
 // Dispatch refuses the helper argument: the helper exists on Linux only.
 func Dispatch() {
