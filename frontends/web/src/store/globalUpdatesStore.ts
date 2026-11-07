@@ -983,6 +983,9 @@ function handleChatConfigChanged(update: UserUpdate) {
     active_daemon_id?: string;
     no_machine?: boolean;
     selection?: SelectionPayload;
+    // MoveChatToProject: the chat moved to project_id, onto its main checkout.
+    project_id?: string;
+    worktree_id?: string;
     updated_at: string;
   };
 
@@ -1019,9 +1022,23 @@ function handleChatConfigChanged(update: UserUpdate) {
   if (data.active_daemon_id !== undefined) {
     patch.activeDaemonId = data.active_daemon_id || undefined;
   }
+  const moved = !!data.project_id;
+  if (data.project_id) {
+    patch.projectId = data.project_id;
+  }
+  if (data.worktree_id) {
+    patch.worktreeId = data.worktree_id;
+    // The workspace summary named the old project's workspace; the refetch
+    // below brings the new one.
+    patch.worktree = undefined;
+  }
   // applyChatPatch also updates the Zustand map — ChatInput preset restore
   // reads workflowName/selectedPresets from the Zustand map, not React Query.
   applyChatPatch(projectId, chat_id, patch);
+  // A moved chat leaves one project's list and joins another's.
+  if (moved) {
+    streamInvalidation.invalidate(chatKeys.lists());
+  }
 }
 
 function handleChatCreated(update: UserUpdate) {
