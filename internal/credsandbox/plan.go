@@ -228,7 +228,7 @@ func buildPlan(base Plan, in planEnv) Plan {
 	roots := cacheRootOverlays(home, in.env)
 	// The working directory is the command's own unless it is the home or
 	// above it: a command started in ~ does not own ~/.cache.
-	cwdOwn := cwd != "" && !(home != "" && under(home, cwd))
+	cwdOwn := cwd != "" && (home == "" || !under(home, cwd))
 	roAll := cleanAbs(append(append([]string(nil), p.ReadOnly...), ro...))
 	var keep []Overlay
 	for _, o := range append(tools, roots...) {
