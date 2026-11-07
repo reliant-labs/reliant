@@ -34,7 +34,18 @@ import { demoSession, resetDemoSessionForTests } from "../demoSession";
 import { FORGE_ONE_LINER, FORGE_ONE_TOOL, FORGE_WHAT_IT_DOES } from "../demoCopy";
 import { DEMO_TIPS, DEMO_TIP_KEYS, DemoTips, demoTipKey, type DemoTipKey } from "../tips";
 
-function renderDemo(path: string) {
+/** A page that renders the given anchors, for the page tours to find. */
+function Page({ anchors = [] }: { anchors?: string[] }) {
+  return (
+    <div data-testid="page">
+      {anchors.map((id) => (
+        <div key={id} data-testid={id} />
+      ))}
+    </div>
+  );
+}
+
+function renderDemo(path: string, anchors?: string[]) {
   const root = createRootRoute({
     component: () => (
       <>
@@ -44,7 +55,7 @@ function renderDemo(path: string) {
       </>
     ),
   });
-  const any = createRoute({ getParentRoute: () => root, path: "$", component: () => <div data-testid="page" />, validateSearch: (s: Record<string, unknown>) => s });
+  const any = createRoute({ getParentRoute: () => root, path: "$", component: () => <Page anchors={anchors} />, validateSearch: (s: Record<string, unknown>) => s });
   const router = createRouter({ routeTree: root.addChildren([any]), history: createMemoryHistory({ initialEntries: [path] }) });
   render(<RouterProvider router={router} />);
   const go = (to: string) =>
@@ -129,15 +140,17 @@ describe("the view tips", () => {
       ["/forge/demo", { section: "built" }, null],
       ["/forge/p/shop", {}, "overview"],
       ["/forge/p/shop/releases", {}, "releases"],
-      ["/forge/p/shop/releases/v1.8.3", {}, "releases"],
+      ["/forge/p/shop/releases/v1.8.3", {}, "release"],
       ["/forge/p/shop/environments", {}, "environments"],
-      ["/forge/p/shop/environments/prod", {}, "environments"],
+      ["/forge/p/shop/environments/prod", {}, "environment"],
       ["/forge/p/shop/secrets", {}, "secrets"],
       ["/forge/p/shop/domains", {}, "domains"],
+      ["/forge/p/shop/activity", {}, "activity"],
       ["/forge/p/shop/observability/traces", { trace: "abc" }, "trace"],
       ["/forge/p/shop/observability/errors", {}, "errors"],
+      ["/forge/p/shop/observability/sessions", {}, "sessions"],
       ["/forge/p/shop/observability/dashboards/release/abc", {}, "dashboards"],
-      ["/forge/p/shop/activity", {}, null],
+      ["/forge/p/shop/observability/graph", {}, null],
     ];
     for (const [path, search, key] of cases) expect(demoTipKey(path, search), `${path} ${JSON.stringify(search)}`).toBe(key);
     expect(new Set(cases.map(([, , key]) => key).filter(Boolean))).toEqual(new Set(DEMO_TIP_KEYS));
@@ -194,6 +207,94 @@ describe("the view tips", () => {
     fireEvent.click(await screen.findByTestId("demo-tour-toast-dismiss"));
     await waitFor(() => expect(tip()).toBe("overview"));
     expect(screen.getByTestId("demo-tip").parentElement!.parentElement).toBe(document.getElementById("forge-demo-corner"));
+  });
+});
+
+describe("the page tours", () => {
+  beforeEach(() => demoSession.dismissToast());
+
+  const TRACE_STOPS = ["obs-trace-latency", "obs-errors-only", "obs-trace-table"];
+  const callout = () => screen.queryByTestId("tour-callout");
+
+  it("the card offers Show me around, and Sign up in its footer for this placement", async () => {
+    renderDemo("/forge/demo?view=traces", TRACE_STOPS);
+    await waitFor(() => expect(tip()).toBe("traces"));
+    expect(screen.getByTestId("demo-page-tour-start")).toHaveTextContent("Show me around");
+    const footer = screen.getByTestId("demo-tip-cta");
+    const signup = footer.querySelector<HTMLAnchorElement>("[data-testid='demo-cta-signup']")!;
+    expect(signup.href).toContain("utm_content=page_card");
+    expect(signup.href).toContain("journey=forge");
+    fireEvent.click(signup);
+    expect(tracked).toContainEqual({ event: "demo_cta_clicked", props: { cta: "signup", placement: "page_card" } });
+  });
+
+  it("walks the page's callouts: Next, Back, then Done leaves the replay button", async () => {
+    renderDemo("/forge/demo?view=traces", TRACE_STOPS);
+    fireEvent.click(await screen.findByTestId("demo-page-tour-start"));
+    await waitFor(() => expect(callout()).toHaveTextContent(DEMO_TIPS.traces.callouts[0].title));
+    expect(screen.getByTestId("tour-step-count")).toHaveTextContent(/1 of 3/);
+    expect(screen.queryByTestId("tour-back")).toBeNull();
+    expect(tip()).toBeNull();
+
+    fireEvent.click(screen.getByTestId("tour-next"));
+    await waitFor(() => expect(callout()).toHaveTextContent(DEMO_TIPS.traces.callouts[1].title));
+    fireEvent.click(screen.getByTestId("tour-back"));
+    await waitFor(() => expect(callout()).toHaveTextContent(DEMO_TIPS.traces.callouts[0].title));
+    fireEvent.click(screen.getByTestId("tour-next"));
+    fireEvent.click(await screen.findByTestId("tour-next"));
+    await waitFor(() => expect(callout()).toHaveTextContent(DEMO_TIPS.traces.callouts[2].title));
+    expect(screen.getByTestId("tour-next")).toHaveTextContent("Done");
+    fireEvent.click(screen.getByTestId("tour-next"));
+
+    await waitFor(() => expect(callout()).toBeNull());
+    expect(screen.getByTestId("demo-page-tour-replay")).toHaveAttribute("data-tip", "traces");
+    expect(tracked.map((t) => t.event)).toEqual(expect.arrayContaining(["demo_page_tour_started", "demo_page_tour_completed"]));
+  });
+
+  it("leaves out a stop whose target isn't on the page", async () => {
+    renderDemo("/forge/demo?view=traces", ["obs-trace-latency", "obs-trace-table"]);
+    fireEvent.click(await screen.findByTestId("demo-page-tour-start"));
+    await waitFor(() => expect(screen.getByTestId("tour-step-count")).toHaveTextContent(/1 of 2/));
+  });
+
+  it("Exit tour and Escape both end it, and the replay button starts it again", async () => {
+    renderDemo("/forge/demo?view=traces", TRACE_STOPS);
+    fireEvent.click(await screen.findByTestId("demo-page-tour-start"));
+    fireEvent.click(await screen.findByTestId("tour-exit"));
+    await waitFor(() => expect(callout()).toBeNull());
+    expect(tracked).toContainEqual({ event: "demo_page_tour_exited", props: { tip: "traces", at: 1 } });
+
+    fireEvent.click(screen.getByTestId("demo-page-tour-replay"));
+    await waitFor(() => expect(callout()).toHaveTextContent(DEMO_TIPS.traces.callouts[0].title));
+    fireEvent.keyDown(window, { key: "Escape" });
+    await waitFor(() => expect(callout()).toBeNull());
+    expect(screen.getByTestId("demo-page-tour-replay")).toBeInTheDocument();
+  });
+
+  it("a dismissed card leaves the replay button; a page seen before shows only that", async () => {
+    const { go } = renderDemo("/forge/demo?view=traces", TRACE_STOPS);
+    fireEvent.click(await screen.findByTestId("demo-tip-dismiss"));
+    expect(screen.getByTestId("demo-page-tour-replay")).toBeInTheDocument();
+    await go("/forge/demo?view=logs");
+    await waitFor(() => expect(tip()).toBe("logs"));
+    await go("/forge/demo?view=traces");
+    await waitFor(() => expect(screen.getByTestId("demo-page-tour-replay")).toHaveAttribute("data-tip", "traces"));
+    expect(tip()).toBeNull();
+  });
+});
+
+describe("the page tours' copy", () => {
+  it("gives every page 2–4 callouts, each on a data-testid anchor with a title and a body", () => {
+    for (const key of DEMO_TIP_KEYS) {
+      const { callouts } = DEMO_TIPS[key];
+      expect(callouts.length, key).toBeGreaterThanOrEqual(2);
+      expect(callouts.length, key).toBeLessThanOrEqual(4);
+      for (const c of callouts) {
+        expect(c.selector, key).toMatch(/^\[data-testid=/);
+        expect(c.title, key).toBeTruthy();
+        expect(c.body.length, key).toBeGreaterThan(15);
+      }
+    }
   });
 });
 

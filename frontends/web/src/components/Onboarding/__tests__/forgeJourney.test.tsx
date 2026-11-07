@@ -290,7 +290,7 @@ describe("the forge journey", () => {
       render(<>{presentStep(step("fg-done")).description}</>);
       expect(screen.getByText("forge scaffold service inventory")).toBeInTheDocument();
       expect(screen.getByTestId("demo-cta-end_card")).toBeInTheDocument();
-      expect(screen.getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("utm_medium=end_card"));
+      expect(screen.getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("utm_content=end_card"));
     });
 
     it("says on each feature step what an agent does with it, with the shell's CLI", () => {

@@ -332,7 +332,7 @@ test.describe('the forge journey on the demo host', () => {
     const banner = page.getByTestId('forge-demo-banner');
     await expect(banner).toContainText('Nothing you click here changes anything.');
     await expect(banner.getByTestId('forge-demo-exit')).toHaveCount(0);
-    await expect(banner.getByTestId('demo-cta-signup')).toHaveAttribute('href', /\/auth\?utm_source=demo&utm_medium=banner/);
+    await expect(banner.getByTestId('demo-cta-signup')).toHaveAttribute('href', /forge\.reliantlabs\.io\/auth\?mode=signup&journey=forge&utm_source=demo&utm_campaign=forge_demo&utm_content=banner/);
     await banner.getByTestId('demo-cta-install').click();
     await expect(page.getByTestId('demo-install-sheet')).toContainText('brew install reliant-labs/reliant/forge');
   });

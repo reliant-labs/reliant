@@ -31,7 +31,7 @@ import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 /** Where "Leave the demo" goes: forge's Apps in Reliant, the project picker in the forge shell. */
 const exitHref = (shell: TourShell) => (shell === "forge" ? "/apps" : "/forge");
 
-const LINK = "no-color inline-flex items-center gap-1.5 text-sm font-medium text-ink underline-offset-2 hover:underline";
+const LINK = "no-color inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-ink underline-offset-2 hover:underline sm:min-h-0";
 
 export function DemoBanner({ shell }: { shell: TourShell }) {
   const navigate = useNavigate();
@@ -46,7 +46,7 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
   return (
     <div
       role="note"
-      className="sticky top-0 z-20 -mx-1 mb-4 space-y-1 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-ink"
+      className="-mx-1 mb-4 space-y-1 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-ink sm:sticky sm:top-0 sm:z-20"
       data-testid="forge-demo-banner"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -54,7 +54,7 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
           <FlaskConical className="h-4 w-4" aria-hidden="true" />
           Demo data
         </span>
-        <span className="min-w-0 flex-1 text-ink-muted" data-testid="forge-demo-data" data-source={demo ? data : "fixtures"}>
+        <span className="min-w-0 flex-1 basis-56 text-ink-muted" data-testid="forge-demo-data" data-source={demo ? data : "fixtures"}>
           {!demo
             ? "Sample data from a made-up app called shop. Nothing here touches your projects."
             : data === "live"
@@ -95,7 +95,9 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
           </button>
         )}
         {demo ? (
-          <DemoCta placement="banner" />
+          <span className="w-full sm:w-auto">
+            <DemoCta placement="banner" size="lg" />
+          </span>
         ) : (
           <a
             href={exitHref(shell)}

@@ -1,14 +1,15 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Which console view a URL is, for the demo's one-time tips (DemoTips).
+ * Which console page a URL is, for the demo's page tours (DemoTips).
  *
  * The demo serves the console two ways, and both are read here:
- *  - the demo console, `/forge/demo?view=<obs view>&trace=…` (DemoConsole);
  *  - the console's own pages at their real paths, `/forge/p/<project>/…`
- *    (Console/paths.ts), which the demo bundle mounts on sample data.
+ *    (Console/paths.ts), which the demo site mounts on sample data;
+ *  - the demo console, `/forge/demo?view=<obs view>&trace=…` (DemoConsole),
+ *    which the other shells keep.
  *
- * A view with no tip is null: no tip shows, and the last one closes.
+ * A page with no tour is null: nothing shows, and an open card closes.
  */
 
 import { consolePageOf } from "../../Console/paths";
@@ -16,17 +17,21 @@ import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "../demoPath";
 
 export const DEMO_TIP_KEYS = [
   "overview",
+  "releases",
+  "release",
+  "environments",
+  "environment",
+  "secrets",
+  "domains",
+  "activity",
+  "dashboards",
+  "errors",
   "traces",
   "trace",
   "logs",
   "profiles",
-  "errors",
-  "releases",
-  "environments",
-  "secrets",
-  "domains",
-  "dashboards",
   "alerts",
+  "sessions",
 ] as const;
 
 export type DemoTipKey = (typeof DEMO_TIP_KEYS)[number];
@@ -39,11 +44,12 @@ const OBS_VIEW_TIPS: Record<string, DemoTipKey> = {
   errors: "errors",
   dashboards: "dashboards",
   alerts: "alerts",
+  sessions: "sessions",
 };
 
 function obsTip(view: string | undefined, search: Record<string, unknown>): DemoTipKey | null {
   const key = OBS_VIEW_TIPS[view ?? "overview"] ?? null;
-  // An open trace is a view of its own: the waterfall.
+  // An open trace is a page of its own: the waterfall.
   if (key === "traces" && typeof search.trace === "string" && search.trace) return "trace";
   return key;
 }
@@ -59,15 +65,19 @@ export function demoTipKey(pathname: string, search: Record<string, unknown>): D
     case "overview":
       return "overview";
     case "releases":
-    case "release":
       return "releases";
+    case "release":
+      return "release";
     case "environments":
-    case "environment":
       return "environments";
+    case "environment":
+      return "environment";
     case "secrets":
       return "secrets";
     case "domains":
       return "domains";
+    case "activity":
+      return "activity";
     case "dashboard":
       return "dashboards";
     case "obs-view":

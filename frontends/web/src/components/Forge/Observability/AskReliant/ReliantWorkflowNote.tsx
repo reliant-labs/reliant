@@ -44,7 +44,7 @@ export function ReliantWorkflowNote() {
             href={RELIANT_PRODUCT_URL}
             target="_blank"
             rel="noopener noreferrer"
-            onClick={() => trackEvent("demo_cta_clicked", { target: "reliant", placement: "ask_agent" })}
+            onClick={() => trackEvent("demo_cta_clicked", { cta: "reliant", placement: "ask_agent" })}
             className="mt-2 inline-flex items-center gap-1 font-medium text-primary-ink hover:underline"
             data-testid="what-is-reliant-link"
           >

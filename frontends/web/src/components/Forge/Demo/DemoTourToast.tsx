@@ -9,8 +9,8 @@
  *
  * Either way it stays gone for the rest of the session (demoSession.ts), and
  * it never shows while a tour is open (a deep link to a step, a restart from
- * the banner), which also counts as dismissing it. Phones don't get it: the
- * tour defers there anyway ("Open this on a computer").
+ * the banner), which also counts as dismissing it. On a phone it is a bottom
+ * sheet (DemoCorner), and so is every tour step.
  *
  * Mounted once at the demo shell's root (demoShellRoutes.tsx).
  */
@@ -22,7 +22,6 @@ import { Compass, X } from "lucide-react";
 import { parseTourParam } from "@/components/Onboarding/tourParam";
 import { useTourNavigation } from "@/components/Onboarding/useTourNavigation";
 import { trackEvent } from "@/lib/analytics";
-import { isPhoneViewport } from "@/lib/mobileRedirect";
 
 import { InstallForgeLink } from "./DemoCta";
 import { DemoCorner } from "./DemoCorner";
@@ -35,7 +34,7 @@ export function DemoTourToast() {
   const tourOpen = !!parseTourParam(search.tour);
   const { toastDismissed } = useDemoSession();
   const offered = useRef(false);
-  const visible = !toastDismissed && !tourOpen && !isPhoneViewport();
+  const visible = !toastDismissed && !tourOpen;
 
   // A tour opened some other way answers the offer.
   useEffect(() => {
@@ -73,7 +72,7 @@ export function DemoTourToast() {
             type="button"
             onClick={() => dismiss("close")}
             aria-label="Dismiss"
-            className="-m-1 rounded p-1 text-muted-foreground hover:text-foreground"
+            className="-m-2 inline-flex h-11 w-11 items-center justify-center rounded text-muted-foreground hover:text-foreground sm:h-7 sm:w-7"
             data-testid="demo-tour-toast-close"
           >
             <X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -89,7 +88,7 @@ export function DemoTourToast() {
           <button
             type="button"
             onClick={() => dismiss("explore")}
-            className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            className="min-h-11 text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline sm:min-h-0"
             data-testid="demo-tour-toast-dismiss"
           >
             Explore on my own
@@ -100,7 +99,7 @@ export function DemoTourToast() {
               demoSession.dismissToast();
               startJourney("forge", "demo");
             }}
-            className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+            className="min-h-11 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 sm:min-h-0"
             data-testid="demo-tour-toast-start"
           >
             Take the guided tour
