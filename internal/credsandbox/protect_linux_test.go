@@ -4,6 +4,7 @@
 package credsandbox
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -186,14 +187,19 @@ func TestSandbox_WithoutOverlaysCachesAreReadOnlyAndPrivate(t *testing.T) {
 	requireSandbox(t)
 	cache := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(cache, "entry"), []byte("trusted"), 0o644))
-	runDir := t.TempDir()
-	plan, env := withoutOverlays(Plan{Overlay: []Overlay{{Path: cache, Env: "GOCACHE", Cache: true}}},
-		[]string{"PATH=/usr/bin:/bin", "GOCACHE=" + cache}, runDir)
+	saved := overlayResult
+	overlayResult = errors.New("refused by the test")
+	t.Cleanup(func() { overlayResult = saved })
+	plan := Plan{Overlay: []Overlay{{Path: cache, Env: "GOCACHE", Cache: true}}}
 
-	out := runIn(t, &plan, t.TempDir(), env, `echo "GOCACHE=$GOCACHE"; echo x > "`+cache+`/entry" 2>&1 || echo SHARED-DENIED; echo y > "$GOCACHE/new" && echo PRIVATE-OK`)
-	assert.Contains(t, out, "GOCACHE="+filepath.Join(runDir, "gocache"))
+	out := runIn(t, &plan, t.TempDir(), []string{"PATH=/usr/bin:/bin", "GOCACHE=" + cache},
+		`echo "GOCACHE=$GOCACHE"; echo x > "`+cache+`/entry" 2>&1 || echo SHARED-DENIED; echo y > "$GOCACHE/new" && echo PRIVATE-OK`)
+	assert.Contains(t, out, "GOCACHE=/tmp/.credsandbox-gocache", "a private, empty cache in the command's own /tmp")
 	assert.Contains(t, out, "SHARED-DENIED")
 	assert.Contains(t, out, "PRIVATE-OK")
+	got, err := os.ReadFile(filepath.Join(cache, "entry"))
+	require.NoError(t, err)
+	assert.Equal(t, "trusted", string(got))
 }
 
 // lineFor is the probe's line for one kind of write to path.

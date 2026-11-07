@@ -85,17 +85,18 @@ func prepareOverlays(p Plan) Plan {
 
 // withoutOverlays is the plan where the kernel allows no unprivileged overlay:
 // every overlaid directory is read-only, and each one a variable names points
-// at a private, empty directory in runDir instead. The module cache is seeded:
-// its downloads are the first GOPROXY, so a module the shared cache holds is
-// extracted rather than fetched, and still checked against go.sum.
+// at a private, empty directory in the command's private /tmp instead. The
+// module cache is seeded: its downloads are the first GOPROXY, so a module the
+// shared cache holds is extracted rather than fetched, and still checked
+// against go.sum.
 func withoutOverlays(p Plan, env []string, runDir string) (Plan, []string) {
 	for _, o := range p.Overlay {
 		p.ReadOnly = append(p.ReadOnly, o.Path)
 		if o.Env == "" {
 			continue
 		}
-		private := filepath.Join(runDir, strings.ToLower(o.Env))
-		if err := os.MkdirAll(private, 0o700); err != nil {
+		host, private := privateTmpPath(runDir, ".credsandbox-"+strings.ToLower(o.Env))
+		if err := os.MkdirAll(host, 0o700); err != nil {
 			continue
 		}
 		env = setEnv(env, o.Env, private)
@@ -200,6 +201,30 @@ func processStart(pid string) string {
 		return ""
 	}
 	return fields[19] // field 22 counts from 1 and from before the name
+}
+
+// removeRunDir is the init's removal of its run directory, as the command
+// exits. What the sandbox mounted on stays until the namespace is gone (the
+// directory carried into the private /tmp: the kernel refuses to remove a mount
+// point), so the owner file goes last, and only once everything else did:
+// until then it tells sweepRunDirs the init is gone, which removes the rest.
+func removeRunDir(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	clean := true
+	for _, e := range entries {
+		if e.Name() == runDirOwnerFile {
+			continue
+		}
+		if err := removeTree(filepath.Join(dir, e.Name())); err != nil {
+			clean = false
+		}
+	}
+	if clean {
+		_ = removeTree(dir)
+	}
 }
 
 // removeTree removes dir and everything below it, including the directories an

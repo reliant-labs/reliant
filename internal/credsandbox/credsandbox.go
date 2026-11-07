@@ -57,10 +57,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // HelperArg is the first argument of the re-executed binary that sets the
@@ -139,13 +142,18 @@ func DefaultPlan() Plan {
 	}
 	hide = append(hide, credentialEnvPaths()...)
 
-	var ro []string
+	var ro, seal []string
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		for _, rel := range readOnlyHomeRel {
 			ro = append(ro, filepath.Join(home, rel))
 		}
+		// Hidden, and sealed for the moment it is missing (Wrap creates it
+		// first): a credentials-none command must not be the one to make it.
+		scratch := filepath.Join(home, CredScratchRel)
+		hide = append(hide, scratch)
+		seal = append(seal, scratch)
 	}
-	return Plan{Hide: cleanAbs(hide), ReadOnly: cleanAbs(ro)}
+	return Plan{Hide: cleanAbs(hide), ReadOnly: cleanAbs(ro), Seal: cleanAbs(seal)}
 }
 
 // credentialEnvPaths are the files and sockets the daemon's own credential
@@ -215,23 +223,113 @@ func DispatchForTest() {
 	}
 }
 
-// Wrap applies the sandbox to cmd when credentials is daemonpolicy.CredentialsNone,
-// with the plan for its directory (PlanFor) and this binary as the helper.
-// writable are the shared checkouts, or directories inside one, that the
-// command declared it writes (a run node's writable_checkouts). A non-empty
-// refusal means the command must not run.
-func Wrap(cmd *exec.Cmd, credentials string, writable ...string) (refusal string) {
-	if credentials != daemonpolicy.CredentialsNone {
+// SignalEnv is the variable a credentialed command finds SignalVersion in when
+// every credentials-none command on this daemon runs in the sandbox at that
+// version. A credentialed step that keeps state where a credentials-none step
+// could once tamper with it (/tmp, a scratch directory) reads it and fails
+// closed below the version it needs; the PR pipeline's credentialed steps
+// require 2. Absent where the sandbox is not in force: another platform, a
+// kernel that refuses it, a program that never called Dispatch.
+const SignalEnv = "RELIANT_CREDSANDBOX_VERSION"
+
+// SignalVersion is the sandbox's version as SignalEnv reports it. Raise it only
+// when a credentials-none command loses a capability a credentialed step relies
+// on it lacking; never lower it.
+//
+//   - 1: credential files hidden, trusted startup files read-only (implied by
+//     the first sandbox; never signalled).
+//   - 2: also the daemon binary, git and daemon config, credential helpers and
+//     shared checkouts read-only; private Go and tool caches; a private /tmp and
+//     /var/tmp; CredScratchDir hidden.
+const SignalVersion = 2
+
+// CredScratchRel is CredScratchDir under the user's home.
+const CredScratchRel = ".reliant/cred-scratch"
+
+// CredScratchDir is the root a credentialed command keeps its scratch in: the
+// daemon creates it, mode 0700, before any command runs, and a credentials-none
+// command cannot see it, so it can neither read nor plant anything there.
+// Empty when there is no home directory.
+func CredScratchDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
 		return ""
 	}
+	return filepath.Join(home, CredScratchRel)
+}
+
+// Wrap prepares cmd, which has not been started, for its credentials. A
+// credentials-none command (daemonpolicy.CredentialsNone) gets the sandbox, with
+// the plan for its directory (PlanFor) and this binary as the helper; writable
+// are the shared checkouts, or directories inside one, that it declared it
+// writes (a run node's writable_checkouts). Any other command gets SignalEnv
+// when the sandbox is in force for its credentials-none peers. A non-empty
+// refusal means the command must not run.
+func Wrap(cmd *exec.Cmd, credentials string, writable ...string) (refusal string) {
+	ensureCredScratch()
 	self, err := os.Executable()
+	if credentials != daemonpolicy.CredentialsNone {
+		signal := err == nil && Enabled() && Available(self) == nil
+		cmd.Env = withSignal(cmd.Env, signal)
+		return ""
+	}
 	if err != nil {
 		return Refusal(fmt.Errorf("locating the sandbox helper binary: %w", err))
 	}
 	if !Enabled() {
 		return ""
 	}
+	cmd.Env = withSignal(cmd.Env, false)
 	return Apply(cmd, self, PlanFor(cmd.Dir, cmd.Env, writable...))
+}
+
+// withSignal is env (nil: this process's) with SignalEnv set when signal, and
+// without it otherwise: a value this process inherited (a daemon started by a
+// credentialed step) says nothing about this daemon's sandbox.
+func withSignal(env []string, signal bool) []string {
+	if env == nil {
+		env = os.Environ() //nolint:forbidigo // a command with no environment of its own inherits this process's
+	}
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, SignalEnv+"=") {
+			out = append(out, kv)
+		}
+	}
+	if signal {
+		out = append(out, SignalEnv+"="+strconv.Itoa(SignalVersion))
+	}
+	return out
+}
+
+// ensureCredScratch creates CredScratchDir, mode 0700, and puts back one that is
+// not a directory of this user's: a link or file there was planted (by a
+// credentials-none command of a daemon older than the sandbox's version 2), and
+// a credentialed command must never write through it. The planted entry is
+// moved aside, not followed or removed.
+func ensureCredScratch() {
+	dir := CredScratchDir()
+	if dir == "" {
+		return
+	}
+	fi, err := os.Lstat(dir)
+	if err == nil && (!fi.IsDir() || !ownedByUs(fi)) {
+		aside := dir + ".untrusted-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+		if renameErr := os.Rename(dir, aside); renameErr != nil {
+			logging.Warn("credsandbox: the credentialed scratch directory is not a directory of the daemon's user and could not be moved aside",
+				"path", dir, "error", renameErr)
+			return
+		}
+		logging.Warn("credsandbox: moved aside a credentialed scratch directory that was not the daemon's own", "path", dir, "moved_to", aside)
+		err = os.ErrNotExist
+	}
+	if err != nil {
+		if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
+			logging.Warn("credsandbox: creating the credentialed scratch directory", "path", dir, "error", mkErr)
+			return
+		}
+	}
+	_ = os.Chmod(dir, 0o700)
 }
 
 // ErrUnavailable wraps the reason this host refused the sandbox.

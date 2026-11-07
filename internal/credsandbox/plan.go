@@ -649,3 +649,16 @@ func dedupeOverlays(in []Overlay) []Overlay {
 }
 
 func depthOf(p string) int { return strings.Count(filepath.Clean(p), string(filepath.Separator)) }
+
+// dedupe is in without its repeats, in order.
+func dedupe(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range in {
+		if !seen[p] {
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	return out
+}

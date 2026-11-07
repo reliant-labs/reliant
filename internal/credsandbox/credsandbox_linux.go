@@ -28,7 +28,13 @@ import (
 // Available reports why this machine cannot run the sandbox, or nil. The answer
 // is cached for the life of the process.
 func Available(self string) error {
-	probeOnce.Do(func() { probeResult = runHelperProbe(self) })
+	probeOnce.Do(func() {
+		probeResult = runHelperProbe(self)
+		if probeResult != nil {
+			logging.Warn("credsandbox: this machine refused the sandbox, so every credentials-none command is refused "+
+				"and credentialed commands get no "+SignalEnv, "reason", probeResult.Error())
+		}
+	})
 	return probeResult
 }
 
@@ -61,19 +67,22 @@ func Apply(cmd *exec.Cmd, self string, plan Plan) (refusal string) {
 	}
 
 	plan = prepareOverlays(plan)
-	runDir := ""
+	runDir, err := newRunDir()
+	if err != nil {
+		return Refusal(fmt.Errorf("making the command's private /tmp: %w", err))
+	}
+	if err := makePrivateTmpDirs(runDir); err != nil {
+		_ = removeTree(runDir)
+		return Refusal(fmt.Errorf("making the command's private /tmp: %w", err))
+	}
+	cmd.Env = setEnv(cmd.Env, "TMPDIR", "/tmp")
 	if len(plan.Overlay) > 0 {
-		dir, err := newRunDir()
-		if err != nil {
-			return Refusal(fmt.Errorf("making the command's private cache directory: %w", err))
-		}
-		runDir = dir
 		if overlayErr := overlayAvailable(); overlayErr != nil {
 			plan, cmd.Env = withoutOverlays(plan, cmd.Env, runDir)
 		}
 	}
 
-	payload, err := json.Marshal(spec{Plan: plan, Path: cmd.Path, Argv: cmd.Args, Dir: cmd.Dir, RunDir: runDir})
+	payload, err := json.Marshal(spec{Plan: plan, Path: cmd.Path, Argv: cmd.Args, Dir: cmd.Dir, RunDir: runDir, TmpRoot: os.TempDir()})
 	if err != nil {
 		return Refusal(err)
 	}
@@ -128,6 +137,9 @@ type spec struct {
 	// RunDir holds the upper and work directories of the command's overlays;
 	// the helper removes it when the command exits.
 	RunDir string `json:",omitempty"`
+	// TmpRoot is the daemon's temp directory (os.TempDir), which the command's
+	// private /tmp covers when it is under /tmp (privateTmp).
+	TmpRoot string `json:",omitempty"`
 	// ProbeOverlay, in the probe only, is a directory to try an overlay mount
 	// in. The helper prints the outcome as its one line of output.
 	ProbeOverlay string `json:",omitempty"`
@@ -237,12 +249,25 @@ func runHelper() int {
 		return fail("not the init of a PID namespace (pid %d)", os.Getpid())
 	}
 
+	if s.Dir == "" {
+		// The command starts in this init's directory. Named by its path, so
+		// the command's chdir resolves through the view built below: a
+		// directory inherited as is stays on the mount it was on, and `..`
+		// from there walks the filesystem the view covers.
+		s.Dir, _ = os.Getwd()
+	}
 	if s.RunDir != "" {
 		// Removed when the command exits, by this init; the daemon removes the
 		// run directory of an init that was killed first (sweepRunDirs), once
 		// the process this names is gone. Read before the private /proc goes
-		// on: there, this process is 1.
-		defer func() { _ = removeTree(s.RunDir) }()
+		// on: there, this process is 1. The run directory is under the
+		// daemon's /tmp, which the private /tmp covers, so it is removed
+		// through a descriptor of its parent taken now.
+		runDir := s.RunDir
+		if fd, err := unix.Open(filepath.Dir(runDir), unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0); err == nil {
+			runDir = "/proc/self/fd/" + strconv.Itoa(fd) + "/" + filepath.Base(runDir)
+		}
+		defer removeRunDir(runDir)
 		if err := writeOwner(s.RunDir); err != nil {
 			return fail("recording the run directory's owner: %v", err)
 		}
@@ -264,7 +289,7 @@ func runHelper() int {
 		}
 		return 0
 	}
-	if err := applyPlan(s.Plan, s.RunDir); err != nil {
+	if err := applyPlan(s.Plan, s.RunDir, s.Dir, s.TmpRoot); err != nil {
 		return fail("%v", err)
 	}
 	if err := dropPrivileges(); err != nil {
@@ -326,8 +351,9 @@ var scratchDirs = map[string]bool{"/tmp": true, "/var/tmp": true, "/dev/shm": tr
 // applyPlan builds the command's view of the filesystem: the hidden paths
 // first (they rebuild directories, which would drop a mount made inside them
 // earlier), then the read-only paths and the carve-outs inside them, the
-// shallowest first, then the private overlays.
-func applyPlan(p Plan, runDir string) error {
+// shallowest first, then the private overlays, and last the private /tmp and
+// /var/tmp (privateTmp), which cover whatever the steps before did there.
+func applyPlan(p Plan, runDir, cwd, tmpRoot string) error {
 	mounts, err := readMounts()
 	if err != nil {
 		return err
@@ -382,7 +408,10 @@ func applyPlan(p Plan, runDir string) error {
 			}
 		}
 	}
-	return nil
+	if runDir == "" {
+		return nil
+	}
+	return privateTmp(runDir, cwd, tmpRoot, mounts)
 }
 
 // mountOverlay mounts an overlay on dir whose lower layer is dir itself and
@@ -514,18 +543,6 @@ func canonical(path string) string {
 		return filepath.Join(real, base)
 	}
 	return path
-}
-
-func dedupe(in []string) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, p := range in {
-		if !seen[p] {
-			seen[p] = true
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 // rebuildWithout replaces directory dir with a tmpfs holding a bind mount of

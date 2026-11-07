@@ -41,6 +41,9 @@ func requireSandbox(t *testing.T) {
 func run(t *testing.T, plan Plan, script string) (string, int) {
 	t.Helper()
 	cmd := exec.Command("bash", "-c", script)
+	// Started in the test's own temp root, which its private /tmp carries
+	// (ownTmpDir): the fake homes are under it.
+	cmd.Dir = filepath.Dir(t.TempDir())
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME")} //nolint:forbidigo // the test's own PATH for the command under test
 	if refusal := Apply(cmd, selfPath(t), plan); refusal != "" {
 		t.Fatalf("sandbox refused: %s", refusal)
@@ -133,6 +136,7 @@ func TestSandbox_ARenamedCredentialFileStaysHidden(t *testing.T) {
 	require.NoError(t, syscallMkfifo(gate))
 
 	cmd := exec.Command("bash", "-c", `cd "`+home+`"; echo ready > work/ready; read x < gate; cat .reliant/daemon.json 2>/dev/null; ls .reliant`)
+	cmd.Dir = home
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")} //nolint:forbidigo // the test's own PATH for the command under test
 	require.Empty(t, Apply(cmd, selfPath(t), planFor(home)))
 	var out strings.Builder
