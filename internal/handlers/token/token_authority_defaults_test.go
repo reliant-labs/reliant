@@ -19,7 +19,8 @@ func TestExchangeToken_AllUserOrgCapabilities(t *testing.T) {
 	want := fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeClusterManage,
 		fat.ScopeSecretRead, fat.ScopeSecretWrite,
 		fat.ScopeDomainRead, fat.ScopeDomainWrite, fat.ScopeIdentityRead, fat.ScopeIdentityManage,
-		fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery, fat.ScopeBillingRead)
+		fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery, fat.ScopeBillingRead,
+		fat.ScopeStorageRead, fat.ScopeDeployConfigRead)
 	if got := fat.SetOf(exchangeableScopes...); !reflect.DeepEqual(got, want) {
 		t.Fatalf("exchangeable = %s, want %s", got, want)
 	}
@@ -59,6 +60,33 @@ func TestExchangeToken_BillingReadRequiresHeldExplicitScope(t *testing.T) {
 	}
 	if child.Scopes.Has(fat.ScopeBillingRead) {
 		t.Fatal("default exchange widened an existing restricted token")
+	}
+}
+
+func TestExchangeToken_StorageAndConfigRequireHeldScopes(t *testing.T) {
+	for _, scope := range []fat.Scope{fat.ScopeStorageRead, fat.ScopeDeployConfigRead} {
+		t.Run(string(scope), func(t *testing.T) {
+			authority := tokenauthority.NewMemory()
+			svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
+			bearer := mintSession(t, authority, "restricted-user", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeObsRead}})
+			_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+				Audience: testControlPlane, Scopes: []string{string(scope)},
+			}))
+			if svcerr.Code(err) != connect.CodePermissionDenied {
+				t.Fatalf("unheld %s delegated: %v", scope, err)
+			}
+			resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			child, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if child.Scopes.Has(scope) {
+				t.Fatalf("default exchange widened token to %s", scope)
+			}
+		})
 	}
 }
 

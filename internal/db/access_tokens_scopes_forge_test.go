@@ -48,4 +48,8 @@ func TestAccessTokensScopesCheckMatchesForge(t *testing.T) {
 		`INSERT INTO access_tokens (id, org_id, name, token_hash, token_prefix, scopes)
 		 VALUES ('tok-bogus', 'org', 'n', 'tok-bogus', 'rlat_x', ARRAY['not:a-scope']::text[])`)
 	require.Error(t, err, "a scope outside forge's set must still be rejected")
+	_, err = raw.Exec(
+		`INSERT INTO access_tokens (id, org_id, name, token_hash, token_prefix, scopes)
+		 VALUES ('tok-empty', 'org', 'n', 'tok-empty', 'rlat_x', ARRAY[]::text[])`)
+	require.Error(t, err, "an empty scope list must still be rejected")
 }

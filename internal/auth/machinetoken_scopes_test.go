@@ -25,6 +25,8 @@ func TestClaimsForAccessTokenAdmitsNarrowTokensButClaimsForAPITokenDoesNot(t *te
 		{"reliant:api", []fat.Scope{fat.ScopeReliantAPI}, "u1", true, true},
 		{"runs:start", []fat.Scope{fat.ScopeRunsStart}, "u1", true, false},
 		{"triggers:manage", []fat.Scope{fat.ScopeTriggersManage}, "u1", true, false},
+		{"storage read is not product API authority", []fat.Scope{fat.ScopeStorageRead}, "u1", false, false},
+		{"config read is not product API authority", []fat.Scope{fat.ScopeDeployConfigRead}, "u1", false, false},
 		{"narrow with reliant:api", []fat.Scope{fat.ScopeRunsRead, fat.ScopeReliantAPI}, "u1", true, true},
 		{"inbox:read", []fat.Scope{fat.ScopeInboxRead}, "u1", true, false},
 		{"inbox:manage", []fat.Scope{fat.ScopeInboxManage}, "u1", true, false},
