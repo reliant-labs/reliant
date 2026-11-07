@@ -1,159 +1,133 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
-import type { useComposerUploads } from "./useComposerUploads";
+import { useEffect, useRef, type RefObject } from "react";
 
-type Preferences = { enabled: boolean; characterThreshold: number; lineThreshold: number };
-export const pasteCounts = (text: string) => ({ characters: Array.from(text).length, lines: text.split(/\r\n|\r|\n/).length });
-export function isLongPaste(text: string, prefs: Preferences) {
-  const counts = pasteCounts(text);
-  return prefs.enabled && (counts.characters >= prefs.characterThreshold || counts.lines >= prefs.lineThreshold);
-}
-type Paste = { id: number; text: string; upload?: number };
-export const pastedFilename = (id: number) => `Pasted text ${id}.txt`;
-const PREFIX = "reliant:long-paste:v1:";
-// Small enough for synchronous browser draft storage; larger pastes stay inline.
-const MAX_DRAFT_BYTES = 1024 * 1024;
-function read(session: string): Paste[] {
-  try {
-    const raw = localStorage.getItem(PREFIX + session) || "[]";
-    if (new Blob([raw]).size > MAX_DRAFT_BYTES) return [];
-    const value: unknown = JSON.parse(raw);
-    const seen = new Set<number>();
-    return Array.isArray(value) ? value.filter((v) => {
-      if (typeof v?.text !== "string" || !Number.isSafeInteger(v?.id) || seen.has(v.id)) return false;
-      seen.add(v.id); return true;
-    }).map(({ id, text }) => ({ id, text })) : [];
-  } catch { return []; }
-}
-function persist(session: string, rows: Paste[]) {
-  const value = JSON.stringify(rows.map(({ id, text }) => ({ id, text })));
-  if (new Blob([value]).size > MAX_DRAFT_BYTES) return false;
-  try {
-    if (rows.length) localStorage.setItem(PREFIX + session, value);
-    else localStorage.removeItem(PREFIX + session);
-    return true;
-  } catch { return false; }
+/** A paste at or past either threshold arrives as a text attachment, not inline text. */
+export const LONG_PASTE_MIN_CHARACTERS = 5000;
+export const LONG_PASTE_MIN_LINES = 100;
+
+export function isLongPaste(text: string): boolean {
+  if (text.length >= LONG_PASTE_MIN_CHARACTERS * 2) return true; // every code point is at most two units
+  return (
+    Array.from(text).length >= LONG_PASTE_MIN_CHARACTERS ||
+    text.split(/\r\n|\r|\n/).length >= LONG_PASTE_MIN_LINES
+  );
 }
 
-export function useLongPaste({ session, textarea, input, setInput, preferences, queue, disabled }: {
-  session: string; textarea: RefObject<HTMLTextAreaElement | null>; input: string;
-  setInput: (text: string) => void; preferences: Preferences;
-  queue: ReturnType<typeof useComposerUploads>; disabled: boolean;
+/** `pasted-text.txt`, then `pasted-text(2).txt`, `pasted-text(3).txt`… — the first not in `taken`. */
+export function pastedTextFilename(taken: Iterable<string>): string {
+  const names = new Set(taken);
+  if (!names.has("pasted-text.txt")) return "pasted-text.txt";
+  for (let n = 2; ; n++) {
+    const name = `pasted-text(${n}).txt`;
+    if (!names.has(name)) return name;
+  }
+}
+
+/**
+ * v1.10 kept each long paste's raw text in localStorage, under
+ * `reliant:long-paste:v1:` + JSON [user id, project id, attachment session],
+ * and showed it in a panel of its own. Draft attachments now persist
+ * themselves, so a stored paste is uploaded once as an ordinary draft
+ * attachment and its entry dropped — only after its upload succeeds, so a
+ * failure leaves it for the next mount. Remove with the next major.
+ */
+const LEGACY_PASTE_PREFIX = "reliant:long-paste:v1:";
+const migrating = new Set<string>();
+
+export function legacyPasteDraftKey(userId: string | undefined, projectId: string | undefined, sessionId: string): string {
+  return LEGACY_PASTE_PREFIX + JSON.stringify([userId, projectId, sessionId]);
+}
+
+export async function migrateLegacyPasteDrafts(keys: string[], attach: (text: string) => Promise<unknown>): Promise<void> {
+  for (const key of keys) {
+    if (migrating.has(key)) continue;
+    let rows: Array<{ id: unknown; text: unknown }>;
+    try {
+      const raw = localStorage.getItem(key);
+      if (!raw) continue;
+      const parsed: unknown = JSON.parse(raw);
+      rows = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      continue;
+    }
+    migrating.add(key);
+    let remaining = rows;
+    const save = () => {
+      try {
+        if (remaining.length) localStorage.setItem(key, JSON.stringify(remaining));
+        else localStorage.removeItem(key);
+      } catch {
+        // Storage refused the write; the next mount sees the entry again.
+      }
+    };
+    try {
+      for (const row of rows) {
+        if (typeof row?.text === "string" && row.text !== "") await attach(row.text);
+        remaining = remaining.filter((r) => r !== row);
+        save();
+      }
+    } catch {
+      // An upload failed (attachFile already raised a toast); the rest wait for the next mount.
+    } finally {
+      migrating.delete(key);
+    }
+  }
+}
+
+/**
+ * Turn a long paste into the composer textarea into a text attachment.
+ *
+ * Cmd/Ctrl+Shift+V pastes inline whatever its length (the browser's "paste
+ * as plain text"). Electron's "Paste as Plain Text" menu item, which owns that
+ * accelerator there, delivers the clipboard as a `reliant:paste-plain-text`
+ * event instead of a paste, and is inserted inline the same way.
+ */
+export function useLongPaste({ textarea, input, setInput, attach, disabled }: {
+  textarea: RefObject<HTMLTextAreaElement | null>;
+  input: string;
+  setInput: (text: string) => void;
+  /** Upload `text` as an attachment. */
+  attach: (text: string) => void;
+  disabled: boolean;
 }) {
-  const drafts = useRef(new Map<string, Paste[]>());
-  if (!drafts.current.has(session)) drafts.current.set(session, read(session));
-  const [, render] = useState(0);
-  const [notice, setNotice] = useState("");
-  const undo = useRef<{ session: string; id: number; before: string; after: string; start: number } | null>(null);
   const bypass = useRef(false);
-  const rows = drafts.current.get(session)!;
-  const update = (next: Paste[]) => { drafts.current.set(session, next); persist(session, next); render((v) => v + 1); };
-  const remove = (id: number) => {
-    const row = rows.find((r) => r.id === id);
-    if (row?.upload !== undefined) queue.discard(row.upload);
-    update(rows.filter((r) => r.id !== id));
-    undo.current = null;
-  };
-  const insert = (id: number) => {
-    const row = rows.find((r) => r.id === id);
-    if (!row) return;
-    const el = textarea.current;
-    const start = el?.selectionStart ?? input.length;
-    const end = el?.selectionEnd ?? start;
-    setInput(input.slice(0, start) + row.text + input.slice(end));
-    remove(id);
-    el?.focus();
-  };
   useEffect(() => {
     const el = textarea.current;
     if (!el) return;
     const key = (e: KeyboardEvent) => {
       bypass.current = (e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "v";
-      const last = undo.current;
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === "z" && last?.session === session && input === last.after) {
-        const row = rows.find((r) => r.id === last.id);
-        if (row) {
-          e.preventDefault(); e.stopPropagation();
-          setInput(last.before.slice(0, last.start) + row.text + last.before.slice(last.start + (last.before.length - last.after.length)));
-          remove(row.id);
-        }
-      } else if (!bypass.current && !["Meta", "Control", "Shift"].includes(e.key)) undo.current = null;
     };
+    const reset = () => { bypass.current = false; };
     const paste = (e: ClipboardEvent) => {
-      const skip = bypass.current; bypass.current = false;
+      const skip = bypass.current;
+      bypass.current = false;
       if (disabled || skip || e.defaultPrevented || e.target !== el || !e.clipboardData) return;
       if (e.clipboardData.files.length || Array.from(e.clipboardData.items).some((item) => item.kind === "file")) return;
       const text = e.clipboardData.getData("text/plain");
-      if (!isLongPaste(text, preferences)) return;
-      const id = Math.max(Date.now(), ...rows.map((r) => r.id + 1));
-      const row: Paste = { id, text };
-      if (!persist(session, [...rows, row])) {
-        setNotice("Paste kept as text: attachment draft storage is full or unavailable.");
-        return;
-      }
+      if (!isLongPaste(text)) return;
       e.preventDefault();
-      const start = el.selectionStart;
-      const after = input.slice(0, start) + input.slice(el.selectionEnd);
-      row.upload = queue.enqueue(new File([text], pastedFilename(id), { type: "text/plain" }));
-      update([...rows, row]);
-      setInput(after);
-      undo.current = { session, id, before: input, after, start };
-      setNotice("Long paste attached. Undo inserts it as text; Shift+paste bypasses conversion.");
+      // A paste replaces the selection, whichever form the text arrives in.
+      if (el.selectionStart !== el.selectionEnd) setInput(input.slice(0, el.selectionStart) + input.slice(el.selectionEnd));
+      attach(text);
     };
-    const blur = () => { bypass.current = false; };
     const plain = (event: Event) => {
       if (event.target !== el || disabled) return;
       const text = (event as CustomEvent<{ text: string }>).detail?.text;
       if (typeof text !== "string") return;
       event.preventDefault();
       setInput(input.slice(0, el.selectionStart) + text + input.slice(el.selectionEnd));
-      undo.current = null;
       bypass.current = false;
     };
     el.addEventListener("reliant:paste-plain-text", plain);
     el.addEventListener("keydown", key, true);
     el.addEventListener("paste", paste);
-    el.addEventListener("blur", blur);
-    el.addEventListener("keyup", blur);
-    return () => { el.removeEventListener("reliant:paste-plain-text", plain); el.removeEventListener("keydown", key, true); el.removeEventListener("paste", paste); el.removeEventListener("blur", blur); el.removeEventListener("keyup", blur); };
+    el.addEventListener("blur", reset);
+    el.addEventListener("keyup", reset);
+    return () => {
+      el.removeEventListener("reliant:paste-plain-text", plain);
+      el.removeEventListener("keydown", key, true);
+      el.removeEventListener("paste", paste);
+      el.removeEventListener("blur", reset);
+      el.removeEventListener("keyup", reset);
+    };
   });
-  return {
-    rows, notice, remove, insert,
-    status: (id: number) => {
-      const row = rows.find((r) => r.id === id);
-      return queue.uploads.find((u) => u.id === row?.upload)?.status ?? (row?.upload === undefined ? "restored" : "ready");
-    },
-    needsRecovery: rows.some((r) => r.upload === undefined),
-    retry: (id: number) => {
-      const row = rows.find((r) => r.id === id);
-      if (!row) return;
-      if (!row.text.length) { setNotice("Empty pasted text cannot be uploaded. Insert as text or remove it."); return; }
-      if (row.upload !== undefined) void queue.retry(row.upload);
-      else update(rows.map((r) => r.id === id ? { ...r, upload: queue.enqueue(new File([r.text], pastedFilename(r.id), { type: "text/plain" })) } : r));
-    },
-    edit: (id: number, text: string) => {
-      const next = rows.map((r) => r.id === id ? { id, text } : r);
-      if (!persist(session, next)) { setNotice("Edit not saved: draft storage is full or unavailable. Original text retained."); return false; }
-      const row = rows.find((r) => r.id === id);
-      if (row?.upload !== undefined) queue.discard(row.upload);
-      update(next);
-      undo.current = null;
-      return true;
-    },
-    submitting: () => {
-      rows.forEach((row) => { if (row.upload !== undefined) queue.transferToSend(row.upload); });
-    },
-    sendFailed: () => {
-      const ids = new Set(rows.map((r) => r.id));
-      const next = (drafts.current.get(session) ?? []).map((r) => ids.has(r.id) ? { id: r.id, text: r.text } : r);
-      drafts.current.set(session, next); persist(session, next); render((v) => v + 1);
-    },
-    // Called only after the existing send/queue path has accepted this draft.
-    sent: () => {
-      const remaining = (drafts.current.get(session) ?? []).filter((row) => !rows.includes(row));
-      drafts.current.set(session, remaining); persist(session, remaining);
-      undo.current = null;
-      rows.forEach((row) => { if (row.upload !== undefined) queue.forgetCompleted(row.upload); });
-      render((v) => v + 1);
-    },
-  };
 }
