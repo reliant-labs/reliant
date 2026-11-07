@@ -274,6 +274,30 @@ describe("the page tours", () => {
     expect(screen.getByTestId("demo-page-tour-replay")).toBeInTheDocument();
   });
 
+  it("on a phone: the card and the corner span the screen, the tour is a bottom sheet, and every tap target is a touch-target (44px on a touch screen)", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 844 });
+    try {
+      renderDemo("/forge/demo?view=traces", TRACE_STOPS);
+      await waitFor(() => expect(tip()).toBe("traces"));
+      const corner = document.getElementById("forge-demo-corner")!;
+      // Full width below `sm`, a 22rem column from `sm` up.
+      expect(corner.className).toMatch(/(^| )inset-x-2( |$)/);
+      expect(screen.getByTestId("demo-tip").parentElement!.className).toMatch(/(^| )w-full( |$)/);
+      const tapTargets = (root: HTMLElement) => [...root.querySelectorAll("button, a")].filter((el) => !el.closest("[data-testid=install-forge-sheet]"));
+      for (const el of tapTargets(screen.getByTestId("demo-tip"))) expect(el.className, el.textContent ?? "").toMatch(/(^| )touch-target( |$)/);
+
+      fireEvent.click(screen.getByTestId("demo-page-tour-start"));
+      const callout = await screen.findByTestId("tour-callout");
+      expect(callout).toHaveAttribute("data-side", "sheet");
+      expect(callout.style.width).toBe("100%");
+      for (const el of tapTargets(callout)) expect(el.className, el.textContent ?? "").toMatch(/(^| )touch-target( |$)/);
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: 768 });
+    }
+  });
+
   it("a dismissed card leaves the replay button; a page seen before shows only that", async () => {
     const { go } = renderDemo("/forge/demo?view=traces", TRACE_STOPS);
     fireEvent.click(await screen.findByTestId("demo-tip-dismiss"));

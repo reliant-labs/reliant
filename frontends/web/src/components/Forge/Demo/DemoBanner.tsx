@@ -31,7 +31,7 @@ import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 /** Where "Leave the demo" goes: forge's Apps in Reliant, the project picker in the forge shell. */
 const exitHref = (shell: TourShell) => (shell === "forge" ? "/apps" : "/forge");
 
-const LINK = "no-color inline-flex min-h-[44px] items-center gap-1.5 text-sm font-medium text-ink underline-offset-2 hover:underline sm:min-h-0";
+const LINK = "no-color inline-flex touch-target items-center gap-1.5 text-sm font-medium text-ink underline-offset-2 hover:underline";
 
 export function DemoBanner({ shell }: { shell: TourShell }) {
   const navigate = useNavigate();

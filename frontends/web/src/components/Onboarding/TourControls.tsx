@@ -7,7 +7,7 @@
  * Next is disabled while the step waits on a required action (its
  * `actionHint` says what to do, and is the button's title), and shows a check
  * once the action is done. Exit ends the tour. Every control is at least
- * 44px tall on a phone, where the card is a bottom sheet.
+ * 44px on a touch screen (`touch-target`, index.css).
  */
 
 import { Check, ChevronLeft, MousePointerClick } from "lucide-react";
@@ -55,7 +55,7 @@ export interface TourControlsProps {
   skip?: { label: string; onClick: () => void };
 }
 
-const TAP = "min-h-[44px] sm:min-h-0";
+const TAP = "touch-target";
 
 export function TourControls({
   stepNumber,
