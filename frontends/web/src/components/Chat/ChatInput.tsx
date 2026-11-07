@@ -1727,6 +1727,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     };
 
     const handleRemoveAttachment = (attachmentId: string) => {
+      if (sendingRef.current || queueingRef.current || uploadQueue.isSendOwned(attachmentId)) return;
       removeAttachment(attachmentSessionId, attachmentId);
     };
 

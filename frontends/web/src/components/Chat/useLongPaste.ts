@@ -140,7 +140,7 @@ export function useLongPaste({ session, textarea, input, setInput, preferences, 
       return true;
     },
     submitting: () => {
-      rows.forEach((row) => { if (row.upload !== undefined) queue.forgetCompleted(row.upload); });
+      rows.forEach((row) => { if (row.upload !== undefined) queue.transferToSend(row.upload); });
     },
     sendFailed: () => {
       const ids = new Set(rows.map((r) => r.id));

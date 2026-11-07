@@ -20,6 +20,7 @@ import { useAttachmentStore } from "../../../store/attachmentStore";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 import { useChatParamsStore } from "../../../store/chatParamsStore";
 import { foldCount } from "../composerPriority";
+import { SurfaceProvider } from "../../../lib/surfaceContext";
 
 globalThis.ResizeObserver ??= class {
   observe() {}
@@ -109,6 +110,39 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("long paste send integration", () => {
+  it("hides every ordinary paste removal path during a delayed mobile send", async () => {
+    localStorage.clear();
+    const originalAttach = useAttachmentStore.getState().attachFile;
+    const originalRemove = useAttachmentStore.getState().removeAttachment;
+    const remove = vi.fn();
+    const attachFile = vi.fn(async (session: string, file: File) => {
+      const attachment = { id: "mobile-paste", filename: file.name, mime_type: file.type, size: file.size, url: "", attachment_type: "file_reference" as const };
+      useAttachmentStore.setState({ attachments: new Map([[session, [attachment]]]) });
+      return attachment;
+    });
+    let finish!: () => void;
+    const onSend = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    useAttachmentStore.setState({ attachFile, removeAttachment: remove });
+    try {
+      const view = renderWithQuery(<SurfaceProvider surface="mobile"><ChatInput onSend={onSend} attachmentDraftId="mobile-paste-test" /></SurfaceProvider>);
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: { files: [], items: [], getData: () => "long text\n".repeat(600) } });
+      await act(async () => { composer().dispatchEvent(event); });
+      fireEvent.click(screen.getByTestId("send-button"));
+      await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+      expect(screen.queryByRole("button", { name: /^Remove Pasted text / })).toBeNull();
+      expect(screen.getByText("Remove").closest("button")).toBeDisabled();
+      // Disabled fieldset controls are inert in the browser.
+      expect(screen.getByText("Remove").closest("button")?.matches(":disabled")).toBe(true);
+      expect(remove).not.toHaveBeenCalled();
+      view.unmount();
+      expect(remove).not.toHaveBeenCalled();
+      await act(async () => { finish(); });
+      expect(remove).not.toHaveBeenCalled();
+    } finally {
+      act(() => useAttachmentStore.setState({ attachFile: originalAttach, removeAttachment: originalRemove }));
+    }
+  });
   it.each([true, false])("blocks while uploading and preserves send-owned IDs on settlement (%s)", async (success) => {
     localStorage.clear();
     const original = useAttachmentStore.getState().attachFile;

@@ -175,6 +175,12 @@ describe("queueing a message while the agent is running", () => {
       expect(sendAgentMessageMock).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/^Attached: Pasted text /), attachments: ["paste-queued"] }));
       expect(screen.getByText("Edit").closest("button")).toBeDisabled();
       expect(screen.getByText("Remove").closest("button")).toBeDisabled();
+      // Submitted pastes must not reappear as ordinary removable attachments.
+      expect(screen.queryByRole("button", { name: /^Remove Pasted text / })).toBeNull();
+      for (const button of screen.getAllByRole("button").filter((button) => /remove/i.test(button.getAttribute("aria-label") ?? button.textContent ?? ""))) {
+        if (!button.matches(":disabled")) fireEvent.click(button);
+      }
+      expect(remove).not.toHaveBeenCalled();
       view.unmount();
       expect(remove).not.toHaveBeenCalled();
       await act(async () => { finish({ success, message: success ? "" : "rejected" }); });
