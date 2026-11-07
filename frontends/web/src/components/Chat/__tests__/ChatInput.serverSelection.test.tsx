@@ -11,7 +11,9 @@
  *     in localStorage, once, and then forgets it.
  */
 
-import { act, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { createInput } from "../../../lib/inputHelpers";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
@@ -33,6 +35,7 @@ const server = vi.hoisted(() => ({
   updates: [] as Array<{ params: Record<string, unknown>; expectedVersion: bigint | undefined }>,
   failNextWith: null as unknown,
   refetches: 0,
+  pending: null as Promise<void> | null,
 }));
 
 vi.mock("../../../lib/toast-manager", () => ({
@@ -59,7 +62,7 @@ vi.mock("../../../hooks/question-queries", () => ({
 const DEFINITION = {
   data: {
     workflow: {
-      inputs: { model: { type: "model" }, mode: { type: "string" } },
+      inputs: { model: { type: "model" }, mode: createInput("enum", { enumValues: ["auto", "manual", "plan"], default: "auto" }) },
       presets: { tag: "agent" },
     },
   },
@@ -81,7 +84,7 @@ vi.mock("../../../hooks/workflow-queries", async () => {
   const actual = await vi.importActual<typeof import("../../../hooks/workflow-queries")>(
     "../../../hooks/workflow-queries",
   );
-  return { ...actual, useWorkflowDefinitionQuery: () => DEFINITION };
+  return { ...actual, useWorkflowDefinitionQuery: () => DEFINITION, fetchWorkflow: async () => DEFINITION.data };
 });
 vi.mock("../../Settings/ModelPreferences", () => ({ loadTagModelConfigs: vi.fn().mockResolvedValue({}) }));
 vi.mock("../../../hooks/useSlashCommands", () => ({ useSlashCommands: () => [] }));
@@ -103,6 +106,9 @@ import type { UpdateWorkflowParamsRequest } from "../../../gen/reliant/v1/chat_p
 // per test: the composer also pushes on leaving a chat, after a test ends.
 setTransport(
   mockTransport({
+    "ChatService.GetThreadWorkflowInputs": {
+      response: { workflowName: WORKFLOW, inputs: { mode: { kind: { case: "stringValue", value: "plan" } } }, isRunning: true },
+    },
     "ChatService.UpdateWorkflowParams": (req: unknown) => {
       const request = req as UpdateWorkflowParamsRequest;
       if (server.failNextWith) {
@@ -111,7 +117,7 @@ setTransport(
         throw error;
       }
       server.updates.push({ params: paramsOf(request.params), expectedVersion: request.expectedVersion });
-      return { success: true, message: "ok" };
+      return server.pending ? server.pending.then(() => ({ success: true, message: "ok" })) : { success: true, message: "ok" };
     },
   }),
 );
@@ -136,6 +142,7 @@ beforeEach(() => {
   server.updates.length = 0;
   server.failNextWith = null;
   server.refetches = 0;
+  server.pending = null;
 });
 
 describe("composer opens on the server's selection", () => {
@@ -190,6 +197,58 @@ describe("composer adopts what the server says runs", () => {
 });
 
 describe("composer pushes edits to the selection", () => {
+  it("pushes a reset-only edit as null, then does not resend it on leaving", async () => {
+    server.selection = { workflowName: WORKFLOW, params: { mode: "plan" }, version: 4n };
+    const view = renderComposer();
+    await waitFor(() => expect(storeParams()).toEqual({ mode: "plan" }));
+    await userEvent.click(screen.getByRole("button", { name: "Show all settings" }));
+    await userEvent.click(screen.getByRole("button", { name: "default" }));
+    await waitFor(() => expect(server.updates).toHaveLength(1), PUSH_DEBOUNCE_WAIT);
+    expect(server.updates[0]).toEqual({ params: { mode: null }, expectedVersion: 4n });
+    expect(storeParams()).not.toHaveProperty("mode");
+    view.unmount();
+    expect(server.updates).toHaveLength(1);
+  });
+
+  it("carries reset intent on an immediate send before the debounce", async () => {
+    server.selection = { workflowName: WORKFLOW, params: { mode: "plan" }, version: 4n };
+    server.selection.params.model = { id: "claude-5.5-opus@claude" };
+    const send = vi.fn().mockResolvedValue(undefined);
+    renderWithQuery(<ChatInput onSend={send} chatId={CHAT_ID} isStreaming={false} />);
+    await waitFor(() => expect(storeParams().mode).toBe("plan"));
+    fireEvent.click(screen.getByRole("button", { name: "Show all settings" }));
+    fireEvent.click(screen.getByRole("button", { name: "default" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "continue" } });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", code: "Enter" });
+    expect(server.updates).toHaveLength(0);
+    await waitFor(() => expect(send).toHaveBeenCalled());
+    expect(send.mock.calls[0][3]).toEqual({ mode: null, model: { id: "claude-5.5-opus@claude" } });
+  });
+
+  it("pushes a thread settings reset rather than dropping the removed key", async () => {
+    renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} selectedThreadId="thread-1" isStreaming={false} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Show all settings" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "plan" }).className).toContain("border-primary"));
+    await userEvent.click(screen.getByRole("button", { name: "default" }));
+    await waitFor(() => expect(server.updates).toHaveLength(1), PUSH_DEBOUNCE_WAIT);
+    expect(server.updates[0].params).toEqual({ mode: null });
+  });
+
+  it.each([undefined, "thread-1"])("keeps a newer mode while reset is pending for %s", async (threadId) => {
+    server.selection = { workflowName: WORKFLOW, params: { mode: "plan" }, version: 4n };
+    let resolve!: () => void;
+    server.pending = new Promise<void>((done) => { resolve = done; });
+    renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} selectedThreadId={threadId} isStreaming={false} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Show all settings" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "plan" }).className).toContain("border-primary"));
+    await userEvent.click(screen.getByRole("button", { name: "default" }));
+    await waitFor(() => expect(server.updates).toHaveLength(1), PUSH_DEBOUNCE_WAIT);
+    await userEvent.click(screen.getByRole("button", { name: "manual" }));
+    await act(async () => { resolve(); });
+    await waitFor(() => expect(server.updates).toHaveLength(2), PUSH_DEBOUNCE_WAIT);
+    expect(server.updates.map(({ params }) => params)).toEqual([{ mode: null }, { mode: "manual" }]);
+  });
+
   it("pushes a Cmd+K H edit with the version it read, with no run live", async () => {
     server.selection = { workflowName: WORKFLOW, params: { model: { id: "claude-5.5-opus@claude" } }, version: 4n };
     renderComposer(false);

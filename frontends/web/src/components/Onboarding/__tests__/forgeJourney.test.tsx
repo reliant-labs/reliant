@@ -1,7 +1,7 @@
 /**
  * The forge journey's content (journeys/forge.tsx, journeys-spec.md §3): its
  * nine steps in Reliant and the forge shell, the demo host's own cut of ten
- * (DEMO_TOUR=short) or thirteen (full), each step's required action against the URL or signal the spec
+ * (DEMO_TOUR=short) or fourteen (full), each step's required action against the URL or signal the spec
  * names (watchAdvance, against a fake router), where Skip lands, and the copy
  * that differs in the forge shell.
  */
@@ -79,7 +79,7 @@ describe("the forge journey", () => {
     expect(forgeJourney.shells).toBeUndefined();
   });
 
-  it("is ten steps or fewer on the demo host: no profile or on-call; across and inside services, and what an agent reads", () => {
+  it("is ten steps or fewer on the demo host: no profile, on-call or agent card; across and inside services; how it was built last, before the end card", () => {
     resetShellForTests("demo");
     expect(active()).toEqual([
       "fg-console",
@@ -89,14 +89,36 @@ describe("the forge journey", () => {
       "fg-inside",
       "fg-logs",
       "fg-issue",
-      "fg-agent",
       "fg-ask",
+      "fg-built",
       "fg-done",
     ]);
     expect(active().length).toBeLessThanOrEqual(10);
   });
 
-  it("is every step on the demo host with DEMO_TOUR=full, the graph included", () => {
+  it("keeps fg-instrumented second in every cut; the short demo stays at ten by leaving out fg-agent, not fg-instrumented", () => {
+    // Every cut the engine can run, counted from activeJourneySteps (what the nav bar's "n / total" shows).
+    const cuts: [string, () => void, number][] = [
+      ["reliant", () => resetShellForTests("reliant"), 9],
+      ["forge", () => resetShellForTests("forge"), 9],
+      ["demo short", () => resetShellForTests("demo"), 10],
+      ["demo full", () => (resetShellForTests("demo"), setRuntimeConfig({ DEMO_TOUR: "full" })), 14],
+    ];
+    expect(step("fg-instrumented").isAvailable).toBeUndefined();
+    for (const [name, enter, total] of cuts) {
+      setRuntimeConfig({});
+      enter();
+      expect(active()[1], name).toBe("fg-instrumented");
+      expect(active(), name).toHaveLength(total);
+      expect(new Set(active()).size, name).toBe(total);
+    }
+    resetShellForTests("demo");
+    setRuntimeConfig({});
+    expect(active()).not.toContain("fg-agent");
+    expect(step("fg-agent").isAvailable?.()).toBe(false);
+  });
+
+  it("is every step on the demo host with DEMO_TOUR=full, the graph and the agent card included", () => {
     resetShellForTests("demo");
     setRuntimeConfig({ DEMO_TOUR: "full" });
     expect(active()).toEqual(forgeJourney.steps.map((s) => s.id));
@@ -113,6 +135,7 @@ describe("the forge journey", () => {
       "fg-oncall",
       "fg-agent",
       "fg-ask",
+      "fg-built",
       "fg-done",
     ]);
   });
@@ -126,6 +149,25 @@ describe("the forge journey", () => {
     expect(step("fg-done").target).toBeUndefined();
   });
 
+  it("shows How this app was built at fg-built as a wide modal card with no spotlight, and closes the page section at every step", () => {
+    const built = step("fg-built");
+    // No target: the engine draws a centred card, no highlight cutout; the card holds the player.
+    expect(built.target).toBeUndefined();
+    expect(built.targets).toBeUndefined();
+    expect(built.card).toEqual({ wide: true, modal: true });
+    expect(conditionsOf(built)).toEqual([]);
+    for (const s of forgeJourney.steps.filter((candidate) => candidate.route)) {
+      const search = openSearch(s.id);
+      expect("section" in search && search.section === undefined, s.id).toBe(true);
+    }
+    // The demo host only, and the last step before the end card.
+    resetShellForTests("reliant");
+    expect(built.isAvailable?.()).toBe(false);
+    resetShellForTests("demo");
+    expect(built.isAvailable?.()).toBe(true);
+    expect(active().slice(-2)).toEqual(["fg-built", "fg-done"]);
+  });
+
   it("finishes on forge's Apps in Reliant and the project picker in the forge shell", () => {
     expect(forgeJourney.finish?.("reliant")).toEqual({ to: "/forge" });
     expect(forgeJourney.finish?.("forge")).toEqual({ to: "/apps" });
@@ -137,7 +179,7 @@ describe("the forge journey", () => {
   });
 
   it("asks only for Next on the explaining steps", () => {
-    for (const id of ["fg-console", "fg-instrumented", "fg-inside", "fg-graph", "fg-oncall", "fg-agent", "fg-done"]) expect(conditionsOf(step(id)), id).toEqual([]);
+    for (const id of ["fg-console", "fg-built", "fg-instrumented", "fg-inside", "fg-graph", "fg-oncall", "fg-agent", "fg-done"]) expect(conditionsOf(step(id)), id).toEqual([]);
   });
 
   describe("required actions", () => {

@@ -78,9 +78,11 @@ import { isSelectorHidden } from "../../lib/executionMode";
 import { isRequiredInput } from "../workflow/run/runWorkflowValues";
 import {
   adoptServerParams,
+  applyParamPatch,
   currentThinkingLevel,
   flatToNestedParams,
   groupNamesOf,
+  nestChangedParams,
   nestedToFlatParams,
   paramValuesEqual,
   threadParamsAcceptChanges,
@@ -431,8 +433,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     } | null>(null);
     // Current thread param values (full values map, updated by WorkflowParamsPanel.onChange)
     const [threadParamValues, setThreadParamValues] = useState<Record<string, unknown> | null>(null);
-    // Last thread params synced to server (to detect unsaved changes)
-    const [threadSyncedParams, setThreadSyncedParams] = useState<Record<string, unknown>>({});
 
     // Whether we're currently showing a non-main thread's params
     const isViewingThreadParams = selectedThreadId != null && selectedThreadId !== chatId && threadParamsOverride != null;
@@ -504,20 +504,17 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       if (!selectedThreadId || selectedThreadId === chatId) {
         setThreadParamsOverride(null);
         setThreadParamValues(null);
-        setThreadSyncedParams({});
         return;
       }
 
       if (!chatId || !currentProjectFromStore?.id) {
         setThreadParamsOverride(null);
         setThreadParamValues(null);
-        setThreadSyncedParams({});
         return;
       }
 
       // Clear stale state from previous thread immediately on switch
       setThreadParamValues(null);
-      setThreadSyncedParams({});
 
       let cancelled = false;
 
@@ -999,7 +996,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           clearLegacyChatParams(chatId);
           legacyPendingRef.current = null;
         }
-        commitSynced({ ...syncedRef.current, ...result.pushed });
+        commitSynced(applyParamPatch(syncedRef.current, result.pushed));
         // The server's copy is the truth: it may have moved a model off a
         // provider that cannot serve it. Adopt that, keeping any edit made
         // while the request was in flight.
@@ -1045,29 +1042,20 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       if (!isViewingThreadParams || !threadParamsAcceptChanges(threadParamsOverride)) return false;
       if (!chatId || !threadParamValues) return false;  // No local edits yet
 
-      const baseline = threadParamsOverride.values;
-      for (const [key, value] of Object.entries(threadParamValues)) {
-        // Compare against last-synced value if available, otherwise against fetched baseline
-        const reference = key in threadSyncedParams ? threadSyncedParams[key] : baseline[key];
-        if (!paramValuesEqual(reference, value)) return true;
-      }
-      return false;
-    }, [isViewingThreadParams, threadParamsOverride, chatId, threadParamValues, threadSyncedParams]);
+      return Object.keys(unsyncedParams(threadParamValues, threadParamsOverride.values)).length > 0;
+    }, [isViewingThreadParams, threadParamsOverride, chatId, threadParamValues]);
+
+    const selectedThreadRef = useRef(selectedThreadId);
+    selectedThreadRef.current = selectedThreadId;
 
     // Sync thread params to server
     const handleSyncThreadParams = useCallback(async () => {
       if (!chatId || !selectedThreadId || !threadParamValues || isSyncing) return;
 
       const baseline = threadParamsOverride?.values ?? {};
-      const changedParams: Record<string, unknown> = {};
-      for (const [key, value] of Object.entries(threadParamValues)) {
-        const reference = key in threadSyncedParams ? threadSyncedParams[key] : baseline[key];
-        if (!paramValuesEqual(reference, value)) {
-          changedParams[key] = value;
-        }
-      }
-
+      const changedParams = unsyncedParams(threadParamValues, baseline);
       if (Object.keys(changedParams).length === 0) return;
+      const patch = nestChangedParams(changedParams, threadParamValues, groupNamesOf(threadParamsOverride?.inputs));
 
       setIsSyncing(true);
       try {
@@ -1076,24 +1064,20 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           threadId: selectedThreadId,
           changedParams,
         });
-        await chatActions.updateWorkflowParams(chatId, changedParams, selectedThreadId);
-        // Update the baseline to include synced values so the sync button clears.
-        // Also clear threadParamValues so UI falls back to the updated baseline.
-        if (threadParamsOverride) {
-          setThreadParamsOverride({
-            ...threadParamsOverride,
-            values: { ...threadParamsOverride.values, ...changedParams },
-          });
-        }
-        setThreadParamValues(null);
-        setThreadSyncedParams({});
+        await chatActions.updateWorkflowParams(chatId, patch, selectedThreadId);
+        if (selectedThreadRef.current !== selectedThreadId) return;
+        const acknowledged = applyParamPatch(baseline, changedParams);
+        setThreadParamsOverride((current) => current ? { ...current, values: acknowledged } : current);
+        // Keep edits made while this request was pending, including another reset.
+        setThreadParamValues((current) => current && !paramValuesEqual(current, threadParamValues) ? current : null);
+
         logger.info("[ChatInput] Thread params synced successfully");
       } catch (error) {
         logger.error("[ChatInput] Failed to sync thread params", { error, chatId, threadId: selectedThreadId });
       } finally {
         setIsSyncing(false);
       }
-    }, [chatId, selectedThreadId, threadParamValues, threadParamsOverride, threadSyncedParams, isSyncing]);
+    }, [chatId, selectedThreadId, threadParamValues, threadParamsOverride, isSyncing]);
 
     // Auto-sync edited params to the in-flight workflow run, debounced.
     // Replaces the former manual "Sync" button: while a run is active, param
@@ -1356,10 +1340,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
         // The composer holds a group's params flat ("<group>.<param>"); a send
         // and the server's selection nest them.
-        const paramsToSend =
-          Object.keys(workflowParams).length > 0
-            ? flatToNestedParams(workflowParams, groupNames)
-            : undefined;
+        // Sending before the debounce fires must carry resets too. New chats
+        // have no server baseline and therefore no overrides to delete.
+        const sendParams = {
+          ...flatToNestedParams(workflowParams, groupNames),
+          ...nestChangedParams(unsyncedParams(workflowParams, chatId ? syncedRef.current : {}), workflowParams, groupNames),
+        };
+        const paramsToSend = Object.keys(sendParams).length > 0 ? sendParams : undefined;
 
         // Filter selectedPresets to only include valid targets for current workflow
         // This prevents stale presets from a different workflow from being sent

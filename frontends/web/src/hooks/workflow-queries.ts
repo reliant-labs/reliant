@@ -115,6 +115,8 @@ export interface WorkflowResponse {
   automationOnly?: boolean;
   /** The definition's declared `triggers:` (its WHEN). */
   triggers?: ProtoWorkflowListItem["triggers"];
+  /** The definition's declared `permissions:` (e.g. "approvals:decide"). */
+  permissions?: string[];
 }
 
 export interface InvalidWorkflow {
@@ -245,6 +247,7 @@ function listItemFromProto(proto: ProtoWorkflowListItem): WorkflowResponse {
     needsMachine: [...(proto.needsMachine || [])],
     automationOnly: proto.automationOnly || false,
     triggers: [...(proto.triggers || [])],
+    permissions: [...(proto.permissions || [])],
   };
 }
 

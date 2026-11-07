@@ -673,7 +673,9 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     if (!newItemName.trim() || !creatingType) return;
 
     try {
-      const fullPath = `/${newItemName.trim()}`;
+      // The root listing uses "/" as a sentinel, but child paths are relative
+      // to the selected workspace. A leading slash would target the host root.
+      const fullPath = newItemName.trim();
       const fileName = newItemName.trim();
       
       if (creatingType === "file") {
@@ -685,7 +687,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
             path: fullPath,
             type: "file",
           };
-          openFileViewer(newFileNode, currentProject.id, undefined, true); // New file - auto-focus
+          openFileViewer(newFileNode, currentProject.id, worktreeId, true); // New file - auto-focus
         }
       } else {
         await createFolder(fullPath, worktreeId);
