@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -34,6 +35,14 @@ type retirementTree struct {
 	// git pointer, a .git anywhere in it is a nested repository and a hold,
 	// and remove takes the directory itself last.
 	subtree bool
+	// path is the checkout's absolute path, for the git questions below.
+	path string
+	// tracked is every path HEAD tracks in the checkout and every directory
+	// on the way to one, read only when the inventory first meets a
+	// never-listed name (trackedPath); head is the commit it was read from.
+	tracked     map[string]bool
+	head        string
+	trackedRead bool
 }
 
 // maxRetirementEntries bounds one inventory. A checkout with its installs
@@ -75,7 +84,7 @@ func retirementRoot(path string) (*retirementTree, error) {
 		parent.Close()
 		return nil, err
 	}
-	return &retirementTree{root: root, parent: parent, name: filepath.Base(abs)}, nil
+	return &retirementTree{root: root, parent: parent, name: filepath.Base(abs), path: abs}, nil
 }
 func (t *retirementTree) close()                      { t.root.Close(); t.parent.Close() }
 func (t *retirementTree) inspectionFiles() []*os.File { return []*os.File{t.root, t.parent} }
@@ -399,7 +408,7 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 			if rel != "" {
 				path = rel + "/" + name
 			}
-			if !inPackage && neverListed(path) {
+			if !inPackage && neverListed(path) && !t.trackedPath(ctx, path) {
 				return fmt.Errorf("protected descendant: %s", path)
 			}
 			if name == ".git" && (rel != "" || t.subtree) {
@@ -477,6 +486,59 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 	}
 	return entries, bytes, newest, nil
 }
+
+// trackedPath reports whether rel is a file HEAD tracks in this checkout, or
+// a directory holding one. The never-list protects the user's data: an
+// ignored .env, a local database, a secrets directory nothing commits. A
+// tracked deploy/secrets/ or internal/secrets/ package is source, in a commit
+// the classifier proves is on the remote, and the classifier proves the
+// working tree matches it; holding it held every checkout of every project
+// that has one (2026-11-07: 174 of 470 live worktrees on one machine, all of
+// control-plane's and reliant's, so no workspace that contains them could
+// ever be retired). Only HEAD's own paths are exempt: an ignored or
+// untracked file inside a tracked secrets/ is still a protected descendant.
+// The exemption is tied to the commit it was read from (validate), so a
+// HEAD that moves after inspection holds the tree. A checkout git cannot
+// read exempts nothing. A regenerable subtree never consults it.
+func (t *retirementTree) trackedPath(ctx context.Context, rel string) bool {
+	if t.subtree {
+		return false
+	}
+	if !t.trackedRead {
+		t.trackedRead = true
+		t.head, t.tracked = trackedInHead(ctx, t.path)
+	}
+	return t.tracked[rel]
+}
+
+// trackedInHead is the commit HEAD names in checkout and the set of paths its
+// tree holds, directories on the way to each included; "" and nil when git
+// cannot say.
+func trackedInHead(ctx context.Context, checkout string) (string, map[string]bool) {
+	head, err := git(ctx, checkout, nil, "rev-parse", "--verify", "HEAD^{commit}")
+	if err != nil || head == "" {
+		return "", nil
+	}
+	out, err := gitRaw(ctx, checkout, nil, "ls-tree", "-r", "-z", "--full-tree", "--name-only", head)
+	if err != nil {
+		return "", nil
+	}
+	return head, trackedSet(out)
+}
+
+// trackedSet is the paths of NUL-separated `git ls-tree -r -z --name-only`
+// output and every directory on the way to each.
+func trackedSet(lsTree []byte) map[string]bool {
+	tracked := map[string]bool{}
+	for _, p := range strings.Split(string(lsTree), "\x00") {
+		for p != "" && p != "." && !tracked[p] {
+			tracked[p] = true
+			p = path.Dir(p)
+		}
+	}
+	return tracked
+}
+
 func retirementMatchesPath(t *retirementTree, path string) (bool, error) {
 	other, err := retirementRoot(path)
 	if err != nil {
@@ -512,6 +574,13 @@ func (t *retirementTree) validate(ctx context.Context) error {
 	}
 	if !retirementIdentity(named, t.entries[""].stat) {
 		return errors.New("checkout pathname was replaced")
+	}
+	if t.head != "" {
+		// Tracked paths were exempted as of t.head; a checkout that has moved
+		// since is not the one the exemption describes.
+		if head, err := git(ctx, t.path, nil, "rev-parse", "--verify", "HEAD^{commit}"); err != nil || head != t.head {
+			return errors.New("checkout HEAD changed since inspection")
+		}
 	}
 	entries, _, _, err := t.inventory(ctx)
 	if err != nil {
