@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
@@ -8,7 +8,7 @@ import { JourneyTour } from "@/components/Onboarding/JourneyTour";
 import { resetShellForTests } from "@/lib/shell";
 import { DemoTips } from "../tips/DemoTips";
 import { DemoTourToast } from "../DemoTourToast";
-import { resetDemoSessionForTests } from "../demoSession";
+import { demoSession, resetDemoSessionForTests } from "../demoSession";
 import { DEMO_TIPS, DEMO_TIP_KEYS, demoTipKey } from "../tips";
 
 function renderDemo(path: string) {
@@ -18,8 +18,21 @@ function renderDemo(path: string) {
   render(<RouterProvider router={router} />);
   return { router, go: (to: string) => act(async () => { await router.navigate({ href: to }); }) };
 }
-beforeEach(() => { resetShellForTests("demo"); setTourShell("forge"); setTourStorage(memoryTourStorage()); resetDemoSessionForTests(); });
-afterEach(() => { cleanup(); setTourShell(null); resetShellForTests(); });
+const visibility: { callback: IntersectionObserverCallback; target?: Element }[] = [];
+function intersect(ratio: number) {
+  act(() => { for (const entry of visibility) if (entry.target?.isConnected) entry.callback([{ target: entry.target, isIntersecting: ratio > 0, intersectionRatio: ratio } as IntersectionObserverEntry], {} as IntersectionObserver); });
+}
+beforeEach(() => {
+  resetShellForTests("demo"); setTourShell("forge"); setTourStorage(memoryTourStorage()); resetDemoSessionForTests();
+  visibility.length = 0;
+  vi.stubGlobal("IntersectionObserver", class {
+    entry: typeof visibility[number];
+    constructor(callback: IntersectionObserverCallback) { this.entry = { callback }; visibility.push(this.entry); }
+    observe(target: Element) { this.entry.target = target; }
+    disconnect() { this.entry.target = undefined; }
+  });
+});
+afterEach(() => { cleanup(); setTourShell(null); resetShellForTests(); vi.unstubAllGlobals(); });
 
 it("arrival shows one compact card, no competing toast, auto-start or modal", async () => {
   const { router } = renderDemo("/forge/p/shop");
@@ -82,6 +95,43 @@ it("the corner disappears while the phone drawer is open", async () => {
     act(() => drawer.setAttribute("aria-modal", "true"));
     await waitFor(() => expect(screen.queryByTestId("demo-tip")).toBeNull());
     act(() => drawer.removeAttribute("aria-modal")); expect(await screen.findByTestId("demo-tip")).toBeInTheDocument();
+  } finally { drawer.remove(); }
+});
+it("reveals a new offer above retained page scroll, without resetting same-page filters or moving focus", async () => {
+  const { go } = renderDemo("/forge/p/shop/releases");
+  await screen.findByTestId("demo-tip"); intersect(1);
+  const main = screen.getByTestId("page");
+  main.tabIndex = -1; main.focus(); main.scrollTop = 700;
+  await go("/forge/p/shop/observability/dashboards");
+  await waitFor(() => expect(screen.getByTestId("demo-tip")).toHaveAttribute("data-tip", "dashboards"));
+  expect(main.scrollTop).toBe(0);
+  expect(main).toHaveFocus();
+  // Allow the scheduled reveal frame to settle; no wall-clock ordering assumption.
+  await act(async () => { await new Promise<void>((resolve) => requestAnimationFrame(() => resolve())); });
+  main.scrollTop = 250;
+  await go("/forge/p/shop/observability/dashboards?range=6h");
+  expect(main.scrollTop).toBe(250);
+  expect(main).toHaveFocus();
+});
+it("does not consume hidden/offscreen offers, marks visible ones, and preserves dismissal on remount", async () => {
+  const { go } = renderDemo("/forge/p/shop/releases");
+  await screen.findByTestId("demo-tip");
+  intersect(0); expect(demoSession.hasSeenTip("releases")).toBe(false);
+  const drawer = document.createElement("nav"); drawer.id = "sidebar-layout-nav"; document.body.appendChild(drawer);
+  try {
+    act(() => drawer.setAttribute("aria-modal", "true"));
+    await waitFor(() => expect(screen.queryByTestId("demo-tip")).toBeNull());
+    await go("/forge/p/shop/observability/dashboards"); intersect(1);
+    expect(demoSession.hasSeenTip("dashboards")).toBe(false);
+    act(() => drawer.removeAttribute("aria-modal"));
+    await screen.findByTestId("demo-tip");
+    intersect(0.5); expect(demoSession.hasSeenTip("dashboards")).toBe(false);
+    intersect(1); expect(demoSession.hasSeenTip("dashboards")).toBe(true);
+    fireEvent.click(screen.getByTestId("demo-tip-dismiss"));
+    cleanup(); renderDemo("/forge/p/shop/observability/dashboards");
+    await screen.findByTestId("demo-page-info"); expect(screen.queryByTestId("demo-tip")).toBeNull();
+    fireEvent.click(screen.getByTestId("demo-page-info"));
+    expect(await screen.findByTestId("demo-tip")).toHaveAttribute("data-tip", "dashboards");
   } finally { drawer.remove(); }
 });
 it("each explanation is brief, plain-language and has no local-stop arrays", () => {

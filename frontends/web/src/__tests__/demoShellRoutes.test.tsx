@@ -140,14 +140,16 @@ describe("explore first: the tour is offered, never started", () => {
   it("opens with one compact page card, not a competing toast or automatic tour", async () => {
     const router = renderDemoShell("/");
     await screen.findByTestId("console-overview");
-    expect(await screen.findByTestId("demo-tip")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("demo-tip")).toBeInTheDocument());
     expect(searchOf(router).tour).toBeUndefined();
     expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
   });
 
   it("starts the optional tour only from Take the tour", async () => {
     const router = renderDemoShell("/");
-    fireEvent.click(await screen.findByTestId("demo-page-tour-start"));
+    await screen.findByTestId("console-overview");
+    await waitFor(() => expect(screen.getByTestId("demo-page-tour-start")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("demo-page-tour-start"));
     await waitFor(() => expect(searchOf(router).tour).toBe("forge:fg-intro"));
     expect(tracked).toContainEqual({ event: "demo_page_tour_started", props: { tip: "overview" } });
     expect(screen.queryByTestId("demo-tour-toast")).toBeNull();

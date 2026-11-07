@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /** One compact, non-modal explanation of the current page. Exploration never starts a tour. */
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { CircleHelp } from "lucide-react";
@@ -47,20 +47,44 @@ export function PageAgentHelp({ tipKey }: { tipKey: DemoTipKey }) {
 }
 
 /** Keep the explanation in the page flow, never over a table, target or drawer. */
-function PageInfoFlow({ children }: { children: React.ReactNode }) {
+function PageInfoFlow({ children, onVisible }: { children: React.ReactNode; onVisible: () => void }) {
   const [host, setHost] = useState<HTMLElement | null>(null);
   useEffect(() => {
     const slot = document.createElement("div");
     slot.className = "mb-4 w-full max-w-xl";
+    let revealFrame: number | undefined;
     const attach = () => {
       const main = document.querySelector("main");
-      if (main && slot.parentElement !== main) { main.prepend(slot); setHost(slot); }
+      if (main && slot.parentElement !== main) {
+        main.prepend(slot);
+        setHost(slot);
+        // Console navigation retains this overflow scroller. Without resetting it,
+        // a newly offered card can be above the viewport and still be marked seen.
+        // Only an open offer mounts this component; dismissed pages keep their scroll.
+        main.scrollTop = 0;
+        revealFrame = requestAnimationFrame(() => { if (slot.isConnected) main.scrollTop = 0; });
+      }
     };
     attach();
     const observer = new MutationObserver(attach);
     observer.observe(document.body, { childList: true, subtree: true });
-    return () => { observer.disconnect(); slot.remove(); };
+    return () => { observer.disconnect(); if (revealFrame !== undefined) cancelAnimationFrame(revealFrame); slot.remove(); };
   }, []);
+  useEffect(() => {
+    if (!host) return;
+    // Intersections are measured against the retained page scroller. Never consume
+    // a session offer before its card has actually been presented to the visitor.
+    const card = host.querySelector('[data-testid="demo-tip"]');
+    if (!card || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting || entry.intersectionRatio < 0.75) return;
+      if (document.querySelector('#sidebar-layout-nav[aria-modal="true"]')) return;
+      onVisible();
+      observer.disconnect();
+    }, { root: host.parentElement, threshold: 0.75 });
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [host, onVisible]);
   return host ? createPortal(children, host) : null;
 }
 
@@ -71,31 +95,35 @@ export function DemoTips() {
   const key = demoTipKey(location.pathname, search);
   const tourOpen = !!parseTourParam(search.tour);
   const [open, setOpen] = useState(false);
+  const [offeredKey, setOfferedKey] = useState<DemoTipKey | null>(null);
   const drawerOpen = useConsoleDrawerOpen();
 
   useEffect(() => {
     // The old global offer no longer competes with the page's own explanation.
     demoSession.dismissToast();
-    if (!key || tourOpen) { setOpen(false); return; }
+    if (!key || tourOpen) { setOpen(false); setOfferedKey(null); return; }
+    setOfferedKey(key);
     setOpen(!demoSession.hasSeenTip(key));
-    demoSession.markTipSeen(key);
   }, [key, tourOpen]);
+  const markVisible = useCallback(() => { if (offeredKey) demoSession.markTipSeen(offeredKey); }, [offeredKey]);
 
   if (tourOpen) return null;
   const tip = key ? DEMO_TIPS[key] : null;
   const dismiss = () => {
+    if (key) demoSession.markTipSeen(key);
     setOpen(false);
     trackEvent("demo_tip_dismissed", { tip: key ?? "none" });
   };
   const start = () => {
     if (!key) return;
+    demoSession.markTipSeen(key);
     trackEvent("demo_page_tour_started", { tip: key });
     void navigate({ search: ((prev: Record<string, unknown>) => ({ ...prev, tour: "forge:fg-intro" })) as never });
   };
   return (
     <>
-      {open && tip && key && !drawerOpen ? (
-        <PageInfoFlow><section aria-label={`About this page: ${tip.title}`} className="rounded-xl border border-border bg-popover p-3 text-popover-foreground" data-testid="demo-tip" data-tip={key}>
+      {open && offeredKey === key && tip && key && !drawerOpen ? (
+        <PageInfoFlow key={key} onVisible={markVisible}><section aria-label={`About this page: ${tip.title}`} className="rounded-xl border border-border bg-popover p-3 text-popover-foreground" data-testid="demo-tip" data-tip={key}>
           <h3 className="text-sm font-semibold">{tip.title}</h3>
           <p className="mt-1 text-sm leading-relaxed text-ink-muted">{tip.body}</p>
           <div className="mt-2 flex items-center justify-end gap-2">
