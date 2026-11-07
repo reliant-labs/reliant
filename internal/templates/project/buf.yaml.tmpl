@@ -1,0 +1,51 @@
+version: v2
+modules:
+  - path: proto
+{{- if .RESTEnabled}}
+# `api.rest: true` in forge.yaml — googleapis is required for the
+# `google/api/annotations.proto` import that vanguard's REST transcoder
+# reads off CRUD RPCs. Remove this block (and flip `api.rest: false`) to
+# drop the BSR dep.
+deps:
+  - buf.build/googleapis/googleapis
+{{- else}}
+# No `deps:` block by default — fresh scaffolds compile without any
+# BSR-hosted modules so anonymous users can run `forge generate`
+# without `buf registry login`. If you need googleapis annotations
+# (`google/api/annotations.proto`, `google/api/field_behavior.proto`),
+# add them back via:
+#   deps:
+#     - buf.build/googleapis/googleapis
+# Well-known protos (`google/protobuf/*`) are part of protobuf itself
+# and do NOT require a BSR dep.
+{{- end}}
+lint:
+  use:
+    - STANDARD
+  ignore:
+    # Vendored protovalidate option definitions (buf.validate field rules,
+    # compiled offline). It is proto2 with an unversioned package, which
+    # trips STANDARD — but it is upstream, not project code, so lint skips
+    # it. Forge vendors it under proto/buf/validate on first use.
+    - proto/buf/validate
+  # Common STANDARD rules that legacy protos frequently trip during
+  # migration. Uncomment any rule you need to silence for a project
+  # that's importing pre-existing .proto files; the forge scaffold
+  # itself produces shapes that satisfy STANDARD without exceptions.
+  #
+  # - PACKAGE_VERSION_SUFFIX:        package names must end in `.v1`/`.v2`/etc.
+  # - RPC_REQUEST_STANDARD_NAME:     RPC inputs must be named `<Rpc>Request`.
+  # - RPC_RESPONSE_STANDARD_NAME:    RPC outputs must be named `<Rpc>Response`.
+  # - RPC_REQUEST_RESPONSE_UNIQUE:   inputs/outputs must not be shared between RPCs.
+  #
+  # FRICTION 2026-06-02: cp-forge proto port hit all four on first
+  # `forge generate` after porting source protos that pre-dated the
+  # forge convention. See proto / proto-breaking skills.
+  # except:
+  #   - PACKAGE_VERSION_SUFFIX
+  #   - RPC_REQUEST_STANDARD_NAME
+  #   - RPC_RESPONSE_STANDARD_NAME
+  #   - RPC_REQUEST_RESPONSE_UNIQUE
+breaking:
+  use:
+    - FILE

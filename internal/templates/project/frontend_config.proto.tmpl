@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package {{.ConfigPackage}};
+
+import "forge/v1/forge.proto";
+
+option go_package = "{{.ConfigGoPackage}}";
+
+// {{.MessageName}} is the PUBLIC runtime configuration for the "{{.Frontend}}"
+// frontend.
+//
+// ── Why this is its own FILE, and why it is the SAME proto package ───────
+//
+// One config.proto per project does not survive contact with a second
+// consumer: each binary and each frontend adds a message, and they arrive
+// from different changes at different times. Splitting per consumer keeps
+// ownership legible — this file is the "{{.Frontend}}" bundle's surface and
+// nothing else's, so adding a field here cannot widen another consumer's,
+// and `forge scaffold frontend` can add a consumer by writing a NEW file
+// rather than editing one that already has content in it.
+//
+// The package is `{{.ConfigPackage}}` — the same package config.proto declares —
+// and that is load-bearing rather than incidental:
+//
+//   - buf's STANDARD lint enforces PACKAGE_DIRECTORY_MATCH, so a proto's
+//     package must match its directory. Putting this file in a directory
+//     of its own would therefore force its own PACKAGE, which forces its
+//     own Go package — and pkg/config/config_gen.go imports exactly ONE
+//     generated config package and refers to every config message through
+//     it. A per-consumer directory breaks that shim's compilation, not just
+//     its tidiness.
+//   - Sharing the package means shared DEFINITIONS need no cross-package
+//     import at all: a block declared in config.proto composes onto a
+//     message here by bare name, so one fact (a collector endpoint, an
+//     API origin) can be declared once and projected into every consumer
+//     that needs it, which is the whole point of the composition model.
+//   - The package (and the directory) carry the PROJECT's name so that it
+//     is unique to this project: the protobuf runtime registers every file
+//     by path and every message by full name, process-wide, so two projects
+//     sharing `config.v1` could never be linked into one binary.
+//
+// The generators do not care either way — they read config messages from
+// the forge descriptor, which protoc-gen-forge builds by walking every
+// compiled proto — so this layout is chosen for the two constraints above.
+//
+// ── Everything here is PUBLIC ────────────────────────────────────────────
+//
+// These values are delivered to a browser: KCL renders them per environment
+// into config.js, which assigns window.__FORGE_CONFIG__ before the bundle
+// runs, and the generated src/lib/config_gen.ts validates and types them.
+// Anyone who opens devtools can read every one of them.
+//
+// A field marked `sensitive: true` reaching this message is a GENERATE-TIME
+// ERROR, not a warning — a leaked credential cannot be un-shipped, so the
+// only useful moment to refuse is before the value is ever written into a
+// bundle. If the browser needs a capability, it needs a token minted by the
+// backend, not the credential itself: declare the secret on a
+// binary-bound message and let the backend hold it.
+//
+// ── Adding a field ───────────────────────────────────────────────────────
+//
+// Add it here, run `forge generate`, and read it via
+// `loadConfig().<ENV_VAR>` from src/lib/config_gen.ts. Never reach for
+// process.env / import.meta.env: both bundlers inline those at BUILD time,
+// which freezes the value into the artifact and makes the bundle
+// unpromotable between environments. Per-environment values go in
+// deploy/kcl/<env>/config.k as a `{{.MessageName}} { ... }` instance.
+message {{.MessageName}} {
+  option (forge.v1.frontend_config) = {frontend: "{{.Frontend}}"};
+
+  string api_url = 1 [(forge.v1.config) = {
+    env_var: "API_URL"
+    default_value: "http://localhost:{{.APIPort}}"
+    description: "Origin of the Connect RPC endpoint this frontend calls. Every service mounts onto the binary's one Connect mux, so this is one origin for the whole API. Deployed environments pin their own in deploy/kcl/<env>/config.k. IN THE DEV LOOP THIS DEFAULT IS STALE AND MUST NOT BE TRUSTED: `forge env up` gives the backend a kernel-assigned port and injects the live origin as NEXT_PUBLIC_API_URL / VITE_API_URL / EXPO_PUBLIC_API_URL, which src/lib/connect.ts prefers over everything here. Build a client from the generated transport rather than reading this value, or you will dial the port the default happens to name — which in a project with a dev IdP is the IdP."
+  }];
+
+  string mock_api = 2 [(forge.v1.config) = {
+    env_var: "MOCK_API"
+    description: "Mock-transport mode: `true` answers every RPC locally from fixtures and signs the UI in as a fixture user, so no IdP and no /auth/session are needed. `hybrid` overlays ?scenario= fixtures over a real backend; the UI shows the same fixture user, but forwarded RPCs carry only the browser's real session cookie. Empty means the real backend, which is the deployed value."
+  }];
+
+  string app_version = 3 [(forge.v1.config) = {
+    env_var: "APP_VERSION"
+    description: "Build identifier surfaced in the UI and as a telemetry attribute. Empty renders as a development placeholder."
+  }];
+
+  string otel_endpoint = 4 [(forge.v1.config) = {
+    env_var: "OTEL_ENDPOINT"
+    description: "Ingest base for BROWSER telemetry (errors, console, network, traces): a path on the app's own origin, normally `/_otel`, which the dev server proxies — and a deployed environment's ingress must route — to a collector's OTLP/HTTP port. The browser never holds a collector address or a secret. Empty or `off` disables browser telemetry; the dev default is `/_otel`, a frontend on platform hosting (forge.OnHosted) defaults to `/_otel` too, and any other deployed runtime defaults to empty."
+  }];
+
+  // ── NO OIDC FIELDS HERE, AND THAT IS THE POINT ───────────────────────
+  //
+  // Sign-in is NATIVE: the browser POSTs credentials to this app's own API
+  // and never contacts the identity provider. The server runs the whole
+  // OIDC flow (internal/app/login_broker.go) and answers with an HttpOnly
+  // session cookie.
+  //
+  // So the issuer URL, the client id, the redirect URI, the scopes and the
+  // resource indicator are all BACKEND configuration now. They live on the
+  // server's own config message, and shipping them here would be worse
+  // than redundant: every value the browser is handed is a value some
+  // future code can be tempted to use to call the issuer directly, which
+  // is exactly the architecture this replaced.
+  //
+  // Field tags 5-9 are RESERVED rather than reused, so a project that
+  // upgrades cannot silently re-bind an old NEXT_PUBLIC_OIDC_* value to a
+  // new meaning.
+  reserved 5, 6, 7, 8, 9;
+  reserved "oidc_issuer", "oidc_client_id", "oidc_redirect_uri", "oidc_scopes", "oidc_resource";
+
+  // NEXT_PUBLIC_BASE_PATH is deliberately NOT here, and this is the comment
+  // for whoever is about to add it.
+  //
+  // The base path is genuinely BUILD-time. next.config.ts reads it to set
+  // `basePath` and `assetPrefix`, which determine the paths every emitted
+  // asset is written to and referenced by. A runtime document delivered to
+  // the browser cannot relocate files a build has already written — so a
+  // base_path field here would be a value the app reads and cannot honor,
+  // which is strictly worse than not having it: it would look configurable
+  // and silently disagree with where the assets actually are.
+  //
+  // Change it in forge.yaml (`frontends[].base_path`) and rebuild. The
+  // generated src/lib/basepath_gen.ts carries the same value for code that
+  // needs to join it onto a URL.
+}
