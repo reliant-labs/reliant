@@ -50,13 +50,13 @@ function formatDiagnosticReport(params: {
   lines.push(`User Agent: ${typeof navigator !== 'undefined' ? navigator.userAgent : ''}`);
   lines.push('');
   lines.push('Message:');
-  lines.push(`${err.name}: ${err.message}`);
+  lines.push(`${err.name}: ${redactImportUrls(err.message)}`);
   lines.push('');
   lines.push('Stack:');
   lines.push(redactImportUrls(err.stack ?? '(no stack)'));
   if (err instanceof StaleBuildError) {
     lines.push('', 'Original import failure (URLs have credentials, query and fragments removed):');
-    lines.push(importFailureDetails(err.cause, typeof performance !== 'undefined' ? performance.getEntriesByType('resource') : []));
+    lines.push(importFailureDetails(err.cause, typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function' ? performance.getEntriesByType('resource') : []));
   }
 
   if (componentStack) {
@@ -170,7 +170,7 @@ export function ErrorFallbackUI(props: {
                 ) : null}
               </div>
               <div className="mt-2 font-mono text-xs text-destructive-ink break-words">
-                {err.name}: {err.message}
+                {err.name}: {redactImportUrls(err.message)}
               </div>
             </div>
 
