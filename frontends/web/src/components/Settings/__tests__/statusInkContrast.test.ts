@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Status text meets WCAG AA (4.5:1) on every scheme's page and card, in both
  * modes — including on the 10-12% tint of its own fill that badges sit on.

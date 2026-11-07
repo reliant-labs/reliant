@@ -1,11 +1,12 @@
 package rundiagnostics
 
 import (
-	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
@@ -16,10 +17,10 @@ func TestNodesVerdictsTimingAndCommandTails(t *testing.T) {
 	raw, _ := json.Marshal(map[string]any{"stdout": strings.Repeat("earlier\n", 80) + "last line\n", "stderr": "token=topsecret\nerror"})
 	nodes := Nodes([]*core.StepExecution{
 		{ID: "failed", WorkflowID: "wf", StepID: "build", ActivityName: "ExecuteRunStep", CreatedAt: end,
-			ExitCode: sql.NullInt64{Int64: 2, Valid: true}, Success: sql.NullBool{Valid: true}, DurationMs: sql.NullInt64{Int64: 1000, Valid: true}, OutputJSON: sql.NullString{String: string(raw), Valid: true}},
+			ExitCode: ptr.Of(int64(2)), Success: ptr.Of(false), DurationMs: ptr.Of(int64(1000)), OutputJSON: ptr.Of(string(raw))},
 		{ID: "skip", StepID: "review", ActivityName: "SkippedStep"},
-		{ID: "ok", StepID: "compute", Success: sql.NullBool{Bool: true, Valid: true}},
-		{ID: "error", StepID: "fetch", ErrorMessage: sql.NullString{String: "Bearer abcdefghijklmnop", Valid: true}},
+		{ID: "ok", StepID: "compute", Success: ptr.Of(true)},
+		{ID: "error", StepID: "fetch", ErrorMessage: ptr.Of("Bearer abcdefghijklmnop")},
 	})
 	require.Len(t, nodes, 4)
 	require.Equal(t, "failed", nodes[0].Status)
@@ -40,7 +41,7 @@ func TestBoundsRedactBeforeCutAndBudget(t *testing.T) {
 	require.NotContains(t, bounded("before "+secret+" after", 80, 50), strings.Repeat("a", 10))
 	rows := make([]*core.StepExecution, RecordLimit)
 	for i := range rows {
-		rows[i] = &core.StepExecution{ErrorMessage: sql.NullString{String: strings.Repeat("x", 4000), Valid: true}}
+		rows[i] = &core.StepExecution{ErrorMessage: ptr.Of(strings.Repeat("x", 4000))}
 	}
 	n := Nodes(rows)
 	total := 0
@@ -50,7 +51,7 @@ func TestBoundsRedactBeforeCutAndBudget(t *testing.T) {
 	require.Less(t, total, TextBudget+RecordLimit*60)
 	require.LessOrEqual(t, len(bounded(strings.Repeat("x", 65537), TailBytes, 50)), TailBytes+50)
 	require.Contains(t, bounded(strings.Repeat("earlier\n", 15000)+"final error", TailBytes, 50), "omitted")
-	require.Contains(t, Failure([]*core.StepExecution{{StepID: "test", ErrorMessage: sql.NullString{String: "bad", Valid: true}}}), "Node test failed: bad")
+	require.Contains(t, Failure([]*core.StepExecution{{StepID: "test", ErrorMessage: ptr.Of("bad")}}), "Node test failed: bad")
 }
 
 // A save_message node is shown like any node; once it is marked as the node
@@ -58,11 +59,11 @@ func TestBoundsRedactBeforeCutAndBudget(t *testing.T) {
 // text it wrote, and a completed save_message does not echo its text.
 func TestSaveMessageNodeErrorCarriesItsRedactedText(t *testing.T) {
 	failed := &core.StepExecution{ID: "stopped", StepID: "stopped", ActivityName: "SaveMessage",
-		Success:      sql.NullBool{Bool: false, Valid: true},
-		ErrorMessage: sql.NullString{String: "declared the run's outcome: failure", Valid: true},
-		OutputJSON:   sql.NullString{String: `{"message":"Review did not finish: Bearer abcdefghijklmnop"}`, Valid: true}}
+		Success:      ptr.Of(false),
+		ErrorMessage: ptr.Of("declared the run's outcome: failure"),
+		OutputJSON:   ptr.Of(`{"message":"Review did not finish: Bearer abcdefghijklmnop"}`)}
 	done := &core.StepExecution{ID: "done", StepID: "done", ActivityName: "SaveMessage",
-		Success: sql.NullBool{Bool: true, Valid: true}, OutputJSON: sql.NullString{String: `{"message":"all good"}`, Valid: true}}
+		Success: ptr.Of(true), OutputJSON: ptr.Of(`{"message":"all good"}`)}
 	nodes := Nodes([]*core.StepExecution{failed, done})
 	require.Equal(t, "failed", nodes[0].Status)
 	require.Contains(t, nodes[0].Error, "declared the run's outcome: failure: ")

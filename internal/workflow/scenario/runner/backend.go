@@ -832,7 +832,15 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 	go func() {
 		defer close(runDone)
 		defer func() { runPanic = recover() }()
-		env.ExecuteWorkflow(runtime.DynamicWorkflow, runtime.WorkflowInput{
+		// Fixtures enter only the root's in-memory workflow context, not the
+		// production WorkflowInput/resume contract or child workflow arguments.
+		root := runtime.DynamicWorkflow
+		if len(sc.State) > 0 {
+			root = func(ctx workflow.Context, input runtime.WorkflowInput) (*runtime.WorkflowResult, error) {
+				return runtime.DynamicWorkflow(runtime.WithScenarioState(ctx, sc.State), input)
+			}
+		}
+		env.ExecuteWorkflow(root, runtime.WorkflowInput{
 			ChatID:       "scenario-chat",
 			WorkflowName: r.workflow.GetName(),
 			Inputs:       inputs,

@@ -2,8 +2,9 @@ package scenario_test
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -67,11 +68,11 @@ func newScenarioRepo(f *fixture) *scenario.MockRepository {
 	scenarios := map[string]*db.WorkflowScenario{
 		ownScenarioID: {
 			ID: ownScenarioID, UserID: "test-user", Name: "Own scenario", Events: fixtureScenario,
-			WorkflowDraftID: sql.NullString{String: ownWorkflowDraft, Valid: true},
+			WorkflowDraftID: ptr.Of(ownWorkflowDraft),
 		},
 		otherScenarioID: {
 			ID: otherScenarioID, UserID: "someone-else", Name: "Other scenario", Events: fixtureScenario,
-			WorkflowDraftID: sql.NullString{String: "draft-other", Valid: true},
+			WorkflowDraftID: ptr.Of("draft-other"),
 		},
 	}
 	draft := &db.WorkflowDraft{ID: ownWorkflowDraft, UserID: "test-user", Slug: ownWorkflowSlug, Definition: fixtureWorkflow}
@@ -105,7 +106,7 @@ func newScenarioRepo(f *fixture) *scenario.MockRepository {
 		ListWorkflowScenariosByDraftFunc: func(_ context.Context, draftID string) ([]*db.WorkflowScenario, error) {
 			var out []*db.WorkflowScenario
 			for _, s := range scenarios {
-				if s.WorkflowDraftID.String == draftID {
+				if ptr.From(s.WorkflowDraftID) == draftID {
 					out = append(out, s)
 				}
 			}

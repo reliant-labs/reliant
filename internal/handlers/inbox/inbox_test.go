@@ -3,7 +3,6 @@ package inbox
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -466,7 +465,7 @@ func TestListInbox_PausedAutomationRunNamesTheRunAndTheCause(t *testing.T) {
 	for i, msg := range []string{"an earlier failure", cause} {
 		require.NoError(t, f.repo.CreateStepExecution(f.ctx, &db.StepExecution{
 			ID: fmt.Sprintf("se-%d", i), WorkflowID: "chat-paused", StepID: "gate", ActivityName: "ExecuteRunStep",
-			ErrorMessage: sql.NullString{String: msg, Valid: true},
+			ErrorMessage: ptr.Of(msg),
 			CreatedAt:    failedAt.Add(time.Duration(i-1) * time.Minute),
 		}))
 	}

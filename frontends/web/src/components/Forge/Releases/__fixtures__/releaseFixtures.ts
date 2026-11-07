@@ -270,6 +270,7 @@ function promotion(
     gates: [],
     bundleId: `bundle-${hexOf(envId + version + agoMs, 8)}`,
     bundleDigest: `sha256:${hexOf(`bundle/${envId}/${version}`, 64)}`,
+    resolvedArtifacts: Object.fromEntries((RELEASES.find((r) => r.version === version)?.artifacts ?? []).filter((a) => a.kind === "image").map((a) => [a.name, a.digest])),
     ...extra,
   };
 }
@@ -340,7 +341,7 @@ export const FIXTURE_NAMES = new Map([
 
 // ── Comparisons ─────────────────────────────────────────────────────────────
 
-function compare(fromVersion: string, toVersion: string, environmentId?: string): ReleaseComparison {
+function compare(fromVersion: string, toVersion: string, environmentId?: string, workload?: string): ReleaseComparison {
   const from = RELEASES.find((r) => r.version === fromVersion) ?? null;
   const to = RELEASES.find((r) => r.version === toVersion) ?? null;
   const fromIndex = V.indexOf(fromVersion);
@@ -373,7 +374,7 @@ function compare(fromVersion: string, toVersion: string, environmentId?: string)
             kind: "Deployment",
             namespace: "control-plane-prod",
             name: a.name === "control-plane" ? "admin-server" : a.name,
-            workload: a.name,
+            workload: a.name === "control-plane" ? "admin-server" : a.name,
             summary: `image ${a.name} ${a.from.slice(7, 19)} → ${a.to.slice(7, 19)}`,
             images: [{ artifact: a.name, from: a.from, to: a.to }],
           })),
@@ -426,7 +427,7 @@ function compare(fromVersion: string, toVersion: string, environmentId?: string)
     artifacts,
     unchangedArtifacts: (to?.artifacts.length ?? 0) - artifacts.length,
     objects: !environmentId
-      ? { state: "no-environment", detail: "", deltas: [], unchanged: 0, summariesMissing: false }
+      ? { state: "no-environment", detail: "", deltas: [], unchanged: 0, summariesMissing: false, workload: "" }
       : oldest
         ? {
             state: "bundle-missing",
@@ -434,8 +435,19 @@ function compare(fromVersion: string, toVersion: string, environmentId?: string)
             deltas: [],
             unchanged: 0,
             summariesMissing: false,
+            workload: workload ?? "",
           }
-        : { state: "compared", detail: "", deltas, unchanged: 46, summariesMissing: false },
+        : workload
+          ? // The server's workload filter: the objects forge tagged with it, or untagged ones named like it.
+            {
+              state: "compared",
+              detail: "",
+              deltas: deltas.filter((d) => d.workload === workload || (!d.workload && d.name === workload)),
+              unchanged: 3,
+              summariesMissing: false,
+              workload,
+            }
+          : { state: "compared", detail: "", deltas, unchanged: 46, summariesMissing: false, workload: "" },
   };
 }
 
@@ -558,7 +570,7 @@ export function createReleasesFixtureApi(options: ReleasesFixtureOptions = {}): 
     compareReleases: (req) =>
       answer(() => {
         if (options.compareFails) throw new ConnectError("compare timed out", Code.DeadlineExceeded);
-        return compare(req.from, req.to, req.environmentId);
+        return compare(req.from, req.to, req.environmentId, req.workload);
       }),
     listPromotions: (environmentId) =>
       answer(() => {

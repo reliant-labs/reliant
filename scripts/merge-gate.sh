@@ -238,7 +238,10 @@ gen_forge() {
     judge generate "$b" "$wt"
     return
   fi
-  (cd "$wt" && GOMAXPROCS=$gen_procs task generate:forge) || return 1
+  # generate.log stays on the runner and the queue's generate is its longest
+  # phase: scripts/generate-timings.sh puts its five slowest steps in the
+  # summary (forge's FORGE_GENERATE_TIMINGS table) and keeps its exit status.
+  (cd "$wt" && GOMAXPROCS=$gen_procs "$root/scripts/generate-timings.sh" "$L/notes" task generate:forge) || return 1
   judge generate "$b" "$wt" || return 1
   (cd "$wt" && GOMAXPROCS=$gen_procs "${forge[@]}" lint --no-fix --conventions) || { echo "forge lint --conventions failed"; return 1; }
 }

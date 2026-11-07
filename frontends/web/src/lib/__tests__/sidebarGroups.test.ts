@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import { WorktreeStatus, type WorktreeSummary } from "../../gen/reliant/v1/worktree_pb";

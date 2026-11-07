@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * `{{ nodes.<id>. }}` completion offers exactly what the step's Outputs tab
  * and Insert data offer: one source, the catalog's ListNodes output fields

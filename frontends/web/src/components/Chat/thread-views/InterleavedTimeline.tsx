@@ -50,6 +50,7 @@ import { useChatThreadMode } from "./useChatThreadMode";
 import {
   buildSimplifiedTimeline,
   createSegmentReader,
+  isRoutineActivityMessage,
   type MessageSlice,
   type WorkItem,
 } from "./simplifiedTurns";
@@ -963,7 +964,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     let lastMessageId: string | undefined;
     for (let i = detailedTimelineItems.length - 1; i >= 0; i--) {
       const item = detailedTimelineItems[i];
-      if (item.type === "message") {
+      if (item.type === "message" && !isRoutineActivityMessage(item.message)) {
         lastMessageId = item.message.id;
         break;
       }
@@ -1245,7 +1246,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       const index = timelineItems.findIndex(
         (item) =>
           (item.type === "message" && item.message.id === messageId) ||
-          (item.type === "work" && item.work.parts.some((part) => part.message.id === messageId)),
+          (item.type === "work" && (
+            item.work.parts.some((part) => part.message.id === messageId) ||
+            item.work.events?.some((event) => event.message.id === messageId)
+          )),
       );
       // Not in the loaded window — the message lives in a page we have not
       // fetched yet, so there is nothing to scroll to.
@@ -1689,7 +1693,14 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       )}
       <div
         ref={setScrollerEl}
-        className="h-full overflow-y-auto"
+        className="h-full overflow-y-auto overflow-x-hidden"
+        // overflow-x-hidden is a guard, not the fix: a row too wide for the
+        // transcript (an AgentMessageCard sized to its subject did this) must
+        // wrap or scroll inside itself. Without the guard one such row made
+        // the whole conversation scroll sideways, since overflow-y: auto
+        // makes the x axis scrollable too. e2e/chat-width.spec.ts measures
+        // scrollWidth, which still sees an overflowing row.
+        //
         // "contain": the end-of-list bounce stays (it is macOS's native
         // rubber-band; its length is set by the OS, not here), but a scroll
         // past either end never chains to the page behind the transcript.

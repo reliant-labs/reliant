@@ -1,10 +1,11 @@
 package rundiagnostics
 
 import (
-	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,7 @@ func TestCredentialFormatsFailClosedBeforeTailAndFailureMessage(t *testing.T) {
 		t.Run(text, func(t *testing.T) {
 			for _, text := range []string{text, strings.Repeat("earlier\n", 45) + text + strings.Repeat("\nafter", 49)} {
 				raw, _ := json.Marshal(map[string]any{"stdout": text, "stderr": text})
-				rows := []*core.StepExecution{{StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 2, Valid: true}, OutputJSON: sql.NullString{String: string(raw), Valid: true}}}
+				rows := []*core.StepExecution{{StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: ptr.Of(int64(2)), OutputJSON: ptr.Of(string(raw))}}
 				nodes := Nodes(rows)
 				encoded, _ := json.Marshal(nodes)
 				require.NotContains(t, string(encoded), "opaque-secret-value")
@@ -47,11 +48,11 @@ func TestCredentialFormatsFailClosedBeforeTailAndFailureMessage(t *testing.T) {
 
 func TestOversizedRawProjectionIsOmittedBeforeParsing(t *testing.T) {
 	raw := `{"stdout":"` + strings.Repeat("s", 2<<20) + `"}`
-	rows := []*core.StepExecution{{ActivityName: "ExecuteRunStep", OutputJSON: sql.NullString{String: raw, Valid: true}}}
+	rows := []*core.StepExecution{{ActivityName: "ExecuteRunStep", OutputJSON: ptr.Of(raw)}}
 	n := Nodes(rows)
 	require.Equal(t, "[output omitted: safe diagnostic limit]", n[0].StdoutTail)
 	large := testing.AllocsPerRun(10, func() { Nodes(rows) })
-	rows[0].OutputJSON.String = strings.Repeat("x", ScanLimit+1)
+	rows[0].OutputJSON = ptr.Of(strings.Repeat("x", ScanLimit+1))
 	small := testing.AllocsPerRun(10, func() { Nodes(rows) })
 	require.Equal(t, small, large, "oversized content must not be parsed or scanned; allocation count is independent of payload size")
 }

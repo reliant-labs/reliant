@@ -3,9 +3,10 @@ package runtime
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -233,10 +234,10 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 			WorkflowID:    workflowID,
 			StepID:        stepID,
 			ActivityName:  "ExecuteRunStep",
-			Success:       sql.NullBool{Bool: true, Valid: true},
-			DurationMs:    sql.NullInt64{Int64: 100, Valid: true},
-			LoopNodeID:    sql.NullString{String: "test_loop", Valid: true},
-			LoopIteration: sql.NullInt64{Int64: 2, Valid: true},
+			Success:       ptr.Of(true),
+			DurationMs:    ptr.Of(int64(100)),
+			LoopNodeID:    ptr.Of("test_loop"),
+			LoopIteration: ptr.Of(int64(2)),
 			CreatedAt:     time.Now(),
 		}
 
@@ -247,13 +248,13 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 		retrieved, err := repo.GetStepExecution(ctx, stepExec.ID)
 		require.NoError(t, err)
 
-		assert.True(t, retrieved.LoopNodeID.Valid, "LoopNodeID should be valid")
-		assert.Equal(t, "test_loop", retrieved.LoopNodeID.String)
-		assert.True(t, retrieved.LoopIteration.Valid, "LoopIteration should be valid")
-		assert.Equal(t, int64(2), retrieved.LoopIteration.Int64)
+		assert.NotNil(t, retrieved.LoopNodeID, "LoopNodeID should be valid")
+		assert.Equal(t, "test_loop", ptr.From(retrieved.LoopNodeID))
+		assert.NotNil(t, retrieved.LoopIteration, "LoopIteration should be valid")
+		assert.Equal(t, int64(2), ptr.From(retrieved.LoopIteration))
 
 		t.Logf("✓ Step execution stored with loop_node_id=%s, loop_iteration=%d",
-			retrieved.LoopNodeID.String, retrieved.LoopIteration.Int64)
+			ptr.From(retrieved.LoopNodeID), ptr.From(retrieved.LoopIteration))
 	})
 
 	t.Run("step execution without loop context", func(t *testing.T) {
@@ -263,8 +264,8 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 			WorkflowID:   workflowID,
 			StepID:       stepID,
 			ActivityName: "SaveMessage",
-			Success:      sql.NullBool{Bool: true, Valid: true},
-			DurationMs:   sql.NullInt64{Int64: 50, Valid: true},
+			Success:      ptr.Of(true),
+			DurationMs:   ptr.Of(int64(50)),
 			CreatedAt:    time.Now(),
 		}
 
@@ -275,8 +276,8 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 		retrieved, err := repo.GetStepExecution(ctx, stepExec.ID)
 		require.NoError(t, err)
 
-		assert.False(t, retrieved.LoopNodeID.Valid, "LoopNodeID should be NULL for non-loop step")
-		assert.False(t, retrieved.LoopIteration.Valid, "LoopIteration should be NULL for non-loop step")
+		assert.Nil(t, retrieved.LoopNodeID, "LoopNodeID should be NULL for non-loop step")
+		assert.Nil(t, retrieved.LoopIteration, "LoopIteration should be NULL for non-loop step")
 
 		t.Logf("✓ Non-loop step execution stored with NULL loop context")
 	})
@@ -289,10 +290,10 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 				WorkflowID:    workflowID,
 				StepID:        "loop-step",
 				ActivityName:  "ExecuteRunStep",
-				Success:       sql.NullBool{Bool: true, Valid: true},
-				DurationMs:    sql.NullInt64{Int64: 100, Valid: true},
-				LoopNodeID:    sql.NullString{String: "iteration_test_loop", Valid: true},
-				LoopIteration: sql.NullInt64{Int64: int64(i), Valid: true},
+				Success:       ptr.Of(true),
+				DurationMs:    ptr.Of(int64(100)),
+				LoopNodeID:    ptr.Of("iteration_test_loop"),
+				LoopIteration: ptr.Of(int64(i)),
 				CreatedAt:     time.Now().Add(time.Duration(i) * time.Second),
 			}
 			err = repo.CreateStepExecution(ctx, stepExec)
@@ -306,7 +307,7 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 		// Find the iteration test steps
 		var iterationSteps []*db.StepExecution
 		for _, step := range steps {
-			if step.LoopNodeID.Valid && step.LoopNodeID.String == "iteration_test_loop" {
+			if step.LoopNodeID != nil && ptr.From(step.LoopNodeID) == "iteration_test_loop" {
 				iterationSteps = append(iterationSteps, step)
 			}
 		}
@@ -316,7 +317,7 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 		// Verify we can distinguish iterations
 		iterations := make(map[int64]bool)
 		for _, step := range iterationSteps {
-			iterations[step.LoopIteration.Int64] = true
+			iterations[ptr.From(step.LoopIteration)] = true
 		}
 
 		assert.True(t, iterations[0], "Should have iteration 0")
@@ -333,9 +334,9 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 			WorkflowID:    workflowID,
 			StepID:        "zero-iter-step",
 			ActivityName:  "ExecuteRunStep",
-			Success:       sql.NullBool{Bool: true, Valid: true},
-			LoopNodeID:    sql.NullString{String: "zero_iter_loop", Valid: true},
-			LoopIteration: sql.NullInt64{Int64: 0, Valid: true},
+			Success:       ptr.Of(true),
+			LoopNodeID:    ptr.Of("zero_iter_loop"),
+			LoopIteration: ptr.Of(int64(0)),
 			CreatedAt:     time.Now(),
 		}
 
@@ -345,8 +346,8 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 		retrieved, err := repo.GetStepExecution(ctx, stepExec.ID)
 		require.NoError(t, err)
 
-		assert.True(t, retrieved.LoopIteration.Valid, "Iteration 0 should be Valid, not NULL")
-		assert.Equal(t, int64(0), retrieved.LoopIteration.Int64)
+		assert.NotNil(t, retrieved.LoopIteration, "Iteration 0 should be Valid, not NULL")
+		assert.Equal(t, int64(0), ptr.From(retrieved.LoopIteration))
 
 		t.Logf("✓ Iteration 0 stored correctly as Valid=true, Int64=0")
 	})

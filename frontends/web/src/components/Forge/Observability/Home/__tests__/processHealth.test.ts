@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2025 Reliant Labs
 
 // Main's process ranking assertions, moved with the surviving Overview table.

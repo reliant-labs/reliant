@@ -16,7 +16,7 @@ import {
   AccountUsageCell,
 } from "./AccountRow";
 import { ConnectPanel } from "./ConnectPanel";
-import { needsAttention, sortByPriority } from "./accountFormat";
+import { sortByPriority } from "./accountFormat";
 
 /** One account as its provider's table holds it. */
 type AccountTableRow = { id: string; account: ProviderAccount };
@@ -182,8 +182,9 @@ function ProviderCard({
   const several = count > 1;
   const draggable = !mobile && several;
 
-  // null follows the account's state; a click pins it open or shut.
-  const isOpen = (account: ProviderAccount) => expandedByUser[account.id] ?? needsAttention(account, now);
+  // Every row starts collapsed — its status sentence, meters and Reconnect
+  // already say what is wrong — and opens only when the user asks.
+  const isOpen = (account: ProviderAccount) => expandedByUser[account.id] === true;
   const rows: AccountTableRow[] = accounts.map((account) => ({ id: account.id, account }));
   const columns: DataTableColumn<AccountTableRow>[] = [
     ...(several

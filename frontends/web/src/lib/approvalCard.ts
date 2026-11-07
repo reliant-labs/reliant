@@ -46,6 +46,13 @@ export interface ApprovalCard {
    * an "Approve all" and is decided on its own.
    */
   legacyActivation: boolean;
+  /**
+   * The activation can approve or deny requests (its capabilities hold
+   * approvals:decide). It is never in an "Approve all": the owner decides it
+   * on its own, because an automation that decides approvals can decide the
+   * ones that gate it.
+   */
+  decidesApprovals: boolean;
 }
 
 const ROW = /^([A-Z][A-Za-z ]{1,40}): (.+)$/;
@@ -59,6 +66,9 @@ const ROW = /^([A-Z][A-Za-z ]{1,40}): (.+)$/;
  * matches only asks for more reading before an approval is decided.
  */
 const ACTIVATION_OPERATION = /^Operation: (create_trigger_activation|update_trigger_activation|enable_trigger)\b/m;
+
+/** The technical "Capabilities: a, b" line carries the exact capability items. */
+const DECIDES_APPROVALS = /^Capabilities: (?:.*, )?approvals:decide(?:,|$)/m;
 
 export function parseApprovalCard(title: string): ApprovalCard {
   const separator = `\n\n${DETAILS_HEADING}\n`;
@@ -84,6 +94,7 @@ export function parseApprovalCard(title: string): ApprovalCard {
     details,
     grantsPower: at >= 0 || activation,
     legacyActivation: activation && !summarised,
+    decidesApprovals: activation && DECIDES_APPROVALS.test(title),
   };
 }
 
@@ -97,6 +108,10 @@ function splitLines(text: string): string[] {
 /** Why an approval is left out of "Approve all", shown beside it. */
 export const LEGACY_ACTIVATION_REASON =
   "Not in Approve all: this request was raised before approval cards said in plain words what they grant. Read its details and decide it on its own.";
+
+/** Why an activation that can decide approvals is left out of "Approve all", shown beside it. */
+export const DECIDES_APPROVALS_REASON =
+  "Not in Approve all: this automation can approve or deny requests, so it is decided on its own.";
 
 /** How "Approve all" treats a set of pending approvals. */
 export interface ApprovalBatchPlan<T> {
@@ -122,6 +137,10 @@ export function planApprovalBatch<T extends { title: string }>(approvals: readon
     const card = parseApprovalCard(approval.title);
     if (card.legacyActivation) {
       plan.apart.push({ approval, reason: LEGACY_ACTIVATION_REASON });
+      continue;
+    }
+    if (card.decidesApprovals) {
+      plan.apart.push({ approval, reason: DECIDES_APPROVALS_REASON });
       continue;
     }
     plan.together.push(approval);

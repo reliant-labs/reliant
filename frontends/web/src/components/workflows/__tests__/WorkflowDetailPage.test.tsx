@@ -272,6 +272,20 @@ describe("WorkflowDetailPage", () => {
     expect(screen.getByText("Drafts can't run until they are published. Open it in the editor to publish it.")).toBeInTheDocument();
   });
 
+  it("badges a workflow that declares approvals:decide, and no other", async () => {
+    const library = libraryResponse();
+    library.workflows[1] = { ...library.workflows[1]!, permissions: ["approvals:decide"] } as (typeof library.workflows)[number];
+    mocks.listWorkflows.mockResolvedValue(library);
+    renderDetail("triage");
+    expect(await screen.findByTestId("workflow-can-approve-badge")).toHaveTextContent("Can approve requests");
+  });
+
+  it("shows no approver badge for a workflow that declares no permissions", async () => {
+    renderDetail("triage");
+    await screen.findByRole("heading", { level: 1, name: "Triage" });
+    expect(screen.queryByTestId("workflow-can-approve-badge")).toBeNull();
+  });
+
   it("Used by lists the workflows that call this one through ref:, from the loaded library", async () => {
     const callsTriage = create(NodeSchema, {
       id: "triage-each",

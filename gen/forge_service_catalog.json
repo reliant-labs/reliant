@@ -4019,6 +4019,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ChatService/MoveChatToProject",
+          "name": "MoveChatToProject",
+          "input": "reliant.v1.MoveChatToProjectRequest",
+          "output": "reliant.v1.MoveChatToProjectResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ChatService/PauseChat",
           "name": "PauseChat",
           "input": "reliant.v1.PauseChatRequest",
@@ -4862,6 +4872,27 @@
               "TargetKind": "chat",
               "Writer": "INTERCEPTOR"
             }
+          },
+          {
+            "Name": "MoveChatToProject",
+            "InputType": "MoveChatToProjectRequest",
+            "OutputType": "MoveChatToProjectResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.MoveChatToProjectRequest",
+            "OutputTypeFQ": "reliant.v1.MoveChatToProjectResponse",
+            "InputProtoFile": "reliant/v1/chat.proto",
+            "OutputProtoFile": "reliant/v1/chat.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "move",
+              "TargetKind": "chat",
+              "Writer": "INTERCEPTOR"
+            }
           }
         ],
         "ProtoFile": "reliant/v1/chat.proto",
@@ -5424,6 +5455,36 @@
               "Name": "message",
               "ProtoType": "string",
               "IsOptional": false
+            }
+          ],
+          "MoveChatToProjectRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "leave_workspace",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "MoveChatToProjectResponse": [
+            {
+              "Name": "chat",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.Chat"
             }
           ],
           "PauseChatRequest": [
@@ -7050,6 +7111,32 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.MoveChatToProjectRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "leave_workspace",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.MoveChatToProjectResponse": [
+            {
+              "name": "chat",
+              "kind": "message",
+              "type_name": "reliant.v1.Chat"
+            }
+          ],
           "reliant.v1.PauseChatRequest": [
             {
               "name": "chat_id",
@@ -7926,6 +8013,8 @@
           "reliant.v1.MarkUnreadChatResponse": "reliant/v1/chat.proto",
           "reliant.v1.Message": "reliant/v1/chat.proto",
           "reliant.v1.MessageSender": "reliant/v1/chat.proto",
+          "reliant.v1.MoveChatToProjectRequest": "reliant/v1/chat.proto",
+          "reliant.v1.MoveChatToProjectResponse": "reliant/v1/chat.proto",
           "reliant.v1.PauseChatRequest": "reliant/v1/chat.proto",
           "reliant.v1.PauseChatResponse": "reliant/v1/chat.proto",
           "reliant.v1.ProviderPolicy": "reliant/v1/chat.proto",
@@ -41282,6 +41371,11 @@
               "map_key_kind": "string",
               "map_value_kind": "message",
               "map_value_type_name": "reliant.v1.SecretDeclaration"
+            },
+            {
+              "name": "permissions",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.WorkflowConcurrency": [
@@ -41407,6 +41501,11 @@
               "name": "triggers",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowTrigger",
+              "repeated": true
+            },
+            {
+              "name": "permissions",
+              "kind": "string",
               "repeated": true
             }
           ],

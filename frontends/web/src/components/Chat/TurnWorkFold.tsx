@@ -1,5 +1,5 @@
-import { memo, useCallback, useEffect, useId, useMemo, useState } from "react";
-import { AlertCircle, ChevronDown, ChevronRight, ListTree } from "lucide-react";
+import { Fragment, memo, useCallback, useEffect, useId, useMemo, useState } from "react";
+import { AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 import { getProcessedMessage } from "../../lib/messageProcessor";
@@ -10,6 +10,8 @@ import { workflowLifecycleToDisplayStatus } from "./ToolExecution";
 import { ChatMessage, type ChatTimelineVariant } from "./ChatMessage";
 import {
   formatTurnWorkHeadline,
+  formatTurnWorkElapsed,
+  formatTurnWorkDetails,
   summarizeTurnWork,
   type TurnWorkExecution,
 } from "./turnWorkSummary";
@@ -17,6 +19,8 @@ import type { TurnWork } from "./thread-views/simplifiedTurns";
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useMinimumDwell } from "./useMinimumDwell";
 import { DeployCardShownOutside } from "../Apps/DeployedAppCard";
+import { AgentMessageCard, isAgentMessage } from "./AgentMessageCard";
+import { SystemNotificationMessage } from "./SystemNotificationMessage";
 
 interface TurnWorkFoldProps {
   work: TurnWork;
@@ -116,9 +120,13 @@ function TurnWorkFoldComponent({
       const done = parseTime(call.durableCompletedAt);
       if (done !== null && (latest === null || done > latest)) latest = done;
     }
+    for (const event of work.events ?? []) {
+      const time = parseTime(event.message.createdAt);
+      if (time !== null && (latest === null || time > latest)) latest = time;
+    }
     if (latest !== null) return latest;
     return parseTime(work.parts[work.parts.length - 1]?.message.createdAt);
-  }, [executions, work.parts]);
+  }, [executions, work.parts, work.events]);
 
   const elapsedMs =
     startMs === null
@@ -134,14 +142,23 @@ function TurnWorkFoldComponent({
   const heldStep = useMinimumDwell(summary.current, STEP_MIN_DWELL_MS);
   const headline = formatTurnWorkHeadline(
     live ? { ...summary, current: heldStep } : summary,
-    { live, elapsedMs },
+    { live },
   );
+  const elapsed = formatTurnWorkElapsed(elapsedMs);
+  const details = formatTurnWorkDetails(summary);
 
   // Collapsed by default, even while live: the header carries the live state.
   const [expanded, setExpanded] = useState(false);
   const toggle = useCallback(() => setExpanded((open) => !open), []);
 
   const common = { chatId, approvals, isStreaming, onSelectThread, timelineVariant };
+  const renderEvents = (afterPart: number) => (work.events ?? [])
+    .filter((event) => event.afterPart === afterPart)
+    .map(({ message }) => isAgentMessage(message) ? (
+      <AgentMessageCard key={message.id} message={message} chatId={chatId} onSelectThread={onSelectThread} />
+    ) : (
+      <SystemNotificationMessage key={message.id} message={message} />
+    ));
 
   return (
     <div className="my-1" data-testid="turn-work-fold" data-live={live ? "true" : "false"}>
@@ -152,40 +169,61 @@ function TurnWorkFoldComponent({
           surface !== "desktop" && "min-h-[44px]",
         )}
         onClick={toggle}
+        aria-label={summary.failed > 0
+          ? `${headline}, ${summary.failed} ${summary.failed === 1 ? "failed step" : "failed steps"}`
+          : headline}
         aria-expanded={expanded}
         aria-controls={panelId}
       >
         <span className="flex min-w-0 items-center gap-1.5">
-          <ListTree className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" aria-hidden="true" />
-          <span className={cn("truncate font-medium", live && "turn-work-shimmer")}>{headline}</span>
-        </span>
-        <span className="flex shrink-0 items-center gap-1.5">
+          {expanded ? (
+            <ChevronDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          ) : (
+            <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          )}
+          {live && (
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary motion-safe:animate-pulse" aria-hidden="true" />
+          )}
+          <span className="truncate font-medium">{headline}</span>
           {summary.failed > 0 && (
-            <span className="inline-flex items-center gap-1 font-mono text-destructive-ink">
+            <span className="inline-flex shrink-0 items-center gap-1">
               <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
-              {summary.failed}
-              <span className="sr-only">failed</span>
+              {summary.failed} {summary.failed === 1 ? "failed step" : "failed steps"}
             </span>
           )}
-          {expanded ? (
-            <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
-          ) : (
-            <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-          )}
         </span>
+        {elapsed !== null && (
+          <span
+            role="timer"
+            aria-live="off"
+            aria-label="Activity elapsed time"
+            className="ml-auto shrink-0 tabular-nums"
+          >
+            {elapsed}
+          </span>
+        )}
       </button>
 
       {expanded && (
         <div id={panelId} className="mt-1 space-y-1 pl-3" data-testid="turn-work-body">
+          {details && <p className="px-1.5 py-1 text-xs text-muted-foreground">{details}</p>}
+          {summary.failed > 0 && (
+            <p className="px-1.5 py-1 text-xs text-muted-foreground">
+              {summary.failed} {summary.failed === 1 ? "step failed" : "steps failed"}. Expand the steps below to inspect their errors.
+            </p>
+          )}
           {/* A deploy's card is the surfaced row's, on screen open or closed. */}
           <DeployCardShownOutside.Provider value={true}>
-            {work.parts.map((part) => (
-              <ChatMessage
-                key={`${part.message.id}-work`}
-                message={part.message}
-                slice={{ segmentIndexes: part.segmentIndexes, role: "work" }}
-                {...common}
-              />
+            {renderEvents(0)}
+            {work.parts.map((part, index) => (
+              <Fragment key={`${part.message.id}-work`}>
+                <ChatMessage
+                  message={part.message}
+                  slice={{ segmentIndexes: part.segmentIndexes, role: "work" }}
+                  {...common}
+                />
+                {renderEvents(index + 1)}
+              </Fragment>
             ))}
           </DeployCardShownOutside.Provider>
         </div>

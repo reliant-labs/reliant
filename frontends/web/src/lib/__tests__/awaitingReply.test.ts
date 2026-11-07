@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import { MessageRole } from "@/gen/reliant/v1/chat_pb";

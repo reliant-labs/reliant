@@ -2,11 +2,12 @@ package handlers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -28,7 +29,7 @@ func TestAutomationFailureFallbackAndDetail(t *testing.T) {
 					return &db.Chat{ID: "chat", LaunchKind: kind, TriggerID: &tid}, nil
 				},
 				ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
-					return []*db.StepExecution{{ID: "attempt", StepID: "gate", CreatedAt: end, ExitCode: sql.NullInt64{Int64: 2, Valid: true}, ErrorMessage: sql.NullString{String: "client_secret: secret", Valid: true}}}, nil
+					return []*db.StepExecution{{ID: "attempt", StepID: "gate", CreatedAt: end, ExitCode: ptr.Of(int64(2)), ErrorMessage: ptr.Of("client_secret: secret")}}, nil
 				},
 				SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 				GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {
@@ -83,7 +84,7 @@ func TestAutomationFailureSuppressesAmbiguousSingleLineAssignments(t *testing.T)
 					return &db.Chat{ID: "chat", LaunchKind: "schedule", TriggerID: &tid}, nil
 				},
 				ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
-					return []*db.StepExecution{{StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: sql.NullInt64{Int64: 2, Valid: true}, OutputJSON: sql.NullString{String: string(raw), Valid: true}}}, nil
+					return []*db.StepExecution{{StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: ptr.Of(int64(2)), OutputJSON: ptr.Of(string(raw))}}, nil
 				},
 				SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, detail string) error {
 					require.NotContains(t, detail, "opaque-secret-value")
@@ -118,9 +119,9 @@ func TestAutomationFailureNamesTheDeclaringSaveMessage(t *testing.T) {
 		},
 		ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
 			return []*db.StepExecution{{ID: "row", StepID: "stopped", ActivityName: "SaveMessage", CreatedAt: end,
-				Success:      sql.NullBool{Bool: false, Valid: true},
-				ErrorMessage: sql.NullString{String: "declared the run's outcome: failure", Valid: true},
-				OutputJSON:   sql.NullString{String: `{"message":"` + text + `"}`, Valid: true}}}, nil
+				Success:      ptr.Of(false),
+				ErrorMessage: ptr.Of("declared the run's outcome: failure"),
+				OutputJSON:   ptr.Of(`{"message":"` + text + `"}`)}}, nil
 		},
 		SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 		GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {
@@ -158,7 +159,7 @@ func TestAutomationFailurePreservesAuthoredFailureMessage(t *testing.T) {
 			return &db.Chat{ID: "c", LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: &trigger}, nil
 		},
 		ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
-			return []*db.StepExecution{{StepID: "gate", ErrorMessage: sql.NullString{String: "bad", Valid: true}, CreatedAt: end}}, nil
+			return []*db.StepExecution{{StepID: "gate", ErrorMessage: ptr.Of("bad"), CreatedAt: end}}, nil
 		},
 		SetLaunchEventRunFailureDetailFunc: func(context.Context, string, string) error { return nil },
 		GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {

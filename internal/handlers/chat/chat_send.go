@@ -729,6 +729,12 @@ func (s *Service) SendMessage(
 					}
 					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, workflowID,
 						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), recorded)
+					if inputUpdate == nil {
+						inputUpdate = make(map[string]interface{})
+					}
+					if err := s.reconcileResumeMode(ctx, userID, chat, activeWorkflowNameForResume(chat, existingWorkflow), inputUpdate, stateUpdate); err != nil {
+						return nil, svcerr.Wrap(err)
+					}
 					inputUpdate = s.withProviderPolicy(ctx, userID, chat, recorded, inputUpdate)
 					inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, existingWorkflow.WorkflowName, inputUpdate)
 				}

@@ -791,14 +791,25 @@ export interface DeclaredPort {
 }
 
 /**
+ * Why a declared spec is not recorded:
+ *   pending           the control plane has not read the bundle's manifests yet (it does, in the background)
+ *   unreadable        the manifests are in a registry it cannot read, are gone, or were never in the bundle
+ *   not-in-manifests  the manifests were read and hold no object for this workload
+ *   unknown           a control plane that predates the reason
+ */
+export type DeclaredSpecGap = "pending" | "unreadable" | "not-in-manifests" | "unknown";
+
+/**
  * What the environment's recorded bundle declares for the workload — names and
  * numbers only (environment variables by NAME, never values). GetWorkload only.
  */
 export interface DeclaredWorkload {
   name: string;
   kind: WorkloadKind;
-  /** False for a bundle recorded before snapshots: only name, kind and replicas are known. */
+  /** True when the spec is recorded (from the bundle's snapshot or its manifests); otherwise only name, kind, replicas (and the shape's image) are known. */
   specRecorded: boolean;
+  /** Why it is not recorded; null when it is. */
+  specGap: DeclaredSpecGap | null;
   replicas: number | null;
   /** 0 = not declared. */
   cpuRequestMillicores: number;

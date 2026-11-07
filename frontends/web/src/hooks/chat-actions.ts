@@ -285,6 +285,27 @@ export async function setChatDaemon(chatId: string, daemonId: string): Promise<C
 }
 
 /**
+ * Move an idle chat to another project. Its next turn runs in that project's
+ * main checkout, on a machine that has it (the server picks one when
+ * `daemonId` is unset). A chat in a branch workspace needs `leaveWorkspace`:
+ * the workspace stays with the old project.
+ */
+export async function moveChatToProject(
+  chatId: string,
+  projectId: string,
+  options: { daemonId?: string; leaveWorkspace?: boolean } = {},
+): Promise<Chat> {
+  return chatOf(
+    await client.moveChatToProject({
+      chatId,
+      projectId,
+      daemonId: options.daemonId,
+      leaveWorkspace: options.leaveWorkspace ?? false,
+    }),
+  );
+}
+
+/**
  * Edit a chat's params. The server stores them as the chat's selection (the
  * choice every later run starts from) whether or not a run is live, and
  * signals a live run. `expectedVersion` is the selection version the edit was

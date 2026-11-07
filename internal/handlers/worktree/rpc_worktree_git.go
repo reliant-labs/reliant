@@ -306,13 +306,17 @@ func (s *Service) GetWorktreePR(
 		State      string `json:"state,omitempty"`
 		LocalHead  string `json:"local_head,omitempty"`
 		HeadRefOid string `json:"head_ref_oid,omitempty"`
+		Error      string `json:"error,omitempty"`
 	}
 	// Branch is resolved daemon-side from HEAD, not from worktree.Branch.
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.get_pr", map[string]string{
 		"worktree_path": repoPath,
 	}, &prResp); err != nil {
 		logging.WarnContext(ctx, "Failed to check PR via daemon", "error", err)
-		return connect.NewResponse(&reliantv1.GetWorktreePRResponse{Exists: false}), nil
+		return nil, svcerr.WrapOr(err, svcerr.Unavailable("could not check pull request; reconnect the machine and retry"))
+	}
+	if prResp.Error != "" {
+		return nil, svcerr.Unavailable(prResp.Error)
 	}
 
 	if !prResp.Exists {

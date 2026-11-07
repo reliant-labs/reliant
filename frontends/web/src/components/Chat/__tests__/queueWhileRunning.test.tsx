@@ -16,7 +16,7 @@
  *                         and never reaches sendAgentMessage.
  */
 
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { useAttachmentStore } from "../../../store/attachmentStore";
@@ -60,6 +60,10 @@ vi.mock("../../../hooks/chat-queries", async () => {
       isLoading: false,
     }),
     getChatFromCache: () => undefined,
+    // The composer reads the chat's server-side selection on mount (a
+    // GetChat). Unmocked, that request reached the network guard only
+    // sometimes, failing a different case each time (reliant#2366).
+    useChatSelection: () => ({ data: undefined, isLoading: false }),
   };
 });
 
@@ -127,8 +131,7 @@ afterEach(() => setTransport(null));
 
 function typeInComposer(text: string) {
   const editor = screen.getByTestId("chat-input");
-  editor.textContent = text;
-  fireEvent.input(editor);
+  fireEvent.change(editor, { target: { value: text } });
   return editor;
 }
 
@@ -145,8 +148,52 @@ function pressEnter(editor: HTMLElement): boolean {
 describe("queueing a message while the agent is running", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     useAttachmentStore.getState().reset();
     sendAgentMessageMock.mockResolvedValue({ success: true, message: "" });
+  });
+
+  it.each([true, false])("keeps an attachment-only pasted queue send-owned through delayed settlement (%s)", async (success) => {
+    localStorage.clear();
+    const originalAttach = useAttachmentStore.getState().attachFile;
+    const originalRemove = useAttachmentStore.getState().removeAttachment;
+    const remove = vi.fn();
+    const attachFile = vi.fn(async (session: string, file: File) => {
+      const attachment = { id: "paste-queued", filename: file.name, mime_type: file.type, size: file.size, url: "", attachment_type: "file_reference" as const };
+      useAttachmentStore.setState({ attachments: new Map([[session, [attachment]]]) as never });
+      return attachment;
+    });
+    let finish!: (response: { success: boolean; message: string }) => void;
+    sendAgentMessageMock.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    useAttachmentStore.setState({ attachFile, removeAttachment: remove });
+    try {
+      const view = renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} isStreaming />);
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: { files: [], items: [], getData: () => "long text\n".repeat(600) } });
+      await act(async () => { screen.getByTestId("chat-input").dispatchEvent(event); });
+      expect(event.defaultPrevented).toBe(true);
+      const queue = screen.getByTestId("queue-send-button");
+      expect(queue).toBeEnabled();
+      fireEvent.click(queue);
+      await waitFor(() => expect(sendAgentMessageMock).toHaveBeenCalledTimes(1));
+      expect(sendAgentMessageMock).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/^Attached: Pasted text /), attachments: ["paste-queued"] }));
+      expect(screen.getByText("Edit").closest("button")).toBeDisabled();
+      expect(screen.getByText("Remove").closest("button")).toBeDisabled();
+      // Submitted pastes must not reappear as ordinary removable attachments.
+      expect(screen.queryByRole("button", { name: /^Remove Pasted text / })).toBeNull();
+      for (const button of screen.getAllByRole("button").filter((button) => /remove/i.test(button.getAttribute("aria-label") ?? button.textContent ?? ""))) {
+        if (!button.matches(":disabled")) fireEvent.click(button);
+      }
+      expect(remove).not.toHaveBeenCalled();
+      view.unmount();
+      expect(remove).not.toHaveBeenCalled();
+      await act(async () => { finish({ success, message: success ? "" : "rejected" }); });
+      expect(remove).not.toHaveBeenCalled();
+      const stored = Object.keys(localStorage).filter((key) => key.startsWith("reliant:long-paste:"));
+      expect(stored.length).toBe(success ? 0 : 1);
+      if (!success) expect(localStorage.getItem(stored[0])).toContain("long text");
+      expect(useAttachmentStore.getState().attachments.get(CHAT_ID) ?? []).toEqual([]);
+    } finally { useAttachmentStore.setState({ attachFile: originalAttach, removeAttachment: originalRemove }); }
   });
 
   it("queues to the main thread on Enter while streaming, and consumes the key", async () => {

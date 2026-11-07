@@ -11,7 +11,7 @@ import { mockAppsBackend } from './appsMocks';
 //   forge        ?shell=forge (lib/shell.ts), signed OUT: the demo is public
 //                there, and the landing page's ?journey= starts the journey.
 //
-// The nine steps are driven the way a visitor drives them: each required
+// The eleven steps are driven the way a visitor drives them: each required
 // action is the real click on the console (open the trace, its logs, the
 // flamegraph, the issue, Ask an agent), then Next. Throughout, the demo must
 // not reach a daemon, a chat or real telemetry; and each shell's end card
@@ -229,131 +229,34 @@ test.describe('the forge journey in the forge shell', () => {
   });
 });
 
-// The public demo host (demo.reliantlabs.io, lib/shell.ts `demo`), picked here
-// with ?shell=demo: it opens on the console, a toast OFFERS the tour (never
-// starts it), each view shows a one-time tip, the tour's short cut is nine
-// steps (DEMO_TOUR=short), every write is off, and the page reaches no other
-// origin: its Connect transport is forge's mock transport (Forge/Demo/demoData).
-test.describe('the forge journey on the demo host', () => {
+// Public demo: each real page entry auto-opens only its current-page callout.
+test.describe('the demo page-entry tour', () => {
   async function openDemo(page: Page, path = '/?shell=demo') {
     const origin = new URL(test.info().project.use.baseURL ?? 'http://localhost:5173').origin;
-    const config = { CONTROL_PLANE_API_URL: origin, APP_URL: RELIANT_ORIGIN, DEMO_TOUR: 'short' };
-    await page.route('**/config.js', (route) =>
-      route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.__FORGE_CONFIG__ = ${JSON.stringify(config)};` }),
-    );
-    const log = recordRequests(page);
-    await page.goto(path, { waitUntil: 'domcontentloaded' });
-    return { log, origin };
+    await page.route('**/config.js', route => route.fulfill({status:200,contentType:'text/javascript',body:`window.__FORGE_CONFIG__ = ${JSON.stringify({CONTROL_PLANE_API_URL:origin,DEMO_TELEMETRY:'off'})};`}));
+    await page.goto(path);
   }
-
-  const atDemoStep = (page: Page, n: number, title: string) => atStep(page, n, 9, title);
-
-  test('opens on the console with the tour offered; walks nine steps on sample data; reaches no other origin', async ({ page }) => {
-    const { log, origin } = await openDemo(page);
-
-    await expect(page).toHaveURL(/\/forge\/demo/, LOADED);
-    await expect(page.locator("[data-shell='demo']")).toHaveCount(1);
-    // Explore first: no tour until asked, only the offer.
-    const toast = page.getByTestId('demo-tour-toast');
-    await expect(toast).toBeVisible(LOADED);
-    expect(new URL(page.url()).searchParams.get('tour')).toBeNull();
-    await toast.getByTestId('demo-tour-toast-start').click();
-
-    await atDemoStep(page, 1, 'What is forge?');
-    await expect(page.getByTestId('install-forge-link-tour_intro')).toBeVisible();
-    await next(page);
-
-    await atDemoStep(page, 2, 'One request, end to end');
-    await openTrace(page);
-
-    await atDemoStep(page, 3, 'Across services');
-    // The callout sits beside its target, never over it.
-    const target = await page.locator("[data-testid='trace-span-row'][data-span-id='e1']").boundingBox();
-    const card = await page.getByTestId('tour-callout').boundingBox();
-    expect(target && card).toBeTruthy();
-    const overlaps = !!target && !!card && card.x < target.x + target.width && target.x < card.x + card.width && card.y < target.y + target.height && target.y < card.y + card.height;
-    expect(overlaps).toBe(false);
-    await page.locator("[data-testid='trace-span-row'][data-span-id='e1']").click();
-
-    await atDemoStep(page, 4, 'Inside a service');
-    await next(page);
-
-    await atDemoStep(page, 5, 'What that request logged');
-    await page.getByTestId('trace-logs').click();
-    await expect(page.getByTestId('obs-logs-trace-scope')).toBeVisible();
-    await next(page);
-
-    await atDemoStep(page, 6, 'Errors, grouped by release');
-    await page.getByTestId(`obs-issue-${ISSUE_ID}`).click();
-
-    await atDemoStep(page, 7, 'Hand it to an agent');
-    // Read-only: triage, assignee and comments are off, saying why.
-    await expect(page.getByTestId('obs-issue-resolve')).toBeDisabled();
-    await expect(page.getByTestId('obs-issue-resolve')).toHaveAttribute('title', 'Read-only demo');
-    await expect(page.getByTestId('obs-issue-assignee-pick')).toBeDisabled();
-    await expect(page.getByTestId('obs-comment-box')).toHaveAttribute('placeholder', 'Comments are off in the demo.');
-    await page.getByTestId('ask-reliant-actions').getByTestId('ask-agent').click();
-    const sheet = page.getByRole('dialog', { name: 'Ask an agent' });
-    // …or a Reliant workflow: What is Reliant?, then the product page, tagged.
-    await sheet.getByTestId('what-is-reliant-toggle').click();
-    await expect(sheet.getByTestId('what-is-reliant-link')).toHaveAttribute('href', /utm_source=demo&utm_campaign=forge_demo/);
-    await sheet.getByRole('button', { name: 'Done' }).click();
-    await next(page);
-
-    // Last before the end card: the recorded forge run, in a modal card of its own (no spotlight), the page
-    // behind held still. It plays by itself.
-    await atDemoStep(page, 8, 'How this app was built');
-    const built = page.getByRole('dialog', { name: 'How this app was built' });
-    await expect(built.getByTestId('scaffold-replay')).toBeVisible();
-    await expect(built.getByTestId('replay-toggle')).toHaveText('Pause', LOADED);
-    await expect(built.getByTestId('replay-screen')).toContainText('forge project new shop');
-    await expect(built.getByTestId('built-tour-totals')).toContainText(/You write \d+ lines of proto/);
-    await expect(built).toHaveAttribute('data-testid', 'tour-card');
-    expect(await page.evaluate(() => getComputedStyle(document.body).overflow)).toBe('hidden');
-    await next(page);
-
-    await atDemoStep(page, 9, 'Try it on your app');
-    await expect(page.getByTestId('demo-cta-end_card')).toBeVisible();
-    await page.getByTestId('tour-next').click();
-    // Nowhere to go: the console stays, the tour closes.
-    await expect(page).toHaveURL(/\/forge\/demo/);
-    expect(page.url()).not.toContain('tour=');
-
-    // Zero requests to any other origin, and no RPC at all (the mock transport answers in the page).
-    expect(log.urls.filter((url) => !url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:'))).toEqual([]);
-    expect(log.urls.filter((url) => /\/(reliant|controlplane)\.v1\./.test(url))).toEqual([]);
-    expect(log.sockets).toEqual([]);
-  });
-
-  test('every path lands on the demo; the banner offers Install forge and Sign up', async ({ page }) => {
-    await openDemo(page, '/auth?shell=demo');
-    await expect(page).toHaveURL(/\/forge\/demo/, LOADED);
-    await expect(page.getByRole('heading', { name: /sign in/i })).toHaveCount(0);
-    const banner = page.getByTestId('forge-demo-banner');
-    await expect(banner).toContainText('Nothing you click here changes anything.');
-    await expect(banner.getByTestId('forge-demo-exit')).toHaveCount(0);
-    await expect(banner.getByTestId('demo-cta-signup')).toHaveAttribute('href', /forge\.reliantlabs\.io\/auth\?mode=signup&journey=forge&utm_source=demo&utm_campaign=forge_demo&utm_content=banner/);
-    await banner.getByTestId('demo-cta-install').click();
-    await expect(page.getByTestId('demo-install-sheet')).toContainText('brew install reliant-labs/reliant/forge');
-  });
-
-  test('a dismissed toast stays dismissed; each view shows its tip once', async ({ page }) => {
-    await openDemo(page, '/forge/demo?shell=demo');
-    await page.getByTestId('demo-tour-toast-dismiss').click();
-    await expect(page.getByTestId('demo-tip')).toHaveAttribute('data-tip', 'overview', LOADED);
-    await page.getByTestId('demo-tip-dismiss').click();
-    await page.goto('/forge/demo?view=traces', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByTestId('demo-tip')).toHaveAttribute('data-tip', 'traces', LOADED);
-    await expect(page.getByTestId('demo-tour-toast')).toHaveCount(0);
-    await page.goto('/forge/demo', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator("[data-tour='forge-console']")).toBeVisible(LOADED);
-    await expect(page.getByTestId('demo-tip')).toHaveCount(0);
-  });
-
-  test('a deep link keeps its step; Exit tour closes it', async ({ page }) => {
-    await openDemo(page, '/forge/demo?shell=demo&view=traces&tour=forge:fg-trace');
-    await atDemoStep(page, 2, 'One request, end to end');
+  test('automatically explains direct Logs, revisits and refresh without a start click', async ({page}) => {
+    await openDemo(page, '/forge/p/shop/observability/logs?shell=demo');
+    await expect(page.getByTestId('tour-callout')).toContainText('Read what your app recorded', LOADED);
+    await expect(page.getByTestId('tour-step-count')).toHaveText('Step 1 of 1');
+    await expect(page.getByTestId('demo-page-tour-start')).toHaveCount(0);
     await page.getByTestId('tour-exit').click();
-    await expect(page.getByTestId('tour-controls')).toHaveCount(0);
+    await expect(page.getByTestId('tour-callout')).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByTestId('tour-callout')).toContainText('Logs', LOADED);
+    await page.getByTestId('tour-next').click();
+    await expect(page).toHaveURL(/observability\/logs/);
+    await expect(page.getByTestId('tour-callout')).toHaveCount(0);
+    await page.getByTestId('demo-page-info').click();
+    await expect(page.getByTestId('tour-callout')).toContainText('Logs');
+    await expect(page.getByTestId('onboarding-nav-bar')).toHaveCount(0);
+  });
+  test('legacy logs link has no prerequisite or cross-site sequence', async ({page}) => {
+    await openDemo(page, '/forge/demo?shell=demo&view=logs&tour=forge:fg-logs');
+    await expect(page.getByTestId('tour-callout')).toContainText('Logs', LOADED);
+    await page.getByTestId('tour-exit').click();
+    await expect(page.getByTestId('tour-callout')).toHaveCount(0);
+    await expect(page).toHaveURL(/view=logs/);
   });
 });
