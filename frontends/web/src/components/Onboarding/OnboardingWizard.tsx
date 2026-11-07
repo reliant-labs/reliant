@@ -120,9 +120,11 @@ export function OnboardingWizard() {
   }, [tourInitialized, user, isDesktopSurface, isOnboardingRoute, tourOpen, goToStep]);
 
   // The mobile surface shows a tour only as its journey's own phone presentation (Journey.phone).
+  // It needs the tour state alone: the checklist never shows there, so its
+  // store loading (or failing to) must not hide an open phone tour.
   if (!isDesktopSurface) {
     const phoneTour = nav.tour?.kind === "step" && !!JOURNEYS[nav.tour.journey].phone;
-    return phoneTour && user && isInitialized ? <JourneyTour /> : null;
+    return phoneTour && user && tourInitialized ? <JourneyTour /> : null;
   }
 
   // Signed out — neither the tour nor the checklist belongs on screen.

@@ -3,10 +3,14 @@
  * tour pans the canvas to the steps a card explains, and "Try it yourself"
  * takes one edge out for the user to draw again.
  *
- * A detached edge is never saved: taking it out doesn't mark the workflow
- * modified, and when the user draws it again (or the tour puts it back) the
- * original edge returns with the modified flag as it was, so the user's
- * workflow ends exactly as stored.
+ * A detached edge is only HIDDEN (React Flow's `hidden`), never taken out of
+ * the builder's edges, so nothing that reads the workflow can lose it: save
+ * (`nodesEdgesToWorkflow`), undo snapshots and a builder that unmounts
+ * mid-exercise all still hold the original edge. Hiding it doesn't mark the
+ * workflow modified, and neither does putting it back, so the modified flag
+ * after "Put it back" is exactly the user's own edits. When the user draws it
+ * again, their new edge is dropped for the original, and the flag goes back to
+ * what it was just before the draw.
  */
 
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
@@ -28,7 +32,8 @@ export function useTourCanvas({ wrapperRef, isViewReady, setEdges, hasModificati
   const { getNodes, setViewport } = useReactFlow();
   const modifiedRef = useRef(hasModifications);
   modifiedRef.current = hasModifications;
-  const detachedRef = useRef<{ edge: Edge; wasModified: boolean } | null>(null);
+  /** The id of the edge lent to the user (hidden), if any. */
+  const detachedRef = useRef<{ id: string; source: string; target: string } | null>(null);
 
   const readyRef = useRef(isViewReady);
   readyRef.current = isViewReady;
@@ -65,33 +70,37 @@ export function useTourCanvas({ wrapperRef, isViewReady, setEdges, hasModificati
           break;
         case "detachEdge":
           setEdges((edges) => {
-            const edge = edges.find((e) => e.source === command.source && e.target === command.target);
+            const edge = edges.find((e) => e.source === command.source && e.target === command.target && !e.hidden);
             if (!edge || detachedRef.current) return edges;
-            detachedRef.current = { edge, wasModified: modifiedRef.current };
-            return edges.filter((e) => e !== edge);
+            detachedRef.current = { id: edge.id, source: edge.source, target: edge.target };
+            return edges.map((e) => (e === edge ? { ...e, hidden: true } : e));
           });
           break;
         case "reattachEdge": {
           const detached = detachedRef.current;
           if (!detached) break;
           detachedRef.current = null;
-          setEdges((edges) => (edges.some((e) => e.id === detached.edge.id) ? edges : [...edges, detached.edge]));
+          setEdges((edges) => showEdge(edges, detached.id));
           break;
         }
       }
     });
 
-    // Drawn again: swap the new edge for the original, and restore the modified flag.
+    // Drawn again: drop the user's new edge for the original, and give the
+    // modified flag back the value it had just before the draw (createEdge
+    // marks it modified in the same tick), so earlier edits stay marked.
     const offConnected = tourEvents.on("workflow:edgeConnected", ({ sourceId, targetId }) => {
       const detached = detachedRef.current;
-      if (!detached || detached.edge.source !== sourceId || detached.edge.target !== targetId) return;
+      if (!detached || detached.source !== sourceId || detached.target !== targetId) return;
       detachedRef.current = null;
-      setEdges((edges) => [
-        ...edges.filter((e) => !(e.source === sourceId && e.target === targetId)),
-        detached.edge,
-      ]);
-      // createEdge marks the workflow modified in the same tick; undo that after it.
-      setTimeout(() => setHasModifications(detached.wasModified), 0);
+      const modifiedBeforeDraw = modifiedRef.current;
+      setEdges((edges) =>
+        showEdge(
+          edges.filter((e) => e.id === detached.id || !(e.source === sourceId && e.target === targetId)),
+          detached.id,
+        ),
+      );
+      setTimeout(() => setHasModifications(modifiedBeforeDraw), 0);
     });
 
     const onResize = () => {
@@ -120,4 +129,13 @@ export function useTourCanvas({ wrapperRef, isViewReady, setEdges, hasModificati
     });
     return () => cancelAnimationFrame(frame);
   }, [isViewReady, wrapperRef]);
+}
+
+/** `edges` with edge `id` visible again (its `hidden` key removed, as it was before the tour hid it). */
+function showEdge(edges: Edge[], id: string): Edge[] {
+  return edges.map((e) => {
+    if (e.id !== id || !e.hidden) return e;
+    const { hidden: _hidden, ...shown } = e;
+    return shown;
+  });
 }

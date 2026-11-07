@@ -237,9 +237,15 @@ describe("the drag demonstration", () => {
     expect(svg).toHaveAttribute("data-motion", "static");
     const still = screen.getByTestId("wf-drag-demo-static");
     expect(still.querySelector("path[stroke-dasharray]")?.getAttribute("d")).toMatch(/^M 520 345 C/);
-    // Let some frames pass: nothing moves, and the real edge stays as it is.
+    // Let some frames pass (fake clock: no real sleep orders this): nothing
+    // moves, and the real edge stays as it is.
     const before = svg.innerHTML;
-    await act(() => new Promise((r) => setTimeout(r, 120)));
+    vi.useFakeTimers({ toFake: ["setTimeout", "setInterval", "requestAnimationFrame", "cancelAnimationFrame", "performance", "Date"] });
+    try {
+      act(() => vi.advanceTimersByTime(500));
+    } finally {
+      vi.useRealTimers();
+    }
     expect(svg.innerHTML).toBe(before);
     expect(edge.style.opacity).toBe("");
     edge.remove();
