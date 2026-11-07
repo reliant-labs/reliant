@@ -1,0 +1,445 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    forge.dev/env: staging
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/warn: privileged
+  name: forge-observability
+spec: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: otel-agent
+  namespace: forge-observability
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: forge-observability-otel-agent
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - namespaces
+  - nodes
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apps
+  resources:
+  - replicasets
+  - deployments
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes/stats
+  verbs:
+  - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: forge-observability-otel-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: forge-observability-otel-agent
+subjects:
+- kind: ServiceAccount
+  name: otel-agent
+  namespace: forge-observability
+---
+apiVersion: v1
+data:
+  config.yaml: |
+    exporters:
+      otlphttp/destination:
+        endpoint: https://otlp.example.com
+        headers: ${env:FORGE_OTLP_HEADERS}
+        retry_on_failure:
+          enabled: true
+          initial_interval: 5s
+          max_elapsed_time: 300s
+          max_interval: 30s
+        sending_queue:
+          enabled: true
+          num_consumers: 4
+          queue_size: 2000
+          storage: file_storage
+    extensions:
+      file_storage:
+        create_directory: true
+        directory: /var/lib/otel-agent
+      health_check:
+        endpoint: 0.0.0.0:13133
+    processors:
+      batch:
+        send_batch_size: 8192
+        timeout: 5s
+      k8sattributes:
+        auth_type: serviceAccount
+        extract:
+          labels:
+          - from: pod
+            key: app.kubernetes.io/name
+            tag_name: service.name
+          - from: pod
+            key: app.kubernetes.io/part-of
+            tag_name: service.namespace
+          - from: pod
+            key: forge.dev/env
+            tag_name: deployment.environment.name
+          - from: pod
+            key: app.kubernetes.io/version
+            tag_name: service.version
+          metadata:
+          - k8s.namespace.name
+          - k8s.pod.name
+          - k8s.pod.uid
+          - k8s.node.name
+          - k8s.deployment.name
+          - k8s.container.name
+        filter:
+          node_from_env_var: K8S_NODE_NAME
+        pod_association:
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.uid
+        - sources:
+          - from: connection
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 204
+        spike_limit_mib: 51
+      transform/line_resource:
+        error_mode: ignore
+        log_statements:
+        - context: resource
+          statements:
+          - set(attributes["service.name"], attributes["forge.line.service.name"]) where
+            attributes["service.name"] == nil and attributes["forge.line.service.name"]
+            != nil
+          - set(attributes["service.version"], attributes["forge.line.service.version"])
+            where attributes["service.version"] == nil and attributes["forge.line.service.version"]
+            != nil
+          - set(attributes["service.namespace"], attributes["forge.line.service.namespace"])
+            where attributes["service.namespace"] == nil and attributes["forge.line.service.namespace"]
+            != nil
+          - set(attributes["deployment.environment.name"], attributes["forge.line.deployment.environment.name"])
+            where attributes["deployment.environment.name"] == nil and attributes["forge.line.deployment.environment.name"]
+            != nil
+          - set(attributes["service.instance.id"], attributes["forge.line.service.instance.id"])
+            where attributes["service.instance.id"] == nil and attributes["forge.line.service.instance.id"]
+            != nil
+          - delete_matching_keys(attributes, "^forge[.]line[.]")
+      transform/strip_client_identity:
+        error_mode: ignore
+        log_statements:
+        - context: resource
+          statements:
+          - delete_matching_keys(resource.attributes, "^(k8s|reliant)\\..*")
+        metric_statements:
+        - context: resource
+          statements:
+          - delete_matching_keys(resource.attributes, "^(k8s|reliant)\\..*")
+        profile_statements:
+        - context: resource
+          statements:
+          - delete_matching_keys(resource.attributes, "^(k8s|reliant)\\..*")
+        trace_statements:
+        - context: resource
+          statements:
+          - delete_matching_keys(resource.attributes, "^(k8s|reliant)\\..*")
+    receivers:
+      filelog:
+        exclude:
+        - /var/log/pods/forge-observability_*/*/*.log
+        include:
+        - /var/log/pods/*/*/*.log
+        include_file_path: true
+        operators:
+        - id: container-parser
+          type: container
+        - if: body matches "^\\s*\\{"
+          on_error: send_quiet
+          parse_from: body
+          severity:
+            parse_from: attributes.level
+          timestamp:
+            layout: 2006-01-02T15:04:05.999999999Z07:00
+            layout_type: gotime
+            parse_from: attributes.time
+          type: json_parser
+        - if: attributes.trace_id != nil
+          span_id:
+            parse_from: attributes.span_id
+          trace_id:
+            parse_from: attributes.trace_id
+          type: trace_parser
+        - field: attributes.trace_id
+          if: attributes.trace_id != nil
+          type: remove
+        - field: attributes.span_id
+          if: attributes.span_id != nil
+          type: remove
+        - field: attributes.time
+          if: attributes.time != nil
+          type: remove
+        - field: attributes.level
+          if: attributes.level != nil
+          type: remove
+        - from: attributes.msg
+          if: attributes.msg != nil
+          to: body
+          type: move
+        - from: attributes.resource["service.name"]
+          if: type(attributes.resource) == "map" && attributes.resource["service.name"]
+            != nil && resource["forge.line.service.name"] == nil
+          to: resource["forge.line.service.name"]
+          type: move
+        - from: attributes.resource["service.version"]
+          if: type(attributes.resource) == "map" && attributes.resource["service.version"]
+            != nil && resource["forge.line.service.version"] == nil
+          to: resource["forge.line.service.version"]
+          type: move
+        - from: attributes.resource["service.namespace"]
+          if: type(attributes.resource) == "map" && attributes.resource["service.namespace"]
+            != nil && resource["forge.line.service.namespace"] == nil
+          to: resource["forge.line.service.namespace"]
+          type: move
+        - from: attributes.resource["deployment.environment.name"]
+          if: type(attributes.resource) == "map" && attributes.resource["deployment.environment.name"]
+            != nil && resource["forge.line.deployment.environment.name"] == nil
+          to: resource["forge.line.deployment.environment.name"]
+          type: move
+        - from: attributes.resource["service.instance.id"]
+          if: type(attributes.resource) == "map" && attributes.resource["service.instance.id"]
+            != nil && resource["forge.line.service.instance.id"] == nil
+          to: resource["forge.line.service.instance.id"]
+          type: move
+        - field: attributes.resource
+          if: type(attributes.resource) == "map"
+          type: remove
+        start_at: end
+        storage: file_storage
+      kubeletstats:
+        auth_type: serviceAccount
+        collection_interval: 30s
+        endpoint: https://${env:K8S_NODE_IP}:10250
+        insecure_skip_verify: true
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+            idle_timeout: 5m
+    service:
+      extensions:
+      - health_check
+      - file_storage
+      pipelines:
+        logs:
+          exporters:
+          - otlphttp/destination
+          processors:
+          - memory_limiter
+          - k8sattributes
+          - transform/line_resource
+          - batch
+          receivers:
+          - filelog
+        metrics:
+          exporters:
+          - otlphttp/destination
+          processors:
+          - memory_limiter
+          - transform/strip_client_identity
+          - k8sattributes
+          - batch
+          receivers:
+          - otlp
+        metrics/node:
+          exporters:
+          - otlphttp/destination
+          processors:
+          - memory_limiter
+          - k8sattributes
+          - batch
+          receivers:
+          - kubeletstats
+        traces:
+          exporters:
+          - otlphttp/destination
+          processors:
+          - memory_limiter
+          - transform/strip_client_identity
+          - k8sattributes
+          - batch
+          receivers:
+          - otlp
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: otel-agent
+  namespace: forge-observability
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: otel-agent
+  namespace: forge-observability
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: otel-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/managed-by: forge
+        app.kubernetes.io/name: otel-agent
+        app.kubernetes.io/part-of: demo
+        forge.dev/env: staging
+    spec:
+      containers:
+      - args:
+        - --config=/etc/otel/config.yaml
+        env:
+        - name: K8S_NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: K8S_NODE_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP
+        - name: GOMEMLIMIT
+          value: 204MiB
+        - name: FORGE_OTLP_HEADERS
+          valueFrom:
+            secretKeyRef:
+              key: headers
+              name: otlp-auth
+        image: otel/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 13133
+          initialDelaySeconds: 10
+        name: collector
+        ports:
+        - containerPort: 4317
+          name: otlp-grpc
+          protocol: TCP
+        - containerPort: 4318
+          name: otlp-http
+          protocol: TCP
+        - containerPort: 13133
+          name: health
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 13133
+        resources:
+          limits:
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          readOnlyRootFilesystem: true
+          runAsUser: 0
+          seccompProfile:
+            type: RuntimeDefault
+        volumeMounts:
+        - mountPath: /etc/otel
+          name: config
+          readOnly: true
+        - mountPath: /var/log/pods
+          name: pod-logs
+          readOnly: true
+        - mountPath: /var/lib/otel-agent
+          name: storage
+      enableServiceLinks: false
+      serviceAccountName: otel-agent
+      tolerations:
+      - operator: Exists
+      volumes:
+      - configMap:
+          name: otel-agent
+        name: config
+      - hostPath:
+          path: /var/log/pods
+          type: Directory
+        name: pod-logs
+      - hostPath:
+          path: /var/lib/forge-otel-agent
+          type: DirectoryOrCreate
+        name: storage
+  updateStrategy:
+    type: RollingUpdate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: forge
+    app.kubernetes.io/name: otel-agent
+    app.kubernetes.io/part-of: demo
+    forge.dev/env: staging
+  name: otel-agent
+  namespace: forge-observability
+spec:
+  internalTrafficPolicy: Local
+  ports:
+  - name: otlp-grpc
+    port: 4317
+    protocol: TCP
+    targetPort: otlp-grpc
+  - name: otlp-http
+    port: 4318
+    protocol: TCP
+    targetPort: otlp-http
+  selector:
+    app.kubernetes.io/name: otel-agent
