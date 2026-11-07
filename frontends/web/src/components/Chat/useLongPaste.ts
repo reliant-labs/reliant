@@ -47,6 +47,11 @@ export function legacyPasteDraftKey(userId: string | undefined, projectId: strin
  * the same user's and project's old desktop "temp" slot. The user and project
  * are part of every key, so another account's or project's pastes are never
  * read; with either unknown, none are.
+ *
+ * v1.10's "temp" was never a global slot: its ChatInput keyed the paste store
+ * by JSON [user id, current project id, attachment session], so a paste made
+ * in a new chat in p1 lives under [u, "p1", "temp"] and only a new chat in p1
+ * reads it back.
  */
 export function legacyPasteDraftKeys({ userId, projectId, sessionId, newChat }: {
   userId: string | undefined;

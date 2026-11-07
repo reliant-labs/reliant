@@ -20,6 +20,8 @@ import { useAttachmentStore } from "../../../store/attachmentStore";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 import { useChatParamsStore } from "../../../store/chatParamsStore";
 import { foldCount } from "../composerPriority";
+import { useAuthStore } from "../../../store/authStore";
+import { legacyPasteDraftKey } from "../useLongPaste";
 
 globalThis.ResizeObserver ??= class {
   observe() {}
@@ -162,6 +164,38 @@ describe("long paste", () => {
       expect(onSend.mock.calls[0][1]).toEqual(["paste-1", "paste-2"]);
     } finally {
       act(() => useAttachmentStore.setState({ attachFile: original }));
+    }
+  });
+
+  it("migrates a v1.10 new-chat paste only into the project it was pasted in", async () => {
+    // v1.10 stored the desktop new chat's paste under [user, project, "temp"]
+    // (its ChatInput keyed the store by JSON [userId, project id, session]).
+    const p1Key = legacyPasteDraftKey("u1", "p1", "temp");
+    localStorage.setItem(p1Key, JSON.stringify([{ id: 1, text: "p1's private paste" }]));
+    const original = useAttachmentStore.getState().attachFile;
+    const attachFile = vi.fn(async (_session: string, file: File) => textAttachment("migrated", file.name));
+    useAttachmentStore.setState({ attachFile });
+    act(() => useAuthStore.setState({ user: { id: "u1" } as never }));
+    try {
+      // A new chat in p2: p1's paste is neither attached nor removed.
+      act(() => useProjectStore.setState({ currentProject: { id: "p2" } as never }));
+      const view = renderWithQuery(<ChatInput onSend={vi.fn()} attachmentDraftId="new-chat:project:p2" />);
+      await act(async () => {});
+      expect(attachFile).not.toHaveBeenCalled();
+      expect(JSON.parse(localStorage.getItem(p1Key)!)).toEqual([{ id: 1, text: "p1's private paste" }]);
+      view.unmount();
+
+      // Back in p1, its own new chat takes it.
+      act(() => useProjectStore.setState({ currentProject: { id: "p1" } as never }));
+      renderWithQuery(<ChatInput onSend={vi.fn()} attachmentDraftId="new-chat:project:p1" />);
+      await waitFor(() => expect(attachFile).toHaveBeenCalledTimes(1));
+      expect(attachFile.mock.calls[0][0]).toBe("new-chat:project:p1");
+    } finally {
+      localStorage.removeItem(p1Key);
+      act(() => {
+        useAttachmentStore.setState({ attachFile: original });
+        useAuthStore.setState({ user: null } as never);
+      });
     }
   });
 
