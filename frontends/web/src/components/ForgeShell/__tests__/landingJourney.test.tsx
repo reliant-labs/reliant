@@ -142,7 +142,7 @@ describe("?journey=forge on the forge shell", () => {
     arriveWith("?journey=forge&rid=r1");
     const router = renderShell("/?journey=forge&rid=r1");
     await waitFor(() => expect(router.state.location.pathname).toBe("/forge/demo"));
-    expect(searchOf(router)).toMatchObject({ tour: "forge:fg-console", view: "overview" });
+    expect(searchOf(router)).toMatchObject({ tour: "forge:fg-intro", view: "overview" });
     expect(await screen.findByTestId("demo-console")).toBeInTheDocument();
     expect(screen.queryByTestId("auth-screen")).not.toBeInTheDocument();
     expect(router.history.location.pathname).not.toBe("/auth");
@@ -156,7 +156,7 @@ describe("?journey=forge on the forge shell", () => {
     arriveWith("?journey=forge");
     const router = renderShell("/apps?journey=forge");
     await waitFor(() => expect(router.state.location.pathname).toBe("/forge/demo"));
-    expect(searchOf(router).tour).toBe("forge:fg-console");
+    expect(searchOf(router).tour).toBe("forge:fg-intro");
     expect(trackEvent.mock.calls.filter(([name]) => name === "journey_selected")).toHaveLength(1);
   });
 
@@ -171,7 +171,7 @@ describe("?journey=forge on the forge shell", () => {
     act(() => useAuthStore.setState({ user: SIGNED_IN }));
     await act(() => router.navigate({ to: "/apps" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/forge/demo"));
-    expect(searchOf(router).tour).toBe("forge:fg-console");
+    expect(searchOf(router).tour).toBe("forge:fg-intro");
   });
 
   it("leaves a tour that is already open alone, and forgets the choice", async () => {

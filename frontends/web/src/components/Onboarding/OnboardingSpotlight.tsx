@@ -9,6 +9,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 import { useUnmountSafeTimeout } from "../../hooks/useUnmountSafeTimeout";
+import { BELOW_FIRST, BESIDE_FIRST, placeCallout, type CalloutSide } from "./calloutPlacement";
 import type { SpotlightConfig } from "./types";
 
 // Store last known positions for smooth transitions between steps
@@ -43,6 +44,13 @@ interface OnboardingSpotlightProps {
    * the user.
    */
   blockOutside?: boolean;
+  /**
+   * The compact presentation (Journey.controls "callout"): the step's own
+   * controls inside the card (`footer`), the pending action's instruction
+   * (`hint`), no bottom bar to keep clear of, and the card beside the target
+   * rather than below it.
+   */
+  callout?: { footer: React.ReactNode; hint?: React.ReactNode };
 }
 
 interface Position {
@@ -89,75 +97,77 @@ const VIEWPORT_PADDING = 16;
 // Height reserved for the OnboardingNavBar at the bottom of the screen
 const NAV_BAR_CLEARANCE = 176;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(value, Math.max(min, max)));
-}
-
+/** Where the card goes: beside the target, never over it (calloutPlacement.ts). */
 function calculateTooltipPosition(
   rect: TargetRect,
   position: "top" | "bottom" | "left" | "right" | "auto",
   tooltipSize: ElementSize = DEFAULT_TOOLTIP_SIZE,
-  targetGap: number = 16
-): Position & { actualPosition: "top" | "bottom" | "left" | "right" } {
-  const viewportWidth = window.innerWidth;
-  const effectiveViewportBottom = Math.max(
-    VIEWPORT_PADDING,
-    window.innerHeight - NAV_BAR_CLEARANCE
+  targetGap: number = 16,
+  bottomReserve: number = NAV_BAR_CLEARANCE,
+  order: readonly CalloutSide[] = BELOW_FIRST
+): Position & { actualPosition: CalloutSide } {
+  const placed = placeCallout(
+    rect,
+    tooltipSize,
+    { width: window.innerWidth, height: window.innerHeight },
+    { preferred: position, order, gap: targetGap, margin: VIEWPORT_PADDING, bottomReserve }
   );
-  const tooltipWidth = tooltipSize.width;
-  const tooltipHeight = tooltipSize.height;
+  return { top: placed.top, left: placed.left, actualPosition: placed.side };
+}
 
-  // Auto-detect best position
-  let actualPosition: "top" | "bottom" | "left" | "right" = position === "auto" ? "bottom" : position;
-  if (position === "auto") {
-    const spaceAbove = rect.top - VIEWPORT_PADDING;
-    const spaceBelow = effectiveViewportBottom - (rect.top + rect.height);
-    const spaceRight = viewportWidth - (rect.left + rect.width) - VIEWPORT_PADDING;
-    const spaceLeft = rect.left - VIEWPORT_PADDING;
+/** Below this width a callout is a bottom sheet (tailwind `sm`). */
+export const SHEET_MAX_WIDTH = 640;
+/** The sheet's tallest, as a share of the viewport: the target keeps the rest. */
+const SHEET_MAX_VH = 45;
 
-    // Prefer below, then above, then right, then left when there is enough room.
-    if (spaceBelow >= tooltipHeight + targetGap) {
-      actualPosition = "bottom";
-    } else if (spaceAbove >= tooltipHeight + targetGap) {
-      actualPosition = "top";
-    } else if (spaceRight >= tooltipWidth + targetGap) {
-      actualPosition = "right";
-    } else if (spaceLeft >= tooltipWidth + targetGap) {
-      actualPosition = "left";
-    } else if (Math.max(spaceBelow, spaceAbove) >= Math.max(spaceRight, spaceLeft)) {
-      actualPosition = spaceBelow >= spaceAbove ? "bottom" : "top";
-    } else {
-      actualPosition = spaceRight >= spaceLeft ? "right" : "left";
+export function isSheetViewport(): boolean {
+  return typeof window !== "undefined" && window.innerWidth < SHEET_MAX_WIDTH;
+}
+
+/** Room left above a target scrolled to the top: a page's sticky header. */
+const SHEET_TOP_GAP = 64;
+
+/** The nearest ancestor that scrolls vertically, else the document. */
+function scrollParent(el: Element): HTMLElement {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const overflowY = getComputedStyle(p).overflowY;
+    if ((overflowY === "auto" || overflowY === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return (document.scrollingElement as HTMLElement | null) ?? document.documentElement;
+}
+
+/**
+ * Scroll `target` into the part of the screen the bottom sheet leaves free,
+ * below the page's header. A target near the page's end can't scroll that
+ * far, so its scroller gets the sheet's height of room underneath while the
+ * sheet is up; the returned function takes it away.
+ */
+function scrollAboveSheet(target: Element): () => void {
+  const free = window.innerHeight * (1 - SHEET_MAX_VH / 100);
+  const inView = () => {
+    const rect = target.getBoundingClientRect();
+    return rect.top >= 8 && rect.bottom <= free;
+  };
+  const scrollTo = () => {
+    try {
+      target.scrollIntoView({ block: "start", behavior: "auto" });
+      const top = target.getBoundingClientRect().top;
+      if (top < SHEET_TOP_GAP) scrollParent(target).scrollBy({ top: top - SHEET_TOP_GAP });
+    } catch {
+      // jsdom and old engines: the sheet still shows.
     }
-  }
-
-  let top = 0;
-  let left = 0;
-
-  switch (actualPosition) {
-    case "top":
-      top = rect.top - tooltipHeight - targetGap;
-      left = rect.left + rect.width / 2 - tooltipWidth / 2;
-      break;
-    case "bottom":
-      top = rect.top + rect.height + targetGap;
-      left = rect.left + rect.width / 2 - tooltipWidth / 2;
-      break;
-    case "left":
-      top = rect.top + rect.height / 2 - tooltipHeight / 2;
-      left = rect.left - tooltipWidth - targetGap;
-      break;
-    case "right":
-      top = rect.top + rect.height / 2 - tooltipHeight / 2;
-      left = rect.left + rect.width + targetGap;
-      break;
-  }
-
-  // Clamp to viewport, reserving space at bottom for nav bar.
-  left = clamp(left, VIEWPORT_PADDING, viewportWidth - tooltipWidth - VIEWPORT_PADDING);
-  top = clamp(top, VIEWPORT_PADDING, effectiveViewportBottom - tooltipHeight - VIEWPORT_PADDING);
-
-  return { top, left, actualPosition };
+  };
+  if (inView()) return () => {};
+  scrollTo();
+  const rect = target.getBoundingClientRect();
+  if (rect.bottom <= free || rect.height > free - SHEET_TOP_GAP) return () => {};
+  const scroller = scrollParent(target);
+  const before = scroller.style.paddingBottom;
+  scroller.style.paddingBottom = `calc(${getComputedStyle(scroller).paddingBottom} + ${SHEET_MAX_VH}vh)`;
+  scrollTo();
+  return () => {
+    scroller.style.paddingBottom = before;
+  };
 }
 
 export function OnboardingSpotlight({
@@ -175,7 +185,17 @@ export function OnboardingSpotlight({
   spotlightConfig,
   keyboardNav = true,
   blockOutside = false,
+  callout,
 }: OnboardingSpotlightProps) {
+  const compact = !!callout;
+  // A phone: the card is a bottom sheet, and the target is scrolled into the space above it.
+  const [sheet, setSheet] = useState(() => compact && isSheetViewport());
+  useEffect(() => {
+    if (!compact) return;
+    const onResize = () => setSheet(isSheetViewport());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [compact]);
   // stepNumber/totalSteps are accepted for interface compatibility — the
   // OnboardingNavBar renders progress. onSkipAll is accepted but unused:
   // ESC no longer ends the tour; skipping happens via the nav bar button.
@@ -270,8 +290,12 @@ export function OnboardingSpotlight({
 
   useEffect(() => {
     if (!spotlightRect) return;
-    setTooltipPos(calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding));
-  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding]);
+    setTooltipPos(
+      compact
+        ? calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, 0, BESIDE_FIRST)
+        : calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding)
+    );
+  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, compact]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(measureTooltip);
@@ -280,9 +304,11 @@ export function OnboardingSpotlight({
 
   useEffect(() => {
     // Initial position update with retry logic for elements that appear after navigation
+    let unroom: (() => void) | null = null;
     const attemptUpdate = () => {
       const target = document.querySelector(targetSelector);
       if (target) {
+        if (sheet) unroom = scrollAboveSheet(target);
         updatePosition();
         setIsVisible(true);
         return true;
@@ -336,8 +362,9 @@ export function OnboardingSpotlight({
       if (settleTimeout) clearTimeout(settleTimeout);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
+      unroom?.();
     };
-  }, [updatePosition, targetSelector, autoSkipIfMissing, onNext]);
+  }, [updatePosition, targetSelector, autoSkipIfMissing, onNext, sheet]);
 
   // Handle keyboard navigation.
   // ESC intentionally does nothing — it must not end the tour. The user can
@@ -491,19 +518,24 @@ export function OnboardingSpotlight({
         aria-live="polite"
         className={cn(
           "absolute rounded-xl border border-border bg-popover text-popover-foreground shadow-2xl",
-          "transition-all duration-500 ease-out",
-          isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95"
+          "transition-all duration-500 ease-out motion-reduce:transition-none",
+          isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95",
+          compact && "pointer-events-auto"
         )}
-        style={{
-          top: tooltipPos.top,
-          left: tooltipPos.left,
-          width: "min(20rem, calc(100vw - 2rem))",
-        }}
+        data-testid="tour-callout"
+        data-side={sheet ? "sheet" : tooltipPos.actualPosition}
+        style={
+          sheet
+            ? { left: 0, right: 0, bottom: 0, top: "auto", width: "100%", maxHeight: `${SHEET_MAX_VH}vh`, overflowY: "auto", borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
+            : { top: tooltipPos.top, left: tooltipPos.left, width: "min(20rem, calc(100vw - 2rem))" }
+        }
       >
-        <div className="p-5">
+        <div className={sheet ? "p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" : "p-5"}>
           {/* Title & Description */}
           <h3 className="text-lg font-semibold text-foreground mb-2.5 tracking-tight">{title}</h3>
           <div className="text-sm text-muted-foreground leading-relaxed">{description}</div>
+          {callout?.hint}
+          {callout?.footer}
         </div>
       </div>
     </div>

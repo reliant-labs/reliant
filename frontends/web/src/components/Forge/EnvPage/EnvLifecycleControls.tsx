@@ -28,6 +28,7 @@ import Button from "@/components/forge-ui/button";
 import { useDeleteEnvironment, useSetEnvironmentRunState } from "@/hooks/forge-queries";
 import { cloudErrorDetail, type CloudEnvStatus } from "@/services/forge/cloudEnvs";
 
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { environmentStopped } from "../runStateVocabulary";
 
 export function EnvLifecycleControls({
@@ -48,6 +49,18 @@ export function EnvLifecycleControls({
   const workloads = status?.workloads ?? [];
   const stopped = environmentStopped(workloads);
   const startError = setRunState.isError && setRunState.variables === "running" ? setRunState.error : null;
+  const lock = useObsReadOnly();
+
+  // The demo console: the controls show, off, saying why (obsReadOnly.tsx); no danger menu.
+  if (lock.readOnly) {
+    return (
+      <div className="flex items-center gap-2" data-testid="env-lifecycle-controls">
+        <Button variant="outline" size="sm" leftIcon={stopped ? <Play className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />} disabled title={lock.reason}>
+          {stopped ? "Start environment" : "Stop environment"}
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-end gap-2" data-testid="env-lifecycle-controls">
