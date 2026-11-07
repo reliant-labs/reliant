@@ -7,7 +7,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../../hooks/attachment-queries", () => api);
 vi.mock("../../lib/toast-manager", () => ({ toast: { error: vi.fn() } }));
 
-import { useAttachmentStore } from "../attachmentStore";
+import { isDraftAttachmentPersisted, useAttachmentStore } from "../attachmentStore";
 
 const KEY = "reliant-composer-attachments";
 const att = (id: string, filename = `${id}.txt`) => ({
@@ -34,6 +34,23 @@ describe("draft attachments across a reload", () => {
     }));
     await useAttachmentStore.persist.rehydrate();
     expect(Object.fromEntries(useAttachmentStore.getState().attachments)).toEqual({ "chat-1": [att("a")] });
+  });
+
+  it("attaches even when storage refuses the write, and reports the draft as not persisted", async () => {
+    api.uploadAttachment.mockResolvedValue(att("a"));
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new DOMException("quota", "QuotaExceededError");
+    });
+    try {
+      await expect(useAttachmentStore.getState().attachFile("chat-1", new File(["x"], "a.txt"))).resolves.toMatchObject({ id: "a" });
+      expect(useAttachmentStore.getState().getAttachments("chat-1").map((a) => a.id)).toEqual(["a"]);
+      expect(isDraftAttachmentPersisted("chat-1", "a")).toBe(false);
+    } finally {
+      setItem.mockRestore();
+    }
+    useAttachmentStore.setState({ attachments: new Map([["chat-1", [att("a")]]]) });
+    expect(isDraftAttachmentPersisted("chat-1", "a")).toBe(true);
+    expect(isDraftAttachmentPersisted("chat-2", "a")).toBe(false);
   });
 
   it("forgets every draft on reset (sign-out)", () => {

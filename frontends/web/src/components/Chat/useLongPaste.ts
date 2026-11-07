@@ -27,17 +27,29 @@ export function pastedTextFilename(taken: Iterable<string>): string {
  * `reliant:long-paste:v1:` + JSON [user id, project id, attachment session],
  * and showed it in a panel of its own. Draft attachments now persist
  * themselves, so a stored paste is uploaded once as an ordinary draft
- * attachment and its entry dropped — only after its upload succeeds, so a
- * failure leaves it for the next mount. Remove with the next major.
+ * attachment. Its entry is dropped only once the new attachment is in the
+ * PERSISTED draft — an upload that fails, or a draft write storage refuses,
+ * leaves the text for the next mount. Remove with the next major.
  */
 const LEGACY_PASTE_PREFIX = "reliant:long-paste:v1:";
 const migrating = new Set<string>();
+// Rows uploaded on this page load whose draft write was not yet confirmed: a
+// later mount re-checks the same attachment rather than uploading the text again.
+const uploadedRows = new Map<string, string>();
 
 export function legacyPasteDraftKey(userId: string | undefined, projectId: string | undefined, sessionId: string): string {
   return LEGACY_PASTE_PREFIX + JSON.stringify([userId, projectId, sessionId]);
 }
 
-export async function migrateLegacyPasteDrafts(keys: string[], attach: (text: string) => Promise<unknown>): Promise<void> {
+/**
+ * @param attach uploads `text` as a draft attachment and resolves its id.
+ * @param persisted whether the draft attachment `id` survives a reload.
+ */
+export async function migrateLegacyPasteDrafts(
+  keys: string[],
+  attach: (text: string) => Promise<string>,
+  persisted: (id: string) => boolean,
+): Promise<void> {
   for (const key of keys) {
     if (migrating.has(key)) continue;
     let rows: Array<{ id: unknown; text: unknown }>;
@@ -61,7 +73,17 @@ export async function migrateLegacyPasteDrafts(keys: string[], attach: (text: st
     };
     try {
       for (const row of rows) {
-        if (typeof row?.text === "string" && row.text !== "") await attach(row.text);
+        if (typeof row?.text === "string" && row.text !== "") {
+          const rowKey = `${key}\u0000${JSON.stringify(row.id)}\u0000${row.text.length}`;
+          let id = uploadedRows.get(rowKey);
+          if (id === undefined) {
+            id = await attach(row.text);
+            uploadedRows.set(rowKey, id);
+          }
+          // The legacy text is the only copy that survives a reload until then.
+          if (!persisted(id)) break;
+          uploadedRows.delete(rowKey);
+        }
         remaining = remaining.filter((r) => r !== row);
         save();
       }

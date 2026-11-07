@@ -98,8 +98,8 @@ describe("migrateLegacyPasteDrafts", () => {
   it("uploads each stored v1.10 paste once and drops the entry", async () => {
     const key = legacyPasteDraftKey("u", "p", "chat-1");
     localStorage.setItem(key, JSON.stringify([{ id: 1, text: "first" }, { id: 2, text: "" }, { id: 3, text: "second" }]));
-    const upload = vi.fn().mockResolvedValue(undefined);
-    await migrateLegacyPasteDrafts([key, legacyPasteDraftKey("u", "p", "absent")], upload);
+    const upload = vi.fn(async (text: string) => `att-${text}`);
+    await migrateLegacyPasteDrafts([key, legacyPasteDraftKey("u", "p", "absent")], upload, () => true);
     expect(upload.mock.calls).toEqual([["first"], ["second"]]);
     expect(localStorage.getItem(key)).toBeNull();
   });
@@ -107,8 +107,27 @@ describe("migrateLegacyPasteDrafts", () => {
   it("keeps what failed to upload for the next mount", async () => {
     const key = legacyPasteDraftKey("u", undefined, "temp");
     localStorage.setItem(key, JSON.stringify([{ id: 1, text: "ok" }, { id: 2, text: "fails" }]));
-    const upload = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error("offline"));
-    await migrateLegacyPasteDrafts([key], upload);
+    const upload = vi.fn().mockResolvedValueOnce("att-ok").mockRejectedValueOnce(new Error("offline"));
+    await migrateLegacyPasteDrafts([key], upload, () => true);
     expect(JSON.parse(localStorage.getItem(key)!)).toEqual([{ id: 2, text: "fails" }]);
+  });
+
+  it("keeps the text until the uploaded attachment is in the persisted draft, without uploading it twice", async () => {
+    const key = legacyPasteDraftKey("u", "p", "chat-2");
+    localStorage.setItem(key, JSON.stringify([{ id: 7, text: "only copy" }]));
+    const upload = vi.fn().mockResolvedValue("att-7");
+    let stored = false;
+    const persisted = vi.fn(() => stored);
+
+    // Upload succeeds, but the draft write was refused: the text is the only copy a reload has.
+    await migrateLegacyPasteDrafts([key], upload, persisted);
+    expect(persisted).toHaveBeenCalledWith("att-7");
+    expect(JSON.parse(localStorage.getItem(key)!)).toEqual([{ id: 7, text: "only copy" }]);
+
+    // A later mount on the same page, once the draft is stored: confirm and drop, no second upload.
+    stored = true;
+    await migrateLegacyPasteDrafts([key], upload, persisted);
+    expect(upload).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(key)).toBeNull();
   });
 });

@@ -19,7 +19,7 @@ import { CodeContextChip } from "./CodeContextChip";
 import { detectPlatform } from "../../lib/keyboard/platform";
 import { useComposerUploads } from "./useComposerUploads";
 import { legacyPasteDraftKey, migrateLegacyPasteDrafts, pastedTextFilename, useLongPaste } from "./useLongPaste";
-import { useAttachmentStore } from "../../store/attachmentStore";
+import { isDraftAttachmentPersisted, useAttachmentStore } from "../../store/attachmentStore";
 import { useAuthStore } from "../../store/authStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
@@ -1199,10 +1199,15 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       const keys = [legacyPasteDraftKey(pasteUserId, pasteProjectId, attachmentSessionId)];
       // v1.10's desktop new chat drafted into "temp"; it drafts per project now.
       if (!chatId) keys.push(legacyPasteDraftKey(pasteUserId, pasteProjectId, "temp"));
-      void migrateLegacyPasteDrafts(keys, (text) => {
-        const taken = useAttachmentStore.getState().getAttachments(attachmentSessionId).map((a) => a.filename);
-        return attachFile(attachmentSessionId, new File([text], pastedTextFilename(taken), { type: "text/plain" }));
-      });
+      void migrateLegacyPasteDrafts(
+        keys,
+        async (text) => {
+          const taken = useAttachmentStore.getState().getAttachments(attachmentSessionId).map((a) => a.filename);
+          const attachment = await attachFile(attachmentSessionId, new File([text], pastedTextFilename(taken), { type: "text/plain" }));
+          return attachment.id;
+        },
+        (id) => isDraftAttachmentPersisted(attachmentSessionId, id),
+      );
     }, [canAttach, pasteUserId, pasteProjectId, attachmentSessionId, chatId, attachFile]);
     // Drag and drop functionality
     const handleFileDrop = async (files: File[]) => {

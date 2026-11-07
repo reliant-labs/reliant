@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist, subscribeWithSelector } from 'zustand/middleware';
+import { createJSONStorage, persist, subscribeWithSelector } from 'zustand/middleware';
 import { toast } from '../lib/toast-manager';
 import { deleteAttachment, uploadAttachment, type Attachment } from '../hooks/attachment-queries';
 import { logger } from '../lib/logger';
@@ -42,6 +42,8 @@ function localBlobUrl(file: File): string | undefined {
   const type = getAttachmentType(file.name);
   return type === 'image' || type === 'file_reference' ? URL.createObjectURL(file) : undefined;
 }
+
+const PERSIST_KEY = 'reliant-composer-attachments';
 
 /** What survives a reload: each draft's attachment metadata, never bytes or blob URLs. */
 interface PersistedAttachments {
@@ -253,8 +255,35 @@ export const useAttachmentStore = create<AttachmentStore>()(
         // (workspace-state). Only metadata is kept: the bytes live on the
         // server until the draft is sent or the attachment removed, and
         // sign-out's reset() empties this with the rest of the store.
-        name: 'reliant-composer-attachments',
+        name: PERSIST_KEY,
         version: 1,
+        // A refused write (quota, private mode) must not fail the action that
+        // caused it: persist() rethrows storage errors out of set(), which
+        // would turn a completed upload into a "Failed to attach". The draft
+        // then lives in memory only, which isDraftAttachmentPersisted reports.
+        storage: createJSONStorage(() => ({
+          getItem: (name: string) => {
+            try {
+              return localStorage.getItem(name);
+            } catch {
+              return null;
+            }
+          },
+          setItem: (name: string, value: string) => {
+            try {
+              localStorage.setItem(name, value);
+            } catch (error) {
+              logger.warn('Draft attachments not saved; they will not survive a reload:', error);
+            }
+          },
+          removeItem: (name: string) => {
+            try {
+              localStorage.removeItem(name);
+            } catch {
+              // Nothing to undo: an unreadable store restores nothing.
+            }
+          },
+        })),
         partialize: (state): PersistedAttachments => ({
           drafts: Object.fromEntries(state.attachments),
         }),
@@ -266,6 +295,22 @@ export const useAttachmentStore = create<AttachmentStore>()(
     ),
   ),
 );
+
+/**
+ * Whether draft attachment `attachmentId` is in what a reload restores — the
+ * stored drafts, not memory. False when storage refused the write or cannot
+ * be read.
+ */
+export function isDraftAttachmentPersisted(sessionId: string, attachmentId: string): boolean {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY);
+    if (!raw) return false;
+    const stored = (JSON.parse(raw) as { state?: unknown } | null)?.state;
+    return (restoreDrafts(stored).get(sessionId) ?? []).some((a) => a.id === attachmentId);
+  } catch {
+    return false;
+  }
+}
 
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 Bytes';
