@@ -2,18 +2,16 @@
 <html lang="en">
   <!-- The forge demo (demo.reliantlabs.io): its own build of this package,
        entry src/demoBundle/main.tsx. `vite build --mode demo` emits it as
-       dist-demo/index.html (vite.config.ts). -->
+       dist-demo/index.html (vite.config.ts). It is a site, not an installable
+       app: no web manifest (whose fetch a credentialed preview proxy refuses)
+       and no *-web-app-capable metas. -->
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="alternate icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#ffffff" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-title" content="forge demo" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <!-- viewport-fit=cover: without it every env(safe-area-inset-*) the
          mobile surface pads with resolves to 0, and a notched phone in
          landscape or a home-screen web app draws under the notch.
