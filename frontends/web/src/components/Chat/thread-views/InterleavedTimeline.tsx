@@ -50,6 +50,7 @@ import { useChatThreadMode } from "./useChatThreadMode";
 import {
   buildSimplifiedTimeline,
   createSegmentReader,
+  isRoutineActivityMessage,
   type MessageSlice,
   type WorkItem,
 } from "./simplifiedTurns";
@@ -963,7 +964,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     let lastMessageId: string | undefined;
     for (let i = detailedTimelineItems.length - 1; i >= 0; i--) {
       const item = detailedTimelineItems[i];
-      if (item.type === "message") {
+      if (item.type === "message" && !isRoutineActivityMessage(item.message)) {
         lastMessageId = item.message.id;
         break;
       }
@@ -1245,7 +1246,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       const index = timelineItems.findIndex(
         (item) =>
           (item.type === "message" && item.message.id === messageId) ||
-          (item.type === "work" && item.work.parts.some((part) => part.message.id === messageId)),
+          (item.type === "work" && (
+            item.work.parts.some((part) => part.message.id === messageId) ||
+            item.work.events?.some((event) => event.message.id === messageId)
+          )),
       );
       // Not in the loaded window — the message lives in a page we have not
       // fetched yet, so there is nothing to scroll to.

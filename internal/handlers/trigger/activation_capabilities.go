@@ -22,6 +22,14 @@ import (
 // a fixed connection to a dynamic one widens power.
 const dynamicCapability = "dynamic"
 
+// approvalsDecideCapability is held by a closure with a step that calls
+// Reliant's ApprovalService to approve or deny. Whether the credential it
+// carries can decide is not knowable here (a saved connection or hosted
+// secret is opaque to this server), so the step's target is the signal: any
+// token that permits approvals:decide, reliant:api included, is treated as
+// able to.
+const approvalsDecideCapability = automationpolicy.CapabilityApprovalsDecide
+
 // prodDeploy matches a fixed shell command that deploys or promotes to a
 // production environment: `reliant forge env deploy prod`, `forge env promote
 // staging prod`, `deploy --env production`. The engine can tell only from a
@@ -97,6 +105,12 @@ func nodeCapabilities(node *pb.Node, values map[string]any, identity string, tai
 				out = append(out, "secret:hosted_use/"+dynamicCapability)
 			}
 		}
+		if integration == "http" {
+			rawURL := model.ActionURL(a)
+			if model.TargetsApprovalDecision(rawURL) || model.TargetsApprovalDecision(fixed(rawURL)) {
+				out = append(out, approvalsDecideCapability)
+			}
+		}
 		return out
 	}
 	if r := node.GetRun(); r != nil {
@@ -104,8 +118,12 @@ func nodeCapabilities(node *pb.Node, values map[string]any, identity string, tai
 		if r.GetCredentials() != "none" {
 			out = append(out, "secret:machine_credentials")
 		}
-		if command := fixed(model.CelStringRaw(r.GetCommand())); command != "" && prodDeploy.MatchString(command) {
+		raw := model.CelStringRaw(r.GetCommand())
+		if command := fixed(raw); command != "" && prodDeploy.MatchString(command) {
 			out = append(out, "deploy:prod")
+		}
+		if model.TargetsApprovalDecision(raw) || model.TargetsApprovalDecision(fixed(raw)) {
+			out = append(out, approvalsDecideCapability)
 		}
 		return out
 	}

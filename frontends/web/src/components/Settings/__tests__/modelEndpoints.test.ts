@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { create } from "@bufbuild/protobuf";
 import { ModelEndpointModelSchema, ModelEndpointRoute, ModelEndpointSchema } from "../../../gen/reliant/v1/model_endpoint_pb";

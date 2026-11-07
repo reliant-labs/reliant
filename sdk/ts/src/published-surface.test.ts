@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The publish contract: what a consumer resolves, and what it must never reach.
 // `pretest` is not used (a build per test run is waste); the dist-reading checks
 // build once here, into a scratch directory, so they always judge current sources.

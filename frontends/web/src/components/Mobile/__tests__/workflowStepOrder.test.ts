@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { orderedWorkflowNodeIds } from "../workflowStepOrder";
 import type { Workflow, Step } from "../../../types/workflow";

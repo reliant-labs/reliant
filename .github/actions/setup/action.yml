@@ -13,6 +13,12 @@ inputs:
   go:
     description: Install Go and restore the module, build and embedded-Postgres caches
     default: "true"
+  go-build-cache:
+    description: Restore the Go build cache (disable for lightweight standalone tools)
+    default: "true"
+  postgres-cache:
+    description: Restore embedded Postgres binaries (disable for jobs with no DB tests)
+    default: "true"
   node:
     description: Install Node
     default: "false"
@@ -101,7 +107,7 @@ runs:
     # Every compile here is -trimpath (the Taskfile and both gates add it), so
     # a package compiled on main's runner is a cache hit on a PR's.
     - name: Restore Go build cache
-      if: inputs.go == 'true'
+      if: inputs.go == 'true' && inputs.go-build-cache == 'true'
       uses: actions/cache/restore@v4
       with:
         path: ~/.cache/go-build
@@ -116,7 +122,7 @@ runs:
     # The archive is fixed by go.mod's embedded-postgres version, and its file
     # name carries the Postgres version, so the prefix fallback is safe.
     - name: Restore embedded Postgres binaries
-      if: inputs.go == 'true'
+      if: inputs.go == 'true' && inputs.postgres-cache == 'true'
       uses: actions/cache/restore@v4
       with:
         path: ~/.cache/forge/embedded-postgres

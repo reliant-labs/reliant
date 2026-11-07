@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The service.name the web app's telemetry reports must be the one forge's
  * generated observability filters on. They were derived apart once — the

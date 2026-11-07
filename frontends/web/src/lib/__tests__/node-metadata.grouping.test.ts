@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Palette grouping is data-driven (research/WORKFLOW_UI.md §3.4 seam 1): the
  * palette groups by whatever key a node yields, defaulting to its category.

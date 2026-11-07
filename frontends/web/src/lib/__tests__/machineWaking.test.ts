@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * A request that finds its machine asleep: the server wakes the machine and
  * fails the request as Unavailable with a `DaemonWaking` detail naming it

@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The backend-signalled modals open on a REASON (lib/errorReasons.ts), read
  * from x-forge-error-reason or, until control-plane switches, x-reliant-reason

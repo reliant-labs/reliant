@@ -1220,7 +1220,7 @@ func stopProcessGroup(w *groupWatch, leaderDone <-chan struct{}, onTerm func()) 
 // command's: some member recorded while the id was known to be the command's
 // must still be in the group (osutil.GroupOwned), and then everyone now in it
 // is recorded in turn, so ownership carries forward as members come and go.
-// Where the process table cannot be read (macOS) it falls back to "does the
+// Where the process table cannot be read it falls back to "does the
 // group id answer a signal".
 type groupWatch struct {
 	pgid     int

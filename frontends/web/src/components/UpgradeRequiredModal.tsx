@@ -10,7 +10,7 @@ import { useComputeSubscription, usePlans } from "@/hooks/useCloudBillingQueries
 import { LinkIdentityModal } from "./Billing/LinkIdentityModal";
 import { ComputeSubscriptionCheckout } from "./Billing/ComputeSubscriptionCheckout";
 import { InlineCreditTopup } from "./Billing/InlineCreditTopup";
-import { deriveMachineOptions } from "./Billing/machineOptions";
+import { deriveMachineOptions, oneRowPerPlan } from "./Billing/machineOptions";
 import { isPurchasableComputePlan, sortPlansForDisplay } from "./Settings/cloud/billingUtils";
 import {
   ACCOUNT_REQUIRED_MACHINE_COPY,
@@ -210,9 +210,11 @@ function ComputeUpgrade({ onDone }: { onDone: () => void }) {
   const currentPlanId = subQ.data?.subscription?.plan?.id ?? null;
   const options = useMemo(
     () =>
-      deriveMachineOptions(
-        sortPlansForDisplay((plansQ.data?.plans ?? []).filter(isPurchasableComputePlan)),
-        plansQ.data?.daemonPricing,
+      oneRowPerPlan(
+        deriveMachineOptions(
+          sortPlansForDisplay((plansQ.data?.plans ?? []).filter(isPurchasableComputePlan)),
+          plansQ.data?.daemonPricing,
+        ),
       ),
     [plansQ.data],
   );

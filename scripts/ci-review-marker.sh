@@ -7,10 +7,13 @@
 # commit_id is the head), posted by the pipeline's reviewer. pr-disarm reacts to
 # a push after the fact; this is checked by the merge itself, so a head pushed
 # after a pass cannot ride an armed auto-merge in. The head's verdict is its
-# FIRST review-passed or review-changes marker, and it is immutable: a later
-# marker on the same sha, whichever way it went, never changes it; only a push
-# (a new sha) starts a new verdict (control-plane docs/pr-pipeline.md, "One
-# verdict per head"). A pull request whose head is in a fork (or whose fork was deleted)
+# newest evidence re-review by the bot (a review-passed or review-changes marker
+# in a review that also carries `<!-- review-rereview sha=<head> of=<id> -->`),
+# else its FIRST review-passed or review-changes marker. Any other later marker
+# on the same sha, whichever way it went, never changes it (control-plane
+# docs/pr-pipeline.md, "One verdict per head" and "Evidence re-review"). Only
+# the bot's re-review marker counts: every agent writes as the owner account,
+# which could otherwise post one. A pull request whose head is in a fork (or whose fork was deleted)
 # never passes, whatever marker it carries: the repository is public, and the
 # pipeline merges only its own branches (control-plane security finding CPI-1).
 #
@@ -25,11 +28,15 @@
 set -euo pipefail
 repo=${GITHUB_REPOSITORY:?}
 reviewers=${REVIEW_MARKER_REVIEWERS:-186876276,225976313}
+rereviewer=${REVIEW_MARKER_REREVIEWER:-186876276} # the one id whose review-rereview marker counts
 
-verdict() { # <pr> <sha>: the first marker a reviewer posted for that sha (its verdict), or none
-  gh api --paginate "repos/$repo/pulls/$1/reviews?per_page=100" | jq -rs --arg sha "$2" --arg ids "$reviewers" '
+verdict() { # <pr> <sha>: the sha's newest bot re-review marker, else the first a reviewer posted (its verdict), or none
+  gh api --paginate "repos/$repo/pulls/$1/reviews?per_page=100" | jq -rs --arg sha "$2" --arg ids "$reviewers" --arg bot "$rereviewer" '
     [.[][] | select(.commit_id == $sha and ((.user.id | tostring) as $i | $ids | split(",") | index($i)))
-     | (.body // "") | capture("<!-- (?<v>review-(passed|changes)) sha=" + $sha + " -->")? | .v] | first // "none"'
+     | (.body // "") as $b
+     | ($b | capture("<!-- (?<v>review-(passed|changes)) sha=" + $sha + " -->")? | .v) as $v
+     | {v: $v, rereview: ((.user.id | tostring) == $bot and ($b | contains("<!-- review-rereview sha=" + $sha + " ")))}]
+    | (map(select(.rereview)) | last) // first | .v // "none"'
 }
 
 case $1 in
@@ -55,6 +62,6 @@ for n in $prs; do
   fi
   v=$(verdict "$n" "$head")
   if [ "$v" = review-passed ]; then echo "#$n: pr-review passed its head $head"
-  else echo "::error::#$n: its head $head has no pr-review pass marker (latest: $v); pr-review must pass this exact head"; bad=1; fi
+  else echo "::error::#$n: its head $head has no pr-review pass verdict (its verdict: $v); pr-review must pass this exact head"; bad=1; fi
 done
 exit $bad

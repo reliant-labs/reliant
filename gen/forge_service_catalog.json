@@ -41512,6 +41512,11 @@
               "map_key_kind": "string",
               "map_value_kind": "message",
               "map_value_type_name": "reliant.v1.SecretDeclaration"
+            },
+            {
+              "name": "permissions",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.WorkflowConcurrency": [
@@ -41637,6 +41642,11 @@
               "name": "triggers",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowTrigger",
+              "repeated": true
+            },
+            {
+              "name": "permissions",
+              "kind": "string",
               "repeated": true
             }
           ],

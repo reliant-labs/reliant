@@ -71,6 +71,10 @@ plugins:
     # forge/v1/forge.proto is imported for method annotations only; it has to be
     # emitted too or the generated descriptors reference a file that is absent.
     include_imports: true
+    # Secret values are a daemon/CLI capability, never a browser capability.
+    # Keep the Go client above, but do not export its service descriptor to
+    # the frontend (including generated per-service mock defaults).
+    exclude_types: [controlplane.v1.LocalSecretService]
     opt:
       - target=ts
       - ts_nocheck=true

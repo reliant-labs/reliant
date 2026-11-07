@@ -9,7 +9,8 @@ import ToggleSwitch from "../forge-ui/toggle_switch";
 import { DEFAULT_TOOL_COLLAPSE_SETTINGS, TOOL_COLLAPSE_SETTINGS_EVENT, ToolCallSettingsCompact } from "./ToolCallSettings";
 import { getSpawnDisplayMode, setSpawnDisplayMode as saveSpawnDisplayMode, type SpawnDisplayMode } from "./SpawnDisplaySettings";
 import { SettingsPageHeader } from "./SettingsPageHeader";
-import { usePreferences, useUpdatePreferences } from "../../hooks/settings-queries";
+import { DEFAULT_LONG_PASTE_PREFERENCES, usePreferences, useUpdatePreferences, useUpdateLongPastePreferences } from "../../hooks/settings-queries";
+import { LongPasteSettings } from "./LongPasteSettings";
 import {
   ChoiceGroup,
   SettingRange,
@@ -45,6 +46,7 @@ export function ChatEditorSettings() {
   const resetEditorSettings = useEditorStore((state) => state.resetSettings);
   const { data: preferences } = usePreferences();
   const updatePreferences = useUpdatePreferences();
+  const updateLongPastePreferences = useUpdateLongPastePreferences();
 
   const [workflowViewerDefaultMode, setWorkflowViewerDefaultMode] = useState<WorkflowViewerMode>("side");
   const [spawnDisplayMode, setSpawnDisplayMode] = useState<SpawnDisplayMode>("preview");
@@ -83,6 +85,7 @@ export function ChatEditorSettings() {
     if (!preferences.streamingEnabled) {
       void updatePreferences.mutateAsync({ streamingEnabled: true }).catch(() => {});
     }
+    void updateLongPastePreferences.mutateAsync(DEFAULT_LONG_PASTE_PREFERENCES).catch(console.error);
     chooseSpawnDisplay("preview");
     setWorkflowViewerDefaultMode("side");
     setShowHiddenFiles(false);
@@ -109,6 +112,7 @@ export function ChatEditorSettings() {
       />
 
       <ResponseStreamingSetting />
+      <LongPasteSettings />
 
       <section aria-labelledby="chat-editor-tool-calls" className="rounded-lg border border-border bg-card p-4 space-y-4">
         <div>
@@ -125,7 +129,7 @@ export function ChatEditorSettings() {
           <h3 id="chat-editor-spawn" className="text-sm font-semibold">
             Sub-agents
           </h3>
-          <p className="text-xs text-muted-foreground mt-1">How a spawned agent's thread shows in the timeline.</p>
+          <p className="text-xs text-muted-foreground mt-1">How a sub-agent's conversation appears in the timeline.</p>
         </div>
         <ChoiceGroup
           label="Sub-agent display"

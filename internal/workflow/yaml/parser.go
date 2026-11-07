@@ -128,6 +128,9 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		case "secrets":
 			wf.Secrets, err = unmarshalWorkflowSecrets(val)
 
+		case "permissions":
+			wf.Permissions, err = unmarshalWorkflowPermissions(val)
+
 		case "on_failure", "onFailure":
 			wf.OnFailure, err = unmarshalWorkflow(val)
 
@@ -426,6 +429,10 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 		return nil, err
 	} else if secrets != nil {
 		m.Content = append(m.Content, scalarNode("secrets", ""), secrets)
+	}
+
+	if perms := marshalWorkflowPermissions(wf.Permissions); perms != nil {
+		m.Content = append(m.Content, scalarNode("permissions", ""), perms)
 	}
 
 	// apiVersion

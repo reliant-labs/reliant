@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { FileChangeStatus } from "../../../../gen/reliant/v1/common_pb";
 import { changeGroupOf, lineCountsOf, splitPath, statusLetterOf } from "../fileStatus";
