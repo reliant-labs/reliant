@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -447,4 +448,42 @@ func TestListProjectDaemons_NamesEachMachineAndWhenItWasVerified(t *testing.T) {
 	require.NotNil(t, found.VerifiedAt)
 	_, err = time.Parse(time.RFC3339, *found.VerifiedAt)
 	assert.NoError(t, err)
+}
+
+// Two detaches of a project's last two checkouts, at once: the guard runs
+// under the project's catalog lock, so the second sees the first's commit and
+// is refused. One checkout always survives.
+func TestDetachProjectFromDaemon_ConcurrentDetachesLeaveOneCheckout(t *testing.T) {
+	f := newMachinesFixture(t)
+	p := f.project(t, "race", "/home/workspace/race-"+uuid.NewString(), f.cloud, nil)
+	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, p.ID, f.laptop, "/Users/me/race", nil))
+
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for _, id := range []string{f.cloud, f.laptop} {
+		wg.Add(1)
+		go func(daemonID string) {
+			defer wg.Done()
+			_, err := f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+				ProjectId: p.ID, DaemonId: daemonID,
+			}))
+			errs <- err
+		}(id)
+	}
+	wg.Wait()
+	close(errs)
+	var ok, refused int
+	for err := range errs {
+		switch {
+		case err == nil:
+			ok++
+		case codeOf(err) == connect.CodeFailedPrecondition && strings.Contains(err.Error(), "only machine"):
+			refused++
+		default:
+			t.Fatalf("unexpected detach error: %v", err)
+		}
+	}
+	assert.Equal(t, 1, ok)
+	assert.Equal(t, 1, refused)
+	assert.Len(t, f.rows(t, p.ID), 1, "one checkout survives")
 }

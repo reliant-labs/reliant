@@ -494,7 +494,7 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 		// directory from. Without it the project would have no checkout on
 		// record until the machine next connected.
 		if createErr == nil && strings.TrimSpace(conn.daemonID) != "" {
-			if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, conn.daemonID, path, nil); err != nil {
+			if _, err := s.deps.Repo.RecordObservedProjectDaemon(ctx, project.ID, conn.daemonID, path, nil); err != nil {
 				logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record the discovering machine's checkout; reconcile will heal it",
 					"error", err, "projectID", project.ID, "daemonID", conn.daemonID)
 			}

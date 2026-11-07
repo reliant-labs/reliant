@@ -72,6 +72,18 @@ func ClearProjectDaemonDetachment(ctx context.Context, db orm.Context, projectID
 	return nil
 }
 
+// ProjectDaemonDetached reports whether the user detached the project from
+// the machine.
+func ProjectDaemonDetached(ctx context.Context, db orm.Context, projectID, daemonID string) (bool, error) {
+	detached, err := db.Bun().NewSelect().Model((*ProjectDaemonDetachment)(nil)).
+		Where("project_id = ? AND daemon_id = ?", projectID, daemonID).
+		Exists(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to read the project's detachment from the machine: %w", err)
+	}
+	return detached, nil
+}
+
 // ListProjectDaemonDetachmentsForDaemon returns every project detached from
 // the machine.
 func ListProjectDaemonDetachmentsForDaemon(ctx context.Context, db orm.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {

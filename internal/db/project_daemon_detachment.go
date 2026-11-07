@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -30,14 +31,28 @@ import (
 // detachment at path (the checkout path it had there), in one transaction.
 // The project's config union is rewritten without the machine's catalog,
 // under the same advisory lock every catalog writer takes
-// (SyncProjectConfigSnapshot). Nothing is sent to the machine.
-func (r *Repo) DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string) error {
+// (SyncProjectConfigSnapshot) and every checkout writer takes
+// (UpsertProjectDaemon, RecordObservedProjectDaemon). Nothing is sent to the
+// machine.
+//
+// guard, when not nil, runs first inside that transaction, after the lock:
+// the caller's preconditions (another checkout remains, no workspaces live
+// there) are judged against every detach and checkout write that committed
+// before it, so two concurrent detaches cannot each see the other's checkout
+// and leave none. A guard error aborts the detach and is returned as is;
+// ErrNothingToDetach aborts it as a success.
+func (r *Repo) DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string, guard func(ctx context.Context) error) error {
 	if projectID == "" || daemonID == "" {
 		return fmt.Errorf("project ID and daemon ID cannot be empty")
 	}
-	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
+	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if err := store.LockProjectCatalog(txCtx, r.ORM(), projectID); err != nil {
 			return err
+		}
+		if guard != nil {
+			if err := guard(txCtx); err != nil {
+				return err
+			}
 		}
 		if err := store.RemoveProjectDaemon(txCtx, r.ORM(), projectID, daemonID); err != nil {
 			return err
@@ -50,7 +65,16 @@ func (r *Repo) DetachProjectFromDaemon(ctx context.Context, projectID, daemonID,
 		}
 		return r.rewriteProjectCatalogUnion(txCtx, projectID)
 	})
+	if errors.Is(err, ErrNothingToDetach) {
+		return nil
+	}
+	return err
 }
+
+// ErrNothingToDetach is what a DetachProjectFromDaemon guard returns when the
+// checkout is already gone (another detach got there first): the detach ends
+// as a success, recording nothing.
+var ErrNothingToDetach = errors.New("no checkout to detach")
 
 // ListProjectDaemonDetachmentsForDaemon returns every project detached from
 // the machine.

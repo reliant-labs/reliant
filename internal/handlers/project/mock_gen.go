@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=272f26f09574329f89aa3450ff4b110097d13af73bd9e4eabb31313c38f9279d
+// forge:hash=e86524d20f6b1ac6e413baa7116ce7b8808e66b1f79eea03a181bbbce8c3c1a9
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -39,12 +39,13 @@ type MockRepository struct {
 	TouchProjectFunc                          func(context.Context, string, string) error
 	DeleteProjectFunc                         func(context.Context, string, string) error
 	UpsertProjectDaemonFunc                   func(context.Context, string, string, string, *string) error
+	RecordObservedProjectDaemonFunc           func(context.Context, string, string, string, *string) (bool, error)
 	UpsertQueuedProjectDaemonFunc             func(context.Context, string, string, string, *string, string) error
 	ListProjectDaemonsForProjectFunc          func(context.Context, string) ([]*core.ProjectDaemon, error)
 	ListProjectDaemonsForDaemonFunc           func(context.Context, string) ([]*core.ProjectDaemon, error)
 	GetDaemonFunc                             func(context.Context, string) (*db.Daemon, error)
 	DeleteProjectDaemonFunc                   func(context.Context, string, string) error
-	DetachProjectFromDaemonFunc               func(context.Context, string, string, string) error
+	DetachProjectFromDaemonFunc               func(context.Context, string, string, string, func(ctx context.Context) error) error
 	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	CreateRepoFunc                            func(context.Context, *core.Repo) error
 	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
@@ -156,6 +157,15 @@ func (m *MockRepository) UpsertProjectDaemon(ctx context.Context, projectID stri
 	return contractkit.MockNotSet("MockRepository", "UpsertProjectDaemon")
 }
 
+// RecordObservedProjectDaemon records the call and delegates to RecordObservedProjectDaemonFunc when set.
+func (m *MockRepository) RecordObservedProjectDaemon(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string) (bool, error) {
+	m.Recorder.Record("RecordObservedProjectDaemon", ctx, projectID, daemonID, path, defaultBranch)
+	if m.RecordObservedProjectDaemonFunc != nil {
+		return m.RecordObservedProjectDaemonFunc(ctx, projectID, daemonID, path, defaultBranch)
+	}
+	return false, contractkit.MockNotSet("MockRepository", "RecordObservedProjectDaemon")
+}
+
 // UpsertQueuedProjectDaemon records the call and delegates to UpsertQueuedProjectDaemonFunc when set.
 func (m *MockRepository) UpsertQueuedProjectDaemon(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string, requestID string) error {
 	m.Recorder.Record("UpsertQueuedProjectDaemon", ctx, projectID, daemonID, path, defaultBranch, requestID)
@@ -202,10 +212,10 @@ func (m *MockRepository) DeleteProjectDaemon(ctx context.Context, projectID stri
 }
 
 // DetachProjectFromDaemon records the call and delegates to DetachProjectFromDaemonFunc when set.
-func (m *MockRepository) DetachProjectFromDaemon(ctx context.Context, projectID string, daemonID string, path string) error {
-	m.Recorder.Record("DetachProjectFromDaemon", ctx, projectID, daemonID, path)
+func (m *MockRepository) DetachProjectFromDaemon(p0 context.Context, projectID string, daemonID string, path string, guard func(ctx context.Context) error) error {
+	m.Recorder.Record("DetachProjectFromDaemon", p0, projectID, daemonID, path, guard)
 	if m.DetachProjectFromDaemonFunc != nil {
-		return m.DetachProjectFromDaemonFunc(ctx, projectID, daemonID, path)
+		return m.DetachProjectFromDaemonFunc(p0, projectID, daemonID, path, guard)
 	}
 	return contractkit.MockNotSet("MockRepository", "DetachProjectFromDaemon")
 }

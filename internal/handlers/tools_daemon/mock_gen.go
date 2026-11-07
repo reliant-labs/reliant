@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=8cb2429cf1d6c218d47305d24470417eeffcc2f508d53566a5e4b2108c0fdd63
+// forge:hash=f34d66b1328cd6a07a2638b4c464735cb6ef1522acb418cd0c1b374ddac419aa
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -50,7 +50,7 @@ type MockRepository struct {
 	ListProjectsFunc                          func(context.Context, db.ProjectFilters) ([]*db.Project, error)
 	ListProjectDaemonsForDaemonFunc           func(context.Context, string) ([]*core.ProjectDaemon, error)
 	StartQueuedProjectDaemonClonesFunc        func(context.Context, string) error
-	UpsertProjectDaemonFunc                   func(context.Context, string, string, string, *string) error
+	RecordObservedProjectDaemonFunc           func(context.Context, string, string, string, *string) (bool, error)
 	MarkProjectDaemonInstalledFunc            func(context.Context, string, string) error
 	FailProjectDaemonInstallFunc              func(context.Context, string, string, string) error
 	GetProjectByRemoteURLAndUserFunc          func(context.Context, string, string) (*db.Project, error)
@@ -260,13 +260,13 @@ func (m *MockRepository) StartQueuedProjectDaemonClones(ctx context.Context, dae
 	return contractkit.MockNotSet("MockRepository", "StartQueuedProjectDaemonClones")
 }
 
-// UpsertProjectDaemon records the call and delegates to UpsertProjectDaemonFunc when set.
-func (m *MockRepository) UpsertProjectDaemon(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string) error {
-	m.Recorder.Record("UpsertProjectDaemon", ctx, projectID, daemonID, path, defaultBranch)
-	if m.UpsertProjectDaemonFunc != nil {
-		return m.UpsertProjectDaemonFunc(ctx, projectID, daemonID, path, defaultBranch)
+// RecordObservedProjectDaemon records the call and delegates to RecordObservedProjectDaemonFunc when set.
+func (m *MockRepository) RecordObservedProjectDaemon(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string) (bool, error) {
+	m.Recorder.Record("RecordObservedProjectDaemon", ctx, projectID, daemonID, path, defaultBranch)
+	if m.RecordObservedProjectDaemonFunc != nil {
+		return m.RecordObservedProjectDaemonFunc(ctx, projectID, daemonID, path, defaultBranch)
 	}
-	return contractkit.MockNotSet("MockRepository", "UpsertProjectDaemon")
+	return false, contractkit.MockNotSet("MockRepository", "RecordObservedProjectDaemon")
 }
 
 // MarkProjectDaemonInstalled records the call and delegates to MarkProjectDaemonInstalledFunc when set.
@@ -354,7 +354,7 @@ func (m *MockRepository) ListDaemonsByUserID(ctx context.Context, userID string)
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockProjectReconcileStore
-// forge:hash=812217764ca28fbbc5dc6a34923f74fc3aa8788a3148a55622d61bd38fe095c3
+// forge:hash=3a5bb5cd942c7aec59e6d25a754f575862187e3329c728dd6746bc40721a59de
 
 // MockProjectReconcileStore is a test mock for the ProjectReconcileStore interface.
 //
@@ -367,7 +367,7 @@ type MockProjectReconcileStore struct {
 	ListProjectsFunc                          func(context.Context, db.ProjectFilters) ([]*db.Project, error)
 	ListProjectDaemonsForDaemonFunc           func(context.Context, string) ([]*core.ProjectDaemon, error)
 	StartQueuedProjectDaemonClonesFunc        func(context.Context, string) error
-	UpsertProjectDaemonFunc                   func(context.Context, string, string, string, *string) error
+	RecordObservedProjectDaemonFunc           func(context.Context, string, string, string, *string) (bool, error)
 	MarkProjectDaemonInstalledFunc            func(context.Context, string, string) error
 	FailProjectDaemonInstallFunc              func(context.Context, string, string, string) error
 	GetProjectByRemoteURLAndUserFunc          func(context.Context, string, string) (*db.Project, error)
@@ -402,13 +402,13 @@ func (m *MockProjectReconcileStore) StartQueuedProjectDaemonClones(ctx context.C
 	return contractkit.MockNotSet("MockProjectReconcileStore", "StartQueuedProjectDaemonClones")
 }
 
-// UpsertProjectDaemon records the call and delegates to UpsertProjectDaemonFunc when set.
-func (m *MockProjectReconcileStore) UpsertProjectDaemon(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string) error {
-	m.Recorder.Record("UpsertProjectDaemon", ctx, projectID, daemonID, path, defaultBranch)
-	if m.UpsertProjectDaemonFunc != nil {
-		return m.UpsertProjectDaemonFunc(ctx, projectID, daemonID, path, defaultBranch)
+// RecordObservedProjectDaemon records the call and delegates to RecordObservedProjectDaemonFunc when set.
+func (m *MockProjectReconcileStore) RecordObservedProjectDaemon(ctx context.Context, projectID string, daemonID string, path string, defaultBranch *string) (bool, error) {
+	m.Recorder.Record("RecordObservedProjectDaemon", ctx, projectID, daemonID, path, defaultBranch)
+	if m.RecordObservedProjectDaemonFunc != nil {
+		return m.RecordObservedProjectDaemonFunc(ctx, projectID, daemonID, path, defaultBranch)
 	}
-	return contractkit.MockNotSet("MockProjectReconcileStore", "UpsertProjectDaemon")
+	return false, contractkit.MockNotSet("MockProjectReconcileStore", "RecordObservedProjectDaemon")
 }
 
 // MarkProjectDaemonInstalled records the call and delegates to MarkProjectDaemonInstalledFunc when set.

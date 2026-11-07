@@ -69,7 +69,7 @@ func TestEnsureOwnedProjectForPath_ResolvesTheMachinesOwnCheckoutPath(t *testing
 func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 	f := newDetachedFixture(t)
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.project.Path, nil))
-	require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.project.ID, f.laptop, f.project.Path))
+	require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.project.ID, f.laptop, f.project.Path, nil))
 	svc := newTestService(f.repo)
 	conn := newTestConn(f.userID, f.laptop, nil)
 
@@ -101,7 +101,7 @@ func TestDetachedProject_StaysOffTheMachine(t *testing.T) {
 func TestDetachedProject_ItsOtherPathIsNotANewProject(t *testing.T) {
 	f := newDetachedFixture(t)
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
-	require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.project.ID, f.laptop, f.localPath))
+	require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
 	svc := newTestService(f.repo)
 
 	_, err := svc.ensureOwnedProjectForPath(f.ctx, newTestConn(f.userID, f.laptop, nil), f.localPath, nil)
@@ -109,4 +109,30 @@ func TestDetachedProject_ItsOtherPathIsNotANewProject(t *testing.T) {
 	projects, err := f.repo.ListProjects(f.ctx, db.ProjectFilters{UserID: f.userID})
 	require.NoError(t, err)
 	assert.Len(t, projects, 1)
+}
+
+// A detach that commits while the connect reconcile is probing the machine
+// (after it read the machine's detachments, before it writes) is not undone:
+// the write re-checks the detachment under the lock the detach held.
+func TestReconcile_DetachDuringTheProbeStaysDetached(t *testing.T) {
+	f := newDetachedFixture(t)
+
+	// The laptop has neither a row nor a detachment when the pass reads them;
+	// the user attaches and then detaches it while the pass probes.
+	detachDuringProbe := func(ctx context.Context, path string) (projectPathState, error) {
+		require.NoError(t, f.repo.UpsertProjectDaemon(ctx, f.project.ID, f.laptop, path, nil))
+		require.NoError(t, f.repo.DetachProjectFromDaemon(ctx, f.project.ID, f.laptop, path, nil))
+		return projectPathState{Exists: true}, nil
+	}
+	_, added, err := reconcileProjectDaemons(f.ctx, f.repo, f.laptop, f.userID, detachDuringProbe)
+	require.NoError(t, err)
+	assert.Empty(t, added)
+
+	rows, err := f.repo.ListProjectDaemonsForProject(f.ctx, f.project.ID)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, f.cloud, rows[0].DaemonID, "the laptop's checkout was not recorded again")
+	detached, err := f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
+	require.NoError(t, err)
+	assert.Len(t, detached, 1, "the detachment stands")
 }

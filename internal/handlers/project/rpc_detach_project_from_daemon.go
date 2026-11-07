@@ -61,16 +61,27 @@ func (s *Service) DetachProjectFromDaemon(
 		return connect.NewResponse(&pb.DetachProjectFromDaemonResponse{}), nil
 	}
 	machine := s.machineName(ctx, daemonID)
-	if row.InstallState == core.ProjectInstallInstalling {
-		return nil, svcerr.FailedPrecondition(fmt.Sprintf("%q is still being cloned onto %s; wait for the clone to finish, then detach it", project.Name, machine))
+	// The preconditions are judged inside the detach's transaction, under the
+	// project's catalog lock (db.Repo.DetachProjectFromDaemon): judged before
+	// it, two concurrent detaches of the project's last two checkouts each saw
+	// the other's and both went through, leaving none.
+	guard := func(txCtx context.Context) error {
+		row, err := s.checkoutOn(txCtx, project.ID, daemonID)
+		if err != nil {
+			return err
+		}
+		if row == nil {
+			return db.ErrNothingToDetach
+		}
+		if row.InstallState == core.ProjectInstallInstalling {
+			return svcerr.FailedPrecondition(fmt.Sprintf("%q is still being cloned onto %s; wait for the clone to finish, then detach it", project.Name, machine))
+		}
+		if err := s.requireCheckoutElsewhere(txCtx, userID, project, daemonID, machine); err != nil {
+			return err
+		}
+		return s.requireNoWorkspacesOn(txCtx, project, daemonID, machine)
 	}
-	if err := s.requireCheckoutElsewhere(ctx, userID, project, daemonID, machine); err != nil {
-		return nil, err
-	}
-	if err := s.requireNoWorkspacesOn(ctx, project, daemonID, machine); err != nil {
-		return nil, err
-	}
-	if err := s.deps.Repo.DetachProjectFromDaemon(ctx, project.ID, daemonID, row.Path); err != nil {
+	if err := s.deps.Repo.DetachProjectFromDaemon(ctx, project.ID, daemonID, row.Path, guard); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to detach the project from the machine"))
 	}
 	return connect.NewResponse(&pb.DetachProjectFromDaemonResponse{}), nil

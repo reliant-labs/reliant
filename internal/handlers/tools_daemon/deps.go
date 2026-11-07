@@ -69,7 +69,9 @@ type ProjectReconcileStore interface {
 	// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
 	// clones queued while the machine was away: they run from this connect.
 	StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error
-	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
+	// RecordObservedProjectDaemon records a checkout found on the machine,
+	// never over a detachment of the pair (reports false then).
+	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)
 	// MarkProjectDaemonInstalled and FailProjectDaemonInstall settle a clone
 	// whose outcome was lost, from the row's own path; the first also
 	// settles one from the machine's filesystem announcement.

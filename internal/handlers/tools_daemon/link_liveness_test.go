@@ -143,11 +143,11 @@ func linkTestService(t *testing.T) (svc *Service, conn *daemonConnection, link *
 		ListProjectDaemonDetachmentsForDaemonFunc: func(context.Context, string) ([]*core.ProjectDaemonDetachment, error) {
 			return nil, nil
 		},
-		UpsertProjectDaemonFunc: func(_ context.Context, _, _, path string, _ *string) error {
+		RecordObservedProjectDaemonFunc: func(_ context.Context, _, _, path string, _ *string) (bool, error) {
 			mu.Lock()
 			upserted = append(upserted, path)
 			mu.Unlock()
-			return nil
+			return true, nil
 		},
 	}
 	svc = newTestService(repo)
