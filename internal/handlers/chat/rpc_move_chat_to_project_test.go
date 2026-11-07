@@ -3,6 +3,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -186,6 +187,38 @@ func TestMoveChatToProject_MovesChatPlansAndMachineAndLeavesANote(t *testing.T) 
 	assert.Contains(t, notes[0], `from project "billing" to project "properties"`)
 	assert.Contains(t, notes[0], "`/home/me/billing`", "the note names the old checkout the history's paths are in")
 	assert.Contains(t, notes[0], "`/home/me/properties` on self-hosted machine "+laptop[:8], "and where the chat works now")
+}
+
+// noteFailingRepo is the test database with the move note's write failing.
+type noteFailingRepo struct {
+	Repository
+}
+
+func (noteFailingRepo) SaveMessageToThread(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error) {
+	return nil, errors.New("note write refused")
+}
+
+// The note commits with the move or not at all: a chat moved without it
+// would run its next turn on the old project's paths with no warning.
+func TestMoveChatToProject_NoteFailureLeavesTheChatWhereItWas(t *testing.T) {
+	t.Parallel()
+	f := newMoveFixture(t)
+	from, fromMain := f.project(moveUser, "billing")
+	to, _ := f.project(moveUser, "properties")
+	laptop := f.machine(moveUser, "laptop")
+	f.install(from, laptop, "/home/me/billing")
+	f.install(to, laptop, "/home/me/properties")
+	chatID := f.chat(from, fromMain, &laptop)
+	f.service.deps.Repo = noteFailingRepo{Repository: f.repo}
+
+	_, err := f.move(&reliantv1.MoveChatToProjectRequest{ChatId: chatID, ProjectId: to})
+	requireCode(t, err, connect.CodeInternal)
+
+	row := f.row(chatID)
+	assert.Equal(t, from, row.ProjectID, "the move rolled back with the note")
+	require.NotNil(t, row.WorktreeID)
+	assert.Equal(t, fromMain, *row.WorktreeID)
+	assert.Empty(t, f.hiddenNotes(chatID))
 }
 
 func TestMoveChatToProject_SameProjectIsANoOp(t *testing.T) {

@@ -27,7 +27,7 @@ import (
 // its project and machine (resolveCallCheckout), so the move itself is the
 // chat row: its project, the new project's main worktree and a machine that
 // has the new project. What does not follow is the history: earlier messages
-// name the old checkout's paths. The hidden note written after the move tells
+// name the old checkout's paths. The hidden note written with the move tells
 // the model so, the way a branch's note tells it what a branch is.
 //
 // The rules:
@@ -104,11 +104,18 @@ func (s *Service) MoveChatToProject(
 	if err != nil {
 		return nil, err
 	}
+	noteThread, err := s.moveNoteThread(ctx, chat)
+	if err != nil {
+		return nil, err
+	}
+	note := moveNote(source, from, target, to)
 
 	// ReadCommitted, not Serializable: what makes the move correct is the chat
 	// row lock its statement runs under (store.MoveChatToProject), the one a
 	// workflow's admission takes too, and the activity check inside that
-	// statement.
+	// statement. The note commits with the move or not at all: a moved chat
+	// whose next turn reads the old project's paths with no warning would act
+	// on paths that no longer apply.
 	var moved bool
 	if err := s.deps.Repo.RunTx(ctx, orm.ReadCommitted, func(txCtx context.Context) error {
 		moved, err = s.deps.Repo.MoveChatToProject(txCtx, db.ChatMove{
@@ -132,7 +139,7 @@ func (s *Service) MoveChatToProject(
 		if err != nil {
 			return err
 		}
-		return s.deps.Repo.CreateUserUpdate(txCtx, &db.UserUpdate{
+		if err := s.deps.Repo.CreateUserUpdate(txCtx, &db.UserUpdate{
 			UserID:     userID,
 			ProjectID:  &target.ID,
 			WorktreeID: worktreeID,
@@ -141,7 +148,10 @@ func (s *Service) MoveChatToProject(
 			EntityType: db.EntityTypeChat,
 			EntityID:   chat.ID,
 			Data:       configData,
-		})
+		}); err != nil {
+			return err
+		}
+		return s.writeMoveNote(txCtx, chat.ID, noteThread, note)
 	}); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to move chat"))
 	}
@@ -153,8 +163,6 @@ func (s *Service) MoveChatToProject(
 	logging.InfoContext(ctx, "[MoveChatToProject] moved chat to another project",
 		"chatID", chat.ID, "fromProjectID", source.ID, "toProjectID", target.ID,
 		"daemonID", stringOrEmpty(to.daemonID), "leftWorkspace", from.workspace != nil)
-
-	s.writeMoveNote(ctx, chat, moveNote(source, from, target, to))
 
 	updated, err := s.getChatForUser(ctx, chat.ID, userID)
 	if err != nil {
@@ -331,24 +339,42 @@ func moveNote(from *db.Project, src movePlace, to *db.Project, dst movePlace) st
 	return b.String()
 }
 
-// writeMoveNote saves note, hidden, on the chat's root thread, where its next
-// turn reads it. Best-effort: the move has happened, and a chat without the
-// note still works, its model just has less to go on.
-func (s *Service) writeMoveNote(ctx context.Context, chat *db.Chat, note string) {
+// noteThread is where a moved chat's note goes: its root run's thread.
+type noteThread struct {
+	workflowID string
+	thread     string
+}
+
+// moveNoteThread is the chat's root thread, where its next turn reads the
+// move note; nil when the chat has never run, so has no history whose paths
+// could mislead it.
+func (s *Service) moveNoteThread(ctx context.Context, chat *db.Chat) (*noteThread, error) {
 	workflowID := chat.MainThreadID()
 	if workflowID == "" {
-		return
+		return nil, nil
 	}
 	root, err := s.deps.Repo.GetWorkflow(ctx, workflowID)
-	if err != nil || root == nil {
-		logging.WarnContext(ctx, "[MoveChatToProject] Could not tell the agent the chat moved: no root run", "chatID", chat.ID, "error", err)
-		return
+	if err != nil && !svcerr.IsNotFound(err) {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load the chat's run"))
+	}
+	if root == nil {
+		return nil, nil
+	}
+	return &noteThread{workflowID: workflowID, thread: root.Thread}, nil
+}
+
+// writeMoveNote saves note, hidden, on the chat's root thread, in the move's
+// transaction (txCtx): a failure fails the move.
+func (s *Service) writeMoveNote(txCtx context.Context, chatID string, at *noteThread, note string) error {
+	if at == nil {
+		return nil
 	}
 	hidden := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
-	if _, err := s.deps.Repo.SaveMessageToThread(ctx, chat.ID, root.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM),
-		note, &workflowID, nil, &hidden); err != nil {
-		logging.WarnContext(ctx, "[MoveChatToProject] Could not tell the agent the chat moved", "chatID", chat.ID, "error", err)
+	if _, err := s.deps.Repo.SaveMessageToThread(txCtx, chatID, at.thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM),
+		note, &at.workflowID, nil, &hidden); err != nil {
+		return fmt.Errorf("save the move note: %w", err)
 	}
+	return nil
 }
 
 func stringOrEmpty(s *string) string {
