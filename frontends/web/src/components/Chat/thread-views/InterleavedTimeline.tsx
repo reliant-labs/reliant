@@ -1693,7 +1693,14 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       )}
       <div
         ref={setScrollerEl}
-        className="h-full overflow-y-auto"
+        className="h-full overflow-y-auto overflow-x-hidden"
+        // overflow-x-hidden is a guard, not the fix: a row too wide for the
+        // transcript (an AgentMessageCard sized to its subject did this) must
+        // wrap or scroll inside itself. Without the guard one such row made
+        // the whole conversation scroll sideways, since overflow-y: auto
+        // makes the x axis scrollable too. e2e/chat-width.spec.ts measures
+        // scrollWidth, which still sees an overflowing row.
+        //
         // "contain": the end-of-list bounce stays (it is macOS's native
         // rubber-band; its length is set by the OS, not here), but a scroll
         // past either end never chains to the page behind the transcript.

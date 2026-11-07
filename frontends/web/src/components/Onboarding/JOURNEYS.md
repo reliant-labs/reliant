@@ -389,16 +389,17 @@ accessible `?` restore button. Secondary agent help is a click/tap/keyboard
 disclosure, not hover-only. Sign up stays primary, Install forge secondary.
 There is no global toast or automatic local multi-stop sequence.
 
-Take the tour is optional. In the demo, `JourneyTour` delegates forge links
-to `DemoPageTour`: one explanation of the actual visible page, with controls
-inside its callout. Explicit Next/Back navigate Overview → Traces → Errors →
-Alerts at the real console paths; Exit stays on the page. Legacy
-`/forge/demo?view=logs&tour=forge:fg-logs` explains the visible logs rather
-than demanding an earlier action. No auth or modal is required to explore.
-Phone callouts use a bottom sheet; the corner and tour hide for the drawer.
+Every actual page entry automatically opens that page's explanation (including
+return visits, direct loads and refresh). `DemoTips` owns `PageEntryTour`, with
+Step 1 of 1, Dismiss and Done inside its callout. There is no full-site sequence
+or prerequisite action. Dismiss lasts for this visit; `?` replays it. Same-page
+filters, polling and rerenders do not restart it. No seen/session state suppresses
+an arrival. Legacy `/forge/demo?view=logs&tour=forge:fg-logs` explains Logs.
+Phone callouts use a bottom sheet after the drawer closes; their targets scroll
+into view above it. No auth or modal is required to explore.
 
 Copy and a single optional anchor live in `tips/tipCopy.ts`; page mapping is
-`tips/tipKeys.ts`. `DemoTipsAndToast.test.tsx` pins optional entry, Dismiss /
+`tips/tipKeys.ts`. `DemoTipsAndToast.test.tsx` pins automatic entry, Dismiss /
 restore, current-page legacy links, real navigation and plain-language copy.
 
 | Event | Props |

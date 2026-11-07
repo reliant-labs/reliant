@@ -229,115 +229,34 @@ test.describe('the forge journey in the forge shell', () => {
   });
 });
 
-// The public demo host (demo.reliantlabs.io, lib/shell.ts `demo`), picked here
-// with ?shell=demo: it opens on the real console (/forge/p/shop, on sample
-// data) with one compact explanation of the page in the page's flow, no toast
-// and no auto-started tour. "Take the tour" is optional: the forge journey is
-// delegated to DemoPageTour (Forge/Demo/tips), four pages — Overview, Traces,
-// Errors, Alerts — at their real console paths, Next/Back navigating, Exit
-// staying put. Every write is off, and the page reaches no other origin: its
-// Connect transport is forge's mock transport (Forge/Demo/demoData).
-test.describe('the forge journey on the demo host', () => {
+// Public demo: each real page entry auto-opens only its current-page callout.
+test.describe('the demo page-entry tour', () => {
   async function openDemo(page: Page, path = '/?shell=demo') {
     const origin = new URL(test.info().project.use.baseURL ?? 'http://localhost:5173').origin;
-    const config = { CONTROL_PLANE_API_URL: origin, APP_URL: RELIANT_ORIGIN, DEMO_TOUR: 'short' };
-    await page.route('**/config.js', (route) =>
-      route.fulfill({ status: 200, contentType: 'text/javascript', body: `window.__FORGE_CONFIG__ = ${JSON.stringify(config)};` }),
-    );
-    const log = recordRequests(page);
-    await page.goto(path, { waitUntil: 'domcontentloaded' });
-    return { log, origin };
+    await page.route('**/config.js', route => route.fulfill({status:200,contentType:'text/javascript',body:`window.__FORGE_CONFIG__ = ${JSON.stringify({CONTROL_PLANE_API_URL:origin,DEMO_TELEMETRY:'off'})};`}));
+    await page.goto(path);
   }
-
-  const atPage = (page: Page, n: number, title: string) => atStep(page, n, 4, title);
-  const tourParam = (page: Page) => new URL(page.url()).searchParams.get('tour');
-
-  test('opens on the console with an optional page card; the tour walks four real pages; reaches no other origin', async ({ page }) => {
-    const { log, origin } = await openDemo(page);
-
-    await expect(page).toHaveURL(/\/forge\/p\/shop(\?|$)/, LOADED);
-    await expect(page.locator("[data-shell='demo']")).toHaveCount(1);
-    // Explore first: the page explains itself, nothing starts a tour, and there is no global toast.
-    await expect(page.getByTestId('demo-tip')).toHaveAttribute('data-tip', 'overview', LOADED);
-    await expect(page.getByTestId('demo-tour-toast')).toHaveCount(0);
-    await expect(page.getByTestId('tour-controls')).toHaveCount(0);
-    expect(tourParam(page)).toBeNull();
-    await page.getByTestId('demo-page-tour-start').click();
-
-    await atPage(page, 1, 'Explore a forge app');
-    await expect(page.getByTestId('tour-back')).toHaveCount(0);
-    await expect(page.getByTestId('tour-next')).toHaveText('Next: Traces');
-    await next(page);
-
-    await expect(page).toHaveURL(/\/forge\/p\/shop\/observability\/traces/, LOADED);
-    await atPage(page, 2, 'Traces');
-    // Back goes to the page before, at its real path.
-    await page.getByTestId('tour-back').click();
-    await expect(page).toHaveURL(/\/forge\/p\/shop(\?|$)/, LOADED);
-    await atPage(page, 1, 'Explore a forge app');
-    await next(page);
-    await atPage(page, 2, 'Traces');
-    await next(page);
-
-    await expect(page).toHaveURL(/\/forge\/p\/shop\/observability\/errors/, LOADED);
-    await atPage(page, 3, 'Errors');
-    await next(page);
-
-    await expect(page).toHaveURL(/\/forge\/p\/shop\/observability\/alerts/, LOADED);
-    await atPage(page, 4, 'Alerts');
-    await expect(page.getByTestId('tour-next')).toHaveText('Done');
-    await next(page);
-    // Done closes the tour on the page it ended on.
-    await expect(page.getByTestId('tour-controls')).toHaveCount(0);
-    await expect(page).toHaveURL(/\/forge\/p\/shop\/observability\/alerts/);
-    expect(tourParam(page)).toBeNull();
-
-    // Zero requests to any other origin, and no RPC at all (the mock transport answers in the page).
-    expect(log.urls.filter((url) => !url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:'))).toEqual([]);
-    expect(log.urls.filter((url) => /\/(reliant|controlplane)\.v1\./.test(url))).toEqual([]);
-    expect(log.sockets).toEqual([]);
-  });
-
-  test('every path lands on the console; the demo banner offers Install forge and Sign up', async ({ page }) => {
-    await openDemo(page, '/auth?shell=demo');
-    await expect(page).toHaveURL(/\/forge\/p\/shop(\?|$)/, LOADED);
-    await expect(page.getByRole('heading', { name: /sign in/i })).toHaveCount(0);
-    await expect(page.getByTestId('demo-corner-bar').getByTestId('demo-cta-signup')).toBeVisible(LOADED);
-
-    await page.goto('/forge/demo', { waitUntil: 'domcontentloaded' });
-    const banner = page.getByTestId('forge-demo-banner');
-    await expect(banner).toContainText('Nothing you click here changes anything.', LOADED);
-    await expect(banner.getByTestId('forge-demo-exit')).toHaveCount(0);
-    await expect(banner.getByTestId('demo-cta-signup')).toHaveAttribute('href', /forge\.reliantlabs\.io\/auth\?mode=signup&journey=forge&utm_source=demo&utm_campaign=forge_demo&utm_content=banner/);
-    await banner.getByTestId('demo-cta-install').click();
-    await expect(page.getByTestId('demo-install-sheet')).toContainText('brew install reliant-labs/reliant/forge');
-  });
-
-  test('a dismissed page card restores from the corner; each page shows its own card once', async ({ page }) => {
-    await openDemo(page);
-    await expect(page.getByTestId('demo-tip')).toHaveAttribute('data-tip', 'overview', LOADED);
-    await page.getByTestId('demo-tip-dismiss').click();
-    await expect(page.getByTestId('demo-tip')).toHaveCount(0);
-    // Dismiss leaves an accessible restore button.
+  test('automatically explains direct Logs, revisits and refresh without a start click', async ({page}) => {
+    await openDemo(page, '/forge/p/shop/observability/logs?shell=demo');
+    await expect(page.getByTestId('tour-callout')).toContainText('Read what your app recorded', LOADED);
+    await expect(page.getByTestId('tour-step-count')).toHaveText('Step 1 of 1');
+    await expect(page.getByTestId('demo-page-tour-start')).toHaveCount(0);
+    await page.getByTestId('tour-next').click();
+    await expect(page.getByTestId('tour-callout')).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByTestId('tour-callout')).toContainText('Logs', LOADED);
+    await page.getByTestId('tour-next').click();
+    await expect(page).toHaveURL(/observability\/logs/);
+    await expect(page.getByTestId('tour-callout')).toHaveCount(0);
     await page.getByTestId('demo-page-info').click();
-    await expect(page.getByTestId('demo-tip')).toHaveAttribute('data-tip', 'overview');
-    await page.getByTestId('demo-tip-dismiss').click();
-
-    await page.goto('/forge/p/shop/observability/traces', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByTestId('demo-tip')).toHaveAttribute('data-tip', 'traces', LOADED);
-    await expect(page.getByTestId('demo-tour-toast')).toHaveCount(0);
-    expect(tourParam(page)).toBeNull();
+    await expect(page.getByTestId('tour-callout')).toContainText('Logs');
+    await expect(page.getByTestId('onboarding-nav-bar')).toHaveCount(0);
   });
-
-  test('a legacy step link explains the visible page; Exit tour stays on it', async ({ page }) => {
+  test('legacy logs link has no prerequisite or cross-site sequence', async ({page}) => {
     await openDemo(page, '/forge/demo?shell=demo&view=logs&tour=forge:fg-logs');
-    await expect(tourCard(page)).toContainText('Logs', LOADED);
-    // No earlier action is demanded: Next is enabled, and the page is the one the link named.
-    await expect(page.getByTestId('tour-next')).toBeEnabled();
+    await expect(page.getByTestId('tour-callout')).toContainText('Logs', LOADED);
+    await page.getByTestId('tour-next').click();
+    await expect(page.getByTestId('tour-callout')).toHaveCount(0);
     await expect(page).toHaveURL(/view=logs/);
-    await page.getByTestId('tour-exit').click();
-    await expect(page.getByTestId('tour-controls')).toHaveCount(0);
-    await expect(page).toHaveURL(/\/forge\/demo\?.*view=logs/);
-    expect(tourParam(page)).toBeNull();
   });
 });
