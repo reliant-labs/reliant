@@ -17,6 +17,8 @@
 
 import type { ActivityEvent } from "@/services/controlPlane/observability/activityApi";
 
+import { formatSize } from "../Storage/storageObject-model";
+
 export interface ActivityText {
   /** Who: a person's name, a credential's, or "Reliant" for the platform's own observations. */
   actor: string;
@@ -112,9 +114,41 @@ export function activityText(e: ActivityEvent): ActivityText {
         facts: env && db ? [db, ...facts] : facts,
       };
     }
+    // The storage browser (StorageBrowserService): "Ada opened the uploads
+    // bucket on prod: <reason>", "Ada downloaded a file from the uploads
+    // bucket on prod: <reason>" with its size. The detail carries the reason
+    // and the size, never the key: the feed's audience is wider than
+    // storage:read, and a key can name a person.
+    case "open_bucket":
+      return { ...base, action: "opened", object: `${bucketPhrase(e)}${onEnv(e)}`, tail: d.reason ? `: ${d.reason}` : "", facts: [] };
+    case "download_object": {
+      const size = Number(d.size);
+      return {
+        ...base,
+        action: "downloaded",
+        object: `a file from ${bucketPhrase(e)}${onEnv(e)}`,
+        tail: d.reason ? `: ${d.reason}` : "",
+        facts: d.size !== undefined && d.size !== "" && Number.isFinite(size) && size >= 0 ? [formatSize(size)] : [],
+      };
+    }
     default:
       return { ...base, action: SIMPLE[e.verb] ?? words(e.verb), tail: "", facts: [] };
   }
+}
+
+/**
+ * Verbs whose sentence already names the environment ("queried prod DB",
+ * "opened the uploads bucket on prod"), so the row does not add "in prod".
+ */
+export const ENV_IN_SENTENCE: ReadonlySet<string> = new Set(["query_database", "open_bucket", "download_object"]);
+
+function onEnv(e: ActivityEvent): string {
+  return e.env?.name ? ` on ${e.env.name}` : "";
+}
+
+function bucketPhrase(e: ActivityEvent): string {
+  const bucket = e.target.id || e.target.label;
+  return bucket ? `the ${bucket} bucket` : "a bucket";
 }
 
 /** The facts a triage or an issue observation carries: which service, which platform. */
@@ -129,6 +163,6 @@ function issueFacts(d: Record<string, string>): string[] {
 export function activitySentence(e: ActivityEvent): string {
   const t = activityText(e);
   const tail = t.tail ? (t.tail.startsWith(":") ? t.tail : ` ${t.tail}`) : "";
-  const where = e.env?.name && e.verb !== "query_database" ? ` in ${e.env.name}` : "";
+  const where = e.env?.name && !ENV_IN_SENTENCE.has(e.verb) ? ` in ${e.env.name}` : "";
   return `${t.actor} ${t.action} ${t.object}${tail}${where}${t.via ? ` ${t.via}` : ""}`;
 }

@@ -261,6 +261,7 @@ export function buildForgeShellTree({
     observabilityView: lazyRoute(() => import('./components/Forge/Console/ConsolePages'), 'ObservabilityViewPage'),
     dashboards: lazyRoute(() => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardsPage'),
     dashboard: lazyRoute(() => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage'),
+    storage: lazyRoute(() => import('./components/Forge/Storage/StoragePage'), 'StoragePage'),
     environments: lazyRoute(() => import('./components/Forge/Overview/EnvironmentsPage'), 'EnvironmentsPage'),
     environment: lazyRoute(() => import('./components/Forge/EnvPage/ForgeEnvPage'), 'ForgeEnvPage'),
     secrets: lazyRoute(() => import('./components/Forge/Console/ConsolePages'), 'SecretsPage'),
