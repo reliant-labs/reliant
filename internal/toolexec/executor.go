@@ -74,6 +74,14 @@ type ToolRequest struct {
 	// command instead of the model's 10-minute cap.
 	RunStep bool
 
+	// BoundParams names the parameters the run's configuration bound for
+	// this call (tools.ApplyBindings already merged their values into
+	// ToolInput and refused a model value that differs). Only execute_tools
+	// sets it, from the turn's capability set; it travels in the server-built
+	// context map (BoundParamsContextKey) as rctx.ToolContext.BoundParams, so
+	// a tool can tell a bound value from one the model wrote.
+	BoundParams []string
+
 	// Repos lists every repo in the project. Tools with a `repo` param resolve
 	// it to workspaceRoot/repo.relative_path. Empty for legacy single-repo /
 	// projects.

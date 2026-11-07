@@ -40453,6 +40453,11 @@
             {
               "name": "credentials",
               "kind": "string"
+            },
+            {
+              "name": "writable_checkouts",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.SaveMessageConfig": [

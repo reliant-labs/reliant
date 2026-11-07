@@ -68,6 +68,11 @@ type toolExecutionContext struct {
 	// model's own, which is what the tool_calls row and the transcript show:
 	// a bound value can be a secret.
 	dispatchInput string
+	// boundParams names the parameters whose values in dispatchInput are
+	// bound ones (boundToolInput): the request carries them to the tool
+	// (toolexec.ToolRequest.BoundParams), which can then tell them from the
+	// model's.
+	boundParams []string
 
 	// projectPathOverride allows sub-workflows to specify a different working directory
 	// When set, this path is used (rebased onto the call machine's checkout)
@@ -215,6 +220,7 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 		Timeout:          toolexec.DefaultToolTimeout,
 		DaemonSelector:   tec.daemonSelector,
 		Repos:            tec.repos,
+		BoundParams:      tec.boundParams,
 	}
 }
 

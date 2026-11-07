@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -228,4 +229,26 @@ func mustJSON(t *testing.T, v any) []byte {
 	b, err := json.Marshal(v)
 	require.NoError(t, err)
 	return b
+}
+
+// Version 2 through the daemon's real exec.run, after every rewrite the daemon
+// makes around the sandbox (the heavy slot, proctree's per-command GOTMPDIR): a
+// credentials-none command's temp directories are its private /tmp, the
+// credentialed scratch is absent, and only a credentialed command carries the
+// version signal.
+func TestExecRun_CredentialsNone_PrivateTmpScratchAndSignal(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces through the daemon's exec handler")
+	home := credHome(t)
+	work := filepath.Join(home, "project")
+
+	res := runExec(t, daemon.RunCommandRequest{Command: `echo "GOTMPDIR=$GOTMPDIR TMPDIR=$TMPDIR v=${RELIANT_CREDSANDBOX_VERSION:-}"
+mkdir "$GOTMPDIR/go-build1" && echo GO-WORK-OK
+ls "$HOME/.reliant/cred-scratch" 2>&1 || true`, WorkingDir: work, Credentials: "none"})
+	require.Equal(t, 0, res.ExitCode, res.Combined)
+	assert.Contains(t, res.Combined, "GOTMPDIR=/tmp TMPDIR=/tmp v=\nGO-WORK-OK\n")
+	assert.Contains(t, res.Combined, "No such file or directory", "the credentialed scratch is absent")
+
+	res = runExec(t, daemon.RunCommandRequest{Command: `echo "v=$` + credsandbox.SignalEnv + `"; echo ok > "$HOME/.reliant/cred-scratch/f" && echo SCRATCH-OK`, WorkingDir: work})
+	require.Equal(t, 0, res.ExitCode, res.Combined)
+	assert.Contains(t, res.Combined, "v=2\nSCRATCH-OK")
 }

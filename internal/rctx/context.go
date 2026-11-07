@@ -87,6 +87,15 @@ type ToolContext struct {
 	// never from tool input, so a model cannot claim it.
 	RunStep bool
 
+	// BoundParams names the tool's parameters that the run's configuration
+	// (the workflow's tool_params, a preset, a global setting) bound for this
+	// call. Their values are in the tool input, merged there by
+	// tools.ApplyBindings, which refuses a call whose own value for one
+	// differs; so a parameter named here holds the bound value, not the
+	// model's. Set only from the request's server-built context
+	// (toolexec.BoundParamsContextKey), never from tool input.
+	BoundParams []string
+
 	// RunMachine is the machine the server routed this call's run to, as the
 	// run's daemon selector names it (a workflow or node `daemon:`): an exact
 	// id, or a name that may also be an id. Zero when the run had no selector
@@ -114,6 +123,20 @@ func NewToolContext(ctx context.Context, chatID, thread string, proj *Project, w
 }
 
 // WithDaemon returns a copy of the ToolContext with the given daemon client.
+// IsBound reports whether the run's configuration bound the tool parameter
+// name for this call (BoundParams).
+func (tc *ToolContext) IsBound(name string) bool {
+	if tc == nil {
+		return false
+	}
+	for _, b := range tc.BoundParams {
+		if b == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (tc *ToolContext) WithDaemon(d daemon.Client) *ToolContext {
 	newTC := *tc
 	newTC.Daemon = d

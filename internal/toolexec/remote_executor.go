@@ -395,6 +395,9 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	if req.RunStep {
 		contextMap[RunStepContextKey] = true
 	}
+	if len(req.BoundParams) > 0 {
+		contextMap[BoundParamsContextKey] = append([]string(nil), req.BoundParams...)
+	}
 	if sel := req.DaemonSelector; sel != nil && (sel.ID != "" || sel.Name != "") {
 		contextMap[RunMachineContextKey] = map[string]interface{}{"id": sel.ID, "name": sel.Name}
 	}
@@ -411,6 +414,11 @@ const RunMachineContextKey = "run_machine"
 // executing tool (rctx.ToolContext.RunStep). The context map is built here,
 // from server-side fields only; a model's tool input never reaches it.
 const RunStepContextKey = "run_step"
+
+// BoundParamsContextKey is the context-map key carrying ToolRequest.BoundParams
+// to the executing tool (rctx.ToolContext.BoundParams). Built here, from the
+// server's capability set; a model's tool input never reaches it.
+const BoundParamsContextKey = "bound_params"
 
 // executeOnDaemon dispatches a tool request to the user's daemon and waits for the result.
 // Used for tools that must run in the user's environment (e.g., bash, shell commands).

@@ -828,7 +828,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	}
 	// credentials: none runs where the daemon's credential files are absent; see
 	// credsandbox. Outside the heavy-slot rewrite above.
-	if refusal := credsandbox.Wrap(cmd, credentials); refusal != "" {
+	if refusal := credsandbox.Wrap(cmd, credentials, req.SandboxWritable()); refusal != "" {
 		return &CommandResult{ExitCode: credsandbox.RefusedExitCode, Stderr: refusal, Combined: refusal}, nil
 	}
 
@@ -967,6 +967,7 @@ func (c *LocalClient) StartBackground(ctx context.Context, req *RunCommandReques
 		WorkingDir:  req.WorkingDir,
 		Env:         req.Env,
 		Credentials: credentials,
+		Writable:    req.SandboxWritable(),
 		HeavyGate:   c.heavy,
 		Heavy:       req.Heavy,
 		AgentID:     req.ChatID,
@@ -1144,4 +1145,13 @@ func shellPortsToDaemon(ports []shell.PortInfo) []PortInfo {
 		}
 	}
 	return out
+}
+
+// SandboxWritable is what the request declares a credentials-none command
+// writes, for credsandbox.Wrap.
+func (r *RunCommandRequest) SandboxWritable() credsandbox.Writable {
+	return credsandbox.Writable{
+		Paths:        r.WritableCheckouts,
+		HandOffsOnly: r.WritableCheckoutsScope == WritableScopeBoundShell,
+	}
 }
