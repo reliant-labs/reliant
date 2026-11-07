@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +56,32 @@ func TestPrepareOverlays_FailsClosed(t *testing.T) {
 	_, err = prepareOverlays(Plan{Overlay: []Overlay{{Path: root, Cache: true, Notice: true}},
 		Passthrough: []string{filepath.Join(root, "f", "out")}})
 	assert.Error(t, err, "a hand-off directory the daemon cannot create")
+}
+
+// R1.B2/R2.B2: the paths made read-only around an overlaid cache are only its
+// other views through other mounts, never the overlay's own path, a mount
+// listed again at it, or a mount holding it. This is a cloud machine's table:
+// the workspace disk at /mnt/workspace-disk, /home/workspace, /tmp, and the
+// cache bound twice under /var.
+func TestOverlayAliases_NeverTheOverlaysOwnPathOrAnEnclosingMount(t *testing.T) {
+	mounts := parseMounts(strings.Join([]string{
+		`1 0 8:0 / /mnt/workspace-disk rw,relatime - ext4 /dev/d rw`,
+		`2 0 8:0 /home /home/workspace rw,relatime - ext4 /dev/d rw`,
+		`3 0 8:0 /docker /var/lib/docker rw,relatime - ext4 /dev/d rw`,
+		`4 0 8:0 /docker /var/lib/docker rw,nosuid - ext4 /dev/d rw`,
+		`5 0 8:0 /tmp /tmp rw,relatime - ext4 /dev/d rw`,
+		`6 0 8:0 /docker/.reliant-cache /var/cache/workspace rw,relatime - ext4 /dev/d rw`,
+		`7 0 8:0 /docker/.reliant-cache /var/cache/workspace rw,nosuid - ext4 /dev/d rw`,
+	}, "\n"))
+	got := overlayAliases("/var/cache/workspace/go-mod", mounts)
+	assert.ElementsMatch(t, []string{
+		"/mnt/workspace-disk/docker/.reliant-cache/go-mod",
+		"/var/lib/docker/.reliant-cache/go-mod",
+	}, got, "the module cache's other views, each once")
+	assert.NotContains(t, got, "/var/cache/workspace/go-mod", "never the overlay's own path, though its mount is listed twice")
+	for _, a := range got {
+		assert.False(t, under("/var/cache/workspace/go-mod", a), "never a directory holding the overlay: %s", a)
+	}
 }
 
 // R2.B5: a hand-off is made from its cache root down, never through a link, so

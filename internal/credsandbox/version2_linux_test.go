@@ -301,31 +301,44 @@ func TestSandbox_AnOverlaidCacheIsReadOnlyUnderItsOtherPaths(t *testing.T) {
 	testkit.Slow(t, "builds real user, mount and PID namespaces")
 	requireSandbox(t)
 	home := wrapHome(t)
-	// Under this checkout, not /tmp: the private /tmp covers every path /tmp has.
-	modcache, err := os.MkdirTemp(".", ".credsandbox-modcache-")
+	// Under this checkout, not /tmp: the private /tmp covers every path /tmp
+	// has, so only a directory elsewhere on the disk has views to test. The
+	// TestMain guard fails the run if it is ever left behind.
+	root, err := os.MkdirTemp(".", ".credsandbox-alias-")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(modcache) })
-	modcache, err = filepath.Abs(modcache)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	root, err = filepath.Abs(root)
 	require.NoError(t, err)
+	modcache, beside := filepath.Join(root, "mod"), filepath.Join(root, "beside")
+	for _, d := range []string{modcache, beside} {
+		require.NoError(t, os.Mkdir(d, 0o755))
+	}
 	require.NoError(t, os.WriteFile(filepath.Join(modcache, "mod.zip"), []byte("trusted"), 0o644))
 	aliases := tmpAliases(t, modcache)
 	if len(aliases) == 0 {
-		t.Skip("this machine mounts the disk once")
+		t.Skip("needs a second mount of this checkout's disk (a cloud machine's /mnt/workspace-disk); this host mounts it once")
 	}
 	var sh strings.Builder
 	sh.WriteString(`echo poisoned > '` + filepath.Join(modcache, "mod.zip") + `' && echo PRIVATE-OK` + "\n")
 	for _, a := range aliases {
 		sh.WriteString(`echo poisoned > '` + filepath.Join(a, "mod.zip") + `' 2>&1 || echo 'ALIAS-DENIED ` + a + `'` + "\n")
+		// The same disk beside the cache, through the same view, is untouched:
+		// only the cache's own view is read-only.
+		sh.WriteString(`echo ok > '` + filepath.Join(filepath.Dir(a), "beside", "f") + `' && echo 'BESIDE-OK ` + a + `'` + "\n")
 	}
 	out := runWrapped(t, "none", home, home, sh.String(), "GOMODCACHE="+modcache)
-	assert.Contains(t, out, "PRIVATE-OK")
+	assert.Contains(t, out, "PRIVATE-OK", "writes through the overlay work")
 	for _, a := range aliases {
-		assert.Contains(t, out, "ALIAS-DENIED "+a)
+		assert.Contains(t, out, "ALIAS-DENIED "+a, "and are refused through every other view")
+		assert.Contains(t, out, "BESIDE-OK "+a, "while the rest of that view stays writable")
 	}
 	assert.Regexp(t, deniedByTheKernel, out)
 	got, err := os.ReadFile(filepath.Join(modcache, "mod.zip"))
 	require.NoError(t, err)
 	assert.Equal(t, "trusted", string(got))
+	assert.FileExists(t, filepath.Join(beside, "f"))
+	// And outside the command, nothing became read-only.
+	require.NoError(t, os.WriteFile(filepath.Join(modcache, "after"), []byte("x"), 0o644))
 }
 
 // forge's config directory, rebuilt without its credentials file, is

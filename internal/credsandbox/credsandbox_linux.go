@@ -525,6 +525,16 @@ func applyOverlays(p Plan, runDir string, masked []string, mounts []mountInfo) e
 			}
 			return nil
 		}
+		// The directory's other paths first, before its overlay exists: each
+		// gets a read-only bind mount of its own in this namespace, which
+		// changes that one mount's flag and nothing else (not the filesystem,
+		// not the overlay's lower or upper layer, not any mount outside the
+		// namespace). overlayAliases never names path itself.
+		for _, alias := range overlayAliases(path, mounts) {
+			if err := makeReadOnly(alias); err != nil {
+				return err
+			}
+		}
 		hidesSomething := false
 		for _, m := range masked {
 			if under(m, path) {
@@ -544,11 +554,6 @@ func applyOverlays(p Plan, runDir string, masked []string, mounts []mountInfo) e
 				return err
 			}
 		}
-		for _, alias := range aliasPaths([]string{path}, mounts) {
-			if err := makeReadOnly(alias); err != nil {
-				return err
-			}
-		}
 	}
 	return nil
 }
@@ -565,6 +570,22 @@ func (e *passthroughError) Error() string {
 }
 
 func (e *passthroughError) Unwrap() error { return e.err }
+
+// overlayAliases are the other paths the directory path has through other
+// mounts of its filesystem (aliasPaths), less any that is path itself or holds
+// or lies inside it: a mount listed twice at path, or a mount of an enclosing
+// directory, would otherwise make the overlay's own path, or its whole tree,
+// read-only.
+func overlayAliases(path string, mounts []mountInfo) []string {
+	var out []string
+	for _, a := range dedupe(aliasPaths([]string{path}, mounts)) {
+		if under(a, path) || under(path, a) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
+}
 
 // overlayWithPassthrough mounts the private overlay on dir and binds each of
 // pass, real, back over it.
