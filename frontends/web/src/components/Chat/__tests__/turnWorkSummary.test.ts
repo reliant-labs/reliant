@@ -142,14 +142,14 @@ describe("formatTurnWorkHeadline", () => {
       exec("edit"), exec("update_plan"), exec("spawn"), exec("mcp__x__y"),
     ]);
     expect(formatTurnWorkDetails(one)).toBe(
-      "read 1 file · 1 search · 1 web lookup · ran 1 command · edited 1 file · 1 plan update · spawned 1 agent · used 1 tool",
+      "read 1 file · 1 search · 1 web lookup · ran 1 command · edited 1 file · 1 plan update · 1 sub-agent action · used 1 tool",
     );
     const many = summarizeTurnWork([
       exec("grep"), exec("grep"), exec("websearch"), exec("fetch"),
       exec("mcp__x__y"), exec("mcp__x__z"), exec("spawn"), exec("spawn"),
     ]);
     expect(formatTurnWorkDetails(many)).toBe(
-      "2 searches · 2 web lookups · spawned 2 agents · used 2 tools",
+      "2 searches · 2 web lookups · 2 sub-agent actions · used 2 tools",
     );
   });
 
