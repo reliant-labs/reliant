@@ -24,8 +24,13 @@
 //     file and shows the new contents;
 //   - the container engines' sockets are replaced by /dev/null;
 //   - the files that decide what a LATER run executes or believes (shell startup
-//     files, git config, the global memory file, skills, installed releases) are
-//     read-only;
+//     files, git config, the global memory file, skills, installed releases, the
+//     daemon's binary and config, credential helpers, and every shared project
+//     checkout but its own) are read-only, and the caches a later build trusts
+//     are private to it (plan.go);
+//   - /tmp and /var/tmp are its own, and the credentialed scratch
+//     (CredScratchDir) is absent, so it cannot reach what a credentialed step
+//     running beside it is about to execute (tmp_linux.go);
 //   - the child sees only its own processes (a fresh /proc), so the daemon's
 //     environment and memory are out of reach;
 //   - the child has no capabilities and cannot gain any (no_new_privs, empty
@@ -41,11 +46,17 @@
 //
 // It fails closed. Where the kernel does not allow unprivileged user, mount and
 // PID namespaces (a hardened host, a container whose default seccomp profile
-// blocks them), the command is not run, and says why.
+// blocks them), the command is not run, and says why. Where it allows them but
+// no unprivileged overlay, the caches are read-only and the command gets empty
+// private ones instead (withoutOverlays). Each says so once in the daemon's log.
 //
 // Elsewhere (macOS, Windows) there is no equivalent that is both strong and
 // unprivileged, so the command keeps only the environment scrub, and the
-// daemon's file tools still refuse the Reliant credential files.
+// daemon's file tools still refuse the Reliant credential files; the daemon's
+// log says so once.
+//
+// Credentialed commands learn which of these holds from SignalEnv: set to
+// SignalVersion only where the sandbox is in force.
 //
 //forge:exclude-contract: a process-launch helper over os/exec and the kernel; there is no second implementation to substitute
 package credsandbox

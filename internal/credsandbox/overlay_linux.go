@@ -24,6 +24,19 @@ import (
 // credentialed build. What it costs: a credentials-none build adds nothing to
 // the shared cache, so its second run rebuilds what its first one did, where
 // the shared cache did not have it already.
+//
+// Measured on a cloud machine (kernel 6.18, 31 CPUs, this repository's warm
+// shared cache), `go build -o /dev/null`, seconds:
+//
+//	                         credentialed  overlay (warm)  no overlay (cold)
+//	./internal/credsandbox        1.8–2.1        2.9–3.7              93
+//	./internal/daemon             1.1–1.6        1.9–2.4             131
+//	./cmd/reliant (links)          48–56          43–44                —
+//
+// So the overlay costs under a second a command (the namespaces and the
+// overlay mounts; noise next to a link), and the fallback a cold build every
+// command. That is why the overlay is the default and the empty private caches
+// only where the kernel refuses it, which the daemon logs once.
 
 // runDirPrefix names a command's run directory under the temp directory.
 const runDirPrefix = "reliant-credsandbox-run-"

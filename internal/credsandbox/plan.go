@@ -39,8 +39,9 @@ import (
 //
 // "The command's own" is the checkout that holds its working directory and,
 // when it runs in a Reliant worktree, every checkout of that worktree. A step
-// that must write a shared checkout runs in it (its working directory), or with
-// credentials.
+// that must write a shared checkout runs in it (its working directory), names
+// it in its run node's writable_checkouts (a checkout, or a directory inside
+// one), or runs with credentials.
 
 // managedProjectsDir is where a Reliant cloud machine keeps its project
 // checkouts (internal/handlers/project). A variable for the tests.
