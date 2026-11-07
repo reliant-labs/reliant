@@ -5,8 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConnectError, Code } from "@connectrpc/connect";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
-import { useWorktreePR } from "../worktree-git-queries";
+import { useWorktreePR, useWorktreeMachineActive } from "../worktree-git-queries";
 import { invalidateWorktreeQueries } from "../worktree-queries";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+
+vi.mock("../worktree-queries", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../worktree-queries")>(),
+  useWorktreeById: () => ({ daemon_id: "machine-a" }),
+}));
 
 let qc: QueryClient;
 function wrapper({ children }: { children: ReactNode }) {
@@ -28,6 +34,29 @@ afterEach(() => {
 });
 
 describe("worktree PR lifecycle", () => {
+  it("discovers a PR after its machine wakes without a push, remount or manual refresh", async () => {
+    let awake = false;
+    const registry = vi.fn(() => ({ daemons: awake ? [{ daemonId: "machine-a", status: DaemonStatus.ACTIVE }] : [] }));
+    const lookup = vi.fn(() => found);
+    setTransport(mockTransport({
+      "DaemonRegistryService.ListDaemons": registry,
+      "WorktreeService.GetWorktreePR": lookup,
+    }));
+    const hook = renderHook(() => {
+      const machineActive = useWorktreeMachineActive(initial.worktreeId);
+      return useWorktreePR({ ...initial, machineActive });
+    }, { wrapper });
+    await settle();
+    expect(registry).toHaveBeenCalledTimes(1);
+    expect(lookup).not.toHaveBeenCalled();
+    expect(hook.result.current.status).toBe("error");
+    awake = true;
+    await advance(30_000);
+    expect(registry).toHaveBeenCalledTimes(2);
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.existing?.url).toBe(found.url);
+  });
+
   it("shares a canonical query and discovers an external PR without a filesystem event", async () => {
     let answer = { exists: false };
     const lookup = vi.fn(() => answer);

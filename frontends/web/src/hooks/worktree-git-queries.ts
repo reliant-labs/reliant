@@ -220,10 +220,17 @@ export function useWorktreePR({
   };
 }
 
-/** Subscribe to registry push updates without waking or polling the machine. */
+/** Registry reads do not contact or wake the machine. Backstop push invalidation
+ * so a sleeping machine becoming active is observed even without another reader. */
 export function useWorktreeMachineActive(worktreeId?: string) {
   const worktree = useWorktreeById(worktreeId);
-  const { data: daemons } = useQuery(daemonListQuery({ enabled: !!worktreeId }));
+  const { data: daemons } = useQuery(daemonListQuery({
+    enabled: !!worktreeId,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
+  }));
   return !!worktree?.daemon_id && !!daemons?.some((d) => d.daemonId === worktree.daemon_id && d.status === DaemonStatus.ACTIVE);
 }
 
