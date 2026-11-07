@@ -73,6 +73,11 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
   const hasPrefetched = useRef<string | null>(null);
   const hasInitializedAuthenticatedStartup = useRef<string | null>(null);
   const userId = user?.id ?? null;
+  // Whether a startup begun for `forUserId` still belongs to the page: once
+  // another identity is installed its remaining steps would load and install
+  // the previous user's state over the next one's, so they stop instead.
+  const stillSignedInAs = (forUserId: string) =>
+    useAuthStore.getState().user?.id === forUserId;
 
   useEffect(() => {
     void initialize();
@@ -164,6 +169,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
                 logger.warn("[AuthInitializer] fetchProjects failed (will retry in ModernApp):", err);
               }),
         ]);
+        if (!stillSignedInAs(startupUserId)) return;
 
         logger.info("[AuthInitializer] Applying appearance settings to DOM...");
         settingsSync.applyAppearanceSettingsToDOM();
@@ -202,6 +208,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       // meant the entire prefetch fan-out went out unauthenticated.
       void (async () => {
         const token = await waitForAccessToken();
+        if (!stillSignedInAs(prefetchUserId)) return;
         logger.info("[AuthInitializer] Session check before prefetch:", {
           hasAccessToken: !!token,
           hasAuthStoreSession: !!session,
@@ -230,11 +237,14 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
           if (hasPrefetched.current === prefetchUserId) hasPrefetched.current = null;
         }
 
+        if (!stillSignedInAs(prefetchUserId)) return;
+
         const waitForChecklist = async () => {
           const [{ useOnboardingChecklistStore }, { useTourStore }] = await Promise.all([
             import("../store/onboardingChecklistStore"),
             import("../store/tourStore"),
           ]);
+          if (!stillSignedInAs(prefetchUserId)) return;
           // Await loadState() directly instead of firing it as `void` and then
           // polling `isInitialized` in a 100ms-tick loop. The previous pattern
           // wasted up to 5s of timers waiting for a promise we already had,
@@ -247,6 +257,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
               logger.warn("[AuthInitializer] Tour loadState failed:", error);
             }),
           ]);
+          if (!stillSignedInAs(prefetchUserId)) return;
           checkApiKeys().catch((error) => {
             logger.warn("[AuthInitializer] API key check failed:", error);
           });

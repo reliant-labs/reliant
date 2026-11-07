@@ -22,8 +22,8 @@ const isElectron = !!window.electronAPI
  * shared session cookie (lib/auth/sharedSession.ts) a sign-out or a sign-in as
  * another user on forge.* reaches app.* only as an auth event, and adopting
  * the next user's session over the previous user's chats, projects and cached
- * answers would show one tenant's data to another. Idempotent: signOut() runs
- * it and then sees its own SIGNED_OUT event.
+ * answers would show one tenant's data to another. Idempotent. Only
+ * commitIdentity calls it, inside the serialized transition queue.
  */
 const clearUserScopedState = async (): Promise<void> => {
   // Clear all store data
@@ -55,6 +55,10 @@ const clearUserScopedState = async (): Promise<void> => {
   useGlobalDataStore.getState().reset()
   useApiKeySetupStore.getState().reset()
   useOnboardingChecklistStore.getState().reset()
+  // The settings cache the checklist (and every readSetting) is served from;
+  // left initialized it would answer the next user with this one's settings.
+  const { settingsSync } = await import('@/services/settingsSync')
+  settingsSync.reset()
 
   // Drop every cached answer about who the user is.
   //
@@ -110,6 +114,10 @@ const adoptIdentity = async (
   set: SetAuthState,
   user: User | null,
   session: Session | null,
+  // Clear the user-scoped state even when the page records nobody's: this
+  // tab's own signOut(), which must leave nothing behind whatever the store
+  // last believed. Ignored for a sign-in, whose clearing follows the rule above.
+  forceClear = false,
 ): Promise<boolean> => {
   // Transitions run one at a time, in the order they were requested, and one
   // requested later supersedes any still waiting: adopting B awaits a cleanup,
@@ -118,7 +126,7 @@ const adoptIdentity = async (
   // transition that replaced it, which is the identity the page now holds.
   const ticket = ++adoptionSeq
   const run = adoptionTail
-    .then(() => commitIdentity(set, user, session, ticket))
+    .then(() => commitIdentity(set, user, session, ticket, forceClear))
     .catch((): AdoptOutcome => 'refused')
   adoptionTail = run
   let outcome = await run
@@ -131,10 +139,14 @@ const commitIdentity = async (
   user: User | null,
   session: Session | null,
   ticket: number,
+  forceClear: boolean,
 ): Promise<AdoptOutcome> => {
   if (ticket !== adoptionSeq) return 'superseded'
   const nextUserId = user?.id ?? null
-  if (scopedStateUserId !== null && scopedStateUserId !== nextUserId) {
+  if (
+    (scopedStateUserId !== null && scopedStateUserId !== nextUserId) ||
+    (forceClear && nextUserId === null)
+  ) {
     try {
       await clearUserScopedState()
     } catch (error) {
@@ -174,6 +186,7 @@ const adoptReturnedIdentity = (
   user: User | null,
   session: Session | null,
   mark: number,
+  forceClear = false,
 ): Promise<boolean> => {
   if (
     observedEvents > mark &&
@@ -183,7 +196,7 @@ const adoptReturnedIdentity = (
     logger.info('[AuthStore] Session changed while the call was in flight; adopting the newer identity')
     return adoptIdentity(set, observedIdentity.user, observedIdentity.session)
   }
-  return adoptIdentity(set, user, session)
+  return adoptIdentity(set, user, session, forceClear)
 }
 
 /**
@@ -597,6 +610,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       : adoptReturnedIdentity(set, user, session, mark),
 
   signOut: async () => {
+    const mark = identityActionMark()
     set({ loading: true })
     try {
       // Clear API key if present
@@ -608,10 +622,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // NOTE: supabase.auth.signOut() will automatically call our storage adapter's
       // removeItem() which clears the auth file. No need for manual authClear().
 
-      await clearUserScopedState()
-      // Through the same queue as every other transition, so a sign-out
-      // finishing late cannot overwrite an identity adopted after it.
-      if (!(await adoptIdentity(set, null, null))) throw new Error(CLEANUP_FAILED_MESSAGE)
+      // The cleanup runs inside the serialized transition, never before it,
+      // and against the mark taken before the sign-out began: a sign-in that
+      // reached this page meanwhile (another host, through the shared session
+      // cookie) is what gets adopted, and its stores are not reset under it.
+      if (!(await adoptReturnedIdentity(set, null, null, mark, true))) {
+        throw new Error(CLEANUP_FAILED_MESSAGE)
+      }
       set({ loading: false })
     } catch (error) {
       set({ loading: false })

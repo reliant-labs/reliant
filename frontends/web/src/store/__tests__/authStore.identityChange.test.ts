@@ -20,8 +20,27 @@ const auth = vi.hoisted(() => ({
   // event to the listener, then hand the session back to the store action.
   refreshSession: vi.fn(),
   signInWithPassword: vi.fn(),
+  signOut: vi.fn(),
 }))
 const resetMock = vi.hoisted(() => vi.fn())
+// The settings each user's ListSettings returns, and the provider-status
+// read; a test swaps either for a held promise.
+const backend = vi.hoisted(() => ({
+  fetchSettings: vi.fn(),
+  fetchProviderStatuses: vi.fn(),
+}))
+
+vi.mock('@/hooks/settings-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/settings-queries')>()),
+  fetchSettings: backend.fetchSettings,
+  fetchProviderStatuses: backend.fetchProviderStatuses,
+  batchUpsertSettings: vi.fn(async () => undefined),
+  deleteSetting: vi.fn(async () => undefined),
+}))
+vi.mock('@/api/authProvider', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/authProvider')>()),
+  getAuthTokenProvider: () => ({ getToken: async () => 'token' }),
+}))
 
 vi.mock('../chatStore', () => ({ useChatStore: { getState: () => ({ reset: resetMock }) } }))
 vi.mock('../projectStore', () => ({ useProjectStore: { getState: () => ({ reset: resetMock }) } }))
@@ -39,6 +58,7 @@ vi.mock('@/lib/supabase', () => ({
       }),
       refreshSession: auth.refreshSession,
       signInWithPassword: auth.signInWithPassword,
+      signOut: auth.signOut,
     },
   },
   setAuthStorageUnreadableHandler: vi.fn(),
@@ -53,6 +73,21 @@ const { useAuthStore } = await import('@/store/authStore')
 const { useGlobalDataStore } = await import('@/store/globalDataStore')
 const { useApiKeySetupStore } = await import('@/store/apiKeySetupStore')
 const { useOnboardingChecklistStore } = await import('@/store/onboardingChecklistStore')
+const { settingsSync } = await import('@/services/settingsSync')
+const { useModalStore } = await import('@/store/modalStore')
+
+const WELCOME_SHOWN = 'onboarding.checklist.welcome_shown'
+const settingsOf = (welcomeShown: boolean) => ({
+  settings: [{ key: WELCOME_SHOWN, value: String(welcomeShown), valueType: 'string' }],
+})
+
+const deferred = <T = void>() => {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((r) => {
+    resolve = r
+  })
+  return { promise, resolve }
+}
 
 const sessionFor = (id: string) => ({ access_token: `t-${id}`, user: { id } }) as unknown as Session
 
@@ -78,6 +113,12 @@ const userAAnswer = () => queryClient.getQueryData(['onboarding', 'currentUser']
 
 beforeEach(async () => {
   resetMock.mockReset()
+  backend.fetchSettings.mockReset()
+  backend.fetchProviderStatuses.mockReset()
+  settingsSync.reset()
+  useOnboardingChecklistStore.getState().reset()
+  useApiKeySetupStore.getState().reset()
+  localStorage.clear()
   queryClient.clear()
   useAuthStore.setState({ user: null, session: null, initialized: false })
   await useAuthStore.getState().initialize()
@@ -257,13 +298,6 @@ describe('per-account startup state', () => {
 // Adoptions are asynchronous (the cleanup awaits); overlapping ones must
 // leave the page on the identity storage moved to last.
 describe('overlapping identity changes', () => {
-  const deferred = () => {
-    let resolve!: () => void
-    const promise = new Promise<void>((r) => {
-      resolve = r
-    })
-    return { promise, resolve }
-  }
 
   it('a later event wins over an earlier one still clearing state', async () => {
     await signedInAs('user-a')
@@ -298,5 +332,129 @@ describe('overlapping identity changes', () => {
 
     expect(useAuthStore.getState().user?.id).toBe('user-c')
     expect(useAuthStore.getState().session?.access_token).toBe('t-user-c')
+  })
+})
+
+// The settings cache readSetting() serves from is per user too: left
+// initialized with A's settings, B's checklist would load A's welcome flag
+// and initialize() would never fetch B's.
+describe('the settings cache', () => {
+  it('serves user B\'s settings to B\'s checklist after user A\'s', async () => {
+    await signedInAs('user-a')
+    backend.fetchSettings.mockResolvedValueOnce(settingsOf(true))
+    await settingsSync.initialize()
+    await useOnboardingChecklistStore.getState().loadState()
+    expect(useOnboardingChecklistStore.getState().welcomeShown).toBe(true)
+
+    await auth.listener!('SIGNED_IN', sessionFor('user-b'))
+    backend.fetchSettings.mockResolvedValueOnce(settingsOf(false))
+    await useOnboardingChecklistStore.getState().loadState()
+
+    expect(backend.fetchSettings).toHaveBeenCalledTimes(2)
+    expect(useOnboardingChecklistStore.getState().welcomeShown).toBe(false)
+  })
+
+  it('drops user A\'s settings load that finishes after user B is installed', async () => {
+    await signedInAs('user-a')
+    const aSettings = deferred<ReturnType<typeof settingsOf>>()
+    backend.fetchSettings.mockReturnValueOnce(aSettings.promise)
+    const aInit = settingsSync.initialize()
+
+    await auth.listener!('SIGNED_IN', sessionFor('user-b'))
+    aSettings.resolve(settingsOf(true))
+    await aInit
+
+    expect(settingsSync.isInitialized()).toBe(false)
+    expect(settingsSync.getSettingFromCache(WELCOME_SHOWN)).toBeNull()
+  })
+})
+
+// Startup work begun for user A must not install its answer after the page
+// moved to user B.
+describe('in-flight startup work', () => {
+  it('a checklist load for user A does not restore A\'s progress for B', async () => {
+    await signedInAs('user-a')
+    const aSettings = deferred<ReturnType<typeof settingsOf>>()
+    backend.fetchSettings.mockReturnValueOnce(aSettings.promise)
+    const aLoad = useOnboardingChecklistStore.getState().loadState()
+    await vi.waitFor(() => expect(backend.fetchSettings).toHaveBeenCalled())
+
+    await auth.listener!('SIGNED_IN', sessionFor('user-b'))
+    aSettings.resolve(settingsOf(true))
+    await aLoad
+
+    const checklist = useOnboardingChecklistStore.getState()
+    expect(checklist.welcomeShown).toBe(false)
+    expect(checklist.isInitialized).toBe(false)
+    expect(localStorage.getItem('reliant.checklist.panelState')).toBeNull()
+  })
+
+  it('an API-key check for user A does not install its result for B', async () => {
+    await signedInAs('user-a')
+    useOnboardingChecklistStore.setState({ isInitialized: true, welcomeShown: true })
+    const aProviders = deferred<{ providers: never[] }>()
+    backend.fetchProviderStatuses.mockReturnValueOnce(aProviders.promise)
+    const aCheck = useApiKeySetupStore.getState().checkApiKeys()
+    await vi.waitFor(() => expect(backend.fetchProviderStatuses).toHaveBeenCalled())
+
+    await auth.listener!('SIGNED_IN', sessionFor('user-b'))
+    aProviders.resolve({ providers: [] })
+    await aCheck
+
+    const apiKeys = useApiKeySetupStore.getState()
+    expect(apiKeys.hasChecked).toBe(false)
+    expect(apiKeys.hasApiKey).toBeNull()
+    expect(apiKeys.showModal).toBe(false)
+    expect(useModalStore.getState().activeModal).not.toBe('api-key-setup')
+  })
+})
+
+// signOut() is one identity transition, ordered like every other one: a
+// sign-in that reaches the page while it runs is the identity left installed.
+describe('signOut', () => {
+  it('does not overwrite user C, who signed in while its cleanup was pending', async () => {
+    await signedInAs('user-a')
+    const blocked = deferred()
+    const cancel = vi.spyOn(queryClient, 'cancelQueries').mockImplementationOnce(() => blocked.promise)
+    // supabase emits SIGNED_OUT (whose adoption clears A's state) before
+    // signOut() returns.
+    auth.signOut.mockImplementation(async () => {
+      await auth.listener!('SIGNED_OUT', null)
+      return { error: null }
+    })
+
+    const out = useAuthStore.getState().signOut()
+    await vi.waitFor(() => expect(cancel).toHaveBeenCalled())
+    // Another host signs in as C through the shared cookie meanwhile.
+    const toC = auth.listener!('SIGNED_IN', sessionFor('user-c'))
+    let resetsWhenCInstalled: number | null = null
+    const unsubscribe = useAuthStore.subscribe((state) => {
+      if (state.user?.id === 'user-c' && resetsWhenCInstalled === null) {
+        resetsWhenCInstalled = resetMock.mock.calls.length
+      }
+    })
+    blocked.resolve()
+    await Promise.all([out, toC])
+    unsubscribe()
+    cancel.mockRestore()
+
+    expect(useAuthStore.getState().user?.id).toBe('user-c')
+    expect(useAuthStore.getState().session?.access_token).toBe('t-user-c')
+    expect(resetsWhenCInstalled).not.toBeNull()
+    expect(resetMock.mock.calls.length).toBe(resetsWhenCInstalled)
+  })
+
+  it('clears the signed-in user\'s state', async () => {
+    await signedInAs('user-a')
+    auth.signOut.mockImplementation(async () => {
+      await auth.listener!('SIGNED_OUT', null)
+      return { error: null }
+    })
+
+    await useAuthStore.getState().signOut()
+
+    expect(resetMock).toHaveBeenCalled()
+    expect(userAAnswer()).toBeUndefined()
+    expect(useAuthStore.getState().user).toBeNull()
   })
 })
