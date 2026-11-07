@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -256,6 +257,7 @@ func runHelper() int {
 		// from there walks the filesystem the view covers.
 		s.Dir, _ = os.Getwd()
 	}
+	runDir := s.RunDir // as this init reaches it once the private /tmp is on
 	if s.RunDir != "" {
 		// Removed when the command exits, by this init; the daemon removes the
 		// run directory of an init that was killed first (sweepRunDirs), once
@@ -263,7 +265,6 @@ func runHelper() int {
 		// on: there, this process is 1. The run directory is under the
 		// daemon's /tmp, which the private /tmp covers, so it is removed
 		// through a descriptor of its parent taken now.
-		runDir := s.RunDir
 		if fd, err := unix.Open(filepath.Dir(runDir), unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0); err == nil {
 			runDir = "/proc/self/fd/" + strconv.Itoa(fd) + "/" + filepath.Base(runDir)
 		}
@@ -295,7 +296,11 @@ func runHelper() int {
 	if err := dropPrivileges(); err != nil {
 		return fail("dropping privileges: %v", err)
 	}
-	return superviseCommand(s)
+	code := superviseCommand(s)
+	if s.RunDir != "" {
+		reportDiscarded(s.Plan, runDir)
+	}
+	return code
 }
 
 // superviseCommand starts the command as the init's only child, forwards the
@@ -365,7 +370,8 @@ func applyPlan(p Plan, runDir, cwd, tmpRoot string) error {
 	if err != nil {
 		return err
 	}
-	if err := hideAndSeal(p, mounts); err != nil {
+	masked, err := hideAndSeal(p, mounts)
+	if err != nil {
 		return err
 	}
 
@@ -396,29 +402,148 @@ func applyPlan(p Plan, runDir, cwd, tmpRoot string) error {
 		}
 	}
 
-	for i, o := range p.Overlay {
-		path := canonical(o.Path)
-		if fi, err := os.Stat(path); err != nil || !fi.IsDir() {
-			continue
-		}
-		if runDir == "" {
-			if err := makeReadOnly(path); err != nil {
-				return err
-			}
-			continue
-		}
-		if err := mountOverlay(path, filepath.Join(runDir, "o"+strconv.Itoa(i))); err != nil {
-			// Read-only is the safe half of private: the command cannot plant
-			// anything there, it only cannot add to it either.
-			if roErr := makeReadOnly(path); roErr != nil {
-				return fmt.Errorf("overlaying %s: %v; and making it read-only: %w", path, err, roErr)
-			}
-		}
+	if err := applyOverlays(p, runDir, masked, mounts); err != nil {
+		return err
 	}
 	if runDir == "" {
 		return nil
 	}
 	return privateTmp(runDir, cwd, tmpRoot, mounts)
+}
+
+// applyOverlays mounts the private overlays, the shallowest first; one inside
+// another is private already and is skipped. Under each, the Passthrough
+// directories are bound back as they are, from descriptors taken before the
+// overlay covers them. Every other path the overlaid directory has (the disk
+// mounted again at /mnt/workspace-disk) is made read-only, or a write there
+// would reach the shared directory after all.
+//
+// An overlay ignores the mounts inside its lower directory, so it would show
+// again what the sandbox hid in there (masked: the directories rebuilt without
+// an entry, the sockets covered): such a directory is made read-only instead,
+// with the Passthrough ones writable inside it.
+func applyOverlays(p Plan, runDir string, masked []string, mounts []mountInfo) error {
+	type entry struct {
+		index int
+		path  string
+	}
+	var entries []entry
+	for i, o := range p.Overlay {
+		entries = append(entries, entry{i, canonical(o.Path)})
+	}
+	sort.SliceStable(entries, func(a, b int) bool { return depthOf(entries[a].path) < depthOf(entries[b].path) })
+	var done []string
+	for _, e := range entries {
+		path := e.path
+		if fi, err := os.Stat(path); err != nil || !fi.IsDir() {
+			continue
+		}
+		if under(path, done...) {
+			continue
+		}
+		done = append(done, path)
+		var pass []string
+		for _, w := range p.Passthrough {
+			if w = canonical(w); w != path && under(w, path) && !under(w, pass...) {
+				pass = append(pass, w)
+			}
+		}
+		readOnly := func(cause error) error {
+			// Read-only is the safe half of private: the command cannot plant
+			// anything there, it only cannot add to it either.
+			if err := makeReadOnly(path); err != nil {
+				if cause != nil {
+					return fmt.Errorf("overlaying %s: %v; and making it read-only: %w", path, cause, err)
+				}
+				return err
+			}
+			for _, w := range pass {
+				if err := makeWritable(w); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		hidesSomething := false
+		for _, m := range masked {
+			if under(m, path) {
+				hidesSomething = true
+			}
+		}
+		if runDir == "" || hidesSomething {
+			if err := readOnly(nil); err != nil {
+				return err
+			}
+		} else if err := overlayWithPassthrough(path, filepath.Join(runDir, "o"+strconv.Itoa(e.index)), pass); err != nil {
+			if err := readOnly(err); err != nil {
+				return err
+			}
+		}
+		for _, alias := range aliasPaths([]string{path}, mounts) {
+			if err := makeReadOnly(alias); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// overlayWithPassthrough mounts the private overlay on dir and binds each of
+// pass, real, back over it.
+func overlayWithPassthrough(dir, work string, pass []string) error {
+	var fds []int
+	defer func() {
+		for _, fd := range fds {
+			_ = unix.Close(fd)
+		}
+	}()
+	var keep []string
+	for _, w := range pass {
+		fd, err := unix.Open(w, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+		if err != nil {
+			continue // absent: nothing of it to keep real
+		}
+		fds = append(fds, fd)
+		keep = append(keep, w)
+	}
+	if err := mountOverlay(dir, work); err != nil {
+		return err
+	}
+	for i, w := range keep {
+		if err := unix.Mount("/proc/self/fd/"+strconv.Itoa(fds[i]), w, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
+			return fmt.Errorf("keeping %s real inside the private %s: %w", w, dir, err)
+		}
+	}
+	return nil
+}
+
+// reportDiscarded tells the command, on its stderr, what it wrote under each
+// Notice overlay and lost when it exited. runDir is the run directory as the
+// init still reaches it.
+func reportDiscarded(p Plan, runDir string) {
+	for i, o := range p.Overlay {
+		if !o.Notice {
+			continue
+		}
+		upper := filepath.Join(runDir, "o"+strconv.Itoa(i), "u")
+		n, first := 0, ""
+		_ = filepath.WalkDir(upper, func(path string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			if n == 0 {
+				first, _ = filepath.Rel(upper, path)
+			}
+			n++
+			return nil
+		})
+		if n == 0 {
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "credsandbox: discarded %d file(s) this credentials-none command wrote under %s (%s, ...): "+
+			"a credentials-none command's writes there are its own. A run node keeps a directory there by naming it in writable_checkouts.\n",
+			n, o.Path, filepath.Join(o.Path, first))
+	}
 }
 
 // mountOverlay mounts an overlay on dir whose lower layer is dir itself and
@@ -468,8 +593,9 @@ func probeOverlay(dir string) error {
 }
 
 // hideAndSeal makes Hide's paths absent and rebuilds the directory above each
-// absent Seal path.
-func hideAndSeal(p Plan, mounts []mountInfo) error {
+// absent Seal path. It returns what it masked: the directories it rebuilt and
+// the paths it covered.
+func hideAndSeal(p Plan, mounts []mountInfo) ([]string, error) {
 
 	// Every spelling the same thing has: its real path, and its path through
 	// every other mount of the same filesystem. The workspace disk is mounted at
@@ -529,15 +655,15 @@ func hideAndSeal(p Plan, mounts []mountInfo) error {
 	sort.Slice(parents, func(i, j int) bool { return len(parents[i]) < len(parents[j]) })
 	for _, d := range parents {
 		if err := rebuildWithout(d, rebuild[d]); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	for _, c := range cover {
 		if err := unix.Mount("/dev/null", c, "", unix.MS_BIND, ""); err != nil {
-			return fmt.Errorf("covering %s: %w", c, err)
+			return nil, fmt.Errorf("covering %s: %w", c, err)
 		}
 	}
-	return nil
+	return append(parents, cover...), nil
 }
 
 // canonical resolves the symlinks in path's directory (a hidden file named
@@ -638,15 +764,30 @@ func makeReadOnly(path string) error {
 	if err != nil {
 		return err
 	}
-	flags := uintptr(unix.MS_BIND | unix.MS_REMOUNT | unix.MS_RDONLY)
-	for i := len(mounts) - 1; i >= 0; i-- {
-		if mounts[i].mountPoint == path {
-			flags |= mountFlags(mounts[i].options)
-			break
+	// Every mount at or below path, not only the top one: a directory the
+	// sandbox rebuilt to hide an entry (~/.config/forge without its
+	// credentials file) is a tmpfs holding a bind mount per entry, and a bind
+	// is read-only only when it is remounted so itself. The last entry for a
+	// mount point is the one on top, which the remount reaches.
+	options := map[string]string{}
+	var points []string
+	for _, m := range mounts {
+		if !under(m.mountPoint, path) {
+			continue
 		}
+		if _, seen := options[m.mountPoint]; !seen {
+			points = append(points, m.mountPoint)
+		}
+		options[m.mountPoint] = m.options
 	}
-	if err := unix.Mount("", path, "", flags, ""); err != nil {
-		return fmt.Errorf("remounting %s read-only: %w", path, err)
+	if len(points) == 0 {
+		points, options[path] = []string{path}, ""
+	}
+	for _, mp := range points {
+		flags := uintptr(unix.MS_BIND|unix.MS_REMOUNT|unix.MS_RDONLY) | mountFlags(options[mp])
+		if err := unix.Mount("", mp, "", flags, ""); err != nil {
+			return fmt.Errorf("remounting %s read-only: %w", mp, err)
+		}
 	}
 	return nil
 }

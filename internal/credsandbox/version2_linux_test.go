@@ -49,6 +49,16 @@ func wrapped(t *testing.T, credentials, dir, home, sh string, extraEnv ...string
 	return cmd
 }
 
+// wrappedWritable is wrapped for a run node that names writable directories.
+func wrappedWritable(t *testing.T, dir, home string, writable []string, sh string, extraEnv ...string) *exec.Cmd {
+	t.Helper()
+	cmd := exec.Command("bash", "-c", sh)
+	cmd.Dir = dir
+	cmd.Env = append([]string{"PATH=/usr/bin:/bin", "HOME=" + home}, extraEnv...)
+	require.Empty(t, Wrap(cmd, "none", writable...))
+	return cmd
+}
+
 func runWrapped(t *testing.T, credentials, dir, home, sh string, extraEnv ...string) string {
 	t.Helper()
 	out, err := wrapped(t, credentials, dir, home, sh, extraEnv...).CombinedOutput()
@@ -173,6 +183,128 @@ cat '`+filepath.Join(home, ".reliant", "daemon.json")+`' 2>/dev/null || true
 		`mkdir -p '`+scratch+`/step' && echo ok > '`+scratch+`/step/run.sh' && ls '`+scratch+`' && echo CRED-WROTE`)
 	assert.Contains(t, out, "step\nCRED-WROTE")
 	assert.FileExists(t, filepath.Join(scratch, "step", "run.sh"))
+}
+
+// A credentialed step hands a later step a directory under XDG_CACHE_HOME (a
+// fetched repository, a pinned script). A credentials-none command running
+// beside it, of the same run or another, cannot change it however it races,
+// and is told its writes there were its own; the one consumer whose run node
+// names its output directory writes it for real.
+func TestSandbox_CacheHandOffsAreTamperProofButForTheirNamedConsumer(t *testing.T) {
+	testkit.Slow(t, "runs sandboxed commands against a credentialed one for seconds")
+	requireSandbox(t)
+	home := wrapHome(t)
+	xdg := filepath.Join(filepath.Dir(home), "xdg")
+	run := filepath.Join(xdg, "pipeline", "run-1")
+	out := filepath.Join(run, "out")
+	require.NoError(t, os.MkdirAll(run, 0o755))
+	script := filepath.Join(run, "script.sh")
+	require.NoError(t, os.WriteFile(script, []byte("echo trusted\n"), 0o755))
+	env := "XDG_CACHE_HOME=" + xdg
+
+	attack := `end=$((SECONDS+3)); n=0
+while [ $SECONDS -lt $end ]; do
+  printf 'echo pwned\n' > '` + script + `' 2>/dev/null; mkdir -p '` + out + `' 2>/dev/null; echo forged > '` + out + `/result' 2>/dev/null
+  n=$((n+1))
+done
+echo "LOOPS $n"`
+	step := `end=$((SECONDS+3)); n=0
+while [ $SECONDS -lt $end ]; do
+  got=$(bash '` + script + `'); [ "$got" = trusted ] || echo "TAMPERED: $got"; n=$((n+1))
+done
+echo "STEPS $n"`
+	attacker := wrapped(t, "none", home, home, attack, env)
+	credentialed := wrapped(t, "inherit", home, home, step, env)
+	var attackOut, stepOut []byte
+	var attackErr, stepErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); attackOut, attackErr = attacker.CombinedOutput() }()
+	go func() { defer wg.Done(); stepOut, stepErr = credentialed.CombinedOutput() }()
+	wg.Wait()
+	require.NoError(t, attackErr, "%s", attackOut)
+	require.NoError(t, stepErr, "%s", stepOut)
+	assert.Regexp(t, `LOOPS [1-9][0-9]*`, string(attackOut))
+	assert.Regexp(t, `STEPS [1-9][0-9]*`, string(stepOut))
+	assert.NotContains(t, string(stepOut), "TAMPERED")
+	assert.Contains(t, string(attackOut), "credsandbox: discarded", "the command is told its writes there were its own")
+	assert.NoFileExists(t, filepath.Join(out, "result"))
+	got, err := os.ReadFile(script)
+	require.NoError(t, err)
+	assert.Equal(t, "echo trusted\n", string(got))
+
+	// The consumer reads the hand-off and writes the output its node names.
+	cmd := wrappedWritable(t, home, home, []string{out},
+		`bash '`+script+`' > '`+out+`/result' && echo x > '`+filepath.Join(run, "elsewhere")+`' 2>/dev/null; echo done`, env)
+	b, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", b)
+	got, err = os.ReadFile(filepath.Join(out, "result"))
+	require.NoError(t, err)
+	assert.Equal(t, "trusted\n", string(got))
+	assert.NoFileExists(t, filepath.Join(run, "elsewhere"), "only the named directory is real")
+}
+
+// The module cache, the build cache and the cache roots are private through
+// their own path; through any other mount of the same disk they are read-only.
+func TestSandbox_AnOverlaidCacheIsReadOnlyUnderItsOtherPaths(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	// Under this checkout, not /tmp: the private /tmp covers every path /tmp has.
+	modcache, err := os.MkdirTemp(".", ".credsandbox-modcache-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(modcache) })
+	modcache, err = filepath.Abs(modcache)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(modcache, "mod.zip"), []byte("trusted"), 0o644))
+	aliases := tmpAliases(t, modcache)
+	if len(aliases) == 0 {
+		t.Skip("this machine mounts the disk once")
+	}
+	var sh strings.Builder
+	sh.WriteString(`echo poisoned > '` + filepath.Join(modcache, "mod.zip") + `' && echo PRIVATE-OK` + "\n")
+	for _, a := range aliases {
+		sh.WriteString(`echo poisoned > '` + filepath.Join(a, "mod.zip") + `' 2>&1 || echo 'ALIAS-DENIED ` + a + `'` + "\n")
+	}
+	out := runWrapped(t, "none", home, home, sh.String(), "GOMODCACHE="+modcache)
+	assert.Contains(t, out, "PRIVATE-OK")
+	for _, a := range aliases {
+		assert.Contains(t, out, "ALIAS-DENIED "+a)
+	}
+	assert.Regexp(t, deniedByTheKernel, out)
+	got, err := os.ReadFile(filepath.Join(modcache, "mod.zip"))
+	require.NoError(t, err)
+	assert.Equal(t, "trusted", string(got))
+}
+
+// forge's config directory, rebuilt without its credentials file, is
+// read-only entry by entry: a rebuilt directory is a bind mount per entry, and
+// each must be remounted read-only itself.
+func TestSandbox_ForgesConfigIsReadOnlyAndItsCredentialsAbsent(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("FORGE_HOME", "")
+	forge := filepath.Join(home, ".config", "forge")
+	require.NoError(t, os.MkdirAll(forge, 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(forge, "credentials.json"), []byte("PAT-forge"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(forge, "storage.json"), []byte(`{"trusted":true}`), 0o600))
+
+	out := runWrapped(t, "none", home, home, `
+cat '`+filepath.Join(forge, "credentials.json")+`' 2>/dev/null
+cat '`+filepath.Join(forge, "storage.json")+`'; echo
+echo '{"evil":true}' > '`+filepath.Join(forge, "storage.json")+`' 2>&1 || echo STORAGE-DENIED
+echo x > '`+filepath.Join(forge, "new.json")+`' 2>&1 || echo NEW-DENIED
+true`)
+	assert.NotContains(t, out, "PAT-forge")
+	assert.Contains(t, out, `{"trusted":true}`, "forge still reads its config")
+	assert.Contains(t, out, "STORAGE-DENIED")
+	assert.Contains(t, out, "NEW-DENIED")
+	assert.Regexp(t, deniedByTheKernel, out)
+
+	out = runWrapped(t, "inherit", home, home, `echo '{"ok":1}' > '`+filepath.Join(forge, "storage.json")+`' && echo CRED-WROTE`)
+	assert.Contains(t, out, "CRED-WROTE")
 }
 
 // A credentials-none command loops, as fast as it can, trying to replace what

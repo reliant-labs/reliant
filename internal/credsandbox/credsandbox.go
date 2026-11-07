@@ -73,6 +73,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/credentials"
+
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -114,6 +116,11 @@ type Plan struct {
 	// Overlay are shared directories the command reads as they are and writes
 	// privately: what it writes is discarded when it exits.
 	Overlay []Overlay `json:",omitempty"`
+	// Passthrough are directories inside an Overlay one that stay real: the
+	// command's own working directory and checkouts, the hand-offs its run
+	// node named, the heavy-slot locks. Where the overlay falls back to
+	// read-only, they are its carve-outs.
+	Passthrough []string `json:",omitempty"`
 }
 
 // Overlay is one directory the command sees through a private overlay.
@@ -131,6 +138,10 @@ type Overlay struct {
 	// Sealed is sealed when it is missing (a PATH directory under home that
 	// does not exist yet).
 	Sealed bool `json:",omitempty"`
+	// Notice tells the command, as it exits, that what it wrote there was
+	// discarded: a cache root, where a step may have meant to leave
+	// something for the next one (cacheRootOverlays).
+	Notice bool `json:",omitempty"`
 }
 
 // readOnlyHomeRel are paths under the user's home that later runs trust: what a
@@ -163,6 +174,17 @@ func DefaultPlan() Plan {
 		scratch := filepath.Join(home, CredScratchRel)
 		hide = append(hide, scratch)
 		seal = append(seal, scratch)
+		ro = append(ro, filepath.Join(home, ".config", "forge"))
+		seal = append(seal, filepath.Join(home, ".config", "forge"))
+	}
+	// forge's config directory, wherever FORGE_HOME or XDG_CONFIG_HOME put
+	// it: its credentials file is hidden (daemonpolicy), and the rest is what
+	// a later forge believes (storage.json, the storage policy that decides
+	// what it deletes; the maintenance cursor; bug-report state), so it is
+	// read-only.
+	if p, err := credentials.PathFromEnv(); err == nil && p != "" {
+		ro = append(ro, filepath.Dir(p))
+		seal = append(seal, filepath.Dir(p))
 	}
 	return Plan{Hide: cleanAbs(hide), ReadOnly: cleanAbs(ro), Seal: cleanAbs(seal)}
 }
@@ -255,7 +277,7 @@ const SignalEnv = "RELIANT_CREDSANDBOX_VERSION"
 const SignalVersion = 2
 
 // CredScratchRel is CredScratchDir under the user's home.
-const CredScratchRel = ".reliant/cred-scratch"
+const CredScratchRel = ".reliant/cred-scratch" //nolint:gosec // a directory name, not a credential
 
 // CredScratchDir is the root a credentialed command keeps its scratch in: the
 // daemon creates it, mode 0700, before any command runs, and a credentials-none

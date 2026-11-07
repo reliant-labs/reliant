@@ -84,6 +84,12 @@ func prepareOverlays(p Plan) Plan {
 	}
 	p.Overlay = keep
 
+	// A hand-off directory the run node named, made now if it is missing:
+	// made by the command, inside the overlay, it would be discarded.
+	for _, w := range p.Passthrough {
+		_ = os.MkdirAll(w, 0o755)
+	}
+
 	writable := map[string]bool{}
 	for _, w := range p.Writable {
 		writable[w] = true
@@ -125,6 +131,9 @@ func withoutOverlays(p Plan, env []string, runDir string) (Plan, []string) {
 		}
 	}
 	p.ReadOnly = cleanAbs(p.ReadOnly)
+	// What stays real inside an overlay is writable inside the read-only
+	// directory instead.
+	p.Writable = onlyUnderReadOnly(cleanAbs(append(p.Writable, p.Passthrough...)), p.ReadOnly)
 	p.Overlay = nil
 	return p, env
 }

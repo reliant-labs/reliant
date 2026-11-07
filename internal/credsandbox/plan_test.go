@@ -168,6 +168,57 @@ func TestPlan_GoDefaultsFollowHomeAndGoEnv(t *testing.T) {
 	assert.Equal(t, filepath.Join(home, ".cache", "golangci-lint"), got["GOLANGCI_LINT_CACHE"])
 }
 
+func TestPlan_TheDaemonBinaryDirectoryIsReadOnly(t *testing.T) {
+	m := newMachine(t)
+	p := buildPlan(Plan{}, planEnv{home: m.home, cwd: m.multi, projectsDir: m.projects, daemonBinDir: "/daemon-bin"})
+	assert.Contains(t, p.ReadOnly, "/daemon-bin", "the directory and everything in it")
+	assert.Equal(t, "/daemon-bin", daemonBinDir, "a cloud machine's daemon binary directory")
+}
+
+// The cache roots hold the hand-offs between a workflow's steps: private to a
+// credentials-none command, but for what stays real in them.
+func TestPlan_CacheRootsArePrivateButForWhatTheCommandOwns(t *testing.T) {
+	m := newMachine(t)
+	xdg := filepath.Join(m.root, "xdg")
+	gate := filepath.Join(xdg, "cp-merge", "gate")
+	env := []string{"XDG_CACHE_HOME=" + xdg, "HOME=" + m.home, "GOCACHE=" + filepath.Join(xdg, "go-build")}
+	handOff := filepath.Join(xdg, "pr-regen", "stage-1")
+
+	p := m.plan(gate, env, handOff, filepath.Join(xdg, "go-build", "x"), xdg)
+	roots := map[string]Overlay{}
+	for _, o := range p.Overlay {
+		roots[o.Path] = o
+	}
+	assert.True(t, roots[xdg].Notice, "XDG_CACHE_HOME")
+	assert.True(t, roots[filepath.Join(m.home, ".cache")].Notice, "~/.cache")
+	assert.Contains(t, p.Passthrough, gate, "its working directory stays real")
+	assert.Contains(t, p.Passthrough, handOff, "a hand-off its run node named stays real")
+	assert.Contains(t, p.Passthrough, filepath.Join(xdg, "forge", "slots"), "the heavy-slot locks every command queues on")
+	assert.NotContains(t, p.Passthrough, filepath.Join(xdg, "go-build", "x"), "an opt-in cannot make a tool cache real")
+	assert.NotContains(t, p.Passthrough, xdg, "nor a whole cache root")
+
+	// Started in its home, a command still does not own ~/.cache.
+	p = m.plan(m.home, []string{"HOME=" + m.home})
+	var paths []string
+	for _, o := range p.Overlay {
+		paths = append(paths, o.Path)
+	}
+	assert.Contains(t, paths, filepath.Join(m.home, ".cache"))
+}
+
+func TestDefaultPlan_ForgesConfigIsReadOnlyAndItsCredentialsHidden(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("FORGE_HOME", "")
+	p := DefaultPlan()
+	forge := filepath.Join(home, ".config", "forge")
+	assert.Contains(t, p.ReadOnly, forge, "storage.json decides what a later forge deletes")
+	assert.Contains(t, p.Seal, forge)
+	assert.Contains(t, p.Hide, filepath.Join(forge, "credentials.json"))
+	assert.Contains(t, p.Hide, filepath.Join(home, ".reliant", "forge-token-cache.json"), "the token cache is hidden, not read-only")
+}
+
 func TestFirstWord(t *testing.T) {
 	assert.Equal(t, "/daemon-bin/reliant", firstWord(`'/daemon-bin/reliant' 'auth'`))
 	assert.Equal(t, "/usr/bin/gh", firstWord(`/usr/bin/gh auth git-credential`))

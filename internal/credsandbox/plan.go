@@ -221,16 +221,18 @@ func buildPlan(base Plan, in planEnv) Plan {
 	// A carve-out matters only inside something read-only; the command's own
 	// checkout nested in a shared one (a repository inside a multi-repo root
 	// that is itself a checkout) is the other case.
-	for _, o := range own {
-		writable = append(writable, o)
-	}
+	writable = append(writable, own...)
 
-	overlays := cacheOverlays(home, in.env)
-	overlays = append(overlays, pathOverlays(in.env, home)...)
+	tools := cacheOverlays(home, in.env)
+	tools = append(tools, pathOverlays(in.env, home)...)
+	roots := cacheRootOverlays(home, in.env)
+	// The working directory is the command's own unless it is the home or
+	// above it: a command started in ~ does not own ~/.cache.
+	cwdOwn := cwd != "" && !(home != "" && under(home, cwd))
 	roAll := cleanAbs(append(append([]string(nil), p.ReadOnly...), ro...))
 	var keep []Overlay
-	for _, o := range overlays {
-		if under(o.Path, own...) || under(o.Path, cwd) {
+	for _, o := range append(tools, roots...) {
+		if under(o.Path, own...) || (cwdOwn && under(o.Path, cwd)) {
 			continue // the command's own tools
 		}
 		if under(o.Path, roAll...) {
@@ -239,11 +241,105 @@ func buildPlan(base Plan, in planEnv) Plan {
 		keep = append(keep, o)
 	}
 
+	// What stays real inside a private cache root: the command's own
+	// checkouts and working directory, the hand-off directories its run node
+	// named (writable_checkouts), and the heavy-slot locks every command on
+	// the machine queues on. A named directory is one strictly inside a cache
+	// root and apart from the tool caches, so an opt-in cannot make the Go
+	// build cache, the module cache or a pinned forge real again.
+	var pass []string
+	if cwdOwn {
+		pass = append(pass, cwd)
+	}
+	pass = append(pass, own...)
+	if slots := slotDir(in.env); slots != "" {
+		pass = append(pass, slots)
+	}
+	for _, w := range in.optIn {
+		if w = canonicalDir(w); handOffDir(w, roots, tools) {
+			pass = append(pass, w)
+		}
+	}
+	var keptRoots []string
+	for _, o := range keep {
+		if o.Notice {
+			keptRoots = append(keptRoots, o.Path)
+		}
+	}
+	var passthrough []string
+	for _, w := range cleanAbs(pass) {
+		for _, r := range keptRoots {
+			if w != r && under(w, r) {
+				passthrough = append(passthrough, w)
+				break
+			}
+		}
+	}
+
 	p.ReadOnly = roAll
 	p.Seal = cleanAbs(append(p.Seal, seal...))
 	p.Writable = onlyUnderReadOnly(cleanAbs(append(p.Writable, writable...)), p.ReadOnly)
 	p.Overlay = dedupeOverlays(append(p.Overlay, keep...))
+	p.Passthrough = cleanAbs(append(p.Passthrough, passthrough...))
 	return p
+}
+
+// cacheRootOverlays are the user's cache directories as a whole: ~/.cache and
+// XDG_CACHE_HOME. Besides the tools' caches (cacheOverlays) they hold what a
+// workflow's steps hand one another (a credentialed step fetches into
+// $XDG_CACHE_HOME/<pipeline>/<run>, an uncredentialed one reads it), so a
+// credentials-none command reads them as they are and writes them privately:
+// it cannot change a hand-off of its own run's or of another run running beside
+// it. A step that must write a hand-off a later step reads names it in its run
+// node's writable_checkouts (Plan.Passthrough). Notice: the command is told,
+// as it exits, what it wrote there and lost.
+func cacheRootOverlays(home string, env []string) []Overlay {
+	var out []Overlay
+	if v := envValue(env, "XDG_CACHE_HOME"); filepath.IsAbs(v) {
+		out = append(out, Overlay{Path: filepath.Clean(v), Cache: true, Notice: true})
+	}
+	if home != "" {
+		out = append(out, Overlay{Path: filepath.Join(home, ".cache"), Cache: true, Notice: true})
+	}
+	return out
+}
+
+// handOffDir reports whether an opt-in w may make a directory inside a private
+// cache root real: strictly inside one, and neither inside nor holding a tool
+// cache.
+func handOffDir(w string, roots, tools []Overlay) bool {
+	inRoot := false
+	for _, r := range roots {
+		if w != r.Path && under(w, r.Path) {
+			inRoot = true
+		}
+	}
+	if !inRoot {
+		return false
+	}
+	for _, t := range tools {
+		if under(w, t.Path) || under(t.Path, w) {
+			return false
+		}
+	}
+	return true
+}
+
+// slotDir is where the machine's heavy slots are (forge/pkg/hostslot): lock
+// files every command queues on, so they must be the real ones.
+func slotDir(env []string) string {
+	if d := envValue(env, "FORGE_SLOTS_DIR"); filepath.IsAbs(d) {
+		return filepath.Clean(d)
+	}
+	cache := envValue(env, "XDG_CACHE_HOME")
+	if !filepath.IsAbs(cache) {
+		home := envValue(env, "HOME")
+		if !filepath.IsAbs(home) {
+			return ""
+		}
+		cache = filepath.Join(home, ".cache")
+	}
+	return filepath.Join(cache, "forge", "slots")
 }
 
 // ownCheckouts are the checkout holding cwd and, when cwd is in a Reliant
