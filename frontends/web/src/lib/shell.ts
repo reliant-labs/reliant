@@ -45,7 +45,13 @@ const isShell = (value: string | null): value is AppShell => (SHELLS as readonly
 /** The forge app host when the runtime config names none. */
 export const DEFAULT_FORGE_APP_HOST = "forge.reliantlabs.io";
 
-/** The demo host when the runtime config names none. */
+/**
+ * The demo host when the runtime config names none.
+ * Deprecated: demo.reliantlabs.io is served by its own build (demo.html, the
+ * `demo` env's forge-demo frontend). This bundle still mounts the demo shell
+ * on DEMO_APP_HOST, so binding the domain back here stays a rollback; removed
+ * in the next major.
+ */
 export const DEFAULT_DEMO_APP_HOST = "demo.reliantlabs.io";
 
 /** Reliant's hosted origin when the runtime config names none (constants.ts DEFAULT_APP_URL). */
@@ -82,7 +88,7 @@ export function forgeAppHost(): string {
   return normalizeHost(configured) || DEFAULT_FORGE_APP_HOST;
 }
 
-/** The public demo's hostname: DEMO_APP_HOST, else the default. */
+/** The public demo's hostname: DEMO_APP_HOST, else the default. Deprecated with DEMO_APP_HOST (see DEFAULT_DEMO_APP_HOST). */
 export function demoAppHost(): string {
   let configured = "";
   try {

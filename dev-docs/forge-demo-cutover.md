@@ -37,7 +37,7 @@ Use `forge`, which runs the forge version reliant's forge.yaml pins (`v1.0.17-0.
    - A build attempt on 2026-11-06 recorded it before refusing (fixed in forge#1876).
    - It is declared and has never been deployed.
 3. Move the domain, then check again.
-4. Merge reliant #2336 `feat/forge-demo-unhost`: no host of `prod/reliant-web` mounts the demo shell any more, and `DEMO_APP_HOST` is gone.
+4. Merge reliant #2336 `feat/forge-demo-unhost`: `DEMO_APP_HOST` is deprecated. `prod/reliant-web` still mounts the demo shell on that host within major 1, so binding the domain back stays a rollback; it is removed in the next major.
 
 ## Commands
 
@@ -105,8 +105,8 @@ forge env deploy demo <previous version>    # read the plan's "direction: BEHIND
 
 A static site has no migrations or data, so deploying the demo env's previous release is a
 complete rollback for it. Step 1 restores exactly what served before the cutover: whatever
-build prod's reliant-web runs, with its own handling of that host. That is why the unhost PR
-(step 4) merges only after the checks pass.
+build prod's reliant-web runs, with its own handling of that host. Step 4 keeps that handling
+(DEMO_APP_HOST is deprecated, not removed, within major 1), so this rollback works at any time.
 
 ## Follow-ups
 
