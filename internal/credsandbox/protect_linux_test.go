@@ -72,13 +72,22 @@ func TestSandbox_ALaterCredentialedRunsInputsAreReadOnly(t *testing.T) {
 	for _, d := range []string{gocache, gobin, filepath.Join(m.home, ".config", "git"), filepath.Join(m.home, ".config", "gh")} {
 		require.NoError(t, os.MkdirAll(d, 0o755))
 	}
+	helper := filepath.Join(m.root, "opt", "helper", "git-credential-reliant")
+	scratch := filepath.Join(m.home, CredScratchRel)
+	for _, d := range []string{filepath.Dir(helper), scratch} {
+		require.NoError(t, os.MkdirAll(d, 0o700))
+	}
+	require.NoError(t, os.WriteFile(helper, []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(scratch, "run.sh"), []byte("echo trusted\n"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".config", "gh", "hosts.yml"), []byte("oauth_token: PAT-gh"), 0o600))
-	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".gitconfig"), []byte("[user]\n\tname = x\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".gitconfig"), []byte("[user]\n\tname = x\n[credential]\n\thelper = !'"+helper+"' get\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".config", "git", "config"), []byte("[core]\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".reliant", "config.yaml"), []byte("x: 1\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(gocache, "ab-d"), []byte("trusted"), 0o644))
 	tmp := t.TempDir()
 	env := []string{"PATH=" + gobin + ":/usr/bin:/bin", "HOME=" + m.home, "TMPDIR=" + tmp, "GOCACHE=" + gocache}
 
-	plan := buildPlan(Plan{Hide: []string{filepath.Join(m.home, ".config", "gh")}}, planEnv{
+	plan := buildPlan(Plan{Hide: []string{filepath.Join(m.home, ".config", "gh"), scratch}}, planEnv{
 		home: m.home, cwd: m.multi, env: env, executable: filepath.Join(m.bin, "reliant"),
 		projectsDir: m.projects, daemonBinDir: m.bin,
 	})
@@ -86,9 +95,14 @@ func TestSandbox_ALaterCredentialedRunsInputsAreReadOnly(t *testing.T) {
 		{"file", filepath.Join(m.bin, "reliant")},
 		{"mv", filepath.Join(m.bin, "reliant")},
 		{"dir", m.bin},
+		{"file", helper},
+		{"mv", helper},
 		{"file", filepath.Join(m.home, ".gitconfig")},
 		{"mv", filepath.Join(m.home, ".gitconfig")},
 		{"dir", filepath.Join(m.home, ".config", "git")},
+		{"file", filepath.Join(m.home, ".config", "git", "config")},
+		{"file", filepath.Join(m.home, ".reliant", "config.yaml")},
+		{"mv", filepath.Join(m.home, ".reliant", "config.yaml")},
 		{"file", filepath.Join(m.a, "README")},
 		{"dir", m.a},
 		{"new", filepath.Join(m.a, ".git", "hooks", "pre-commit")},
@@ -100,8 +114,9 @@ func TestSandbox_ALaterCredentialedRunsInputsAreReadOnly(t *testing.T) {
 	}
 	out := runIn(t, &plan, m.multi, env, script(protected)+`
 cat "$HOME/.config/gh/hosts.yml" 2>/dev/null
+ls "`+scratch+`" >/dev/null 2>&1 && echo SCRATCH-LISTED
 echo own > "`+filepath.Join(m.multi, "notes.txt")+`" && echo OWN-CWD-OK
-t=$(mktemp -d) && echo x > "$t/f" && echo OWN-TMP-OK
+[ "$TMPDIR" = /tmp ] && t=$(mktemp -d) && echo x > "$t/f" && echo x > /var/tmp/own.$$ && echo OWN-TMP-OK
 echo poisoned > "$GOCACHE/ab-d" && cat "$GOCACHE/ab-d" && echo new > "$GOCACHE/cd-d" && echo CACHE-PRIVATE-WRITE-OK
 echo evil > "`+gobin+`/git" && echo PATH-PRIVATE-WRITE-OK
 echo '{"mcpServers":{}}' > "$HOME/.reliant/mcp.json" && echo SEALED-IN-RUN
@@ -112,6 +127,7 @@ echo '{"mcpServers":{}}' > "$HOME/.reliant/mcp.json" && echo SEALED-IN-RUN
 		assert.Regexp(t, deniedByTheKernel, line)
 	}
 	assert.NotContains(t, out, "PAT-gh", "gh's config stays hidden")
+	assert.NotContains(t, out, "SCRATCH-LISTED", "the credentialed scratch is hidden")
 	for _, ok := range []string{"OWN-CWD-OK", "OWN-TMP-OK", "CACHE-PRIVATE-WRITE-OK", "PATH-PRIVATE-WRITE-OK", "SEALED-IN-RUN"} {
 		assert.Contains(t, out, ok)
 	}
@@ -129,9 +145,11 @@ echo '{"mcpServers":{}}' > "$HOME/.reliant/mcp.json" && echo SEALED-IN-RUN
 	require.NoError(t, err)
 	assert.Equal(t, "#!/bin/sh\n", string(got))
 
-	// The same writes with credentials: every one lands.
-	out = runIn(t, nil, m.multi, env, script(protected))
-	for _, p := range protected {
+	// The same writes with credentials: every one lands, and so do its
+	// scratch's and its /tmp's.
+	credentialed := append(protected, probe{"file", filepath.Join(scratch, "run.sh")}, probe{"dir", scratch}, probe{"dir", tmp})
+	out = runIn(t, nil, m.multi, env, script(credentialed))
+	for _, p := range credentialed {
 		assert.Equal(t, p.kind+" WROTE "+p.path, lineFor(out, p.path, p.kind), "a credentialed command writes %s:\n%s", p.path, out)
 	}
 }
