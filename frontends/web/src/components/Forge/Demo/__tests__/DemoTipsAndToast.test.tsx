@@ -254,6 +254,16 @@ describe("the page tours", () => {
     expect(tracked.map((t) => t.event)).toEqual(expect.arrayContaining(["demo_page_tour_started", "demo_page_tour_completed"]));
   });
 
+  it("cancels a pending tour when the visitor changes page", async () => {
+    const { go } = renderDemo("/forge/demo?view=traces", ["obs-trace-latency", "obs-log-query"]);
+    fireEvent.click(await screen.findByTestId("demo-page-tour-start"));
+    await go("/forge/demo?view=logs");
+    await waitFor(() => expect(tip()).toBe("logs"));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 500)); });
+    expect(screen.queryByTestId("demo-page-tour")).toBeNull();
+    expect(tip()).toBe("logs");
+  });
+
   it("leaves out a stop whose target isn't on the page", async () => {
     renderDemo("/forge/demo?view=traces", ["obs-trace-latency", "obs-trace-table"]);
     fireEvent.click(await screen.findByTestId("demo-page-tour-start"));

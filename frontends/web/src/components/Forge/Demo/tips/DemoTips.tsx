@@ -28,7 +28,7 @@
  * Mounted once at the demo shell's root (demoShellRoutes.tsx).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Bot, Compass, Lightbulb, X } from "lucide-react";
 
@@ -64,6 +64,11 @@ export function DemoTips() {
   const toastWaiting = !toastDismissed;
   const [mode, setMode] = useState<Mode | null>(null);
   const [shownKey, setShownKey] = useState<DemoTipKey | null>(null);
+  const startTimer = useRef<number | null>(null);
+  // A route change or opening the guided journey cancels a pending page tour.
+  useEffect(() => () => {
+    if (startTimer.current !== null) window.clearTimeout(startTimer.current);
+  }, [key, tourOpen, toastWaiting]);
 
   useEffect(() => {
     if (!key || tourOpen || toastWaiting) {
@@ -85,7 +90,9 @@ export function DemoTips() {
     if (!shownKey) return;
     trackEvent("demo_page_tour_started", { tip: shownKey });
     // Give the page a moment: its parts may still be loading.
-    window.setTimeout(() => {
+    if (startTimer.current !== null) window.clearTimeout(startTimer.current);
+    startTimer.current = window.setTimeout(() => {
+      startTimer.current = null;
       const stops = presentStops(shownKey);
       setMode(stops.length ? { kind: "touring", stops, at: 0 } : { kind: "pill" });
     }, SETTLE_MS);
