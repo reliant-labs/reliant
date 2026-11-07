@@ -420,60 +420,78 @@ export function BackgroundWorkPill({
   );
   const inSheet = useStatusSlotCollapsed();
 
+  // In the status sheet (phones) the list is the whole point of opening it:
+  // the agents are always shown, and there is no way to fold them away.
+  const showList = inSheet || isExpanded;
+
   if (!hasAnything) return null;
 
-  return (
-    <div className={statusBannerFrame(inSheet, "flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5")}>
-      <button
-        type="button"
-        onClick={() => setIsExpanded((v) => !v)}
-        aria-expanded={isExpanded}
-        className="flex w-full items-center gap-2 text-xs"
-        data-testid="background-work-pill"
-      >
-        {isBlocked ? (
-          <span className="relative flex h-2 w-2 flex-shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-warning" />
-          </span>
-        ) : hasFailed ? (
-          <span className="relative inline-flex h-2 w-2 flex-shrink-0 rounded-full bg-warning" />
-        ) : (
-          <span className="relative flex h-2 w-2 flex-shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
-          </span>
-        )}
-
-        <span
-          className={cn(
-            "font-medium",
-            isBlocked ? "text-warning-ink" : hasFailed ? "text-warning-ink" : "text-foreground",
-          )}
-        >
-          {isBlocked
-            ? waitingLabel
-            : hasFailed
-              ? failedLabel
-              : summary}
+  const header = (
+    <>
+      {isBlocked ? (
+        <span className="relative flex h-2 w-2 flex-shrink-0">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-warning" />
         </span>
+      ) : hasFailed ? (
+        <span className="relative inline-flex h-2 w-2 flex-shrink-0 rounded-full bg-warning" />
+      ) : (
+        <span className="relative flex h-2 w-2 flex-shrink-0">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+        </span>
+      )}
 
-        {isBlocked && hasFailed && (
-          <span className="text-warning-ink">· {failedLabel}</span>
+      <span
+        className={cn(
+          "font-medium",
+          isBlocked ? "text-warning-ink" : hasFailed ? "text-warning-ink" : "text-foreground",
         )}
-        {(isBlocked || hasFailed) && summary && (
-          <span className="text-muted-foreground">· {summary} running</span>
-        )}
+      >
+        {isBlocked
+          ? waitingLabel
+          : hasFailed
+            ? failedLabel
+            : summary}
+      </span>
 
+      {isBlocked && hasFailed && (
+        <span className="text-warning-ink">· {failedLabel}</span>
+      )}
+      {(isBlocked || hasFailed) && summary && (
+        <span className="text-muted-foreground">· {summary} running</span>
+      )}
+
+      {!inSheet && (
         <ChevronDown
           className={cn(
             "ml-auto h-3.5 w-3.5 flex-shrink-0 text-muted-foreground transition-transform",
             isExpanded && "rotate-180",
           )}
         />
-      </button>
+      )}
+    </>
+  );
 
-      {isExpanded && (
+  return (
+    <div className={statusBannerFrame(inSheet, "flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5")}>
+      {inSheet ? (
+        <div className="flex w-full items-center gap-2 text-xs" data-testid="background-work-pill">
+          {header}
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setIsExpanded((v) => !v)}
+          aria-expanded={isExpanded}
+          className="flex w-full items-center gap-2 text-xs"
+          data-testid="background-work-pill"
+        >
+          {header}
+        </button>
+      )}
+
+      {showList && (
         <div className="mt-1 flex flex-col gap-0.5">
           {waitingQuestions.map((waiting) => (
             <WaitingQuestionRow

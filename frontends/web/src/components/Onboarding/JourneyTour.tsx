@@ -14,7 +14,6 @@ import { createPortal } from "react-dom";
 import { useLocation } from "@tanstack/react-router";
 import { trackEvent } from "../../lib/analytics";
 import { isDemoShell } from "../../lib/shell";
-import { DemoPageTour } from "../Forge/Demo/tips/DemoTips";
 import { isPhoneViewport } from "../../lib/mobileRedirect";
 import { useTourStore } from "../../store/tourStore";
 import { OnboardingSpotlight } from "./OnboardingSpotlight";
@@ -367,7 +366,7 @@ export function JourneyTour() {
   const { journey, stepId, step } = nav.tour;
   // The public demo explains the actual page, including legacy ?view= deep links.
   // It never demands a prior action or sends exploration through the old single-page sequence.
-  if (journey === "forge" && isDemoShell()) return <DemoPageTour />;
+  if (journey === "forge" && isDemoShell()) return null; // DemoTips owns the page-local entry callout, including legacy links.
   return (
     <JourneyStepView
       key={formatTourParam(journey, stepId)}

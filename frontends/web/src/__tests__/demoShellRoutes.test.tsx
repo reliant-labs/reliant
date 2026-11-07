@@ -136,23 +136,23 @@ describe("the demo shell's routes", () => {
   });
 });
 
-describe("explore first: the tour is offered, never started", () => {
-  it("opens with one compact page card, not a competing toast or automatic tour", async () => {
+describe("every demo page entry starts its own concise tour", () => {
+  it("opens the current-page callout automatically without a tour query or Take-tour click", async () => {
     const router = renderDemoShell("/");
     await screen.findByTestId("console-overview");
-    await waitFor(() => expect(screen.getByTestId("demo-tip")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("tour-callout")).toBeInTheDocument());
     expect(searchOf(router).tour).toBeUndefined();
+    expect(screen.queryByTestId("demo-page-tour-start")).toBeNull();
     expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
   });
 
-  it("starts the optional tour only from Take the tour", async () => {
+  it("dismisses for this visit without navigating the site", async () => {
     const router = renderDemoShell("/");
     await screen.findByTestId("console-overview");
-    await waitFor(() => expect(screen.getByTestId("demo-page-tour-start")).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId("demo-page-tour-start"));
-    await waitFor(() => expect(searchOf(router).tour).toBe("forge:fg-intro"));
-    expect(tracked).toContainEqual({ event: "demo_page_tour_started", props: { tip: "overview" } });
-    expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
+    await waitFor(() => fireEvent.click(screen.getByTestId("tour-exit")));
+    await waitFor(() => expect(screen.queryByTestId("tour-callout")).toBeNull());
+    expect(router.state.location.pathname).toBe("/forge/p/shop");
+    expect(screen.getByTestId("demo-page-info")).toBeInTheDocument();
   });
 
   it("hides the toast over a deep link to a step, and leaves the link alone", async () => {
