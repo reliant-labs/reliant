@@ -78,6 +78,23 @@ describe("the console's sample data, on the demo's transport", () => {
     expect(promotions.length).toBeGreaterThanOrEqual(3);
   });
 
+  it("Deploys: one per promotion, newest first, and a staging build that failed before it cut a release", async () => {
+    const { listDeployRuns, getDeployRun } = await import("@/services/forge/deployAttempts");
+    const runs = await listDeployRuns(DEMO_PROJECT);
+    expect(runs.length).toBe(10);
+    expect(runs.every((r, i) => i === 0 || Date.parse(runs[i - 1].startedAt!) >= Date.parse(r.startedAt!))).toBe(true);
+    expect(runs.slice(0, 2).map((r) => [r.env, r.release, r.state])).toEqual([
+      ["dev", "v1.8.4", "succeeded"],
+      ["prod", "v1.8.3", "succeeded"],
+    ]);
+    const failed = runs.filter((r) => r.state === "failed");
+    expect(failed.map((r) => [r.env, r.release, r.failedPhase])).toEqual([["staging", "", "build"]]);
+    expect((await getDeployRun(failed[0].id)).log).toMatch(/nothing was cut or promoted/);
+    // prod's from a terminal: its output stayed there.
+    expect((await listDeployRuns(DEMO_PROJECT, "prod")).every((r) => r.source === "terminal" && !r.hasLog)).toBe(true);
+    expect(await listDeployRuns("someone-else")).toEqual([]);
+  });
+
   it("Releases: newest first with commits, one release, and its rollout", async () => {
     const releases = await listProjectReleases(DEMO_PROJECT);
     expect(releases.map((r) => r.version)).toEqual(DEMO_RELEASES.map((r) => r.version));

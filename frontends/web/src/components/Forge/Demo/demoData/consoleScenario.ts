@@ -27,6 +27,7 @@ import type { JsonObject, MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromMs, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
+  DeployAttemptState,
   DeployCustomDomainState,
   DeployEnvironmentKind,
   DeployObservedState,
@@ -565,6 +566,85 @@ function activity(): MessageInitShape<typeof ActivityEventSchema>[] {
   }));
 }
 
+// ── Deploys ─────────────────────────────────────────────────────────────────
+
+const DEPLOY_PHASES = ["start", "preflight", "build", "plan", "promote", "rollout"] as const;
+
+/** The deploy that broke before it could cut a release: staging, before the one that shipped v1.8.3. */
+const FAILED_DEPLOY = {
+  id: "dep-run-staging-failed",
+  env: "env-staging" as EnvId,
+  age: 4 * HOUR,
+  by: "jon",
+  failedPhase: "build",
+  error: "go build ./cmd/worker: internal/inventory/reserve.go:42:9: undefined: inventory.ReserveFromEvent",
+  log: [
+    "forge env deploy staging",
+    "  preflight  ok · staging has room for 7 workloads",
+    "  build      api ✓  orders ✓  payments ✓  inventory ✓",
+    "  build      worker ✗",
+    "internal/inventory/reserve.go:42:9: undefined: inventory.ReserveFromEvent",
+    "error: build failed for worker; nothing was cut or promoted",
+  ].join("\n"),
+};
+
+/**
+ * One `forge env deploy` per promotion (RUNNING and HISTORY), newest first,
+ * and the failed one. The promotions to dev and staging ran in CI; prod's
+ * from a terminal, so their output stayed there.
+ */
+function deployAttempts() {
+  const runs = (Object.keys(RUNNING) as EnvId[]).flatMap((envId) =>
+    [RUNNING[envId], ...HISTORY[envId]].map((p) => ({ envId, ...p, failed: null as typeof FAILED_DEPLOY | null })),
+  );
+  runs.push({ envId: FAILED_DEPLOY.env, version: "", age: FAILED_DEPLOY.age, by: FAILED_DEPLOY.by, failed: FAILED_DEPLOY });
+  runs.sort((a, b) => a.age - b.age);
+  return runs.map((r) => {
+    const env = DEMO_ENVS.find((e) => e.id === r.envId)!;
+    const ci = !r.failed && env.name !== "prod";
+    const took = r.failed ? 3 * MINUTE : 6 * MINUTE;
+    const phases = r.failed ? DEPLOY_PHASES.slice(0, DEPLOY_PHASES.indexOf("build") + 1) : DEPLOY_PHASES;
+    return {
+      id: r.failed ? r.failed.id : `dep-run-${env.name}-${r.version.replace(/\./g, "")}`,
+      project: DEMO_PROJECT,
+      environmentName: env.name,
+      mode: "apply",
+      source: ci ? "ci" : "terminal",
+      releaseVersion: r.version,
+      promotionId: r.failed ? "" : promotionId(r.envId, r.version),
+      run: ci ? { url: `https://${REPO}/actions/runs/${9_400_000 + Math.round(r.age / MINUTE)}` } : undefined,
+      forgeVersion: FORGE_VERSION,
+      startedByUserId: `user-${r.by}`,
+      startedByActor: ci ? "github-actions" : r.by,
+      phase: phases[phases.length - 1],
+      phases: phases.map((name, i) => ({ name, startedAt: ago(r.age + took - (i * took) / phases.length) })),
+      state: r.failed ? DeployAttemptState.FAILED : DeployAttemptState.SUCCEEDED,
+      failedPhase: r.failed?.failedPhase ?? "",
+      errorMessage: r.failed?.error ?? "",
+      exitCode: r.failed ? 1 : 0,
+      startedAt: ago(r.age + took),
+      lastHeartbeatAt: ago(r.age),
+      finishedAt: ago(r.age),
+      hasLog: !!r.failed || ci,
+      logTruncated: false,
+      hasReport: !r.failed,
+    };
+  });
+}
+
+function deployLog(attempt: ReturnType<typeof deployAttempts>[number]): string {
+  if (attempt.id === FAILED_DEPLOY.id) return FAILED_DEPLOY.log;
+  return [
+    `forge env deploy ${attempt.environmentName} --version ${attempt.releaseVersion}`,
+    `  preflight  ok`,
+    `  build      ${DEMO_WORKLOADS.length} artifacts, reused from ${attempt.releaseVersion}'s cut`,
+    `  plan       ${DEMO_WORKLOADS.length} workloads to update, 0 to create, 0 to delete`,
+    `  promote    ${attempt.promotionId}`,
+    `  rollout    ${DEMO_WORKLOADS.map((w) => `${w.name} ✓`).join("  ")}`,
+    `deployed ${attempt.releaseVersion} to ${attempt.environmentName}`,
+  ].join("\n");
+}
+
 // ── Handlers ────────────────────────────────────────────────────────────────
 
 // Scope, in every handler as well as around them all (demoScope.ts scopedToDemo): an environment
@@ -699,7 +779,20 @@ export function consoleScenarioHandlers(): MockHandlers {
             unchangedArtifacts: 0,
           };
         },
-        listDeployAttempts: () => ({ attempts: [] }),
+        listDeployAttempts: (req) => {
+          if (!forProject(req.project)) return { attempts: [] };
+          const attempts = deployAttempts().filter((a) => !req.environmentName || a.environmentName === req.environmentName);
+          return { attempts: req.limit > 0 ? attempts.slice(0, req.limit) : attempts };
+        },
+        getDeployAttempt: (req) => {
+          const attempt = deployAttempts().find((a) => a.id === req.id);
+          if (!attempt) return {};
+          return {
+            attempt,
+            log: attempt.hasLog ? deployLog(attempt) : "",
+            reportJson: attempt.hasReport ? JSON.stringify({ environment: attempt.environmentName, version: attempt.releaseVersion, promotion: attempt.promotionId, result: "deployed" }) : "",
+          };
+        },
         listGates: () => ({ gates: [] }),
       }),
     ),
