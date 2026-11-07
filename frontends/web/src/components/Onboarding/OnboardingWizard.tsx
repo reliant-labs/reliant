@@ -119,7 +119,11 @@ export function OnboardingWizard() {
     goToStep(journey, first);
   }, [tourInitialized, user, isDesktopSurface, isOnboardingRoute, tourOpen, goToStep]);
 
-  if (!isDesktopSurface) return null;
+  // The mobile surface shows a tour only as its journey's own phone presentation (Journey.phone).
+  if (!isDesktopSurface) {
+    const phoneTour = nav.tour?.kind === "step" && !!JOURNEYS[nav.tour.journey].phone;
+    return phoneTour && user && isInitialized ? <JourneyTour /> : null;
+  }
 
   // Signed out — neither the tour nor the checklist belongs on screen.
   if (!user) return null;
