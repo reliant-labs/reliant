@@ -50,7 +50,7 @@ interface OnboardingSpotlightProps {
    * (`hint`), no bottom bar to keep clear of, and the card beside the target
    * rather than below it.
    */
-  callout?: { footer: React.ReactNode; hint?: React.ReactNode };
+  callout?: { footer: React.ReactNode; hint?: React.ReactNode; /** Keep an always-open page tour out of the desktop sidebar. */ viewportLeft?: number };
 }
 
 interface Position {
@@ -104,15 +104,16 @@ function calculateTooltipPosition(
   tooltipSize: ElementSize = DEFAULT_TOOLTIP_SIZE,
   targetGap: number = 16,
   bottomReserve: number = NAV_BAR_CLEARANCE,
-  order: readonly CalloutSide[] = BELOW_FIRST
+  order: readonly CalloutSide[] = BELOW_FIRST,
+  viewportLeft = 0
 ): Position & { actualPosition: CalloutSide } {
   const placed = placeCallout(
-    rect,
+    { ...rect, left: rect.left - viewportLeft },
     tooltipSize,
-    { width: window.innerWidth, height: window.innerHeight },
+    { width: window.innerWidth - viewportLeft, height: window.innerHeight },
     { preferred: position, order, gap: targetGap, margin: VIEWPORT_PADDING, bottomReserve }
   );
-  return { top: placed.top, left: placed.left, actualPosition: placed.side };
+  return { top: placed.top, left: placed.left + viewportLeft, actualPosition: placed.side };
 }
 
 /** Below this width a callout is a bottom sheet (tailwind `sm`). */
@@ -292,10 +293,10 @@ export function OnboardingSpotlight({
     if (!spotlightRect) return;
     setTooltipPos(
       compact
-        ? calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, 0, BESIDE_FIRST)
+        ? calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, 0, BESIDE_FIRST, callout?.viewportLeft ?? 0)
         : calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding)
     );
-  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, compact]);
+  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, compact, callout?.viewportLeft]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(measureTooltip);
