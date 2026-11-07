@@ -258,7 +258,7 @@ func TestApplyGracefulCancel_KillsGrandchildThatOutlivesTheShell(t *testing.T) {
 
 	deadline := time.Now().Add(conditionTimeout)
 	for syscall.Kill(grandchild, 0) == nil {
-		if state, _ := os.ReadFile("/proc/" + strconv.Itoa(grandchild) + "/stat"); strings.Contains(string(state), ") Z ") {
+		if isZombie(grandchild) {
 			break // dead, awaiting its reaper
 		}
 		if time.Now().After(deadline) {
@@ -396,7 +396,7 @@ func TestApplyGracefulCancel_ZeroGraceUsesDefault(t *testing.T) {
 // its start time, not its pid alone.
 func TestGroupMembersAndOwnership(t *testing.T) {
 	if _, ok := GroupMembers(1); !ok {
-		t.Skip("needs /proc")
+		t.Skip("needs a readable process table")
 	}
 	cmd := exec.Command("sleep", "300")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
