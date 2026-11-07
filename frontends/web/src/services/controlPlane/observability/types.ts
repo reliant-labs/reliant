@@ -479,7 +479,28 @@ export interface PanelPostgres {
   group?: string[];
 }
 
+export interface PanelLink {
+  database: string;
+  table: string;
+  column?: string;
+  fromField?: string;
+  row?: boolean;
+  fromFields?: string[];
+}
+
+/** forge.dashspec BrowseView: structured data, never SQL or executable expressions. */
+export interface BrowseView {
+  database: string;
+  table: string;
+  columns?: string[];
+  filters?: { column: string; op: import("./appDatabaseApi").BrowseOp; values?: string[] }[];
+  sort?: { column: string; desc?: boolean }[];
+  size?: number;
+}
+
 export interface Panel {
+  link?: PanelLink;
+  browse?: BrowseView;
   id: string;
   /** Optional dashboard section; viewer visibility never edits this association. */
   section?: string;
@@ -517,6 +538,8 @@ export interface Panel {
 }
 
 export interface DashboardFilter {
+  kind?: "toggle";
+  default?: boolean;
   /** Empty or absent targets all panels. Never infer targeting from panel titles. */
   panelIds?: string[];
   id: string;
