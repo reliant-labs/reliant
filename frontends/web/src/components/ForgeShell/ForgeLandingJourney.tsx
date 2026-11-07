@@ -86,7 +86,7 @@ function WorkflowsInReliant({ onClose }: { onClose: () => void }) {
             trackEvent("tour_link_clicked", { journey: "workflows", target: "reliant" });
             onClose();
           }}
-          className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          className="no-color inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
         >
           Open Reliant
         </a>

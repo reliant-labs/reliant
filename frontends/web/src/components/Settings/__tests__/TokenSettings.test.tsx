@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { TokenKind } from "../../../gen/reliant/v1/token_pb";
 import { mockTransport, renderWithTransport } from "@/lib/test-utils";
 import { serviceHandlers } from "@/test/serviceTransport";
+import { expectEveryCommandCopyable } from "@/test/commandBlocks";
 
 // TokenSettings drives reliant.v1.TokenService (kind DAEMON) — the ONE
 // machine-credential surface. These pin the wire requests it sends, because
@@ -40,6 +41,12 @@ describe("TokenSettings", () => {
     listTokens.mockReset().mockResolvedValue({ tokens: [liveToken] });
     createToken.mockReset();
     revokeToken.mockReset().mockResolvedValue({});
+  });
+
+  it("shows the headless-machine command with a copy button", async () => {
+    renderTokens();
+    expect(await screen.findByText('echo "your-token" | reliant daemon start --token')).toBeInTheDocument();
+    expectEveryCommandCopyable(document.body);
   });
 
   it("lists DAEMON tokens only and shows their display prefix", async () => {

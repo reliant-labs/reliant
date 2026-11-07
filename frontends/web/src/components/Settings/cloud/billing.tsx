@@ -83,7 +83,7 @@ import {
   sizeName,
   storageCard,
 } from "@/components/Billing/daemonUsage";
-import { deriveMachineOptions } from "@/components/Billing/machineOptions";
+import { deriveMachineOptions, oneRowPerPlan } from "@/components/Billing/machineOptions";
 import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
 import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import { WalletTopupCheckout } from "@/components/Billing/WalletTopupCheckout";
@@ -1183,7 +1183,7 @@ function PlansTab() {
    * plan, so a row can be `current`.
    */
   const planOptions: ComputePlanOption[] = useMemo(
-    () => deriveMachineOptions(computePlans, plansQ.data?.daemonPricing),
+    () => oneRowPerPlan(deriveMachineOptions(computePlans, plansQ.data?.daemonPricing)),
     [computePlans, plansQ.data?.daemonPricing],
   );
 

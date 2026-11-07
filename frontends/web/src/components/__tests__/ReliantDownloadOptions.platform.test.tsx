@@ -73,7 +73,7 @@ describe("ReliantDownloadOptions — Homebrew is gated to macOS", () => {
       ).toBeInTheDocument();
     });
     expect(screen.getByText(HOMEBREW_CASK_INSTALL)).toBeInTheDocument();
-    expect(screen.getByText(/Or install via Homebrew/i)).toBeInTheDocument();
+    expect(screen.getByText(/Or use Homebrew/i)).toBeInTheDocument();
   });
 
   it("labels the cask as macOS-specific when the platform is unknown", () => {
@@ -81,7 +81,7 @@ describe("ReliantDownloadOptions — Homebrew is gated to macOS", () => {
     render(<ReliantDownloadOptions />);
 
     expect(screen.getByText(HOMEBREW_CASK_INSTALL)).toBeInTheDocument();
-    expect(screen.getByText(/On macOS, you can install via Homebrew/i))
+    expect(screen.getByText(/macOS alternative · Homebrew/i))
       .toBeInTheDocument();
   });
 

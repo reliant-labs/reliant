@@ -8,6 +8,7 @@ import { useCreateToken, useRevokeToken, useUpdateToken } from "../../hooks/toke
 import Input from "../forge-ui/input";
 import Button from "@/components/forge-ui/button";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { CommandBlock } from "../CommandBlock";
 
 // The permissions a daemon credential can carry. Mirrors the org-administration
 // half of forge/pkg/accesstoken plus daemon:connect, which every daemon token
@@ -163,7 +164,7 @@ export function TokenSettings() {
     <div className="space-y-6">
       <SettingsPageHeader
         title="Access tokens"
-        description="Create tokens that let a self-hosted or headless machine connect to your account. Come here to issue a token for a new machine, or revoke one you no longer trust."
+        description="Connect a headless machine with an access token. Revoke tokens you no longer trust."
       />
 
       {shownError && (
@@ -175,11 +176,12 @@ export function TokenSettings() {
       {/* Usage instructions */}
       <div className="rounded-lg border border-border bg-card p-4">
         <p className="text-xs text-muted-foreground mb-2">
-          Use a token to connect a headless machine:
+          Create a token below, then run this on your machine:
         </p>
-        <p className="text-sm font-mono">
-          echo "your-token" | reliant daemon start --token
-        </p>
+        <CommandBlock
+          command={'echo "your-token" | reliant daemon start --token'}
+          label="headless machine start command"
+        />
       </div>
 
       {/* New token reveal */}

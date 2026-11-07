@@ -14,6 +14,7 @@ import { AccountList } from "./AccountList";
 import { AddProviderPicker, type ReliantOffer } from "./AddProviderPicker";
 import { ConnectPanel } from "./ConnectPanel";
 import { providerConfigs } from "./providerCatalog";
+import { ProviderLogo } from "../../icons/ProviderLogo";
 
 /**
  * Reliant credits as the picker and the empty state offer them: connected,
@@ -153,8 +154,7 @@ export function ProvidersSection({ variant = "desktop", pickerOpen, onPickerOpen
           >
             <h2 className="text-sm font-semibold text-foreground">Connect the AI your agents run on</h2>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Have a Claude or ChatGPT plan? Sign in with it and your agents use it the way you do. Otherwise add an
-              API key{reliant ? ", or run on Reliant credits" : ""}.
+              Use your Claude or ChatGPT subscription, an API key{reliant ? ", or Reliant credits" : ""}.
             </p>
             {starting ? (
               <div className="mt-4">
@@ -175,6 +175,7 @@ export function ProvidersSection({ variant = "desktop", pickerOpen, onPickerOpen
                     variant="outline"
                     size={variant === "mobile" ? "xl" : "md"}
                     className={variant === "mobile" ? "min-h-[44px]" : undefined}
+                    leftIcon={<ProviderLogo provider={id} />}
                     onClick={() => setStarting(id)}
                   >
                     Sign in with {providerConfigs[id].name}
@@ -186,6 +187,7 @@ export function ProvidersSection({ variant = "desktop", pickerOpen, onPickerOpen
                     size={variant === "mobile" ? "xl" : "md"}
                     className={variant === "mobile" ? "min-h-[44px]" : undefined}
                     loading={reliant.enabling}
+                    leftIcon={<ProviderLogo provider="reliant" />}
                     onClick={reliant.onEnable}
                   >
                     Use {reliant.balance} of Reliant credits
