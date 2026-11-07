@@ -1595,6 +1595,11 @@ message CompareDeployReleasesRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 5;
+  // Only this workload's objects: those whose forge workload is this name, or
+  // which belong to no workload and are named it. objects.unchanged then
+  // counts that workload's objects alone. Commits and artifacts are the
+  // release's and are not filtered. Unset compares every object.
+  optional string workload = 6;
 }
 
 message CompareDeployReleasesResponse {
@@ -1681,6 +1686,11 @@ message DeployObjectComparison {
   // summaries: objects are named without saying what they are or what in them
   // changed.
   bool summaries_missing = 8;
+  // The workload the objects were filtered to, echoing the request's. Empty
+  // when every object was compared — including from a control plane that
+  // predates the filter, so a client that asked for one and reads "" filters
+  // the deltas itself.
+  string workload = 9;
 }
 
 enum DeployObjectComparisonState {
