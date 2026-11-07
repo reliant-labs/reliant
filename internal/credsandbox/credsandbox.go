@@ -85,8 +85,38 @@ const RefusedExitCode = 126
 type Plan struct {
 	// Hide are absolute paths made absent: files, sockets and directories.
 	Hide []string
-	// ReadOnly are absolute paths made read-only.
+	// ReadOnly are absolute paths made read-only, under every path the disk
+	// they are on is mounted at. One that does not exist is skipped (see Seal).
 	ReadOnly []string
+	// Seal are absolute paths that must not come to exist for real: when one
+	// is absent, the nearest directory above it that exists is rebuilt, so
+	// whatever the command creates there is gone when it exits.
+	Seal []string `json:",omitempty"`
+	// Writable are paths inside a ReadOnly one made writable again: the
+	// command's own checkout, and the git directory its linked worktree
+	// shares. Applied with ReadOnly, the shallowest first, so a ReadOnly path
+	// inside a Writable one (that git directory's config) stays read-only.
+	Writable []string `json:",omitempty"`
+	// Overlay are shared directories the command reads as they are and writes
+	// privately: what it writes is discarded when it exits.
+	Overlay []Overlay `json:",omitempty"`
+}
+
+// Overlay is one directory the command sees through a private overlay.
+type Overlay struct {
+	// Path is the directory, absolute.
+	Path string
+	// Env is the variable that names the directory to the tools that use it
+	// (GOCACHE), when there is one. Where the kernel has no unprivileged
+	// overlay, the directory is read-only instead and Env points at a private
+	// empty one.
+	Env string `json:",omitempty"`
+	// Cache is a cache the daemon creates when it is missing, so that a
+	// command cannot be the one to create it.
+	Cache bool `json:",omitempty"`
+	// Sealed is sealed when it is missing (a PATH directory under home that
+	// does not exist yet).
+	Sealed bool `json:",omitempty"`
 }
 
 // readOnlyHomeRel are paths under the user's home that later runs trust: what a
@@ -196,7 +226,10 @@ func Wrap(cmd *exec.Cmd, credentials string) (refusal string) {
 	if err != nil {
 		return Refusal(fmt.Errorf("locating the sandbox helper binary: %w", err))
 	}
-	return Apply(cmd, self, DefaultPlan())
+	if !Enabled() {
+		return ""
+	}
+	return Apply(cmd, self, PlanFor(cmd.Dir, cmd.Env))
 }
 
 // ErrUnavailable wraps the reason this host refused the sandbox.
