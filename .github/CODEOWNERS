@@ -1,0 +1,3 @@
+# Default owner for everything in this repo. Override with more specific
+# rules below — later rules take precedence in GitHub's CODEOWNERS format.
+* @reliant-labs
