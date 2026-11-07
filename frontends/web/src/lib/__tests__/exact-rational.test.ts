@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { addRational, compareRational, divideRational, exactCentsLabel, exactHours, formatRational, parseRational, rational } from "../exact-rational";
 describe("exact wire rational quantities", () => {

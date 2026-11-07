@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { WORKTREE_OPERATION_TIMEOUT_MS } from '../constants';
 
 describe('timeout constants', () => {

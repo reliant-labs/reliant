@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest'
 import { autoLayoutWorkflow } from '../workflow-layout'
 import type { Workflow } from '../../types/workflow'

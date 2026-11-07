@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The browser-reserved table against what Chromium actually withholds.
  *

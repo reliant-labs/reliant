@@ -1,6 +1,11 @@
 import { batchUpsertSettings, deleteSetting } from "../hooks/settings-queries";
 import { getAuthTokenProvider } from "../api/authProvider";
 import { settingsSync } from "../services/settingsSync";
+import {
+  credentialBelongsTo,
+  currentSessionOwner,
+  type SessionOwner,
+} from "./auth/sessionOwner";
 import { logger } from "./logger";
 
 /**
@@ -16,12 +21,39 @@ import { logger } from "./logger";
  * unauthenticated and must not deadlock the sign-in flow itself. Settings are
  * unambiguously auth-only, so the narrow gate is both safe and sufficient.
  */
-async function hasAuthToken(): Promise<boolean> {
+async function currentToken(): Promise<string | null> {
   try {
-    return (await getAuthTokenProvider().getToken()) !== null;
+    return await getAuthTokenProvider().getToken();
   } catch {
+    return null;
+  }
+}
+
+async function hasAuthToken(): Promise<boolean> {
+  return (await currentToken()) !== null;
+}
+
+/**
+ * Whether a write queued for `owner` may go out now. Its token wait can span
+ * an identity change (another host signing in as someone else through the
+ * shared session cookie), and the transport attaches whichever credential is
+ * current when the request leaves: checked against the credential the
+ * request is about to carry, so the departing user's write is dropped rather
+ * than sent into the next user's settings.
+ */
+async function mayWriteFor(owner: SessionOwner, keys: string[]): Promise<boolean> {
+  const token = await currentToken();
+  if (token === null) {
+    logger.warn("[settingsPersistence] Skipping setting writes while unauthenticated", { keys });
     return false;
   }
+  if (!credentialBelongsTo(owner, token)) {
+    logger.warn("[settingsPersistence] Dropping setting writes queued for a previous identity", {
+      keys,
+    });
+    return false;
+  }
+  return true;
 }
 
 export interface PersistedStringSetting {
@@ -80,6 +112,8 @@ export async function safeGetSetting(
  * fan-out this exists to remove.
  */
 interface PendingWrites {
+  // The account the writes were made for: a batch never mixes two.
+  owner: SessionOwner;
   values: Map<string, string>;
   waiters: Array<() => void>;
 }
@@ -97,12 +131,7 @@ async function flushWrites(batch: PendingWrites): Promise<void> {
     // The auth gate runs HERE, once for the whole batch, rather than in
     // upsertStringSetting. Awaiting a token before enqueuing would put each
     // caller in a different microtask and defeat the coalescing entirely.
-    if (!(await hasAuthToken())) {
-      logger.warn("[settingsPersistence] Skipping setting writes while unauthenticated", {
-        keys: settings.map((s) => s.key),
-      });
-      return;
-    }
+    if (!(await mayWriteFor(batch.owner, settings.map((s) => s.key)))) return;
     await batchUpsertSettings(settings);
   } catch (error) {
     logger.error("[settingsPersistence] Failed to upsert settings batch", {
@@ -121,11 +150,12 @@ export function upsertStringSetting(key: string, value: string): Promise<void> {
 
   // Enqueue SYNCHRONOUSLY — no await before this point, or callers in the same
   // tick would land in different batches.
-  if (!pendingWrites) {
-    const batch: PendingWrites = { values: new Map(), waiters: [] };
+  const owner = currentSessionOwner();
+  if (!pendingWrites || pendingWrites.owner !== owner) {
+    const batch: PendingWrites = { owner, values: new Map(), waiters: [] };
     pendingWrites = batch;
     void Promise.resolve().then(() => {
-      pendingWrites = null;
+      if (pendingWrites === batch) pendingWrites = null;
       void flushWrites(batch);
     });
   }
@@ -138,8 +168,9 @@ export function upsertStringSetting(key: string, value: string): Promise<void> {
 }
 
 export async function deleteSettingIfExists(key: string): Promise<void> {
+  const owner = currentSessionOwner();
   settingsSync.removeFromCache(key);
-  if (!(await hasAuthToken())) return;
+  if (!(await mayWriteFor(owner, [key]))) return;
   try {
     await deleteSetting(key);
   } catch {

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import { ProjectInstallState } from "@/gen/reliant/v1/project_pb";

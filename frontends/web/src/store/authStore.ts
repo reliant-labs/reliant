@@ -6,6 +6,7 @@ import { getAppURL } from '@/lib/constants'
 import { setTelemetryUserId } from '@/lib/telemetry'
 import { trackEvent } from '@/lib/analytics'
 import { queryClient } from '@/lib/query-client'
+import { setSessionOwner } from '@/lib/auth/sessionOwner'
 import {
   startOAuthSignIn,
   oauthCallbackTransport,
@@ -152,6 +153,9 @@ const commitIdentity = async (
     (scopedStateUserId !== null && scopedStateUserId !== nextUserId) ||
     (forceClear && nextUserId === null)
   ) {
+    // From here on the page acts for nobody: writes queued for the previous
+    // user that are still waiting to send are dropped (lib/auth/sessionOwner).
+    setSessionOwner(null)
     try {
       await clearUserScopedState()
     } catch (error) {
@@ -165,6 +169,7 @@ const commitIdentity = async (
   }
   if (ticket !== adoptionSeq) return 'superseded'
   scopedStateUserId = nextUserId
+  setSessionOwner(nextUserId)
   set({ user, session })
   return 'installed'
 }

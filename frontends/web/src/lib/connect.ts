@@ -317,8 +317,12 @@ export function installShellTransport(t: Transport | Promise<Transport> | null):
  * `renderWithTransport` in src/lib/test-utils and the generated hook tests
  * call it; production code never does.
  */
-export function setTransport(t: Transport | null): void {
+export function setTransport(t: Transport | null): () => void {
+  const previous = _override;
   _override = t;
+  // Preview lifecycles restore the transport they replaced, not necessarily
+  // the live transport (tests and another harness may own the previous one).
+  return () => { if (_override === t) _override = previous; };
 }
 
 /**

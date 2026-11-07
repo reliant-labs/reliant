@@ -4498,11 +4498,21 @@ must be one of those bindings or Reliant cloud:
 
   forge env delete prod-web --endpoint https://admin.reliantapi.com
 
+--id names the environment by the control plane's id instead (the Reliant UI
+shows it), for an undeclared env whose name is ambiguous or unknown. It is
+looked up the same way, on a control plane this project has used; a name given
+beside it must match. `forge env list --orphaned` lists the hosted envs this
+project no longer declares.
+
+Before asking for confirmation it shows what will be deleted: the env's id,
+project, control plane, deployments and bound custom domains. The control
+plane refuses to delete an env while a custom domain is bound to it.
+
 Only hosted environments: for a local stack use `forge env down`, which never
 deletes anything on a control plane and which this command never uses.
 
 ```
-reliant forge env delete <environment> [flags]
+reliant forge env delete <environment> | --id <environment-id> [flags]
 ```
 
 **Flags:**
@@ -4511,6 +4521,7 @@ reliant forge env delete <environment> [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--endpoint` | `string` | - | Control plane holding an env that is no longer declared under deploy/kcl/: one this project is bound to (.forge/hosted-projects.json) or Reliant cloud; https, or http to localhost only (default: the one this project is bound to) |
+| `--id` | `string` | - | Delete the hosted environment with this control-plane id (an env no longer declared under deploy/kcl/); a name given beside it must match |
 | `--keep-data` | `bool` | - | Keep the environment's managed databases (retained, still billed as storage) instead of destroying them |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 | `--yes` | `bool` | - | Confirm the deletion without the typed-name prompt (required when non-interactive) |
@@ -5274,6 +5285,14 @@ reliant forge env exec <env> [--workload <name>] -- <command> [args...] [flags]
 
 List the environments declared in deploy/kcl/
 
+List the environments declared in deploy/kcl/: one directory per env, each
+carrying a main.k. Reads nothing but the checkout.
+
+--orphaned asks the control plane instead: it lists the hosted envs of this
+project that deploy/kcl/ no longer declares (an env outlives its directory),
+on each control plane this project is bound to (.forge/hosted-projects.json),
+or on the one --endpoint names. Each is deletable with `forge env delete <env>`.
+
 ```
 reliant forge env list [flags]
 ```
@@ -5283,6 +5302,9 @@ reliant forge env list [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | With --orphaned: the control plane to ask, one this project is bound to or Reliant cloud (default: every one it is bound to) |
+| `--orphaned` | `bool` | - | List the hosted envs on the control plane that deploy/kcl/ no longer declares |
+| `--token` | `string` | - | With --orphaned: credential to use, ahead of the env var and the credentials file |
 
 ---
 

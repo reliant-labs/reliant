@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { WorkflowResponse } from "@/hooks/workflow-queries";
 import { integrationsNeeded, isReadyMadeAutomation } from "../list/readyMade";

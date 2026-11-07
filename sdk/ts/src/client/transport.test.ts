@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { Code, ConnectError, createRouterTransport, type Interceptor } from "@connectrpc/connect";
 import { ChatService } from "#gen/reliant/v1/chat_pb.js";

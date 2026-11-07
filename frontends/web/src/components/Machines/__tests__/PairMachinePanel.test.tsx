@@ -49,6 +49,7 @@ vi.mock("@/services/controlPlane/pairing", async (importOriginal) => {
 });
 
 import { describeTerminal } from "@/components/ReliantDownloadOptions";
+import { expectEveryCommandCopyable } from "@/test/commandBlocks";
 import { PairMachinePanel } from "../PairMachinePanel";
 
 function setPlatform(platform: string) {
@@ -215,9 +216,9 @@ describe("layout", () => {
     const { container } = render(<PairMachinePanel />);
     const sections = container.querySelectorAll("section");
     expect(sections).toHaveLength(2);
-    expect(sections[0]).toHaveTextContent(/Install Reliant on that machine/i);
-    expect(sections[1]).toHaveTextContent(/Run this in/i);
-    expect(sections[1]).toHaveTextContent(/Approve it here/i);
+    expect(sections[0]).toHaveTextContent(/Download \/ install/i);
+    expect(sections[1]).toHaveTextContent(/Run the command/i);
+    expect(sections[1]).toHaveTextContent(/Enter pairing code/i);
     for (const n of ["1", "2", "3"]) expect(screen.getByText(n)).toBeInTheDocument();
   });
 
@@ -233,7 +234,10 @@ describe("layout", () => {
 
   it("names PowerShell on Windows and gives no keystroke on an unknown platform", () => {
     render(<PairMachinePanel />);
-    expect(screen.getByText(/Run this in PowerShell on that machine/i)).toBeInTheDocument();
+    const help = screen.getByText("More help").closest("details")!;
+    expect(help).not.toHaveAttribute("open");
+    expect(help.textContent).toMatch(/PowerShell/);
+    expect(screen.getByLabelText("Pairing code")).toBeVisible();
     const generic = describeTerminal("unknown");
     expect(generic.name).toBe("a terminal");
     expect(generic.howToOpen).not.toMatch(/⌘|Win|Ctrl/);
@@ -247,5 +251,18 @@ describe("a deployment with no control plane", () => {
     expect(screen.getByTestId("pair-token-fallback")).toHaveTextContent(/reliant daemon start --token/);
     expect(screen.queryByLabelText("Pairing code")).not.toBeInTheDocument();
     expect(screen.queryByTestId("pair-no-code-hint")).not.toBeInTheDocument();
+    expectEveryCommandCopyable(document.body);
+  });
+});
+
+describe("every command has a copy button", () => {
+  it.each([
+    ["add", "MacIntel"],
+    ["bootstrap", "Win32"],
+    ["reference", "Linux x86_64"],
+  ] as const)("in %s mode on %s", (mode, platform) => {
+    setPlatform(platform);
+    const { container } = render(<PairMachinePanel mode={mode} />);
+    expectEveryCommandCopyable(container);
   });
 });

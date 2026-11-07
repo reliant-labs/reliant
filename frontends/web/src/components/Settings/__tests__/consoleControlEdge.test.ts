@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The forge console's control edge meets WCAG 1.4.11 (3:1 non-text contrast)
  * against the page and the card in every color scheme, light and dark.

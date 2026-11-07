@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The Files tab and the file preview must read from the open chat's machine.
  *

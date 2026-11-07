@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2025 Reliant Labs
 
 /** The Runs filter state ↔ URL mapping (runFilterState.ts). */
