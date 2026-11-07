@@ -14,6 +14,7 @@ import * as rpc from "./api";
 export interface IdentityApi {
   currentOrgId: typeof rpc.currentOrgId;
   getStatus: typeof rpc.getIdentityStatus;
+  getUser?: typeof rpc.getIdentityUser;
   listUsers: typeof rpc.listIdentityUsers;
   inviteUser: typeof rpc.inviteIdentityUser;
   setUserRoles: typeof rpc.setIdentityUserRoles;
@@ -29,6 +30,7 @@ export interface IdentityApi {
 export const controlPlaneIdentityApi: IdentityApi = {
   currentOrgId: rpc.currentOrgId,
   getStatus: rpc.getIdentityStatus,
+  getUser: rpc.getIdentityUser,
   listUsers: rpc.listIdentityUsers,
   inviteUser: rpc.inviteIdentityUser,
   setUserRoles: rpc.setIdentityUserRoles,

@@ -85,6 +85,36 @@ describe("an audited environment", () => {
   });
 });
 
+describe("Identity app data discovery", () => {
+  const subject = JSON.stringify({ environmentId: "env-prod", userId: "subject-1", email: "ada@example.com" });
+  it("waits for the existing reason flow, then describes one chosen database without rows or counts", async () => {
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", subject }, PROD);
+    await screen.findByRole("dialog");
+    expect(described(api)).toHaveLength(0);
+    expect(browseCalls(api)).toHaveLength(0);
+    fireEvent.change(screen.getByTestId("data-access-reason"), { target: { value: "Support case 42" } });
+    fireEvent.click(screen.getByTestId("data-access-confirm"));
+    expect(await screen.findByTestId("data-identity-tables")).toHaveTextContent("No explicit identity-subject");
+    expect(described(api)).toHaveLength(1);
+    expect(described(api)[0]!.req).toMatchObject({ access: { reason: "Support case 42", confirmEnvId: "env-prod" } });
+    expect(browseCalls(api)).toHaveLength(0);
+  });
+  it("never probes after metadata admission is refused", async () => {
+    const api = createDataFixtureApi({ fail: { method: "listBrowsableDatabases", code: Code.PermissionDenied } });
+    renderBrowser(api, { subject }, PROD);
+    await screen.findByTestId("data-databases-error");
+    expect(described(api)).toHaveLength(0);
+    expect(browseCalls(api)).toHaveLength(0);
+  });
+  it("does not link a prod subject in staging and never reads a count", async () => {
+    const api = createDataFixtureApi({ onlyShop: true });
+    renderBrowser(api, { db: "shop", subject }, STAGING);
+    expect(await screen.findByTestId("data-identity-tables")).toHaveTextContent("another environment");
+    expect(browseCalls(api)).toHaveLength(0);
+  });
+});
+
 describe("policies and empty environments", () => {
   it("explains a deny policy and reads nothing", async () => {
     const api = createDataFixtureApi({ onlyShop: true, policy: { "env-staging": "deny" } });

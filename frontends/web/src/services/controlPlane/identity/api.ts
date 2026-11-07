@@ -312,6 +312,11 @@ export async function getIdentityStatus(orgId: string, environmentId: string): P
 
 export const USERS_PAGE_SIZE = 50;
 
+export async function getIdentityUser(orgId: string, environmentId: string, userId: string): Promise<IdentityUser | null> {
+  const r = await client().getUser({ orgId, environmentId, userId });
+  return r.user ? mapUser(r.user) : null;
+}
+
 export async function listIdentityUsers(
   orgId: string,
   environmentId: string,
