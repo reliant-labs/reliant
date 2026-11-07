@@ -2,9 +2,9 @@
 
 /**
  * The demo shell (demo.reliantlabs.io): its route module boots the tour into
- * memory-only storage, the tree is one page — every path lands on
- * `/forge/demo`, query kept — and it opens on the console: a toast offers the
- * forge tour, which never starts by itself.
+ * memory-only storage; every path it has no page for lands on the sample app's
+ * console (`/forge/p/shop`), query kept, whose pages are all mounted; and a
+ * compact card offers the optional forge tour, which never starts by itself.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +25,18 @@ vi.mock("@/components/NewBuildPrompt", () => ({ NewBuildPrompt: () => null }));
 vi.mock("@/lib/toast", () => ({ Toaster: () => null }));
 vi.mock("@/components/Onboarding/JourneyTour", () => ({ JourneyTour: () => <div data-testid="journey-tour" /> }));
 vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <main data-testid="demo-console" /> }));
+// The console's pages, one test id each; the layouts pass through.
+vi.mock("@/forgeConsolePages", async () => {
+  const { Outlet } = await import("@tanstack/react-router");
+  const { useObsReadOnly } = await import("@/components/Forge/Observability/obsReadOnly");
+  const page = (name: string) => () => {
+    const { readOnly, reason } = useObsReadOnly();
+    return <main data-testid={`console-${name}`} data-read-only={readOnly} data-read-only-reason={reason} />;
+  };
+  const names = ["overview", "workload", "releases", "release", "observabilityView", "dashboards", "dashboard", "environments", "environment", "secrets", "domains", "activity", "orgObservability", "landing", "legacyEnv", "legacyDomains", "legacyCommand"];
+  return { forgeConsolePages: { layout: Outlet, console: Outlet, orgLayout: Outlet, ...Object.fromEntries(names.map((n) => [n, page(n)])) } };
+});
+vi.mock("@/demoBundle/DemoConsoleProviders", () => ({ DemoConsoleProviders: ({ children }: { children: React.ReactNode }) => children }));
 // The boot installs the demo transport through a lazy import() whose fixture
 // chain (sample metrics, traces, scenarios) is still loading when the file's
 // tests are done, and vitest then fails the run with EnvironmentTeardownError
@@ -73,27 +85,52 @@ describe("the demo shell's boot", () => {
 });
 
 describe("the demo shell's routes", () => {
+  it.each(["/", "/auth", "/oauth/cli?port=1", "/claim", "/apps", "/forge/p/shop/env/prod", "/workflows"])(
+    "sends %s to the sample app's console overview",
+    async (path) => {
+      const router = renderDemoShell(path);
+      expect(await screen.findByTestId("console-overview")).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe("/forge/p/shop");
+      expect(screen.getByTestId("journey-tour")).toBeInTheDocument();
+      expect(document.querySelector("[data-shell='demo']")).not.toBeNull();
+    },
+  );
+
   it.each([
-    ["/", "/forge/demo"],
-    ["/demo", "/forge/demo"],
-    ["/auth", "/forge/demo"],
-    ["/oauth/cli?port=1", "/forge/demo"],
-    ["/claim", "/forge/demo"],
-    ["/apps", "/forge/demo"],
-    ["/forge/p/shop/env/prod", "/forge/demo"],
-    ["/workflows", "/forge/demo"],
-  ])("sends %s to the demo console", async (path, landed) => {
+    ["/forge/p/shop/releases", "console-releases"],
+    ["/forge/p/shop/environments", "console-environments"],
+    ["/forge/p/shop/environments/prod", "console-environment"],
+    ["/forge/p/shop/secrets", "console-secrets"],
+    ["/forge/p/shop/domains", "console-domains"],
+    ["/forge/p/shop/activity", "console-activity"],
+    ["/forge/p/shop/observability/traces", "console-observabilityView"],
+    ["/forge/p/shop/observability/dashboards", "console-dashboards"],
+  ])("mounts the console page at %s", async (path, testId) => {
     const router = renderDemoShell(path);
+    const page = await screen.findByTestId(testId);
+    expect(page).toHaveAttribute("data-read-only", "true");
+    expect(page).toHaveAttribute("data-read-only-reason", "Read-only demo");
+    expect(router.state.location.pathname).toBe(path);
+  });
+
+  it("keeps /forge/demo (the tour's console) and sends /demo there", async () => {
+    const router = renderDemoShell("/demo?view=traces");
     expect(await screen.findByTestId("demo-console")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe(landed);
-    expect(screen.getByTestId("journey-tour")).toBeInTheDocument();
-    expect(document.querySelector("[data-shell='demo']")).not.toBeNull();
+    expect(router.state.location.pathname).toBe("/forge/demo");
+  });
+
+  it("preserves a legacy logs tour URL without sending it to auth or a prerequisite", async () => {
+    const router = renderDemoShell("/forge/demo?shell=demo&view=logs&tour=forge:fg-logs");
+    await screen.findByTestId("demo-console");
+    expect(router.state.location.pathname).toBe("/forge/demo");
+    expect(searchOf(router)).toMatchObject({ shell: "demo", view: "logs", tour: "forge:fg-logs" });
+    expect(screen.queryByTestId("demo-tip")).toBeNull();
   });
 
   it("keeps the query across the redirect (a landing link's rid and utm_*)", async () => {
     const router = renderDemoShell("/?rid=abcdefgh1234&utm_source=landing&tour=forge:fg-trace");
-    await screen.findByTestId("demo-console");
-    expect(router.state.location.pathname).toBe("/forge/demo");
+    await screen.findByTestId("console-overview");
+    expect(router.state.location.pathname).toBe("/forge/p/shop");
     expect(router.state.location.searchStr).toContain("rid=abcdefgh1234");
     expect(router.state.location.searchStr).toContain("utm_source=landing");
   });
@@ -102,7 +139,7 @@ describe("the demo shell's routes", () => {
 describe("explore first: the tour is offered, never started", () => {
   it("opens with one compact page card, not a competing toast or automatic tour", async () => {
     const router = renderDemoShell("/");
-    await screen.findByTestId("demo-console");
+    await screen.findByTestId("console-overview");
     expect(await screen.findByTestId("demo-tip")).toBeInTheDocument();
     expect(searchOf(router).tour).toBeUndefined();
     expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
