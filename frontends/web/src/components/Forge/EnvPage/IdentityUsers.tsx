@@ -24,7 +24,10 @@
  * IdentityPasswordCodeDialog.
  */
 
-import { useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
+import { ForgeConsoleContext } from "../Console/consoleContext";
+import { useSearch, useNavigate } from "@tanstack/react-router";
+import { IdentitySelection, IdentityAppDataLink, IdentityUserLink } from "./IdentitySelection";
 import { Link2, Lock, MailPlus, Search, ShieldCheck, Users } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
@@ -74,7 +77,22 @@ const STATE_FILTERS: { value: IdentityUserFilter["state"]; label: string }[] = [
 
 type Confirm = { kind: "delete" | "lock" | "revoke"; user: IdentityUser };
 
-export function IdentityUsers({
+type IdentityUsersProps = { orgId: string; envId: string; envName: string; status: IdentityStatus };
+export function IdentityUsers(props: IdentityUsersProps) {
+  const console = useContext(ForgeConsoleContext);
+  const [query, setQuery] = useState("");
+  return console ? <RoutedIdentityUsers {...props} /> : <IdentityUsersBody {...props} query={query} setQuery={setQuery} />;
+}
+function RoutedIdentityUsers(props: IdentityUsersProps) {
+  const search = useSearch({ strict: false }) as Record<string, unknown>;
+  const navigate = useNavigate();
+  const query = typeof search.q === "string" && search.q.length <= 200 ? search.q : "";
+  const setQuery = (q: string) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, q: q || undefined, user: undefined }), replace: true });
+  return <><IdentitySelection orgId={props.orgId} envId={props.envId} serving={props.status.state === "ready" || props.status.state === "degraded"} /><IdentityUsersBody {...props} query={query} setQuery={setQuery} /></>;
+}
+function IdentityUsersBody({
+  query,
+  setQuery,
   orgId,
   envId,
   envName,
@@ -84,6 +102,8 @@ export function IdentityUsers({
   envId: string;
   envName: string;
   status: IdentityStatus;
+  query: string;
+  setQuery: (query: string) => void;
 }) {
   const canManage = status.callerCanManage;
   // User verbs open the instance with its owner key, which only a ready (or
@@ -93,7 +113,6 @@ export function IdentityUsers({
   // what that server does.
   const canEmail = status.mailDelivery !== "none";
 
-  const [query, setQuery] = useState("");
   const [state, setState] = useState<IdentityUserFilter["state"]>(undefined);
   const filter = useMemo(() => ({ query, state }), [query, state]);
   const users = useIdentityUsers(orgId, envId, filter, serving);
@@ -367,6 +386,8 @@ function UserRow({
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm text-ink">{user.email}</span>
             <Badge label={USER_STATE_LABEL[user.state]} variant={USER_STATE_VARIANT[user.state]} size="sm" />
+            <IdentityUserLink envId={envId} user={user} />
+            <IdentityAppDataLink envId={envId} user={user} />
           </div>
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
             {user.displayName && user.displayName !== user.email && <span>{user.displayName}</span>}

@@ -22,6 +22,8 @@ import { dataBrowserErrorKind } from "@/services/controlPlane/observability/erro
 
 import { CopyButton, CutNote, FullValue } from "./CellValue";
 import { cellDisplay } from "./dataCells-model";
+import { identityTarget } from "./identityLinks-model";
+import { IdentityRowLink } from "./IdentityRowLink";
 import {
   RELATED_CONCURRENCY,
   createLimiter,
@@ -143,6 +145,7 @@ export function RowPage({ env, database, table, tables, rowParam, access, gridHr
               {query.data.columns.map((column, i) => (
                 <Field
                   key={column.name}
+                  env={env}
                   table={table}
                   tables={tables}
                   column={column.name}
@@ -163,6 +166,7 @@ export function RowPage({ env, database, table, tables, rowParam, access, gridHr
 }
 
 function Field({
+  env,
   table,
   tables,
   column,
@@ -172,6 +176,7 @@ function Field({
   record,
   linkTo,
 }: {
+  env: { id: string; name: string };
   table: DbTable;
   tables: DbTable[];
   column: string;
@@ -184,6 +189,7 @@ function Field({
 }) {
   const meta = table.columns.find((c) => c.name === column);
   const display = cellDisplay(value, resultType, flaggedCut);
+  const identity = identityTarget(meta, value, flaggedCut);
   const references = foreignKeysOf(table, column).flatMap((fk) => {
     const target = foreignKeyTarget(fk, tables, record);
     return target ? [{ fk, href: linkTo(target) }] : [];
@@ -228,6 +234,7 @@ function Field({
             <CopyButton text={display.full} label={copyLabel} />
           </>
         )}
+        {identity && <IdentityRowLink env={env} target={identity} />}
         {references.map(({ fk, href }) => (
           <Link key={fk.constraint} href={href} className="inline-flex items-center gap-1 text-2xs text-ink-muted hover:text-ink" data-testid="data-field-ref">
             <Link2 className="h-3 w-3" aria-hidden="true" />
