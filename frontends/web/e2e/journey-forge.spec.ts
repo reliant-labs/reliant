@@ -239,7 +239,8 @@ test.describe('the demo page-entry tour', () => {
   test('automatically explains direct Logs, revisits and refresh without a start click', async ({page}) => {
     await openDemo(page, '/forge/p/shop/observability/logs?shell=demo');
     await expect(page.getByTestId('tour-callout')).toContainText('Read what your app recorded', LOADED);
-    await expect(page.getByTestId('tour-step-count')).toHaveText('Step 1 of 1');
+    // A one-step tour shows no step count (TourControls: #2399).
+    await expect(page.getByTestId('tour-step-count')).toHaveCount(0);
     await expect(page.getByTestId('demo-page-tour-start')).toHaveCount(0);
     await page.getByTestId('tour-next').click();
     await expect(page.getByTestId('tour-callout')).toHaveCount(0);
