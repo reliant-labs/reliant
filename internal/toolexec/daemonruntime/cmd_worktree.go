@@ -369,7 +369,19 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		head.Dir = worktreePath
 		out, err := head.Output()
 		if err != nil || strings.TrimSpace(string(out)) != req.ExpectedHead {
-			return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head", WorktreePath: worktreePath})
+			// A checkout on the wrong head is never handed over, and it must
+			// not be left behind either: it is unlocked, so a re-send could
+			// not adopt it (finishedCreate checks the head), and its
+			// registration would hold the branch against the re-send's own
+			// `git worktree add`. Take it back as a failed add is taken
+			// back, so the retry starts clean. A directory that predates
+			// this call was empty (git adds only into an empty one), so it
+			// is put back empty.
+			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
+			if preExisted {
+				_ = os.MkdirAll(worktreePath, 0o755)
+			}
+			return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head"})
 		}
 	}
 
