@@ -329,8 +329,8 @@ export function MobileAppearancePanel() {
       />
 
       <MobileSettingsSectionTitle
-        title="Spawn display"
-        description="How spawned sub-agent threads appear in the timeline."
+        title="Sub-agent display"
+        description="How sub-agent conversations appear in the timeline."
       />
       <MobileSegmentedRow
         value={spawnDisplayMode}

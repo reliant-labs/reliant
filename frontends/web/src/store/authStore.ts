@@ -15,6 +15,56 @@ import {
 const isElectron = !!window.electronAPI
 
 /**
+ * Drops everything held for the signed-in user: the user-owned stores, the
+ * query cache and the cached identity answers.
+ *
+ * Runs on EVERY identity transition, not only this tab's signOut(): with the
+ * shared session cookie (lib/auth/sharedSession.ts) a sign-out or a sign-in as
+ * another user on forge.* reaches app.* only as an auth event, and adopting
+ * the next user's session over the previous user's chats, projects and cached
+ * answers would show one tenant's data to another. Idempotent: signOut() runs
+ * it and then sees its own SIGNED_OUT event.
+ */
+const clearUserScopedState = async (): Promise<void> => {
+  // Clear all store data
+  // Import these dynamically to avoid circular dependencies
+  const { useChatStore } = await import('./chatStore')
+  const { useProjectStore } = await import('./projectStore')
+  const { useWorktreeStore } = await import('./worktreeStore')
+  const { resetWorktreeAnnouncements } = await import('../hooks/worktree-queries')
+  const { useChatNavigationStore } = await import('./chatNavigationStore')
+  const { useAttachmentStore } = await import('./attachmentStore')
+
+  // Reset all stores (order matters: navigation first to trigger chat cleanup, then everything else)
+  useChatNavigationStore.getState().reset()
+  useChatStore.getState().reset()
+  useProjectStore.getState().reset()
+  useWorktreeStore.getState().reset()
+  // Workspace rows are in the query cache (cleared below); forget which
+  // creates this session was waiting on.
+  resetWorktreeAnnouncements()
+  useAttachmentStore.getState().reset()
+
+  // Drop every cached answer about who the user is.
+  //
+  // The QueryClient is a module-level singleton and the onboarding queries
+  // are keyed on ['onboarding', …] with no user id in the key, so without
+  // this the NEXT user inherits this one's answers for a full staleTime
+  // window. `currentUser.onboardingCompleted` is the gate ModernApp uses to
+  // decide whether to onboard at all — a brand-new anonymous account read
+  // the departed user's `true` and was sent straight into the app, never
+  // seeing onboarding. `cloud.getCurrentUser` keeps its own 30s promise
+  // cache for the same data, which is why clearing the query cache alone is
+  // not enough.
+  const { resetUserCache } = await import(
+    '@/services/controlPlane/onboarding'
+  )
+  resetUserCache()
+  await queryClient.cancelQueries()
+  queryClient.clear()
+}
+
+/**
  * Where the identity provider should send the user back to.
  *
  * This must be the PUBLIC app URL, never the renderer's own origin. In the
@@ -422,41 +472,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // NOTE: supabase.auth.signOut() will automatically call our storage adapter's
       // removeItem() which clears the auth file. No need for manual authClear().
 
-      // Clear all store data
-      // Import these dynamically to avoid circular dependencies
-      const { useChatStore } = await import('./chatStore')
-      const { useProjectStore } = await import('./projectStore')
-      const { useWorktreeStore } = await import('./worktreeStore')
-      const { resetWorktreeAnnouncements } = await import('../hooks/worktree-queries')
-      const { useChatNavigationStore } = await import('./chatNavigationStore')
-      const { useAttachmentStore } = await import('./attachmentStore')
-
-      // Reset all stores (order matters: navigation first to trigger chat cleanup, then everything else)
-      useChatNavigationStore.getState().reset()
-      useChatStore.getState().reset()
-      useProjectStore.getState().reset()
-      useWorktreeStore.getState().reset()
-      // Workspace rows are in the query cache (cleared below); forget which
-      // creates this session was waiting on.
-      resetWorktreeAnnouncements()
-      useAttachmentStore.getState().reset()
-
-      // Drop every cached answer about who the user is.
-      //
-      // The QueryClient is a module-level singleton and the onboarding queries
-      // are keyed on ['onboarding', …] with no user id in the key, so without
-      // this the NEXT user inherits this one's answers for a full staleTime
-      // window. `currentUser.onboardingCompleted` is the gate ModernApp uses to
-      // decide whether to onboard at all — a brand-new anonymous account read
-      // the departed user's `true` and was sent straight into the app, never
-      // seeing onboarding. `cloud.getCurrentUser` keeps its own 30s promise
-      // cache for the same data, which is why clearing the query cache alone is
-      // not enough.
-      const { resetUserCache } = await import(
-        '@/services/controlPlane/onboarding'
-      )
-      resetUserCache()
-      queryClient.clear()
+      await clearUserScopedState()
 
       set({
         user: null,
@@ -938,6 +954,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // Set up auth state listener to keep store in sync
       supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
+        // A different identity (signed out, or another user signed in, often
+        // on another host sharing the session cookie): clear the previous
+        // user's state BEFORE adopting the next one.
+        const previousUserId = get().user?.id
+        if (previousUserId && previousUserId !== session?.user?.id) {
+          try {
+            await clearUserScopedState()
+          } catch (error) {
+            logger.error('[AuthStore] Clearing the previous user\'s state failed:', error)
+          }
+        }
         set({
           user: session?.user ?? null,
           session: session,

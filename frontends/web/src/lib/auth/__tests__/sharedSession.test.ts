@@ -227,6 +227,29 @@ describe('migrateLocalSession', () => {
     expect(local.getItem(KEY)).toBe(session())
   })
 
+  it('keeps the local session when the probe passes but a chunk of the session is refused', () => {
+    const browser = new FakeCookieBrowser()
+    const real = browser.jar('app.reliantlabs.io')
+    // The small probe cookie fits; the session's second chunk is over quota.
+    const jar = {
+      read: real.read,
+      write: (cookie: string) => {
+        if (cookie.startsWith(`${KEY}.1=`) && !cookie.includes('Max-Age=0')) return
+        real.write(cookie)
+      },
+    }
+    expect(cookiesWritable({ domain: DOMAIN, jar })).toBe(true)
+    const store = createSessionCookieStore({ key: KEY, domain: DOMAIN, jar })
+    const local = memoryStorage()
+    const value = bigSession()
+    local.setItem(KEY, value)
+
+    expect(migrateLocalSession({ key: KEY, local, store })).toBe('failed')
+    expect(local.getItem(KEY)).toBe(value)
+    // The torn chunks the write left are gone, so no host reads half a session.
+    expect(browser.named(`${KEY}.`)).toEqual([])
+  })
+
   it('does nothing for a signed-out visitor', () => {
     const { local, store } = setup()
     expect(migrateLocalSession({ key: KEY, local, store })).toBe('none')

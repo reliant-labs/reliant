@@ -4,8 +4,10 @@ import type { LockFunc, SupportedStorage } from '@supabase/auth-js'
 import { devAuthGrpc } from '@/api/grpc-unauth'
 import {
   type AuthStorageMode,
+  type RotationTracker,
   type SessionCookieStore,
   cookiesWritable,
+  createRotationTracker,
   createSessionCookieStore,
   createSharedLock,
   createSharedSessionStorage,
@@ -286,6 +288,7 @@ interface SharedCookieSession {
   storage: SupportedStorage
   store: SessionCookieStore
   lock: LockFunc
+  rotation: RotationTracker
 }
 
 /**
@@ -301,14 +304,22 @@ const sharedCookieSession = (): SharedCookieSession | null => {
   }
   const store = createSessionCookieStore({ key: STORAGE_KEY, domain })
   const migrated = migrateLocalSession({ key: STORAGE_KEY, local: window.localStorage, store })
+  if (migrated === 'failed') {
+    // The session did not land whole in the cookie; it is still in localStorage.
+    console.warn('[SharedSession] The session does not fit in cookies on', domain, '; keeping this origin\'s session')
+    return null
+  }
   if (migrated !== 'none') console.info('[SharedSession] localStorage session:', migrated)
+  const rotation = createRotationTracker()
+  const nearExpiry = sessionNearExpiry(() => store.read())
   return {
     store,
+    rotation,
     storage: createSharedSessionStorage({ key: STORAGE_KEY, store, local: window.localStorage }),
     lock: createSharedLock({
       name: `${STORAGE_KEY}-lock`,
       domain,
-      refreshLikely: sessionNearExpiry(() => store.read()),
+      refreshLikely: () => rotation.active() || nearExpiry(),
       localLock: globalThis.navigator?.locks ? navigatorLock : undefined,
     }),
   }
@@ -385,7 +396,11 @@ const getClient = (): SupabaseClient => {
     },
   })
   // Another host's sign-in, refresh or sign-out becomes this client's event.
-  if (shared) followSharedSession(client.auth, shared.store)
+  if (shared) {
+    // refreshSession/setSession rotate whatever the expiry: take the lease for them.
+    shared.rotation.track(client.auth)
+    followSharedSession(client.auth, shared.store)
+  }
   return client
 }
 

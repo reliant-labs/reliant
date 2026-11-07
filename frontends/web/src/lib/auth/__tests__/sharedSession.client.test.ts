@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import type { LockFunc } from '@supabase/auth-js'
 import {
+  createRotationTracker,
   createSessionCookieStore,
   createSharedLock,
   createSharedSessionStorage,
@@ -81,8 +82,18 @@ const host = (browser: FakeCookieBrowser, name: string, gotrue: FakeGoTrue, { le
   const jar = browser.jar(name)
   const store = createSessionCookieStore({ key: KEY, domain: DOMAIN, jar })
   const local = memoryStorage()
+  // As lib/supabase.ts wires it: near expiry, or an explicit rotation in flight.
+  const rotation = createRotationTracker()
+  const nearExpiry = sessionNearExpiry(() => store.read())
   const lock: LockFunc = lease
-    ? createSharedLock({ name: `${KEY}-lock`, domain: DOMAIN, jar, refreshLikely: sessionNearExpiry(() => store.read()), confirmMs: 10, pollMs: 10 })
+    ? createSharedLock({
+        name: `${KEY}-lock`,
+        domain: DOMAIN,
+        jar,
+        refreshLikely: () => rotation.active() || nearExpiry(),
+        confirmMs: 10,
+        pollMs: 10,
+      })
     : async (_n, _t, fn) => fn()
   const client = createClient(URL, 'test-anon-key', {
     global: { fetch: gotrue.fetch },
@@ -101,6 +112,7 @@ const host = (browser: FakeCookieBrowser, name: string, gotrue: FakeGoTrue, { le
       lock,
     },
   })
+  rotation.track(client.auth)
   const stop = followSharedSession(client.auth, store)
   stops.push(stop, () => void client.auth.stopAutoRefresh())
   return { client, store, local, stop }
@@ -138,6 +150,24 @@ describe('shared session through supabase-js', () => {
 
     expect(gotrue.refreshes).toEqual(['refresh-0', 'refresh-0'])
     expect(gotrue.reused).toEqual(['refresh-0'])
+  })
+
+  it('two hosts explicitly refreshing a FRESH session rotate it in turn, never the same token twice', async () => {
+    const browser = new FakeCookieBrowser()
+    const gotrue = new FakeGoTrue()
+    createSessionCookieStore({ key: KEY, domain: DOMAIN, jar: browser.jar('app.reliantlabs.io') }).write(
+      JSON.stringify(sessionJSON(0, Math.floor(Date.now() / 1000) + 3600)),
+    )
+    const app = host(browser, 'app.reliantlabs.io', gotrue)
+    const forge = host(browser, 'forge.reliantlabs.io', gotrue)
+    await Promise.all([app.client.auth.getSession(), forge.client.auth.getSession()])
+
+    const [a, f] = await Promise.all([app.client.auth.refreshSession(), forge.client.auth.refreshSession()])
+
+    expect(a.error).toBeNull()
+    expect(f.error).toBeNull()
+    expect(gotrue.reused).toEqual([])
+    expect([...gotrue.refreshes].sort()).toEqual(['refresh-0', 'refresh-1'])
   })
 
   it('signing out on forge.* signs app.* out: storage is empty and app.* gets SIGNED_OUT', async () => {

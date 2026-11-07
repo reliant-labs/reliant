@@ -10,7 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { create } from "@bufbuild/protobuf";
-import { ContentBlockType, MessageRole, StreamingState } from "../../../../types/chat";
+import { ContentBlockType, DisplayStyle, MessageRole, StreamingState } from "../../../../types/chat";
 import type { Message } from "../../../../types/chat";
 import { ApprovalSchema, ApprovalStatus } from "../../../../gen/reliant/v1/approval_pb";
 import type { Approval } from "../../../../gen/reliant/v1/approval_pb";
@@ -247,7 +247,7 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(visible("Fix the flaky test")).toBe(true);
     expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
     expect(foldButton()).toHaveAttribute("aria-expanded", "false");
-    expect(foldButton()).toHaveTextContent(/^Worked/);
+    expect(foldButton()).toHaveTextContent(/^Activity/);
     expect(visible("Fixed: the race is gone.")).toBe(true);
     expect(visible("Let me look at the test.")).toBe(false);
     expect(screen.queryAllByTestId("tool-card")).toHaveLength(0);
@@ -309,7 +309,7 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(screen.getAllByRole("button", { name: /approve tool execution/i })).toHaveLength(1);
   });
 
-  it("labels the fold of a streaming turn 'Working…'", () => {
+  it("labels the fold of a streaming turn with its current action", () => {
     settings.store.set("appearance.chatThreadMode", "simplified");
     const messages = [
       user(1, "Run the suite"),
@@ -319,9 +319,33 @@ describe("InterleavedTimeline simplified thread", () => {
     renderTimeline(messages, { isStreaming: true });
 
     expect(fold()).toHaveAttribute("data-live", "true");
-    expect(foldButton()).toHaveTextContent(/Working…/);
+    expect(foldButton()).toHaveTextContent(/^bash/);
     expect(foldButton()).toHaveAttribute("aria-expanded", "false");
     expect(visible("Starting.")).toBe(false);
+  });
+
+  it("keeps successful spawn notices inspectable inside one activity and unchanged in detailed mode", async () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    const completion = {
+      ...assistant(3, [text(0, 'spawn "research" completed')]),
+      role: MessageRole.SYSTEM,
+      displayStyle: DisplayStyle.INFO,
+    };
+    renderTimeline([
+      user(1, "Investigate"),
+      assistant(2, [tool(0, "read_file", "read")]),
+      completion,
+      assistant(4, [tool(0, "bash", "check")]),
+      assistant(5, [text(0, "Verified.")]),
+    ]);
+    expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
+    expect(visible('spawn "research" completed')).toBe(false);
+    fireEvent.click(foldButton());
+    expect(visible('spawn "research" completed')).toBe(true);
+    expect(visible("Verified.")).toBe(true);
+    await act(async () => setChatThreadMode("detailed"));
+    expect(screen.queryByTestId("turn-work-fold")).toBeNull();
+    expect(visible('spawn "research" completed')).toBe(true);
   });
 
   it("switches modes through the setting without remount errors", async () => {

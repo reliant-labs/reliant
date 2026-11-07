@@ -799,6 +799,7 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `on_failure` | Workflow | No | *A finally-style handler: an inline graph ({entry, nodes, edges}) that runs once when a run FAILS (an unhandled node error, an agent that never produced its required response, a node that declares outcome: failure). Never when the run completes, pauses or is cancelled. Its nodes read `failure.{node_id, node_path, error, error_code, attempt}`, `inputs`, and the `nodes` outputs the run produced (guard them with `.?`). The run still ends FAILED; an error in the handler is logged and never recursive.* |
 | `requires` | WorkflowRequirements | No | - |
 | `secrets` | map[string]SecretDeclaration | No | - |
+| `permissions` | string[] | No | - |
 
 ## Edge
 

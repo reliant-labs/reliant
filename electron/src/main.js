@@ -974,6 +974,10 @@ async function createWindow() {
         { label: "Cut", role: "cut" },
         { label: "Copy", role: "copy" },
         { label: "Paste", role: "paste" },
+        {
+          label: "Paste as Plain Text",
+          click: () => mainWindow.webContents.send("paste-plain-text", require("electron").clipboard.readText()),
+        },
         { type: "separator" },
         { label: "Select All", role: "selectAll" }
       );
@@ -3398,6 +3402,14 @@ function createApplicationMenu() {
         { role: "cut" },
         { role: "copy" },
         { role: "paste" },
+        {
+          label: "Paste as Plain Text",
+          accelerator: "CmdOrCtrl+Shift+V",
+          click: () => {
+            const focused = BrowserWindow.getFocusedWindow();
+            if (focused) focused.webContents.send("paste-plain-text", require("electron").clipboard.readText());
+          },
+        },
         { role: "selectall" },
         { type: "separator" },
         shortcut.findInPage,

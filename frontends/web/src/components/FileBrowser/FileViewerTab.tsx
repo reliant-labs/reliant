@@ -38,6 +38,7 @@ import { useDaemonWait } from "../../hooks/useDaemonWait";
 import { AddToChatPopup } from "./AddToChatPopup";
 import { ImagePreviewModal } from "../Chat/ImagePreviewModal";
 import { FileIcon } from "./FileIcon";
+import { MarkdownFilePreview } from "./MarkdownFilePreview";
 import { toast } from "sonner";
 import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
 import { ADD_SELECTION_TO_CHAT } from "../../hooks/useShortcutHost";
@@ -119,6 +120,27 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
   const isEditableTextPreview =
     previewInfo?.viewerKind === "text" && previewInfo?.isEditable !== false;
   const hasChanges = isEditableTextPreview && content !== originalContent;
+  const isMarkdown = previewInfo?.viewerKind === "text" && /\.(md|markdown)$/i.test(file.name);
+  // View mode belongs to this open file, not a global editor preference.
+  const [markdownPreview, setMarkdownPreview] = useState(false);
+  const [previewVisited, setPreviewVisited] = useState(false);
+  const showingMarkdownPreview = isMarkdown && markdownPreview;
+  const sourceVisible = isTextPreview && !showingMarkdownPreview;
+
+  useLayoutEffect(() => {
+    setMarkdownPreview(false);
+    setPreviewVisited(false);
+  }, [file.path, effectiveWorktreeId]);
+
+  useEffect(() => {
+    if (file.line) setMarkdownPreview(false);
+  }, [file.line, file.column, file.lineEnd]);
+
+  useEffect(() => {
+    if (showingMarkdownPreview) {
+      setShowAddToChatPopup(false);
+    }
+  }, [showingMarkdownPreview]);
 
   const revokePreviewUrl = useCallback(() => {
     if (previewUrlRef.current) {
@@ -353,7 +375,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
         return;
       }
 
-      if (isTextPreview && editorRef.current) {
+      if (sourceVisible && editorRef.current) {
         editorRef.current.focus();
       } else {
         previewFocusRef.current?.focus();
@@ -364,7 +386,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
     return () => {
       window.removeEventListener("file-viewer-focus", handleFocus as EventListener);
     };
-  }, [isTextPreview, viewerId]);
+  }, [sourceVisible, viewerId]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -416,6 +438,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
         return;
       }
 
+      setMarkdownPreview(false);
       editorRef.current.setPosition({
         lineNumber: customEvent.detail.line,
         column: customEvent.detail.column || 1,
@@ -453,7 +476,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
   useEffect(() => {
     if (isActive && !loading && !error) {
       const timeoutId = window.setTimeout(() => {
-        if (isTextPreview && editorRef.current) {
+        if (sourceVisible && editorRef.current) {
           editorRef.current.focus();
         } else {
           previewFocusRef.current?.focus();
@@ -462,7 +485,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
 
       return () => window.clearTimeout(timeoutId);
     }
-  }, [error, isActive, isTextPreview, loading]);
+  }, [error, isActive, sourceVisible, loading]);
 
   const handleSave = useCallback(async () => {
     if (!isEditableTextPreview || content === originalContent) return;
@@ -573,7 +596,9 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
           activeElement?.classList.contains("inputarea") ||
           activeElement?.closest(".monaco-editor .inputarea") !== null;
 
-        if (isMonacoFocused && hasChanges) {
+        const isRenderedPreviewFocused = showingMarkdownPreview &&
+          !!activeElement && !!popupContainerRef.current?.contains(activeElement);
+        if ((isMonacoFocused || isRenderedPreviewFocused) && hasChanges) {
           e.preventDefault();
           e.stopPropagation();
           e.stopImmediatePropagation();
@@ -584,7 +609,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
 
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [handleSave, hasChanges]);
+  }, [handleSave, hasChanges, showingMarkdownPreview]);
 
   // The addSelectionToChat shortcut (Cmd+L in the editor; Cmd+K L in a
   // browser): taken by the viewer whose editor has focus and a selection. Any
@@ -592,7 +617,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
   useEffect(() => {
     const handleAddSelection = (e: Event) => {
       const editor = editorRef.current;
-      if (!isTextPreview || !editor?.hasTextFocus()) return;
+      if (!sourceVisible || !editor?.hasTextFocus()) return;
 
       const selection = editor.getSelection();
       if (!selection || selection.isEmpty()) return;
@@ -603,7 +628,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
 
     window.addEventListener(ADD_SELECTION_TO_CHAT, handleAddSelection);
     return () => window.removeEventListener(ADD_SELECTION_TO_CHAT, handleAddSelection);
-  }, [handleAddToChat, isTextPreview]);
+  }, [handleAddToChat, sourceVisible]);
 
   const handleEditorDidMount = (editor: any, monaco: any) => {
     editorRef.current = editor;
@@ -987,6 +1012,9 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
 
     if (isTextPreview) {
       return (
+        <>
+        {/* Keep Monaco mounted: toggling must not dispose its model or undo stack. */}
+        <div className={cn("h-full", showingMarkdownPreview && "hidden")}>
         <Editor
           height="100%"
           language={getMonacoLanguage(file.name)}
@@ -1029,6 +1057,23 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
             suggestOnTriggerCharacters: settings.suggestOnTriggerCharacters,
           }}
         />
+        </div>
+        {isMarkdown && previewVisited && (
+          <div
+            ref={previewFocusRef}
+            tabIndex={0}
+            aria-label="Markdown preview"
+            className={cn("h-full overflow-auto", !showingMarkdownPreview && "hidden")}
+          >
+            <MarkdownFilePreview
+              content={content}
+              filePath={file.path}
+              worktreeId={effectiveWorktreeId}
+              worktreePath={effectiveWorktree && effectiveWorktree.id === effectiveWorktreeId ? effectiveWorktree.path : undefined}
+            />
+          </div>
+        )}
+        </>
       );
     }
 
@@ -1117,6 +1162,27 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
             {hasChanges && <span className="text-xs text-amber-500 font-medium">• Modified</span>}
           </div>
           <div className="flex items-center gap-2">
+            {isMarkdown && !loading && !error && (
+              <div role="group" aria-label="Markdown view mode" className="flex items-center gap-1 rounded border border-border p-0.5">
+                {(["Markdown", "Preview"] as const).map((mode) => {
+                  const selected = (mode === "Preview") === showingMarkdownPreview;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => {
+                        setMarkdownPreview(mode === "Preview");
+                        if (mode === "Preview") setPreviewVisited(true);
+                      }}
+                      className={cn("rounded px-2 py-1 text-xs transition-colors hover:bg-foreground/5", selected ? "bg-foreground/5 text-foreground font-medium" : "text-muted-foreground")}
+                    >
+                      {mode}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
             {hasChanges && (
               <Tooltip content="Undo all changes and revert to saved version" side="bottom" delay={300} triggerClassName="inline-flex">
 <button
@@ -1171,7 +1237,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
 
       {!embedded && (
         <AddToChatPopup
-          visible={isTextPreview && showAddToChatPopup && selectedRange !== null}
+          visible={sourceVisible && showAddToChatPopup && selectedRange !== null}
           x={popupPosition.x}
           y={popupPosition.y}
           onAdd={() => void handleAddToChat()}

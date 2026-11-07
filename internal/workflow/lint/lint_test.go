@@ -264,3 +264,18 @@ func TestEveryRuleIsDocumented(t *testing.T) {
 		}
 	}
 }
+
+// A declared permissions: [approvals:decide] covers the steps that decide and
+// is itself reported once, at the workflow, so it can be allowed with a reason.
+func TestApprovalPermissionIsReportedOnceAndCoversItsSteps(t *testing.T) {
+	in := loadFixture(t, filepath.Join("testdata", RuleApprovalDecider, "bad.yaml"))
+	in.Workflow.Permissions = []string{"approvals:decide"}
+	got := findingsOf(Check(in), RuleApprovalDecider)
+	require.Len(t, got, 1, "%v", got)
+	assert.Equal(t, "", got[0].Node)
+	assert.Equal(t, SeverityWarning, got[0].Severity)
+
+	src := []byte("# lint:allow approval-decider — the on-call bot approves staging deploys\npermissions: [approvals:decide]\n")
+	in.Source = src
+	assert.Empty(t, findingsOf(Check(in), RuleApprovalDecider))
+}

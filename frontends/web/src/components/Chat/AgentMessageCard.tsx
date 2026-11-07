@@ -76,10 +76,10 @@ export const AgentMessageCard = memo(function AgentMessageCard({
     <div
       data-testid="agent-message-card"
       data-sender={fromRun ? "run" : "agent"}
-      className="message-content w-full min-w-0 px-2 mb-2"
+      className="message-content my-1 w-full min-w-0"
     >
-      <div className="min-w-0 rounded-md border border-border/60 bg-background text-muted-foreground">
-        <div className="flex min-w-0 items-center gap-1.5 px-2 py-1 text-xs">
+      <div className="min-w-0 text-muted-foreground">
+        <div className="flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 text-xs transition-colors hover:bg-foreground/5">
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}

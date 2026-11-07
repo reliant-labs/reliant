@@ -2202,6 +2202,13 @@ message Workflow {
   // and writes it into the outgoing request. A child workflow (a ref) declares
   // its own secrets.
   map<string, SecretDeclaration> secrets = 22;
+  // Permissions declares powers over Reliant itself that this workflow's steps
+  // use. The only value today is "approvals:decide": a step calls
+  // ApprovalService to approve or deny. A hosted credential that can decide
+  // approvals is refused for a step that targets ApprovalService unless the
+  // workflow declares it, and enabling the automation always shows its owner a
+  // card for it. Unknown values are a validation error.
+  repeated string permissions = 23;
 }
 
 // SecretDeclaration says where a secret lives.

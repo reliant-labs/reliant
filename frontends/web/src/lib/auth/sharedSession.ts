@@ -34,6 +34,9 @@
  *                           possible. Web Locks are per origin, so without the
  *                           lease two hosts could rotate the same refresh
  *                           token at once (see createSharedLock).
+ *   createRotationTracker   marks the auth-js calls that rotate the refresh
+ *                           token whatever its expiry (refreshSession,
+ *                           setSession), so the lease covers them too.
  *   watchSharedSession      reports a sign-in, refresh or sign-out made by
  *                           ANOTHER host, which auth-js has no event for.
  *
@@ -179,6 +182,11 @@ const attributes = (domain: string, maxAgeSeconds: number): string =>
 export interface SessionCookieStore {
   /** The stored session JSON, or null. A torn read answers the last good value. */
   read(): string | null
+  /**
+   * The session exactly as the cookie holds it: null when it is absent OR
+   * torn, never the last good value. What proves a write landed whole.
+   */
+  readComplete(): string | null
   write(value: string): void
   clear(): void
   /**
@@ -264,6 +272,10 @@ export function createSessionCookieStore({
       lastGood = r.value
       return r.value
     },
+    readComplete() {
+      const r = readChunks()
+      return r.kind === 'value' ? r.value : null
+    },
     write(value) {
       const encoded = encodeValue(value)
       const chunks: string[] = []
@@ -342,8 +354,15 @@ export type MigrationResult = 'none' | 'moved' | 'dropped-local' | 'failed'
  *
  * A cookie session already present wins: it is the shared one, and a local
  * copy beside it is older (this host stopped writing localStorage when the
- * cookie took over). A write the browser refused leaves the local copy in
- * place, so a failed move never signs anyone out.
+ * cookie took over).
+ *
+ * The move counts only when the cookie reads back WHOLE (readComplete, not
+ * read, whose torn-read fallback answers the value this tab just proposed).
+ * cookiesWritable's small probe does not prove a multi-chunk session fits the
+ * browser's cookie quota: a refused chunk leaves a torn cookie that the next
+ * page load reads as signed out. So a write that did not land whole is
+ * undone and the local copy stays: 'failed', and the caller keeps this
+ * origin's localStorage, so a failed move never signs anyone out.
  */
 export function migrateLocalSession({
   key,
@@ -366,7 +385,12 @@ export function migrateLocalSession({
     return 'dropped-local'
   }
   store.write(value)
-  if (store.read() !== value) return 'failed'
+  if (store.readComplete() !== value) {
+    // The cookie held no session before this write: clearing it removes only
+    // the chunks this write left behind.
+    store.clear()
+    return 'failed'
+  }
   local.removeItem(key)
   return 'moved'
 }
@@ -411,7 +435,7 @@ export interface SharedLockOptions extends CookieOptions {
  * written the rotated session, which it then reads and does not refresh.
  *
  * HOW. Inside the same-origin lock, and only while a refresh is possible
- * (REFRESH_WINDOW_MS), a lease cookie `<owner>~<expiresAt>` on the shared
+ * (REFRESH_WINDOW_MS, or an explicit rotation: createRotationTracker), a lease cookie `<owner>~<expiresAt>` on the shared
  * domain: claim it when free or expired, confirm after `confirmMs` that the
  * claim held, renew it while the operation runs, delete it after. Every other
  * auth operation (each RPC's getSession) skips the lease and costs nothing.
@@ -502,6 +526,49 @@ export function createSharedLock({
     localLock
       ? localLock(lockName, acquireTimeout, () => guarded(acquireTimeout, fn))
       : guarded(acquireTimeout, fn)
+}
+
+/**
+ * The auth-js calls that may rotate the refresh token whatever the stored
+ * session's expiry: refreshSession() always does, and setSession() does for an
+ * expired access token. sessionNearExpiry cannot see them coming, so without
+ * this a fresh session skips the lease and two hosts explicitly refreshing it
+ * at once (authStore.refreshSession, e.g. after updatePassword) both rotate
+ * the same refresh token.
+ */
+export interface RotationTracker {
+  /** True while a wrapped call is in flight: the lease must be taken. */
+  active(): boolean
+  /** Wraps `auth`'s (a GoTrueClient's) rotating methods in place. */
+  track(auth: unknown): void
+}
+
+/** The rotating GoTrueClient methods createRotationTracker wraps. */
+const ROTATING_METHODS = ['refreshSession', 'setSession'] as const
+
+export function createRotationTracker(): RotationTracker {
+  let inFlight = 0
+  return {
+    active: () => inFlight > 0,
+    track(auth) {
+      const target = auth as Record<string, unknown>
+      for (const method of ROTATING_METHODS) {
+        const original = target[method]
+        if (typeof original !== 'function') continue
+        const bound = (original as (...args: unknown[]) => Promise<unknown>).bind(auth)
+        // Counted from the call, so the flag is up when auth-js reaches its
+        // lock (after awaiting initialize), and down only once it returned.
+        target[method] = async (...args: unknown[]) => {
+          inFlight += 1
+          try {
+            return await bound(...args)
+          } finally {
+            inFlight -= 1
+          }
+        }
+      }
+    },
+  }
 }
 
 /** The refresh-window test createSharedLock needs, over the stored session JSON. */
