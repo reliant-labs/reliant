@@ -349,7 +349,12 @@ export function JourneyTour() {
 
   // Phones: Reliant's mobile surface has none of the desktop chrome a journey points at, so it
   // defers there. The forge shell and the demo draw each step as a bottom sheet instead.
-  if (isPhoneViewport() && getTourShell() === "reliant") return <DeferredOnPhone onClose={nav.exitTour} />;
+  // A journey with its own phone presentation (Journey.phone) shows that instead.
+  if (isPhoneViewport() && getTourShell() === "reliant") {
+    const Phone = nav.tour.kind === "step" ? getJourney(nav.tour.journey).phone : undefined;
+    if (Phone) return <Phone onFinish={() => void nav.finish()} onExit={() => void nav.skipAll()} />;
+    return <DeferredOnPhone onClose={nav.exitTour} />;
+  }
 
   if (nav.tour.kind === "picker") {
     return (

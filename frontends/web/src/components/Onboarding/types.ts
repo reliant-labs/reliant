@@ -234,6 +234,13 @@ export interface Journey {
    */
   elsewhere?: { label: string; href: () => string };
   /**
+   * The journey on a phone in the Reliant shell, where its steps' targets
+   * don't exist (e.g. the workflows journey's lessons as a card deck). Without
+   * it, a phone shows "Open this on a computer". `onFinish` completes the
+   * journey; `onExit` ends it as skipped.
+   */
+  phone?: React.ComponentType<JourneyPhoneProps>;
+  /**
    * How a step's controls are drawn.
    *  - "bar" (default): the bottom nav bar (progress, Back, Skip step, Next, End tour).
    *  - "callout": no bar. Each card carries its own small controls: the step
@@ -243,6 +250,11 @@ export interface Journey {
    *    the action opened). No Skip step, no Back button (← still goes back).
    */
   controls?: "bar" | "callout";
+}
+
+export interface JourneyPhoneProps {
+  onFinish: () => void;
+  onExit: () => void;
 }
 
 /** How a step was completed, for `journey_step_completed.via`. */
