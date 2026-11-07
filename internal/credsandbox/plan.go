@@ -85,11 +85,17 @@ type planEnv struct {
 	executable   string
 	projectsDir  string
 	daemonBinDir string
+	// optIn are the shared checkouts, or directories inside one, that the
+	// command declared it writes (Wrap's writable). Anything else in it is
+	// ignored: an opt-in cannot unfreeze the daemon's binary or git config.
+	optIn []string
 }
 
 // PlanFor is the plan for a credentials-none command with working directory
 // dir (empty: this process's) and environment env (nil: this process's).
-func PlanFor(dir string, env []string) Plan {
+// writable are shared checkouts, or directories inside one, the command
+// declared it writes; relative ones are relative to dir.
+func PlanFor(dir string, env []string, writable ...string) Plan {
 	if env == nil {
 		env = os.Environ() //nolint:forbidigo // a command with no environment of its own inherits this process's
 	}
@@ -98,9 +104,19 @@ func PlanFor(dir string, env []string) Plan {
 	}
 	home, _ := os.UserHomeDir()
 	self, _ := os.Executable()
+	var optIn []string
+	for _, w := range writable {
+		if w = strings.TrimSpace(w); w == "" {
+			continue
+		}
+		if !filepath.IsAbs(w) {
+			w = filepath.Join(dir, w)
+		}
+		optIn = append(optIn, w)
+	}
 	return buildPlan(DefaultPlan(), planEnv{
 		home: home, cwd: dir, env: env, executable: self,
-		projectsDir: managedProjectsDir, daemonBinDir: daemonBinDir,
+		projectsDir: managedProjectsDir, daemonBinDir: daemonBinDir, optIn: optIn,
 	})
 }
 
@@ -167,14 +183,28 @@ func buildPlan(base Plan, in planEnv) Plan {
 			commons[common] = main
 		}
 	}
+	// An opt-in naming a shared checkout makes it the command's own; one
+	// inside a shared checkout is a carve-out of it.
+	var writable []string
+	shared = dedupe(shared)
+	for _, w := range in.optIn {
+		w = canonicalDir(w)
+		for _, s := range shared {
+			switch {
+			case w == s:
+				own = append(own, s)
+			case under(w, s):
+				writable = append(writable, w)
+			}
+		}
+	}
 	readOnlyShared := map[string]bool{}
-	for _, s := range dedupe(shared) {
+	for _, s := range shared {
 		if !isOwn(s) {
 			ro = append(ro, s)
 			readOnlyShared[s] = true
 		}
 	}
-	var writable []string
 	for common, main := range commons {
 		if !readOnlyShared[main] {
 			continue

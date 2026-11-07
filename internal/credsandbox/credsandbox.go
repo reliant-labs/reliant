@@ -216,9 +216,11 @@ func DispatchForTest() {
 }
 
 // Wrap applies the sandbox to cmd when credentials is daemonpolicy.CredentialsNone,
-// with this process's plan and this binary as the helper. A non-empty refusal
-// means the command must not run.
-func Wrap(cmd *exec.Cmd, credentials string) (refusal string) {
+// with the plan for its directory (PlanFor) and this binary as the helper.
+// writable are the shared checkouts, or directories inside one, that the
+// command declared it writes (a run node's writable_checkouts). A non-empty
+// refusal means the command must not run.
+func Wrap(cmd *exec.Cmd, credentials string, writable ...string) (refusal string) {
 	if credentials != daemonpolicy.CredentialsNone {
 		return ""
 	}
@@ -229,7 +231,7 @@ func Wrap(cmd *exec.Cmd, credentials string) (refusal string) {
 	if !Enabled() {
 		return ""
 	}
-	return Apply(cmd, self, PlanFor(cmd.Dir, cmd.Env))
+	return Apply(cmd, self, PlanFor(cmd.Dir, cmd.Env, writable...))
 }
 
 // ErrUnavailable wraps the reason this host refused the sandbox.
