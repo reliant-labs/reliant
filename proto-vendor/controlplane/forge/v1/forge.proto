@@ -37,6 +37,54 @@ extend google.protobuf.FieldOptions {
   FieldOptions field = 50300;
   // Configuration binding to environment variables and CLI flags.
   ConfigFieldOptions config = 50400;
+  // A List request field's filter facet: the column it compares and how.
+  // See ListFilterOptions.
+  ListFilterOptions filter = 50500;
+}
+
+// ListFilterOptions declares how a generated List op applies one request
+// field. Without it a List request field is an exact match on the column of
+// the same name; with it the field may name another column and compare by
+// range or prefix:
+//
+//   message ListPublicationsRequest {
+//     google.protobuf.Timestamp published_after = 1 [(forge.v1.filter) = {
+//       column: "published_at", op: LIST_FILTER_OP_GTE
+//     }];
+//     string week_start_from = 2 [(forge.v1.filter) = {
+//       column: "week_start", op: LIST_FILTER_OP_GTE
+//     }];
+//     string key_prefix = 3 [(forge.v1.filter) = {
+//       column: "key", op: LIST_FILTER_OP_PREFIX
+//     }];
+//   }
+//
+// An unset field (empty string, zero number, nil Timestamp, nil `optional`)
+// applies no filter, as for an exact field. `forge generate` fails a column
+// the entity does not declare, and an op the field's type cannot take.
+message ListFilterOptions {
+  // The column compared. Empty: the field's own name.
+  string column = 1;
+
+  // The comparison. Unspecified: equality.
+  ListFilterOp op = 2;
+}
+
+// ListFilterOp is a ListFilterOptions comparison: `<column> <op> <value>`.
+enum ListFilterOp {
+  // Equality (`=`), the default.
+  LIST_FILTER_OP_UNSPECIFIED = 0;
+  // `>`.
+  LIST_FILTER_OP_GT = 1;
+  // `>=`: a "from" or "after" bound.
+  LIST_FILTER_OP_GTE = 2;
+  // `<`: a "before" bound.
+  LIST_FILTER_OP_LT = 3;
+  // `<=`.
+  LIST_FILTER_OP_LTE = 4;
+  // `LIKE '<value>%'`, with %, _ and \ in the value matched literally. A
+  // string field only.
+  LIST_FILTER_OP_PREFIX = 5;
 }
 
 // Service-level annotations for Connect RPC service definitions.
@@ -307,7 +355,8 @@ message MethodOptions {
 // FIELD PATHS (target.id, target.label, env, scope, detail) are dotted proto
 // field names resolved against the REQUEST, or against the RESPONSE when
 // they start with "response." — a created object's id exists only in the
-// response. Every path must end on a scalar or an enum field.
+// response. A "request." prefix names the request explicitly, the mirror of
+// "response.". Every path must end on a scalar or an enum field.
 //
 // A Create<E>, Update<E> or Delete<E> rpc whose messages have forge's CRUD
 // shape needs no option: verb create/update/delete and target kind snake(E)
