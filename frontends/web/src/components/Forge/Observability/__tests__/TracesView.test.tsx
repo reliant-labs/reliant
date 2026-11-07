@@ -15,6 +15,11 @@ import { renderPanel } from "./obsTestUtils";
 
 vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("./obsMocks")).obsMocks.virtual());
+// Opening a trace's browser session mounts the replay player, which loads
+// rrweb lazily. The real one cannot rebuild a page in jsdom and threw an
+// unhandled error whenever its import won the race with the test's end.
+vi.mock("@rrweb/replay", async () => ({ Replayer: (await import("../Sessions/__tests__/fakeReplayer")).FakeReplayer }));
+vi.mock("@rrweb/replay/dist/style.css", () => ({}));
 
 describe("trace list", () => {
   it("shows the server's RED summary above the traces", async () => {

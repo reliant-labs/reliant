@@ -42,6 +42,7 @@
  * without a router. Callers spread the result into `useNavigate()({...})`.
  */
 import type { HistoryState } from "@tanstack/react-router";
+import { isSafeReturnTo } from "./returnTo";
 import {
   WORKFLOWS_LIBRARY_PATH,
   WORKFLOWS_TABS,
@@ -104,12 +105,7 @@ export function getBuilderCloseNavigateOptions(
   state: unknown,
 ): { href: string } | RouteParentNavigateOptions {
   const returnTo = (state as BuilderReturnState | null | undefined)?.builderReturnTo;
-  if (
-    typeof returnTo === "string" &&
-    returnTo.startsWith("/") &&
-    !returnTo.startsWith("//") &&
-    !isWorkflowBuilderPath(returnTo)
-  ) {
+  if (typeof returnTo === "string" && isSafeReturnTo(returnTo) && !isWorkflowBuilderPath(returnTo)) {
     return { href: returnTo };
   }
   return getParentRouteNavigateOptions(pathname);

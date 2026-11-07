@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	forgecli "github.com/reliant-labs/forge/cli"
@@ -203,6 +205,12 @@ func TestForgeSkills_ABodyThatFitsArrivesWhole(t *testing.T) {
 // project with the same discovery the daemon runs (catalog.DiscoverAll with
 // full definitions, as buildSkillsIndex), from the forge linked into this
 // binary. It returns the project dir and the catalog.
+//
+// The catalog is discovered once per test binary and shared: it is the same
+// for every fresh project, and under -race one discovery takes ~28s. Each
+// test discovering its own put the package at the 5m per-package budget of
+// main's release gate on a loaded host, and it timed out there (2026-11-05,
+// mid-TestForgeSkills_ABodyThatFitsArrivesWhole).
 func discoverForgeProjectCatalog(t *testing.T) (string, []cfgpkg.StoredSkill) {
 	t.Helper()
 	t.Setenv("HOME", t.TempDir()) // no ~/.forge or ~/.reliant skills
@@ -210,15 +218,22 @@ func discoverForgeProjectCatalog(t *testing.T) (string, []cfgpkg.StoredSkill) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte("name: roofers\n"), 0o644))
 
-	snap := catalog.DiscoverAll(catalog.DiscoverInput{ProjectPath: dir, LoadFullDefinitions: true})
-	stored := make([]cfgpkg.StoredSkill, 0, len(snap.Definitions))
-	for _, d := range snap.Definitions {
-		stored = append(stored, cfgpkg.StoredSkill{
-			SkillPath: d.SkillPath, Name: d.Name, Description: d.Description, Scope: string(d.Scope),
-			Body: d.Body, HasChildren: d.HasChildren, Source: d.Source,
-		})
-	}
-	return dir, stored
+	forgeProjectCatalog.once.Do(func() {
+		snap := catalog.DiscoverAll(catalog.DiscoverInput{ProjectPath: dir, LoadFullDefinitions: true})
+		for _, d := range snap.Definitions {
+			forgeProjectCatalog.stored = append(forgeProjectCatalog.stored, cfgpkg.StoredSkill{
+				SkillPath: d.SkillPath, Name: d.Name, Description: d.Description, Scope: string(d.Scope),
+				Body: d.Body, HasChildren: d.HasChildren, Source: d.Source,
+			})
+		}
+	})
+	return dir, slices.Clone(forgeProjectCatalog.stored)
+}
+
+// forgeProjectCatalog is discoverForgeProjectCatalog's one discovery.
+var forgeProjectCatalog struct {
+	once   sync.Once
+	stored []cfgpkg.StoredSkill
 }
 
 // runAsReliantBinary makes this test process present itself as the `reliant`

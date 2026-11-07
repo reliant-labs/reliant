@@ -1,6 +1,6 @@
 import { useId } from "react";
 import { ArrowDown, ArrowUp, ArrowUpFromLine, ExternalLink, GitPullRequest, Loader2, X } from "lucide-react";
-import type { ExistingPRResponse } from "../../../api/git";
+import type { PullRequestLookup } from "../../../hooks/worktree-git-queries";
 import Button from "@/components/forge-ui/button";
 import Tooltip from "../../forge-ui/tooltip";
 import { cn } from "../../../lib/utils";
@@ -28,11 +28,7 @@ interface CommitComposerProps {
   onPush: () => void;
   onPull: () => void;
   /** PR affordance. `null` hides it (no worktree, or on the default branch). */
-  pr: {
-    existing: ExistingPRResponse | null;
-    ghCliMissing: boolean;
-    onCreate: () => void;
-  } | null;
+  pr: (PullRequestLookup & { onCreate: () => void }) | null;
 }
 
 /**
@@ -202,20 +198,20 @@ export function CommitComposer({
   );
 }
 
-function PullRequestAction({
-  existing,
-  ghCliMissing,
-  onCreate,
-  disabled,
-}: {
-  existing: ExistingPRResponse | null;
-  ghCliMissing: boolean;
-  onCreate: () => void;
-  disabled: boolean;
-}) {
+export function PullRequestAction({
+  existing, status, error, refreshing, retry, onCreate, disabled,
+}: PullRequestLookup & { onCreate: () => void; disabled: boolean }) {
+  const ghCliMissing = !!error && /GitHub CLI \(gh\) is (not installed|missing)/i.test(error);
+  const retryAction = error && (
+    <Button variant="outline" size="sm" onClick={retry} disabled={disabled || refreshing}
+      title={ghCliMissing ? "Install the GitHub CLI (gh) from cli.github.com, then retry" : error}>
+      {refreshing ? "Checking PR…" : "Retry PR lookup"}
+    </Button>
+  );
   if (existing?.exists && existing.url) {
     const state = existing.state ? existing.state.toLowerCase() : "";
     return (
+      <>
       <Tooltip content={existing.title ? `Open “${existing.title}” on GitHub` : "Open pull request on GitHub"} delay={300} triggerClassName="flex min-w-0 flex-1">
         <a
           href={existing.url}
@@ -232,8 +228,14 @@ function PullRequestAction({
           <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
         </a>
       </Tooltip>
+      {error && <span className="text-xs text-muted-foreground">PR status unavailable</span>}
+      {retryAction}
+      </>
     );
   }
+
+  if (status === "error") return retryAction;
+  if (status !== "absent") return <span role="status" className="text-xs text-muted-foreground">Checking PR…</span>;
 
   return (
     <Tooltip

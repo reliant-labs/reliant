@@ -39,6 +39,7 @@ import { useActivityStore, activityToDotState, ChatActivity } from "./activitySt
 import { getCachedChatList, getCachedListMainWorktrees, getChatFromCache } from "../hooks/chat-queries";
 import { groupByProject, groupByWorkspace } from "../lib/sidebarGroups";
 import { sortChats } from "../lib/chatListOrder";
+import { effectiveMachineFilter, filterChatsByMachine, machineResolver } from "../lib/sidebarMachineFilter";
 
 /**
  * Whether a chat is blocked on the user.
@@ -109,6 +110,18 @@ async function getOrderedChatList(): Promise<Chat[]> {
   // Skip chats whose worktrees are completed/abandoned. A worktree the server
   // could not find is not a reason to skip: the sidebar still lists the chat.
   activeChats = activeChats.filter((chat) => !isWorkspaceClosed(getWorktreeForChat(chat)));
+
+  // The sidebar's machine filter, resolved from the same caches it reads.
+  const [{ cachedDaemonList }, { getCachedWorktrees }, { queryClient }] = await Promise.all([
+    import("../hooks/daemon-registry-queries"),
+    import("../hooks/worktree-queries"),
+    import("../lib/query-client"),
+  ]);
+  const machines = cachedDaemonList(queryClient) ?? [];
+  const machineFilter = effectiveMachineFilter(useWorkspaceStateStore.getState().machineFilterIds, machines);
+  if (machineFilter) {
+    activeChats = filterChatsByMachine(activeChats, machineFilter, machineResolver(machines, getCachedWorktrees()));
+  }
 
   // Apply state filters (matching Sidebar.tsx logic)
   if (filters.states && filters.states.length > 0) {

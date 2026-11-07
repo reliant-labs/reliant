@@ -154,7 +154,7 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
   {
     id: "spawned-thread-intro" as ContextualTipId,
     title: "A new thread was created",
-    body: "This is a spawned sub-conversation running alongside the main chat. Open it to inspect what happened or continue work there.",
+    body: "A sub-agent handles part of your request in its own conversation and reports back to the main agent. Open it to inspect what happened or continue work there.",
     targetSelector: "[data-contextual-tip='spawned-thread-item']",
     priority: 100,
     cooldownMs: THREAD_TIP_COOLDOWN_MS,
@@ -172,7 +172,7 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
   {
     id: "spawned-thread-interact" as ContextualTipId,
     title: "You can interact with this thread",
-    body: "Spawned threads are interactive. Click into one to chat directly.",
+    body: "Sub-agent conversations are interactive. Click into one to chat directly.",
     targetSelector: "[data-contextual-tip='spawned-thread-item']",
     priority: 90,
     cooldownMs: THREAD_TIP_COOLDOWN_MS,
@@ -191,7 +191,7 @@ export const CONTEXTUAL_TIP_DEFINITIONS: ContextualTipDefinition[] = [
   {
     id: "thread-model" as ContextualTipId,
     title: "Threads are independent agents within a chat",
-    body: "Threads can be spawned dynamically by an agent, or created deterministically within a workflow. You can interact with each thread independently, send messages to guide that agent, or even branch a thread into a top-level chat.",
+    body: "Conversations can be started dynamically by an agent, or created deterministically within a workflow. You can interact with each thread independently, send messages to guide that agent, or even branch a thread into a top-level chat.",
     targetSelector: "[data-contextual-tip='spawned-thread-item']",
     priority: 75,
     cooldownMs: THREAD_TIP_COOLDOWN_MS,

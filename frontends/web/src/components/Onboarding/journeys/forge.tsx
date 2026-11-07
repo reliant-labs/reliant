@@ -15,8 +15,9 @@
  * BEFORE the action, or on the step after it.
  *
  * Cuts (isAvailable; lib/demoTour.ts, runtime config DEMO_TOUR):
- *  - the public demo host, `short` (default), 9 steps: intro, trace, hops,
- *    inside, logs, issue, ask, built (the recorded forge run, a dialog), done;
+ *  - the public demo host, `short` (default), 10 steps: intro, instrumented,
+ *    trace, hops, inside, logs, issue, ask, built (the recorded forge run, a
+ *    dialog), done;
  *  - the demo host, `full`: every step;
  *  - Reliant and the forge shell, 11 steps: no fg-inside, fg-graph,
  *    fg-agent or fg-built.
@@ -234,8 +235,8 @@ export const forgeJourney: Journey = {
         "Forge gives your app monitoring from the start, so you can find problems without adding it by hand. Follow a slow or failed request to its logs and the code doing the work; your agent can read the same evidence.",
       target: "[data-testid='obs-overview']",
       route: demo({ view: "overview", ...CLOSED }),
-      // The demo host's short tour leaves it out: fg-hops and fg-inside show the same thing on a real trace.
-      isAvailable: notOnShortDemo,
+      // No isAvailable on purpose: in every cut, the demo's included (owner, 2026-11-06). fg-built, at the end,
+      // does not replace it; the short demo makes room by leaving out fg-agent.
     },
     {
       id: "fg-trace",
@@ -386,7 +387,8 @@ export const forgeJourney: Journey = {
       title: "What your agent reads",
       description: <WhatYourAgentReads cli="reliant forge" />,
       copyByShell: { forge: { description: <WhatYourAgentReads cli="forge" /> } },
-      // The demo host's full tour only (DEMO_TOUR=full): the short tour says it a line at a time, on each step.
+      // The demo host's full tour only (DEMO_TOUR=full): the short tour makes room for fg-built, whose card
+      // already says what forge gives an agent, and fg-ask hands the issue to one.
       isAvailable: onDemoFull,
     },
     {

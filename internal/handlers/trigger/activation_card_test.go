@@ -75,6 +75,14 @@ func TestActivationCardKeepsTechnicalLinesOutOfTheBody(t *testing.T) {
 	require.NotContains(t, details, "Machine id:", "a no-machine activation has no machine id")
 }
 
+func TestActivationCardSaysWhenItCanDecideApprovals(t *testing.T) {
+	card := prReviewCard()
+	card.Capabilities = append(card.Capabilities, "approvals:decide")
+	body, details := cardParts(t, card.String())
+	require.Contains(t, body, "approve or deny requests on your behalf")
+	require.Contains(t, details, "approvals:decide", "the web app reads this line to keep the card out of Approve all")
+}
+
 func TestActivationCardShowsTheMachineIDOnlyWhenThereIsOne(t *testing.T) {
 	card := prReviewCard()
 	card.Row.NoMachine = false

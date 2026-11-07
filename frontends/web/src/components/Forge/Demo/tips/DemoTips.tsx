@@ -38,7 +38,7 @@ export function PageAgentHelp({ tipKey }: { tipKey: DemoTipKey }) {
     <div className="mt-2 text-xs" data-testid="demo-agent-help">
       <button ref={trigger} type="button" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(true)} onFocus={() => setOpen(true)} className="touch-target inline-flex cursor-pointer items-center rounded px-1 font-medium text-primary-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">How an agent helps</button>
       {open && createPortal(
-        <div ref={panel} id={id} role="note" className="fixed z-[200] max-h-48 overflow-y-auto rounded-lg border border-border bg-popover p-3 text-xs text-muted-foreground shadow-xl" style={{ width, left: Math.max(12, Math.min(rect?.left ?? 12, window.innerWidth - width - 12)), bottom: Math.max(12, window.innerHeight - (rect?.top ?? window.innerHeight - 12) + 4) }}>
+        <div ref={panel} id={id} role="note" className="fixed z-[200] max-h-48 overflow-y-auto rounded-lg border border-border bg-popover p-3 text-xs text-ink-muted shadow-xl" style={{ width, left: Math.max(12, Math.min(rect?.left ?? 12, window.innerWidth - width - 12)), bottom: Math.max(12, window.innerHeight - (rect?.top ?? window.innerHeight - 12) + 4) }}>
           <p>{tip.help}</p><code className="mt-2 block [overflow-wrap:anywhere] font-mono">{tip.command}</code>
         </div>, document.body,
       )}
@@ -97,7 +97,7 @@ export function DemoTips() {
       {open && tip && key && !drawerOpen ? (
         <PageInfoFlow><section aria-label={`About this page: ${tip.title}`} className="rounded-xl border border-border bg-popover p-3 text-popover-foreground" data-testid="demo-tip" data-tip={key}>
           <h3 className="text-sm font-semibold">{tip.title}</h3>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{tip.body}</p>
+          <p className="mt-1 text-sm leading-relaxed text-ink-muted">{tip.body}</p>
           <div className="mt-2 flex items-center justify-end gap-2">
             <button type="button" onClick={dismiss} className="touch-target rounded-md border border-border px-3 py-1.5 text-xs font-medium" data-testid="demo-tip-dismiss">Dismiss</button>
             <button type="button" onClick={start} className="touch-target rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground" data-testid="demo-page-tour-start">Take the tour</button>
@@ -109,7 +109,7 @@ export function DemoTips() {
         <SignUpButton placement="corner" size="md" />
         <InstallForgeLink placement="corner" />
         {!open && key && (
-          <button type="button" onClick={() => { setOpen(true); requestAnimationFrame(() => document.querySelector('[data-testid="demo-tip"]')?.scrollIntoView?.({ block: "nearest" })); }} aria-label={`About ${tip?.title}`} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-popover text-foreground shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" data-testid="demo-page-info">
+          <button type="button" onClick={() => { setOpen(true); requestAnimationFrame(() => document.querySelector('[data-testid="demo-tip"]')?.scrollIntoView?.({ block: "nearest" })); }} aria-label={`About ${tip?.title}`} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-popover text-ink shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" data-testid="demo-page-info">
             <CircleHelp className="h-5 w-5" aria-hidden="true" />
           </button>
         )}
@@ -158,7 +158,7 @@ export function DemoPageTour() {
     <DemoCorner order={1}>
       <section className="max-h-[60dvh] overflow-y-auto rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-xl" data-testid="tour-callout">
         <h3 className="text-sm font-semibold">{tip.title}</h3>
-        <div className="mt-1 text-sm leading-relaxed text-muted-foreground">{description}</div>
+        <div className="mt-1 text-sm leading-relaxed text-ink-muted">{description}</div>
         {footer}
       </section>
     </DemoCorner>

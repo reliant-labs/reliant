@@ -357,7 +357,7 @@ The forge journey runs its own cut there, chosen with `isAvailable`
 |---|---|---|---|
 | fg-intro (what forge is, Install forge) | ✓ | ✓ | ✓ |
 | fg-console | ✓ | | ✓ |
-| fg-instrumented | ✓ | | ✓ |
+| fg-instrumented | ✓ | ✓ | ✓ |
 | fg-trace | ✓ | ✓ | ✓ |
 | fg-hops (between services) | ✓ | ✓ | ✓ |
 | fg-inside (inside a service) | | ✓ | ✓ |
@@ -368,9 +368,14 @@ The forge journey runs its own cut there, chosen with `isAvailable`
 | fg-oncall | ✓ | | ✓ |
 | fg-agent (what a coding agent reads) | | | ✓ |
 | fg-ask | ✓ | ✓ | ✓ |
-| fg-built (the recorded forge run, a wide modal card) | | ✓ | ✓ |
+| fg-built (the recorded forge run, a wide modal card, `card: { wide, modal }`) | | ✓ | ✓ |
 | fg-done | ✓ | ✓ | ✓ |
-| **steps** | 11 | 9 | 15 |
+| **steps** | 11 | 10 | 15 |
+
+fg-built is the demo's last step before the end card. It does not replace
+fg-instrumented, which runs in every cut; the short cut leaves out fg-agent
+instead (fg-built's card says what forge gives an agent, and fg-ask hands the
+issue to one).
 
 The short cut takes the best moments only; each view's tip covers the rest.
 `forgeJourney.test.tsx` pins it. `finish` returns null on the demo host, so

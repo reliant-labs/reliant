@@ -640,4 +640,3 @@ func TestStartNATSCluster_RecoversWhenARoutePortIsTaken(t *testing.T) {
 	assert.Less(t, time.Since(start), 15*time.Second,
 		"a lost route port must be detected when the bind fails, not after the readiness timeout")
 }
-

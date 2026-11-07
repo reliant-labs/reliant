@@ -379,7 +379,7 @@ func TestRemoveWorkflowDraft(t *testing.T) {
 	}
 }
 
-func sampleScenarios(draft sql.NullString) []*core.WorkflowScenario {
+func sampleScenarios(draft *string) []*core.WorkflowScenario {
 	return []*core.WorkflowScenario{
 		{ID: "sc-1", WorkflowDraftID: draft, Name: "happy", Events: `[{"a":1}]`, Expect: nstr(`{"ok":true}`), CreatedAt: l2Base, UpdatedAt: l2Base.Add(3 * time.Minute)},
 		{ID: "sc-2", WorkflowDraftID: draft, Name: "sad", Description: nstr("fails"), Events: `[]`, CreatedAt: l2Base.Add(time.Minute), UpdatedAt: l2Base.Add(time.Minute)},
@@ -501,7 +501,7 @@ func TestWorkflowScenarioWrites(t *testing.T) {
 	// and updated_at, and leaves the draft, owner, created_at and last run.
 	edited := *want["sc-1"]
 	edited.Name, edited.Events, edited.Description = "happy path", `[{"a":2}]`, nstr("now described")
-	edited.Expect = sql.NullString{} // cleared
+	edited.Expect = nil // cleared
 	edited.UserID, edited.CreatedAt = "ignored", l2Base.Add(99*time.Hour)
 	if err := store.ReplaceWorkflowScenario(ctx, env.ORM, &edited); err != nil {
 		t.Fatal(err)
@@ -515,10 +515,10 @@ func TestWorkflowScenarioWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	requireRecent(t, "updated_at", sc1.UpdatedAt)
-	if !sc1.LastRunAt.Valid {
+	if sc1.LastRunAt == nil {
 		t.Fatal("last_run_at not stamped")
 	}
-	requireRecent(t, "last_run_at", sc1.LastRunAt.Time)
+	requireRecent(t, "last_run_at", fromPtr(sc1.LastRunAt))
 	requireSame(t, "sc-1 after an edit and a result", sc1, &core.WorkflowScenario{
 		ID: "sc-1", WorkflowDraftID: nstr("d-sc"), UserID: storetest.SeedUserID, Name: "happy path", Description: nstr("now described"),
 		Events: `[{"a":2}]`, LastRunAt: sc1.LastRunAt, LastRunStatus: nstr("passed"), LastRunResult: nstr(`{"steps":3}`),
@@ -536,7 +536,7 @@ func TestWorkflowScenarioWrites(t *testing.T) {
 	exp := *want["sc-2"]
 	exp.LastRunStatus, exp.LastRunResult, exp.LastRunAt, exp.UpdatedAt, exp.Version = nstr("error"), nstr(`{"steps":0}`), sc2.LastRunAt, sc2.UpdatedAt, 3
 	requireSame(t, "sc-2 after two results", sc2, &exp)
-	requireRecent(t, "sc-2 last_run_at", sc2.LastRunAt.Time)
+	requireRecent(t, "sc-2 last_run_at", fromPtr(sc2.LastRunAt))
 
 	// The others were not touched.
 	for _, id := range []string{"sc-raw", "sc-foreign"} {

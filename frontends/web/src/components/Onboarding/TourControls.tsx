@@ -25,7 +25,7 @@ export function TourActionHint({ hint, done }: { hint?: string; done: boolean })
   if (!hint) return null;
   return (
     <p aria-live="polite" className="mt-3 flex items-center gap-1.5 text-xs font-medium text-foreground" data-testid="tour-action-hint">
-      <MousePointerClick className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+      <MousePointerClick className="h-3.5 w-3.5 text-primary-ink" aria-hidden="true" />
       {hint}
     </p>
   );

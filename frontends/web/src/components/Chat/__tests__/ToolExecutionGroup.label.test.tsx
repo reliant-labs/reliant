@@ -1,7 +1,7 @@
 /**
  * The collapsed group header says what the lead call did rather than counting
  * tool calls: "Edited totals.ts", a shell call's own description ("Run the
- * tests"), "Spawned researcher" — and name(preview) for a tool with no
+ * tests"), "Started sub-agent researcher" — and name(preview) for a tool with no
  * plain-words verb.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -77,7 +77,7 @@ describe("ToolExecutionGroup header label", () => {
         ]}
       />
     );
-    expect(screen.getByText("Spawned researcher and 2 other tools")).toBeInTheDocument();
+    expect(screen.getByText("Started sub-agent researcher and 2 other tools")).toBeInTheDocument();
   });
 
   it("strips the mcp__ prefix from the lead name", () => {
@@ -86,7 +86,12 @@ describe("ToolExecutionGroup header label", () => {
         executions={[shell("1", "Run the tests"), mk("mcp__reliant__spawn", "2", {})]}
       />
     );
-    expect(screen.getByText("Spawned and 1 other tool")).toBeInTheDocument();
+    expect(screen.getByText("Started sub-agent and 1 other tool")).toBeInTheDocument();
+  });
+
+  it("labels an existing agent as resumed rather than newly started", () => {
+    render(<ToolExecutionGroup executions={[mk("mcp__reliant__spawn", "1", { agent_id: "existing-agent", title: "Review" })]} />);
+    expect(screen.getByText("Resumed sub-agent Review")).toBeInTheDocument();
   });
 
   it("shows just the lead preview when the group holds a single call", () => {

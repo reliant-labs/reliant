@@ -1,7 +1,7 @@
 /**
  * The forge journey's content (journeys/forge.tsx, journeys-spec.md §3): its
  * eleven steps in Reliant and the forge shell, the demo host's own short cut
- * of nine (DEMO_TOUR=short) or every step (full), the compact controls, each
+ * of ten (DEMO_TOUR=short) or every step (full), the compact controls, each
  * step's required action against the URL or signal the spec names
  * (watchAdvance, against a fake router), and the copy that differs per shell.
  */
@@ -94,8 +94,30 @@ describe("the forge journey", () => {
 
   it("is a short, optional path on the demo host: what forge is, one request across services, its logs and error, the handoff, how it was built", () => {
     resetShellForTests("demo");
-    expect(active()).toEqual(["fg-intro", "fg-trace", "fg-hops", "fg-inside", "fg-logs", "fg-issue", "fg-ask", "fg-built", "fg-done"]);
-    expect(active().length).toBeLessThanOrEqual(9);
+    expect(active()).toEqual(["fg-intro", "fg-instrumented", "fg-trace", "fg-hops", "fg-inside", "fg-logs", "fg-issue", "fg-ask", "fg-built", "fg-done"]);
+    expect(active().length).toBeLessThanOrEqual(10);
+  });
+
+  it("keeps fg-instrumented in every cut; the short demo stays at ten by leaving out fg-agent, not fg-instrumented", () => {
+    // Every cut the engine can run, counted from activeJourneySteps (what the callout's "Step X of Y" shows).
+    const cuts: [string, () => void, number][] = [
+      ["reliant", () => resetShellForTests("reliant"), 11],
+      ["forge", () => resetShellForTests("forge"), 11],
+      ["demo short", () => resetShellForTests("demo"), 10],
+      ["demo full", () => (resetShellForTests("demo"), setRuntimeConfig({ DEMO_TOUR: "full" })), 15],
+    ];
+    expect(step("fg-instrumented").isAvailable).toBeUndefined();
+    for (const [name, enter, total] of cuts) {
+      setRuntimeConfig({});
+      enter();
+      expect(active(), name).toContain("fg-instrumented");
+      expect(active(), name).toHaveLength(total);
+      expect(new Set(active()).size, name).toBe(total);
+    }
+    resetShellForTests("demo");
+    setRuntimeConfig({});
+    expect(active()).not.toContain("fg-agent");
+    expect(step("fg-agent").isAvailable?.()).toBe(false);
   });
 
   it("is every step on the demo host with DEMO_TOUR=full", () => {

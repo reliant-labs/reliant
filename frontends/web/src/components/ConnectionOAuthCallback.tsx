@@ -7,6 +7,7 @@ import { connectionErrorMessage } from '@/hooks/connection-queries'
 import { completeOAuth, relayedErrorMessage } from '@/lib/connection-oauth'
 import { GradientBackground } from './GradientBackground'
 import { BrandMark } from './icons/BrandMark'
+import { isSafeReturnTo } from '@/lib/returnTo'
 
 /**
  * `/connections/oauth/callback`: where the API relays a web app's integration
@@ -83,10 +84,5 @@ export function ConnectionOAuthCallback() {
 
 /** A same-origin relative path, or undefined: the open-redirect guard. */
 function safeRelativePath(raw: string | undefined): string | undefined {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.includes('\\')) return undefined
-  try {
-    return new URL(raw, window.location.origin).origin === window.location.origin ? raw : undefined
-  } catch {
-    return undefined
-  }
+  return isSafeReturnTo(raw) ? raw : undefined
 }

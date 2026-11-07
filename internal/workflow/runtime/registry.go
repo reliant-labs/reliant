@@ -3,7 +3,6 @@ package runtime
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 
@@ -1940,7 +1941,7 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, attempt 
 			"workflowID", workflowID,
 			"stepID", stepID,
 			"activityType", activityType,
-			"success", verdict.Success.Bool,
+			"success", ptr.From(verdict.Success),
 			"durationMs", attempt.DurationMs)
 	}
 }
@@ -1951,30 +1952,30 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, attempt 
 func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 	// Marshal the output once and reuse it for both the stored JSON and the
 	// verdict, instead of round-tripping through encoding/json twice.
-	var outputJSON sql.NullString
+	var outputJSON *string
 	var outputMap map[string]interface{}
 	if attempt.Output != nil {
 		if jsonBytes, err := json.Marshal(attempt.Output); err == nil {
-			outputJSON = sql.NullString{String: string(jsonBytes), Valid: true}
+			outputJSON = ptr.Of(string(jsonBytes))
 			_ = json.Unmarshal(jsonBytes, &outputMap)
 		}
 	}
 
 	verdict := deriveRecordedVerdict(outputMap, attempt.Err)
 
-	var loopNodeIDSQL sql.NullString
-	var loopIterationSQL sql.NullInt64
+	var loopNodeID *string
+	var loopIteration *int64
 	if attempt.Scope.LoopNodeID != "" {
-		loopNodeIDSQL = sql.NullString{String: attempt.Scope.LoopNodeID, Valid: true}
-		loopIterationSQL = sql.NullInt64{Int64: int64(attempt.Scope.LoopIteration), Valid: true}
+		loopNodeID = ptr.Of(attempt.Scope.LoopNodeID)
+		loopIteration = ptr.Of(int64(attempt.Scope.LoopIteration))
 	}
-	var attemptSQL sql.NullInt32
+	var attemptNumber *int32
 	if attempt.Attempt > 0 {
-		attemptSQL = sql.NullInt32{Int32: int32(attempt.Attempt), Valid: true}
+		attemptNumber = ptr.Of(int32(attempt.Attempt))
 	}
-	var nodePathSQL sql.NullString
+	var nodePath *string
 	if attempt.Scope.NodePath != "" {
-		nodePathSQL = sql.NullString{String: attempt.Scope.NodePath, Valid: true}
+		nodePath = ptr.Of(attempt.Scope.NodePath)
 	}
 
 	return &db.StepExecution{
@@ -1985,13 +1986,13 @@ func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 		OutputJSON:    outputJSON,
 		ExitCode:      verdict.ExitCode,
 		Success:       verdict.Success,
-		DurationMs:    sql.NullInt64{Int64: attempt.DurationMs, Valid: true},
-		LoopNodeID:    loopNodeIDSQL,
-		LoopIteration: loopIterationSQL,
+		DurationMs:    ptr.Of(attempt.DurationMs),
+		LoopNodeID:    loopNodeID,
+		LoopIteration: loopIteration,
 		InputJSON:     attempt.Args,
 		ErrorMessage:  recordedError(attempt.Err),
-		Attempt:       attemptSQL,
-		NodePath:      nodePathSQL,
+		Attempt:       attemptNumber,
+		NodePath:      nodePath,
 		// No .UTC(): created_at is timestamptz, so the offset is preserved and
 		// normalized on the way in and a local time stores the same instant.
 		// This site is where the two-basis bug was found — it wrote local time
@@ -2013,8 +2014,8 @@ func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 // look, which is the node execution event (see emitNodeExecutionEvent) and the
 // `workflow status` renderer.
 type recordedVerdict struct {
-	ExitCode sql.NullInt64
-	Success  sql.NullBool
+	ExitCode *int64
+	Success  *bool
 }
 
 // deriveRecordedVerdict decides what a step execution row claims about its step,
@@ -2028,21 +2029,21 @@ func deriveRecordedVerdict(outputMap map[string]interface{}, execErr error) reco
 	if ec, ok := outputMap["exit_code"]; ok {
 		switch n := ec.(type) {
 		case int:
-			v.ExitCode = sql.NullInt64{Int64: int64(n), Valid: true}
+			v.ExitCode = ptr.Of(int64(n))
 		case int64:
-			v.ExitCode = sql.NullInt64{Int64: n, Valid: true}
+			v.ExitCode = ptr.Of(n)
 		case float64:
-			v.ExitCode = sql.NullInt64{Int64: int64(n), Valid: true}
+			v.ExitCode = ptr.Of(int64(n))
 		}
 	}
 
 	switch {
 	case execErr != nil:
-		v.Success = sql.NullBool{Bool: false, Valid: true}
-	case v.ExitCode.Valid:
-		v.Success = sql.NullBool{Bool: v.ExitCode.Int64 == 0, Valid: true}
+		v.Success = ptr.Of(false)
+	case v.ExitCode != nil:
+		v.Success = ptr.Of(*v.ExitCode == 0)
 	default:
-		v.Success = sql.NullBool{Bool: true, Valid: true}
+		v.Success = ptr.Of(true)
 	}
 	return v
 }

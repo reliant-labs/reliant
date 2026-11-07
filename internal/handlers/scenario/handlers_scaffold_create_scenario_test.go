@@ -3,6 +3,8 @@ package scenario_test
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/ptr"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
@@ -60,7 +62,7 @@ func TestCreateScenario_Generated(t *testing.T) {
 			Check: func(t *testing.T, resp *connect.Response[pb.CreateScenarioResponse]) {
 				require.Len(t, f.created, 1)
 				require.Equal(t, "test-user", f.created[0].UserID)
-				require.Equal(t, ownWorkflowDraft, f.created[0].WorkflowDraftID.String)
+				require.Equal(t, ownWorkflowDraft, ptr.From(f.created[0].WorkflowDraftID))
 				require.Equal(t, f.created[0].ID, resp.Msg.GetScenario().GetId())
 				require.Len(t, resp.Msg.GetScenario().GetEvents(), 1)
 				require.Nil(t, resp.Msg.GetResult(), "not run unless asked")
