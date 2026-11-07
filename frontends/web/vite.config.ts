@@ -48,7 +48,17 @@ function intEnv(name: string): number | undefined {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 }
 const cores = os.availableParallelism();
-const maxWorkers = intEnv("VITEST_MAX_WORKERS") ?? Math.max(2, Math.min(8, cores));
+// Workers also follow memory: a vmThreads worker recycles at VM_MEMORY_LIMIT
+// but peaks a little above it (~1.1 GiB measured), and the sum of them must
+// leave the host room for the vitest parent and whatever else runs beside it.
+// So all workers together get at most half the host's memory (its cgroup
+// limit when it has one): 7 workers on a 16-GiB runner, ~7.5 GiB at peak.
+const VM_MEMORY_LIMIT = "1GB";
+const WORKER_PEAK_BYTES = 1.1 * 1024 ** 3;
+const constrained = process.constrainedMemory?.() ?? 0;
+const hostMemory = constrained > 0 ? Math.min(constrained, os.totalmem()) : os.totalmem();
+const memoryWorkers = Math.floor(hostMemory / 2 / WORKER_PEAK_BYTES);
+const maxWorkers = intEnv("VITEST_MAX_WORKERS") ?? Math.max(2, Math.min(8, cores, memoryWorkers));
 const loadFactor = Math.min(6, Math.max(1, Math.ceil(os.loadavg()[0] / cores)));
 const testTimeout = intEnv("VITEST_TIMEOUT_MS") ?? 5_000 * loadFactor;
 const asyncUtilTimeout = intEnv("VITEST_ASYNC_UTIL_TIMEOUT_MS") ?? Math.round(testTimeout / 2);
@@ -334,8 +344,9 @@ export default defineConfig({
     // A vmThreads worker keeps every file's VM context reachable until it is
     // recycled: unbounded, the full suite peaked at 30 GiB on 8 workers and a
     // starved worker timed a test out. Recycling at 1 GB keeps the peak at
-    // ~1 GiB per worker (8.6 GiB on 8, 4 GiB on 4) for ~2x the forks speed.
-    vmMemoryLimit: "1GB",
+    // ~1 GiB per worker (8.6 GiB on 8, 4 GiB on 4) for ~2x the forks speed;
+    // maxWorkers (above) holds the sum to half the host's memory.
+    vmMemoryLimit: VM_MEMORY_LIMIT,
     // Two projects over this config, split by pool (see FORKS_POOL_FILES).
     // Each owns its include and exclude: `extends` concatenates lists, so a
     // root include would put every file in both projects.
