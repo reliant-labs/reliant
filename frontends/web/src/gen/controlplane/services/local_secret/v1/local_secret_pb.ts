@@ -9,16 +9,15 @@
 //
 // See proto/controlplane/v1/README.md for stability/versioning policy.
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import { file_forge_v1_forge } from "../../../forge/v1/forge_pb";
+import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file services/local_secret/v1/local_secret.proto.
  */
 export const file_services_local_secret_v1_local_secret: GenFile = /*@__PURE__*/
-  fileDesc("CitzZXJ2aWNlcy9sb2NhbF9zZWNyZXQvdjEvbG9jYWxfc2VjcmV0LnByb3RvEg9jb250cm9scGxhbmUudjEiMQoXUHVsbExvY2FsU2VjcmV0c1JlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkiTgoYUHVsbExvY2FsU2VjcmV0c1Jlc3BvbnNlEjIKB3NlY3JldHMYASADKAsyIS5jb250cm9scGxhbmUudjEuTG9jYWxTZWNyZXRWYWx1ZSJAChBMb2NhbFNlY3JldFZhbHVlEgwKBG5hbWUYASABKAkSDQoFdmFsdWUYAiABKAkSDwoHdmVyc2lvbhgDIAEoDTLHAQoSTG9jYWxTZWNyZXRTZXJ2aWNlErABCgtQdWxsU2VjcmV0cxIoLmNvbnRyb2xwbGFuZS52MS5QdWxsTG9jYWxTZWNyZXRzUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5QdWxsTG9jYWxTZWNyZXRzUmVzcG9uc2UiTKK7GEgIATpEOkJyZWFkcyBzZWNyZXQgdmFsdWVzIGludG8gYSBsb2NhbCBkZXYgc2Vzc2lvbjsgYXVkaXRfbG9nIHJlY29yZHMgaXRC3gEKE2NvbS5jb250cm9scGxhbmUudjFCEExvY2FsU2VjcmV0UHJvdG9QAVpYZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2xvY2FsX3NlY3JldC92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_forge_v1_forge]);
+  fileDesc("CitzZXJ2aWNlcy9sb2NhbF9zZWNyZXQvdjEvbG9jYWxfc2VjcmV0LnByb3RvEg9jb250cm9scGxhbmUudjEiMQoXUHVsbExvY2FsU2VjcmV0c1JlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkiTgoYUHVsbExvY2FsU2VjcmV0c1Jlc3BvbnNlEjIKB3NlY3JldHMYASADKAsyIS5jb250cm9scGxhbmUudjEuTG9jYWxTZWNyZXRWYWx1ZSJAChBMb2NhbFNlY3JldFZhbHVlEgwKBG5hbWUYASABKAkSDQoFdmFsdWUYAiABKAkSDwoHdmVyc2lvbhgDIAEoDULeAQoTY29tLmNvbnRyb2xwbGFuZS52MUIQTG9jYWxTZWNyZXRQcm90b1ABWlhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvbG9jYWxfc2VjcmV0L3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z");
 
 /**
  * @generated from message controlplane.v1.PullLocalSecretsRequest
@@ -92,53 +91,4 @@ export type LocalSecretValue = Message<"controlplane.v1.LocalSecretValue"> & {
  */
 export const LocalSecretValueSchema: GenMessage<LocalSecretValue> = /*@__PURE__*/
   messageDesc(file_services_local_secret_v1_local_secret, 2);
-
-/**
- * === LocalSecretService ===
- *
- * The ONE path in the platform that returns a managed secret's VALUE to a
- * caller — and it only ever returns values of a LOCAL deploy environment
- * (DEPLOY_ENVIRONMENT_KIND_LOCAL): an environment whose workloads run on a
- * developer machine under `forge env up`, which pulls these values into the
- * processes it launches, in memory only.
- *
- * SecretStoreService stays write-only and value-free. This is the "new,
- * separately-granted capability" its header reserves, and it is separate in
- * every layer that can hold a line:
- *
- *   - STORAGE. A LOCAL environment's values live under their own KV root,
- *     local/<org_id>/<environment_id>/<NAME>, never under tenants/. The
- *     kind is immutable, so an environment's root never changes after it is
- *     created; SecretStoreService.SetSecret routes a LOCAL environment's
- *     writes there, which is why `forge secret set --env dev` needs no new
- *     write RPC.
- *   - CREDENTIAL. This service reads through its own OpenBao principal
- *     (policy `local-secret-reader`: read on secret/data/local/* and nothing
- *     else — deploy/openbao/bootstrap.sh). A persistent environment's value
- *     under tenants/ is refused by OpenBao itself, whatever this code does.
- *   - KIND. A non-LOCAL environment answers FailedPrecondition before any
- *     path is built.
- *
- * Authorization is the secret store's: the caller must belong to the
- * environment's org (a human member, or an org-bound access token carrying
- * `secret:read`). A foreign environment id is NotFound — never an existence
- * oracle.
- *
- * @generated from service controlplane.v1.LocalSecretService
- */
-export const LocalSecretService: GenService<{
-  /**
-   * PullSecrets returns every live secret of one LOCAL environment, with its
-   * value and current version. Soft-deleted and destroyed secrets are
-   * omitted — they are not part of what the environment runs with.
-   *
-   * @generated from rpc controlplane.v1.LocalSecretService.PullSecrets
-   */
-  pullSecrets: {
-    methodKind: "unary";
-    input: typeof PullLocalSecretsRequestSchema;
-    output: typeof PullLocalSecretsResponseSchema;
-  },
-}> = /*@__PURE__*/
-  serviceDesc(file_services_local_secret_v1_local_secret, 0);
 

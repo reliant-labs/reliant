@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Check, Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { CommandBlock } from "../CommandBlock";
+import { SetupHelp } from "../SetupHelp";
 import {
   useRefreshLocalModels,
   useSetLocalModelEndpoints,
@@ -67,32 +69,6 @@ function ModelRow({ model }: { model: LocalModelInfo }) {
   );
 }
 
-function CopyableCode({ code }: { code: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard unavailable; the text is still selectable.
-    }
-  };
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-border/60 bg-card px-2.5 py-1.5">
-      <code className="min-w-0 flex-1 overflow-x-auto font-mono text-xs text-foreground">{code}</code>
-      <button
-        type="button"
-        aria-label="Copy command"
-        onClick={copy}
-        className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
-      >
-        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-      </button>
-    </div>
-  );
-}
-
 function OllamaContextFix({ smallestContext }: { smallestContext: number }) {
   const size = formatContextWindow(BigInt(smallestContext)).replace(" ctx", "");
   return (
@@ -106,7 +82,7 @@ function OllamaContextFix({ smallestContext }: { smallestContext: number }) {
         </li>
         <li className="space-y-1">
           <span>Or from the command line:</span>
-          <CopyableCode code="OLLAMA_CONTEXT_LENGTH=64000 ollama serve" />
+          <CommandBlock command="OLLAMA_CONTEXT_LENGTH=64000 ollama serve" label="Ollama context length command" />
         </li>
       </ul>
       <p className="mt-2 text-xs text-muted-foreground">
@@ -185,16 +161,20 @@ function GettingStarted({ managed }: { managed: boolean }) {
           server it can reach over the network, add its URL below.
         </p>
       ) : (
-        <p>No local model server found on this machine. To get started, install Ollama and pull a model:</p>
+        <p>No local model server found. Install Ollama, then download a model.</p>
       )}
       {!managed && (
-        <CardInset padding="sm">
-          <pre className="overflow-x-auto font-mono text-xs text-foreground">
-            {"brew install ollama\nollama pull qwen3"}
-          </pre>
-        </CardInset>
+        <div className="space-y-1.5">
+          <p className="font-medium text-foreground">1. Install (macOS · Homebrew)</p>
+          <CommandBlock command="brew install ollama" label="Ollama install command" />
+          <p className="font-medium text-foreground">2. Download a model</p>
+          <CommandBlock command="ollama pull qwen3" label="model download command" />
+        </div>
       )}
-      {!managed && <p>Reliant finds it automatically, or add its URL below.</p>}
+      {!managed && <SetupHelp>
+        <p>Reliant finds Ollama automatically, or add its URL below. Run these commands on the machine hosting the models.</p>
+        <a className="inline-flex min-h-[44px] items-center underline" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Ollama downloads for other platforms</a>
+      </SetupHelp>}
     </div>
   );
 }
@@ -394,9 +374,7 @@ export function LocalModelsSection() {
       {/* The tab already names the page, so no heading repeats it here. */}
       <div>
         <p className="text-sm text-muted-foreground">
-          Run models like Ollama or LM Studio on your own hardware. Reliant on each machine finds
-          the servers running on it and relays chats to them, so nothing about them is sent through
-          Reliant's cloud. Servers it can't find, like a GPU cluster, can be added as custom endpoints.
+          Run models on your own hardware. Chats to local models stay off Reliant's cloud.
         </p>
       </div>
       {daemons.length === 0 ? (

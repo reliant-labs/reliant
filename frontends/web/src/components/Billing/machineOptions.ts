@@ -97,3 +97,30 @@ export function deriveMachineOptions<T extends MachineCatalogPlan>(
 }
 
 export type { DaemonSizeName };
+
+/**
+ * The rows a PLAN PICKER may show: one per plan, named by the largest size
+ * that plan runs.
+ *
+ * `deriveMachineOptions` is one row per SIZE, and two sizes can share a
+ * cheapest plan: pricing v2 holds S1 off sale, so `plan_compute_s2` (which
+ * allows s1 and s2) is the cheapest plan for BOTH, and the picker showed an
+ * S1 row and an S2 row with the same `planId` and the same $21.48. Every
+ * picker selects by `planId`, so clicking either lit up both, and choosing
+ * "S1" bought and provisioned the S2 machine (`daemonSizeForPlan` reads the
+ * size from the plan id).
+ *
+ * Keeping the LARGEST size per plan keeps the row that is true: it is the
+ * machine the plan provisions and the price it charges. When the catalog
+ * sells an S1 plan again, S1 gets its own plan id and its row comes back.
+ *
+ * The add-machine sheet does not use this. It picks a SIZE within an
+ * allowance, keyed by size, where an S1 under an S2 subscription is a real
+ * choice.
+ */
+export function oneRowPerPlan(options: ComputePlanOption[]): ComputePlanOption[] {
+  const largest = new Map<string, ComputePlanOption>();
+  // `options` is cheapest-size first, so the last row per plan is its largest.
+  for (const option of options) largest.set(option.planId, option);
+  return options.filter((option) => largest.get(option.planId) === option);
+}

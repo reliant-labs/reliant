@@ -133,6 +133,13 @@ export interface JourneyStep extends StepPresentation {
   description: React.ReactNode;
   tooltipPadding?: number;
   spotlightConfig?: SpotlightConfig;
+  /**
+   * A card step (no target) drawn as the step's own view: `wide` for content
+   * that needs room (a player, a table), `modal` to hold the page still behind
+   * it (scroll locked, clicks on the backdrop stopped) so nothing on the page
+   * moves out from under the step. Default: a narrow, non-modal card.
+   */
+  card?: { wide?: boolean; modal?: boolean };
   /** Per-shell overrides of title / description / target. */
   copyByShell?: Partial<Record<TourShell, StepPresentation>>;
   /** Shells the step appears in. Default both. */

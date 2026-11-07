@@ -83,7 +83,7 @@ import {
   sizeName,
   storageCard,
 } from "@/components/Billing/daemonUsage";
-import { deriveMachineOptions } from "@/components/Billing/machineOptions";
+import { deriveMachineOptions, oneRowPerPlan } from "@/components/Billing/machineOptions";
 import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
 import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import { WalletTopupCheckout } from "@/components/Billing/WalletTopupCheckout";
@@ -118,6 +118,7 @@ import { MachinePricingReadinessPanel } from "@/components/Billing/MachinePricin
 import { exactCentsLabel, exactHours } from "@/lib/exact-rational";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { formatPrice } from "@/components/Billing/priceFormat";
+import { isSafeReturnTo } from "@/lib/returnTo";
 
 /**
  * Overview, plans, usage — and Reliant AI, the managed keys and spend that
@@ -493,7 +494,7 @@ function BackToOrigin({ returnTo }: { returnTo?: string }) {
  * never protocol-relative (`//evil.com`). Undefined for anything else.
  */
 function sameOriginPath(returnTo: string | undefined): string | undefined {
-  return returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
+  return isSafeReturnTo(returnTo) ? returnTo : undefined;
 }
 
 // ── Shared bits ─────────────────────────────────────────────────────────
@@ -1182,7 +1183,7 @@ function PlansTab() {
    * plan, so a row can be `current`.
    */
   const planOptions: ComputePlanOption[] = useMemo(
-    () => deriveMachineOptions(computePlans, plansQ.data?.daemonPricing),
+    () => oneRowPerPlan(deriveMachineOptions(computePlans, plansQ.data?.daemonPricing)),
     [computePlans, plansQ.data?.daemonPricing],
   );
 

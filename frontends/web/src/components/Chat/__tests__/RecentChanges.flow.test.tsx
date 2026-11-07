@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 import { RecentChanges } from "../RecentChanges";
 import { FileChangeStatus } from "../../../gen/reliant/v1/common_pb";
 import { useProjectStore } from "../../../store/projectStore";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 
 // The commit flow of the Changes panel: commit-all when nothing is staged,
 // commit-and-push, discard confirmation, and error states that keep the
@@ -34,6 +36,7 @@ vi.mock("../../../../src/hooks/worktree-git-queries", async (importOriginal) => 
   ...(await importOriginal<typeof import("../../../../src/hooks/worktree-git-queries")>()),
   fetchWorktreeChanges: (...args: unknown[]) => getChangesMock(...args),
   useWorktreeRepoStatuses: () => ({ data: undefined }),
+  useWorktreeMachineActive: () => true,
 }));
 // The workspace row only supplies the PR's base branch; none here.
 vi.mock("../../../../src/hooks/worktree-queries", async (importOriginal) => ({
@@ -95,6 +98,7 @@ function typeMessage(text: string) {
 describe("RecentChanges commit flow", () => {
   beforeEach(() => {
     getChangesMock.mockReset();
+    setTransport(mockTransport({ "WorktreeService.GetWorktreePR": () => ({ exists: false }) }));
     Object.values(git).forEach((fn) => fn.mockReset());
     git.getExistingPR.mockResolvedValue({ exists: false });
     git.stageFiles.mockResolvedValue({ message: "ok" });
@@ -119,6 +123,20 @@ describe("RecentChanges commit flow", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    setTransport(null);
+  });
+
+  it("discovers the PR after the initial changes load, without remounting", async () => {
+    let finish!: (value: ReturnType<typeof changes>) => void;
+    getChangesMock.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const lookup = vi.fn(() => ({ exists: true, number: 42, url: "https://github.com/o/r/pull/42", state: "OPEN" }));
+    setTransport(mockTransport({ "WorktreeService.GetWorktreePR": lookup }));
+    renderWithQuery(<RecentChanges worktreeId={nextWorktreeId()} projectId="project-1" onClose={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Create PR" })).toBeNull();
+    expect(lookup).not.toHaveBeenCalled();
+    finish(changes([]));
+    expect(await screen.findByRole("link", { name: /PR #42/ })).toBeTruthy();
+    expect(lookup).toHaveBeenCalledOnce();
   });
 
   it("stages every change and commits when nothing is staged", async () => {

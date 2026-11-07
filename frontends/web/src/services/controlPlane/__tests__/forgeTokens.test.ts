@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The forge shell's personal-token client (forgeTokens.ts), through the real
  * generated client and request/response types over a mock transport.

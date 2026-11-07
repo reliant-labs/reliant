@@ -26,6 +26,7 @@ import { logger } from "@/lib/logger";
 import { cn } from "@/lib/utils";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { ACCOUNT_REQUIRED_COUPON_COPY } from "@/lib/accountRequired";
+import { isSafeReturnTo } from "@/lib/returnTo";
 import { computeCouponRedeemedLine, formatPrice } from "@/components/Billing/priceFormat";
 
 export interface RedeemCouponFormProps {
@@ -89,7 +90,7 @@ export function RedeemCouponForm({
   // every code up front (wallet coupons work for anyone).
   const accountGate = useAccountGate(() => {
     const here = `${window.location.pathname}${window.location.search}`;
-    return here.startsWith("/") && !here.startsWith("//") ? here : undefined;
+    return isSafeReturnTo(here) ? here : undefined;
   });
 
   const small = size === "sm";

@@ -16,12 +16,10 @@ import { useMemo } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import {
-  ProviderAccountService,
   ProviderAccountStatus,
   type ListProviderAccountsResponse,
   type ProviderAccount as ProtoProviderAccount,
 } from "../gen/reliant/v1/provider_account_pb";
-import { connectClient } from "../lib/connect";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "../store/authStore";
 import { invalidateProviderStatuses } from "./settings-queries";
@@ -32,6 +30,7 @@ import {
 } from "../types/providerAccount";
 import {
   providerAccountServiceKeys,
+  providerAccountServiceMutations,
   useAddProviderAPIKey,
   useDeleteProviderAccount,
   useListProviderAccounts,
@@ -42,7 +41,7 @@ import {
 
 export type { ProviderAccount };
 
-const client = connectClient(ProviderAccountService);
+const accountMutations = providerAccountServiceMutations(queryClient);
 
 const listKey = () => providerAccountServiceKeys.listProviderAccounts({});
 
@@ -263,10 +262,15 @@ export function useProviderAccountActions(): ProviderAccountActions {
 /** Add an API key as a new account of the provider. The same key twice is one account. */
 export async function addProviderApiKey(provider: string, apiKey: string): Promise<{ created: boolean }> {
   try {
-    const { created } = await client.addProviderAPIKey({ provider, apiKey });
+    const { created } = await accountMutations.addProviderAPIKey({ provider, apiKey });
     return { created };
-  } finally {
+  } catch (error) {
+    // The generated mutation refreshes accounts on success. Keep the old
+    // failure refresh: an account may have been saved before the error.
     void queryClient.invalidateQueries({ queryKey: providerAccountServiceKeys.all });
+    throw error;
+  } finally {
+    // Cross-service dependency: GetProviderStatuses derives from accounts.
     invalidateProviderStatuses();
   }
 }

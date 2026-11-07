@@ -92,4 +92,21 @@ describe('ApiKeySetupModal redirect-OAuth routing', () => {
       }
     },
   )
+
+  it('shows each provider tile with its own mark', () => {
+    render(<ApiKeySetupModal isOpen onClose={vi.fn()} />)
+    for (const [label, mark] of [
+      ['Claude subscription', 'claude'],
+      ['Codex (ChatGPT)', 'codex'],
+      ['Antigravity', 'antigravity'],
+      ['GitHub Copilot', 'copilot'],
+      ['Anthropic API', 'anthropic'],
+      ['OpenAI', 'openai'],
+      ['Google Gemini', 'gemini'],
+      ['OpenRouter', 'openrouter'],
+    ]) {
+      const tile = screen.getByRole('button', { name: label })
+      expect(tile.querySelector('[data-provider-logo]')).toHaveAttribute('data-provider-logo', mark)
+    }
+  })
 })

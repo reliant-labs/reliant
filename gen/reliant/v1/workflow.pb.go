@@ -121,7 +121,10 @@ type WorkflowListItem struct {
 	AutomationOnly bool `protobuf:"varint,21,opt,name=automation_only,json=automationOnly,proto3" json:"automation_only,omitempty"`
 	// The definition's declared `triggers:` (its WHEN), so a list can show the
 	// ones the caller has not activated yet.
-	Triggers      []*v1.WorkflowTrigger `protobuf:"bytes,22,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	Triggers []*v1.WorkflowTrigger `protobuf:"bytes,22,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	// The definition's declared `permissions:` (Workflow.permissions), so a list
+	// or detail page can say the workflow can decide approvals.
+	Permissions   []string `protobuf:"bytes,23,rep,name=permissions,proto3" json:"permissions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -285,6 +288,13 @@ func (x *WorkflowListItem) GetAutomationOnly() bool {
 func (x *WorkflowListItem) GetTriggers() []*v1.WorkflowTrigger {
 	if x != nil {
 		return x.Triggers
+	}
+	return nil
+}
+
+func (x *WorkflowListItem) GetPermissions() []string {
+	if x != nil {
+		return x.Permissions
 	}
 	return nil
 }
@@ -2225,7 +2235,7 @@ var File_reliant_v1_workflow_proto protoreflect.FileDescriptor
 const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/workflow.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xc5\a\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xe7\a\n" +
 	"\x10WorkflowListItem\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
@@ -2248,7 +2258,8 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x05title\x18\x13 \x01(\tR\x05title\x12#\n" +
 	"\rneeds_machine\x18\x14 \x03(\tR\fneedsMachine\x12'\n" +
 	"\x0fautomation_only\x18\x15 \x01(\bR\x0eautomationOnly\x127\n" +
-	"\btriggers\x18\x16 \x03(\v2\x1b.reliant.v1.WorkflowTriggerR\btriggers\x1aL\n" +
+	"\btriggers\x18\x16 \x03(\v2\x1b.reliant.v1.WorkflowTriggerR\btriggers\x12 \n" +
+	"\vpermissions\x18\x17 \x03(\tR\vpermissions\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +

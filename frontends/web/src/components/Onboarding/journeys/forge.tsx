@@ -11,8 +11,10 @@
  * every visit, so it runs a SHORTER, different cut there (DEMO_TOUR, default
  * `short`, at most ten steps): no profile or on-call step, and instead the
  * instrumentation forge writes between services (fg-hops) and inside one
- * (fg-inside), and what a coding agent reads (fg-agent). DEMO_TOUR=full adds
- * the service graph (fg-graph) and puts the left-out steps back.
+ * (fg-inside), and last, before the end card, how the app was built (fg-built:
+ * the recorded forge run, in a modal card of its own). DEMO_TOUR=full adds the
+ * service graph (fg-graph) and what a coding agent reads (fg-agent), and puts
+ * the profile and on-call steps back.
  *
  * It runs unchanged in both shells. Nothing here needs a daemon, a chat or a
  * signed-in user: every step's target is fixture data, every required action
@@ -23,6 +25,8 @@
  * repeated rather than imported so the fixtures stay out of the app's main
  * chunk. A test pins them to the fixture's.
  */
+
+import { lazy, Suspense } from "react";
 
 import { FORGE_DEMO_PATH } from "../../Forge/Demo/demoPath";
 import { trackEvent } from "../../../lib/analytics";
@@ -42,13 +46,19 @@ export const DEMO_INVENTORY_SPAN_ID = "e1";
 /** In that trace: the api's CreateOrder method span, one SELECT, and the worker's consumer span (fg-inside). */
 export const DEMO_INSIDE_SPAN_IDS = { method: "a2", query: "b1", worker: "d1" } as const;
 
+/** fg-built's view: the recorded forge run. Its own chunk, so the fixtures stay out of the main one. */
+const BuiltTourStep = lazy(() => import("../../Forge/Demo/howBuilt/BuiltTourStep"));
+
 const AUTOPILOT_PATH = "/workflows/library/builtin%3A%2F%2Fautopilot-oncall";
 const RELIANT_APP_URL = "https://app.reliantlabs.io";
 const QUICK_START_URL = "https://docs.reliantlabs.io/forge/quick-start";
 
-/** A step on the demo console, opening it with `search` (merged when already there). */
+/**
+ * A step on the demo console, opening it with `search` (merged when already
+ * there). It closes "How this app was built" unless the step names it.
+ */
 function demo(search: Record<string, unknown>): JourneyRoute {
-  const open: RouteTarget = { to: FORGE_DEMO_PATH, search };
+  const open: RouteTarget = { to: FORGE_DEMO_PATH, search: { section: undefined, ...search } };
   return { path: FORGE_DEMO_PATH, open, label: "Open the demo console", message: "This step is on the forge demo console." };
 }
 
@@ -144,6 +154,8 @@ export const forgeJourney: Journey = {
         "Nobody added tracing to this app by hand. forge writes the code at every boundary it owns: the Connect handlers and clients, a wrapper around each service package, and the database driver. It also ships helpers that carry a trace across NATS and Temporal. Each of these opens a span and passes the trace on, and every log line gets the trace id. Services also push a CPU profile about once a minute. The rate, errors and latency here come from those spans.",
       target: "[data-testid='obs-overview']",
       route: demo({ view: "overview", ...CLOSED }),
+      // No isAvailable on purpose: in every cut, the demo's included (owner, 2026-11-06). fg-built, at the end,
+      // does not replace it; the short demo makes room by leaving out fg-agent.
     },
     {
       id: "fg-trace",
@@ -321,8 +333,9 @@ export const forgeJourney: Journey = {
       title: "What your agent reads",
       description: <WhatYourAgentReads cli="reliant forge" />,
       copyByShell: { forge: { description: <WhatYourAgentReads cli="forge" /> } },
-      // The demo host only: how forge helps the model.
-      isAvailable: onDemo,
+      // The demo host's full tour only (DEMO_TOUR=full): the short tour makes room for fg-built, whose card
+      // already says what forge gives an agent, and fg-ask hands the issue to one.
+      isAvailable: onDemoFull,
     },
     {
       id: "fg-ask",
@@ -344,6 +357,21 @@ export const forgeJourney: Journey = {
       afterAction: "Copy something to try it.",
       actionHint: "Click Ask an agent",
       signal: "ask_agent_opened",
+    },
+    {
+      id: "fg-built",
+      title: "How this app was built",
+      // The recorded forge run as the step's own view: a wide modal card holding the player (no spotlight, the
+      // page behind scroll-locked), so the player can't be scrolled out from under the step. It plays by itself.
+      description: (
+        <Suspense fallback={<p>Loading the recorded run…</p>}>
+          <BuiltTourStep />
+        </Suspense>
+      ),
+      card: { wide: true, modal: true },
+      // The demo host only: the last thing before the end card.
+      isAvailable: onDemo,
+      route: demo({ view: "overview", ...CLOSED }),
     },
     {
       id: "fg-done",

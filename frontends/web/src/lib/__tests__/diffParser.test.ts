@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { parseUnifiedDiff, parseDiff, compareContent } from '../diffParser';
 
 describe('diffParser', () => {
