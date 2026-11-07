@@ -506,11 +506,13 @@ describe("the demo shell", () => {
   };
   afterEach(() => setNavigator({ doNotTrack: null, globalPrivacyControl: undefined }));
 
-  it("reports as forge-demo, still the reliant-web frontend (source maps)", () => {
-    const config = buildTelemetryConfig({ ...base, shell: "demo", demoTelemetry: "replay" });
+  it("reports as reliant-forge-demo; the demo's own build is the forge-demo frontend (source maps)", () => {
+    const config = buildTelemetryConfig({ ...base, shell: "demo", demoTelemetry: "replay", demoBuild: true });
     expect(config.serviceName).toBe(DEMO_SHELL_SERVICE_NAME);
-    expect(DEMO_SHELL_SERVICE_NAME).toBe("forge-demo");
-    expect(config.frontend).toBe("reliant-web");
+    expect(DEMO_SHELL_SERVICE_NAME).toBe("reliant-forge-demo");
+    expect(config.frontend).toBe("forge-demo");
+    // ?shell=demo in the app's own bundle: still reliant-web's source maps.
+    expect(buildTelemetryConfig({ ...base, shell: "demo", demoTelemetry: "replay" }).frontend).toBe("reliant-web");
     expect(buildTelemetryConfig({ ...base, shell: "forge" }).serviceName).toBe("forge-web");
     expect(buildTelemetryConfig(base).serviceName).toBe("reliant-web");
   });
@@ -525,7 +527,7 @@ describe("the demo shell", () => {
   it("starts anonymously with replay on by default", async () => {
     resetShellForTests("demo");
     expect(await initTelemetry()).toBe(true);
-    expect(lastConfig()).toMatchObject({ serviceName: "forge-demo", replay: true, replaySampleRate: 1 });
+    expect(lastConfig()).toMatchObject({ serviceName: "reliant-forge-demo", replay: true, replaySampleRate: 1 });
     expect(runtime.setTelemetryUser).not.toHaveBeenCalled();
   });
 
@@ -611,7 +613,7 @@ describe("the demo host on the production config document", () => {
     setRuntimeConfig(PROD_DOCUMENT);
     resetShellForTests("demo");
     expect(await initTelemetry()).toBe(true);
-    expect(lastConfig()).toMatchObject({ serviceName: "forge-demo", endpoint: "/_otel", replay: true, replaySampleRate: 1 });
+    expect(lastConfig()).toMatchObject({ serviceName: "reliant-forge-demo", endpoint: "/_otel", replay: true, replaySampleRate: 1 });
     // A relative endpoint is the demo host's own origin: no cross-origin ingest.
     expect(lastConfig().endpoint?.startsWith("/")).toBe(true);
   });
@@ -622,7 +624,7 @@ describe("the demo host on the production config document", () => {
     expect(shellOn("demo.reliantlabs.io")).toBe("reliant");
     resetShellForTests("demo");
     expect(await initTelemetry()).toBe(true);
-    expect(lastConfig()).toMatchObject({ serviceName: "forge-demo", endpoint: "/_otel", replay: false });
+    expect(lastConfig()).toMatchObject({ serviceName: "reliant-forge-demo", endpoint: "/_otel", replay: false });
 
     resetTelemetryForTests();
     runtime.initBrowserTelemetry.mockClear();

@@ -107,7 +107,7 @@ Runtime config (all defaults are the owner's, 2026-11-05):
 | Key | Default | What it does |
 |---|---|---|
 | `DEMO_APP_HOST` | `demo.reliantlabs.io` | the host that mounts the demo shell |
-| `DEMO_TELEMETRY` | `replay` | `replay` / `analytics` / `off`, service `forge-demo`, `surface=demo`; never for a browser sending DNT or GPC |
+| `DEMO_TELEMETRY` | `replay` | `replay` / `analytics` / `off`, service `reliant-forge-demo`, `surface=demo`; never for a browser sending DNT or GPC |
 | `DEMO_TOUR` | `short` | `short` (≤ 10 steps) or `full` |
 | `DEMO_DATA_SOURCE` | `fixtures` | `fixtures`, or `remote` = the demo-data gateway at `DEMO_DATA_URL`, falling back to fixtures |
 | `DEMO_DATA_URL` | unset | the gateway's base URL (phase 2) |
@@ -131,7 +131,7 @@ Checks, signed out: `/` lands on `/forge/demo?tour=forge:fg-console` with
 `data-shell="demo"` on the root; the tour makes no request to any other origin
 (with `DEMO_DATA_SOURCE=fixtures`); Resolve, assign and comment are disabled
 with "Read-only demo"; a `POST /_otel/…` answers 2xx and ClickStack shows
-`ServiceName='forge-demo'` page views.
+`ServiceName='reliant-forge-demo'` page views.
 
 Rollback: `reliant forge domain unbind demo.reliantlabs.io --env prod` (or
 delete the `demo` CNAME). Reverting the shell code instead makes the host fall

@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, type Plugin, type ViteUserConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { forgeRuntimeConfig } from "@reliantlabs/forge-web-runtime/vite";
 import os from "node:os";
@@ -9,6 +9,7 @@ import { cspPlugin } from "./vite-plugin-csp";
 import { speedscopeStatic } from "./vite-plugin-speedscope";
 import { preloadGeistLatin } from "./vite-plugin-preload-fonts";
 import { securityTxt } from "./vite-plugin-security-txt";
+import { demoBundleGuard, demoSubstitutes } from "./vite-plugin-demo-bundle";
 
 // Get worktree name from the checkout root
 // When Vite runs, cwd is frontends/web, so the checkout is two levels up
@@ -54,7 +55,7 @@ const testTimeout = intEnv("VITEST_TIMEOUT_MS") ?? 5_000 * loadFactor;
 const asyncUtilTimeout = intEnv("VITEST_ASYNC_UTIL_TIMEOUT_MS") ?? Math.round(testTimeout / 2);
 
 // https://vite.dev/config/
-export default defineConfig({
+const appConfig: ViteUserConfig = {
   // browserLogSink is dev-only (apply: "serve"): it gives a plain browser tab
   // the file-backed logging that only the Electron build otherwise has. See
   // vite-plugin-browser-logs.ts.
@@ -85,6 +86,10 @@ export default defineConfig({
   // Define global constants available in the app
   define: {
     __WORKTREE_NAME__: JSON.stringify(getWorktreeName()),
+    // Which build this is: the app, or the forge demo (demoConfig below).
+    // lib/shell.ts reads it, so the demo bundle is the demo shell whatever
+    // host serves it, and the app's build drops the check entirely.
+    __WEB_TARGET__: JSON.stringify("app"),
   },
   resolve: {
     // @reliantlabs/sdk is a workspace member, built from source here: the app
@@ -293,4 +298,71 @@ export default defineConfig({
       "**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*",
     ],
   },
-});
+};
+
+// ── The forge demo: a second build of this package ──────────────────────────
+//
+// demo.reliantlabs.io serves the forge demo and nothing else: entry demo.html
+// → src/demoBundle/main.tsx, which mounts the demo shell's routes (demoShellRoutes.tsx).
+// It builds to dist-demo/, with demo.html published as its index.html, and
+// vite-plugin-demo-bundle.ts fails the build if a Reliant-only module (chat,
+// onboarding, auth, Supabase, daemon, settings) reaches it. Modules with a
+// `.demo.ts` twin (lib/connect.demo.ts: every RPC to the demo's transport) are
+// replaced by it there ("DEMO TWINS" in vite-plugin-demo-bundle.ts).
+//
+//   npm run build:demo        typecheck, then this build
+//   npm run dev:demo          the dev server, every page load the demo document
+//
+// Selected by `--mode demo` or by WEB_BUILD_TARGET=demo. The variable is how
+// forge builds it: a forge frontend's build is always `npm run build` in its
+// directory, with its `env_vars` as the build's environment, so the
+// `forge-demo` frontend (deploy/kcl/demo/main.k) is this package with
+// WEB_BUILD_TARGET=demo set.
+const DEMO_HTML = "demo.html";
+
+export function isDemoBuild(mode: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  return mode === "demo" || env.WEB_BUILD_TARGET === "demo";
+}
+
+/** demo.html is the demo site's index.html: in the build's output, and for every page the dev server serves. */
+function demoDocument(): Plugin {
+  return {
+    name: "reliant:demo-document",
+    enforce: "post",
+    generateBundle(_options, bundle) {
+      const doc = bundle[DEMO_HTML];
+      if (doc) doc.fileName = "index.html";
+    },
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const [pathname, query] = (req.url ?? "/").split("?");
+        if (req.headers.accept?.includes("text/html") && !path.extname(pathname)) {
+          req.url = `/${DEMO_HTML}${query ? `?${query}` : ""}`;
+        }
+        next();
+      });
+    },
+  };
+}
+
+function demoConfig(app: ViteUserConfig): ViteUserConfig {
+  // Not the editor's chunk: an object-form manual chunk is built whether or
+  // not anything imports it, and the demo has no editor.
+  const { "vendor-monaco": _monaco, ...manualChunks } = (app.build?.rollupOptions?.output as { manualChunks: Record<string, string[]> }).manualChunks;
+  return {
+    ...app,
+    plugins: [demoSubstitutes(), ...(app.plugins ?? []), demoDocument(), demoBundleGuard()],
+    define: { ...app.define, __WEB_TARGET__: JSON.stringify("demo") },
+    build: {
+      ...app.build,
+      outDir: "dist-demo",
+      rollupOptions: {
+        ...app.build?.rollupOptions,
+        input: { demo: path.resolve(__dirname, DEMO_HTML) },
+        output: { ...app.build?.rollupOptions?.output, manualChunks },
+      },
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => (isDemoBuild(mode) ? demoConfig(appConfig) : appConfig));
