@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2026 Reliant Labs
 import { describe, expect, it } from "vitest";
 import { askWorkspaceName, buildAskReliantPrompt, type AskSubject } from "../../AskReliant/askReliantPrompt";

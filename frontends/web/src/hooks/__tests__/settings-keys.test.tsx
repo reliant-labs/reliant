@@ -24,10 +24,15 @@ import { useAuthStore } from "@/store/authStore";
 import { addProviderApiKey } from "../provider-account-queries";
 import {
   batchUpsertSettings,
+  completeAntigravityOAuth,
   completeClaudeOAuth,
+  completeCodexOAuth,
+  deleteSetting,
   fetchProviderStatuses,
   fetchSettings,
+  pollCopilotDeviceAuth,
   readBrowserPreferences,
+  syncReliantProvider,
   updateShortcuts,
   usePreferences,
   useProviderStatuses,
@@ -192,6 +197,82 @@ describe("SettingsService keys", () => {
 
     await updateShortcuts('{"a":{"currentBinding":"mod+k"}}');
     await waitFor(() => expect(read.result.current.data?.shortcuts).toBe('{"a":{"currentBinding":"mod+k"}}'));
+  });
+
+  it("deleting a setting refreshes the existing request-keyed list and returns the response", async () => {
+    stored = [{ key: "theme", value: "dark" }];
+    setTransport(mockTransport({
+      "SettingsService.ListSettings": () => ({ settings: stored }),
+      "SettingsService.DeleteSetting": () => {
+        stored = [];
+        return { success: true };
+      },
+    }));
+    const list = renderHook(() => useListSettings({ projectId: "p1" }), { wrapper });
+    await waitFor(() => expect(list.result.current.data?.settings).toHaveLength(1));
+
+    const response = await deleteSetting("theme", "p1");
+
+    expect(response.success).toBe(true);
+    await waitFor(() => expect(list.result.current.data?.settings).toEqual([]));
+  });
+
+  it("imperative settings writes now share their generated hook's service-wide invalidation", async () => {
+    const key = settingsServiceKeys.getConfigHealth({ projectId: "p1" });
+    queryClient.setQueryData(key, { errors: [] });
+
+    await updateShortcuts("changed");
+
+    // No new key layout or parallel cache: exactly the hook's existing scope.
+    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(queryClient.getMutationCache().getAll()).toEqual([]);
+  });
+
+  it("an empty batch makes no request and does not invalidate cached reads", async () => {
+    const key = settingsServiceKeys.listSettings({ projectId: "p1" });
+    queryClient.setQueryData(key, { settings: [] });
+    expect(await batchUpsertSettings([], "p1")).toEqual([]);
+    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(false);
+  });
+
+  it("a failed ordinary write rejects without invalidating the read or retrying", async () => {
+    const key = settingsServiceKeys.getShortcuts({});
+    queryClient.setQueryData(key, { shortcuts: "{}" });
+    setTransport(mockTransport({
+      "SettingsService.UpdateShortcuts": () => {
+        count("UpdateShortcuts");
+        throw new ConnectError("denied", Code.Unavailable);
+      },
+    }));
+
+    await expect(updateShortcuts("changed")).rejects.toThrow("denied");
+
+    expect(calls.UpdateShortcuts).toBe(1);
+    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(false);
+    expect(queryClient.getMutationCache().getAll()).toEqual([]);
+  });
+
+  it.each([
+    ["SyncReliantProvider", () => syncReliantProvider()],
+    ["CompleteClaudeOAuth", () => completeClaudeOAuth({})],
+    ["CompleteCodexOAuth", () => completeCodexOAuth({})],
+    ["CompleteAntigravityOAuth", () => completeAntigravityOAuth({})],
+    ["PollCopilotDeviceAuth", () => pollCopilotDeviceAuth({})],
+  ] as const)("%s still refreshes provider statuses on failure without retrying", async (rpc, call) => {
+    const key = settingsServiceKeys.getProviderStatuses({});
+    queryClient.setQueryData(key, { providers: [] });
+    setTransport(mockTransport({
+      [`SettingsService.${rpc}`]: () => {
+        count(rpc);
+        throw new ConnectError("credential saved before failure", Code.Unavailable);
+      },
+    }));
+
+    await expect(call()).rejects.toThrow("credential saved before failure");
+
+    expect(calls[rpc]).toBe(1);
+    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
+    expect(queryClient.getMutationCache().getAll()).toEqual([]);
   });
 
   it("settingsServiceKeys.all reaches config health", async () => {

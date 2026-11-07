@@ -269,6 +269,10 @@ describe("Settings → AI", () => {
 
     const empty = await screen.findByTestId("providers-empty");
     expect(empty).toHaveTextContent("Connect the AI your agents run on");
+    // Each sign-in names its provider by mark as well as by word.
+    for (const [name, mark] of [["Sign in with Claude", "claude"], ["Sign in with ChatGPT", "codex"]]) {
+      expect(within(empty).getByRole("button", { name }).querySelector("[data-provider-logo]")).toHaveAttribute("data-provider-logo", mark);
+    }
     await userEvent.click(within(empty).getByRole("button", { name: "Sign in with Claude" }));
     expect(within(empty).getByTestId("connect-panel")).toHaveTextContent("Sign in with Claude");
 

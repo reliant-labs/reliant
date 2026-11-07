@@ -3,6 +3,19 @@ import { describe, expect, it, vi } from "vitest";
 import { useComposerUploads } from "../useComposerUploads";
 
 describe("composer uploads", () => {
+  it("retains submitted identity without retaining draft deletion ownership", async () => {
+    const remove = vi.fn();
+    const { result, unmount } = renderHook(() => useComposerUploads(vi.fn().mockResolvedValue({ id: "submitted" }), remove, "draft"));
+    let id!: number;
+    await act(async () => { id = result.current.enqueue(new File(["paste"], "paste.txt")); });
+    act(() => result.current.transferToSend(id));
+    expect(result.current.attachmentId(id)).toBe("submitted");
+    expect(result.current.isSendOwned("submitted")).toBe(true);
+    act(() => result.current.discard(id));
+    expect(remove).not.toHaveBeenCalled();
+    unmount();
+    expect(remove).not.toHaveBeenCalled();
+  });
   it("cancels unfinished work on unmount, removes late success with its original callback, and skips queued files", async () => {
     let resolve!: (value: { id: string }) => void;
     // Only the first upload is deferred. If cleanup regresses and starts the

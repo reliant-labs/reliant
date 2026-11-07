@@ -37,6 +37,19 @@
 #   type `feat`                                                  -> minor
 #   anything else (fix, perf, chore, docs, refactor, ...)        -> patch
 #
+# A breaking marker that turned out false (a squash body keeping the API-BREAK: line
+# of a commit the same PR later undid) is retracted by a reviewed commit, never by a
+# flag: a body line
+#   API-BREAK-RETRACTED: <sha, 12+ hex chars> <reason>
+# in a commit of the range that DESCENDS from the breaking commit stops that one
+# commit refusing (a note names the retraction and the retracting commit). It still
+# bumps a minor. The sha must resolve to exactly that commit; a retraction never
+# applies to another commit, to itself, or to a breaking commit newer than it.
+# With --breaking-since, a break an earlier release candidate carried is judged by
+# that first, and a retraction counts only from SINCE..HEAD: a retraction reachable
+# from SINCE descends from a break also reachable from SINCE, so that break is
+# already "carried", never "retracted".
+#
 # Prints the version on stdout and exits 0; exits 3 naming every breaking commit
 # (its subject carries the PR number), 4 when a later commit is already released (a
 # final tag on a descendant of the head) or the computed version is already a tag, 2 on a
@@ -88,11 +101,40 @@ bump=patch breaking=()
 LOG="$(mktemp)"; trap 'rm -f "$LOG"' EXIT
 git -C "$REPO" log --no-merges --format='%H%x09%s%n%b%x00' "$BASE_REV..$HEAD_REV" >"$LOG" \
   || die "git log $BASE_REV..$HEAD_REV failed in $REPO"
-while IFS= read -r -d '' rec; do
-  rec="${rec#$'\n'}"
+split_rec() { # <record>: sets sha, subject, body
+  local rec="${1#$'\n'}" rest
   sha="${rec%%$'\t'*}"; rest="${rec#*$'\t'}"
   subject="${rest%%$'\n'*}"; body=""; [ "$rest" = "$subject" ] || body="${rest#*$'\n'}"
-  kind=patch
+}
+
+# Retractions, parallel arrays: the sha prefix named, the retracting commit, the reason.
+ret_of=() ret_by=() ret_why=()
+while IFS= read -r -d '' rec; do
+  split_rec "$rec"
+  while IFS= read -r line; do
+    [[ "$line" =~ ^API-BREAK-RETRACTED:[[:space:]]+([0-9a-fA-F]{12,40})[[:space:]]+([^[:space:]].*)$ ]] || continue
+    ret_of+=("$(tr 'A-F' 'a-f' <<<"${BASH_REMATCH[1]}")"); ret_by+=("$sha"); ret_why+=("${BASH_REMATCH[2]}")
+  done <<<"$body"
+done <"$LOG"
+retraction() { # <breaking sha>: prints "<retracting sha12> retracts it: <reason>" and returns 0 if retracted
+  local i full
+  for i in "${!ret_of[@]}"; do
+    [[ "$1" == "${ret_of[$i]}"* ]] || continue
+    # The prefix must resolve to exactly this commit (not be ambiguous), and the
+    # retracting commit must be strictly newer: a descendant, never the commit itself.
+    full="$(git -C "$REPO" rev-parse -q --verify "${ret_of[$i]}^{commit}" 2>/dev/null)" || continue
+    [ "$full" = "$1" ] && [ "${ret_by[$i]}" != "$1" ] || continue
+    git -C "$REPO" merge-base --is-ancestor "$1" "${ret_by[$i]}" || continue
+    # Only a retraction newer than the previous candidate (in SINCE..HEAD) counts.
+    if [ -n "$SINCE" ] && git -C "$REPO" merge-base --is-ancestor "${ret_by[$i]}" "$SINCE"; then continue; fi
+    echo "${ret_by[$i]:0:12} retracts it (API-BREAK-RETRACTED): ${ret_why[$i]}"; return 0
+  done
+  return 1
+}
+
+while IFS= read -r -d '' rec; do
+  split_rec "$rec"
+  kind="patch"
   if [[ "$subject" =~ ^([a-z]+)(\([^\)]*\))?(!)?:\  ]]; then
     [ "${BASH_REMATCH[1]}" = feat ] && kind=minor
     [ -n "${BASH_REMATCH[3]}" ] && kind=breaking
@@ -104,6 +146,8 @@ while IFS= read -r -d '' rec; do
       bump=minor
       if [ -n "$SINCE" ] && git -C "$REPO" merge-base --is-ancestor "$sha" "$SINCE"; then
         echo "semver-next: note: ${sha:0:12} $subject is breaking, but an earlier release candidate already carried it" >&2
+      elif why="$(retraction "$sha")"; then
+        echo "semver-next: note: ${sha:0:12} $subject is breaking, but $why" >&2
       else breaking+=("${sha:0:12} $subject"); fi ;;
     minor) bump=minor ;;
   esac

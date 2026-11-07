@@ -310,7 +310,7 @@ export function ToolCallSettingsCompact() {
         <ToolCategoryToggle
           icon={<Bot className="w-4 h-4" />}
           label="Agent Tools"
-          description="spawn, agent, sub_agent"
+          description="Tools that start or resume sub-agents"
           examples=""
           collapsed={settings.agent}
           onChange={(v) => updateSetting("agent", v)}

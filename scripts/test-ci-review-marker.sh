@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Hermetic self-test of scripts/ci-review-marker.sh (the `Reliant review` required
 # check): an exact-head pass marker by a pipeline reviewer passes a branch of this
-# repository, and nothing passes a fork's head (control-plane finding CPI-1). A
+# repository, nothing passes a fork's head (control-plane finding CPI-1), and the
+# head's verdict is its newest bot evidence re-review, else its first marker. A
 # fake gh answers from fixed JSON; no network.
 set -euo pipefail
 src="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/ci-review-marker.sh"
@@ -41,3 +42,17 @@ passed="{\"user\":{\"id\":186876276},\"commit_id\":\"$head\",\"body\":\"<!-- rev
 # (forge #1683 got three review-changes and then a review-passed for one head).
 check 1 "a pass posted after a review-changes on the same head does not pass" '{"full_name":"acme/app"}' "[$changes,$passed]"
 check 0 "a review-changes posted after the head's pass does not fail it" '{"full_name":"acme/app"}' "[$passed,$changes]"
+# Evidence re-review (control-plane docs/pr-pipeline.md): the bot's newest review
+# that also carries a review-rereview marker for the head is its verdict; the same
+# marker from any other reviewer (the owner's account, 225976313) is a later marker.
+# rr <user id> <verdict marker> [sha]: a re-review of the head (or of sha).
+rr() { local s=${3:-$head}; echo "{\"user\":{\"id\":$1},\"commit_id\":\"$head\",\"body\":\"## $2\\n<!-- $2 sha=$head -->\\n<!-- review-rereview sha=$s of=1 -->\"}"; }
+check 0 "the bot's re-reviewed pass after a review-changes passes" '{"full_name":"acme/app"}' "[$changes,$(rr 186876276 review-passed)]"
+check 1 "the bot's re-reviewed review-changes after a pass fails" '{"full_name":"acme/app"}' "[$passed,$(rr 186876276 review-changes)]"
+check 1 "the newest re-review decides: a re-reviewed pass then a re-reviewed review-changes fails" '{"full_name":"acme/app"}' "[$changes,$(rr 186876276 review-passed),$(rr 186876276 review-changes)]"
+check 0 "the newest re-review decides: a re-reviewed review-changes then a re-reviewed pass passes" '{"full_name":"acme/app"}' "[$changes,$(rr 186876276 review-changes),$(rr 186876276 review-passed)]"
+check 1 "an owner-account re-review pass marker is ignored" '{"full_name":"acme/app"}' "[$changes,$(rr 225976313 review-passed)]"
+check 0 "an owner-account re-review changes marker is ignored" '{"full_name":"acme/app"}' "[$passed,$(rr 225976313 review-changes)]"
+check 1 "a re-review marker naming another sha is not a re-review of this head" '{"full_name":"acme/app"}' "[$changes,$(rr 186876276 review-passed bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb)]"
+stale="{\"user\":{\"id\":186876276},\"commit_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"body\":\"<!-- review-passed sha=$head -->\\n<!-- review-rereview sha=$head of=1 -->\"}"
+check 1 "a re-review on another commit is not a verdict of this head" '{"full_name":"acme/app"}' "[$changes,$stale]"

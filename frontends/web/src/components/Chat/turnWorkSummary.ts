@@ -120,7 +120,7 @@ function stepLabel(call: TurnWorkCall, max: number, phase: "live" | "done"): str
   const formatted =
     call.input === undefined ? undefined : formatToolParams(call.name, call.input as ToolInput);
   const preview = formatted?.summary?.trim();
-  const verb = toolActionVerb(call.name, phase);
+  const verb = toolActionVerb(call.name, phase, call.input);
   // A shell call's description is already an action ("Run cart tests").
   if (verb && preview && typeof formatted?.structured?.description === "string") {
     return truncate(preview, max);
@@ -199,7 +199,7 @@ const COUNT_PHRASES: ReadonlyArray<[TurnWorkCountKey, (n: number) => string]> = 
   ["ran", (n) => `ran ${plural(n, "command", "commands")}`],
   ["edited", (n) => `edited ${plural(n, "file", "files")}`],
   ["planned", (n) => plural(n, "plan update", "plan updates")],
-  ["spawned", (n) => `spawned ${plural(n, "agent", "agents")}`],
+  ["spawned", (n) => plural(n, "sub-agent action", "sub-agent actions")],
   ["other", (n) => `used ${plural(n, "tool", "tools")}`],
 ];
 

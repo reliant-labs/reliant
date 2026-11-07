@@ -23,6 +23,7 @@ import { OAuthHelperPanel } from "../../OAuthHelperPanel";
 import { CopilotDevicePanel } from "../../CopilotDevicePanel";
 import { addAnotherLabel, parseErrorMessage, providerConfig } from "./providerCatalog";
 import { ProviderMark } from "./ProviderMark";
+import { SetupHelp } from "../../SetupHelp";
 
 type Feedback = { ok: boolean; message: string } | null;
 
@@ -357,7 +358,7 @@ export function ConnectPanel({
           Cancel
         </Button>
       </div>
-      {hint && <p className="mb-3 text-xs text-muted-foreground">{hint}</p>}
+      {hint && <SetupHelp label="Account help"><p>{hint}</p></SetupHelp>}
       {body}
       {feedback && (
         <div

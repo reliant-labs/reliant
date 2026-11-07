@@ -142,7 +142,7 @@ function ToolExecutionGroupComponent({
     // does; a tool with no plain-words verb keeps its name(preview) form. A
     // shell call's description is already an action ("Run cart tests").
     const leadDone = lead.result !== undefined || lead.status === "completed" || lead.status === "failed";
-    const verb = toolActionVerb(rawName, leadDone ? "done" : "live");
+    const verb = toolActionVerb(rawName, leadDone ? "done" : "live", lead.call.input);
     const isDescribedShell =
       verb !== null && typeof formatted?.structured?.description === "string" && !!preview;
     const head = isDescribedShell

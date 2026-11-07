@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 
 import { gitHubLogin, isGitHubUserId, normalizeSenderId, onlyFromClause, parseOnlyFrom, withOnlyFrom } from '../onlyFromFilter'

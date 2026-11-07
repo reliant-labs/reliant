@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { fromJsonString } from "@bufbuild/protobuf";
 import { MessageSchema, DisplayStyle } from "../../gen/reliant/v1/chat_pb";
