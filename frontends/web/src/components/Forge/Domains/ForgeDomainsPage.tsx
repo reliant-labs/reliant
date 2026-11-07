@@ -59,6 +59,7 @@ import { useForgeConsole } from "../Console/consoleContext";
 import { AddDomainDialog, type DomainTargetEnv } from "./AddDomainDialog";
 import { DomainDetail } from "./DomainDetail";
 import { DomainStateBadge } from "./DomainStateBadge";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 
 /** Where the tenant-facing explanation of all this lives. */
 export const CUSTOM_DOMAINS_DOCS_URL = "https://docs.reliantlabs.io/features/custom-domains";
@@ -76,6 +77,7 @@ export function ForgeDomainsPage() {
 
   const [expanded, setExpanded] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const lock = useObsReadOnly();
   /** The domain being re-bound, or null. Reuses the add dialog's picker. */
   const [rebinding, setRebinding] = useState<ForgeDomain | null>(null);
   const [removing, setRemoving] = useState<ForgeDomain | null>(null);
@@ -203,6 +205,8 @@ export function ForgeDomainsPage() {
             label: "Add domain",
             onClick: () => setAddOpen(true),
             variant: "primary",
+            // The demo console: no writes, said on hover of every control (obsReadOnly.tsx).
+            disabled: lock.readOnly,
             icon: <Plus className="h-4 w-4" aria-hidden="true" />,
           },
         ]}
@@ -215,7 +219,7 @@ export function ForgeDomainsPage() {
           icon={<Globe className="h-7 w-7" aria-hidden="true" />}
           title="No custom domains yet"
           description="Your organization holds no domains. Add one to serve this project on a hostname you own instead of the generated one."
-          actionLabel="Add domain"
+          actionLabel={lock.readOnly ? undefined : "Add domain"}
           onAction={() => setAddOpen(true)}
         />
       ) : (

@@ -135,7 +135,9 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
     [orgId, envId]
   );
   const all = useMemo(() => index.data?.dashboards ?? [], [index.data]);
-  const canWrite = !!index.data?.canWrite;
+  // The demo console writes nothing, whatever the index says (obsReadOnly.tsx).
+  const obsLock = useObsReadOnly();
+  const canWrite = !!index.data?.canWrite && !obsLock.readOnly;
   const pickedApps = appFilter?.selected;
   const shown = useMemo(
     () => filterIndex(all, search).filter((d) => !pickedApps?.length || pickedApps.includes(d.ref.projectId)),
@@ -174,7 +176,7 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
     });
   const starred = starredOf(shown);
   const owners = ownersOf(all);
-  const readOnlyReason = useObsReadOnly().reason;
+  const readOnlyReason = obsLock.reason;
   const toggleStar = (d: DashboardSummary) => star.mutate({ ref: d.ref, starred: !d.starred });
   // The demo's reason first (obsReadOnly.tsx): there, nobody can, admin or not.
   const writeHint = canWrite ? undefined : readOnlyReason ?? "Only organization admins can create dashboards.";

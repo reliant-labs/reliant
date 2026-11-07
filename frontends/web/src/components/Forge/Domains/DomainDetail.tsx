@@ -41,6 +41,7 @@ import {
 } from "@/services/forge/domains";
 
 import { DnsRecordsTable } from "./DnsRecordsTable";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 
 export interface DomainDetailProps {
   domain: ForgeDomain;
@@ -74,6 +75,9 @@ export function DomainDetail({
   const nextStep = DOMAIN_STATE_NEXT_STEPS[domain.state];
   const liveSince = formatWhen(domain.liveSince);
   const verifiedAt = formatWhen(domain.verifiedAt);
+  // The demo console: every action here is off, saying why (obsReadOnly.tsx).
+  const lock = useObsReadOnly();
+  const lockTitle = lock.readOnly ? lock.reason : undefined;
 
   return (
     <div className="flex flex-col gap-5" data-testid={`domain-detail-${domain.hostname}`}>
@@ -141,7 +145,8 @@ export function DomainDetail({
         <button
           type="button"
           onClick={onVerify}
-          disabled={isVerifying}
+          disabled={isVerifying || lock.readOnly}
+          title={lockTitle}
           className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink transition hover:bg-ink/5 disabled:opacity-50"
         >
           {isVerifying ? (
@@ -154,7 +159,9 @@ export function DomainDetail({
         <button
           type="button"
           onClick={onRebind}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs text-ink transition hover:bg-ink/5"
+          disabled={lock.readOnly}
+          title={lockTitle}
+          className="disabled:opacity-50 rounded-lg border border-border px-3 py-1.5 text-xs text-ink transition hover:bg-ink/5"
         >
           {domain.binding ? "Change target" : "Choose a target"}
         </button>
@@ -162,7 +169,9 @@ export function DomainDetail({
           <button
             type="button"
             onClick={onUnbind}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink transition hover:bg-ink/5"
+            disabled={lock.readOnly}
+            title={lockTitle}
+            className="disabled:opacity-50 inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-ink transition hover:bg-ink/5"
           >
             <Unlink className="h-3.5 w-3.5" aria-hidden="true" />
             Stop serving
@@ -171,7 +180,9 @@ export function DomainDetail({
         <button
           type="button"
           onClick={onRemove}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-danger-border px-3 py-1.5 text-xs text-danger-ink transition hover:bg-danger-surface"
+          disabled={lock.readOnly}
+          title={lockTitle}
+          className="disabled:opacity-50 ml-auto inline-flex items-center gap-1.5 rounded-lg border border-danger-border px-3 py-1.5 text-xs text-danger-ink transition hover:bg-danger-surface"
         >
           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           Remove domain
