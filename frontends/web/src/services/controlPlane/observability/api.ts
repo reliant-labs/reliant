@@ -52,12 +52,13 @@ import {
   type TraceRedSummary as WireRed,
   type TraceSummary as WireTraceSummary,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
-import { WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+import { DeclaredSpecGap as WireDeclaredSpecGap, WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
 import { obsClient } from "./obsClient";
 import type {
   AttributeFilter,
   AttributeOp,
+  DeclaredSpecGap,
   DeclaredWorkload,
   Workload,
   WorkloadCause,
@@ -735,11 +736,26 @@ function mapPod(p: WireWorkloadPod): WorkloadPod {
   };
 }
 
+/** Why a declared spec is not recorded; "unknown" from a control plane that predates the reason. */
+function specGapOf(gap: WireDeclaredSpecGap): DeclaredSpecGap {
+  switch (gap) {
+    case WireDeclaredSpecGap.PENDING:
+      return "pending";
+    case WireDeclaredSpecGap.UNREADABLE:
+      return "unreadable";
+    case WireDeclaredSpecGap.NOT_IN_MANIFESTS:
+      return "not-in-manifests";
+    default:
+      return "unknown";
+  }
+}
+
 function mapDeclared(d: WireDeclaredWorkload): DeclaredWorkload {
   return {
     name: d.name,
     kind: kindOf(d.kind),
     specRecorded: d.specRecorded,
+    specGap: d.specRecorded ? null : specGapOf(d.specGap),
     replicas: d.replicas ?? null,
     cpuRequestMillicores: Number(d.cpuRequestMillicores),
     cpuLimitMillicores: Number(d.cpuLimitMillicores),

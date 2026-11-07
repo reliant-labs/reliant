@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Renaming a step rewrites what names it: `nodes.<old>` in templates, raw CEL
  * conditions and bracket form, and the workflow fields that hold step ids —

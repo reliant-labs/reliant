@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { DECIDES_APPROVALS_REASON, DETAILS_HEADING, LEGACY_ACTIVATION_REASON, parseApprovalCard, planApprovalBatch } from "../approvalCard";
 

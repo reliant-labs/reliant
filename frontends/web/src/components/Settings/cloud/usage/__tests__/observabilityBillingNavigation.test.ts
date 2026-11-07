@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { BILLING_TAB_IDS, resolveBillingTab, VISIBLE_BILLING_TABS } from "@/routeSchemas";
 

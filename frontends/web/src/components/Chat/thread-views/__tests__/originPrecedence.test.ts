@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { isSpawnOrigin } from "../threadUtils";
 import type { ThreadOrigin } from "../../ExecutionSidebar/types";

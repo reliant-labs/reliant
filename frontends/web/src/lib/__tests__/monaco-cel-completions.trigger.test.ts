@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * `trigger.*` autocompletes (research/WORKFLOW_UI.md §3.2). The backend's
  * catalog lists `trigger` as a dynamic namespace with no fields, so without a

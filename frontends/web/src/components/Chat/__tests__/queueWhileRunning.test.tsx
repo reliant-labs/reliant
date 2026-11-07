@@ -60,6 +60,10 @@ vi.mock("../../../hooks/chat-queries", async () => {
       isLoading: false,
     }),
     getChatFromCache: () => undefined,
+    // The composer reads the chat's server-side selection on mount (a
+    // GetChat). Unmocked, that request reached the network guard only
+    // sometimes, failing a different case each time (reliant#2366).
+    useChatSelection: () => ({ data: undefined, isLoading: false }),
   };
 });
 
