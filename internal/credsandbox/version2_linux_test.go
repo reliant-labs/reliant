@@ -244,6 +244,57 @@ echo "STEPS $n"`
 	assert.NoFileExists(t, filepath.Join(run, "elsewhere"), "only the named directory is real")
 }
 
+// pr-fix's implementer: an agent's shell, bound credentials: none, started in
+// the project root, committing in its per-run clone under XDG_CACHE_HOME,
+// which the workflow bound as the shell's writable_checkouts. The commit is
+// real; a shared checkout or the daemon's binary in the same binding refuses
+// the command and names it.
+func TestWrap_ABoundAgentShellCommitsInItsCloneAndNowhereElse(t *testing.T) {
+	testkit.Slow(t, "runs git in real user, mount and PID namespaces")
+	requireSandbox(t)
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	home := wrapHome(t)
+	xdg := filepath.Join(filepath.Dir(home), "xdg")
+	clone := filepath.Join(xdg, "pr-fix", "repo-12-run-1", "repo")
+	shared := filepath.Join(managedProjectsDir, "repo")
+	gitEnv := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + home, "XDG_CACHE_HOME=" + xdg, "GIT_CONFIG_NOSYSTEM=1", //nolint:forbidigo // the test's own PATH for git
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t"}
+	setup := exec.Command("bash", "-c", `set -e
+git init -q -b main '`+shared+`' && cd '`+shared+`' && echo a > a && git add a && git commit -qm a
+git clone -q --shared '`+shared+`' '`+clone+`'`)
+	setup.Env = gitEnv
+	out, err := setup.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+
+	bound := Writable{Paths: []string{clone}, HandOffsOnly: true}
+	cmd := exec.Command("bash", "-c", `cd '`+clone+`' && echo fix > fix.go && git add fix.go && git commit -qm fix && echo COMMIT-OK
+echo evil > '`+shared+`/a' 2>/dev/null || echo SHARED-DENIED`)
+	cmd.Dir, cmd.Env = managedProjectsDir, gitEnv
+	require.Empty(t, Wrap(cmd, "none", bound))
+	out, err = cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	assert.Contains(t, string(out), "COMMIT-OK")
+	assert.Contains(t, string(out), "SHARED-DENIED")
+	assert.NotContains(t, string(out), "credsandbox: discarded", "nothing it wrote in its clone was thrown away")
+	log, err := exec.Command("git", "-C", clone, "log", "--format=%s").Output()
+	require.NoError(t, err)
+	assert.Equal(t, "fix\na\n", string(log), "the commit survives the command")
+	assert.FileExists(t, filepath.Join(clone, "fix.go"))
+
+	for _, bad := range []string{shared, "/daemon-bin", filepath.Join(home, ".gitconfig")} {
+		cmd := exec.Command("bash", "-c", "true")
+		cmd.Dir, cmd.Env = managedProjectsDir, gitEnv
+		refusal := Wrap(cmd, "none", Writable{Paths: []string{clone, bad}, HandOffsOnly: true})
+		assert.Contains(t, refusal, "writable_checkouts names "+bad, "a bound agent shell may not name %s", bad)
+	}
+	// A run node may name the shared checkout.
+	cmd = exec.Command("bash", "-c", "true")
+	cmd.Dir, cmd.Env = managedProjectsDir, gitEnv
+	assert.Empty(t, Wrap(cmd, "none", Writable{Paths: []string{shared}}))
+}
+
 // The module cache, the build cache and the cache roots are private through
 // their own path; through any other mount of the same disk they are read-only.
 func TestSandbox_AnOverlaidCacheIsReadOnlyUnderItsOtherPaths(t *testing.T) {
