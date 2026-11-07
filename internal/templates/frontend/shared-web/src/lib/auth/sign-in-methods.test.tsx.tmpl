@@ -1,0 +1,812 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// Pins the sign-in methods a LOGIN_POLICY turns on — passkeys, emailed links,
+// Google/GitHub, invitations, address confirmation — as the screens show
+// them: each form state, and the rule that an emailed link's page does
+// nothing until the person presses its button.
+
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { AcceptInviteForm } from "@/components/accept-invite-form";
+import { MagicLinkForm } from "@/components/magic-link-form";
+import { NoCodeHint, SignInMethods, UnverifiedNotice } from "@/components/sign-in-methods";
+import { SocialCallback } from "@/components/social-callback";
+import { VerifyEmailForm } from "@/components/verify-email-form";
+import { AuthContext } from "@/lib/auth/use-auth";
+
+import {
+  AuthError,
+  LEGACY_AUTH_OPTIONS,
+  credentialToJSON,
+  fetchAuthOptions,
+  fromBase64url,
+  isVerifySent,
+  passkeySignIn,
+  signUp,
+  toBase64url,
+  toRequestOptions,
+  type AuthOptions,
+} from "./native-login";
+{{- if .HasTypedConfig}}
+
+vi.mock("@/lib/config_gen", () => ({ loadConfig: () => ({ API_URL: "", MOCK_API: "" }) }));
+{{- end}}
+
+type Route = { status: number; body?: unknown };
+
+/** Stubs fetch by path: each path answers its listed responses in turn (the last one repeats). */
+function stubRoutes(routes: Record<string, Route | Route[]>) {
+  const seen: Record<string, number> = {};
+  const fetchMock = vi.fn<typeof fetch>(async (input) => {
+    const path = new URL(String(input), "http://app.test").pathname.replace(/^\/_api/, "");
+    const entry = routes[path];
+    if (!entry) return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+    const list = Array.isArray(entry) ? entry : [entry];
+    const n = seen[path] ?? 0;
+    seen[path] = n + 1;
+    const r: Route = list[Math.min(n, list.length - 1)] ?? { status: 500 };
+    return new Response(r.body === undefined ? null : JSON.stringify(r.body), {
+      status: r.status,
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+function calls(fetchMock: ReturnType<typeof stubRoutes>, path: string) {
+  return fetchMock.mock.calls.filter(([input]) => String(input).endsWith(path));
+}
+
+function bodyOf(fetchMock: ReturnType<typeof stubRoutes>, path: string): Record<string, unknown> {
+  const call = calls(fetchMock, path)[0];
+  if (!call) throw new Error(`${path} was never called`);
+  return JSON.parse(String(call[1]?.body ?? "{}")) as Record<string, unknown>;
+}
+
+const allOptions: AuthOptions = {
+  selfSignup: true,
+  signup: "open",
+  methods: ["password", "passkey", "magic_link"],
+  social: [{ type: "google", label: "Google" }],
+  mail: true,
+};
+
+/** A WebAuthn-capable browser whose authenticator answers with `credential` (null: cancelled). */
+function stubWebAuthn(credential: PublicKeyCredential | null) {
+  vi.stubGlobal("PublicKeyCredential", function PublicKeyCredential() {});
+  const get = vi.fn(async () => credential);
+  const create = vi.fn(async () => credential);
+  vi.stubGlobal("navigator", { ...navigator, credentials: { get, create } });
+  return { get, create };
+}
+
+function fakeCredential(): PublicKeyCredential {
+  const bytes = (s: string) => new TextEncoder().encode(s).buffer;
+  return {
+    id: "a2V5",
+    rawId: bytes("key"),
+    type: "public-key",
+    response: {
+      clientDataJSON: bytes('{"type":"webauthn.get"}'),
+      authenticatorData: bytes("auth"),
+      signature: bytes("sig"),
+      userHandle: bytes("user"),
+    },
+  } as unknown as PublicKeyCredential;
+}
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+describe("the auth client", () => {
+  it("reads every option, and fails closed to password-only, invite-only", async () => {
+    stubRoutes({
+      "/auth/options": { status: 200, body: { ...allOptions, methods: ["passkey", "sms"] } },
+    });
+    expect(await fetchAuthOptions()).toEqual({ ...allOptions, methods: ["passkey"] });
+
+    // An older server answers only {selfSignup}.
+    stubRoutes({ "/auth/options": { status: 200, body: { selfSignup: true } } });
+    expect(await fetchAuthOptions()).toEqual({ ...LEGACY_AUTH_OPTIONS, selfSignup: true });
+
+    stubRoutes({});
+    expect(await fetchAuthOptions()).toEqual(LEGACY_AUTH_OPTIONS);
+  });
+
+  it("round-trips base64url and converts the server's passkey options", () => {
+    const raw = new Uint8Array([0, 250, 251, 252, 253, 254, 255]).buffer;
+    expect(toBase64url(raw)).toBe("APr7_P3-_w");
+    expect(new Uint8Array(fromBase64url("APr7_P3-_w"))).toEqual(new Uint8Array(raw));
+    const opts = toRequestOptions({
+      publicKey: {
+        challenge: "Y2g",
+        rpId: "app.test",
+        allowCredentials: [{ type: "public-key", id: "a2V5" }],
+      },
+    });
+    expect(opts.publicKey?.rpId).toBe("app.test");
+    expect(opts.publicKey?.challenge).toBeInstanceOf(ArrayBuffer);
+    expect(opts.publicKey?.allowCredentials?.[0]?.id).toBeInstanceOf(ArrayBuffer);
+    expect(credentialToJSON(fakeCredential())).toMatchObject({
+      id: "a2V5",
+      rawId: "a2V5",
+      type: "public-key",
+      response: { signature: "c2ln", userHandle: "dXNlcg" },
+    });
+  });
+
+  it("signs in with a passkey: begin, the authenticator, finish", async () => {
+    const fetchMock = stubRoutes({
+      "/auth/passkey/begin": {
+        status: 200,
+        body: { options: { publicKey: { challenge: "Y2g" } } },
+      },
+      "/auth/passkey/finish": { status: 200, body: { authenticated: true, subject: "u1" } },
+    });
+    stubWebAuthn(fakeCredential());
+    expect(await passkeySignIn("a@b.test")).toEqual({ authenticated: true, subject: "u1" });
+    expect(bodyOf(fetchMock, "/auth/passkey/begin")).toEqual({ email: "a@b.test" });
+    expect(bodyOf(fetchMock, "/auth/passkey/finish").credential).toMatchObject({
+      type: "public-key",
+    });
+  });
+
+  it("does not post a cancelled passkey prompt", async () => {
+    const fetchMock = stubRoutes({
+      "/auth/passkey/begin": {
+        status: 200,
+        body: { options: { publicKey: { challenge: "Y2g" } } },
+      },
+    });
+    stubWebAuthn(null);
+    const err = await passkeySignIn("a@b.test").catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AuthError);
+    expect((err as AuthError).code).toBe("passkey_cancelled");
+    expect(calls(fetchMock, "/auth/passkey/finish")).toHaveLength(0);
+  });
+
+  it("tells a 'check your email' sign-up from a signed-in one", async () => {
+    stubRoutes({
+      "/auth/register": { status: 202, body: { verify: "sent", message: "Check your email." } },
+    });
+    expect(isVerifySent(await signUp({ email: "a@b.test" }))).toBe(true);
+    stubRoutes({ "/auth/register": { status: 200, body: { authenticated: true } } });
+    expect(isVerifySent(await signUp({ email: "a@b.test", password: "x" }))).toBe(false);
+  });
+
+  it("carries the server's reason code on a refusal", async () => {
+    stubRoutes({
+      "/auth/passkey/begin": {
+        status: 200,
+        body: { options: { publicKey: { challenge: "Y2g" } } },
+      },
+      "/auth/passkey/finish": {
+        status: 403,
+        body: { error: "Confirm your email.", code: "email_unverified" },
+      },
+    });
+    stubWebAuthn(fakeCredential());
+    const err = await passkeySignIn("a@b.test").catch((e: unknown) => e);
+    expect((err as AuthError).code).toBe("email_unverified");
+  });
+});
+
+describe("SignInMethods", () => {
+  const noop = () => {};
+
+  it("renders nothing for the legacy password-only policy", () => {
+    const { container } = render(
+      <SignInMethods options={LEGACY_AUTH_OPTIONS} email="" returnTo="/" onSignedIn={noop} />,
+    );
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("offers each method only when the policy does", () => {
+    stubWebAuthn(fakeCredential());
+    render(<SignInMethods options={allOptions} email="" returnTo="/" onSignedIn={noop} />);
+    expect(screen.getByRole("button", { name: "Continue with passkey" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Email me a link" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toBeTruthy();
+    cleanup();
+    // No mail delivery: no emailed link, however the methods read.
+    const noMail: AuthOptions = { ...allOptions, mail: false };
+    render(<SignInMethods options={noMail} email="" returnTo="/" onSignedIn={noop} />);
+    expect(screen.queryByRole("button", { name: "Email me a link" })).toBeNull();
+  });
+
+  it("asks for the address before mailing a link, then waits for the code in this tab", async () => {
+    const fetchMock = stubRoutes({
+      "/auth/magic/request": {
+        status: 202,
+        body: { message: "If that address can sign in, a sign-in link is on its way." },
+      },
+      "/auth/magic/consume": [
+        { status: 401, body: { error: "That code or link is not valid.", code: "invalid_code" } },
+        { status: 200, body: { authenticated: true } },
+      ],
+    });
+    const onSignedIn = vi.fn();
+    const { rerender } = render(
+      <SignInMethods options={allOptions} email="" returnTo="/" onSignedIn={onSignedIn} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Email me a link" }));
+    expect(screen.getByRole("alert").textContent).toMatch(/email address first/);
+    expect(calls(fetchMock, "/auth/magic/request")).toHaveLength(0);
+
+    rerender(
+      <SignInMethods options={allOptions} email="a@b.test" returnTo="/" onSignedIn={onSignedIn} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Email me a link" }));
+    await screen.findByText(/a sign-in link is on its way/);
+    fireEvent.change(screen.getByLabelText("Code from the email"), { target: { value: "123456" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with the code" }));
+    await screen.findByText("That code or link is not valid.");
+    expect(onSignedIn).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in with the code" }));
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledOnce());
+  });
+
+  it("offers a new confirmation link when the address is unverified", async () => {
+    stubWebAuthn(fakeCredential());
+    stubRoutes({
+      "/auth/passkey/begin": {
+        status: 200,
+        body: { options: { publicKey: { challenge: "Y2g" } } },
+      },
+      "/auth/passkey/finish": {
+        status: 403,
+        body: { error: "Confirm your email.", code: "email_unverified" },
+      },
+      "/auth/verify/resend": { status: 202, body: { message: "A new link is on its way." } },
+    });
+    render(<SignInMethods options={allOptions} email="a@b.test" returnTo="/" onSignedIn={noop} />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue with passkey" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send a new link" }));
+    await screen.findByText("A new link is on its way.");
+  });
+});
+
+describe("UnverifiedNotice", () => {
+  it("resends, and shows the server's uniform answer", async () => {
+    const fetchMock = stubRoutes({
+      "/auth/verify/resend": { status: 202, body: { message: "Sent if pending." } },
+    });
+    render(<UnverifiedNotice email=" a@b.test " />);
+    fireEvent.click(screen.getByRole("button", { name: "Send a new link" }));
+    await screen.findByText("Sent if pending.");
+    expect(bodyOf(fetchMock, "/auth/verify/resend")).toEqual({ email: "a@b.test" });
+  });
+});
+
+// "Didn't get a code?" is ONE sentence for every address. The server cannot
+// know whether mail arrived (a relay may refuse an address that once reported
+// spam), and copy that said why would tell anyone which addresses exist.
+const NO_CODE = "Didn't get a code? Check spam, try another sign-in method, or contact support.";
+
+describe("no code arrived", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function requestLink(message: string) {
+    stubRoutes({ "/auth/magic/request": { status: 202, body: { message } } });
+    render(
+      <SignInMethods options={allOptions} email="a@b.test" returnTo="/" onSignedIn={() => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Email me a link" }));
+    await screen.findByText(new RegExp(message));
+  }
+
+  it("appears after a minute of waiting, not before", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    render(<NoCodeHint />);
+    expect(screen.queryByText(NO_CODE)).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(59_000);
+    });
+    expect(screen.queryByText(NO_CODE)).toBeNull();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(screen.getByText(NO_CODE)).toBeTruthy();
+  });
+
+  it("appears at once after asking again", async () => {
+    await requestLink("Link requested.");
+    fireEvent.click(screen.getByRole("button", { name: "Send a new link" }));
+    expect(await screen.findByText(NO_CODE)).toBeTruthy();
+  });
+
+  it("follows a resent confirmation link too", async () => {
+    stubRoutes({ "/auth/verify/resend": { status: 202, body: { message: "Sent if pending." } } });
+    render(<UnverifiedNotice email="a@b.test" />);
+    fireEvent.click(screen.getByRole("button", { name: "Send a new link" }));
+    expect(await screen.findByText(NO_CODE)).toBeTruthy();
+  });
+
+  it("says the same thing whatever the server answered", async () => {
+    const shown: string[] = [];
+    for (const message of ["Link requested.", "Something else entirely."]) {
+      await requestLink(message);
+      fireEvent.click(screen.getByRole("button", { name: "Send a new link" }));
+      shown.push((await screen.findByText(/Didn't get a code/)).textContent ?? "");
+      cleanup();
+    }
+    expect(shown).toEqual([NO_CODE, NO_CODE]);
+  });
+});
+
+describe("MagicLinkForm", () => {
+  it("does nothing on load — a mail scanner opening the link spends nothing", async () => {
+    const fetchMock = stubRoutes({
+      "/auth/magic/consume": { status: 200, body: { authenticated: true } },
+    });
+    const onSignedIn = vi.fn();
+    render(<MagicLinkForm code="123456" signInHref="/auth/sign-in" onSignedIn={onSignedIn} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledOnce());
+    expect(bodyOf(fetchMock, "/auth/magic/consume")).toEqual({ code: "123456" });
+  });
+
+  it("explains a link opened in another browser", async () => {
+    stubRoutes({
+      "/auth/magic/consume": {
+        status: 400,
+        body: { error: "Other browser.", code: "magic_other_browser" },
+      },
+    });
+    render(<MagicLinkForm code="123456" signInHref="/auth/sign-in" onSignedIn={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByText("This link only works in the browser where you asked for it.");
+    expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+  });
+
+  it("takes a typed code when the link carried none, and shows a rejected one", async () => {
+    stubRoutes({
+      "/auth/magic/consume": { status: 401, body: { error: "Not valid.", code: "invalid_code" } },
+    });
+    render(<MagicLinkForm code={null} signInHref="/auth/sign-in" onSignedIn={() => {}} />);
+    fireEvent.change(screen.getByLabelText("Code"), { target: { value: "999" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByText("Not valid.");
+  });
+});
+
+describe("VerifyEmailForm", () => {
+  it("refuses an incomplete link without calling the server", () => {
+    const fetchMock = stubRoutes({});
+    render(
+      <VerifyEmailForm
+        forgotHref="/auth/forgot"
+        userID={null}
+        code="c"
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toMatch(/incomplete/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("confirms on the button, not on load, then says to sign in", async () => {
+    const fetchMock = stubRoutes({
+      "/auth/verify": { status: 200, body: { verified: true, enroll: false } },
+    });
+    render(
+      <VerifyEmailForm
+        forgotHref="/auth/forgot"
+        userID="u1"
+        code="c1"
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm my email" }));
+    await screen.findByText(/You can sign in now/);
+    expect(bodyOf(fetchMock, "/auth/verify")).toEqual({ userID: "u1", code: "c1" });
+  });
+
+  it("offers a passkey when the account has no password", async () => {
+    stubRoutes({ "/auth/verify": { status: 200, body: { verified: true, enroll: true } } });
+    render(
+      <VerifyEmailForm
+        forgotHref="/auth/forgot"
+        userID="u1"
+        code="c1"
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm my email" }));
+    expect(await screen.findByRole("button", { name: "Create a passkey" })).toBeTruthy();
+  });
+
+  it("asks for a password again when the sign-up password could not be saved", async () => {
+    const fetchMock = stubRoutes({
+      "/auth/verify": {
+        status: 200,
+        body: {
+          verified: true,
+          enroll: false,
+          password: "not_set",
+          reset: { userID: "u1", code: "r1" },
+        },
+      },
+    });
+    const auth = {
+      identity: { authenticated: false },
+      isAuthenticated: false,
+      isLoading: false,
+      refresh: async () => {},
+      logout: async () => {},
+    };
+    render(
+      <AuthContext.Provider value={auth}>
+        <VerifyEmailForm
+          forgotHref="/auth/forgot"
+          userID="u1"
+          code="c1"
+          signInHref="/auth/sign-in"
+          onSignedIn={() => {}}
+        />
+      </AuthContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm my email" }));
+    await screen.findByText(/your password could not be saved/);
+    expect(screen.queryByText(/You can sign in now/)).toBeNull();
+    expect(screen.getByText("Choose a new password")).toBeTruthy();
+    expect(bodyOf(fetchMock, "/auth/verify")).toEqual({ userID: "u1", code: "c1" });
+  });
+
+  it("points to a reset when the password could not be saved and no code came back", async () => {
+    stubRoutes({
+      "/auth/verify": { status: 200, body: { verified: true, enroll: false, password: "not_set" } },
+    });
+    render(
+      <VerifyEmailForm
+        forgotHref="/auth/forgot"
+        userID="u1"
+        code="c1"
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm my email" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/Forgot your\s+password\?/);
+    expect(screen.queryByText(/You can sign in now/)).toBeNull();
+  });
+
+  it("says when earlier sign-in methods were removed, and offers a password", async () => {
+    stubRoutes({
+      "/auth/verify": {
+        status: 200,
+        body: { verified: true, enroll: false, credentialsReset: true },
+      },
+    });
+    render(
+      <VerifyEmailForm
+        forgotHref="/auth/forgot"
+        userID="u1"
+        code="c1"
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm my email" }));
+    await screen.findByText(/sign-in methods set before it was confirmed have been removed/);
+    expect(screen.getByRole("link", { name: "Choose a password" }).getAttribute("href")).toBe(
+      "/auth/forgot",
+    );
+    expect(screen.queryByText(/You can sign in now/)).toBeNull();
+  });
+
+  it("shows a rejected code", async () => {
+    stubRoutes({
+      "/auth/verify": {
+        status: 401,
+        body: { error: "That code or link is not valid.", code: "invalid_code" },
+      },
+    });
+    render(
+      <VerifyEmailForm
+        forgotHref="/auth/forgot"
+        userID="u1"
+        code="bad"
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Confirm my email" }));
+    await screen.findByText("That code or link is not valid.");
+  });
+});
+
+describe("AcceptInviteForm", () => {
+  function options(methods: AuthOptions["methods"]) {
+    return { "/auth/options": { status: 200, body: { ...allOptions, methods } } };
+  }
+
+  it("sets a password and signs in", async () => {
+    const fetchMock = stubRoutes({
+      ...options(["password"]),
+      "/auth/password-policy": { status: 204 },
+      "/auth/invite/accept": { status: 200, body: { authenticated: true } },
+    });
+    const onSignedIn = vi.fn();
+    render(
+      <AcceptInviteForm
+        userID="u1"
+        code="inv"
+        orgID="o1"
+        signInHref="/auth/sign-in"
+        onSignedIn={onSignedIn}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "a-long-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Accept invitation" }));
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledOnce());
+    expect(bodyOf(fetchMock, "/auth/invite/accept")).toEqual({
+      userID: "u1",
+      code: "inv",
+      orgID: "o1",
+      method: "password",
+      password: "a-long-password",
+    });
+  });
+
+  it("shows a refused password's rules and keeps the form", async () => {
+    stubRoutes({
+      ...options(["password"]),
+      "/auth/password-policy": { status: 204 },
+      "/auth/invite/accept": {
+        status: 400,
+        body: {
+          error: "That password needs at least 8 characters.",
+          code: "password_policy",
+          unmet: ["min_length"],
+        },
+      },
+    });
+    render(
+      <AcceptInviteForm
+        userID="u1"
+        code="inv"
+        orgID={null}
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "short" } });
+    fireEvent.click(screen.getByRole("button", { name: "Accept invitation" }));
+    await screen.findByText("That password needs at least 8 characters.");
+    expect(screen.getByRole("button", { name: "Accept invitation" })).toBeTruthy();
+  });
+
+  it("checks a chosen password against the stated policy before it spends the invitation", async () => {
+    const fetchMock = stubRoutes({
+      ...options(["password"]),
+      "/auth/password-policy": {
+        status: 200,
+        body: {
+          min_length: 8,
+          has_uppercase: true,
+          has_lowercase: true,
+          has_number: true,
+          has_symbol: true,
+        },
+      },
+      "/auth/invite/accept": { status: 200, body: { authenticated: true } },
+    });
+    const onSignedIn = vi.fn();
+    render(
+      <AcceptInviteForm
+        userID="u1"
+        code="inv"
+        orgID={null}
+        signInHref="/auth/sign-in"
+        onSignedIn={onSignedIn}
+      />,
+    );
+    await screen.findByText("Your password needs");
+    const field = screen.getByLabelText("Password");
+    fireEvent.change(field, { target: { value: "short" } });
+    fireEvent.click(screen.getByRole("button", { name: "Accept invitation" }));
+    expect((await screen.findByRole("alert")).textContent).toMatch(/every requirement/);
+    expect(calls(fetchMock, "/auth/invite/accept")).toHaveLength(0);
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+
+    fireEvent.change(field, { target: { value: "Passw0rd!" } });
+    fireEvent.click(screen.getByRole("button", { name: "Accept invitation" }));
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledOnce());
+  });
+
+  it("lets the person see the password they typed", async () => {
+    stubRoutes({ ...options(["password"]), "/auth/password-policy": { status: 204 } });
+    render(
+      <AcceptInviteForm
+        userID="u1"
+        code="inv"
+        orgID={null}
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    const field = screen.getByLabelText("Password");
+    const toggle = screen.getByRole("button", { name: "Show password" });
+    expect(field.getAttribute("type")).toBe("password");
+    fireEvent.click(toggle);
+    expect(field.getAttribute("type")).toBe("text");
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(toggle);
+    expect(field.getAttribute("type")).toBe("password");
+  });
+
+  it("offers the policy's methods and mails a link for magic_link", async () => {
+    const fetchMock = stubRoutes({
+      ...options(["password", "magic_link"]),
+      "/auth/password-policy": { status: 204 },
+      "/auth/invite/accept": {
+        status: 202,
+        body: { message: "A sign-in link is on its way to your email." },
+      },
+    });
+    render(
+      <AcceptInviteForm
+        userID="u1"
+        code="inv"
+        orgID={null}
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByLabelText("Email me a sign-in link each time"));
+    expect(screen.queryByLabelText("Password")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Accept invitation" }));
+    await screen.findByText(/on its way to your email/);
+    expect(bodyOf(fetchMock, "/auth/invite/accept").method).toBe("magic_link");
+  });
+
+  it("shows a rejected invitation", async () => {
+    stubRoutes({
+      ...options(["password"]),
+      "/auth/password-policy": { status: 204 },
+      "/auth/invite/accept": {
+        status: 401,
+        body: { error: "That code or link is not valid.", code: "invalid_code" },
+      },
+    });
+    render(
+      <AcceptInviteForm
+        userID="u1"
+        code="used"
+        orgID={null}
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "a-long-password" } });
+    fireEvent.click(screen.getByRole("button", { name: "Accept invitation" }));
+    await screen.findByText("That code or link is not valid.");
+  });
+
+  it("accepts with a social account when no other method is offered", async () => {
+    const fetchMock = stubRoutes({
+      ...options([]),
+      "/auth/password-policy": { status: 204 },
+      "/auth/invite/accept": {
+        status: 200,
+        body: { redirect: "https://provider.example/start?state=i1" },
+      },
+    });
+    render(
+      <AcceptInviteForm
+        userID="u1"
+        code="inv"
+        orgID={null}
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Continue with Google" }));
+    // acceptInvite then leaves for the provider (window.location.assign).
+    await waitFor(() => expect(calls(fetchMock, "/auth/invite/accept")).toHaveLength(1));
+    expect(bodyOf(fetchMock, "/auth/invite/accept")).toEqual({
+      userID: "u1",
+      code: "inv",
+      method: "social",
+      provider: "google",
+    });
+    // Nothing defaults to a password the server would refuse.
+    expect(screen.queryByLabelText("Password")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Accept invitation" })).toBeNull();
+  });
+
+  it("refuses an incomplete link", () => {
+    stubRoutes(options(["password"]));
+    render(
+      <AcceptInviteForm
+        userID="u1"
+        code={null}
+        orgID={null}
+        signInHref="/auth/sign-in"
+        onSignedIn={() => {}}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toMatch(/incomplete/);
+  });
+});
+
+describe("SocialCallback", () => {
+  it("completes once and lands where the sign-in started", async () => {
+    const fetchMock = stubRoutes({
+      "/auth/social/callback": {
+        status: 200,
+        body: { identity: { authenticated: true }, returnTo: "/projects" },
+      },
+    });
+    const onSignedIn = vi.fn();
+    render(
+      <SocialCallback id="i1" token="t1" signInHref="/auth/sign-in" onSignedIn={onSignedIn} />,
+    );
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith("/projects"));
+    expect(calls(fetchMock, "/auth/social/callback")).toHaveLength(1);
+    expect(bodyOf(fetchMock, "/auth/social/callback")).toEqual({ id: "i1", token: "t1" });
+  });
+
+  it("says to confirm the address when the provider's was unverified", async () => {
+    stubRoutes({
+      "/auth/social/callback": {
+        status: 202,
+        body: { verify: "sent", message: "Check your email." },
+      },
+    });
+    const onSignedIn = vi.fn();
+    render(
+      <SocialCallback id="i1" token="t1" signInHref="/auth/sign-in" onSignedIn={onSignedIn} />,
+    );
+    await screen.findByText("Check your email.");
+    expect(onSignedIn).not.toHaveBeenCalled();
+  });
+
+  it("shows why a link was refused", async () => {
+    stubRoutes({
+      "/auth/social/callback": {
+        status: 409,
+        body: {
+          error: "Sign in another way, then connect Google from your account.",
+          code: "social_link_required",
+        },
+      },
+    });
+    render(<SocialCallback id="i1" token="t1" signInHref="/auth/sign-in" onSignedIn={() => {}} />);
+    await screen.findByText("Sign in another way, then connect Google from your account.");
+  });
+
+  it("lands home when the returned path would leave the site", async () => {
+    stubRoutes({
+      "/auth/social/callback": {
+        status: 200,
+        body: { identity: { authenticated: true }, returnTo: "/a/..//evil.com" },
+      },
+    });
+    const onSignedIn = vi.fn();
+    render(
+      <SocialCallback id="i1" token="t1" signInHref="/auth/sign-in" onSignedIn={onSignedIn} />,
+    );
+    await waitFor(() => expect(onSignedIn).toHaveBeenCalledWith("/"));
+  });
+
+  it("does not call the server without the id and token", async () => {
+    const fetchMock = stubRoutes({});
+    render(<SocialCallback id={null} token="t" signInHref="/auth/sign-in" onSignedIn={() => {}} />);
+    await screen.findByText(/did not complete/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

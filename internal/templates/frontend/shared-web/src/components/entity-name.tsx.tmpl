@@ -1,0 +1,93 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}import type { ConnectClientError } from "@reliantlabs/forge-web-runtime";
+import type { UseQueryOptions, UseQueryResult } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+
+/**
+ * EntityName — the other half of a foreign key: given an id, show the row's
+ * display name instead of a UUID.
+ *
+ * A table of orders holds `patient_id`, not the patient's name, so every
+ * relational UI grows a resolver. This is that resolver, done once: hand it the
+ * generated Get hook and say how to read the name out of the response.
+ *
+ *   <EntityName
+ *     id={order.patientId}
+ *     useGet={useGetPatient}
+ *     buildRequest={(id) => ({ id })}
+ *     nameOf={(res) => res.patient?.fullName}
+ *   />
+ *
+ * Also the natural `selectedLabel` for <EntityPicker>, which cannot resolve a
+ * server-loaded id on its own (its list query is idle until the popover opens):
+ *
+ *   selectedLabel={<EntityName id={patientId} useGet={useGetPatient} … />}
+ *
+ * An unset id renders the em dash used everywhere else for "no value"; a
+ * resolving id renders a muted ellipsis; a row that is gone or unreadable
+ * renders `fallback` (the em dash by default) rather than the raw id.
+ *
+ * ONE lookup per DISTINCT id — React Query dedupes and caches by query key, so
+ * a 25-row table referencing 4 patients issues 4 requests, not 25. That is
+ * still N requests for N distinct ids: if a list view needs many names at once,
+ * have the List RPC return them (a denormalized `patient_name`, or a
+ * `BatchGetPatients`) and render the field directly.
+ */
+
+/**
+ * EntityGetHook — the shape `forge generate` gives every Get RPC:
+ * `use<GetThing>(request, options?)`. Taking it as a prop is what lets this
+ * component stay generic over the entity without importing a single service.
+ *
+ * The error is ConnectClientError, not React Query's default `Error`, and it
+ * is NOT a type parameter — see the same note on EntityListHook in
+ * entity-picker.tsx. This seam accepts a GENERATED hook, and a generated hook
+ * is bound to the transport that throws that shape. It is generic in TData
+ * for the same reason EntityListHook is: a generated query hook is.
+ */
+export type EntityGetHook<TReq, TRes> = <TData = TRes>(
+  req: TReq,
+  options?: Partial<UseQueryOptions<TRes, ConnectClientError, TData>>,
+) => UseQueryResult<TData, ConnectClientError>;
+
+export interface EntityNameProps<TReq, TRes> {
+  /** The foreign-key value to resolve. */
+  id: string | null | undefined;
+  /** The generated get hook, e.g. `useGetPatient`. */
+  useGet: EntityGetHook<TReq, TRes>;
+  /** Build the get request from the id. */
+  buildRequest: (id: string) => TReq;
+  /** Read the display name out of the get response. */
+  nameOf: (data: TRes) => string | undefined;
+  /** Rendered when the row is missing or unreadable. Defaults to an em dash. */
+  fallback?: ReactNode;
+  className?: string;
+}
+
+export function EntityName<TReq, TRes>({
+  id,
+  useGet,
+  buildRequest,
+  nameOf,
+  fallback = "—",
+  className,
+}: EntityNameProps<TReq, TRes>) {
+  const resolvable = id !== null && id !== undefined && id !== "";
+  // Hooks can't be called conditionally, so the request is always BUILT — but
+  // `enabled` keeps an unset id from ever hitting the network.
+  const query = useGet(buildRequest(resolvable ? id : ""), { enabled: resolvable });
+
+  if (!resolvable) return <span className={className}>—</span>;
+  if (query.isPending) {
+    return (
+      <span className={className ?? "text-ink-subtle"} aria-busy="true">
+        …
+      </span>
+    );
+  }
+
+  const name = query.data === undefined ? undefined : nameOf(query.data);
+  if (name === undefined || name === "") return <span className={className}>{fallback}</span>;
+  return <span className={className}>{name}</span>;
+}

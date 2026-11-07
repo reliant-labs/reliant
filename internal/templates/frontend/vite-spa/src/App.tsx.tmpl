@@ -1,0 +1,140 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// App shell — yours to edit. Forge writes this once at scaffold time and
+// never overwrites it. The `children` prop receives the matched route's
+// component from tanstack-router via `<Outlet />` in routes.tsx.
+//
+// STARTER CODE, NOT A DESIGN. The header below exists so a scaffolded SPA
+// has somewhere to put the session control and the theme toggle, and so the
+// app does not open as an unframed page. It is the most generic shell there
+// is — replace it with your product's real chrome (a sidebar, a command bar,
+// nothing at all) rather than treating it as the intended look.
+//
+// Common edits:
+//   - Swap the header for a sidebar (see the Next.js scaffold's nav.tsx, or
+//     install the `sidebar_layout` component: `forge component install sidebar_layout`)
+//   - Add navigation links once you have entity routes
+//
+// Presentation comes from the semantic theme tokens in index.css
+// (bg-surface, text-ink, border-border), so restyling the whole app is a
+// one-file change there rather than an edit here.
+
+import { Link } from "@tanstack/react-router";
+
+import { SessionNav } from "@/components/session_nav";
+{{if .HasMockAPI}}import { loadConfig } from "@/lib/config_gen";
+{{end}}
+import type { ReactNode } from "react";
+
+// Credit link, shown at the bottom of every page. Yours to edit or delete:
+// remove this constant and the footer element below. Forge never re-adds it.
+const BUILT_WITH_FORGE_URL =
+  "https://reliantlabs.io/?utm_source=forge&utm_medium=app-footer&utm_campaign=built-with-forge";
+
+/** Product name and its monogram, for the header brand. Yours to replace with a logo. */
+const APP_NAME = "{{.ProjectName}}";
+const APP_MONOGRAM = APP_NAME.charAt(0).toUpperCase();
+
+// MockModeBanner renders a loud, always-visible reminder when the app is
+// running against mock data instead of the real backend. Mock mode is
+// opt-in (the forge.Frontend `config.mock` KCL knob); the banner exists so a
+// working-looking UI can never silently masquerade as a working stack.
+//
+// It is loud through the SEMANTIC warning tokens (`bg-warning` /
+// `text-on-warning` from index.css), not a raw palette color — the same
+// rule every other surface in this app follows, so rebranding moves the
+// banner too.
+{{- if .HasMockAPI}}
+// The mode is read through the typed config module — the same source
+// src/lib/connect.ts selects its transport from, so the banner cannot
+// disagree with the transport about whether this is mock data. Reading
+// import.meta.env.VITE_MOCK_API here instead would split that decision
+// across two sources AND inline it at build time, which is what makes a
+// bundle unpromotable between environments.
+function MockModeBanner() {
+  const mode = loadConfig().MOCK_API;
+{{- else}}
+function MockModeBanner() {
+  const mode = import.meta.env.VITE_MOCK_API;
+{{- end}}
+  if (mode !== "true" && mode !== "hybrid") return null;
+  return (
+    <div className="bg-warning px-4 py-1.5 text-center text-sm font-semibold text-on-warning">
+      {mode === "true"
+        ? "MOCK DATA — backend not connected (unset mock_api in deploy/kcl/<env>/config.k to use the real backend)"
+        : "HYBRID MOCK MODE — ?scenario= overlays active; unmatched RPCs hit the real backend"}
+    </div>
+  );
+}
+
+export default function App({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-surface text-ink">
+      {/*
+        Skip link: the first tab stop on every page, so a keyboard user does
+        not tab through the header to reach the content. Visually hidden until
+        focused.
+      */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-ink focus:shadow-lg focus:ring-2 focus:ring-accent focus:outline-none"
+      >
+        Skip to content
+      </a>
+      <MockModeBanner />
+
+      {/*
+        Chrome vs canvas: the header sits on `bg-surface`, the content area
+        on `bg-surface-muted`, so cards (themselves `bg-surface`) separate
+        from their background instead of dissolving into it.
+      */}
+      <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-4 sm:px-6">
+        <Link
+          to="/"
+          className="flex items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <span
+            aria-hidden
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-sm font-bold text-on-accent"
+          >
+            {APP_MONOGRAM}
+          </span>
+          <span className="text-sm font-semibold tracking-tight text-ink">{APP_NAME}</span>
+        </Link>
+        {/*
+          The user menu holds the theme too; signed out, it renders the
+          compact theme toggle instead (see session_nav.tsx).
+        */}
+        <div className="flex items-center gap-3">
+          <SessionNav />
+        </div>
+      </header>
+
+      <main
+        id="main"
+        tabIndex={-1}
+        className="min-h-0 flex-1 overflow-y-auto bg-surface-muted focus:outline-none"
+      >
+        {/* Max width so content does not run full-bleed on a wide display. */}
+        <div className="mx-auto max-w-7xl p-6 lg:p-8">{children}</div>
+      </main>
+
+      {/*
+        The credit is a SIBLING of the scroll container, like the header: it
+        stays at the bottom of the shell while the page scrolls, and sits
+        outside the main landmark.
+      */}
+      <footer className="shrink-0 bg-surface-muted px-6 py-2 text-center text-xs text-ink-muted lg:px-8">
+        Built with ❤️ using{" "}
+        <a
+          href={BUILT_WITH_FORGE_URL}
+          target="_blank"
+          rel="noopener"
+          className="rounded-sm underline underline-offset-2 hover:text-ink focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+        >
+          Forge
+        </a>
+      </footer>
+    </div>
+  );
+}

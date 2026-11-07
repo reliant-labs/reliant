@@ -1,0 +1,140 @@
+# yours: scaffolded once, never touched again — forge will not overwrite this file.
+# This CI workflow is a starting point you own — add jobs, secrets, and steps freely.
+# Deleting it sticks (.forge/scaffolded/); `forge project rescaffold <path>` re-creates it.
+# Source: internal/templates/ci/github/dependabot.yml.tmpl.
+#
+# Every Dependabot PR runs the project's whole CI, so one PR per dependency
+# multiplies that cost (and each rebase re-runs it). Updates are grouped: Go
+# patches in one PR, Go minors in one PR per ecosystem that moves together
+# (see the gomod entry), npm and the rest one PR per ecosystem. Groups take
+# minor and patch updates only, so a rare major bump stays its own PR and
+# cannot block a batch.
+#
+# Code generators that stamp their own version into what they generate are
+# ignored below. Dependabot edits go.mod or the lockfile but cannot run
+# `forge generate`, so a bump of one changes every generated file's header and
+# fails Verify Generated Code every time. Bump those by hand, regenerating in
+# the same PR.
+version: 2
+updates:
+  # The generated protobuf module lives under /gen with its own go.mod.
+  - package-ecosystem: gomod
+    directories:
+      - /
+      - /gen
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    # Grouped by ecosystem, not one group for everything. A single group of
+    # every minor and patch bump once carried a 0.x minor (connectrpc.com/
+    # vanguard v0.5.0) that removed an API in use, inside a PR of 23 bumps.
+    # Go treats v0 as unstable (a minor may break), and Dependabot cannot group
+    # by version range, so the minors are split by the ecosystems that move
+    # together, and a red PR points at one of them: reverting it does not drop
+    # twenty unrelated good bumps. Patches stay one PR: cheap, and almost never
+    # breaking. A group that matches nothing in this go.mod costs nothing.
+    #
+    # connectrpc.com/* is in no minor group on purpose: each of its minors is
+    # its own PR. connectrpc is mid-migration to connect-go v2, and its 0.x
+    # minors are where redesigns land.
+    groups:
+      go-patch:
+        patterns:
+          - "*"
+        update-types:
+          - patch
+      # k8s.io and sigs.k8s.io (controller-runtime) move together or not at all.
+      go-k8s:
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+        update-types:
+          - minor
+      # otel, the collector and contrib are versioned as a set.
+      go-otel:
+        patterns:
+          - "go.opentelemetry.io/*"
+          - "github.com/open-telemetry/*"
+          - "github.com/XSAM/otelsql"
+        update-types:
+          - minor
+      go-kcl:
+        patterns:
+          - "kcl-lang.io/*"
+        update-types:
+          - minor
+      # Every other minor, golang.org/x included.
+      go-minor:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "connectrpc.com/*"
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+          - "go.opentelemetry.io/*"
+          - "github.com/open-telemetry/*"
+          - "github.com/XSAM/otelsql"
+          - "kcl-lang.io/*"
+        update-types:
+          - minor
+    ignore:
+      # forge_version in forge.yaml must move with this require, and a hop can
+      # carry migrations that only `forge project upgrade` runs.
+      - dependency-name: github.com/reliant-labs/forge
+{{- if .RunsProtocGenGo}}
+      # google.golang.org/protobuf's version is also protoc-gen-go's: `forge
+      # tools install` installs the plugin at the version go.mod resolves, and
+      # protoc-gen-go writes it into every gen/**/*.pb.go header. Bump by hand
+      # in both modules, then reinstall the plugin and regenerate:
+      #   go get google.golang.org/protobuf@vX && (cd gen && go get google.golang.org/protobuf@vX)
+      #   forge tools install --force && forge generate
+      # (Another bump can still raise it through a shared requirement; that
+      # PR needs the same regenerate.) connectrpc.com/connect drives
+      # protoc-gen-connect-go the same way but stamps no version, so its bumps
+      # stay here: one only fails the check when the generated code changes.
+      - dependency-name: google.golang.org/protobuf
+{{- end}}
+{{- if .FrontendName}}
+
+  - package-ecosystem: npm
+    directory: /frontends/{{.FrontendName}}
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      npm-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # protoc-gen-es writes its version into every generated *_pb.ts, and
+      # declares an EXACT peer dependency on @bufbuild/protobuf, so the two
+      # only ever move together. Bump both by hand in one PR and commit
+      # `forge generate`'s output with the lockfile:
+      #   pnpm add -D @bufbuild/protoc-gen-es@X && pnpm add @bufbuild/protobuf@X
+      #   forge generate
+      - dependency-name: "@bufbuild/protoc-gen-es"
+      - dependency-name: "@bufbuild/protobuf"
+{{- end}}
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      docker:
+        patterns:
+          - "*"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns:
+          - "*"
