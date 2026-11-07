@@ -6,9 +6,10 @@ import { createPortal } from "react-dom";
 import { DEMO_TIPS } from "./tipCopy";
 import type { DemoTipKey } from "./tipKeys";
 import { PageEntryTour } from "./PageEntryTour";
+import { DemoScreenActions } from "../DemoScreenActions";
 
 /** The existing demo-shell mount owns automatic entry and visit-local dismissal. */
-export function DemoTips() { return <PageEntryTour />; }
+export function DemoTips() { return <><DemoScreenActions /><PageEntryTour /></>; }
 
 /** Secondary information is disclosed by click, tap or keyboard, never hover only. */
 export function PageAgentHelp({ tipKey }: { tipKey: DemoTipKey }) {

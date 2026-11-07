@@ -6,7 +6,6 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { CircleHelp } from "lucide-react";
 import { OnboardingSpotlight } from "@/components/Onboarding/OnboardingSpotlight";
 import { TourControls } from "@/components/Onboarding/TourControls";
-import { SignUpButton, InstallForgeLink } from "../DemoCta";
 import { DemoCorner, useConsoleDrawerOpen } from "../DemoCorner";
 import { PageAgentHelp } from "./DemoTips";
 import { DEMO_TIPS } from "./tipCopy";
@@ -54,7 +53,6 @@ function VisitTour({ tipKey }: { tipKey: DemoTipKey }) {
       {open ? <PageCallout tipKey={tipKey} onDismiss={dismiss} /> : null}
       {!open && <DemoCorner order={1}>
         <div className="flex items-center justify-end gap-2" data-testid="demo-corner-bar">
-          <SignUpButton placement="corner" size="md" /><InstallForgeLink placement="corner" />
           <button type="button" aria-label={`About ${tip.title}`} onClick={() => setOpen(true)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-popover text-ink shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" data-testid="demo-page-info"><CircleHelp className="h-5 w-5" aria-hidden="true" /></button>
         </div>
       </DemoCorner>}
@@ -80,7 +78,7 @@ function PageCallout({ tipKey, onDismiss }: { tipKey: DemoTipKey; onDismiss: () 
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [tip.target]);
-  const footer = <><div className="mt-2 flex flex-wrap items-center gap-2"><SignUpButton placement="page_card" size="md" /><InstallForgeLink placement="page_card" /></div><TourControls stepNumber={1} totalSteps={1} onExit={onDismiss} exitLabel="Dismiss" onNext={onDismiss} nextLabel="Done" /></>;
+  const footer = <TourControls stepNumber={1} totalSteps={1} onNext={onDismiss} nextLabel="Done" />;
   const description = <>{tip.body}<PageAgentHelp tipKey={tipKey} /></>;
   if (target) return <OnboardingSpotlight targetSelector={target} title={tip.title} description={description} stepNumber={1} totalSteps={1} onNext={onDismiss} onSkipAll={onDismiss} keyboardNav={false} callout={{ footer, viewportLeft: Math.max(0, document.querySelector('main')?.getBoundingClientRect().left ?? 0) }} />;
   return <DemoCorner order={1}><section className="max-h-[70dvh] overflow-y-auto rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-xl" data-testid="tour-callout" data-page-tour={tipKey}><h3 className="text-sm font-semibold">{tip.title}</h3><div className="mt-1 text-sm leading-relaxed text-ink-muted">{description}</div>{footer}</section></DemoCorner>;

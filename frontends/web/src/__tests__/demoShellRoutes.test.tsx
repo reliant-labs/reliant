@@ -149,7 +149,7 @@ describe("every demo page entry starts its own concise tour", () => {
   it("dismisses for this visit without navigating the site", async () => {
     const router = renderDemoShell("/");
     await screen.findByTestId("console-overview");
-    await waitFor(() => fireEvent.click(screen.getByTestId("tour-exit")));
+    await waitFor(() => fireEvent.click(screen.getByTestId("tour-next")));
     await waitFor(() => expect(screen.queryByTestId("tour-callout")).toBeNull());
     expect(router.state.location.pathname).toBe("/forge/p/shop");
     expect(screen.getByTestId("demo-page-info")).toBeInTheDocument();

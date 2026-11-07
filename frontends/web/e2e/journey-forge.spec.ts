@@ -241,7 +241,7 @@ test.describe('the demo page-entry tour', () => {
     await expect(page.getByTestId('tour-callout')).toContainText('Read what your app recorded', LOADED);
     await expect(page.getByTestId('tour-step-count')).toHaveText('Step 1 of 1');
     await expect(page.getByTestId('demo-page-tour-start')).toHaveCount(0);
-    await page.getByTestId('tour-exit').click();
+    await page.getByTestId('tour-next').click();
     await expect(page.getByTestId('tour-callout')).toHaveCount(0);
     await page.reload();
     await expect(page.getByTestId('tour-callout')).toContainText('Logs', LOADED);
@@ -255,7 +255,7 @@ test.describe('the demo page-entry tour', () => {
   test('legacy logs link has no prerequisite or cross-site sequence', async ({page}) => {
     await openDemo(page, '/forge/demo?shell=demo&view=logs&tour=forge:fg-logs');
     await expect(page.getByTestId('tour-callout')).toContainText('Logs', LOADED);
-    await page.getByTestId('tour-exit').click();
+    await page.getByTestId('tour-next').click();
     await expect(page.getByTestId('tour-callout')).toHaveCount(0);
     await expect(page).toHaveURL(/view=logs/);
   });

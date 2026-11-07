@@ -23,15 +23,17 @@ it("opens this page's tour automatically on direct load, regardless of session s
   demoSession.markTipSeen("logs"); demoSession.disableTips();
   const {router} = renderDemo("/forge/p/shop/observability/logs");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
-  expect(screen.getByTestId("tour-step-count")).toHaveTextContent("Step 1 of 1");
-  expect(screen.getByTestId("tour-exit")).toHaveTextContent("Dismiss");
+  expect(screen.queryByTestId("tour-step-count")).toBeNull();
+  expect(screen.queryByTestId("tour-exit")).toBeNull();
+  expect(screen.getByTestId("tour-next")).toHaveTextContent("Done");
+  expect(screen.getByTestId("tour-callout").querySelector('[data-testid="demo-cta-signup"]')).toBeNull();
   expect(screen.queryByText("Take the tour")).toBeNull();
   expect(screen.queryByTestId("onboarding-nav-bar")).toBeNull();
   expect((router.state.location.search as {tour?:string}).tour).toBeUndefined();
 });
 it("dismissal holds through same-page filters and rerenders, ? replays without navigation", async () => {
   const {go,router} = renderDemo("/forge/p/shop/observability/logs");
-  await waitFor(() => fireEvent.click(screen.getByTestId("tour-exit")));
+  await waitFor(() => fireEvent.click(screen.getByTestId("tour-next")));
   await waitFor(() => expect(screen.queryByTestId("tour-callout")).toBeNull());
   await go("/forge/p/shop/observability/logs?severity=error&range=6h");
   expect(screen.queryByTestId("tour-callout")).toBeNull();
@@ -44,19 +46,19 @@ it("dismissal holds through same-page filters and rerenders, ? replays without n
 it("each actual page navigation and return starts a new page-local tour", async () => {
   const {go} = renderDemo("/forge/p/shop");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.overview.body);
-  fireEvent.click(screen.getByTestId("tour-exit"));
+  fireEvent.click(screen.getByTestId("tour-next"));
   await go("/forge/p/shop/releases");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.releases.body);
-  fireEvent.click(screen.getByTestId("tour-exit"));
+  fireEvent.click(screen.getByTestId("tour-next"));
   await go("/forge/p/shop/observability/logs");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
-  fireEvent.click(screen.getByTestId("tour-exit"));
+  fireEvent.click(screen.getByTestId("tour-next"));
   await go("/forge/p/shop");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.overview.body);
 });
 it("refresh starts again, even after dismissing the previous mount", async () => {
   renderDemo("/forge/p/shop/observability/errors");
-  await waitFor(() => fireEvent.click(screen.getByTestId("tour-exit"))); cleanup();
+  await waitFor(() => fireEvent.click(screen.getByTestId("tour-next"))); cleanup();
   renderDemo("/forge/p/shop/observability/errors");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.errors.body);
 });
@@ -70,7 +72,7 @@ it("drawer hides the callout, then closing it reveals the new page without consu
     expect(screen.queryByTestId("tour-callout")).toBeNull();
     act(()=>drawer.removeAttribute("aria-modal"));
     expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.alerts.body);
-    fireEvent.click(screen.getByTestId("tour-exit"));
+    fireEvent.click(screen.getByTestId("tour-next"));
     act(()=>drawer.setAttribute("aria-modal","true")); act(()=>drawer.removeAttribute("aria-modal"));
     expect(screen.queryByTestId("tour-callout")).toBeNull();
   }finally{drawer.remove();}
@@ -82,6 +84,16 @@ it("legacy logs tour link opens only logs; Done dismisses without a full-site se
   await waitFor(()=>expect(screen.queryByTestId("tour-callout")).toBeNull());
   expect(router.state.location.pathname).toBe("/forge/demo");
   expect((router.state.location.search as {view:string}).view).toBe("logs");
+});
+it("persistent actions survive page navigation and open the existing build section", async()=>{
+  const {go,router}=renderDemo("/forge/p/shop");
+  expect(await screen.findByTestId("demo-screen-actions")).toHaveTextContent("How Forge builds this");
+  await go("/forge/p/shop/observability/logs");
+  expect(screen.getByTestId("demo-screen-actions")).toHaveTextContent("Install Forge");
+  expect(screen.getByTestId("tour-callout").querySelector('[data-testid="demo-cta-signup"]')).toBeNull();
+  fireEvent.click(screen.getByRole("link",{name:"How Forge builds this"}));
+  await waitFor(()=>expect(router.state.location.pathname).toBe("/forge/demo"));
+  expect(router.state.location.search).toMatchObject({section:"built"});
 });
 it("copy stays concise and permission-aware",()=>{
   for(const key of DEMO_TIP_KEYS){expect(DEMO_TIPS[key].body.length,key).toBeLessThan(480);expect(DEMO_TIPS[key].body).not.toMatch(/NATS|transport/);}

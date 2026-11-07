@@ -71,13 +71,15 @@ export function TourControls({
   secondary,
   skip,
 }: TourControlsProps) {
+  const single = totalSteps <= 1;
+  const last = stepNumber >= totalSteps && !!onNext;
   return (
     <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border pt-3" data-testid="tour-controls">
-      <span className="text-xs tabular-nums text-muted-foreground" data-testid="tour-step-count">
+      {!single && <span className="text-xs tabular-nums text-muted-foreground" data-testid="tour-step-count">
         Step {stepNumber} of {totalSteps}
-      </span>
+      </span>}
       <span className="flex-1" />
-      {onExit && (
+      {onExit && !last && (
         <button
           type="button"
           onClick={onExit}
@@ -107,7 +109,7 @@ export function TourControls({
           {skip.label}
         </button>
       )}
-      {onBack && (
+      {onBack && !single && (
         <button
           type="button"
           onClick={onBack}
@@ -130,7 +132,7 @@ export function TourControls({
           data-done={actionDone || undefined}
         >
           {actionDone && <Check className="h-3.5 w-3.5" aria-label="Done" data-testid="tour-next-done" />}
-          {nextLabel}
+          {single ? "Done" : nextLabel}
         </button>
       )}
       {nextDisabled && nextDisabledReason && (
