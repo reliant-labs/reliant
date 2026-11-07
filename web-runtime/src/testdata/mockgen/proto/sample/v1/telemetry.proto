@@ -1,0 +1,172 @@
+// The sample contract the service-default tests run against: a non-CRUD
+// service with nested messages, enums, maps, oneofs, well-known types,
+// streams and protovalidate rules. gen/ is generated from it: see
+// web-runtime/src/testdata/mockgen/buf.gen.yaml.
+syntax = "proto3";
+
+package sample.v1;
+
+import "buf/validate/validate.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+
+enum TraceStatus {
+  TRACE_STATUS_UNSPECIFIED = 0;
+  TRACE_STATUS_OK = 1;
+  TRACE_STATUS_ERROR = 2;
+  TRACE_STATUS_SLOW = 3;
+}
+
+enum Region {
+  REGION_UNSPECIFIED = 0;
+  REGION_US = 1;
+  REGION_EU = 2;
+  REGION_APAC = 3;
+  REGION_SA = 4;
+}
+
+message ListTracesRequest {
+  string project_id = 1 [(buf.validate.field).string.min_len = 1];
+  optional string root_service = 2;
+  int32 page_size = 3 [(buf.validate.field).int32 = {gte: 0, lte: 500}];
+  string page_token = 4;
+  TraceStatus status = 5;
+}
+
+message ListTracesResponse {
+  repeated TraceSummary traces = 1 [(buf.validate.field).repeated = {min_items: 1, max_items: 50}];
+  string next_page_token = 2;
+  int64 total_count = 3;
+  RedSummary red = 4;
+}
+
+message TraceSummary {
+  string trace_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  google.protobuf.Timestamp end_time = 3;
+  double duration_ms = 4;
+  string root_service = 5;
+  string root_span_name = 6;
+  uint32 span_count = 7 [(buf.validate.field).uint32 = {gte: 1, lte: 200}];
+  TraceStatus status = 8;
+  repeated string services = 9 [(buf.validate.field).repeated = {min_items: 1, max_items: 3}];
+  map<string, string> attributes = 10;
+  Region region = 11 [(buf.validate.field).enum = {in: [1, 2]}];
+  string project_id = 12;
+  bool errors_only = 13;
+}
+
+message RedSummary {
+  double error_rate = 1 [(buf.validate.field).double = {gte: 0, lte: 1}];
+  int64 request_count = 2;
+  google.protobuf.Duration p95 = 3;
+}
+
+message GetTraceRequest {
+  string trace_id = 1 [(buf.validate.field).string.len = 32];
+}
+
+message GetTraceResponse {
+  string trace_id = 1;
+  repeated Span spans = 2;
+}
+
+message Span {
+  string span_id = 1;
+  string parent_span_id = 2;
+  string name = 3;
+  google.protobuf.Timestamp start_time = 4;
+  google.protobuf.Duration duration = 5;
+  google.protobuf.Struct attributes = 6;
+  repeated SpanEvent events = 7;
+  oneof outcome {
+    SpanError error = 8;
+    string status_message = 9;
+    int32 http_status = 10;
+  }
+  google.protobuf.StringValue peer_service = 11;
+  repeated Span children = 12;
+}
+
+message SpanEvent {
+  string name = 1;
+  int64 time_unix_nano = 2;
+  map<string, int64> counters = 3;
+}
+
+message SpanError {
+  string message = 1;
+  string type = 2;
+}
+
+// Every protovalidate rule kind the engine reads.
+message RuleShowcase {
+  string sku = 1 [(buf.validate.field).string.pattern = "^[A-Z]{3}-[0-9]{4}$"];
+  string contact_email = 2 [(buf.validate.field).string.email = true];
+  string homepage = 3 [(buf.validate.field).string.uri = true];
+  string request_uuid = 4 [(buf.validate.field).string.uuid = true];
+  string tier = 5 [(buf.validate.field).string = {in: ["free", "pro", "enterprise"]}];
+  string code = 6 [(buf.validate.field).string = {min_len: 12, max_len: 16}];
+  string short = 7 [(buf.validate.field).string.max_len = 4];
+  string tag = 8 [(buf.validate.field).string = {prefix: "tag_", suffix: "_v1"}];
+  int32 bounded = 9 [(buf.validate.field).int32 = {gt: 1000, lt: 1010}];
+  int64 fixed = 10 [(buf.validate.field).int64.const = 42];
+  uint64 choice = 11 [(buf.validate.field).uint64 = {in: [7, 11, 13]}];
+  float ratio = 12 [(buf.validate.field).float = {gte: 0.25, lte: 0.5}];
+  bool must = 13 [(buf.validate.field).bool.const = true];
+  bytes digest = 14 [(buf.validate.field).bytes.len = 32];
+  repeated string labels = 15 [(buf.validate.field).repeated = {min_items: 12, max_items: 12}];
+  map<string, string> pairs = 16 [(buf.validate.field).map = {min_pairs: 1, max_pairs: 2}];
+  google.protobuf.Duration timeout = 17 [(buf.validate.field).duration = {gte: {seconds: 1}, lte: {seconds: 5}}];
+  google.protobuf.Timestamp expires_at = 18 [(buf.validate.field).timestamp.gt_now = true];
+  Region region = 19 [(buf.validate.field).enum = {not_in: [1, 2, 3]}];
+  string host = 20 [(buf.validate.field).string.hostname = true];
+  string addr = 21 [(buf.validate.field).string.ipv4 = true];
+  repeated int32 scores = 22 [(buf.validate.field).repeated.items.int32 = {gte: 90, lte: 99}];
+  bytes salt = 23 [(buf.validate.field).bytes.min_len = 24];
+  bytes nonce = 24 [(buf.validate.field).bytes = {min_len: 4, max_len: 8}];
+  map<string, int32> quotas = 25 [(buf.validate.field).map.values.int32 = {gte: 500, lte: 510}];
+  map<string, Region> home_regions = 26 [(buf.validate.field).map.values.enum = {in: [2]}];
+  map<string, SpanError> errors_by_code = 27;
+}
+
+message GetRuleShowcaseRequest {}
+
+message WatchRequest {
+  string project_id = 1;
+}
+
+message WatchEvent {
+  string id = 1;
+  google.protobuf.Timestamp observed_at = 2;
+  TraceStatus status = 3;
+}
+
+message UploadChunk {
+  bytes data = 1;
+}
+
+message UploadSummary {
+  int64 bytes = 1;
+  string upload_id = 2;
+}
+
+service TelemetryService {
+  rpc ListTraces(ListTracesRequest) returns (ListTracesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetTrace(GetTraceRequest) returns (GetTraceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetRuleShowcase(GetRuleShowcaseRequest) returns (RuleShowcase);
+  rpc Watch(WatchRequest) returns (stream WatchEvent);
+  rpc Upload(stream UploadChunk) returns (UploadSummary);
+  rpc Chat(stream WatchRequest) returns (stream WatchEvent);
+}
+
+// Bytes bounds no value satisfies: the engine refuses rather than emit one.
+message ImpossibleBytes {
+  bytes blob = 1 [(buf.validate.field).bytes = {min_len: 9, max_len: 3}];
+}

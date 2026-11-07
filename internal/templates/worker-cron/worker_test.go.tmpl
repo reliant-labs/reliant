@@ -1,0 +1,85 @@
+//go:build ignore
+
+package {{.Package}}
+
+import (
+	"context"
+	"log/slog"
+	"testing"
+	"time"
+{{- if .HasConfig}}
+
+	"{{.Module}}/pkg/config"
+{{- end}}
+)
+
+func TestCronWorkerStartStop(t *testing.T) {
+	w := New(Deps{
+		Logger: slog.Default(),
+{{- if .HasConfig}}
+		Config: &config.Config{},
+{{- end}}
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- w.Start(ctx)
+	}()
+
+	// Give the cron scheduler time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Trigger shutdown
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Start returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("worker did not stop within timeout")
+	}
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopCancel()
+	if err := w.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop returned error: %v", err)
+	}
+}
+
+func TestCronWorkerName(t *testing.T) {
+	w := New(Deps{
+		Logger: slog.Default(),
+{{- if .HasConfig}}
+		Config: &config.Config{},
+{{- end}}
+	})
+
+	if got := w.Name(); got != "{{.Name | kebabCase}}" {
+		t.Errorf("Name() = %q, want %q", got, "{{.Name | kebabCase}}")
+	}
+}
+
+// TestCronWorkerRunAcceptsContext pins the Run(ctx) signature — the
+// shutdown-aware contract means Run MUST take a context.Context so it
+// can observe Stop() / parent cancellation via ctx.Done(). If you've
+// since added real Run logic, extend this test rather than dropping it.
+func TestCronWorkerRunAcceptsContext(t *testing.T) {
+	w := New(Deps{
+		Logger: slog.Default(),
+{{- if .HasConfig}}
+		Config: &config.Config{},
+{{- end}}
+	})
+
+	// A cancelled context is the contract's simplest exercise: Run must
+	// accept it without panicking, and may return ctx.Err(). Real Run
+	// bodies should select on ctx.Done() to bail early; the scaffold body
+	// just logs.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_ = w.Run(ctx)
+}

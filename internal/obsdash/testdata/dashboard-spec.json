@@ -1,0 +1,3032 @@
+{
+  "version": "forge.dashboards/v1",
+  "project": "shop",
+  "dashboards": [
+    {
+      "id": "overview",
+      "title": "shop: overview",
+      "description": "Metric-backed request, server-fault and duration health across deployed processes; saturation, errors and releases. Counters are unsampled; trace drilldowns may be sampled.",
+      "group": "overview",
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "id": "requests",
+          "title": "Requests",
+          "kind": "number",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "increase",
+              "field": "rpc.server.calls",
+              "metricType": "sum"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "errors",
+          "title": "Server faults",
+          "kind": "number",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "server faults",
+              "agg": "increase",
+              "field": "rpc.server.errors",
+              "metricType": "sum",
+              "where": [
+                {
+                  "field": "metric.attr.error_class",
+                  "op": "eq",
+                  "value": "server"
+                }
+              ]
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "p95",
+          "title": "p95 RPC duration",
+          "kind": "number",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "rpc.server.duration",
+              "metricType": "histogram"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "s",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "id": "request-rate",
+          "title": "Request rate by process",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "rate",
+              "field": "rpc.server.calls",
+              "metricType": "sum"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "groupBy": [
+            "service.name"
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 7
+        },
+        {
+          "id": "error-rate",
+          "title": "Server fault rate by process",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "server faults",
+              "agg": "rate",
+              "field": "rpc.server.errors",
+              "metricType": "sum",
+              "where": [
+                {
+                  "field": "metric.attr.error_class",
+                  "op": "eq",
+                  "value": "server"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "rate",
+              "field": "rpc.server.calls",
+              "metricType": "sum"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "groupBy": [
+            "service.name"
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 7
+        },
+        {
+          "id": "latency",
+          "title": "p95 duration by process",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "rpc.server.duration",
+              "metricType": "histogram"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "groupBy": [
+            "service.name"
+          ],
+          "unit": "s",
+          "width": 8,
+          "height": 7
+        },
+        {
+          "id": "top-errors",
+          "title": "Top server faults",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "sampled faults",
+              "agg": "count"
+            }
+          ],
+          "limit": 20,
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            },
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "groupBy": [
+            "service.name",
+            "span.name",
+            "span.status_message"
+          ],
+          "width": 24,
+          "height": 7
+        },
+        {
+          "id": "cpu-vs-limit",
+          "title": "CPU against its limit",
+          "description": "The busiest container of each workload as a fraction of its CPU limit. Near 1 the container is being throttled.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of limit",
+              "agg": "max",
+              "field": "k8s.container.cpu_limit_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.k8s.workload.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "memory-vs-limit",
+          "title": "Memory against its limit",
+          "description": "The fullest container of each workload as a fraction of its memory limit. Near 1 the container is about to be OOM-killed.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of limit",
+              "agg": "max",
+              "field": "k8s.container.memory_limit_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.k8s.workload.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "restarts",
+          "title": "Container restarts",
+          "description": "The highest restart count among each workload's containers; a step is a restart.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "restarts",
+              "agg": "max",
+              "field": "k8s.container.restarts",
+              "metricType": "gauge"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.k8s.workload.name",
+              "op": "in",
+              "values": [
+                "shop-api",
+                "shop-worker"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "request-rate-by-version",
+          "title": "Requests by version",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api",
+                "shop-worker"
+              ]
+            },
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "error-logs",
+          "title": "Recent error logs",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api",
+                "shop-worker"
+              ]
+            },
+            {
+              "field": "log.severity",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 9
+        }
+      ]
+    },
+    {
+      "sections": [
+        {
+          "id": "rpc",
+          "title": "RPC health"
+        },
+        {
+          "id": "runtime",
+          "title": "Runtime"
+        },
+        {
+          "id": "workload",
+          "title": "Workload saturation"
+        },
+        {
+          "id": "logs",
+          "title": "Logs"
+        },
+        {
+          "id": "database",
+          "title": "Database"
+        }
+      ],
+      "id": "process-shop-api",
+      "title": "shop: shop-api",
+      "description": "The service shop-api. Panels are chosen by what it does: RPC health if it serves RPCs, worker runs if it runs workers, saturation against the limits it declares; runtime and logs always.",
+      "group": "services",
+      "tags": [
+        "service"
+      ],
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name"
+        },
+        {
+          "panelIds": [
+            "requests",
+            "errors",
+            "p95",
+            "request-rate",
+            "error-rate",
+            "latency"
+          ],
+          "id": "rpc-procedure",
+          "label": "RPC procedure (metrics)",
+          "field": "metric.attr.procedure",
+          "signal": "metrics"
+        },
+        {
+          "panelIds": [
+            "red-by-rpc"
+          ],
+          "id": "rpc-service",
+          "label": "RPC service (traces)",
+          "field": "span.attr.rpc.service",
+          "signal": "traces"
+        },
+        {
+          "panelIds": [
+            "red-by-rpc"
+          ],
+          "id": "rpc-method",
+          "label": "RPC method (traces)",
+          "field": "span.attr.rpc.method",
+          "signal": "traces"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "section": "rpc",
+          "id": "requests",
+          "title": "Requests",
+          "kind": "number",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "increase",
+              "field": "rpc.server.calls",
+              "metricType": "sum"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "section": "rpc",
+          "id": "errors",
+          "title": "Server faults",
+          "kind": "number",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "server faults",
+              "agg": "increase",
+              "field": "rpc.server.errors",
+              "metricType": "sum",
+              "where": [
+                {
+                  "field": "metric.attr.error_class",
+                  "op": "eq",
+                  "value": "server"
+                }
+              ]
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "section": "rpc",
+          "id": "p95",
+          "title": "p95 RPC duration",
+          "kind": "number",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "rpc.server.duration",
+              "metricType": "histogram"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "s",
+          "width": 8,
+          "height": 4
+        },
+        {
+          "section": "rpc",
+          "id": "request-rate",
+          "title": "Request rate by process",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "rate",
+              "field": "rpc.server.calls",
+              "metricType": "sum"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 8,
+          "height": 7
+        },
+        {
+          "section": "rpc",
+          "id": "error-rate",
+          "title": "Server fault rate by process",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "server faults",
+              "agg": "rate",
+              "field": "rpc.server.errors",
+              "metricType": "sum",
+              "where": [
+                {
+                  "field": "metric.attr.error_class",
+                  "op": "eq",
+                  "value": "server"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "rate",
+              "field": "rpc.server.calls",
+              "metricType": "sum"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "percent",
+          "width": 8,
+          "height": 7
+        },
+        {
+          "section": "rpc",
+          "id": "latency",
+          "title": "p95 duration by process",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "rpc.server.duration",
+              "metricType": "histogram"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "s",
+          "width": 8,
+          "height": 7
+        },
+        {
+          "section": "rpc",
+          "id": "red-by-rpc",
+          "title": "Rate, errors and latency by RPC",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "limit": 50,
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            },
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            },
+            {
+              "field": "span.name",
+              "op": "match",
+              "value": "^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$"
+            }
+          ],
+          "groupBy": [
+            "span.name"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "section": "database",
+          "id": "db-latency",
+          "title": "Database call latency",
+          "description": "Client spans carrying db.system (the ORM's query hook).",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            },
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "database",
+          "id": "db-by-operation",
+          "title": "Database calls by operation",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            },
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "client"
+            },
+            {
+              "field": "span.attr.db.system",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "span.attr.db.operation"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "runtime",
+          "id": "go-memory",
+          "title": "Go memory used",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "used",
+              "agg": "sum",
+              "field": "go.memory.used",
+              "metricType": "sum"
+            },
+            {
+              "label": "gc goal",
+              "agg": "avg",
+              "field": "go.memory.gc.goal",
+              "metricType": "sum"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "bytes",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "runtime",
+          "id": "go-goroutines",
+          "title": "Goroutines",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "goroutines",
+              "agg": "sum",
+              "field": "go.goroutine.count",
+              "metricType": "sum"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "runtime",
+          "id": "go-alloc",
+          "title": "Heap allocation",
+          "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "allocated",
+              "agg": "sum",
+              "field": "go.memory.allocated",
+              "metricType": "sum"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "unit": "bytes",
+          "width": 24,
+          "height": 7
+        },
+        {
+          "section": "logs",
+          "id": "error-logs",
+          "title": "Error logs",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            },
+            {
+              "field": "log.severity",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "section": "logs",
+          "id": "logs",
+          "title": "Process logs",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "section": "workload",
+          "id": "cpu-vs-limit",
+          "title": "CPU against its limit",
+          "description": "The busiest container of each workload as a fraction of its CPU limit. Near 1 the container is being throttled.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of limit",
+              "agg": "max",
+              "field": "k8s.container.cpu_limit_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.k8s.workload.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "workload",
+          "id": "memory-vs-limit",
+          "title": "Memory against its limit",
+          "description": "The fullest container of each workload as a fraction of its memory limit. Near 1 the container is about to be OOM-killed.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of limit",
+              "agg": "max",
+              "field": "k8s.container.memory_limit_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.k8s.workload.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "workload",
+          "id": "restarts",
+          "title": "Container restarts",
+          "description": "The highest restart count among each workload's containers; a step is a restart.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "restarts",
+              "agg": "max",
+              "field": "k8s.container.restarts",
+              "metricType": "gauge"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.k8s.workload.name",
+              "op": "in",
+              "values": [
+                "shop-api"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        }
+      ]
+    },
+    {
+      "sections": [
+        {
+          "id": "runs",
+          "title": "Worker runs"
+        },
+        {
+          "id": "runtime",
+          "title": "Runtime"
+        },
+        {
+          "id": "workload",
+          "title": "Workload saturation"
+        },
+        {
+          "id": "logs",
+          "title": "Logs"
+        }
+      ],
+      "id": "process-shop-worker",
+      "title": "shop: shop-worker",
+      "description": "The worker shop-worker. Panels are chosen by what it does: RPC health if it serves RPCs, worker runs if it runs workers, saturation against the limits it declares; runtime and logs always.",
+      "group": "services",
+      "tags": [
+        "worker"
+      ],
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "section": "runs",
+          "id": "worker-runs",
+          "title": "Worker runs",
+          "description": "Root spans of the process's worker loops (worker.\u003cname\u003e.*), one line per loop.",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "runs",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "worker."
+            }
+          ],
+          "groupBy": [
+            "span.name"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "runs",
+          "id": "worker-failures",
+          "title": "Worker run failures",
+          "description": "Runs that ended with an error, one line per loop.",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "failed",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "worker."
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "groupBy": [
+            "span.name"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "runs",
+          "id": "worker-duration",
+          "title": "Worker run duration",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "runs",
+              "agg": "count"
+            },
+            {
+              "label": "failed",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "limit": 50,
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            },
+            {
+              "field": "span.name",
+              "op": "prefix",
+              "value": "worker."
+            }
+          ],
+          "groupBy": [
+            "span.name"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "section": "runtime",
+          "id": "go-memory",
+          "title": "Go memory used",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "used",
+              "agg": "sum",
+              "field": "go.memory.used",
+              "metricType": "sum"
+            },
+            {
+              "label": "gc goal",
+              "agg": "avg",
+              "field": "go.memory.gc.goal",
+              "metricType": "sum"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            }
+          ],
+          "unit": "bytes",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "runtime",
+          "id": "go-goroutines",
+          "title": "Goroutines",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "goroutines",
+              "agg": "sum",
+              "field": "go.goroutine.count",
+              "metricType": "sum"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "runtime",
+          "id": "go-alloc",
+          "title": "Heap allocation",
+          "description": "Bytes allocated to the heap per time bucket: the rate the garbage collector has to keep up with.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "allocated",
+              "agg": "sum",
+              "field": "go.memory.allocated",
+              "metricType": "sum"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            }
+          ],
+          "unit": "bytes",
+          "width": 24,
+          "height": 7
+        },
+        {
+          "section": "logs",
+          "id": "error-logs",
+          "title": "Error logs",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            },
+            {
+              "field": "log.severity",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "section": "logs",
+          "id": "logs",
+          "title": "Process logs",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "log.severity",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "section": "workload",
+          "id": "cpu-vs-request",
+          "title": "CPU against its request",
+          "description": "The busiest container of each workload as a fraction of the CPU it requested (1 = at the request).",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of request",
+              "agg": "max",
+              "field": "k8s.container.cpu_request_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.k8s.workload.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "workload",
+          "id": "memory-vs-request",
+          "title": "Memory against its request",
+          "description": "The fullest container of each workload as a fraction of the memory it requested.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of request",
+              "agg": "max",
+              "field": "k8s.container.memory_request_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.k8s.workload.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "workload",
+          "id": "restarts",
+          "title": "Container restarts",
+          "description": "The highest restart count among each workload's containers; a step is a restart.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "restarts",
+              "agg": "max",
+              "field": "k8s.container.restarts",
+              "metricType": "gauge"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.k8s.workload.name",
+              "op": "in",
+              "values": [
+                "shop-worker"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        }
+      ]
+    },
+    {
+      "id": "workloads",
+      "title": "shop: workloads",
+      "description": "Per-workload customer metadata from the node agent: CPU and memory against requests and limits, restarts and the last exit reason, the image versions that ran, and Kubernetes events. Present in deployed environments only (a local forge env up has no node agent).",
+      "group": "platform",
+      "tags": [
+        "k8s"
+      ],
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name",
+          "signal": "metrics"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name",
+          "signal": "metrics"
+        },
+        {
+          "id": "workload",
+          "label": "k8s.workload.name",
+          "field": "resource.attr.k8s.workload.name",
+          "signal": "metrics"
+        },
+        {
+          "id": "container",
+          "label": "k8s.container.name",
+          "field": "resource.attr.k8s.container.name",
+          "signal": "metrics"
+        },
+        {
+          "id": "namespace",
+          "label": "k8s.namespace.name",
+          "field": "resource.attr.k8s.namespace.name",
+          "signal": "metrics"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "id": "cpu-usage",
+          "title": "CPU usage",
+          "description": "Average CPU cores used per container, one line per workload.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "cpu",
+              "agg": "avg",
+              "field": "container.cpu.usage",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "memory-working-set",
+          "title": "Memory working set",
+          "description": "Average working-set bytes per container, one line per workload.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "memory",
+              "agg": "avg",
+              "field": "container.memory.working_set",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "bytes",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "cpu-vs-request",
+          "title": "CPU against its request",
+          "description": "The busiest container of each workload as a fraction of the CPU it requested (1 = at the request).",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of request",
+              "agg": "max",
+              "field": "k8s.container.cpu_request_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "cpu-vs-limit",
+          "title": "CPU against its limit",
+          "description": "The busiest container of each workload as a fraction of its CPU limit. Near 1 the container is being throttled.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of limit",
+              "agg": "max",
+              "field": "k8s.container.cpu_limit_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "memory-vs-request",
+          "title": "Memory against its request",
+          "description": "The fullest container of each workload as a fraction of the memory it requested.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of request",
+              "agg": "max",
+              "field": "k8s.container.memory_request_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "memory-vs-limit",
+          "title": "Memory against its limit",
+          "description": "The fullest container of each workload as a fraction of its memory limit. Near 1 the container is about to be OOM-killed.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "of limit",
+              "agg": "max",
+              "field": "k8s.container.memory_limit_utilization",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "restarts",
+          "title": "Container restarts",
+          "description": "The highest restart count among each workload's containers; a step is a restart.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "restarts",
+              "agg": "max",
+              "field": "k8s.container.restarts",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "restarts-by-exit-reason",
+          "title": "Restarts by last exit reason",
+          "description": "The same restart count split by why the container last terminated (OOMKilled, Error, Completed, ...).",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "restarts",
+              "agg": "max",
+              "field": "k8s.container.restarts",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "metric.attr.k8s.container.last_terminated_reason"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "cpu-by-image-tag",
+          "title": "CPU by image version",
+          "description": "CPU used per container, split by the image tag it ran (container.image.tag), so a rollout shows as one line replacing another.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "cpu",
+              "agg": "avg",
+              "field": "container.cpu.usage",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.container.image.tag"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "memory-by-image-tag",
+          "title": "Memory by image version",
+          "description": "Working-set bytes per container, split by image tag: a version that leaks memory climbs above its predecessor.",
+          "kind": "line",
+          "signal": "metrics",
+          "series": [
+            {
+              "label": "memory",
+              "agg": "avg",
+              "field": "container.memory.working_set",
+              "metricType": "gauge"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.container.image.tag"
+          ],
+          "unit": "bytes",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "events-by-reason",
+          "title": "Kubernetes events by reason",
+          "description": "Count of Kubernetes events per reason (BackOff, Failed, Evicted, Killing, ...) over time.",
+          "kind": "line",
+          "signal": "logs",
+          "series": [
+            {
+              "label": "events",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "log.attr.k8s.event.reason",
+              "op": "exists"
+            }
+          ],
+          "groupBy": [
+            "log.attr.k8s.event.reason"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "warning-events",
+          "title": "Warning events by workload",
+          "description": "Warning-type Kubernetes events per workload: crash loops, failed image pulls, evictions, failed scheduling.",
+          "kind": "line",
+          "signal": "logs",
+          "series": [
+            {
+              "label": "warnings",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "log.attr.k8s.event.type",
+              "op": "eq",
+              "value": "Warning"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.k8s.workload.name"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "container-terminations",
+          "title": "Container terminations",
+          "description": "Events that carry a container's last terminated reason.",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "log.attr.k8s.container.last_terminated_reason",
+              "op": "exists"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "resource.attr.k8s.workload.name",
+            "resource.attr.k8s.container.name",
+            "log.attr.k8s.container.last_terminated_reason",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "events",
+          "title": "Kubernetes events",
+          "description": "Every Kubernetes event of the selected workloads, newest first.",
+          "kind": "search",
+          "signal": "logs",
+          "where": [
+            {
+              "field": "log.attr.k8s.event.reason",
+              "op": "exists"
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "resource.attr.k8s.workload.name",
+            "log.attr.k8s.event.type",
+            "log.attr.k8s.event.reason",
+            "log.attr.k8s.object.kind",
+            "log.attr.k8s.object.name",
+            "log.body"
+          ],
+          "width": 24,
+          "height": 10
+        }
+      ]
+    },
+    {
+      "id": "releases",
+      "title": "shop: releases",
+      "description": "Request rate, error rate and latency split by service.version, so a deploy shows as one version replacing another. Deploy markers come from the release ledger. Narrow with the service.name and deployment.environment.name filters.",
+      "group": "releases",
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "id": "request-rate-by-version",
+          "title": "Requests by version",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "count",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "error-rate-by-version",
+          "title": "Error rate by version",
+          "description": "Server faults (span status Error) over all requests, per version.",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "requests",
+              "agg": "count"
+            }
+          ],
+          "ratio": true,
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "percent",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "p95-by-version",
+          "title": "p95 latency by version",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "p99-by-version",
+          "title": "p99 latency by version",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "version-comparison",
+          "title": "Version comparison",
+          "description": "Requests, errors and latency per service.version over the selected range. Pick a range that spans a deploy to read old against new.",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "requests",
+              "agg": "count"
+            },
+            {
+              "label": "errors",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.status",
+                  "op": "eq",
+                  "value": "error"
+                }
+              ]
+            },
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "span.kind",
+              "op": "eq",
+              "value": "server"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "error-logs-by-version",
+          "title": "Error logs by version",
+          "kind": "line",
+          "signal": "logs",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "log.severity",
+              "op": "eq",
+              "value": "error"
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "count",
+          "width": 24,
+          "height": 7
+        }
+      ]
+    },
+    {
+      "sections": [
+        {
+          "id": "runs",
+          "title": "Runs"
+        },
+        {
+          "id": "health",
+          "title": "Health"
+        },
+        {
+          "id": "logs",
+          "title": "Logs"
+        }
+      ],
+      "id": "jobs",
+      "title": "shop: jobs",
+      "description": "Every job and cron job of the project: runs, failures, duration and last run per job, from the Kubernetes Job events, plus container restarts, warning events and error logs. Present in deployed environments only. The service selector picks a job by its name, a workload name, a service.name or a run name, on every panel alike.",
+      "group": "jobs",
+      "tags": [
+        "jobs"
+      ],
+      "replaces": [
+        "process-shop-migrate",
+        "process-shop-prune"
+      ],
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name",
+          "signal": "logs"
+        }
+      ],
+      "panels": [
+        {
+          "section": "runs",
+          "id": "jobs-summary",
+          "title": "Runs per job",
+          "description": "Per job over the selected range: runs seen, succeeded and failed, the latest run's start, and run durations (seconds, start to completion). One row per forge job. A run is one Kubernetes Job in one environment, however many pods it created.",
+          "kind": "sql",
+          "sql": "SELECT job,\n       count() AS runs,\n       countIf(finished \u003e 0) AS succeeded,\n       countIf(failed) AS failed,\n       max(started) AS last_started,\n       tupleElement(argMax(tuple(if(finished \u003e 0 AND started \u003e 0, dateDiff('second', started, finished), NULL)), started), 1) AS last_duration_s,\n       if(countIf(finished \u003e 0 AND started \u003e 0) = 0, NULL, round(avgIf(dateDiff('second', started, finished), finished \u003e 0 AND started \u003e 0), 1)) AS avg_duration_s,\n       if(countIf(finished \u003e 0 AND started \u003e 0) = 0, NULL, maxIf(dateDiff('second', started, finished), finished \u003e 0 AND started \u003e 0)) AS max_duration_s\nFROM (\n  SELECT env, run, job, started, finished, failed_at, failure, failed\n  FROM (\n  SELECT env, run, any(job) AS job,\n         minIf(Timestamp, reason = 'SuccessfulCreate') AS started,\n         maxIf(Timestamp, reason = 'Completed') AS finished,\n         maxIf(Timestamp, reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) AS failed_at,\n         argMaxIf(reason, Timestamp, reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) AS failure,\n         countIf(reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) \u003e 0 AS failed\n  FROM (\n    SELECT Timestamp, env, run, uid, job, reason,\n           sum(reason = 'SuccessfulCreate' AND prev IN ('Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) OVER (PARTITION BY env, run, uid ORDER BY Timestamp, ended ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS generation\n    FROM (\n      SELECT Timestamp, env, run, uid, job, reason, reason IN ('Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy') AS ended,\n             lagInFrame(reason, 1, '') OVER (PARTITION BY env, run, uid ORDER BY Timestamp, ended ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS prev\n      FROM (\nWITH [('shop-migrate', ['shop-migrate'], ['shop-migrate']), ('shop-prune', ['shop-prune'], ['shop-prune'])] AS job_identity,\n  arrayMap(j -\u003e j.1, if(empty({services:Array(String)}), job_identity,\n    arrayFilter(j -\u003e arrayExists(s -\u003e has(j.3, s) OR arrayExists(w -\u003e match(s, concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), {services:Array(String)}), job_identity))) AS selected_jobs\nSELECT Timestamp, ResourceAttributes['reliant.env.id'] AS env, ResourceAttributes['k8s.workload.name'] AS run,\n       ResourceAttributes['k8s.object.uid'] AS uid, LogAttributes['k8s.event.reason'] AS reason, tupleElement(arrayFirst(j -\u003e arrayExists(w -\u003e match(ResourceAttributes['k8s.workload.name'], concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), job_identity), 1) AS job\nFROM otel_logs\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)}\n  AND LogAttributes['k8s.event.reason'] IN ('SuccessfulCreate', 'Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')\n  AND if(mapContains(LogAttributes, 'k8s.object.kind'), LogAttributes['k8s.object.kind'], ResourceAttributes['k8s.object.kind']) = 'Job'\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND job != '' AND has(selected_jobs, job)\n      )\n    )\n  )\n  GROUP BY env, run, uid, generation\n  )\n)\nGROUP BY job\nORDER BY last_started DESC, job\n",
+          "width": 24,
+          "height": 8
+        },
+        {
+          "section": "runs",
+          "id": "runs-totals",
+          "title": "Runs in range",
+          "description": "Runs started in the selected range, and how many of the runs seen in it succeeded and failed, across every job. A run is one Kubernetes Job in one environment, however many pods it created.",
+          "kind": "sql",
+          "sql": "SELECT countIf(started \u003e 0) AS runs_started,\n       countIf(finished \u003e 0) AS runs_succeeded,\n       countIf(failed) AS runs_failed\nFROM (\n  SELECT env, run, job, started, finished, failed_at, failure, failed\n  FROM (\n  SELECT env, run, any(job) AS job,\n         minIf(Timestamp, reason = 'SuccessfulCreate') AS started,\n         maxIf(Timestamp, reason = 'Completed') AS finished,\n         maxIf(Timestamp, reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) AS failed_at,\n         argMaxIf(reason, Timestamp, reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) AS failure,\n         countIf(reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) \u003e 0 AS failed\n  FROM (\n    SELECT Timestamp, env, run, uid, job, reason,\n           sum(reason = 'SuccessfulCreate' AND prev IN ('Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) OVER (PARTITION BY env, run, uid ORDER BY Timestamp, ended ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS generation\n    FROM (\n      SELECT Timestamp, env, run, uid, job, reason, reason IN ('Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy') AS ended,\n             lagInFrame(reason, 1, '') OVER (PARTITION BY env, run, uid ORDER BY Timestamp, ended ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS prev\n      FROM (\nWITH [('shop-migrate', ['shop-migrate'], ['shop-migrate']), ('shop-prune', ['shop-prune'], ['shop-prune'])] AS job_identity,\n  arrayMap(j -\u003e j.1, if(empty({services:Array(String)}), job_identity,\n    arrayFilter(j -\u003e arrayExists(s -\u003e has(j.3, s) OR arrayExists(w -\u003e match(s, concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), {services:Array(String)}), job_identity))) AS selected_jobs\nSELECT Timestamp, ResourceAttributes['reliant.env.id'] AS env, ResourceAttributes['k8s.workload.name'] AS run,\n       ResourceAttributes['k8s.object.uid'] AS uid, LogAttributes['k8s.event.reason'] AS reason, tupleElement(arrayFirst(j -\u003e arrayExists(w -\u003e match(ResourceAttributes['k8s.workload.name'], concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), job_identity), 1) AS job\nFROM otel_logs\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)}\n  AND LogAttributes['k8s.event.reason'] IN ('SuccessfulCreate', 'Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')\n  AND if(mapContains(LogAttributes, 'k8s.object.kind'), LogAttributes['k8s.object.kind'], ResourceAttributes['k8s.object.kind']) = 'Job'\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND job != '' AND has(selected_jobs, job)\n      )\n    )\n  )\n  GROUP BY env, run, uid, generation\n  )\n)\n",
+          "width": 24,
+          "height": 4
+        },
+        {
+          "section": "runs",
+          "id": "runs-by-job",
+          "title": "Runs started by job",
+          "description": "Runs started over time, one line per job. A run is one Kubernetes Job in one environment, however many pods it created.",
+          "kind": "sql",
+          "sql": "SELECT toStartOfInterval(started, toIntervalSecond({step:UInt32})) AS t, job, count() AS runs\nFROM (\n  SELECT env, run, job, started, finished, failed_at, failure, failed\n  FROM (\n  SELECT env, run, any(job) AS job,\n         minIf(Timestamp, reason = 'SuccessfulCreate') AS started,\n         maxIf(Timestamp, reason = 'Completed') AS finished,\n         maxIf(Timestamp, reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) AS failed_at,\n         argMaxIf(reason, Timestamp, reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) AS failure,\n         countIf(reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) \u003e 0 AS failed\n  FROM (\n    SELECT Timestamp, env, run, uid, job, reason,\n           sum(reason = 'SuccessfulCreate' AND prev IN ('Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) OVER (PARTITION BY env, run, uid ORDER BY Timestamp, ended ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS generation\n    FROM (\n      SELECT Timestamp, env, run, uid, job, reason, reason IN ('Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy') AS ended,\n             lagInFrame(reason, 1, '') OVER (PARTITION BY env, run, uid ORDER BY Timestamp, ended ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS prev\n      FROM (\nWITH [('shop-migrate', ['shop-migrate'], ['shop-migrate']), ('shop-prune', ['shop-prune'], ['shop-prune'])] AS job_identity,\n  arrayMap(j -\u003e j.1, if(empty({services:Array(String)}), job_identity,\n    arrayFilter(j -\u003e arrayExists(s -\u003e has(j.3, s) OR arrayExists(w -\u003e match(s, concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), {services:Array(String)}), job_identity))) AS selected_jobs\nSELECT Timestamp, ResourceAttributes['reliant.env.id'] AS env, ResourceAttributes['k8s.workload.name'] AS run,\n       ResourceAttributes['k8s.object.uid'] AS uid, LogAttributes['k8s.event.reason'] AS reason, tupleElement(arrayFirst(j -\u003e arrayExists(w -\u003e match(ResourceAttributes['k8s.workload.name'], concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), job_identity), 1) AS job\nFROM otel_logs\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)}\n  AND LogAttributes['k8s.event.reason'] IN ('SuccessfulCreate', 'Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')\n  AND if(mapContains(LogAttributes, 'k8s.object.kind'), LogAttributes['k8s.object.kind'], ResourceAttributes['k8s.object.kind']) = 'Job'\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND job != '' AND has(selected_jobs, job)\n      )\n    )\n  )\n  GROUP BY env, run, uid, generation\n  )\n)\nWHERE started \u003e 0\nGROUP BY t, job\nORDER BY t, job\n",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "runs",
+          "id": "failures-by-job",
+          "title": "Failed runs by job",
+          "description": "Runs that ended in failure over time, one line per job, at the time of the failure. A run is one Kubernetes Job in one environment, however many pods it created.",
+          "kind": "sql",
+          "sql": "SELECT toStartOfInterval(failed_at, toIntervalSecond({step:UInt32})) AS t, job, count() AS runs\nFROM (\n  SELECT env, run, job, started, finished, failed_at, failure, failed\n  FROM (\n  SELECT env, run, any(job) AS job,\n         minIf(Timestamp, reason = 'SuccessfulCreate') AS started,\n         maxIf(Timestamp, reason = 'Completed') AS finished,\n         maxIf(Timestamp, reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) AS failed_at,\n         argMaxIf(reason, Timestamp, reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) AS failure,\n         countIf(reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) \u003e 0 AS failed\n  FROM (\n    SELECT Timestamp, env, run, uid, job, reason,\n           sum(reason = 'SuccessfulCreate' AND prev IN ('Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) OVER (PARTITION BY env, run, uid ORDER BY Timestamp, ended ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS generation\n    FROM (\n      SELECT Timestamp, env, run, uid, job, reason, reason IN ('Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy') AS ended,\n             lagInFrame(reason, 1, '') OVER (PARTITION BY env, run, uid ORDER BY Timestamp, ended ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS prev\n      FROM (\nWITH [('shop-migrate', ['shop-migrate'], ['shop-migrate']), ('shop-prune', ['shop-prune'], ['shop-prune'])] AS job_identity,\n  arrayMap(j -\u003e j.1, if(empty({services:Array(String)}), job_identity,\n    arrayFilter(j -\u003e arrayExists(s -\u003e has(j.3, s) OR arrayExists(w -\u003e match(s, concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), {services:Array(String)}), job_identity))) AS selected_jobs\nSELECT Timestamp, ResourceAttributes['reliant.env.id'] AS env, ResourceAttributes['k8s.workload.name'] AS run,\n       ResourceAttributes['k8s.object.uid'] AS uid, LogAttributes['k8s.event.reason'] AS reason, tupleElement(arrayFirst(j -\u003e arrayExists(w -\u003e match(ResourceAttributes['k8s.workload.name'], concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), job_identity), 1) AS job\nFROM otel_logs\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)}\n  AND LogAttributes['k8s.event.reason'] IN ('SuccessfulCreate', 'Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')\n  AND if(mapContains(LogAttributes, 'k8s.object.kind'), LogAttributes['k8s.object.kind'], ResourceAttributes['k8s.object.kind']) = 'Job'\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND job != '' AND has(selected_jobs, job)\n      )\n    )\n  )\n  GROUP BY env, run, uid, generation\n  )\n)\nWHERE failed\nGROUP BY t, job\nORDER BY t, job\n",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "runs",
+          "id": "recent-runs",
+          "title": "Recent runs",
+          "description": "The newest runs, one row each: job, Kubernetes Job, environment, outcome (Completed, Running, or the failure reason such as BackoffLimitExceeded), start and duration in seconds. A run is one Kubernetes Job in one environment, however many pods it created.",
+          "kind": "sql",
+          "sql": "SELECT job, run, env,\n       if(failed, failure, if(finished \u003e 0, 'Completed', 'Running')) AS outcome,\n       if(started \u003e 0, toString(started), '') AS started_at,\n       if(finished \u003e 0 AND started \u003e 0, dateDiff('second', started, finished), NULL) AS duration_s\nFROM (\n  SELECT env, run, job, started, finished, failed_at, failure, failed\n  FROM (\n  SELECT env, run, any(job) AS job,\n         minIf(Timestamp, reason = 'SuccessfulCreate') AS started,\n         maxIf(Timestamp, reason = 'Completed') AS finished,\n         maxIf(Timestamp, reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) AS failed_at,\n         argMaxIf(reason, Timestamp, reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) AS failure,\n         countIf(reason IN ('BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) \u003e 0 AS failed\n  FROM (\n    SELECT Timestamp, env, run, uid, job, reason,\n           sum(reason = 'SuccessfulCreate' AND prev IN ('Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')) OVER (PARTITION BY env, run, uid ORDER BY Timestamp, ended ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS generation\n    FROM (\n      SELECT Timestamp, env, run, uid, job, reason, reason IN ('Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy') AS ended,\n             lagInFrame(reason, 1, '') OVER (PARTITION BY env, run, uid ORDER BY Timestamp, ended ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS prev\n      FROM (\nWITH [('shop-migrate', ['shop-migrate'], ['shop-migrate']), ('shop-prune', ['shop-prune'], ['shop-prune'])] AS job_identity,\n  arrayMap(j -\u003e j.1, if(empty({services:Array(String)}), job_identity,\n    arrayFilter(j -\u003e arrayExists(s -\u003e has(j.3, s) OR arrayExists(w -\u003e match(s, concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), {services:Array(String)}), job_identity))) AS selected_jobs\nSELECT Timestamp, ResourceAttributes['reliant.env.id'] AS env, ResourceAttributes['k8s.workload.name'] AS run,\n       ResourceAttributes['k8s.object.uid'] AS uid, LogAttributes['k8s.event.reason'] AS reason, tupleElement(arrayFirst(j -\u003e arrayExists(w -\u003e match(ResourceAttributes['k8s.workload.name'], concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), job_identity), 1) AS job\nFROM otel_logs\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)}\n  AND LogAttributes['k8s.event.reason'] IN ('SuccessfulCreate', 'Completed', 'BackoffLimitExceeded', 'DeadlineExceeded', 'PodFailurePolicy')\n  AND if(mapContains(LogAttributes, 'k8s.object.kind'), LogAttributes['k8s.object.kind'], ResourceAttributes['k8s.object.kind']) = 'Job'\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND job != '' AND has(selected_jobs, job)\n      )\n    )\n  )\n  GROUP BY env, run, uid, generation\n  )\n)\nORDER BY greatest(started, finished, failed_at) DESC, job, run\nLIMIT 50\n",
+          "width": 24,
+          "height": 8
+        },
+        {
+          "section": "health",
+          "id": "warning-events",
+          "title": "Warning events by job",
+          "description": "Warning-type Kubernetes events of the jobs, over time, one line per job: the Job's own (a run that hit its backoff limit or deadline) and its pods' (failed image pulls, evictions, failed scheduling, back-offs).",
+          "kind": "sql",
+          "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, job, count() AS warnings\nFROM (\nWITH [('shop-migrate', ['shop-migrate'], ['shop-migrate']), ('shop-prune', ['shop-prune'], ['shop-prune'])] AS job_identity,\n  arrayMap(j -\u003e j.1, if(empty({services:Array(String)}), job_identity,\n    arrayFilter(j -\u003e arrayExists(s -\u003e has(j.3, s) OR arrayExists(w -\u003e match(s, concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), {services:Array(String)}), job_identity))) AS selected_jobs\nSELECT Timestamp, tupleElement(arrayFirst(j -\u003e arrayExists(w -\u003e match(ResourceAttributes['k8s.workload.name'], concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), job_identity), 1) AS job\nFROM otel_logs\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)}\n  AND LogAttributes['k8s.event.reason'] != ''\n  AND LogAttributes['k8s.event.type'] = 'Warning'\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND job != '' AND has(selected_jobs, job)\n)\nGROUP BY t, job\nORDER BY t, job\n",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "health",
+          "id": "restarts",
+          "title": "Container restarts",
+          "description": "The highest restart count among each job's containers, one line per job; a step is a restart.",
+          "kind": "sql",
+          "sql": "SELECT toStartOfInterval(Timestamp, toIntervalSecond({step:UInt32})) AS t, job, max(restarts) AS restarts\nFROM (\nWITH [('shop-migrate', ['shop-migrate'], ['shop-migrate']), ('shop-prune', ['shop-prune'], ['shop-prune'])] AS job_identity,\n  arrayMap(j -\u003e j.1, if(empty({services:Array(String)}), job_identity,\n    arrayFilter(j -\u003e arrayExists(s -\u003e has(j.3, s) OR arrayExists(w -\u003e match(s, concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), {services:Array(String)}), job_identity))) AS selected_jobs\nSELECT TimeUnix AS Timestamp, Value AS restarts, tupleElement(arrayFirst(j -\u003e arrayExists(w -\u003e match(ResourceAttributes['k8s.workload.name'], concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), job_identity), 1) AS job\nFROM otel_metrics_gauge\nWHERE TimeUnix \u003e= {from:DateTime64(9)} AND TimeUnix \u003c {to:DateTime64(9)}\n  AND MetricName = 'k8s.container.restarts'\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND job != '' AND has(selected_jobs, job)\n)\nGROUP BY t, job\nORDER BY t, job\n",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "section": "logs",
+          "id": "error-logs",
+          "title": "Error logs",
+          "description": "The newest error-level log records of the jobs, newest first: job, service, severity, time and message.",
+          "kind": "sql",
+          "sql": "SELECT job, ServiceName AS service, upper(SeverityText) AS severity, toString(Timestamp) AS at, left(Body, 500) AS message\nFROM (\nWITH [('shop-migrate', ['shop-migrate'], ['shop-migrate']), ('shop-prune', ['shop-prune'], ['shop-prune'])] AS job_identity,\n  arrayMap(j -\u003e j.1, if(empty({services:Array(String)}), job_identity,\n    arrayFilter(j -\u003e arrayExists(s -\u003e has(j.3, s) OR arrayExists(w -\u003e match(s, concat('^', w, '(-[0-9a-f]{6,12})?$')), j.2), {services:Array(String)}), job_identity))) AS selected_jobs\nSELECT Timestamp, ServiceName, SeverityText, Body, tupleElement(arrayFirst(j -\u003e has(j.3, ServiceName), job_identity), 1) AS job\nFROM otel_logs\nWHERE Timestamp \u003e= {from:DateTime64(9)} AND Timestamp \u003c {to:DateTime64(9)}\n  AND upper(SeverityText) IN ('ERROR', 'ERR')\n  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))\n  AND job != '' AND has(selected_jobs, job)\n)\nORDER BY Timestamp DESC\nLIMIT 100\n",
+          "width": 24,
+          "height": 8
+        }
+      ]
+    },
+    {
+      "id": "frontend",
+      "title": "shop: frontend",
+      "description": "Browser errors, page loads, web vitals and API calls from the HyperDX browser SDK (service.name shop-web). Panels follow HyperDX's Browser RUM template: a browser span carries the rum.sessionId resource attribute.",
+      "group": "product",
+      "tags": [
+        "browser"
+      ],
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "id": "js-errors",
+          "title": "JS errors",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "not_in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "sessions",
+          "title": "Sessions",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "sessions",
+              "agg": "count_distinct",
+              "field": "resource.attr.rum.sessionId"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            }
+          ],
+          "unit": "count",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "page-views",
+          "title": "Page views",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "views",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "in",
+              "values": [
+                "documentLoad",
+                "routeChange"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "api-failures",
+          "title": "Failed API calls",
+          "description": "fetch / XHR spans with an HTTP status of 400 or more.",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "failures",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            },
+            {
+              "field": "span.attr.http.status_code",
+              "op": "gte",
+              "value": "400"
+            }
+          ],
+          "unit": "count",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "errors-over-time",
+          "title": "JS errors over time",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "not_in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 24,
+          "height": 6
+        },
+        {
+          "id": "issues",
+          "title": "Issues",
+          "description": "Errors grouped by cause (type, message and the top in-app frames): new and regressed first, then the most frequent. A string-only console.error is not an issue.",
+          "kind": "issues",
+          "signal": "traces",
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            }
+          ],
+          "width": 24,
+          "height": 9
+        },
+        {
+          "id": "sessions-with-errors",
+          "title": "Sessions with errors",
+          "description": "Sessions that hit an error, newest first; a session that was recorded links to its replay.",
+          "kind": "sessions",
+          "signal": "traces",
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            }
+          ],
+          "hasError": true,
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "lcp",
+          "title": "LCP p75",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "lcp p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.lcp"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            },
+            {
+              "field": "span.attr.lcp",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "inp",
+          "title": "INP p75",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "inp p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.inp"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            },
+            {
+              "field": "span.attr.inp",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "cls",
+          "title": "CLS p75",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "cls p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.cls"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            },
+            {
+              "field": "span.attr.cls",
+              "op": "exists"
+            }
+          ],
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "fcp",
+          "title": "FCP p75",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "fcp p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.fcp"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            },
+            {
+              "field": "span.attr.fcp",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "ttfb",
+          "title": "TTFB p75",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "ttfb p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.ttfb"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            },
+            {
+              "field": "span.attr.ttfb",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "vitals-by-route",
+          "title": "Web vitals by route",
+          "description": "p75 per page. LCP good at 2500 ms or less and poor above 4000 ms; INP 200 / 500 ms; CLS 0.1 / 0.25.",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "lcp p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.lcp",
+              "where": [
+                {
+                  "field": "span.attr.lcp",
+                  "op": "exists"
+                }
+              ],
+              "thresholds": {
+                "good": 2500,
+                "poor": 4000
+              }
+            },
+            {
+              "label": "inp p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.inp",
+              "where": [
+                {
+                  "field": "span.attr.inp",
+                  "op": "exists"
+                }
+              ],
+              "thresholds": {
+                "good": 200,
+                "poor": 500
+              }
+            },
+            {
+              "label": "cls p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.cls",
+              "where": [
+                {
+                  "field": "span.attr.cls",
+                  "op": "exists"
+                }
+              ],
+              "thresholds": {
+                "good": 0.1,
+                "poor": 0.25
+              }
+            },
+            {
+              "label": "samples",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.attr.lcp",
+                  "op": "exists"
+                }
+              ]
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            }
+          ],
+          "groupBy": [
+            "span.attr.location.href"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "errors-by-release",
+          "title": "JS errors by release",
+          "description": "The same error spans as above, one line per service.version (the build id), so a release that introduced a regression shows as its own line. Release markers are drawn from the ledger.",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "not_in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "count",
+          "width": 24,
+          "height": 7
+        },
+        {
+          "id": "page-load",
+          "title": "Page load p50 / p90 / p99",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p90",
+              "agg": "quantile",
+              "quantile": 0.9,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "documentLoad"
+            }
+          ],
+          "unit": "ms",
+          "width": 24,
+          "height": 7
+        },
+        {
+          "id": "api-latency",
+          "title": "API call latency (browser)",
+          "description": "Browser-side fetch / XHR spans; the same calls appear server-side on the service dashboards, joined by traceparent.",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "api-calls",
+          "title": "API calls by URL",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "failures",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.attr.http.status_code",
+                  "op": "gte",
+                  "value": "400"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            }
+          ],
+          "groupBy": [
+            "span.attr.http.url"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "browser-console",
+          "title": "Browser console and error events",
+          "description": "The HyperDX SDK ships console output and uncaught errors as spans (console.*, onerror, unhandledrejection), not as OTLP logs.",
+          "kind": "search",
+          "signal": "traces",
+          "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "shop-web"
+              ]
+            },
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "in",
+              "values": [
+                "console.error",
+                "console.warn",
+                "onerror",
+                "unhandledrejection"
+              ]
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "span.name",
+            "span.attr.error.message"
+          ],
+          "width": 24,
+          "height": 9
+        }
+      ]
+    }
+  ],
+  "savedSearches": [
+    {
+      "id": "errors-process-shop-api",
+      "title": "shop-api: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "service.name",
+          "op": "in",
+          "values": [
+            "shop-api"
+          ]
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    },
+    {
+      "id": "errors-process-shop-worker",
+      "title": "shop-worker: error logs",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "service.name",
+          "op": "in",
+          "values": [
+            "shop-worker"
+          ]
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ]
+    }
+  ]
+}
