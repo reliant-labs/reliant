@@ -67,32 +67,56 @@ func Apply(cmd *exec.Cmd, self string, plan Plan) (refusal string) {
 		cmd.Env = os.Environ() //nolint:forbidigo // a command with no environment of its own inherits this process's; the helper needs it written down to add its descriptor
 	}
 
-	plan = prepareOverlays(plan)
-	runDir, err := newRunDir()
+	plan, err := prepareOverlays(plan)
 	if err != nil {
-		return Refusal(fmt.Errorf("making the command's private /tmp: %w", err))
+		return Refusal(err)
 	}
-	if err := makePrivateTmpDirs(runDir); err != nil {
+	runDir, runDirFile, err := newRunDir()
+	if err != nil {
+		return Refusal(fmt.Errorf("making the command's run directory: %w", err))
+	}
+	parentFD, err := unix.Open(filepath.Dir(runDir), unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		_ = runDirFile.Close()
 		_ = removeTree(runDir)
-		return Refusal(fmt.Errorf("making the command's private /tmp: %w", err))
+		return Refusal(fmt.Errorf("opening the run directory's parent: %w", err))
+	}
+	parentFile := os.NewFile(uintptr(parentFD), filepath.Dir(runDir))
+	abandon := func(cause error) string {
+		_ = runDirFile.Close()
+		_ = parentFile.Close()
+		_ = removeTree(runDir)
+		return Refusal(cause)
+	}
+	// From here the run directory is used through its descriptor only.
+	ref := "/proc/self/fd/" + strconv.Itoa(int(runDirFile.Fd()))
+	if err := makePrivateTmpDirs(ref); err != nil {
+		return abandon(fmt.Errorf("making the command's private /tmp: %w", err))
 	}
 	cmd.Env = privateTmpEnv(cmd.Env)
 	if len(plan.Overlay) > 0 {
 		if overlayErr := overlayAvailable(); overlayErr != nil {
-			plan, cmd.Env = withoutOverlays(plan, cmd.Env, runDir)
+			var err error
+			if plan, cmd.Env, err = withoutOverlays(plan, cmd.Env, ref); err != nil {
+				return abandon(err)
+			}
 		}
 	}
 
-	payload, err := json.Marshal(spec{Plan: plan, Path: cmd.Path, Argv: cmd.Args, Dir: cmd.Dir, RunDir: runDir, TmpRoot: os.TempDir()})
+	// The run directory and its parent travel as descriptors the helper
+	// inherits, after the caller's own ExtraFiles, then the spec's pipe.
+	first := 3 + len(cmd.ExtraFiles)
+	payload, err := json.Marshal(spec{Plan: plan, Path: cmd.Path, Argv: cmd.Args, Dir: cmd.Dir,
+		RunDir: runDir, RunDirFD: first, RunParentFD: first + 1, TmpRoot: os.TempDir()})
 	if err != nil {
-		return Refusal(err)
+		return abandon(err)
 	}
 	// The spec travels on a pipe the helper inherits: not on the command line,
 	// where ps would show it, and not in the environment, which the command
 	// would inherit.
 	r, w, err := os.Pipe()
 	if err != nil {
-		return Refusal(err)
+		return abandon(err)
 	}
 	go func() {
 		defer w.Close()
@@ -101,8 +125,8 @@ func Apply(cmd *exec.Cmd, self string, plan Plan) (refusal string) {
 
 	cmd.Path = self
 	cmd.Args = []string{self, HelperArg}
-	cmd.ExtraFiles = append(cmd.ExtraFiles, r)
-	cmd.Env = append(cmd.Env, specFDEnv+"="+strconv.Itoa(3+len(cmd.ExtraFiles)-1))
+	cmd.ExtraFiles = append(cmd.ExtraFiles, runDirFile, parentFile, r)
+	cmd.Env = append(cmd.Env, specFDEnv+"="+strconv.Itoa(first+2))
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
@@ -138,6 +162,12 @@ type spec struct {
 	// RunDir holds the upper and work directories of the command's overlays;
 	// the helper removes it when the command exits.
 	RunDir string `json:",omitempty"`
+	// RunDirFD and RunParentFD are the descriptors the helper inherits of the
+	// run directory and the directory holding it. The helper reaches the run
+	// directory only through RunDirFD, and removes it from RunParentFD only
+	// while RunDir's name there is still that directory.
+	RunDirFD    int `json:",omitempty"`
+	RunParentFD int `json:",omitempty"`
 	// TmpRoot is the daemon's temp directory (os.TempDir), which the command's
 	// private /tmp covers when it is under /tmp (privateTmp).
 	TmpRoot string `json:",omitempty"`
@@ -257,19 +287,47 @@ func runHelper() int {
 		// from there walks the filesystem the view covers.
 		s.Dir, _ = os.Getwd()
 	}
-	runDir := s.RunDir // as this init reaches it once the private /tmp is on
+	runDir := "" // as this init reaches it: through its descriptor
 	if s.RunDir != "" {
+		// The run directory and its parent arrive as descriptors. Close-on-exec
+		// first: the command must never inherit a way back into the daemon's
+		// /tmp. Then the name RunDir must still be that directory, and the
+		// directory still a private one of this user's (newRunDir).
+		for _, fd := range []int{s.RunDirFD, s.RunParentFD} {
+			if fd < 3 {
+				return fail("no run directory descriptor")
+			}
+			unix.CloseOnExec(fd)
+		}
+		if err := checkRunDir(s.RunDirFD); err != nil {
+			return fail("%v", err)
+		}
+		name := filepath.Base(s.RunDir)
+		if !sameDirAt(s.RunDirFD, s.RunParentFD, name) {
+			return fail("the run directory %s is no longer the one the daemon made", s.RunDir)
+		}
+		// The inherited descriptors belong to the daemon's mount namespace,
+		// and the kernel binds nothing from a mount outside this one. So the
+		// run directory is opened again here, and used only once it is proved
+		// to be the very directory the daemon made and handed over.
+		nsFD, err := unix.Open(s.RunDir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
+		if err != nil {
+			return fail("opening the run directory: %v", err)
+		}
+		if !sameDir(nsFD, s.RunDirFD) {
+			return fail("the run directory %s is no longer the one the daemon made", s.RunDir)
+		}
+		runDir = "/proc/self/fd/" + strconv.Itoa(nsFD)
 		// Removed when the command exits, by this init; the daemon removes the
 		// run directory of an init that was killed first (sweepRunDirs), once
-		// the process this names is gone. Read before the private /proc goes
-		// on: there, this process is 1. The run directory is under the
-		// daemon's /tmp, which the private /tmp covers, so it is removed
-		// through a descriptor of its parent taken now.
-		if fd, err := unix.Open(filepath.Dir(runDir), unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0); err == nil {
-			runDir = "/proc/self/fd/" + strconv.Itoa(fd) + "/" + filepath.Base(runDir)
+		// the process this names is gone. Recorded before the private /proc
+		// goes on: there, this process is 1.
+		defer removeRunDir(runDir, nsFD, s.RunParentFD, name)
+		self, err := os.Readlink("/proc/self")
+		if err != nil {
+			return fail("reading this init's pid: %v", err)
 		}
-		defer removeRunDir(runDir)
-		if err := writeOwner(s.RunDir); err != nil {
+		if err := writeOwnerAt(s.RunDirFD, self); err != nil {
 			return fail("recording the run directory's owner: %v", err)
 		}
 	}
@@ -290,7 +348,7 @@ func runHelper() int {
 		}
 		return 0
 	}
-	if err := applyPlan(s.Plan, s.RunDir, s.Dir, s.TmpRoot); err != nil {
+	if err := applyPlan(s.Plan, runDir, s.Dir, s.TmpRoot); err != nil {
 		return fail("%v", err)
 	}
 	if err := dropPrivileges(); err != nil {
@@ -458,6 +516,9 @@ func applyOverlays(p Plan, runDir string, masked []string, mounts []mountInfo) e
 				return err
 			}
 			for _, w := range pass {
+				if _, err := os.Lstat(w); err != nil {
+					return &passthroughError{path: w, err: err}
+				}
 				if err := makeWritable(w); err != nil {
 					return err
 				}
@@ -475,6 +536,10 @@ func applyOverlays(p Plan, runDir string, masked []string, mounts []mountInfo) e
 				return err
 			}
 		} else if err := overlayWithPassthrough(path, filepath.Join(runDir, "o"+strconv.Itoa(e.index)), pass); err != nil {
+			var pe *passthroughError
+			if errors.As(err, &pe) {
+				return err
+			}
 			if err := readOnly(err); err != nil {
 				return err
 			}
@@ -488,6 +553,19 @@ func applyOverlays(p Plan, runDir string, masked []string, mounts []mountInfo) e
 	return nil
 }
 
+// passthroughError is a directory the plan keeps real that the sandbox could
+// not reach: the command is refused rather than run with it private.
+type passthroughError struct {
+	path string
+	err  error
+}
+
+func (e *passthroughError) Error() string {
+	return fmt.Sprintf("keeping %s real for the command: %v", e.path, e.err)
+}
+
+func (e *passthroughError) Unwrap() error { return e.err }
+
 // overlayWithPassthrough mounts the private overlay on dir and binds each of
 // pass, real, back over it.
 func overlayWithPassthrough(dir, work string, pass []string) error {
@@ -497,19 +575,19 @@ func overlayWithPassthrough(dir, work string, pass []string) error {
 			_ = unix.Close(fd)
 		}
 	}()
-	var keep []string
 	for _, w := range pass {
+		// prepareOverlays made every one: one that cannot be opened now is
+		// refused, never left private, which would discard what it declared.
 		fd, err := unix.Open(w, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 		if err != nil {
-			continue // absent: nothing of it to keep real
+			return &passthroughError{path: w, err: err}
 		}
 		fds = append(fds, fd)
-		keep = append(keep, w)
 	}
 	if err := mountOverlay(dir, work); err != nil {
 		return err
 	}
-	for i, w := range keep {
+	for i, w := range pass {
 		if err := unix.Mount("/proc/self/fd/"+strconv.Itoa(fds[i]), w, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
 			return fmt.Errorf("keeping %s real inside the private %s: %w", w, dir, err)
 		}
