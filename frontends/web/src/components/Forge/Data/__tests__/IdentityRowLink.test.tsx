@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import { ForgeConsoleContext, type ForgeConsole } from "../../Console/consoleContext";
 import { IdentityRowLink } from "../IdentityRowLink";
 const s = vi.hoisted(() => ({ data: { hasInstance: true }, error: null as unknown, status: vi.fn() }));
+vi.mock("@/components/forge-ui/link", () => ({ default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a> }));
 vi.mock("@/hooks/identity-queries", () => ({ useIdentityOrg: () => ({ orgId: "org" }), useIdentityStatus: (...args: unknown[]) => { s.status(...args); return s; } }));
 beforeEach(() => { s.data = { hasInstance: true }; s.error = null; vi.clearAllMocks(); });
 const href = vi.fn((_page: unknown, search: unknown) => `/identity?${new URLSearchParams(search as Record<string, string>)}`);
