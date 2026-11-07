@@ -125,6 +125,11 @@ interface ApiKeySetupState {
   reset: () => void;
 }
 
+// Bumped by reset() (an identity change: authStore): a check started for the
+// previous user drops its answer instead of installing it, or opening the
+// setup modal, for the next one.
+let generation = 0;
+
 export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
   showModal: false,
   isChecking: false,
@@ -136,6 +141,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
    * Called when user logs out so we can check again on next login.
    */
   reset: () => {
+    generation++;
     set({
       hasChecked: false,
       isChecking: false,
@@ -159,8 +165,11 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       return;
     }
 
+    const startedIn = generation;
+
     // Check if onboarding welcome hasn't been shown yet - don't show API key modal during welcome
     const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
+    if (startedIn !== generation) return;
     const checklistState = useOnboardingChecklistStore.getState();
     
     if (!checklistState.isInitialized) {
@@ -187,6 +196,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       logger.info("[ApiKeySetupStore] Checking for configured API keys...");
       const { providers, hasAnyKey, hasAnyManualKey } =
         await loadProviderCredentials();
+      if (startedIn !== generation) return;
 
       logger.info("[ApiKeySetupStore] API key check result", {
         hasAnyKey,
@@ -207,6 +217,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       if (shouldShowModal) openApiKeySetupModal();
     } catch (error) {
       logger.error("[ApiKeySetupStore] Failed to check API keys:", error);
+      if (startedIn !== generation) return;
       set({
         isChecking: false,
         hasChecked: true,
@@ -224,10 +235,12 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
    * or if the cached result says no key is configured.
    */
   ensureApiKeyOrShowModal: async () => {
-    const state = get();
+    const startedIn = generation;
 
     // Check if onboarding welcome hasn't been shown yet - don't show modal during welcome
     const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
+    if (startedIn !== generation) return;
+    const state = get();
     const checklistState = useOnboardingChecklistStore.getState();
     
     if (!checklistState.isInitialized) {
@@ -268,6 +281,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
     try {
       logger.info("[ApiKeySetupStore] Ensuring API key is configured...");
       const { hasAnyKey, hasAnyManualKey } = await loadProviderCredentials();
+      if (startedIn !== generation) return;
 
       logger.info("[ApiKeySetupStore] API key ensure result", { hasAnyKey, hasAnyManualKey });
 
@@ -282,6 +296,7 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
       if (shouldShowModal) openApiKeySetupModal();
     } catch (error) {
       logger.error("[ApiKeySetupStore] Failed to ensure API key:", error);
+      if (startedIn !== generation) return;
       set({
         isChecking: false,
         // On error, don't show modal (fail gracefully)

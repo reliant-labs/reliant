@@ -11,7 +11,7 @@
  * The chain composes forge's web runtime (`@reliantlabs/forge-web-runtime`)
  * with reliant's own interceptors. The order is:
  *   error-normalize → org-snapshot → timeout → auth → missing-token → daemon-last-seen → trace
- *     → error-logging → upgrade-modal → machine-wake → 401-signout
+ *     → error-logging → upgrade-modal → machine-wake → 401-signout → write-owner
  * (error-normalize and auth are the runtime's; daemon-last-seen only on reliant
  * api-server transports — see TransportBackend; trace is the runtime's).
  *
@@ -43,9 +43,12 @@
  *     propagates;
  *   - unauthInterceptor (401 → one refresh, else one sign-out) lives innermost so it doesn't gobble
  *     the timeout's DeadlineExceeded or the upgrade's ResourceExhausted.
+ *   - writeOwnerInterceptor (writeOwner.ts) is innermost of all, so a write
+ *     bound to an account is checked against the credential on the request
+ *     that actually leaves, including unauthInterceptor's re-sends.
  *
- * Setting `withAuth: false` skips the auth stages AND
- * `unauthInterceptor` (a 401 with no session would loop). All other
+ * Setting `withAuth: false` skips the auth stages, `unauthInterceptor`
+ * (a 401 with no session would loop) and the write-owner check. All other
  * interceptors stay on so the unauth transport still gets timeouts, tracing,
  * error reporting, and the upgrade modal — drift gone.
  */
@@ -65,6 +68,7 @@ import { upgradeInterceptor } from "./upgradeInterceptor";
 import { orgInterceptor } from "./orgInterceptor";
 import { machineWakeInterceptor } from "./machineWakeInterceptor";
 import { createDeadlineInterceptor } from "./rpcDeadline";
+import { writeOwnerInterceptor } from "./writeOwner";
 import { isReadSlotProcedure } from "../services/controlPlane/observability/readSlots";
 import { classifyRpcFailure } from "./rpcErrorPolicy";
 import { noteVersionSkew } from "./versionSkew";
@@ -763,7 +767,7 @@ export function buildInterceptors(
     errorInterceptor,
     upgradeInterceptor,
     machineWakeInterceptor,
-    ...(withAuth ? [unauthInterceptor] : []),
+    ...(withAuth ? [unauthInterceptor, writeOwnerInterceptor] : []),
   ];
   return chain;
 }

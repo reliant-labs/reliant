@@ -66,54 +66,66 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
   const prefetch = useGlobalDataStore((state) => state.prefetch);
   const checkApiKeys = useApiKeySetupStore((state) => state.checkApiKeys);
   const resetApiKeyCheck = useApiKeySetupStore((state) => state.reset);
-  const hasPrefetched = useRef(false);
-  const hasInitializedAuthenticatedStartup = useRef(false);
+  // The user id each one-shot startup ran for (null: not run). Keyed on the
+  // id, not a boolean, so a direct A→B identity change (another host signing
+  // in through the shared session cookie) resets and re-runs both for B
+  // instead of leaving B on A's startup.
+  const hasPrefetched = useRef<string | null>(null);
+  const hasInitializedAuthenticatedStartup = useRef<string | null>(null);
+  const userId = user?.id ?? null;
+  // Whether a startup begun for `forUserId` still belongs to the page: once
+  // another identity is installed its remaining steps would load and install
+  // the previous user's state over the next one's, so they stop instead.
+  const stillSignedInAs = (forUserId: string) =>
+    useAuthStore.getState().user?.id === forUserId;
 
   useEffect(() => {
     void initialize();
   }, [initialize]);
 
-  // Reset state when user logs out
+  // Reset state when the user logs out or another user replaces them
   useEffect(() => {
-    if (!user) {
-      if (hasPrefetched.current) {
-        logger.info("[AuthInitializer] User logged out, resetting prefetch and API check state");
-        hasPrefetched.current = false;
-        resetApiKeyCheck();
+    if (hasPrefetched.current !== null && hasPrefetched.current !== userId) {
+      logger.info("[AuthInitializer] User changed, resetting prefetch and API check state");
+      hasPrefetched.current = null;
+      resetApiKeyCheck();
 
-        // The onboarding checklist is per-user, but it mirrors itself to
-        // localStorage (`reliant.checklist.*`) so a reload can decide offline
-        // whether the guide was already dismissed. That mirror is device-wide
-        // and outlives the session, so without this reset the NEXT account to
-        // sign in on this device inherits the previous user's progress.
-        //
-        // `welcomeShown` is the damaging one: apiKeySetupStore treats it as
-        // "this user has been introduced to the product" and defers the
-        // api-key-setup modal until it is true. Inherited, it reads as true
-        // for a brand-new user, so the modal fires immediately — including
-        // over `/onboarding`, whose z-40 overlay it outranks at z-50.
-        void import("../store/onboardingChecklistStore").then(
-          ({ useOnboardingChecklistStore }) => {
-            useOnboardingChecklistStore.getState().reset();
-          },
-        ).catch((error) => {
-          logger.warn("[AuthInitializer] Checklist reset failed:", error);
-        });
-      }
-
-      if (hasInitializedAuthenticatedStartup.current) {
-        logger.info("[AuthInitializer] User logged out, clearing authenticated startup state");
-        hasInitializedAuthenticatedStartup.current = false;
-      }
+      // The onboarding checklist is per-user, but it mirrors itself to
+      // localStorage (`reliant.checklist.*`) so a reload can decide offline
+      // whether the guide was already dismissed. That mirror is device-wide
+      // and outlives the session, so without this reset the NEXT account to
+      // sign in on this device inherits the previous user's progress.
+      //
+      // `welcomeShown` is the damaging one: apiKeySetupStore treats it as
+      // "this user has been introduced to the product" and defers the
+      // api-key-setup modal until it is true. Inherited, it reads as true
+      // for a brand-new user, so the modal fires immediately — including
+      // over `/onboarding`, whose z-40 overlay it outranks at z-50.
+      void import("../store/onboardingChecklistStore").then(
+        ({ useOnboardingChecklistStore }) => {
+          useOnboardingChecklistStore.getState().reset();
+        },
+      ).catch((error) => {
+        logger.warn("[AuthInitializer] Checklist reset failed:", error);
+      });
     }
-  }, [user, resetApiKeyCheck]);
+
+    if (
+      hasInitializedAuthenticatedStartup.current !== null &&
+      hasInitializedAuthenticatedStartup.current !== userId
+    ) {
+      logger.info("[AuthInitializer] User changed, clearing authenticated startup state");
+      hasInitializedAuthenticatedStartup.current = null;
+    }
+  }, [userId, resetApiKeyCheck]);
 
   useEffect(() => {
-    if (!initialized || loading || !user || hasInitializedAuthenticatedStartup.current) {
+    if (!initialized || loading || !user || hasInitializedAuthenticatedStartup.current === user.id) {
       return;
     }
 
-    hasInitializedAuthenticatedStartup.current = true;
+    const startupUserId = user.id;
+    hasInitializedAuthenticatedStartup.current = startupUserId;
 
     const initializeAuthenticatedStartup = async () => {
       // Wait for a token to actually exist before issuing authenticated RPCs.
@@ -130,7 +142,9 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       if (!token) {
         // Don't burn the one-shot guard on a failed attempt: a later session
         // commit should still be able to run startup.
-        hasInitializedAuthenticatedStartup.current = false;
+        if (hasInitializedAuthenticatedStartup.current === startupUserId) {
+          hasInitializedAuthenticatedStartup.current = null;
+        }
         logger.warn(
           "[AuthInitializer] No access token available; deferring authenticated startup",
         );
@@ -155,6 +169,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
                 logger.warn("[AuthInitializer] fetchProjects failed (will retry in ModernApp):", err);
               }),
         ]);
+        if (!stillSignedInAs(startupUserId)) return;
 
         logger.info("[AuthInitializer] Applying appearance settings to DOM...");
         settingsSync.applyAppearanceSettingsToDOM();
@@ -176,8 +191,9 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
   // checklist, the tour and the API-key check are all Reliant's.
   useEffect(() => {
     if (isForgeShell()) return;
-    if (initialized && !loading && user && !hasPrefetched.current) {
-      hasPrefetched.current = true;
+    if (initialized && !loading && user && hasPrefetched.current !== user.id) {
+      const prefetchUserId = user.id;
+      hasPrefetched.current = prefetchUserId;
       logger.info("[AuthInitializer] Auth ready, triggering global data prefetch...", {
         userId: user.id,
         email: user.email,
@@ -192,6 +208,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
       // meant the entire prefetch fan-out went out unauthenticated.
       void (async () => {
         const token = await waitForAccessToken();
+        if (!stillSignedInAs(prefetchUserId)) return;
         logger.info("[AuthInitializer] Session check before prefetch:", {
           hasAccessToken: !!token,
           hasAuthStoreSession: !!session,
@@ -202,7 +219,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
 
         if (!token) {
           logger.warn("[AuthInitializer] No access token available; skipping prefetch");
-          hasPrefetched.current = false;
+          if (hasPrefetched.current === prefetchUserId) hasPrefetched.current = null;
           return;
         }
 
@@ -217,14 +234,17 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
           );
         } catch (error) {
           logger.warn("[AuthInitializer] Global data prefetch failed:", error);
-          hasPrefetched.current = false;
+          if (hasPrefetched.current === prefetchUserId) hasPrefetched.current = null;
         }
+
+        if (!stillSignedInAs(prefetchUserId)) return;
 
         const waitForChecklist = async () => {
           const [{ useOnboardingChecklistStore }, { useTourStore }] = await Promise.all([
             import("../store/onboardingChecklistStore"),
             import("../store/tourStore"),
           ]);
+          if (!stillSignedInAs(prefetchUserId)) return;
           // Await loadState() directly instead of firing it as `void` and then
           // polling `isInitialized` in a 100ms-tick loop. The previous pattern
           // wasted up to 5s of timers waiting for a promise we already had,
@@ -237,6 +257,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
               logger.warn("[AuthInitializer] Tour loadState failed:", error);
             }),
           ]);
+          if (!stillSignedInAs(prefetchUserId)) return;
           checkApiKeys().catch((error) => {
             logger.warn("[AuthInitializer] API key check failed:", error);
           });
