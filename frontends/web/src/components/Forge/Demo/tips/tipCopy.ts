@@ -106,7 +106,7 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     body: "Find exactly where an error happens or time is spent in a user’s journey—even when the request crosses several services. Open a request below to see its timeline; your agent can read the same evidence to investigate.",
     help: "Choose a failed or slow request, then open its timeline and related logs. Your agent uses the request’s trace ID to read the same timeline, including the slowest part.",
     command: "forge obs traces prod --errors",
-    target: tid("obs-trace-table"),
+    target: tid("obs-trace-row"),
   },
   trace: {
     title: "One request, end to end",
@@ -134,7 +134,7 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     body: "Group repeated failures and see how many users are affected, with links to the request and release. Because forge manages releases, it can tie a first occurrence or regression to a release and help your agent focus on changed code. Open an issue to investigate.",
     help: "Your agent reads the grouped failure, affected users, related trace and release history before proposing a fix.",
     command: "forge obs issue <id> prod",
-    target: tid("obs-errors-list"),
+    target: tid("obs-issue-iss-orders-deadline"),
   },
   alerts: {
     title: "Alerts",
