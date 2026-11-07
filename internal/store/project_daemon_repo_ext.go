@@ -235,6 +235,7 @@ func projectDaemonsToCore(rows []*ProjectDaemon) []*core.ProjectDaemon {
 			InstallError:     row.InstallError,
 			InstallRequestID: row.InstallRequestID,
 			CloneStartedAt:   row.CloneStartedAt,
+			VerifiedAt:       row.VerifiedAt,
 		}
 	}
 	return out

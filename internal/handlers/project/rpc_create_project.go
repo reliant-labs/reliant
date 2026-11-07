@@ -14,11 +14,13 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitref"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
+	"github.com/reliant-labs/reliant/internal/projectfacts"
 )
 
 // CreateProject creates a new project
@@ -39,6 +41,24 @@ func (s *Service) CreateProject(
 		return nil, svcerr.InvalidArgument(fmt.Sprintf("project path must be absolute, got: %q", req.Msg.Path))
 	}
 
+	// pinned is the machine the request names (daemon_id); "" is today's
+	// default resolution. A named machine is resolved, and an existing
+	// project attached, before anything below (findOrAttachOn).
+	pinned := req.Msg.GetDaemonId()
+	if pinned != "" {
+		resp, err := s.findOrAttachOn(ctx, userID, pinned, req.Msg.Path)
+		if err != nil || resp != nil {
+			return resp, err
+		}
+	}
+	// send runs a command on the pinned machine, or by default resolution.
+	send := func(commandType string, payload, resp any) error {
+		if pinned != "" {
+			return s.sendToDaemon(ctx, userID, pinned, commandType, payload, resp)
+		}
+		return s.sendProjectDaemonCommand(ctx, userID, commandType, payload, resp)
+	}
+
 	// Check if project already exists for this user and path. Path-only
 	// lookups are nondeterministic in multi-user setups (the projects table
 	// allows the same path under different user_ids), so scope the check.
@@ -47,7 +67,7 @@ func (s *Service) CreateProject(
 	// resolution lands here on the second and later runs. A row is not a
 	// directory, so before handing the caller an id to bind a run to, confirm
 	// the directory the row names is still there.
-	if existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, req.Msg.Path, userID); err == nil && existing != nil {
+	if existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, req.Msg.Path, userID); pinned == "" && err == nil && existing != nil {
 		// The row was found BY this path, so the path asked about is the
 		// one the caller named — on the machine the request runs on.
 		machine := s.requestMachine(ctx, userID, existing.ID, req.Msg.Path)
@@ -78,7 +98,10 @@ func (s *Service) CreateProject(
 	// A resolve failure is non-fatal: it just means no daemon is reachable
 	// right now, and the mkdir will fall through to the pending-command
 	// enqueue path (the reconcile-on-connect flow writes the row later).
-	resolvedDaemonID, resolveErr := s.resolveDaemonID(ctx, userID)
+	resolvedDaemonID, resolveErr := pinned, error(nil)
+	if pinned == "" {
+		resolvedDaemonID, resolveErr = s.resolveDaemonID(ctx, userID)
+	}
 	if resolveErr != nil {
 		logging.InfoContext(ctx, "No daemon resolvable for new project; will rely on pending-command + reconcile", "path", req.Msg.Path, "error", resolveErr)
 	}
@@ -89,7 +112,13 @@ func (s *Service) CreateProject(
 	// project_daemons row write on this so a phantom row is never recorded.
 	daemonConnected := false
 	mkdirPayload := map[string]string{"path": req.Msg.Path}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", mkdirPayload, nil); err != nil {
+	if err := send("fs.mkdir", mkdirPayload, nil); err != nil {
+		if pinned != "" {
+			// The user picked this machine and its folder: queueing the
+			// mkdir for whichever machine connects next is not what they
+			// asked for. Nothing is recorded yet.
+			return nil, daemonerr.Error("create the project's folder on "+s.machineName(ctx, pinned), err)
+		}
 		logging.WarnContext(ctx, "Failed to mkdir project path via daemon; enqueueing for delivery on next connect", "error", err, "path", req.Msg.Path)
 		payloadBytes, marshalErr := json.Marshal(mkdirPayload)
 		if marshalErr != nil {
@@ -108,11 +137,6 @@ func (s *Service) CreateProject(
 	// IsGitRepo is derived from "any repos discovered". If the daemon is
 	// unreachable, project creation still succeeds with zero repos —
 	// repos can be added later via AddRepo.
-	type discoveredRepo struct {
-		RelativePath string `json:"relative_path"`
-		Name         string `json:"name"`
-		RemoteURL    string `json:"remote_url,omitempty"`
-	}
 	var discoverResp struct {
 		Discovered       []discoveredRepo `json:"discovered"`
 		HasForge         bool             `json:"has_forge"`
@@ -120,7 +144,7 @@ func (s *Service) CreateProject(
 		Truncated        bool             `json:"truncated"`
 		TruncatedReason  string           `json:"truncated_reason"`
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "repo.discover", map[string]interface{}{"path": req.Msg.Path}, &discoverResp); err != nil {
+	if err := send("repo.discover", map[string]interface{}{"path": req.Msg.Path}, &discoverResp); err != nil {
 		logging.WarnContext(ctx, "Failed to discover repos via daemon, project will start with zero repos", "error", err, "path", req.Msg.Path)
 	} else if discoverResp.Truncated {
 		// The repos found are registered; the rest are adopted the first time
@@ -130,6 +154,17 @@ func (s *Service) CreateProject(
 			"found", len(discoverResp.Discovered), "path", req.Msg.Path)
 	}
 	isGitRepo := len(discoverResp.Discovered) > 0
+
+	// On a named machine, a folder that is a checkout of one of the user's
+	// projects (its root remote) is that project here, not a new one: the
+	// same rule CreateProjectFromRepo applies (existingProjectForRepo).
+	if pinned != "" {
+		if root, ok := rootRepo(discoverResp.Discovered); ok && strings.TrimSpace(root.RemoteURL) != "" {
+			if existing, err := s.deps.Repo.GetProjectByRemoteURLAndUser(ctx, strings.TrimSpace(root.RemoteURL), userID); err == nil && existing != nil {
+				return s.attachExisting(ctx, userID, pinned, existing, req.Msg.Path)
+			}
+		}
+	}
 
 	// Set defaults. Normalize + validate the caller-supplied branch so an
 	// untrimmed or invalid value (e.g. "main " with a trailing space) is
@@ -170,9 +205,14 @@ func (s *Service) CreateProject(
 			Success bool   `json:"success"`
 			Error   string `json:"error,omitempty"`
 		}
-		if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_git_repo", gitInitPayload, &gitInitResp); err != nil {
+		if err := send("project.init_git_repo", gitInitPayload, &gitInitResp); err != nil {
 			logging.WarnContext(ctx, "Failed to auto git-init project via daemon; enqueueing for delivery on next connect", "error", err, "path", req.Msg.Path)
-			if payloadBytes, marshalErr := json.Marshal(gitInitPayload); marshalErr != nil {
+			if pinned != "" {
+				// The queue delivers to whichever machine connects next,
+				// not to the one named; the user is offered "Initialize
+				// Git" instead.
+				logging.InfoContext(ctx, "Not queueing git-init: the project is on a named machine", "daemonID", pinned)
+			} else if payloadBytes, marshalErr := json.Marshal(gitInitPayload); marshalErr != nil {
 				logging.WarnContext(ctx, "Failed to marshal git-init payload for enqueue", "error", marshalErr, "path", req.Msg.Path)
 			} else if n, enqErr := s.enqueueDaemonCommand(ctx, userID, "project.init_git_repo", payloadBytes); enqErr != nil {
 				logging.WarnContext(ctx, "Failed to enqueue git-init for daemon", "error", enqErr, "path", req.Msg.Path)
@@ -300,7 +340,7 @@ func (s *Service) CreateProject(
 		"path":            req.Msg.Path,
 		"default_content": defaultProjectReliantMD,
 	}
-	if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_files", initPayload, &initFilesResp); err != nil {
+	if err := send("project.init_files", initPayload, &initFilesResp); err != nil {
 		logging.WarnContext(ctx, "Failed to initialize project files via daemon", "error", err, "path", req.Msg.Path)
 	} else if initFilesResp.Error != "" {
 		logging.WarnContext(ctx, "Failed to initialize project files", "error", initFilesResp.Error, "path", req.Msg.Path)
@@ -323,7 +363,7 @@ func (s *Service) CreateProject(
 			"path":            repoPath,
 			"skip_reliant_md": true,
 		}
-		if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_files", repoInitPayload, &repoInitResp); err != nil {
+		if err := send("project.init_files", repoInitPayload, &repoInitResp); err != nil {
 			logging.WarnContext(ctx, "Failed to initialize repo files via daemon", "error", err, "path", repoPath)
 		} else if repoInitResp.Error != "" {
 			logging.WarnContext(ctx, "Failed to initialize repo files", "error", repoInitResp.Error, "path", repoPath)
@@ -366,7 +406,9 @@ func (s *Service) CreateProject(
 	// Tell the daemon to load real configs for this project path.
 	// This is fire-and-forget — the seed row above ensures the workflow
 	// can start even if the daemon hasn't responded yet.
-	if s.deps.Router != nil {
+	if pinned != "" {
+		s.syncConfigOn(ctx, userID, pinned, project.ID, req.Msg.Path)
+	} else if s.deps.Router != nil {
 		if err := s.deps.Router.SendLoadProjectConfigs(ctx, userID, req.Msg.Path, uuid.New().String()); err != nil {
 			logging.WarnContext(ctx, "Failed to request daemon config load for new project",
 				"error", err,
@@ -387,7 +429,75 @@ func (s *Service) CreateProject(
 		}
 	}
 
+	resp := &reliantv1.CreateProjectResponse{Project: projectToProto(project)}
+	if pinned != "" {
+		resp.ProjectDaemon = s.checkoutProto(ctx, justRecorded(project.ID, pinned, project.Path, project.DefaultBranch))
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// findOrAttachOn is CreateProject's find half on a named machine (daemon_id).
+// It returns a response when the folder is an existing project — attached to
+// it, when the project is not on the machine yet — an error when the request
+// must stop, and (nil, nil) when a new project is to be created.
+//
+// "Existing" is decided as today, by path, extended to the named machine:
+//   - a folder that is already a project's checkout on this machine is
+//     AlreadyExists, as a path that is a project's is today (after the same
+//     check that its directory is still there);
+//   - a folder at the creation path of one of the user's projects is that
+//     project. The connect reconcile already reads it so — any machine with a
+//     directory at a project's creation path is recorded as holding it — so
+//     attaching it here only does now what the next connect would. A project
+//     already on this machine at another path is AlreadyExists: one machine
+//     holds one checkout of a project.
+//
+// The third rule, a git checkout of a project's remote, needs the folder's
+// remote, which repo.discover reads in CreateProject itself.
+func (s *Service) findOrAttachOn(ctx context.Context, userID, daemonID, path string) (*connect.Response[reliantv1.CreateProjectResponse], error) {
+	if _, err := s.ownedMachine(ctx, userID, daemonID); err != nil {
+		return nil, err
+	}
+	if here, err := s.projectAtPathOn(ctx, userID, daemonID, path); err != nil {
+		return nil, err
+	} else if here != nil {
+		if verr := s.verifyProjectDirectoryExists(ctx, userID, here.ID, path, daemonID); verr != nil {
+			return nil, verr
+		}
+		return nil, svcerr.AlreadyExists(fmt.Sprintf("a project already exists at this path: %q on %s", here.Name, s.machineName(ctx, daemonID)))
+	}
+	existing, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, userID)
+	if err != nil || existing == nil {
+		return nil, nil
+	}
+	// Attaching a found project never creates its folder: an empty
+	// directory dressed as the project is the phantom
+	// verifyProjectDirectoryExists refuses.
+	if err := s.requireFolder(ctx, userID, daemonID, path); err != nil {
+		return nil, err
+	}
+	return s.attachExisting(ctx, userID, daemonID, existing, path)
+}
+
+// attachExisting records the folder at path on the machine as existing's
+// checkout there (CreateProject with daemon_id found the project), unless the
+// project is already on that machine.
+func (s *Service) attachExisting(ctx context.Context, userID, daemonID string, existing *db.Project, path string) (*connect.Response[reliantv1.CreateProjectResponse], error) {
+	prior, err := s.checkoutOn(ctx, existing.ID, daemonID)
+	if err != nil {
+		return nil, err
+	}
+	if prior != nil {
+		return nil, svcerr.AlreadyExists(fmt.Sprintf("a project already exists for this folder: %q is on %s at %s",
+			existing.Name, s.machineName(ctx, daemonID), prior.Path))
+	}
+	if err := s.recordCheckout(ctx, userID, daemonID, existing, path, existing.DefaultBranch); err != nil {
+		return nil, err
+	}
+	projectfacts.LearnForgeName(ctx, s.deps.Router, s.deps.Repo, userID, daemonID, existing.ID, path)
 	return connect.NewResponse(&reliantv1.CreateProjectResponse{
-		Project: projectToProto(project),
+		Project:       projectToProto(existing),
+		ProjectDaemon: s.checkoutProto(ctx, justRecorded(existing.ID, daemonID, path, existing.DefaultBranch)),
+		Attached:      true,
 	}), nil
 }

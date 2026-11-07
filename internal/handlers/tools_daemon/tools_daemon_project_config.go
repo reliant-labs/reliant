@@ -3,6 +3,7 @@ package tools_daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -62,7 +63,9 @@ func (s *Service) handleProjectDiscovery(ctx context.Context, conn *daemonConnec
 		discovered := projectsByPath[path]
 		// One unresolvable path must not abandon the rest of the daemon's
 		// projects, so this logs and moves on rather than returning.
-		if _, err := s.ensureOwnedProjectForPath(ctx, conn, path, discovered); err != nil {
+		if _, err := s.ensureOwnedProjectForPath(ctx, conn, path, discovered); errors.Is(err, errProjectDetached) {
+			continue
+		} else if err != nil {
 			logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Skipped discovered project that could not be resolved",
 				"error", err, "projectPath", path, "daemonID", conn.daemonID, "userID", conn.userID)
 			continue
@@ -283,6 +286,9 @@ func (s *Service) handleProjectConfigDelta(ctx context.Context, conn *daemonConn
 	}
 
 	project, err := s.ensureOwnedProjectForPath(ctx, conn, projectPath, nil)
+	if errors.Is(err, errProjectDetached) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -327,6 +333,11 @@ func (s *Service) persistProjectConfigSnapshot(ctx context.Context, conn *daemon
 	}
 
 	project, err := s.ensureOwnedProjectForPath(ctx, conn, projectPath, nil)
+	if errors.Is(err, errProjectDetached) {
+		logging.DebugContext(ctx, "[ToolsDaemon] Dropped a config snapshot of a project detached from this machine",
+			"projectPath", projectPath, "daemonID", conn.daemonID)
+		return nil
+	}
 	if err != nil {
 		// Dropping a snapshot is NOT recoverable by waiting: runProjectWatcher
 		// suppresses any delta whose content hash matches the last one it SENT,
@@ -409,7 +420,35 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 		return nil, fmt.Errorf("cannot resolve project %q: the daemon connection carries no user", path)
 	}
 
+	// The machine's own checkouts come first. projects.path is where a
+	// project was CREATED, on whichever machine created it; a machine whose
+	// checkout of it is elsewhere (cloned or attached at another path) pushes
+	// that path, and looked up by creation path alone it read as a brand-new
+	// project — a duplicate of one the machine already holds.
+	detached, err := s.detachedProjects(ctx, conn.daemonID)
+	if err != nil {
+		return nil, err
+	}
+	if detached.path(path) {
+		return nil, errProjectDetached
+	}
+	if own, err := s.machineCheckoutAt(ctx, conn, path); err != nil {
+		return nil, err
+	} else if own != nil {
+		if discovered != nil {
+			if updateErr := projectfacts.ReconcileGitRepo(ctx, s.deps.Repo, own, discovered.IsGitRepo); updateErr != nil {
+				logging.WarnContext(ctx, "ensureOwnedProjectForPath: failed to update git status", "error", updateErr, "projectID", own.ID)
+			}
+		}
+		return own, nil
+	}
+
 	project, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)
+	if err == nil && project != nil && detached.project(project.ID) {
+		// Found by its creation path, but the user detached it from this
+		// machine (at another path, or this one).
+		return nil, errProjectDetached
+	}
 	if err != nil {
 		if !isNotFoundErr(err) {
 			return nil, err
@@ -455,7 +494,7 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 		// directory from. Without it the project would have no checkout on
 		// record until the machine next connected.
 		if createErr == nil && strings.TrimSpace(conn.daemonID) != "" {
-			if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, conn.daemonID, path, nil); err != nil {
+			if _, err := s.deps.Repo.RecordObservedProjectDaemon(ctx, project.ID, conn.daemonID, path, nil); err != nil {
 				logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record the discovering machine's checkout; reconcile will heal it",
 					"error", err, "projectID", project.ID, "daemonID", conn.daemonID)
 			}
@@ -471,6 +510,63 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	}
 
 	return project, nil
+}
+
+// errProjectDetached is ensureOwnedProjectForPath's answer for a path, or a
+// project, the user detached from the reporting machine: its discovery,
+// snapshots and deltas are dropped, quietly — the folder is still on the
+// machine's disk by design (DetachProjectFromDaemon), and its watcher runs
+// until the machine reconnects without being asked to watch it.
+var errProjectDetached = errors.New("project detached from this machine")
+
+// machineDetachments is what the user detached from one machine.
+type machineDetachments struct {
+	projects map[string]bool
+	paths    map[string]bool
+}
+
+func (d machineDetachments) project(id string) bool { return d.projects[id] }
+func (d machineDetachments) path(p string) bool     { return d.paths[ospath.Clean(p)] }
+
+// detachedProjects reads the machine's detachments; none for a connection
+// that names no machine.
+func (s *Service) detachedProjects(ctx context.Context, daemonID string) (machineDetachments, error) {
+	out := machineDetachments{projects: map[string]bool{}, paths: map[string]bool{}}
+	if strings.TrimSpace(daemonID) == "" {
+		return out, nil
+	}
+	rows, err := s.deps.Repo.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	if err != nil {
+		return out, err
+	}
+	for _, d := range rows {
+		out.projects[d.ProjectID] = true
+		out.paths[ospath.Clean(d.Path)] = true
+	}
+	return out, nil
+}
+
+// machineCheckoutAt is the user's project whose checkout on the connected
+// machine is recorded at path, nil when none is.
+func (s *Service) machineCheckoutAt(ctx context.Context, conn *daemonConnection, path string) (*db.Project, error) {
+	if strings.TrimSpace(conn.daemonID) == "" {
+		return nil, nil
+	}
+	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, conn.daemonID)
+	if err != nil {
+		return nil, err
+	}
+	want := ospath.Clean(path)
+	for _, row := range rows {
+		if row == nil || ospath.Clean(row.Path) != want {
+			continue
+		}
+		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, conn.userID)
+		if err == nil && project != nil {
+			return project, nil
+		}
+	}
+	return nil, nil
 }
 
 // shouldApplyProjectConfigUpdate drops a delta older than the last push from

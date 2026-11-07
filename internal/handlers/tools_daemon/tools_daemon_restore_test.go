@@ -38,9 +38,9 @@ func (s *restoreStore) ListReposByProject(_ context.Context, projectID string) (
 	return s.repos[projectID], nil
 }
 
-func (s *restoreStore) UpsertProjectDaemon(_ context.Context, projectID, _, _ string, _ *string) error {
+func (s *restoreStore) RecordObservedProjectDaemon(_ context.Context, projectID, _, _ string, _ *string) (bool, error) {
 	s.installed = append(s.installed, projectID)
-	return nil
+	return true, nil
 }
 
 func (s *restoreStore) UpsertQueuedProjectDaemon(_ context.Context, projectID, _, _ string, _ *string, requestID string) error {

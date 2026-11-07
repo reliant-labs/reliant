@@ -68,6 +68,12 @@ func (r *Repo) SyncProjectConfigSnapshot(ctx context.Context, record *ProjectCon
 		if err := store.LockProjectCatalog(txCtx, r.ORM(), record.ProjectID); err != nil {
 			return err
 		}
+		// A snapshot of a detached pair is dropped here, under the lock the
+		// detach holds: one the caller resolved before a detach committed
+		// must not recreate the machine's catalog afterwards.
+		if detached, err := store.ProjectDaemonDetached(txCtx, r.ORM(), record.ProjectID, record.DaemonID); err != nil || detached {
+			return err
+		}
 		prevRow, err := store.GetProjectMachineCatalog(txCtx, r.ORM(), record.ProjectID, record.DaemonID)
 		if err != nil {
 			return err
