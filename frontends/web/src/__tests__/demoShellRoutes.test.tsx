@@ -24,7 +24,7 @@ vi.mock("@/components/Modals/ModalLayer", () => ({ ModalLayer: () => null }));
 vi.mock("@/components/NewBuildPrompt", () => ({ NewBuildPrompt: () => null }));
 vi.mock("@/lib/toast", () => ({ Toaster: () => null }));
 vi.mock("@/components/Onboarding/JourneyTour", () => ({ JourneyTour: () => <div data-testid="journey-tour" /> }));
-vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <div data-testid="demo-console" /> }));
+vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <main data-testid="demo-console" /> }));
 // The boot installs the demo transport through a lazy import() whose fixture
 // chain (sample metrics, traces, scenarios) is still loading when the file's
 // tests are done, and vitest then fails the run with EnvironmentTeardownError
@@ -100,19 +100,19 @@ describe("the demo shell's routes", () => {
 });
 
 describe("explore first: the tour is offered, never started", () => {
-  it("opens on the console with no tour, and a toast that offers it", async () => {
+  it("opens with one compact page card, not a competing toast or automatic tour", async () => {
     const router = renderDemoShell("/");
     await screen.findByTestId("demo-console");
-    expect(await screen.findByTestId("demo-tour-toast")).toBeInTheDocument();
+    expect(await screen.findByTestId("demo-tip")).toBeInTheDocument();
     expect(searchOf(router).tour).toBeUndefined();
-    expect(tracked).toContainEqual({ event: "demo_tour_offered", props: {} });
+    expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
   });
 
-  it("starts the forge journey from the toast, from the demo source", async () => {
+  it("starts the optional tour only from Take the tour", async () => {
     const router = renderDemoShell("/");
-    fireEvent.click(await screen.findByTestId("demo-tour-toast-start"));
+    fireEvent.click(await screen.findByTestId("demo-page-tour-start"));
     await waitFor(() => expect(searchOf(router).tour).toBe("forge:fg-intro"));
-    expect(tracked).toContainEqual(expect.objectContaining({ event: "journey_selected", props: expect.objectContaining({ source: "demo" }) }));
+    expect(tracked).toContainEqual({ event: "demo_page_tour_started", props: { tip: "overview" } });
     expect(screen.queryByTestId("demo-tour-toast")).toBeNull();
   });
 

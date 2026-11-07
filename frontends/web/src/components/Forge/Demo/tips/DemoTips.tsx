@@ -109,7 +109,7 @@ export function DemoTips() {
         <SignUpButton placement="corner" size="md" />
         <InstallForgeLink placement="corner" />
         {!open && key && (
-          <button type="button" onClick={() => { setOpen(true); requestAnimationFrame(() => document.querySelector('[data-testid="demo-tip"]')?.scrollIntoView({ block: "nearest" })); }} aria-label={`About ${tip?.title}`} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-popover text-foreground shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" data-testid="demo-page-info">
+          <button type="button" onClick={() => { setOpen(true); requestAnimationFrame(() => document.querySelector('[data-testid="demo-tip"]')?.scrollIntoView?.({ block: "nearest" })); }} aria-label={`About ${tip?.title}`} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-popover text-foreground shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" data-testid="demo-page-info">
             <CircleHelp className="h-5 w-5" aria-hidden="true" />
           </button>
         )}
