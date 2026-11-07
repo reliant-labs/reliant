@@ -4,11 +4,15 @@
  * Which app shell this page load mounts: Reliant, the forge-branded shell, or
  * the public forge demo.
  *
- * One bundle, three shells. The reliant-web static site serves
- * `app.reliantlabs.io` (Reliant), the forge host (`forge.reliantlabs.io`,
- * runtime config FORGE_APP_HOST) and the demo host (`demo.reliantlabs.io`,
- * DEMO_APP_HOST): the document's HOSTNAME picks the shell, so the forge pages
- * are the same bytes in all three and ship with the same release.
+ * The reliant-web static site serves `app.reliantlabs.io` (Reliant) and the
+ * forge host (`forge.reliantlabs.io`, runtime config FORGE_APP_HOST): the
+ * document's HOSTNAME picks the shell, so the forge pages are the same bytes
+ * in both and ship with the same release. The public demo
+ * (`demo.reliantlabs.io`) is a build of its own (demo.html, the forge-demo
+ * frontend of the `demo` env), which is always the demo shell
+ * (`__WEB_TARGET__`). Deprecated, kept working until a future major: this
+ * bundle still mounts the demo shell on the DEMO_APP_HOST host, so a
+ * deployment that still points that host at reliant-web keeps its demo.
  *
  *   forge    ForgeShell (forgeShellRoutes.tsx): the forge console,
  *            observability, environments, secrets, domains, releases and
@@ -82,7 +86,10 @@ export function forgeAppHost(): string {
   return normalizeHost(configured) || DEFAULT_FORGE_APP_HOST;
 }
 
-/** The public demo's hostname: DEMO_APP_HOST, else the default. */
+/**
+ * The public demo's hostname in this bundle: DEMO_APP_HOST, else the default.
+ * Deprecated: the demo's own build (demo.html) is the supported path.
+ */
 export function demoAppHost(): string {
   let configured = "";
   try {
