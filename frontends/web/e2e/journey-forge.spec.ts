@@ -107,7 +107,7 @@ async function walkToEndCard(page: Page) {
   await next(page);
 
   await atStep(page, 4, T, 'One request, end to end');
-  await expect(page.getByTestId('tour-next')).toHaveCount(0);
+  await expect(page.getByTestId('tour-next')).toBeDisabled();
   await openTrace(page);
   await expect(page).toHaveURL(new RegExp(`trace=${TRACE_ID}`));
 
@@ -118,7 +118,7 @@ async function walkToEndCard(page: Page) {
   await page.getByTestId('trace-logs').click();
   await expect(page).toHaveURL(/view=logs/);
   await expect(page.getByTestId('obs-logs-trace-scope')).toBeVisible();
-  await expect(page.getByTestId('tour-action-done')).toBeVisible();
+  await expect(page.getByTestId('tour-next-done')).toBeVisible();
   await next(page);
 
   await atStep(page, 7, T, 'Where the CPU went');
@@ -140,7 +140,7 @@ async function walkToEndCard(page: Page) {
   // Sample ids, not log text: the demo says so.
   await expect(page.getByTestId('ask-agent-demo-note')).toBeVisible();
   await sheet.getByRole('button', { name: 'Done' }).click();
-  await expect(page.getByTestId('tour-action-done')).toBeVisible();
+  await expect(page.getByTestId('tour-next-done')).toBeVisible();
   await next(page);
 
   await atStep(page, 11, T, 'Try it on your app');

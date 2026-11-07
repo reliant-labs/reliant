@@ -310,7 +310,7 @@ describe("the forge journey", () => {
     it("says Autopilot runs in Reliant, in the forge shell", () => {
       setTourShell("forge");
       render(<>{presentStep(step("fg-oncall")).description}</>);
-      expect(screen.getByText(/Autopilot runs in Reliant/)).toBeInTheDocument();
+      expect(screen.getByText(/Nothing deploys without configuration and permission/)).toBeInTheDocument();
       expect(screen.getByRole("link", { name: "Set it up in Reliant" })).toHaveAttribute(
         "href",
         "https://app.reliantlabs.io/workflows/library/builtin%3A%2F%2Fautopilot-oncall",

@@ -100,7 +100,7 @@ function WhatIsForge() {
 }
 
 const ONCALL_LEAD =
-  "Alerts, and new or regressed issues, can start an agent. The Autopilot on-call workflow listens for them.";
+  "Configure notifications by text, email or Slack where supported. An alert can trigger a configured Reliant workflow to investigate, test a fix and propose or release it under your chosen approvals.";
 
 const tryCommands = (cli: string) => [`${cli} obs status prod`, `${cli} obs issues prod`, `${cli} obs traces prod --errors`];
 const scaffoldCommands = (cli: string) => [`${cli} scaffold service inventory`, `${cli} scaffold worker fulfilment`, `${cli} lint --tracing`];
@@ -155,9 +155,8 @@ function Hops({ cli }: { cli: string }) {
   return (
     <>
       <p>
-        Each bar is a span. The payment call timed out, was retried and failed: most of the 182 ms. Then the order event went over NATS to
-        the worker, which called inventory over Connect. That is one trace across three services, and neither service has tracing code:
-        forge&apos;s Connect client and server pass the trace in request headers, and its NATS helpers pass it in message headers.
+        Follow one request across services to find where it failed or spent time. Here the payment was retried and failed before the
+        order was processed and stock was reserved. The timeline connects those actions so you and your agent can investigate the same evidence.
       </p>
       <AgentLine>
         Your agent runs <code>{cli} obs trace {DEMO_TRACE_ID.slice(0, 8)}… prod</code> and reads the same waterfall as a tree, with the
@@ -185,9 +184,8 @@ function Issue({ cli }: { cli: string }) {
   return (
     <>
       <p>
-        That deadline is an error, and forge groups errors into issues. Because
-        forge also ships your releases, it knows which release each error first appeared in, and which commits in that release touched the
-        failing code.
+        Forge groups repeated failures so you can see affected users and follow a failure to its request and release.
+        Because forge manages releases, it can tie a first occurrence or regression to a release and help your agent focus on changed code.
       </p>
       <AgentLine>
         Your agent runs <code>{cli} obs issue &lt;id&gt; prod</code>: the latest event, the release it first appeared in, and the suspect
@@ -233,7 +231,7 @@ export const forgeJourney: Journey = {
       id: "fg-instrumented",
       title: "Instrumented from the start",
       description:
-        "Nobody added tracing to this app by hand. forge writes the code at every boundary it owns: the Connect handlers and clients, a wrapper around each service package, and the database driver. It also ships helpers that carry a trace across NATS and Temporal. Every log line gets the trace id, and services push a CPU profile about once a minute. The rate, errors and latency here come from those spans.",
+        "Forge gives your app monitoring from the start, so you can find problems without adding it by hand. Follow a slow or failed request to its logs and the code doing the work; your agent can read the same evidence.",
       target: "[data-testid='obs-overview']",
       route: demo({ view: "overview", ...CLOSED }),
       // The demo host's short tour leaves it out: fg-hops and fg-inside show the same thing on a real trace.
@@ -242,7 +240,7 @@ export const forgeJourney: Journey = {
     {
       id: "fg-trace",
       title: "One request, end to end",
-      description: "Every request to shop is a trace, and forge recorded each one without a line of tracing code. The CreateOrder trace at the top failed.",
+      description: "Find exactly where an error happens or time is spent in a user’s journey—even when the request crosses several services. Open the failed CreateOrder request to see its timeline; your agent reads the same evidence.",
       target: `[data-testid='obs-trace-row'][data-trace-id='${DEMO_TRACE_ID}']`,
       route: demo({ view: "traces", ...CLOSED }),
       advanceOn: { kind: "when", test: ({ location }) => location.search.trace === DEMO_TRACE_ID },
@@ -350,8 +348,7 @@ export const forgeJourney: Journey = {
       description: (
         <>
           <p>
-            {ONCALL_LEAD} Enable it once and every alert becomes a GitHub issue that an agent investigates read-only and
-            writes up with the evidence and a likely fix. It never marks the work ready; a person does.
+            {ONCALL_LEAD} Nothing deploys without configuration and permission.
           </p>
           <p className="mt-2">
             <ExternalLink href={AUTOPILOT_PATH} onClick={() => trackEvent("tour_link_clicked", { journey: "forge", target: "autopilot" })}>
@@ -365,8 +362,7 @@ export const forgeJourney: Journey = {
           description: (
             <>
               <p>
-                {ONCALL_LEAD} Enable it once and every alert becomes a GitHub issue that an agent investigates. Autopilot
-                runs in Reliant. Without it, you can hand any alert or issue to your own agent, which is the next step.
+                {ONCALL_LEAD} Nothing deploys without configuration and permission. You can also hand an alert to your own agent.
               </p>
               <p className="mt-2">
                 <ExternalLink

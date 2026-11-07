@@ -378,25 +378,23 @@ the visitor stays on the console.
 
 ### Page tours (the demo)
 
-A journey crosses pages; a page tour stays on one. The forge demo
-(`Forge/Demo/tips/DemoTips.tsx`) gives each console page, the first time a
-visitor opens it in a session, a card: what the page is, the `forge …` command
-an agent runs for it, **Show me around**, Dismiss, Exit tips, and Sign up. Show
-me around draws 2–4 callouts (`tips/tipCopy.ts`, `callouts`) with this engine's
-presentation: `OnboardingSpotlight` with `TourControls` in the card (Step X of
-Y, Back, Next, Exit tour; Escape exits too), placed beside the target and a
-bottom sheet on a phone.
+The public demo gives each page one compact, non-modal explanation: what it
+is, why it helps, and how to use it (2–3 sentences). Dismiss leaves an
+accessible `?` restore button. Secondary agent help is a click/tap/keyboard
+disclosure, not hover-only. Sign up stays primary, Install forge secondary.
+There is no global toast or automatic local multi-stop sequence.
 
-Page tours are not journeys and never touch `?tour=`: no URL, no route, no
-required action, no signals. A stop whose `selector` the page doesn't render
-is left out. Nothing shows while a journey is open or while the tour toast
-waits for an answer. Afterwards a "Show me around" button in the corner
-replays the page's tour, beside Sign up. Which page a URL is: `tips/tipKeys.ts`.
+Take the tour is optional. In the demo, `JourneyTour` delegates forge links
+to `DemoPageTour`: one explanation of the actual visible page, with controls
+inside its callout. Explicit Next/Back navigate Overview → Traces → Errors →
+Alerts at the real console paths; Exit stays on the page. Legacy
+`/forge/demo?view=logs&tour=forge:fg-logs` explains the visible logs rather
+than demanding an earlier action. No auth or modal is required to explore.
+Phone callouts use a bottom sheet; the corner and tour hide for the drawer.
 
-Add a page: a key in `DEMO_TIP_KEYS`, its mapping in `demoTipKey`, and its
-copy with callouts on `data-testid`s the page renders.
-`Forge/Demo/__tests__/DemoTipsAndToast.test.tsx` checks the mapping and the
-copy, and walks a tour.
+Copy and a single optional anchor live in `tips/tipCopy.ts`; page mapping is
+`tips/tipKeys.ts`. `DemoTipsAndToast.test.tsx` pins optional entry, Dismiss /
+restore, current-page legacy links, real navigation and plain-language copy.
 
 | Event | Props |
 |---|---|

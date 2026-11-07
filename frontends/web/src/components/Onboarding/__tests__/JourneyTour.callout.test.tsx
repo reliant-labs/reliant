@@ -48,7 +48,7 @@ function renderTour(path: string) {
 }
 
 beforeEach(() => {
-  resetShellForTests("demo");
+  resetShellForTests("forge");
   setTourShell("forge");
   setTourStorage(memoryTourStorage());
   useTourStore.setState({ isInitialized: true });
@@ -67,7 +67,7 @@ describe("the forge journey's compact controls", () => {
     expect(await screen.findByTestId("tour-controls")).toBeInTheDocument();
     expect(screen.queryByTestId("onboarding-nav-bar")).toBeNull();
     expect(screen.queryByText("Skip step")).toBeNull();
-    expect(screen.getByText("Step 1 of 9")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 11")).toBeInTheDocument();
     expect(screen.getByTestId("tour-exit")).toHaveTextContent("Exit tour");
     expect(screen.getByTestId("tour-next")).toHaveTextContent("Next");
   });
@@ -114,7 +114,7 @@ describe("the callout controls are the engine's default, in every shell", () => 
   it.each([
     ["reliant", "reliant"],
     ["forge", "forge"],
-    ["demo", "forge"],
+
   ] as const)("the %s shell: no bottom bar; Step X of Y, Back, Next (disabled until the action), Exit", async (shell, tourShell) => {
     resetShellForTests(shell);
     setTourShell(tourShell);
