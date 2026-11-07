@@ -109,9 +109,11 @@ describe("settingsPersistence across an identity change", () => {
     token.release(sessionToken("user-a"));
     await write;
 
-    expect(mocks.batchUpsertSettings).toHaveBeenCalledWith([
-      { key: "tour.completed", value: "true", valueType: "string" },
-    ]);
+    expect(mocks.batchUpsertSettings).toHaveBeenCalledWith(
+      [{ key: "tour.completed", value: "true", valueType: "string" }],
+      undefined,
+      expect.objectContaining({ userId: "user-a" }),
+    );
   });
 
   it("never mixes two owners' writes in one batch", async () => {
@@ -122,8 +124,10 @@ describe("settingsPersistence across an identity change", () => {
     await Promise.all([a, b]);
 
     expect(mocks.batchUpsertSettings).toHaveBeenCalledTimes(1);
-    expect(mocks.batchUpsertSettings).toHaveBeenCalledWith([
-      { key: "tour.completedSteps", value: "[]", valueType: "string" },
-    ]);
+    expect(mocks.batchUpsertSettings).toHaveBeenCalledWith(
+      [{ key: "tour.completedSteps", value: "[]", valueType: "string" }],
+      undefined,
+      expect.objectContaining({ userId: "user-b" }),
+    );
   });
 });

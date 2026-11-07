@@ -64,25 +64,28 @@ beforeEach(() => {
 })
 
 describe('buildInterceptors factory', () => {
-  it('produces an 11-stage authed chain in the documented order', async () => {
+  it('produces a 12-stage authed chain in the documented order', async () => {
     const { buildInterceptors, traceStage } = await import('../transport')
+    const { writeOwnerInterceptor } = await import('../writeOwner')
     const chain = buildInterceptors({ withAuth: true })
     // error-normalize → timeout → auth → missing-token → org → daemon-last-seen →
-    // trace → error-log → upgrade → machine-wake → unauth
-    expect(chain).toHaveLength(11)
+    // trace → error-log → upgrade → machine-wake → unauth → write-owner
+    expect(chain).toHaveLength(12)
     // The trace stage (the forge runtime's traceInterceptor) is at its documented position.
     expect(chain[6]).toBe(traceStage)
+    // The write-owner check is innermost: it sees the header that leaves, retries included.
+    expect(chain[11]).toBe(writeOwnerInterceptor)
     // Every entry must be a function (Connect Interceptor shape).
     for (const entry of chain) {
       expect(typeof entry).toBe('function')
     }
   })
 
-  it('produces a 7-stage unauthed chain that omits auth, missing-token + 401-signout', async () => {
+  it('produces a 7-stage unauthed chain that omits auth, missing-token, 401-signout + write-owner', async () => {
     const { buildInterceptors } = await import('../transport')
     const authed = buildInterceptors({ withAuth: true })
     const unauthed = buildInterceptors({ withAuth: false })
-    // 11 - 4 (auth, missing-token, org, unauth) = 7
+    // 12 - 5 (auth, missing-token, org, unauth, write-owner) = 7
     expect(unauthed).toHaveLength(7)
     // The unauthed chain is a subset of the authed chain — every entry in
     // unauthed must also appear in authed at the same relative ordering. If
@@ -95,8 +98,8 @@ describe('buildInterceptors factory', () => {
 
   it('defaults withAuth to true when no option object is passed', async () => {
     const { buildInterceptors } = await import('../transport')
-    expect(buildInterceptors()).toHaveLength(11)
-    expect(buildInterceptors({})).toHaveLength(11)
+    expect(buildInterceptors()).toHaveLength(12)
+    expect(buildInterceptors({})).toHaveLength(12)
   })
 
   it('swaps exactly one stage (daemon-last-seen for forge-via) in the control-plane chain', async () => {

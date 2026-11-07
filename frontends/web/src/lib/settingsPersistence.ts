@@ -1,5 +1,6 @@
 import { batchUpsertSettings, deleteSetting } from "../hooks/settings-queries";
 import { getAuthTokenProvider } from "../api/authProvider";
+import { isWriteOwnerMismatch } from "../api/writeOwner";
 import { settingsSync } from "../services/settingsSync";
 import {
   credentialBelongsTo,
@@ -34,12 +35,13 @@ async function hasAuthToken(): Promise<boolean> {
 }
 
 /**
- * Whether a write queued for `owner` may go out now. Its token wait can span
- * an identity change (another host signing in as someone else through the
- * shared session cookie), and the transport attaches whichever credential is
- * current when the request leaves: checked against the credential the
- * request is about to carry, so the departing user's write is dropped rather
- * than sent into the next user's settings.
+ * Whether a write queued for `owner` is worth sending: there is a credential,
+ * and it still belongs to `owner`. Its token wait can span an identity change
+ * (another host signing in as someone else through the shared session
+ * cookie). This is the cheap early answer only: the transport resolves the
+ * credential again when the request leaves, and that second wait can span a
+ * change too, so the write also carries `owner` to the transport
+ * (api/writeOwner.ts), which refuses to send it with anyone else's credential.
  */
 async function mayWriteFor(owner: SessionOwner, keys: string[]): Promise<boolean> {
   const token = await currentToken();
@@ -132,8 +134,14 @@ async function flushWrites(batch: PendingWrites): Promise<void> {
     // upsertStringSetting. Awaiting a token before enqueuing would put each
     // caller in a different microtask and defeat the coalescing entirely.
     if (!(await mayWriteFor(batch.owner, settings.map((s) => s.key)))) return;
-    await batchUpsertSettings(settings);
+    await batchUpsertSettings(settings, undefined, batch.owner);
   } catch (error) {
+    if (isWriteOwnerMismatch(error)) {
+      logger.warn("[settingsPersistence] Dropped setting writes queued for a previous identity", {
+        keys: settings.map((s) => s.key),
+      });
+      return;
+    }
     logger.error("[settingsPersistence] Failed to upsert settings batch", {
       keys: settings.map((s) => s.key),
       error,
@@ -172,8 +180,9 @@ export async function deleteSettingIfExists(key: string): Promise<void> {
   settingsSync.removeFromCache(key);
   if (!(await mayWriteFor(owner, [key]))) return;
   try {
-    await deleteSetting(key);
+    await deleteSetting(key, undefined, owner);
   } catch {
-    // Ignore missing setting or transient errors.
+    // Ignore missing setting, transient errors, and a delete the transport
+    // dropped because the credential moved to another account.
   }
 }

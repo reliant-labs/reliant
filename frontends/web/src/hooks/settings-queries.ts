@@ -20,6 +20,7 @@
  */
 
 import { useMemo } from "react";
+import { createContextValues } from "@connectrpc/connect";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import type { MessageInitShape } from "@bufbuild/protobuf";
@@ -37,12 +38,16 @@ import {
   type ListSettingsResponse,
   type PollCopilotDeviceAuthRequestSchema,
   type PollCopilotDeviceAuthResponse_Status,
+  SettingsService,
   type Setting,
   type StartCopilotDeviceAuthResponse,
   type SyncReliantProviderResponse,
   type UpdatePreferencesRequestSchema,
   type UpdateShortcutsResponse,
 } from "../gen/reliant/v1/settings_pb";
+import { writeOwnerKey } from "../api/writeOwner";
+import type { SessionOwner } from "../lib/auth/sessionOwner";
+import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "@/store/authStore";
@@ -159,17 +164,44 @@ export function fetchSettings(projectId?: string): Promise<ListSettingsResponse>
 export async function batchUpsertSettings(
   settings: Array<{ key: string; value: string; valueType?: string }>,
   projectId?: string,
+  owner?: SessionOwner,
 ): Promise<Setting[]> {
   if (settings.length === 0) return [];
-  const response = await settingsMutations.batchUpsertSettings({
+  const req = {
     settings: settings.map((s) => ({ ...s, valueType: s.valueType ?? "string" })),
     projectId,
-  });
+  };
+  const response = owner
+    ? await ownedWrite(() => settingsClient.batchUpsertSettings(req, ownedCall(owner)))
+    : await settingsMutations.batchUpsertSettings(req);
   return response.settings;
 }
 
-export function deleteSetting(key: string, projectId?: string): Promise<DeleteSettingResponse> {
+export function deleteSetting(
+  key: string,
+  projectId?: string,
+  owner?: SessionOwner,
+): Promise<DeleteSettingResponse> {
+  if (owner) return ownedWrite(() => settingsClient.deleteSetting({ key, projectId }, ownedCall(owner)));
   return settingsMutations.deleteSetting({ key, projectId });
+}
+
+// A write made for a captured account (`owner`) must leave with that
+// account's credential or not at all: the transport's write-owner stage
+// (api/writeOwner.ts) checks the header it actually attaches. The generated
+// mutations forward only an abort signal, so an owned write calls the client
+// with the owner in its contextValues and then invalidates exactly what the
+// generated mutation would (`settingsServiceKeys.all`, on success).
+const settingsClient = connectClient(SettingsService);
+
+function ownedCall(owner: SessionOwner) {
+  return { contextValues: createContextValues().set(writeOwnerKey, owner) };
+}
+
+async function ownedWrite<T>(call: () => Promise<T>): Promise<T> {
+  const response = await call();
+  void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.all });
+  return response;
 }
 
 /** The saved shortcut overrides (a JSON document), refetched. */
