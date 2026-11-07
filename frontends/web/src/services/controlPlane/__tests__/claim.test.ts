@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The /claim page's three rpcs, through the real generated client and the real
  * Connect request/response types over a mock transport (W5a, the server half,

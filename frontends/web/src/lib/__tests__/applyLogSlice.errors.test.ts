@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Store-level dedup of error events (applyErrorUpdates → applyLogSlice, keyed
  * by e.id).

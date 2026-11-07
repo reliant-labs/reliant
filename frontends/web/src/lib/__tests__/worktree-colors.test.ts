@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { getWorktreeColor, resetWorktreeColors } from '../worktree-colors';
 
 describe('worktree-colors', () => {

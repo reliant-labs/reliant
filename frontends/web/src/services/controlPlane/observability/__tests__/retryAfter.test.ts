@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { BinaryWriter } from "@bufbuild/protobuf/wire";
 import { Code, ConnectError } from "@connectrpc/connect";

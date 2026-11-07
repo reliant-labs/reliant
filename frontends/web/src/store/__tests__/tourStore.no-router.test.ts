@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Guardrail: the tourStore must not couple itself to the router.
  *

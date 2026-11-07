@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Wiring Run LLM Tool Calls (`execute_tools`) after a Call LLM fills in
  * `tool_calls` with that step's tool calls — through a Switch, which is how

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { ChatState } from "../../gen/reliant/v1/chat_pb";
 import type { Chat } from "../../types/chat";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import { OBS_READ_CONCURRENCY, ReadScheduler, SERVER_READ_CAP, VISIBLE_READ_RESERVE } from "../readScheduler";
