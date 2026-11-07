@@ -294,6 +294,22 @@ func TestDefaultPlan_ForgesConfigIsReadOnlyAndItsCredentialsHidden(t *testing.T)
 	assert.Contains(t, p.Hide, filepath.Join(home, ".reliant", "forge-token-cache.json"), "the token cache is hidden, not read-only")
 }
 
+// R6.B2: Go's env file and git's config are protected where the go command
+// and git find them, the same path goEnvFile reads.
+func TestPlan_GoAndGitConfigUnderXDGConfigHomeAreProtected(t *testing.T) {
+	m := newMachine(t)
+	xdg := filepath.Join(m.root, "elsewhere", "config")
+	p := m.plan(m.multi, []string{"XDG_CONFIG_HOME=" + xdg})
+	for _, want := range []string{filepath.Join(xdg, "go", "env"), filepath.Join(xdg, "git")} {
+		assert.Contains(t, p.ReadOnly, want)
+		assert.Contains(t, p.Seal, want)
+	}
+	assert.Equal(t, filepath.Join(xdg, "go", "env"), goEnvPath(m.home, []string{"XDG_CONFIG_HOME=" + xdg}))
+	assert.Equal(t, "/x/env", goEnvPath(m.home, []string{"XDG_CONFIG_HOME=" + xdg, "GOENV=/x/env"}), "GOENV wins")
+	assert.Equal(t, "", goEnvPath(m.home, []string{"GOENV=off"}))
+	assert.Equal(t, filepath.Join(m.home, ".config", "go", "env"), goEnvPath(m.home, nil))
+}
+
 func TestFirstWord(t *testing.T) {
 	assert.Equal(t, "/daemon-bin/reliant", firstWord(`'/daemon-bin/reliant' 'auth'`))
 	assert.Equal(t, "/usr/bin/gh", firstWord(`/usr/bin/gh auth git-credential`))

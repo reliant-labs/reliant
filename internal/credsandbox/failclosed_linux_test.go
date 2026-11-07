@@ -258,3 +258,68 @@ func TestSandbox_HidesADirectoryInASharedScratchDirectory(t *testing.T) {
 	assert.Contains(t, out, "done")
 	assert.NoFileExists(t, filepath.Join(shm, "planted"))
 }
+
+// R5.B1: a PATH directory that does not exist yet is sealed wherever it is,
+// not only under the home; a PATH entry that is a file is read-only; a cache
+// that is not a directory refuses the command.
+func TestPrepareOverlays_MissingAndOddPathEntries(t *testing.T) {
+	root := t.TempDir()
+	missing := filepath.Join(root, "opt", "tools", "bin")
+	file := filepath.Join(root, "bin-file")
+	require.NoError(t, os.WriteFile(file, nil, 0o755))
+	p, err := prepareOverlays(Plan{Overlay: []Overlay{{Path: missing}, {Path: file}}})
+	require.NoError(t, err)
+	assert.Contains(t, p.Seal, missing)
+	assert.Contains(t, p.ReadOnly, file)
+	assert.Empty(t, p.Overlay)
+
+	_, err = prepareOverlays(Plan{Overlay: []Overlay{{Path: file, Env: "GOCACHE", Cache: true}}})
+	assert.Error(t, err, "a cache that is not a directory")
+}
+
+// A path to seal whose nearest directory the sandbox may not rebuild (a
+// shared scratch directory, "/" or a top-level one) but the daemon's user can
+// write refuses the plan; one under the private /tmp is fine.
+func TestCheckSeals_RefusesWhatCannotBeSealed(t *testing.T) {
+	assert.NoError(t, checkSeals([]string{filepath.Join(t.TempDir(), "x", "y")}), "under /tmp: private to the command")
+	shm, err := os.MkdirTemp("/dev/shm", "credsandbox-seal-")
+	if err != nil {
+		t.Skipf("needs a writable /dev/shm: %v", err)
+	}
+	require.NoError(t, os.Remove(shm))
+	assert.Error(t, checkSeals([]string{filepath.Join(shm, "bin")}), "/dev/shm is shared and cannot be rebuilt")
+}
+
+// R5.B1 and R6.B2 in a real sandbox, outside both the home and /tmp: a PATH
+// directory that does not exist yet, and Go's and git's config under a
+// non-default XDG_CONFIG_HOME, cannot be made or changed for a later
+// credentialed command.
+func TestSandbox_AbsentPathDirsAndXDGConfigOutsideTheHomeAreProtected(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	// Under this checkout: /tmp is private to the command, so only a
+	// directory elsewhere tests a write that could persist. The TestMain
+	// guard fails the run if it is ever left behind.
+	root, err := os.MkdirTemp(".", ".credsandbox-outside-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	bin := filepath.Join(root, "opt", "tools", "bin")
+	xdg := filepath.Join(root, "xdg-config")
+	require.NoError(t, os.MkdirAll(filepath.Join(xdg, "git"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(xdg, "git", "config"), []byte("[core]\n"), 0o644))
+
+	out := runWrapped(t, "none", home, home, `
+mkdir -p '`+bin+`' && printf '#!/bin/sh\necho pwned\n' > '`+bin+`/git' && chmod +x '`+bin+`/git' && echo PATH-PLANTED-IN-RUN
+mkdir -p '`+xdg+`/go' 2>/dev/null; echo 'GOFLAGS=-toolexec=/x' > '`+xdg+`/go/env' 2>&1 || echo GOENV-DENIED
+echo '[core] hooksPath = /x' >> '`+xdg+`/git/config' 2>&1 || echo GITCONFIG-DENIED
+true`, "PATH="+bin+":/usr/bin:/bin", "XDG_CONFIG_HOME="+xdg)
+	assert.NoDirExists(t, bin, "an absent PATH directory outside the home does not outlive the command")
+	assert.NoFileExists(t, filepath.Join(xdg, "go", "env"), "nor does $XDG_CONFIG_HOME/go/env")
+	assert.Contains(t, out, "GITCONFIG-DENIED")
+	got, err := os.ReadFile(filepath.Join(xdg, "git", "config"))
+	require.NoError(t, err)
+	assert.Equal(t, "[core]\n", string(got))
+}

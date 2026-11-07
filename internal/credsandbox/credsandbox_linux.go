@@ -738,9 +738,10 @@ func hideAndSeal(p Plan, mounts []mountInfo) ([]string, error) {
 			}
 			d = filepath.Dir(d)
 		}
-		// Never "/" or a top-level directory, and never a shared scratch
-		// directory (see scratchDirs).
-		if depthOf(d) < 2 || scratchDirs[d] {
+		// Never "/" or a top-level directory but the home, and never a shared
+		// scratch directory (sealable). prepareOverlays refused a plan with
+		// one the daemon's user could write (checkSeals).
+		if !sealable(d) {
 			continue
 		}
 		if _, ok := rebuild[d]; !ok {

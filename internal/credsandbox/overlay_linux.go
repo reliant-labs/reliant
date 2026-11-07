@@ -79,11 +79,17 @@ func prepareOverlays(p Plan) (Plan, error) {
 		case err != nil && o.Cache:
 			return p, fmt.Errorf("the cache %s: %w", o.Path, err)
 		case err != nil:
-			if o.Sealed {
-				p.Seal = append(p.Seal, o.Path)
-			}
+			// A PATH directory that does not exist yet, wherever it is: a
+			// command that made it could leave a program there that a later
+			// command runs. Sealed (checkSeals refuses one that cannot be).
+			p.Seal = append(p.Seal, o.Path)
 			continue
+		case !fi.IsDir() && o.Cache:
+			return p, fmt.Errorf("the cache %s is not a directory", o.Path)
 		case !fi.IsDir():
+			// A PATH entry that is a file: read-only, so it cannot be replaced
+			// by a directory of programs.
+			p.ReadOnly = append(p.ReadOnly, o.Path)
 			continue
 		case !o.Cache && unix.Access(o.Path, unix.W_OK) != nil:
 			continue
@@ -111,6 +117,10 @@ func prepareOverlays(p Plan) (Plan, error) {
 		}
 	}
 
+	if err := checkSeals(p.Seal); err != nil {
+		return p, err
+	}
+
 	writable := map[string]bool{}
 	for _, w := range p.Writable {
 		writable[w] = true
@@ -123,6 +133,48 @@ func prepareOverlays(p Plan) (Plan, error) {
 		}
 	}
 	return p, nil
+}
+
+// checkSeals refuses a plan with a path to seal that the sandbox could not
+// seal (hideAndSeal rebuilds the nearest directory above a missing one, but
+// never "/", a top-level directory or a shared scratch directory) while the
+// daemon's user could create it there: the command would be free to make it.
+// One under /tmp or /var/tmp is private to the command anyway.
+func checkSeals(seal []string) error {
+	for _, s := range seal {
+		s = canonical(s)
+		if _, err := os.Lstat(s); err == nil {
+			continue // it exists: ReadOnly freezes it
+		}
+		d := filepath.Dir(s)
+		for d != "/" {
+			if _, err := os.Lstat(d); err == nil {
+				break
+			}
+			d = filepath.Dir(d)
+		}
+		if under(d, "/tmp", "/var/tmp") || unix.Access(d, unix.W_OK) != nil {
+			continue
+		}
+		if !sealable(d) {
+			return fmt.Errorf("%s must not come to exist, and its directory %s cannot be sealed: point the variable that names it somewhere deeper", s, d)
+		}
+	}
+	return nil
+}
+
+// sealable reports whether hideAndSeal may rebuild directory d: never "/", a
+// top-level directory (the user's home, /root for a daemon run as root,
+// excepted) or a shared scratch directory.
+func sealable(d string) bool {
+	if d == "/" || scratchDirs[d] {
+		return false
+	}
+	if depthOf(d) >= 2 {
+		return true
+	}
+	home, err := os.UserHomeDir()
+	return err == nil && home != "" && canonicalDir(home) == d
 }
 
 // mkdirBeneath makes dir, inside root, one component at a time from root and

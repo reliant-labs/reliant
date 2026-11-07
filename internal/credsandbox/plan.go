@@ -205,10 +205,14 @@ func buildPlan(base Plan, in planEnv) Plan {
 			ro = append(ro, filepath.Join(home, rel))
 			seal = append(seal, filepath.Join(home, rel))
 		}
-		if goenv := envValue(in.env, "GOENV"); goenv != "" && goenv != "off" {
-			ro = append(ro, goenv)
-			seal = append(seal, goenv)
-		}
+	}
+	// Go's and git's own config wherever the environment puts it, by the
+	// same lookup they use (and goEnvFile reads): GOENV, else
+	// $XDG_CONFIG_HOME/go/env; $XDG_CONFIG_HOME/git. The home's defaults are
+	// above.
+	for _, p := range trustedConfigPaths(home, in.env) {
+		ro = append(ro, p)
+		seal = append(seal, p)
 	}
 
 	// The command's own checkouts.
@@ -613,6 +617,9 @@ func credentialHelpers(home string, env []string) (present, absent []string) {
 	if home != "" {
 		configs = append(configs, filepath.Join(home, ".gitconfig"), filepath.Join(home, ".config", "git", "config"))
 	}
+	if cfg := envValue(env, "XDG_CONFIG_HOME"); filepath.IsAbs(cfg) {
+		configs = append(configs, filepath.Join(cfg, "git", "config"))
+	}
 	for _, c := range configs {
 		for _, h := range gitConfigHelpers(c) {
 			hs = append(hs, helper{name: h.program, shell: h.shell})
@@ -784,21 +791,48 @@ func pathOverlays(env []string, home string) []Overlay {
 	return out
 }
 
-// goEnvFile is the go env -w file's settings.
-func goEnvFile(home string, env []string) map[string]string {
+// goEnvPath is the go env -w file as the go command finds it: GOENV ("off": none),
+// else $XDG_CONFIG_HOME/go/env, else ~/.config/go/env.
+func goEnvPath(home string, env []string) string {
 	path := envValue(env, "GOENV")
-	if path == "off" {
-		return nil
+	switch {
+	case path == "off":
+		return ""
+	case path != "":
+		return path
 	}
-	if path == "" {
-		cfg := envValue(env, "XDG_CONFIG_HOME")
-		if cfg == "" && home != "" {
+	cfg := envValue(env, "XDG_CONFIG_HOME")
+	if !filepath.IsAbs(cfg) {
+		cfg = ""
+		if home != "" {
 			cfg = filepath.Join(home, ".config")
 		}
-		if cfg == "" {
-			return nil
-		}
-		path = filepath.Join(cfg, "go", "env")
+	}
+	if cfg == "" {
+		return ""
+	}
+	return filepath.Join(cfg, "go", "env")
+}
+
+// trustedConfigPaths are Go's and git's config files outside the home's
+// defaults that the environment points them at: the go env -w file
+// (goEnvPath) and, with XDG_CONFIG_HOME set, $XDG_CONFIG_HOME/git.
+func trustedConfigPaths(home string, env []string) []string {
+	var out []string
+	if p := goEnvPath(home, env); filepath.IsAbs(p) {
+		out = append(out, p)
+	}
+	if cfg := envValue(env, "XDG_CONFIG_HOME"); filepath.IsAbs(cfg) {
+		out = append(out, filepath.Join(cfg, "git"))
+	}
+	return out
+}
+
+// goEnvFile is the go env -w file's settings.
+func goEnvFile(home string, env []string) map[string]string {
+	path := goEnvPath(home, env)
+	if path == "" {
+		return nil
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
