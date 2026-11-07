@@ -137,6 +137,9 @@ const (
 	DeployServiceRecordBundleProcedure = "/controlplane.v1.DeployService/RecordBundle"
 	// DeployServiceGetBundleProcedure is the fully-qualified name of the DeployService's GetBundle RPC.
 	DeployServiceGetBundleProcedure = "/controlplane.v1.DeployService/GetBundle"
+	// DeployServiceGetWorkloadConfigProcedure is the fully-qualified name of the DeployService's
+	// GetWorkloadConfig RPC.
+	DeployServiceGetWorkloadConfigProcedure = "/controlplane.v1.DeployService/GetWorkloadConfig"
 	// DeployServiceListConvergencesProcedure is the fully-qualified name of the DeployService's
 	// ListConvergences RPC.
 	DeployServiceListConvergencesProcedure = "/controlplane.v1.DeployService/ListConvergences"
@@ -407,6 +410,9 @@ type DeployServiceClient interface {
 	// created=false.
 	RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error)
 	GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error)
+	// Values require BOTH deploy:read and deploy:config:read. Every read is
+	// synchronously audited. The names-only GetBundle endpoint is unchanged.
+	GetWorkloadConfig(context.Context, *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error)
 	// ListConvergences returns an environment's OBSERVATION TIMELINE, newest
 	// first, keyset-paged for ListPromotions' reason: rows arrive while a reader
 	// pages, so an offset would skip or repeat one.
@@ -782,6 +788,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
 			connect.WithClientOptions(opts...),
 		),
+		getWorkloadConfig: connect.NewClient[v1.GetWorkloadConfigRequest, v1.GetWorkloadConfigResponse](
+			httpClient,
+			baseURL+DeployServiceGetWorkloadConfigProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetWorkloadConfig")),
+			connect.WithClientOptions(opts...),
+		),
 		listConvergences: connect.NewClient[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse](
 			httpClient,
 			baseURL+DeployServiceListConvergencesProcedure,
@@ -901,6 +913,7 @@ type deployServiceClient struct {
 	listUsage               *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
 	recordBundle            *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
 	getBundle               *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
+	getWorkloadConfig       *connect.Client[v1.GetWorkloadConfigRequest, v1.GetWorkloadConfigResponse]
 	listConvergences        *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
 	openDeployAttempt       *connect.Client[v1.OpenDeployAttemptRequest, v1.OpenDeployAttemptResponse]
 	reportDeployAttempt     *connect.Client[v1.ReportDeployAttemptRequest, v1.ReportDeployAttemptResponse]
@@ -1094,6 +1107,11 @@ func (c *deployServiceClient) RecordBundle(ctx context.Context, req *connect.Req
 // GetBundle calls controlplane.v1.DeployService.GetBundle.
 func (c *deployServiceClient) GetBundle(ctx context.Context, req *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error) {
 	return c.getBundle.CallUnary(ctx, req)
+}
+
+// GetWorkloadConfig calls controlplane.v1.DeployService.GetWorkloadConfig.
+func (c *deployServiceClient) GetWorkloadConfig(ctx context.Context, req *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error) {
+	return c.getWorkloadConfig.CallUnary(ctx, req)
 }
 
 // ListConvergences calls controlplane.v1.DeployService.ListConvergences.
@@ -1391,6 +1409,9 @@ type DeployServiceHandler interface {
 	// created=false.
 	RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error)
 	GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error)
+	// Values require BOTH deploy:read and deploy:config:read. Every read is
+	// synchronously audited. The names-only GetBundle endpoint is unchanged.
+	GetWorkloadConfig(context.Context, *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error)
 	// ListConvergences returns an environment's OBSERVATION TIMELINE, newest
 	// first, keyset-paged for ListPromotions' reason: rows arrive while a reader
 	// pages, so an offset would skip or repeat one.
@@ -1762,6 +1783,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceGetWorkloadConfigHandler := connect.NewUnaryHandler(
+		DeployServiceGetWorkloadConfigProcedure,
+		svc.GetWorkloadConfig,
+		connect.WithSchema(deployServiceMethods.ByName("GetWorkloadConfig")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceListConvergencesHandler := connect.NewUnaryHandler(
 		DeployServiceListConvergencesProcedure,
 		svc.ListConvergences,
@@ -1914,6 +1941,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceRecordBundleHandler.ServeHTTP(w, r)
 		case DeployServiceGetBundleProcedure:
 			deployServiceGetBundleHandler.ServeHTTP(w, r)
+		case DeployServiceGetWorkloadConfigProcedure:
+			deployServiceGetWorkloadConfigHandler.ServeHTTP(w, r)
 		case DeployServiceListConvergencesProcedure:
 			deployServiceListConvergencesHandler.ServeHTTP(w, r)
 		case DeployServiceOpenDeployAttemptProcedure:
@@ -2091,6 +2120,10 @@ func (UnimplementedDeployServiceHandler) RecordBundle(context.Context, *connect.
 
 func (UnimplementedDeployServiceHandler) GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetBundle is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) GetWorkloadConfig(context.Context, *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetWorkloadConfig is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error) {

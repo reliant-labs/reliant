@@ -28,6 +28,20 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 const ready = async () => waitFor(() => expect(screen.getByTestId("workload-detail")).toHaveAttribute("data-state", "ready"));
 
 describe("a workload", () => {
+  it.each([Code.PermissionDenied, Code.Unimplemented])("preserves names-only Config when values are refused (%s), with no automatic read", async (code) => {
+    const readConfig = vi.fn().mockRejectedValue(new ConnectError("refused", code));
+    renderWorkload("admin-server", { search: { tab: "config" }, readConfig });
+    await ready();
+    const names = screen.getByTestId("workload-config-env").textContent;
+    expect(readConfig).not.toHaveBeenCalled();
+    expect(screen.getByTestId("workload-config")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "View config values" }));
+    await screen.findByRole("alert");
+    expect(screen.getByTestId("workload-config-env").textContent).toBe(names);
+    expect(screen.getByTestId("workload-config")).toBeInTheDocument();
+    expect(readConfig).toHaveBeenCalledTimes(1);
+  });
+
   it("heads the page with its verdict, environment, kind, replicas and release", async () => {
     renderWorkload("reliant-temporal-worker");
     await ready();
