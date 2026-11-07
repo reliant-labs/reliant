@@ -32,14 +32,13 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/nats-io/nats-server/v2 v2.15.1
 	github.com/nats-io/nats.go v1.55.0
-	github.com/oklog/ulid/v2 v2.1.2
 	github.com/openai/openai-go/v3 v3.55.0
 	github.com/pb33f/ordered-map/v2 v2.3.1
 	github.com/pdfcpu/pdfcpu v0.15.0
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
-	github.com/reliant-labs/forge v1.1.1-0.20261106155323-b83896da0a2a
+	github.com/reliant-labs/forge v1.1.1-0.20261106204911-b96dfa7ed3de
 	github.com/reliant-labs/reliant/sdk/go v0.0.0-20261106012652-9d2ac59c65eb
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
@@ -257,6 +256,7 @@ require (
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/nexus-rpc/nexus-proto-annotations v0.1.0 // indirect
 	github.com/nexus-rpc/sdk-go v0.7.0 // indirect
+	github.com/oklog/ulid/v2 v2.1.2 // indirect
 	github.com/open-telemetry/opentelemetry-collector-contrib/pkg/translator/pprof v0.164.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
