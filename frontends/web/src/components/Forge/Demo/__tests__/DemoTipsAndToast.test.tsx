@@ -43,7 +43,7 @@ it("arrival shows one compact card, no competing toast, auto-start or modal", as
   expect(screen.queryByTestId("tour-callout")).toBeNull();
   expect(screen.queryByRole("dialog")).toBeNull();
   expect((router.state.location.search as {tour?:string}).tour).toBeUndefined();
-  expect(screen.getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("utm_content=corner"));
+  expect(screen.getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("utm_content=banner"));
 });
 it("Dismiss leaves the page usable and accessible ? restores the information", async () => {
   const { go } = renderDemo("/forge/p/shop/observability/traces");
@@ -133,6 +133,17 @@ it("does not consume hidden/offscreen offers, marks visible ones, and preserves 
     fireEvent.click(screen.getByTestId("demo-page-info"));
     expect(await screen.findByTestId("demo-tip")).toHaveAttribute("data-tip", "dashboards");
   } finally { drawer.remove(); }
+});
+it("persistent screen actions follow navigation and open the existing build section, not a new route", async () => {
+  const {go,router}=renderDemo("/forge/p/shop");
+  const actions=await screen.findByTestId("demo-screen-actions");
+  expect(screen.getByTestId("demo-tip").querySelector('[data-testid="demo-cta-signup"]')).toBeNull();
+  expect(actions).toHaveTextContent("How Forge builds this");
+  await go("/forge/p/shop/observability/logs");
+  expect(screen.getByTestId("demo-screen-actions")).toHaveTextContent("Install Forge");
+  fireEvent.click(screen.getByRole("link",{name:"How Forge builds this"}));
+  await waitFor(()=>expect(router.state.location.pathname).toBe("/forge/demo"));
+  expect(router.state.location.search).toMatchObject({section:"built"});
 });
 it("each explanation is brief, plain-language and has no local-stop arrays", () => {
   for (const key of DEMO_TIP_KEYS) {

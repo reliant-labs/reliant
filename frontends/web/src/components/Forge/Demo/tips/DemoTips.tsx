@@ -11,7 +11,7 @@ import { TourControls } from "@/components/Onboarding/TourControls";
 import { parseTourParam } from "@/components/Onboarding/tourParam";
 import { trackEvent } from "@/lib/analytics";
 
-import { SignUpButton, InstallForgeLink } from "../DemoCta";
+import { DemoScreenActions } from "../DemoScreenActions";
 import { DemoCorner, useConsoleDrawerOpen } from "../DemoCorner";
 import { demoSession } from "../demoSession";
 import { DEMO_TIPS } from "./tipCopy";
@@ -107,7 +107,7 @@ export function DemoTips() {
   }, [key, tourOpen]);
   const markVisible = useCallback(() => { if (offeredKey) demoSession.markTipSeen(offeredKey); }, [offeredKey]);
 
-  if (tourOpen) return null;
+  if (tourOpen) return <DemoScreenActions />;
   const tip = key ? DEMO_TIPS[key] : null;
   const dismiss = () => {
     if (key) demoSession.markTipSeen(key);
@@ -122,6 +122,7 @@ export function DemoTips() {
   };
   return (
     <>
+      <DemoScreenActions />
       {open && offeredKey === key && tip && key && !drawerOpen ? (
         <PageInfoFlow key={key} onVisible={markVisible}><section aria-label={`About this page: ${tip.title}`} className="rounded-xl border border-border bg-popover p-3 text-popover-foreground" data-testid="demo-tip" data-tip={key}>
           <h3 className="text-sm font-semibold">{tip.title}</h3>
@@ -134,8 +135,6 @@ export function DemoTips() {
         </section></PageInfoFlow>
       ) : null}
       <DemoCorner order={1}><div className="mt-2 flex items-center justify-end gap-2" data-testid="demo-corner-bar">
-        <SignUpButton placement="corner" size="md" />
-        <InstallForgeLink placement="corner" />
         {!open && key && (
           <button type="button" onClick={() => { setOpen(true); requestAnimationFrame(() => document.querySelector('[data-testid="demo-tip"]')?.scrollIntoView?.({ block: "nearest" })); }} aria-label={`About ${tip?.title}`} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-popover text-ink shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" data-testid="demo-page-info">
             <CircleHelp className="h-5 w-5" aria-hidden="true" />

@@ -20,7 +20,7 @@ import { withAttribution } from "@reliantlabs/forge-web-runtime";
 import { Download, UserPlus } from "lucide-react";
 
 import { trackEvent } from "@/lib/analytics";
-import { forgeAppOrigin } from "@/lib/shell";
+import { forgeAppOrigin, isDemoShell } from "@/lib/shell";
 import { cn } from "@/lib/utils";
 
 import { InstallForgeSheet } from "./InstallForgeSheet";
@@ -43,6 +43,7 @@ const tracked = (cta: "signup" | "install", placement: DemoCtaPlacement) => trac
 /** "Install forge" as a text link (the tour's intro, the toast), opening the same sheet. */
 export function InstallForgeLink({ placement, children = "Install forge" }: { placement: DemoCtaPlacement; children?: React.ReactNode }) {
   const [installing, setInstalling] = useState(false);
+  if (isDemoShell() && ["page_card", "end_card", "toast", "tour_intro", "corner"].includes(placement)) return null;
   return (
     <>
       <button
@@ -63,6 +64,7 @@ export function InstallForgeLink({ placement, children = "Install forge" }: { pl
 
 /** Sign up, as the page's primary button. */
 export function SignUpButton({ placement, size = "lg", className }: { placement: DemoCtaPlacement; size?: "md" | "lg"; className?: string }) {
+  if (isDemoShell() && ["page_card", "end_card", "toast", "tour_intro", "corner"].includes(placement)) return null;
   return (
     <a
       href={signupHref(placement)}
@@ -85,6 +87,9 @@ export function SignUpButton({ placement, size = "lg", className }: { placement:
 /** Sign up (primary) and Install forge (secondary). */
 export function DemoCta({ placement, size = "lg" }: { placement: DemoCtaPlacement; size?: "md" | "lg" }) {
   const [installing, setInstalling] = useState(false);
+  // The public demo keeps sales actions in its persistent screen action row,
+  // never inside a page explanation or journey callout.
+  if (isDemoShell() && ["page_card", "end_card", "toast", "tour_intro", "corner"].includes(placement)) return null;
   return (
     <span className="inline-flex flex-wrap items-center gap-2" data-testid={`demo-cta-${placement}`}>
       <SignUpButton placement={placement} size={size} />
