@@ -55,6 +55,7 @@ export const workflowsJourney: Journey = {
   elsewhere: { label: "Try AI workflows in Reliant", href: () => `${reliantAppOrigin()}/?journey=workflows` }, // lib/shell.ts: runtime config APP_URL
   isAvailable: () => true,          // e.g. a feature flag
   reshowAfterVersionBump: true,     // default true
+  phone: MyPhoneDeck,               // optional: shown on Reliant phones instead of "Open this on a computer"
   controls: "bar",                  // or "callout"; see "Controls"
 };
 ```
@@ -88,6 +89,10 @@ last step). There is no bottom nav bar and no generic Skip step.
   screen) and the target is scrolled into the space above it. Reliant's
   mobile surface defers instead ("Open this on a computer"); the forge shell
   and the demo use the sheet. Every control is at least 44px tall there.
+  A journey with its own phone presentation, `Journey.phone` (a component
+  taking `{ onFinish, onExit }`), shows that there instead, on the mobile
+  surface too: the workflows journey's lessons as a swipeable card deck with
+  still diagrams (`journeys/workflowsPhone.tsx`).
 - `controls: "bar"` keeps the retired bottom nav bar, for a journey that
   still needs it. Nothing ships with it.
 

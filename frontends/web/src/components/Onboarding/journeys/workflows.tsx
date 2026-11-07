@@ -1,151 +1,174 @@
 /**
- * The "Use AI workflows" journey (journeys-spec.md §2): the user builds
- * "Fix my PR" in a draft of their own — an agent reviews a pull request, a
- * loop fixes it until the tests pass, a branch merges or reports — then
- * gives it a schedule, sees what turning it on would do, where it would run,
- * and where automations are listed. The tour never turns anything on.
+ * The "Use AI workflows" journey: SHOW a real workflow, don't make the user
+ * build one. The first step adds "Fix my PR" to the user's workflows (their
+ * own draft, complete and wired: review, a loop until the tests pass, a
+ * branch that asks before merging, a weekday schedule) and opens it on the
+ * builder canvas. Each step after pans the canvas to one idea and explains it
+ * beside the steps it is about, never over them (workflowsCanvas.tsx). The
+ * only action anywhere is optional: "Try it yourself" on the edge step.
  *
- * W1 seeds the draft (fixMyPr.ts) and records its slug in the journey
- * context; the builder steps' routes read it. Every required step waits on a
- * tour signal (signals.ts) emitted by the code that performs the action:
- *   W1 workflow:draftCreated   NewWorkflowDialog / "Create it for me"
- *   W2 workflow:edgeConnected  WorkflowBuilder.createEdge
- *   W3 workflow:nodeSelected   WorkflowBuilder.onNodeClick (or loopExpanded)
- *   W4 workflow:nodeAdded      CanvasInsertContext.insertNode
- *   W5 workflow:triggerDeclared + workflow:saved
- *   W6 automation:dialogOpened, then machineChosen or dialogClosed
- *   W7 the Machines route
- * Then a Reliant-only outro tours the chat and its panels and tidies them away.
+ *   1 wf-example   the example, and what a step is (review, an agent)
+ *   2 wf-edge      edges, and how to draw one (a looping drag demonstration)
+ *   3 wf-loop      a loop and how it ends
+ *   4 wf-branch    a switch, and an approval before merge
+ *   5 wf-trigger   the schedule: declared, off until turned on
+ *   6 wf-machine   where it runs (Activate asks: Runs on)
+ *   7 wf-inputs    inputs belong to the workflow
+ *   8 outro        back to the chat; Make your own, or Finish
+ *
+ * Phones get the same lessons as a card deck with still diagrams
+ * (workflowsPhone.tsx). The copy for both is in workflowsLessons.tsx.
  */
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { toast } from "sonner";
 
-import { useTriggers } from "../../../hooks/trigger-queries";
 import { reliantAppOrigin } from "../../../lib/shell";
-import { triggerRunsWorkflow } from "../../../lib/triggerRail";
-import { WORKFLOW_PAGES_PREFIX, WORKFLOWS_LIBRARY_PATH } from "../../../lib/workflowsArea";
 import { useProjectStore } from "../../../store/projectStore";
 import { useTourStore } from "../../../store/tourStore";
-import { tourEvents, type TourEventMap, type TourEventName } from "../tourEvents";
-import type { AdvanceOn, Journey, JourneyContext, JourneyRoute } from "../types";
-import { FIX_MY_PR_START, seedFixMyPr } from "./fixMyPr";
+import type { TourEventMap, TourEventName } from "../tourEvents";
+import type { AdvanceOn, Journey, JourneyContext, JourneyRoute, JourneyStep } from "../types";
+import { useTourNavigation } from "../useTourNavigation";
+import { EXAMPLE_SLUG, ensureFixMyPrExample } from "./fixMyPr";
 import { layoutActions } from "./layoutActions";
-import { WF_ENABLE_STEP } from "./workflowsTour";
-
-/** The node ids the steps point at; they come from fixMyPrTemplate.yaml. */
-const REVIEW = "review";
-const LOOP = "fix_until_green";
-const MERGE = "merge";
-export const LOOP_CONDITION = "outputs.exit_code != 0 && iter.iteration < 3";
+import { EdgeLesson, FOCUS_TARGET, OnCanvas } from "./workflowsCanvas";
+import { APPROVE, LESSONS, LOOP, MERGE, REPORT, REVIEW, SCHEDULE, START, SWITCH } from "./workflowsLessons";
+import { WorkflowsPhoneDeck } from "./workflowsPhone";
 
 const BUILDER_PATH = "/workflow/";
 
-function workflowSlug(context: JourneyContext): string | undefined {
-  return typeof context.workflowSlug === "string" && context.workflowSlug ? context.workflowSlug : undefined;
+function exampleSlug(context: JourneyContext): string | undefined {
+  const slug = context[EXAMPLE_SLUG];
+  return typeof slug === "string" && slug ? slug : undefined;
 }
 
-/** The builder, on the draft W1 created. */
+/** The builder, on the example. */
 const builderRoute: JourneyRoute = {
   path: BUILDER_PATH,
   open: (context) => {
-    const slug = workflowSlug(context);
+    const slug = exampleSlug(context);
     return slug ? { to: "/workflow/$workflowName", params: { workflowName: slug } } : null;
   },
   label: "Open Fix my PR",
-  message: "Open your Fix my PR workflow to continue this step.",
+  message: "Open the Fix my PR example to continue.",
 };
 
-// ─── Step-specific copy that depends on what the user did ────────────────────
+const lesson = (id: string) => LESSONS.find((l) => l.id === id)!;
 
-/** Whether `event` (narrowed by `where`) has been emitted since this mounted. */
-function useSignalSeen<K extends TourEventName>(event: K, where?: (payload: TourEventMap[K]) => boolean): boolean {
-  const [seen, setSeen] = useState(false);
-  useEffect(
-    () => tourEvents.on(event, (payload) => (!where || where(payload)) && setSeen(true)),
-    // `where` is static step content.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [event],
-  );
-  return seen;
-}
+// ─── Step 1: open the example (adding it once) ───────────────────────────────
 
-function Check({ done, children }: { done: boolean; children: ReactNode }) {
-  return (
-    <li className="flex items-center gap-1.5" data-done={done ? "true" : "false"}>
-      <span aria-hidden="true" className={done ? "text-success-ink" : "text-muted-foreground"}>
-        {done ? "✓" : "○"}
-      </span>
-      <span className="sr-only">{done ? "Done: " : "To do: "}</span>
-      {children}
-    </li>
-  );
-}
+/** One import per project at a time, however often the step mounts (StrictMode, Back). */
+const opening = new Map<string, Promise<string>>();
 
-/** W5: the two checks, and a reminder when W2's edge is still missing. */
-function TriggerChecklist() {
-  const declared = useSignalSeen("workflow:triggerDeclared", (p) => p.source === "schedule");
-  const saved = useSignalSeen("workflow:saved", (p) => p.triggerSources.includes("schedule"));
-  const reviewConnected =
-    typeof document === "undefined" || !!document.querySelector(`[data-edge-source="${REVIEW}"][data-edge-target="${LOOP}"]`);
-  return (
-    <>
-      <ul className="mt-2 space-y-1 text-xs" data-testid="wf-trigger-checklist">
-        <Check done={declared}>Add a Schedule trigger</Check>
-        <Check done={saved}>Save</Check>
-      </ul>
-      {saved && !reviewConnected && <p className="mt-2 text-xs">review isn't connected yet; you can drag it later.</p>}
-    </>
-  );
-}
-
-/** W4: where the Approval landed, recorded by the step's `where`. */
-let lastApproval: TourEventMap["workflow:nodeAdded"] | null = null;
-
-function ApprovalPlacement() {
-  const onMergeLine = lastApproval?.anchor === "splice" && lastApproval.spliceTarget === MERGE;
-  return onMergeLine ? (
-    <>It's on the line into merge, so the run stops and asks you before it merges.</>
-  ) : (
-    <>It's not on the line into merge. That works for the tour, and you can drag it there later.</>
-  );
-}
-
-/** W8: whether the user turned Fix my PR on in W6 (the tour never does). */
-function AutomationStatus() {
+function ExampleIntro() {
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const search = useSearch({ strict: false }) as { tour?: string };
   const projectId = useProjectStore((s) => s.currentProject?.id);
-  const slug = useTourStore((s) => workflowSlug(s.contexts?.workflows ?? {}));
-  const triggers = useTriggers(projectId, { enabled: !!projectId && !!slug });
-  const on = !!slug && (triggers.data ?? []).some((t) => triggerRunsWorkflow(t, slug));
-  return on ? (
-    <>Fix my PR is on that list because you turned it on.</>
-  ) : (
-    <>Fix my PR isn't on it, because it isn't turned on.</>
+  const slug = useTourStore((s) => exampleSlug(s.contexts?.workflows ?? {}));
+  const [failed, setFailed] = useState<string | null>(null);
+  const onExample = !!slug && pathname === `/workflow/${slug}`;
+  const tour = useRef(search.tour);
+  tour.current = search.tour;
+
+  useEffect(() => {
+    if (onExample || !projectId || failed) return;
+    let cancelled = false;
+    const pending = opening.get(projectId) ?? ensureFixMyPrExample(projectId);
+    opening.set(projectId, pending);
+    pending
+      .then((made) => {
+        if (cancelled) return;
+        void navigate({ to: "/workflow/$workflowName", params: { workflowName: made }, search: { tour: tour.current } } as never);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : "Could not add the example";
+        toast.error(message);
+        setFailed(message);
+      })
+      .finally(() => opening.delete(projectId));
+    return () => {
+      cancelled = true;
+    };
+  }, [onExample, projectId, failed, navigate]);
+
+  if (onExample) return <OnCanvas nodes={[REVIEW]} />;
+  if (!projectId) return <p className="mt-2 text-xs" data-testid="wf-example-status">Pick a project first, then start the tour again.</p>;
+  if (failed)
+    return (
+      <p className="mt-2 text-xs" data-testid="wf-example-status">
+        {failed}{" "}
+        <button type="button" className="font-medium underline underline-offset-2" onClick={() => setFailed(null)}>
+          Try again
+        </button>
+      </p>
+    );
+  return (
+    <p className="mt-2 text-xs text-muted-foreground" data-testid="wf-example-status">
+      Opening Fix my PR…
+    </p>
   );
 }
 
-// ─── W1's fallback: "Create it for me" ───────────────────────────────────────
+// ─── The end: Make your own ──────────────────────────────────────────────────
 
-async function createItForMe(): Promise<void> {
-  const projectId = useProjectStore.getState().currentProject?.id;
-  try {
-    if (!projectId) throw new Error("Pick a project first, then try again.");
-    await seedFixMyPr(projectId);
-  } catch (error) {
-    toast.error(error instanceof Error ? error.message : "Could not create the workflow");
-    throw error; // stay on the step: Create it for me again, or End tour
-  }
+/** Set by Make your own just before Finish: the journey's `finish` sends the user to New workflow. */
+let makeOwnRequested = false;
+
+function MakeYourOwn() {
+  const nav = useTourNavigation();
+  return (
+    <button
+      type="button"
+      data-testid="wf-make-your-own"
+      className="mt-3 block rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+      onClick={() => {
+        makeOwnRequested = true;
+        void nav.finish();
+      }}
+    >
+      Make your own
+    </button>
+  );
 }
+
+// ─── Steps ───────────────────────────────────────────────────────────────────
 
 const eventSeen = <K extends TourEventName>(event: K, where?: (p: TourEventMap[K]) => boolean): AdvanceOn =>
   ({ kind: "event", event, where }) as AdvanceOn;
 
+/** A step on the canvas: the lesson's copy, the canvas panned to `nodes`, and the card beside them. */
+function canvasStep(id: string, nodes: string[], extra: Partial<JourneyStep> & { box?: string[]; more?: ReactNode } = {}): JourneyStep {
+  const { box, more, ...rest } = extra;
+  const { title, body } = lesson(id);
+  return {
+    id,
+    title,
+    description: (
+      <>
+        {body}
+        {more}
+        <OnCanvas nodes={nodes} box={box} />
+      </>
+    ),
+    target: FOCUS_TARGET,
+    tooltipPosition: "right",
+    spotlightConfig: { padding: 4 },
+    route: builderRoute,
+    ...rest,
+  };
+}
+
 export const workflowsJourney: Journey = {
   id: "workflows",
-  // v1 was the engine's two-step placeholder; v0 the retired single tour.
-  version: 2,
-  // Workflows need Reliant; the forge shell links here instead. Reliant's
-  // origin is the runtime config's (APP_URL), as the shell's "Open in Reliant".
+  // v3 shows a finished example instead of building one; v2 built it, v1 was
+  // the engine's placeholder and v0 the retired single tour. People who
+  // finished v2 see v3 once.
+  version: 3,
+  controls: "callout",
+  // Workflows need Reliant; the forge shell links here instead.
   shells: ["reliant"],
   elsewhere: {
     label: "Try AI workflows in Reliant",
@@ -153,213 +176,47 @@ export const workflowsJourney: Journey = {
   },
   title: "Use AI workflows",
   description:
-    "Build a workflow step by step: agents, loops and branches, a trigger that runs it for you, and the machine it runs on.",
+    "See a finished workflow on the canvas: agent steps, edges, a loop, a branch that asks you first, a schedule, and where it runs.",
+  // Make your own ends on New workflow; Finish ends on the chat.
+  finish: (shell) => {
+    const makeOwn = makeOwnRequested;
+    makeOwnRequested = false;
+    return shell === "reliant" && makeOwn ? { to: "/workflow/new" } : null;
+  },
+  // Phones have no builder: the same lessons as a card deck.
+  phone: WorkflowsPhoneDeck,
   steps: [
     {
-      id: "wf-new",
-      title: "Start a workflow",
-      description:
-        "A workflow is a set of steps an agent follows. You'll build one that reviews a pull request, fixes it until the tests pass, and asks you before it merges. Click New workflow.",
-      target: "button:has([data-tour='new-workflow'])",
-      route: { path: WORKFLOW_PAGES_PREFIX, open: { to: WORKFLOWS_LIBRARY_PATH }, label: "Open Workflows" },
-      phases: [
-        { target: "button:has([data-tour='new-workflow'])" },
-        {
-          when: { kind: "element", selector: "[data-tour='new-workflow-dialog']" },
-          target: "[data-tour='new-workflow-dialog']",
-          description:
-            "Keep the guided start and click Create workflow. The draft is yours: you can change or delete any step.",
-        },
-      ],
-      advanceOn: {
-        kind: "when",
-        test: ({ signals, location }) =>
-          signals["workflow:draftCreated"]?.start === FIX_MY_PR_START &&
-          location.pathname.startsWith(BUILDER_PATH) &&
-          location.pathname !== "/workflow/new",
-      },
-      autoAdvance: true,
-      actionHint: "Click New workflow, then Create workflow",
-      signal: "draft_created",
-      // Every later step needs the draft.
-      skip: { label: "Create it for me", run: createItForMe },
-    },
-    {
-      id: "wf-edge",
-      title: "Connect the steps",
+      id: "wf-example",
+      title: lesson("wf-example").title,
       description: (
         <>
-          Steps run in the order their edges say. <code>review</code> isn't connected yet. Drag from the dot on the
-          right of <code>review</code> to <code>{LOOP}</code>.
+          {lesson("wf-example").body}
+          <ExampleIntro />
         </>
       ),
-      target: `.react-flow__handle.source[data-nodeid="${REVIEW}"]`,
-      spotlightConfig: { padding: 10 },
-      route: builderRoute,
+      target: FOCUS_TARGET,
+      tooltipPosition: "right",
+      spotlightConfig: { padding: 4 },
+      // No route: the step adds the example if needed and opens it itself.
+    },
+    canvasStep("wf-edge", [REVIEW, LOOP], {
+      more: <EdgeLesson source={REVIEW} target={LOOP} />,
+      // Optional: Next works throughout; drawing the edge (after Try it yourself) also moves on.
       advanceOn: eventSeen("workflow:edgeConnected", (p) => p.sourceId === REVIEW && p.targetId === LOOP),
+      showNext: true,
       autoAdvance: true,
-      actionHint: `Drag from review to ${LOOP}`,
+      afterAction: <>That's an edge. Nothing changed in your workflow: it's the same one it had.</>,
       signal: "edge_connected",
-    },
+    }),
+    canvasStep("wf-loop", [LOOP]),
+    canvasStep("wf-branch", [SWITCH, APPROVE, MERGE, REPORT]),
+    canvasStep("wf-trigger", [START], { box: ["[data-testid='trigger-lane']"] }),
+    canvasStep("wf-machine", [START], { box: [`[data-testid="trigger-card-${SCHEDULE}"]`] }),
     {
-      id: "wf-loop",
-      title: "A loop",
-      description: (
-        <>
-          Click <code>{LOOP}</code>. Inside, an agent makes a fix, then your test command runs. The loop repeats while
-          the tests fail, up to 3 times. You can change that condition in the panel that opens.
-        </>
-      ),
-      target: `.react-flow__node[data-id="${LOOP}"]`,
-      route: builderRoute,
-      advanceOn: [
-        eventSeen("workflow:nodeSelected", (p) => p.nodeId === LOOP && p.type === "loop"),
-        eventSeen("workflow:loopExpanded", (p) => p.nodeId === LOOP),
-      ],
-      afterAction: (
-        <>
-          The condition is <code>{LOOP_CONDITION}</code>.
-        </>
-      ),
-      actionHint: `Click ${LOOP}`,
-      signal: "loop_opened",
-    },
-    {
-      id: "wf-branch",
-      title: "A branch, and asking you first",
-      description:
-        "After the loop the workflow branches. If the tests pass it goes to merge; otherwise it goes to report. Click the + on the line into merge and add an Approval step. The run will then stop and ask you before it merges.",
-      target: `[data-testid^="edge-insert-"][data-edge-target="${MERGE}"]`,
-      spotlightConfig: { padding: 12 },
-      route: builderRoute,
-      phases: [
-        { target: `[data-testid^="edge-insert-"][data-edge-target="${MERGE}"]` },
-        {
-          when: { kind: "element", selector: "[data-palette-item='approval']" },
-          target: "[data-palette-item='approval']",
-          description: "Pick Approval. It goes where you clicked the +.",
-        },
-      ],
-      // Deliberately lenient: an Approval anywhere counts.
-      advanceOn: eventSeen("workflow:nodeAdded", (p) => {
-        if (p.type !== "approval") return false;
-        lastApproval = p;
-        return true;
-      }),
-      afterAction: <ApprovalPlacement />,
-      actionHint: "Click the + on the line into merge, then pick Approval",
-      signal: "approval_added",
-      onEnter: () => {
-        lastApproval = null;
-      },
-    },
-    {
-      id: "wf-trigger",
-      title: "When it runs",
-      description: (
-        <>
-          Right now a chat starts it. Click Add trigger and pick Schedule. It starts as weekdays at 9:00 in your
-          timezone; change it if you like. Then click Save.
-          <TriggerChecklist />
-        </>
-      ),
-      target: "[data-tour='add-trigger']",
-      route: builderRoute,
-      phases: [
-        { target: "[data-tour='add-trigger']" },
-        { when: { kind: "element", selector: "[data-palette-item='schedule']" }, target: "[data-palette-item='schedule']" },
-        {
-          when: eventSeen("workflow:triggerDeclared", (p) => p.source === "schedule"),
-          target: "[data-testid='workflow-save']",
-        },
-      ],
-      advanceOn: {
-        kind: "when",
-        test: ({ signals }) =>
-          signals["workflow:triggerDeclared"]?.source === "schedule" &&
-          !!signals["workflow:saved"]?.triggerSources.includes("schedule"),
-      },
-      autoAdvance: true,
-      actionHint: "Add a Schedule trigger, then Save",
-      signal: "schedule_saved",
-      // Without a saved schedule there is no Activate button: W6 explains it from the trigger lane.
-      skip: { run: ({ setContext }) => setContext({ scheduleSkipped: true }) },
-    },
-    {
-      id: WF_ENABLE_STEP,
-      title: "Turning it on is your call",
-      description:
-        "The schedule is declared but off. Nothing runs until you turn it on. Click Activate to see what that asks.",
-      target: "[data-tour='activate-trigger']",
-      route: builderRoute,
-      phases: [
-        { target: "[data-tour='activate-trigger']" },
-        {
-          // W5 was skipped: no schedule, so no Activate. Explain it from the lane.
-          when: { kind: "when", test: ({ context }) => context.scheduleSkipped === true },
-          target: "[data-tour='add-trigger']",
-          description:
-            "A trigger starts a workflow by itself. Once one is declared and saved, Activate opens the Turn on dialog: you pick the project, the machine it runs on and its inputs, and from then on it runs without you. The tour never turns anything on.",
-        },
-        {
-          when: { kind: "element", selector: "[data-tour='runs-on']" },
-          target: "[data-tour='runs-on']",
-          description:
-            "Runs on is where each run happens: one of your machines, or No machine for workflows that only use the web and integrations. This one runs your tests, so it needs a machine. Turn on enables every trigger this workflow declares, with the project, machine and inputs you pick here. After that it runs on weekdays at 9:00 without you. Each run is listed in Workflows › Runs, a failed run notifies you, and you can switch it off any time. Fix my PR is still a draft, and a draft can't run yet: Publish makes it runnable, then Turn on starts its schedule. The tour won't press either. Close the dialog when you're done.",
-        },
-      ],
-      // Turning it on stays the user's call: the dialog's button is live, and
-      // the tour never presses it or asks them to.
-      advanceOn: [
-        {
-          kind: "when",
-          test: ({ signals }) =>
-            !!signals["automation:dialogOpened"] &&
-            (!!signals["automation:machineChosen"] || !!signals["automation:dialogClosed"]),
-        },
-        { kind: "when", test: ({ context }) => context.scheduleSkipped === true },
-      ],
-      actionHint: "Click Activate, look at Runs on, then close the dialog",
-      signal: "enable_viewed",
-    },
-    {
-      id: "wf-machines",
-      title: "Machines",
-      description:
-        "A machine is a computer that runs your workflows: your own, or a cloud machine Reliant runs for you. A cloud machine wakes when a run needs it and suspends when it's idle, so it doesn't run up hours while it waits. Automations pick one when you turn them on. No machine yet? Add one here when a workflow needs to run code.",
-      target: "[data-tour='machines-list']",
-      tooltipPosition: "left",
-      route: { path: "/settings/machines", label: "Open Machines" },
-      advanceOn: { kind: "route", path: "/settings/machines" },
-      actionHint: "Open Machines",
-      signal: "machines_viewed",
-    },
-    {
-      id: "wf-automations",
-      title: "Automations",
-      description: (
-        <>
-          Automations live in the Workflows list. Runs by itself says what starts each workflow and Next run says when;
-          the On switch pauses or resumes it. The On filter shows only the workflows that run by themselves. Webhooks
-          and GitHub, Gmail or Slack events work the same way as your schedule. <AutomationStatus />
-        </>
-      ),
-      // The filter chip is always there, with or without any trigger; the
-      // summary above the list only appears once something has one.
-      target: "[data-tour='workflows-show-on']",
-      tooltipPosition: "bottom",
-      route: { path: WORKFLOWS_LIBRARY_PATH, label: "Open Workflows" },
-    },
-    {
-      id: "wf-params",
-      title: "Inputs belong to the workflow",
-      description: (
-        <>
-          Fix my PR has two inputs, <code>pr</code> and <code>test_command</code>. When you pick a workflow in a chat,
-          its inputs become the controls under the message box, so each workflow brings its own chat parameters. A
-          preset is a saved set of those values.
-        </>
-      ),
+      id: "wf-inputs",
+      title: lesson("wf-inputs").title,
+      description: lesson("wf-inputs").body,
       target: "[data-tour='workflow-inputs']",
       tooltipPosition: "bottom",
       route: builderRoute,
@@ -371,8 +228,14 @@ export const workflowsJourney: Journey = {
       // The forge shell has no chat or workspace panels.
       shell: "reliant",
       title: "Back to the chat",
-      description:
-        "The chat is where work starts: pick a workflow under the message box and send. Your conversations are on the left; files and the terminal open on the right. Each panel has a button at the top of the window, and the same button closes it. We'll close the side panels now so you start with just the chat. Open any of them again from its button.",
+      description: (
+        <>
+          The chat is where work starts: pick a workflow under the message box and send. Conversations are on the left;
+          files and the terminal open on the right, each from its button at the top. We'll close the side panels when
+          you finish. Ready to build one? Make your own starts a new workflow.
+          <MakeYourOwn />
+        </>
+      ),
       targets: [
         { selector: "[data-onboarding='chat-input']", label: "The chat", description: "Start work here." },
         { selector: "[aria-label='Toggle Chat Sidebar']", label: "Conversations", description: "Opens and closes the list on the left." },
@@ -396,3 +259,8 @@ export const workflowsJourney: Journey = {
     },
   ],
 };
+
+/** For tests: whether a pending Make your own will route Finish to New workflow. */
+export function _makeOwnRequested(): boolean {
+  return makeOwnRequested;
+}

@@ -44,8 +44,8 @@ export const NEW_WORKFLOW_STARTS: readonly NewWorkflowStart[] = [
  */
 export const GUIDED_START: NewWorkflowStart = {
   id: "guided-fix-my-pr",
-  label: "Fix my PR (guided)",
-  description: "Reviews a pull request, fixes it until the tests pass, and asks before merging. The tour builds it with you.",
+  label: "Fix my PR (example)",
+  description: "A complete example: reviews a pull request, fixes it until the tests pass, and asks before merging.",
 };
 
 export interface CreatedWorkflow {

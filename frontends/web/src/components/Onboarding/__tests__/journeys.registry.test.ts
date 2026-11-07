@@ -26,18 +26,8 @@ import type { Journey } from "../types";
 
 const resolve = (raw: string) => resolveTour(parseTourParam(raw));
 
-/** The workflows journey proper (journeys-spec.md §2.2), before its outro. */
-const WORKFLOWS_STEPS = [
-  "wf-new",
-  "wf-edge",
-  "wf-loop",
-  "wf-branch",
-  "wf-trigger",
-  "wf-enable",
-  "wf-machines",
-  "wf-automations",
-  "wf-params",
-];
+/** The workflows journey proper, before its outro. */
+const WORKFLOWS_STEPS = ["wf-example", "wf-edge", "wf-loop", "wf-branch", "wf-trigger", "wf-machine", "wf-inputs"];
 
 function journeys(over: Partial<Record<"workflows" | "forge", Partial<Journey>>>) {
   return {
@@ -92,7 +82,7 @@ describe("journey registry", () => {
   describe("resolveTour", () => {
     it("opens journey:step, and a journey alone at its first step", () => {
       expect(resolve("workflows:wf-loop")).toMatchObject({ kind: "step", journey: "workflows", stepId: "wf-loop" });
-      expect(resolve("workflows")).toMatchObject({ stepId: "wf-new" });
+      expect(resolve("workflows")).toMatchObject({ stepId: "wf-example" });
     });
 
     it("finds the journey of a bare step id", () => {
@@ -100,12 +90,12 @@ describe("journey registry", () => {
     });
 
     it("opens an unknown step of a known journey at its first step", () => {
-      expect(resolve("workflows:not-a-step")).toMatchObject({ journey: "workflows", stepId: "wf-new" });
+      expect(resolve("workflows:not-a-step")).toMatchObject({ journey: "workflows", stepId: "wf-example" });
     });
 
     it("redirects the retired single tour's ids to their successor journey", () => {
-      expect(resolve("chat-and-sidebars")).toMatchObject({ journey: "workflows", stepId: "wf-new" });
-      expect(resolve("workflow-builder")).toMatchObject({ journey: "workflows", stepId: "wf-new" });
+      expect(resolve("chat-and-sidebars")).toMatchObject({ journey: "workflows", stepId: "wf-example" });
+      expect(resolve("workflow-builder")).toMatchObject({ journey: "workflows", stepId: "wf-example" });
       expect(resolve("deployments")).toMatchObject({ journey: "forge", stepId: "fg-intro" });
     });
 
@@ -122,16 +112,16 @@ describe("journey registry", () => {
   describe("walking steps", () => {
     it("walks steps then the outro, in Reliant", () => {
       expect(activeJourneySteps("workflows").map((s) => s.id)).toEqual([...WORKFLOWS_STEPS, "wf-outro-layout"]);
-      expect(nextStepId("workflows", "wf-params")).toBe("wf-outro-layout");
+      expect(nextStepId("workflows", "wf-inputs")).toBe("wf-outro-layout");
       expect(nextStepId("workflows", "wf-outro-layout")).toBeNull();
-      expect(previousStepId("workflows", "wf-outro-layout")).toBe("wf-params");
-      expect(stepPosition("workflows", "wf-outro-layout")).toEqual({ index: 9, total: 10 });
+      expect(previousStepId("workflows", "wf-outro-layout")).toBe("wf-inputs");
+      expect(stepPosition("workflows", "wf-outro-layout")).toEqual({ index: 7, total: 8 });
     });
 
     it("drops a reliant-only outro step in the forge shell, so the journey ends on its last step", () => {
       setTourShell("forge");
       expect(activeJourneySteps("workflows").map((s) => s.id)).toEqual(WORKFLOWS_STEPS);
-      expect(nextStepId("workflows", "wf-params")).toBeNull();
+      expect(nextStepId("workflows", "wf-inputs")).toBeNull();
     });
 
     it("lists only the journeys that run in this shell", () => {
