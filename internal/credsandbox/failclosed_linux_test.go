@@ -121,7 +121,7 @@ func TestSweepRunDirs_RemovesOnlyWhatADeadOwnerLeft(t *testing.T) {
 		if owner != "" {
 			require.NoError(t, os.WriteFile(filepath.Join(d, runDirOwnerFile), []byte(owner+"\n"), 0o600))
 		}
-		old := time.Now().Add(-24 * time.Hour)
+		old := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC) // long before any sweep could have made it
 		require.NoError(t, os.Chtimes(d, old, old))
 		return d
 	}
@@ -222,4 +222,39 @@ func TestCanonicalDir_ResolvesTheLongestExistingAncestor(t *testing.T) {
 	assert.Equal(t, filepath.Join(real, "a", "b"), canonicalDir(filepath.Join(link, "a", "b")))
 	assert.Equal(t, real, canonicalDir(link))
 	assert.Equal(t, "/no/such/dir", canonicalDir("/no/such/./dir"))
+}
+
+// A path already covered with the null device (by the host, or by the sandbox
+// a nested daemon's tests run in: /run/docker.sock on a cloud machine's
+// credentials-none gate) hides nothing and is not covered again; the second
+// cover failed every credentials-none command there.
+func TestIsNullDevice(t *testing.T) {
+	fi, err := os.Lstat("/dev/null")
+	require.NoError(t, err)
+	assert.True(t, isNullDevice(fi))
+	f := filepath.Join(t.TempDir(), "f")
+	require.NoError(t, os.WriteFile(f, nil, 0o600))
+	fi, err = os.Lstat(f)
+	require.NoError(t, err)
+	assert.False(t, isNullDevice(fi))
+}
+
+// A directory hidden inside a shared scratch directory (GH_CONFIG_DIR in /tmp,
+// a directory in /dev/shm) is covered by an empty read-only tmpfs: the null
+// device cannot be mounted on a directory.
+func TestSandbox_HidesADirectoryInASharedScratchDirectory(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	shm, err := os.MkdirTemp("/dev/shm", "credsandbox-hidden-")
+	if err != nil {
+		t.Skipf("needs a writable /dev/shm: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(shm) })
+	require.NoError(t, os.WriteFile(filepath.Join(shm, "hosts.yml"), []byte("PAT-gh"), 0o600))
+
+	out, code := run(t, Plan{Hide: []string{shm}}, `cat '`+shm+`/hosts.yml' 2>&1; echo x > '`+shm+`/planted' 2>&1; echo done`)
+	require.Equal(t, 0, code, out)
+	assert.NotContains(t, out, "PAT-gh")
+	assert.Contains(t, out, "done")
+	assert.NoFileExists(t, filepath.Join(shm, "planted"))
 }

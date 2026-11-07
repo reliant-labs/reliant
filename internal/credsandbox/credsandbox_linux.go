@@ -714,6 +714,9 @@ func hideAndSeal(p Plan, mounts []mountInfo) ([]string, error) {
 			continue // nothing there to hide
 		}
 		parent := filepath.Dir(t)
+		if isNullDevice(fi) {
+			continue // covered already, by an enclosing sandbox or the host: it hides nothing
+		}
 		if fi.Mode()&os.ModeSocket != 0 || scratchDirs[parent] {
 			cover = append(cover, t)
 			continue
@@ -758,11 +761,40 @@ func hideAndSeal(p Plan, mounts []mountInfo) ([]string, error) {
 		}
 	}
 	for _, c := range cover {
-		if err := unix.Mount("/dev/null", c, "", unix.MS_BIND, ""); err != nil {
+		var err error
+		if fi, lerr := os.Lstat(c); lerr == nil && fi.IsDir() {
+			// A directory (GH_CONFIG_DIR in /tmp) is covered by an empty,
+			// read-only tmpfs: the null device cannot be mounted on one.
+			err = unix.Mount("tmpfs", c, "tmpfs", unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, "size=4k,mode=000")
+		} else {
+			err = unix.Mount("/dev/null", c, "", unix.MS_BIND, "")
+		}
+		if err != nil {
+			// Gone, or the null device by now (a host without the socket, or
+			// one that covered it itself): there is nothing to hide. Anything
+			// else still there is refused.
+			if fi, lerr := os.Lstat(c); errors.Is(lerr, os.ErrNotExist) || (lerr == nil && isNullDevice(fi)) {
+				continue
+			}
 			return nil, fmt.Errorf("covering %s: %w", c, err)
 		}
 	}
 	return append(parents, cover...), nil
+}
+
+// isNullDevice reports whether fi is the null device: something already put
+// over a path to hide it.
+func isNullDevice(fi os.FileInfo) bool {
+	if fi.Mode()&os.ModeCharDevice == 0 {
+		return false
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	null, err := os.Stat("/dev/null")
+	if !ok || err != nil {
+		return false
+	}
+	nst, ok := null.Sys().(*syscall.Stat_t)
+	return ok && st.Rdev == nst.Rdev
 }
 
 // canonical resolves the symlinks in path's directory (a hidden file named

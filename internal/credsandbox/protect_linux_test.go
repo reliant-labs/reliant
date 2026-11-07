@@ -174,7 +174,7 @@ func TestSandbox_AWorktreeCommitsThroughItsReadOnlyMainCheckout(t *testing.T) {
 	testkit.Slow(t, "runs git in real namespaces")
 	requireSandbox(t)
 	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("no git")
+		t.Skip("needs git on PATH")
 	}
 	m := newMachine(t)
 	main := filepath.Join(m.projects, "repo")

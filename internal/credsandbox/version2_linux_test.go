@@ -7,11 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -103,7 +101,7 @@ func TestSandbox_TmpAndVarTmpArePrivate(t *testing.T) {
 		t.Cleanup(func() { _ = os.RemoveAll(stepVar) })
 		visible = append(visible, stepVar)
 	}
-	own := "credsandbox-own-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	own := "credsandbox-own-" + filepath.Base(t.TempDir()) // unique: the name of a directory of this test's own
 
 	var sees strings.Builder
 	for _, p := range visible {
@@ -263,7 +261,7 @@ func TestWrap_ABoundAgentShellCommitsInItsCloneAndNowhereElse(t *testing.T) {
 	testkit.Slow(t, "runs git in real user, mount and PID namespaces")
 	requireSandbox(t)
 	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("no git")
+		t.Skip("needs git on PATH")
 	}
 	home := wrapHome(t)
 	xdg := filepath.Join(filepath.Dir(home), "xdg")
