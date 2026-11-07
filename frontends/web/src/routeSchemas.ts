@@ -18,6 +18,7 @@ import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observabili
 import { RELEASE_TABS, STATUS_FILTERS } from "./components/Forge/Releases/releaseModel";
 import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from "./components/Forge/Workloads/workloadModel";
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
+import { isBucketName, isSendableKey, MAX_TOKEN_LENGTH, type StorageSearch } from "./components/Forge/Storage/storageUrl-model";
 import { HEALTH_WINDOWS } from "./services/controlPlane/observability/deliveryTypes";
 import { ISSUE_PLATFORMS, ISSUE_SORTS } from "./services/controlPlane/observability/issuesTypes";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
@@ -554,6 +555,28 @@ export const forgeConsoleSecretsSearchSchema = z.object({
   env: envScopeParam,
   secret: z.string().optional().catch(undefined),
 });
+
+/**
+ * Storage (components/Forge/Storage): the scope, and the browser's view —
+ * which bucket, which level (`prefix`), the open object and the listing page
+ * (`token`, opaque). Every view is a link someone can send ("look at this
+ * upload"). Keys are arbitrary text, so a numeric-looking one ("2026") is
+ * read back as the string it was; the bounds (1024-byte keys, the bucket
+ * name's pattern) are Storage/storageUrl-model.ts's, which reads a value that
+ * does not fit as absent rather than failing the route.
+ */
+const storageTextParam = z.union([z.string(), z.number().transform(String)]);
+export const forgeConsoleStorageSearchSchema = z.object({
+  env: envScopeParam,
+  bucket: storageTextParam.refine(isBucketName).optional().catch(undefined),
+  prefix: storageTextParam.refine(isSendableKey).optional().catch(undefined),
+  object: storageTextParam.refine((key) => key.length > 0 && isSendableKey(key)).optional().catch(undefined),
+  token: storageTextParam.refine((token) => token.length <= MAX_TOKEN_LENGTH).optional().catch(undefined),
+});
+
+/** Every StorageSearch key has a schema entry and vice versa. */
+export type _StorageSchemaCoversSearch = AssertNoDrift<Exclude<keyof StorageSearch, keyof z.output<typeof forgeConsoleStorageSearchSchema>>>;
+export type _StorageSearchCoversSchema = AssertNoDrift<Exclude<Exclude<keyof z.output<typeof forgeConsoleStorageSearchSchema>, "env">, keyof StorageSearch>>;
 
 // ── Observability URL state ────────────────────────────────────────────────
 

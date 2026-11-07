@@ -91,6 +91,21 @@ export const ERROR_REASONS = [
   "obs_query_quota_soft",
   /** A console user already has the server's cap of observability reads running; the RetryInfo detail says when to try again. */
   "in_flight_limit",
+  // ── control-plane: audited reads of an environment's contents (StorageBrowserService; AppDatabaseService shares the first three) ──
+  /** An audited environment's read arrived without confirm_env_id and a reason. */
+  "confirmation_required",
+  /** The environment has not recorded what it deploys yet, so its buckets (and their policy) are not known. */
+  "shape_unknown",
+  /** The per-principal read budget is spent; RetryInfo / Retry-After says when to try again. */
+  "rate_limited",
+  /** The control plane cannot read the bucket (a self-managed MinIO, an undialable S3 endpoint, a hosted bucket not yet converged). */
+  "bucket_unreachable",
+  /** A ListObjects page_token that was not issued for this bucket and prefix. */
+  "bad_page_token",
+  /** PreviewObject: not an image, text or JSON object. */
+  "not_previewable",
+  /** PreviewObject: over the preview's size cap (10 MiB for an image, 1 MiB for text). */
+  "too_large",
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */
   "git_credential_not_connected",
