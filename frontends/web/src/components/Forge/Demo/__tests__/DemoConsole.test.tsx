@@ -245,7 +245,7 @@ describe("the forge demo console", () => {
       const banner = await screen.findByTestId("forge-demo-banner", {}, { timeout: 15_000 });
       expect(banner).toHaveTextContent("Nothing you click here changes anything.");
       expect(within(banner).queryByTestId("forge-demo-exit")).toBeNull();
-      expect(within(banner).getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("/auth?utm_source=demo&utm_medium=banner"));
+      expect(within(banner).getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("https://forge.reliantlabs.io/auth?mode=signup&journey=forge&utm_source=demo&utm_campaign=forge_demo&utm_content=banner"));
       expect(within(banner).getByTestId("forge-demo-telemetry-notice")).toHaveTextContent("This demo records usage and session replays to improve the product.");
       await user.click(within(banner).getByTestId("demo-cta-install"));
       const sheet = await screen.findByTestId("demo-install-sheet");

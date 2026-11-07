@@ -1106,13 +1106,17 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         const make = (scale: number, seed: number, group: Record<string, string>) => [
           { ...health("api", req.window, 42 * scale, 0.012 / scale, 3 + seed, 86 / scale), group },
           { ...health("worker", req.window, 6 * scale, 0.004, 5 + seed, 240), group },
+          // The demo's sample app: the inventory service the toured trace crosses into.
+          ...(options.crossService ? [{ ...health("inventory", req.window, 6 * scale, 0.001, 2 + seed, 21), group }] : []),
         ];
         const all = groupBy.length
           ? fixtureGroups(groupBy, req).flatMap((group, index) => make(1 / (index + 1), index * 7, group))
           : make(1, 0, {});
         const services = req.services?.length ? all.filter((s) => req.services!.includes(s.name)) : all;
+        // A Reliant daemon's operator row; the demo's sample app has no daemon.
         const daemon: ServiceHealth = { ...health("reliant-daemon", req.window, 0, 0, 9, 0), requestCount: 0, requestRate: 0, errorLogCount: 3, source: "daemon", operatorData: true };
-        return { services: req.services?.length || groupBy.length ? services : [...services, daemon], trendStepSeconds };
+        const withDaemon = !(req.services?.length || groupBy.length) && !options.crossService;
+        return { services: withDaemon ? [...services, daemon] : services, trendStepSeconds };
       }),
     searchLogs: (req) =>
       call("SearchLogs", req, () => {

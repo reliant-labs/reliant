@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+// The workflows journey's content and Reliant's end-of-tour landing (the demo bundle leaves them out).
+import './components/Onboarding/journeys/catalog'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type RouteComponent } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'

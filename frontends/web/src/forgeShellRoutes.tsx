@@ -37,6 +37,8 @@ import type { ComponentType, ReactNode } from 'react'
 import { createRootRoute, createRoute, createRouter, Navigate, Outlet, useRouterState, type AnyRoute } from '@tanstack/react-router'
 
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
+// The workflows journey's content: its step ids still resolve here (the demo bundle leaves it out).
+import './components/Onboarding/journeys/catalog'
 import { ForgeAuthGuard } from './components/ForgeShell/ForgeAuthGuard'
 import { ForgeLandingJourney } from './components/ForgeShell/ForgeLandingJourney'
 import { ForgeShellLayout } from './components/ForgeShell/ForgeShellLayout'
