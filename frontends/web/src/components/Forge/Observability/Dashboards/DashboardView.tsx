@@ -110,8 +110,12 @@ import { PanelDrawer, type DrawerMode } from "./PanelDrawer";
 import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON, INK_LINK, Menu, PointMenu, Segmented, SourceTag, StarButton, VariableSelect, type MenuEntry } from "./parts";
 import { useObsReadOnly } from "../obsReadOnly";
+import { DataPanelBody, type PanelDataContext } from "./DataPanel";
+import { browseParams } from "./dataPanelModel";
+import type { DataSearch } from "../../Data/dataUrl-model";
 
 export interface DashboardHrefs extends ExploreHrefs {
+  data?: (search: DataSearch) => string;
   list: string;
   release: (version: string) => string;
   trace: (traceId: string) => string;
@@ -173,6 +177,12 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
   // figures declares "period", so each opens beside its change.
   const defaultCompare = dashboardDefaultCompare(spec?.defaultCompare);
   const compare: CompareMode = search.compare ?? defaultCompare;
+  // Data reads never poll implicitly. Keep bound time stable through telemetry
+  // polling/re-renders; changing the range creates a new structured question.
+  const browseWindow = useMemo(() => {
+    const endMs = Date.now();
+    return { startMs: endMs - rangeMs(range), endMs };
+  }, [range]);
 
   // A platform dashboard's signals belong to no environment: it reads them
   // platform-wide whatever environment the top bar names.
@@ -384,6 +394,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                 : []),
             ]}
             scope={scope}
+            dataContext={!platform && !orgScoped && envId && hrefs.data && scope ? {
+              env: { id: envId, name: env }, href: hrefs.data,
+              params: browseParams(spec, search, browseWindow),
+            } : undefined}
             range={range}
             services={viewerQuery(spec, panel, search).services}
             refreshEvery={refreshEvery}
@@ -1079,6 +1093,7 @@ function DashboardPanelCard({
   panel,
   queryPanel,
   scope,
+  dataContext,
   range: rangeOfCard,
   services,
   refreshEvery,
@@ -1091,6 +1106,7 @@ function DashboardPanelCard({
   panel: Panel;
   queryPanel: Panel;
   scope: ObsScope | null;
+  dataContext?: PanelDataContext;
   range: RangePreset;
   services: string[];
   refreshEvery: number | false;
@@ -1209,7 +1225,8 @@ function DashboardPanelCard({
         )}
       </div>
       <div ref={bodyRef} className="px-4 pb-4 pt-2">
-        <PanelBody
+        <DataPanelBody
+          context={near ? dataContext : undefined}
           panel={queryPanel}
           query={query}
           compare={comparable && offsetSec ? { query: compareQuery, label: target.mode === "release" ? target.label : "previous period", offsetSec } : undefined}
