@@ -46,6 +46,24 @@ export function PageAgentHelp({ tipKey }: { tipKey: DemoTipKey }) {
   );
 }
 
+/** Keep the explanation in the page flow, never over a table, target or drawer. */
+function PageInfoFlow({ children }: { children: React.ReactNode }) {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    const slot = document.createElement("div");
+    slot.className = "mb-4 w-full max-w-xl";
+    const attach = () => {
+      const main = document.querySelector("main");
+      if (main && slot.parentElement !== main) { main.prepend(slot); setHost(slot); }
+    };
+    attach();
+    const observer = new MutationObserver(attach);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => { observer.disconnect(); slot.remove(); };
+  }, []);
+  return host ? createPortal(children, host) : null;
+}
+
 export function DemoTips() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -53,6 +71,7 @@ export function DemoTips() {
   const key = demoTipKey(location.pathname, search);
   const tourOpen = !!parseTourParam(search.tour);
   const [open, setOpen] = useState(false);
+  const drawerOpen = useConsoleDrawerOpen();
 
   useEffect(() => {
     // The old global offer no longer competes with the page's own explanation.
@@ -74,9 +93,9 @@ export function DemoTips() {
     void navigate({ search: ((prev: Record<string, unknown>) => ({ ...prev, tour: "forge:fg-intro" })) as never });
   };
   return (
-    <DemoCorner order={1}>
-      {open && tip && key ? (
-        <section aria-label={`About this page: ${tip.title}`} className="max-h-[50dvh] overflow-y-auto rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl" data-testid="demo-tip" data-tip={key}>
+    <>
+      {open && tip && key && !drawerOpen ? (
+        <PageInfoFlow><section aria-label={`About this page: ${tip.title}`} className="rounded-xl border border-border bg-popover p-3 text-popover-foreground" data-testid="demo-tip" data-tip={key}>
           <h3 className="text-sm font-semibold">{tip.title}</h3>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{tip.body}</p>
           <div className="mt-2 flex items-center justify-end gap-2">
@@ -84,18 +103,18 @@ export function DemoTips() {
             <button type="button" onClick={start} className="touch-target rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground" data-testid="demo-page-tour-start">Take the tour</button>
           </div>
           <PageAgentHelp tipKey={key} />
-        </section>
+        </section></PageInfoFlow>
       ) : null}
-      <div className="mt-2 flex items-center justify-end gap-2" data-testid="demo-corner-bar">
+      <DemoCorner order={1}><div className="mt-2 flex items-center justify-end gap-2" data-testid="demo-corner-bar">
         <SignUpButton placement="corner" size="md" />
         <InstallForgeLink placement="corner" />
         {!open && key && (
-          <button type="button" onClick={() => setOpen(true)} aria-label={`About ${tip?.title}`} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-popover text-foreground shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" data-testid="demo-page-info">
+          <button type="button" onClick={() => { setOpen(true); requestAnimationFrame(() => document.querySelector('[data-testid="demo-tip"]')?.scrollIntoView({ block: "nearest" })); }} aria-label={`About ${tip?.title}`} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-popover text-foreground shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" data-testid="demo-page-info">
             <CircleHelp className="h-5 w-5" aria-hidden="true" />
           </button>
         )}
-      </div>
-    </DemoCorner>
+      </div></DemoCorner>
+    </>
   );
 }
 
