@@ -1,0 +1,269 @@
+import fs from "node:fs";
+import path from "node:path";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { forgeRuntimeConfig } from "@reliantlabs/forge-web-runtime/vite";
+// `vitest/config` re-exports vite's defineConfig with the `test` block typed.
+// Importing it from "vite" instead type-errors on `test`, and this file is in
+// the tsconfig `include` list.
+import { defineConfig } from "vitest/config";
+
+import { devLogPlugin } from "./src/lib/devlog-plugin";
+
+// The libraries @reliantlabs/forge-web-runtime declares as peerDependencies —
+// read from the installed package so this list can never drift from what the
+// runtime actually asks the app to supply.
+//
+// peerDependencies states the contract: "the consuming app supplies this
+// copy". npm honours it for a registry install (one hoisted copy at the app
+// root) but CANNOT honour it for the `file:` specifier a dev build of forge
+// writes to bridge a local forge checkout. That specifier is materialised as
+// a SYMLINK, the checkout behind it is a working tree carrying its own
+// node_modules, and a bundler resolves a module's bare imports by walking up
+// from that module's own location — so the runtime binds @connectrpc/connect,
+// @bufbuild/protobuf and @opentelemetry/api out of the forge checkout while
+// this app binds its own. Two copies of every shared library in one bundle,
+// each with its own classes, module-level state and registries, and every
+// byte of them shipped twice. It typechecks and builds perfectly green, so no
+// type-level or build-level gate can see it; `resolve.dedupe` below is what
+// forces the single copy the contract promised.
+// The lookup walks UP. An npm workspace — which forge's own dev bridge writes
+// — hoists every member's dependencies to the workspace root, so this frontend
+// legitimately has no node_modules of its own and the package sits at the
+// project root. Reading only __dirname/node_modules throws ENOENT there and
+// takes the whole config load down before anything builds.
+const readWebRuntimePeers = (): string[] => {
+  let dir = __dirname;
+  for (;;) {
+    const manifest = path.join(
+      dir,
+      "node_modules",
+      "@reliantlabs",
+      "forge-web-runtime",
+      "package.json",
+    );
+    if (fs.existsSync(manifest)) {
+      return Object.keys(JSON.parse(fs.readFileSync(manifest, "utf8")).peerDependencies ?? {});
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return []; // not installed — nothing to dedupe
+    dir = parent;
+  }
+};
+
+const webRuntimePeers: string[] = readWebRuntimePeers();
+
+// Vite config for the SPA scaffold. Tailwind v4 plugin keeps the CSS
+// pipeline first-party (no PostCSS config needed). The path aliases mirror
+// the tsconfig "paths" entries so editor and runtime resolution agree.
+//
+// There is no dev proxy to the identity provider here. This config used to
+// read IDP_UPSTREAM_ORIGIN through `loadEnv` and forward a path to the IdP,
+// because the browser had to reach the issuer's discovery and authorize
+// endpoints same-origin. It does not any more: sign-in is native, so the
+// browser talks only to this app's own API and the SERVER talks to the
+// issuer. Nothing in the dev loop needs the IdP reachable from a page.
+//
+// Still the function form rather than a plain object, so a `mode`-dependent
+// setting can be added without restructuring the file.
+// ── Browser telemetry proxy (DEV ONLY) ──────────────────────────────────
+//
+// The browser sends telemetry to `/_otel/v1/{traces,logs}` on ITS OWN origin
+// and holds no collector address and no secret (see src/lib/otel_gen.ts).
+// `vite` forwards that to the local collector's OTLP/HTTP port.
+//
+//   upstream: OTEL_EXPORTER_OTLP_ENDPOINT, a collector BASE URL
+//             (default http://127.0.0.1:4318 — the OTLP/HTTP port, not gRPC's 4317)
+//   path:     /_otel/*  ->  <upstream>/*   (the /_otel prefix is stripped)
+//
+// `forge env up` sets the variable for the dev server, so this follows the
+// collector that stack started.
+//
+// `server.proxy` exists only while the dev server runs. A built SPA is plain
+// static files, so there is NO production equivalent in this file, by design:
+// routing `/_otel/*` to the collector in a deployed environment is the
+// ingress's job (the hosted gateway, or your cluster's ingress). Until that
+// route exists, leave the frontend's otel_endpoint unset and the production
+// bundle sends nothing.
+const OTEL_ENDPOINT = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://127.0.0.1:4318";
+const OTEL_UPSTREAM = OTEL_ENDPOINT.replace(/\/+$/, "");
+
+// A HOSTED dev stack (observability.dev_telemetry): `forge env up` points
+// OTEL_EXPORTER_OTLP_ENDPOINT at the org's hosted edge and
+// FORGE_OTEL_HEADERS_FILE at the file holding this stack's browser token,
+// which forge renews in place. The proxy reads the file on EVERY request and
+// attaches what it holds (`authorization=Bearer …`) server-side, so the token
+// never reaches the bundle; the browser's cookies and any authorization
+// header it sent are not forwarded to the edge, even when the file is
+// missing. Unset (the local ClickStack), nothing is added.
+const OTEL_HEADERS_FILE = process.env.FORGE_OTEL_HEADERS_FILE ?? "";
+const readOtelHeaders = (): Array<[string, string]> => {
+  let text = "";
+  try {
+    text = fs.readFileSync(OTEL_HEADERS_FILE, "utf8");
+  } catch {
+    return []; // not written yet, or removed: send nothing extra
+  }
+  const out: Array<[string, string]> = [];
+  for (const pair of text.split(/[\n,]/)) {
+    const i = pair.indexOf("=");
+    if (i <= 0) continue;
+    let value = pair.slice(i + 1).trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // Not percent-encoded: use it as written.
+    }
+    out.push([pair.slice(0, i).trim(), value]);
+  }
+  return out;
+};
+
+// ── API proxy (DEV ONLY) ────────────────────────────────────────────────
+//
+// Under the dev server the browser calls the API on ITS OWN origin, at
+// `/_api/*`, and `vite` forwards that to the API server. A page opened
+// through a Reliant workspace preview URL, a tunnel or another machine's IP
+// cannot reach "localhost:<api port>" — that is the viewer's machine — so
+// the API is reached through the one host the browser already has.
+// src/lib/api-base.ts has the whole story.
+//
+//   upstream: VITE_API_URL, the API's base URL. `forge env up` sets it to the
+//             API it started, and a value from your shell or the frontend's
+//             KCL env_vars wins over forge's.
+//   path:     /_api/*  ->  <upstream>/*   (the /_api prefix is stripped)
+//   off:      FORGE_DEV_API_PROXY=off, or no upstream. The browser then calls
+//             the configured API URL directly, cross-origin, as before.
+//
+// The answer reaches the bundle as import.meta.env.FORGE_DEV_API_PROXY
+// (`define` below), which api-base.ts reads, so the proxy and the transport
+// are one decision. Like /_otel, there is no production equivalent: a built
+// SPA reads the API's URL from the runtime config (config.js), as before.
+const API_UPSTREAM = (process.env.VITE_API_URL || "").replace(/\/+$/, "");
+const DEV_API_PROXY =
+  API_UPSTREAM !== "" && !/^(off|false|0|no)$/i.test(process.env.FORGE_DEV_API_PROXY ?? "")
+    ? "/_api"
+    : "";
+
+// ── Dev hosts (DEV ONLY) ────────────────────────────────────────────────
+//
+// `vite` answers only requests whose Host it recognises: localhost,
+// *.localhost and any IP address (a guard against DNS rebinding). Anything
+// else gets "Blocked request. This host is not allowed." Allowed here as
+// well:
+//
+//   - this dev server's Reliant workspace preview host: RELIANT_PREVIEW_URL_TEMPLATE
+//     (`https://{port}-<id>.workspaces.reliantapi.com`, set on a Reliant
+//     cloud machine) with the dev server's port.
+//   - FORGE_DEV_ALLOWED_ORIGINS: more hostnames, comma-separated (a tunnel,
+//     a custom dev DNS name). A leading "." allows every subdomain.
+const devAllowedHosts = (port: number): string[] => {
+  const out = new Set<string>();
+  const preview = process.env.RELIANT_PREVIEW_URL_TEMPLATE;
+  if (preview) {
+    try {
+      out.add(new URL(preview.replace("{port}", String(port))).hostname);
+    } catch {
+      // A malformed template allows nothing extra.
+    }
+  }
+  for (const host of (process.env.FORGE_DEV_ALLOWED_ORIGINS ?? "").split(",")) {
+    if (host.trim()) out.add(host.trim());
+  }
+  return [...out];
+};
+
+export default defineConfig(({ command, mode }) => {
+  // Only the dev server proxies. A build, and Vitest (which loads this file
+  // too), must not believe in a proxy that is not there.
+  const devApiProxy = command === "serve" && mode !== "test" ? DEV_API_PROXY : "";
+  return {
+    // Whether the dev server proxies the API, for src/lib/api-base.ts — see
+    // DEV_API_PROXY above. Undefined (so "") everywhere else.
+    define: devApiProxy
+      ? { "import.meta.env.FORGE_DEV_API_PROXY": JSON.stringify(devApiProxy) }
+      : {},
+    // devLogPlugin is dev-only (`apply: "serve"`): it receives the browser
+    // console lines that installDevLogging() posts in src/main.tsx and prints
+    // them to this dev server's stdout, which `forge env up` tees to
+    // .forge/logs/<env>/frontend_<name>.log. Delete both to opt out.
+    //
+    // forgeRuntimeConfig serves config.js from FORGE_RUNTIME_CONFIG_FILE when
+    // `forge env up` sets it — which it does when THIS frontend's code is
+    // checked out beside a project that declares it (a `path` outside that
+    // project), so the environment's runtime document reaches the page
+    // without being written into this tree. Unset, it does nothing and
+    // public/config.js is served as usual.
+    plugins: [react(), tailwindcss(), devLogPlugin(), forgeRuntimeConfig()],
+    resolve: {
+      // Resolve every runtime peer from this project root, whatever the
+      // importer. A registry install already resolves that way, so this is
+      // a no-op there and a fix only where the dev bridge is live.
+      dedupe: webRuntimePeers,
+      alias: {
+{{- if .Workspaces}}
+        // In workspaces mode the shared component library lives at
+        // packages/ui-web/. Redirect `@/components/ui/*` so existing
+        // imports keep working without rewriting every page that consumes
+        // them. Scoped to /ui/ so non-ui paths (e.g. the owned
+        // `@/components/nav`) keep resolving against the local src tree.
+        "@/components/ui": path.resolve(__dirname, "../../packages/ui-web/src/components/ui"),
+{{- end}}
+        "@": path.resolve(__dirname, "./src"),
+      },
+    },
+    build: {
+      // forge asks for source maps when IT builds for a deploy
+      // (FORGE_SOURCEMAPS=1) and then moves them out of the served tree, so
+      // they can symbolicate errors without being public. Any other build
+      // (a Docker image, a local `npm run build`) emits none, because
+      // nothing there would take them out of the output.
+      sourcemap: process.env.FORGE_SOURCEMAPS === "1",
+    },
+    server: {
+      port: 5173,
+      host: true,
+      // A Reliant workspace preview host (and any FORGE_DEV_ALLOWED_ORIGINS)
+      // — see devAllowedHosts above. Vite's port, not PORT: this file pins it.
+      allowedHosts: devAllowedHosts(5173),
+      proxy: {
+        "/_otel": {
+          target: OTEL_UPSTREAM,
+          changeOrigin: true,
+          rewrite: (p: string) => p.replace(/^\/_otel/, ""),
+          ...(OTEL_HEADERS_FILE
+            ? {
+                configure: (proxy) => {
+                  proxy.on("proxyReq", (proxyReq) => {
+                    // Only forge's token reaches the edge: never the page's
+                    // cookies, nor an authorization header the page sent.
+                    proxyReq.removeHeader("cookie");
+                    proxyReq.removeHeader("authorization");
+                    for (const [name, value] of readOtelHeaders()) proxyReq.setHeader(name, value);
+                  });
+                },
+              }
+            : {}),
+        },
+        ...(devApiProxy
+          ? {
+              [devApiProxy]: {
+                target: API_UPSTREAM,
+                changeOrigin: true,
+                rewrite: (p: string) => p.slice(devApiProxy.length),
+              },
+            }
+          : {}),
+      },
+    },
+    // Vitest reads THIS file when a project has no vitest.config.ts. The
+    // scaffold ships component tests that mount into the DOM
+    // (src/components/*.test.tsx, shared with the Next.js tree), so the
+    // jsdom environment is not optional — without it `npm test` fails on
+    // arrival with "document is not defined".
+    test: {
+      environment: "jsdom",
+      include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    },
+  };
+});

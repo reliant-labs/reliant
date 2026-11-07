@@ -1,0 +1,1215 @@
+{{- /*
+  next.config.ts scaffold — branches on the frontend's `output:` field in
+  forge.yaml. New frontends are scaffolded "static": a production build is
+  a static export into out/, which ships to the hosted runtime's static
+  hosting, a bucket or a CDN. The generated CRUD pages are static routes
+  (`/<slug>/view?id=…`, `/<slug>/edit?id=…`), so the export builds on a
+  project with entities. Standalone and server are explicit opt-ins.
+
+  Branches:
+    static     — (scaffold default) production export (`output: "export"`
+                 gated on NODE_ENV=production); dev stays as `next dev`.
+                 No Node runtime in prod → out/ is plain files.
+    standalone — self-contained Node server
+                 (`.next-prod/standalone/server.js` in production). Pair
+                 with the generated Dockerfile. Also what an EMPTY
+                 Output renders: frontends scaffolded before the static
+                 default left the field empty.
+    server     — neither; full Next.js dev AND prod (`next start`).
+
+  All three branches emit the same base-path block: `basePath` and
+  `assetPrefix` (same value) default to forge.yaml's
+  `frontends[].base_path` and are overridable via the single canonical
+  env var NEXT_PUBLIC_BASE_PATH. The static branch additionally fails
+  the production build when forge.yaml declares a base_path but the
+  override empties it — a static export would bake root-mounted URLs
+  that 404 behind the proxy.
+
+  All three also emit the same dev-only proxies: `/_otel` to the local
+  collector and `/_api` to the API (src/lib/api-base.ts reads the latter's
+  on/off answer through `env`), so the browser in the dev loop talks only
+  to the dev server's own origin — plus the `allowedDevOrigins` that let
+  that origin be a workspace preview host or this machine's own address.
+*/ -}}
+{{- if eq .Output "static" -}}
+import fs from "node:fs";
+import http from "node:http";
+import https from "node:https";
+import os from "node:os";
+import path from "node:path";
+
+import bundleAnalyzer from "@next/bundle-analyzer";
+
+import type { NextConfig } from "next";
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+});
+
+// Path prefix this frontend is mounted under (e.g. "/admin" behind a
+// reverse proxy that blends several apps on one host). Empty = served
+// from the host root.
+//
+// Sources, in order:
+//   1. NEXT_PUBLIC_BASE_PATH — the ONLY env var forge reads for the
+//      base path. The NEXT_PUBLIC_ prefix is load-bearing: Next.js
+//      inlines such vars into the client bundle, so the generated
+//      browser-side helper (src/lib/basepath_gen.ts) reads the SAME
+//      name. One name everywhere; a second variant would silently be
+//      ignored.
+//   2. forge.yaml `frontends[].base_path`, baked in by forge: "{{.BasePath}}".
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "{{.BasePath}}";
+{{- if .BasePath}}
+
+// forge.yaml declares base_path: "{{.BasePath}}" for this frontend, and a
+// static export bakes the prefix into every emitted URL at build time. If
+// NEXT_PUBLIC_BASE_PATH overrides it to "" the build would silently emit
+// root-mounted URLs that 404 behind the proxy (and there is no server at
+// runtime to compensate). A wrong silent default is worse than an error —
+// fail the production build loudly. To genuinely serve this frontend from
+// the root, remove base_path from forge.yaml and run `forge generate`.
+if (process.env.NODE_ENV === "production" && basePath === "") {
+  throw new Error(
+    "frontend {{.FrontendName}}: forge.yaml declares base_path \"{{.BasePath}}\" but " +
+      "NEXT_PUBLIC_BASE_PATH is empty at build time; refusing to bake a " +
+      "root-mounted static export. Unset the override (or remove base_path " +
+      "from forge.yaml and re-run `forge generate`).",
+  );
+}
+{{- end}}
+
+// ── Browser telemetry proxy (DEV ONLY) ──────────────────────────────────
+//
+// The browser sends telemetry to `<basePath>/_otel/v1/{traces,logs}` on ITS
+// OWN origin and holds no collector address and no secret (see
+// src/lib/otel_gen.ts). `next dev` forwards that to the local collector's
+// OTLP/HTTP port; the rewrite below is the whole proxy.
+//
+//   upstream: OTEL_EXPORTER_OTLP_ENDPOINT, a collector BASE URL
+//             (default http://127.0.0.1:4318 — the OTLP/HTTP port, not gRPC's 4317)
+//   path:     /_otel/:path*  ->  <upstream>/:path*
+//
+// `forge env up` sets the variable for the dev server, so this follows the
+// collector that stack started. It is read when the dev server starts.
+//
+// There is NO production equivalent in this file, by design: a static export
+// (`output: "export"`) has no Next.js server, so `rewrites` do not exist in
+// the built site, and a standalone build bakes a rewrite's destination in at
+// BUILD time, which cannot name a collector that differs per environment.
+// Routing `<basePath>/_otel/*` to the collector in a deployed environment is
+// the ingress's job (the hosted gateway, or your cluster's ingress). Until
+// that route exists, leave the frontend's otel_endpoint unset and the
+// production bundle sends nothing.
+const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://127.0.0.1:4318";
+const otelUpstream = otelEndpoint.replace(/\/+$/, "");
+
+// A HOSTED dev stack (observability.dev_telemetry): `forge env up` points
+// OTEL_EXPORTER_OTLP_ENDPOINT at the org's hosted edge and
+// FORGE_OTEL_HEADERS_FILE at the file holding this stack's browser token,
+// which forge renews in place. A rewrite cannot add a header, so the rewrite
+// then goes to a relay on 127.0.0.1 that this dev server starts: it reads the
+// file on EVERY request, attaches what it holds (`authorization=Bearer …`)
+// and forwards to the edge. The token never reaches the bundle, and neither
+// the browser's cookies nor an authorization header it sent are forwarded,
+// even when the file is missing. Unset (the local ClickStack), there is no
+// relay and nothing changes.
+const otelHeadersFile = process.env.FORGE_OTEL_HEADERS_FILE ?? "";
+const readOtelHeaders = (): Array<[string, string]> => {
+  let text = "";
+  try {
+    text = fs.readFileSync(otelHeadersFile, "utf8");
+  } catch {
+    return []; // not written yet, or removed: send nothing extra
+  }
+  const out: Array<[string, string]> = [];
+  for (const pair of text.split(/[\n,]/)) {
+    const i = pair.indexOf("=");
+    if (i <= 0) continue;
+    let value = pair.slice(i + 1).trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // Not percent-encoded: use it as written.
+    }
+    out.push([pair.slice(0, i).trim().toLowerCase(), value]);
+  }
+  return out;
+};
+let otelRelay: Promise<string> | undefined;
+const devOtelUpstream = (): Promise<string> => {
+  if (!otelHeadersFile) return Promise.resolve(otelUpstream);
+  otelRelay ??= new Promise<string>((resolve) => {
+    const target = new URL(otelUpstream);
+    const send = (url: URL, opts: http.RequestOptions, cb: (r: http.IncomingMessage) => void) =>
+      url.protocol === "https:" ? https.request(url, opts, cb) : http.request(url, opts, cb);
+    const server = http.createServer((req, res) => {
+      const headers: http.OutgoingHttpHeaders = { ...req.headers, host: target.host };
+      delete headers.cookie;
+      delete headers.authorization;
+      for (const [k, v] of readOtelHeaders()) headers[k] = v;
+      const url = new URL(target.pathname.replace(/\/+$/, "") + (req.url ?? "/"), target);
+      const upstream = send(url, { method: req.method, headers }, (up) => {
+        res.writeHead(up.statusCode ?? 502, up.headers);
+        up.pipe(res);
+      });
+      upstream.on("error", () => {
+        if (!res.headersSent) res.writeHead(502);
+        res.end();
+      });
+      req.pipe(upstream);
+    });
+    server.on("error", () => resolve(otelUpstream));
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      resolve(typeof addr === "object" && addr ? `http://127.0.0.1:${addr.port}` : otelUpstream);
+    });
+    server.unref();
+  });
+  return otelRelay;
+};
+
+// ── API proxy (DEV ONLY) ────────────────────────────────────────────────
+//
+// Under `next dev` the browser calls the API on ITS OWN origin, at
+// `<basePath>/_api/*`, and the rewrite below forwards that to the API server.
+// A page opened through a Reliant workspace preview URL, a tunnel or another
+// machine's IP cannot reach "localhost:<api port>" — that is the viewer's
+// machine — so the API is reached through the one host the browser already
+// has. src/lib/api-base.ts has the whole story.
+//
+//   upstream: NEXT_PUBLIC_API_URL, the API's base URL. `forge env up` sets it
+//             to the API it started, and a value from your shell or the
+//             frontend's KCL env_vars wins over forge's. Read here, on the
+//             server, when the dev server starts.
+//   path:     /_api/:path*  ->  <upstream>/:path*
+//   off:      FORGE_DEV_API_PROXY=off, or no upstream. The browser then calls
+//             the configured API URL directly, cross-origin, as before.
+//
+// The answer reaches the bundle as process.env.FORGE_DEV_API_PROXY (`env`
+// below), which api-base.ts reads, so the rewrite and the transport are one
+// decision. Next's proxy ends a request after 30s (`experimental.proxyTimeout`);
+// a server-streaming RPC that must outlive that needs it raised, or the proxy off.
+//
+// There is no production equivalent, for the same reasons as /_otel above. A
+// build reads the API's URL from the runtime config (config.js), as before.
+const apiUpstream = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+const devApiProxy =
+  process.env.NODE_ENV === "development" &&
+  apiUpstream !== "" &&
+  !/^(off|false|0|no)$/i.test(process.env.FORGE_DEV_API_PROXY ?? "")
+    ? "/_api"
+    : "";
+
+// ── Dev origins (DEV ONLY) ──────────────────────────────────────────────
+//
+// `next dev` refuses its own dev resources — the HMR socket, /__nextjs_*,
+// dev fonts — to a page whose Origin is not localhost or listed in
+// `allowedDevOrigins`. A page opened any other way renders but never
+// hydrates: every button is dead and nothing in the console says why.
+// Allowed here, beside localhost:
+//
+//   - this dev server's Reliant workspace preview host: RELIANT_PREVIEW_URL_TEMPLATE
+//     (`https://{port}-<id>.workspaces.reliantapi.com`, set on a Reliant
+//     cloud machine) with the port the dev server binds (PORT, which
+//     `forge env up` sets; Next's 3000 otherwise).
+//   - this machine's own network addresses, so `http://<LAN or container
+//     IP>:<port>` works once the dev server listens beyond loopback
+//     (`forge env up dev -- -H 0.0.0.0`). A page served from this machine's
+//     own address is no more foreign than localhost, which Next allows on
+//     any port.
+//   - FORGE_DEV_ALLOWED_ORIGINS: more hostnames, comma-separated (a tunnel,
+//     a custom dev DNS name). Next matches hostnames, with `*` for a whole
+//     label, and ignores ports.
+const devOrigins = (): string[] => {
+  const out = new Set<string>();
+  const preview = process.env.RELIANT_PREVIEW_URL_TEMPLATE;
+  if (preview) {
+    try {
+      out.add(new URL(preview.replace("{port}", process.env.PORT || "3000")).hostname);
+    } catch {
+      // A malformed template allows nothing extra.
+    }
+  }
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const addr of addrs ?? []) {
+      if (!addr.internal && addr.family === "IPv4") out.add(addr.address);
+    }
+  }
+  for (const host of (process.env.FORGE_DEV_ALLOWED_ORIGINS ?? "").split(",")) {
+    if (host.trim()) out.add(host.trim());
+  }
+  return [...out];
+};
+
+const nextConfig: NextConfig = {
+  // basePath prefixes routes and <Link>/router URLs; assetPrefix (same
+  // value) prefixes /_next/* asset and RSC chunk URLs. Omitting
+  // assetPrefix lets some chunk URLs skip the prefix — the JS 404s
+  // behind the proxy and React never hydrates.
+  ...(basePath ? { basePath, assetPrefix: basePath } : {}),
+  // NOTE: no distDir fence here, unlike the standalone/server branches.
+  // In export mode Next.js treats a custom distDir as the EXPORT
+  // destination (the site would land there instead of out/) while build
+  // intermediates still go to .next regardless — a fence would break
+  // the out/ contract and fence nothing. Avoid running a production
+  // build while `next dev` is live in this mode.
+  //
+  // Production: static export (`output: static` in forge.yaml, the scaffold
+  // default). The build emits `out/` (static HTML + JS + CSS) which the
+  // hosted runtime's static hosting, a bucket or a CDN serves as plain
+  // files — no Node runtime in prod.
+  //
+  // An export can only contain pages it can enumerate at build time, so a
+  // dynamic segment (`[id]`) fails the build unless it has
+  // generateStaticParams(). forge's generated CRUD pages therefore have
+  // none: detail and edit are static routes that read the id from the query
+  // string in the browser (`/<slug>/view?id=…`, src/lib/entity-routes.ts).
+  // Keep hand-written routes the same shape. Anything that needs a server
+  // at request time — server actions, middleware, a route handler that
+  // answers GET dynamically, `cookies()`/`headers()` — needs
+  // `output: standalone` instead.
+  //
+  // trailingSlash is left at Next's default (false): the export writes
+  // `<route>.html`, which the hosted static origin and this frontend's nginx
+  // image both resolve for `/<route>`. Turn it on only for a host that maps
+  // directories to index.html and nothing else.
+  //
+  // Development: full Next.js dev server (HMR, rewrites). The conditional
+  // below keeps `next dev` unchanged when NODE_ENV !== "production".
+  ...(process.env.NODE_ENV === "production" ? { output: "export" } : {}),
+  // forge asks for browser source maps when IT builds for a deploy
+  // (FORGE_SOURCEMAPS=1) and then moves them out of the exported site, so they
+  // can symbolicate errors without being served. Any other build emits none.
+  productionBrowserSourceMaps: process.env.FORGE_SOURCEMAPS === "1",
+  // next/image's default loader is an optimizing SERVER route, which an
+  // export does not have — `next build` refuses an <Image> without this.
+  // Size images for the web before they go in public/.
+  images: { unoptimized: true },
+  // Whether `next dev` proxies the API, for src/lib/api-base.ts — see
+  // devApiProxy above. "" in every build.
+  env: { FORGE_DEV_API_PROXY: devApiProxy },
+  // Hosts besides localhost that may load this dev server — see devOrigins.
+  ...(process.env.NODE_ENV === "development" ? { allowedDevOrigins: devOrigins() } : {}),
+  // Dev-only proxies: /_otel to the local collector (see otelUpstream above)
+  // and /_api to the API (see devApiProxy). Gated on NODE_ENV so
+  // `forge lint --static-export` can see the intent: a static host applies no
+  // rewrites.
+  ...(process.env.NODE_ENV === "development"
+    ? {
+        async rewrites() {
+          const otel = await devOtelUpstream();
+          return [
+            { source: "/_otel/:path*", destination: `${otel}/:path*` },
+            ...(devApiProxy
+              ? [{ source: `${devApiProxy}/:path*`, destination: `${apiUpstream}/:path*` }]
+              : []),
+          ];
+        },
+      }
+    : {}),
+  // @reliantlabs/forge-web-runtime ships TypeScript sources, so Next has to run
+  // them through its own compiler instead of treating node_modules as
+  // pre-built JavaScript.
+  transpilePackages: ["@reliantlabs/forge-web-runtime"],
+  // WEBPACK, NOT TURBOPACK — and that is a deliberate pin, not lag.
+  //
+  // Next.js 16 makes Turbopack the default bundler for `next dev` and
+  // `next build`. A config carrying a `webpack` key under that default does
+  // NOT silently lose it: Next refuses to start, on both dev and build, with
+  //   "ERROR: This build is using Turbopack, with a `webpack` config and no
+  //    `turbopack` config."
+  // and exits 1 (next/dist/lib/turbopack-warning.js, guarded by
+  // `process.env.TURBOPACK === 'auto'` — i.e. only when the bundler was
+  // defaulted rather than chosen). That loudness is the good case; the
+  // dangerous one would have been a silent drop, because the second block
+  // below fixes a bug that "typechecks and builds perfectly green".
+  //
+  // So the bundler is chosen EXPLICITLY, via `--webpack` on the `dev`,
+  // `build` and `analyze` scripts in package.json. The two customisations
+  // below are why, and neither is expressible in Turbopack today:
+  //
+  //   1. `resolve.extensionAlias` — Turbopack offers `turbopack.resolveExtensions`,
+  //      but that is a flat list of extensions to TRY, not a mapping from a
+  //      requested `.js` specifier onto `.ts`/`.tsx` sources. protobuf-es emits
+  //      `./foo_pb.js` against files that only exist as `.ts`, which is exactly
+  //      the mapping form.
+  //   2. the module-rules redirect — `turbopack.rules` entries carry
+  //      `loaders`/`as`/`condition`/`type` and have NO `resolve` key at all
+  //      (see TurbopackRuleConfigItem in next/dist/server/config-shared.d.ts),
+  //      so a per-module resolution override cannot be written for Turbopack.
+  //
+  // Revisit if Turbopack grows a per-module resolve override; until then
+  // `--webpack` is the supported opt-out and keeps both protections real.
+  // Note `@next/bundle-analyzer` also no-ops under Turbopack (it warns and
+  // returns the config untouched), which `--webpack` likewise keeps working.
+  webpack: (config) => {
+    // protobuf-es generates imports with .js extensions (e.g. './foo_pb.js').
+    // Next.js with moduleResolution: bundler can't resolve .js to .ts files
+    // without this alias mapping.
+    config.resolve.extensionAlias = {
+      ".js": [".ts", ".tsx", ".js", ".jsx"],
+    };
+
+    // A dev build of forge bridges @reliantlabs/forge-web-runtime with a `file:`
+    // specifier, which npm materialises as a SYMLINK to the forge checkout.
+    // That checkout is a working tree, so it carries its own node_modules —
+    // and a bundler resolves a module's bare imports by walking up from that
+    // module's own location, not from the app. The runtime's peer
+    // dependencies (@connectrpc/connect, @bufbuild/protobuf,
+    // @opentelemetry/api) therefore resolve out of the forge checkout while
+    // this app's own code resolves them out of node_modules here: two copies
+    // of every shared library in one bundle, each with its own classes,
+    // module-level state and registries, and every byte of them shipped
+    // twice. It typechecks and builds perfectly green, which is why no
+    // type-level or build-level gate can see it.
+    //
+    // peerDependencies already states the contract — "the consuming app
+    // supplies this copy". npm honours it for a registry install (one
+    // hoisted copy at the app root) and CANNOT honour it across a `file:`
+    // link, so honour it in the resolver instead: anything coming from the
+    // linked runtime resolves its bare imports against THIS app's
+    // node_modules first.
+    //
+    // Scoped to the linked runtime deliberately. The same redirect applied
+    // globally (a `resolve.modules` prefix) would also override the nested,
+    // version-pinned copies npm installs beneath other packages — next's own
+    // included.
+    // Both the link and the app's dependency roots are found by walking UP,
+    // because an npm workspace — which forge's own dev bridge writes — hoists
+    // every member's dependencies to the workspace root. This frontend can
+    // therefore have no node_modules of its own, or (worse) a PARTIAL one
+    // holding just the linked runtime while the shared libraries sit at the
+    // project root.
+    //
+    // appModules is consequently the whole ANCESTOR CHAIN, not the first
+    // directory found. Pointing the redirect at a single node_modules that
+    // happens to exist but does not contain the peer resolves nothing, and
+    // webpack then falls back to the runtime's own copy — exactly the
+    // duplicate this block exists to collapse, and the shape a partial
+    // frontend-local install produces.
+    const nodeModulesChain = (): string[] => {
+      const out: string[] = [];
+      let dir = __dirname;
+      for (;;) {
+        const candidate = path.join(dir, "node_modules");
+        if (fs.existsSync(candidate)) out.push(candidate);
+        const parent = path.dirname(dir);
+        if (parent === dir) return out;
+        dir = parent;
+      }
+    };
+    const appModules = nodeModulesChain();
+    const findUp = (leaf: string): string => {
+      for (const base of appModules) {
+        const candidate = path.join(base, leaf);
+        if (fs.existsSync(candidate)) return candidate;
+      }
+      return "";
+    };
+    const runtimeLink = findUp(path.join("@reliantlabs", "forge-web-runtime"));
+    let runtimeReal = "";
+    try {
+      runtimeReal = fs.realpathSync(runtimeLink);
+    } catch {
+      runtimeReal = ""; // not installed yet — nothing to redirect
+    }
+    // A registry install is a real directory with no node_modules of its own,
+    // so it needs none of this; only the dev bridge does.
+    if (runtimeReal && runtimeReal !== runtimeLink) {
+      config.module.rules.push({
+        // webpack names a module by its real path by default and by its link
+        // path when resolve.symlinks is off — match either spelling.
+        test: (resource: unknown) =>
+          typeof resource === "string" &&
+          (resource.startsWith(runtimeReal + path.sep) ||
+            resource.startsWith(runtimeLink + path.sep)),
+        resolve: {
+          modules: [...appModules, "node_modules"],
+        },
+      });
+    }
+
+    return config;
+  },
+};
+
+export default withBundleAnalyzer(nextConfig);
+{{- else if eq .Output "server" -}}
+import fs from "node:fs";
+import http from "node:http";
+import https from "node:https";
+import os from "node:os";
+import path from "node:path";
+
+import bundleAnalyzer from "@next/bundle-analyzer";
+
+import type { NextConfig } from "next";
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+});
+
+// Path prefix this frontend is mounted under (e.g. "/admin" behind a
+// reverse proxy that blends several apps on one host). Empty = served
+// from the host root.
+//
+// Sources, in order:
+//   1. NEXT_PUBLIC_BASE_PATH — the ONLY env var forge reads for the
+//      base path. The NEXT_PUBLIC_ prefix is load-bearing: Next.js
+//      inlines such vars into the client bundle, so the generated
+//      browser-side helper (src/lib/basepath_gen.ts) reads the SAME
+//      name. One name everywhere; a second variant would silently be
+//      ignored.
+//   2. forge.yaml `frontends[].base_path`, baked in by forge: "{{.BasePath}}".
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "{{.BasePath}}";
+
+// ── Browser telemetry proxy (DEV ONLY) ──────────────────────────────────
+//
+// The browser sends telemetry to `<basePath>/_otel/v1/{traces,logs}` on ITS
+// OWN origin and holds no collector address and no secret (see
+// src/lib/otel_gen.ts). `next dev` forwards that to the local collector's
+// OTLP/HTTP port; the rewrite below is the whole proxy.
+//
+//   upstream: OTEL_EXPORTER_OTLP_ENDPOINT, a collector BASE URL
+//             (default http://127.0.0.1:4318 — the OTLP/HTTP port, not gRPC's 4317)
+//   path:     /_otel/:path*  ->  <upstream>/:path*
+//
+// `forge env up` sets the variable for the dev server, so this follows the
+// collector that stack started. It is read when the dev server starts.
+//
+// There is NO production equivalent in this file, by design: a static export
+// (`output: "export"`) has no Next.js server, so `rewrites` do not exist in
+// the built site, and a standalone build bakes a rewrite's destination in at
+// BUILD time, which cannot name a collector that differs per environment.
+// Routing `<basePath>/_otel/*` to the collector in a deployed environment is
+// the ingress's job (the hosted gateway, or your cluster's ingress). Until
+// that route exists, leave the frontend's otel_endpoint unset and the
+// production bundle sends nothing.
+const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://127.0.0.1:4318";
+const otelUpstream = otelEndpoint.replace(/\/+$/, "");
+
+// A HOSTED dev stack (observability.dev_telemetry): `forge env up` points
+// OTEL_EXPORTER_OTLP_ENDPOINT at the org's hosted edge and
+// FORGE_OTEL_HEADERS_FILE at the file holding this stack's browser token,
+// which forge renews in place. A rewrite cannot add a header, so the rewrite
+// then goes to a relay on 127.0.0.1 that this dev server starts: it reads the
+// file on EVERY request, attaches what it holds (`authorization=Bearer …`)
+// and forwards to the edge. The token never reaches the bundle, and neither
+// the browser's cookies nor an authorization header it sent are forwarded,
+// even when the file is missing. Unset (the local ClickStack), there is no
+// relay and nothing changes.
+const otelHeadersFile = process.env.FORGE_OTEL_HEADERS_FILE ?? "";
+const readOtelHeaders = (): Array<[string, string]> => {
+  let text = "";
+  try {
+    text = fs.readFileSync(otelHeadersFile, "utf8");
+  } catch {
+    return []; // not written yet, or removed: send nothing extra
+  }
+  const out: Array<[string, string]> = [];
+  for (const pair of text.split(/[\n,]/)) {
+    const i = pair.indexOf("=");
+    if (i <= 0) continue;
+    let value = pair.slice(i + 1).trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // Not percent-encoded: use it as written.
+    }
+    out.push([pair.slice(0, i).trim().toLowerCase(), value]);
+  }
+  return out;
+};
+let otelRelay: Promise<string> | undefined;
+const devOtelUpstream = (): Promise<string> => {
+  if (!otelHeadersFile) return Promise.resolve(otelUpstream);
+  otelRelay ??= new Promise<string>((resolve) => {
+    const target = new URL(otelUpstream);
+    const send = (url: URL, opts: http.RequestOptions, cb: (r: http.IncomingMessage) => void) =>
+      url.protocol === "https:" ? https.request(url, opts, cb) : http.request(url, opts, cb);
+    const server = http.createServer((req, res) => {
+      const headers: http.OutgoingHttpHeaders = { ...req.headers, host: target.host };
+      delete headers.cookie;
+      delete headers.authorization;
+      for (const [k, v] of readOtelHeaders()) headers[k] = v;
+      const url = new URL(target.pathname.replace(/\/+$/, "") + (req.url ?? "/"), target);
+      const upstream = send(url, { method: req.method, headers }, (up) => {
+        res.writeHead(up.statusCode ?? 502, up.headers);
+        up.pipe(res);
+      });
+      upstream.on("error", () => {
+        if (!res.headersSent) res.writeHead(502);
+        res.end();
+      });
+      req.pipe(upstream);
+    });
+    server.on("error", () => resolve(otelUpstream));
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      resolve(typeof addr === "object" && addr ? `http://127.0.0.1:${addr.port}` : otelUpstream);
+    });
+    server.unref();
+  });
+  return otelRelay;
+};
+
+// ── API proxy (DEV ONLY) ────────────────────────────────────────────────
+//
+// Under `next dev` the browser calls the API on ITS OWN origin, at
+// `<basePath>/_api/*`, and the rewrite below forwards that to the API server.
+// A page opened through a Reliant workspace preview URL, a tunnel or another
+// machine's IP cannot reach "localhost:<api port>" — that is the viewer's
+// machine — so the API is reached through the one host the browser already
+// has. src/lib/api-base.ts has the whole story.
+//
+//   upstream: NEXT_PUBLIC_API_URL, the API's base URL. `forge env up` sets it
+//             to the API it started, and a value from your shell or the
+//             frontend's KCL env_vars wins over forge's. Read here, on the
+//             server, when the dev server starts.
+//   path:     /_api/:path*  ->  <upstream>/:path*
+//   off:      FORGE_DEV_API_PROXY=off, or no upstream. The browser then calls
+//             the configured API URL directly, cross-origin, as before.
+//
+// The answer reaches the bundle as process.env.FORGE_DEV_API_PROXY (`env`
+// below), which api-base.ts reads, so the rewrite and the transport are one
+// decision. Next's proxy ends a request after 30s (`experimental.proxyTimeout`);
+// a server-streaming RPC that must outlive that needs it raised, or the proxy off.
+//
+// There is no production equivalent, for the same reasons as /_otel above. A
+// build reads the API's URL from the runtime config (config.js), as before.
+const apiUpstream = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+const devApiProxy =
+  process.env.NODE_ENV === "development" &&
+  apiUpstream !== "" &&
+  !/^(off|false|0|no)$/i.test(process.env.FORGE_DEV_API_PROXY ?? "")
+    ? "/_api"
+    : "";
+
+// ── Dev origins (DEV ONLY) ──────────────────────────────────────────────
+//
+// `next dev` refuses its own dev resources — the HMR socket, /__nextjs_*,
+// dev fonts — to a page whose Origin is not localhost or listed in
+// `allowedDevOrigins`. A page opened any other way renders but never
+// hydrates: every button is dead and nothing in the console says why.
+// Allowed here, beside localhost:
+//
+//   - this dev server's Reliant workspace preview host: RELIANT_PREVIEW_URL_TEMPLATE
+//     (`https://{port}-<id>.workspaces.reliantapi.com`, set on a Reliant
+//     cloud machine) with the port the dev server binds (PORT, which
+//     `forge env up` sets; Next's 3000 otherwise).
+//   - this machine's own network addresses, so `http://<LAN or container
+//     IP>:<port>` works once the dev server listens beyond loopback
+//     (`forge env up dev -- -H 0.0.0.0`). A page served from this machine's
+//     own address is no more foreign than localhost, which Next allows on
+//     any port.
+//   - FORGE_DEV_ALLOWED_ORIGINS: more hostnames, comma-separated (a tunnel,
+//     a custom dev DNS name). Next matches hostnames, with `*` for a whole
+//     label, and ignores ports.
+const devOrigins = (): string[] => {
+  const out = new Set<string>();
+  const preview = process.env.RELIANT_PREVIEW_URL_TEMPLATE;
+  if (preview) {
+    try {
+      out.add(new URL(preview.replace("{port}", process.env.PORT || "3000")).hostname);
+    } catch {
+      // A malformed template allows nothing extra.
+    }
+  }
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const addr of addrs ?? []) {
+      if (!addr.internal && addr.family === "IPv4") out.add(addr.address);
+    }
+  }
+  for (const host of (process.env.FORGE_DEV_ALLOWED_ORIGINS ?? "").split(",")) {
+    if (host.trim()) out.add(host.trim());
+  }
+  return [...out];
+};
+
+const nextConfig: NextConfig = {
+  // No `output:` field — full Next.js for both dev and prod. Production
+  // builds are served via `next start` (or a managed host like Vercel).
+  // Use this when you need server components, server actions, ISR, or
+  // request-time `redirect()` / `cookies()` in production.
+  //
+  // basePath prefixes routes and <Link>/router URLs; assetPrefix (same
+  // value) prefixes /_next/* asset and RSC chunk URLs. Omitting
+  // assetPrefix lets some chunk URLs skip the prefix — the JS 404s
+  // behind the proxy and React never hydrates.
+  ...(basePath ? { basePath, assetPrefix: basePath } : {}),
+  // Production builds land in .next-prod so `npm run build` can't clobber
+  // the dev server's .next directory out from under a live `next dev` /
+  // `forge env up dev`. `next start` also runs with NODE_ENV=production, so it
+  // serves the same directory the production build wrote.
+  distDir: process.env.NODE_ENV === "production" ? ".next-prod" : ".next",
+  // Whether `next dev` proxies the API, for src/lib/api-base.ts — see
+  // devApiProxy above. "" in every build.
+  env: { FORGE_DEV_API_PROXY: devApiProxy },
+  // Hosts besides localhost that may load this dev server — see devOrigins.
+  ...(process.env.NODE_ENV === "development" ? { allowedDevOrigins: devOrigins() } : {}),
+  // Dev-only proxies: /_otel to the local collector (see otelUpstream above)
+  // and /_api to the API (see devApiProxy). Gated on NODE_ENV so
+  // `forge lint --static-export` can see the intent: a static host applies no
+  // rewrites.
+  ...(process.env.NODE_ENV === "development"
+    ? {
+        async rewrites() {
+          const otel = await devOtelUpstream();
+          return [
+            { source: "/_otel/:path*", destination: `${otel}/:path*` },
+            ...(devApiProxy
+              ? [{ source: `${devApiProxy}/:path*`, destination: `${apiUpstream}/:path*` }]
+              : []),
+          ];
+        },
+      }
+    : {}),
+  // @reliantlabs/forge-web-runtime ships TypeScript sources, so Next has to run
+  // them through its own compiler instead of treating node_modules as
+  // pre-built JavaScript.
+  transpilePackages: ["@reliantlabs/forge-web-runtime"],
+  // WEBPACK, NOT TURBOPACK — and that is a deliberate pin, not lag.
+  //
+  // Next.js 16 makes Turbopack the default bundler for `next dev` and
+  // `next build`. A config carrying a `webpack` key under that default does
+  // NOT silently lose it: Next refuses to start, on both dev and build, with
+  //   "ERROR: This build is using Turbopack, with a `webpack` config and no
+  //    `turbopack` config."
+  // and exits 1 (next/dist/lib/turbopack-warning.js, guarded by
+  // `process.env.TURBOPACK === 'auto'` — i.e. only when the bundler was
+  // defaulted rather than chosen). That loudness is the good case; the
+  // dangerous one would have been a silent drop, because the second block
+  // below fixes a bug that "typechecks and builds perfectly green".
+  //
+  // So the bundler is chosen EXPLICITLY, via `--webpack` on the `dev`,
+  // `build` and `analyze` scripts in package.json. The two customisations
+  // below are why, and neither is expressible in Turbopack today:
+  //
+  //   1. `resolve.extensionAlias` — Turbopack offers `turbopack.resolveExtensions`,
+  //      but that is a flat list of extensions to TRY, not a mapping from a
+  //      requested `.js` specifier onto `.ts`/`.tsx` sources. protobuf-es emits
+  //      `./foo_pb.js` against files that only exist as `.ts`, which is exactly
+  //      the mapping form.
+  //   2. the module-rules redirect — `turbopack.rules` entries carry
+  //      `loaders`/`as`/`condition`/`type` and have NO `resolve` key at all
+  //      (see TurbopackRuleConfigItem in next/dist/server/config-shared.d.ts),
+  //      so a per-module resolution override cannot be written for Turbopack.
+  //
+  // Revisit if Turbopack grows a per-module resolve override; until then
+  // `--webpack` is the supported opt-out and keeps both protections real.
+  // Note `@next/bundle-analyzer` also no-ops under Turbopack (it warns and
+  // returns the config untouched), which `--webpack` likewise keeps working.
+  webpack: (config) => {
+    // protobuf-es generates imports with .js extensions (e.g. './foo_pb.js').
+    // Next.js with moduleResolution: bundler can't resolve .js to .ts files
+    // without this alias mapping.
+    config.resolve.extensionAlias = {
+      ".js": [".ts", ".tsx", ".js", ".jsx"],
+    };
+
+    // A dev build of forge bridges @reliantlabs/forge-web-runtime with a `file:`
+    // specifier, which npm materialises as a SYMLINK to the forge checkout.
+    // That checkout is a working tree, so it carries its own node_modules —
+    // and a bundler resolves a module's bare imports by walking up from that
+    // module's own location, not from the app. The runtime's peer
+    // dependencies (@connectrpc/connect, @bufbuild/protobuf,
+    // @opentelemetry/api) therefore resolve out of the forge checkout while
+    // this app's own code resolves them out of node_modules here: two copies
+    // of every shared library in one bundle, each with its own classes,
+    // module-level state and registries, and every byte of them shipped
+    // twice. It typechecks and builds perfectly green, which is why no
+    // type-level or build-level gate can see it.
+    //
+    // peerDependencies already states the contract — "the consuming app
+    // supplies this copy". npm honours it for a registry install (one
+    // hoisted copy at the app root) and CANNOT honour it across a `file:`
+    // link, so honour it in the resolver instead: anything coming from the
+    // linked runtime resolves its bare imports against THIS app's
+    // node_modules first.
+    //
+    // Scoped to the linked runtime deliberately. The same redirect applied
+    // globally (a `resolve.modules` prefix) would also override the nested,
+    // version-pinned copies npm installs beneath other packages — next's own
+    // included.
+    // Both the link and the app's dependency roots are found by walking UP,
+    // because an npm workspace — which forge's own dev bridge writes — hoists
+    // every member's dependencies to the workspace root. This frontend can
+    // therefore have no node_modules of its own, or (worse) a PARTIAL one
+    // holding just the linked runtime while the shared libraries sit at the
+    // project root.
+    //
+    // appModules is consequently the whole ANCESTOR CHAIN, not the first
+    // directory found. Pointing the redirect at a single node_modules that
+    // happens to exist but does not contain the peer resolves nothing, and
+    // webpack then falls back to the runtime's own copy — exactly the
+    // duplicate this block exists to collapse, and the shape a partial
+    // frontend-local install produces.
+    const nodeModulesChain = (): string[] => {
+      const out: string[] = [];
+      let dir = __dirname;
+      for (;;) {
+        const candidate = path.join(dir, "node_modules");
+        if (fs.existsSync(candidate)) out.push(candidate);
+        const parent = path.dirname(dir);
+        if (parent === dir) return out;
+        dir = parent;
+      }
+    };
+    const appModules = nodeModulesChain();
+    const findUp = (leaf: string): string => {
+      for (const base of appModules) {
+        const candidate = path.join(base, leaf);
+        if (fs.existsSync(candidate)) return candidate;
+      }
+      return "";
+    };
+    const runtimeLink = findUp(path.join("@reliantlabs", "forge-web-runtime"));
+    let runtimeReal = "";
+    try {
+      runtimeReal = fs.realpathSync(runtimeLink);
+    } catch {
+      runtimeReal = ""; // not installed yet — nothing to redirect
+    }
+    // A registry install is a real directory with no node_modules of its own,
+    // so it needs none of this; only the dev bridge does.
+    if (runtimeReal && runtimeReal !== runtimeLink) {
+      config.module.rules.push({
+        // webpack names a module by its real path by default and by its link
+        // path when resolve.symlinks is off — match either spelling.
+        test: (resource: unknown) =>
+          typeof resource === "string" &&
+          (resource.startsWith(runtimeReal + path.sep) ||
+            resource.startsWith(runtimeLink + path.sep)),
+        resolve: {
+          modules: [...appModules, "node_modules"],
+        },
+      });
+    }
+
+    return config;
+  },
+};
+
+export default withBundleAnalyzer(nextConfig);
+{{- else -}}
+import fs from "node:fs";
+import http from "node:http";
+import https from "node:https";
+import os from "node:os";
+import path from "node:path";
+
+import bundleAnalyzer from "@next/bundle-analyzer";
+
+import type { NextConfig } from "next";
+
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+});
+
+// Path prefix this frontend is mounted under (e.g. "/admin" behind a
+// reverse proxy that blends several apps on one host). Empty = served
+// from the host root.
+//
+// Sources, in order:
+//   1. NEXT_PUBLIC_BASE_PATH — the ONLY env var forge reads for the
+//      base path. The NEXT_PUBLIC_ prefix is load-bearing: Next.js
+//      inlines such vars into the client bundle, so the generated
+//      browser-side helper (src/lib/basepath_gen.ts) reads the SAME
+//      name. One name everywhere; a second variant would silently be
+//      ignored.
+//   2. forge.yaml `frontends[].base_path`, baked in by forge: "{{.BasePath}}".
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "{{.BasePath}}";
+
+// ── Browser telemetry proxy (DEV ONLY) ──────────────────────────────────
+//
+// The browser sends telemetry to `<basePath>/_otel/v1/{traces,logs}` on ITS
+// OWN origin and holds no collector address and no secret (see
+// src/lib/otel_gen.ts). `next dev` forwards that to the local collector's
+// OTLP/HTTP port; the rewrite below is the whole proxy.
+//
+//   upstream: OTEL_EXPORTER_OTLP_ENDPOINT, a collector BASE URL
+//             (default http://127.0.0.1:4318 — the OTLP/HTTP port, not gRPC's 4317)
+//   path:     /_otel/:path*  ->  <upstream>/:path*
+//
+// `forge env up` sets the variable for the dev server, so this follows the
+// collector that stack started. It is read when the dev server starts.
+//
+// There is NO production equivalent in this file, by design: a static export
+// (`output: "export"`) has no Next.js server, so `rewrites` do not exist in
+// the built site, and a standalone build bakes a rewrite's destination in at
+// BUILD time, which cannot name a collector that differs per environment.
+// Routing `<basePath>/_otel/*` to the collector in a deployed environment is
+// the ingress's job (the hosted gateway, or your cluster's ingress). Until
+// that route exists, leave the frontend's otel_endpoint unset and the
+// production bundle sends nothing.
+const otelEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || "http://127.0.0.1:4318";
+const otelUpstream = otelEndpoint.replace(/\/+$/, "");
+
+// A HOSTED dev stack (observability.dev_telemetry): `forge env up` points
+// OTEL_EXPORTER_OTLP_ENDPOINT at the org's hosted edge and
+// FORGE_OTEL_HEADERS_FILE at the file holding this stack's browser token,
+// which forge renews in place. A rewrite cannot add a header, so the rewrite
+// then goes to a relay on 127.0.0.1 that this dev server starts: it reads the
+// file on EVERY request, attaches what it holds (`authorization=Bearer …`)
+// and forwards to the edge. The token never reaches the bundle, and neither
+// the browser's cookies nor an authorization header it sent are forwarded,
+// even when the file is missing. Unset (the local ClickStack), there is no
+// relay and nothing changes.
+const otelHeadersFile = process.env.FORGE_OTEL_HEADERS_FILE ?? "";
+const readOtelHeaders = (): Array<[string, string]> => {
+  let text = "";
+  try {
+    text = fs.readFileSync(otelHeadersFile, "utf8");
+  } catch {
+    return []; // not written yet, or removed: send nothing extra
+  }
+  const out: Array<[string, string]> = [];
+  for (const pair of text.split(/[\n,]/)) {
+    const i = pair.indexOf("=");
+    if (i <= 0) continue;
+    let value = pair.slice(i + 1).trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // Not percent-encoded: use it as written.
+    }
+    out.push([pair.slice(0, i).trim().toLowerCase(), value]);
+  }
+  return out;
+};
+let otelRelay: Promise<string> | undefined;
+const devOtelUpstream = (): Promise<string> => {
+  if (!otelHeadersFile) return Promise.resolve(otelUpstream);
+  otelRelay ??= new Promise<string>((resolve) => {
+    const target = new URL(otelUpstream);
+    const send = (url: URL, opts: http.RequestOptions, cb: (r: http.IncomingMessage) => void) =>
+      url.protocol === "https:" ? https.request(url, opts, cb) : http.request(url, opts, cb);
+    const server = http.createServer((req, res) => {
+      const headers: http.OutgoingHttpHeaders = { ...req.headers, host: target.host };
+      delete headers.cookie;
+      delete headers.authorization;
+      for (const [k, v] of readOtelHeaders()) headers[k] = v;
+      const url = new URL(target.pathname.replace(/\/+$/, "") + (req.url ?? "/"), target);
+      const upstream = send(url, { method: req.method, headers }, (up) => {
+        res.writeHead(up.statusCode ?? 502, up.headers);
+        up.pipe(res);
+      });
+      upstream.on("error", () => {
+        if (!res.headersSent) res.writeHead(502);
+        res.end();
+      });
+      req.pipe(upstream);
+    });
+    server.on("error", () => resolve(otelUpstream));
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      resolve(typeof addr === "object" && addr ? `http://127.0.0.1:${addr.port}` : otelUpstream);
+    });
+    server.unref();
+  });
+  return otelRelay;
+};
+
+// ── API proxy (DEV ONLY) ────────────────────────────────────────────────
+//
+// Under `next dev` the browser calls the API on ITS OWN origin, at
+// `<basePath>/_api/*`, and the rewrite below forwards that to the API server.
+// A page opened through a Reliant workspace preview URL, a tunnel or another
+// machine's IP cannot reach "localhost:<api port>" — that is the viewer's
+// machine — so the API is reached through the one host the browser already
+// has. src/lib/api-base.ts has the whole story.
+//
+//   upstream: NEXT_PUBLIC_API_URL, the API's base URL. `forge env up` sets it
+//             to the API it started, and a value from your shell or the
+//             frontend's KCL env_vars wins over forge's. Read here, on the
+//             server, when the dev server starts.
+//   path:     /_api/:path*  ->  <upstream>/:path*
+//   off:      FORGE_DEV_API_PROXY=off, or no upstream. The browser then calls
+//             the configured API URL directly, cross-origin, as before.
+//
+// The answer reaches the bundle as process.env.FORGE_DEV_API_PROXY (`env`
+// below), which api-base.ts reads, so the rewrite and the transport are one
+// decision. Next's proxy ends a request after 30s (`experimental.proxyTimeout`);
+// a server-streaming RPC that must outlive that needs it raised, or the proxy off.
+//
+// There is no production equivalent, for the same reasons as /_otel above. A
+// build reads the API's URL from the runtime config (config.js), as before.
+const apiUpstream = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+const devApiProxy =
+  process.env.NODE_ENV === "development" &&
+  apiUpstream !== "" &&
+  !/^(off|false|0|no)$/i.test(process.env.FORGE_DEV_API_PROXY ?? "")
+    ? "/_api"
+    : "";
+
+// ── Dev origins (DEV ONLY) ──────────────────────────────────────────────
+//
+// `next dev` refuses its own dev resources — the HMR socket, /__nextjs_*,
+// dev fonts — to a page whose Origin is not localhost or listed in
+// `allowedDevOrigins`. A page opened any other way renders but never
+// hydrates: every button is dead and nothing in the console says why.
+// Allowed here, beside localhost:
+//
+//   - this dev server's Reliant workspace preview host: RELIANT_PREVIEW_URL_TEMPLATE
+//     (`https://{port}-<id>.workspaces.reliantapi.com`, set on a Reliant
+//     cloud machine) with the port the dev server binds (PORT, which
+//     `forge env up` sets; Next's 3000 otherwise).
+//   - this machine's own network addresses, so `http://<LAN or container
+//     IP>:<port>` works once the dev server listens beyond loopback
+//     (`forge env up dev -- -H 0.0.0.0`). A page served from this machine's
+//     own address is no more foreign than localhost, which Next allows on
+//     any port.
+//   - FORGE_DEV_ALLOWED_ORIGINS: more hostnames, comma-separated (a tunnel,
+//     a custom dev DNS name). Next matches hostnames, with `*` for a whole
+//     label, and ignores ports.
+const devOrigins = (): string[] => {
+  const out = new Set<string>();
+  const preview = process.env.RELIANT_PREVIEW_URL_TEMPLATE;
+  if (preview) {
+    try {
+      out.add(new URL(preview.replace("{port}", process.env.PORT || "3000")).hostname);
+    } catch {
+      // A malformed template allows nothing extra.
+    }
+  }
+  for (const addrs of Object.values(os.networkInterfaces())) {
+    for (const addr of addrs ?? []) {
+      if (!addr.internal && addr.family === "IPv4") out.add(addr.address);
+    }
+  }
+  for (const host of (process.env.FORGE_DEV_ALLOWED_ORIGINS ?? "").split(",")) {
+    if (host.trim()) out.add(host.trim());
+  }
+  return [...out];
+};
+
+const nextConfig: NextConfig = {
+  // basePath prefixes routes and <Link>/router URLs; assetPrefix (same
+  // value) prefixes /_next/* asset and RSC chunk URLs. Omitting
+  // assetPrefix lets some chunk URLs skip the prefix — the JS 404s
+  // behind the proxy and React never hydrates.
+  ...(basePath ? { basePath, assetPrefix: basePath } : {}),
+  // Production builds land in .next-prod so `npm run build` can't clobber
+  // the dev server's .next directory out from under a live `next dev` /
+  // `forge env up dev`. `next start` also runs with NODE_ENV=production, so it
+  // serves the same directory the production build wrote.
+  distDir: process.env.NODE_ENV === "production" ? ".next-prod" : ".next",
+  // "standalone" emits a self-contained Node server at
+  // <distDir>/standalone/server.js (.next-prod in production) plus a
+  // pruned node_modules tree. This is the shape the Dockerfile copies into
+  // the runner image: a frontend that needs a server at request time.
+  // A static site cannot run it — the hosted runtime serves frontends as
+  // static exports. To switch to one, set `output: static` on this
+  // frontend in forge.yaml, then `forge project upgrade --force
+  // <this file>` (and the Dockerfile beside it); the generated CRUD pages
+  // must be the static `/<slug>/view?id=…` shape (`forge skill load
+  // frontend/pages`).
+  output: "standalone",
+  // outputFileTracingRoot is the BASE that traced file paths are made
+  // relative to, and Next.js writes each traced file to
+  // `<distDir>/standalone/<path relative to this root>`. So the root must be
+  // an ANCESTOR of every file the trace can reach, or the relative path
+  // starts with `../` and the write escapes the dist directory.
+  //
+  // This was pinned to `path.join(__dirname)` — this frontend's own folder —
+  // and that is exactly the escape. forge's dev bridge makes the project root
+  // an npm workspace root (`workspaces: ["frontends/*", ".forge-link/*"]`),
+  // which HOISTS the real `next` to `<project>/node_modules`. Relative to a
+  // frontend-pinned root that install is `../../node_modules/next/...`, so
+  // joining it onto `.next-prod/standalone/` lands the traced copy back
+  // inside `frontends/<name>/node_modules/next` — a 29-file pruned `next`
+  // with no package.json, sitting in the nearest node_modules Node consults.
+  // The NEXT build resolved that stub instead of the complete hoisted
+  // install and died inside Next's own package:
+  //
+  //   ./node_modules/next/dist/pages/_app.js
+  //   Module not found: Can't resolve '../shared/lib/utils'
+  //
+  // Consecutive builds therefore alternated pass/fail forever, each one
+  // poisoning the next, with an error naming a file the user never wrote.
+  //
+  // Rooting at the workspace root instead keeps the hoisted install a
+  // DESCENDANT, so every traced path stays under `.next-prod/` and nothing
+  // is ever written into a module-resolution path. Inside the Docker build
+  // the frontend is the whole context (WORKDIR /src/<its repo path>, no
+  // workspace root above it), so this resolves to the frontend itself and the
+  // bundle still lands at `.next-prod/standalone/server.js` exactly where the
+  // Dockerfile's `COPY --from=builder …/.next-prod/standalone ./` expects it.
+  //
+  // Resolved explicitly rather than left to Next's own root detection:
+  // that walks up looking for a lockfile, and the bridge's workspace root is
+  // GITIGNORED — present for a dev forge, absent for a release one. Letting
+  // it decide would make the output path depend on which forge built the
+  // project, which is the same class of bug one level up.
+  //
+  // A pnpm workspace ABOVE this frontend counts the same way: there the
+  // dependencies are symlinks into the root's node_modules/.pnpm, which the
+  // trace follows. This frontend's OWN pnpm-workspace.yaml does not — it
+  // keeps the store in its own node_modules.
+  outputFileTracingRoot: (() => {
+    let dir = __dirname;
+    for (;;) {
+      if (dir !== __dirname && fs.existsSync(path.join(dir, "pnpm-workspace.yaml"))) return dir;
+      const manifest = path.join(dir, "package.json");
+      if (fs.existsSync(manifest)) {
+        try {
+          if (JSON.parse(fs.readFileSync(manifest, "utf8")).workspaces) return dir;
+        } catch {
+          // An unreadable/!JSON package.json is not a workspace root; keep walking.
+        }
+      }
+      const parent = path.dirname(dir);
+      if (parent === dir) return __dirname; // no workspace above: self-contained
+      dir = parent;
+    }
+  })(),
+  // Whether `next dev` proxies the API, for src/lib/api-base.ts — see
+  // devApiProxy above. "" in every build.
+  env: { FORGE_DEV_API_PROXY: devApiProxy },
+  // Hosts besides localhost that may load this dev server — see devOrigins.
+  ...(process.env.NODE_ENV === "development" ? { allowedDevOrigins: devOrigins() } : {}),
+  // Dev-only proxies: /_otel to the local collector (see otelUpstream above)
+  // and /_api to the API (see devApiProxy). Gated on NODE_ENV so
+  // `forge lint --static-export` can see the intent: a static host applies no
+  // rewrites.
+  ...(process.env.NODE_ENV === "development"
+    ? {
+        async rewrites() {
+          const otel = await devOtelUpstream();
+          return [
+            { source: "/_otel/:path*", destination: `${otel}/:path*` },
+            ...(devApiProxy
+              ? [{ source: `${devApiProxy}/:path*`, destination: `${apiUpstream}/:path*` }]
+              : []),
+          ];
+        },
+      }
+    : {}),
+  // @reliantlabs/forge-web-runtime ships TypeScript sources, so Next has to run
+  // them through its own compiler instead of treating node_modules as
+  // pre-built JavaScript.
+  transpilePackages: ["@reliantlabs/forge-web-runtime"],
+  // WEBPACK, NOT TURBOPACK — and that is a deliberate pin, not lag.
+  //
+  // Next.js 16 makes Turbopack the default bundler for `next dev` and
+  // `next build`. A config carrying a `webpack` key under that default does
+  // NOT silently lose it: Next refuses to start, on both dev and build, with
+  //   "ERROR: This build is using Turbopack, with a `webpack` config and no
+  //    `turbopack` config."
+  // and exits 1 (next/dist/lib/turbopack-warning.js, guarded by
+  // `process.env.TURBOPACK === 'auto'` — i.e. only when the bundler was
+  // defaulted rather than chosen). That loudness is the good case; the
+  // dangerous one would have been a silent drop, because the second block
+  // below fixes a bug that "typechecks and builds perfectly green".
+  //
+  // So the bundler is chosen EXPLICITLY, via `--webpack` on the `dev`,
+  // `build` and `analyze` scripts in package.json. The two customisations
+  // below are why, and neither is expressible in Turbopack today:
+  //
+  //   1. `resolve.extensionAlias` — Turbopack offers `turbopack.resolveExtensions`,
+  //      but that is a flat list of extensions to TRY, not a mapping from a
+  //      requested `.js` specifier onto `.ts`/`.tsx` sources. protobuf-es emits
+  //      `./foo_pb.js` against files that only exist as `.ts`, which is exactly
+  //      the mapping form.
+  //   2. the module-rules redirect — `turbopack.rules` entries carry
+  //      `loaders`/`as`/`condition`/`type` and have NO `resolve` key at all
+  //      (see TurbopackRuleConfigItem in next/dist/server/config-shared.d.ts),
+  //      so a per-module resolution override cannot be written for Turbopack.
+  //
+  // Revisit if Turbopack grows a per-module resolve override; until then
+  // `--webpack` is the supported opt-out and keeps both protections real.
+  // Note `@next/bundle-analyzer` also no-ops under Turbopack (it warns and
+  // returns the config untouched), which `--webpack` likewise keeps working.
+  webpack: (config) => {
+    // protobuf-es generates imports with .js extensions (e.g. './foo_pb.js').
+    // Next.js with moduleResolution: bundler can't resolve .js to .ts files
+    // without this alias mapping.
+    config.resolve.extensionAlias = {
+      ".js": [".ts", ".tsx", ".js", ".jsx"],
+    };
+
+    // A dev build of forge bridges @reliantlabs/forge-web-runtime with a `file:`
+    // specifier, which npm materialises as a SYMLINK to the forge checkout.
+    // That checkout is a working tree, so it carries its own node_modules —
+    // and a bundler resolves a module's bare imports by walking up from that
+    // module's own location, not from the app. The runtime's peer
+    // dependencies (@connectrpc/connect, @bufbuild/protobuf,
+    // @opentelemetry/api) therefore resolve out of the forge checkout while
+    // this app's own code resolves them out of node_modules here: two copies
+    // of every shared library in one bundle, each with its own classes,
+    // module-level state and registries, and every byte of them shipped
+    // twice. It typechecks and builds perfectly green, which is why no
+    // type-level or build-level gate can see it.
+    //
+    // peerDependencies already states the contract — "the consuming app
+    // supplies this copy". npm honours it for a registry install (one
+    // hoisted copy at the app root) and CANNOT honour it across a `file:`
+    // link, so honour it in the resolver instead: anything coming from the
+    // linked runtime resolves its bare imports against THIS app's
+    // node_modules first.
+    //
+    // Scoped to the linked runtime deliberately. The same redirect applied
+    // globally (a `resolve.modules` prefix) would also override the nested,
+    // version-pinned copies npm installs beneath other packages — next's own
+    // included.
+    // Both the link and the app's dependency roots are found by walking UP,
+    // because an npm workspace — which forge's own dev bridge writes — hoists
+    // every member's dependencies to the workspace root. This frontend can
+    // therefore have no node_modules of its own, or (worse) a PARTIAL one
+    // holding just the linked runtime while the shared libraries sit at the
+    // project root.
+    //
+    // appModules is consequently the whole ANCESTOR CHAIN, not the first
+    // directory found. Pointing the redirect at a single node_modules that
+    // happens to exist but does not contain the peer resolves nothing, and
+    // webpack then falls back to the runtime's own copy — exactly the
+    // duplicate this block exists to collapse, and the shape a partial
+    // frontend-local install produces.
+    const nodeModulesChain = (): string[] => {
+      const out: string[] = [];
+      let dir = __dirname;
+      for (;;) {
+        const candidate = path.join(dir, "node_modules");
+        if (fs.existsSync(candidate)) out.push(candidate);
+        const parent = path.dirname(dir);
+        if (parent === dir) return out;
+        dir = parent;
+      }
+    };
+    const appModules = nodeModulesChain();
+    const findUp = (leaf: string): string => {
+      for (const base of appModules) {
+        const candidate = path.join(base, leaf);
+        if (fs.existsSync(candidate)) return candidate;
+      }
+      return "";
+    };
+    const runtimeLink = findUp(path.join("@reliantlabs", "forge-web-runtime"));
+    let runtimeReal = "";
+    try {
+      runtimeReal = fs.realpathSync(runtimeLink);
+    } catch {
+      runtimeReal = ""; // not installed yet — nothing to redirect
+    }
+    // A registry install is a real directory with no node_modules of its own,
+    // so it needs none of this; only the dev bridge does.
+    if (runtimeReal && runtimeReal !== runtimeLink) {
+      config.module.rules.push({
+        // webpack names a module by its real path by default and by its link
+        // path when resolve.symlinks is off — match either spelling.
+        test: (resource: unknown) =>
+          typeof resource === "string" &&
+          (resource.startsWith(runtimeReal + path.sep) ||
+            resource.startsWith(runtimeLink + path.sep)),
+        resolve: {
+          modules: [...appModules, "node_modules"],
+        },
+      });
+    }
+
+    return config;
+  },
+};
+
+export default withBundleAnalyzer(nextConfig);
+{{- end }}

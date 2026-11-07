@@ -1,0 +1,100 @@
+{
+  "OCIRepository": {
+    "apiVersion": "source.toolkit.fluxcd.io/v1",
+    "kind": "OCIRepository",
+    "metadata": {
+      "name": "acme.env.env-prod",
+      "namespace": "flux-acme",
+      "labels": {
+        "app.kubernetes.io/managed-by": "reliant-control-plane",
+        "reliant.dev/environment": "env-prod",
+        "reliant.dev/org": "acme",
+        "sharding.fluxcd.io/key": "shard0"
+      }
+    },
+    "spec": {
+      "url": "oci://registry.example.com/orgs/acme/bundle.v1/prod",
+      "interval": "5m0s",
+      "ref": {
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "secretRef": {
+        "name": "registry-pull"
+      },
+      "layerSelector": {
+        "mediaType": "application/vnd.forge.bundle.manifests.v1.tar+gzip",
+        "operation": "extract"
+      }
+    }
+  },
+  "Kustomizations": [
+    {
+      "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+      "kind": "Kustomization",
+      "metadata": {
+        "name": "acme.env.env-prod-gke-reliant-labs-us-central1-prod",
+        "namespace": "flux-acme",
+        "labels": {
+          "app.kubernetes.io/managed-by": "reliant-control-plane",
+          "reliant.dev/cluster": "gke-reliant-labs-us-central1-prod",
+          "reliant.dev/environment": "env-prod",
+          "reliant.dev/org": "acme",
+          "sharding.fluxcd.io/key": "connected"
+        }
+      },
+      "spec": {
+        "interval": "5m0s",
+        "prune": true,
+        "sourceRef": {
+          "apiVersion": "source.toolkit.fluxcd.io/v1",
+          "kind": "OCIRepository",
+          "name": "acme.env.env-prod"
+        },
+        "path": "manifests/gke_reliant-labs_us-central1_prod",
+        "serviceAccountName": "",
+        "kubeConfig": {
+          "secretRef": {
+            "name": "cluster-a-kubeconfig",
+            "key": "value"
+          }
+        },
+        "wait": true,
+        "timeout": "5m0s"
+      }
+    },
+    {
+      "apiVersion": "kustomize.toolkit.fluxcd.io/v1",
+      "kind": "Kustomization",
+      "metadata": {
+        "name": "acme.env.env-prod-vke-staging",
+        "namespace": "flux-acme",
+        "labels": {
+          "app.kubernetes.io/managed-by": "reliant-control-plane",
+          "reliant.dev/cluster": "vke-staging",
+          "reliant.dev/environment": "env-prod",
+          "reliant.dev/org": "acme",
+          "sharding.fluxcd.io/key": "connected"
+        }
+      },
+      "spec": {
+        "interval": "5m0s",
+        "prune": true,
+        "sourceRef": {
+          "apiVersion": "source.toolkit.fluxcd.io/v1",
+          "kind": "OCIRepository",
+          "name": "acme.env.env-prod"
+        },
+        "path": "manifests/vke-staging",
+        "serviceAccountName": "",
+        "kubeConfig": {
+          "secretRef": {
+            "name": "cluster-b-kubeconfig",
+            "key": "value"
+          }
+        },
+        "wait": true,
+        "timeout": "5m0s"
+      }
+    }
+  ]
+}

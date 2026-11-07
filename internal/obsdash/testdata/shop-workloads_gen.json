@@ -1,0 +1,421 @@
+{
+  "name": "shop: workloads",
+  "tags": [
+    "forge",
+    "generated"
+  ],
+  "tiles": [
+    {
+      "id": "t-cpu-usage",
+      "x": 0,
+      "y": 0,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "CPU usage",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "avg",
+            "valueExpression": "",
+            "alias": "cpu",
+            "metricName": "container.cpu.usage",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto"
+      }
+    },
+    {
+      "id": "t-memory-working-set",
+      "x": 12,
+      "y": 0,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Memory working set",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "avg",
+            "valueExpression": "",
+            "alias": "memory",
+            "metricName": "container.memory.working_set",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "byte",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-cpu-vs-request",
+      "x": 0,
+      "y": 7,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "CPU against its request",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "max",
+            "valueExpression": "",
+            "alias": "of request",
+            "metricName": "k8s.container.cpu_request_utilization",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-cpu-vs-limit",
+      "x": 12,
+      "y": 7,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "CPU against its limit",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "max",
+            "valueExpression": "",
+            "alias": "of limit",
+            "metricName": "k8s.container.cpu_limit_utilization",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-memory-vs-request",
+      "x": 0,
+      "y": 14,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Memory against its request",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "max",
+            "valueExpression": "",
+            "alias": "of request",
+            "metricName": "k8s.container.memory_request_utilization",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-memory-vs-limit",
+      "x": 12,
+      "y": 14,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Memory against its limit",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "max",
+            "valueExpression": "",
+            "alias": "of limit",
+            "metricName": "k8s.container.memory_limit_utilization",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "percent",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-restarts",
+      "x": 0,
+      "y": 21,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Container restarts",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "max",
+            "valueExpression": "",
+            "alias": "restarts",
+            "metricName": "k8s.container.restarts",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-restarts-by-exit-reason",
+      "x": 12,
+      "y": 21,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Restarts by last exit reason",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "max",
+            "valueExpression": "",
+            "alias": "restarts",
+            "metricName": "k8s.container.restarts",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "groupBy": "Attributes['k8s.container.last_terminated_reason']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-cpu-by-image-tag",
+      "x": 0,
+      "y": 28,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "CPU by image version",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "avg",
+            "valueExpression": "",
+            "alias": "cpu",
+            "metricName": "container.cpu.usage",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['container.image.tag']",
+        "granularity": "auto"
+      }
+    },
+    {
+      "id": "t-memory-by-image-tag",
+      "x": 12,
+      "y": 28,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Memory by image version",
+        "source": "Metrics",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "avg",
+            "valueExpression": "",
+            "alias": "memory",
+            "metricName": "container.memory.working_set",
+            "metricType": "gauge"
+          }
+        ],
+        "where": "",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['container.image.tag']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "byte",
+          "mantissa": 1
+        }
+      }
+    },
+    {
+      "id": "t-events-by-reason",
+      "x": 0,
+      "y": 35,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Kubernetes events by reason",
+        "source": "Logs",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "events"
+          }
+        ],
+        "where": "LogAttributes['k8s.event.reason'] != ''",
+        "whereLanguage": "sql",
+        "groupBy": "LogAttributes['k8s.event.reason']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-warning-events",
+      "x": 12,
+      "y": 35,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "Warning events by workload",
+        "source": "Logs",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "warnings"
+          }
+        ],
+        "where": "LogAttributes['k8s.event.type'] = 'Warning'",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['k8s.workload.name']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-container-terminations",
+      "x": 0,
+      "y": 42,
+      "w": 24,
+      "h": 8,
+      "config": {
+        "name": "Container terminations",
+        "source": "Logs",
+        "displayType": "search",
+        "select": "Timestamp, ResourceAttributes['k8s.workload.name'], ResourceAttributes['k8s.container.name'], LogAttributes['k8s.container.last_terminated_reason'], Body",
+        "where": "LogAttributes['k8s.container.last_terminated_reason'] != ''",
+        "whereLanguage": "sql"
+      }
+    },
+    {
+      "id": "t-events",
+      "x": 0,
+      "y": 50,
+      "w": 24,
+      "h": 10,
+      "config": {
+        "name": "Kubernetes events",
+        "source": "Logs",
+        "displayType": "search",
+        "select": "Timestamp, ResourceAttributes['k8s.workload.name'], LogAttributes['k8s.event.type'], LogAttributes['k8s.event.reason'], LogAttributes['k8s.object.kind'], LogAttributes['k8s.object.name'], Body",
+        "where": "LogAttributes['k8s.event.reason'] != ''",
+        "whereLanguage": "sql"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "filter-service",
+      "type": "QUERY_EXPRESSION",
+      "name": "service.name",
+      "expression": "ServiceName",
+      "source": "Metrics",
+      "whereLanguage": "sql"
+    },
+    {
+      "id": "filter-env",
+      "type": "QUERY_EXPRESSION",
+      "name": "deployment.environment.name",
+      "expression": "ResourceAttributes['deployment.environment.name']",
+      "source": "Metrics",
+      "whereLanguage": "sql"
+    },
+    {
+      "id": "filter-workload",
+      "type": "QUERY_EXPRESSION",
+      "name": "k8s.workload.name",
+      "expression": "ResourceAttributes['k8s.workload.name']",
+      "source": "Metrics",
+      "whereLanguage": "sql"
+    },
+    {
+      "id": "filter-container",
+      "type": "QUERY_EXPRESSION",
+      "name": "k8s.container.name",
+      "expression": "ResourceAttributes['k8s.container.name']",
+      "source": "Metrics",
+      "whereLanguage": "sql"
+    },
+    {
+      "id": "filter-namespace",
+      "type": "QUERY_EXPRESSION",
+      "name": "k8s.namespace.name",
+      "expression": "ResourceAttributes['k8s.namespace.name']",
+      "source": "Metrics",
+      "whereLanguage": "sql"
+    }
+  ]
+}
