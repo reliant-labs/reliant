@@ -42,6 +42,26 @@ export function legacyPasteDraftKey(userId: string | undefined, projectId: strin
 }
 
 /**
+ * The stored v1.10 pastes that belong to THIS draft: the signed-in user's, in
+ * the current project, for this attachment session — plus, for a new chat,
+ * the same user's and project's old desktop "temp" slot. The user and project
+ * are part of every key, so another account's or project's pastes are never
+ * read; with either unknown, none are.
+ */
+export function legacyPasteDraftKeys({ userId, projectId, sessionId, newChat }: {
+  userId: string | undefined;
+  projectId: string | undefined;
+  sessionId: string;
+  newChat: boolean;
+}): string[] {
+  if (!userId || !projectId) return [];
+  const keys = [legacyPasteDraftKey(userId, projectId, sessionId)];
+  // v1.10's desktop new chat drafted into "temp"; it drafts per project now.
+  if (newChat && sessionId !== "temp") keys.push(legacyPasteDraftKey(userId, projectId, "temp"));
+  return keys;
+}
+
+/**
  * @param attach uploads `text` as a draft attachment and resolves its id.
  * @param persisted whether the draft attachment `id` survives a reload.
  */

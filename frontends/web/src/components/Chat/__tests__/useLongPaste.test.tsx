@@ -6,6 +6,7 @@ import {
   LONG_PASTE_MIN_LINES,
   isLongPaste,
   legacyPasteDraftKey,
+  legacyPasteDraftKeys,
   migrateLegacyPasteDrafts,
   pastedTextFilename,
   useLongPaste,
@@ -91,6 +92,40 @@ describe("useLongPaste", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(el.value).toBe(long + " after");
     expect(attach).not.toHaveBeenCalled();
+  });
+});
+
+describe("legacyPasteDraftKeys", () => {
+  it("reads only the signed-in user's pastes in the current project", () => {
+    const mine = legacyPasteDraftKeys({ userId: "u1", projectId: "p1", sessionId: "new-chat:project:p1", newChat: true });
+    expect(mine).toEqual([
+      legacyPasteDraftKey("u1", "p1", "new-chat:project:p1"),
+      legacyPasteDraftKey("u1", "p1", "temp"),
+    ]);
+    // Another account's or project's old "temp" slot is a different key, never one of ours.
+    expect(mine).not.toContain(legacyPasteDraftKey("u2", "p1", "temp"));
+    expect(mine).not.toContain(legacyPasteDraftKey("u1", "p2", "temp"));
+    // An existing chat never takes the new-chat slot.
+    expect(legacyPasteDraftKeys({ userId: "u1", projectId: "p1", sessionId: "chat-1", newChat: false }))
+      .toEqual([legacyPasteDraftKey("u1", "p1", "chat-1")]);
+  });
+
+  it("reads nothing while the user or project is unknown", () => {
+    expect(legacyPasteDraftKeys({ userId: undefined, projectId: "p1", sessionId: "temp", newChat: true })).toEqual([]);
+    expect(legacyPasteDraftKeys({ userId: "u1", projectId: undefined, sessionId: "temp", newChat: true })).toEqual([]);
+  });
+
+  it("leaves another identity's stored paste untouched when switching user or project", async () => {
+    const theirs = legacyPasteDraftKey("u-old", "p-old", "temp");
+    localStorage.setItem(theirs, JSON.stringify([{ id: 1, text: "someone else's draft" }]));
+    const upload = vi.fn().mockResolvedValue("att");
+    await migrateLegacyPasteDrafts(
+      legacyPasteDraftKeys({ userId: "u-new", projectId: "p-new", sessionId: "new-chat:project:p-new", newChat: true }),
+      upload,
+      () => true,
+    );
+    expect(upload).not.toHaveBeenCalled();
+    expect(JSON.parse(localStorage.getItem(theirs)!)).toEqual([{ id: 1, text: "someone else's draft" }]);
   });
 });
 

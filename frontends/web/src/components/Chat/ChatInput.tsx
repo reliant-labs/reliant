@@ -18,7 +18,7 @@ import { useCoarsePointer } from "./useCoarsePointer";
 import { CodeContextChip } from "./CodeContextChip";
 import { detectPlatform } from "../../lib/keyboard/platform";
 import { useComposerUploads } from "./useComposerUploads";
-import { legacyPasteDraftKey, migrateLegacyPasteDrafts, pastedTextFilename, useLongPaste } from "./useLongPaste";
+import { legacyPasteDraftKeys, migrateLegacyPasteDrafts, pastedTextFilename, useLongPaste } from "./useLongPaste";
 import { isDraftAttachmentPersisted, useAttachmentStore } from "../../store/attachmentStore";
 import { useAuthStore } from "../../store/authStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
@@ -1196,9 +1196,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const pasteProjectId = currentProjectFromStore?.id;
     useEffect(() => {
       if (!canAttach) return;
-      const keys = [legacyPasteDraftKey(pasteUserId, pasteProjectId, attachmentSessionId)];
-      // v1.10's desktop new chat drafted into "temp"; it drafts per project now.
-      if (!chatId) keys.push(legacyPasteDraftKey(pasteUserId, pasteProjectId, "temp"));
+      const keys = legacyPasteDraftKeys({
+        userId: pasteUserId,
+        projectId: pasteProjectId,
+        sessionId: attachmentSessionId,
+        newChat: !chatId,
+      });
+      if (keys.length === 0) return;
       void migrateLegacyPasteDrafts(
         keys,
         async (text) => {
