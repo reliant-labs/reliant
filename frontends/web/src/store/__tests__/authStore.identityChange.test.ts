@@ -14,7 +14,13 @@ import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 type Listener = (event: AuthChangeEvent, session: Session | null) => Promise<void>
 
-const auth = vi.hoisted(() => ({ listener: null as Listener | null }))
+const auth = vi.hoisted(() => ({
+  listener: null as Listener | null,
+  // What supabase's refreshSession / signInWithPassword do: emit the auth
+  // event to the listener, then hand the session back to the store action.
+  refreshSession: vi.fn(),
+  signInWithPassword: vi.fn(),
+}))
 const resetMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../chatStore', () => ({ useChatStore: { getState: () => ({ reset: resetMock }) } }))
@@ -31,6 +37,8 @@ vi.mock('@/lib/supabase', () => ({
         auth.listener = cb
         return { data: { subscription: { unsubscribe: vi.fn() } } }
       }),
+      refreshSession: auth.refreshSession,
+      signInWithPassword: auth.signInWithPassword,
     },
   },
   setAuthStorageUnreadableHandler: vi.fn(),
@@ -51,7 +59,22 @@ const signedInAs = async (id: string) => {
   resetMock.mockClear()
 }
 
+// supabase emits the event to the listener before the call returns.
+const emittingThenReturning = (event: AuthChangeEvent, id: string) => async () => {
+  const session = sessionFor(id)
+  await auth.listener!(event, session)
+  return { data: { user: session.user, session }, error: null }
+}
+
+const failCleanup = () =>
+  resetMock.mockImplementation(() => {
+    throw new Error('reset failed')
+  })
+
+const userAAnswer = () => queryClient.getQueryData(['onboarding', 'currentUser'])
+
 beforeEach(async () => {
+  resetMock.mockReset()
   queryClient.clear()
   useAuthStore.setState({ user: null, session: null, initialized: false })
   await useAuthStore.getState().initialize()
@@ -115,5 +138,68 @@ describe('identity changes observed by the auth listener', () => {
       id: 'user-a',
       onboardingCompleted: true,
     })
+  })
+})
+
+// Every store action that installs a session goes through the same gate as
+// the listener: a cleanup failure the listener saw must not be undone by the
+// action that emitted the event installing the session anyway.
+describe('identity changes installed by a store action', () => {
+  it('refreshSession installs no identity while clearing user A\'s state fails', async () => {
+    await signedInAs('user-a')
+    failCleanup()
+    auth.refreshSession.mockImplementation(emittingThenReturning('TOKEN_REFRESHED', 'user-b'))
+
+    await useAuthStore.getState().refreshSession()
+
+    expect(useAuthStore.getState().user).toBeNull()
+    expect(useAuthStore.getState().session).toBeNull()
+    expect(useAuthStore.getState().authError).toBeTruthy()
+    expect(userAAnswer()).toEqual({ id: 'user-a', onboardingCompleted: true })
+
+    resetMock.mockReset()
+    await useAuthStore.getState().refreshSession()
+
+    expect(resetMock).toHaveBeenCalled()
+    expect(userAAnswer()).toBeUndefined()
+    expect(useAuthStore.getState().user?.id).toBe('user-b')
+  })
+
+  it('signIn rejects and installs no identity while clearing user A\'s state fails', async () => {
+    await signedInAs('user-a')
+    failCleanup()
+    auth.signInWithPassword.mockImplementation(emittingThenReturning('SIGNED_IN', 'user-b'))
+
+    await expect(useAuthStore.getState().signIn('b@example.com', 'pw')).rejects.toThrow(
+      /could not be cleared/,
+    )
+
+    expect(useAuthStore.getState().user).toBeNull()
+    expect(useAuthStore.getState().session).toBeNull()
+    expect(userAAnswer()).toEqual({ id: 'user-a', onboardingCompleted: true })
+
+    resetMock.mockReset()
+    await useAuthStore.getState().signIn('b@example.com', 'pw')
+
+    expect(userAAnswer()).toBeUndefined()
+    expect(useAuthStore.getState().user?.id).toBe('user-b')
+  })
+
+  it('still clears user A\'s state after a failed refresh signed the store out without clearing it', async () => {
+    await signedInAs('user-a')
+    auth.refreshSession.mockResolvedValue({
+      data: { session: null },
+      error: new Error('refresh failed'),
+    })
+
+    await useAuthStore.getState().refreshSession()
+    expect(useAuthStore.getState().user).toBeNull()
+    expect(resetMock).not.toHaveBeenCalled()
+
+    await auth.listener!('SIGNED_IN', sessionFor('user-b'))
+
+    expect(resetMock).toHaveBeenCalled()
+    expect(userAAnswer()).toBeUndefined()
+    expect(useAuthStore.getState().user?.id).toBe('user-b')
   })
 })

@@ -64,9 +64,50 @@ const clearUserScopedState = async (): Promise<void> => {
   queryClient.clear()
 }
 
-// Set when an identity change needs clearUserScopedState() and it has not yet
-// succeeded. While set, the auth listener installs no session.
-let userScopedCleanupOwed = false
+// The user whose chats, projects and cached answers this page may still hold:
+// the last identity installed with the previous user's state cleared first.
+// Tracked apart from the store's `user`, which several paths (a failed
+// refresh, an unreadable stored session) set to null WITHOUT clearing that
+// state, so "the store is signed out" never means "nothing is left to clear".
+let scopedStateUserId: string | null = null
+
+const CLEANUP_FAILED_MESSAGE =
+  'Your previous session could not be cleared from this page. Please reload the page to continue.'
+
+type SetAuthState = (partial: Partial<AuthState>) => void
+
+/**
+ * The one way a user and session are installed in the store: every sign-in,
+ * refresh, verification and auth event goes through it.
+ *
+ * A different identity from the one whose state the page holds (signed out,
+ * or another user signed in, often on another host sharing the session
+ * cookie) clears that state BEFORE the next one is installed. Fail closed: if
+ * the cleanup fails, NO identity is installed, the store goes signed out with
+ * an authError, and the cleanup stays owed, so every later adoption (including
+ * one for the same next user) retries it first. Returns whether the identity
+ * was installed; a caller that reports success to the user must check it.
+ */
+const adoptIdentity = async (
+  set: SetAuthState,
+  user: User | null,
+  session: Session | null,
+): Promise<boolean> => {
+  const nextUserId = user?.id ?? null
+  if (scopedStateUserId !== null && scopedStateUserId !== nextUserId) {
+    try {
+      await clearUserScopedState()
+    } catch (error) {
+      logger.error('[AuthStore] Clearing the previous user\'s state failed; staying signed out:', error)
+      set({ user: null, session: null, authError: CLEANUP_FAILED_MESSAGE })
+      setTelemetryUserId(null)
+      return false
+    }
+  }
+  scopedStateUserId = nextUserId
+  set({ user, session })
+  return true
+}
 
 /**
  * Where the identity provider should send the user back to.
@@ -182,6 +223,10 @@ interface AuthState {
   ) => Promise<void>
   signInAnonymously: () => Promise<void>
   adoptSession: (tokens: { accessToken: string; refreshToken: string }) => Promise<User>
+  // Install a session supabase already holds (an /auth/callback exchange),
+  // clearing the previous user's state first; false when that failed and
+  // nothing was installed (authError says why).
+  installIdentity: (user: User | null, session: Session | null) => Promise<boolean>
   signOut: () => Promise<void>
   setApiKeySession: (apiKey: string) => void
 
@@ -268,10 +313,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error
     }
 
-    set({
-      user: data.user,
-      session: data.session,
-    })
+    if (!(await adoptIdentity(set, data.user, data.session))) {
+      throw new Error(CLEANUP_FAILED_MESSAGE)
+    }
   },
 
   /**
@@ -433,10 +477,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error
     }
 
-    set({
-      user: data.user,
-      session: data.session,
-    })
+    if (!(await adoptIdentity(set, data.user, data.session))) {
+      throw new Error(CLEANUP_FAILED_MESSAGE)
+    }
 
     trackAuthFunnelEvent('login_succeeded', {
       auth_method: 'anonymous',
@@ -460,9 +503,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!data.user || !data.session) {
       throw new Error('The released session could not be installed')
     }
-    set({ user: data.user, session: data.session })
+    if (!(await adoptIdentity(set, data.user, data.session))) {
+      throw new Error(CLEANUP_FAILED_MESSAGE)
+    }
     return data.user
   },
+
+  installIdentity: (user: User | null, session: Session | null) =>
+    adoptIdentity(set, user, session),
 
   signOut: async () => {
     set({ loading: true })
@@ -477,6 +525,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // removeItem() which clears the auth file. No need for manual authClear().
 
       await clearUserScopedState()
+      scopedStateUserId = null
 
       set({
         user: null,
@@ -664,7 +713,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       throw error
     }
 
-    set({ user: data.user, session: data.session })
+    if (!(await adoptIdentity(set, data.user, data.session))) {
+      throw new Error(CLEANUP_FAILED_MESSAGE)
+    }
     trackAuthFunnelEvent('login_succeeded', { auth_method: 'email_otp' })
   },
 
@@ -699,10 +750,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
 
       // Update auth state with the new session
-      set({
-        user: data.user,
-        session: data.session,
-      })
+      if (!(await adoptIdentity(set, data.user, data.session))) {
+        throw new Error(CLEANUP_FAILED_MESSAGE)
+      }
     } catch (error) {
       logger.error('[AuthStore] verifyPasswordResetOTP error:', error)
       throw error
@@ -756,10 +806,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       // verifyOtp can return a fresh session/user. Use it directly when available.
       if (data.session || data.user) {
-        set({
-          user: data.user ?? null,
-          session: data.session ?? null,
-        })
+        if (!(await adoptIdentity(set, data.user ?? null, data.session ?? null))) {
+          throw new Error(CLEANUP_FAILED_MESSAGE)
+        }
       } else {
         await get().refreshSession()
       }
@@ -795,7 +844,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     if (data.session || data.user) {
-      set({ user: data.user ?? null, session: data.session ?? null })
+      if (!(await adoptIdentity(set, data.user ?? null, data.session ?? null))) {
+        throw new Error(CLEANUP_FAILED_MESSAGE)
+      }
     } else {
       await get().refreshSession()
     }
@@ -949,47 +1000,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // No need to manually load from file storage anymore
       const { data: { session } } = await supabase.auth.getSession()
 
-      set({
-        user: session?.user ?? null,
-        session: session,
-        loading: false,
-        initialized: true,
-      })
+      await adoptIdentity(set, session?.user ?? null, session)
+      set({ loading: false, initialized: true })
 
-      // Set up auth state listener to keep store in sync
+      // Set up auth state listener to keep store in sync. A different
+      // identity (signed out, or another user signed in on another host
+      // sharing the session cookie) clears the previous user's state first,
+      // and installs nothing if that fails: see adoptIdentity.
       supabase.auth.onAuthStateChange(async (_event: AuthChangeEvent, session: Session | null) => {
-        // A different identity (signed out, or another user signed in, often
-        // on another host sharing the session cookie): clear the previous
-        // user's state BEFORE adopting the next one.
-        //
-        // Fail closed: if the cleanup fails, adopt NO identity. The store
-        // goes signed out and the cleanup stays owed, so every later event
-        // (including one for the same next user) retries it before any
-        // session is installed over the previous user's state.
-        const previousUserId = get().user?.id
-        if (previousUserId && previousUserId !== session?.user?.id) {
-          userScopedCleanupOwed = true
-        }
-        if (userScopedCleanupOwed) {
-          try {
-            await clearUserScopedState()
-            userScopedCleanupOwed = false
-          } catch (error) {
-            logger.error('[AuthStore] Clearing the previous user\'s state failed; staying signed out:', error)
-            set({
-              user: null,
-              session: null,
-              authError:
-                'Your previous session could not be cleared from this page. Please reload the page to continue.',
-            })
-            setTelemetryUserId(null)
-            return
-          }
-        }
-        set({
-          user: session?.user ?? null,
-          session: session,
-        })
+        if (!(await adoptIdentity(set, session?.user ?? null, session))) return
 
         // Attach the user to telemetry for error correlation
         setTelemetryUserId(session?.user ? { id: session.user.id } : null)
@@ -1018,10 +1037,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
       if (error) throw error
 
-      set({
-        user: session?.user ?? null,
-        session: session,
-      })
+      await adoptIdentity(set, session?.user ?? null, session)
     } catch (error) {
       logger.error('Failed to refresh session:', error)
       set({

@@ -52,11 +52,10 @@ vi.mock('@/lib/githubCredentialSync', () => ({
   githubCredentialSync: { syncProviderTokenFromSession },
 }))
 
-const setUser = vi.fn()
-const setSession = vi.fn()
+const installIdentity = vi.fn(async () => true)
 
 vi.mock('@/store/authStore', () => ({
-  useAuthStore: () => ({ setUser, setSession }),
+  useAuthStore: () => ({ installIdentity }),
 }))
 
 vi.mock('@/lib/logger', () => ({
@@ -106,8 +105,9 @@ describe('OAuthCallback — email confirmation link', () => {
 
     // The reported symptom was returning still-anonymous and hitting the same
     // modal. Setting the verified session is what breaks that loop.
-    await waitFor(() => expect(setUser).toHaveBeenCalledWith(LINKED.user))
-    expect(setSession).toHaveBeenCalledWith(LINKED.session)
+    await waitFor(() =>
+      expect(installIdentity).toHaveBeenCalledWith(LINKED.user, LINKED.session),
+    )
   })
 
   it('lands the user back on the onboarding URL they left, not the app root', async () => {
@@ -156,7 +156,7 @@ describe('OAuthCallback — email confirmation link', () => {
     // Rendered through describeAuthError, so an expired token becomes an
     // instruction ("send yourself a new one") rather than a bare status.
     expect(await findByText(/expired/i)).toBeInTheDocument()
-    expect(setSession).not.toHaveBeenCalled()
+    expect(installIdentity).not.toHaveBeenCalled()
   })
 })
 
@@ -177,7 +177,7 @@ describe('OAuthCallback — a stale PKCE code degrades to an instruction', () =>
 
     expect(await findByText(/6-digit code/i)).toBeInTheDocument()
     expect(queryByText(/pkce_code_verifier_not_found/i)).not.toBeInTheDocument()
-    expect(setSession).not.toHaveBeenCalled()
+    expect(installIdentity).not.toHaveBeenCalled()
   })
 })
 
