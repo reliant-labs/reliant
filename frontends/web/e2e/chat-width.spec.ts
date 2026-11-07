@@ -17,6 +17,9 @@ const WIDE_TABLE =
   '| ' + Array.from({ length: 14 }, () => '---').join(' | ') + ' |\n' +
   '| ' + Array.from({ length: 14 }, (_, i) => `cell_value_${i}_${'x'.repeat(20)}`).join(' | ') + ' |';
 const LONG_CODE = '```ts\nconst x = "' + 'y'.repeat(500) + '";\n```';
+// A fixed message time, so the rendered timestamp (and the row it sits in)
+// is the same whenever the test runs.
+const FIXTURE_CREATED_AT = '2026-10-01T00:00:00Z';
 
 const WIDE_BODY = [
   `A bare URL: ${LONG_URL}`,
@@ -111,7 +114,7 @@ const LONG_COMMAND = `echo ${'x'.repeat(400)}`;
 
 async function mockAgentAndToolChat(page: Page) {
   const chatId = DEPLOY_CHAT.id;
-  const createdAt = new Date().toISOString();
+  const createdAt = FIXTURE_CREATED_AT;
   await mockChatSnapshot(page, [
     {
       id: 'msg_user', chatId, thread: chatId, seq: 1n, role: 1, createdAt,
@@ -251,7 +254,7 @@ function wideToolInput(): string {
 
 async function mockEveryRowKind(page: Page) {
   const chatId = DEPLOY_CHAT.id;
-  const createdAt = new Date().toISOString();
+  const createdAt = FIXTURE_CREATED_AT;
   await mockChatSnapshot(page, [
     {
       id: 'msg_user', chatId, thread: chatId, seq: 1n, role: 1, createdAt,
@@ -289,9 +292,35 @@ async function rowsPastTheEdge(page: Page): Promise<string[]> {
     const edge = transcript.getBoundingClientRect();
     const outside = (r: DOMRect) => r.right > edge.right + 1 || r.left < edge.left - 1;
     const found = new Set<string>();
+    const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    // What the virtualizer has committed: the scroll position and each
+    // rendered row's index and measured top/height.
+    const layout = () =>
+      `${transcript.scrollTop}|${transcript.scrollHeight}|` +
+      Array.from(transcript.querySelectorAll<HTMLElement>('[data-index]'))
+        .map((row) => {
+          const r = row.getBoundingClientRect();
+          return `${row.dataset.index}:${Math.round(r.top)}:${Math.round(r.height)}`;
+        })
+        .join(',');
+    // Wait until the virtualizer has rendered and measured the rows for this
+    // position: the layout is unchanged across several consecutive frames.
+    // Bounded by a deadline, so a layout that never settles fails loudly.
+    const settle = async () => {
+      const deadline = performance.now() + 10_000;
+      let last = layout();
+      let stable = 0;
+      while (stable < 3) {
+        if (performance.now() > deadline) throw new Error('transcript layout never settled');
+        await nextFrame();
+        const now = layout();
+        stable = now === last ? stable + 1 : 0;
+        last = now;
+      }
+    };
     for (let y = 0; y <= transcript.scrollHeight; y += Math.max(200, transcript.clientHeight / 2)) {
       transcript.scrollTop = y;
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await settle();
       for (const el of Array.from(transcript.querySelectorAll<HTMLElement>('[data-index] *'))) {
         const r = el.getBoundingClientRect();
         // An overflowing box, or a visible-overflow box whose text runs out of it.
