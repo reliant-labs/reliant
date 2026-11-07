@@ -18,7 +18,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { create, equals, type DescMessage, type DescService } from "@bufbuild/protobuf";
+import { ScalarType, create, createFileRegistry, equals, type DescField, type DescMessage, type DescService } from "@bufbuild/protobuf";
+import { FieldDescriptorProto_Label, FieldDescriptorProto_Type, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
@@ -38,6 +39,9 @@ import { DEMO_DEFAULT_SERVICES } from "../demoServiceDefaults";
 import { outsideDemo } from "../demoScope";
 import { createDemoTransport, isDemoRead } from "../demoTransport";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../../../Observability/__fixtures__/fixtureApi";
+
+const { OPTIONAL: LABEL_OPTIONAL, REPEATED: LABEL_REPEATED } = FieldDescriptorProto_Label;
+const { MESSAGE: TYPE_MESSAGE, STRING: TYPE_STRING } = FieldDescriptorProto_Type;
 
 beforeEach(() => {
   setTransport(null);
@@ -244,6 +248,9 @@ describe("nothing outside shop", () => {
     expect((await deploy.compareReleases({ project: DEMO_PROJECT, environmentId: OTHER_ENV, fromVersion: "v1.8.2", toVersion: "v1.8.3" })).to).toBeUndefined();
     expect((await listActivity({ orgId: "org-demo", projectId: "other", envIds: [] })).events).toEqual([]);
     expect((await listActivity({ orgId: "org-demo", projectId: DEMO_PROJECT, envIds: [OTHER_ENV] })).events).toEqual([]);
+    // An environment named by name, not id (ListDeployAttemptsRequest.environment_name).
+    expect((await deploy.listDeployAttempts({ project: DEMO_PROJECT, environmentName: "other-prod" })).attempts).toEqual([]);
+    expect((await deploy.listDeployAttempts({ project: DEMO_PROJECT, environmentName: "prod" })).attempts.length).toBeGreaterThan(0);
     // And shop's, named: still answered.
     expect((await deploy.getRelease({ project: DEMO_PROJECT, version: "v1.8.3" })).release?.version).toBe("v1.8.3");
     const prodOnly = await listActivity({ orgId: "org-demo", projectId: DEMO_PROJECT, envIds: ["env-prod"] });
@@ -253,18 +260,35 @@ describe("nothing outside shop", () => {
 
   it("every read of every console service, story or default, is empty when it names another project or environment", async () => {
     const t = (await import("@/lib/connect")).transport;
-    /** The request with every project / environment field it has (top level or one message down) set to another app's. */
-    function foreign(input: DescMessage, depth = 0): Record<string, unknown> | null {
+    /**
+     * The request with every project / environment selector it has, at any depth (nested,
+     * repeated and oneof messages too), set to another app's, under every name demoScope.ts reads.
+     */
+    function foreign(input: DescMessage, seen: ReadonlySet<string> = new Set()): Record<string, unknown> | null {
+      if (seen.has(input.typeName)) return null;
+      const inside = new Set([...seen, input.typeName]);
       const out: Record<string, unknown> = {};
       let named = false;
+      const set = (f: DescField, value: unknown) => {
+        if (f.oneof) {
+          if (out[f.oneof.localName]) return;
+          out[f.oneof.localName] = { case: f.localName, value };
+        } else out[f.localName] = value;
+        named = true;
+      };
       for (const f of input.fields) {
-        if (f.oneof) continue;
-        if (f.fieldKind === "scalar" && /^project(_id)?$/.test(f.name)) [out[f.localName], named] = ["other-app", true];
-        else if (f.fieldKind === "scalar" && /(^|_)(environment_id|env_id)$/.test(f.name)) [out[f.localName], named] = [OTHER_ENV, true];
-        else if (f.fieldKind === "list" && /(^|_)(environment_ids|env_ids)$/.test(f.name)) [out[f.localName], named] = [[OTHER_ENV], true];
-        else if (f.fieldKind === "message" && depth < 1) {
-          const inner = foreign(f.message, depth + 1);
-          if (inner) [out[f.localName], named] = [inner, true];
+        const selector = /(^|_)project(_id|_name|_slug)?s?$/.test(f.name)
+          ? "other-app"
+          : /(^|_)(environment|env)_ids?$/.test(f.name)
+            ? OTHER_ENV
+            : /(^|_)(environment|env)(_name)?s?$/.test(f.name)
+              ? "other-prod"
+              : undefined;
+        if (f.fieldKind === "scalar" && f.scalar === ScalarType.STRING && selector) set(f, selector);
+        else if (f.fieldKind === "list" && f.listKind === "scalar" && f.scalar === ScalarType.STRING && selector) set(f, [selector]);
+        else if (f.fieldKind === "message" || (f.fieldKind === "list" && f.listKind === "message")) {
+          const inner = foreign(f.message, inside);
+          if (inner) set(f, f.fieldKind === "list" ? [inner] : inner);
         }
       }
       return named ? out : null;
@@ -282,6 +306,75 @@ describe("nothing outside shop", () => {
       }
     }
     expect(scoped).toBeGreaterThan(30);
+  });
+
+  it("a selector at any depth, under any selector name, is judged: nested, repeated, mapped and oneof messages", () => {
+    // Shaped like no console request on purpose: the guard must not depend on today's contracts' shapes.
+    const registry = createFileRegistry(
+      create(FileDescriptorSetSchema, {
+        file: [
+          {
+            name: "demo_scope_probe.proto",
+            package: "demo.scope.probe",
+            syntax: "proto3",
+            messageType: [
+              {
+                name: "Req",
+                field: [
+                  { name: "outer", number: 1, label: LABEL_OPTIONAL, type: TYPE_MESSAGE, typeName: ".demo.scope.probe.Outer" },
+                  { name: "outers", number: 2, label: LABEL_REPEATED, type: TYPE_MESSAGE, typeName: ".demo.scope.probe.Outer" },
+                  { name: "by_key", number: 3, label: LABEL_REPEATED, type: TYPE_MESSAGE, typeName: ".demo.scope.probe.Req.ByKeyEntry" },
+                  { name: "self", number: 4, label: LABEL_OPTIONAL, type: TYPE_MESSAGE, typeName: ".demo.scope.probe.Req" },
+                ],
+                nestedType: [
+                  {
+                    name: "ByKeyEntry",
+                    options: { mapEntry: true },
+                    field: [
+                      { name: "key", number: 1, label: LABEL_OPTIONAL, type: TYPE_STRING },
+                      { name: "value", number: 2, label: LABEL_OPTIONAL, type: TYPE_MESSAGE, typeName: ".demo.scope.probe.Outer" },
+                    ],
+                  },
+                ],
+              },
+              { name: "Outer", field: [{ name: "middle", number: 1, label: LABEL_OPTIONAL, type: TYPE_MESSAGE, typeName: ".demo.scope.probe.Middle" }] },
+              {
+                name: "Middle",
+                field: [
+                  { name: "by_id", number: 1, label: LABEL_OPTIONAL, type: TYPE_MESSAGE, typeName: ".demo.scope.probe.Leaf", oneofIndex: 0 },
+                  { name: "other", number: 2, label: LABEL_OPTIONAL, type: TYPE_STRING, oneofIndex: 0 },
+                ],
+                oneofDecl: [{ name: "pick" }],
+              },
+              {
+                name: "Leaf",
+                field: [
+                  { name: "parent_project_id", number: 1, label: LABEL_OPTIONAL, type: TYPE_STRING },
+                  { name: "project_name", number: 2, label: LABEL_OPTIONAL, type: TYPE_STRING },
+                  { name: "target_env_id", number: 3, label: LABEL_OPTIONAL, type: TYPE_STRING },
+                  { name: "from_environment", number: 4, label: LABEL_OPTIONAL, type: TYPE_STRING },
+                  { name: "env_names", number: 5, label: LABEL_REPEATED, type: TYPE_STRING },
+                  { name: "note", number: 6, label: LABEL_OPTIONAL, type: TYPE_STRING },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    const Req = registry.getMessage("demo.scope.probe.Req")!;
+    const leaf = (l: Record<string, unknown>) => ({ middle: { pick: { case: "byId", value: l } } });
+    const outside = (r: Record<string, unknown>) => outsideDemo(Req, create(Req, r as never));
+    for (const l of [{ parentProjectId: "other-app" }, { projectName: "other-app" }, { targetEnvId: OTHER_ENV }, { fromEnvironment: "other-prod" }, { envNames: ["prod", "other-prod"] }]) {
+      expect(outside({ outer: leaf(l) }), JSON.stringify(l)).toBe(true);
+      expect(outside({ outers: [leaf({}), leaf(l)] }), JSON.stringify(l)).toBe(true);
+      expect(outside({ byKey: { a: leaf(l) } }), JSON.stringify(l)).toBe(true);
+      expect(outside({ self: { self: { self: { outer: leaf(l) } } } }), JSON.stringify(l)).toBe(true);
+    }
+    // Shop's, by id or by name, and a field that selects nothing: in scope.
+    const shop = { parentProjectId: DEMO_PROJECT, projectName: DEMO_PROJECT, targetEnvId: "env-prod", fromEnvironment: "staging", envNames: ["dev", "prod"], note: "other-app" };
+    expect(outside({ outer: leaf(shop), outers: [leaf(shop)], byKey: { a: leaf(shop) }, self: { outer: leaf(shop) } })).toBe(false);
+    expect(outside({})).toBe(false);
   });
 
   it("a secret's versions only in an environment that holds it: PAYMENTS_WEBHOOK_SECRET is not in dev", async () => {

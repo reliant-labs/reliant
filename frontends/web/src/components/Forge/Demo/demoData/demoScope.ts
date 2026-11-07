@@ -7,10 +7,15 @@
  * EMPTY answer — never shop's data, and never the generated defaults' made-up
  * rows (scopedToDemo).
  *
- * What "names" means: a request field `project` / `project_id`, or one ending
- * `environment_id` / `env_id` (`env_ids` too), at the request's top level or
- * one message down (a `scope`). Empty means unscoped (the org's view, which in
- * the demo org is shop's).
+ * What "names" means: a string field, or a repeated one, whose name says it
+ * selects a project (`project`, `project_id`, `project_name`, `project_slug`,
+ * or any of those after a prefix: `parent_project_id`), an environment by id
+ * (ending `environment_id` / `env_id`, plural `_ids`) or an environment by
+ * name (ending `environment` / `environment_name` / `env` / `env_name`,
+ * plural too: `from_environment`, `env_names`) — at any depth of the request:
+ * nested messages, repeated messages and message-valued maps are all walked,
+ * and set oneof cases with them. Empty means unscoped (the org's view, which
+ * in the demo org is shop's).
  */
 
 import { create, isMessage, type DescMessage, type DescMethod, type DescService, type Message } from "@bufbuild/protobuf";
@@ -36,27 +41,54 @@ export const inDemoProject = (project: string | undefined): boolean => !project 
 export const demoEnvId = (id: string | undefined): DemoEnvId | undefined =>
   id && ENV_IDS.has(id) ? (id as DemoEnvId) : undefined;
 
-const PROJECT_FIELD = /^project(_id)?$/;
-const ENV_FIELD = /(^|_)(environment_id|env_id)$/;
-const ENV_LIST_FIELD = /(^|_)(environment_ids|env_ids)$/;
+/** The demo environment a name names (`prod`), or an id does (`env-prod`). */
+const demoEnvName = (name: string): boolean => DEMO_ENVS.some((e) => e.name === name || e.id === name);
 
-/** Whether `req` names a project or environment that is not the demo's. */
+const PROJECT_FIELD = /(^|_)project(_id|_name|_slug)?s?$/;
+const ENV_ID_FIELD = /(^|_)(environment|env)_ids?$/;
+const ENV_NAME_FIELD = /(^|_)(environment|env)(_name)?s?$/;
+
+/** Whether one selector value is outside the demo, judged by its field's name; false for a field that is no selector. */
+function foreignSelector(fieldName: string, value: string): boolean {
+  if (value === "") return false;
+  if (PROJECT_FIELD.test(fieldName)) return !inDemoProject(value);
+  if (ENV_ID_FIELD.test(fieldName)) return !demoEnvId(value);
+  if (ENV_NAME_FIELD.test(fieldName)) return !demoEnvName(value);
+  return false;
+}
+
+/**
+ * How deep a request is walked. Every console request is far shallower; the
+ * cap only stops a self-referencing message type from recursing for ever.
+ */
+const MAX_DEPTH = 16;
+
+/** Whether `req` names a project or environment that is not the demo's, anywhere in it. */
 export function outsideDemo(input: DescMessage, req: Message, depth = 0): boolean {
+  if (depth > MAX_DEPTH) return false;
   const msg = req as unknown as Record<string, unknown>;
+  const nested = (desc: DescMessage | undefined, value: unknown): boolean => !!desc && isMessage(value) && outsideDemo(desc, value, depth + 1);
   for (const field of input.fields) {
     const value = field.oneof
       ? (msg[field.oneof.localName] as { case?: string; value?: unknown } | undefined)?.case === field.localName
         ? (msg[field.oneof.localName] as { value?: unknown }).value
         : undefined
       : msg[field.localName];
-    if (value == null || value === "") continue;
-    if (field.fieldKind === "scalar" && typeof value === "string") {
-      if (PROJECT_FIELD.test(field.name) && !inDemoProject(value)) return true;
-      if (ENV_FIELD.test(field.name) && !demoEnvId(value)) return true;
-    } else if (field.fieldKind === "list" && field.listKind === "scalar" && ENV_LIST_FIELD.test(field.name)) {
-      if ((value as unknown[]).some((id) => typeof id === "string" && id !== "" && !demoEnvId(id))) return true;
-    } else if (field.fieldKind === "message" && depth < 1 && isMessage(value)) {
-      if (outsideDemo(field.message, value, depth + 1)) return true;
+    if (value == null) continue;
+    switch (field.fieldKind) {
+      case "scalar":
+        if (typeof value === "string" && foreignSelector(field.name, value)) return true;
+        break;
+      case "message":
+        if (nested(field.message, value)) return true;
+        break;
+      case "list":
+        if (field.listKind === "scalar" && (value as unknown[]).some((v) => typeof v === "string" && foreignSelector(field.name, v))) return true;
+        if (field.listKind === "message" && (value as unknown[]).some((v) => nested(field.message, v))) return true;
+        break;
+      case "map":
+        if (field.mapKind === "message" && Object.values(value as Record<string, unknown>).some((v) => nested(field.message, v))) return true;
+        break;
     }
   }
   return false;
