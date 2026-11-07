@@ -30,9 +30,13 @@ import (
 // covered by those methods, so one of the three models reaching one of them,
 // directly, in a slice or map, as a field of another struct, or inside a
 // composite literal handed to it, would change a persisted or public payload.
-// This guard keeps them apart.
+// LIMITATION (review B2, PR #2346): this is a best-effort check, NOT proof
+// that the models cannot reach a serializer. Empty import stubs cause type
+// errors which the checker currently suppresses; carriedBy cannot recover
+// arbitrary erased/interface dataflow or unresolved dependency declarations.
+// This implementation must not merge as an exhaustive boundary guard.
 //
-// How it stays fast and deterministic (an earlier version loaded ./... through
+// How this prototype limits its cost (an earlier version loaded ./... through
 // go/packages, which type-checks the whole module in parallel: ~20 CPU-minutes
 // under -race, a timeout, and a data race inside go/types):
 //
@@ -206,28 +210,29 @@ func (idx *moduleIndex) isModule(p string) bool {
 	return p == idx.modulePath || strings.HasPrefix(p, idx.modulePath+"/")
 }
 
-// reachesCore reports whether p's non-test imports lead to internal/db/core.
+// reachesCore computes reverse reachability to a fixed point. No provisional
+// negative is cached: every participant of a cycle inherits its outgoing
+// paths. Test imports count too; a model may occur only in a test file.
 func (idx *moduleIndex) reachesCore(p string) bool {
-	if r, ok := idx.reach[p]; ok {
-		return r
-	}
-	idx.reach[p] = false // cycle guard; module packages are acyclic
-	mp := idx.pkgs[p]
-	r := false
-	switch {
-	case mp == nil:
-	case strings.HasSuffix(p, corePkgSuffix):
-		r = true
-	default:
-		for _, imp := range mp.bp.Imports {
-			if idx.reachesCore(imp) {
-				r = true
-				break
+	if len(idx.reach) == 0 {
+		idx.reach[idx.modulePath+corePkgSuffix] = true
+		for changed := true; changed; {
+			changed = false
+			for ip, mp := range idx.pkgs {
+				if idx.reach[ip] {
+					continue
+				}
+				for _, imp := range mp.allImports() {
+					if idx.reach[imp] {
+						idx.reach[ip] = true
+						changed = true
+						break
+					}
+				}
 			}
 		}
 	}
-	idx.reach[p] = r
-	return r
+	return idx.reach[p]
 }
 
 // checker type-checks module packages from source, sequentially. Only PARSING
@@ -241,8 +246,9 @@ type checker struct {
 	parsed map[string]*ast.File
 }
 
-func (c *checker) prefetch(paths []string) {
+func (c *checker) prefetch(paths []string) error {
 	files := make([]*ast.File, len(paths))
+	errs := make([]error, len(paths))
 	var wg sync.WaitGroup
 	work := make(chan int)
 	for w := 0; w < runtime.GOMAXPROCS(0); w++ {
@@ -250,7 +256,7 @@ func (c *checker) prefetch(paths []string) {
 		go func() {
 			defer wg.Done()
 			for i := range work {
-				files[i], _ = parser.ParseFile(c.fset, paths[i], nil, parser.SkipObjectResolution)
+				files[i], errs[i] = parser.ParseFile(c.fset, paths[i], nil, parser.SkipObjectResolution)
 			}
 		}()
 	}
@@ -259,11 +265,14 @@ func (c *checker) prefetch(paths []string) {
 	}
 	close(work)
 	wg.Wait()
-	for i, p := range paths {
-		if files[i] != nil {
-			c.parsed[p] = files[i]
-		}
+	// Reject partial ASTs too: any syntax error means this is not a proof.
+	if err := errors.Join(errs...); err != nil {
+		return err
 	}
+	for i, p := range paths {
+		c.parsed[p] = files[i]
+	}
+	return nil
 }
 
 func (c *checker) parse(dir string, files []string) []*ast.File {
@@ -453,6 +462,7 @@ func carriedBy(e ast.Expr, info *types.Info) bool {
 type scanResult struct {
 	checked    int
 	violations []string
+	parseErr   error
 }
 
 func (c *checker) scanRoot(mp *modulePkg, res *scanResult) {
@@ -541,7 +551,9 @@ func scanModule(idx *moduleIndex, only func(*modulePkg) bool) *scanResult {
 		}
 	}
 	sort.Slice(roots, func(i, j int) bool { return roots[i].path < roots[j].path })
-	c.prefetch(idx.neededFiles(roots))
+	if err := c.prefetch(idx.neededFiles(roots)); err != nil {
+		return &scanResult{parseErr: err}
+	}
 	res := &scanResult{}
 	for _, mp := range roots {
 		c.scanRoot(mp, res)
@@ -553,6 +565,9 @@ func scanModule(idx *moduleIndex, only func(*modulePkg) bool) *scanResult {
 // verdict is the guard's judgement of a scan: zero serializer calls is a
 // failure (the scan is not seeing the code), and so is any violation.
 func verdict(res *scanResult) error {
+	if res.parseErr != nil {
+		return fmt.Errorf("serializer scan could not parse its inputs: %w", res.parseErr)
+	}
 	if res.checked == 0 {
 		return errors.New("found no serializer calls at all: the scan is not seeing the code it guards")
 	}
