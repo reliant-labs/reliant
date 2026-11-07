@@ -15,6 +15,7 @@ import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 import {
+  DeployBundleSchema,
   DeployCommitRangeSchema,
   DeployCommitSchema,
   DeployGateSchema,
@@ -36,7 +37,18 @@ import {
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "http://127.0.0.1:8090", hasControlPlane: true }));
 
-import { toReleaseComparison, toReleasePromotion, toReleaseRecord, toReleaseRollout } from "../releases";
+import { toReleaseBundle, toReleaseComparison, toReleasePromotion, toReleaseRecord, toReleaseRollout } from "../releases";
+
+describe("bundle workload images", () => {
+  it("maps image artifacts by workload even when the artifact is named differently", () => {
+    const bundle = toReleaseBundle(create(DeployBundleSchema, { shape: { objects: [
+      { name: "admin-server", workload: "admin-server", images: { "control-plane": "sha256:abc" } },
+      { name: "web", images: { web: "sha256:def" } },
+      { name: "ignored", images: { invalid: 7 } },
+    ] } }));
+    expect(bundle.workloadImages).toEqual({ "admin-server": { "control-plane": "sha256:abc" }, web: { web: "sha256:def" } });
+  });
+});
 
 describe("toReleaseRecord", () => {
   it("reads the cut commit's subject and author, and a capped range", () => {
