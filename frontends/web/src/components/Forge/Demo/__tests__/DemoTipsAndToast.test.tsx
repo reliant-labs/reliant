@@ -49,11 +49,13 @@ it("Dismiss leaves the page usable and accessible ? restores the information", a
 });
 it("secondary help is keyboard/click accessible, not hover-only", async () => {
   renderDemo("/forge/p/shop/observability/alerts"); await screen.findByTestId("demo-tip");
-  const help = screen.getByText("How an agent helps"); help.focus(); expect(help).toHaveFocus();
-  await userEvent.click(help);
-  expect(help.closest("details")).toHaveAttribute("open");
+  const help = screen.getByRole("button", { name: "How an agent helps" });
+  act(() => help.focus()); expect(help).toHaveFocus();
+  expect(help).toHaveAttribute("aria-expanded", "true");
   expect(screen.getByText(/Notification destinations/)).toBeVisible();
-  await userEvent.click(help); expect(help.closest("details")).not.toHaveAttribute("open");
+  await userEvent.keyboard("{Escape}");
+  expect(help).toHaveAttribute("aria-expanded", "false");
+  await userEvent.click(help); expect(help).toHaveAttribute("aria-expanded", "true");
 });
 it("optional Next follows actual page navigation; Exit stays on the current page", async () => {
   const { router } = renderDemo("/forge/p/shop");

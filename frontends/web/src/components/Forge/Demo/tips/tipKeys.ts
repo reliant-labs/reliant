@@ -32,6 +32,10 @@ export const DEMO_TIP_KEYS = [
   "profiles",
   "alerts",
   "sessions",
+  "metrics",
+  "rpc",
+  "graph",
+  "workload",
 ] as const;
 
 export type DemoTipKey = (typeof DEMO_TIP_KEYS)[number];
@@ -45,6 +49,9 @@ const OBS_VIEW_TIPS: Record<string, DemoTipKey> = {
   dashboards: "dashboards",
   alerts: "alerts",
   sessions: "sessions",
+  metrics: "metrics",
+  rpc: "rpc",
+  graph: "graph",
 };
 
 function obsTip(view: string | undefined, search: Record<string, unknown>): DemoTipKey | null {
@@ -64,6 +71,8 @@ export function demoTipKey(pathname: string, search: Record<string, unknown>): D
   switch (page.kind) {
     case "overview":
       return "overview";
+    case "workload":
+      return "workload";
     case "releases":
       return "releases";
     case "release":

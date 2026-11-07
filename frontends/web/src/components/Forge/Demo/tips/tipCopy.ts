@@ -15,6 +15,30 @@ export interface DemoTip {
 const tid = (id: string) => `[data-testid='${id}']`;
 
 export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
+  metrics: {
+    title: "Metrics",
+    body: "Compare traffic, failures and response times to see whether your app is getting better or worse. Choose a measurement and time range to investigate a change.",
+    help: "Your agent can query the same measurements alongside recent changes.",
+    command: "forge obs status prod",
+  },
+  rpc: {
+    title: "Service operations",
+    body: "Find the operations that are slow or failing most often. Open one to follow its requests and focus your investigation on the right part of the app.",
+    help: "Your agent can find failed requests for the same service and inspect their details.",
+    command: "forge obs traces prod --errors",
+  },
+  graph: {
+    title: "Service map",
+    body: "See which parts of your app depend on one another, so a failure is easier to follow. Select a service or connection to inspect the work passing through it.",
+    help: "Your agent can follow a request across the same services to locate the problem.",
+    command: "forge obs traces prod --errors",
+  },
+  workload: {
+    title: "One service or job",
+    body: "Check whether this part of your app is healthy and which version it runs. Use its logs, requests and history to understand a failure before changing anything.",
+    help: "Your agent can combine service health with logs and recent changes.",
+    command: "forge obs status prod",
+  },
   overview: {
     title: "Explore a forge app",
     body: "Forge builds, deploys and monitors your app, so you can see what changed and whether it is healthy in one place. This is shop, a sample app with read-only data—explore freely, or take the optional tour.",

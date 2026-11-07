@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /** One compact, non-modal explanation of the current page. Exploration never starts a tour. */
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { CircleHelp } from "lucide-react";
 
@@ -19,16 +20,29 @@ import { demoTipKey, type DemoTipKey } from "./tipKeys";
 /** Secondary information is disclosed by click, tap or keyboard, never hover only. */
 export function PageAgentHelp({ tipKey }: { tipKey: DemoTipKey }) {
   const tip = DEMO_TIPS[tipKey];
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const id = useId();
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: PointerEvent) => { if (!trigger.current?.contains(e.target as Node) && !panel.current?.contains(e.target as Node)) setOpen(false); };
+    const escape = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopImmediatePropagation(); setOpen(false); trigger.current?.focus(); } };
+    document.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", escape, true);
+    return () => { document.removeEventListener("pointerdown", close); window.removeEventListener("keydown", escape, true); };
+  }, [open]);
+  const rect = trigger.current?.getBoundingClientRect();
+  const width = Math.min(320, window.innerWidth - 24);
   return (
-    <details className="relative mt-2 text-xs" data-testid="demo-agent-help">
-      <summary className="touch-target inline-flex cursor-pointer items-center rounded px-1 font-medium text-primary-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">
-        How an agent helps
-      </summary>
-      <div className="absolute bottom-full left-0 z-10 mb-1 max-h-48 w-full overflow-y-auto rounded-lg border border-border bg-popover p-3 text-muted-foreground shadow-lg" role="note">
-        <p>{tip.help}</p>
-        <code className="mt-2 block [overflow-wrap:anywhere] font-mono">{tip.command}</code>
-      </div>
-    </details>
+    <div className="mt-2 text-xs" data-testid="demo-agent-help">
+      <button ref={trigger} type="button" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(true)} onFocus={() => setOpen(true)} className="touch-target inline-flex cursor-pointer items-center rounded px-1 font-medium text-primary-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">How an agent helps</button>
+      {open && createPortal(
+        <div ref={panel} id={id} role="note" className="fixed z-[200] max-h-48 overflow-y-auto rounded-lg border border-border bg-popover p-3 text-xs text-muted-foreground shadow-xl" style={{ width, left: Math.max(12, Math.min(rect?.left ?? 12, window.innerWidth - width - 12)), bottom: Math.max(12, window.innerHeight - (rect?.top ?? window.innerHeight - 12) + 4) }}>
+          <p>{tip.help}</p><code className="mt-2 block [overflow-wrap:anywhere] font-mono">{tip.command}</code>
+        </div>, document.body,
+      )}
+    </div>
   );
 }
 
