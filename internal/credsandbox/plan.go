@@ -194,7 +194,8 @@ func buildPlan(base Plan, in planEnv) Plan {
 			ro = append(ro, real)
 		}
 	}
-	ro = append(ro, credentialHelpers(home, in.env)...)
+	helpersPresent, helpersAbsent := credentialHelpers(home, in.env)
+	ro = append(ro, helpersPresent...)
 	if home != "" {
 		for _, rel := range readOnlyReliantRel {
 			ro = append(ro, filepath.Join(home, rel))
@@ -340,6 +341,25 @@ func buildPlan(base Plan, in planEnv) Plan {
 				passthrough = append(passthrough, w)
 				break
 			}
+		}
+	}
+
+	// A helper not on PATH yet must not be creatable where a credentialed git
+	// would find it: in a directory kept private it cannot outlive the
+	// command anyway; in one of the home's, or the command's own, that is not,
+	// it is sealed. System directories are the system's, which the daemon's
+	// user cannot write.
+	var keptPaths []string
+	for _, o := range keep {
+		keptPaths = append(keptPaths, o.Path)
+	}
+	for _, c := range helpersAbsent {
+		d := filepath.Dir(c)
+		if under(d, keptPaths...) || under(d, roAll...) {
+			continue
+		}
+		if (home != "" && under(d, home)) || under(d, own...) || (cwdOwn && under(d, cwd)) {
+			seal = append(seal, c)
 		}
 	}
 
@@ -567,16 +587,26 @@ func projectRoots(projectsDir string) []string {
 }
 
 // credentialHelpers are the programs a later credentialed git or forge runs to
-// fetch a credential: FORGE_CREDENTIAL_HELPER's program and every absolute
-// helper in the user's and the system's git config.
-func credentialHelpers(home string, env []string) []string {
-	var out []string
+// fetch a credential, as git and forge find them: FORGE_CREDENTIAL_HELPER's
+// program, and every helper in the user's and the system's git config. A
+// helper that is a path is that file. One that is not is found on PATH by the
+// credentialed command: a `!` shell helper's first word as it is, any other
+// helper as git-credential-<name> (git's own exec directory, root's, comes
+// first and needs nothing). Those are every candidate on the command's PATH:
+// existing ones (present) are made read-only; missing ones (absent) must not
+// be creatable where they would be found (buildPlan seals them).
+func credentialHelpers(home string, env []string) (present, absent []string) {
+	type helper struct {
+		name  string
+		shell bool // a `!` helper, or forge's: the name as it is
+	}
+	var hs []helper
 	if v := envValue(env, "FORGE_CREDENTIAL_HELPER"); v != "" {
 		var argv []string
 		if json.Unmarshal([]byte(v), &argv) == nil && len(argv) > 0 {
-			out = append(out, argv[0])
+			hs = append(hs, helper{name: argv[0], shell: true})
 		} else {
-			out = append(out, firstWord(v))
+			hs = append(hs, helper{name: firstWord(v), shell: true})
 		}
 	}
 	configs := []string{"/etc/gitconfig"}
@@ -584,27 +614,59 @@ func credentialHelpers(home string, env []string) []string {
 		configs = append(configs, filepath.Join(home, ".gitconfig"), filepath.Join(home, ".config", "git", "config"))
 	}
 	for _, c := range configs {
-		out = append(out, gitConfigHelpers(c)...)
-	}
-	var abs []string
-	for _, h := range out {
-		if filepath.IsAbs(h) {
-			abs = append(abs, h)
+		for _, h := range gitConfigHelpers(c) {
+			hs = append(hs, helper{name: h.program, shell: h.shell})
 		}
 	}
-	return abs
+	var dirs []string
+	for _, d := range filepath.SplitList(envValue(env, "PATH")) {
+		if filepath.IsAbs(d) {
+			dirs = append(dirs, filepath.Clean(d))
+		}
+	}
+	for _, h := range hs {
+		switch {
+		case h.name == "":
+		case filepath.IsAbs(h.name):
+			present = append(present, h.name)
+		case strings.ContainsRune(h.name, '/'):
+			// Relative to whatever directory the credentialed git runs in:
+			// not a path this plan can name.
+		default:
+			name := h.name
+			if !h.shell {
+				name = "git-credential-" + name
+			}
+			for _, d := range dirs {
+				c := filepath.Join(d, name)
+				if _, err := os.Lstat(c); err == nil {
+					present = append(present, c)
+				} else {
+					absent = append(absent, c)
+				}
+			}
+		}
+	}
+	return present, absent
+}
+
+// gitHelper is one `helper = ...` value of a git config: the program it runs
+// and whether it is a `!` shell helper.
+type gitHelper struct {
+	program string
+	shell   bool
 }
 
 // gitConfigHelpers reads the `helper = ...` values of a git config file and
 // returns the program each runs: the first word of a `!` shell helper, or the
-// helper itself when it is a path.
-func gitConfigHelpers(path string) []string {
+// helper itself (a path, or a name git prefixes with git-credential-).
+func gitConfigHelpers(path string) []gitHelper {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil
 	}
 	defer func() { _ = f.Close() }()
-	var out []string
+	var out []gitHelper
 	s := bufio.NewScanner(f)
 	for s.Scan() {
 		line := strings.TrimSpace(s.Text())
@@ -615,9 +677,10 @@ func gitConfigHelpers(path string) []string {
 		value = strings.TrimSpace(value)
 		value = strings.TrimPrefix(value, `"`)
 		value = strings.TrimSuffix(value, `"`)
+		shell := strings.HasPrefix(value, "!")
 		value = strings.TrimPrefix(value, "!")
 		if w := firstWord(value); w != "" {
-			out = append(out, w)
+			out = append(out, gitHelper{program: w, shell: shell})
 		}
 	}
 	return out

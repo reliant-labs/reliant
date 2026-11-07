@@ -130,6 +130,36 @@ func TestPlan_CredentialHelpersAreReadOnly(t *testing.T) {
 	assert.Contains(t, p.ReadOnly, "/opt/forge-helper")
 }
 
+// R2.B9: a helper that is not a path is the program a credentialed git finds
+// on PATH: a `!` helper's first word, any other helper as git-credential-<name>.
+// Every such candidate on the command's PATH is read-only where it exists, and
+// cannot be created where it does not, unless that directory is private to the
+// command (then nothing it makes there outlives it).
+func TestPlan_CredentialHelpersFoundOnPathAreProtected(t *testing.T) {
+	m := newMachine(t)
+	tools := filepath.Join(m.a, ".tools", "bin") // the command's own: not overlaid
+	gobin := filepath.Join(m.home, "go", "bin")  // private to the command
+	for _, d := range []string{tools, gobin} {
+		require.NoError(t, os.MkdirAll(d, 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(tools, "gh"), []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".gitconfig"), []byte(
+		"[credential]\n\thelper = store\n\thelper = \"!gh auth git-credential\"\n\thelper = ./relative-helper\n"), 0o644))
+	env := []string{"HOME=" + m.home, "PATH=" + tools + ":" + gobin + ":/usr/bin:/bin"}
+
+	p := m.plan(m.a, env)
+	assert.Contains(t, p.ReadOnly, filepath.Join(tools, "gh"), "a `!` helper found on PATH, in the command's own tools")
+	assert.Contains(t, p.Seal, filepath.Join(tools, "git-credential-store"), "git-credential-<name> cannot be planted there")
+	assert.Contains(t, p.Seal, filepath.Join(m.home, ".bashrc"), "(the home's own seals are unchanged)")
+	assert.NotContains(t, p.Seal, filepath.Join(gobin, "git-credential-store"), "a private PATH directory needs no seal")
+	assert.NotContains(t, p.Seal, "/usr/bin/git-credential-store", "nor the system's")
+	var overlaid []string
+	for _, o := range p.Overlay {
+		overlaid = append(overlaid, o.Path)
+	}
+	assert.Contains(t, overlaid, gobin)
+}
+
 func TestPlan_CachesAndPathDirectoriesArePrivate(t *testing.T) {
 	m := newMachine(t)
 	gobin := filepath.Join(m.home, "go", "bin")
