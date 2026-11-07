@@ -224,6 +224,7 @@ func (c *checker) run() {
 		c.checkGraph(g, slotBound)
 	}
 	c.checkWorkflow()
+	c.checkApprovalPermission()
 	c.checkSecrets()
 	c.checkScenarios()
 }

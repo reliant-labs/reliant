@@ -16,14 +16,15 @@ import { retainTourParam } from "@/components/Onboarding/tourParam";
 import { lazyRoute } from "@/lib/lazyRoute";
 import { obsSearchShape } from "@/routeSchemas";
 
-import { FORGE_DEMO_PATH } from "./demoPath";
+import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 
-export { FORGE_DEMO_PATH } from "./demoPath";
+export { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 
-/** The panel's search keys (obsSearch.ts), plus the tour's. Each key drops itself rather than failing the route. */
+/** The panel's search keys (obsSearch.ts), the tour's, and the demo's own section. Each key drops itself rather than failing the route. */
 export const forgeDemoSearchSchema = z.object({
   ...obsSearchShape,
   tour: z.string().optional().catch(undefined),
+  section: z.enum([DEMO_SECTION_BUILT]).optional().catch(undefined),
 });
 
 /** The demo page, loaded on first visit. */

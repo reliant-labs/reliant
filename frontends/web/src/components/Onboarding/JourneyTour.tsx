@@ -81,17 +81,45 @@ function OpenPageModal({
   );
 }
 
-/** A step with no target: a card, centred above the nav bar. Non-modal. */
-function TourCard({ title, description }: { title: string; description: React.ReactNode }) {
+/**
+ * A step with no target: a card, centred above the nav bar. Non-modal by
+ * default; `modal` (JourneyStep.card) locks the page's scroll and stops clicks
+ * on the backdrop, and `wide` gives it room. Either way, no spotlight cutout.
+ */
+export function TourCard({
+  title,
+  description,
+  wide = false,
+  modal = false,
+}: {
+  title: string;
+  description: React.ReactNode;
+  wide?: boolean;
+  modal?: boolean;
+}) {
+  useEffect(() => {
+    if (!modal) return;
+    const els = [document.documentElement, document.body];
+    const before = els.map((el) => el.style.overflow);
+    for (const el of els) el.style.overflow = "hidden";
+    return () => els.forEach((el, i) => (el.style.overflow = before[i]));
+  }, [modal]);
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
-      <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
+    <div
+      className={`fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none ${modal ? "pt-6 pb-52" : ""}`}
+      data-testid="tour-card-layer"
+    >
+      {/* Modal: room below for the nav bar (z-[101], bottom-24). The backdrop takes the clicks and the wheel, so the page behind stays put. */}
+      <div className={`absolute inset-0 bg-black/60 ${modal ? "pointer-events-auto" : ""}`} aria-hidden="true" data-testid="tour-card-backdrop" />
       <section
-        role="status"
-        aria-live="polite"
+        role={modal ? "dialog" : "status"}
+        aria-modal={modal || undefined}
+        aria-live={modal ? undefined : "polite"}
         aria-labelledby="tour-card-title"
         data-testid="tour-card"
-        className="relative w-full max-w-md rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl pointer-events-auto"
+        className={`relative w-full rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl pointer-events-auto ${
+          wide ? "max-w-4xl max-h-full overflow-y-auto overscroll-contain" : "max-w-md"
+        }`}
       >
         <h3 id="tour-card-title" className="mb-2.5 text-lg font-semibold tracking-tight text-foreground">
           {title}
@@ -236,7 +264,7 @@ function JourneyStepView({
         );
         break;
       case "card":
-        body = <TourCard title={shown.title} description={description} />;
+        body = <TourCard title={shown.title} description={description} wide={step.card?.wide} modal={step.card?.modal} />;
         break;
     }
   }

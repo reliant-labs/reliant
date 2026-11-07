@@ -15,7 +15,7 @@
  */
 
 import type { Message } from "../../../gen/reliant/v1/chat_pb";
-import { MessageRole } from "../../../gen/reliant/v1/chat_pb";
+import { AgentMessageKind, ContentBlockType, DisplayStyle, MessageRole } from "../../../gen/reliant/v1/chat_pb";
 import { getProcessedMessage } from "../../../lib/messageProcessor";
 import type { MessageSegment, ToolResultsByCallId } from "../../../lib/messageProcessor";
 import type { Approval } from "../../../gen/reliant/v1/approval_pb";
@@ -52,6 +52,11 @@ export interface TurnWork {
   thread: string;
   /** The turn's work, in render order; each entry is one message's slice. */
   parts: ReadonlyArray<{ message: Message; segmentIndexes: readonly number[] }>;
+  /** Routine notices, retained in full in the expanded activity only.
+   * afterPart is the number of parts preceding the notice (0 means before all).
+   * The original message supplies its timestamp and navigation metadata.
+   */
+  events?: ReadonlyArray<{ type: "message"; message: Message; afterPart: number }>;
 }
 
 /** The subset of an InterleavedTimeline item this pass reads. */
@@ -85,6 +90,23 @@ export function createSegmentReader(): SegmentReader {
 
 const NO_INDEXES: readonly number[] = [];
 
+/** Only successful machine-classified outcomes are routine. Free-form agent
+ * mail can carry blockers/questions and must remain a conversational boundary.
+ */
+export function isRoutineActivityMessage(message: Pick<Message, "role" | "displayStyle" | "attachments" | "sender"> & {
+  contentBlocks: ReadonlyArray<{ type: ContentBlockType; content?: string }>;
+}): boolean {
+  if (message.displayStyle === DisplayStyle.WARNING || (message.attachments?.length ?? 0) > 0) return false;
+  if (message.sender) {
+    return Boolean(message.sender.threadId) && message.sender.kind === AgentMessageKind.COMPLETION;
+  }
+  // Older drain_agent_messages writes SYSTEM+INFO without sender metadata.
+  // Match its entire Go %q notification grammar, never arbitrary completion prose.
+  if (message.role !== MessageRole.SYSTEM || message.displayStyle !== DisplayStyle.INFO) return false;
+  if (message.contentBlocks?.length !== 1 || message.contentBlocks[0].type !== ContentBlockType.TEXT) return false;
+  return /^spawn "(?:[^"\\\n]|\\.)*" completed$/.test(message.contentBlocks[0].content ?? "");
+}
+
 function isBlankText(segment: MessageSegment): boolean {
   return segment.kind === "text" && segment.text.trim() === "";
 }
@@ -94,10 +116,12 @@ function isBlankText(segment: MessageSegment): boolean {
  * answer rows. Single linear pass; rows the pass does not change (non-message
  * items, turns that never ran a tool) are returned as the same objects.
  *
- * A turn is a maximal run of consecutive assistant message items on one thread
- * with no displayStyle; any other item (user message, thread-start, handoff,
- * error, info, run_output, a displayStyle message, another thread's message)
- * ends it.
+ * A turn is a run of assistant messages on one thread, allowing successful
+ * spawn notices between them. Those notices remain inspectable in the fold;
+ * without any tool work they stay ordinary rows. Human messages, free-form
+ * agent mail, errors, warnings, info events, run outputs and thread changes
+ * remain boundaries. In particular, no prose heuristic classifies questions
+ * or a peer's report as routine.
  *
  * `isLiveTurn` is asked about a turn's last message only when the turn ends on
  * a tools segment: while live there is no answer yet; otherwise the last
@@ -113,6 +137,10 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
 ): Array<SlicedMessageItem<I> | WorkItem<W>> {
   const { segmentsOf, isLiveTurn, workflowOf } = opts;
   const out: Array<SlicedMessageItem<I> | WorkItem<W>> = [];
+  const routine = new Set<number>();
+  const segmentsAt = (index: number) => routine.has(index)
+    ? []
+    : segmentsOf((items[index] as { message: Message }).message);
 
   const flush = (start: number, end: number) => {
     if (start >= end) return;
@@ -121,7 +149,7 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     let lastM = -1;
     let lastS = -1;
     for (let i = end - 1; i >= start && lastM < 0; i--) {
-      const segs = segmentsOf((items[i] as { message: Message }).message);
+      const segs = segmentsAt(i);
       for (let s = segs.length - 1; s >= 0; s--) {
         if (segs[s].kind === "tools") {
           lastM = i;
@@ -138,7 +166,7 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     // Answer = non-blank text after the last tools segment.
     let hasAnswer = false;
     for (let i = lastM; i < end && !hasAnswer; i++) {
-      const segs = segmentsOf((items[i] as { message: Message }).message);
+      const segs = segmentsAt(i);
       for (let s = i === lastM ? lastS + 1 : 0; s < segs.length; s++) {
         if (segs[s].kind === "text" && !isBlankText(segs[s])) {
           hasAnswer = true;
@@ -150,9 +178,11 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     // Turn ended on tools and is no longer live: promote the last narration.
     let promoteM = -1;
     let promoteS = -1;
-    if (!hasAnswer && !isLiveTurn((items[end - 1] as { message: Message }).message)) {
+    let lastAssistant = end - 1;
+    while (routine.has(lastAssistant)) lastAssistant--;
+    if (!hasAnswer && !isLiveTurn((items[lastAssistant] as { message: Message }).message)) {
       for (let i = lastM; i >= start && promoteM < 0; i--) {
-        const segs = segmentsOf((items[i] as { message: Message }).message);
+        const segs = segmentsAt(i);
         for (let s = (i === lastM ? lastS : segs.length) - 1; s >= 0; s--) {
           if (segs[s].kind === "text" && !isBlankText(segs[s])) {
             promoteM = i;
@@ -164,10 +194,15 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     }
 
     const parts: Array<{ message: Message; segmentIndexes: readonly number[] }> = [];
+    const events: NonNullable<TurnWork["events"]>[number][] = [];
     const answers: Array<SlicedMessageItem<I>> = [];
     for (let i = start; i < end; i++) {
       const item = items[i] as I & { type: "message" };
       const message = (item as { message: Message }).message;
+      if (routine.has(i)) {
+        events.push({ type: "message", message, afterPart: parts.length });
+        continue;
+      }
       const segs = segmentsOf(message);
       let work: number[] | null = null;
       let answer: number[] | null = null;
@@ -197,6 +232,7 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
         key: `work-${(first as { message: Message }).message.id}`,
         thread: (first as { workflow: { thread: string } }).workflow.thread,
         parts,
+        ...(events.length ? { events } : {}),
       },
       workflow: workflowOf(first),
     });
@@ -210,6 +246,15 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     const item = items[i];
     if (item.type === "message") {
       const m = item as { message: Message; workflow: { thread: string } };
+      // A completion must belong to this turn in both representations. The
+      // timeline workflow can be an aggregate parent while the message still
+      // names a different thread; never hide that cross-thread notice.
+      const sameThread = m.workflow.thread === thread && (!m.message.thread || m.message.thread === thread);
+      if (end > start && sameThread && isRoutineActivityMessage(m.message)) {
+        routine.add(i);
+        end = i + 1;
+        continue;
+      }
       if (m.message.role === MessageRole.ASSISTANT && !m.message.displayStyle) {
         if (end > start && m.workflow.thread !== thread) {
           flush(start, end);

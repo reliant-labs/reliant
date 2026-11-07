@@ -39,10 +39,16 @@ type fakeCP struct {
 	// account, when set, is who every token reply names (account_id,
 	// account_email), as a control plane that names accounts does.
 	account cliauth.Account
+	// grantScope, when set, is the scope every token reply grants instead of
+	// the one requested, as a control plane that grants more or less does.
+	grantScope string
 }
 
 // tokenReply is the token endpoint's success body.
 func (cp *fakeCP) tokenReply(scope string) map[string]any {
+	if cp.grantScope != "" {
+		scope = cp.grantScope
+	}
 	reply := map[string]any{"access_token": cp.token, "token_type": "Bearer", "expires_in": 7776000, "scope": scope}
 	if cp.account.Known() {
 		reply["account_id"] = cp.account.ID

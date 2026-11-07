@@ -211,6 +211,9 @@ message WorkflowListItem {
   // The definition's declared `triggers:` (its WHEN), so a list can show the
   // ones the caller has not activated yet.
   repeated WorkflowTrigger triggers = 22;
+  // The definition's declared `permissions:` (Workflow.permissions), so a list
+  // or detail page can say the workflow can decide approvals.
+  repeated string permissions = 23;
 }
 
 // ============================================
