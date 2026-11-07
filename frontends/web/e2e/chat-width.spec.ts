@@ -186,3 +186,147 @@ for (const mode of ['simplified', 'detailed'] as const) {
     expect(geometry.cardRight).toBeLessThanOrEqual(geometry.transcriptRight);
   });
 }
+
+// The guard. overflow-x: hidden on the scroller is not enough: a hidden axis
+// is still scrollable by scrollIntoView, focus, a drag-select, find-in-page and
+// an iOS touch pan, so one row wider than the column left the conversation
+// parked far to the right with no way back. The virtual container clips its
+// x axis, which gives the scroller no horizontal range at all, whatever a row
+// does. A deliberately oversized row stands in for the next one nobody has
+// found yet.
+
+for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+  test(`a row wider than the transcript cannot scroll the chat sideways (${viewport.width}px)`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await mockAgentAndToolChat(page);
+    const path = viewport.width < 768 ? `/m/chats/${DEPLOY_CHAT.id}` : '/';
+    await page.goto(path, { waitUntil: 'domcontentloaded' });
+    if (path === '/') await page.getByText(DEPLOY_CHAT.title, { exact: true }).click();
+    await expect(page.getByTestId('agent-message-subject')).toBeVisible({ timeout: 15_000 });
+
+    const result = await page.evaluate(() => {
+      const transcript = document.querySelector<HTMLElement>('[data-context="transcript"]')!;
+      const row = transcript.querySelector<HTMLElement>('[data-index]')!;
+      const wide = document.createElement('div');
+      wide.style.width = '4000px';
+      wide.style.height = '10px';
+      row.appendChild(wide);
+      // Every programmatic path that ignores overflow: hidden.
+      transcript.scrollLeft = 100_000;
+      wide.scrollIntoView({ block: 'nearest', inline: 'end' });
+      return {
+        scrollLeft: transcript.scrollLeft,
+        overflow: transcript.scrollWidth - transcript.clientWidth,
+      };
+    });
+
+    expect(result.overflow, 'the transcript must have no horizontal scroll range').toBeLessThanOrEqual(0);
+    expect(result.scrollLeft, 'nothing can scroll the transcript sideways').toBe(0);
+  });
+}
+
+// The guard clips; it does not lay out. Agent-written text in every kind of
+// row (tool inputs, a question card, a system notice, markdown) must still
+// wrap or scroll inside its own block, or it is cut off at the column edge.
+// The transcript is virtualized, so this walks it top to bottom and checks
+// every row it renders.
+
+const UNBROKEN = 'x'.repeat(400);
+const LONG_FILE = '/Users/someone/' + 'deeply_nested_directory/'.repeat(16) + 'file.ts';
+const TOOL_NAMES = [
+  'shell', 'view', 'edit', 'write', 'spawn', 'spawn_send', 'spawn_status', 'websearch', 'fetch', 'skill',
+  'create_plan', 'update_task', 'ask_user', 'code_context', 'worktree', 'shell_wait', 'find_replace',
+];
+
+function wideToolInput(): string {
+  return JSON.stringify({
+    command: `echo ${UNBROKEN}`, description: UNBROKEN, file_path: LONG_FILE, path: LONG_FILE,
+    old_string: UNBROKEN, new_string: UNBROKEN, content: UNBROKEN, prompt: UNBROKEN, title: UNBROKEN,
+    preset: 'general', agent_id: UNBROKEN, subject: UNBROKEN, message: UNBROKEN, query: UNBROKEN,
+    url: LONG_URL, symbol: UNBROKEN, process_id: UNBROKEN,
+    questions: [{ question: `Use ${LONG_URL}?`, options: [{ label: UNBROKEN, description: UNBROKEN }] }],
+    tasks: [{ title: UNBROKEN, description: UNBROKEN }],
+  });
+}
+
+async function mockEveryRowKind(page: Page) {
+  const chatId = DEPLOY_CHAT.id;
+  const createdAt = new Date().toISOString();
+  await mockChatSnapshot(page, [
+    {
+      id: 'msg_user', chatId, thread: chatId, seq: 1n, role: 1, createdAt,
+      contentBlocks: [{ id: 'u1', index: 0, type: 1, content: `Look at ${LONG_URL}` }],
+    },
+    {
+      id: 'msg_tools', chatId, thread: chatId, seq: 2n, role: 2, createdAt,
+      contentBlocks: [
+        { id: 'think', index: 0, type: 5, content: UNBROKEN },
+        ...TOOL_NAMES.map((toolName, i) => ({
+          id: `t${i}`, index: i + 1, type: 2, toolName, toolCallId: `call${i}`, toolCallStatus: 3, input: wideToolInput(),
+        })),
+        { id: 'text', index: 99, type: 1, content: WIDE_BODY },
+      ],
+    },
+    {
+      id: 'msg_results', chatId, thread: chatId, seq: 3n, role: 4, createdAt,
+      contentBlocks: TOOL_NAMES.map((toolName, i) => ({
+        id: `r${i}`, index: i, type: 3, toolCallId: `call${i}`, toolName,
+        content: JSON.stringify({ stdout: UNBROKEN, stderr: '', exit_code: 0, output: UNBROKEN }),
+      })),
+    },
+    {
+      // A system notice (role SYSTEM, display style INFO).
+      id: 'msg_notice', chatId, thread: chatId, seq: 4n, role: 3, createdAt, displayStyle: 1,
+      contentBlocks: [{ id: 'n1', index: 0, type: 1, content: `Switched to ${LONG_FILE}` }],
+    },
+  ]);
+}
+
+/** Every element, across the whole virtualized transcript, that reaches past its edges unclipped. */
+async function rowsPastTheEdge(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const transcript = document.querySelector<HTMLElement>('[data-context="transcript"]')!;
+    const edge = transcript.getBoundingClientRect();
+    const outside = (r: DOMRect) => r.right > edge.right + 1 || r.left < edge.left - 1;
+    const found = new Set<string>();
+    for (let y = 0; y <= transcript.scrollHeight; y += Math.max(200, transcript.clientHeight / 2)) {
+      transcript.scrollTop = y;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      for (const el of Array.from(transcript.querySelectorAll<HTMLElement>('[data-index] *'))) {
+        const r = el.getBoundingClientRect();
+        // An overflowing box, or a visible-overflow box whose text runs out of it.
+        const textRunsOut = getComputedStyle(el).overflowX === 'visible' && r.left + el.scrollWidth > edge.right + 1;
+        if (r.width === 0 || !(outside(r) || textRunsOut)) continue;
+        // Fine when a box between it and the row clips it inside the column
+        // (a code block or table scrolling in place).
+        let clipped = false;
+        for (let a = el.parentElement; a && !a.hasAttribute('data-index'); a = a.parentElement) {
+          if (getComputedStyle(a).overflowX !== 'visible' && !outside(a.getBoundingClientRect())) {
+            clipped = true;
+            break;
+          }
+        }
+        if (clipped) continue;
+        const owner = el.closest('[data-testid]')?.getAttribute('data-testid') ?? '';
+        found.add(`${owner} > ${el.tagName.toLowerCase()}.${String(el.className).slice(0, 80)}`);
+      }
+    }
+    return Array.from(found);
+  });
+}
+
+for (const mode of ['simplified', 'detailed'] as const) {
+  for (const viewport of [{ width: 1280, height: 900 }, { width: 390, height: 844 }]) {
+    test(`no row reaches past the transcript (${mode}, ${viewport.width}px)`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await page.addInitScript((m) => localStorage.setItem('appearance.chatThreadMode', m), mode);
+      await mockEveryRowKind(page);
+      const path = viewport.width < 768 ? `/m/chats/${DEPLOY_CHAT.id}` : '/';
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
+      if (path === '/') await page.getByText(DEPLOY_CHAT.title, { exact: true }).click();
+      await expect(page.locator('[data-context="transcript"] [data-index]').first()).toBeVisible({ timeout: 15_000 });
+
+      expect(await rowsPastTheEdge(page)).toEqual([]);
+    });
+  }
+}
