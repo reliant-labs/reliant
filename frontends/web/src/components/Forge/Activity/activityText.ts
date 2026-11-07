@@ -112,9 +112,49 @@ export function activityText(e: ActivityEvent): ActivityText {
         facts: env && db ? [db, ...facts] : facts,
       };
     }
+    // The data browser (AppDatabaseService): "Ada opened the shop database on
+    // prod: <reason>". The environment is part of the sentence, as for a query.
+    // browse_table is phrased for the events a control plane recorded while
+    // BrowseTable declared it; the current one records none (a page view is an
+    // audit row, not a feed line).
+    case "describe_database": {
+      const db = e.target.id || e.target.label;
+      return {
+        ...base,
+        action: "opened",
+        object: `${db ? `the ${db} database` : "a database"}${onEnv(e)}`,
+        tail: d.reason ? `: ${d.reason}` : "",
+        facts: durationFacts(d),
+      };
+    }
+    case "browse_table": {
+      const table = e.target.id || e.target.label || "a table";
+      return {
+        ...base,
+        action: "browsed",
+        object: `${table}${d.database ? ` in the ${d.database} database` : ""}${onEnv(e)}`,
+        tail: d.reason ? `: ${d.reason}` : "",
+        facts: durationFacts(d),
+      };
+    }
     default:
       return { ...base, action: SIMPLE[e.verb] ?? words(e.verb), tail: "", facts: [] };
   }
+}
+
+/**
+ * Verbs whose sentence already names the environment ("queried prod DB",
+ * "opened the shop database on prod"), so the row does not add "in prod".
+ */
+export const ENV_IN_SENTENCE: ReadonlySet<string> = new Set(["query_database", "describe_database", "browse_table"]);
+
+function onEnv(e: ActivityEvent): string {
+  return e.env?.name ? ` on ${e.env.name}` : "";
+}
+
+function durationFacts(d: Record<string, string>): string[] {
+  const ms = Number(d.duration_ms);
+  return d.duration_ms !== undefined && Number.isFinite(ms) ? [`${ms.toLocaleString()} ms`] : [];
 }
 
 /** The facts a triage or an issue observation carries: which service, which platform. */
@@ -129,6 +169,6 @@ function issueFacts(d: Record<string, string>): string[] {
 export function activitySentence(e: ActivityEvent): string {
   const t = activityText(e);
   const tail = t.tail ? (t.tail.startsWith(":") ? t.tail : ` ${t.tail}`) : "";
-  const where = e.env?.name && e.verb !== "query_database" ? ` in ${e.env.name}` : "";
+  const where = e.env?.name && !ENV_IN_SENTENCE.has(e.verb) ? ` in ${e.env.name}` : "";
   return `${t.actor} ${t.action} ${t.object}${tail}${where}${t.via ? ` ${t.via}` : ""}`;
 }
