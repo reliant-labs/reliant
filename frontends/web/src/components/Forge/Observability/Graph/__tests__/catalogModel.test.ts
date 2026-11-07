@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2026 Reliant Labs
 import { describe, expect, it } from "vitest";
 import { fixtureCatalog, GRAPH_RPC } from "../../__fixtures__/fixtureGraph";

@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The poll registry answers to the ClickHouse quota for telemetry reads only:
  * a key subscribed with `quota: false` (a postgres panel's read) keeps polling

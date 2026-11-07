@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 
 import { CAPACITY_WAIT_DETAIL, WAKE_MAX_MS, WAKE_SUSPENDED_GRACE_MS, presentMachineStatus } from "../machineWake";

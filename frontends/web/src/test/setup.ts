@@ -1,7 +1,7 @@
 import '@testing-library/jest-dom'
 import { cleanup, configure } from '@testing-library/react'
 import { afterAll, afterEach, beforeEach, vi } from 'vitest'
-import { resetConfigForTests } from '@/lib/config_gen'
+import { configSchema, resetConfigForTests } from '@/lib/config_gen'
 
 // Runtime config: every test starts from an EMPTY config.js document, i.e.
 // config_gen.ts's defaults (the self-hosted app). An absent document is not
@@ -10,9 +10,19 @@ import { resetConfigForTests } from '@/lib/config_gen'
 // exports would leak into them. Set before any test file imports a module
 // that reads the config at module scope; tests override it with
 // src/test/runtimeConfig.ts setRuntimeConfig().
-window.__FORGE_CONFIG__ = {}
+//
+// A file that needs no DOM runs in the node environment instead (a
+// `// @vitest-environment node` line at its top: jsdom costs every file about
+// a second to build). There is no window to hold the document, and config_gen
+// reads process.env instead, so the config keys are removed from it: the same
+// defaults, whatever the shell exports.
+const hasWindow = typeof window !== 'undefined'
+if (!hasWindow) {
+  for (const key of Object.keys(configSchema.shape)) delete process.env[key]
+}
+if (hasWindow) window.__FORGE_CONFIG__ = {}
 beforeEach(() => {
-  window.__FORGE_CONFIG__ = {}
+  if (hasWindow) window.__FORGE_CONFIG__ = {}
   resetConfigForTests()
 })
 
