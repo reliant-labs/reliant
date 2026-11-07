@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 func TestScenarioStateIsCopiedAndConsumed(t *testing.T) {
@@ -16,7 +17,7 @@ func TestScenarioStateIsCopiedAndConsumed(t *testing.T) {
 			"items":  []interface{}{map[string]interface{}{"value": "original"}},
 		},
 	}
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.ExecuteWorkflow(func(ctx workflow.Context) error {
 		// Without the harness setter, production retains the original context.
