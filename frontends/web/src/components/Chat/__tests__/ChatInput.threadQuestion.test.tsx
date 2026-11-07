@@ -49,6 +49,10 @@ vi.mock("../../../hooks/chat-queries", async () => {
     // The main thread's id is the chat id.
     useChat: () => ({ data: { id: CHAT_ID, workflowId: CHAT_ID }, isLoading: false }),
     getChatFromCache: () => undefined,
+    // The composer reads the chat's server-side selection on mount (a GetChat).
+    // Unmocked, that request reached the network guard only sometimes: after
+    // the test under load, or never (flake: reliant#2366's class).
+    useChatSelection: () => ({ data: undefined, isLoading: false }),
   };
 });
 vi.mock("../../../hooks/question-queries", () => ({
