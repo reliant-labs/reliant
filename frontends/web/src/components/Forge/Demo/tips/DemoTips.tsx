@@ -16,7 +16,9 @@
  *  - Sign up (primary) and Install forge, in its footer.
  *
  * Once per page per session (demoSession.ts). Afterwards a small "Show me
- * around" button in the corner replays the page's tour. Nothing shows while
+ * around" button in the corner replays the page's tour, beside Sign up (on
+ * every console page, tour or not; the demo console's banner has its own,
+ * so not on /forge/demo). Nothing shows while
  * the guided journey is open, or while the tour toast still waits for an
  * answer; nothing is marked seen meanwhile.
  *
@@ -35,9 +37,10 @@ import { TourControls } from "@/components/Onboarding/TourControls";
 import { parseTourParam } from "@/components/Onboarding/tourParam";
 import { trackEvent } from "@/lib/analytics";
 
-import { DemoCta } from "../DemoCta";
+import { DemoCta, SignUpButton } from "../DemoCta";
 import { DemoCorner } from "../DemoCorner";
 import { demoSession, useDemoSession } from "../demoSession";
+import { FORGE_DEMO_PATH } from "../demoPath";
 import { DEMO_TIPS, type PageCallout } from "./tipCopy";
 import { demoTipKey, type DemoTipKey } from "./tipKeys";
 
@@ -92,7 +95,9 @@ export function DemoTips() {
     setMode({ kind: "pill" });
   };
 
-  if (!shownKey || !mode) return null;
+  if (tourOpen || toastWaiting) return null;
+  // A page with no tour (or before the effect has run) still keeps Sign up in reach.
+  if (!shownKey || !mode) return <CornerBar />;
   const tip = DEMO_TIPS[shownKey];
 
   if (mode.kind === "touring") {
@@ -122,20 +127,18 @@ export function DemoTips() {
 
   if (mode.kind === "pill") {
     return (
-      <DemoCorner order={1}>
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={start}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-popover px-3.5 text-sm font-medium text-foreground shadow-lg hover:bg-muted sm:min-h-9"
-            data-testid="demo-page-tour-replay"
-            data-tip={shownKey}
-          >
-            <Compass className="h-4 w-4 text-primary" aria-hidden="true" />
-            Show me around
-          </button>
-        </div>
-      </DemoCorner>
+      <CornerBar>
+        <button
+          type="button"
+          onClick={start}
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-border bg-popover px-3.5 text-sm font-medium text-foreground shadow-lg hover:bg-muted sm:min-h-9"
+          data-testid="demo-page-tour-replay"
+          data-tip={shownKey}
+        >
+          <Compass className="h-4 w-4 text-primary" aria-hidden="true" />
+          Show me around
+        </button>
+      </CornerBar>
     );
   }
 
@@ -203,6 +206,22 @@ export function DemoTips() {
           <DemoCta placement="page_card" size="md" />
         </div>
       </section>
+    </DemoCorner>
+  );
+}
+
+/** The corner between cards: Sign up, and the page's replay button when it has a tour. */
+function CornerBar({ children }: { children?: React.ReactNode }) {
+  const pathname = useLocation({ select: (l) => l.pathname });
+  // The demo console's banner has its own.
+  const signup = pathname !== FORGE_DEMO_PATH && !pathname.startsWith(`${FORGE_DEMO_PATH}/`);
+  if (!signup && !children) return null;
+  return (
+    <DemoCorner order={1}>
+      <div className="flex flex-wrap items-center justify-end gap-2" data-testid="demo-corner-bar">
+        {signup && <SignUpButton placement="corner" size="md" className="rounded-full shadow-lg" />}
+        {children}
+      </div>
     </DemoCorner>
   );
 }

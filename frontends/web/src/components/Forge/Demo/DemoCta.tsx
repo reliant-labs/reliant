@@ -3,7 +3,8 @@
 /**
  * The public demo's calls to action: **Sign up** (the primary, large) and
  * **Install forge** (secondary, opens InstallForgeSheet). They sit in the
- * banner, on the tour's end card and in every page card's footer. Each click
+ * banner, on the tour's end card, in every page card's footer and, once a
+ * page's card is closed, in the corner beside "Show me around". Each click
  * records `demo_cta_clicked{cta, placement}`.
  *
  * Sign up goes to forge's sign-up (forge.reliantlabs.io, `forgeAppOrigin`)
@@ -25,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { InstallForgeSheet } from "./InstallForgeSheet";
 
 /** Where a CTA sits: the landing UTM's `utm_content`, and analytics' `placement`. */
-export type DemoCtaPlacement = "banner" | "end_card" | "page_card" | "toast" | "tour_intro";
+export type DemoCtaPlacement = "banner" | "corner" | "end_card" | "page_card" | "toast" | "tour_intro";
 
 /** Where Sign up goes from `placement`. */
 export function signupHref(placement: DemoCtaPlacement): string {

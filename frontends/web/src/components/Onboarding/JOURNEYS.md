@@ -391,7 +391,7 @@ Page tours are not journeys and never touch `?tour=`: no URL, no route, no
 required action, no signals. A stop whose `selector` the page doesn't render
 is left out. Nothing shows while a journey is open or while the tour toast
 waits for an answer. Afterwards a "Show me around" button in the corner
-replays the page's tour. Which page a URL is: `tips/tipKeys.ts`.
+replays the page's tour, beside Sign up. Which page a URL is: `tips/tipKeys.ts`.
 
 Add a page: a key in `DEMO_TIP_KEYS`, its mapping in `demoTipKey`, and its
 copy with callouts on `data-testid`s the page renders.
@@ -403,7 +403,7 @@ copy, and walks a tour.
 | `demo_tip_shown`, `demo_tip_dismissed`, `demo_tips_exited` | `tip` |
 | `demo_page_tour_started`, `demo_page_tour_completed` | `tip` |
 | `demo_page_tour_exited` | `tip, at` (the stop it was on) |
-| `demo_cta_clicked` | `cta: signup\|install, placement: banner\|end_card\|page_card\|toast\|tour_intro` |
+| `demo_cta_clicked` | `cta: signup\|install, placement: banner\|corner\|end_card\|page_card\|toast\|tour_intro` |
 
 ## Analytics (through `trackEvent`)
 

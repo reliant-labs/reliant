@@ -11,6 +11,9 @@
  *    off while the tour is open or the toast still waits for an answer;
  *    every listed view has one, and the copy has
  *    an agent line with a command on every tip.
+ *  - Page tours: Show me around walks the page's callouts (Back, Next, Done,
+ *    Exit, Escape), leaves out a stop with no target, and a corner button
+ *    replays it; the card's footer signs up with `utm_content=page_card`.
  *  - The copy never says "new in release": releases are connected, not news.
  */
 
@@ -280,6 +283,32 @@ describe("the page tours", () => {
     await go("/forge/demo?view=traces");
     await waitFor(() => expect(screen.getByTestId("demo-page-tour-replay")).toHaveAttribute("data-tip", "traces"));
     expect(tip()).toBeNull();
+  });
+});
+
+describe("the corner's Sign up", () => {
+  beforeEach(() => demoSession.dismissToast());
+  const cornerSignup = () => screen.queryByTestId("demo-corner-bar")?.querySelector<HTMLAnchorElement>("[data-testid='demo-cta-signup']") ?? null;
+
+  it("stays in reach on the console once a page's card is closed, and on a page with no tour", async () => {
+    const { go } = renderDemo("/forge/p/shop/secrets");
+    fireEvent.click(await screen.findByTestId("demo-tip-dismiss"));
+    expect(cornerSignup()!.href).toContain("utm_content=corner");
+    await go("/forge/p/shop/observability/graph");
+    await waitFor(() => expect(screen.queryByTestId("demo-page-tour-replay")).toBeNull());
+    expect(cornerSignup()).not.toBeNull();
+  });
+
+  it("is not on the demo console, whose banner has one, nor over the toast", async () => {
+    renderDemo("/forge/demo?view=traces");
+    fireEvent.click(await screen.findByTestId("demo-tip-dismiss"));
+    expect(screen.getByTestId("demo-page-tour-replay")).toBeInTheDocument();
+    expect(cornerSignup()).toBeNull();
+    cleanup();
+    resetDemoSessionForTests();
+    renderDemo("/forge/p/shop/secrets");
+    await screen.findByTestId("demo-tour-toast");
+    expect(screen.queryByTestId("demo-corner-bar")).toBeNull();
   });
 });
 
