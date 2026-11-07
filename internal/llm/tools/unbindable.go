@@ -40,6 +40,9 @@ var unbindableParams = map[string]map[string]string{
 	"edit": {
 		"file_path": "an edit is defined by the file it edits; fixing it makes the tool able to edit exactly one file",
 	},
+	"shell": {
+		"writable_checkouts": "honoured only from a workflow run node's writable_checkouts; on an agent's shell it is ignored, so a binding would unfreeze nothing",
+	},
 	"shell_output": {
 		"process_id": "identifies one live process, which is chosen per call and cannot be known in advance",
 	},

@@ -891,7 +891,9 @@ var generatedToolParams = map[string]ToolParams{
 			"tail_lines":        {},
 			"timeout":           {},
 		},
-		Unbindable: map[string]string{},
+		Unbindable: map[string]string{
+			"writable_checkouts": "honoured only from a workflow run node's writable_checkouts; on an agent's shell it is ignored, so a binding would unfreeze nothing",
+		},
 	},
 	"shell_kill": {
 		Bindable: map[string]struct{}{},
