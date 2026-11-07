@@ -83,20 +83,38 @@ func GetThread(ctx context.Context, db orm.Context, id string) (*core.Thread, er
 // A read/write error is returned: falling back to false would disclose memories.
 func ResolveThreadAmbientMemoryExclusion(ctx context.Context, db orm.Context, chatID, threadID string, requested bool) (bool, error) {
 	var row struct {
-		Excluded bool `bun:"excluded"`
-		Count    int  `bun:"count"`
+		Excluded        bool `bun:"excluded"`
+		CurrentExcluded bool `bun:"current_excluded"`
+		Complete        bool `bun:"complete"`
+		Count           int  `bun:"count"`
 	}
+	// A chain is proved only when it reaches a real root. A missing parent
+	// (there is no parent FK), cycle or depth cutoff must never look like a
+	// default-false ancestor. Bound both traversal and cycles explicitly.
+	// Cross-chat ancestors are intentional: a conversation fork retains its
+	// source thread's policy, while the starting thread stays chat-scoped.
 	err := db.Bun().NewRaw(`WITH RECURSIVE lineage AS (
- SELECT id, parent_thread_id, exclude_ambient_memory FROM threads WHERE id = ?0 AND chat_id = ?1
- UNION
- SELECT t.id, t.parent_thread_id, t.exclude_ambient_memory
+ SELECT id, parent_thread_id, exclude_ambient_memory, ARRAY[id] AS path
+ FROM threads WHERE id = ?0 AND chat_id = ?1
+ UNION ALL
+ SELECT t.id, t.parent_thread_id, t.exclude_ambient_memory, p.path || t.id
  FROM threads t JOIN lineage p ON t.id = p.parent_thread_id
- ) SELECT COALESCE(bool_or(exclude_ambient_memory), false) AS excluded, count(*) AS count FROM lineage`, threadID, chatID).Scan(ctx, &row)
+ WHERE cardinality(p.path) < 256 AND NOT (t.id = ANY(p.path))
+ ) SELECT COALESCE(bool_or(exclude_ambient_memory), false) AS excluded,
+ COALESCE(bool_or(id = ?0 AND exclude_ambient_memory), false) AS current_excluded,
+ COALESCE(bool_or(parent_thread_id IS NULL), false) AS complete,
+ count(*) AS count FROM lineage`, threadID, chatID).Scan(ctx, &row)
 	if err != nil {
 		return false, fmt.Errorf("read thread memory exclusion: %w", err)
 	}
 	if row.Count == 0 {
 		return false, fmt.Errorf("read thread memory exclusion: thread not found")
+	}
+	if !row.Complete {
+		return false, fmt.Errorf("read thread memory exclusion: incomplete lineage (missing ancestor, cycle or depth limit)")
+	}
+	if row.CurrentExcluded {
+		return true, nil // Already durable; avoid a redundant write each turn.
 	}
 	if !requested && !row.Excluded {
 		return false, nil

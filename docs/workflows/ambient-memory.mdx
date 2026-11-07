@@ -42,6 +42,9 @@ thread outside that lineage for work that needs the default memory behavior.
 The additive database field defaults to false for existing threads; it cannot
 prove what older runtimes already sent, nor retroactively remove prior content.
 Policy read/write failures stop the call rather than send memories by default.
+The lineage must reach a real root: missing ancestors, cycles, or ancestry beyond
+256 threads stop the call before any provider request, rather than treating
+unresolved policy as false. Repair that lineage before retrying.
 
 **This is not full context isolation or an approved-information-only mode.** It
 only excludes automatic saved-memory injection; it does not erase history or

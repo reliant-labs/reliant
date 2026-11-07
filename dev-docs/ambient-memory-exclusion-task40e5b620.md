@@ -20,6 +20,17 @@ Owner explicitly approved additive durable thread policy after discovery that co
 
 Scoped short suites passed: handlers, runtime, threads, store, db, workflow/yaml, runtime/schema. New runtime/provider/store tests repeated 3x passed. Provider tests include real OpenAI HTTP request capture, driver-boundary retry capture, fresh-handler recovery, stopped-child lineage, minimal machine-less context. No whole-repo gates or daemon updates.
 
+## Independent review repair
+
+Review of 9682c2f4699f264346bb81045b36d21c011108f8 reproduced a dangling-parent
+policy bypass: counting surviving lineage nodes did not prove ancestry complete.
+The resolver now requires a real root, tracks visited IDs, and bounds traversal
+at 256 threads; dangling parents/grandparents, cycles and depth truncation fail
+closed. Actual CallLLM regressions populate all three private-memory canaries and
+assert no driver request for each malformed lineage, with both false and true
+surviving policies. Complete cross-chat forks remain supported; an already-true
+row is no longer rewritten each turn.
+
 ## Verification/shipping
 
 Only scoped fast tests and build for affected packages. No whole-repo tests/gates. New tests deterministic repeated 3x. Git commit identity through env GIT_AUTHOR_NAME/GIT_COMMITTER_NAME=reliant-01 and EMAIL=sean@reliantlabs.io. Non-draft upstream PR no labels; report and stop. No daemon update.

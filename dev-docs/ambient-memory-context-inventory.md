@@ -56,7 +56,11 @@ DEFAULT false`, migration `20261107122606_thread_ambient_memory_exclusion.up.sql
 `internal/store/thread_repo_ext.go`: `ResolveThreadAmbientMemoryExclusion` reads
 recursive parent lineage and monotonically latches true on the current thread.
 `call_llm.go` does this before request assembly; an error blocks provider send.
-`create_workflow_with_thread.go` latches at child initialization. Thus coarse
+`create_workflow_with_thread.go` latches at child initialization. Lineage must
+reach an actual root within 256 threads: dangling parent/grandparent links,
+cycles and depth truncation fail closed before provider send, even when the
+surviving thread already has a true policy. Cross-chat fork ancestry is followed.
+An already-true complete thread is not rewritten on each turn. Thus coarse
 recovery and stopped-agent resume do not depend on their discarded runtime map.
 Runtime context, thread tracker and continue-as-new handoffs also carry the flag.
 No false/reset write exists. This does not retroactively establish exclusions

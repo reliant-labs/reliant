@@ -280,6 +280,70 @@ func TestCallLLM_ExcludeAmbientMemoryFailsClosed(t *testing.T) {
 	require.Empty(t, driver.sent, "a failed policy read must never default to injecting memory")
 }
 
+// Real storage plus real CallLLM assembly: incomplete lineage must stop before
+// the driver sees any request, including when surviving nodes default to false.
+func TestCallLLM_ExcludeAmbientMemoryIncompleteLineageNoProviderRequest(t *testing.T) {
+	for _, kind := range []string{"missing parent", "missing grandparent", "self cycle", "two node cycle", "depth limit"} {
+		t.Run(kind, func(t *testing.T) {
+			h := NewIdempotencyTestHelper(t)
+			defer h.Cleanup()
+			ctx := context.Background()
+			project := h.CreateTestProject(ctx, uuid.NewString(), uuid.NewString())
+			chat := h.CreateTestChat(ctx, uuid.NewString(), project.ID, project.UserID)
+			h.CreateTestUserMessageWithText(ctx, chat.ID, chat.ID, approvedBriefCanary)
+			parent := "missing-ancestor"
+			switch kind {
+			case "missing grandparent":
+				id := uuid.NewString()
+				_, err := h.Repo().CreateThread(ctx, &db.Thread{ID: id, ChatID: chat.ID, ParentThreadID: &parent})
+				require.NoError(t, err)
+				parent = id
+			case "self cycle":
+				parent = chat.ID
+			case "two node cycle":
+				id := uuid.NewString()
+				_, err := h.Repo().CreateThread(ctx, &db.Thread{ID: id, ChatID: chat.ID, ParentThreadID: &chat.ID})
+				require.NoError(t, err)
+				parent = id
+			case "depth limit":
+				// A legitimate root beyond the bound is still unresolved, not false.
+				parent = ""
+				for i := 0; i < 256; i++ {
+					id := uuid.NewString()
+					var link *string
+					if parent != "" {
+						p := parent
+						link = &p
+					}
+					_, err := h.Repo().CreateThread(ctx, &db.Thread{ID: id, ChatID: chat.ID, ParentThreadID: link})
+					require.NoError(t, err)
+					parent = id
+				}
+			}
+			_, err := h.sqlDB.ExecContext(ctx, "UPDATE threads SET parent_thread_id = $1 WHERE id = $2", parent, chat.ID)
+			require.NoError(t, err)
+			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private": ambientRepoCanary}}
+			driver := &ambientCaptureDriver{}
+			handler := NewCallLLMActivity(h.Repo(), nil, nil, ambientConfigProvider{cfg}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+				return driver, nil
+			}, nil)
+			// Test both default-false (the reproduced leak) and already-excluded
+			// survivors: corrupt lineage is not silently accepted in either case.
+			for _, alreadyExcluded := range []bool{false, true} {
+				_, err := h.sqlDB.ExecContext(ctx, "UPDATE threads SET exclude_ambient_memory = $1 WHERE id = $2", alreadyExcluded, chat.ID)
+				require.NoError(t, err)
+				excluded, err := h.Repo().ResolveThreadAmbientMemoryExclusion(ctx, chat.ID, chat.ID, false)
+				require.ErrorContains(t, err, "incomplete lineage")
+				require.False(t, excluded)
+				var out CallLLMOutput
+				err = h.ExecuteActivity(handler.Execute, callLLMInput(chat.ID, chat.ID, "mock-model"), &out)
+				require.ErrorContains(t, err, "incomplete lineage")
+				require.Empty(t, driver.sent, "unproved lineage must never send saved memory canaries to a provider")
+			}
+		})
+	}
+}
+
 // Existing empty tool/skill declarations are not a bootstrap-isolation API.
 // Machine-less runs still see the configured skill catalog and generic harness
 // instructions; an empty config removes the catalog, not the harness.
