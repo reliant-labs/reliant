@@ -406,20 +406,33 @@ export const useTourStore = create<TourState>((set, get) => ({
     // in-memory write left the store saying "expanded" while the settings row
     // still said "dismissed", so the guide reappeared now and then vanished on
     // the next reload.
+    //
+    // Every await is followed by the generation check before anything that
+    // touches the checklist or settings: a restart begun for user A must not
+    // clear user B's checklist, or persist B's panel, once B is adopted while
+    // A's import or revive is still pending.
+    let checklist: typeof import("./onboardingChecklistStore").useOnboardingChecklistStore | undefined;
     try {
-      const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
-      useOnboardingChecklistStore.setState({
-        completedItems: new Set(),
-        welcomeShown: false,
-      });
-      await useOnboardingChecklistStore.getState().revive();
+      ({ useOnboardingChecklistStore: checklist } = await import("./onboardingChecklistStore"));
     } catch {
       /* ignore */
     }
+    if (startedIn !== generation) return;
+    if (checklist) {
+      checklist.setState({
+        completedItems: new Set(),
+        welcomeShown: false,
+      });
+      try {
+        await checklist.getState().revive();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (startedIn !== generation) return;
     localStorage.removeItem("reliant.checklist.welcomeShown");
     localStorage.removeItem("reliant.checklist.completedItems");
 
-    if (startedIn !== generation) return;
     await get().saveTourState();
     await get().detectProjectCode();
   },
