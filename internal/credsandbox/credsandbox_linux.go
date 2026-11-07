@@ -75,7 +75,7 @@ func Apply(cmd *exec.Cmd, self string, plan Plan) (refusal string) {
 		_ = removeTree(runDir)
 		return Refusal(fmt.Errorf("making the command's private /tmp: %w", err))
 	}
-	cmd.Env = setEnv(cmd.Env, "TMPDIR", "/tmp")
+	cmd.Env = privateTmpEnv(cmd.Env)
 	if len(plan.Overlay) > 0 {
 		if overlayErr := overlayAvailable(); overlayErr != nil {
 			plan, cmd.Env = withoutOverlays(plan, cmd.Env, runDir)
@@ -311,9 +311,16 @@ func superviseCommand(s spec) int {
 	sigs := make(chan os.Signal, 16)
 	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGUSR1, syscall.SIGUSR2)
 
+	env := withoutSpecFD(os.Environ()) //nolint:forbidigo // hands the command the environment the daemon built for it, minus the helper's own variable
+	if s.RunDir != "" {
+		// Again here, not only in Apply: the daemon adds variables after it
+		// (proctree gives every command a GOTMPDIR of its own, under the
+		// machine's /tmp, which the command cannot see).
+		env = privateTmpEnv(env)
+	}
 	pid, err := syscall.ForkExec(s.Path, args, &syscall.ProcAttr{
 		Dir:   s.Dir,
-		Env:   withoutSpecFD(os.Environ()), //nolint:forbidigo // hands the command the environment the daemon built for it, minus the helper's own variable
+		Env:   env,
 		Files: []uintptr{0, 1, 2},
 		Sys:   &syscall.SysProcAttr{Setpgid: true},
 	})

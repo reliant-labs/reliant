@@ -114,6 +114,20 @@ echo mine > /tmp/`+own+` && echo mine > /var/tmp/`+own+` && d=$(mktemp -d) && ec
 	assert.Contains(t, out, "SEES "+stepTmp)
 }
 
+// The daemon gives every command a GOTMPDIR of its own under the machine's
+// /tmp (proctree), after Wrap: inside the sandbox it is the private /tmp, or
+// every go build would fail to make its work directory.
+func TestSandbox_TempVariablesAddedAfterWrapPointIntoThePrivateTmp(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	cmd := wrapped(t, "none", home, home, `echo "GOTMPDIR=$GOTMPDIR TMP=$TMP TMPDIR=$TMPDIR"; mkdir "$GOTMPDIR/go-build1" && echo WORK-DIR-OK`, "TMP=/var/tmp/x")
+	cmd.Env = append(cmd.Env, "GOTMPDIR="+filepath.Join(os.TempDir(), "reliant-gotmp-1", "gotmp-1-1"))
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", out)
+	assert.Contains(t, string(out), "GOTMPDIR=/tmp TMP=/tmp TMPDIR=/tmp\nWORK-DIR-OK")
+}
+
 func TestSandbox_ADirectoryStartedInUnderTmpIsCarriedThrough(t *testing.T) {
 	testkit.Slow(t, "builds real user, mount and PID namespaces")
 	requireSandbox(t)

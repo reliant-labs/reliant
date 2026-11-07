@@ -72,6 +72,22 @@ func makePrivateTmpDirs(runDir string) error {
 	return nil
 }
 
+// tmpVars name a temp directory to the tools that read one. TMPDIR is always
+// set; the others only when the command was given them, since a value there
+// (GOTMPDIR under the machine's /tmp, or a shared directory where a
+// credentialed build keeps its work directory) is out of sight or shared.
+var tmpVars = []string{"TMPDIR", "TMP", "TEMP", "TEMPDIR", "GOTMPDIR"}
+
+// privateTmpEnv points env's temp directories into the private /tmp.
+func privateTmpEnv(env []string) []string {
+	for _, name := range tmpVars {
+		if name == "TMPDIR" || envValue(env, name) != "" {
+			env = setEnv(env, name, "/tmp")
+		}
+	}
+	return env
+}
+
 // privateTmpPath is where a file the daemon prepares in the command's private
 // /tmp is on the daemon's disk, and where the command sees it.
 func privateTmpPath(runDir, name string) (host, inSandbox string) {
