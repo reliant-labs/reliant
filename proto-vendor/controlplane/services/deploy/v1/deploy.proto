@@ -619,6 +619,12 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
 
+  // Values require BOTH deploy:read and deploy:config:read. Every read is
+  // synchronously audited. The names-only GetBundle endpoint is unchanged.
+  rpc GetWorkloadConfig(GetWorkloadConfigRequest) returns (GetWorkloadConfigResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // BeginApply AND FinishApply ARE DELETED, and the deletion is the point of
   // the unified model rather than a cleanup.
   //
@@ -1955,6 +1961,30 @@ message RecordDeployBundleResponse {
 
 // Address a bundle by id, or by (environment_id, digest) — which is the pair a
 // client holds after a render, before it has ever seen the row.
+// Exactly one recorded environment; no registry URL is accepted. Selectors
+// are mutually exclusive. Absent selector resolves the current promotion.
+message GetWorkloadConfigRequest {
+  string environment_id = 1;
+  optional string bundle_id = 2;
+  optional string release_version = 3;
+  string workload = 4;
+}
+
+message GetWorkloadConfigResponse {
+  string environment_id = 1;
+  string bundle_id = 2;
+  string release_version = 3;
+  string workload = 4;
+  // All fields originate from the same server-redacted tree. Secret values
+  // are fixed withheld markers, never hashes; compare these projections only.
+  repeated google.protobuf.Struct objects = 5;
+  string rendered_yaml = 6;
+  // No unverified config.js URL fetch is performed.
+  string frontend_config_unsupported_reason = 7;
+  // Verified immutable OCI manifest digest from the resolved bundle row.
+  string bundle_digest = 8;
+}
+
 message GetDeployBundleRequest {
   string bundle_id = 1;
   string environment_id = 2;

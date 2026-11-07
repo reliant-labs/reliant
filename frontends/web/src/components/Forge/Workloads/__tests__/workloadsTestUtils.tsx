@@ -116,6 +116,7 @@ export function renderWorkload(
     hosted,
     obs = createWorkloadsFixtureApi(),
     repoMeta,
+    readConfig,
   }: {
     env?: string;
     search?: WorkloadDetailSearch;
@@ -124,6 +125,7 @@ export function renderWorkload(
     hosted?: HostedObservation | null;
     obs?: ObservabilityApi;
     repoMeta?: RepoMetaApi;
+    readConfig?: ComponentProps<typeof WorkloadDetail>["readConfig"];
   } = {}
 ): Harness<WorkloadDetailSearch> & { actions: WorkloadActions } {
   let latest = search;
@@ -144,6 +146,7 @@ export function renderWorkload(
         }}
         hrefs={{ overview: "/overview", release: (version) => `/r/${version}`, activity: "/activity", dashboards: "/dashboards" }}
         actions={allActions}
+        readConfig={readConfig}
         hosted={observation}
         declaredInRender={!scoped.placed && scoped.declared.includes(name)}
       />
