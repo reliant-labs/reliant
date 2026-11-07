@@ -150,7 +150,14 @@ func TestWorktreeCreate_ForcedFailedAddKeepsABranchThatPredatesIt(t *testing.T) 
 	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	projectPath := diagnoseRepo(t)
-	gitOutIn(t, projectPath, "branch", "feat/predates", "main")
+	// The branch carries a commit past main, which -B's reset to main would lose.
+	side := filepath.Join(t.TempDir(), "side")
+	gitOutIn(t, projectPath, "worktree", "add", "-q", "-b", "feat/predates", side, "main")
+	require.NoError(t, os.WriteFile(filepath.Join(side, "own.txt"), []byte("mine\n"), 0o644))
+	gitOutIn(t, side, "add", "own.txt")
+	gitOutIn(t, side, "-c", "user.name=t", "-c", "user.email=t@e.com", "commit", "-q", "-m", "own work")
+	tip := strings.TrimSpace(gitOutIn(t, projectPath, "rev-parse", "feat/predates"))
+	gitOutIn(t, projectPath, "worktree", "remove", "--force", side)
 	hooks := filepath.Join(t.TempDir(), "hooks")
 	require.NoError(t, os.MkdirAll(hooks, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-checkout"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
@@ -171,6 +178,8 @@ func TestWorktreeCreate_ForcedFailedAddKeepsABranchThatPredatesIt(t *testing.T) 
 
 	require.NotContains(t, guardWorktrees(t, projectPath), "feat/predates", "registration left behind")
 	require.Contains(t, guardRepoBranches(t, projectPath), "feat/predates", "a branch that predates the create was deleted")
+	require.Equal(t, tip, strings.TrimSpace(gitOutIn(t, projectPath, "rev-parse", "feat/predates")),
+		"the failed forced create must put the branch back at its own tip, not leave -B's reset to main")
 }
 
 // A checkout that predates the call is never taken back, nor a branch the

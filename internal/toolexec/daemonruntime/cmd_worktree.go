@@ -282,12 +282,17 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	// point with --no-track: a base taken from origin is a starting commit,
 	// not the branch's upstream, exactly as a local base is.
 	var worktreeCmd *exec.Cmd
+	priorTip := ""
 	switch {
 	case reuseLocal:
 		// No -B and no --force: git itself refuses when the branch is
 		// checked out in another worktree.
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
 	case !req.ReuseBranch && (branchExists || req.Force):
+		// -B resets an existing local branch to the start point before the
+		// checkout runs. Its tip is kept, so a create that then fails puts the
+		// branch back where it was (restoreForcedBranch).
+		priorTip = localBranchTip(ctx, req.ProjectPath, req.Branch)
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-B", req.Branch, worktreePath, startPoint)
 	default:
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-b", req.Branch, worktreePath, startPoint)
@@ -343,6 +348,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		} else {
 			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
 		}
+		restoreForcedBranch(ctx, req.ProjectPath, req.Branch, priorTip, startPoint)
 		if parent := filepath.Dir(worktreePath); parent != worktreePath {
 			removeIfEmpty(parent)
 		}
@@ -384,6 +390,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 			// this call was empty (git adds only into an empty one), so it
 			// is put back empty.
 			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
+			restoreForcedBranch(ctx, req.ProjectPath, req.Branch, priorTip, startPoint)
 			if preExisted {
 				_ = os.MkdirAll(worktreePath, 0o755)
 			}

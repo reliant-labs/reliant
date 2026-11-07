@@ -187,6 +187,49 @@ func localBranchAbsent(ctx context.Context, repoPath, branch string) bool {
 	return errors.As(cmd.Run(), &exitErr) && exitErr.ExitCode() == 1
 }
 
+// localBranchTip is the commit refs/heads/branch names in repoPath, or "" when
+// there is no such local branch or it cannot be read.
+func localBranchTip(ctx context.Context, repoPath, branch string) string {
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"^{commit}")
+	cmd.Dir = repoPath
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// restoreForcedBranch puts a branch a failed forced create reset with -B back
+// at priorTip, its tip before the create. It is a compare-and-swap on the
+// start point: a branch that moved since (someone else's commit, or no reset
+// happened at all) is left as it is, and so is one this create made (no
+// priorTip). Best effort, on a context of its own, like abandonCheckout.
+func restoreForcedBranch(ctx context.Context, repoPath, branch, priorTip, startPoint string) {
+	if priorTip == "" || startPoint == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), worktreeAbandonTimeout)
+	defer cancel()
+	start := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", startPoint+"^{commit}")
+	start.Dir = repoPath
+	out, err := start.Output()
+	if err != nil {
+		return
+	}
+	reset := strings.TrimSpace(string(out))
+	if reset == priorTip {
+		return
+	}
+	cmd := exec.CommandContext(ctx, "git", "update-ref", "-m", "reliant: a failed forced worktree create restores its branch", "refs/heads/"+branch, priorTip, reset)
+	cmd.Dir = repoPath
+	if err := cmd.Run(); err != nil {
+		logging.WarnContext(ctx, "worktree.create could not restore the branch its failed -B reset; its prior tip is in the reflog",
+			"branch", branch, "prior_tip", priorTip, "error", err)
+		return
+	}
+	logging.InfoContext(ctx, "worktree.create restored the branch its failed -B reset", "branch", branch, "prior_tip", priorTip)
+}
+
 // worktreeAbandonTimeout bounds taking back one checkout. It runs on a
 // context of its own: the create's has usually ended by then.
 const worktreeAbandonTimeout = time.Minute
