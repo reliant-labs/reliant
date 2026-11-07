@@ -3,6 +3,8 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -49,6 +51,53 @@ func TestWorktreeRefreshUsesFetchedHeadNotStaleLocalBranch(t *testing.T) {
 	require.NoError(t, err)
 	var out worktreeCreateResponse
 	require.NoError(t, json.Unmarshal(raw, &out))
+	require.True(t, out.Success, out.Error)
+	require.Equal(t, head, r.run(out.WorktreePath, "rev-parse", "HEAD"))
+}
+
+// A checkout that lands on the wrong head (here a post-checkout hook commits in
+// the new worktree, so HEAD moves after `git worktree add` passed the pre-add
+// check) is refused AND taken back. Left behind unlocked, its registration
+// would hold the branch at that path, so a re-send could neither adopt it
+// (its head is wrong) nor add it again: the checkout was stranded for good.
+func TestWorktreeCreateTakesBackACheckoutOnTheWrongHead(t *testing.T) {
+	if testing.Short() {
+		t.Skip("real git origin, fetch, hooks and worktree; runs in full package tests")
+	}
+	r := newBaseRepos(t)
+	head := r.run(r.clone, "rev-parse", "refs/remotes/origin/feat/x")
+	hook := filepath.Join(r.clone, ".git", "hooks", "post-checkout")
+	require.NoError(t, os.MkdirAll(filepath.Dir(hook), 0o755))
+	require.NoError(t, os.WriteFile(hook, []byte("#!/bin/sh\n"+
+		"[ \"$(git rev-parse --git-dir)\" = \"$(git rev-parse --git-common-dir)\" ] && exit 0\n"+
+		"git -c user.name=t -c user.email=t@e.com commit -q --allow-empty -m drift\n"), 0o755))
+	// The test HOME is shared by every run of the package (TestMain), so the
+	// workspace is named per run: a repeated run must not find the last one's.
+	workspace := "wrong-head-" + filepath.Base(filepath.Dir(filepath.Dir(r.clone)))
+	req := worktreeCreateRequest{
+		ProjectPath: r.clone, WorkspaceID: workspace, SubPath: "target",
+		Branch: "worktree/review", BaseBranch: "feat/x", FetchBranch: "feat/x", ExpectedHead: head,
+	}
+	create := func() worktreeCreateResponse {
+		t.Helper()
+		payload, err := json.Marshal(req)
+		require.NoError(t, err)
+		raw, err := handleWorktreeCreate(context.Background(), payload)
+		require.NoError(t, err)
+		var out worktreeCreateResponse
+		require.NoError(t, json.Unmarshal(raw, &out))
+		return out
+	}
+
+	out := create()
+	require.False(t, out.Success)
+	require.Contains(t, out.Error, "does not match verified expected head")
+	require.NotContains(t, r.run(r.clone, "worktree", "list", "--porcelain"), workspace,
+		"the wrong-head checkout must not stay registered")
+
+	// The hook gone, the re-sent request finishes cleanly on the expected head.
+	require.NoError(t, os.Remove(hook))
+	out = create()
 	require.True(t, out.Success, out.Error)
 	require.Equal(t, head, r.run(out.WorktreePath, "rev-parse", "HEAD"))
 }
