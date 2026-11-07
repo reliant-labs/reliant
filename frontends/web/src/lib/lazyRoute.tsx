@@ -48,7 +48,7 @@ export function isChunkLoadError(error: unknown): error is Error {
 export class StaleBuildError extends Error {
   constructor(cause: Error) {
     super(
-      "This screen couldn't be loaded. Reliant may have been updated since this tab opened — reload to get the latest version.",
+      "This screen couldn't be loaded after retrying. A network, asset or server error may be preventing it from loading.",
       { cause },
     );
     this.name = "StaleBuildError";
