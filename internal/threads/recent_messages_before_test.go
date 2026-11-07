@@ -9,14 +9,12 @@ import (
 
 // legacyRecentMessagesBefore is what LoadRecentMessagesBefore returned for a
 // forked or compacted thread before it was bounded: resolve the whole
-// transcript, drop everything at or past the cursor, keep the newest `limit`.
-// The bounded walk has to be indistinguishable from it.
-func legacyRecentMessagesBefore(t *testing.T, svc *Service, threadID string, beforeSeq int64, limit int) (page []*db.Message, hasMore bool) {
-	t.Helper()
-	all, err := svc.LoadDisplayMessages(context.Background(), threadID)
-	if err != nil {
-		t.Fatalf("LoadDisplayMessages: %v", err)
-	}
+// transcript (all, LoadDisplayMessages' answer), drop everything at or past the
+// cursor, keep the newest `limit`. The bounded walk has to be indistinguishable
+// from it. The caller resolves the transcript once: it does not change while
+// the test reads it, and resolving it again for every (cursor, limit) pair was
+// three quarters of the test's run time (13s -> 3.5s).
+func legacyRecentMessagesBefore(all []*db.Message, beforeSeq int64, limit int) (page []*db.Message, hasMore bool) {
 	if len(all) == 0 {
 		return []*db.Message{}, false
 	}
@@ -66,7 +64,7 @@ func TestLoadRecentMessagesBefore_CompactedAndBranched_MatchesFullLoad(t *testin
 	checked := 0
 	for _, cursor := range cursors {
 		for limit := 1; limit <= len(full)+2; limit++ {
-			want, wantMore := legacyRecentMessagesBefore(t, h.svc, leaf, cursor, limit)
+			want, wantMore := legacyRecentMessagesBefore(full, cursor, limit)
 			got, gotMore, err := h.svc.LoadRecentMessagesBefore(ctx, leaf, cursor, limit)
 			if err != nil {
 				t.Fatalf("LoadRecentMessagesBefore(cursor=%d, limit=%d): %v", cursor, limit, err)

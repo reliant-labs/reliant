@@ -581,6 +581,12 @@ RELIANT_TOKEN.
 
 Re-running with the same --name replaces that token.
 
+--scope narrows the token to part of the API instead of all of it. Repeat it, or
+give a comma-separated list. Without it the token is reliant:api, the whole
+API. A narrow token reaches only the rpcs its scopes cover and gets
+PermissionDenied (scope_missing) on the rest. Valid scopes:
+reliant:api, runs:read, runs:start, runs:control, triggers:fire, triggers:manage, inbox:read, inbox:manage, approvals:decide, questions:answer.
+
 ```
 reliant auth token create [flags]
 ```
@@ -590,6 +596,7 @@ reliant auth token create [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--name` | `string` | - | Label for the token, e.g. ci-deploy (required) |
+| `--scope` | `stringSlice` | `[]` | Narrow the token to a scope; repeatable or comma-separated, e.g. --scope runs:read --scope triggers:fire (default reliant:api) |
 
 ---
 
@@ -3201,7 +3208,7 @@ reliant forge db migration rebase [file...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--all-pending` | `bool` | - | Re-version every migration added on this branch (above the default branch's merge-base) |
+| `--all-pending` | `bool` | - | Re-version every migration added on this branch (every file the default branch does not have) |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dir` | `string` | - | Migrations directory (default: forge.yaml database.migrations_dir, else db/migrations; a relative path resolves against the project root, not the CWD) |
 
@@ -4484,11 +4491,28 @@ a NEW environment and does NOT reattach it.
 KEPT EITHER WAY: the project's release images in the registry. They belong to
 the project, not the environment, and other environments promote them.
 
+An env no longer declared under deploy/kcl/ (its directory was removed but the
+hosted env lives on) is looked up by name on the control plane this project is
+bound to (.forge/hosted-projects.json), or on the one --endpoint names, which
+must be one of those bindings or Reliant cloud:
+
+  forge env delete prod-web --endpoint https://admin.reliantapi.com
+
+--id names the environment by the control plane's id instead (the Reliant UI
+shows it), for an undeclared env whose name is ambiguous or unknown. It is
+looked up the same way, on a control plane this project has used; a name given
+beside it must match. `forge env list --orphaned` lists the hosted envs this
+project no longer declares.
+
+Before asking for confirmation it shows what will be deleted: the env's id,
+project, control plane, deployments and bound custom domains. The control
+plane refuses to delete an env while a custom domain is bound to it.
+
 Only hosted environments: for a local stack use `forge env down`, which never
 deletes anything on a control plane and which this command never uses.
 
 ```
-reliant forge env delete <environment> [flags]
+reliant forge env delete <environment> | --id <environment-id> [flags]
 ```
 
 **Flags:**
@@ -4496,6 +4520,8 @@ reliant forge env delete <environment> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | Control plane holding an env that is no longer declared under deploy/kcl/: one this project is bound to (.forge/hosted-projects.json) or Reliant cloud; https, or http to localhost only (default: the one this project is bound to) |
+| `--id` | `string` | - | Delete the hosted environment with this control-plane id (an env no longer declared under deploy/kcl/); a name given beside it must match |
 | `--keep-data` | `bool` | - | Keep the environment's managed databases (retained, still billed as storage) instead of destroying them |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 | `--yes` | `bool` | - | Confirm the deletion without the typed-name prompt (required when non-interactive) |
@@ -5259,6 +5285,14 @@ reliant forge env exec <env> [--workload <name>] -- <command> [args...] [flags]
 
 List the environments declared in deploy/kcl/
 
+List the environments declared in deploy/kcl/: one directory per env, each
+carrying a main.k. Reads nothing but the checkout.
+
+--orphaned asks the control plane instead: it lists the hosted envs of this
+project that deploy/kcl/ no longer declares (an env outlives its directory),
+on each control plane this project is bound to (.forge/hosted-projects.json),
+or on the one --endpoint names. Each is deletable with `forge env delete <env>`.
+
 ```
 reliant forge env list [flags]
 ```
@@ -5268,6 +5302,9 @@ reliant forge env list [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--endpoint` | `string` | - | With --orphaned: the control plane to ask, one this project is bound to or Reliant cloud (default: every one it is bound to) |
+| `--orphaned` | `bool` | - | List the hosted envs on the control plane that deploy/kcl/ no longer declares |
+| `--token` | `string` | - | With --orphaned: credential to use, ahead of the env var and the credentials file |
 
 ---
 
@@ -7264,6 +7301,10 @@ Skipping:
   environment that steers them — prints one line saying so and stops, in
   about a second instead of minutes. Any change runs every step. --no-cache
   (or FORGE_GENERATE_NO_CACHE=1) always runs every step.
+  Inside a run that does run, go mod tidy is skipped for a module whose
+  go.mod, go.sum and imports are what its last tidy left, and the validate
+  build for a tree whose Go build inputs are ones it last passed on
+  (.forge/generate-memo.json; --no-cache runs both).
 
 Examples:
   forge generate            # Generate all code
@@ -10312,8 +10353,8 @@ Export an aggregated continuous profile as pprof, speedscope or collapsed stacks
 Export the continuous profile the local ClickStack collected, for a service
 over a time range or for one trace.
 
-Apps push a 10s CPU profile plus heap and goroutine snapshots about once a
-minute (pkg/observe, on by default whenever an OTLP endpoint is set). They land
+Apps push a 5s CPU profile every 5 minutes and a live-heap snapshot every 2
+hours (pkg/observe, on by default whenever an OTLP endpoint is set). They land
 in ClickHouse; HyperDX cannot draw flamegraphs, so this exports them:
 
   forge obs profile --service api --since 30m -o api.pb.gz
@@ -10327,7 +10368,11 @@ in ClickHouse; HyperDX cannot draw flamegraphs, so this exports them:
 
 Sample types: cpu (nanoseconds) and inuse_space / inuse_objects (live heap) by
 default; alloc_space / alloc_objects and goroutine only from a workload whose
-profiling block turns them on (see forge skill load observability/profiles). Raw samples (and so --trace) are kept 24h; the
+profiling block turns them on (see forge skill load observability/profiles).
+CPU and the other accumulated types are summed over the range. The live heap
+and the goroutines are gauges: each instance's newest snapshot in the range,
+or, when the range holds none, the newest before it, so a range shorter than
+the heap interval still shows the heap as last measured. Raw samples (so --trace and the heap) are kept 24h; the
 per-minute aggregate behind --since is kept 30 days. --sql prints the query so
 you can run it yourself against the ClickStack ClickHouse.
 

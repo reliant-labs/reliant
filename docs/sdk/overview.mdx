@@ -67,9 +67,13 @@ Everything else needs `reliant:api`. A narrow token that reaches any other proce
 
 So a narrow token suits a service that starts runs and checks on them with `Runs.Get`, or one that cancels runs, but not one that follows a run to a verdict: `Follow` reads a session's updates, which only `reliant:api` may. `Triggers.Fire` looks the trigger up before firing it, so with a token that holds only `triggers:fire`, call the generated client's `FireTrigger` with the trigger's id instead; [Beyond the wrappers](/sdk/go#beyond-the-wrappers) shows how to build one. A token for a webhook-only caller needs no scope at all, because it does not use an API token: see below.
 
-<Note>
-  `reliant auth token create` cannot request a narrow scope yet. The login it runs through does not grant the runs and triggers scopes by name, so every token it makes is `reliant:api`. The flag will come back together with that change. Until then, a narrow token can only be minted through the control plane's token API (`CreateMyToken`), and this page will name the CLI flag when it exists.
-</Note>
+To mint a narrow token, name the scopes. The flag is repeatable and also takes a comma-separated list:
+
+```bash
+reliant auth token create --name ci --scope runs:read --scope triggers:fire
+```
+
+The command refuses a scope an API token cannot carry and lists the valid ones; the inbox scopes (`inbox:read`, `inbox:manage`, `approvals:decide`, `questions:answer`) work the same way. Without `--scope` the token is `reliant:api`.
 
 ### Keep tokens out of frontends
 

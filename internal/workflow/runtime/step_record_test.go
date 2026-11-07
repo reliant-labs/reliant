@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/ptr"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -43,21 +45,21 @@ func TestBuildStepExecution_RecordsWhatTheStepWasGivenAndHowItEnded(t *testing.T
 		DurationMs:   120,
 	})
 
-	require.True(t, row.InputJSON.Valid, "the resolved args are recorded")
+	require.NotNil(t, row.InputJSON, "the resolved args are recorded")
 	var args map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(row.InputJSON.String), &args))
+	require.NoError(t, json.Unmarshal([]byte(ptr.From(row.InputJSON)), &args))
 	assert.Equal(t, "Summarize issue #42", args["system_prompt"], "a CelString is recorded as the value it resolved to")
 	assert.Equal(t, map[string]interface{}{"tags": []interface{}{"flagship"}}, args["model"],
 		"an object literal is recorded as the object, not its {literal: …} wrapper")
 
-	assert.Equal(t, "provider returned 400: model not found", row.ErrorMessage.String)
-	assert.True(t, row.ErrorMessage.Valid)
-	assert.Equal(t, int32(3), row.Attempt.Int32)
-	assert.True(t, row.Attempt.Valid)
-	assert.Equal(t, "attempt.summarize", row.NodePath.String)
-	assert.Equal(t, "attempt", row.LoopNodeID.String)
-	assert.Equal(t, int64(2), row.LoopIteration.Int64)
-	assert.False(t, row.Success.Bool)
+	assert.Equal(t, "provider returned 400: model not found", ptr.From(row.ErrorMessage))
+	assert.NotNil(t, row.ErrorMessage)
+	assert.Equal(t, int32(3), ptr.From(row.Attempt))
+	assert.NotNil(t, row.Attempt)
+	assert.Equal(t, "attempt.summarize", ptr.From(row.NodePath))
+	assert.Equal(t, "attempt", ptr.From(row.LoopNodeID))
+	assert.Equal(t, int64(2), ptr.From(row.LoopIteration))
+	assert.False(t, ptr.From(row.Success))
 }
 
 func TestBuildStepExecution_SuccessRecordsNoError(t *testing.T) {
@@ -65,26 +67,26 @@ func TestBuildStepExecution_SuccessRecordsNoError(t *testing.T) {
 		WorkflowID: "wf-1", StepID: "lint", ActivityType: "ExecuteRunStep",
 		Attempt: 1, Output: map[string]interface{}{"exit_code": 0},
 	})
-	assert.False(t, row.ErrorMessage.Valid)
-	assert.False(t, row.InputJSON.Valid, "no node, nothing to record")
-	assert.False(t, row.NodePath.Valid)
+	assert.Nil(t, row.ErrorMessage)
+	assert.Nil(t, row.InputJSON, "no node, nothing to record")
+	assert.Nil(t, row.NodePath)
 }
 
 func TestRecordedArgs_OnlyGraphNodes(t *testing.T) {
-	assert.False(t, recordedArgs(map[string]interface{}{"chat_id": "c", "error": "x"}).Valid,
+	assert.Nil(t, recordedArgs(map[string]interface{}{"chat_id": "c", "error": "x"}),
 		"an infrastructure activity's plain map input is not a node's args")
 
 	save := types.ActivityInput{Node: &reliantv1.Node{Id: "save", Type: "save_message"}}
-	assert.False(t, recordedArgs(save).Valid, "a save_message node's args are the message, stored as the message")
+	assert.Nil(t, recordedArgs(save), "a save_message node's args are the message, stored as the message")
 }
 
 func TestBoundedJSON_CutsLongStringsAndMarksThem(t *testing.T) {
 	long := strings.Repeat("é", 6000) // 12000 bytes
 	got := boundedJSON(map[string]interface{}{"content": long, "path": "a.go"}, recordedArgsMaxBytes)
-	require.True(t, got.Valid)
+	require.NotNil(t, got)
 
 	var decoded map[string]string
-	require.NoError(t, json.Unmarshal([]byte(got.String), &decoded))
+	require.NoError(t, json.Unmarshal([]byte(*got), &decoded))
 	assert.Equal(t, "a.go", decoded["path"], "short values are kept whole")
 	assert.Contains(t, decoded["content"], "… [3952 more characters]")
 	assert.True(t, strings.HasPrefix(decoded["content"], strings.Repeat("é", 2048)), "cut on a rune boundary")
@@ -96,9 +98,9 @@ func TestBoundedJSON_TightensUntilItFits(t *testing.T) {
 		items[i] = strings.Repeat("x", 3000)
 	}
 	got := boundedJSON(map[string]interface{}{"calls": items}, recordedArgsMaxBytes)
-	require.True(t, got.Valid)
-	assert.LessOrEqual(t, len(got.String), recordedArgsMaxBytes)
-	assert.Contains(t, got.String, "more characters]")
+	require.NotNil(t, got)
+	assert.LessOrEqual(t, len(*got), recordedArgsMaxBytes)
+	assert.Contains(t, *got, "more characters]")
 }
 
 // A {{ }} expression that fails to evaluate is reported through FailStep. Its

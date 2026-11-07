@@ -63,11 +63,7 @@ func startGrandchildCommand(t *testing.T, exitShell bool) (*BackgroundManager, *
 
 // gone reports whether pid has exited (a zombie awaiting its reaper counts).
 func gone(pid int) bool {
-	if syscall.Kill(pid, 0) != nil {
-		return true
-	}
-	stat, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
-	return err == nil && strings.Contains(string(stat), ") Z ")
+	return syscall.Kill(pid, 0) != nil || isZombie(pid)
 }
 
 // shell_kill must take the whole process group down, not just the shell it
@@ -113,7 +109,7 @@ func TestKillProcessReachesWhatAnExitedShellLeftRunning(t *testing.T) {
 // is the command's only while a process it left is provably still in it.
 func TestKillProcessNeverSignalsARecycledGroup(t *testing.T) {
 	if _, ok := osutil.GroupMembers(1); !ok {
-		t.Skip("needs /proc to tell a group's members apart")
+		t.Skip("needs a readable process table to tell a group's members apart")
 	}
 	// The "recycled" group: an unrelated process leading a group whose id is
 	// the old command's pid.
@@ -148,7 +144,7 @@ func TestKillProcessNeverSignalsARecycledGroup(t *testing.T) {
 // zombie's parent and does not reap it until the end.
 func TestGroupWatchIgnoresUnreapedZombies(t *testing.T) {
 	if _, ok := osutil.GroupMembers(1); !ok {
-		t.Skip("needs /proc to tell a group's members apart")
+		t.Skip("needs a readable process table to tell a group's members apart")
 	}
 	z := exec.Command("sleep", "0.3")
 	z.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -158,9 +154,8 @@ func TestGroupWatchIgnoresUnreapedZombies(t *testing.T) {
 
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		stat, err := os.ReadFile("/proc/" + strconv.Itoa(z.Process.Pid) + "/stat")
-		require.NoError(t, err, "the zombie was reaped by someone else")
-		if strings.Contains(string(stat), ") Z ") {
+		require.NoError(t, syscall.Kill(z.Process.Pid, 0), "the zombie was reaped by someone else")
+		if isZombie(z.Process.Pid) {
 			break
 		}
 		require.True(t, time.Now().Before(deadline), "the child never became a zombie")

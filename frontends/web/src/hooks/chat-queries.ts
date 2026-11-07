@@ -453,6 +453,32 @@ export function useArchiveChat() {
   });
 }
 
+/**
+ * Move a chat to another project (MoveChatToProject). The answer is the moved
+ * chat, so its detail is replaced outright; every list refetches, because the
+ * chat leaves one project's list and joins another's.
+ */
+export function useMoveChatToProject() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      chatId,
+      projectId,
+      daemonId,
+      leaveWorkspace,
+    }: {
+      chatId: string;
+      projectId: string;
+      daemonId?: string;
+      leaveWorkspace?: boolean;
+    }) => chatActions.moveChatToProject(chatId, projectId, { daemonId, leaveWorkspace }),
+    onSuccess: (chat) => {
+      seedChatDetail(chat);
+      queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+    },
+  });
+}
+
 export function useUnarchiveChat() {
   const queryClient = useQueryClient();
   return useMutation({

@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The `?tour=` grammar and the root route's retention of it.
  */

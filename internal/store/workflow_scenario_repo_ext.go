@@ -22,12 +22,12 @@ import (
 func InsertWorkflowScenario(ctx context.Context, db orm.Context, s *core.WorkflowScenario) error {
 	return CreateWorkflowScenario(ctx, db, &WorkflowScenario{
 		ID:              s.ID,
-		WorkflowDraftID: nullStringPtr(s.WorkflowDraftID),
+		WorkflowDraftID: s.WorkflowDraftID,
 		UserID:          s.UserID,
 		Name:            s.Name,
-		Description:     nullStringPtr(s.Description),
+		Description:     s.Description,
 		Events:          s.Events,
-		Expect:          nullStringPtr(s.Expect),
+		Expect:          s.Expect,
 		CreatedAt:       s.CreatedAt,
 		UpdatedAt:       s.UpdatedAt,
 		Version:         1,
@@ -82,9 +82,9 @@ func selectWorkflowScenarios(ctx context.Context, db orm.Context, apply func(*bu
 func ReplaceWorkflowScenario(ctx context.Context, db orm.Context, s *core.WorkflowScenario) error {
 	return updateWorkflowScenario(ctx, db, s.ID, func(q *bun.UpdateQuery) *bun.UpdateQuery {
 		return q.Set("name = ?", s.Name).
-			Set("description = ?", nullStringPtr(s.Description)).
+			Set("description = ?", s.Description).
 			Set("events = ?", s.Events).
-			Set("expect = ?", nullStringPtr(s.Expect))
+			Set("expect = ?", s.Expect)
 	})
 }
 
@@ -116,15 +116,15 @@ func RemoveWorkflowScenario(ctx context.Context, db orm.Context, id string) erro
 func workflowScenarioToCore(row *WorkflowScenario) *core.WorkflowScenario {
 	return &core.WorkflowScenario{
 		ID:              row.ID,
-		WorkflowDraftID: toNullString(row.WorkflowDraftID),
+		WorkflowDraftID: row.WorkflowDraftID,
 		UserID:          row.UserID,
 		Name:            row.Name,
-		Description:     toNullString(row.Description),
+		Description:     row.Description,
 		Events:          row.Events,
-		Expect:          toNullString(row.Expect),
-		LastRunAt:       toNullTime(row.LastRunAt),
-		LastRunStatus:   toNullString(row.LastRunStatus),
-		LastRunResult:   toNullString(row.LastRunResult),
+		Expect:          row.Expect,
+		LastRunAt:       row.LastRunAt,
+		LastRunStatus:   row.LastRunStatus,
+		LastRunResult:   row.LastRunResult,
 		CreatedAt:       row.CreatedAt,
 		UpdatedAt:       row.UpdatedAt,
 		Version:         row.Version,

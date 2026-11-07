@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { PackageCommand, PackageType } from "../../../hooks/package-queries";
 import { findCommandForProcess, processMatchesCommand } from "../commandMatching";

@@ -15,6 +15,7 @@
 import type { StatusTone } from "@/components/forge-ui/status";
 import type { AlertInstance } from "@/services/controlPlane/observability/alertingTypes";
 import type {
+  DeclaredSpecGap,
   DeclaredWorkload,
   ResourceUsage,
   Workload,
@@ -25,12 +26,12 @@ import type {
   WorkloadPod,
 } from "@/services/controlPlane/observability/types";
 
-import type { ReleasePromotion } from "@/services/forge/releases";
+import type { ObjectDelta, ReleaseComparison, ReleasePromotion } from "@/services/forge/releases";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 
 import { ENV_ALL } from "../Console/envScope";
 import { alertService } from "../Observability/Home/homeModel";
-import { promoterOf } from "../Releases/releaseModel";
+import { checksOf, promoterOf, type ChecksSummary } from "../Releases/releaseModel";
 import { HEALTH_STATUS } from "./health";
 import { jobFailurePhrase } from "./plainHealth";
 
@@ -529,3 +530,110 @@ export function deployHistory(
 
 /** The Overview's window when the URL names none: a day, so "Restarts" reads as restarts today. Here, not in OverviewHome, so a page that reads the same workloads need not load its charts. */
 export const OVERVIEW_RANGE: RangePreset = "24h";
+
+/**
+ * Why the Config tab cannot show a recorded spec, in words that are true for
+ * each case. The spec comes from the bundle's snapshot or, for every bundle
+ * plain `forge env deploy` records, from its manifests layer, which the
+ * control plane reads at record time and backfills for older bundles: so
+ * "the next deploy records the rest" is true only of the unreadable case.
+ */
+export function specGapNote(gap: DeclaredSpecGap | null, workload: string, env: string): string {
+  switch (gap) {
+    case "pending":
+      return `Reliant has not read the manifests of ${env}'s recorded bundle yet, so only the name, kind and replicas are known. It reads them in the background; the rest appears here without a deploy.`;
+    case "unreadable":
+      return `${env}'s recorded bundle is in a registry Reliant cannot read, is no longer there, or carries no manifests, so only the name, kind and replicas are known. A deploy that pushes its bundle to the platform registry records the rest.`;
+    case "not-in-manifests":
+      return `${env}'s recorded bundle names ${workload}, but its rendered manifests hold no object that runs it, so only the name, kind and replicas are known.`;
+    default:
+      return `${env}'s recorded bundle carries only the name, kind and replicas of ${workload}.`;
+  }
+}
+
+// ── Releases (History tab) ──────────────────────────────────────────────────
+
+/** One promotion that moved this workload in the environment, for the History tab's Releases panel. */
+export interface WorkloadReleaseRow extends DeployHistoryEntry {
+  /** The release it replaced for this workload, newest-first ledger order; null for the first one recorded. */
+  previousVersion: string | null;
+  /** The promotion's checks; null when it recorded none. */
+  checks: ChecksSummary | null;
+  /** The exact bundle the promotion applied, when recorded. */
+  bundleId: string;
+  bundleDigest: string;
+  /** The release's artifacts as the promotion froze them. */
+  resolvedArtifacts: Record<string, string>;
+}
+
+/**
+ * The environment's promotions that moved `workload`, newest first, each with
+ * the release it replaced (what a "what changed" comparison runs from), who,
+ * when, its checks and whether it was a rollback (deployHistory's rules).
+ */
+export function workloadReleaseRows(
+  promotions: readonly ReleasePromotion[],
+  workload: string,
+  rank: ReadonlyMap<string, number>,
+  names: ReadonlyMap<string, string>
+): WorkloadReleaseRow[] {
+  const byId = new Map(promotions.map((p) => [p.id, p]));
+  const entries = deployHistory(promotions, workload, rank, names);
+  return entries.map((entry, index) => {
+    const p = byId.get(entry.id)!;
+    return {
+      ...entry,
+      previousVersion: entries[index + 1]?.version ?? null,
+      checks: checksOf(p.gates),
+      bundleId: p.bundleId,
+      bundleDigest: p.bundleDigest,
+      resolvedArtifacts: p.resolvedArtifacts ?? {},
+    };
+  });
+}
+
+/** An object belongs to the workload forge tagged it with, or, untagged, to the one it is named like (the server's filter). */
+export function deltaOfWorkload(delta: Pick<ObjectDelta, "workload" | "name">, workload: string): boolean {
+  return delta.workload === workload || (!delta.workload && delta.name === workload);
+}
+
+export type WorkloadChange =
+  | { kind: "same-release" }
+  | { kind: "first" }
+  | { kind: "not-compared"; detail: string }
+  | { kind: "unchanged"; unchanged: number }
+  | { kind: "changed"; lines: string[]; image: { artifact: string; from: string; to: string } | null };
+
+/**
+ * What one promotion changed in this workload, from the release comparison
+ * against the release it replaced. Filtered to the workload here as well as
+ * by the server, because a control plane that predates the filter returns
+ * every object.
+ */
+export function workloadChange(row: Pick<WorkloadReleaseRow, "version" | "previousVersion">, comparison: ReleaseComparison | null | undefined, workload: string): WorkloadChange | null {
+  if (row.previousVersion === null) return { kind: "first" };
+  if (row.previousVersion === row.version) return { kind: "same-release" };
+  if (!comparison) return null;
+  const objects = comparison.objects;
+  if (objects.state !== "compared") return { kind: "not-compared", detail: objects.detail };
+  const deltas = objects.deltas.filter((d) => deltaOfWorkload(d, workload));
+  if (deltas.length === 0) return { kind: "unchanged", unchanged: objects.workload ? objects.unchanged : 0 };
+  const image = deltas.flatMap((d) => d.images)[0] ?? null;
+  return {
+    kind: "changed",
+    lines: deltas.map((d) => `${d.change === "unknown" ? "changed" : d.change} ${d.kind} ${d.name}${d.summary ? `: ${d.summary}` : ""}`),
+    image,
+  };
+}
+
+/**
+ * The image digest the promotion ran for this workload: what the comparison
+ * says its image moved to, else the promotion's frozen artifact named like
+ * the workload. "" when neither tells — an artifact named otherwise is not
+ * guessed at.
+ */
+export function workloadDigestOf(row: Pick<WorkloadReleaseRow, "resolvedArtifacts">, change: WorkloadChange | null, workload: string): string {
+  if (change?.kind === "changed" && change.image) return change.image.to;
+  const frozen = row.resolvedArtifacts[workload] ?? "";
+  return frozen.startsWith("sha256:") ? frozen : "";
+}

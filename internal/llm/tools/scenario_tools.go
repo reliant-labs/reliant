@@ -3,12 +3,13 @@ package tools
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -108,8 +109,8 @@ func (t *listScenariosTool) Execute(ctx *rctx.ToolContext, args ListScenariosPar
 
 	for _, s := range scenarios {
 		status := "⏸ Not run"
-		if s.LastRunStatus.Valid {
-			switch s.LastRunStatus.String {
+		if s.LastRunStatus != nil {
+			switch *s.LastRunStatus {
 			case "passed":
 				status = "✓ Passed"
 			case "failed":
@@ -121,11 +122,11 @@ func (t *listScenariosTool) Execute(ctx *rctx.ToolContext, args ListScenariosPar
 
 		output += fmt.Sprintf("### %s\n", s.Name)
 		output += fmt.Sprintf("- **Status:** %s\n", status)
-		if s.Description.Valid && s.Description.String != "" {
-			output += fmt.Sprintf("- **Description:** %s\n", s.Description.String)
+		if description := ptr.From(s.Description); description != "" {
+			output += fmt.Sprintf("- **Description:** %s\n", description)
 		}
-		if s.LastRunAt.Valid {
-			output += fmt.Sprintf("- **Last run:** %s\n", s.LastRunAt.Time.Format("2006-01-02 15:04:05"))
+		if s.LastRunAt != nil {
+			output += fmt.Sprintf("- **Last run:** %s\n", s.LastRunAt.Format("2006-01-02 15:04:05"))
 		}
 		output += "\n"
 	}
@@ -201,8 +202,8 @@ func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParam
 
 	// Status
 	status := "Not run"
-	if scenario.LastRunStatus.Valid {
-		switch scenario.LastRunStatus.String {
+	if scenario.LastRunStatus != nil {
+		switch *scenario.LastRunStatus {
 		case "passed":
 			status = "✓ Passed"
 		case "failed":
@@ -212,8 +213,8 @@ func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParam
 		}
 	}
 	fmt.Fprintf(&sb, "**Last Run Status:** %s\n", status)
-	if scenario.LastRunAt.Valid {
-		fmt.Fprintf(&sb, "**Last Run:** %s\n\n", scenario.LastRunAt.Time.Format("2006-01-02 15:04:05"))
+	if scenario.LastRunAt != nil {
+		fmt.Fprintf(&sb, "**Last Run:** %s\n\n", scenario.LastRunAt.Format("2006-01-02 15:04:05"))
 	}
 
 	sb.WriteString("```yaml\n")
@@ -227,9 +228,9 @@ func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParam
 	fmt.Fprintf(&sb, "**Updated at:** `%s`\n", scenario.UpdatedAt.Format(time.RFC3339))
 
 	// Last run result
-	if scenario.LastRunResult.Valid && scenario.LastRunResult.String != "" {
+	if lastRunResult := ptr.From(scenario.LastRunResult); lastRunResult != "" {
 		sb.WriteString("\n### Last Run Result\n```json\n")
-		sb.WriteString(scenario.LastRunResult.String)
+		sb.WriteString(lastRunResult)
 		sb.WriteString("\n```\n")
 	}
 
@@ -339,17 +340,17 @@ func (t *editScenarioTool) Execute(ctx *rctx.ToolContext, args EditScenarioParam
 	newContent := strings.Replace(scenario.Events, args.OldString, args.NewString, 1)
 
 	// Try to extract description from the YAML
-	var desc sql.NullString
+	var desc *string
 	var basicDef struct {
 		Description string `yaml:"description"`
 	}
 	if err := yaml.Unmarshal([]byte(newContent), &basicDef); err == nil && basicDef.Description != "" {
-		desc = sql.NullString{String: basicDef.Description, Valid: true}
+		desc = ptr.Of(basicDef.Description)
 	}
 
 	// Store the raw edited content
 	scenario.Events = newContent
-	scenario.Expect = sql.NullString{}
+	scenario.Expect = nil
 	scenario.Description = desc
 	scenario.UpdatedAt = time.Now().UTC()
 
@@ -491,12 +492,12 @@ func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioPar
 	}
 
 	// Check basic YAML syntax and try to extract description
-	var desc sql.NullString
+	var desc *string
 	var basicDef struct {
 		Description string `yaml:"description"`
 	}
 	if err := yaml.Unmarshal([]byte(args.Content), &basicDef); err == nil && basicDef.Description != "" {
-		desc = sql.NullString{String: basicDef.Description, Valid: true}
+		desc = ptr.Of(basicDef.Description)
 	}
 
 	now := time.Now().UTC()
@@ -504,7 +505,7 @@ func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioPar
 	if existing != nil {
 		// Update existing scenario
 		existing.Events = args.Content
-		existing.Expect = sql.NullString{}
+		existing.Expect = nil
 		existing.Description = desc
 		existing.UpdatedAt = now
 
@@ -520,7 +521,7 @@ func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioPar
 
 		scenario := &db.WorkflowScenario{
 			ID:              uuid.New().String(),
-			WorkflowDraftID: sql.NullString{String: draft.ID, Valid: true},
+			WorkflowDraftID: ptr.Of(draft.ID),
 			UserID:          chat.UserID,
 			Name:            args.Name,
 			Description:     desc,

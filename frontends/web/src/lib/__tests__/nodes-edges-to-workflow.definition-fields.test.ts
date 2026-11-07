@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The builder rebuilds the saved definition from the canvas plus the
  * workflow-level fields it holds. Every top-level field the canvas does not

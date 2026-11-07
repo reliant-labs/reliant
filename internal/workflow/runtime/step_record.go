@@ -2,10 +2,11 @@
 package runtime
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"unicode/utf8"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -24,7 +25,7 @@ type stepAttempt struct {
 	// Attempt is Temporal's 1-based attempt number; 0 when unknown.
 	Attempt int
 	// Args is the node's resolved config (recordedArgs), when it is a graph node.
-	Args       sql.NullString
+	Args       *string
 	Output     interface{}
 	Err        error
 	DurationMs int64
@@ -52,14 +53,14 @@ var recordedStringLimits = []int{4 << 10, 512}
 // maps, and a save_message node's args are the message itself, already stored
 // as the message — neither is recorded. Long strings are cut and marked rather
 // than dropping the whole record, so the shape of the input survives.
-func recordedArgs(input interface{}) sql.NullString {
+func recordedArgs(input interface{}) *string {
 	activityInput, ok := input.(types.ActivityInput)
 	if !ok || activityInput.Node == nil || activityInput.Node.GetType() == model.NodeTypeSaveMessage {
-		return sql.NullString{}
+		return nil
 	}
 	args, err := model.NodeArgsAsMap(activityInput.Node)
 	if err != nil || len(args) == 0 {
-		return sql.NullString{}
+		return nil
 	}
 	return boundedJSON(unwrapLiterals(args), recordedArgsMaxBytes)
 }
@@ -92,17 +93,17 @@ func unwrapLiterals(value interface{}) interface{} {
 
 // boundedJSON marshals value within maxBytes, cutting long strings first and
 // recording a marker when even that does not fit.
-func boundedJSON(value interface{}, maxBytes int) sql.NullString {
+func boundedJSON(value interface{}, maxBytes int) *string {
 	for _, limit := range recordedStringLimits {
 		encoded, err := json.Marshal(truncateLongStrings(value, limit))
 		if err != nil {
-			return sql.NullString{}
+			return nil
 		}
 		if len(encoded) <= maxBytes {
-			return sql.NullString{String: string(encoded), Valid: true}
+			return ptr.Of(string(encoded))
 		}
 	}
-	return sql.NullString{String: `{"_truncated":"too large to record"}`, Valid: true}
+	return ptr.Of(`{"_truncated":"too large to record"}`)
 }
 
 // truncateLongStrings returns a copy of a decoded-JSON value with every string
@@ -141,9 +142,9 @@ func truncateString(text string, limit int) string {
 }
 
 // recordedError is the error_message a failed attempt records.
-func recordedError(err error) sql.NullString {
+func recordedError(err error) *string {
 	if err == nil {
-		return sql.NullString{}
+		return nil
 	}
-	return sql.NullString{String: truncateString(err.Error(), recordedErrorMaxBytes), Valid: true}
+	return ptr.Of(truncateString(err.Error(), recordedErrorMaxBytes))
 }

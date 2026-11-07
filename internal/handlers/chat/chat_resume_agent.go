@@ -236,6 +236,9 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 		delete(inputs, v2.InputKeyLaunchRun)
 		v2.DropActingIdentity(inputs)
 		inputs = s.overSelection(ctx, chat.ID, workflowName, inputs)
+		if err := s.reconcileResumeMode(ctx, userID, chat, workflowName, inputs, nil); err != nil {
+			return refuse(err, "This chat's mode could not be resolved. Check its workflow settings and try again.")
+		}
 		s.refreshProviderPolicy(ctx, chat, inputs)
 	} else {
 		presets := make(map[string]string, len(chat.SelectedPresets))

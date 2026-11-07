@@ -401,3 +401,14 @@ edges:
 	_, err := snapshotFor(t, yaml, "", nil)
 	require.ErrorContains(t, err, "must resolve before activation approval")
 }
+
+func TestActivationSnapshotHoldsApprovalsDecideForADeclaredPermission(t *testing.T) {
+	wf := "name: decider\nentry: [a]\n%snodes:\n  - id: a\n    type: save_message\n    args: {role: assistant, content: hi}\n"
+	declared, err := snapshotFor(t, fmt.Sprintf(wf, "permissions: [approvals:decide]\n"), "", nil)
+	require.NoError(t, err)
+	require.True(t, declared.Capabilities["approvals:decide"])
+	require.Contains(t, strings.Join(declared.Summary, "\n"), "Permission approvals:decide")
+	plain, err := snapshotFor(t, fmt.Sprintf(wf, ""), "", nil)
+	require.NoError(t, err)
+	require.False(t, plain.Capabilities["approvals:decide"])
+}

@@ -3,11 +3,12 @@ package chat
 
 import (
 	"context"
-	"database/sql"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -157,8 +158,8 @@ func seedWorkflowWithSteps(
 	}
 }
 
-func stepOutput(s string) sql.NullString {
-	return sql.NullString{String: s, Valid: true}
+func stepOutput(s string) *string {
+	return ptr.Of(s)
 }
 
 func saveStep(stepID, messageID string) *db.StepExecution {

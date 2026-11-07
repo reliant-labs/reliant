@@ -92,23 +92,6 @@ export function windowShortLabel(w: UsageWindow): string {
   }
 }
 
-/** True when any window is at or past the warning fraction right now. */
-export function isNearLimit(account: ProviderAccount, now: Date): boolean {
-  return account.windows.some((w) => {
-    const used = effectiveWindow(w, account.usageObservedAt, now).used;
-    return used !== null && used >= USAGE_WARN_FRACTION;
-  });
-}
-
-/**
- * Whether an account's row opens by itself. Healthy accounts are one line; an
- * account that is limited, close to a limit, or waiting for sign-in shows its
- * detail without being asked, because that is the account the user came for.
- */
-export function needsAttention(account: ProviderAccount, now: Date): boolean {
-  return account.status === "limited" || account.status === "needs_sign_in" || isNearLimit(account, now);
-}
-
 export interface EffectiveWindow {
   /** 0..1, or null when the usage is unknown. */
   used: number | null;

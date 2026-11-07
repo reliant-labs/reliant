@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Runtime half of the LaunchPlan <-> launchPlanSchema drift guard.
  *

@@ -877,12 +877,12 @@ func buildForensicsReport(executionID string, rd *runData, opts forensicsOpts) f
 	for _, steps := range rd.stepsByWF {
 		for _, s := range steps {
 			ct.StepCount++
-			if s.DurationMs.Valid {
-				ct.CommandMs += s.DurationMs.Int64
+			if s.DurationMs != nil {
+				ct.CommandMs += *s.DurationMs
 			} else {
 				ct.UntimedSteps++
 			}
-			if s.Success.Valid && !s.Success.Bool {
+			if s.Success != nil && !*s.Success {
 				ct.FailedSteps++
 			}
 		}
