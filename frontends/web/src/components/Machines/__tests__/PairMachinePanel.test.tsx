@@ -216,9 +216,9 @@ describe("layout", () => {
     const { container } = render(<PairMachinePanel />);
     const sections = container.querySelectorAll("section");
     expect(sections).toHaveLength(2);
-    expect(sections[0]).toHaveTextContent(/Install Reliant on that machine/i);
-    expect(sections[1]).toHaveTextContent(/Run this in/i);
-    expect(sections[1]).toHaveTextContent(/Approve it here/i);
+    expect(sections[0]).toHaveTextContent(/Download \/ install/i);
+    expect(sections[1]).toHaveTextContent(/Run the command/i);
+    expect(sections[1]).toHaveTextContent(/Enter pairing code/i);
     for (const n of ["1", "2", "3"]) expect(screen.getByText(n)).toBeInTheDocument();
   });
 
@@ -234,7 +234,10 @@ describe("layout", () => {
 
   it("names PowerShell on Windows and gives no keystroke on an unknown platform", () => {
     render(<PairMachinePanel />);
-    expect(screen.getByText(/Run this in PowerShell on that machine/i)).toBeInTheDocument();
+    const help = screen.getByText("More help").closest("details")!;
+    expect(help).not.toHaveAttribute("open");
+    expect(help.textContent).toMatch(/PowerShell/);
+    expect(screen.getByLabelText("Pairing code")).toBeVisible();
     const generic = describeTerminal("unknown");
     expect(generic.name).toBe("a terminal");
     expect(generic.howToOpen).not.toMatch(/⌘|Win|Ctrl/);

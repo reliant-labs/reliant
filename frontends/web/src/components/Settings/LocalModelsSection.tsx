@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { CommandBlock } from "../CommandBlock";
+import { SetupHelp } from "../SetupHelp";
 import {
   useRefreshLocalModels,
   useSetLocalModelEndpoints,
@@ -160,15 +161,20 @@ function GettingStarted({ managed }: { managed: boolean }) {
           server it can reach over the network, add its URL below.
         </p>
       ) : (
-        <p>No local model server found on this machine. To get started, install Ollama and pull a model:</p>
+        <p>No local model server found. Install Ollama, then download a model.</p>
       )}
       {!managed && (
         <div className="space-y-1.5">
+          <p className="font-medium text-foreground">1. Install (macOS · Homebrew)</p>
           <CommandBlock command="brew install ollama" label="Ollama install command" />
+          <p className="font-medium text-foreground">2. Download a model</p>
           <CommandBlock command="ollama pull qwen3" label="model download command" />
         </div>
       )}
-      {!managed && <p>Reliant finds it automatically, or add its URL below.</p>}
+      {!managed && <SetupHelp>
+        <p>Reliant finds Ollama automatically, or add its URL below. Run these commands on the machine hosting the models.</p>
+        <a className="inline-flex min-h-[44px] items-center underline" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Ollama downloads for other platforms</a>
+      </SetupHelp>}
     </div>
   );
 }
@@ -368,9 +374,7 @@ export function LocalModelsSection() {
       {/* The tab already names the page, so no heading repeats it here. */}
       <div>
         <p className="text-sm text-muted-foreground">
-          Run models like Ollama or LM Studio on your own hardware. Reliant on each machine finds
-          the servers running on it and relays chats to them, so nothing about them is sent through
-          Reliant's cloud. Servers it can't find, like a GPU cluster, can be added as custom endpoints.
+          Run models on your own hardware. Chats to local models stay off Reliant's cloud.
         </p>
       </div>
       {daemons.length === 0 ? (

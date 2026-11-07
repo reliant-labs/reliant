@@ -154,8 +154,7 @@ export function ProvidersSection({ variant = "desktop", pickerOpen, onPickerOpen
           >
             <h2 className="text-sm font-semibold text-foreground">Connect the AI your agents run on</h2>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Have a Claude or ChatGPT plan? Sign in with it and your agents use it the way you do. Otherwise add an
-              API key{reliant ? ", or run on Reliant credits" : ""}.
+              Use your Claude or ChatGPT subscription, an API key{reliant ? ", or Reliant credits" : ""}.
             </p>
             {starting ? (
               <div className="mt-4">

@@ -89,7 +89,7 @@ const PROVIDERS = [
   },
 ];
 
-const AUTO_MANAGED_PROVIDER_NAME = "Reliant";
+
 
 type ProviderId = (typeof PROVIDERS)[number]["id"];
 
@@ -395,7 +395,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     >
       <div className="space-y-5">
         <p className="text-sm text-muted-foreground">
-          Reliant can sync your {AUTO_MANAGED_PROVIDER_NAME} access automatically after sign-in, or you can add another provider key to continue.
+          Choose a provider to sign in or add an API key.
         </p>
 
         <div className="space-y-2">
@@ -420,7 +420,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
                 type="button"
                 onClick={() => handleProviderSelect(p.id)}
                 className={cn(
-                  "flex items-center gap-2.5 text-left px-3 py-2 rounded-lg border transition-colors",
+                  "flex min-h-[44px] items-center gap-2.5 text-left px-3 py-2 rounded-lg border transition-colors",
                   p.id === selectedProvider
                     ? "border-primary bg-primary/10 ring-2 ring-primary/30 shadow-sm"
                     : "border-border hover:bg-muted"

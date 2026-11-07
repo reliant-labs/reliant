@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AuthorizeOrgPicker, useAuthorizeOrg } from "@/components/Orgs/AuthorizeOrgPicker";
 import { getActiveOrgId } from "@/store/activeOrgStore";
-import { Check, Download, Loader2, Monitor, Terminal } from "lucide-react";
+import { Check, Loader2, Monitor, Terminal } from "lucide-react";
+import { SetupHelp } from "@/components/SetupHelp";
 
 import Button from "@/components/forge-ui/button";
 import { cn } from "@/lib/utils";
@@ -246,20 +247,14 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
           as "start here" rather than a tinted box competing with the selection
           above it. */}
       <section className="space-y-3 rounded-lg border border-border/60 bg-background p-4">
-        <StepHeading index={1} title="Install Reliant on that machine" tone="accent" />
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          Using the desktop app here? Skip this — it connects on its own.
-        </p>
-        <ReliantDownloadOptions defaultCollapsed={installLikelyDone} collapsedNote={installEvidenceNote} />
+        <StepHeading index={1} title="Download / install" tone="accent" />
+        <ReliantDownloadOptions defaultCollapsed={installLikelyDone} hideHelp />
       </section>
 
       <section className="space-y-4 rounded-lg border border-border/60 bg-background p-4">
         <div className="space-y-2">
-          <StepHeading index={2} title={`Run this in ${terminal.name} on that machine`} />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            {terminal.howToOpen} Paste this and press <span className="font-medium text-foreground">Enter</span> — it
-            prints a pairing code.
-          </p>
+          <StepHeading index={2} title="Run the command" />
+          <p className="text-xs text-muted-foreground">On the machine you want to connect. It prints a pairing code.</p>
           {isElectron && cliInstalled === false && (
             <div className="space-y-2 rounded border border-warning/30 bg-warning/5 p-2.5">
               <p className="flex items-start gap-2 text-xs text-warning-ink">
@@ -269,18 +264,10 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
                   {supportsHomebrewCask(detectedOS) ? " Install it here, or with the Homebrew cask." : " Install it here."}
                 </span>
               </p>
-              <Button size="sm" variant="outline" onClick={() => void handleInstallCli()} loading={installingCli}>
+              <Button size="xl" variant="outline" onClick={() => void handleInstallCli()} loading={installingCli}>
                 {installingCli ? "Installing…" : "Install reliant CLI"}
               </Button>
             </div>
-          )}
-          {isElectron && cliInstalled === true && cliPath && (
-            <p className="flex items-center gap-1.5 text-xs text-success-ink">
-              <Check className="h-3 w-3" />
-              <span>
-                <code className="font-mono">reliant</code> CLI installed at <code className="font-mono">{cliPath}</code>
-              </span>
-            </p>
           )}
           <CommandLine command={daemonStartCommand()} />
           {daemonStartCommandNeedsEditing() && (
@@ -292,7 +279,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
         </div>
 
         <div className="space-y-2 border-t border-border/50 pt-4">
-          <StepHeading index={3} title="Approve it here" />
+          <StepHeading index={3} title={getControlPlaneURL() ? "Enter pairing code" : "Connect with a token"} />
           {!getControlPlaneURL() ? (
             // A deployment with no Reliant control plane has nothing to pair
             // through: the machine connects with an access token instead.
@@ -328,7 +315,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
               />
               <div className="flex gap-2">
                 <Button
-                  size="sm"
+                  size="xl"
                   onClick={() => void decide(approval.machine, true)}
                   loading={approval.kind === "deciding" && approval.approved}
                   disabled={approval.kind === "deciding" || !authorizeOrg.ready}
@@ -336,7 +323,7 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
                   Approve
                 </Button>
                 <Button
-                  size="sm"
+                  size="xl"
                   variant="ghost"
                   onClick={() => void decide(approval.machine, false)}
                   disabled={approval.kind === "deciding"}
@@ -368,9 +355,9 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
                 autoComplete="off"
                 spellCheck={false}
                 maxLength={9}
-                className="w-36 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-sm uppercase tracking-widest text-foreground"
+                className="min-h-[44px] min-w-0 w-36 rounded-md border border-border bg-background px-3 py-1.5 font-mono text-sm uppercase tracking-widest text-foreground"
               />
-              <Button type="submit" size="sm" disabled={normalized.length !== 8} loading={approval.kind === "looking"}>
+              <Button type="submit" size="xl" className="min-h-[44px]" disabled={normalized.length !== 8} loading={approval.kind === "looking"}>
                 Continue
               </Button>
             </form>
@@ -378,37 +365,26 @@ export function PairMachinePanel({ onConnected, mode = "add", initialCode = "" }
           {approval.kind === "declined" && (
             <p className="text-xs text-muted-foreground">Declined. That machine was not connected.</p>
           )}
-          {/* The silent case. A machine whose CLI is already signed in to
-              Reliant — as ANOTHER account — needs no pairing, so `daemon
-              start` connects it to that account and prints no code, while
-              this panel waits for a machine that never arrives here. Signing
-              out first makes the next start pair. Folded, because it is the
-              exception: most people never open it. */}
-          {getControlPlaneURL() && (approval.kind === "enter" || approval.kind === "looking") && (
-            <details className="text-xs text-muted-foreground" data-testid="pair-no-code-hint">
-              <summary className="w-fit cursor-pointer select-none hover:text-foreground">
-                Not seeing a code?
-              </summary>
-              <div className="mt-2 space-y-1.5">
-                <p className="leading-relaxed">
-                  That machine may be signed in to another account. Sign it out there, then start it again:
-                </p>
-                <CommandLine command={authLogoutCommand()} />
-                <CommandLine command={daemonStartCommand()} />
-              </div>
-            </details>
-          )}
+
         </div>
       </section>
 
       {error && <p className="text-center text-xs text-destructive-ink">{error}</p>}
 
-      {mode !== "reference" && approval.kind !== "approved" && (
-        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Download className="h-3.5 w-3.5" aria-hidden="true" />
-          This moves on by itself once the machine connects.
-        </p>
-      )}
+      <SetupHelp>
+        <p>The installer includes the CLI and adds it to your PATH when you first open the app. The desktop app connects automatically on this computer.</p>
+        {installEvidenceNote && <p>{installEvidenceNote}</p>}
+        {cliPath && <p>CLI location: <code>{cliPath}</code></p>}
+        <p>{terminal.howToOpen} Paste the command and press Enter.</p>
+        {mode !== "reference" && <p>This moves on by itself once the machine connects.</p>}
+        {getControlPlaneURL() && (approval.kind === "enter" || approval.kind === "looking") && (
+          <div className="space-y-2" data-testid="pair-no-code-hint">
+            <p><strong>Not seeing a code?</strong> That machine may be signed in to another account. Sign it out there, then start it again:</p>
+            <CommandLine command={authLogoutCommand()} />
+            <CommandLine command={daemonStartCommand()} />
+          </div>
+        )}
+      </SetupHelp>
     </div>
   );
 }

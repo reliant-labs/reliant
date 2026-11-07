@@ -8,7 +8,7 @@
  * response, so nothing reaches a backend and nothing needs signing in. Used to
  * screenshot the onboarding-polish changes before and after.
  */
-import { useMemo, useState, type ReactNode } from "react";
+import { useLayoutEffect, useState, type ReactNode } from "react";
 import { create, type DescMessage } from "@bufbuild/protobuf";
 import { Code, ConnectError, type Transport, type UnaryResponse } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -29,6 +29,7 @@ import { TokenSettings } from "@/components/Settings/TokenSettings";
 import { MobileAIProvidersPanel } from "@/components/Mobile/MobileAIProvidersPanel";
 import { ApiKeySetupModal } from "@/components/ApiKeySetupModal";
 import { PairMachinePanel } from "@/components/Machines/PairMachinePanel";
+import { OAuthHelperPanel } from "@/components/OAuthHelperPanel";
 
 type Fixtures = Record<string, unknown>;
 
@@ -155,7 +156,8 @@ const SURFACES: Record<string, { title: string; fixtures?: Fixtures; render: () 
     render: () => <LocalModelsSection />,
   },
   tokens: { title: "Settings → Access tokens", render: () => <TokenSettings /> },
-  "pair-machine": { title: "Settings → Machines: pair a machine", render: () => <PairMachinePanel mode="reference" /> },
+  "pair-machine": { title: "Settings → Machines: pair a machine", width: 560, render: () => <PairMachinePanel mode="reference" /> },
+  "provider-helper": { title: "Provider sign-in helper", width: 560, render: () => <OAuthHelperPanel providerName="Claude" available={false} loading={false} connecting={false} onRetry={() => {}} onConnect={() => {}} /> },
   // Provider accounts list only for a session; the token is never sent anywhere.
   "mobile-providers": { title: "Mobile: AI providers", width: 390, signedIn: true, render: () => <MobileAIProvidersPanel /> },
   "api-key-modal": { title: "Provider connect dialog (Add an API key)", render: () => <ApiKeySetupModal isOpen onClose={() => {}} /> },
@@ -164,12 +166,33 @@ const SURFACES: Record<string, { title: string; fixtures?: Fixtures; render: () 
 export default function SetupSurfacesPreview() {
   const id = new URLSearchParams(window.location.search).get("surface") ?? "";
   const surface = SURFACES[id];
-  // Installed before the first render, so no query ever reaches a backend.
-  const client = useMemo(() => {
-    setTransport(previewTransport({ ...BASE, ...surface?.fixtures }));
-    if (surface?.signedIn) useAuthStore.setState({ session: { access_token: "preview" } as never });
-    return new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
-  }, [surface]);
+  return <PreviewSession key={id} fixtures={{ ...BASE, ...surface?.fixtures }} signedIn={surface?.signedIn}>
+    <PreviewSurface surface={surface} />
+  </PreviewSession>;
+}
+
+/** Install before mounting children; restore auth/transport on exit (review B1). */
+export function PreviewSession({ fixtures, signedIn, children }: { fixtures: Fixtures; signedIn?: boolean; children: ReactNode }) {
+  const [client, setClient] = useState<QueryClient | null>(null);
+  useLayoutEffect(() => {
+    const restoreTransport = setTransport(previewTransport(fixtures));
+    const originalSession = useAuthStore.getState().session;
+    const fakeSession = { access_token: "preview" } as NonNullable<typeof originalSession>;
+    if (signedIn) useAuthStore.setState({ session: fakeSession });
+    const cache = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
+    setClient(cache);
+    return () => {
+      cache.clear();
+      restoreTransport();
+      if (signedIn && useAuthStore.getState().session === fakeSession) useAuthStore.setState({ session: originalSession });
+    };
+    // A keyed session owns one fixture set for its whole lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return client ? <QueryClientProvider client={client}>{children}</QueryClientProvider> : null;
+}
+
+function PreviewSurface({ surface }: { surface: (typeof SURFACES)[string] | undefined }) {
   if (!surface) {
     return (
       <main className="mx-auto max-w-xl space-y-3 p-8 text-foreground">
@@ -183,12 +206,11 @@ export default function SetupSurfacesPreview() {
     );
   }
   return (
-    <QueryClientProvider client={client}>
-      <main className="min-h-screen bg-background p-4 text-foreground sm:p-8" data-testid="setup-surface">
-        <div className="mx-auto w-full" style={{ maxWidth: surface.width ?? 840 }}>
-          {surface.render()}
-        </div>
-      </main>
-    </QueryClientProvider>
+    <main className="min-h-screen bg-background p-4 text-foreground sm:p-8" data-testid="setup-surface">
+      <div className="mx-auto w-full" style={{ maxWidth: surface.width ?? 840 }}>
+        <p role="note" className="mb-4 text-xs text-muted-foreground">Preview · pairing and sign-in are simulated. Commands use public Reliant CLI defaults; they connect to production, not this preview. No tokens are shown.</p>
+        {surface.render()}
+      </div>
+    </main>
   );
 }

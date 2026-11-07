@@ -67,7 +67,7 @@ export function CommandBlock({
     >
       <code
         className={cn(
-          "min-w-0 flex-1 select-all break-all px-3 py-2 font-mono text-xs text-foreground",
+          "min-h-[44px] min-w-0 flex-1 select-all whitespace-pre-wrap break-words px-3 py-3 font-mono text-xs text-foreground [overflow-wrap:anywhere]",
           codeClassName,
         )}
       >
@@ -78,7 +78,7 @@ export function CommandBlock({
         onClick={() => void handleCopy()}
         aria-label={`Copy ${label}`}
         className={cn(
-          "flex flex-shrink-0 items-center gap-1.5 border-l border-border/40 px-2.5 text-xs font-medium transition-colors",
+          "flex min-h-[44px] min-w-[44px] flex-shrink-0 items-center justify-center gap-1.5 border-l border-border/40 px-2.5 text-xs font-medium transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
           copied
             ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"

@@ -106,8 +106,10 @@ afterEach(() => {
 describe("MobileAIProvidersPanel", () => {
   it("always shows the desktop-only browser sign-in notice", () => {
     renderPanel();
-    const notice = screen.getByText(/claude, chatgpt and google sign-in needs/i);
-    expect(notice.textContent).toMatch(/github copilot/i);
+    expect(screen.getByText(/Run this on your computer, then sign in there/i)).toBeVisible();
+    const help = screen.getByText("More help").closest("details")!;
+    expect(help).not.toHaveAttribute("open");
+    expect(help.textContent).toMatch(/GitHub Copilot can sign in directly/);
   });
 
   it("gives the sign-in helper command a copy button, at a 44px touch height", () => {
