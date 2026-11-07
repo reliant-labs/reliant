@@ -168,6 +168,19 @@ func (e *LocalToolExecutor) executeTool(
 	// A workflow run step, marked by the server (ToolRequest.RunStep). Read
 	// from the context map only — never from toolInput, which a model writes.
 	toolContext.RunStep, _ = contextMap[RunStepContextKey].(bool)
+	// The parameters the run's configuration bound, as the server recorded
+	// them (ToolRequest.BoundParams). The map has crossed JSON on the way to
+	// a daemon, and stayed a []string on the way to this worker.
+	switch bound := contextMap[BoundParamsContextKey].(type) {
+	case []string:
+		toolContext.BoundParams = append([]string(nil), bound...)
+	case []interface{}:
+		for _, name := range bound {
+			if s, ok := name.(string); ok {
+				toolContext.BoundParams = append(toolContext.BoundParams, s)
+			}
+		}
+	}
 	if machine, ok := contextMap[RunMachineContextKey].(map[string]interface{}); ok {
 		toolContext.RunMachine.ID, _ = machine["id"].(string)
 		toolContext.RunMachine.Name, _ = machine["name"].(string)

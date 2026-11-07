@@ -115,6 +115,7 @@ func TestPlan_OptInUnfreezesOnlySharedCheckouts(t *testing.T) {
 	assert.Contains(t, p.ReadOnly, m.bin, "an opt-in cannot unfreeze the daemon's binary")
 	assert.Contains(t, p.ReadOnly, filepath.Join(m.home, ".gitconfig"))
 	assert.Empty(t, p.Writable)
+	assert.Equal(t, []string{m.bin, filepath.Join(m.home, ".gitconfig")}, p.Rejected, "and the command is refused, naming them")
 }
 
 func TestPlan_CredentialHelpersAreReadOnly(t *testing.T) {
@@ -166,6 +167,50 @@ func TestPlan_GoDefaultsFollowHomeAndGoEnv(t *testing.T) {
 	assert.Equal(t, filepath.Join(home, ".cache", "go-build"), got["GOCACHE"])
 	assert.Equal(t, "/srv/mod", got["GOMODCACHE"], "go env -w")
 	assert.Equal(t, filepath.Join(home, ".cache", "golangci-lint"), got["GOLANGCI_LINT_CACHE"])
+}
+
+// The same rule for a run node's writable_checkouts and a workflow's binding
+// of an agent shell's (writableFor), but the agent's may name only hand-offs:
+// its commands are a model's.
+func TestPlan_ABoundAgentShellMayNameOnlyHandOffs(t *testing.T) {
+	m := newMachine(t)
+	xdg := filepath.Join(m.root, "xdg")
+	clone := filepath.Join(xdg, "pr-fix", "a-12-run", "a")
+	env := []string{"XDG_CACHE_HOME=" + xdg, "HOME=" + m.home}
+	agent := func(optIn ...string) Plan {
+		return buildPlan(Plan{}, planEnv{
+			home: m.home, cwd: m.multi, env: env, executable: filepath.Join(m.bin, "reliant"),
+			projectsDir: m.projects, daemonBinDir: m.bin, optIn: optIn, handOffsOnly: true,
+		})
+	}
+
+	p := agent(clone)
+	assert.Empty(t, p.Rejected)
+	assert.Contains(t, p.Passthrough, clone, "its scratch clone is written for real")
+
+	for _, bad := range []string{m.a, filepath.Join(m.a, "gen"), m.bin, filepath.Join(m.bin, "reliant"),
+		filepath.Join(m.home, ".gitconfig"), filepath.Join(xdg, "go-build")} {
+		p = agent(bad)
+		assert.Equal(t, []string{bad}, p.Rejected, "%s", bad)
+		if !under(bad, xdg) {
+			assert.Contains(t, p.ReadOnly, firstReadOnlyAbove(p.ReadOnly, bad), "%s stays read-only", bad)
+		}
+	}
+
+	// A run node may name the shared checkout; the agent's binding may not.
+	runNode := m.plan(m.multi, env, m.a)
+	assert.Empty(t, runNode.Rejected)
+	assert.NotContains(t, runNode.ReadOnly, m.a)
+}
+
+// firstReadOnlyAbove is the read-only path at or above p, or p.
+func firstReadOnlyAbove(ro []string, p string) string {
+	for _, r := range ro {
+		if under(p, r) {
+			return r
+		}
+	}
+	return p
 }
 
 func TestPlan_TheDaemonBinaryDirectoryIsReadOnly(t *testing.T) {

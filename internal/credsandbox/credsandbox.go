@@ -121,6 +121,10 @@ type Plan struct {
 	// node named, the heavy-slot locks. Where the overlay falls back to
 	// read-only, they are its carve-outs.
 	Passthrough []string `json:",omitempty"`
+	// Rejected are declared writable directories the rules do not allow
+	// (writableFor): Wrap refuses the command and names them, rather than
+	// run it with less than it declared.
+	Rejected []string `json:"-"`
 }
 
 // Overlay is one directory the command sees through a private overlay.
@@ -294,11 +298,10 @@ func CredScratchDir() string {
 // Wrap prepares cmd, which has not been started, for its credentials. A
 // credentials-none command (daemonpolicy.CredentialsNone) gets the sandbox, with
 // the plan for its directory (PlanFor) and this binary as the helper; writable
-// are the shared checkouts, or directories inside one, that it declared it
-// writes (a run node's writable_checkouts). Any other command gets SignalEnv
+// is what it declared it writes (Writable). Any other command gets SignalEnv
 // when the sandbox is in force for its credentials-none peers. A non-empty
 // refusal means the command must not run.
-func Wrap(cmd *exec.Cmd, credentials string, writable ...string) (refusal string) {
+func Wrap(cmd *exec.Cmd, credentials string, writable Writable) (refusal string) {
 	ensureCredScratch()
 	self, err := os.Executable()
 	if credentials != daemonpolicy.CredentialsNone {
@@ -313,7 +316,24 @@ func Wrap(cmd *exec.Cmd, credentials string, writable ...string) (refusal string
 		return ""
 	}
 	cmd.Env = withSignal(cmd.Env, false)
-	return Apply(cmd, self, PlanFor(cmd.Dir, cmd.Env, writable...))
+	plan := PlanFor(cmd.Dir, cmd.Env, writable)
+	// Only where the sandbox is in force: elsewhere nothing is read-only, so
+	// there is nothing a declared directory could be refused.
+	if len(plan.Rejected) > 0 && Available(self) == nil {
+		return rejectedRefusal(plan.Rejected, writable.HandOffsOnly)
+	}
+	return Apply(cmd, self, plan)
+}
+
+// rejectedRefusal is what a command whose declared writable directories the
+// rules refused reports.
+func rejectedRefusal(rejected []string, handOffsOnly bool) string {
+	allowed := "a shared project checkout, a directory inside one, or a directory inside the cache directory (XDG_CACHE_HOME or ~/.cache) apart from the tools' caches"
+	if handOffsOnly {
+		allowed = "a directory inside the cache directory (XDG_CACHE_HOME or ~/.cache) apart from the tools' caches: an agent's shell may be given a scratch clone there, never a shared checkout"
+	}
+	return fmt.Sprintf("reliant: `credentials: none` command not run: writable_checkouts names %s, which it may not write. "+
+		"Each entry must be %s. Fix the workflow's writable_checkouts.", strings.Join(rejected, ", "), allowed)
 }
 
 // withSignal is env (nil: this process's) with SignalEnv set when signal, and

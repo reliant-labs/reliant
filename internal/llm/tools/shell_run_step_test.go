@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -194,5 +195,74 @@ func TestShellTool_OnlyARunStepNamesWritableCheckouts(t *testing.T) {
 		if len(req.WritableCheckouts) != 0 {
 			t.Errorf("a model's call reached the daemon with WritableCheckouts %v", req.WritableCheckouts)
 		}
+	}
+}
+
+// A workflow that binds writable_checkouts on an agent's shell (tool_params)
+// gives the model's commands that directory, scoped to cache hand-offs: the
+// server says the parameter was bound (rctx.ToolContext.BoundParams), and
+// tools.ApplyBindings has put the bound value in the input. The same value
+// from a model, with nothing bound, reaches the daemon as nothing.
+func TestShellTool_ABoundWritableCheckoutsReachesTheDaemonScopedToHandOffs(t *testing.T) {
+	const clone = "/var/cache/workspace/xdg/pr-fix/cp-12-run/control-plane"
+	run := func(t *testing.T, bound bool) daemon.RunCommandRequest {
+		t.Helper()
+		bindings := Bindings{"credentials": LiteralBinding("none")}
+		if bound {
+			bindings["writable_checkouts"] = LiteralBinding([]any{clone})
+		}
+		model := `{"command":"git commit -qam fix","writable_checkouts":["` + clone + `"]}`
+		if bound {
+			model = `{"command":"git commit -qam fix"}`
+		}
+		input, err := ApplyBindings(ShellToolName, model, bindings)
+		if err != nil {
+			t.Fatalf("ApplyBindings: %v", err)
+		}
+		md := &timingOutDaemon{}
+		tc := &rctx.ToolContext{Context: context.Background(), ChatID: "chat-1",
+			Project: &rctx.Project{ID: "p", Checkout: "/work/p"}, Daemon: md}
+		if bound {
+			tc.BoundParams = bindings.Names()
+		}
+		if _, err := NewShellTool(ShellPlatformUnix).Run(tc, ToolCall{ID: "call-1", Name: ShellToolName, Input: input}); err != nil {
+			t.Fatalf("Run: %v", err)
+		}
+		if len(md.reqs) == 0 {
+			t.Fatal("no command reached the daemon")
+		}
+		return md.reqs[0]
+	}
+
+	req := run(t, true)
+	if !reflect.DeepEqual(req.WritableCheckouts, []string{clone}) || req.WritableCheckoutsScope != daemon.WritableScopeBoundShell {
+		t.Errorf("bound: WritableCheckouts = %v scope %q, want [%s] scope %q",
+			req.WritableCheckouts, req.WritableCheckoutsScope, clone, daemon.WritableScopeBoundShell)
+	}
+	req = run(t, false)
+	if len(req.WritableCheckouts) != 0 || req.WritableCheckoutsScope != "" {
+		t.Errorf("a model's own value reached the daemon: %v scope %q", req.WritableCheckouts, req.WritableCheckoutsScope)
+	}
+}
+
+// A model that sets a bound writable_checkouts to another directory is
+// refused, not run with either value (checkBoundKeys).
+func TestShellTool_AModelCannotOverrideABoundWritableCheckouts(t *testing.T) {
+	bindings := Bindings{"writable_checkouts": LiteralBinding([]any{"/var/cache/x/clone"})}
+	_, err := ApplyBindings(ShellToolName, `{"command":"true","writable_checkouts":["/home/workspace/projects/p"]}`, bindings)
+	var set *BoundParamSetError
+	if !errors.As(err, &set) {
+		t.Fatalf("err = %v, want a BoundParamSetError", err)
+	}
+}
+
+// writable_checkouts may be bound: a workflow gives an agent's shell its
+// scratch clone that way.
+func TestShellTool_WritableCheckoutsIsBindable(t *testing.T) {
+	if _, unbindable := UnbindableParams(ShellToolName)["writable_checkouts"]; unbindable {
+		t.Error("writable_checkouts is on the shell tool's unbindable list")
+	}
+	if _, err := BindTool(NewShellTool(ShellPlatformUnix), Bindings{"writable_checkouts": LiteralBinding([]any{"/x"})}); err != nil {
+		t.Errorf("binding writable_checkouts: %v", err)
 	}
 }

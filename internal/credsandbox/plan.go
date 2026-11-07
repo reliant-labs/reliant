@@ -86,17 +86,34 @@ type planEnv struct {
 	executable   string
 	projectsDir  string
 	daemonBinDir string
-	// optIn are the shared checkouts, or directories inside one, that the
-	// command declared it writes (Wrap's writable). Anything else in it is
-	// ignored: an opt-in cannot unfreeze the daemon's binary or git config.
+	// optIn are the directories the command declared it writes
+	// (Writable.Paths, absolute). What may be named is decided in one place,
+	// writableFor; anything else is Plan.Rejected.
 	optIn []string
+	// handOffsOnly is Writable.HandOffsOnly.
+	handOffsOnly bool
+}
+
+// Writable is what a credentials-none command declared it writes beyond its
+// own checkout and working directory: a run node's writable_checkouts, or the
+// writable_checkouts a workflow bound on an agent's shell. Either way the
+// workflow wrote it, never a model (the shell tool takes it only from a run
+// step or a bound parameter), and the same rules decide what it may name.
+type Writable struct {
+	// Paths are shared project checkouts or directories inside one, and
+	// hand-off directories inside a cache root (cacheRootOverlays). Relative
+	// ones are relative to the command's directory.
+	Paths []string
+	// HandOffsOnly limits Paths to hand-off directories. Set for an agent's
+	// shell: its commands are the model's, so a binding there may give it
+	// its own scratch clone to commit in, never a shared checkout.
+	HandOffsOnly bool
 }
 
 // PlanFor is the plan for a credentials-none command with working directory
-// dir (empty: this process's) and environment env (nil: this process's).
-// writable are shared checkouts, or directories inside one, the command
-// declared it writes; relative ones are relative to dir.
-func PlanFor(dir string, env []string, writable ...string) Plan {
+// dir (empty: this process's) and environment env (nil: this process's), which
+// declared writable.
+func PlanFor(dir string, env []string, writable Writable) Plan {
 	if env == nil {
 		env = os.Environ() //nolint:forbidigo // a command with no environment of its own inherits this process's
 	}
@@ -106,7 +123,7 @@ func PlanFor(dir string, env []string, writable ...string) Plan {
 	home, _ := os.UserHomeDir()
 	self, _ := os.Executable()
 	var optIn []string
-	for _, w := range writable {
+	for _, w := range writable.Paths {
 		if w = strings.TrimSpace(w); w == "" {
 			continue
 		}
@@ -118,7 +135,48 @@ func PlanFor(dir string, env []string, writable ...string) Plan {
 	return buildPlan(DefaultPlan(), planEnv{
 		home: home, cwd: dir, env: env, executable: self,
 		projectsDir: managedProjectsDir, daemonBinDir: daemonBinDir, optIn: optIn,
+		handOffsOnly: writable.HandOffsOnly,
 	})
+}
+
+// optInKind is what a declared writable directory turned out to be.
+type optInKind int
+
+const (
+	optInRejected       optInKind = iota
+	optInOwn                      // inside what the command writes anyway: nothing to do
+	optInHandOff                  // a hand-off inside a cache root: kept real (Passthrough)
+	optInSharedCheckout           // a shared checkout itself: the command's own
+	optInInsideShared             // a directory inside a shared checkout: a carve-out
+)
+
+// writableFor is the one rule for what a declared writable directory w may
+// be, for a run node's and a bound agent shell's alike. Never the daemon's
+// binary, git or daemon config, a credential helper or a tool cache: those are
+// not checkouts or hand-offs, so they are rejected.
+func writableFor(w string, handOffsOnly bool, own, shared []string, cwd string, cwdOwn bool, roots, tools []Overlay) optInKind {
+	if under(w, own...) {
+		return optInOwn
+	}
+	// Before the working directory: a shared checkout inside it (the
+	// multi-repo root a command starts in) is read-only all the same.
+	for _, s := range shared {
+		switch {
+		case handOffsOnly && under(w, s):
+			return optInRejected
+		case w == s:
+			return optInSharedCheckout
+		case under(w, s):
+			return optInInsideShared
+		}
+	}
+	switch {
+	case handOffDir(w, roots, tools):
+		return optInHandOff
+	case cwdOwn && under(w, cwd):
+		return optInOwn
+	}
+	return optInRejected
 }
 
 func buildPlan(base Plan, in planEnv) Plan {
@@ -185,19 +243,31 @@ func buildPlan(base Plan, in planEnv) Plan {
 			commons[common] = main
 		}
 	}
+	tools := cacheOverlays(home, in.env)
+	tools = append(tools, pathOverlays(in.env, home)...)
+	roots := cacheRootOverlays(home, in.env)
+	// The working directory is the command's own unless it is the home or
+	// above it: a command started in ~ does not own ~/.cache.
+	cwdOwn := cwd != "" && (home == "" || !under(home, cwd))
+
 	// An opt-in naming a shared checkout makes it the command's own; one
-	// inside a shared checkout is a carve-out of it.
-	var writable []string
+	// inside a shared checkout is a carve-out of it; one inside a cache root
+	// stays real there (below). Anything else is refused.
+	var writable, handOffs, rejected []string
 	shared = dedupe(shared)
+	ownBefore := append([]string(nil), own...)
 	for _, w := range in.optIn {
 		w = canonicalDir(w)
-		for _, s := range shared {
-			switch {
-			case w == s:
-				own = append(own, s)
-			case under(w, s):
-				writable = append(writable, w)
-			}
+		switch writableFor(w, in.handOffsOnly, ownBefore, shared, cwd, cwdOwn, roots, tools) {
+		case optInSharedCheckout:
+			own = append(own, w)
+		case optInInsideShared:
+			writable = append(writable, w)
+		case optInHandOff:
+			handOffs = append(handOffs, w)
+		case optInRejected:
+			rejected = append(rejected, w)
+		case optInOwn:
 		}
 	}
 	readOnlyShared := map[string]bool{}
@@ -223,12 +293,6 @@ func buildPlan(base Plan, in planEnv) Plan {
 	// that is itself a checkout) is the other case.
 	writable = append(writable, own...)
 
-	tools := cacheOverlays(home, in.env)
-	tools = append(tools, pathOverlays(in.env, home)...)
-	roots := cacheRootOverlays(home, in.env)
-	// The working directory is the command's own unless it is the home or
-	// above it: a command started in ~ does not own ~/.cache.
-	cwdOwn := cwd != "" && (home == "" || !under(home, cwd))
 	roAll := cleanAbs(append(append([]string(nil), p.ReadOnly...), ro...))
 	var keep []Overlay
 	for _, o := range append(tools, roots...) {
@@ -255,11 +319,7 @@ func buildPlan(base Plan, in planEnv) Plan {
 	if slots := slotDir(in.env); slots != "" {
 		pass = append(pass, slots)
 	}
-	for _, w := range in.optIn {
-		if w = canonicalDir(w); handOffDir(w, roots, tools) {
-			pass = append(pass, w)
-		}
-	}
+	pass = append(pass, handOffs...)
 	var keptRoots []string
 	for _, o := range keep {
 		if o.Notice {
@@ -281,6 +341,7 @@ func buildPlan(base Plan, in planEnv) Plan {
 	p.Writable = onlyUnderReadOnly(cleanAbs(append(p.Writable, writable...)), p.ReadOnly)
 	p.Overlay = dedupeOverlays(append(p.Overlay, keep...))
 	p.Passthrough = cleanAbs(append(p.Passthrough, passthrough...))
+	p.Rejected = cleanAbs(append(p.Rejected, rejected...))
 	return p
 }
 

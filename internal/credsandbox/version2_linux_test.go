@@ -45,7 +45,7 @@ func wrapped(t *testing.T, credentials, dir, home, sh string, extraEnv ...string
 	cmd := exec.Command("bash", "-c", sh)
 	cmd.Dir = dir
 	cmd.Env = append([]string{"PATH=/usr/bin:/bin", "HOME=" + home}, extraEnv...)
-	require.Empty(t, Wrap(cmd, credentials))
+	require.Empty(t, Wrap(cmd, credentials, Writable{}))
 	return cmd
 }
 
@@ -55,7 +55,7 @@ func wrappedWritable(t *testing.T, dir, home string, writable []string, sh strin
 	cmd := exec.Command("bash", "-c", sh)
 	cmd.Dir = dir
 	cmd.Env = append([]string{"PATH=/usr/bin:/bin", "HOME=" + home}, extraEnv...)
-	require.Empty(t, Wrap(cmd, "none", writable...))
+	require.Empty(t, Wrap(cmd, "none", Writable{Paths: writable}))
 	return cmd
 }
 

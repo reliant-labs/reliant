@@ -201,6 +201,10 @@ type FindReplaceChange struct {
 // Executor types
 // ---------------------------------------------------------------------------
 
+// WritableScopeBoundShell is RunCommandRequest.WritableCheckoutsScope for
+// writable checkouts a workflow bound on an agent's shell tool.
+const WritableScopeBoundShell = "bound_shell"
+
 // RunCommandRequest describes a command to execute.
 type RunCommandRequest struct {
 	// Command is the shell command to run (passed to bash -c).
@@ -238,6 +242,12 @@ type RunCommandRequest struct {
 	// daemon older than the field ignores it, and leaves every checkout
 	// writable as it always did.
 	WritableCheckouts []string `json:"writable_checkouts,omitempty"`
+	// WritableCheckoutsScope says who declared WritableCheckouts: "" a
+	// workflow run node, WritableScopeBoundShell a workflow binding of an
+	// agent's shell (whose commands a model writes), which may name only
+	// hand-off directories in the cache directory. A daemon older than the
+	// field ignores it with WritableCheckouts.
+	WritableCheckoutsScope string `json:"writable_checkouts_scope,omitempty"`
 	// Heavy declares the command heavy — a whole-module build, a test suite,
 	// codegen — whatever its words are, so it queues for one of the machine's
 	// heavy slots like the commands the daemon recognizes by itself (see

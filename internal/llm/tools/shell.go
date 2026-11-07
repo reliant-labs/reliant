@@ -107,9 +107,34 @@ func (ShellParams) JSONSchemaExtend(s *jsonschema.Schema) {
 }
 
 // shellWritableCheckoutsParamDoc is the schema description for
-// ShellParams.WritableCheckouts. Only a workflow run node's value is used (see
-// Run), so a model naming checkouts unfreezes nothing.
-const shellWritableCheckoutsParamDoc = "Set only by a workflow run node's writable_checkouts; ignored in any other call."
+// ShellParams.WritableCheckouts. Only a workflow's value is used
+// (workflowWritableCheckouts), so a model naming checkouts unfreezes nothing.
+const shellWritableCheckoutsParamDoc = "Set only by a workflow: a run node's writable_checkouts, or a binding of this parameter in tool_params; a value in any other call is ignored."
+
+// workflowWritableCheckouts is the one place a shell call's writable
+// checkouts come from, and only ever from the workflow, never from the model:
+//
+//   - a run node's command (rctx.RunStep, set by the server): the node's
+//     writable_checkouts, shared checkouts and cache hand-offs alike;
+//   - an agent's call where the workflow bound the parameter
+//     (rctx.IsBound, from the server's capability set; tools.ApplyBindings
+//     put the bound value in the input and refused a call that set another):
+//     hand-off directories only (daemon.WritableScopeBoundShell), since the
+//     commands are the model's.
+//
+// Anything else, a model's own value included, is dropped. The daemon decides
+// what each entry may name (credsandbox.Writable, writableFor), for both alike.
+func workflowWritableCheckouts(tc *rctx.ToolContext, params ShellParams) ([]string, string) {
+	switch {
+	case len(params.WritableCheckouts) == 0:
+		return nil, ""
+	case tc.RunStep:
+		return params.WritableCheckouts, ""
+	case tc.IsBound("writable_checkouts"):
+		return params.WritableCheckouts, daemon.WritableScopeBoundShell
+	}
+	return nil, ""
+}
 
 // shellKeepAliveParamDoc is the schema description for ShellParams.KeepAlive.
 const shellKeepAliveParamDoc = "With run_in_background: keep this process running after this chat finishes. Without it, a background process is stopped once it has been idle for 4 hours by default (no output, and no agent read it with shell_output/shell_wait, listed it with shell_list or killed it) and the chat that started it has no run in progress. Set it only for an intentional long-lived server the user will keep using."
@@ -572,12 +597,7 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 		ThreadID:    rctx.Thread,
 		KeepAlive:   params.KeepAlive,
 	}
-	// Only a run node's command (rctx.RunStep, set by the server) may name
-	// checkouts to write: a model running with credentials: none bound must
-	// not be able to unfreeze the shared checkouts for itself.
-	if rctx.RunStep {
-		req.WritableCheckouts = params.WritableCheckouts
-	}
+	req.WritableCheckouts, req.WritableCheckoutsScope = workflowWritableCheckouts(rctx, params)
 	if credentials == daemonpolicy.CredentialsNone {
 		// A daemon older than the credentials field ignores it but applies env,
 		// so the neutral assignments keep it from failing open. A caller's own
