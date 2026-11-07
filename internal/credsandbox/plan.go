@@ -246,6 +246,13 @@ func buildPlan(base Plan, in planEnv) Plan {
 	tools := cacheOverlays(home, in.env)
 	tools = append(tools, pathOverlays(in.env, home)...)
 	roots := cacheRootOverlays(home, in.env)
+	// Every root and cache by its real path, as an opt-in is classified.
+	for i := range tools {
+		tools[i].Path = canonicalDir(tools[i].Path)
+	}
+	for i := range roots {
+		roots[i].Path = canonicalDir(roots[i].Path)
+	}
 	// The working directory is the command's own unless it is the home or
 	// above it: a command started in ~ does not own ~/.cache.
 	cwdOwn := cwd != "" && (home == "" || !under(home, cwd))
@@ -754,14 +761,31 @@ func envValue(env []string, name string) string {
 }
 
 // canonicalDir resolves dir's symlinks, or returns it cleaned.
+//
+// For a path that does not exist (yet), the links are resolved in its longest
+// existing ancestor and the rest is appended: a hand-off to be made under a
+// cache root reached through a link is classified, and later made and
+// mounted, as the path it really is, and one whose existing ancestry leaves
+// the roots is seen to.
 func canonicalDir(dir string) string {
 	if dir == "" {
 		return ""
 	}
-	if real, err := filepath.EvalSymlinks(dir); err == nil {
-		return real
+	dir = filepath.Clean(dir)
+	var rest []string
+	for d := dir; ; d = filepath.Dir(d) {
+		if real, err := filepath.EvalSymlinks(d); err == nil {
+			for i := len(rest) - 1; i >= 0; i-- {
+				real = filepath.Join(real, rest[i])
+			}
+			return real
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return dir
+		}
+		rest = append(rest, filepath.Base(d))
 	}
-	return filepath.Clean(dir)
 }
 
 // under reports whether path is one of roots or inside one.

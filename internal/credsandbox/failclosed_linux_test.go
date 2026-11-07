@@ -186,3 +186,40 @@ func TestSandbox_ARunDirectoryReplacedBeforeTheInitStartsRefusesTheCommand(t *te
 	assert.Equal(t, "theirs", string(got))
 	assert.NoFileExists(t, filepath.Join(runDir, runDirOwnerFile))
 }
+
+// R2.B5: an opt-in is classified by its real path, resolved through its
+// longest existing ancestor, so a hand-off not made yet under a cache root
+// reached through a link is the directory later made and mounted, and one
+// whose existing ancestry leaves the roots is refused.
+func TestPlan_OptInsAreClassifiedByTheirRealPath(t *testing.T) {
+	m := newMachine(t)
+	realXDG := filepath.Join(m.root, "var-cache", "xdg")
+	require.NoError(t, os.MkdirAll(realXDG, 0o755))
+	link := filepath.Join(m.root, "xdg-link")
+	require.NoError(t, os.Symlink(realXDG, link))
+	require.NoError(t, os.Symlink(m.bin, filepath.Join(realXDG, "escape")))
+	env := []string{"XDG_CACHE_HOME=" + link, "HOME=" + m.home}
+	agent := func(optIn string) Plan {
+		return buildPlan(Plan{}, planEnv{home: m.home, cwd: m.multi, env: env,
+			projectsDir: m.projects, daemonBinDir: m.bin, optIn: []string{optIn}, handOffsOnly: true})
+	}
+
+	p := agent(filepath.Join(link, "pipeline", "run-1", "out"))
+	assert.Empty(t, p.Rejected)
+	assert.Contains(t, p.Passthrough, filepath.Join(realXDG, "pipeline", "run-1", "out"), "by the path it really is")
+
+	p = agent(filepath.Join(link, "escape", "planted"))
+	assert.Equal(t, []string{filepath.Join(m.bin, "planted")}, p.Rejected, "a link out of the root is followed, and refused")
+
+	p = agent(filepath.Join(link, "..", "home", ".gitconfig"))
+	assert.Equal(t, []string{filepath.Join(m.home, ".gitconfig")}, p.Rejected)
+}
+
+func TestCanonicalDir_ResolvesTheLongestExistingAncestor(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(real, link))
+	assert.Equal(t, filepath.Join(real, "a", "b"), canonicalDir(filepath.Join(link, "a", "b")))
+	assert.Equal(t, real, canonicalDir(link))
+	assert.Equal(t, "/no/such/dir", canonicalDir("/no/such/./dir"))
+}
