@@ -139,6 +139,7 @@ func buildPlan(base Plan, in planEnv) Plan {
 	if home != "" {
 		for _, rel := range readOnlyReliantRel {
 			ro = append(ro, filepath.Join(home, rel))
+			seal = append(seal, filepath.Join(home, rel))
 		}
 		for _, rel := range sealedHomeRel {
 			ro = append(ro, filepath.Join(home, rel))

@@ -41,6 +41,9 @@ type ExecuteRunStepInput struct {
 	// Credentials is the node's `credentials` setting: "none" runs the command
 	// with no GitHub, git, ssh or cloud credentials.
 	Credentials string `json:"credentials,omitempty"`
+	// WritableCheckouts is the node's `writable_checkouts`: the shared
+	// checkouts a credentials-none command may write (credsandbox.Wrap).
+	WritableCheckouts []string `json:"writable_checkouts,omitempty"`
 	// SaveMessage delegates the run node's save_message to the ActivityWrapper
 	// (see types.SaveMessageRequest). The handler never reads it.
 	SaveMessage *activitytypes.SaveMessageRequest `json:"save_message,omitempty" reliant:"-"`
@@ -219,6 +222,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 			Duration: time.Since(startTime).Milliseconds()}, nil
 	}
 	execCtx.Credentials = credentials
+	execCtx.WritableCheckouts = input.WritableCheckouts
 
 	// The command's machine is final: its checkout is the working directory.
 	// A machine without one fails the command with the reason and the way

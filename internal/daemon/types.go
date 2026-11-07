@@ -229,6 +229,13 @@ type RunCommandRequest struct {
 	// own environment. It is a seatbelt for what Reliant hands out, not a
 	// sandbox: the daemon user's files stay readable.
 	Credentials string `json:"credentials,omitempty"`
+	// WritableCheckouts are the shared project checkouts, or directories
+	// inside one, that a credentials-none command may write. Such a command
+	// otherwise sees every project checkout but its own read-only
+	// (internal/credsandbox). Relative paths are relative to WorkingDir. A
+	// daemon older than the field ignores it, and leaves every checkout
+	// writable as it always did.
+	WritableCheckouts []string `json:"writable_checkouts,omitempty"`
 	// Heavy declares the command heavy — a whole-module build, a test suite,
 	// codegen — whatever its words are, so it queues for one of the machine's
 	// heavy slots like the commands the daemon recognizes by itself (see

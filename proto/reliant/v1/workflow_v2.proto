@@ -1179,6 +1179,18 @@ message RunArgs {
     example: "none"
     label: "Credentials"
   }];
+  // WritableCheckouts are the shared project checkouts, or directories inside
+  // one, that a credentials: none command writes. On Linux such a command sees
+  // every project checkout other than its own (the one holding its working
+  // directory, and its Reliant worktree's) read-only, .git included, so it
+  // cannot plant hooks, config or scripts that a later credentialed step runs.
+  // Relative paths are relative to the working directory. Ignored when the
+  // command has credentials; a daemon older than the field ignores it too.
+  repeated string writable_checkouts = 6 [(reliant) = {
+    description: "With credentials: none, the shared project checkouts the command may write. Every other checkout but its own is read-only to it"
+    example: "reliant"
+    hidden: true
+  }];
 }
 
 // SubWorkflowArgs configures a workflow node — invokes a sub-workflow.

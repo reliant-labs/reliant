@@ -828,7 +828,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	}
 	// credentials: none runs where the daemon's credential files are absent; see
 	// credsandbox. Outside the heavy-slot rewrite above.
-	if refusal := credsandbox.Wrap(cmd, credentials); refusal != "" {
+	if refusal := credsandbox.Wrap(cmd, credentials, req.WritableCheckouts...); refusal != "" {
 		return &CommandResult{ExitCode: credsandbox.RefusedExitCode, Stderr: refusal, Combined: refusal}, nil
 	}
 
@@ -963,13 +963,14 @@ func (c *LocalClient) StartBackground(ctx context.Context, req *RunCommandReques
 	}
 	bgm := shell.GetBackgroundManager()
 	process, err := bgm.StartProcess(ctx, shell.StartProcessOptions{
-		Command:     req.Command,
-		WorkingDir:  req.WorkingDir,
-		Env:         req.Env,
-		Credentials: credentials,
-		HeavyGate:   c.heavy,
-		Heavy:       req.Heavy,
-		AgentID:     req.ChatID,
+		Command:           req.Command,
+		WorkingDir:        req.WorkingDir,
+		Env:               req.Env,
+		Credentials:       credentials,
+		WritableCheckouts: req.WritableCheckouts,
+		HeavyGate:         c.heavy,
+		Heavy:             req.Heavy,
+		AgentID:           req.ChatID,
 		// The chat that started it, so the idle reaper may stop it once
 		// that chat has finished (shell/background_reaper.go).
 		ChatID:         req.ChatID,

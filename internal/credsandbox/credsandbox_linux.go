@@ -108,9 +108,12 @@ func namespaces(a *syscall.SysProcAttr) {
 	a.GidMappings = []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}}
 	a.GidMappingsEnableSetgroups = false
 	// The helper needs CAP_SYS_ADMIN inside its own user namespace to mount, and
-	// CAP_SETPCAP to empty the bounding set; it drops everything before the
-	// command runs.
-	a.AmbientCaps = append(a.AmbientCaps, unix.CAP_SYS_ADMIN, unix.CAP_SETPCAP)
+	// CAP_SETPCAP to empty the bounding set; an overlay mount takes the
+	// mounter's file capabilities for its copy-ups and work directory too
+	// (they reach only the files of the one id mapped). It drops everything
+	// before the command runs.
+	a.AmbientCaps = append(a.AmbientCaps, unix.CAP_SYS_ADMIN, unix.CAP_SETPCAP,
+		unix.CAP_DAC_OVERRIDE, unix.CAP_DAC_READ_SEARCH, unix.CAP_FOWNER, unix.CAP_CHOWN, unix.CAP_FSETID)
 }
 
 // specFDEnv names the file descriptor the helper reads its spec from. The

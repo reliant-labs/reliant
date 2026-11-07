@@ -3611,9 +3611,17 @@ type RunArgs struct {
 	// A guard rail against a command that pushes or merges when it should not,
 	// not containment: the command still runs as the daemon's Unix user and can
 	// read that user's files.
-	Credentials   string `protobuf:"bytes,5,opt,name=credentials,proto3" json:"credentials,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Credentials string `protobuf:"bytes,5,opt,name=credentials,proto3" json:"credentials,omitempty"`
+	// WritableCheckouts are the shared project checkouts, or directories inside
+	// one, that a credentials: none command writes. On Linux such a command sees
+	// every project checkout other than its own (the one holding its working
+	// directory, and its Reliant worktree's) read-only, .git included, so it
+	// cannot plant hooks, config or scripts that a later credentialed step runs.
+	// Relative paths are relative to the working directory. Ignored when the
+	// command has credentials; a daemon older than the field ignores it too.
+	WritableCheckouts []string `protobuf:"bytes,6,rep,name=writable_checkouts,json=writableCheckouts,proto3" json:"writable_checkouts,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *RunArgs) Reset() {
@@ -3679,6 +3687,13 @@ func (x *RunArgs) GetCredentials() string {
 		return x.Credentials
 	}
 	return ""
+}
+
+func (x *RunArgs) GetWritableCheckouts() []string {
+	if x != nil {
+		return x.WritableCheckouts
+	}
+	return nil
 }
 
 // SubWorkflowArgs configures a workflow node — invokes a sub-workflow.
@@ -8992,7 +9007,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x11BaseBranchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:f\x8a\xb5\x18b\n" +
-	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\xe5\x05\n" +
+	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\xaa\a\n" +
 	"\aRunArgs\x12~\n" +
 	"\acommand\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBM\x82\xb5\x18I\n" +
 	"1The shell command to run in the project directoryp\x01\x82\x01\x11npm test -- --runR\acommand\x12M\n" +
@@ -9003,7 +9018,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\blog_file\x18\x04 \x01(\v2\x15.reliant.v1.CelStringB+\x82\xb5\x18'\n" +
 	"#Redirect stdout+stderr to this file \x01R\alogFile\x12\xca\x01\n" +
 	"\vcredentials\x18\x05 \x01(\tB\xa7\x01\x82\xb5\x18\xa2\x01\n" +
-	"\x8b\x01Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readableJ\vCredentials\x82\x01\x04noneR\vcredentials\x1a6\n" +
+	"\x8b\x01Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readableJ\vCredentials\x82\x01\x04noneR\vcredentials\x12\xc2\x01\n" +
+	"\x12writable_checkouts\x18\x06 \x03(\tB\x92\x01\x82\xb5\x18\x8d\x01\n" +
+	"\x7fWith credentials: none, the shared project checkouts the command may write. Every other checkout but its own is read-only to it \x01\x82\x01\areliantR\x11writableCheckouts\x1a6\n" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:D\x8a\xb5\x18@\n" +

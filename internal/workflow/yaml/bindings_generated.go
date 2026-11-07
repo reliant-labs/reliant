@@ -196,11 +196,12 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		oneofFieldName: "run",
 		isStructural:   true,
 		argFieldKeys: map[string]struct{}{
-			"command":     {},
-			"credentials": {},
-			"env":         {},
-			"log_file":    {},
-			"work_dir":    {},
+			"command":            {},
+			"credentials":        {},
+			"env":                {},
+			"log_file":           {},
+			"work_dir":           {},
+			"writable_checkouts": {},
 		},
 	},
 	"save_message": {

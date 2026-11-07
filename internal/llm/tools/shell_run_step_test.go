@@ -173,3 +173,26 @@ func TestShellTool_ToolInputCannotClaimRunStep(t *testing.T) {
 		t.Errorf("the shell schema offers run_step to the model: %s", schema)
 	}
 }
+
+// A run node's writable_checkouts reach the daemon; a model's call cannot name
+// any, so a model run with credentials: none bound cannot unfreeze the shared
+// checkouts for itself (credsandbox).
+func TestShellTool_OnlyARunStepNamesWritableCheckouts(t *testing.T) {
+	input := `{"command":"make gen","credentials":"none","writable_checkouts":["reliant"]}`
+	d, _ := runShellCall(t, true, input)
+	if got := d.reqs[0].WritableCheckouts; !reflect.DeepEqual(got, []string{"reliant"}) {
+		t.Errorf("run step: WritableCheckouts = %v, want [reliant]", got)
+	}
+
+	md := &timingOutDaemon{}
+	tc := &rctx.ToolContext{Context: context.Background(), ChatID: "chat-1",
+		Project: &rctx.Project{ID: "p", Checkout: "/work/p"}, Daemon: md}
+	if _, err := NewShellTool(ShellPlatformUnix).Run(tc, ToolCall{ID: "call-1", Name: ShellToolName, Input: input}); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	for _, req := range md.reqs {
+		if len(req.WritableCheckouts) != 0 {
+			t.Errorf("a model's call reached the daemon with WritableCheckouts %v", req.WritableCheckouts)
+		}
+	}
+}

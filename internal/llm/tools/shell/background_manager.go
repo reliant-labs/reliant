@@ -417,6 +417,9 @@ type StartProcessOptions struct {
 	// Credentials is daemonpolicy.CredentialsNone to start the process with no
 	// GitHub, git, ssh or cloud credentials.
 	Credentials string
+	// WritableCheckouts are the shared checkouts a credentials-none process
+	// may write (daemon.RunCommandRequest.WritableCheckouts).
+	WritableCheckouts []string
 	// Argv, when set, runs the command with no shell (see
 	// daemon.RunCommandRequest.Argv). Command is used for display only.
 	Argv []string
@@ -496,7 +499,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	// credentials: none runs where the daemon's credential files are absent; see
 	// credsandbox. Outside the heavy-slot rewrite above, so the slot wrapper
 	// runs inside it.
-	if refusal := credsandbox.Wrap(cmd, opts.Credentials); refusal != "" {
+	if refusal := credsandbox.Wrap(cmd, opts.Credentials, opts.WritableCheckouts...); refusal != "" {
 		cancel()
 		return nil, errors.New(refusal)
 	}

@@ -43,7 +43,11 @@ type ShellParams struct {
 	// (bound, so the model is never shown it); "" is the daemon's own
 	// environment.
 	Credentials string `json:"credentials,omitempty" jsonschema:"enum=none,enum=inherit"`
-	Repo        string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to run the command in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Omit in single-repo projects. The system prompt lists available repos when this matters."`
+	// WritableCheckouts are the shared project checkouts a credentials-none
+	// command may write (daemon.RunCommandRequest.WritableCheckouts). Only a
+	// run node's value is used: Run ignores it in a model's call.
+	WritableCheckouts []string `json:"writable_checkouts,omitempty"`
+	Repo              string   `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to run the command in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Omit in single-repo projects. The system prompt lists available repos when this matters."`
 	// Heavy declares the command heavy so it queues for one of the machine's
 	// heavy slots (see daemon.RunCommandRequest.Heavy). Its schema
 	// description is attached in JSONSchemaExtend.
@@ -97,7 +101,15 @@ func (ShellParams) JSONSchemaExtend(s *jsonschema.Schema) {
 	if prop, ok := s.Properties.Get("keep_alive"); ok {
 		prop.Description = shellKeepAliveParamDoc
 	}
+	if prop, ok := s.Properties.Get("writable_checkouts"); ok {
+		prop.Description = shellWritableCheckoutsParamDoc
+	}
 }
+
+// shellWritableCheckoutsParamDoc is the schema description for
+// ShellParams.WritableCheckouts. Only a workflow run node's value is used (see
+// Run), so a model naming checkouts unfreezes nothing.
+const shellWritableCheckoutsParamDoc = "Set only by a workflow run node's writable_checkouts; ignored in any other call."
 
 // shellKeepAliveParamDoc is the schema description for ShellParams.KeepAlive.
 const shellKeepAliveParamDoc = "With run_in_background: keep this process running after this chat finishes. Without it, a background process is stopped once it has been idle for 4 hours by default (no output, and no agent read it with shell_output/shell_wait, listed it with shell_list or killed it) and the chat that started it has no run in progress. Set it only for an intentional long-lived server the user will keep using."
@@ -559,6 +571,12 @@ func (s *shellTool) execute(rctx *rctx.ToolContext, params ShellParams, outcome 
 		ChatID:      chatID,
 		ThreadID:    rctx.Thread,
 		KeepAlive:   params.KeepAlive,
+	}
+	// Only a run node's command (rctx.RunStep, set by the server) may name
+	// checkouts to write: a model running with credentials: none bound must
+	// not be able to unfreeze the shared checkouts for itself.
+	if rctx.RunStep {
+		req.WritableCheckouts = params.WritableCheckouts
 	}
 	if credentials == daemonpolicy.CredentialsNone {
 		// A daemon older than the credentials field ignores it but applies env,
