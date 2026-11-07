@@ -28,7 +28,11 @@ export const installShellTransport: typeof Real.installShellTransport = (t) => {
 };
 
 export const setTransport: typeof Real.setTransport = (t) => {
+  const previous = _override;
   _override = t;
+  // Match the app seam: an older preview's cleanup must not remove a newer
+  // override, and normal cleanup restores the transport it replaced.
+  return () => { if (_override === t) _override = previous; };
 };
 
 async function target(): Promise<Transport> {
