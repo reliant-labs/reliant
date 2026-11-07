@@ -106,6 +106,12 @@ export interface TourState {
   /** Reset all per-step progress so the tour can be restarted from scratch. */
   resetTourProgress: () => Promise<void>;
   saveTourState: () => Promise<void>;
+  /**
+   * Forget this user's tour in memory, WITHOUT persisting: cancel the queued
+   * save, clear progress and contexts, and make in-flight loads and saves
+   * started before it drop their result. Called on an identity change.
+   */
+  reset: () => void;
   detectProjectCode: () => Promise<void>;
 }
 
@@ -132,6 +138,11 @@ function cancelPendingSave(): void {
     _saveTimer = null;
   }
 }
+
+// Bumped by reset() (an identity change: authStore): a load started for the
+// previous user drops its answer instead of installing it, and a save or
+// terminal transition started for them writes nothing under the next one.
+let generation = 0;
 
 /** Test-only: drop any scheduled save so state can't leak across cases. */
 export function __resetTourSaveScheduler(): void {
@@ -167,6 +178,7 @@ export const useTourStore = create<TourState>((set, get) => ({
   loadState: async () => {
     if (get().isLoading) return;
     set({ isLoading: true });
+    const startedIn = generation;
 
     // Versions come from the journey content. Imported lazily so this store
     // never pulls journey content (and whatever it imports) into its static
@@ -226,6 +238,10 @@ export const useTourStore = create<TourState>((set, get) => ({
     if (contextSetting) {
       try { contexts = JSON.parse(contextSetting) as typeof contexts; } catch { /* ignore */ }
     }
+
+    // The identity changed while the settings were in flight: they are the
+    // previous user's. reset() already cleared isLoading for the next load.
+    if (startedIn !== generation) return;
 
     set({
       hasCompletedOnboarding,
@@ -303,13 +319,18 @@ export const useTourStore = create<TourState>((set, get) => ({
     // tour (wizard hook or external) gets consistent side effects.
     // The checklist is Reliant's (settings-backed); a shell with its own
     // storage (the forge shell) has none to update.
+    const startedIn = generation;
     if (getTourStorage().kind === "settings") try {
       const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
+      if (startedIn !== generation) return;
       void useOnboardingChecklistStore.getState().markComplete("take-product-tour");
       void useOnboardingChecklistStore.getState().markWelcomeShown();
     } catch {
       /* ignore */
     }
+    // The identity changed while the import was pending: the store now holds
+    // nobody's tour, and saving it would overwrite the next user's.
+    if (startedIn !== generation) return;
     await get().saveTourState();
   },
 
@@ -355,12 +376,14 @@ export const useTourStore = create<TourState>((set, get) => ({
 
   resetTourProgress: async () => {
     trackEvent('tour_restarted');
+    const startedIn = generation;
 
     try {
       await getTourStorage().delete(TOUR_SETTINGS_KEYS.SKIPPED_ALL);
     } catch {
       /* ignore */
     }
+    if (startedIn !== generation) return;
 
     set({
       completedSteps: new Set(),
@@ -396,6 +419,7 @@ export const useTourStore = create<TourState>((set, get) => ({
     localStorage.removeItem("reliant.checklist.welcomeShown");
     localStorage.removeItem("reliant.checklist.completedItems");
 
+    if (startedIn !== generation) return;
     await get().saveTourState();
     await get().detectProjectCode();
   },
@@ -429,7 +453,26 @@ export const useTourStore = create<TourState>((set, get) => ({
   },
 
   detectProjectCode: async () => {
+    const startedIn = generation;
     const hasCode = await detectHasCode();
+    if (startedIn !== generation) return;
     set({ projectHasCode: hasCode });
+  },
+
+  reset: () => {
+    generation++;
+    cancelPendingSave();
+    set({
+      completedSteps: new Set(),
+      skippedSteps: new Set(),
+      hasCompletedOnboarding: false,
+      journeys: emptyRecords(),
+      lastJourney: null,
+      resumeStep: null,
+      contexts: {},
+      projectHasCode: null,
+      isInitialized: false,
+      isLoading: false,
+    });
   },
 }));

@@ -55,6 +55,11 @@ const clearUserScopedState = async (): Promise<void> => {
   useGlobalDataStore.getState().reset()
   useApiKeySetupStore.getState().reset()
   useOnboardingChecklistStore.getState().reset()
+  // The product tour's progress and its debounced save: left alive, a save
+  // queued for this user would write their progress into the next user's
+  // settings, and a load in flight would install this user's journeys.
+  const { useTourStore } = await import('./tourStore')
+  useTourStore.getState().reset()
   // The settings cache the checklist (and every readSetting) is served from;
   // left initialized it would answer the next user with this one's settings.
   const { settingsSync } = await import('@/services/settingsSync')

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AuthChangeEvent, Session } from '@supabase/supabase-js'
 
 // ---------------------------------------------------------------------------
@@ -75,6 +75,9 @@ const { useApiKeySetupStore } = await import('@/store/apiKeySetupStore')
 const { useOnboardingChecklistStore } = await import('@/store/onboardingChecklistStore')
 const { settingsSync } = await import('@/services/settingsSync')
 const { useModalStore } = await import('@/store/modalStore')
+const { useTourStore, __resetTourSaveScheduler } = await import('@/store/tourStore')
+const { setTourStorage, settingsTourStorage } = await import('@/components/Onboarding/tourShell')
+const { TOUR_SETTINGS_KEYS } = await import('@/components/Onboarding/constants')
 
 const WELCOME_SHOWN = 'onboarding.checklist.welcome_shown'
 const settingsOf = (welcomeShown: boolean) => ({
@@ -406,6 +409,70 @@ describe('in-flight startup work', () => {
     expect(apiKeys.hasApiKey).toBeNull()
     expect(apiKeys.showModal).toBe(false)
     expect(useModalStore.getState().activeModal).not.toBe('api-key-setup')
+  })
+})
+
+// The product tour persists through the current session's settings: a load or
+// a debounced save begun for user A must neither install A's tour for B nor
+// write A's progress under B.
+describe('the product tour', () => {
+  // A tour storage whose reads wait on `held` and whose writes are recorded.
+  const tourStorageHolding = (held: Promise<void>) => {
+    const writes: Array<[string, string]> = []
+    const reads = vi.fn(async (key: string) => {
+      await held
+      return key === TOUR_SETTINGS_KEYS.COMPLETED_STEPS ? JSON.stringify(['a:step']) : 'true'
+    })
+    setTourStorage({
+      kind: 'local',
+      get: reads,
+      set: async (key, value) => void writes.push([key, value]),
+      delete: async () => undefined,
+    })
+    return { writes, reads }
+  }
+
+  beforeEach(() => {
+    __resetTourSaveScheduler()
+    useTourStore.getState().reset()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    __resetTourSaveScheduler()
+    setTourStorage(settingsTourStorage)
+  })
+
+  it('a tour load for user A does not install A\'s tour for B', async () => {
+    await signedInAs('user-a')
+    const aSettings = deferred()
+    const { reads } = tourStorageHolding(aSettings.promise)
+    const aLoad = useTourStore.getState().loadState()
+    // The first load imports the journey registry before it reads.
+    await vi.waitFor(() => expect(reads).toHaveBeenCalled(), { timeout: 15_000 })
+
+    await auth.listener!('SIGNED_IN', sessionFor('user-b'))
+    aSettings.resolve()
+    await aLoad
+
+    const tour = useTourStore.getState()
+    expect(tour.isInitialized).toBe(false)
+    expect(tour.isLoading).toBe(false)
+    expect(tour.hasCompletedOnboarding).toBe(false)
+    expect(tour.completedSteps.size).toBe(0)
+    expect(tour.lastJourney).toBeNull()
+  })
+
+  it('a save queued for user A writes nothing under B', async () => {
+    await signedInAs('user-a')
+    const { writes } = tourStorageHolding(Promise.resolve())
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    await useTourStore.getState().completeStep('a:step')
+
+    await auth.listener!('SIGNED_IN', sessionFor('user-b'))
+    await vi.runAllTimersAsync()
+
+    expect(writes).toEqual([])
+    expect(useTourStore.getState().completedSteps.size).toBe(0)
   })
 })
 
