@@ -200,12 +200,17 @@ func localBranchTip(ctx context.Context, repoPath, branch string) string {
 }
 
 // restoreForcedBranch puts a branch a failed forced create reset with -B back
-// at priorTip, its tip before the create. It is a compare-and-swap on the
-// start point: a branch that moved since (someone else's commit, or no reset
-// happened at all) is left as it is, and so is one this create made (no
-// priorTip). Best effort, on a context of its own, like abandonCheckout.
-func restoreForcedBranch(ctx context.Context, repoPath, branch, priorTip, startPoint string) {
-	if priorTip == "" || startPoint == "" {
+// at priorTip, its tip before the create. observed is the branch's tip read
+// when the create failed, while its checkout still held the branch (so only
+// that checkout, a hook in it, could have moved it): the reset itself
+// (startPoint), or commits a hook made on top of it. The restore is a
+// compare-and-swap from observed, and only when observed descends from the
+// start point: a branch that moved since, one no reset reached, or one this
+// create made (no priorTip) is left as it is. A hook's commits go with the
+// checkout being taken back. Best effort, on a context of its own, like
+// abandonCheckout.
+func restoreForcedBranch(ctx context.Context, repoPath, branch, priorTip, startPoint, observed string) {
+	if priorTip == "" || startPoint == "" || observed == "" || observed == priorTip {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), worktreeAbandonTimeout)
@@ -217,10 +222,14 @@ func restoreForcedBranch(ctx context.Context, repoPath, branch, priorTip, startP
 		return
 	}
 	reset := strings.TrimSpace(string(out))
-	if reset == priorTip {
-		return
+	if reset != observed {
+		anc := exec.CommandContext(ctx, "git", "merge-base", "--is-ancestor", reset, observed)
+		anc.Dir = repoPath
+		if anc.Run() != nil {
+			return // not the reset, nor built on it: not this create's to undo
+		}
 	}
-	cmd := exec.CommandContext(ctx, "git", "update-ref", "-m", "reliant: a failed forced worktree create restores its branch", "refs/heads/"+branch, priorTip, reset)
+	cmd := exec.CommandContext(ctx, "git", "update-ref", "-m", "reliant: a failed forced worktree create restores its branch", "refs/heads/"+branch, priorTip, observed)
 	cmd.Dir = repoPath
 	if err := cmd.Run(); err != nil {
 		logging.WarnContext(ctx, "worktree.create could not restore the branch its failed -B reset; its prior tip is in the reflog",

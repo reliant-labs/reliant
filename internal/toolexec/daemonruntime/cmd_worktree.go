@@ -343,12 +343,15 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 				_ = os.Remove(dir)
 			}
 		}
+		// Read before the checkout goes: while it is registered the branch is
+		// checked out there and nothing else can move it.
+		observed := localBranchTip(ctx, req.ProjectPath, req.Branch)
 		if preExisted {
 			removeIfEmpty(worktreePath)
 		} else {
 			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
 		}
-		restoreForcedBranch(ctx, req.ProjectPath, req.Branch, priorTip, startPoint)
+		restoreForcedBranch(ctx, req.ProjectPath, req.Branch, priorTip, startPoint, observed)
 		if parent := filepath.Dir(worktreePath); parent != worktreePath {
 			removeIfEmpty(parent)
 		}
@@ -389,8 +392,9 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 			// back, so the retry starts clean. A directory that predates
 			// this call was empty (git adds only into an empty one), so it
 			// is put back empty.
+			observed := localBranchTip(ctx, req.ProjectPath, req.Branch)
 			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
-			restoreForcedBranch(ctx, req.ProjectPath, req.Branch, priorTip, startPoint)
+			restoreForcedBranch(ctx, req.ProjectPath, req.Branch, priorTip, startPoint, observed)
 			if preExisted {
 				_ = os.MkdirAll(worktreePath, 0o755)
 			}

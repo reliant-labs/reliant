@@ -182,6 +182,42 @@ func TestWorktreeCreate_ForcedFailedAddKeepsABranchThatPredatesIt(t *testing.T) 
 		"the failed forced create must put the branch back at its own tip, not leave -B's reset to main")
 }
 
+// The failing post-checkout hook commits in the new checkout before it
+// exits: the branch has moved past -B's reset when the create fails. It is
+// still this create's doing (the checkout held the branch), so the branch goes
+// back to its own tip all the same.
+func TestWorktreeCreate_ForcedFailedAddRestoresABranchAHookMoved(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
+	t.Parallel()
+	projectPath := diagnoseRepo(t)
+	side := filepath.Join(t.TempDir(), "side")
+	gitOutIn(t, projectPath, "worktree", "add", "-q", "-b", "feat/hooked", side, "main")
+	require.NoError(t, os.WriteFile(filepath.Join(side, "own.txt"), []byte("mine\n"), 0o644))
+	gitOutIn(t, side, "add", "own.txt")
+	gitOutIn(t, side, "-c", "user.name=t", "-c", "user.email=t@e.com", "commit", "-q", "-m", "own work")
+	tip := strings.TrimSpace(gitOutIn(t, projectPath, "rev-parse", "feat/hooked"))
+	gitOutIn(t, projectPath, "worktree", "remove", "--force", side)
+	hooks := filepath.Join(t.TempDir(), "hooks")
+	require.NoError(t, os.MkdirAll(hooks, 0o755))
+	hook := "#!/bin/sh\ngit -c user.name=h -c user.email=h@e.com commit -q --allow-empty -m hook\nexit 1\n"
+	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-checkout"), []byte(hook), 0o755))
+	gitOutIn(t, projectPath, "config", "core.hooksPath", hooks)
+
+	resp := createFor(t, map[string]any{
+		"project_path": projectPath,
+		"workspace_id": uniqueWorkspaceID(t, "ws-hook-moved"),
+		"sub_path":     "repo",
+		"name":         "hooked",
+		"branch":       "feat/hooked",
+		"base_branch":  "main",
+		"force":        true,
+		"worktree_id":  "wt-hook-moved",
+	})
+	require.False(t, resp.Success, "the failing post-checkout hook must fail the create")
+	require.Equal(t, tip, strings.TrimSpace(gitOutIn(t, projectPath, "rev-parse", "feat/hooked")),
+		"a hook's commit on top of -B's reset must not strand the branch's own tip")
+}
+
 // A checkout that predates the call is never taken back, nor a branch the
 // call did not make.
 func TestAbandonCheckout_KeepsABranchThatMoved(t *testing.T) {
