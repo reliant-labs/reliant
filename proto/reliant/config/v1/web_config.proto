@@ -89,7 +89,7 @@ message ReliantWebConfig {
   string demo_telemetry = 25 [(forge.v1.config) = {
     env_var: "DEMO_TELEMETRY"
     default_value: "replay"
-    description: "What the demo host records about its anonymous visitors, under service forge-demo. \"replay\": page and tour analytics and masked session replay. \"analytics\": page and tour analytics only. \"off\": nothing. A browser that sends Do Not Track or Global Privacy Control is never recorded."
+    description: "What the demo host records about its anonymous visitors, under service reliant-forge-demo. \"replay\": page and tour analytics and masked session replay. \"analytics\": page and tour analytics only. \"off\": nothing. A browser that sends Do Not Track or Global Privacy Control is never recorded."
     allowed_values: ["replay", "analytics", "off"]
   }];
 
