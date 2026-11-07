@@ -41,7 +41,8 @@ import { ObservabilityApiProvider } from "@/services/controlPlane/observability/
 import { ConsoleShell } from "../Console/ConsoleShell";
 import { ProjectMonogram } from "../Console/ConsoleProjectSwitcher";
 import { ENV_ALL } from "../Console/envScope";
-import { isObsNavView, withSearch, type ConsolePage } from "../Console/paths";
+import { consolePath, isObsNavView, withSearch, type ConsolePage } from "../Console/paths";
+import { isDemoShell } from "@/lib/shell";
 import { AskAgentModeProvider } from "../Observability/AskReliant/askAgentMode";
 import ObservabilityPanel, { type ObsPlace } from "../Observability/ObservabilityPanel";
 import { OBS_VIEW_LABELS, OBS_VIEWS, viewOf, type ObsNavigate, type ObsSearch, type ObsView } from "../Observability/obsSearch";
@@ -78,6 +79,8 @@ const READ_ONLY: ObsReadOnly = { readOnly: true, reason: "Read-only demo" };
 
 /** Every nav row and crumb stays on the demo: a panel view by `view`, anything else the overview. */
 function demoLink(target: ConsolePage): string {
+  // The demo site mounts the real console (/forge/p/shop/…): every nav row goes to its page.
+  if (isDemoShell()) return consolePath(FIXTURE_PROJECT, target);
   if (target.kind === "obs-view" && (OBS_VIEWS as readonly string[]).includes(target.view)) {
     return withSearch(FORGE_DEMO_PATH, { view: target.view });
   }

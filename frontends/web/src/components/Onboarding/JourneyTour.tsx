@@ -9,7 +9,7 @@
  * (tourShell.ts). Journey CONTENT is data (journeys/<id>.tsx, JOURNEYS.md).
  */
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "@tanstack/react-router";
 import { trackEvent } from "../../lib/analytics";
@@ -33,6 +33,7 @@ import {
   stepType,
 } from "./journeys/registry";
 import { formatTourParam, otherJourney, type JourneyId } from "./tourParam";
+import { getTourShell } from "./tourShell";
 import type { JourneyStep } from "./types";
 import { isOnRoute, useTourNavigation, type TourNavigation } from "./useTourNavigation";
 
@@ -178,13 +179,9 @@ function JourneyStepView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // "callout": a required action moves the tour on by itself unless the step says otherwise.
-  const compact = getJourney(journey).controls === "callout";
-  const walked = useMemo(
-    () => (compact && step.autoAdvance === undefined ? { ...step, autoAdvance: true } : step),
-    [compact, step],
-  );
-  const { pending, satisfied } = useAdvanceOn(journey, walked, stepKey, () => {
+  // The card's own controls (the default); "bar" keeps the retired bottom nav bar.
+  const compact = getJourney(journey).controls !== "bar";
+  const { pending, satisfied } = useAdvanceOn(journey, step, stepKey, () => {
     void nav.advance("action", { journey, stepId });
   });
   const phase = useStepPhase(journey, step, stepKey);
@@ -223,20 +220,24 @@ function JourneyStepView({
         ? { label: elsewhere.label, onClick: () => window.open(elsewhere.href(), "_blank", "noopener") }
         : undefined;
 
-  // "callout": the card's own controls. Next only where nothing is pending; while an
-  // auto-advancing action is done, the tour is about to move on by itself.
-  const movingOn = hasAction && satisfied && walked.autoAdvance === true;
+  // The card's own controls: Step X of Y, Back, Next (disabled until a required action is
+  // done, then checked), and Exit. An auto-advancing step moves on by itself once done.
   const footer = compact ? (
     <TourControls
       stepNumber={stepNumber}
       totalSteps={total}
       onExit={isLast ? undefined : () => void nav.skipAll()}
-      onNext={nextHidden || movingOn ? undefined : onNext}
+      onBack={onBack}
+      onNext={onNext}
+      nextDisabled={nextHidden}
+      nextDisabledReason={step.actionHint}
+      actionDone={hasAction && satisfied}
       nextLabel={isLast ? "Finish" : "Next"}
       secondary={secondaryAction}
+      skip={step.skip?.label && !isLast && !(hasAction && satisfied) ? { label: step.skip.label, onClick: () => void nav.skipStep() } : undefined}
     />
   ) : undefined;
-  const hint = compact && hasAction ? <TourActionHint hint={step.actionHint} done={satisfied} /> : undefined;
+  const hint = compact && hasAction && !satisfied ? <TourActionHint hint={step.actionHint} done={false} /> : undefined;
   const callout = compact ? { footer, hint } : undefined;
 
   let body: React.ReactNode;
@@ -344,7 +345,9 @@ export function JourneyTour() {
 
   if (!nav.tour || !initialized) return null;
 
-  if (isPhoneViewport()) return <DeferredOnPhone onClose={nav.exitTour} />;
+  // Phones: Reliant's mobile surface has none of the desktop chrome a journey points at, so it
+  // defers there. The forge shell and the demo draw each step as a bottom sheet instead.
+  if (isPhoneViewport() && getTourShell() === "reliant") return <DeferredOnPhone onClose={nav.exitTour} />;
 
   if (nav.tour.kind === "picker") {
     return (

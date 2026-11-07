@@ -115,6 +115,27 @@ function calculateTooltipPosition(
   return { top: placed.top, left: placed.left, actualPosition: placed.side };
 }
 
+/** Below this width a callout is a bottom sheet (tailwind `sm`). */
+export const SHEET_MAX_WIDTH = 640;
+/** The sheet's tallest, as a share of the viewport: the target keeps the rest. */
+const SHEET_MAX_VH = 45;
+
+export function isSheetViewport(): boolean {
+  return typeof window !== "undefined" && window.innerWidth < SHEET_MAX_WIDTH;
+}
+
+/** Scroll `target` into the part of the screen the bottom sheet leaves free. */
+function scrollAboveSheet(target: Element): void {
+  const rect = target.getBoundingClientRect();
+  const free = window.innerHeight * (1 - SHEET_MAX_VH / 100);
+  if (rect.top >= 8 && rect.bottom <= free) return;
+  try {
+    target.scrollIntoView({ block: "start", behavior: "auto" });
+  } catch {
+    // jsdom and old engines: the sheet still shows.
+  }
+}
+
 export function OnboardingSpotlight({
   targetSelector,
   title,
@@ -133,6 +154,14 @@ export function OnboardingSpotlight({
   callout,
 }: OnboardingSpotlightProps) {
   const compact = !!callout;
+  // A phone: the card is a bottom sheet, and the target is scrolled into the space above it.
+  const [sheet, setSheet] = useState(() => compact && isSheetViewport());
+  useEffect(() => {
+    if (!compact) return;
+    const onResize = () => setSheet(isSheetViewport());
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [compact]);
   // stepNumber/totalSteps are accepted for interface compatibility — the
   // OnboardingNavBar renders progress. onSkipAll is accepted but unused:
   // ESC no longer ends the tour; skipping happens via the nav bar button.
@@ -244,6 +273,7 @@ export function OnboardingSpotlight({
     const attemptUpdate = () => {
       const target = document.querySelector(targetSelector);
       if (target) {
+        if (sheet) scrollAboveSheet(target);
         updatePosition();
         setIsVisible(true);
         return true;
@@ -298,7 +328,7 @@ export function OnboardingSpotlight({
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
     };
-  }, [updatePosition, targetSelector, autoSkipIfMissing, onNext]);
+  }, [updatePosition, targetSelector, autoSkipIfMissing, onNext, sheet]);
 
   // Handle keyboard navigation.
   // ESC intentionally does nothing — it must not end the tour. The user can
@@ -457,14 +487,14 @@ export function OnboardingSpotlight({
           compact && "pointer-events-auto"
         )}
         data-testid="tour-callout"
-        data-side={tooltipPos.actualPosition}
-        style={{
-          top: tooltipPos.top,
-          left: tooltipPos.left,
-          width: "min(20rem, calc(100vw - 2rem))",
-        }}
+        data-side={sheet ? "sheet" : tooltipPos.actualPosition}
+        style={
+          sheet
+            ? { left: 0, right: 0, bottom: 0, top: "auto", width: "100%", maxHeight: `${SHEET_MAX_VH}vh`, overflowY: "auto", borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
+            : { top: tooltipPos.top, left: tooltipPos.left, width: "min(20rem, calc(100vw - 2rem))" }
+        }
       >
-        <div className="p-5">
+        <div className={sheet ? "p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" : "p-5"}>
           {/* Title & Description */}
           <h3 className="text-lg font-semibold text-foreground mb-2.5 tracking-tight">{title}</h3>
           <div className="text-sm text-muted-foreground leading-relaxed">{description}</div>

@@ -180,8 +180,8 @@ describe("the forge journey", () => {
       expect(onFire).not.toHaveBeenCalled();
       go({ view: "traces", trace: DEMO_TRACE_ID });
       expect(onFire).toHaveBeenCalledTimes(1);
-      // The compact controls move on once it's done (autoAdvance unset = on).
-      expect(step("fg-trace").autoAdvance).toBeUndefined();
+      // It moves on once it's done.
+      expect(step("fg-trace").autoAdvance).toBe(true);
       watcher.dispose();
     });
 
@@ -194,7 +194,7 @@ describe("the forge journey", () => {
       go({ view: "traces", trace: DEMO_TRACE_ID, span: DEMO_INVENTORY_SPAN_ID });
       expect(onFire).toHaveBeenCalledTimes(1);
       // It moves on when clicked, so the step's copy explains the hop BEFORE the click.
-      expect(step("fg-hops").autoAdvance).toBeUndefined();
+      expect(step("fg-hops").autoAdvance).toBe(true);
       expect(step("fg-hops").target).toBe(`[data-testid='trace-span-row'][data-span-id='${DEMO_INVENTORY_SPAN_ID}']`);
       watcher.dispose();
     });

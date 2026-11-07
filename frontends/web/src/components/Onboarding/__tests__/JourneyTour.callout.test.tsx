@@ -67,15 +67,16 @@ describe("the forge journey's compact controls", () => {
     expect(await screen.findByTestId("tour-controls")).toBeInTheDocument();
     expect(screen.queryByTestId("onboarding-nav-bar")).toBeNull();
     expect(screen.queryByText("Skip step")).toBeNull();
-    expect(screen.getByText("1 of 9")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 9")).toBeInTheDocument();
     expect(screen.getByTestId("tour-exit")).toHaveTextContent("Exit tour");
     expect(screen.getByTestId("tour-next")).toHaveTextContent("Next");
   });
 
-  it("a required action: its instruction, no Next, no Skip, and the tour moves on once it's done", async () => {
+  it("a required action: its instruction, Next disabled, no Skip, and the tour moves on once it's done", async () => {
     const router = renderTour("/forge/demo?view=traces&tour=forge:fg-trace");
     expect(await screen.findByTestId("tour-action-hint")).toHaveTextContent("Open the CreateOrder trace at the top");
-    expect(screen.queryByTestId("tour-next")).toBeNull();
+    expect(screen.getByTestId("tour-next")).toBeDisabled();
+    expect(screen.getByTestId("tour-back")).toBeInTheDocument();
     expect(screen.queryByText("Skip step")).toBeNull();
     expect(screen.getByTestId("tour-exit")).toBeInTheDocument();
     await act(async () => {
@@ -106,5 +107,45 @@ describe("the forge journey's compact controls", () => {
       expect(overlapArea(rowRect, { top: parseFloat(callout.style.top), left: parseFloat(callout.style.left), width: 320, height: 200 })).toBe(0);
     });
     expect(callout.getAttribute("data-side")).toBe("bottom");
+  });
+});
+
+describe("the callout controls are the engine's default, in every shell", () => {
+  it.each([
+    ["reliant", "reliant"],
+    ["forge", "forge"],
+    ["demo", "forge"],
+  ] as const)("the %s shell: no bottom bar; Step X of Y, Back, Next (disabled until the action), Exit", async (shell, tourShell) => {
+    resetShellForTests(shell);
+    setTourShell(tourShell);
+    renderTour("/forge/demo?view=traces&tour=forge:fg-trace");
+    const controls = await screen.findByTestId("tour-controls");
+    expect(screen.queryByTestId("onboarding-nav-bar")).toBeNull();
+    expect(controls).toHaveTextContent(/Step \d+ of \d+/);
+    expect(screen.getByTestId("tour-back")).toBeInTheDocument();
+    expect(screen.getByTestId("tour-next")).toBeDisabled();
+    expect(screen.getByTestId("tour-exit")).toHaveTextContent("Exit tour");
+  });
+
+  it("draws a bottom sheet on a phone in the forge shells, and defers in Reliant", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 844 });
+    const matchMedia = window.matchMedia;
+    window.matchMedia = ((query: string) => ({ matches: true, media: query, addEventListener() {}, removeEventListener() {} })) as never;
+    try {
+      renderTour("/forge/demo?view=traces&tour=forge:fg-trace");
+      const callout = await screen.findByTestId("tour-callout");
+      expect(callout).toHaveAttribute("data-side", "sheet");
+      expect(callout.style.bottom).toBe("0px");
+      cleanup();
+      resetShellForTests("reliant");
+      setTourShell("reliant");
+      renderTour("/forge/demo?view=traces&tour=forge:fg-trace");
+      expect(await screen.findByText("Open this on a computer")).toBeInTheDocument();
+    } finally {
+      window.matchMedia = matchMedia;
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1024 });
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: 768 });
+    }
   });
 });

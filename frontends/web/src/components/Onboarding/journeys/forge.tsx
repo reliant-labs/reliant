@@ -9,10 +9,10 @@
  * a one-time tip of its own (Forge/Demo/tips), so the tour only takes the
  * best moments.
  *
- * Drawn with the compact controls (`controls: "callout"`): no bottom bar and
- * no Skip step. Each card has its instruction and one small Exit tour, and a
- * required action moves the tour on as soon as it's done, so an action
- * step's explanation sits BEFORE the action, or on the step after it.
+ * Drawn with the engine's callout controls (Step X of Y, Back, Next, Exit; no
+ * bottom bar, no Skip step). Most required actions move the tour on as soon
+ * as they're done (`autoAdvance`), so an action step's explanation sits
+ * BEFORE the action, or on the step after it.
  *
  * Cuts (isAvailable; lib/demoTour.ts, runtime config DEMO_TOUR):
  *  - the public demo host, `short` (default), 9 steps: intro, trace, hops,
@@ -247,6 +247,7 @@ export const forgeJourney: Journey = {
       route: demo({ view: "traces", ...CLOSED }),
       advanceOn: { kind: "when", test: ({ location }) => location.search.trace === DEMO_TRACE_ID },
       actionHint: "Open the CreateOrder trace at the top",
+      autoAdvance: true,
       signal: "trace_opened",
     },
     {
@@ -258,6 +259,7 @@ export const forgeJourney: Journey = {
       route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
       advanceOn: { kind: "when", test: ({ location }) => location.search.span === DEMO_INVENTORY_SPAN_ID },
       actionHint: "Click Reserve on inventory, near the bottom",
+      autoAdvance: true,
       signal: "service_hop_opened",
     },
     {
@@ -315,6 +317,7 @@ export const forgeJourney: Journey = {
       route: demo({ view: "traces", trace: DEMO_TRACE_ID, span: undefined, issue: undefined }),
       advanceOn: { kind: "when", test: ({ location }) => location.search.view === "profiles" },
       actionHint: "Click Flamegraph",
+      autoAdvance: true,
       signal: "flamegraph_opened",
       // The demo host's short tour leaves it out (DEMO_TOUR); the Profiles tip covers it.
       isAvailable: notOnShortDemo,
@@ -338,6 +341,7 @@ export const forgeJourney: Journey = {
       route: demo({ view: "errors", ...CLOSED }),
       advanceOn: { kind: "when", test: ({ location }) => location.search.issue === DEMO_ISSUE_ID },
       actionHint: "Open CreateOrder: context deadline exceeded",
+      autoAdvance: true,
       signal: "issue_opened",
     },
     {

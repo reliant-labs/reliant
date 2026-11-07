@@ -69,20 +69,27 @@ placeholder's version, title and link equal to the real journey's. The
 Reliant-only end of a tour (land on the chat, ask for an API key) is
 installed the same way, through `setReliantTourHooks` (tourShell.ts).
 
-**Controls.** How a step's controls are drawn:
-- `"bar"` (default): the bottom nav bar, with progress, Back, Skip step,
-  Next and End tour.
-- `"callout"`: no bar and no Skip step. Each card carries the step count, one
-  small **Exit tour**, and **Next** only where nothing is pending. A required
-  action shows its `actionHint` as one line in the card, and the tour moves on
-  as soon as the action is done (`autoAdvance` defaults to true; set it false
-  to hold the step, e.g. to read what the action opened). So put an action
-  step's explanation in its description, before the action, or on the next
-  step. ← still goes back. A spotlight's card is placed beside its target
-  first (right, left, then below, above), flipped to whichever side has room,
-  and never over the target unless no side can hold it
-  (`calloutPlacement.ts`, tested by a sweep). A multi-spotlight keeps its
-  labels and adds a centred card for the copy and controls.
+**Controls.** Every step carries its own controls in its card (the default,
+`controls: "callout"`, in every shell): **Step X of Y**, **Back** (not on the
+first step; ← works too), **Next** / **Finish**, and **Exit tour** (not on the
+last step). There is no bottom nav bar and no generic Skip step.
+- A required action (`advanceOn`) keeps Next **disabled** until it's done
+  (the step's `actionHint` is the button's title and one line in the card);
+  then Next shows a **check**. With `autoAdvance` the tour moves on by itself
+  instead (default false).
+- A step's own `skip` with a label ("Create it for me") is a button in the
+  card while the action is pending.
+- The card is placed beside its target first (right, left, then below,
+  above), flipped to whichever side has room, and never over the target
+  unless no side can hold it (`calloutPlacement.ts`, tested by a sweep). A
+  multi-spotlight keeps its labels and adds a centred card for the copy and
+  controls.
+- On a phone (below 640px) the card is a bottom sheet (at most 45% of the
+  screen) and the target is scrolled into the space above it. Reliant's
+  mobile surface defers instead ("Open this on a computer"); the forge shell
+  and the demo use the sheet. Every control is at least 44px tall there.
+- `controls: "bar"` keeps the retired bottom nav bar, for a journey that
+  still needs it. Nothing ships with it.
 
 **Versioning.** Each journey records its outcome per version, under
 `onboarding.tour.<id>.v<version>.completed`, with the value `completed`,
@@ -116,20 +123,19 @@ installed the same way, through `setReliantTourHooks` (tourShell.ts).
 | `phases` | Sub-targets within one step; see below. |
 | `advanceOn` | The step's **required action**; see below. |
 | `card` | `{ wide?, modal? }` for a step with no target: `wide` gives the card room (a player), `modal` locks the page's scroll and takes the backdrop's clicks. No spotlight either way. |
-| `autoAdvance` | Once the action is done, move on by itself after 600 ms. Default false (`"bar"`) or true (`"callout"`). |
+| `autoAdvance` | Once the action is done, move on by itself after 600 ms. Default false: Next shows a check and the user clicks it. |
 | `afterAction` | Extra copy appended once the action is done ("Copy something to try it."). |
-| `actionHint` | Nav-bar text while waiting ("Drag Review to the loop"). Announced to screen readers. |
-| `showNext` | Keep Next visible while the action is pending. Default false. |
+| `actionHint` | What to do, while waiting ("Drag Review to the loop"): one line in the card and disabled Next's title. Announced to screen readers. |
+| `showNext` | Keep Next enabled while the action is pending. Default false. |
 | `blockOutside` | While pending, block pointer clicks outside the target (spotlight steps). Keyboard and screen readers are unaffected. Off by default; the spotlight is normally click-through. |
 | `advanceIfAlreadyDone` | If the state already holds on entry, advance at once. |
 | `skip` | `{ label?, run? }`. Overrides **Skip step** for a step that later steps depend on (W1: "Create it for me" seeds the draft). If `run` throws, the user stays on the step; show your own toast. `run` gets `{context, setContext}`. |
 | `signal` | Analytics name for the action (`draft_created`). Sent as `signal` on `journey_step_completed` when the action completed the step. |
 | `onEnter` | Runs once when the step opens (e.g. `layoutActions.showSidebar`). |
-| `onComplete` | Runs once when the user leaves the step forward: Next, the action, Skip step or Finish. It doesn't run on Back or End tour. |
+| `onComplete` | Runs once when the user leaves the step forward: Next, the action, the step's skip or Finish. It doesn't run on Back or Exit tour. |
 
-With the bar, every card has **Skip step** (until the action is done) and
-**End tour**; with `"callout"`, only **Exit tour**, which works the same way.
-- End tour records the journey as skipped at this version, and remembers the
+Every card but the last has **Exit tour** (the bar called it End tour).
+- Exit tour records the journey as skipped at this version, and remembers the
   step in `onboarding.journey_resume`. The picker then offers "Resume where you
   left off".
 - Back goes to the previous step. On the first step it closes the tour.
@@ -159,9 +165,9 @@ route: {
 ### `advanceOn`: required actions
 
 `advanceOn` takes one condition or an array, and the step completes when any
-of them is met. Until one is met, Next is hidden, the nav bar shows
-`actionHint` plus **Skip step**, and Enter/arrow-key navigation is off (the
-user is typing into the app).
+of them is met. Until one is met, Next is disabled, the card shows
+`actionHint`, and Enter/arrow-key navigation is off (the user is typing into
+the app).
 
 | Condition | Kind | Fires when |
 |---|---|---|

@@ -122,8 +122,8 @@ describe("the demo's busy app", () => {
     const releaseAt = NOW - DEMO_RELEASE_AGO_MS;
     const at = payments.timestamps.findIndex((t) => t * 1000 >= releaseAt);
     const rate = (from: number, to: number) => {
-      const req = payments.requestTrend.slice(from, to).reduce((a, b) => a + b, 0);
-      return payments.errorTrend.slice(from, to).reduce((a, b) => a + b, 0) / req;
+      const sum = (xs: (number | null)[]) => xs.reduce<number>((a, b) => a + (b ?? 0), 0);
+      return sum(payments.errorTrend.slice(from, to)) / sum(payments.requestTrend.slice(from, to));
     };
     expect(rate(at, 30)).toBeGreaterThan(rate(0, at) * 5);
   });
