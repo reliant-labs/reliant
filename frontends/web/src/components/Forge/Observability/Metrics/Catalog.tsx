@@ -22,6 +22,7 @@ import type { MetricCatalogEntry } from "@/services/controlPlane/observability/m
 import { formatAgo, formatCount } from "../format";
 import { useRovingFocus } from "../useRovingFocus";
 import { GROUP_LABELS, groupCatalog, kindLabel } from "./seriesView";
+import { CONTROL_FIELD } from "../../controlStyles";
 
 export interface CatalogProps {
   metrics: readonly MetricCatalogEntry[];
@@ -101,7 +102,7 @@ export function Catalog({ metrics, selected, onPick, query, onQuery, truncated, 
             }
           }}
           placeholder="Search metrics"
-          className="h-8 w-full rounded-md border border-border bg-surface-sunken pl-7 pr-2 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={`${CONTROL_FIELD} h-8 w-full pl-7 pr-2 text-sm`}
           data-testid="metrics-catalog-search"
           aria-busy={isFetching || undefined}
         />

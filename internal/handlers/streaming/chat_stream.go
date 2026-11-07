@@ -210,7 +210,10 @@ func (s *Service) StreamChatUpdates(
 					Heartbeat: &reliantv1.Heartbeat{Timestamp: time.Now().Unix()},
 				},
 			}); err != nil {
-				logging.ErrorContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to send heartbeat", "error", err)
+				// A failed send is the client gone or no longer reading; the
+				// stream's end is reported once, at the RPC edge, with its
+				// code (see sendStreamingDeltas).
+				logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to send heartbeat", "error", err)
 				return err
 			}
 		}
@@ -302,7 +305,8 @@ func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, st
 		},
 	}
 	if err := stream.Send(event); err != nil {
-		logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send chat update", "error", err)
+		// See sendStreamingDeltas: reported once, at the RPC edge.
+		logging.Debug(LOG_PREFIX_STREAM_CHAT+" Failed to send chat update", "error", err)
 		return err
 	}
 	return nil
@@ -372,7 +376,12 @@ func (s *Service) sendStreamingDeltas(chatID string, deltas []streaming.Streamin
 		},
 	}
 	if err := stream.Send(event); err != nil {
-		logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send streaming delta", "error", err, "chatID", shortID(chatID))
+		// A send fails when the client went away or stopped reading (a
+		// write deadline on a browser tab that froze: "i/o timeout"). The
+		// error ends the stream and the RPC edge logs that once, at the
+		// level its code calls for; an ERROR here as well was an issue per
+		// stalled tab (prod ebd5bc38).
+		logging.Debug(LOG_PREFIX_STREAM_CHAT+" Failed to send streaming delta", "error", err, "chatID", shortID(chatID))
 		return err
 	}
 	return nil

@@ -13,7 +13,7 @@ import Logo from '../assets/logo.svg'
  * 1. Proxy redirects browser to /auth/proxy?return={originalURL}
  * 2. This component checks for a valid Supabase session
  * 3. If no session → redirect to /auth with return back here
- * 4. If session → POST to admin-server (control-plane) /api/proxy-session to mint a proxy token
+ * 4. If session → POST to platform-api (control-plane) /api/proxy-session to mint a proxy token
  * 5. Redirect to {return_url_origin}/__proxy/callback?token={token}
  *
  * The embedded browser skips this bounce: lib/proxy-session mints the token
@@ -57,7 +57,7 @@ export function ProxyAuth() {
         return
       }
 
-      // Session exists — mint a proxy session token via the admin-server and
+      // Session exists — mint a proxy session token via the platform-api and
       // redirect to the proxy callback on the workspace domain.
       try {
         logger.info('[ProxyAuth] Minting proxy session token')

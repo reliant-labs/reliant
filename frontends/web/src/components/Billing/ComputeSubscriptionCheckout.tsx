@@ -192,7 +192,7 @@ export function ComputeSubscriptionCheckout({
              choose to run on your own computer." — which described a server
              misconfiguration in words that sound like a product limitation,
              and then asked the user to undo a correct choice to work around
-             it. The real cause was a stale admin-server whose `planToProto`
+             it. The real cause was a stale platform-api whose `planToProto`
              did not project `price_cents`, so every plan arrived unpriced and
              the purchasable filter emptied the list.
 

@@ -282,6 +282,19 @@ message ToolResponse {
   string error_message = 6; // Error message if success=false
   string error_code = 7; // Error code for categorization
   bool backgrounded = 8; // Whether tool was converted to background execution
+  // Images and documents the tool handed the model (an MCP screenshot, a
+  // rendered page). Without them a daemon-placed tool's media reached the
+  // model as its text caption only. Empty from a daemon that predates the
+  // field; a server that predates it ignores them.
+  repeated ToolResponseMedia media = 9;
+}
+
+// ToolResponseMedia is one binary part of a tool result.
+message ToolResponseMedia {
+  string mime_type = 1;
+  bytes data = 2;
+  // The file the part was read from, when there is one (display only).
+  string path = 3;
 }
 
 // DaemonHeartbeat is sent periodically to keep connection alive.

@@ -21,17 +21,70 @@ func startSleeper(t *testing.T) *exec.Cmd {
 }
 
 func TestLowerChildPriority(t *testing.T) {
+	skipIfNicerThanChild(t)
 	cmd := startSleeper(t)
 	if err := LowerChildPriority(cmd.Process.Pid); err != nil {
 		t.Fatal(err)
 	}
-	got, err := syscall.Getpriority(syscall.PRIO_PROCESS, cmd.Process.Pid)
-	if err != nil {
+	if got := niceOf(t, cmd.Process.Pid); got != ChildNiceValue {
+		t.Fatalf("child nice = %d, want %d", got, ChildNiceValue)
+	}
+}
+
+// A child that already runs nicer than ChildNiceValue — what every child of a
+// daemon started under `nice -n 19` inherits, and what the release lane's
+// reliant gate ran at — is left where it is: setting it to ChildNiceValue
+// would raise its priority, which needs CAP_SYS_NICE, and LowerChildPriority
+// only ever lowers. Renicing the child up to 19 first is unprivileged, so this
+// creates the condition on any host.
+func TestLowerChildPriorityLeavesNicerChild(t *testing.T) {
+	cmd := startSleeper(t)
+	const nicer = 19
+	if err := syscall.Setpriority(syscall.PRIO_PROCESS, cmd.Process.Pid, nicer); err != nil {
+		t.Fatalf("setpriority(child, %d): %v", nicer, err)
+	}
+	if err := LowerChildPriority(cmd.Process.Pid); err != nil {
+		t.Fatalf("LowerChildPriority on a child already at nice %d: %v", nicer, err)
+	}
+	if got := niceOf(t, cmd.Process.Pid); got != nicer {
+		t.Fatalf("child nice = %d, want it left at %d", got, nicer)
+	}
+}
+
+// A group whose members straddle ChildNiceValue is lowered per member: the
+// one already nicer keeps its niceness (a group-wide setpriority would raise
+// it back to ChildNiceValue), and the less nice one is lowered (where the
+// process table lists group members).
+func TestLowerChildPriorityMixedGroup(t *testing.T) {
+	skipIfNicerThanChild(t)
+	leader := startSleeper(t)
+	startMember := func() *exec.Cmd {
+		cmd := exec.Command("sleep", "30")
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pgid: leader.Process.Pid}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+		return cmd
+	}
+	lessNice, nicer := startMember(), startMember()
+	const nicerValue = 19
+	if err := syscall.Setpriority(syscall.PRIO_PROCESS, nicer.Process.Pid, nicerValue); err != nil {
+		t.Fatalf("setpriority(member, %d): %v", nicerValue, err)
+	}
+	if err := LowerChildPriority(leader.Process.Pid); err != nil {
 		t.Fatal(err)
 	}
-	// Linux's raw syscall reports 20-nice; darwin reports nice directly.
-	if got != ChildNiceValue && got != 20-ChildNiceValue {
-		t.Fatalf("priority = %d, want nice %d", got, ChildNiceValue)
+	if got := niceOf(t, leader.Process.Pid); got != ChildNiceValue {
+		t.Fatalf("leader nice = %d, want %d", got, ChildNiceValue)
+	}
+	if got := niceOf(t, nicer.Process.Pid); got != nicerValue {
+		t.Fatalf("nicer member nice = %d, want it left at %d", got, nicerValue)
+	}
+	if _, ok := GroupMembers(leader.Process.Pid); ok {
+		if got := niceOf(t, lessNice.Process.Pid); got != ChildNiceValue {
+			t.Fatalf("less nice member nice = %d, want %d", got, ChildNiceValue)
+		}
 	}
 }
 
@@ -42,27 +95,44 @@ func TestLowerChildPriorityOptOut(t *testing.T) {
 	if err := LowerChildPriority(cmd.Process.Pid); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := syscall.Getpriority(syscall.PRIO_PROCESS, cmd.Process.Pid)
-	if got == ChildNiceValue || got == 20-ChildNiceValue {
-		t.Fatalf("priority lowered despite opt-out: %d", got)
+	if got := niceOf(t, cmd.Process.Pid); got == ChildNiceValue {
+		t.Fatalf("priority lowered despite opt-out: nice %d", got)
 	}
 }
 
 // skipIfAlreadyAtChildNice skips when this test binary itself already runs at
-// ChildNiceValue. The child inherits it, so "opt-out honoured" and "opt-out
-// ignored" both leave the child at ChildNiceValue and the test cannot tell
-// them apart — it would fail spuriously (an agent under forge runs at nice
-// 10), and any rewrite that passed there would pass with the opt-out broken.
-// CI runs at nice 0, where the check is meaningful.
+// ChildNiceValue or nicer. The child inherits it, so "opt-out honoured" and
+// "opt-out ignored" both leave the child where the parent is and the test
+// cannot tell them apart — it would fail spuriously (an agent under forge runs
+// at nice 10), and any rewrite that passed there would pass with the opt-out
+// broken. CI runs at nice 0, where the check is meaningful.
 func skipIfAlreadyAtChildNice(t *testing.T) {
 	t.Helper()
-	parent, err := syscall.Getpriority(syscall.PRIO_PROCESS, 0)
+	if parent := niceOf(t, 0); parent >= ChildNiceValue {
+		t.Skipf("test process already runs at nice %d (>= %d), so a lowered child is indistinguishable from an inherited one", parent, ChildNiceValue)
+	}
+}
+
+// skipIfNicerThanChild skips when this test binary runs nicer than
+// ChildNiceValue: its child inherits that niceness, and bringing it back to
+// ChildNiceValue is a priority raise that needs CAP_SYS_NICE, which
+// LowerChildPriority rightly never attempts. TestLowerChildPriorityLeavesNicerChild
+// covers that case on every host.
+func skipIfNicerThanChild(t *testing.T) {
+	t.Helper()
+	if parent := niceOf(t, 0); parent > ChildNiceValue {
+		t.Skipf("test process runs at nice %d, nicer than %d: a child at nice %d needs CAP_SYS_NICE to create", parent, ChildNiceValue, ChildNiceValue)
+	}
+}
+
+// niceOf returns the nice value of pid (0: this process).
+func niceOf(t *testing.T, pid int) int {
+	t.Helper()
+	nice, err := getNice(syscall.PRIO_PROCESS, pid)
 	if err != nil {
-		t.Fatalf("getpriority(self): %v", err)
+		t.Fatalf("getpriority(%d): %v", pid, err)
 	}
-	if parent == ChildNiceValue || parent == 20-ChildNiceValue {
-		t.Skipf("test process already runs at nice %d, so a lowered child is indistinguishable from an inherited one", ChildNiceValue)
-	}
+	return nice
 }
 
 func TestLowerChildPriorityInvalidPID(t *testing.T) {

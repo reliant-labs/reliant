@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 // FileViewerTab shows the shared machine-wait state, which reads daemon status
 // through React Query — so it needs a provider the way the real app has one.
 import { renderWithQuery as render } from "../../test/renderWithQuery";
@@ -42,8 +42,20 @@ const fileSystemMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@monaco-editor/react", () => ({
-  default: ({ value, options }: { value?: string; options?: { readOnly?: boolean } }) => (
-    <div data-testid="monaco-editor" data-readonly={options?.readOnly ? "true" : "false"}>{value}</div>
+  default: ({ value, options, onChange }: {
+    value?: string;
+    options?: { readOnly?: boolean };
+    onChange?: (value: string) => void;
+  }) => (
+    <textarea
+      className="monaco-editor"
+      aria-label="File source"
+      data-testid="monaco-editor"
+      data-readonly={options?.readOnly ? "true" : "false"}
+      readOnly={options?.readOnly}
+      value={value}
+      onChange={(event) => onChange?.(event.target.value)}
+    />
   ),
 }));
 
@@ -141,6 +153,138 @@ describe("FileViewerTab", () => {
     vi.clearAllMocks();
     createObjectURLSpy.mockReturnValue("blob:preview-url");
     revokeObjectURLSpy.mockImplementation(() => {});
+  });
+
+  describe("Markdown view mode", () => {
+    function mockMarkdown(name = "README.md", viewerKind = "text") {
+      const file = createFile({ name, path: `/workspace/${name}` });
+      fileSystemMocks.getFilePreviewInfo.mockResolvedValue({
+        ...file,
+        viewerKind,
+        mimeType: "text/markdown",
+        isBinary: viewerKind !== "text",
+        isEditable: viewerKind === "text",
+      });
+      fileSystemMocks.getFileContent.mockResolvedValue("# Saved heading");
+      fileSystemMocks.getFilePreviewBlob.mockResolvedValue(new Blob(["media"]));
+      fileSystemMocks.saveFileContent.mockResolvedValue(undefined);
+      return file;
+    }
+
+    it.each(["README.md", "README.MD", "guide.markdown", "guide.MaRkDoWn"])(
+      "offers accessible source-default controls for %s",
+      async (name) => {
+        render(<FileViewerTab file={mockMarkdown(name)} isActive />);
+        expect(await screen.findByTestId("monaco-editor")).toHaveValue("# Saved heading");
+        const controls = screen.getByRole("group", { name: "Markdown view mode" });
+        expect(within(controls).getByRole("button", { name: "Markdown", pressed: true })).toBeInTheDocument();
+        expect(within(controls).getByRole("button", { name: "Preview", pressed: false })).toBeInTheDocument();
+        expect(screen.queryByRole("heading", { name: "Saved heading" })).not.toBeInTheDocument();
+      },
+    );
+
+    it.each([
+      ["notes.txt", "text"],
+      ["README.mdx", "text"],
+      ["README.md.txt", "text"],
+      ["README.md", "pdf"],
+      ["README.md", "binary"],
+      ["README.md", "image"],
+      ["README.md", "audio"],
+      ["README.md", "video"],
+    ])("does not offer Markdown controls for %s classified as %s", async (name, kind) => {
+      const { container } = render(<FileViewerTab file={mockMarkdown(name, kind)} isActive />);
+      await waitFor(() => expect(container).toHaveTextContent("text/markdown"));
+      expect(screen.queryByRole("button", { name: "Markdown" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Preview" })).not.toBeInTheDocument();
+    });
+
+    it("renders the unsaved buffer without saving or refetching and keeps the same editor mounted", async () => {
+      render(<FileViewerTab file={mockMarkdown()} isActive />);
+      const editor = await screen.findByTestId("monaco-editor");
+      fireEvent.change(editor, { target: { value: "# Unsaved heading\n\n**Draft text**" } });
+      fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+      expect(await screen.findByRole("heading", { name: "Unsaved heading", level: 1 })).toBeInTheDocument();
+      expect(screen.getByText("Draft text").tagName).toBe("STRONG");
+      expect(screen.queryByRole("heading", { name: "Saved heading" })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Preview", pressed: true })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Markdown", pressed: false })).toBeInTheDocument();
+      expect(screen.getByText("• Modified")).toBeInTheDocument();
+      expect(screen.getByTestId("monaco-editor")).toBe(editor);
+      fireEvent.click(screen.getByRole("button", { name: "Markdown" }));
+      expect(screen.getByTestId("monaco-editor")).toBe(editor);
+      expect(editor).toHaveValue("# Unsaved heading\n\n**Draft text**");
+      expect(fileSystemMocks.getFileContent).toHaveBeenCalledTimes(1);
+      expect(fileSystemMocks.getFilePreviewInfo).toHaveBeenCalledTimes(1);
+      expect(fileSystemMocks.saveFileContent).not.toHaveBeenCalled();
+    });
+
+    it.each(["button", "shortcut"])("saves the dirty buffer from preview using the %s", async (method) => {
+      render(<FileViewerTab file={mockMarkdown()} isActive />);
+      fireEvent.change(await screen.findByTestId("monaco-editor"), { target: { value: "# Draft to save" } });
+      fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+      expect(await screen.findByRole("heading", { name: "Draft to save" })).toBeInTheDocument();
+      expect(screen.getByText("• Modified")).toBeInTheDocument();
+      if (method === "button") {
+        fireEvent.click(screen.getByRole("button", { name: "Save (Cmd+S / Ctrl+S)" }));
+      } else {
+        screen.getByLabelText("Markdown preview", { selector: "[tabindex]" }).focus();
+        fireEvent.keyDown(document.activeElement!, { key: "s", ctrlKey: true });
+      }
+      await waitFor(() => expect(fileSystemMocks.saveFileContent).toHaveBeenCalledWith("/workspace/README.md", "# Draft to save", "wt-1"));
+      await waitFor(() => expect(screen.queryByText("• Modified")).not.toBeInTheDocument());
+      expect(screen.getByRole("button", { name: "Preview", pressed: true })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Draft to save" })).toBeInTheDocument();
+      expect(fileSystemMocks.getFileContent).toHaveBeenCalledTimes(1);
+    });
+
+    it("reverts unsaved changes while remaining in preview", async () => {
+      render(<FileViewerTab file={mockMarkdown()} isActive />);
+      fireEvent.change(await screen.findByTestId("monaco-editor"), { target: { value: "# Draft" } });
+      fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+      expect(await screen.findByRole("heading", { name: "Draft" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+      expect(await screen.findByRole("heading", { name: "Saved heading" })).toBeInTheDocument();
+      expect(screen.queryByText("• Modified")).not.toBeInTheDocument();
+      expect(screen.getByTestId("monaco-editor")).toHaveValue("# Saved heading");
+      expect(screen.getByRole("button", { name: "Preview", pressed: true })).toBeInTheDocument();
+      expect(fileSystemMocks.saveFileContent).not.toHaveBeenCalled();
+    });
+
+    it("keeps view mode independent between two viewers of the same file", async () => {
+      const file = mockMarkdown();
+      render(<>
+        <section aria-label="First viewer"><FileViewerTab file={file} viewerId="first" /></section>
+        <section aria-label="Second viewer"><FileViewerTab file={file} viewerId="second" /></section>
+      </>);
+      const first = within(screen.getByRole("region", { name: "First viewer" }));
+      const second = within(screen.getByRole("region", { name: "Second viewer" }));
+      await first.findByTestId("monaco-editor");
+      await second.findByTestId("monaco-editor");
+      fireEvent.click(first.getByRole("button", { name: "Preview" }));
+      expect(await first.findByRole("heading", { name: "Saved heading" })).toBeInTheDocument();
+      expect(first.getByRole("button", { name: "Preview", pressed: true })).toBeInTheDocument();
+      expect(second.getByRole("button", { name: "Markdown", pressed: true })).toBeInTheDocument();
+      expect(second.queryByRole("heading")).not.toBeInTheDocument();
+    });
+
+    it.each(["path", "worktree"])("resets to source when file identity changes by %s", async (identity) => {
+      const file = mockMarkdown();
+      const { rerender } = render(<FileViewerTab file={file} worktreeId="wt-1" isActive />);
+      await screen.findByTestId("monaco-editor");
+      fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+      expect(await screen.findByRole("heading", { name: "Saved heading" })).toBeInTheDocument();
+      fileSystemMocks.getFileContent.mockResolvedValue("# Another file");
+      rerender(<FileViewerTab
+        file={identity === "path" ? { ...file, path: "/workspace/other/README.md" } : file}
+        worktreeId={identity === "worktree" ? "wt-2" : "wt-1"}
+        isActive
+      />);
+      await waitFor(() => expect(screen.getByTestId("monaco-editor")).toHaveValue("# Another file"));
+      expect(screen.getByRole("button", { name: "Markdown", pressed: true })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Preview", pressed: false })).toBeInTheDocument();
+      expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+    });
   });
 
   it("renders Monaco for text previews", async () => {

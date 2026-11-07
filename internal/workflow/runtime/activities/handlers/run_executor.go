@@ -16,15 +16,27 @@ import (
 // RunExecutor defines the interface for executing shell commands.
 // This abstraction allows for mocking in tests.
 type RunExecutor interface {
-	// ExecuteCommand runs a command and returns stdout, stderr, exit code, and whether it was interrupted.
-	// It should execute the command in the specified working directory with the given timeout.
+	// ExecuteCommand runs a command in the specified working directory with
+	// the given timeout and returns what it printed and how it ended.
 	ExecuteCommand(
 		ctx context.Context,
 		command string,
 		workingDir string,
 		timeoutMs int,
 		env map[string]string,
-	) (stdout, stderr string, exitCode int, interrupted bool, err error)
+	) (CommandResult, error)
+}
+
+// CommandResult is one command's verdict.
+type CommandResult struct {
+	Stdout      string
+	Stderr      string
+	ExitCode    int
+	Interrupted bool
+	// Truncated reports that the machine cut stdout or stderr to its output
+	// cap (head+tail, with a marker in the middle): what is here is not the
+	// whole output, and text a workflow parses (json.decode) may not decode.
+	Truncated bool
 }
 
 // RunExecutorContext provides the IDs needed to build a ToolRequest for remote execution.
@@ -87,7 +99,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 	workingDir string,
 	timeoutMs int,
 	env map[string]string,
-) (stdout, stderr string, exitCode int, interrupted bool, err error) {
+) (CommandResult, error) {
 	// Build shell tool input
 	input := shellInput{
 		Command:     command,
@@ -96,7 +108,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 	}
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
-		return "", "", -1, false, fmt.Errorf("failed to marshal shell tool input: %w", err)
+		return CommandResult{ExitCode: -1}, fmt.Errorf("failed to marshal shell tool input: %w", err)
 	}
 
 	// Determine effective working directory
@@ -133,12 +145,12 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 	// Execute through the daemon
 	result, err := e.executor.ExecuteTool(ctx, req)
 	if err != nil {
-		return "", "", -1, false, fmt.Errorf("tool execution failed: %w", err)
+		return CommandResult{ExitCode: -1}, fmt.Errorf("tool execution failed: %w", err)
 	}
 
 	// Map tool result back to RunExecutor contract
 	if result == nil {
-		return "", "", -1, false, fmt.Errorf("nil result from tool executor")
+		return CommandResult{ExitCode: -1}, fmt.Errorf("nil result from tool executor")
 	}
 
 	if result.IsError {
@@ -149,7 +161,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		// worse, at the previous iteration's). Surface it as an error so the
 		// activity's retry policy — not the workflow's attempt budget — owns it.
 		if toolexec.IsTransportErrorCode(result.ErrorCode) {
-			return "", "", -1, false, &toolexec.TransportError{
+			return CommandResult{ExitCode: -1}, &toolexec.TransportError{
 				Code:          result.ErrorCode,
 				Command:       command,
 				Detail:        result.Content,
@@ -159,7 +171,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		}
 		// The tool itself reported an error (bad input, tool not found, …):
 		// that IS a verdict about this command.
-		return "", result.Content, 1, false, nil
+		return CommandResult{Stderr: result.Content, ExitCode: 1}, nil
 	}
 
 	// The shell tool returns structured JSON: {"stdout": "...", "stderr": "...", "exit_code": 0}
@@ -170,10 +182,29 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 	}
 	if err := json.Unmarshal([]byte(result.Content), &shellOutput); err != nil {
 		// Fallback: treat content as plain text stdout (e.g. legacy format)
-		return result.Content, "", 0, false, nil
+		return CommandResult{Stdout: result.Content, Truncated: shellOutputTruncated(result.Metadata)}, nil
 	}
 
-	return shellOutput.Stdout, shellOutput.Stderr, shellOutput.ExitCode, false, nil
+	return CommandResult{
+		Stdout:    shellOutput.Stdout,
+		Stderr:    shellOutput.Stderr,
+		ExitCode:  shellOutput.ExitCode,
+		Truncated: shellOutputTruncated(result.Metadata),
+	}, nil
+}
+
+// shellOutputTruncated reads the shell tool's own report that it cut the
+// command's output (ShellResponseMetadata.Truncated). Every daemon release
+// sends it, so a run step is told about a cut even on a machine whose shell
+// tool still applies the model's 16 KB cap to run steps.
+func shellOutputTruncated(metadata string) bool {
+	if metadata == "" {
+		return false
+	}
+	var m struct {
+		Truncated bool `json:"truncated"`
+	}
+	return json.Unmarshal([]byte(metadata), &m) == nil && m.Truncated
 }
 
 // resolveRunExecutorContext loads the IDs needed for remote execution from the DB.

@@ -26,6 +26,8 @@
  */
 
 /** Below this width the desktop shell's sidebars and panels stop fitting. */
+import { isSafeReturnTo } from "./returnTo";
+
 export const MOBILE_MAX_WIDTH = 768;
 
 /** Query param and storage key for the "give me the desktop app" opt-out. */
@@ -137,7 +139,7 @@ export function mobilePathFor(pathname: string, search = ""): string {
   if (path === "/settings/billing") {
     const q = new URLSearchParams(search);
     const returnTo = q.get("returnTo");
-    if (returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")) {
+    if (isSafeReturnTo(returnTo)) {
       return `/m/settings?${new URLSearchParams({ section: "billing", returnTo })}`;
     }
   }

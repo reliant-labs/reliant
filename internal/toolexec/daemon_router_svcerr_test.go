@@ -128,3 +128,20 @@ func TestDaemonReportedText(t *testing.T) {
 	_, ok = DaemonReportedText(fmt.Errorf("daemon command %q failed: %s", "git.push", "gateway round trip failed"))
 	assert.False(t, ok)
 }
+
+// A machine that went away under a request — its connection closed mid-call,
+// its restarted daemon could not resume the call — is the other end going
+// away: the canceled class, so every layer that logs it writes it below
+// ERROR. A round trip the gateway itself could not complete stays
+// unclassified (a server fault).
+func TestDaemonGoneErrorsAreTheCanceledClass(t *testing.T) {
+	for _, code := range []string{ErrorCodeDaemonInterrupted, ErrorCodeDaemonRestarted} {
+		err := fmt.Errorf("failed to execute command: %w", &TransportError{Code: code, Detail: "gone"})
+		assert.Equal(t, svcerr.ClassCanceled, svcerr.Classify(err), code)
+	}
+	assert.Equal(t, svcerr.ClassServer, svcerr.Classify(&TransportError{Code: ErrorCodeDaemonRoundTrip}))
+
+	interrupted := fmt.Errorf("daemon command %q failed: %w", "fs.get_tree", interruption("daemon connection interrupted"))
+	assert.Equal(t, svcerr.ClassCanceled, svcerr.Classify(interrupted))
+	assert.True(t, errors.Is(interrupted, ErrDaemonConnectionInterrupted), "the class changes nothing errors.Is sees")
+}

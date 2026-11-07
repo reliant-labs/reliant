@@ -58,6 +58,7 @@ import {
   traceInterceptor,
 } from "@reliantlabs/forge-web-runtime/interceptors";
 import { reportError, reportFailure } from "../lib/errorReporting";
+import { noteRpcFailureDecided } from "../lib/handledRpcFailures";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
 import { upgradeInterceptor } from "./upgradeInterceptor";
@@ -114,7 +115,7 @@ const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
 // Forge-Via names this client to the control plane's activity stream
 // (forge/pkg/activity): a change made here reads "sean promoted v1.7.44 via
 // Console", where the same change from `reliant forge` reads "via CLI". The
-// control-plane admin-server admits it cross-origin (forge's default CORS
+// control-plane platform-api admits it cross-origin (forge's default CORS
 // allow list, forge >= #966); the reliant api-server does not read it, so it
 // is never sent there.
 export const FORGE_VIA_HEADER = "Forge-Via";
@@ -263,7 +264,7 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
  * one run up to the gateway's 15s (the prod route has no timeout policy, so
  * Envoy's default ends it at 15.0s), and the 10s default threw away reads
  * that were about to answer: on 2026-11-03 the Overview's ListWorkloads was
- * cut at 10.0s while admin-server finished in 9.4-11.0s, so Services, Jobs
+ * cut at 10.0s while platform-api finished in 9.4-11.0s, so Services, Jobs
  * and "Needs attention" never loaded. Just under the gateway, so a read that
  * cannot answer in time ends here, as a timeout the page explains and does not
  * retry, rather than as a dropped connection that is retried once.
@@ -383,6 +384,9 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     }
     return result;
   } catch (error) {
+    // Decided here, once: whatever a caller logs about it later is a log line
+    // (lib/handledRpcFailures.ts), not a second report.
+    noteRpcFailureDecided(error);
     const duration = Date.now() - startTime;
     const kind = classifyRpcFailure(error, {
       serviceTypeName: req.service.typeName,
@@ -409,6 +413,11 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     }
     if (kind === "machine-wait") {
       logger.info("[gRPC Client] Machine not serving yet", context);
+      throw error;
+    }
+    if (kind === "network") {
+      // No server answered; the SDK's fetch span records the failed request.
+      logger.warn("[gRPC Client] Network failure", context);
       throw error;
     }
     if (kind === "deadline") {
@@ -715,7 +724,7 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
  * activity stream reads. In a production build the web app calls both
  * servers CROSS-ORIGIN (api.reliantapi.com and admin.reliantapi.com), so every
  * header it sends must be in that server's CORS preflight allow-list or the
- * browser refuses to send the RPC at all. The control-plane admin-server does
+ * browser refuses to send the RPC at all. The control-plane platform-api does
  * not read this header and does not allow it, so sending it there blocked
  * every controlplane.v1 RPC once a machine heartbeated.
  */

@@ -34948,6 +34948,26 @@
             {
               "name": "backgrounded",
               "kind": "bool"
+            },
+            {
+              "name": "media",
+              "kind": "message",
+              "type_name": "reliant.v1.ToolResponseMedia",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.ToolResponseMedia": [
+            {
+              "name": "mime_type",
+              "kind": "string"
+            },
+            {
+              "name": "data",
+              "kind": "bytes"
+            },
+            {
+              "name": "path",
+              "kind": "string"
             }
           ],
           "reliant.v1.ToolResultAck": [
@@ -35038,6 +35058,7 @@
           "reliant.v1.ToolExecutionCancel": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ToolRequest": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ToolResponse": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.ToolResponseMedia": "reliant/v1/tools_daemon.proto",
           "reliant.v1.ToolResultAck": "reliant/v1/tools_daemon.proto",
           "reliant.v1.UnwatchProjectConfigsRequest": "reliant/v1/tools_daemon.proto",
           "reliant.v1.WatchProjectConfigsRequest": "reliant/v1/tools_daemon.proto",
@@ -41261,6 +41282,11 @@
               "map_key_kind": "string",
               "map_value_kind": "message",
               "map_value_type_name": "reliant.v1.SecretDeclaration"
+            },
+            {
+              "name": "permissions",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.WorkflowConcurrency": [
@@ -41386,6 +41412,11 @@
               "name": "triggers",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowTrigger",
+              "repeated": true
+            },
+            {
+              "name": "permissions",
+              "kind": "string",
               "repeated": true
             }
           ],

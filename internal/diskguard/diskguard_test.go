@@ -38,18 +38,22 @@ func TestNext_Thresholds(t *testing.T) {
 		u    diskwatch.Usage
 		want reliantv1.DiskGuardState
 	}{
-		{"below reclaim", none, at(small, 0.89), none},
-		{"at reclaim", none, at(small, 0.90), reclaim},
+		{"below reclaim", none, at(small, 0.79), none},
+		{"at reclaim", none, at(small, 0.80), reclaim},
+		{"the 2026-11-06 machine: 629G at 86% reclaims", none, at(629*gib, 0.86), reclaim},
 		{"between", none, at(small, 0.94), reclaim},
 		{"at refuse", none, at(small, 0.95), refuseAll},
 		{"full", reclaim, at(small, 0.99), refuseAll},
 		{"a big disk past the percentage with room left is not refused", none, at(big, 0.96), reclaim},
 		{"a big disk with under the ceiling free is", none, at(big, 0.985), refuseAll},
-		// Hysteresis: each state holds until 2 points below its threshold.
+		// Hysteresis: a refusal holds until 2 points below its threshold; a
+		// reclaim works down to the 70% target.
 		{"refusal holds just below", refuseAll, at(small, 0.935), refuseAll},
 		{"refusal clears past the margin", refuseAll, at(small, 0.925), reclaim},
-		{"reclaim holds just below", reclaim, at(small, 0.885), reclaim},
-		{"reclaim clears past the margin", reclaim, at(small, 0.875), none},
+		{"reclaim holds just below the trigger", reclaim, at(small, 0.785), reclaim},
+		{"reclaim holds above the target", reclaim, at(small, 0.71), reclaim},
+		{"reclaim clears under the target", reclaim, at(small, 0.69), none},
+		{"a cleared refusal reclaims down to the target", refuseAll, at(small, 0.75), reclaim},
 		{"recovery from refusal all the way", refuseAll, at(small, 0.5), none},
 		{"no size", none, diskwatch.Usage{}, none},
 	} {
@@ -65,9 +69,20 @@ func TestNext_Thresholds(t *testing.T) {
 	if got := Next(none, at(small, 0.81), custom); got != refuseAll {
 		t.Errorf("custom refuse threshold: %v", got)
 	}
+	// A configured trigger under the default target still clears 2 points under it.
+	if got := Next(reclaim, at(small, 0.685), custom); got != reclaim {
+		t.Errorf("custom reclaim holds just under its trigger: %v", got)
+	}
+	if got := Next(reclaim, at(small, 0.675), custom); got != none {
+		t.Errorf("custom reclaim clears ClearMargin under its trigger: %v", got)
+	}
 	off := Config{RefuseAt: math.Inf(1)}
 	if got := Next(none, at(small, 0.999), off); got != reclaim {
 		t.Errorf("refusal off still reclaims: %v", got)
+	}
+	noReclaim := Config{ReclaimAt: math.Inf(1)}
+	if got := Next(refuseAll, at(small, 0.90), noReclaim); got != none {
+		t.Errorf("reclaim off: a cleared refusal must not hold RECLAIMING: %v", got)
 	}
 }
 
@@ -226,6 +241,14 @@ func TestGuard_RefusesPastTheThresholdAndRecoversWhenSpaceReturns(t *testing.T) 
 	if why := g.HeavyRefusal(); why != "" {
 		t.Fatalf("still refusing at 85%%: %s", why)
 	}
+	rep, _ = src.Report()
+	g.Annotate(rep)
+	if rep.Volumes[0].Guard != reclaim {
+		t.Fatalf("guard state at 85%% after a refusal: %v, want RECLAIMING (it works down to 70%%)", rep.Volumes[0].Guard)
+	}
+	// Under the target: the guard stands down.
+	src.set(cacheVolume(0.65))
+	g.Check(ctx)
 	rep, _ = src.Report()
 	g.Annotate(rep)
 	if rep.Volumes[0].Guard != none {

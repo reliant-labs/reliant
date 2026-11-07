@@ -3,9 +3,10 @@ package runner
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -90,7 +91,7 @@ func TestRunScenarioTool_ExecutesOnTheRuntime(t *testing.T) {
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, draft))
 	stored := &db.WorkflowScenario{
 		ID:              uuid.NewString(),
-		WorkflowDraftID: sql.NullString{String: draft.ID, Valid: true},
+		WorkflowDraftID: ptr.Of(draft.ID),
 		UserID:          "test-user",
 		Name:            "denied_once",
 		Events:          deniedOnceScenario,
@@ -110,7 +111,7 @@ func TestRunScenarioTool_ExecutesOnTheRuntime(t *testing.T) {
 
 	after, err := repo.GetWorkflowScenario(ctx, stored.ID)
 	require.NoError(t, err)
-	assert.Equal(t, "failed", after.LastRunStatus.String, "the tool persists the runtime's verdict")
+	assert.Equal(t, "failed", ptr.From(after.LastRunStatus), "the tool persists the runtime's verdict")
 }
 
 // Without an injected runner (the daemon runtime), the tool reports that

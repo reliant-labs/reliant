@@ -313,9 +313,16 @@ with `isAvailable` (`lib/demoTour.ts`, runtime config `DEMO_TOUR`):
 | fg-graph | | | ✓ |
 | fg-issue | ✓ | ✓ | ✓ |
 | fg-oncall | ✓ | | ✓ |
-| fg-agent (what a coding agent reads) | | ✓ | ✓ |
-| fg-ask, fg-done | ✓ | ✓ | ✓ |
-| **steps** | 9 | 10 | 13 |
+| fg-agent (what a coding agent reads) | | | ✓ |
+| fg-ask | ✓ | ✓ | ✓ |
+| fg-built (how this app was built: the recorded forge run, in a wide modal card, `card: { wide, modal }`) | | ✓ | ✓ |
+| fg-done | ✓ | ✓ | ✓ |
+| **steps** | 9 | 10 | 14 |
+
+fg-built is the demo's last step before the end card. It does not replace
+fg-instrumented, which runs in every cut; the short cut leaves out fg-agent
+instead (fg-built's card says what forge gives an agent, and fg-ask hands the
+issue to one).
 
 Keep the short cut at ten or fewer: an auto-started tour has to earn each
 step (`forgeJourney.test.tsx` pins it). `finish` returns null on the demo

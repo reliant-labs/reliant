@@ -3,8 +3,11 @@
 package egresslimit_test
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	"github.com/reliant-labs/reliant/internal/egresslimit"
@@ -73,4 +76,19 @@ func TestContract(t *testing.T) {
 	}
 
 	tdd.TableContract(t, svc, cases)
+}
+
+// A per-account limit is the caller's own volume: a user error. The per-host
+// cap is shared capacity and stays a server fault.
+func TestLimitedErrorClass(t *testing.T) {
+	for scope, want := range map[string]svcerr.Class{
+		egresslimit.ScopeUserRate:        svcerr.ClassUser,
+		egresslimit.ScopeUserConcurrency: svcerr.ClassUser,
+		egresslimit.ScopeHostConcurrency: svcerr.ClassServer,
+	} {
+		err := fmt.Errorf("fetch: %w", &egresslimit.LimitedError{Scope: scope, RetryAfter: time.Second, Host: "example.com"})
+		if got := svcerr.Classify(err); got != want {
+			t.Errorf("Classify(%s) = %s, want %s", scope, got, want)
+		}
+	}
 }

@@ -288,6 +288,22 @@
   --accent-foreground: var(--primary-foreground);
 }
 
+/*
+ * THE CONSOLE'S CONTROL EDGE. The forge console (ConsoleShell, OrgShell,
+ * ForgeShellLayout) puts filters, toggles and selects directly above charts,
+ * and forge's control edge, `border-strong` (--input, 1.45-1.75:1 against the
+ * card), drew them as faintly as the chart's own frame. Inside the console it
+ * is muted ink at 80%: at least 3.2:1 against the page and the card in every
+ * scheme, light and dark (WCAG 1.4.11 non-text contrast; pinned by
+ * components/Settings/__tests__/consoleControlEdge.test.ts). Declared here,
+ * not in @theme: a var() inside a custom property resolves where it is
+ * declared, and --muted-foreground is inherited unchanged below this scope.
+ * Its vocabulary is components/Forge/controlStyles.ts.
+ */
+.forge-console {
+  --color-border-strong: hsl(var(--muted-foreground) / 0.8);
+}
+
 /* Animations */
 @layer utilities {
   @keyframes pulse-border {
@@ -334,34 +350,6 @@
     }
   }
 
-  /* Live headline of a simplified-thread work fold: a soft highlight sweeps
-     across muted text. Reduced motion keeps the plain muted text. */
-  @keyframes turnWorkShimmer {
-    from { background-position: 100% 0; }
-    to { background-position: -100% 0; }
-  }
-
-  .turn-work-shimmer {
-    background-image: linear-gradient(
-      90deg,
-      hsl(var(--muted-foreground)) 35%,
-      hsl(var(--foreground)) 50%,
-      hsl(var(--muted-foreground)) 65%
-    );
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: turnWorkShimmer 2s linear infinite;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .turn-work-shimmer {
-      background-image: none;
-      -webkit-text-fill-color: currentColor;
-      animation: none;
-    }
-  }
 }
 
 /* Syntax highlighting themes - using .dark class instead of media queries */

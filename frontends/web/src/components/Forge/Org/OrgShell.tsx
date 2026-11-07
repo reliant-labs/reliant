@@ -119,9 +119,11 @@ export function OrgShell({ brand, brandCollapsed, user, collapsed, onToggleColla
     /*
      * `forge-ui` is REQUIRED, not cosmetic: inside it forge's `accent` token
      * resolves to reliant's primary action colour; outside it, to reliant's
-     * muted hover tint (src/index.css).
+     * muted hover tint (src/index.css). `forge-console` raises the control
+     * edge to 3:1 so filters and toggles read as controls beside the charts
+     * (controlStyles.ts).
      */
-    <div className="forge-ui h-dvh w-full" data-testid="forge-org-shell">
+    <div className="forge-ui forge-console h-dvh w-full" data-testid="forge-org-shell">
       <SidebarLayout
         navLabel="Organization console"
         brand={brand}

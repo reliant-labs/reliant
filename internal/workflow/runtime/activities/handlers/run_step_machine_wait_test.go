@@ -77,21 +77,21 @@ type blippingDaemon struct {
 
 func (d *blippingDaemon) up() bool { return !d.removed && !d.clock.Now().Before(d.backAt) }
 
-func (d *blippingDaemon) ExecuteCommand(_ context.Context, command, _ string, timeoutMs int, _ map[string]string) (string, string, int, bool, error) {
+func (d *blippingDaemon) ExecuteCommand(_ context.Context, command, _ string, timeoutMs int, _ map[string]string) (CommandResult, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.sends++
 	d.timeouts = append(d.timeouts, timeoutMs)
 	if !d.up() {
 		_ = d.clock.Sleep(context.Background(), d.undeliveredDelay)
-		return "", "", -1, false, &toolexec.TransportError{
+		return CommandResult{ExitCode: -1}, &toolexec.TransportError{
 			Code: toolexec.ErrorCodeDaemonUnreached, Command: command,
 			Detail:        "tool request via NATS failed: no daemon connected for user",
 			NotDispatched: true, DaemonID: blipDaemonID,
 		}
 	}
 	d.ran++
-	return "gate passed", "", 0, false, nil
+	return CommandResult{Stdout: "gate passed"}, nil
 }
 
 func (d *blippingDaemon) MachineStatus(context.Context, string) (tools.MachineStatus, error) {

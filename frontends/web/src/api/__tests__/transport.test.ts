@@ -109,7 +109,7 @@ describe('buildInterceptors factory', () => {
 })
 
 // x-daemon-last-seen is read only by the reliant api-server. A production
-// build calls both servers cross-origin, and the control-plane admin-server's
+// build calls both servers cross-origin, and the control-plane platform-api's
 // CORS preflight does not allow this header, so attaching it there made the
 // browser block every controlplane.v1 RPC once a machine heartbeated. These
 // run the real chain end to end and look at what reaches the wire.

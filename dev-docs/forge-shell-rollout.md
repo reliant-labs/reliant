@@ -21,7 +21,7 @@ may do.
    `rw.reliant_web`), and point its DNS record where the binding says.
    The certificate is issued by the hosting platform once DNS resolves.
 2. **CORS.** Add `https://forge.reliantlabs.io` to `_cors_origins` in
-   control-plane `deploy/kcl/prod/main.k` (read by admin-server and
+   control-plane `deploy/kcl/prod/main.k` (read by platform-api and
    reliant-api-server; `lib/invariants.k` checks the coupling).
 3. **Stripe returns.** Add `forge.reliantlabs.io` to `_allowed_redirect_hosts`
    in the same file, so billing in the forge shell's Settings can return there.

@@ -7402,12 +7402,16 @@ func (x *DeleteWorktreeOutput) GetDeleted() bool {
 
 // RunOutput is the output from run nodes (shell command execution).
 type RunOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ExitCode      int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
-	Stdout        string                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
-	Stderr        string                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
-	WorkingDir    string                 `protobuf:"bytes,4,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
-	LogFile       string                 `protobuf:"bytes,5,opt,name=log_file,json=logFile,proto3" json:"log_file,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ExitCode   int32                  `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	Stdout     string                 `protobuf:"bytes,2,opt,name=stdout,proto3" json:"stdout,omitempty"`
+	Stderr     string                 `protobuf:"bytes,3,opt,name=stderr,proto3" json:"stderr,omitempty"`
+	WorkingDir string                 `protobuf:"bytes,4,opt,name=working_dir,json=workingDir,proto3" json:"working_dir,omitempty"`
+	LogFile    string                 `protobuf:"bytes,5,opt,name=log_file,json=logFile,proto3" json:"log_file,omitempty"`
+	// The machine cut stdout or stderr to the run step's output cap (128 KiB of
+	// stdout, half that of stderr): they are not the command's whole output,
+	// and text a workflow decodes (json.decode) may not decode.
+	Truncated     bool `protobuf:"varint,6,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7475,6 +7479,13 @@ func (x *RunOutput) GetLogFile() string {
 		return x.LogFile
 	}
 	return ""
+}
+
+func (x *RunOutput) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 // WorkflowOutput is the output from a workflow node (non-loop sub-workflow).
@@ -8171,7 +8182,14 @@ type Workflow struct {
 	// history: only the action's activity resolves it, through the control plane,
 	// and writes it into the outgoing request. A child workflow (a ref) declares
 	// its own secrets.
-	Secrets       map[string]*SecretDeclaration `protobuf:"bytes,22,rep,name=secrets,proto3" json:"secrets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Secrets map[string]*SecretDeclaration `protobuf:"bytes,22,rep,name=secrets,proto3" json:"secrets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Permissions declares powers over Reliant itself that this workflow's steps
+	// use. The only value today is "approvals:decide": a step calls
+	// ApprovalService to approve or deny. A hosted credential that can decide
+	// approvals is refused for a step that targets ApprovalService unless the
+	// workflow declares it, and enabling the automation always shows its owner a
+	// card for it. Unknown values are a validation error.
+	Permissions   []string `protobuf:"bytes,23,rep,name=permissions,proto3" json:"permissions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8349,6 +8367,13 @@ func (x *Workflow) GetRequires() *WorkflowRequirements {
 func (x *Workflow) GetSecrets() map[string]*SecretDeclaration {
 	if x != nil {
 		return x.Secrets
+	}
+	return nil
+}
+
+func (x *Workflow) GetPermissions() []string {
+	if x != nil {
+		return x.Permissions
 	}
 	return nil
 }
@@ -9393,14 +9418,15 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\arepo_id\x18\x06 \x01(\tR\x06repoId\x12\x16\n" +
 	"\x06status\x18\a \x01(\tR\x06status\"0\n" +
 	"\x14DeleteWorktreeOutput\x12\x18\n" +
-	"\adeleted\x18\x01 \x01(\bR\adeleted\"\x94\x01\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted\"\xb2\x01\n" +
 	"\tRunOutput\x12\x1b\n" +
 	"\texit_code\x18\x01 \x01(\x05R\bexitCode\x12\x16\n" +
 	"\x06stdout\x18\x02 \x01(\tR\x06stdout\x12\x16\n" +
 	"\x06stderr\x18\x03 \x01(\tR\x06stderr\x12\x1f\n" +
 	"\vworking_dir\x18\x04 \x01(\tR\n" +
 	"workingDir\x12\x19\n" +
-	"\blog_file\x18\x05 \x01(\tR\alogFile\"C\n" +
+	"\blog_file\x18\x05 \x01(\tR\alogFile\x12\x1c\n" +
+	"\ttruncated\x18\x06 \x01(\bR\ttruncated\"C\n" +
 	"\x0eWorkflowOutput\x121\n" +
 	"\aoutputs\x18\x01 \x01(\v2\x17.google.protobuf.StructR\aoutputs\"\xc5\x02\n" +
 	"\n" +
@@ -9454,7 +9480,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x14.reliant.v1.PositionR\x05value:\x028\x01\x1aW\n" +
 	"\rSwitchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\x80\t\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xa2\t\n" +
 	"\bWorkflow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x10.reliant.v1.NodeR\x05nodes\x12&\n" +
@@ -9480,7 +9506,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\n" +
 	"on_failure\x18\x13 \x01(\v2\x14.reliant.v1.WorkflowR\tonFailure\x12<\n" +
 	"\brequires\x18\x15 \x01(\v2 .reliant.v1.WorkflowRequirementsR\brequires\x12;\n" +
-	"\asecrets\x18\x16 \x03(\v2!.reliant.v1.Workflow.SecretsEntryR\asecrets\x1aL\n" +
+	"\asecrets\x18\x16 \x03(\v2!.reliant.v1.Workflow.SecretsEntryR\asecrets\x12 \n" +
+	"\vpermissions\x18\x17 \x03(\tR\vpermissions\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +

@@ -2064,18 +2064,52 @@ func handleWorktreeGetPR(ctx context.Context, payload []byte) ([]byte, error) {
 
 	branch, err := resolveCurrentBranch(ctx, req.WorktreePath)
 	if err != nil {
-		// No detected branch -> no PR (mirrors original "no PR exists" path).
 		resp.Error = err.Error()
 		return json.Marshal(resp)
 	}
 
-	// Use gh pr view to check if a PR exists
-	prCmd := exec.CommandContext(ctx, "gh", "pr", "view", branch, "--json", "url,number,title,state,headRefOid")
-	prCmd.Dir = req.WorktreePath
-	output, err := prCmd.Output()
+	return json.Marshal(lookupWorktreePR(ctx, req.WorktreePath, branch, func(cmd *exec.Cmd) ([]byte, error) {
+		return cmd.Output()
+	}))
+}
+
+// Keep gh's repository and fork selection for view. A list is used only to
+// establish absence: view reports both absence and operational failures via
+// its exit status. Never infer absence from a localized error message.
+func lookupWorktreePR(ctx context.Context, repoPath, branch string, run func(*exec.Cmd) ([]byte, error)) worktreeGetPRResponse {
+	resp := worktreeGetPRResponse{}
+	fail := func(err error) worktreeGetPRResponse {
+		resp = worktreeGetPRResponse{}
+		if errors.Is(err, exec.ErrNotFound) {
+			resp.Error = "GitHub CLI (gh) is missing on this machine; install gh and run gh auth login"
+		} else {
+			resp.Error = fmt.Sprintf("failed to look up pull request: %v; check gh auth status and repository access on this machine", err)
+		}
+		return resp
+	}
+	listCmd := exec.CommandContext(ctx, "gh", "pr", "list", "--head", branch, "--state", "all", "--limit", "1", "--json", "number")
+	listCmd.Dir = repoPath
+	output, err := run(listCmd)
 	if err != nil {
-		// No PR exists
-		return json.Marshal(resp)
+		return fail(err)
+	}
+	var candidates []struct {
+		Number int `json:"number"`
+	}
+	if err := json.Unmarshal(output, &candidates); err != nil {
+		return fail(fmt.Errorf("invalid PR list response: %w", err))
+	}
+	if candidates == nil {
+		return fail(errors.New("invalid PR list response: expected an array"))
+	}
+	if len(candidates) == 0 {
+		return resp
+	}
+	prCmd := exec.CommandContext(ctx, "gh", "pr", "view", branch, "--json", "url,number,title,state,headRefOid")
+	prCmd.Dir = repoPath
+	output, err = run(prCmd)
+	if err != nil {
+		return fail(err)
 	}
 
 	var prInfo struct {
@@ -2086,7 +2120,10 @@ func handleWorktreeGetPR(ctx context.Context, payload []byte) ([]byte, error) {
 		HeadRefOid string `json:"headRefOid"`
 	}
 	if err := json.Unmarshal(output, &prInfo); err != nil {
-		return json.Marshal(resp)
+		return fail(fmt.Errorf("invalid PR response: %w", err))
+	}
+	if prInfo.Number <= 0 || prInfo.URL == "" || (prInfo.State != "OPEN" && prInfo.State != "CLOSED" && prInfo.State != "MERGED") {
+		return fail(errors.New("invalid PR response: missing number, URL or state"))
 	}
 
 	resp.Exists = true
@@ -2098,12 +2135,17 @@ func handleWorktreeGetPR(ctx context.Context, payload []byte) ([]byte, error) {
 
 	// Get local HEAD
 	localHeadCmd := exec.CommandContext(ctx, "git", "rev-parse", "HEAD")
-	localHeadCmd.Dir = req.WorktreePath
-	if localHeadOutput, err := localHeadCmd.Output(); err == nil {
-		resp.LocalHead = strings.TrimSpace(string(localHeadOutput))
+	localHeadCmd.Dir = repoPath
+	localHeadOutput, err := run(localHeadCmd)
+	if err != nil {
+		return fail(fmt.Errorf("resolve local HEAD: %w", err))
+	}
+	resp.LocalHead = strings.TrimSpace(string(localHeadOutput))
+	if resp.LocalHead == "" {
+		return fail(errors.New("resolve local HEAD: empty result"))
 	}
 
-	return json.Marshal(resp)
+	return resp
 }
 
 // =============================================================================

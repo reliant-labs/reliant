@@ -33,6 +33,18 @@ function renderUsage(usage: Partial<ObservabilityUsage> = {}, failWith?: Code) {
 }
 
 describe("UsageView", () => {
+  it("marks the by-service split as estimated for a billing-exempt org only", async () => {
+    renderUsage({ exempt: true });
+    await screen.findByTestId("obs-usage-services");
+    expect(screen.getByText(/Estimated: weighted by row count/)).toBeInTheDocument();
+  });
+
+  it("does not call a customer's by-service split estimated", async () => {
+    renderUsage();
+    await screen.findByTestId("obs-usage-services");
+    expect(screen.queryByText(/Estimated/)).not.toBeInTheDocument();
+  });
+
   it("shows month-to-date against the allowance, the projection, and that it lags", async () => {
     const { onCall } = renderUsage();
     expect(await screen.findByTestId("obs-usage-used")).toHaveTextContent("6.4 GB");

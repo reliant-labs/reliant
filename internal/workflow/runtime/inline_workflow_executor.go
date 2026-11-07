@@ -741,6 +741,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		subInputs["mode"] = getModeFromInputs(e.workflowInputs)
 	}
 	e.bodyInputs, e.bodyNodeOutputs = subInputs, subNodeOutputs
+	e.childTracker.captureThreadResetInputs(subThread, subInputs, ownedKeys)
 	// What the user set on this thread alone wins over everything the thread
 	// started with — the model they switched a stopped agent to, above all.
 	// Only for a body with inputs of its own: an inline body's map IS its
@@ -961,6 +962,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					return nil, err
 				}
 				nid := node.GetId()
+				inlineOutput = publishWorkflowNodeOutputs(e.ctx, node, inlineOutput)
 				subNodeOutputs[nid] = inlineOutput
 
 				// Execute save_message if configured on the nested workflow node

@@ -8,6 +8,20 @@ import { ObservabilityBillingApiContext } from "@/hooks/observability-billing-qu
 import { ObservabilityUsageDetails } from "../ObservabilityUsageDetails";
 vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({ listOrgLimitChanges: async () => ({ changes: [], nextPageToken: "" }), listEnvironments: async () => ({ environments: [] }) }) }));
 
+describe("estimated split", () => {
+  it("says the daily per-service split is estimated only for a billing-exempt org", async () => {
+    const list = vi.fn(async () => create(ListObservabilityUsageResponseSchema, { buckets: [{ signal: "logs", service: "api", billedBytes: 1n }], nextPageToken: "" }));
+    const api = { getObservabilityUsage: vi.fn(), getObservabilityLimits: async () => create(GetObservabilityLimitsResponseSchema), getObservabilityStorage: async () => create(GetObservabilityStorageResponseSchema), listObservabilityUsage: list, updateObservabilityLimits: vi.fn() };
+    const view = (estimatedSplit: boolean) => <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><ObservabilityBillingApiContext.Provider value={api}><ObservabilityUsageDetails orgId="org" estimatedSplit={estimatedSplit} /></ObservabilityBillingApiContext.Provider></QueryClientProvider>;
+    const { unmount } = render(view(false));
+    await screen.findByText("api");
+    expect(screen.queryByTestId("obs-daily-estimated")).not.toBeInTheDocument();
+    unmount();
+    render(view(true));
+    expect(await screen.findByTestId("obs-daily-estimated")).toHaveTextContent(/weighted by row count/);
+  });
+});
+
 describe("itemized history paging", () => {
   it("passes daily service grouping, keeps CSV disabled until all pages arrive, and changes month", async () => {
     const list = vi.fn(async ({ pageToken }: { pageToken?: string }) => create(ListObservabilityUsageResponseSchema, { buckets: [{ signal: "logs", service: pageToken ? "worker" : "api", billedBytes: 1073741824n }], nextPageToken: pageToken ? "" : "next" }));

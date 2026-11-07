@@ -311,6 +311,24 @@ func (e *TransportError) Error() string {
 	return "daemon transport failure (" + e.Code + "): no result came back, the command may have run: " + e.Detail
 }
 
+// ErrorClass implements svcerr.Classed. A request whose machine connection
+// closed while it ran, or that the machine's restarted daemon could not
+// resume, is the other end going away — a laptop that slept, a network that
+// dropped, a machine that restarted — so it is the canceled class, as a reaped
+// silent daemon stream is (tools_daemon's errDaemonStreamSilent). The caller
+// still learns exactly what happened from the code; only the log level
+// follows. Unclassified, every one was an ERROR "[ActivityWrapper] Activity
+// execution failed" issue (prod 90db0931). Any other transport failure keeps
+// no opinion.
+func (e *TransportError) ErrorClass() svcerr.Class {
+	switch e.Code {
+	case ErrorCodeDaemonInterrupted, ErrorCodeDaemonRestarted:
+		return svcerr.ClassCanceled
+	default:
+		return svcerr.ClassNone
+	}
+}
+
 // ToolExecutionResponse is the synchronous response from a daemon tool execution.
 type ToolExecutionResponse struct {
 	RequestID    string `json:"request_id"`

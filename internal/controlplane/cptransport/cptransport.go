@@ -23,7 +23,7 @@ var ErrInsecure = errors.New("control-plane URL must use https unless its host i
 // Check accepts https to any host, and plaintext http only to a host that
 // never leaves the machine or the cluster: localhost, a loopback IP, or a
 // Kubernetes Service DNS name. That last is how every server role reaches
-// control-plane's admin-server in a hosted deployment
+// control-plane's platform-api in a hosted deployment
 // (http://admin-server.<ns>.svc.cluster.local:8090) — the same hop that already
 // carries the GitHub installation tokens credwire fetches — so admitting it
 // adds no exposure. An http:// URL naming any other host (a public name, a

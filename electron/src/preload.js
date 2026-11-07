@@ -1,5 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Deliver the clipboard value as one operation, never a flag consumed by a
+// later paste. The composer cancels this event to insert without conversion;
+// native editable fields retain Chromium's input/undo/React event behavior.
+ipcRenderer.on('paste-plain-text', (_event, text) => {
+  if (typeof text !== 'string' || text === '') return;
+  const target = document.activeElement;
+  if (!target) return;
+  const event = new CustomEvent('reliant:paste-plain-text', {
+    bubbles: true,
+    cancelable: true,
+    detail: { text },
+  });
+  if (target.dispatchEvent(event)) {
+    document.execCommand('insertText', false, text);
+  }
+});
+
 // Store config in preload context
 let reliantConfig = null;
 
@@ -444,7 +461,7 @@ const injectReliantConfig = async () => {
      * the Electron app now runs a local daemon that bridges to the cloud.
      */
     const buildConfig = (status, info) => {
-      // apiUrl         = daemon --server URL (admin-server in cloud-dev, the
+      // apiUrl         = daemon --server URL (platform-api in cloud-dev, the
       //                  build-config-injected hosted endpoint in packaged
       //                  commercial builds). Renderer code that reads
       //                  RELIANT_CONFIG.apiUrl for non-grpc purposes still
@@ -463,7 +480,7 @@ const injectReliantConfig = async () => {
         grpcUrl: rendererApiUrl,
         apiUrl: apiUrl,
         gatewayUrl: status?.gatewayUrl || '',
-        // controlPlaneURL = the admin-server origin (billing, coupons,
+        // controlPlaneURL = the platform-api origin (billing, coupons,
         // /api/proxy-session). getControlPlaneURL() in frontends/web/src/lib/constants.ts
         // prefers THIS over the build-time VITE_CONTROL_PLANE_API_URL, so
         // injecting it at runtime lets a config change reach the app without

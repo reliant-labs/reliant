@@ -2020,6 +2020,10 @@ message RunOutput {
   string stderr = 3;
   string working_dir = 4;
   string log_file = 5;
+  // The machine cut stdout or stderr to the run step's output cap (128 KiB of
+  // stdout, half that of stderr): they are not the command's whole output,
+  // and text a workflow decodes (json.decode) may not decode.
+  bool truncated = 6;
 }
 
 // WorkflowOutput is the output from a workflow node (non-loop sub-workflow).
@@ -2198,6 +2202,13 @@ message Workflow {
   // and writes it into the outgoing request. A child workflow (a ref) declares
   // its own secrets.
   map<string, SecretDeclaration> secrets = 22;
+  // Permissions declares powers over Reliant itself that this workflow's steps
+  // use. The only value today is "approvals:decide": a step calls
+  // ApprovalService to approve or deny. A hosted credential that can decide
+  // approvals is refused for a step that targets ApprovalService unless the
+  // workflow declares it, and enabling the automation always shows its owner a
+  // card for it. Unknown values are a validation error.
+  repeated string permissions = 23;
 }
 
 // SecretDeclaration says where a secret lives.

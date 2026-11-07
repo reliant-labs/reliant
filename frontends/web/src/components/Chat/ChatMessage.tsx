@@ -22,6 +22,7 @@ import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
 import { DraftAutomationCard, isDraftAutomationTool } from "./tool-renderers/DraftAutomationToolRenderer";
 import { AskUserCard } from "./AskUserCard";
+import { DeployedAppCard, deployOfToolCall } from "../Apps/DeployedAppCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
@@ -862,9 +863,18 @@ function ChatMessageComponent({
 
     if (sliceRole === "work-surfaced") {
       // What must stay visible while the fold is collapsed: a call waiting
-      // on the user's approval, plus the cards and media above.
+      // on the user's approval, the cards and media above, and what a deploy
+      // put live (its tool rows in the fold leave their own card out).
       const pending = runExecutions.filter((exec) => exec.approval?.status === ApprovalStatus.PENDING);
-      if (pending.length + userCards.length + runImages.length + runVideos.length === 0) return null;
+      const deployCards = runExecutions.flatMap((exec) => {
+        const deploy = exec.approval?.status === ApprovalStatus.PENDING
+          ? null
+          : deployOfToolCall(exec.call.name, exec.call.input, exec.result);
+        return deploy
+          ? [<DeployedAppCard key={`${keyBase}-deploy-${exec.call.id}`} deploy={deploy} standalone />]
+          : [];
+      });
+      if (pending.length + userCards.length + deployCards.length + runImages.length + runVideos.length === 0) return null;
       return (
         <Fragment key={keyBase}>
           {pending.length > 0 && (
@@ -887,6 +897,7 @@ function ChatMessageComponent({
             </div>
           )}
           {userCards}
+          {deployCards}
           {media}
         </Fragment>
       );

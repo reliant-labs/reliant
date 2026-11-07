@@ -40,6 +40,7 @@ import { isReplayKnownUnplayable, rumScopeOf, sessionTitle } from "./sessionMode
 import { SessionsNotConfigured } from "./SessionStates";
 import { ClientName, DeviceSummary } from "../Client";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
+import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
 
 export interface SessionsViewProps {
   scope: ObsScope;
@@ -174,7 +175,7 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
 }
 
 const INPUT =
-  "h-8 w-full rounded-md border border-border bg-surface-sunken px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  `${CONTROL_FIELD} h-8 w-full px-2.5 text-sm`;
 
 function SessionToolbar({
   scope,
@@ -204,7 +205,7 @@ function SessionToolbar({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label="Only sessions" className="inline-flex rounded-lg border border-border bg-surface-sunken p-0.5">
+        <div role="group" aria-label="Only sessions" className={SEGMENTED}>
           <button
             type="button"
             aria-pressed={hasError}
@@ -258,7 +259,7 @@ function SessionToolbar({
 function chip(active: boolean) {
   return cn(
     "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+    segmentTone(active)
   );
 }
 

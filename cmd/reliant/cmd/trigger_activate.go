@@ -112,7 +112,7 @@ itself, with a step that messages you.`,
 			}
 			printWorkflowTriggerResults(cmd.OutOrStdout(), resp.Msg.GetResults())
 			if !resp.Msg.GetEnabled() {
-				return fmt.Errorf("workflow %q was not enabled; nothing new is running (see the reasons above)", f.workflow)
+				return activateFailure(f.workflow, resp.Msg.GetResults())
 			}
 			return nil
 		},
@@ -327,4 +327,22 @@ func printWorkflowTriggerResults(out io.Writer, results []*reliantv1.WorkflowTri
 func workflowOutcomeLabel(o reliantv1.WorkflowTriggerOutcome) string {
 	label := strings.TrimPrefix(o.String(), "WORKFLOW_TRIGGER_OUTCOME_")
 	return strings.ToLower(strings.ReplaceAll(label, "_", " "))
+}
+
+// activateFailure is the error for an enable that did not complete. "Nothing
+// new is running" is true only when no trigger was left enabled: an undo that
+// failed (a request deadline mid-write, say) leaves one on, and saying
+// otherwise sent people to re-run an activation that was already live.
+func activateFailure(workflow string, results []*reliantv1.WorkflowTriggerResult) error {
+	var left []string
+	for _, r := range results {
+		if r.GetOutcome() == reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED {
+			left = append(left, r.GetTrigger())
+		}
+	}
+	if len(left) > 0 {
+		return fmt.Errorf("workflow %q was not fully enabled, and these triggers are enabled anyway: %s (see the reasons above; `reliant trigger list` shows what is on)",
+			workflow, strings.Join(left, ", "))
+	}
+	return fmt.Errorf("workflow %q was not enabled; nothing new is running (see the reasons above)", workflow)
 }

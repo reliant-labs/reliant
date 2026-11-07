@@ -70,6 +70,40 @@ func TestWithReporting_UserErrorsAreInfo(t *testing.T) {
 	assert.Equal(t, "server", server["error_class"])
 }
 
+// machineGone stands in for toolexec.TransportError: a typed error classed as
+// the other end going away.
+type machineGone struct{}
+
+func (machineGone) Error() string            { return "daemon connection interrupted; not found" }
+func (machineGone) ErrorClass() svcerr.Class { return svcerr.ClassCanceled }
+
+// ActivityWrapper.Execute reports a terminal activity failure with
+// logging.ErrorContext whatever its class, and relies on this policy for the
+// level: a terminal failure that is the user's (a preset the project does not
+// define) or the other end going away (a machine that disconnected) is
+// written below ERROR, so it is no issue; a server fault stays ERROR.
+func TestWithReporting_TerminalActivityFailureLevelFollowsClass(t *testing.T) {
+	var buf bytes.Buffer
+	logger := policyLogger(t, &buf)
+	const msg = "[ActivityWrapper] Activity execution failed"
+
+	for class, failure := range map[string]error{
+		"user":     fmt.Errorf("load preset: %w", svcerr.WithClass(errors.New("preset not found: codex_limit_fallback"), svcerr.ClassUser)),
+		"canceled": fmt.Errorf("failed to execute command: %w", machineGone{}),
+		"server":   errors.New("connection refused"),
+	} {
+		buf.Reset()
+		logger.Error(msg, "activityType", "RunStep", "error", failure)
+		line := lineFor(t, &buf, msg)
+		assert.Equal(t, class, line["error_class"], class)
+		if class == "server" {
+			assert.Equal(t, "ERROR", line["level"], "a server fault stays an issue")
+		} else {
+			assert.Equal(t, "INFO", line["level"], "a %s failure is no issue", class)
+		}
+	}
+}
+
 func TestWithReporting_UserErrorsAreCounted(t *testing.T) {
 	counter := prometheus.NewCounterVec(prometheus.CounterOpts{Name: "test_user_error_total"}, []string{"level", "package", "message"})
 	previous := deadEndCounter

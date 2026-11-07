@@ -75,14 +75,50 @@ func (s *Service) UpdateWorkflowParams(
 	// unchanged to the run: the old expansion to the full preset+default set
 	// reset a live run's model to the preset's tier on a Mode toggle, and
 	// overwrote a sub-agent's model, tools and skills with the root's preset.
-	stateUpdate, err := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, nil, req.Msg.Params)
+	params := req.Msg.Params
+	validationChat := chat
+	if threadScoped {
+		wf, err := s.deps.Repo.GetWorkflowByThread(ctx, chat.ID, *req.Msg.ThreadId)
+		if err != nil || wf == nil {
+			return nil, svcerr.FailedPrecondition("The thread's workflow is unavailable. Try again when it resumes.")
+		}
+		workflowName = wf.WorkflowName
+		// Never apply the root's preset or selection to a thread's reset or
+		// validation. Its own baseline is maintained by the runtime.
+		threadChat := *chat
+		threadChat.ID = ""
+		threadChat.SelectedPresets = nil
+		validationChat = &threadChat
+		params, err = s.resolveThreadResetParams(ctx, userID, chat, workflowName, workflowID, *req.Msg.ThreadId, params)
+		if err != nil {
+			return nil, err
+		}
+	}
+	stateUpdate, err := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, validationChat, workflowName, nil, params)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}
 
 	// Validate the run as it would be after the update (model selectors,
 	// required inputs) before anything is stored or signalled.
-	if validationErrors := s.launcher().ValidateStateUpdate(ctx, userID, chat, workflowName, chat.SelectedPresets, stateUpdate); len(validationErrors) > 0 {
+	var validationErrors []error
+	if threadScoped {
+		// Required thread inputs may come from node args, not schema defaults.
+		// Validate the actual thread plus the delta whenever it can answer.
+		var current map[string]interface{}
+		response, queryErr := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, workflowID, "get_thread_inputs", *req.Msg.ThreadId)
+		if queryErr == nil && response.Get(&current) == nil && current != nil {
+			for key, value := range stateUpdate {
+				current[key] = value
+			}
+			validationErrors = s.launcher().ValidateChatWorkflowInputs(ctx, userID, validationChat, workflowName, current)
+		} else {
+			validationErrors = s.launcher().ValidateStateUpdate(ctx, userID, validationChat, workflowName, nil, stateUpdate)
+		}
+	} else {
+		validationErrors = s.launcher().ValidateStateUpdate(ctx, userID, validationChat, workflowName, validationChat.SelectedPresets, stateUpdate)
+	}
+	if len(validationErrors) > 0 {
 		errMsgs := make([]string, len(validationErrors))
 		for i, e := range validationErrors {
 			errMsgs[i] = e.Error()
@@ -110,6 +146,16 @@ func (s *Service) UpdateWorkflowParams(
 		// are signalled and remembered by the run, never stored as the
 		// selection (which would hand the sub-agent's model to the next root run).
 		stateUpdate["__thread"] = *req.Msg.ThreadId
+		var resetKeys []string
+		for key, value := range req.Msg.Params {
+			if value.AsInterface() == nil {
+				resetKeys = append(resetKeys, key)
+			}
+		}
+		if len(resetKeys) > 0 {
+			sort.Strings(resetKeys)
+			stateUpdate["__reset_keys"] = resetKeys
+		}
 		if err := s.signalParamUpdate(ctx, workflowID, stateUpdate); err != nil {
 			return nil, err
 		}
@@ -376,7 +422,8 @@ func (s *Service) GetWorkflowExecutions(
 		// Degrade to a tree with no thread metadata rather than failing the
 		// read: a partial timeline beats an error page. Logged loudly because
 		// the symptom (spawned threads rendering inline) is otherwise
-		// unattributable; each workflow also logs its own missing thread.
+		// unattributable; it explains every missing thread, so the tree does
+		// not report them again.
 		logging.ErrorContext(ctx, "[WorkflowTree] Failed to list threads; thread origin will be empty and threads without a workflow row will be missing from the timeline",
 			"error", threadsErr, "chatID", req.Msg.ChatId)
 	}
@@ -425,6 +472,7 @@ func (s *Service) GetWorkflowExecutions(
 	for _, root := range roots {
 		allRootProtos = append(allRootProtos, tree.build(root))
 	}
+	tree.reportMissingThreads(ctx, req.Msg.ChatId, threadsErr)
 
 	// The tree above can only describe threads that a workflow row points at,
 	// and that is strictly fewer than the threads which exist. Fill the gap
@@ -680,6 +728,30 @@ type workflowTreeBuilder struct {
 	forkedThreads    map[string]bool
 	childrenByParent map[string][]*db.Workflow
 	stepsByWorkflow  map[string][]*db.ChatStepExecution
+	// missingThreads is every workflow thread build found no row for.
+	missingThreads []string
+}
+
+// reportMissingThreads logs, once for the whole tree, the workflow threads
+// that had no row in the chat's thread list. A failure here is NOT cosmetic:
+// Origin is what tells the UI a thread is a spawned sub-agent, and a spawn
+// whose origin is missing renders its entire transcript inline in the parent
+// chat. Swallowing it left that looking like a frontend bug for a long time,
+// so it stays an ERROR — unless the thread list itself failed to load, which
+// was already reported and explains every miss.
+func (b *workflowTreeBuilder) reportMissingThreads(ctx context.Context, chatID string, threadsErr error) {
+	if len(b.missingThreads) == 0 || threadsErr != nil {
+		return
+	}
+	sample := b.missingThreads
+	if len(sample) > 5 {
+		sample = sample[:5]
+	}
+	logging.ErrorContext(ctx, "[WorkflowTree] Failed to load thread for workflow; Origin will be empty and spawned threads will render inline",
+		"error", fmt.Errorf("%d workflow thread(s) not found in chat, e.g. %q", len(b.missingThreads), sample),
+		"missing", len(b.missingThreads),
+		"threads", sample,
+		"chatID", chatID)
 }
 
 // build recursively builds the workflow execution tree
@@ -707,19 +779,14 @@ func (b *workflowTreeBuilder) build(wf *db.Workflow) *reliantv1.WorkflowExecutio
 		proto.Outcome = wf.Outcome
 	}
 	// Populate Origin, ForkedFromThread, ParentThread, and ThreadTitle from the
-	// Thread table (single source of truth for thread identity).
-	//
-	// A failure here is NOT cosmetic: Origin is what tells the UI a thread is a
-	// spawned sub-agent, and a spawn whose origin is missing renders its entire
-	// transcript inline in the parent chat. Swallowing the error left that
-	// looking like a frontend bug for a long time, so it is logged loudly.
+	// Thread table (single source of truth for thread identity). A missing
+	// thread is reported by reportMissingThreads.
 	thread := b.threadsByID[wf.Thread]
 	if thread == nil {
-		logging.Error("[WorkflowTree] Failed to load thread for workflow; Origin will be empty and spawned threads will render inline",
-			"error", fmt.Errorf("thread %q not found in chat", wf.Thread),
-			"workflowID", wf.ID,
-			"thread", wf.Thread,
-			"chatID", wf.ChatID)
+		// Collected and reported once per tree (see reportMissingThreads),
+		// not once per workflow: one chat whose thread list did not load was
+		// 568 ERROR events, five per request (prod 48884f4d).
+		b.missingThreads = append(b.missingThreads, wf.Thread)
 	}
 	if thread != nil {
 		if thread.ParentThreadID != nil {
@@ -772,25 +839,17 @@ func (b *workflowTreeBuilder) build(wf *db.Workflow) *reliantv1.WorkflowExecutio
 				ActivityName: step.ActivityName,
 				CreatedAt:    step.CreatedAt.Format(time.RFC3339),
 			}
-			if step.SavedMessageID.Valid {
-				proto.Steps[i].SavedMessageId = &step.SavedMessageID.String
-			}
+			proto.Steps[i].SavedMessageId = step.SavedMessageID
 			proto.Steps[i].OutputJson = step.OutputJSON
-			if step.ExitCode.Valid {
-				exitCode := int32(step.ExitCode.Int64)
+			if step.ExitCode != nil {
+				exitCode := int32(*step.ExitCode)
 				proto.Steps[i].ExitCode = &exitCode
 			}
-			if step.Success.Valid {
-				proto.Steps[i].Success = &step.Success.Bool
-			}
-			if step.DurationMs.Valid {
-				proto.Steps[i].DurationMs = &step.DurationMs.Int64
-			}
-			if step.LoopNodeID.Valid {
-				proto.Steps[i].LoopNodeId = &step.LoopNodeID.String
-			}
-			if step.LoopIteration.Valid {
-				loopIter := int32(step.LoopIteration.Int64)
+			proto.Steps[i].Success = step.Success
+			proto.Steps[i].DurationMs = step.DurationMs
+			proto.Steps[i].LoopNodeId = step.LoopNodeID
+			if step.LoopIteration != nil {
+				loopIter := int32(*step.LoopIteration)
 				proto.Steps[i].LoopIteration = &loopIter
 			}
 		}

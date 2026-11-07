@@ -25,6 +25,6 @@ events:
   - node: rounds.capped_comment
     output: {"is_error": false, "data": {"id": 11}}
 expect:
-  outcome: completed
+  outcome: failed
   completed: [rounds.capped_label]
   not_reached: [rounds.lease]

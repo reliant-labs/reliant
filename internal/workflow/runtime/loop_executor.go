@@ -1780,6 +1780,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 				}
 
 				// Store output for edge routing
+				inlineOutput = publishWorkflowNodeOutputs(e.ctx, step.Node, inlineOutput)
 				iterNodeOutputs[step.Node.GetId()] = inlineOutput
 
 				// Execute save_message if configured on the inline workflow node

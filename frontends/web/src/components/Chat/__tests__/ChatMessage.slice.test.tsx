@@ -42,6 +42,14 @@ vi.mock("../AskUserCard", () => ({
 vi.mock("../MessageGeneratedImages", () => ({
   MessageGeneratedImages: () => <div data-testid="generated-images">images</div>,
 }));
+vi.mock("../../Apps/DeployedAppCard", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../Apps/DeployedAppCard")>()),
+  DeployedAppCard: ({ deploy }: { deploy: { env: string } }) => (
+    <div data-testid="deployed-app-card" data-env={deploy.env}>
+      deployed:{deploy.env}
+    </div>
+  ),
+}));
 vi.mock("../MessageGeneratedVideos", () => ({
   MessageGeneratedVideos: () => <div data-testid="generated-videos">videos</div>,
   isVideoMimeType: (mime: string) => mime.startsWith("video/"),
@@ -50,6 +58,7 @@ vi.mock("../MessageGeneratedVideos", () => ({
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
   useToolResultsByCallId: () => ({
+    "call-deploy": { content: JSON.stringify({ exit_code: 0, output: "released" }), is_error: false },
     "call-img": {
       content: "Image generated.",
       is_error: false,
@@ -274,6 +283,16 @@ describe("ChatMessage slice", () => {
 
     expect(screen.getByTestId("generated-images")).toBeInTheDocument();
     expect(screen.queryByTestId("tool-card")).toBeNull();
+  });
+
+  it("work-surfaced surfaces what a deploy put live", () => {
+    const deploy = { ...tool(1, "shell", "call-deploy"), input: JSON.stringify({ command: "reliant forge env deploy prod" }) };
+    const message = assistant([text(0, "Shipping it."), deploy]);
+    render(<ChatMessage message={message} chatId="chat-1" slice={slice("work-surfaced", [0, 1])} />);
+
+    expect(screen.getByTestId("deployed-app-card")).toHaveAttribute("data-env", "prod");
+    expect(screen.queryByTestId("tool-card")).toBeNull();
+    expect(texts()).toEqual([]);
   });
 
   it("work-surfaced renders nothing when there is nothing to surface", () => {

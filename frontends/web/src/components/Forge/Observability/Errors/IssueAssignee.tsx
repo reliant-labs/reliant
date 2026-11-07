@@ -24,8 +24,9 @@ import type { Issue, IssueUser } from "@/services/controlPlane/observability/iss
 import { conflictSummary } from "./issueModel";
 import { discussionErrorText } from "./issueTimelineModel";
 import { useObsReadOnly } from "../obsReadOnly";
+import { CONTROL_FIELD } from "../../controlStyles";
 
-const FIELD = "h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const FIELD = `${CONTROL_FIELD} h-8 px-2 text-sm`;
 
 /** People the picker can offer: the roster, plus anyone it knows of that the roster did not list. */
 export function assigneeChoices(roster: readonly IssueUser[] | undefined, me: IssueUser | null | undefined, current: IssueUser | null): IssueUser[] {

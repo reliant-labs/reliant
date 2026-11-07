@@ -151,6 +151,62 @@ func TestMergeGateRunsGenerateAloneOnASmallHost(t *testing.T) {
 	}
 }
 
+// On a small host the test phase waits for a generate running alone (avg 313s
+// in the merge queue, before the test phase's own ~281s). prewarm_tests
+// compiles the selected test packages in that shadow: niced, a quarter of the
+// budget, compile-only (`go list -export`, never a 2.7 GiB link), with the
+// test phase's -buildvcs=false so its cache entries are the ones go test
+// reuses. It never fails the gate, and the gate waits for it before testing.
+func TestMergeGatePrewarmsTestsBesideAGenerateRunningAlone(t *testing.T) {
+	root := scriptFixture(t, "merge-gate.sh")
+	b, err := os.ReadFile(filepath.Join(root, "scripts/merge-gate.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	_, rest, ok := strings.Cut(src, `elif [ "$gen_alone" = 1 ]; then`)
+	if !ok {
+		t.Fatal("merge-gate has no gen_alone branch")
+	}
+	branch, _, _ := strings.Cut(rest, "\n    else ")
+	pre, gen, wait := strings.Index(branch, "phase prewarm prewarm_tests &"), strings.Index(branch, "phase generate gen_forge"), strings.Index(branch, `wait "$prewarm_pid"`)
+	if pre < 0 || gen < 0 || wait < 0 || pre > gen || gen > wait {
+		t.Fatalf("the gen_alone branch must start prewarm, then generate, then wait for prewarm:\n%s", branch)
+	}
+	fn, _, ok := strings.Cut(src[strings.Index(src, "prewarm_tests() {"):], "\n}\n")
+	if !ok || !strings.HasPrefix(fn, "prewarm_tests() {") {
+		t.Fatal("merge-gate has no prewarm_tests function")
+	}
+	bin := filepath.Join(root, "bin")
+	putFixture(t, root, "bin/go", "#!/bin/sh\necho \"$GOMAXPROCS $*\" >>\"$GO_ARGS\"\nexit \"${GO_RC:-0}\"\n", 0755)
+	for _, tc := range []struct {
+		name, gofull, packages, rc, want string
+	}{
+		{"selected packages", "false", `["./internal/a/...","./internal/b"]`, "0", "2 list -buildvcs=false -e -test -export -p 2 ./internal/a/... ./internal/b"},
+		{"a full lane", "true", `[]`, "0", "2 list -buildvcs=false -e -test -export -p 2 ./..."},
+		{"a compile error is the test phase's", "false", `["./internal/a"]`, "1", "2 list -buildvcs=false -e -test -export -p 2 ./internal/a"},
+		{"nothing selected", "false", `[]`, "0", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			plan := filepath.Join(dir, "plan.json")
+			putFixture(t, dir, "plan.json", `{"go":{"packages":`+tc.packages+`}}`, 0644)
+			args := filepath.Join(dir, "args")
+			cmd := exec.Command("bash", "-c", fn+"\n}\nprewarm_tests")
+			cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "GO_ARGS="+args, "GO_RC="+tc.rc,
+				"gofull="+tc.gofull, "run_plan="+plan, "quarter=2")
+			out, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("prewarm_tests failed the gate: %v\n%s", err, out)
+			}
+			got, _ := os.ReadFile(args)
+			if strings.TrimSpace(string(got)) != tc.want {
+				t.Fatalf("go invoked as %q, want %q\n%s", got, tc.want, out)
+			}
+		})
+	}
+}
+
 func TestRegeneratedSelectionPreparesNewDependencies(t *testing.T) {
 	root := scriptFixture(t, "merge-gate.sh")
 	b, err := os.ReadFile(filepath.Join(root, "scripts/merge-gate.sh"))

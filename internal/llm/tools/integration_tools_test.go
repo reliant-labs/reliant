@@ -3,6 +3,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -180,4 +181,31 @@ func TestBoundParamLeavesTheModelSchemaAndIsMergedAtCall(t *testing.T) {
 
 	_, err = BindTool(tool, Bindings{"nope": LiteralBinding(1)})
 	assert.ErrorIs(t, err, ErrUnknownBoundParam)
+}
+
+// A model that quotes a number ({"issue_number": "1634"}) gets it coerced to
+// the integer the manifest declares, as every wrapped tool already does,
+// instead of a rejection that prints `type: 1634 has type "string"`.
+func TestIntegrationToolCoercesAQuotedNumberToTheDeclaredInteger(t *testing.T) {
+	for _, name := range []string{"github__issue_labels_add", "github__pr_update"} {
+		t.Run(name, func(t *testing.T) {
+			tool, ok := NewToolsFactory(nil).GetToolByName(name, nil).(*integrationTool)
+			require.True(t, ok, "%s is an integration tool", name)
+			numberKey := "issue_number"
+			extra := `"label":"merge:queue"`
+			if name == "github__pr_update" {
+				numberKey, extra = "pull_number", `"body":"b"`
+			}
+			for _, sent := range []string{`"1634"`, `1634`} {
+				input := `{"owner":"reliant-labs","repo":"control-plane","` + numberKey + `":` + sent + `,` + extra + `}`
+				repaired, err := tool.repairModelInput(input)
+				require.NoError(t, err, "input %s", input)
+				var params map[string]any
+				require.NoError(t, json.Unmarshal([]byte(repaired), &params))
+				assert.Equal(t, float64(1634), params[numberKey], "input %s", input)
+			}
+			_, err := tool.repairModelInput(`{"owner":"reliant-labs","repo":"control-plane","` + numberKey + `":"PR-12",` + extra + `}`)
+			require.Error(t, err, "a string that is not a number is still refused")
+		})
+	}
 }

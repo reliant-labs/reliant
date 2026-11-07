@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
@@ -18,9 +19,13 @@ type machineCall struct {
 type fakeMachines struct {
 	calls      []machineCall
 	activation string
+	listErr    error
 }
 
 func (f *fakeMachines) ListMachines(context.Context, string) ([]MachineSummary, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
 	return []MachineSummary{
 		{ID: "cicd-id", Name: "cicd", Type: "managed", State: "suspended", Size: "xl"},
 		{ID: "default-id", Name: "default", Type: "managed", State: "ready", Size: "xl"},
@@ -179,4 +184,44 @@ func TestListMachinesMarksTheRunsOwnMachine(t *testing.T) {
 	require.False(t, resp.IsError, resp.Content)
 	require.Contains(t, resp.Content, "cicd (id cicd-id), managed, suspended, xl")
 	require.Contains(t, resp.Content, "default (id default-id), managed, ready, xl — this run executes on it")
+}
+
+// A run whose workflow pins `daemon: cicd` executes there, whatever the
+// chat's own machine is: list_machines marks cicd, and stop spares cicd.
+// The selector may name the machine by id or by name.
+func TestRunMachineFollowsTheRunsDaemonOverride(t *testing.T) {
+	own := "default-id"
+	store := triggerCallerStore{chat: &db.Chat{UserID: "owner", ActiveDaemonID: &own}}
+	for _, sel := range []rctx.RunMachine{{ID: "cicd-id"}, {Name: "cicd"}, {Name: "cicd-id"}} {
+		t.Run(sel.ID+sel.Name, func(t *testing.T) {
+			ctx := machineToolCtx(automationpolicy.Execution{})
+			ctx.RunMachine = sel
+			resp, err := NewListMachinesTool(store, &fakeMachines{}).Run(ctx, ToolCall{ID: "call", Name: ToolListMachines, Input: `{}`})
+			require.NoError(t, err)
+			require.Contains(t, resp.Content, "cicd (id cicd-id), managed, suspended, xl — this run executes on it")
+			require.NotContains(t, resp.Content, "default (id default-id), managed, ready, xl — this run executes on it")
+
+			f := &fakeMachines{}
+			resp, err = NewManageMachineTool(store, f).Run(ctx, ToolCall{ID: "call", Name: ToolManageMachine, Input: `{"machine_id":"cicd-id","action":"stop"}`})
+			require.NoError(t, err)
+			require.True(t, resp.IsError, resp.Content)
+			require.Contains(t, resp.Content, "would stop this run")
+			for _, c := range f.calls {
+				require.NotEqual(t, "stop", c.op)
+			}
+		})
+	}
+}
+
+// A selector naming the run's machine by name needs the machine list to
+// resolve; when listing fails, stop changes nothing rather than guess.
+func TestStopRefusesWhenTheRunsMachineNameCannotBeResolved(t *testing.T) {
+	ctx := machineToolCtx(automationpolicy.Execution{})
+	ctx.RunMachine = rctx.RunMachine{Name: "cicd"}
+	f := &fakeMachines{listErr: errors.New("control plane unavailable")}
+	resp, err := newTestMachineTool(f).Run(ctx, ToolCall{ID: "call", Name: ToolManageMachine, Input: `{"machine_id":"cicd-id","action":"stop"}`})
+	require.NoError(t, err)
+	require.True(t, resp.IsError, resp.Content)
+	require.Contains(t, resp.Content, "Nothing changed")
+	require.Empty(t, f.calls)
 }

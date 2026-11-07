@@ -147,7 +147,9 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 // connection-account routes the events may reach (a ConnectionSigned
 // provider's routes whose connection verified the delivery); nil means
 // every route of the integration.
-func (e *EventsReceiver) recordAndAck(ctx context.Context, w http.ResponseWriter, providerID string, delivery *Delivery, verified []*core.IntegrationTriggerRoute) {
+func (e *EventsReceiver) recordAndAck(reqCtx context.Context, w http.ResponseWriter, providerID string, delivery *Delivery, verified []*core.IntegrationTriggerRoute) {
+	ctx, cancel := recordingContext(reqCtx)
+	defer cancel()
 	// Revocations first: an event in the same delivery routes under the
 	// reduced access. A failure here is a 503 like a routing failure — the
 	// receiver must not ack a revocation it did not apply.

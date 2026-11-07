@@ -9,11 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
+	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
 )
@@ -166,4 +168,39 @@ func TestWrappedActivity_TerminalErrorRendersOnce(t *testing.T) {
 	require.True(t, errors.As(err, &appErr))
 	assert.True(t, appErr.NonRetryable(), "a terminal error stays terminal")
 	assert.Equal(t, "TerminalError", appErr.Type(), "the workflow keys on this type")
+}
+
+// machineGone stands in for toolexec.TransportError (which this package
+// cannot import in a test): a failure classed as the other end going away.
+type machineGone struct{}
+
+func (machineGone) Error() string            { return "daemon connection interrupted; not found" }
+func (machineGone) ErrorClass() svcerr.Class { return svcerr.ClassCanceled }
+
+// An activity failure that is not a server fault — the user's (a preset the
+// project does not define) or the other end going away (a machine that
+// disconnected mid-command) — reaches the workflow as a BENIGN failure, even
+// after classifyError rewrote it to a terminal one by its text, so the
+// workflow layers that pass it up classify it as the user's too
+// (errclass.Library) instead of logging it as an ERROR issue each.
+func TestWrappedActivity_NonServerFailuresCrossAsBenign(t *testing.T) {
+	t.Parallel()
+	for name, failure := range map[string]error{
+		"user":     svcerr.WithClass(errors.New("preset not found: codex_limit_fallback"), svcerr.ClassUser),
+		"canceled": fmt.Errorf("failed to execute command: %w", machineGone{}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			err := runWrappedFailure(t, func(context.Context, string) (string, error) { return "", failure })
+
+			var appErr *temporal.ApplicationError
+			require.True(t, errors.As(err, &appErr))
+			assert.Equal(t, temporal.ApplicationErrorCategoryBenign, appErr.Category())
+			assert.Equal(t, svcerr.ClassUser, errclass.Classify(err))
+		})
+	}
+	err := runWrappedFailure(t, func(context.Context, string) (string, error) {
+		return "", errors.New("connection refused")
+	})
+	assert.Equal(t, svcerr.ClassServer, errclass.Classify(err), "a server fault stays one")
 }

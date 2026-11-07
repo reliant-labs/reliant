@@ -7,7 +7,7 @@ import { supabase } from "./supabase";
  *
  * A preview URL is behind the workspace-proxy, which admits a browser that
  * carries its `__proxy_session` cookie. Without one it redirects to the app's
- * /auth/proxy (ProxyAuth), which mints a token at the admin-server
+ * /auth/proxy (ProxyAuth), which mints a token at the platform-api
  * (POST /api/proxy-session) and sends the browser to the preview's
  * `/__proxy/callback?token=…`; the callback sets the cookie and redirects to
  * the URL the token names.
@@ -23,7 +23,7 @@ export async function mintProxySessionCallbackUrl(returnURL: string, accessToken
   const controlPlaneURL = getControlPlaneURL();
   if (!controlPlaneURL) throw new Error("Control plane API URL not configured.");
 
-  // This must hit admin-server (the control-plane API), NOT admin-web. In
+  // This must hit platform-api (the control-plane API), NOT admin-web. In
   // cloud-dev they are separate origins.
   const response = await fetch(`${controlPlaneURL}/api/proxy-session`, {
     method: "POST",

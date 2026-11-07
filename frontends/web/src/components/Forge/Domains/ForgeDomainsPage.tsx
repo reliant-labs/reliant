@@ -50,6 +50,7 @@ import { hostedWorkloadsOf } from "@/services/forge/topology";
 import {
   DOMAIN_AVAILABILITY_EXPLANATIONS,
   bindingSummary,
+  domainStatusLine,
   domainTargetsOf,
   type ForgeDomain,
 } from "@/services/forge/domains";
@@ -221,6 +222,7 @@ export function ForgeDomainsPage() {
         <ul className="flex flex-col gap-2" aria-label="Custom domains">
           {domains.map((domain) => {
             const open = expanded === domain.id;
+            const status = domainStatusLine(domain);
             return (
               <li
                 key={domain.id}
@@ -245,6 +247,17 @@ export function ForgeDomainsPage() {
                       ? `${domain.binding.target} in ${envNameFor(domain.binding.environmentId)}`
                       : bindingSummary(domain.binding)}
                   </span>
+                  {status && (
+                    <span
+                      className={cn(
+                        "basis-full break-words text-xs",
+                        status.tone === "danger" ? "text-danger-ink" : "text-ink-muted"
+                      )}
+                      data-testid="domain-status-line"
+                    >
+                      {status.text}
+                    </span>
+                  )}
                 </button>
                 {open && (
                   <div className="border-t border-border/60 px-4 py-4">

@@ -39,7 +39,7 @@ func TestRemoteRunExecutor_CarriesCredentials(t *testing.T) {
 		cap := &capturingToolExecutor{}
 		exec := NewRemoteRunExecutor(cap)
 		exec.SetContext(RunExecutorContext{UserID: "u", ProjectPath: "/p", Credentials: tc.credentials})
-		_, _, _, _, err := exec.ExecuteCommand(context.Background(), "git push", "/p", 1000, nil)
+		_, err := exec.ExecuteCommand(context.Background(), "git push", "/p", 1000, nil)
 		require.NoError(t, err)
 		require.Len(t, cap.reqs, 1)
 		in := shellInputOf(t, cap.reqs[0])

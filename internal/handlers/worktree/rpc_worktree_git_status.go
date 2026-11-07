@@ -2,7 +2,9 @@ package worktree
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"sync"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -11,6 +13,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -38,16 +42,6 @@ func (s *Service) GetWorktreeChanges(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
 
-	// Validate worktree is suitable for git operations
-	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
-		return nil, err
-	}
-
-	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
-	if err != nil {
-		return nil, err
-	}
-
 	// Get changes via daemon
 	type fileChangeEntry struct {
 		Path     string `json:"path"`
@@ -65,16 +59,25 @@ func (s *Service) GetWorktreeChanges(
 		DefaultBranch string            `json:"default_branch"`
 		Error         string            `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_changes", map[string]string{
-		"worktree_path": repoPath,
-		"branch":        worktree.Branch,
-		"base_branch":   worktree.BaseBranch,
-	}, &changesResp, worktreeReadCommandTimeoutMs); err != nil {
-		return nil, daemonerr.Error("get worktree changes", err)
-	}
-	if changesResp.Error != "" {
-		// The daemon's own report of what git said.
-		return nil, svcerr.Internal(changesResp.Error)
+	if err := s.gitReadOnDisk(ctx, userID, worktree, func() error {
+		repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+		if err != nil {
+			return err
+		}
+		if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_changes", map[string]string{
+			"worktree_path": repoPath,
+			"branch":        worktree.Branch,
+			"base_branch":   worktree.BaseBranch,
+		}, &changesResp, worktreeReadCommandTimeoutMs); err != nil {
+			return daemonerr.Error("get worktree changes", err)
+		}
+		if changesResp.Error != "" {
+			// The daemon's own report of what git said.
+			return svcerr.Internal(changesResp.Error)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	// Convert to proto
@@ -130,16 +133,6 @@ func (s *Service) GetWorktreeGitStatus(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
 
-	// Validate worktree is suitable for git operations
-	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
-		return nil, err
-	}
-
-	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
-	if err != nil {
-		return nil, err
-	}
-
 	// Get git status via daemon
 	var statusResp struct {
 		Branch         string   `json:"branch"`
@@ -151,11 +144,22 @@ func (s *Service) GetWorktreeGitStatus(
 		Ahead          int32    `json:"ahead"`
 		Behind         int32    `json:"behind"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_status", map[string]string{
-		"worktree_path": repoPath,
-		"branch":        worktree.Branch,
-	}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {
-		return nil, daemonerr.Error("get git status", err)
+	var repoPath string
+	if err := s.gitReadOnDisk(ctx, userID, worktree, func() error {
+		var err error
+		repoPath, _, err = s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+		if err != nil {
+			return err
+		}
+		if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_status", map[string]string{
+			"worktree_path": repoPath,
+			"branch":        worktree.Branch,
+		}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {
+			return daemonerr.Error("get git status", err)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
 	return connect.NewResponse(&reliantv1.GetWorktreeGitStatusResponse{
@@ -190,16 +194,6 @@ func (s *Service) GetWorktreeCommits(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
-	}
-
-	// Validate worktree is suitable for git operations
-	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
-		return nil, err
-	}
-
-	repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
-	if err != nil {
-		return nil, err
 	}
 
 	// Get commit limit (default 20, max 100)
@@ -238,12 +232,25 @@ func (s *Service) GetWorktreeCommits(
 		BaseBranch   string `json:"base_branch"`
 		Limit        int32  `json:"limit"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_commits", commitsReq{
-		WorktreePath: repoPath,
-		Branch:       worktree.Branch,
-		BaseBranch:   baseBranch,
-		Limit:        limit,
-	}, &commitsResp, worktreeReadCommandTimeoutMs); err != nil {
+	// A failed send answers with no commits, once the directory is known to
+	// be there.
+	var sendErr error
+	if err := s.gitReadOnDisk(ctx, userID, worktree, func() error {
+		repoPath, _, err := s.resolveRepoPath(ctx, worktree, req.Msg.RepoId)
+		if err != nil {
+			return err
+		}
+		sendErr = s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_commits", commitsReq{
+			WorktreePath: repoPath,
+			Branch:       worktree.Branch,
+			BaseBranch:   baseBranch,
+			Limit:        limit,
+		}, &commitsResp, worktreeReadCommandTimeoutMs)
+		return sendErr
+	}); err != nil {
+		if sendErr == nil || err != sendErr {
+			return nil, err
+		}
 		logging.WarnContext(ctx, "Failed to get git commits via daemon", "error", err)
 		return connect.NewResponse(&reliantv1.GetWorktreeCommitsResponse{
 			Commits: []*reliantv1.GitCommit{},
@@ -300,65 +307,79 @@ func (s *Service) ListWorktreeRepoStatuses(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 	}
 
-	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
+	var statuses []*reliantv1.WorktreeRepoStatus
+	err = s.gitReadOnDisk(ctx, userID, worktree, func() error {
+		repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
+		if err != nil {
+			return svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
+		}
+		// 0-repo project: empty response. The UI treats this as "nothing to
+		// show in the sidebar" rather than an error so newly-created projects
+		// without any nested repo registered yet still render cleanly.
+		statuses = make([]*reliantv1.WorktreeRepoStatus, len(repos))
+		if len(repos) == 0 {
+			return errDirUnverified
+		}
+		// The repos are independent reads of one machine: asked at once, the
+		// answer takes the slowest repo's time, not the sum.
+		var wg sync.WaitGroup
+		for i, r := range repos {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				statuses[i] = s.repoStatus(ctx, userID, worktree, r)
+			}()
+		}
+		wg.Wait()
+		for _, row := range statuses {
+			if row.Error != "" {
+				return errDirUnverified
+			}
+		}
+		return nil
+	})
+	if err != nil && !errors.Is(err, errDirUnverified) {
 		return nil, err
-	}
-
-	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
-	}
-
-	// 0-repo project: empty response. The UI treats this as "nothing to show
-	// in the sidebar" rather than an error so newly-created projects without
-	// any nested repo registered yet still render cleanly.
-	if len(repos) == 0 {
-		return connect.NewResponse(&reliantv1.ListWorktreeRepoStatusesResponse{
-			Statuses: []*reliantv1.WorktreeRepoStatus{},
-		}), nil
-	}
-
-	statuses := make([]*reliantv1.WorktreeRepoStatus, 0, len(repos))
-	for _, r := range repos {
-		repoPath := filepath.Join(worktree.Path, r.RelativePath)
-		row := &reliantv1.WorktreeRepoStatus{
-			RepoId:           r.ID,
-			RepoName:         r.Name,
-			RepoRelativePath: r.RelativePath,
-		}
-
-		var statusResp struct {
-			Branch         string   `json:"branch"`
-			HasChanges     bool     `json:"has_changes"`
-			Status         string   `json:"status"`
-			StagedFiles    []string `json:"staged_files"`
-			UnstagedFiles  []string `json:"unstaged_files"`
-			UntrackedFiles []string `json:"untracked_files"`
-			Ahead          int32    `json:"ahead"`
-			Behind         int32    `json:"behind"`
-			Error          string   `json:"error,omitempty"`
-		}
-		if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_status", map[string]string{
-			"worktree_path": repoPath,
-			"branch":        worktree.Branch,
-		}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {
-			row.Error = err.Error()
-			statuses = append(statuses, row)
-			continue
-		}
-
-		row.CurrentBranch = statusResp.Branch
-		row.HasChanges = statusResp.HasChanges
-		row.Ahead = statusResp.Ahead
-		row.Behind = statusResp.Behind
-		row.ChangedFiles = int32(len(statusResp.StagedFiles) + len(statusResp.UnstagedFiles) + len(statusResp.UntrackedFiles))
-		if statusResp.Error != "" {
-			row.Error = statusResp.Error
-		}
-		statuses = append(statuses, row)
 	}
 
 	return connect.NewResponse(&reliantv1.ListWorktreeRepoStatusesResponse{
 		Statuses: statuses,
 	}), nil
+}
+
+// repoStatus is one ListWorktreeRepoStatuses row: r's git status in worktree,
+// or the failure to read it.
+func (s *Service) repoStatus(ctx context.Context, userID string, worktree *db.Worktree, r *core.Repo) *reliantv1.WorktreeRepoStatus {
+	row := &reliantv1.WorktreeRepoStatus{
+		RepoId:           r.ID,
+		RepoName:         r.Name,
+		RepoRelativePath: r.RelativePath,
+	}
+	var statusResp struct {
+		Branch         string   `json:"branch"`
+		HasChanges     bool     `json:"has_changes"`
+		Status         string   `json:"status"`
+		StagedFiles    []string `json:"staged_files"`
+		UnstagedFiles  []string `json:"unstaged_files"`
+		UntrackedFiles []string `json:"untracked_files"`
+		Ahead          int32    `json:"ahead"`
+		Behind         int32    `json:"behind"`
+		Error          string   `json:"error,omitempty"`
+	}
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.git_status", map[string]string{
+		"worktree_path": filepath.Join(worktree.Path, r.RelativePath),
+		"branch":        worktree.Branch,
+	}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {
+		row.Error = err.Error()
+		return row
+	}
+	row.CurrentBranch = statusResp.Branch
+	row.HasChanges = statusResp.HasChanges
+	row.Ahead = statusResp.Ahead
+	row.Behind = statusResp.Behind
+	row.ChangedFiles = int32(len(statusResp.StagedFiles) + len(statusResp.UnstagedFiles) + len(statusResp.UntrackedFiles))
+	if statusResp.Error != "" {
+		row.Error = statusResp.Error
+	}
+	return row
 }

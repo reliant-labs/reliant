@@ -510,7 +510,7 @@ standard library plus these extensions:
 | Strings | `trimPrefix`, `trimSuffix`, `split`, `join`, `replace`, `format`, `lowerAscii`, `upperAscii`, `trim`, `indexOf`, `substring`, `padLeft`, `padRight` |
 | Lists | `sort()`, `sortBy(x, key)`, `distinct()`, `flatten()`, `slice(a, b)`, `first()`, `last()`, `lists.range(n)` (at most 100,000) |
 | Sets | `sets.contains(a, b)`, `sets.intersects(a, b)`, `sets.equivalent(a, b)` |
-| Math | `math.greatest(...)`, `math.least(...)`, `math.abs`, `math.ceil`, `math.floor`, `math.round`, `math.sign` |
+| Math | `math.greatest(...)`, `math.least(...)`, `math.abs`, `math.ceil`, `math.floor`, `math.round`, `math.trunc`, `math.sign` (ceil, floor, round and trunc take an int too: a whole number read from another node is an int; an int beyond ±2^53 has no exact double and is an error) |
 | Encoders | `base64.encode(bytes)`, `base64.decode(string)` |
 | Bindings | `cel.bind(name, value, body)`: name an intermediate value once |
 | Regex | `regex.extract`, `regex.extractAll`, `regex.replace` (plus `string.matches(re)` from the standard library) |

@@ -78,6 +78,7 @@ import { SaveToDashboard } from "./SaveToDashboardDialog";
 import { SeriesTable } from "./SeriesTable";
 import { chartUnitOf } from "./seriesView";
 import { SqlTab } from "./SqlTab";
+import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
 
 // ── The console page ─────────────────────────────────────────────────────────
 
@@ -404,7 +405,7 @@ export function MetricsExplorer({ project, org: orgPlace, env, environments, sea
           id="metrics-range"
           value={range}
           onChange={(event) => onSearch({ range: event.target.value === DEFAULT_RANGE ? undefined : event.target.value })}
-          className="h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={`${CONTROL_FIELD} h-8 px-2 text-sm`}
           data-testid="metrics-range"
         >
           {RANGE_PRESETS.map((preset) => (
@@ -678,7 +679,7 @@ function Tabs({ tab, onTab }: { tab: "chart" | "sql"; onTab: (tab: "chart" | "sq
     <div
       role="tablist"
       aria-label="Query or SQL"
-      className="inline-flex rounded-md border border-border bg-surface-sunken p-0.5"
+      className={SEGMENTED}
       onKeyDown={(event) => {
         if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
         event.preventDefault();
@@ -699,7 +700,7 @@ function Tabs({ tab, onTab }: { tab: "chart" | "sql"; onTab: (tab: "chart" | "sq
           onClick={() => onTab(t.id)}
           className={cn(
             "h-7 rounded px-3 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-            tab === t.id ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+            segmentTone(tab === t.id)
           )}
           data-testid={`metrics-tab-${t.id}`}
         >

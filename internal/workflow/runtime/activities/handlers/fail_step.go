@@ -76,8 +76,16 @@ func (a *FailStepActivity) Category() schema.ActivityCategory {
 // Retrying used to keep such a run alive indefinitely under Temporal's default
 // policy (unlimited attempts, backing off to minutes apart): a test run with
 // one broken expression never ended, and never said it had failed.
+//
+// It is also BENIGN: the workflow's author has to fix it, and the run reports
+// it to them; nobody operating the server can. Unclassified, one expression
+// over the CEL cost limit was an ERROR issue at each layer the failure passed
+// (prod e4653a18, 77 events).
 func (a *FailStepActivity) Execute(ctx context.Context, input FailStepInput) (FailStepOutput, error) {
 	logging.WarnContext(ctx, "[FailStep] Workflow validation error", "error", input.Error)
-	return FailStepOutput{}, temporal.NewNonRetryableApplicationError(
-		fmt.Sprintf("workflow validation failed: %s", input.Error), "", nil)
+	return FailStepOutput{}, temporal.NewApplicationErrorWithOptions(
+		fmt.Sprintf("workflow validation failed: %s", input.Error), "", temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Category:     temporal.ApplicationErrorCategoryBenign,
+		})
 }

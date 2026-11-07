@@ -25,6 +25,13 @@ vi.mock("@/components/NewBuildPrompt", () => ({ NewBuildPrompt: () => null }));
 vi.mock("@/lib/toast", () => ({ Toaster: () => null }));
 vi.mock("@/components/Onboarding/JourneyTour", () => ({ JourneyTour: () => <div data-testid="journey-tour" /> }));
 vi.mock("@/components/Forge/Demo/DemoConsole", () => ({ DemoConsole: () => <div data-testid="demo-console" /> }));
+// The boot installs the demo transport through a lazy import() whose fixture
+// chain (sample metrics, traces, scenarios) is still loading when the file's
+// tests are done, and vitest then fails the run with EnvironmentTeardownError
+// ("Cannot load …metricsTypes.ts … after the environment was torn down"),
+// intermittently. DemoConsole is mocked above, so nothing here reads that data:
+// the transport is mocked too, and nothing loads after teardown.
+vi.mock("@/components/Forge/Demo/demoData/demoTransport", () => ({ createDemoTransport: () => ({}) }));
 
 import { getTourShell, getTourStorage } from "@/components/Onboarding/tourShell";
 import { resetDemoAutoStartForTests } from "@/components/Forge/Demo/DemoAutoStart";

@@ -132,4 +132,10 @@ func TestFetchGitToken_CallsServerAsPinnedDaemonSession(t *testing.T) {
 	if _, err := fetchGitToken(context.Background(), cmd, forgecred.Pin{Server: srv.URL}, "github"); !errors.Is(err, errGitProviderNotConnected) {
 		t.Fatalf("err = %v, want errGitProviderNotConnected", err)
 	}
+
+	// A transient server-side failure says to retry, not just its code.
+	fake.err = connect.NewError(connect.CodeUnavailable, errors.New("control plane down"))
+	if _, err := fetchGitToken(context.Background(), cmd, forgecred.Pin{Server: srv.URL}, "github"); err == nil || !strings.Contains(err.Error(), "retry") {
+		t.Fatalf("err = %v, want a retry message for Unavailable", err)
+	}
 }

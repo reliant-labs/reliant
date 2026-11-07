@@ -15,6 +15,12 @@ import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 
 // Keeps the trigger wrapper's classes (triggerClassName): the hover-only
 // actions hide and show on it.
+// The machine filter's daemon list: no machines, so the filter is hidden.
+vi.mock("../../hooks/useOnboardingQueries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/useOnboardingQueries")>()),
+  useDaemonList: () => NO_MACHINES,
+}));
+const NO_MACHINES = { data: [] };
 vi.mock("../forge-ui/tooltip", () => ({
   default: ({ children, triggerClassName }: { children: ReactNode; triggerClassName?: string }) =>
     triggerClassName ? <span className={triggerClassName}>{children}</span> : <>{children}</>,

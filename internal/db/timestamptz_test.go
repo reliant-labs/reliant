@@ -3,9 +3,10 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/ptr"
 
 	"github.com/google/uuid"
 )
@@ -84,7 +85,7 @@ func TestLocalTimeRoundTripsAsTheSameInstant(t *testing.T) {
 		WorkflowID:   uuid.New().String(),
 		StepID:       "lint",
 		ActivityName: "ExecuteRunStep",
-		Success:      sql.NullBool{Bool: true, Valid: true},
+		Success:      ptr.Of(true),
 		CreatedAt:    written,
 	}
 	if err := repo.CreateStepExecution(ctx, exec); err != nil {

@@ -64,6 +64,13 @@ func (s *Service) StageFiles(
 		return nil, daemonerr.Error("stage files", err)
 	}
 	if !stageResp.Success {
+		// A path git has neither on disk nor in the index — the file was
+		// deleted after the changes list showed it — is the state of the
+		// user's worktree, not a server failure. As Internal it was a browser
+		// issue per click (prod 2026-11-05, e39fe2ca: a .png that was gone).
+		if strings.Contains(stageResp.Error, "did not match any files") {
+			return nil, svcerr.FailedPrecondition(fmt.Sprintf("failed to stage files: %s", stageResp.Error))
+		}
 		return nil, svcerr.Internal(fmt.Sprintf("failed to stage files: %s", stageResp.Error))
 	}
 
@@ -299,13 +306,17 @@ func (s *Service) GetWorktreePR(
 		State      string `json:"state,omitempty"`
 		LocalHead  string `json:"local_head,omitempty"`
 		HeadRefOid string `json:"head_ref_oid,omitempty"`
+		Error      string `json:"error,omitempty"`
 	}
 	// Branch is resolved daemon-side from HEAD, not from worktree.Branch.
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonplacement.WorktreeOwner(worktree), "worktree.get_pr", map[string]string{
 		"worktree_path": repoPath,
 	}, &prResp); err != nil {
 		logging.WarnContext(ctx, "Failed to check PR via daemon", "error", err)
-		return connect.NewResponse(&reliantv1.GetWorktreePRResponse{Exists: false}), nil
+		return nil, svcerr.WrapOr(err, svcerr.Unavailable("could not check pull request; reconnect the machine and retry"))
+	}
+	if prResp.Error != "" {
+		return nil, svcerr.Unavailable(prResp.Error)
 	}
 
 	if !prResp.Exists {

@@ -5,19 +5,19 @@
  * shape — prod, e2e and dev plus three previews, the release ledger of
  * ../../Releases/__fixtures__ — with every state the pages must draw:
  *
- *   prod   admin-server healthy (verified by digest), reliant-api-server
+ *   prod   platform-api healthy (verified by digest), reliant-api-server
  *          healthy, reliant-temporal-worker crash-looping (OOMKilled, 0/2),
  *          litellm degraded (1 of 2 ready), web healthy with a release that
  *          is DECLARED by the promotion (no digest observed), a migrate Job
  *          that succeeded.
- *   e2e    admin-server healthy, reliant-api-server pending (a rollout in
+ *   e2e    platform-api healthy, reliant-api-server pending (a rollout in
  *          flight), a migrate Job that FAILED (BackoffLimitExceeded).
  *   dev    two healthy services, a provisioning Job still running.
  *   pr-981 one healthy service.
  *   staging  SELF-MANAGED: nothing reports from it; its render declares three
  *          workloads, which the Overview lists as unobserved.
  *
- * The hosted observation (GetStatus) of prod: admin-server serves a URL,
+ * The hosted observation (GetStatus) of prod: platform-api serves a URL,
  * litellm runs the WRONG VERSION (an observed digest no promotion pinned),
  * reliant-temporal-worker carries the platform's last error, docs is stopped
  * by its owner.

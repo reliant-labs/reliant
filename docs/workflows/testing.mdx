@@ -95,6 +95,21 @@ expect:
 
 An event without a `type` must look like the real node's output: it is checked against that node type's output schema, so a mock cannot claim a shape the real node never produces.
 
+#### Approval and ask_question events
+
+A person resolves these nodes in production, so a mock must be something a person can produce:
+
+- **approval**: `status` is `approved`, `denied` or `timeout` (the node's own timer). Any other value is a validation error. An approval the scenario gives no `status` resolves as `approved` and the run carries a warning, because production never approves on its own: write `status: approved` to test that path on purpose.
+- **ask_question**: `response` is what the person gave, the text they typed or else the label of the option they clicked, never the question service's raw `{"answers": [...]}` payload (a validation error). A `response` implies `has_feedback: true`; `has_feedback: false` with a `response` is a validation error. `has_feedback: false` alone is a plain "Continue": no feedback and an empty `response`.
+
+```yaml
+events:
+  - node: founder_gate
+    output: {response: "Ship it"}   # has_feedback is true
+  - node: confirm
+    output: {status: denied}
+```
+
 #### Event Fields
 
 ```yaml
@@ -208,8 +223,11 @@ The `expect` section defines assertions:
 
 ```yaml
 expect:
-  # Expected outcome
-  outcome: completed  # or "error", or "failed"
+  # Expected outcome: completed, error (a node failed, or the run errored)
+  # or failed (the run ended at a terminal node declaring outcome: failure).
+  # `completed` still matches a failed run, with a warning, so scenarios
+  # written before failed was reported keep passing; assert `failed` there.
+  outcome: completed
 
   # Nodes that must have been scheduled: run, skipped or errored.
   # This does not prove a node ran; use completed for that.
@@ -234,7 +252,9 @@ expect:
     - planning.revise
     - impl_loop.lint            # skipped because 'lint' not in steps
 
-  # Assert specific node output values
+  # Assert specific node output values. Partial in the fields it names; each
+  # named field's value must match exactly at every depth (a nested map needs
+  # every key), with numbers compared by value: 1750 equals 1750.0.
   node_outputs:
     call_llm:
       tool_calls: []

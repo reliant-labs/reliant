@@ -51,6 +51,7 @@ import { affectedNoun, issueAskSubject, PLATFORM_LABEL, SORT_LABEL, STATUS_LABEL
 import { linkChatToIssue } from "./linkIssueChat";
 import { assigneeFilterOf, assigneeFilterWaitsForMe, assigneeParam, serverAssignee } from "./issueTimelineModel";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
+import { CONTROL_FIELD, SEGMENTED, segmentTone } from "../../controlStyles";
 
 export interface ErrorsViewProps {
   scope: ObsScope;
@@ -177,7 +178,7 @@ function IssueList({ scope, subject, range, text, service, statuses, platform, s
   );
 }
 
-const SELECT = "h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const SELECT = `${CONTROL_FIELD} h-8 px-2 text-sm`;
 
 function IssueToolbar({
   scope,
@@ -221,7 +222,7 @@ function IssueToolbar({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label="Status" className="inline-flex flex-wrap rounded-lg border border-border bg-surface-sunken p-0.5" data-testid="obs-errors-status">
+        <div role="group" aria-label="Status" className={cn(SEGMENTED, "flex-wrap")} data-testid="obs-errors-status">
           <button
             type="button"
             aria-pressed={statuses.length === 0}
@@ -312,7 +313,7 @@ function IssueToolbar({
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             placeholder="Title or culprit contains, e.g. TypeError or checkout.tsx"
-            className="h-8 w-full rounded-md border border-border bg-surface-sunken pl-8 pr-3 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className={`${CONTROL_FIELD} h-8 w-full pl-8 pr-3 text-sm`}
             data-testid="obs-errors-query"
           />
         </div>
@@ -326,7 +327,7 @@ function IssueToolbar({
 function chip(active: boolean) {
   return cn(
     "rounded-md px-2.5 py-1 text-xs transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-    active ? "bg-surface font-medium text-ink shadow-sm" : "text-ink-muted hover:text-ink"
+    segmentTone(active)
   );
 }
 

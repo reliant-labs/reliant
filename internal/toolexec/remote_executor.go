@@ -49,6 +49,17 @@ func capLLMToolContent(content string) string {
 		formatByteSize(int64(len(content))))
 }
 
+// capToolContent is capLLMToolContent for a result a model reads. A workflow
+// run step's result is workflow data, not model context: the shell tool
+// already bounded it to tools.MaxRunStepOutputSize, so it passes whole, with
+// that bound as the backstop.
+func capToolContent(content string, runStep bool) string {
+	if runStep && len(content) <= tools.MaxRunStepOutputSize {
+		return content
+	}
+	return capLLMToolContent(content)
+}
+
 // DaemonClientFactory creates the daemon.Client a server-side tool uses for one
 // request: bound to the user's daemon that selector names (the run's machine,
 // as ExecuteTools chose it), or to default resolution for a nil selector. In
@@ -332,7 +343,7 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 		Success:      result.Success,
 		IsError:      result.IsError,
 		Backgrounded: result.Backgrounded,
-		Content:      capLLMToolContent(result.Content),
+		Content:      capToolContent(result.Content, req.RunStep),
 		Metadata:     result.Metadata,
 		BinaryParts:  result.BinaryParts,
 		StartTime:    startTime,
@@ -384,8 +395,17 @@ func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	if req.RunStep {
 		contextMap[RunStepContextKey] = true
 	}
+	if sel := req.DaemonSelector; sel != nil && (sel.ID != "" || sel.Name != "") {
+		contextMap[RunMachineContextKey] = map[string]interface{}{"id": sel.ID, "name": sel.Name}
+	}
 	return contextMap
 }
+
+// RunMachineContextKey is the context-map key carrying the run's daemon
+// selector (its id or name) to the executing tool (rctx.ToolContext.RunMachine),
+// so a tool that reports "the machine this run executes on" names the machine
+// the run's override routed it to, not the chat's default.
+const RunMachineContextKey = "run_machine"
 
 // RunStepContextKey is the context-map key carrying ToolRequest.RunStep to the
 // executing tool (rctx.ToolContext.RunStep). The context map is built here,
@@ -505,7 +525,7 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		Success:      resp.Success,
 		IsError:      resp.IsError,
 		Backgrounded: resp.Backgrounded,
-		Content:      capLLMToolContent(content),
+		Content:      capToolContent(content, req.RunStep),
 		Metadata:     resp.Metadata,
 		// A transport failure the gateway answered for — the daemon's
 		// connection dropped under the request, or the gateway was too busy

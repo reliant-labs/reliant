@@ -25,8 +25,9 @@ import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 
 import { useObsReadOnly } from "../obsReadOnly";
 import { conflictSummary, IGNORE_FOR, ignoreChange, resolveChange, triageActionsOf, type IgnoreFor, type ResolveChoice } from "./issueModel";
+import { CONTROL_FIELD } from "../../controlStyles";
 
-const FIELD = "h-8 rounded-md border border-border bg-surface-sunken px-2 text-sm text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const FIELD = `${CONTROL_FIELD} h-8 px-2 text-sm`;
 
 export function IssueTriage({ issue }: { issue: Issue }) {
   const update = useUpdateIssueStatus();

@@ -69,7 +69,7 @@ func TestSpawnTerminalFailure_DoesNotHangParentLoop(t *testing.T) {
 	require.Less(t, elapsed, DefaultTimeout,
 		"the workflow must terminate on its own, not be cut off by the run budget")
 	for _, m := range res.Mismatches {
-		require.NotEqual(t, nonTerminatingMessage, m,
+		require.NotContains(t, m, nonTerminatingPrefix,
 			"a deterministic spawn failure must not leave the parent loop parked "+
 				"in awaitLiveDetachedSpawns; the spawn has to fail terminally so "+
 				"completeDetachedSpawn releases the parent")

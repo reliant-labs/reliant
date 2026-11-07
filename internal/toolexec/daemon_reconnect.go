@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
@@ -366,3 +367,11 @@ func (e interruption) Is(target error) bool { return target == ErrDaemonConnecti
 // ConnectionInterrupted marks the error for a consumer that cannot import
 // this package (see ErrDaemonConnectionInterrupted).
 func (interruption) ConnectionInterrupted() bool { return true }
+
+// ErrorClass implements svcerr.Classed: the machine's connection closed under
+// the request — the other end went away — which is the canceled class. The
+// code a caller receives is unchanged (Unavailable); without the class every
+// interrupted fs.get_tree, worktree.validate_path or terminal.create was an
+// ERROR issue at each layer that logged it (prod 59c805cd, 939023e3,
+// 2fc6efff).
+func (e interruption) ErrorClass() svcerr.Class { return svcerr.ClassCanceled }

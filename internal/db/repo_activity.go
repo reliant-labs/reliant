@@ -69,6 +69,24 @@ func (r *Repo) emitChatActivityIfChanged(ctx context.Context, chatID string) err
 	return r.announceChatActivity(ctx, chatID, nil)
 }
 
+// chatDeletedUnder reports whether err is a user update refused because its
+// chat row is gone: the chat was deleted after it was read (a delete racing a
+// state change). That is the same "nothing left to announce" as a chat that
+// was already gone when read, not a failure — it was an ERROR issue per race
+// (prod 6faa21ee, 4e294eda).
+func chatDeletedUnder(err error) bool {
+	return err != nil && orm.ConstraintName(err) == store.UserUpdateConstraintChatIDFkey
+}
+
+// chatGoneError carries a chatDeletedUnder failure out of a transaction as a
+// TxOutcome, so RunTx does not log it as "Transaction failed"; errors.As and
+// orm.ConstraintName still see the driver error.
+type chatGoneError struct{ err error }
+
+func (e chatGoneError) Error() string { return e.err.Error() }
+func (e chatGoneError) Unwrap() error { return e.err }
+func (chatGoneError) TxOutcome()      {}
+
 // emitChatActivityChanged writes a chat_activity_changed event carrying state
 // rather than the state the view reports now. Outside a transaction only.
 func (r *Repo) emitChatActivityChanged(ctx context.Context, chatID string, state ChatActivityState) error {
@@ -137,6 +155,11 @@ func (r *Repo) announceChatActivity(ctx context.Context, chatID string, fixed *C
 				Data:       data,
 			}, nil
 		})
+		if chatDeletedUnder(err) {
+			// The insert aborted the transaction: roll it back as an
+			// outcome, below, rather than commit it.
+			return chatGoneError{err}
+		}
 		if err != nil {
 			return fmt.Errorf("failed to create activity event: %w", err)
 		}
@@ -147,6 +170,10 @@ func (r *Repo) announceChatActivity(ctx context.Context, chatID string, fixed *C
 		}
 		return nil
 	})
+	if chatDeletedUnder(err) {
+		logging.DebugContext(ctx, "[ActivityEvent] chat was deleted before its announcement; no activity to announce", "chatID", chatID)
+		return nil
+	}
 	if err != nil {
 		return err
 	}

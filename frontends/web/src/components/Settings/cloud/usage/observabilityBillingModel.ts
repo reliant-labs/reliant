@@ -36,3 +36,13 @@ export function dailyTotals(buckets: UsageBucket[]) {
   }
   return [...days].sort(([a], [b]) => a.localeCompare(b)).map(([date, signals]) => ({ date, signals: [...signals], total: [...signals.values()].reduce((a, b) => a + b, 0n) }));
 }
+
+/**
+ * The meter splits a billing-exempt org's exact ingested bytes across services,
+ * browser and customer metadata by ROW COUNT instead of weighing every byte
+ * (control-plane internal/obsmeter, meterOrg): the org is never charged, and
+ * weighing its bytes was nearly all of the meter's ClickHouse reads. Ingested
+ * totals per signal stay exact; only the split is an estimate.
+ */
+export const ESTIMATED_SPLIT_NOTE =
+  "Estimated: this organization is not billed, so its split by service, browser and customer metadata is weighted by row count, not measured in bytes. Ingested totals per signal are exact.";

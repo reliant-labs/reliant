@@ -594,6 +594,64 @@ export function useToggleHiddenItem() {
   }, [qc, mutateAsync]);
 }
 
+// --- Composer: automatic long-paste attachments (in `additional`) ---
+
+export interface LongPastePreferences {
+  enabled: boolean;
+  characterThreshold: number;
+  lineThreshold: number;
+}
+
+export const DEFAULT_LONG_PASTE_PREFERENCES: LongPastePreferences = {
+  enabled: true,
+  characterThreshold: 5000,
+  lineThreshold: 100,
+};
+
+const LONG_PASTE_KEYS = {
+  enabled: "longPaste.enabled",
+  characterThreshold: "longPaste.characterThreshold",
+  lineThreshold: "longPaste.lineThreshold",
+} as const;
+
+function positiveThreshold(raw: string | undefined, fallback: number): number {
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value > 0 ? value : fallback;
+}
+
+function longPastePreferencesOf(response: GetPreferencesResponse): LongPastePreferences {
+  const values = response.additional;
+  return {
+    enabled: values[LONG_PASTE_KEYS.enabled] !== "false",
+    characterThreshold: positiveThreshold(values[LONG_PASTE_KEYS.characterThreshold], 5000),
+    lineThreshold: positiveThreshold(values[LONG_PASTE_KEYS.lineThreshold], 100),
+  };
+}
+
+export function useLongPastePreferencesQuery() {
+  const hasSession = useHasSession();
+  return useGetPreferences({}, { staleTime: 60_000, enabled: hasSession, select: longPastePreferencesOf });
+}
+
+export function useUpdateLongPastePreferences() {
+  const rpc = usePreferencesWrite();
+  return {
+    isPending: rpc.isPending,
+    mutateAsync: (prefs: Partial<LongPastePreferences>) => {
+      const additional: Record<string, string> = {};
+      for (const field of ["enabled", "characterThreshold", "lineThreshold"] as const) {
+        const value = prefs[field];
+        if (value === undefined) continue;
+        if (field !== "enabled" && (!Number.isSafeInteger(value) || Number(value) <= 0)) {
+          return Promise.reject(new Error("Thresholds must be positive whole numbers."));
+        }
+        additional[LONG_PASTE_KEYS[field]] = String(value);
+      }
+      return rpc.mutateAsync({ additional });
+    },
+  };
+}
+
 // --- Browser: default page, bookmarks (in `additional`) ---
 //
 // Where a clicked link opens is not a preference: dev URLs open in the

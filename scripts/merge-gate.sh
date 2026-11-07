@@ -325,6 +325,24 @@ prepare_dependencies
 # Otherwise (a clean tree without --amend) a regenerate cannot change what is
 # judged — any change fails the generate phase — so the generators run in
 # scratch checkouts and every phase runs at once.
+# prewarm_tests: compile, never link, the test packages the plan selected, so
+# a test phase that has to wait for a generate running alone (a small host,
+# the memory budget above) finds them in the build cache and only links and
+# runs. It runs in the generate's shadow: niced, so it takes only the CPU the
+# generate leaves idle, and at a quarter of the budget, so its compiles (each
+# well under 1 GiB; no 2.7 GiB link) fit beside generate's 7.5 GiB on a
+# 16 GiB runner. It judges nothing: a package that does not compile is the
+# test phase's to report, so it never fails the gate. The tree it compiles is
+# the one test judges: generate runs in a scratch checkout here.
+prewarm_tests() {
+  local pkgs
+  if [ "$gofull" = true ]; then pkgs=(./...); else mapfile -t pkgs < <(jq -r '.go.packages // [] | .[]' "$run_plan"); fi
+  if [ ${#pkgs[@]} -eq 0 ]; then echo "prewarm: no Go test package selected"; return 0; fi
+  echo "prewarm: compiling the tests of ${#pkgs[@]} package selection(s) beside forge generate"
+  GOMAXPROCS=$quarter nice -n 10 go list -buildvcs=false -e -test -export -p "$quarter" "${pkgs[@]}" >/dev/null 2>&1 ||
+    echo "prewarm: some packages did not compile; the test phase reports them"
+  return 0
+}
 inplace=0; { [ "$amend" = 1 ] || [ -n "$(git status --porcelain)" ]; } && inplace=1
 pids=()
 # A generator running first and alone gets the whole budget; one beside the
@@ -363,9 +381,13 @@ elif [ "$fail" = 0 ]; then
   if [ "$fgen" = true ]; then
     if ! scratch gen; then fail=1
     elif [ "$gen_alone" = 1 ]; then
-      # A small host (the memory budget above): generate first, alone.
-      notes+=("memory: ${mem_gib} GiB < ${MG_GEN_ALONE_GIB:-32}; forge generate ran alone before the other phases")
+      # A small host (the memory budget above): generate first, alone, but
+      # with the test packages compiling beside it (prewarm_tests), so the
+      # test phase that follows only links and runs.
+      notes+=("memory: ${mem_gib} GiB < ${MG_GEN_ALONE_GIB:-32}; forge generate ran before the other phases, test packages compiled beside it")
+      phase prewarm prewarm_tests & prewarm_pid=$!
       gen_procs=$gate_cpus; phase generate gen_forge "$SCRATCH" || fail=1; gen_procs=$quarter
+      wait "$prewarm_pid" || fail=1
     else phase generate gen_forge "$SCRATCH" & pids+=($!); fi
   fi
   # A generate that already failed alone leaves nothing to run docs beside.
@@ -461,6 +483,11 @@ if [ "$amend" = 1 ] && [ "$fail" != 0 ] && [ -n "$(git status --porcelain)" ]; t
   git reset -q --hard; git clean -fdq
 fi
 [ -f "$L/notes" ] && while IFS= read -r n; do notes+=("$n"); done <"$L/notes"
+# The peak memory of the gate's cgroup (cgroup v2 memory.peak, where the host
+# has it), so the summary shows how close a small host came to its limit: the
+# rollout check of the prewarm beside a generate running alone reads it.
+cg_peak=$(cat "/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup 2>/dev/null | head -n1)/memory.peak" 2>/dev/null || true)
+case "$cg_peak" in ''|*[!0-9]*) ;; *) notes+=("memory peak: $(awk -v b="$cg_peak" 'BEGIN { printf "%.1f", b / 1073741824 }') GiB of ${mem_gib} GiB (cgroup memory.peak)") ;; esac
 
 # ── fail closed: every phase the plan selected must have COMPLETED ────────
 # A selected lane that never ran (queued for a slot, cancelled, timed out, tool

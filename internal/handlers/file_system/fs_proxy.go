@@ -209,6 +209,52 @@ func (w workspaceScope) resolveForView(requestedPath string) (string, error) {
 	return validateWorkspacePath(w.basePath, requestedPath, filepreview.ScopeAllowAbsolute)
 }
 
+// resolveForView is scope.resolveForView for a path as a person or an agent
+// writes it, "~" included: "~/notes/post.md" names the file in the home
+// directory of the machine that holds it, and is an absolute path there.
+//
+// The contract (filepreview.ValidatePathScoped) knows nothing of "~", so such
+// a path read as relative and was joined onto the workspace root:
+// "/home/workspace/projects/x/~/notes/post.md", a file that does not exist —
+// prod, 2026-11-05, every click on a "~/..." path a chat mentioned (issues
+// b52cdbdb, 584d1a9a). Only the machine knows its home directory, so it is
+// asked (skills.get_home_dir, which every daemon serves) and only for such a
+// path. The expanded path is then an absolute path outside the workspace,
+// confined and credential-guarded exactly like one the client sent.
+func (s *Service) resolveForView(ctx context.Context, userID string, scope workspaceScope, requestedPath string) (string, error) {
+	rest, ok := homeRelative(requestedPath)
+	if !ok {
+		return scope.resolveForView(requestedPath)
+	}
+	var resp struct {
+		HomeDir string `json:"home_dir"`
+		Error   string `json:"error,omitempty"`
+	}
+	if err := s.sendCommand(ctx, userID, scope.target, "skills.get_home_dir", map[string]any{}, &resp, 10000); err != nil {
+		return "", err
+	}
+	if resp.HomeDir == "" || !ospath.IsAbs(resp.HomeDir) {
+		return "", svcerr.FailedPrecondition("this machine has no home directory to resolve " + requestedPath + " against")
+	}
+	if rest == "" {
+		return scope.resolveForView(ospath.Clean(resp.HomeDir))
+	}
+	return scope.resolveForView(ospath.Join(resp.HomeDir, rest))
+}
+
+// homeRelative reports whether p is "~" or begins "~/" (or "~\" for a
+// Windows machine), and returns what follows the separator. "~user/..." is
+// not this: it names another account's home, which the viewer does not open.
+func homeRelative(p string) (string, bool) {
+	if p == "~" {
+		return "", true
+	}
+	if len(p) >= 2 && p[0] == '~' && (p[1] == '/' || p[1] == '\\') {
+		return p[2:], true
+	}
+	return "", false
+}
+
 // requireViewerGuard refuses to show a file outside the workspace unless the
 // daemon's reply says it applied the credential guard (viewer_guarded, which
 // cmd_fs.go sets on every reply to a viewer_root request).
@@ -495,7 +541,7 @@ func (s *Service) GetFileContent(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolveForView(req.Msg.Path)
+	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -576,7 +622,7 @@ func (s *Service) GetFileMetadata(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolveForView(req.Msg.Path)
+	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -637,7 +683,7 @@ func (s *Service) GetFilePreviewInfo(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolveForView(req.Msg.Path)
+	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -737,7 +783,7 @@ func (s *Service) GetFilePreview(
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := scope.resolveForView(req.Msg.Path)
+	resolvedPath, err := s.resolveForView(ctx, userID, scope, req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}

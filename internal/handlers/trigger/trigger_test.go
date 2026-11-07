@@ -32,7 +32,10 @@ type fakeTriggerBackend struct {
 	deleted []string
 	fires   []string
 
-	syncErr   error
+	syncErr error
+	// syncHook, when set, runs first on every Sync; a non-nil error is
+	// returned as the sync's.
+	syncHook  func(ctx context.Context) error
 	deleteErr error
 	fireErr   error
 	nextFire  *time.Time
@@ -48,6 +51,11 @@ func (b *fakeTriggerBackend) Sync(ctx context.Context, triggerID string) error {
 	defer b.mu.Unlock()
 	if b.syncErr != nil {
 		return b.syncErr
+	}
+	if b.syncHook != nil {
+		if err := b.syncHook(ctx); err != nil {
+			return err
+		}
 	}
 	t, err := b.repo.GetTrigger(ctx, triggerID)
 	if err != nil {

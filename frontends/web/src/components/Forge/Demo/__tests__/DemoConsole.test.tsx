@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import type { Transport } from "@connectrpc/connect";
@@ -103,6 +103,27 @@ describe("the forge demo console", () => {
     expect(nav).not.toBeNull();
     expect(within(nav!).getByRole("link", { name: /Overview/ })).toHaveAttribute("href", "/forge/demo");
     expect(within(nav!).getByRole("link", { name: /Releases/ })).toHaveAttribute("href", "/forge/demo");
+    expectNothingTouched();
+  }, 30_000);
+
+  it("opens How this app was built from the banner, on the recorded run, and goes back to the console", async () => {
+    const router = renderDemo("/forge/demo?view=overview");
+    fireEvent.click(await screen.findByTestId("forge-demo-how-built", {}, { timeout: 15_000 }));
+    await waitFor(() => expect(search(router).section).toBe("built"));
+    expect(await screen.findByTestId("scaffold-replay", {}, { timeout: 15_000 })).toBeInTheDocument();
+    expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(/You wrote \d+ lines of proto/);
+    expect(screen.queryByTestId("obs-overview")).toBeNull();
+    // Already open: the banner no longer offers it.
+    expect(screen.queryByTestId("forge-demo-how-built")).toBeNull();
+    fireEvent.click(screen.getByTestId("how-built-back"));
+    await waitFor(() => expect(search(router).section).toBeUndefined());
+    expect(await screen.findByTestId("obs-overview")).toBeInTheDocument();
+    // It is also last on the page, after the console's view.
+    const link = screen.getByTestId("how-built-link");
+    expect(screen.getByTestId("obs-overview").compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(link);
+    await waitFor(() => expect(search(router).section).toBe("built"));
+    expect(await screen.findByTestId("scaffold-replay")).toBeInTheDocument();
     expectNothingTouched();
   }, 30_000);
 

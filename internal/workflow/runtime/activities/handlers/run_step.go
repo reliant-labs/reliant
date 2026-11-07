@@ -48,11 +48,14 @@ type ExecuteRunStepInput struct {
 
 // ExecuteRunStepOutput is the output from ExecuteRunStep activity
 type ExecuteRunStepOutput struct {
-	Stdout       string `json:"stdout"`
-	Stderr       string `json:"stderr"`
-	Output       string `json:"output"` // combined stdout + stderr
-	ExitCode     int    `json:"exit_code"`
-	Interrupted  bool   `json:"interrupted"`
+	Stdout      string `json:"stdout"`
+	Stderr      string `json:"stderr"`
+	Output      string `json:"output"` // combined stdout + stderr
+	ExitCode    int    `json:"exit_code"`
+	Interrupted bool   `json:"interrupted"`
+	// Truncated: the machine cut stdout or stderr to its output cap, so
+	// they are not the command's whole output.
+	Truncated    bool   `json:"truncated"`
 	Duration     int64  `json:"duration"`           // in milliseconds
 	WorkingDir   string `json:"working_dir"`        // the directory where command was executed
 	WorktreeID   string `json:"worktree_id"`        // worktree ID if used
@@ -161,9 +164,17 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 			Output:   msg,
 			ExitCode: -1,
 			Duration: time.Since(startTime).Milliseconds(),
-		}, temporal.NewNonRetryableApplicationError(
+		}, temporal.NewApplicationErrorWithOptions(
 			fmt.Sprintf("activity retry detected (attempt %d): the previous attempt may have started the shell command, refusing to re-execute it", attemptNumber),
-			runStepRetryRefusedErrType, nil)
+			runStepRetryRefusedErrType, temporal.ApplicationErrorOptions{
+				NonRetryable: true,
+				// Benign: refusing is the designed at-most-once outcome, not a
+				// fault — the run pauses and says why, and the user resumes
+				// it. What ended the previous attempt was reported there.
+				// Unclassified, each refusal was an ERROR issue (prod
+				// 48b45b13).
+				Category: temporal.ApplicationErrorCategoryBenign,
+			})
 	}
 
 	// Set default timeout if not provided (5 minutes)
@@ -240,7 +251,8 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		wait = defaultMachineWait()
 	}
 	observe := a.observeMachine(execCtx)
-	stdout, stderr, exitCode, interrupted, err := executeUntilDelivered(ctx, executor, wait, observe, input.Command, workingDir, timeout)
+	result, err := executeUntilDelivered(ctx, executor, wait, observe, input.Command, workingDir, timeout)
+	stdout, stderr, exitCode, interrupted := result.Stdout, result.Stderr, result.ExitCode, result.Interrupted
 	if err != nil {
 		// The machine never took the command within the wait (or is gone):
 		// the step fails saying which machine and for how long.
@@ -322,7 +334,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 			shellQuote(logFilePath),
 			string(logJSON),
 		)
-		_, _, _, _, writeErr := executor.ExecuteCommand(ctx, writeCmd, workingDir, 30000, nil)
+		_, writeErr := executor.ExecuteCommand(ctx, writeCmd, workingDir, 30000, nil)
 		if writeErr != nil {
 			logger := activity.GetLogger(ctx)
 			logger.Warn("[RunStep] Failed to write log file (non-fatal)",
@@ -341,6 +353,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		Output:       combinedOutput,
 		ExitCode:     exitCode,
 		Interrupted:  interrupted,
+		Truncated:    result.Truncated,
 		Duration:     duration,
 		WorkingDir:   workingDir,
 		WorktreeID:   worktreeID,
@@ -560,7 +573,7 @@ func formatMachineWait(d time.Duration) string {
 // proves it never reached a machine, holds it for the machine and sends it
 // again (see machineWait). Every other outcome — a verdict, a failure that may
 // have followed a start — is returned as it came: it is sent once.
-func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *machineWait, look machineLook, command, workingDir string, timeoutMs int) (stdout, stderr string, exitCode int, interrupted bool, err error) {
+func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *machineWait, look machineLook, command, workingDir string, timeoutMs int) (result CommandResult, err error) {
 	logger := activity.GetLogger(ctx)
 	// The wait's clock starts when the FIRST send starts, not when it fails:
 	// that send may itself have ridden out a disconnect for up to
@@ -571,14 +584,14 @@ func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *mach
 	waiting := false
 	resend := wait.firstResend
 	for {
-		stdout, stderr, exitCode, interrupted, err = executor.ExecuteCommand(ctx, command, workingDir, timeoutMs, nil)
+		result, err = executor.ExecuteCommand(ctx, command, workingDir, timeoutMs, nil)
 		var transportErr *toolexec.TransportError
 		if err == nil || !errors.As(err, &transportErr) || !transportErr.NotDispatched {
 			if waiting && err == nil {
 				logger.Info("[RunStep] machine is back; the command went through",
 					"waited", wait.now().Sub(first).Round(time.Second))
 			}
-			return stdout, stderr, exitCode, interrupted, err
+			return result, err
 		}
 		if !waiting {
 			waiting = true
@@ -594,43 +607,43 @@ func executeUntilDelivered(ctx context.Context, executor RunExecutor, wait *mach
 		for {
 			remaining := wait.budget - wait.now().Sub(first)
 			if remaining <= 0 {
-				return "", "", -1, false, unavailable("")
+				return CommandResult{ExitCode: -1}, unavailable("")
 			}
 			status, ok := look(ctx)
 			if ok && status.Removed {
-				return "", "", -1, false, unavailable(goneReason("no longer exists", status.StatusMessage))
+				return CommandResult{ExitCode: -1}, unavailable(goneReason("no longer exists", status.StatusMessage))
 			}
 			if ok && status.Failed {
-				return "", "", -1, false, unavailable(goneReason("failed to start", status.StatusMessage))
+				return CommandResult{ExitCode: -1}, unavailable(goneReason("failed to start", status.StatusMessage))
 			}
 			if !ok || status.Connected {
 				break
 			}
 			if wait.sleep(ctx, min(wait.poll, remaining)) != nil {
-				return stdout, stderr, exitCode, interrupted, err
+				return result, err
 			}
 		}
 
 		remaining := wait.budget - wait.now().Sub(first)
 		if remaining <= 0 {
-			return "", "", -1, false, unavailable("")
+			return CommandResult{ExitCode: -1}, unavailable("")
 		}
 		logger.Info("[RunStep] sending the command again",
 			"daemon_id", transportErr.DaemonID, "retry_in", min(resend, remaining),
 			"waited", wait.now().Sub(first).Round(time.Second))
 		if wait.sleep(ctx, min(resend, remaining)) != nil {
-			return stdout, stderr, exitCode, interrupted, err
+			return result, err
 		}
 		resend = min(resend*2, wait.maxResend)
 		if wait.now().Sub(first) >= wait.budget {
-			return "", "", -1, false, unavailable("")
+			return CommandResult{ExitCode: -1}, unavailable("")
 		}
 		// Never start a send the activity cannot see through: one killed by
 		// its deadline is retried by Temporal, refused (RunStepRetryRefused)
 		// and pauses the run — exactly what this wait exists to prevent.
 		if deadline, ok := ctx.Deadline(); ok &&
 			time.Until(deadline) < time.Duration(timeoutMs)*time.Millisecond+activitytypes.RunStepSendOverhead {
-			return "", "", -1, false, unavailable("")
+			return CommandResult{ExitCode: -1}, unavailable("")
 		}
 	}
 }

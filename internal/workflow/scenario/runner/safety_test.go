@@ -105,6 +105,8 @@ events: []
 	assert.Equal(t, scenario.StatusError, res.Status)
 	require.NotNil(t, res.Execution.Error)
 	assert.Contains(t, res.Execution.Error.Message, "did not terminate")
+	assert.Contains(t, res.Execution.Error.Message, `loop "forever" was still iterating`,
+		"a spinning loop is named as the cause")
 	assert.Less(t, elapsed, 5*time.Second, "the budget must bound the run")
 }
 

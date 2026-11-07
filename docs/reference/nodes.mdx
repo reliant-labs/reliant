@@ -420,6 +420,7 @@ Execute a shell command
 | `stderr` | string | - |
 | `working_dir` | string | - |
 | `log_file` | string | - |
+| `truncated` | boolean | - |
 
 ---
 

@@ -36,6 +36,7 @@ import { envScopeLabel, envScopeOf, writeErrorMessage } from "../Dashboards/dial
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL } from "../Dashboards/parts";
 import { upsertPanel } from "../Dashboards/panelBuilder";
 import type { ObsEnvironment } from "../obsPlace";
+import { CONTROL_FIELD } from "../../controlStyles";
 
 function isConflict(error: unknown): boolean {
   return error instanceof ConnectError && error.code === Code.Aborted;
@@ -75,7 +76,7 @@ export function newDashboardSpec(slug: string, title: string, panel: Panel): Das
 }
 
 const INPUT =
-  "h-8 w-full rounded-md border border-border bg-surface px-2.5 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  `${CONTROL_FIELD} h-8 w-full px-2.5 text-sm`;
 
 export interface SaveToDashboardProps {
   orgId: string | null;

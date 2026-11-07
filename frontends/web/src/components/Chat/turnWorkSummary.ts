@@ -1,7 +1,6 @@
 /**
- * The words on a simplified-thread fold row: "Working… · Reading
- * ChatInput.tsx" while a turn runs, "Worked for 1m 12s · read 6 files · ran 3
- * commands" once it is done.
+ * Action-first labels for a simplified-thread fold, with elapsed time and
+ * expanded count details kept separate from the headline.
  *
  * Pure. Spawn status needs the child workflow tree (a hook), so the component
  * resolves it and hands it in as `spawnStatus`; everything else reads the
@@ -11,7 +10,7 @@
 
 import { ToolCallStatus } from "../../gen/reliant/v1/chat_pb";
 import { getToolCategory } from "../Settings/ToolCallSettings";
-import { formatToolDuration, toolActionVerb, toolBaseName } from "../../lib/toolAction";
+import { toolActionVerb, toolBaseName } from "../../lib/toolAction";
 import { formatToolParams, isSpawnTool, type ToolInput } from "../../lib/toolFormatters";
 
 /** What a fold reads of one tool call (a structural subset of ToolCallData). */
@@ -121,7 +120,7 @@ function stepLabel(call: TurnWorkCall, max: number, phase: "live" | "done"): str
   const formatted =
     call.input === undefined ? undefined : formatToolParams(call.name, call.input as ToolInput);
   const preview = formatted?.summary?.trim();
-  const verb = toolActionVerb(call.name, phase);
+  const verb = toolActionVerb(call.name, phase, call.input);
   // A shell call's description is already an action ("Run cart tests").
   if (verb && preview && typeof formatted?.structured?.description === "string") {
     return truncate(preview, max);
@@ -200,30 +199,33 @@ const COUNT_PHRASES: ReadonlyArray<[TurnWorkCountKey, (n: number) => string]> = 
   ["ran", (n) => `ran ${plural(n, "command", "commands")}`],
   ["edited", (n) => `edited ${plural(n, "file", "files")}`],
   ["planned", (n) => plural(n, "plan update", "plan updates")],
-  ["spawned", (n) => `spawned ${plural(n, "agent", "agents")}`],
+  ["spawned", (n) => plural(n, "sub-agent action", "sub-agent actions")],
   ["other", (n) => `used ${plural(n, "tool", "tools")}`],
 ];
 
-function formatElapsed(ms: number): string {
-  if (ms < 60_000) return `${Math.max(1, Math.round(ms / 1000))}s`;
-  return formatToolDuration(ms);
+export function formatTurnWorkElapsed(ms: number | null): string | null {
+  if (ms === null || !Number.isFinite(ms)) return null;
+  const seconds = Math.floor(Math.max(0, ms) / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainder = String(seconds % 60).padStart(2, "0");
+  return minutes < 60
+    ? `${minutes}:${remainder}`
+    : `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, "0")}:${remainder}`;
 }
 
 export function formatTurnWorkHeadline(
   summary: TurnWorkSummary,
   opts: { live: boolean; elapsedMs?: number | null },
 ): string {
-  if (opts.live) {
-    const parts = ["Working…"];
-    if (summary.current) parts.push(summary.current);
-    if (summary.spawnsRunning > 0) {
-      parts.push(`${plural(summary.spawnsRunning, "agent", "agents")} running`);
-    }
-    return parts.join(" · ");
-  }
+  if (!opts.live) return "Activity";
+  // Parallel agents can change steps independently; keep their shared label
+  // stable without guessing whether they are reviewing, researching or coding.
+  if (summary.spawnsRunning > 0) return `Coordinating ${plural(summary.spawnsRunning, "agent", "agents")}`;
+  return summary.current || "Thinking";
+}
 
-  const hasElapsed = typeof opts.elapsedMs === "number" && Number.isFinite(opts.elapsedMs);
-  const parts = [hasElapsed ? `Worked for ${formatElapsed(opts.elapsedMs as number)}` : "Worked"];
+export function formatTurnWorkDetails(summary: TurnWorkSummary): string {
+  const parts: string[] = [];
   for (const [key, phrase] of COUNT_PHRASES) {
     const n = summary.counts[key];
     if (n > 0) parts.push(phrase(n));

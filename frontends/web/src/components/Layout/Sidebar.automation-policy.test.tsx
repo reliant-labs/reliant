@@ -28,6 +28,12 @@ import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
 
+// The machine filter's daemon list: no machines, so the filter is hidden.
+vi.mock("../../hooks/useOnboardingQueries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/useOnboardingQueries")>()),
+  useDaemonList: () => NO_MACHINES,
+}));
+const NO_MACHINES = { data: [] };
 vi.mock("../forge-ui/tooltip", () => ({
   default: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));

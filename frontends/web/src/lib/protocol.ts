@@ -86,7 +86,7 @@ export const isPackagedRendererOrigin = (): boolean => {
 /**
  * Whether Connect transports should use a SAME-ORIGIN (relative) baseUrl so the
  * Vite dev-server proxy fans every RPC out to its backend (`/reliant.v1.*` →
- * reliant-api, `/controlplane.v1.*` → admin-server). This is the SINGLE root
+ * reliant-api, `/controlplane.v1.*` → platform-api). This is the SINGLE root
  * reason web-dev AND electron-dev are CORS-free: the renderer is served over
  * http(s) by Vite, so every RPC is first-party and the proxy (vite.config.ts)
  * does the host routing — no absolute cross-origin backend URLs, no per-port
