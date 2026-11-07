@@ -2,9 +2,18 @@
 
 /** Import errors may be missing chunks, gateway failures or CSP/network errors—not proof of a deploy. */
 export interface FailedImportResource { path: string; status: number }
+/**
+ * Keeps a path segment only when it looks like a route or static asset name; anything else
+ * (percent-encoded data, long or digit-bearing token runs as in signed storage URLs) is redacted.
+ */
+export function safeImportPath(pathname: string): string {
+  return pathname.split("/").map((segment) =>
+    segment === "" || (segment.length <= 64 && /^[A-Za-z0-9._-]+$/.test(segment) && !(segment.match(/[A-Za-z0-9]{16,}/g) ?? []).some((run) => /\d/.test(run)))
+      ? segment : "[redacted]").join("/");
+}
 export function redactImportUrls(text: string): string {
   return text.replace(/https?:\/\/[^\s)\]"'<>]+/g, (value) => {
-    try { const url = new URL(value); return `${url.origin}${url.pathname}`; } catch { return "[invalid URL]"; }
+    try { const url = new URL(value); return `${url.origin}${safeImportPath(url.pathname)}`; } catch { return "[invalid URL]"; }
   });
 }
 export function failedImportResources(entries: readonly PerformanceEntry[]): FailedImportResource[] {
@@ -15,7 +24,8 @@ export function failedImportResources(entries: readonly PerformanceEntry[]): Fai
     try {
       const url = new URL(entry.name);
       if (!/\.(?:m?js|css)$/.test(url.pathname)) continue;
-      failures.set(url.pathname, { path: url.pathname, status });
+      const path = safeImportPath(url.pathname);
+      failures.set(path, { path, status });
     } catch { /* Not a resource URL. */ }
   }
   return [...failures.values()].slice(-20);

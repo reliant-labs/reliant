@@ -19,6 +19,13 @@ describe("lazy import evidence", () => {
     expect(details).toContain("Resource HTTP 502: /assets/route.js");
     expect(details).not.toMatch(/password|token|secret|hidden|fragment|u:p/);
   });
+  it("redacts secrets embedded in path segments but keeps asset names", () => {
+    const entries = [resource("https://storage.test/sig/AKIA1234567890ABCDEFsecretvalue/assets/route-BxY12abc.js", 403), resource("https://preview.test/t/abc%2Fdef/app.css", 500)];
+    expect(failedImportResources(entries)).toEqual([{path:"/sig/[redacted]/assets/route-BxY12abc.js",status:403},{path:"/t/[redacted]/app.css",status:500}]);
+    const details = importFailureDetails(new Error("Failed to fetch dynamically imported module: https://preview.test/s/eyJhbGciOiJIUzI1NiJ9xyz123/assets/route.js"), entries);
+    expect(details).toContain("https://preview.test/s/[redacted]/assets/route.js");
+    expect(details).not.toMatch(/AKIA|eyJhbGci|abc%2F/);
+  });
   it("does not fabricate HTTP status in older Safari and redacts copied page URLs", () => {
     expect(failedImportResources([resource("https://preview.test/assets/route.js")])).toEqual([]);
     expect(redactImportUrls("URL: https://u:p@preview.test/logs?token=secret#part")).toBe("URL: https://preview.test/logs");
