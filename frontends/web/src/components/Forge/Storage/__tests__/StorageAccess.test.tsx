@@ -26,6 +26,19 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 afterEach(() => window.sessionStorage.clear());
 
 describe("an audited environment", () => {
+  it("does not browse direct GCS even when its physical name is known", async () => {
+    const api = createStorageFixtureApi();
+    api.listBrowsableBuckets = async () => ({
+      policy: "open",
+      buckets: [{ name: "direct", runtime: "gcs", publicRead: false, reachable: false, unreachableReason: "Direct GCS browsing is not enabled" }],
+    });
+    renderBrowser(api, { bucket: "direct", object: "customer.txt" });
+    expect(await screen.findByTestId("storage-unreachable")).toHaveTextContent("Direct GCS browsing is not enabled");
+    for (const method of ["listObjects", "getObjectMetadata", "previewObject", "presignObjectDownload"] as const) {
+      expect(callsOf(api, method)).toHaveLength(0);
+    }
+  });
+
   it("asks for a reason, naming the environment, before reading anything", async () => {
     const api = createStorageFixtureApi();
     renderBrowser(api, { bucket: "uploads", prefix: "docs/" }, PROD);

@@ -69,7 +69,7 @@ function errorCopy(kind: StorageErrorKind, env: string, subject: string): { titl
     case "unreachable":
       return {
         title: `Reliant can't reach ${subject}`,
-        body: "The control plane has no way to read this bucket: a MinIO forge runs beside the app, an S3 endpoint it cannot dial, or a hosted bucket that is not provisioned yet.",
+        body: "Only Reliant-hosted buckets can be browsed. Direct GCS, S3 and MinIO buckets are unavailable; a hosted bucket must also be provisioned and ready.",
       };
     case "not-previewable":
       return { title: "No preview for this object", body: "Only images (png, jpeg, gif, webp), text and JSON preview here. Download it to open it." };
