@@ -10,7 +10,7 @@
  *
  *   environments  env-prod (prod, AUDITED), env-staging (staging, OPEN),
  *                 env-dev (dev, OPEN)
- *   buckets       uploads (hosted), exports (GCS), media (MinIO,
+ *   buckets       uploads (hosted), exports (hosted), media (MinIO,
  *                 unreachable)
  *   uploads       robots.txt, avatars/2026/{ada.png, grace.webp, logo.svg},
  *                 avatars/legacy.jpg (14 MiB: too large to preview),
@@ -122,7 +122,7 @@ const EXPORTS: FixtureObject[] = Array.from({ length: 450 }, (_, i) => ({
 }));
 
 const BUCKETS: StorageBucket[] = [
-  { name: "exports", runtime: "gcs", publicRead: false, reachable: true, unreachableReason: "" },
+  { name: "exports", runtime: "hosted", publicRead: false, reachable: true, unreachableReason: "" },
   { name: "media", runtime: "minio", publicRead: false, reachable: false, unreachableReason: "self-managed MinIO: not reachable from the control plane" },
   { name: "uploads", runtime: "hosted", publicRead: false, reachable: true, unreachableReason: "" },
 ];

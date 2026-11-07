@@ -6,7 +6,8 @@
  *
  *   - An image (png, jpeg, gif, webp; never SVG) is drawn by an <img> from
  *     the 2-minute URL PreviewObject mints: never an iframe, never an
- *     <object>, so nothing the bucket holds runs on this page.
+ *     <object>. Type/10 MiB limits are checked at stat time only: a writer
+ *     can replace the object before GET because the URL is not generation-bound.
  *   - Text and JSON arrive as bytes (at most 1 MiB) and are shown as text,
  *     JSON re-indented; the browser never navigates to the object.
  *   - Anything else is metadata and Download only.
@@ -178,7 +179,7 @@ function PreviewSection({
       {kind === "none" ? (
         <StorageNote testId="storage-preview-none" icon={<FileQuestion className="h-4 w-4" />} title="No preview for this object">
           <p>
-            Previews are for images (png, jpeg, gif, webp) up to 10 MiB, and text and JSON up to 1 MiB.{" "}
+            Previews are for images (png, jpeg, gif, webp) checked at up to 10 MiB, and text and JSON up to 1 MiB.{" "}
             {meta.contentType ? (
               <>
                 This one is <span className="font-mono text-ink">{meta.contentType}</span>.
@@ -250,7 +251,7 @@ function ImagePreview({ preview, alt, onReload }: { preview: StoragePreview; alt
     );
   }
   return (
-    <div className="flex justify-center rounded-md border border-border/60 bg-surface-sunken p-2">
+    <div className="flex flex-col items-center justify-center gap-2 rounded-md border border-border/60 bg-surface-sunken p-2">
       <img
         src={url}
         alt={alt}
@@ -260,6 +261,7 @@ function ImagePreview({ preview, alt, onReload }: { preview: StoragePreview; alt
         className="max-h-[28rem] max-w-full object-contain"
         data-testid="storage-preview-image"
       />
+      <p className="text-2xs text-ink-muted">Size and type were checked before this link was issued; the image may have changed since.</p>
     </div>
   );
 }
