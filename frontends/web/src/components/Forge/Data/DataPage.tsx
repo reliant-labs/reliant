@@ -29,6 +29,7 @@ import { useForgeConsole } from "../Console/consoleContext";
 import { ENV_ALL } from "../Console/envScope";
 import { CloudNotice } from "../SourceNotices";
 import { DataBrowser } from "./DataBrowser";
+import { SaveBrowseView } from "./SaveBrowseView";
 import { DataNote } from "./DataStates";
 import { DATA_SEARCH_KEYS, type DataSearch } from "./dataUrl-model";
 
@@ -128,6 +129,7 @@ export function DataPage() {
 
   return (
     <Frame>
+      <SaveBrowseView key={`save/${scoped.live.id}`} search={search} environmentId={scoped.live.id} />
       <DataBrowser key={scoped.live.id} env={{ id: scoped.live.id, name: scoped.name }} search={search} onNavigate={onNavigate} href={dataHref} />
     </Frame>
   );
