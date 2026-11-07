@@ -168,7 +168,7 @@ export function DemoTips() {
           <Bot className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>
             {tip.agent.before}{" "}
-            <code className="break-all rounded bg-surface-sunken px-1 py-0.5 font-mono text-2xs text-ink">{tip.agent.command}</code>
+            <code className="[overflow-wrap:anywhere] rounded bg-surface-sunken px-1 py-0.5 font-mono text-2xs text-ink">{tip.agent.command}</code>
             {tip.agent.after}
           </span>
         </p>

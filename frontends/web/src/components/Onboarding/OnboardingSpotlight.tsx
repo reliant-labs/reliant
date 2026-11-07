@@ -124,16 +124,50 @@ export function isSheetViewport(): boolean {
   return typeof window !== "undefined" && window.innerWidth < SHEET_MAX_WIDTH;
 }
 
-/** Scroll `target` into the part of the screen the bottom sheet leaves free. */
-function scrollAboveSheet(target: Element): void {
-  const rect = target.getBoundingClientRect();
-  const free = window.innerHeight * (1 - SHEET_MAX_VH / 100);
-  if (rect.top >= 8 && rect.bottom <= free) return;
-  try {
-    target.scrollIntoView({ block: "start", behavior: "auto" });
-  } catch {
-    // jsdom and old engines: the sheet still shows.
+/** Room left above a target scrolled to the top: a page's sticky header. */
+const SHEET_TOP_GAP = 64;
+
+/** The nearest ancestor that scrolls vertically, else the document. */
+function scrollParent(el: Element): HTMLElement {
+  for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+    const overflowY = getComputedStyle(p).overflowY;
+    if ((overflowY === "auto" || overflowY === "scroll") && p.scrollHeight > p.clientHeight) return p;
   }
+  return (document.scrollingElement as HTMLElement | null) ?? document.documentElement;
+}
+
+/**
+ * Scroll `target` into the part of the screen the bottom sheet leaves free,
+ * below the page's header. A target near the page's end can't scroll that
+ * far, so its scroller gets the sheet's height of room underneath while the
+ * sheet is up; the returned function takes it away.
+ */
+function scrollAboveSheet(target: Element): () => void {
+  const free = window.innerHeight * (1 - SHEET_MAX_VH / 100);
+  const inView = () => {
+    const rect = target.getBoundingClientRect();
+    return rect.top >= 8 && rect.bottom <= free;
+  };
+  const scrollTo = () => {
+    try {
+      target.scrollIntoView({ block: "start", behavior: "auto" });
+      const top = target.getBoundingClientRect().top;
+      if (top < SHEET_TOP_GAP) scrollParent(target).scrollBy({ top: top - SHEET_TOP_GAP });
+    } catch {
+      // jsdom and old engines: the sheet still shows.
+    }
+  };
+  if (inView()) return () => {};
+  scrollTo();
+  const rect = target.getBoundingClientRect();
+  if (rect.bottom <= free || rect.height > free - SHEET_TOP_GAP) return () => {};
+  const scroller = scrollParent(target);
+  const before = scroller.style.paddingBottom;
+  scroller.style.paddingBottom = `calc(${getComputedStyle(scroller).paddingBottom} + ${SHEET_MAX_VH}vh)`;
+  scrollTo();
+  return () => {
+    scroller.style.paddingBottom = before;
+  };
 }
 
 export function OnboardingSpotlight({
@@ -270,10 +304,11 @@ export function OnboardingSpotlight({
 
   useEffect(() => {
     // Initial position update with retry logic for elements that appear after navigation
+    let unroom: (() => void) | null = null;
     const attemptUpdate = () => {
       const target = document.querySelector(targetSelector);
       if (target) {
-        if (sheet) scrollAboveSheet(target);
+        if (sheet) unroom = scrollAboveSheet(target);
         updatePosition();
         setIsVisible(true);
         return true;
@@ -327,6 +362,7 @@ export function OnboardingSpotlight({
       if (settleTimeout) clearTimeout(settleTimeout);
       window.removeEventListener("resize", updatePosition);
       window.removeEventListener("scroll", updatePosition, true);
+      unroom?.();
     };
   }, [updatePosition, targetSelector, autoSkipIfMissing, onNext, sheet]);
 
