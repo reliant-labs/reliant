@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -307,6 +308,43 @@ func TestGolangciChangedPlan(t *testing.T) {
 	cmd.Dir, cmd.Env = dir, append(os.Environ(), "PATH="+fake+":"+os.Getenv("PATH"))
 	if b, err := cmd.CombinedOutput(); err == nil || strings.Contains(string(b), "nothing to lint") {
 		t.Errorf("a failing go list: err=%v, want a non-zero exit, not an empty scope:\n%s", err, b)
+	}
+
+	// Without --plan, over the same diff: golangci-lint is invoked on exactly
+	// the planned packages, findings limited to the diff's whole files from
+	// base, under -trimpath; and a finding (golangci-lint's exit 1) fails the
+	// script with that status.
+	lint := t.TempDir()
+	argsFile := filepath.Join(lint, "args")
+	writeExec(t, filepath.Join(lint, "golangci-lint"), "#!/usr/bin/env bash\n"+
+		"[ \"$1\" = version ] && { echo 'golangci-lint fake'; exit 0; }\n"+
+		"{ printf '%s\\n' \"$*\"; printf 'GOFLAGS=%s\\n' \"$GOFLAGS\"; } > \""+argsFile+"\"\n"+
+		"[ \"$FAKE_FINDING\" = 1 ] && { echo 'kept/kept.go:3:1: finding (fake)'; exit 1; }\n"+
+		"exit 0\n")
+	for _, finding := range []bool{false, true} {
+		_ = os.Remove(argsFile)
+		cmd = exec.Command("bash", "scripts/golangci-changed.sh", "--base", base)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "PATH="+lint+":"+os.Getenv("PATH"), "GOFLAGS=-mod=mod")
+		if finding {
+			cmd.Env = append(cmd.Env, "FAKE_FINDING=1")
+		}
+		b, err := cmd.CombinedOutput()
+		var exit *exec.ExitError
+		switch {
+		case !finding && err != nil:
+			t.Errorf("a clean lint: err=%v, want exit 0:\n%s", err, b)
+		case finding && (!errors.As(err, &exit) || exit.ExitCode() != 1):
+			t.Errorf("a lint finding: err=%v, want golangci-lint's exit 1 passed through:\n%s", err, b)
+		}
+		got, rerr := os.ReadFile(argsFile)
+		if rerr != nil {
+			t.Fatalf("finding=%v: golangci-lint run was never invoked: %v\n%s", finding, rerr, b)
+		}
+		want := "run --new-from-rev=" + base + " --whole-files ./added/a ./kept\nGOFLAGS=-mod=mod -trimpath\n"
+		if string(got) != want {
+			t.Errorf("finding=%v: golangci-lint invoked as\n%s\nwant\n%s", finding, got, want)
+		}
 	}
 
 	write("README.md", "more docs\n")
