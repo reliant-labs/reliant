@@ -23,6 +23,8 @@ export const releaseKeys = {
   detail: (project: string, version: string) => [...releaseKeys.root, "detail", project, version] as const,
   compare: (project: string, from: string, to: string, environmentId: string) =>
     [...releaseKeys.root, "compare", project, from, to, environmentId] as const,
+  compareWorkload: (project: string, from: string, to: string, environmentId: string, workload: string) =>
+    [...releaseKeys.root, "compare", project, from, to, environmentId, "workload", workload] as const,
   promotions: (environmentId: string) => [...releaseKeys.root, "promotions", environmentId] as const,
   rollout: (environmentId: string, promotionId: string) => [...releaseKeys.root, "rollout", environmentId, promotionId] as const,
   bundle: (environmentId: string, bundleId: string, digest: string) =>
@@ -92,6 +94,18 @@ export function useReleaseComparison(project: string, from: string | null, to: s
     queryKey: releaseKeys.compare(project, from ?? "", to, environmentId ?? ""),
     queryFn: () => api.compareReleases({ project, from: from as string, to, environmentId: environmentId ?? undefined }),
     enabled: !!project && !!from && !!to && from !== to,
+    staleTime: 5 * 60_000,
+    retry: forgeRetry,
+  });
+}
+
+/** What changed from `from` to `to` in one environment, for one workload's objects (the workload History tab). */
+export function useWorkloadReleaseComparison(project: string, from: string | null, to: string, environmentId: string, workload: string) {
+  const api = useReleasesApi();
+  return useQuery({
+    queryKey: releaseKeys.compareWorkload(project, from ?? "", to, environmentId, workload),
+    queryFn: () => api.compareReleases({ project, from: from as string, to, environmentId, workload }),
+    enabled: !!project && !!from && !!to && from !== to && !!environmentId && !!workload,
     staleTime: 5 * 60_000,
     retry: forgeRetry,
   });

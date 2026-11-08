@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The file tree and file content stay off the query cache (api/fileSystem.ts):
  * their only sharing is in flight. Two identical reads at once make one

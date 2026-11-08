@@ -128,6 +128,9 @@ const (
 	// ChatServiceSetChatDaemonProcedure is the fully-qualified name of the ChatService's SetChatDaemon
 	// RPC.
 	ChatServiceSetChatDaemonProcedure = "/reliant.v1.ChatService/SetChatDaemon"
+	// ChatServiceMoveChatToProjectProcedure is the fully-qualified name of the ChatService's
+	// MoveChatToProject RPC.
+	ChatServiceMoveChatToProjectProcedure = "/reliant.v1.ChatService/MoveChatToProject"
 )
 
 // ChatServiceClient is a client for the reliant.v1.ChatService service.
@@ -278,6 +281,19 @@ type ChatServiceClient interface {
 	// no_machine in the same write; the next turn is offered the full tool set.
 	// The reverse never happens: clearing the daemon leaves no_machine false.
 	SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error)
+	// MoveChatToProject moves an idle chat to another of the caller's projects.
+	// The chat keeps its history; its next turn runs in the new project's main
+	// checkout, on a machine that has the project (daemon_id when given, else the
+	// chat's machine when it has the project, else the project's default
+	// machine). A hidden note on the chat's root thread tells the model where it
+	// moved from and to, since earlier messages name the old checkout's paths.
+	//
+	// Refused (FAILED_PRECONDITION) while the chat has a run in progress, is
+	// waiting for an answer, is paused or has a message queued for its machine,
+	// and for an archived chat. A chat in a branch workspace is refused unless
+	// leave_workspace is set: the workspace belongs to the old project and stays
+	// there. Moving a chat to the project it is already in returns it unchanged.
+	MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the reliant.v1.ChatService service. By default, it
@@ -507,6 +523,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("SetChatDaemon")),
 			connect.WithClientOptions(opts...),
 		),
+		moveChatToProject: connect.NewClient[v1.MoveChatToProjectRequest, v1.MoveChatToProjectResponse](
+			httpClient,
+			baseURL+ChatServiceMoveChatToProjectProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("MoveChatToProject")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -548,6 +570,7 @@ type chatServiceClient struct {
 	getWorkflowNodeExecutions *connect.Client[v1.GetWorkflowNodeExecutionsRequest, v1.GetWorkflowNodeExecutionsResponse]
 	getThreadWorkflowInputs   *connect.Client[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse]
 	setChatDaemon             *connect.Client[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse]
+	moveChatToProject         *connect.Client[v1.MoveChatToProjectRequest, v1.MoveChatToProjectResponse]
 }
 
 // StartChat calls reliant.v1.ChatService.StartChat.
@@ -730,6 +753,11 @@ func (c *chatServiceClient) SetChatDaemon(ctx context.Context, req *connect.Requ
 	return c.setChatDaemon.CallUnary(ctx, req)
 }
 
+// MoveChatToProject calls reliant.v1.ChatService.MoveChatToProject.
+func (c *chatServiceClient) MoveChatToProject(ctx context.Context, req *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error) {
+	return c.moveChatToProject.CallUnary(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the reliant.v1.ChatService service.
 type ChatServiceHandler interface {
 	// StartChat starts a chat's root run — the ONE door through which a session
@@ -878,6 +906,19 @@ type ChatServiceHandler interface {
 	// no_machine in the same write; the next turn is offered the full tool set.
 	// The reverse never happens: clearing the daemon leaves no_machine false.
 	SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error)
+	// MoveChatToProject moves an idle chat to another of the caller's projects.
+	// The chat keeps its history; its next turn runs in the new project's main
+	// checkout, on a machine that has the project (daemon_id when given, else the
+	// chat's machine when it has the project, else the project's default
+	// machine). A hidden note on the chat's root thread tells the model where it
+	// moved from and to, since earlier messages name the old checkout's paths.
+	//
+	// Refused (FAILED_PRECONDITION) while the chat has a run in progress, is
+	// waiting for an answer, is paused or has a message queued for its machine,
+	// and for an archived chat. A chat in a branch workspace is refused unless
+	// leave_workspace is set: the workspace belongs to the old project and stays
+	// there. Moving a chat to the project it is already in returns it unchanged.
+	MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1103,6 +1144,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("SetChatDaemon")),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceMoveChatToProjectHandler := connect.NewUnaryHandler(
+		ChatServiceMoveChatToProjectProcedure,
+		svc.MoveChatToProject,
+		connect.WithSchema(chatServiceMethods.ByName("MoveChatToProject")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceStartChatProcedure:
@@ -1177,6 +1224,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceGetThreadWorkflowInputsHandler.ServeHTTP(w, r)
 		case ChatServiceSetChatDaemonProcedure:
 			chatServiceSetChatDaemonHandler.ServeHTTP(w, r)
+		case ChatServiceMoveChatToProjectProcedure:
+			chatServiceMoveChatToProjectHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1328,4 +1377,8 @@ func (UnimplementedChatServiceHandler) GetThreadWorkflowInputs(context.Context, 
 
 func (UnimplementedChatServiceHandler) SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.SetChatDaemon is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) MoveChatToProject(context.Context, *connect.Request[v1.MoveChatToProjectRequest]) (*connect.Response[v1.MoveChatToProjectResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.MoveChatToProject is not implemented"))
 }

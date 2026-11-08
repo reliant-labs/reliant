@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+// The workflows journey's content and Reliant's end-of-tour landing (the demo bundle leaves them out).
+import './components/Onboarding/journeys/catalog'
 import { ActiveOrgBinding } from './components/Orgs/ActiveOrgBinding'
 import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate, type RouteComponent } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
@@ -85,6 +87,9 @@ const DesignSandboxPage = lazyRoute(
 // Proving harness for the forge → reliant token bridge (see index.css).
 const ForgeTokenSandbox = lazyRoute(
   () => import('./components/forge-ui/ForgeTokenSandbox'), 'default')
+// The download / connect / buy-a-machine surfaces against a fake network.
+const SetupSurfacesPreview = lazyRoute(
+  () => import('./components/OnboardingFlow/__preview__/SetupSurfacesPreview'), 'default')
 const SecretsPreview = lazyRoute(
   () => import('./components/Forge/Secrets/__preview__/SecretsPreview'), 'default')
 // The whole Forge pane against a fake network (control-plane's real state as
@@ -558,6 +563,12 @@ const forgeTokenSandboxRoute = createRoute({
 // LOOKED at in every scheme, and the states that are easiest to get wrong
 // (destroyed, soft-deleted, declared-but-never-set) are the hardest to
 // reproduce on demand against a live OpenBao.
+const setupSurfacesPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/setup-surfaces-preview',
+  component: () => <DevOnlyRoute><SetupSurfacesPreview /></DevOnlyRoute>,
+})
+
 const forgeSecretsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-secrets-preview',
@@ -967,6 +978,7 @@ const routeTree = rootRoute.addChildren([
   claimRoute,
   designSandboxRoute,
   forgeTokenSandboxRoute,
+  setupSurfacesPreviewRoute,
   forgeSecretsPreviewRoute,
   forgePanePreviewRoute,
   forgeObservabilityPreviewRoute,

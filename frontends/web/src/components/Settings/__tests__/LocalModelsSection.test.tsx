@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { expectEveryCommandCopyable } from "@/test/commandBlocks";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -158,6 +159,7 @@ describe("LocalModelsSection", () => {
     mocks.daemons = [daemon({ localModels: create(LocalModelInventorySchema, { endpoints: [] }) })];
     renderSection();
     expect(screen.getByText(/ollama pull qwen3/)).toBeTruthy();
+    expectEveryCommandCopyable(document.body, { atLeast: 2 });
   });
 
   it("words the empty state for a cloud machine without a localhost GPU", () => {
@@ -196,6 +198,7 @@ describe("LocalModelsSection context warnings", () => {
     expect(fix.textContent).toMatch(/Settings → Context length/);
     expect(fix.textContent).toMatch(/OLLAMA_CONTEXT_LENGTH=64000 ollama serve/);
     expect(fix.textContent).toMatch(/Then click Test connection/);
+    expectEveryCommandCopyable(fix);
   });
 
   it("shows only a soft note at 32768", () => {

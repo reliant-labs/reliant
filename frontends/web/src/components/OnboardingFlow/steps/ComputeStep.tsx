@@ -17,7 +17,7 @@ import {
   isPurchasableComputePlan,
   sortPlansForDisplay,
 } from "@/components/Settings/cloud/billingUtils";
-import { deriveMachineOptions } from "@/components/Billing/machineOptions";
+import { deriveMachineOptions, oneRowPerPlan } from "@/components/Billing/machineOptions";
 import { usePlans } from "@/hooks/useCloudBillingQueries";
 import { getForcedEligibility } from "../forcedEligibility";
 import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
@@ -173,8 +173,11 @@ export function ComputeStep({
   // a different way — a plan-name grid behind a size filter — which is the
   // divergence that produced two unlike surfaces for one choice. One
   // declaration, two callers that differ only in what a row DOES.
+  //
+  // One row per plan (oneRowPerPlan): the rows select by `planId`, and two
+  // sizes sharing a cheapest plan rendered as two rows that selected together.
   const planOptions = useMemo<ComputePlanOption[]>(
-    () => deriveMachineOptions(computePlans, plansQ.data?.daemonPricing),
+    () => oneRowPerPlan(deriveMachineOptions(computePlans, plansQ.data?.daemonPricing)),
     [computePlans, plansQ.data?.daemonPricing],
   );
 

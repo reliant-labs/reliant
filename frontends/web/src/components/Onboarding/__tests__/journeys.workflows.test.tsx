@@ -13,6 +13,8 @@ vi.mock("../../../hooks/trigger-queries", () => ({ useTriggers: () => ({ data: [
 import { watchAdvance, conditionsOf, type AdvanceEnv } from "../advanceOn";
 import { tourEvents } from "../tourEvents";
 import { setTourShell } from "../tourShell";
+// The workflows journey's content is registered by the Reliant shells (journeys/catalog.ts).
+import "../journeys/catalog";
 import { activeJourneySteps } from "../journeys/registry";
 import { workflowsJourney, LOOP_CONDITION } from "../journeys/workflows";
 import { layoutActions } from "../journeys/layoutActions";

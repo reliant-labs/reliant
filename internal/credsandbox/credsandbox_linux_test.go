@@ -311,3 +311,26 @@ func TestUnescapeMount(t *testing.T) {
 	assert.Equal(t, "/a b/c", unescapeMount(`/a\040b/c`))
 	assert.Equal(t, "/plain", unescapeMount("/plain"))
 }
+
+// A credential DIRECTORY in a scratch dir (an outer sandbox's GH_CONFIG_DIR,
+// a DOCKER_CONFIG under /tmp) cannot be covered with /dev/null: it is covered
+// with an empty read-only directory, and the command still runs.
+func TestSandbox_HidesACredentialDirectoryInAScratchDir(t *testing.T) {
+	requireSandbox(t)
+	dir, err := os.MkdirTemp("/tmp", "credsandbox-dir-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hosts.yml"), []byte("PAT-gh"), 0o600))
+
+	out, code := run(t, Plan{Hide: []string{dir}}, `
+cat "`+dir+`/hosts.yml" 2>/dev/null && echo LEAK
+ls -A "`+dir+`"
+touch "`+dir+`/planted" 2>/dev/null && echo PLANTED
+echo ran`)
+	require.Equal(t, 0, code, out)
+	assert.NotContains(t, out, "PAT-")
+	assert.NotContains(t, out, "LEAK")
+	assert.NotContains(t, out, "hosts.yml")
+	assert.NotContains(t, out, "PLANTED")
+	assert.Contains(t, out, "ran")
+}

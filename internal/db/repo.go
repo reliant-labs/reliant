@@ -1263,6 +1263,16 @@ func (r *Repo) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemon
 	return store.UpdateChatActiveDaemon(ctx, r.ORM(), chatID, daemonID)
 }
 
+// ChatMove is a chat's move to another project (MoveChatToProject).
+type ChatMove = store.ChatMove
+
+// MoveChatToProject moves an idle (or errored) chat, with its plans, to
+// another project. moved is false, and nothing is written, when the chat is
+// gone, has left m.FromProjectID, or is not idle.
+func (r *Repo) MoveChatToProject(ctx context.Context, m ChatMove) (moved bool, err error) {
+	return store.MoveChatToProject(ctx, r.ORM(), m)
+}
+
 // PinChatDaemonIfUnset pins an unpinned chat that is on a machine to daemonID
 // and returns the pin the row holds afterwards, whichever send wrote it ("" for
 // none). A chat that already has a pin, or has no machine by design, is left

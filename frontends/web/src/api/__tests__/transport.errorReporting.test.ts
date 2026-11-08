@@ -206,6 +206,31 @@ describe("the network did not deliver the request (TypeError: Failed to fetch)",
   });
 });
 
+describe("deleting a setting that is already gone", () => {
+  // Every startup deleted the retired `onboarding.current_step` key and logged
+  // its NotFound as "[gRPC Client] Request failed" at error level.
+  it("is a debug line, not an error log, and still reaches the caller", async () => {
+    const call = await chainFailingWith(() => new ConnectError("setting not found", Code.NotFound));
+    const { logger } = await import("@/lib/logger");
+    await expect(call("reliant.v1.SettingsService", "DeleteSetting")).rejects.toMatchObject({
+      code: Code.NotFound,
+    });
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(logger.debug).toHaveBeenCalledWith(
+      "[gRPC Client] Delete target already absent",
+      expect.objectContaining({ service: "reliant.v1.SettingsService", method: "DeleteSetting" }),
+    );
+    expect(reporting.reportError).not.toHaveBeenCalled();
+  });
+
+  it("leaves NotFound from any other rpc as it was", async () => {
+    const call = await chainFailingWith(() => new ConnectError("setting not found", Code.NotFound));
+    const { logger } = await import("@/lib/logger");
+    await expect(call("reliant.v1.SettingsService", "UpdateSetting")).rejects.toBeInstanceOf(ConnectError);
+    expect(logger.error).toHaveBeenCalledWith("[gRPC Client] Request failed:", expect.anything());
+  });
+});
+
 describe("what a caller holds after the transport decided", () => {
   // A caller's console.error of it must not be a second report
   // (lib/handledRpcFailures.ts): reported or not, it was decided once.

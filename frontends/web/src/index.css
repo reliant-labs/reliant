@@ -1411,6 +1411,21 @@
     width: 100%;
   }
 
+  /*
+   * flex-start sizes each child to fit its content, and that size never goes
+   * below the child's min-content width. min-w-0 does not help: it relaxes
+   * the main (vertical) axis, not this one. A `truncate` line's min-content is
+   * the whole unwrapped line, so an agent message's long subject, or a tool
+   * group's long command on a phone, sized its box past the column and the
+   * whole transcript scrolled sideways instead of the line truncating. Capped
+   * at the column, the child keeps its fit-content width when it is narrow
+   * and truncates, wraps or scrolls inside itself when it is not.
+   * :where() keeps this at zero specificity, so a child's own max-w-* wins.
+   */
+  :where(.message-content) > * {
+    max-width: 100%;
+  }
+
   /* User message content - removed blue left border highlight */
   /*
    * Overflow deliberately is NOT set here. This rule is emitted after

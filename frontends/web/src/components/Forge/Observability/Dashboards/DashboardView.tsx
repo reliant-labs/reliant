@@ -159,7 +159,10 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
 
   const doc = useDashboard(orgId, dashRef, dashRef.kind === "builtin" ? undefined : search.version, dashRef.kind === "builtin" ? undefined : search.release);
   // The demo's reason first (obsReadOnly.tsx): there, nobody can, admin or not.
-  const readOnlyReason = useObsReadOnly().reason;
+  const obsLock = useObsReadOnly();
+  const readOnlyReason = obsLock.reason;
+  // Whether this reader may change the dashboard: the server's answer, and never on the demo console.
+  const docCanWrite = !!doc.data?.canWrite && !obsLock.readOnly;
   const spec = doc.data?.spec;
   const summary = doc.data?.summary;
   // The dashboard's own default when the URL names no range: a day-grained one
@@ -297,7 +300,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
 
   const currentVersion = summary.workspace?.version ?? 0;
   const viewingOld = !!search.version && search.version !== currentVersion;
-  const editable = !summary.readOnly && !!doc.data?.canWrite && !search.version && !search.release;
+  const editable = !summary.readOnly && docCanWrite && !search.version && !search.release;
   const writeVersion = (next: Dashboard, message: string, done?: () => void) =>
     save.mutate({ spec: next, base: currentVersion, message }, { onSuccess: () => done?.() });
   const shown = layout ?? spec;
@@ -472,8 +475,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                 type="button"
                 className={BUTTON_PRIMARY}
                 onClick={() => setDialog("copy")}
-                disabled={!doc.data?.canWrite}
-                title={doc.data?.canWrite ? undefined : readOnlyReason ?? "Only organization admins can create dashboards."}
+                disabled={!docCanWrite}
+                title={docCanWrite ? undefined : readOnlyReason ?? "Only organization admins can create dashboards."}
                 data-testid="dashboard-save-copy"
               >
                 Save as copy
@@ -487,8 +490,8 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                     setDialog("promote");
                     promote.mutate(search.version);
                   }}
-                  disabled={!doc.data?.canWrite}
-                  title={doc.data?.canWrite ? undefined : readOnlyReason ?? "Only organization admins can promote dashboards."}
+                  disabled={!docCanWrite}
+                  title={docCanWrite ? undefined : readOnlyReason ?? "Only organization admins can promote dashboards."}
                   data-testid="dashboard-promote-open"
                 >
                   Promote to code
@@ -517,12 +520,12 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
                   triggerClassName={cn(ICON_BUTTON, "h-8 w-8 border border-border bg-surface")}
                   testId="dashboard-more"
                   entries={[
-                    { label: "Save as copy", onSelect: () => setDialog("copy"), disabled: !doc.data?.canWrite, testId: "dashboard-more-copy" },
+                    { label: "Save as copy", onSelect: () => setDialog("copy"), disabled: !docCanWrite, testId: "dashboard-more-copy" },
                     {
                       label: "Archive dashboard",
                       detail: "versions are kept",
                       onSelect: () => setDialog("archive"),
-                      disabled: !doc.data?.canWrite,
+                      disabled: !docCanWrite,
                       separated: true,
                       testId: "dashboard-more-archive",
                     },
@@ -558,7 +561,7 @@ export function DashboardView({ project, dashRef, env: consoleEnv, environments:
           <span className="text-ink-muted">
             You are looking at <span className="font-medium text-ink">v{search.version}</span>. The current version is v{currentVersion}.
           </span>
-          {doc.data?.canWrite && (
+          {docCanWrite && (
             <button
               type="button"
               className={BUTTON_SMALL}

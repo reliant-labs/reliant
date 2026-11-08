@@ -31,7 +31,7 @@
  *     predicate covers everything under the key.
  */
 
-import { hashKey, type Query, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { hashKey, notifyManager, type Query, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 export type QueryPredicate = (query: Query) => boolean;
 
@@ -98,9 +98,20 @@ export function createCoalescedInvalidator(
     }
   };
 
+  // Marks the matching queries stale, synchronously: the refetch `run`
+  // schedules must never be overtaken by stale-marking still in progress,
+  // which would leave its fresh result stale and fetch again. This is what
+  // invalidateQueries({ refetchType: "none" }) does before returning a
+  // resolved promise, without leaning on that promise being already settled.
+  const markStale = (queryKey: QueryKey, predicate?: QueryPredicate) => {
+    notifyManager.batch(() => {
+      for (const query of client.getQueryCache().findAll({ queryKey, predicate })) query.invalidate();
+    });
+  };
+
   return {
     invalidate(queryKey, predicate) {
-      void client.invalidateQueries({ queryKey, predicate, refetchType: "none" });
+      markStale(queryKey, predicate);
       const hash = hashKey(queryKey);
       let state = states.get(hash);
       if (!state) {

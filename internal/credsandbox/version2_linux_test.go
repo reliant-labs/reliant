@@ -70,7 +70,17 @@ func tmpAliases(t *testing.T, path string) []string {
 	t.Helper()
 	mounts, err := readMounts()
 	require.NoError(t, err)
-	return aliasPaths([]string{path}, mounts)
+	// Run inside another sandbox (a gate's tests under credentials: none), the
+	// disk has more mounts (the outer sandbox's rebuilt directories), and
+	// aliasPaths can name path itself, or one view twice. The other views are
+	// the ones under test.
+	var out []string
+	for _, a := range dedupe(aliasPaths([]string{path}, mounts)) {
+		if a != path {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 func TestWrap_OnlyCredentialedCommandsGetTheSignal(t *testing.T) {

@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Clicking "Connect" twice must not report a failure.
  *

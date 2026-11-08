@@ -29,6 +29,7 @@ import { isWorkflowSurfacePath } from "../../lib/workflowsArea";
 import { OnboardingChecklist } from "./OnboardingChecklist";
 import { JourneyTour } from "./JourneyTour";
 import { JOURNEYS, firstStepId, isJourneyAvailable } from "./journeys/registry";
+import "./journeys/catalog";
 import { journeyToReshow } from "./journeys/reshow";
 import { useTourNavigation } from "./useTourNavigation";
 

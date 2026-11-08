@@ -9913,8 +9913,14 @@ type GetObservabilityUsageResponse struct {
 	// its own line. Node- and cluster-level platform data ("infrastructure") is
 	// Reliant's own and is never billed.
 	MetadataBytes int64 `protobuf:"varint,22,opt,name=metadata_bytes,json=metadataBytes,proto3" json:"metadata_bytes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The split of stored bytes across services and categories (by_service,
+	// browser_bytes, operator_bytes, metadata_bytes, and so used_bytes and each
+	// signal's billed_bytes) is an ESTIMATE for at least one hour of the period:
+	// weighted by row count instead of bytes. Only a billing-exempt org, which is
+	// never charged, is metered this way. stored bytes and rows stay exact.
+	BreakdownEstimated bool `protobuf:"varint,23,opt,name=breakdown_estimated,json=breakdownEstimated,proto3" json:"breakdown_estimated,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetObservabilityUsageResponse) Reset() {
@@ -10101,6 +10107,13 @@ func (x *GetObservabilityUsageResponse) GetMetadataBytes() int64 {
 	return 0
 }
 
+func (x *GetObservabilityUsageResponse) GetBreakdownEstimated() bool {
+	if x != nil {
+		return x.BreakdownEstimated
+	}
+	return false
+}
+
 type SignalUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "logs", "traces", "metrics" or "profiles".
@@ -10173,9 +10186,12 @@ func (x *SignalUsage) GetRows() int64 {
 type ServiceUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The service.name; empty for data that carried none.
-	Service       string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
-	Signal        string `protobuf:"bytes,2,opt,name=signal,proto3" json:"signal,omitempty"`
-	BilledBytes   int64  `protobuf:"varint,3,opt,name=billed_bytes,json=billedBytes,proto3" json:"billed_bytes,omitempty"`
+	Service     string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	Signal      string `protobuf:"bytes,2,opt,name=signal,proto3" json:"signal,omitempty"`
+	BilledBytes int64  `protobuf:"varint,3,opt,name=billed_bytes,json=billedBytes,proto3" json:"billed_bytes,omitempty"`
+	// billed_bytes is weighted by rows, not bytes, for at least one hour (see
+	// GetObservabilityUsageResponse.breakdown_estimated).
+	Estimated     bool `protobuf:"varint,4,opt,name=estimated,proto3" json:"estimated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -10229,6 +10245,13 @@ func (x *ServiceUsage) GetBilledBytes() int64 {
 		return x.BilledBytes
 	}
 	return 0
+}
+
+func (x *ServiceUsage) GetEstimated() bool {
+	if x != nil {
+		return x.Estimated
+	}
+	return false
 }
 
 type GetReleaseHealthRequest struct {
@@ -11860,7 +11883,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\tresets_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bresetsAt\x12\x12\n" +
 	"\x04lane\x18\x03 \x01(\tR\x04lane\"5\n" +
 	"\x1cGetObservabilityUsageRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\xb2\b\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\xe3\b\n" +
 	"\x1dGetObservabilityUsageResponse\x12=\n" +
 	"\fperiod_start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
@@ -11888,16 +11911,18 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\n" +
 	"by_service\x18\x14 \x03(\v2\x1d.controlplane.v1.ServiceUsageR\tbyService\x12%\n" +
 	"\x0eoperator_bytes\x18\x15 \x01(\x03R\roperatorBytes\x12%\n" +
-	"\x0emetadata_bytes\x18\x16 \x01(\x03R\rmetadataBytes\"\x7f\n" +
+	"\x0emetadata_bytes\x18\x16 \x01(\x03R\rmetadataBytes\x12/\n" +
+	"\x13breakdown_estimated\x18\x17 \x01(\bR\x12breakdownEstimated\"\x7f\n" +
 	"\vSignalUsage\x12\x16\n" +
 	"\x06signal\x18\x01 \x01(\tR\x06signal\x12!\n" +
 	"\fbilled_bytes\x18\x02 \x01(\x03R\vbilledBytes\x12!\n" +
 	"\fstored_bytes\x18\x03 \x01(\x03R\vstoredBytes\x12\x12\n" +
-	"\x04rows\x18\x04 \x01(\x03R\x04rows\"c\n" +
+	"\x04rows\x18\x04 \x01(\x03R\x04rows\"\x81\x01\n" +
 	"\fServiceUsage\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x16\n" +
 	"\x06signal\x18\x02 \x01(\tR\x06signal\x12!\n" +
-	"\fbilled_bytes\x18\x03 \x01(\x03R\vbilledBytes\"\x94\x03\n" +
+	"\fbilled_bytes\x18\x03 \x01(\x03R\vbilledBytes\x12\x1c\n" +
+	"\testimated\x18\x04 \x01(\bR\testimated\"\x94\x03\n" +
 	"\x17GetReleaseHealthRequest\x121\n" +
 	"\x05scope\x18\x01 \x01(\v2\x1b.controlplane.v1.QueryScopeR\x05scope\x12#\n" +
 	"\fpromotion_id\x18\x02 \x01(\tH\x00R\vpromotionId\x12)\n" +

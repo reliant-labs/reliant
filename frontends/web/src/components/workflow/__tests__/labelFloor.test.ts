@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * 12px is the floor for text in the workflow editor, the Workflows area,
  * Automations and Runs (research/WORKFLOW_EDITOR_UX_REVIEW.md §1 issue 10).

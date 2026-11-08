@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2026 Reliant Labs
 
 /**
