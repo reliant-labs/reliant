@@ -109,6 +109,99 @@ func TestWorktreeReap_ReapsEveryRepositoryOnItsScheduleFromTheReaperTick(t *test
 	}
 }
 
+// The in-process worktree sweep rides the reap's schedule. In mode on it is
+// the machine's only worktree deleter: forge's subprocess no longer runs. In
+// dry-run it only reports, and forge's reap runs as it did; off (or no sweep)
+// is exactly the old reap.
+func TestWorktreeReap_SweepReplacesForgesReaperOnlyInModeOn(t *testing.T) {
+	for _, tc := range []struct {
+		mode        string
+		sweeps      int
+		forgeReaped bool
+	}{
+		{"on", 1, false},
+		{"dry-run", 1, true},
+		{"off", 0, true},
+		{"", 0, true},
+	} {
+		t.Run("mode="+tc.mode, func(t *testing.T) {
+			home := t.TempDir()
+			root := filepath.Join(home, ".reliant", "worktrees")
+			repo := initRepo(t, filepath.Join(home, "projects", "a"))
+			gitT(t, repo, "worktree", "add", "-q", "-b", "ws", filepath.Join(root, "proj", "ws-1", "a"))
+			fs := &fakeFS{
+				mounts: map[string]fsStat{home: {Dev: 8, Bsize: 4096, Blocks: 1 << 20, Bfree: 1 << 19, Bavail: 1 << 19, Files: 1000, Ffree: 900}},
+				exists: map[string]bool{home: true},
+			}
+			env := Environment{Getenv: func(string) string { return "" }, Home: home, GOOS: "test"}
+			now := time.Now()
+			w := watcherOn(t, fs, env, &now)
+			forge := 0
+			w.worktreeReap.run = func(context.Context, string) (reaperRun, error) { forge++; return reaperRun{}, nil }
+			var sweeps []string
+			w.ConfigureWorktreeSweep(WorktreeSweep{Mode: tc.mode, Run: func(_ context.Context, trigger string, _, approvedOnly bool) {
+				sweeps = append(sweeps, trigger)
+				if approvedOnly {
+					t.Error("a scheduled pass ran approved-only")
+				}
+			}})
+			w.ConfigureReaper(ReaperConfig{Enabled: true, Interval: time.Hour, PressureInterval: 10 * time.Minute, PolicyPath: filepath.Join(t.TempDir(), "storage.json")})
+			w.reaper.lastRun = now
+			w.reaperTick(context.Background())
+			if len(sweeps) != tc.sweeps || (forge > 0) != tc.forgeReaped {
+				t.Fatalf("sweeps %v, forge reaps %d; want %d sweeps, forge reaped %v", sweeps, forge, tc.sweeps, tc.forgeReaped)
+			}
+		})
+	}
+}
+
+// A person's approval is acted on within a minute, by an approved-only
+// sweep between scheduled passes, and only once per new approval.
+func TestWorktreeReap_ApprovalRunsAnApprovedOnlySweepBetweenPasses(t *testing.T) {
+	home := t.TempDir()
+	fs := &fakeFS{
+		mounts: map[string]fsStat{home: {Dev: 8, Bsize: 4096, Blocks: 1 << 20, Bfree: 1 << 19, Bavail: 1 << 19, Files: 1000, Ffree: 900}},
+		exists: map[string]bool{home: true},
+	}
+	env := Environment{Getenv: func(string) string { return "" }, Home: home, GOOS: "test"}
+	now := time.Now()
+	w := watcherOn(t, fs, env, &now)
+	w.worktreeReap.run = func(context.Context, string) (reaperRun, error) { return reaperRun{}, nil }
+	approvedAt := time.Time{}
+	var passes []bool
+	w.ConfigureWorktreeSweep(WorktreeSweep{
+		Mode:           "on",
+		Run:            func(_ context.Context, _ string, _, approvedOnly bool) { passes = append(passes, approvedOnly) },
+		ApprovalsSince: func(since time.Time) bool { return approvedAt.After(since) },
+	})
+	w.ConfigureReaper(ReaperConfig{Enabled: true, Interval: time.Hour, PressureInterval: 10 * time.Minute, PolicyPath: filepath.Join(t.TempDir(), "storage.json")})
+	w.reaper.lastRun = now
+	ctx := context.Background()
+	w.reaperTick(ctx) // the scheduled pass
+	if len(passes) != 1 || passes[0] {
+		t.Fatalf("passes %v, want one scheduled pass", passes)
+	}
+	now = now.Add(time.Minute)
+	w.reaper.lastRun = now
+	w.reaperTick(ctx)
+	if len(passes) != 1 {
+		t.Fatalf("an approved-only pass ran with no approval: %v", passes)
+	}
+	approvedAt = now.Add(time.Second)
+	now = now.Add(time.Minute)
+	w.reaper.lastRun = now
+	w.reaperTick(ctx)
+	if len(passes) != 2 || !passes[1] {
+		t.Fatalf("passes %v, want an approved-only pass after the approval", passes)
+	}
+	now = now.Add(time.Minute)
+	w.reaper.lastRun = now
+	w.reaperTick(ctx)
+	if len(passes) != 2 {
+		t.Fatalf("the same approval ran another pass: %v", passes)
+	}
+}
+
 func TestWorktreeReap_RunsForgesReaperWithRemovalOverTheRootsCheckouts(t *testing.T) {
 	got := worktreeReapCommandArgs("/r")
 	want := []string{"forge", "storage", "worktrees", "--repo", "/r", "--apply", "--reliant-managed"}

@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/config.proto.
  */
 export const file_reliant_config_v1_config: GenFile = /*@__PURE__*/
-  fileDesc("Ch5yZWxpYW50L2NvbmZpZy92MS9jb25maWcucHJvdG8SEXJlbGlhbnQuY29uZmlnLnYxIrwBCg1SZWxpYW50Q29uZmlnEikKA2xvZxgBIAEoCzIcLnJlbGlhbnQuY29uZmlnLnYxLkxvZ0NvbmZpZxIxCgdydW50aW1lGAIgASgLMiAucmVsaWFudC5jb25maWcudjEuUnVudGltZUNvbmZpZxI+Cg5zdG9yYWdlX3JlYXBlchgDIAEoCzImLnJlbGlhbnQuY29uZmlnLnYxLlN0b3JhZ2VSZWFwZXJDb25maWc6DcrBGAkKB3JlbGlhbnQiiAEKDVJ1bnRpbWVDb25maWcSdwoLZW52aXJvbm1lbnQYASABKAlCYoLOGF4KC1JFTElBTlRfRU5WKkNFbnZpcm9ubWVudCB0aWVyOiBkZXYsIHRlc3Qgb3IgcHJvZCAodW5zZXQgb3IgdW5yZWNvZ25pc2VkIGlzIHByb2QpWgoKCE5PREVfRU5WIuoBCglMb2dDb25maWcSZwoFbGV2ZWwYASABKAlCWILOGFQKEVJFTElBTlRfTE9HX0xFVkVMEglsb2ctbGV2ZWwqNExvZyBsZXZlbDogZGVidWcsIGluZm8sIHdhcm4gb3IgZXJyb3IgKGRlZmF1bHQgaW5mbykSdAoGZm9ybWF0GAIgASgJQmSCzhhgCgpMT0dfRk9STUFUEgpsb2ctZm9ybWF0KkZMb2cgbGluZSBmb3JtYXQ6IHRleHQgb3IganNvbiAoZGVmYXVsdCB0ZXh0OyBqc29uIGZvciBhIGhvc3RlZCBkYWVtb24pIqwGChNTdG9yYWdlUmVhcGVyQ29uZmlnEpQBCgRtb2RlGAEgASgJQoUBgs4YgAEKFlJFTElBTlRfU1RPUkFHRV9SRUFQRVIaBGF1dG8qUVJ1biBmb3JnZSdzIHN0b3JhZ2UgcmVhcGVyIG9uIGEgc2NoZWR1bGU6IGF1dG8gKG1hbmFnZWQgZGFlbW9ucyBvbmx5KSwgb24sIG9yIG9mZkoEYXV0b0oCb25KA29mZhKEAQoIaW50ZXJ2YWwYAiABKAlCcoLOGG4KH1JFTElBTlRfU1RPUkFHRV9SRUFQRVJfSU5URVJWQUwaAjFoKkdJbnRlcnZhbCBvZiB0aGUgc2NoZWR1bGVkIHN0b3JhZ2UgcmVhcGVyIHBhc3MgKEdvIGR1cmF0aW9uLCBtaW5pbXVtIDVtKRK2AQoRcHJlc3N1cmVfaW50ZXJ2YWwYAyABKAlCmgGCzhiVAQooUkVMSUFOVF9TVE9SQUdFX1JFQVBFUl9QUkVTU1VSRV9JTlRFUlZBTBoDMTBtKmRNaW5pbXVtIGdhcCBiZXR3ZWVuIHN0b3JhZ2UgcmVhcGVyIHBhc3NlcyB3aGlsZSBhIHZvbHVtZSBpcyB1bmRlciBwcmVzc3VyZSAoR28gZHVyYXRpb24sIG1pbmltdW0gMW0pEoIBCgtwb2xpY3lfcGF0aBgEIAEoCUJtgs4YaQoURk9SR0VfU1RPUkFHRV9QT0xJQ1kqUUZvcmdlIG1hY2hpbmUgc3RvcmFnZSBwb2xpY3kgZmlsZSAoZGVmYXVsdDogPHVzZXIgY29uZmlnIGRpcj4vZm9yZ2Uvc3RvcmFnZS5qc29uKRK4AQoQZ29jYWNoZV9pbnRlcnZhbBgFIAEoCUKdAYLOGJgBCidSRUxJQU5UX1NUT1JBR0VfUkVBUEVSX0dPQ0FDSEVfSU5URVJWQUwaAzEwbSpoSW50ZXJ2YWwgb2YgdGhlIEdvLWNhY2hlIHRyaW0gYmV0d2VlbiBmdWxsIHN0b3JhZ2UgcmVhcGVyIHBhc3NlcyAoR28gZHVyYXRpb24sIG1pbmltdW0gMm07IG9mZiBkaXNhYmxlcylCQFo+Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_forge_v1_forge]);
+  fileDesc("Ch5yZWxpYW50L2NvbmZpZy92MS9jb25maWcucHJvdG8SEXJlbGlhbnQuY29uZmlnLnYxIoACCg1SZWxpYW50Q29uZmlnEikKA2xvZxgBIAEoCzIcLnJlbGlhbnQuY29uZmlnLnYxLkxvZ0NvbmZpZxIxCgdydW50aW1lGAIgASgLMiAucmVsaWFudC5jb25maWcudjEuUnVudGltZUNvbmZpZxI+Cg5zdG9yYWdlX3JlYXBlchgDIAEoCzImLnJlbGlhbnQuY29uZmlnLnYxLlN0b3JhZ2VSZWFwZXJDb25maWcSQgoQd29ya3RyZWVfcmVjbGFpbRgEIAEoCzIoLnJlbGlhbnQuY29uZmlnLnYxLldvcmt0cmVlUmVjbGFpbUNvbmZpZzoNysEYCQoHcmVsaWFudCKIAQoNUnVudGltZUNvbmZpZxJ3CgtlbnZpcm9ubWVudBgBIAEoCUJigs4YXgoLUkVMSUFOVF9FTlYqQ0Vudmlyb25tZW50IHRpZXI6IGRldiwgdGVzdCBvciBwcm9kICh1bnNldCBvciB1bnJlY29nbmlzZWQgaXMgcHJvZClaCgoITk9ERV9FTlYi6gEKCUxvZ0NvbmZpZxJnCgVsZXZlbBgBIAEoCUJYgs4YVAoRUkVMSUFOVF9MT0dfTEVWRUwSCWxvZy1sZXZlbCo0TG9nIGxldmVsOiBkZWJ1ZywgaW5mbywgd2FybiBvciBlcnJvciAoZGVmYXVsdCBpbmZvKRJ0CgZmb3JtYXQYAiABKAlCZILOGGAKCkxPR19GT1JNQVQSCmxvZy1mb3JtYXQqRkxvZyBsaW5lIGZvcm1hdDogdGV4dCBvciBqc29uIChkZWZhdWx0IHRleHQ7IGpzb24gZm9yIGEgaG9zdGVkIGRhZW1vbikirAYKE1N0b3JhZ2VSZWFwZXJDb25maWcSlAEKBG1vZGUYASABKAlChQGCzhiAAQoWUkVMSUFOVF9TVE9SQUdFX1JFQVBFUhoEYXV0bypRUnVuIGZvcmdlJ3Mgc3RvcmFnZSByZWFwZXIgb24gYSBzY2hlZHVsZTogYXV0byAobWFuYWdlZCBkYWVtb25zIG9ubHkpLCBvbiwgb3Igb2ZmSgRhdXRvSgJvbkoDb2ZmEoQBCghpbnRlcnZhbBgCIAEoCUJygs4YbgofUkVMSUFOVF9TVE9SQUdFX1JFQVBFUl9JTlRFUlZBTBoCMWgqR0ludGVydmFsIG9mIHRoZSBzY2hlZHVsZWQgc3RvcmFnZSByZWFwZXIgcGFzcyAoR28gZHVyYXRpb24sIG1pbmltdW0gNW0pErYBChFwcmVzc3VyZV9pbnRlcnZhbBgDIAEoCUKaAYLOGJUBCihSRUxJQU5UX1NUT1JBR0VfUkVBUEVSX1BSRVNTVVJFX0lOVEVSVkFMGgMxMG0qZE1pbmltdW0gZ2FwIGJldHdlZW4gc3RvcmFnZSByZWFwZXIgcGFzc2VzIHdoaWxlIGEgdm9sdW1lIGlzIHVuZGVyIHByZXNzdXJlIChHbyBkdXJhdGlvbiwgbWluaW11bSAxbSkSggEKC3BvbGljeV9wYXRoGAQgASgJQm2CzhhpChRGT1JHRV9TVE9SQUdFX1BPTElDWSpRRm9yZ2UgbWFjaGluZSBzdG9yYWdlIHBvbGljeSBmaWxlIChkZWZhdWx0OiA8dXNlciBjb25maWcgZGlyPi9mb3JnZS9zdG9yYWdlLmpzb24pErgBChBnb2NhY2hlX2ludGVydmFsGAUgASgJQp0Bgs4YmAEKJ1JFTElBTlRfU1RPUkFHRV9SRUFQRVJfR09DQUNIRV9JTlRFUlZBTBoDMTBtKmhJbnRlcnZhbCBvZiB0aGUgR28tY2FjaGUgdHJpbSBiZXR3ZWVuIGZ1bGwgc3RvcmFnZSByZWFwZXIgcGFzc2VzIChHbyBkdXJhdGlvbiwgbWluaW11bSAybTsgb2ZmIGRpc2FibGVzKSLJBQoVV29ya3RyZWVSZWNsYWltQ29uZmlnEqIBCgRtb2RlGAEgASgJQpMBgs4YjgEKGFJFTElBTlRfV09SS1RSRUVfUkVDTEFJTRoHZHJ5LXJ1bipXTWFjaGluZS13aWRlIHdvcmt0cmVlIHJlY2xhaW06IG9mZiwgZHJ5LXJ1biAocmVwb3J0IG9ubHkpIG9yIG9uIChjYXB0dXJlLCB0aGVuIHJlY2xhaW0pSgNvZmZKB2RyeS1ydW5KAm9uEsEBCgVyb290cxgCIAEoCUKxAYLOGKwBCh5SRUxJQU5UX1dPUktUUkVFX1JFQ0xBSU1fUk9PVFMqiQFEaXJlY3RvcmllcyB0aGUgd29ya3RyZWUgcmVjbGFpbSB3YWxrcyBmb3IgcmVwb3NpdG9yaWVzLCBjb21tYS1zZXBhcmF0ZWQgcGF0aFs6ZGVwdGhdIChkZWZhdWx0OiB3b3JrdHJlZSByb290LCB0ZW1wLCBjYWNoZSBhbmQgaG9tZSBkaXJzKRKVAQoKY2xlYW5faWRsZRgDIAEoCUKAAYLOGHwKI1JFTElBTlRfV09SS1RSRUVfUkVDTEFJTV9DTEVBTl9JRExFGgMyNGgqUElkbGUgdGltZSBiZWZvcmUgYSBjbGVhbiwgcHVzaGVkIHdvcmt0cmVlIGlzIHJlY2xhaW1lZCAoR28gZHVyYXRpb24sIG1pbmltdW0gMWgpEq4BCg1hcHByb3ZhbF9pZGxlGAQgASgJQpYBgs4YkQEKJlJFTElBTlRfV09SS1RSRUVfUkVDTEFJTV9BUFBST1ZBTF9JRExFGgQxMjBoKmFJZGxlIHRpbWUgYmVmb3JlIGEgd29ya3RyZWUgd2l0aCB1bnNhdmVkIHdvcmsgaXMgcHJvcG9zZWQgZm9yIGFwcHJvdmFsIChHbyBkdXJhdGlvbiwgbWluaW11bSAyNGgpQkBaPmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge]);
 
 /**
  * ReliantConfig is the reliant binary's root config: the surface every
@@ -35,6 +35,11 @@ export type ReliantConfig = Message<"reliant.config.v1.ReliantConfig"> & {
    * @generated from field: reliant.config.v1.StorageReaperConfig storage_reaper = 3;
    */
   storageReaper?: StorageReaperConfig | undefined;
+
+  /**
+   * @generated from field: reliant.config.v1.WorktreeReclaimConfig worktree_reclaim = 4;
+   */
+  worktreeReclaim?: WorktreeReclaimConfig | undefined;
 };
 
 /**
@@ -169,4 +174,62 @@ export type StorageReaperConfig = Message<"reliant.config.v1.StorageReaperConfig
  */
 export const StorageReaperConfigSchema: GenMessage<StorageReaperConfig> = /*@__PURE__*/
   messageDesc(file_reliant_config_v1_config, 3);
+
+/**
+ * WorktreeReclaimConfig is the daemon's machine-wide worktree reclaim
+ * (internal/worktreereclaim/sweep.go): every linked git worktree on the
+ * machine, whether Reliant made it or an agent ran `git worktree add`, is
+ * captured into a local ref of its own repository
+ * (refs/reliant/reclaimed/...) before it is deleted. It rides the storage
+ * reaper's schedule and single-flight (RELIANT_STORAGE_REAPER), so it runs
+ * only where that does. Durations are Go durations; a value the daemon cannot
+ * use is named in a warning and replaced by its default.
+ *
+ * @generated from message reliant.config.v1.WorktreeReclaimConfig
+ */
+export type WorktreeReclaimConfig = Message<"reliant.config.v1.WorktreeReclaimConfig"> & {
+  /**
+   * off never runs it. dry-run records what it would reclaim, and the bytes,
+   * in ~/.reliant/reclaim/report.json and its journal, captures and deletes
+   * nothing, and leaves forge's worktree reaper running as before. on
+   * reclaims clean, pushed, idle worktrees after capturing them, proposes
+   * the rest for a person's approval, and replaces forge's worktree reaper.
+   *
+   * @generated from field: string mode = 1;
+   */
+  mode: string;
+
+  /**
+   * Where discovery looks for repositories besides the ones it knows:
+   * comma-separated path[:depth] entries. Unset: the worktree root (depth
+   * 4), the temp dir, the user cache dir and $HOME (depth 3 each).
+   *
+   * @generated from field: string roots = 2;
+   */
+  roots: string;
+
+  /**
+   * How long a clean worktree whose HEAD is on a remote must have had no
+   * commit and no file change before it is reclaimed without asking.
+   *
+   * @generated from field: string clean_idle = 3;
+   */
+  cleanIdle: string;
+
+  /**
+   * How long a worktree with uncommitted, unpushed or reflog-only work must
+   * have had no commit and no file change before it is proposed for a
+   * person's approval. It is never reclaimed without one.
+   *
+   * @generated from field: string approval_idle = 4;
+   */
+  approvalIdle: string;
+};
+
+/**
+ * Describes the message reliant.config.v1.WorktreeReclaimConfig.
+ * Use `create(WorktreeReclaimConfigSchema)` to create a new message.
+ */
+export const WorktreeReclaimConfigSchema: GenMessage<WorktreeReclaimConfig> = /*@__PURE__*/
+  messageDesc(file_reliant_config_v1_config, 4);
 
