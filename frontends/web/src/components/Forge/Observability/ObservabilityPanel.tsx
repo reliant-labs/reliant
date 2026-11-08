@@ -364,6 +364,7 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
             sessionId={search.session}
             atMs={search.t}
             navigate={navigate}
+            environments={environments}
           />
         ) : view === "overview" ? (
           <OverviewView scope={scope} subject={subject} range={range} service={search.service} groupBy={groupBy} navigate={navigate} />

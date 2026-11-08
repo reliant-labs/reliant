@@ -16,6 +16,8 @@
 import { keepPreviousData, useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { FilterUnsupportedError, obsRetryDelay, rumRetry } from "@/services/controlPlane/observability/errors";
+import type { FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useObsReadApi } from "./observability-queries";
 import type { RumScope, SessionList, Timeline } from "@/services/controlPlane/observability/rumTypes";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -47,6 +49,8 @@ export const sessionKeys = {
   list: (scope: RumScope | null, filters: SessionFilters) => [...sessionKeys.root(), "list", ...scopeKey(scope), filters] as const,
   detail: (scope: RumScope | null, sessionId: string) => [...sessionKeys.root(), "detail", ...scopeKey(scope), sessionId] as const,
   timeline: (scope: RumScope | null, sessionId: string) => [...sessionKeys.root(), "timeline", ...scopeKey(scope), sessionId] as const,
+  frontendReplay: (scope: RumScope | null) => [...sessionKeys.root(), "frontend-replay", ...scopeKey(scope)] as const,
+  replayEvidence: (scope: RumScope | null, envIds: readonly string[]) => [...sessionKeys.root(), "replay-evidence", ...scopeKey(scope), envIds] as const,
 };
 
 /**
@@ -124,6 +128,58 @@ export function useSessionTimeline(scope: RumScope | null, sessionId: string | u
     getNextPageParam: (last) => last.nextPageToken || undefined,
     enabled: !!scope && !!sessionId,
     staleTime: 30_000,
+    retry: rumRetry, retryDelay: obsRetryDelay,
+  });
+}
+
+/**
+ * Each frontend's session replay switch in the scope's environments
+ * (ObservabilityService.ListFrontendReplay), for the empty list to say which
+ * frontend is off and why. It reads Postgres and the hosting hub, not
+ * ClickHouse, so it goes around the quota guard: a quota pause must not hide
+ * the reason the list is empty. Under sessionKeys.root(), so Refresh re-reads it.
+ */
+export function useFrontendReplay(scope: RumScope | null, enabled = true) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: sessionKeys.frontendReplay(scope),
+    queryFn: ({ signal }): Promise<FrontendReplayList> =>
+      api.listFrontendReplay({ orgId: (scope as RumScope).orgId, projectId: scope?.projectId, envIds: scope?.envIds ?? [] }, { signal }),
+    enabled: !!scope && enabled,
+    staleTime: 60_000,
+    retry: rumRetry, retryDelay: obsRetryDelay,
+  });
+}
+
+/** How far back the console looks for replays a frontend's config says it should not be recording. */
+export const REPLAY_EVIDENCE_RANGE: RangePreset = "7d";
+/** The server's page maximum: the evidence is the newest sessions, one page. */
+export const REPLAY_EVIDENCE_PAGE_SIZE = 100;
+
+/**
+ * The newest sessions with a replay in `envIds` over REPLAY_EVIDENCE_RANGE:
+ * what reconciles a frontend whose runtime config reads "off" but that still
+ * records through the deprecated build flag (ListFrontendReplay cannot see a
+ * flag baked into the bundle).
+ */
+export function useReplayEvidence(scope: RumScope | null, envIds: readonly string[], enabled = true) {
+  const api = useObsReadApi();
+  return useQuery({
+    queryKey: sessionKeys.replayEvidence(scope, envIds),
+    queryFn: ({ signal }): Promise<SessionList> =>
+      api.listSessions({
+        ...(scope as RumScope),
+        envIds: [...envIds],
+        services: [],
+        window: resolveWindow(REPLAY_EVIDENCE_RANGE),
+        hasError: false,
+        hasReplay: true,
+        userId: "",
+        pathContains: "",
+        pageSize: REPLAY_EVIDENCE_PAGE_SIZE,
+      }, { signal }),
+    enabled: !!scope && enabled && envIds.length > 0,
+    staleTime: 60_000,
     retry: rumRetry, retryDelay: obsRetryDelay,
   });
 }
