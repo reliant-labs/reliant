@@ -67,6 +67,31 @@ func TestEnsureOwnedProjectForPath_ResolvesTheMachinesOwnCheckoutPath(t *testing
 	assert.Len(t, projects, 1, "no duplicate project is created for the machine's checkout path")
 }
 
+// A machine's checkout row naming ANOTHER user's project never resolves to
+// that project: a folder the machine reports is the connection's user's, found
+// by its own path or created for them, and the foreign project gets no
+// checkout, catalog or config from it.
+func TestEnsureOwnedProjectForPath_AnotherUsersCheckoutRowIsNeverResolved(t *testing.T) {
+	f := newDetachedFixture(t)
+	otherUser := "other-user-" + uuid.NewString()
+	now := time.Now().UTC()
+	foreign := &db.Project{ID: uuid.NewString(), UserID: otherUser, Name: "theirs",
+		Path: "/home/them/theirs-" + uuid.NewString(), CreatedAt: now, UpdatedAt: now, LastActive: now}
+	require.NoError(t, f.repo.CreateProject(f.ctx, foreign))
+	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, foreign.ID, f.laptop, f.localPath, nil))
+	svc := newTestService(f.repo)
+
+	got, err := svc.ensureOwnedProjectForPath(f.ctx, newTestConn(f.userID, f.laptop, nil), f.localPath, nil)
+	require.NoError(t, err)
+	assert.NotEqual(t, foreign.ID, got.ID, "the machine's row for another user's project was resolved for this user")
+	assert.Equal(t, f.userID, got.UserID)
+
+	theirs, err := f.repo.ListProjects(f.ctx, db.ProjectFilters{UserID: otherUser})
+	require.NoError(t, err)
+	require.Len(t, theirs, 1)
+	assert.Equal(t, foreign.Path, theirs[0].Path, "the other user's project is untouched")
+}
+
 // After a detach, the machine's discovery and snapshots of the folder are
 // dropped — neither recorded as the project nor read as a new one — and its
 // connect reconcile does not record the folder again.
