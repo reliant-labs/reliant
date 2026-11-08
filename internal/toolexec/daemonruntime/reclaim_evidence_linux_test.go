@@ -39,7 +39,10 @@ func evidenceReclaimer(t *testing.T, g *recoveryAdmission) (*worktreereclaim.Rec
 	if err := worktreereclaim.LockCheckout(context.Background(), path, "evidence"); err != nil {
 		t.Fatal(err)
 	}
-	r := &worktreereclaim.Reclaimer{Root: root, Now: func() time.Time { return time.Now().Add(48 * time.Hour) },
+	// A fixed clock decades past the fixture's file times: every idle floor
+	// is met without reading the wall clock.
+	idleNow := time.Date(2100, time.January, 1, 0, 0, 0, 0, time.UTC)
+	r := &worktreereclaim.Reclaimer{Root: root, Now: func() time.Time { return idleNow },
 		Cwds: worktreereclaim.ProcessCwds, ProcessUse: worktreereclaim.CheckProcessUse}
 	r.Acquire = func(_ context.Context, paths []string) (worktreereclaim.RecoveryLease, error) {
 		lease, err := g.acquireLease(paths, false)
