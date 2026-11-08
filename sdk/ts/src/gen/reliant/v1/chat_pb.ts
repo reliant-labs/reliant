@@ -17,7 +17,7 @@ import type { Message as Message$1 } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/chat.proto.
  */
 export const file_reliant_v1_chat: GenFile = /*@__PURE__*/
-  fileDesc("ChVyZWxpYW50L3YxL2NoYXQucHJvdG8SCnJlbGlhbnQudjEilAUKB01lc3NhZ2USCgoCaWQYASABKAkSDwoHY2hhdF9pZBgCIAEoCRILCgNzZXEYAyABKAMSDgoGdGhyZWFkGAQgASgJEiUKBHJvbGUYBiABKA4yFy5yZWxpYW50LnYxLk1lc3NhZ2VSb2xlEhIKBW1vZGVsGAcgASgJSACIAQESEgoFYWdlbnQYCCABKAlIAYgBARIZCgxpbnB1dF90b2tlbnMYCSABKAVIAogBARIaCg1vdXRwdXRfdG9rZW5zGAogASgFSAOIAQESMwoPc3RyZWFtaW5nX3N0YXRlGAsgASgOMhoucmVsaWFudC52MS5TdHJlYW1pbmdTdGF0ZRIwCg5jb250ZW50X2Jsb2NrcxgMIAMoCzIYLnJlbGlhbnQudjEuQ29udGVudEJsb2NrEisKC2F0dGFjaG1lbnRzGA0gAygLMhYucmVsaWFudC52MS5BdHRhY2htZW50EhIKCmNyZWF0ZWRfYXQYDiABKAkSEgoKdXBkYXRlZF9hdBgPIAEoCRIYCgt3b3JrZmxvd19pZBgQIAEoCUgEiAEBEjQKDWRpc3BsYXlfc3R5bGUYESABKA4yGC5yZWxpYW50LnYxLkRpc3BsYXlTdHlsZUgFiAEBEhcKD3NlcXVlbmNlX251bWJlchgSIAEoAxIUCgdub2RlX2lkGBMgASgJSAaIAQESKQoGc2VuZGVyGBQgASgLMhkucmVsaWFudC52MS5NZXNzYWdlU2VuZGVyQggKBl9tb2RlbEIICgZfYWdlbnRCDwoNX2lucHV0X3Rva2Vuc0IQCg5fb3V0cHV0X3Rva2Vuc0IOCgxfd29ya2Zsb3dfaWRCEAoOX2Rpc3BsYXlfc3R5bGVCCgoIX25vZGVfaWQibgoNTWVzc2FnZVNlbmRlchIRCgl0aHJlYWRfaWQYASABKAkSDQoFdGl0bGUYAiABKAkSKgoEa2luZBgDIAEoDjIcLnJlbGlhbnQudjEuQWdlbnRNZXNzYWdlS2luZBIPCgdzdWJqZWN0GAQgASgJIs8ECgxDb250ZW50QmxvY2sSCgoCaWQYASABKAkSDQoFaW5kZXgYAiABKAUSKgoEdHlwZRgDIAEoDjIcLnJlbGlhbnQudjEuQ29udGVudEJsb2NrVHlwZRIUCgdjb250ZW50GAQgASgJSACIAQESFgoJdG9vbF9uYW1lGAUgASgJSAGIAQESGQoMdG9vbF9jYWxsX2lkGAYgASgJSAKIAQESEgoFaW5wdXQYByABKAlIA4gBARIVCghpc19lcnJvchgIIAEoCEgEiAEBEjkKEHRvb2xfY2FsbF9zdGF0dXMYCiABKA4yGi5yZWxpYW50LnYxLlRvb2xDYWxsU3RhdHVzSAWIAQESFwoKc3RhcnRlZF9hdBgLIAEoCUgGiAEBEhkKDGNvbXBsZXRlZF9hdBgMIAEoCUgHiAEBEh4KEWNoaWxkX3dvcmtmbG93X2lkGA0gASgJSAiIAQESFgoJdHJ1bmNhdGVkGA4gASgISAmIAQESGgoNb3JpZ2luYWxfc2l6ZRgPIAEoA0gKiAEBQgoKCF9jb250ZW50QgwKCl90b29sX25hbWVCDwoNX3Rvb2xfY2FsbF9pZEIICgZfaW5wdXRCCwoJX2lzX2Vycm9yQhMKEV90b29sX2NhbGxfc3RhdHVzQg0KC19zdGFydGVkX2F0Qg8KDV9jb21wbGV0ZWRfYXRCFAoSX2NoaWxkX3dvcmtmbG93X2lkQgwKCl90cnVuY2F0ZWRCEAoOX29yaWdpbmFsX3NpemVKBAgJEApSDm1hdGNoZWRfcmVzdWx0IlgKCkF0dGFjaG1lbnQSCgoCaWQYASABKAkSEAoIZmlsZW5hbWUYAiABKAkSDAoEc2l6ZRgDIAEoAxIRCgltaW1lX3R5cGUYBCABKAkSCwoDdXJsGAUgASgJIo4BCgxJbnB1dE1lc3NhZ2USJQoEcm9sZRgBIAEoDjIXLnJlbGlhbnQudjEuTWVzc2FnZVJvbGUSDwoHY29udGVudBgCIAEoCRI0Cg1kaXNwbGF5X3N0eWxlGAMgASgOMhgucmVsaWFudC52MS5EaXNwbGF5U3R5bGVIAIgBAUIQCg5fZGlzcGxheV9zdHlsZSKOBQoSU2VuZE1lc3NhZ2VSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkSEwoLYXR0YWNobWVudHMYAyADKAkSFQoId29ya2Zsb3cYBSABKAlIAIgBARIYCgt0ZW1wZXJhdHVyZRgIIAEoAUgBiAEBEhcKCm1heF90b2tlbnMYCSABKANIAogBARJLCg93b3JrZmxvd19wYXJhbXMYCyADKAsyMi5yZWxpYW50LnYxLlNlbmRNZXNzYWdlUmVxdWVzdC5Xb3JrZmxvd1BhcmFtc0VudHJ5EhEKBG1vZGUYDCABKAlIA4gBARIaCg10YXJnZXRfdGhyZWFkGA0gASgJSASIAQESTQoQc2VsZWN0ZWRfcHJlc2V0cxgOIAMoCzIzLnJlbGlhbnQudjEuU2VuZE1lc3NhZ2VSZXF1ZXN0LlNlbGVjdGVkUHJlc2V0c0VudHJ5EioKCG1lc3NhZ2VzGA8gAygLMhgucmVsaWFudC52MS5JbnB1dE1lc3NhZ2USHgoRY2xpZW50X21lc3NhZ2VfaWQYEiABKAlIBYgBARpNChNXb3JrZmxvd1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAEaNgoUU2VsZWN0ZWRQcmVzZXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4AUILCglfd29ya2Zsb3dCDgoMX3RlbXBlcmF0dXJlQg0KC19tYXhfdG9rZW5zQgcKBV9tb2RlQhAKDl90YXJnZXRfdGhyZWFkQhQKEl9jbGllbnRfbWVzc2FnZV9pZEoECBEQElIHZGlzY3VzcyKxAQoTU2VuZE1lc3NhZ2VSZXNwb25zZRIPCgdjaGF0X2lkGAEgASgJEhMKC3dvcmtmbG93X2lkGAIgASgJEg4KBnJ1bl9pZBgDIAEoCRIOCgZzdGF0dXMYBCABKAkSHAoPd29ya2Zsb3dfc3RhdHVzGAUgASgJSACIAQESEgoKbWVzc2FnZV9pZBgGIAEoCRIOCgZxdWV1ZWQYByABKAhCEgoQX3dvcmtmbG93X3N0YXR1cyI8ChZJbnRlcnJ1cHRUaHJlYWRSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkSEQoJdGhyZWFkX2lkGAIgASgJIlkKF0ludGVycnVwdFRocmVhZFJlc3BvbnNlEhwKFGNhbmNlbGxlZF90b29sX2NhbGxzGAEgASgFEiAKGHVuZGVsaXZlcmFibGVfdG9vbF9jYWxscxgCIAMoCSKcAQoTTGlzdE1lc3NhZ2VzUmVxdWVzdBIXCgdjaGF0X2lkGAEgASgJQga6SAPIAQESEwoGcmVjZW50GAIgASgFSACIAQESFwoKYmVmb3JlX3NlcRgDIAEoA0gBiAEBEhYKCXRocmVhZF9pZBgEIAEoCUgCiAEBQgkKB19yZWNlbnRCDQoLX2JlZm9yZV9zZXFCDAoKX3RocmVhZF9pZCKuAQoUTGlzdE1lc3NhZ2VzUmVzcG9uc2USJQoIbWVzc2FnZXMYASADKAsyEy5yZWxpYW50LnYxLk1lc3NhZ2USDQoFdG90YWwYAiABKAUSDQoFY291bnQYAyABKAUSEAoIaGFzX21vcmUYBCABKAgSEgoKb2xkZXN0X3NlcRgFIAEoAxIrCgZlcnJvcnMYBiADKAsyGy5yZWxpYW50LnYxLkNoYXRFcnJvclVwZGF0ZSJkCg9DaGF0RXJyb3JVcGRhdGUSEQoJZW50aXR5X2lkGAEgASgJEhcKD3NlcXVlbmNlX251bWJlchgCIAEoAxIRCglkYXRhX2pzb24YAyABKAkSEgoKY3JlYXRlZF9hdBgEIAEoCSIjChBQYXVzZUNoYXRSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkiNQoRUGF1c2VDaGF0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIiQKEVJlc3VtZUNoYXRSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkipAEKElJlc3VtZUNoYXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSEwoLd29ya2Zsb3dfaWQYAyABKAkSDgoGcnVuX2lkGAQgASgJEhYKDm5lZWRzX3JlY292ZXJ5GAUgASgIEi8KDXJlY292ZXJ5X3R5cGUYBiABKA4yGC5yZWxpYW50LnYxLlJlY292ZXJ5VHlwZSqCAQoNV29ya2Zsb3dTdGF0ZRIeChpXT1JLRkxPV19TVEFURV9VTlNQRUNJRklFRBAAEhoKFldPUktGTE9XX1NUQVRFX1BFTkRJTkcQARIZChVXT1JLRkxPV19TVEFURV9BQ1RJVkUQAhIaChZXT1JLRkxPV19TVEFURV9TVE9QUEVEEAMqxAEKEldvcmtmbG93U3RvcFJlYXNvbhIkCiBXT1JLRkxPV19TVE9QX1JFQVNPTl9VTlNQRUNJRklFRBAAEiIKHldPUktGTE9XX1NUT1BfUkVBU09OX0NPTVBMRVRFRBABEh8KG1dPUktGTE9XX1NUT1BfUkVBU09OX0ZBSUxFRBACEh8KG1dPUktGTE9XX1NUT1BfUkVBU09OX1BBVVNFRBADEiIKHldPUktGTE9XX1NUT1BfUkVBU09OX0NBTkNFTExFRBAEKo4BCgtNZXNzYWdlUm9sZRIcChhNRVNTQUdFX1JPTEVfVU5TUEVDSUZJRUQQABIVChFNRVNTQUdFX1JPTEVfVVNFUhABEhoKFk1FU1NBR0VfUk9MRV9BU1NJU1RBTlQQAhIXChNNRVNTQUdFX1JPTEVfU1lTVEVNEAMSFQoRTUVTU0FHRV9ST0xFX1RPT0wQBCqKAQoOU3RyZWFtaW5nU3RhdGUSHwobU1RSRUFNSU5HX1NUQVRFX1VOU1BFQ0lGSUVEEAASHQoZU1RSRUFNSU5HX1NUQVRFX1NUUkVBTUlORxABEhwKGFNUUkVBTUlOR19TVEFURV9DT01QTEVURRACEhoKFlNUUkVBTUlOR19TVEFURV9GQUlMRUQQAyqVAQoMRGlzcGxheVN0eWxlEh0KGURJU1BMQVlfU1RZTEVfVU5TUEVDSUZJRUQQABIWChJESVNQTEFZX1NUWUxFX0lORk8QARIZChVESVNQTEFZX1NUWUxFX1dBUk5JTkcQAhIZChVESVNQTEFZX1NUWUxFX1NVQ0NFU1MQAxIYChRESVNQTEFZX1NUWUxFX0hJRERFThAEKoQCChBBZ2VudE1lc3NhZ2VLaW5kEiIKHkFHRU5UX01FU1NBR0VfS0lORF9VTlNQRUNJRklFRBAAEh4KGkFHRU5UX01FU1NBR0VfS0lORF9NRVNTQUdFEAESIQodQUdFTlRfTUVTU0FHRV9LSU5EX0NPTVBMRVRJT04QAhIgChxBR0VOVF9NRVNTQUdFX0tJTkRfQ0FOQ0VMTEVEEAMSHQoZQUdFTlRfTUVTU0FHRV9LSU5EX0ZBSUxFRBAEEiQKIEFHRU5UX01FU1NBR0VfS0lORF9IVU1BTl9NRVNTQUdFEAUSIgoeQUdFTlRfTUVTU0FHRV9LSU5EX1JVTl9NRVNTQUdFEAYqygIKEENvbnRlbnRCbG9ja1R5cGUSIgoeQ09OVEVOVF9CTE9DS19UWVBFX1VOU1BFQ0lGSUVEEAASGwoXQ09OVEVOVF9CTE9DS19UWVBFX1RFWFQQARIgChxDT05URU5UX0JMT0NLX1RZUEVfVE9PTF9DQUxMEAISIgoeQ09OVEVOVF9CTE9DS19UWVBFX1RPT0xfUkVTVUxUEAMSHAoYQ09OVEVOVF9CTE9DS19UWVBFX0lNQUdFEAQSHwobQ09OVEVOVF9CTE9DS19UWVBFX1RISU5LSU5HEAUSJQohQ09OVEVOVF9CTE9DS19UWVBFX0ZJTEVfUkVGRVJFTkNFEAYSHwobQ09OVEVOVF9CTE9DS19UWVBFX0RPQ1VNRU5UEAcSKAokQ09OVEVOVF9CTE9DS19UWVBFX1JFREFDVEVEX1RISU5LSU5HEAgqjQIKDENoYXRBY3Rpdml0eRIWChJDSEFUX0FDVElWSVRZX0lETEUQABIZChVDSEFUX0FDVElWSVRZX1JVTk5JTkcQARIgChxDSEFUX0FDVElWSVRZX0FXQUlUSU5HX0lOUFVUEAISFwoTQ0hBVF9BQ1RJVklUWV9FUlJPUhADEhgKFENIQVRfQUNUSVZJVFlfUEFVU0VEEAQSJAogQ0hBVF9BQ1RJVklUWV9XQUlUSU5HX0ZPUl9EQUVNT04QBRIkCiBDSEFUX0FDVElWSVRZX1FVRVVFRF9GT1JfTUFDSElORRAGEikKJUNIQVRfQUNUSVZJVFlfV0FJVElOR19GT1JfVVNBR0VfTElNSVQQByrwAQoOVG9vbENhbGxTdGF0dXMSIAocVE9PTF9DQUxMX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGFRPT0xfQ0FMTF9TVEFUVVNfUEVORElORxABEh4KGlRPT0xfQ0FMTF9TVEFUVVNfRVhFQ1VUSU5HEAISHgoaVE9PTF9DQUxMX1NUQVRVU19DT01QTEVURUQQAxIbChdUT09MX0NBTExfU1RBVFVTX0ZBSUxFRBAEEh4KGlRPT0xfQ0FMTF9TVEFUVVNfQ0FOQ0VMTEVEEAUSIQodVE9PTF9DQUxMX1NUQVRVU19CQUNLR1JPVU5ERUQQBippCgxSZWNvdmVyeVR5cGUSHQoZUkVDT1ZFUllfVFlQRV9VTlNQRUNJRklFRBAAEhkKFVJFQ09WRVJZX1RZUEVfUkVTVU1FRBABEh8KG1JFQ09WRVJZX1RZUEVfV09SS0ZMT1dfTE9TVBACMqIFCgtDaGF0U2VydmljZRKoAQoLU2VuZE1lc3NhZ2USHi5yZWxpYW50LnYxLlNlbmRNZXNzYWdlUmVxdWVzdBofLnJlbGlhbnQudjEuU2VuZE1lc3NhZ2VSZXNwb25zZSJYorsYVDpSOlBwZXItdHVybiBjb252ZXJzYXRpb24gdHJhZmZpYzogdGhlIGNoYXQncyBvd24gbWVzc2FnZSBoaXN0b3J5IHJlY29yZHMgZXZlcnkgc2VuZBK8AQoPSW50ZXJydXB0VGhyZWFkEiIucmVsaWFudC52MS5JbnRlcnJ1cHRUaHJlYWRSZXF1ZXN0GiMucmVsaWFudC52MS5JbnRlcnJ1cHRUaHJlYWRSZXNwb25zZSJgorsYXDpaOlhwZXItdHVybiBzdGVlcmluZyBvZiBhIHJ1bm5pbmcgdGhyZWFkOyBlYWNoIHRvb2wgY2FsbCBpdCBjYW5jZWxzIHJlY29yZHMgaXRzIG93biBvdXRjb21lElEKDExpc3RNZXNzYWdlcxIfLnJlbGlhbnQudjEuTGlzdE1lc3NhZ2VzUmVxdWVzdBogLnJlbGlhbnQudjEuTGlzdE1lc3NhZ2VzUmVzcG9uc2USaAoJUGF1c2VDaGF0EhwucmVsaWFudC52MS5QYXVzZUNoYXRSZXF1ZXN0Gh0ucmVsaWFudC52MS5QYXVzZUNoYXRSZXNwb25zZSIeorsYGjoYCgVwYXVzZRIPCgRjaGF0EgdjaGF0X2lkEmwKClJlc3VtZUNoYXQSHS5yZWxpYW50LnYxLlJlc3VtZUNoYXRSZXF1ZXN0Gh4ucmVsaWFudC52MS5SZXN1bWVDaGF0UmVzcG9uc2UiH6K7GBs6GQoGcmVzdW1lEg8KBGNoYXQSB2NoYXRfaWRCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_struct]);
+  fileDesc("ChVyZWxpYW50L3YxL2NoYXQucHJvdG8SCnJlbGlhbnQudjEilAUKB01lc3NhZ2USCgoCaWQYASABKAkSDwoHY2hhdF9pZBgCIAEoCRILCgNzZXEYAyABKAMSDgoGdGhyZWFkGAQgASgJEiUKBHJvbGUYBiABKA4yFy5yZWxpYW50LnYxLk1lc3NhZ2VSb2xlEhIKBW1vZGVsGAcgASgJSACIAQESEgoFYWdlbnQYCCABKAlIAYgBARIZCgxpbnB1dF90b2tlbnMYCSABKAVIAogBARIaCg1vdXRwdXRfdG9rZW5zGAogASgFSAOIAQESMwoPc3RyZWFtaW5nX3N0YXRlGAsgASgOMhoucmVsaWFudC52MS5TdHJlYW1pbmdTdGF0ZRIwCg5jb250ZW50X2Jsb2NrcxgMIAMoCzIYLnJlbGlhbnQudjEuQ29udGVudEJsb2NrEisKC2F0dGFjaG1lbnRzGA0gAygLMhYucmVsaWFudC52MS5BdHRhY2htZW50EhIKCmNyZWF0ZWRfYXQYDiABKAkSEgoKdXBkYXRlZF9hdBgPIAEoCRIYCgt3b3JrZmxvd19pZBgQIAEoCUgEiAEBEjQKDWRpc3BsYXlfc3R5bGUYESABKA4yGC5yZWxpYW50LnYxLkRpc3BsYXlTdHlsZUgFiAEBEhcKD3NlcXVlbmNlX251bWJlchgSIAEoAxIUCgdub2RlX2lkGBMgASgJSAaIAQESKQoGc2VuZGVyGBQgASgLMhkucmVsaWFudC52MS5NZXNzYWdlU2VuZGVyQggKBl9tb2RlbEIICgZfYWdlbnRCDwoNX2lucHV0X3Rva2Vuc0IQCg5fb3V0cHV0X3Rva2Vuc0IOCgxfd29ya2Zsb3dfaWRCEAoOX2Rpc3BsYXlfc3R5bGVCCgoIX25vZGVfaWQibgoNTWVzc2FnZVNlbmRlchIRCgl0aHJlYWRfaWQYASABKAkSDQoFdGl0bGUYAiABKAkSKgoEa2luZBgDIAEoDjIcLnJlbGlhbnQudjEuQWdlbnRNZXNzYWdlS2luZBIPCgdzdWJqZWN0GAQgASgJIp8FCgxDb250ZW50QmxvY2sSCgoCaWQYASABKAkSDQoFaW5kZXgYAiABKAUSKgoEdHlwZRgDIAEoDjIcLnJlbGlhbnQudjEuQ29udGVudEJsb2NrVHlwZRIUCgdjb250ZW50GAQgASgJSACIAQESFgoJdG9vbF9uYW1lGAUgASgJSAGIAQESGQoMdG9vbF9jYWxsX2lkGAYgASgJSAKIAQESEgoFaW5wdXQYByABKAlIA4gBARIVCghpc19lcnJvchgIIAEoCEgEiAEBEjkKEHRvb2xfY2FsbF9zdGF0dXMYCiABKA4yGi5yZWxpYW50LnYxLlRvb2xDYWxsU3RhdHVzSAWIAQESFwoKc3RhcnRlZF9hdBgLIAEoCUgGiAEBEhkKDGNvbXBsZXRlZF9hdBgMIAEoCUgHiAEBEh4KEWNoaWxkX3dvcmtmbG93X2lkGA0gASgJSAiIAQESFgoJdHJ1bmNhdGVkGA4gASgISAmIAQESGgoNb3JpZ2luYWxfc2l6ZRgPIAEoA0gKiAEBEhgKC2JvZHlfZWxpZGVkGBAgASgISAuIAQESFgoJYm9keV9zaXplGBEgASgDSAyIAQFCCgoIX2NvbnRlbnRCDAoKX3Rvb2xfbmFtZUIPCg1fdG9vbF9jYWxsX2lkQggKBl9pbnB1dEILCglfaXNfZXJyb3JCEwoRX3Rvb2xfY2FsbF9zdGF0dXNCDQoLX3N0YXJ0ZWRfYXRCDwoNX2NvbXBsZXRlZF9hdEIUChJfY2hpbGRfd29ya2Zsb3dfaWRCDAoKX3RydW5jYXRlZEIQCg5fb3JpZ2luYWxfc2l6ZUIOCgxfYm9keV9lbGlkZWRCDAoKX2JvZHlfc2l6ZUoECAkQClIObWF0Y2hlZF9yZXN1bHQiWAoKQXR0YWNobWVudBIKCgJpZBgBIAEoCRIQCghmaWxlbmFtZRgCIAEoCRIMCgRzaXplGAMgASgDEhEKCW1pbWVfdHlwZRgEIAEoCRILCgN1cmwYBSABKAkijgEKDElucHV0TWVzc2FnZRIlCgRyb2xlGAEgASgOMhcucmVsaWFudC52MS5NZXNzYWdlUm9sZRIPCgdjb250ZW50GAIgASgJEjQKDWRpc3BsYXlfc3R5bGUYAyABKA4yGC5yZWxpYW50LnYxLkRpc3BsYXlTdHlsZUgAiAEBQhAKDl9kaXNwbGF5X3N0eWxlIo4FChJTZW5kTWVzc2FnZVJlcXVlc3QSDwoHY2hhdF9pZBgBIAEoCRITCgthdHRhY2htZW50cxgDIAMoCRIVCgh3b3JrZmxvdxgFIAEoCUgAiAEBEhgKC3RlbXBlcmF0dXJlGAggASgBSAGIAQESFwoKbWF4X3Rva2VucxgJIAEoA0gCiAEBEksKD3dvcmtmbG93X3BhcmFtcxgLIAMoCzIyLnJlbGlhbnQudjEuU2VuZE1lc3NhZ2VSZXF1ZXN0LldvcmtmbG93UGFyYW1zRW50cnkSEQoEbW9kZRgMIAEoCUgDiAEBEhoKDXRhcmdldF90aHJlYWQYDSABKAlIBIgBARJNChBzZWxlY3RlZF9wcmVzZXRzGA4gAygLMjMucmVsaWFudC52MS5TZW5kTWVzc2FnZVJlcXVlc3QuU2VsZWN0ZWRQcmVzZXRzRW50cnkSKgoIbWVzc2FnZXMYDyADKAsyGC5yZWxpYW50LnYxLklucHV0TWVzc2FnZRIeChFjbGllbnRfbWVzc2FnZV9pZBgSIAEoCUgFiAEBGk0KE1dvcmtmbG93UGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEiUKBXZhbHVlGAIgASgLMhYuZ29vZ2xlLnByb3RvYnVmLlZhbHVlOgI4ARo2ChRTZWxlY3RlZFByZXNldHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBQgsKCV93b3JrZmxvd0IOCgxfdGVtcGVyYXR1cmVCDQoLX21heF90b2tlbnNCBwoFX21vZGVCEAoOX3RhcmdldF90aHJlYWRCFAoSX2NsaWVudF9tZXNzYWdlX2lkSgQIERASUgdkaXNjdXNzIrEBChNTZW5kTWVzc2FnZVJlc3BvbnNlEg8KB2NoYXRfaWQYASABKAkSEwoLd29ya2Zsb3dfaWQYAiABKAkSDgoGcnVuX2lkGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIcCg93b3JrZmxvd19zdGF0dXMYBSABKAlIAIgBARISCgptZXNzYWdlX2lkGAYgASgJEg4KBnF1ZXVlZBgHIAEoCEISChBfd29ya2Zsb3dfc3RhdHVzIjwKFkludGVycnVwdFRocmVhZFJlcXVlc3QSDwoHY2hhdF9pZBgBIAEoCRIRCgl0aHJlYWRfaWQYAiABKAkiWQoXSW50ZXJydXB0VGhyZWFkUmVzcG9uc2USHAoUY2FuY2VsbGVkX3Rvb2xfY2FsbHMYASABKAUSIAoYdW5kZWxpdmVyYWJsZV90b29sX2NhbGxzGAIgAygJIuABChNMaXN0TWVzc2FnZXNSZXF1ZXN0EhcKB2NoYXRfaWQYASABKAlCBrpIA8gBARITCgZyZWNlbnQYAiABKAVIAIgBARIXCgpiZWZvcmVfc2VxGAMgASgDSAGIAQESFgoJdGhyZWFkX2lkGAQgASgJSAKIAQESMgoLdG9vbF9ib2RpZXMYBSABKA4yGC5yZWxpYW50LnYxLlRvb2xCb2R5TW9kZUgDiAEBQgkKB19yZWNlbnRCDQoLX2JlZm9yZV9zZXFCDAoKX3RocmVhZF9pZEIOCgxfdG9vbF9ib2RpZXMirgEKFExpc3RNZXNzYWdlc1Jlc3BvbnNlEiUKCG1lc3NhZ2VzGAEgAygLMhMucmVsaWFudC52MS5NZXNzYWdlEg0KBXRvdGFsGAIgASgFEg0KBWNvdW50GAMgASgFEhAKCGhhc19tb3JlGAQgASgIEhIKCm9sZGVzdF9zZXEYBSABKAMSKwoGZXJyb3JzGAYgAygLMhsucmVsaWFudC52MS5DaGF0RXJyb3JVcGRhdGUiZAoPQ2hhdEVycm9yVXBkYXRlEhEKCWVudGl0eV9pZBgBIAEoCRIXCg9zZXF1ZW5jZV9udW1iZXIYAiABKAMSEQoJZGF0YV9qc29uGAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAkiZgocR2V0Q29udGVudEJsb2NrQm9kaWVzUmVxdWVzdBIXCgdjaGF0X2lkGAEgASgJQga6SAPIAQESEQoJYmxvY2tfaWRzGAIgAygJEhEKBGZ1bGwYAyABKAhIAIgBAUIHCgVfZnVsbCK4AQoQQ29udGVudEJsb2NrQm9keRIQCghibG9ja19pZBgBIAEoCRISCgVpbnB1dBgCIAEoCUgAiAEBEhQKB2NvbnRlbnQYAyABKAlIAYgBARIWCgl0cnVuY2F0ZWQYBCABKAhIAogBARIaCg1vcmlnaW5hbF9zaXplGAUgASgDSAOIAQFCCAoGX2lucHV0QgoKCF9jb250ZW50QgwKCl90cnVuY2F0ZWRCEAoOX29yaWdpbmFsX3NpemUicgodR2V0Q29udGVudEJsb2NrQm9kaWVzUmVzcG9uc2USLAoGYm9kaWVzGAEgAygLMhwucmVsaWFudC52MS5Db250ZW50QmxvY2tCb2R5EhEKCW5vdF9mb3VuZBgCIAMoCRIQCghkZWZlcnJlZBgDIAMoCSIjChBQYXVzZUNoYXRSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkiNQoRUGF1c2VDaGF0UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIiQKEVJlc3VtZUNoYXRSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkipAEKElJlc3VtZUNoYXRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkSEwoLd29ya2Zsb3dfaWQYAyABKAkSDgoGcnVuX2lkGAQgASgJEhYKDm5lZWRzX3JlY292ZXJ5GAUgASgIEi8KDXJlY292ZXJ5X3R5cGUYBiABKA4yGC5yZWxpYW50LnYxLlJlY292ZXJ5VHlwZSqCAQoNV29ya2Zsb3dTdGF0ZRIeChpXT1JLRkxPV19TVEFURV9VTlNQRUNJRklFRBAAEhoKFldPUktGTE9XX1NUQVRFX1BFTkRJTkcQARIZChVXT1JLRkxPV19TVEFURV9BQ1RJVkUQAhIaChZXT1JLRkxPV19TVEFURV9TVE9QUEVEEAMqxAEKEldvcmtmbG93U3RvcFJlYXNvbhIkCiBXT1JLRkxPV19TVE9QX1JFQVNPTl9VTlNQRUNJRklFRBAAEiIKHldPUktGTE9XX1NUT1BfUkVBU09OX0NPTVBMRVRFRBABEh8KG1dPUktGTE9XX1NUT1BfUkVBU09OX0ZBSUxFRBACEh8KG1dPUktGTE9XX1NUT1BfUkVBU09OX1BBVVNFRBADEiIKHldPUktGTE9XX1NUT1BfUkVBU09OX0NBTkNFTExFRBAEKo4BCgtNZXNzYWdlUm9sZRIcChhNRVNTQUdFX1JPTEVfVU5TUEVDSUZJRUQQABIVChFNRVNTQUdFX1JPTEVfVVNFUhABEhoKFk1FU1NBR0VfUk9MRV9BU1NJU1RBTlQQAhIXChNNRVNTQUdFX1JPTEVfU1lTVEVNEAMSFQoRTUVTU0FHRV9ST0xFX1RPT0wQBCqKAQoOU3RyZWFtaW5nU3RhdGUSHwobU1RSRUFNSU5HX1NUQVRFX1VOU1BFQ0lGSUVEEAASHQoZU1RSRUFNSU5HX1NUQVRFX1NUUkVBTUlORxABEhwKGFNUUkVBTUlOR19TVEFURV9DT01QTEVURRACEhoKFlNUUkVBTUlOR19TVEFURV9GQUlMRUQQAyqVAQoMRGlzcGxheVN0eWxlEh0KGURJU1BMQVlfU1RZTEVfVU5TUEVDSUZJRUQQABIWChJESVNQTEFZX1NUWUxFX0lORk8QARIZChVESVNQTEFZX1NUWUxFX1dBUk5JTkcQAhIZChVESVNQTEFZX1NUWUxFX1NVQ0NFU1MQAxIYChRESVNQTEFZX1NUWUxFX0hJRERFThAEKoQCChBBZ2VudE1lc3NhZ2VLaW5kEiIKHkFHRU5UX01FU1NBR0VfS0lORF9VTlNQRUNJRklFRBAAEh4KGkFHRU5UX01FU1NBR0VfS0lORF9NRVNTQUdFEAESIQodQUdFTlRfTUVTU0FHRV9LSU5EX0NPTVBMRVRJT04QAhIgChxBR0VOVF9NRVNTQUdFX0tJTkRfQ0FOQ0VMTEVEEAMSHQoZQUdFTlRfTUVTU0FHRV9LSU5EX0ZBSUxFRBAEEiQKIEFHRU5UX01FU1NBR0VfS0lORF9IVU1BTl9NRVNTQUdFEAUSIgoeQUdFTlRfTUVTU0FHRV9LSU5EX1JVTl9NRVNTQUdFEAYqygIKEENvbnRlbnRCbG9ja1R5cGUSIgoeQ09OVEVOVF9CTE9DS19UWVBFX1VOU1BFQ0lGSUVEEAASGwoXQ09OVEVOVF9CTE9DS19UWVBFX1RFWFQQARIgChxDT05URU5UX0JMT0NLX1RZUEVfVE9PTF9DQUxMEAISIgoeQ09OVEVOVF9CTE9DS19UWVBFX1RPT0xfUkVTVUxUEAMSHAoYQ09OVEVOVF9CTE9DS19UWVBFX0lNQUdFEAQSHwobQ09OVEVOVF9CTE9DS19UWVBFX1RISU5LSU5HEAUSJQohQ09OVEVOVF9CTE9DS19UWVBFX0ZJTEVfUkVGRVJFTkNFEAYSHwobQ09OVEVOVF9CTE9DS19UWVBFX0RPQ1VNRU5UEAcSKAokQ09OVEVOVF9CTE9DS19UWVBFX1JFREFDVEVEX1RISU5LSU5HEAgqjQIKDENoYXRBY3Rpdml0eRIWChJDSEFUX0FDVElWSVRZX0lETEUQABIZChVDSEFUX0FDVElWSVRZX1JVTk5JTkcQARIgChxDSEFUX0FDVElWSVRZX0FXQUlUSU5HX0lOUFVUEAISFwoTQ0hBVF9BQ1RJVklUWV9FUlJPUhADEhgKFENIQVRfQUNUSVZJVFlfUEFVU0VEEAQSJAogQ0hBVF9BQ1RJVklUWV9XQUlUSU5HX0ZPUl9EQUVNT04QBRIkCiBDSEFUX0FDVElWSVRZX1FVRVVFRF9GT1JfTUFDSElORRAGEikKJUNIQVRfQUNUSVZJVFlfV0FJVElOR19GT1JfVVNBR0VfTElNSVQQByrwAQoOVG9vbENhbGxTdGF0dXMSIAocVE9PTF9DQUxMX1NUQVRVU19VTlNQRUNJRklFRBAAEhwKGFRPT0xfQ0FMTF9TVEFUVVNfUEVORElORxABEh4KGlRPT0xfQ0FMTF9TVEFUVVNfRVhFQ1VUSU5HEAISHgoaVE9PTF9DQUxMX1NUQVRVU19DT01QTEVURUQQAxIbChdUT09MX0NBTExfU1RBVFVTX0ZBSUxFRBAEEh4KGlRPT0xfQ0FMTF9TVEFUVVNfQ0FOQ0VMTEVEEAUSIQodVE9PTF9DQUxMX1NUQVRVU19CQUNLR1JPVU5ERUQQBipgCgxUb29sQm9keU1vZGUSHgoaVE9PTF9CT0RZX01PREVfVU5TUEVDSUZJRUQQABIXChNUT09MX0JPRFlfTU9ERV9GVUxMEAESFwoTVE9PTF9CT0RZX01PREVfU1RVQhACKmkKDFJlY292ZXJ5VHlwZRIdChlSRUNPVkVSWV9UWVBFX1VOU1BFQ0lGSUVEEAASGQoVUkVDT1ZFUllfVFlQRV9SRVNVTUVEEAESHwobUkVDT1ZFUllfVFlQRV9XT1JLRkxPV19MT1NUEAIykAYKC0NoYXRTZXJ2aWNlEqgBCgtTZW5kTWVzc2FnZRIeLnJlbGlhbnQudjEuU2VuZE1lc3NhZ2VSZXF1ZXN0Gh8ucmVsaWFudC52MS5TZW5kTWVzc2FnZVJlc3BvbnNlIliiuxhUOlI6UHBlci10dXJuIGNvbnZlcnNhdGlvbiB0cmFmZmljOiB0aGUgY2hhdCdzIG93biBtZXNzYWdlIGhpc3RvcnkgcmVjb3JkcyBldmVyeSBzZW5kErwBCg9JbnRlcnJ1cHRUaHJlYWQSIi5yZWxpYW50LnYxLkludGVycnVwdFRocmVhZFJlcXVlc3QaIy5yZWxpYW50LnYxLkludGVycnVwdFRocmVhZFJlc3BvbnNlImCiuxhcOlo6WHBlci10dXJuIHN0ZWVyaW5nIG9mIGEgcnVubmluZyB0aHJlYWQ7IGVhY2ggdG9vbCBjYWxsIGl0IGNhbmNlbHMgcmVjb3JkcyBpdHMgb3duIG91dGNvbWUSUQoMTGlzdE1lc3NhZ2VzEh8ucmVsaWFudC52MS5MaXN0TWVzc2FnZXNSZXF1ZXN0GiAucmVsaWFudC52MS5MaXN0TWVzc2FnZXNSZXNwb25zZRJsChVHZXRDb250ZW50QmxvY2tCb2RpZXMSKC5yZWxpYW50LnYxLkdldENvbnRlbnRCbG9ja0JvZGllc1JlcXVlc3QaKS5yZWxpYW50LnYxLkdldENvbnRlbnRCbG9ja0JvZGllc1Jlc3BvbnNlEmgKCVBhdXNlQ2hhdBIcLnJlbGlhbnQudjEuUGF1c2VDaGF0UmVxdWVzdBodLnJlbGlhbnQudjEuUGF1c2VDaGF0UmVzcG9uc2UiHqK7GBo6GAoFcGF1c2USDwoEY2hhdBIHY2hhdF9pZBJsCgpSZXN1bWVDaGF0Eh0ucmVsaWFudC52MS5SZXN1bWVDaGF0UmVxdWVzdBoeLnJlbGlhbnQudjEuUmVzdW1lQ2hhdFJlc3BvbnNlIh+iuxgbOhkKBnJlc3VtZRIPCgRjaGF0EgdjaGF0X2lkQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_struct]);
 
 /**
  * Message represents a conversation message
@@ -295,6 +295,26 @@ export type ContentBlock = Message$1<"reliant.v1.ContentBlock"> & {
    * @generated from field: optional int64 original_size = 15;
    */
   originalSize?: bigint | undefined;
+
+  /**
+   * The body of this block was left out of a read that asked for
+   * TOOL_BODY_MODE_STUB. tool_call: input holds a skeleton (the same JSON
+   * object, every key kept, long strings cut) that is enough to label the
+   * call but not to render it. tool_result: content holds a stub preview,
+   * and truncated/original_size are set as for any preview. thinking:
+   * content is empty. GetContentBlockBodies returns the body by block id.
+   *
+   * @generated from field: optional bool body_elided = 16;
+   */
+  bodyElided?: boolean | undefined;
+
+  /**
+   * Byte length of the stored body (input for tool_call, content
+   * otherwise). Set when body_elided is.
+   *
+   * @generated from field: optional int64 body_size = 17;
+   */
+  bodySize?: bigint | undefined;
 };
 
 /**
@@ -635,6 +655,14 @@ export type ListMessagesRequest = Message$1<"reliant.v1.ListMessagesRequest"> & 
    * @generated from field: optional string thread_id = 4;
    */
   threadId?: string | undefined;
+
+  /**
+   * How finished tool calls' bodies are sent. Unset is
+   * TOOL_BODY_MODE_FULL: inputs whole, results previewed.
+   *
+   * @generated from field: optional reliant.v1.ToolBodyMode tool_bodies = 5;
+   */
+  toolBodies?: ToolBodyMode | undefined;
 };
 
 /**
@@ -728,6 +756,123 @@ export const ChatErrorUpdateSchema: GenMessage<ChatErrorUpdate> = /*@__PURE__*/
   messageDesc(file_reliant_v1_chat, 11);
 
 /**
+ * GetContentBlockBodiesRequest names content blocks of a chat the caller
+ * owns, by block id.
+ *
+ * @generated from message reliant.v1.GetContentBlockBodiesRequest
+ */
+export type GetContentBlockBodiesRequest = Message$1<"reliant.v1.GetContentBlockBodiesRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+
+  /**
+   * At most 100 ids; more is INVALID_ARGUMENT.
+   *
+   * @generated from field: repeated string block_ids = 2;
+   */
+  blockIds: string[];
+
+  /**
+   * Results whole rather than as the 8 KiB display preview: for copy and
+   * export. Unset returns what an expanded row shows.
+   *
+   * @generated from field: optional bool full = 3;
+   */
+  full?: boolean | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.GetContentBlockBodiesRequest.
+ * Use `create(GetContentBlockBodiesRequestSchema)` to create a new message.
+ */
+export const GetContentBlockBodiesRequestSchema: GenMessage<GetContentBlockBodiesRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 12);
+
+/**
+ * ContentBlockBody is one block's body, as a FULL read would have sent it
+ * (or, with full, as stored).
+ *
+ * @generated from message reliant.v1.ContentBlockBody
+ */
+export type ContentBlockBody = Message$1<"reliant.v1.ContentBlockBody"> & {
+  /**
+   * @generated from field: string block_id = 1;
+   */
+  blockId: string;
+
+  /**
+   * tool_call: the stored input, whole
+   *
+   * @generated from field: optional string input = 2;
+   */
+  input?: string | undefined;
+
+  /**
+   * tool_result: display preview (or whole when full); thinking: whole
+   *
+   * @generated from field: optional string content = 3;
+   */
+  content?: string | undefined;
+
+  /**
+   * as ContentBlock.truncated
+   *
+   * @generated from field: optional bool truncated = 4;
+   */
+  truncated?: boolean | undefined;
+
+  /**
+   * as ContentBlock.original_size
+   *
+   * @generated from field: optional int64 original_size = 5;
+   */
+  originalSize?: bigint | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.ContentBlockBody.
+ * Use `create(ContentBlockBodySchema)` to create a new message.
+ */
+export const ContentBlockBodySchema: GenMessage<ContentBlockBody> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 13);
+
+/**
+ * GetContentBlockBodiesResponse returns every requested id in exactly one of
+ * its three lists.
+ *
+ * @generated from message reliant.v1.GetContentBlockBodiesResponse
+ */
+export type GetContentBlockBodiesResponse = Message$1<"reliant.v1.GetContentBlockBodiesResponse"> & {
+  /**
+   * @generated from field: repeated reliant.v1.ContentBlockBody bodies = 1;
+   */
+  bodies: ContentBlockBody[];
+
+  /**
+   * Not a block this chat displays: unknown, another chat's, or hidden.
+   *
+   * @generated from field: repeated string not_found = 2;
+   */
+  notFound: string[];
+
+  /**
+   * Left out to keep the response under its byte budget: ask again.
+   *
+   * @generated from field: repeated string deferred = 3;
+   */
+  deferred: string[];
+};
+
+/**
+ * Describes the message reliant.v1.GetContentBlockBodiesResponse.
+ * Use `create(GetContentBlockBodiesResponseSchema)` to create a new message.
+ */
+export const GetContentBlockBodiesResponseSchema: GenMessage<GetContentBlockBodiesResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_chat, 14);
+
+/**
  * PauseChatRequest pauses a chat's workflow
  *
  * @generated from message reliant.v1.PauseChatRequest
@@ -744,7 +889,7 @@ export type PauseChatRequest = Message$1<"reliant.v1.PauseChatRequest"> & {
  * Use `create(PauseChatRequestSchema)` to create a new message.
  */
 export const PauseChatRequestSchema: GenMessage<PauseChatRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_chat, 12);
+  messageDesc(file_reliant_v1_chat, 15);
 
 /**
  * PauseChatResponse confirms pause
@@ -768,7 +913,7 @@ export type PauseChatResponse = Message$1<"reliant.v1.PauseChatResponse"> & {
  * Use `create(PauseChatResponseSchema)` to create a new message.
  */
 export const PauseChatResponseSchema: GenMessage<PauseChatResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_chat, 13);
+  messageDesc(file_reliant_v1_chat, 16);
 
 /**
  * ResumeChatRequest resumes a paused workflow
@@ -787,7 +932,7 @@ export type ResumeChatRequest = Message$1<"reliant.v1.ResumeChatRequest"> & {
  * Use `create(ResumeChatRequestSchema)` to create a new message.
  */
 export const ResumeChatRequestSchema: GenMessage<ResumeChatRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_chat, 14);
+  messageDesc(file_reliant_v1_chat, 17);
 
 /**
  * ResumeChatResponse confirms resume
@@ -835,7 +980,7 @@ export type ResumeChatResponse = Message$1<"reliant.v1.ResumeChatResponse"> & {
  * Use `create(ResumeChatResponseSchema)` to create a new message.
  */
 export const ResumeChatResponseSchema: GenMessage<ResumeChatResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_chat, 15);
+  messageDesc(file_reliant_v1_chat, 18);
 
 /**
  * WorkflowState is where a workflow run IS: it has not started, it is going,
@@ -1305,6 +1450,43 @@ export const ToolCallStatusSchema: GenEnum<ToolCallStatus> = /*@__PURE__*/
   enumDesc(file_reliant_v1_chat, 8);
 
 /**
+ * ToolBodyMode is how a transcript read sends the bodies of finished tool
+ * calls.
+ *
+ * @generated from enum reliant.v1.ToolBodyMode
+ */
+export enum ToolBodyMode {
+  /**
+   * Today's behaviour: inputs whole, results previewed at 8 KiB. Every
+   * client that does not set the field gets this, forever (v1).
+   *
+   * @generated from enum value: TOOL_BODY_MODE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The same, said explicitly.
+   *
+   * @generated from enum value: TOOL_BODY_MODE_FULL = 1;
+   */
+  FULL = 1,
+
+  /**
+   * Finished calls' bodies are left out (ContentBlock.body_elided); the
+   * client reads them with GetContentBlockBodies when it shows them.
+   *
+   * @generated from enum value: TOOL_BODY_MODE_STUB = 2;
+   */
+  STUB = 2,
+}
+
+/**
+ * Describes the enum reliant.v1.ToolBodyMode.
+ */
+export const ToolBodyModeSchema: GenEnum<ToolBodyMode> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_chat, 9);
+
+/**
  * RecoveryType indicates what kind of resume/recovery happened
  *
  * @generated from enum reliant.v1.RecoveryType
@@ -1336,7 +1518,7 @@ export enum RecoveryType {
  * Describes the enum reliant.v1.RecoveryType.
  */
 export const RecoveryTypeSchema: GenEnum<RecoveryType> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_chat, 9);
+  enumDesc(file_reliant_v1_chat, 10);
 
 /**
  * ChatService handles chat-related operations
@@ -1395,6 +1577,21 @@ export const ChatService: GenService<{
     methodKind: "unary";
     input: typeof ListMessagesRequestSchema;
     output: typeof ListMessagesResponseSchema;
+  },
+  /**
+   * GetContentBlockBodies returns the bodies of content blocks that a
+   * transcript read sent elided (ContentBlock.body_elided), by block id. A
+   * block resolves when it belongs to chat_id, or to history a branch of it
+   * inherits (the same rule as GetToolResult). Any other id comes back in
+   * not_found, so the response never says whether an id exists elsewhere.
+   * forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
+   *
+   * @generated from rpc reliant.v1.ChatService.GetContentBlockBodies
+   */
+  getContentBlockBodies: {
+    methodKind: "unary";
+    input: typeof GetContentBlockBodiesRequestSchema;
+    output: typeof GetContentBlockBodiesResponseSchema;
   },
   /**
    * PauseChat pauses the running workflow (keeps it resumable)
