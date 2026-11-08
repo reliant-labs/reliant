@@ -11,7 +11,8 @@ import (
 // forked or compacted thread before it was bounded: resolve the whole
 // transcript (all, LoadDisplayMessages' answer), drop everything at or past the
 // cursor, keep the newest `limit`. The bounded walk has to be indistinguishable
-// from it. The caller resolves the transcript once: it does not change while
+// from it, over the transcript's rows: callers pass the resolution through
+// transcriptOf, since the walk leaves HIDDEN rows out. The caller resolves the transcript once: it does not change while
 // the test reads it, and resolving it again for every (cursor, limit) pair was
 // three quarters of the test's run time (13s -> 3.5s).
 func legacyRecentMessagesBefore(all []*db.Message, beforeSeq int64, limit int) (page []*db.Message, hasMore bool) {
@@ -51,6 +52,7 @@ func TestLoadRecentMessagesBefore_CompactedAndBranched_MatchesFullLoad(t *testin
 	if err != nil {
 		t.Fatalf("LoadDisplayMessages: %v", err)
 	}
+	full = transcriptOf(full)
 	if len(full) < 20 {
 		t.Fatalf("fixture resolved only %d messages; it is not exercising a deep chain", len(full))
 	}
@@ -104,6 +106,7 @@ func TestLoadRecentMessagesBefore_CompactedAndBranched_PagesTileTheTranscript(t 
 	if err != nil {
 		t.Fatalf("LoadDisplayMessages: %v", err)
 	}
+	full = transcriptOf(full)
 
 	const pageSize = 4
 	var walked []string

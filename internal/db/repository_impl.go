@@ -622,15 +622,16 @@ func (r *Repo) CountMessagesByContextWindowUpToSeq(ctx context.Context, contextW
 	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldContextWindowID, contextWindowID), orm.WhereLte(store.MessageFieldSeq, maxSeq))
 }
 
-// ListRecentMessagesInContextWindowBeforeSeq returns the newest `limit`
-// messages in a single context window strictly before beforeSeq (0 means
-// unbounded), ascending, bounded in SQL.
-func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*Message, error) {
+// ListRecentTranscriptMessagesInContextWindowBeforeSeq returns the newest
+// `limit` transcript messages (every row but the DISPLAY_STYLE_HIDDEN ones) in
+// a single context window strictly before beforeSeq (0 means unbounded),
+// ascending, bounded in SQL.
+func (r *Repo) ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*Message, error) {
 	if contextWindowID == "" {
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return store.ListRecentMessagesInContextWindowBeforeSeq(ctx, r.ORM(), contextWindowID, beforeSeq, limit)
+	return store.ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx, r.ORM(), contextWindowID, beforeSeq, limit)
 }
 
 // ListTranscriptSiblingMessagesInRange returns, ascending, every message of

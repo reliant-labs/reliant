@@ -23,7 +23,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=e454b61674d4486d264034e106d6c772e0a2eb6f3f69c73c7c6a30814d71f192
+// forge:hash=f3115bc41aa23558da14f1e017d609748279823aafbd39e3fbbc300460bac251
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -33,157 +33,157 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	ListChatsFunc                                  func(context.Context, db.ChatFilters) ([]*db.Chat, error)
-	GetChatRowFunc                                 func(context.Context, string) (*db.ChatRow, error)
-	GetChatRowWithUserCheckFunc                    func(context.Context, string, string) (*db.ChatRow, error)
-	GetChatWithUserCheckFunc                       func(context.Context, string, string) (*db.Chat, error)
-	SearchChatsFunc                                func(context.Context, db.ChatSearchFilters) ([]*db.Chat, error)
-	ListArchivedChatsFunc                          func(context.Context, string) ([]*db.ArchivedChatInfo, error)
-	DeleteChatFunc                                 func(context.Context, string) error
-	UpdateChatStateFunc                            func(context.Context, string, db.ChatState, string) error
-	UpdateChatUnreadFunc                           func(context.Context, string, bool, string) error
-	SetChatAdoptedFunc                             func(context.Context, string, string, bool) (bool, error)
-	SetChatDaemonBlockedFunc                       func(context.Context, string, bool) error
-	SetChatPausedForMachineFunc                    func(context.Context, string, bool) (bool, error)
-	SetChatQueuedForMachineFunc                    func(context.Context, string, bool) (bool, error)
-	MoveChatToProjectFunc                          func(context.Context, db.ChatMove) (bool, error)
-	ListCapacityWakeTargetsFunc                    func(context.Context, string) ([]string, error)
-	ListThreadsByConversationFunc                  func(context.Context, string) ([]*db.Thread, error)
-	ReviveThreadFunc                               func(context.Context, string) (int64, error)
-	ListForkedThreadIDsFunc                        func(context.Context, []string) ([]string, error)
-	ListInheritedSpawnChildrenFunc                 func(context.Context, string) ([]*db.InheritedSpawnChild, error)
-	ThreadAwaitsReplyFunc                          func(context.Context, string) (bool, error)
-	IsLatestTurnInThreadFunc                       func(context.Context, string, string) (bool, error)
-	CountMessagesInThreadFunc                      func(context.Context, string) (int, error)
-	CountMessagesInChatOutsideThreadFunc           func(context.Context, string, string) (int, error)
-	ListTranscriptSiblingMessagesInRangeFunc       func(context.Context, string, string, int64, *int64, int) ([]*db.Message, error)
-	GetWorkflowByThreadFunc                        func(context.Context, string, string) (*db.Workflow, error)
-	ListWorkflowsByChatFunc                        func(context.Context, string) ([]*db.Workflow, error)
-	ListMessagesFunc                               func(context.Context, string, db.MessageListOptions) ([]*db.Message, error)
-	ListContentBlocksForMessagesFunc               func(context.Context, []string) ([]*db.MessageContentBlock, error)
-	GetToolCallFunc                                func(context.Context, string) (*db.ToolCall, error)
-	GetToolResultBlockFunc                         func(context.Context, string) (*db.MessageContentBlock, error)
-	ListToolResultBlocksFunc                       func(context.Context, string) ([]*db.MessageContentBlock, error)
-	PendingQuestionsByThreadFunc                   func(context.Context, string) (map[string]*db.Question, error)
-	EnqueueAgentMessageFunc                        func(context.Context, *db.AgentMessage) error
-	EnqueueAgentMessageOnceFunc                    func(context.Context, *db.AgentMessage) (bool, error)
-	GetAgentMessageFunc                            func(context.Context, string) (*db.AgentMessage, error)
-	CancelQueuedAgentMessageFunc                   func(context.Context, string, string) (bool, error)
-	DeleteUndeliveredAgentMessageFunc              func(context.Context, string, string) (bool, error)
-	CountQueuedAgentMessagesForThreadFunc          func(context.Context, string) (int64, error)
-	ListQueuedAgentMessagesForThreadFunc           func(context.Context, string) ([]*db.AgentMessage, error)
-	CreatePlanFunc                                 func(context.Context, *db.Plan) error
-	CreateTaskFunc                                 func(context.Context, *db.Task) error
-	ListPlansByChatIDFunc                          func(context.Context, string) ([]*db.Plan, error)
-	ListTasksByPlanFunc                            func(context.Context, string) ([]*db.Task, error)
-	GetStepExecutionsForChatFunc                   func(context.Context, string) ([]*db.ChatStepExecution, error)
-	GetBasicStepExecutionsForChatFunc              func(context.Context, string) ([]*db.ChatStepExecution, error)
-	ListStepExecutionRecordsForChatFunc            func(context.Context, string, string, int) ([]*db.StepExecution, error)
-	GetLatestUpdateSequenceFunc                    func(context.Context, string) (int64, error)
-	GetUpdatesSinceFunc                            func(context.Context, string, int64, int) ([]db.ChatUpdate, error)
-	ListErrorUpdatesInRangeFunc                    func(context.Context, string, *time.Time, string, int64) ([]db.ChatUpdate, error)
-	GetLatestWorkflowNodeUpdatesFunc               func(context.Context, string, string) ([]db.ChatUpdate, error)
-	GetLatestUserUpdateSequenceFunc                func(context.Context, string) (int64, error)
-	ListWorktreesByIDsFunc                         func(context.Context, []string) ([]*db.Worktree, error)
-	ListMainWorktreesForUserFunc                   func(context.Context, string, *string) ([]*db.Worktree, error)
-	UnarchiveWorktreeFunc                          func(context.Context, string) error
-	GetWorkflowCheckpointFunc                      func(context.Context, string) (*db.WorkflowCheckpoint, error)
-	ListLiveBackgroundSpawnsFunc                   func(context.Context, string) ([]*db.LiveBackgroundSpawn, error)
-	ListToolGrantsFunc                             func(context.Context, string) ([]*db.ToolGrant, error)
-	GetStoppedSpawnAgentFunc                       func(context.Context, string, string) (*db.StoppedSpawnAgent, error)
-	GetTriggerEventByChatIDFunc                    func(context.Context, string) (*core.TriggerEvent, error)
-	CreateNumberedMessageFunc                      func(context.Context, *db.Message) error
-	CreateThreadFunc                               func(context.Context, *db.Thread) (*db.Thread, error)
-	GetThreadFunc                                  func(context.Context, string) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusionFunc        func(context.Context, string, string, bool) (bool, error)
-	GetThreadWithParentFunc                        func(context.Context, string) (*db.Thread, *string, error)
-	GetRootThreadFunc                              func(context.Context, string) (*db.Thread, error)
-	SenderTitleFunc                                func(context.Context, string) *string
-	CreateWorkflowFunc                             func(context.Context, *db.Workflow) error
-	UpdateThreadWorkflowFunc                       func(context.Context, string, string) (*db.Thread, error)
-	CreateContextWindowFunc                        func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
-	GetContextWindowFunc                           func(context.Context, string) (*db.ContextWindow, error)
-	GetLatestContextWindowFunc                     func(context.Context, string) (*db.ContextWindow, error)
-	GetContextWindowBySequenceFunc                 func(context.Context, string, int) (*db.ContextWindow, error)
-	GetMaxSequenceForThreadFunc                    func(context.Context, string) (int, error)
-	SetCompactionSummaryMessageFunc                func(context.Context, string, string) (*db.ContextWindow, error)
-	GetMessageFunc                                 func(context.Context, string) (*db.Message, error)
-	FindMessageFunc                                func(context.Context, string) (*db.Message, error)
-	GetMessagesByContextWindowFunc                 func(context.Context, string, *int64) ([]*db.Message, error)
-	GetLatestMessageWithTokensInThreadFunc         func(context.Context, string, int) (*db.Message, error)
-	GetLatestMessageInThreadFunc                   func(context.Context, string) (*db.Message, error)
-	CountMessagesByContextWindowFunc               func(context.Context, string) (int, error)
-	CountMessagesByContextWindowUpToSeqFunc        func(context.Context, string, int64) (int, error)
-	ListRecentMessagesInContextWindowBeforeSeqFunc func(context.Context, string, int64, int) ([]*db.Message, error)
-	CreateMessageFunc                              func(context.Context, *db.Message) error
-	DeleteMessageFunc                              func(context.Context, string) error
-	GetMessageByActivityIDFunc                     func(context.Context, string, string) (*db.Message, error)
-	GetMessageByWorkflowAndActivityIDFunc          func(context.Context, string, string, string) (*db.Message, error)
-	GetEffectiveMessageCountFunc                   func(context.Context, string, string) (int, error)
-	AllocateMessageOrderFunc                       func(context.Context, string, string) (int64, int64, error)
-	AllocateContextWindowSequenceFunc              func(context.Context, string) (int, error)
-	GetContextUsageFunc                            func(context.Context, string, string) (*db.ContextUsage, error)
-	CreateContentBlockFunc                         func(context.Context, *db.MessageContentBlock) error
-	ListContentBlocksFunc                          func(context.Context, string) ([]*db.MessageContentBlock, error)
-	ListLiveToolCallsByChatFunc                    func(context.Context, string) ([]*db.ToolCall, error)
-	ListToolCallsByMessageIDsFunc                  func(context.Context, []string) ([]*db.ToolCall, error)
-	UpsertToolCallFunc                             func(context.Context, *db.ToolCall) error
-	UpsertToolCallResultFunc                       func(context.Context, string, *db.ToolCallResult) error
-	GetAttachmentFunc                              func(context.Context, string) (*db.Attachment, error)
-	GetAttachmentsByIDsFunc                        func(context.Context, []string) ([]*db.Attachment, error)
-	CreateChatUpdateFunc                           func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
-	SaveMessageAtomicFunc                          func(context.Context, db.AtomicMessageWrite) (*db.AtomicMessageResult, error)
-	SeedSeqCounterForForkFunc                      func(context.Context, string, string) error
-	RunTxFunc                                      func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	GetChatFunc                                    func(context.Context, string) (*db.Chat, error)
-	UpdateChatFunc                                 func(context.Context, *db.Chat) error
-	GetWorkflowFunc                                func(context.Context, string) (*db.Workflow, error)
-	UpdateWorkflowStatusFunc                       func(context.Context, string, db.WorkflowStatus) error
-	CompareAndSwapWorkflowStatusFunc               func(context.Context, string, db.WorkflowStatus, db.WorkflowStatus) (bool, error)
-	DeleteWorkflowCheckpointFunc                   func(context.Context, string) error
-	CascadeTerminalStatusToDescendantsFunc         func(context.Context, string, db.WorkflowStopReason) error
-	CascadeTerminalStatusToThreadSubtreeFunc       func(context.Context, string, db.WorkflowStopReason) error
-	ListPendingQuestionsByChatFunc                 func(context.Context, string) ([]*db.Question, error)
-	ResolveQuestionFunc                            func(context.Context, string, *string) error
-	EmitQuestionUpdateFunc                         func(context.Context, string, db.QuestionUpdate) error
-	LockChatRunControlFunc                         func(context.Context, string) (func(), error)
-	ClearUsageLimitWaitFunc                        func(context.Context, string, string, time.Time) error
-	ClaimPendingTriggerEventFunc                   func(context.Context, string, map[string]any, *core.TriggerEventDefinition) (bool, error)
-	ClaimWorkflowStartFunc                         func(context.Context, string) (bool, error)
-	CopyChatSelectionFunc                          func(context.Context, string, string, string) error
-	CountMessagesInChatFunc                        func(context.Context, string) (int, error)
-	CreateChatFunc                                 func(context.Context, *db.Chat) error
-	CreateTriggerEventFunc                         func(context.Context, *core.TriggerEvent) (bool, error)
-	CreateUserUpdateFunc                           func(context.Context, *db.UserUpdate) error
-	GetChatSelectionFunc                           func(context.Context, string) (*chatselection.Selection, error)
-	GetDaemonFunc                                  func(context.Context, string) (*db.Daemon, error)
-	GetPresetBySlugFunc                            func(context.Context, string, string) (*db.Preset, error)
-	GetPresetBySlugAndProjectFunc                  func(context.Context, string, string, string) (*db.Preset, error)
-	GetProjectFunc                                 func(context.Context, string) (*db.Project, error)
-	GetProjectMachinePresetsJSONFunc               func(context.Context, string, string) (*string, bool, error)
-	GetProjectMachineWorkflowsJSONFunc             func(context.Context, string, string) (*string, bool, error)
-	GetProjectPresetsJSONFunc                      func(context.Context, string) (*string, error)
-	GetProjectWithUserCheckFunc                    func(context.Context, string, string) (*db.Project, error)
-	GetProjectWorkflowsJSONFunc                    func(context.Context, string) (*string, error)
-	GetSettingFunc                                 func(context.Context, string, *string, string) (*db.Setting, error)
-	GetTriggerEventByDedupeFunc                    func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
-	GetUsableWorkflowBySlugFunc                    func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorkflowDraftBySlugFunc                     func(context.Context, string, string) (*db.WorkflowDraft, error)
-	GetWorktreeFunc                                func(context.Context, string) (*db.Worktree, error)
-	ListProjectDaemonsForProjectFunc               func(context.Context, string) ([]*core.ProjectDaemon, error)
-	ListWorktreesFunc                              func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
-	MarkWorkflowStartFailedFunc                    func(context.Context, string) (bool, error)
-	MutateChatSelectionFunc                        func(context.Context, string, func(current *chatselection.Selection) (*chatselection.Selection, error)) (*chatselection.Selection, error)
-	SaveMessageToThreadFunc                        func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
-	SaveMessageToThreadOnceFunc                    func(context.Context, string, string, int32, string, *string, []string, *int32, string) (*db.Message, bool, error)
-	UpdateChatActiveDaemonFunc                     func(context.Context, string, *string) error
-	UpdateTriggerEventOutcomeFunc                  func(context.Context, string, core.TriggerEventOutcome, string, *string) error
-	UpdateTriggerEventPayloadFunc                  func(context.Context, string, map[string]any) error
-	UpdateWorkflowNameFunc                         func(context.Context, string, string) error
-	WorkflowSourceDiagnosticFunc                   func(context.Context, string, string, string) (string, error)
-	PinChatDaemonIfUnsetFunc                       func(context.Context, string, string) (string, error)
-	ListToolCallsByIDsFunc                         func(context.Context, []string) ([]*db.ToolCall, error)
-	SenderTitlesFunc                               func(context.Context, []string) (map[string]string, error)
+	ListChatsFunc                                            func(context.Context, db.ChatFilters) ([]*db.Chat, error)
+	GetChatRowFunc                                           func(context.Context, string) (*db.ChatRow, error)
+	GetChatRowWithUserCheckFunc                              func(context.Context, string, string) (*db.ChatRow, error)
+	GetChatWithUserCheckFunc                                 func(context.Context, string, string) (*db.Chat, error)
+	SearchChatsFunc                                          func(context.Context, db.ChatSearchFilters) ([]*db.Chat, error)
+	ListArchivedChatsFunc                                    func(context.Context, string) ([]*db.ArchivedChatInfo, error)
+	DeleteChatFunc                                           func(context.Context, string) error
+	UpdateChatStateFunc                                      func(context.Context, string, db.ChatState, string) error
+	UpdateChatUnreadFunc                                     func(context.Context, string, bool, string) error
+	SetChatAdoptedFunc                                       func(context.Context, string, string, bool) (bool, error)
+	SetChatDaemonBlockedFunc                                 func(context.Context, string, bool) error
+	SetChatPausedForMachineFunc                              func(context.Context, string, bool) (bool, error)
+	SetChatQueuedForMachineFunc                              func(context.Context, string, bool) (bool, error)
+	MoveChatToProjectFunc                                    func(context.Context, db.ChatMove) (bool, error)
+	ListCapacityWakeTargetsFunc                              func(context.Context, string) ([]string, error)
+	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
+	ReviveThreadFunc                                         func(context.Context, string) (int64, error)
+	ListForkedThreadIDsFunc                                  func(context.Context, []string) ([]string, error)
+	ListInheritedSpawnChildrenFunc                           func(context.Context, string) ([]*db.InheritedSpawnChild, error)
+	ThreadAwaitsReplyFunc                                    func(context.Context, string) (bool, error)
+	IsLatestTurnInThreadFunc                                 func(context.Context, string, string) (bool, error)
+	CountMessagesInThreadFunc                                func(context.Context, string) (int, error)
+	CountMessagesInChatOutsideThreadFunc                     func(context.Context, string, string) (int, error)
+	ListTranscriptSiblingMessagesInRangeFunc                 func(context.Context, string, string, int64, *int64, int) ([]*db.Message, error)
+	GetWorkflowByThreadFunc                                  func(context.Context, string, string) (*db.Workflow, error)
+	ListWorkflowsByChatFunc                                  func(context.Context, string) ([]*db.Workflow, error)
+	ListMessagesFunc                                         func(context.Context, string, db.MessageListOptions) ([]*db.Message, error)
+	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
+	GetToolCallFunc                                          func(context.Context, string) (*db.ToolCall, error)
+	GetToolResultBlockFunc                                   func(context.Context, string) (*db.MessageContentBlock, error)
+	ListToolResultBlocksFunc                                 func(context.Context, string) ([]*db.MessageContentBlock, error)
+	PendingQuestionsByThreadFunc                             func(context.Context, string) (map[string]*db.Question, error)
+	EnqueueAgentMessageFunc                                  func(context.Context, *db.AgentMessage) error
+	EnqueueAgentMessageOnceFunc                              func(context.Context, *db.AgentMessage) (bool, error)
+	GetAgentMessageFunc                                      func(context.Context, string) (*db.AgentMessage, error)
+	CancelQueuedAgentMessageFunc                             func(context.Context, string, string) (bool, error)
+	DeleteUndeliveredAgentMessageFunc                        func(context.Context, string, string) (bool, error)
+	CountQueuedAgentMessagesForThreadFunc                    func(context.Context, string) (int64, error)
+	ListQueuedAgentMessagesForThreadFunc                     func(context.Context, string) ([]*db.AgentMessage, error)
+	CreatePlanFunc                                           func(context.Context, *db.Plan) error
+	CreateTaskFunc                                           func(context.Context, *db.Task) error
+	ListPlansByChatIDFunc                                    func(context.Context, string) ([]*db.Plan, error)
+	ListTasksByPlanFunc                                      func(context.Context, string) ([]*db.Task, error)
+	GetStepExecutionsForChatFunc                             func(context.Context, string) ([]*db.ChatStepExecution, error)
+	GetBasicStepExecutionsForChatFunc                        func(context.Context, string) ([]*db.ChatStepExecution, error)
+	ListStepExecutionRecordsForChatFunc                      func(context.Context, string, string, int) ([]*db.StepExecution, error)
+	GetLatestUpdateSequenceFunc                              func(context.Context, string) (int64, error)
+	GetUpdatesSinceFunc                                      func(context.Context, string, int64, int) ([]db.ChatUpdate, error)
+	ListErrorUpdatesInRangeFunc                              func(context.Context, string, *time.Time, string, int64) ([]db.ChatUpdate, error)
+	GetLatestWorkflowNodeUpdatesFunc                         func(context.Context, string, string) ([]db.ChatUpdate, error)
+	GetLatestUserUpdateSequenceFunc                          func(context.Context, string) (int64, error)
+	ListWorktreesByIDsFunc                                   func(context.Context, []string) ([]*db.Worktree, error)
+	ListMainWorktreesForUserFunc                             func(context.Context, string, *string) ([]*db.Worktree, error)
+	UnarchiveWorktreeFunc                                    func(context.Context, string) error
+	GetWorkflowCheckpointFunc                                func(context.Context, string) (*db.WorkflowCheckpoint, error)
+	ListLiveBackgroundSpawnsFunc                             func(context.Context, string) ([]*db.LiveBackgroundSpawn, error)
+	ListToolGrantsFunc                                       func(context.Context, string) ([]*db.ToolGrant, error)
+	GetStoppedSpawnAgentFunc                                 func(context.Context, string, string) (*db.StoppedSpawnAgent, error)
+	GetTriggerEventByChatIDFunc                              func(context.Context, string) (*core.TriggerEvent, error)
+	CreateNumberedMessageFunc                                func(context.Context, *db.Message) error
+	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
+	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
+	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
+	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
+	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
+	SenderTitleFunc                                          func(context.Context, string) *string
+	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
+	UpdateThreadWorkflowFunc                                 func(context.Context, string, string) (*db.Thread, error)
+	CreateContextWindowFunc                                  func(context.Context, *db.ContextWindow) (*db.ContextWindow, error)
+	GetContextWindowFunc                                     func(context.Context, string) (*db.ContextWindow, error)
+	GetLatestContextWindowFunc                               func(context.Context, string) (*db.ContextWindow, error)
+	GetContextWindowBySequenceFunc                           func(context.Context, string, int) (*db.ContextWindow, error)
+	GetMaxSequenceForThreadFunc                              func(context.Context, string) (int, error)
+	SetCompactionSummaryMessageFunc                          func(context.Context, string, string) (*db.ContextWindow, error)
+	GetMessageFunc                                           func(context.Context, string) (*db.Message, error)
+	FindMessageFunc                                          func(context.Context, string) (*db.Message, error)
+	GetMessagesByContextWindowFunc                           func(context.Context, string, *int64) ([]*db.Message, error)
+	GetLatestMessageWithTokensInThreadFunc                   func(context.Context, string, int) (*db.Message, error)
+	GetLatestMessageInThreadFunc                             func(context.Context, string) (*db.Message, error)
+	CountMessagesByContextWindowFunc                         func(context.Context, string) (int, error)
+	CountMessagesByContextWindowUpToSeqFunc                  func(context.Context, string, int64) (int, error)
+	ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc func(context.Context, string, int64, int) ([]*db.Message, error)
+	CreateMessageFunc                                        func(context.Context, *db.Message) error
+	DeleteMessageFunc                                        func(context.Context, string) error
+	GetMessageByActivityIDFunc                               func(context.Context, string, string) (*db.Message, error)
+	GetMessageByWorkflowAndActivityIDFunc                    func(context.Context, string, string, string) (*db.Message, error)
+	GetEffectiveMessageCountFunc                             func(context.Context, string, string) (int, error)
+	AllocateMessageOrderFunc                                 func(context.Context, string, string) (int64, int64, error)
+	AllocateContextWindowSequenceFunc                        func(context.Context, string) (int, error)
+	GetContextUsageFunc                                      func(context.Context, string, string) (*db.ContextUsage, error)
+	CreateContentBlockFunc                                   func(context.Context, *db.MessageContentBlock) error
+	ListContentBlocksFunc                                    func(context.Context, string) ([]*db.MessageContentBlock, error)
+	ListLiveToolCallsByChatFunc                              func(context.Context, string) ([]*db.ToolCall, error)
+	ListToolCallsByMessageIDsFunc                            func(context.Context, []string) ([]*db.ToolCall, error)
+	UpsertToolCallFunc                                       func(context.Context, *db.ToolCall) error
+	UpsertToolCallResultFunc                                 func(context.Context, string, *db.ToolCallResult) error
+	GetAttachmentFunc                                        func(context.Context, string) (*db.Attachment, error)
+	GetAttachmentsByIDsFunc                                  func(context.Context, []string) ([]*db.Attachment, error)
+	CreateChatUpdateFunc                                     func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
+	SaveMessageAtomicFunc                                    func(context.Context, db.AtomicMessageWrite) (*db.AtomicMessageResult, error)
+	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
+	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+	GetChatFunc                                              func(context.Context, string) (*db.Chat, error)
+	UpdateChatFunc                                           func(context.Context, *db.Chat) error
+	GetWorkflowFunc                                          func(context.Context, string) (*db.Workflow, error)
+	UpdateWorkflowStatusFunc                                 func(context.Context, string, db.WorkflowStatus) error
+	CompareAndSwapWorkflowStatusFunc                         func(context.Context, string, db.WorkflowStatus, db.WorkflowStatus) (bool, error)
+	DeleteWorkflowCheckpointFunc                             func(context.Context, string) error
+	CascadeTerminalStatusToDescendantsFunc                   func(context.Context, string, db.WorkflowStopReason) error
+	CascadeTerminalStatusToThreadSubtreeFunc                 func(context.Context, string, db.WorkflowStopReason) error
+	ListPendingQuestionsByChatFunc                           func(context.Context, string) ([]*db.Question, error)
+	ResolveQuestionFunc                                      func(context.Context, string, *string) error
+	EmitQuestionUpdateFunc                                   func(context.Context, string, db.QuestionUpdate) error
+	LockChatRunControlFunc                                   func(context.Context, string) (func(), error)
+	ClearUsageLimitWaitFunc                                  func(context.Context, string, string, time.Time) error
+	ClaimPendingTriggerEventFunc                             func(context.Context, string, map[string]any, *core.TriggerEventDefinition) (bool, error)
+	ClaimWorkflowStartFunc                                   func(context.Context, string) (bool, error)
+	CopyChatSelectionFunc                                    func(context.Context, string, string, string) error
+	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
+	CreateChatFunc                                           func(context.Context, *db.Chat) error
+	CreateTriggerEventFunc                                   func(context.Context, *core.TriggerEvent) (bool, error)
+	CreateUserUpdateFunc                                     func(context.Context, *db.UserUpdate) error
+	GetChatSelectionFunc                                     func(context.Context, string) (*chatselection.Selection, error)
+	GetDaemonFunc                                            func(context.Context, string) (*db.Daemon, error)
+	GetPresetBySlugFunc                                      func(context.Context, string, string) (*db.Preset, error)
+	GetPresetBySlugAndProjectFunc                            func(context.Context, string, string, string) (*db.Preset, error)
+	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
+	GetProjectMachinePresetsJSONFunc                         func(context.Context, string, string) (*string, bool, error)
+	GetProjectMachineWorkflowsJSONFunc                       func(context.Context, string, string) (*string, bool, error)
+	GetProjectPresetsJSONFunc                                func(context.Context, string) (*string, error)
+	GetProjectWithUserCheckFunc                              func(context.Context, string, string) (*db.Project, error)
+	GetProjectWorkflowsJSONFunc                              func(context.Context, string) (*string, error)
+	GetSettingFunc                                           func(context.Context, string, *string, string) (*db.Setting, error)
+	GetTriggerEventByDedupeFunc                              func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
+	GetUsableWorkflowBySlugFunc                              func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorkflowDraftBySlugFunc                               func(context.Context, string, string) (*db.WorkflowDraft, error)
+	GetWorktreeFunc                                          func(context.Context, string) (*db.Worktree, error)
+	ListProjectDaemonsForProjectFunc                         func(context.Context, string) ([]*core.ProjectDaemon, error)
+	ListWorktreesFunc                                        func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
+	MarkWorkflowStartFailedFunc                              func(context.Context, string) (bool, error)
+	MutateChatSelectionFunc                                  func(context.Context, string, func(current *chatselection.Selection) (*chatselection.Selection, error)) (*chatselection.Selection, error)
+	SaveMessageToThreadFunc                                  func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
+	SaveMessageToThreadOnceFunc                              func(context.Context, string, string, int32, string, *string, []string, *int32, string) (*db.Message, bool, error)
+	UpdateChatActiveDaemonFunc                               func(context.Context, string, *string) error
+	UpdateTriggerEventOutcomeFunc                            func(context.Context, string, core.TriggerEventOutcome, string, *string) error
+	UpdateTriggerEventPayloadFunc                            func(context.Context, string, map[string]any) error
+	UpdateWorkflowNameFunc                                   func(context.Context, string, string) error
+	WorkflowSourceDiagnosticFunc                             func(context.Context, string, string, string) (string, error)
+	PinChatDaemonIfUnsetFunc                                 func(context.Context, string, string) (string, error)
+	ListToolCallsByIDsFunc                                   func(context.Context, []string) ([]*db.ToolCall, error)
+	SenderTitlesFunc                                         func(context.Context, []string) (map[string]string, error)
 }
 
 // ListChats records the call and delegates to ListChatsFunc when set.
@@ -915,13 +915,13 @@ func (m *MockRepository) CountMessagesByContextWindowUpToSeq(ctx context.Context
 	return 0, contractkit.MockNotSet("MockRepository", "CountMessagesByContextWindowUpToSeq")
 }
 
-// ListRecentMessagesInContextWindowBeforeSeq records the call and delegates to ListRecentMessagesInContextWindowBeforeSeqFunc when set.
-func (m *MockRepository) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error) {
-	m.Recorder.Record("ListRecentMessagesInContextWindowBeforeSeq", ctx, contextWindowID, beforeSeq, limit)
-	if m.ListRecentMessagesInContextWindowBeforeSeqFunc != nil {
-		return m.ListRecentMessagesInContextWindowBeforeSeqFunc(ctx, contextWindowID, beforeSeq, limit)
+// ListRecentTranscriptMessagesInContextWindowBeforeSeq records the call and delegates to ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc when set.
+func (m *MockRepository) ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error) {
+	m.Recorder.Record("ListRecentTranscriptMessagesInContextWindowBeforeSeq", ctx, contextWindowID, beforeSeq, limit)
+	if m.ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc != nil {
+		return m.ListRecentTranscriptMessagesInContextWindowBeforeSeqFunc(ctx, contextWindowID, beforeSeq, limit)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListRecentMessagesInContextWindowBeforeSeq")
+	return nil, contractkit.MockNotSet("MockRepository", "ListRecentTranscriptMessagesInContextWindowBeforeSeq")
 }
 
 // CreateMessage records the call and delegates to CreateMessageFunc when set.
