@@ -297,6 +297,19 @@ describe("NewChatView: where the chat runs", () => {
       expect(machineArg()).toEqual({ daemonId: undefined, noMachine: undefined });
     });
 
+    // The open chat is on the gpu-box branch workspace, and Add project's
+    // folder on the laptop attached to this project: the named laptop wins,
+    // and the branch workspace is left for main, as a pick in the picker does.
+    it("leaves a branch workspace on another machine when the opening screen names a machine", async () => {
+      useNewChatMachineStore.getState().offer({ projectId: "p1", daemonId: "d-laptop" });
+      render(<NewChatView tabId="t1" />);
+      await waitFor(() => expect(screen.getByTestId("machine-picker")).toHaveTextContent("laptop"));
+      fireEvent.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => expect(startChat).toHaveBeenCalled());
+      expect((startChat.mock.calls[0] as unknown[])[0]).toBe("w-main");
+      expect(machineArg()).toEqual({ daemonId: "d-laptop", noMachine: undefined });
+    });
+
     it("moves to the main workspace, and offers only that machine's workspaces, when another machine is chosen", async () => {
       render(<NewChatView tabId="t1" />);
       fireEvent.click(screen.getByTestId("machine-picker"));

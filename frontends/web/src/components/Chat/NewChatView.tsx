@@ -207,15 +207,7 @@ export function NewChatView({
       canChoose(placement, machineChoice);
     if (!keep) setMachineChoice(null);
   }
-  // The screen that opened this view named the machine the chat is for (Add
-  // project's folder or clone, newChatMachineStore): it is the user's choice,
-  // taken once its project is current, after the reset above.
   const requestedMachine = useNewChatMachineStore((state) => state.pending);
-  useEffect(() => {
-    if (!currentProject?.id || requestedMachine?.projectId !== currentProject.id) return;
-    const daemonId = useNewChatMachineStore.getState().take(currentProject.id);
-    if (daemonId) setMachineChoice(daemonId);
-  }, [currentProject?.id, requestedMachine]);
   // A branch workspace is a checkout on one machine, so selecting one selects
   // its machine (lib/workspaceMachine.ts); the server refuses anything else.
   const machineIds = new Set(daemons.map((d) => d.daemonId));
@@ -492,6 +484,29 @@ export function NewChatView({
       void handleWorkspaceSelect(mainWorktree?.id ?? null);
     }
   };
+
+  // The screen that opened this view named the machine the chat is for (Add
+  // project's folder or clone, newChatMachineStore): taken once its project
+  // is current, after the project-switch reset, and applied as the user's own
+  // pick. Like a pick in the picker, it leaves a branch workspace that lives
+  // on another machine for the main one, but only once the workspace
+  // selection has settled: the open chat's workspace (and so its machine's
+  // lock) is selected after this view mounts.
+  const [machineRequest, setMachineRequest] = useState<string | null>(null);
+  useEffect(() => {
+    if (!currentProject?.id || requestedMachine?.projectId !== currentProject.id) return;
+    const daemonId = useNewChatMachineStore.getState().take(currentProject.id);
+    if (!daemonId) return;
+    setMachineChoice(daemonId);
+    setMachineRequest(daemonId);
+  }, [currentProject?.id, requestedMachine]);
+  const leaveForMain = useRef(() => {});
+  leaveForMain.current = () => void handleWorkspaceSelect(mainWorktree?.id ?? null);
+  useEffect(() => {
+    if (!machineRequest || selectedWorkspaceId === undefined) return;
+    if (choiceLeavesWorkspace(machineRequest, resolvedMachine.lockedBy)) leaveForMain.current();
+    setMachineRequest(null);
+  }, [machineRequest, selectedWorkspaceId, resolvedMachine.lockedBy]);
 
   // Get display name for selected workspace
   const selectedWorkspaceName = selectedWorkspaceId
