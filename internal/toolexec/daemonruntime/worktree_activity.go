@@ -269,6 +269,14 @@ func (g *recoveryAdmission) acquire(paths []string) (*WorktreeRecoveryLease, err
 // that opens the quarantine path by name between a Check and the next unlink
 // is not fenced; it never was for any process on the machine, managed or not,
 // so scoping managed work to its own directory does not widen it.
+//
+// Residual risk (owner-accepted, 2026-11-08, question bccdb4da: "Land it now,
+// race documented"): a process that writes into the random quarantine path
+// between the last Check and the unlink loses that write. Main has the same
+// window for every unmanaged process. A daemon without root cannot fence it
+// (fanotify FAN_OPEN_PERM needs CAP_SYS_ADMIN; so does a mount-namespace
+// barrier). Capture-before-delete, in the all-worktrees reclaim redesign,
+// makes such a write recoverable rather than closing the window.
 func managedRecoveryUse(leased []string) error {
 	return managedUseIn(leased, managedWorkSnapshot())
 }
