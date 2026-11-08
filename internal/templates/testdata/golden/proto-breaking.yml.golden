@@ -1,0 +1,68 @@
+# yours: scaffolded once, never touched again — forge will not overwrite this file.
+# This CI workflow is a starting point you own — add jobs, secrets, and steps freely.
+# Deleting it sticks (.forge/scaffolded/); `forge project rescaffold <path>` re-creates it.
+# Source: internal/templates/ci/github/proto-breaking.yml.tmpl.
+#
+# Skipped on pushes to main — main is the baseline for compatibility.
+name: Proto Breaking Change Detection
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "proto/**"
+      - "buf.yaml"
+      - "buf.gen.yaml"
+
+permissions:
+  contents: read
+
+# Cancel the run in progress on a pull request only — the same rule as every
+# forge workflow, so it stays right if this one ever runs on main, where a
+# newer push supersedes only the pending run (ci.yml says why).
+concurrency:
+  group: proto-breaking-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  buf-breaking:
+    name: buf breaking
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The base branch's history, so the step below can ask whether it
+          # has any protos to compare against.
+          fetch-depth: 0
+      # There is nothing to break on the PR that INTRODUCES the first protos:
+      # buf fails with `Module "path: "proto"" had no .proto files` against a
+      # base that has none. That is not a breaking change, so the check passes
+      # with a notice instead of failing the first proto PR of every project.
+      - name: Check the base branch has protos
+        id: base
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if git ls-tree -r --name-only "origin/${BASE_REF}" | grep -q '\.proto$'; then
+            echo "has_protos=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::origin/${BASE_REF} has no .proto files yet — nothing to check for breaking changes."
+            echo "has_protos=false" >> "$GITHUB_OUTPUT"
+          fi
+      # Breaking-change detection ONLY. buf-action's defaults also run lint
+      # and format, push to the BSR, and post a PR comment: lint and format
+      # are already gated (ci.yml's `buf lint`, pre-commit's `buf format`), a
+      # push needs BSR credentials this project may not have, and the comment
+      # needs a write-scoped token this read-only workflow does not have
+      # ("Resource not accessible by integration").
+      - uses: bufbuild/buf-action@v1
+        if: steps.base.outputs.has_protos == 'true'
+        with:
+          breaking: true
+          breaking_against: "https://github.com/${{ github.repository }}.git#branch=${{ github.base_ref }}"
+          lint: false
+          format: false
+          push: false
+          archive: false
+          pr_comment: false

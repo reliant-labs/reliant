@@ -1,0 +1,70 @@
+package {{.Package}}
+
+import (
+	"context"
+	"log/slog"
+	"testing"
+	"time"
+{{- if .HasConfig}}
+
+	"{{.Module}}/pkg/config"
+{{- end}}
+)
+
+func TestWorkerStartStop(t *testing.T) {
+	w := New(Deps{
+		Logger: slog.Default(),
+{{- if .HasConfig}}
+		Config: &config.Config{},
+{{- end}}
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- w.Start(ctx)
+	}()
+
+	// Give worker time to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Trigger shutdown
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Start returned error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("worker did not stop within timeout")
+	}
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopCancel()
+	if err := w.Stop(stopCtx); err != nil {
+		t.Fatalf("Stop returned error: %v", err)
+	}
+}
+
+// TestWorkerRunOnceAcceptsContext pins the context-aware cycle contract:
+// runOnce takes the lifecycle ctx so per-cycle work can observe graceful
+// shutdown mid-flight. If you've replaced the scaffold body, extend this
+// test rather than dropping it — a cancelled ctx must not wedge or panic
+// the cycle.
+func TestWorkerRunOnceAcceptsContext(t *testing.T) {
+	w := New(Deps{
+		Logger: slog.Default(),
+{{- if .HasConfig}}
+		Config: &config.Config{},
+{{- end}}
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// The scaffold body only logs, so it returns nil even on a cancelled
+	// ctx. Real bodies should return ctx.Err() (or bail early) once ctx
+	// is done.
+	_ = w.runOnce(ctx)
+}

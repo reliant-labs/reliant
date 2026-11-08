@@ -1,0 +1,45 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// /auth/magic?code=… — the page an emailed sign-in link opens.
+//
+// Public (the route guard lists it beside /auth/sign-in) and rendered outside
+// the app shell, like the sign-in screen. The form is shared with the Vite
+// scaffold: src/components/magic-link-form.tsx.
+
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+import { AuthPage } from "@/components/auth-ui";
+import { MagicLinkForm } from "@/components/magic-link-form";
+import { useAuth } from "@/lib/auth/use-auth";
+import { joinBasePath } from "@/lib/basepath_gen";
+
+function Page() {
+  const searchParams = useSearchParams();
+  const { refresh } = useAuth();
+  return (
+    <AuthPage>
+      <MagicLinkForm
+        code={searchParams?.get("code") ?? null}
+        signInHref={joinBasePath("/auth/sign-in")}
+        onSignedIn={async () => {
+          // A full navigation, as the sign-in screen does: every provider
+          // re-initialises with the session in place.
+          await refresh();
+          window.location.assign(joinBasePath("/"));
+        }}
+      />
+    </AuthPage>
+  );
+}
+
+// useSearchParams bails out of prerendering; keep the bailout to this page.
+export default function MagicLinkPage() {
+  return (
+    <Suspense fallback={null}>
+      <Page />
+    </Suspense>
+  );
+}
