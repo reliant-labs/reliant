@@ -2,9 +2,13 @@
 package daemonruntime
 
 import (
+	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -96,24 +100,136 @@ func sameCheckoutPath(a, b string) bool {
 // its new branch: where another git process may make the same branch first.
 var beforeBranchCreate func(repoPath, branch string)
 
+// ownedBranch is a branch one create made: its name, the commit createBranch
+// set it to, and the token createBranch wrote into its one reflog entry. The
+// token is what proves ownership later: a tip still at the start point does
+// not (anyone may set a branch to that commit), but a reflog holding only the
+// entry this create wrote does, because git appends to a ref's reflog on every
+// update and drops it with the ref.
+type ownedBranch struct {
+	name  string
+	oid   string
+	token string
+}
+
 // createBranch makes refs/heads/<branch> at startPoint's commit, only if no
 // such ref exists: `git update-ref <ref> <new> ""` is a compare-and-swap whose
 // expected old value is "absent", applied in git's own ref transaction. So it
 // succeeds only for the call that made the branch, whatever other git process
-// runs beside it, and that call alone may delete the branch again
-// (abandonCheckout). It records the reflog entry `git branch` would. On
-// failure it returns git's output.
-func createBranch(ctx context.Context, repoPath, branch, startPoint string) ([]byte, error) {
+// runs beside it. It records the reflog entry `git branch` would, tagged with
+// a token unique to this call, which deleteOwnedBranch checks before it takes
+// the branch back. On failure it returns git's output and a nil branch.
+func createBranch(ctx context.Context, repoPath, branch, startPoint string) (*ownedBranch, []byte, error) {
 	rev := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", startPoint+"^{commit}")
 	rev.Dir = repoPath
 	out, err := rev.Output()
 	if err != nil {
-		return []byte(fmt.Sprintf("fatal: invalid start point '%s'\n", startPoint)), err
+		return nil, []byte(fmt.Sprintf("fatal: invalid start point '%s'\n", startPoint)), err
 	}
-	cmd := exec.CommandContext(ctx, "git", "update-ref", "--create-reflog", "-m", "branch: Created from "+startPoint,
-		"refs/heads/"+branch, strings.TrimSpace(string(out)), "")
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return nil, []byte("fatal: could not generate a branch ownership token\n"), err
+	}
+	owned := &ownedBranch{name: branch, oid: strings.TrimSpace(string(out)), token: hex.EncodeToString(nonce[:])}
+	cmd := exec.CommandContext(ctx, "git", "update-ref", "--create-reflog", "-m", owned.reflogMessage(startPoint),
+		"refs/heads/"+branch, owned.oid, "")
 	cmd.Dir = repoPath
-	return cmd.CombinedOutput()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, out, err
+	}
+	return owned, nil, nil
+}
+
+// reflogTokenPrefix marks the token in the reflog entry createBranch writes.
+const reflogTokenPrefix = "reliant-worktree-create:"
+
+func (b *ownedBranch) reflogMessage(startPoint string) string {
+	return "branch: Created from " + startPoint + " (" + reflogTokenPrefix + b.token + ")"
+}
+
+// beforeBranchDelete, when set (tests only), runs while deleteOwnedBranch
+// holds the branch's ref lock, right before it checks ownership.
+var beforeBranchDelete func(repoPath, branch string)
+
+// deleteOwnedBranch deletes b only while it is provably still the branch this
+// create made, and returns whether it did. It deletes in one git ref
+// transaction: `prepare` takes the ref's lock and verifies its tip is still
+// b.oid, so no other git process can update the ref until the transaction
+// commits or aborts. With the lock held it checks that the reflog is exactly
+// the one entry createBranch wrote (a branch deleted and remade, or moved and
+// moved back, has another reflog) and that no worktree has the branch checked
+// out (what `git branch -D` refuses), and only then commits the deletion.
+// Anything else aborts and leaves the branch.
+func deleteOwnedBranch(ctx context.Context, repoPath string, b *ownedBranch) bool {
+	ref := "refs/heads/" + b.name
+	cmd := exec.CommandContext(ctx, "git", "update-ref", "--stdin")
+	cmd.Dir = repoPath
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return false
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return false
+	}
+	if err := cmd.Start(); err != nil {
+		return false
+	}
+	defer func() {
+		_ = stdin.Close()
+		_ = cmd.Wait()
+	}()
+	if _, err := fmt.Fprintf(stdin, "start\ndelete %s %s\nprepare\n", ref, b.oid); err != nil {
+		return false
+	}
+	replies := bufio.NewReader(stdout)
+	for _, want := range []string{"start: ok", "prepare: ok"} {
+		line, err := replies.ReadString('\n')
+		if err != nil || strings.TrimSpace(line) != want {
+			return false // the tip moved, or git refused: the transaction is gone
+		}
+	}
+	if beforeBranchDelete != nil {
+		beforeBranchDelete(repoPath, b.name)
+	}
+	if !branchStillOwned(ctx, repoPath, b) {
+		_, _ = io.WriteString(stdin, "abort\n")
+		return false
+	}
+	if _, err := io.WriteString(stdin, "commit\n"); err != nil {
+		return false
+	}
+	line, err := replies.ReadString('\n')
+	return err == nil && strings.TrimSpace(line) == "commit: ok"
+}
+
+// branchStillOwned reports whether b's reflog is exactly the entry
+// createBranch wrote and no worktree has b checked out. The caller holds the
+// ref's lock, so neither the ref nor its reflog can change under it.
+func branchStillOwned(ctx context.Context, repoPath string, b *ownedBranch) bool {
+	ref := "refs/heads/" + b.name
+	logCmd := exec.CommandContext(ctx, "git", "reflog", "show", "--format=%gs", ref, "--")
+	logCmd.Dir = repoPath
+	out, err := logCmd.Output()
+	if err != nil {
+		return false
+	}
+	entries := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(entries) != 1 || !strings.HasSuffix(entries[0], "("+reflogTokenPrefix+b.token+")") {
+		return false
+	}
+	wtCmd := exec.CommandContext(ctx, "git", "worktree", "list", "--porcelain")
+	wtCmd.Dir = repoPath
+	out, err = wtCmd.Output()
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) == "branch "+ref {
+			return false
+		}
+	}
+	return true
 }
 
 // worktreeAbandonTimeout bounds taking back one checkout. It runs on a
@@ -122,11 +238,12 @@ const worktreeAbandonTimeout = time.Minute
 
 // abandonCheckout removes a checkout this create made and is not handing to
 // its caller: the directory, its registration in the project's repository
-// (even one git left locked "initializing"), and branch when the create made
-// it and nothing has moved it since startPoint. The caller guarantees the
+// (even one git left locked "initializing"), and the branch the create made
+// (nil when it made none) while it is provably still that branch
+// (deleteOwnedBranch). The caller guarantees the
 // directory did not exist before this create, so everything in it is ours.
 // Best effort: what it cannot remove, the startup repair prunes later.
-func abandonCheckout(ctx context.Context, repoPath, checkout, branch, startPoint string) {
+func abandonCheckout(ctx context.Context, repoPath, checkout string, created *ownedBranch) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), worktreeAbandonTimeout)
 	defer cancel()
 	git := func(args ...string) (string, error) {
@@ -146,16 +263,10 @@ func abandonCheckout(ctx context.Context, repoPath, checkout, branch, startPoint
 		}
 	}
 
-	branchRemoved := false
-	if branch != "" && startPoint != "" {
-		head, errHead := git("rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
-		start, errStart := git("rev-parse", "--verify", "--quiet", startPoint+"^{commit}")
-		if errHead == nil && errStart == nil && head == start {
-			// git refuses to delete a branch checked out anywhere, so a
-			// branch someone else picked up in the meantime stays.
-			_, err := git("branch", "-D", branch)
-			branchRemoved = err == nil
-		}
+	branch, branchRemoved := "", false
+	if created != nil {
+		branch = created.name
+		branchRemoved = deleteOwnedBranch(ctx, repoPath, created)
 	}
 	if removeErr != nil {
 		logging.WarnContext(ctx, "worktree.create could not take back its unfinished checkout; the startup repair prunes what is left",

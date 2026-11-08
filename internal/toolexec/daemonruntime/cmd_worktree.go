@@ -275,8 +275,10 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	// tip may well be the start point too), so a new branch is created here
 	// first, by a compare-and-swap that succeeds only while the ref does not
 	// exist (createBranch), and then checked out. The branch is this call's
-	// exactly when that swap succeeded.
-	createdBranch := ""
+	// exactly when that swap succeeded, and a rollback deletes it only while
+	// it is provably still that branch: the reflog token createBranch wrote,
+	// checked under the ref's lock (deleteOwnedBranch), not its tip.
+	var createdBranch *ownedBranch
 
 	// Create the git worktree. A new branch starts from the resolved start
 	// point with no upstream: a base taken from origin is a starting commit,
@@ -300,8 +302,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		if beforeBranchCreate != nil {
 			beforeBranchCreate(req.ProjectPath, req.Branch)
 		}
-		if output, err = createBranch(ctx, req.ProjectPath, req.Branch, startPoint); err == nil {
-			createdBranch = req.Branch
+		if createdBranch, output, err = createBranch(ctx, req.ProjectPath, req.Branch, startPoint); err == nil {
 			worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
 		}
 	}
@@ -360,7 +361,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		if preExisted || forced {
 			removeIfEmpty(worktreePath)
 		} else {
-			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
+			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch)
 		}
 		if parent := filepath.Dir(worktreePath); parent != worktreePath {
 			removeIfEmpty(parent)
@@ -404,7 +405,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 			if forced {
 				return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head", WorktreePath: worktreePath})
 			}
-			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
+			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch)
 			if preExisted {
 				_ = os.MkdirAll(worktreePath, 0o755)
 			}
@@ -431,7 +432,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		if forced {
 			return json.Marshal(worktreeCreateResponse{Error: msg, WorktreePath: worktreePath})
 		}
-		abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
+		abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch)
 		if preExisted {
 			_ = os.MkdirAll(worktreePath, 0o755)
 		} else if parent := filepath.Dir(worktreePath); parent != worktreePath {

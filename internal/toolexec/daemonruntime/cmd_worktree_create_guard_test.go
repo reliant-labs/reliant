@@ -4,6 +4,7 @@ package daemonruntime
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -122,22 +123,107 @@ func TestWorktreeCreate_AnUnsyncedCheckoutIsNotReportedCreated(t *testing.T) {
 	require.NotContains(t, guardRepoBranches(t, projectPath), "feat/unsynced", "branch left behind")
 }
 
-// A checkout that predates the call is never taken back, nor a branch the
-// call did not make.
+// guardCreateBranch makes branch at main as worktree.create does and checks
+// it out at checkout.
+func guardCreateBranch(t *testing.T, projectPath, branch, checkout string) *ownedBranch {
+	t.Helper()
+	owned, out, err := createBranch(context.Background(), projectPath, branch, "refs/heads/main")
+	require.NoError(t, err, "%s", out)
+	gitOutIn(t, projectPath, "worktree", "add", "-q", checkout, branch)
+	return owned
+}
+
+// A branch the call made but someone has committed on since is not taken
+// back.
 func TestAbandonCheckout_KeepsABranchThatMoved(t *testing.T) {
 	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	projectPath := diagnoseRepo(t)
 	checkout := filepath.Join(t.TempDir(), "wt")
-	gitOutIn(t, projectPath, "worktree", "add", "-q", "-b", "feat/moved", checkout, "main")
+	owned := guardCreateBranch(t, projectPath, "feat/moved", checkout)
 	require.NoError(t, os.WriteFile(filepath.Join(checkout, "g.txt"), []byte("x\n"), 0o644))
 	gitOutIn(t, checkout, "add", "g.txt")
 	gitOutIn(t, checkout, "-c", "user.name=t", "-c", "user.email=t@e.com", "commit", "-q", "-m", "work")
 
-	abandonCheckout(context.Background(), projectPath, checkout, "feat/moved", "refs/heads/main")
+	abandonCheckout(context.Background(), projectPath, checkout, owned)
 
 	require.NotContains(t, guardWorktrees(t, projectPath), checkout)
 	require.Contains(t, guardRepoBranches(t, projectPath), "feat/moved", "a branch with commits past the start point is someone's work")
+}
+
+// A branch moved away and back to the start point, or deleted and made again
+// there by someone else, has the create's tip but is no longer the create's:
+// only its reflog says so, and it is kept.
+func TestAbandonCheckout_KeepsABranchSomeoneElseReclaimedAtTheStartPoint(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
+	t.Parallel()
+	for name, reclaim := range map[string][]string{
+		"moved back": {"update-ref", "-m", "someone else", "refs/heads/feat/reclaimed", "refs/heads/main"},
+		"remade":     {"branch", "feat/reclaimed", "main"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			projectPath := diagnoseRepo(t)
+			checkout := filepath.Join(t.TempDir(), "wt")
+			owned := guardCreateBranch(t, projectPath, "feat/reclaimed", checkout)
+			gitOutIn(t, projectPath, "worktree", "remove", "--force", checkout)
+			if name == "remade" {
+				gitOutIn(t, projectPath, "branch", "-D", "feat/reclaimed")
+			}
+			if name == "moved back" {
+				away := strings.TrimSpace(gitOutIn(t, projectPath, "-c", "user.name=t", "-c", "user.email=t@e.com",
+					"commit-tree", "main^{tree}", "-p", "main", "-m", "away"))
+				gitOutIn(t, projectPath, "update-ref", "-m", "someone else", "refs/heads/feat/reclaimed", away)
+			}
+			gitOutIn(t, projectPath, reclaim...)
+			require.Equal(t, owned.oid, strings.TrimSpace(gitOutIn(t, projectPath, "rev-parse", "refs/heads/feat/reclaimed")))
+
+			abandonCheckout(context.Background(), projectPath, checkout, owned)
+
+			require.Contains(t, guardRepoBranches(t, projectPath), "feat/reclaimed", "a branch someone else set to the start point was deleted")
+		})
+	}
+}
+
+// A branch another worktree checked out after the create made it is kept,
+// as `git branch -D` would keep it.
+func TestAbandonCheckout_KeepsABranchCheckedOutElsewhere(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
+	t.Parallel()
+	projectPath := diagnoseRepo(t)
+	checkout := filepath.Join(t.TempDir(), "wt")
+	owned := guardCreateBranch(t, projectPath, "feat/elsewhere", checkout)
+	gitOutIn(t, projectPath, "worktree", "remove", "--force", checkout)
+	gitOutIn(t, projectPath, "worktree", "add", "-q", filepath.Join(t.TempDir(), "other"), "feat/elsewhere")
+
+	abandonCheckout(context.Background(), projectPath, checkout, owned)
+
+	require.Contains(t, guardRepoBranches(t, projectPath), "feat/elsewhere")
+}
+
+// While the rollback holds the branch's ref lock, no other git process can
+// move the branch: an update attempted then fails, and the deletion of the
+// unchanged branch the create made goes through. Not parallel: it sets the
+// package's beforeBranchDelete hook.
+func TestAbandonCheckout_HoldsTheRefLockWhileItChecksOwnership(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
+	projectPath := diagnoseRepo(t)
+	checkout := filepath.Join(t.TempDir(), "wt")
+	owned := guardCreateBranch(t, projectPath, "feat/locked", checkout)
+	var raced error
+	beforeBranchDelete = func(repo, branch string) {
+		if repo == projectPath {
+			cmd := exec.Command("git", "update-ref", "-m", "racer", "refs/heads/"+branch, "refs/heads/main")
+			cmd.Dir = repo
+			raced = cmd.Run()
+		}
+	}
+	t.Cleanup(func() { beforeBranchDelete = nil })
+
+	abandonCheckout(context.Background(), projectPath, checkout, owned)
+
+	require.Error(t, raced, "another git process updated the branch while the rollback held its lock")
+	require.NotContains(t, guardRepoBranches(t, projectPath), "feat/locked")
 }
 
 // What SIGKILL leaves mid-checkout: a registration still locked
@@ -147,12 +233,12 @@ func TestAbandonCheckout_RemovesAKilledAddsRegistration(t *testing.T) {
 	t.Parallel()
 	projectPath := diagnoseRepo(t)
 	checkout := filepath.Join(t.TempDir(), "killed")
-	gitOutIn(t, projectPath, "worktree", "add", "-q", "-b", "feat/killed", checkout, "main")
+	owned := guardCreateBranch(t, projectPath, "feat/killed", checkout)
 	admin := registrationOf(context.Background(), projectPath, checkout)
 	require.NotEmpty(t, admin)
 	require.NoError(t, os.WriteFile(filepath.Join(admin, "locked"), []byte("initializing\n"), 0o644))
 
-	abandonCheckout(context.Background(), projectPath, checkout, "feat/killed", "refs/heads/main")
+	abandonCheckout(context.Background(), projectPath, checkout, owned)
 
 	_, err := os.Stat(admin)
 	require.True(t, os.IsNotExist(err), "registration left: %v", err)
