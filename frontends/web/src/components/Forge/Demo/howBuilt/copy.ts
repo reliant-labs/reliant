@@ -11,44 +11,44 @@ import type { CategoryId, ChainExcerpt } from "./fixtures";
 
 /** Display order and labels: the contract first, the project's own files last. */
 export const CATEGORY_COPY: { id: CategoryId; label: string; detail: string }[] = [
-  { id: "contract", label: "Contract", detail: "The protos, and the Go and TypeScript stubs buf compiles from them" },
-  { id: "migrations", label: "Schema", detail: "SQL migrations, the read-only role's grants, seed data" },
-  { id: "handlers", label: "Go handlers", detail: "Connect handlers, CRUD wiring and rpc stubs" },
-  { id: "store", label: "ORM and store", detail: "Row types and stores projected from the applied schema" },
-  { id: "wiring", label: "Server, middleware and auth", detail: "The binary, the composition graph, auth and middleware" },
-  { id: "mocks", label: "Contract mocks", detail: "Go mocks of each service, and the frontend's mock data" },
-  { id: "tests", label: "Tests", detail: "CRUD tests on real Postgres, handler, hook and middleware tests" },
-  { id: "frontend", label: "Frontend", detail: "Connect hooks, CRUD pages and the UI kit (Next.js)" },
-  { id: "observability", label: "Observability", detail: "Dashboards, alerts, collector config, browser telemetry" },
-  { id: "deploy", label: "Deploy", detail: "KCL for dev, staging and prod; Dockerfiles; local compose" },
-  { id: "ci", label: "CI", detail: "GitHub workflows, git hooks, lint config, the Taskfile" },
+  { id: "contract", label: "API definitions", detail: "Request and response definitions, with matching Go and TypeScript code" },
+  { id: "migrations", label: "Database setup", detail: "Database changes, read-only access rules and sample data" },
+  { id: "handlers", label: "Server code", detail: "Standard data operations and placeholders for custom API actions" },
+  { id: "store", label: "Database code", detail: "Go types and data-access code generated from the database structure" },
+  { id: "wiring", label: "Server setup and sign-in", detail: "Server startup, connected services and request checks" },
+  { id: "mocks", label: "Test substitutes", detail: "Stand-ins for services and sample browser data" },
+  { id: "tests", label: "Tests", detail: "Database operations tested with real Postgres, plus server and browser tests" },
+  { id: "frontend", label: "Browser app", detail: "API helpers, starting pages for managing data and Next.js UI components" },
+  { id: "observability", label: "Monitoring", detail: "Dashboards, alerts and settings for collecting browser and server health data" },
+  { id: "deploy", label: "Deployment setup", detail: "Configuration for dev, staging and production; Dockerfiles and local services" },
+  { id: "ci", label: "Automated checks", detail: "GitHub workflows and local build, test and code-check settings" },
   { id: "project", label: "Project files", detail: "README, AGENTS.md, runbook, editor and agent config" },
 ];
 
 export const CHAIN_COPY: Record<ChainExcerpt["id"], { title: string; body: string }> = {
   proto: {
-    title: "The message you write",
-    body: "You write the message and its forge:entity marker. forge adds the fields it manages (id, created_at, updated_at) and, in the service above it, the five CRUD rpcs.",
+    title: "The API definition",
+    body: "You define the order's fields and mark it for Forge to build on. Forge adds an ID, creation and update times, and API operations for creating, viewing, listing, updating and deleting orders.",
   },
   migration: {
-    title: "The migration",
-    body: "forge writes the table's first migration from the message, once. After that the schema is yours: you change it with a new migration, not by editing the proto.",
+    title: "The database setup",
+    body: "Forge writes the table's first SQL migration: instructions for creating it. Later database changes go in new migration files, not edits to the API definition alone.",
   },
   orm: {
-    title: "The ORM row",
-    body: "forge applies the migrations to a real Postgres and reads the table back, so this type matches a schema that exists. It is rewritten on every forge generate.",
+    title: "The Go database type",
+    body: "Forge applies the migrations to a real Postgres database and reads the table back, so this Go type matches the database structure. It is rewritten on every forge generate.",
   },
   handler: {
-    title: "The handler",
-    body: "The Connect handler is yours and works from the start: it hands the request to forge's CRUD code. The custom rpc, CancelOrder, gets a stub that answers Unimplemented until you write it.",
+    title: "The server code",
+    body: "Creating, viewing, listing, updating and deleting orders are wired up for you. Custom API actions still need your app's rules: CancelOrder starts as a placeholder that returns Unimplemented until you or your agent implement it.",
   },
   hook: {
-    title: "The React hooks",
-    body: "One React Query hook per rpc, typed from the same proto as the server. They are rewritten when the proto changes.",
+    title: "The browser's API helpers",
+    body: "Forge generates React helpers for calling each API operation, using the same request and response definitions as the server. They are regenerated when those definitions change.",
   },
   test: {
     title: "The test",
-    body: "A lifecycle test that runs create, get, list, update and delete against a real Postgres with your migrations applied. forge writes it once; you extend it as the entity grows.",
+    body: "This test creates, reads, lists, updates and deletes orders against a real Postgres database with your migrations applied. Forge writes it once; you extend it as your app grows. The recording shows the test code being generated, not the test being run.",
   },
 };
 

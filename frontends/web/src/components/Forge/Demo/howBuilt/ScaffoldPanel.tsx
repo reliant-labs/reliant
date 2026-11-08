@@ -55,14 +55,15 @@ export function ScaffoldPanel({ manifest, cast }: { manifest: ScaffoldManifest; 
           What forge generated
         </h3>
         <p className="text-lg text-ink" data-testid="scaffold-headline">
-          You wrote <strong>{n(s.youLines)}</strong> lines of proto in {s.youFiles} files. forge generated{" "}
+          A person wrote <strong>{n(s.youLines)}</strong> lines of API definitions in {s.youFiles} files. Forge generated{" "}
           <strong>{n(s.forgeLines)}</strong> lines across <strong>{n(s.files)}</strong> files.
         </p>
         <p className="text-sm text-ink-muted">
           <code>forge project new</code> wrote {n(s.newFiles)} files; <code>forge scaffold</code> then added {n(s.scaffoldAdded)} and changed{" "}
-          {n(s.scaffoldChanged)}. Of forge&apos;s lines, {n(s.regenLines)} are in files it rewrites on every <code>forge generate</code>,{" "}
-          {n(s.machineLines)} of them the protobuf and Connect stubs buf compiles. It wrote the other {n(s.onceLines)} once: they are
-          starting points, and yours to change. Not counted: {s.lockfiles} lockfiles, and forge&apos;s own state in <code>.forge/</code>.
+          {n(s.scaffoldChanged)}. Of Forge&apos;s lines, {n(s.regenLines)} are in files it rewrites on every <code>forge generate</code>:
+          change their inputs rather than editing those files. These include {n(s.machineLines)} lines of generated Go and TypeScript API code.
+          It wrote the other {n(s.onceLines)} once: starting code and pages you can customize, not a finished product.
+          Not counted: {s.lockfiles} dependency lockfiles, and Forge&apos;s own working files in <code>.forge/</code>.
         </p>
       </div>
 
@@ -70,36 +71,29 @@ export function ScaffoldPanel({ manifest, cast }: { manifest: ScaffoldManifest; 
       <EntityChain manifest={manifest} />
 
       <div className="grid gap-4 md:grid-cols-3" data-testid="scaffold-explainers">
-        <Explainer title="The contract">
-          The protos are the wire truth. Each service is a Connect RPC service, so the same handler answers Connect, gRPC and gRPC-Web
-          clients. buf compiles the protos into Go and TypeScript ({n(s.machineLines)} lines under <code>gen/</code>), and the
-          handlers, the React hooks and the mocks are typed from that code. Change a field and the compiler shows you every place that
-          needs to follow.
+        <Explainer title="One API definition">
+          The API files describe the requests your app accepts and the responses it returns. Forge uses them to generate matching Go and
+          TypeScript code ({n(s.machineLines)} lines under <code>gen/</code>) for the server, browser and tests. When a definition changes,
+          type checks help find code that no longer matches.
         </Explainer>
-        <Explainer title="The schema">
-          The SQL migrations are the schema truth. forge writes a table&apos;s first migration from its entity message and never edits
-          it again. On every generate it applies all the migrations to a throwaway Postgres and reads the result back, so the ORM (
-          {s.storeFiles} files in <code>internal/db</code>) is a projection of a schema that exists. The wire and the table change on
-          their own schedules, on purpose.
+        <Explainer title="Database changes you control">
+          Forge creates the first database setup file from your data definition. Later changes go in new SQL migration files:
+          instructions for updating the database. Forge applies those files to a temporary Postgres database and generates matching Go
+          database code ({s.storeFiles} files in <code>internal/db</code>). Editing an API definition alone does not update an existing table.
         </Explainer>
-        <Explainer title="The instrumentation">
-          The server&apos;s start-up (<code>{NAMED_PATHS.serve}</code>) sets up OpenTelemetry traces and metrics. forge&apos;s Connect
-          interceptors put a span on every rpc and carry the trace to the next service, the database driver adds one per query, and the
-          browser app (<code>{NAMED_PATHS.browserTelemetry}</code>) sends its own spans and errors. <code>deploy/observability</code>{" "}
-          holds {s.observabilityFiles} files of dashboards, default alerts and collector config.
+        <Explainer title="Monitoring built in">
+          Forge sets up request timelines, performance measurements and error reporting across the server (<code>{NAMED_PATHS.serve}</code>),
+          database and browser (<code>{NAMED_PATHS.browserTelemetry}</code>). <code>deploy/observability</code> holds {s.observabilityFiles}{" "}
+          files of dashboards, default alerts and settings for collecting this information.
           <span className="mt-2 block">
-            That matters to an LLM as much as to you. Your agent reads the same telemetry from a terminal with <code>forge obs</code>.{" "}
-            <code>{NAMED_PATHS.agents}</code>, which forge wrote into the project, points it at forge&apos;s skills before it guesses.{" "}
+            On your running app, you and your agent can inspect the same health information with <code>forge obs</code>.{" "}
+            <code>{NAMED_PATHS.agents}</code> points your agent to Forge&apos;s instructions.{" "}
             {s.gatingLinters !== null ? (
               <>
-                <code>forge lint</code> ran {s.gatingLinters} gating linters on this app before it built, and <code>forge lint --tracing</code>{" "}
-                points out where a trace would break.
+                In this recording, <code>forge lint</code> passed {s.gatingLinters} required checks before the Go build.{" "}
               </>
-            ) : (
-              <>
-                <code>forge lint --tracing</code> points out where a trace would break.
-              </>
-            )}
+            ) : null}
+            <code>forge lint --tracing</code> checks for common gaps in request tracking.
           </span>
         </Explainer>
       </div>
@@ -183,9 +177,9 @@ function EntityChain({ manifest }: { manifest: ScaffoldManifest }) {
   const copy = CHAIN_COPY[excerpt.id];
   return (
     <div data-testid="scaffold-chain">
-      <h4 className="mb-1 text-sm font-semibold text-ink">One entity, end to end: Order</h4>
-      <p className="mb-2 text-sm text-ink-muted">From the proto you write to the test forge scaffolds, all from the same run.</p>
-      <div role="tablist" aria-label="The Order entity, step by step" className="mb-2 flex flex-wrap gap-1">
+      <h4 className="mb-1 text-sm font-semibold text-ink">Follow an order through the generated code</h4>
+      <p className="mb-2 text-sm text-ink-muted">From the API&apos;s order data to database setup, server and browser code, and a test—all from this recording.</p>
+      <div role="tablist" aria-label="The Order example, step by step" className="mb-2 flex flex-wrap gap-1">
         {chain.map((step, i) => (
           <button
             key={step.id}
