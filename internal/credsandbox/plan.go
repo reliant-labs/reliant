@@ -640,7 +640,11 @@ func projectRoots(projectsDir string) []string {
 // be creatable where they would be found (buildPlan seals them). A helper
 // configured as an absolute path that does not exist (absentPath) is sealed
 // wherever it is: git runs exactly that file, so whoever creates it first
-// supplies every later credentialed command's credential.
+// supplies every later credentialed command's credential. The config files
+// those include (include.path, includeIf.*.path), followed as git follows
+// them, are reported the same way: present ones read-only, absent ones as
+// absentPath, so neither an included file nor the helper it names can be
+// changed or created outside the otherwise protected roots.
 func credentialHelpers(home string, env []string) (present, absent, absentPath []string) {
 	type helper struct {
 		name  string
@@ -662,9 +666,21 @@ func credentialHelpers(home string, env []string) (present, absent, absentPath [
 	if cfg := envValue(env, "XDG_CONFIG_HOME"); filepath.IsAbs(cfg) {
 		configs = append(configs, filepath.Join(cfg, "git", "config"))
 	}
+	cfg := gitConfigs{home: home, seen: map[string]bool{}}
 	for _, c := range configs {
-		for _, h := range gitConfigHelpers(c) {
-			hs = append(hs, helper{name: h.program, shell: h.shell})
+		cfg.read(c, 0)
+	}
+	for _, h := range cfg.helpers {
+		hs = append(hs, helper{name: h.program, shell: h.shell})
+	}
+	// The files they include are as trusted as the helpers they name: one
+	// that exists is read-only, one that does not is sealed wherever it is,
+	// as an absent helper path is.
+	for _, inc := range cfg.included {
+		if _, err := os.Lstat(inc); err == nil {
+			present = append(present, inc)
+		} else {
+			absentPath = append(absentPath, inc)
 		}
 	}
 	var dirs []string
@@ -718,33 +734,91 @@ type gitHelper struct {
 	shell   bool
 }
 
-// gitConfigHelpers reads the `helper = ...` values of a git config file and
-// returns the program each runs: the first word of a `!` shell helper, or the
-// helper itself (a path, or a name git prefixes with git-credential-).
-func gitConfigHelpers(path string) []gitHelper {
+// gitIncludeMaxDepth is how deep git follows include.path (its own limit).
+const gitIncludeMaxDepth = 10
+
+// gitConfigs is what a credentialed git reads of its config files: the
+// `helper = ...` values, and every file an include.path or includeIf.*.path
+// pulls in (included), which may name helpers of its own.
+type gitConfigs struct {
+	home     string
+	seen     map[string]bool
+	helpers  []gitHelper
+	included []string
+}
+
+// read reads the config file at path and, as git does, the files it
+// includes: a relative include is relative to the including file's
+// directory, `~/` is the home. Every includeIf is followed whatever its
+// condition: a later credentialed git may run where it holds.
+func (g *gitConfigs) read(path string, depth int) {
+	if depth > gitIncludeMaxDepth || g.seen[path] {
+		return
+	}
+	g.seen[path] = true
 	f, err := os.Open(path)
 	if err != nil {
-		return nil
+		return
 	}
 	defer func() { _ = f.Close() }()
-	var out []gitHelper
+	var includes []string
+	section := ""
 	s := bufio.NewScanner(f)
 	for s.Scan() {
 		line := strings.TrimSpace(s.Text())
+		if strings.HasPrefix(line, "[") {
+			end := strings.IndexByte(line, ']')
+			if end < 0 {
+				continue
+			}
+			name, _, _ := strings.Cut(strings.TrimSpace(line[1:end]), " ")
+			name, _, _ = strings.Cut(name, "\"")
+			section = strings.ToLower(strings.TrimSpace(name))
+			line = strings.TrimSpace(line[end+1:])
+		}
 		key, value, ok := strings.Cut(line, "=")
-		if !ok || !strings.EqualFold(strings.TrimSpace(key), "helper") {
+		if !ok {
 			continue
 		}
+		key = strings.ToLower(strings.TrimSpace(key))
 		value = strings.TrimSpace(value)
 		value = strings.TrimPrefix(value, `"`)
 		value = strings.TrimSuffix(value, `"`)
-		shell := strings.HasPrefix(value, "!")
-		value = strings.TrimPrefix(value, "!")
-		if w := firstWord(value); w != "" {
-			out = append(out, gitHelper{program: w, shell: shell})
+		switch {
+		case key == "helper":
+			shell := strings.HasPrefix(value, "!")
+			value = strings.TrimPrefix(value, "!")
+			if w := firstWord(value); w != "" {
+				g.helpers = append(g.helpers, gitHelper{program: w, shell: shell})
+			}
+		case key == "path" && (section == "include" || section == "includeif"):
+			if inc := g.includePath(path, value); inc != "" {
+				includes = append(includes, inc)
+			}
 		}
 	}
-	return out
+	for _, inc := range includes {
+		g.included = append(g.included, inc)
+		g.read(inc, depth+1)
+	}
+}
+
+// includePath is the file an include's path names, from the file at from.
+func (g *gitConfigs) includePath(from, value string) string {
+	switch {
+	case value == "":
+		return ""
+	case value == "~" || strings.HasPrefix(value, "~/"):
+		if g.home == "" {
+			return ""
+		}
+		value = filepath.Join(g.home, strings.TrimPrefix(value, "~"))
+	case strings.HasPrefix(value, "~"):
+		return "" // another user's home: not one this plan can name
+	case !filepath.IsAbs(value):
+		value = filepath.Join(filepath.Dir(from), value)
+	}
+	return filepath.Clean(value)
 }
 
 // firstWord is s's first shell word, its single or double quotes removed.

@@ -372,3 +372,51 @@ func TestCredentialHelpers_ABuiltinHelperIsNotLookedUpOnPath(t *testing.T) {
 	_, absent, _ := credentialHelpers(home, []string{"PATH=" + bin})
 	assert.Equal(t, []string{filepath.Join(bin, "git-credential-vault")}, absent)
 }
+
+// R13.B1: a credentialed git reads the files its config includes, and runs the
+// helpers they name. Both are protected as the directly named ones are: an
+// included file and its helper outside home, PATH and the checkouts are
+// read-only, an absent one (an includeIf's, relative to its includer) is
+// sealed, and an include cycle ends.
+func TestPlan_GitConfigIncludesAndTheirHelpersAreProtected(t *testing.T) {
+	m := newMachine(t)
+	srv := filepath.Join(m.root, "srv")
+	conf := filepath.Join(srv, "config", "credentials.conf")
+	helper := filepath.Join(srv, "helpers", "auth")
+	nested := filepath.Join(srv, "config", "nested.conf")
+	nestedHelper := filepath.Join(srv, "helpers", "nested")
+	absentConf := filepath.Join(srv, "config", "work.conf")
+	for _, d := range []string{filepath.Dir(conf), filepath.Dir(helper)} {
+		require.NoError(t, os.MkdirAll(d, 0o755))
+	}
+	require.NoError(t, os.WriteFile(helper, []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.WriteFile(conf, []byte(
+		"[credential]\n\thelper = "+helper+"\n[includeIf \"gitdir:~/work/\"]\n\tpath = work.conf\n[include]\n\tpath = nested.conf\n"), 0o644))
+	require.NoError(t, os.WriteFile(nested, []byte(
+		"[include]\n\tpath = "+conf+"\n[credential]\n\thelper = \"!"+nestedHelper+" get\"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".gitconfig"), []byte(
+		"[user]\n\tname = x\n[include]\n\tpath = "+conf+"\n"), 0o644))
+
+	p := m.plan(m.multi, nil)
+	for _, ro := range []string{conf, helper, nested, absentConf, nestedHelper} {
+		assert.Contains(t, p.ReadOnly, ro, "what an included config is or names is read-only")
+	}
+	assert.Contains(t, p.Seal, absentConf, "an absent included config is sealed where git would read it")
+	assert.Contains(t, p.Seal, nestedHelper, "an absent helper an included config names is sealed")
+	assert.NotContains(t, p.Seal, conf)
+	assert.NotContains(t, p.Seal, helper)
+}
+
+func TestCredentialHelpers_IncludesFollowGitsPathRules(t *testing.T) {
+	home := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(home, "inc"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"),
+		[]byte("[include]\n\tpath = ~/inc/a.conf\n[includeIf \"onbranch:main\"]\n\tpath = inc/b.conf\n[core]\n\tpath = /not/an/include\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(home, "inc", "a.conf"),
+		[]byte("[credential]\n\thelper = /opt/a-helper\n"), 0o644))
+	present, _, absentPath := credentialHelpers(home, nil)
+	assert.Contains(t, present, filepath.Join(home, "inc", "a.conf"), "~/ is the home")
+	assert.Contains(t, absentPath, filepath.Join(home, "inc", "b.conf"), "a relative include is relative to its includer")
+	assert.Contains(t, absentPath, "/opt/a-helper", "an included file's helper")
+	assert.NotContains(t, absentPath, "/not/an/include", "a path key outside include sections is no include")
+}

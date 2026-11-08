@@ -563,3 +563,45 @@ echo ran`
 	_, err = os.Lstat(elsewhere)
 	assert.True(t, os.IsNotExist(err), "a planted credential helper outlived the credentials-none command: %v", err)
 }
+
+// R13.B1: a credential helper named by a config file ~/.gitconfig includes,
+// both outside home, PATH and the checkouts, cannot be overwritten, nor the
+// included config changed, nor an absent included one created.
+func TestSandbox_AnIncludedGitConfigAndItsHelperCannotBeReplaced(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	// Under this checkout, not /tmp: the command's /tmp is private.
+	root, err := os.MkdirTemp(".", ".credsandbox-include-")
+	require.NoError(t, err)
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	conf := filepath.Join(root, "config", "credentials.conf")
+	helper := filepath.Join(root, "helpers", "auth")
+	absentConf := filepath.Join(root, "config", "work.conf")
+	for _, d := range []string{filepath.Dir(conf), filepath.Dir(helper)} {
+		require.NoError(t, os.MkdirAll(d, 0o755))
+	}
+	const trustedHelper = "#!/bin/sh\necho trusted\n"
+	confBody := "[credential]\n\thelper = " + helper + "\n[includeIf \"gitdir:~/work/\"]\n\tpath = work.conf\n"
+	require.NoError(t, os.WriteFile(helper, []byte(trustedHelper), 0o755))
+	require.NoError(t, os.WriteFile(conf, []byte(confBody), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"),
+		[]byte("[include]\n\tpath = "+conf+"\n"), 0o644))
+
+	out := runWrapped(t, "none", home, home, `
+printf '#!/bin/sh\necho password=planted\n' > '`+helper+`' 2>/dev/null
+printf '[credential]\n\thelper = /planted\n' > '`+conf+`' 2>/dev/null
+printf '[credential]\n\thelper = /planted\n' > '`+absentConf+`' 2>/dev/null
+echo ran`)
+	assert.Contains(t, out, "ran")
+	got, err := os.ReadFile(helper)
+	require.NoError(t, err)
+	assert.Equal(t, trustedHelper, string(got), "the included config's helper was overwritten")
+	got, err = os.ReadFile(conf)
+	require.NoError(t, err)
+	assert.Equal(t, confBody, string(got), "the included config was changed")
+	_, err = os.Lstat(absentConf)
+	assert.True(t, os.IsNotExist(err), "an absent included config outlived the credentials-none command: %v", err)
+}
