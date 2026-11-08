@@ -530,6 +530,19 @@ gate's five minutes:
   same runners, so the lint is done well before the gate and the wait step
   costs nothing. A future diff where it is not shows up in the five-minute
   budget step, which measures the whole run.
+- **Checking it after the merge.** The first merge group after this lands
+  runs `golangci (changed)`: its wall time sits beside `CI result`'s in the
+  run's job list, and the duration of `CI result`'s "golangci (changed)
+  passed" step is the time it waited (seconds when the lint finished first).
+  The first push to main then runs the setup action's "Save golangci-lint
+  (main only)" step in `go-cache`, and the next merge group's "Restore
+  golangci-lint" reports a cache hit and downloads nothing.
+- **Rollback.** If the job costs the queue more than its budget, or fails for
+  a reason that is not a finding (a download, the cache), revert the PR that
+  added it: a plain `git revert` of one squash commit, with no data, schema or
+  ruleset change to undo (the ruleset requires `CI result` alone, which then
+  stops waiting for the job). Its cached binary goes unread and GitHub evicts
+  it after 7 days.
 - **What it still leaves to the release gate.** Packages the group did not
   change, findings in files it did not change, the build-tagged pass, and buf
   lint.

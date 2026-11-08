@@ -299,12 +299,22 @@ func TestGolangciChangedPlan(t *testing.T) {
 		t.Errorf("planned %q, want %q:\n%s", got, want, out)
 	}
 
+	// The same diff with a go that cannot list packages: discovery failed, so
+	// the script fails rather than reading the failure as an empty scope.
+	fake := t.TempDir()
+	writeExec(t, filepath.Join(fake, "go"), "#!/usr/bin/env bash\necho 'go: toolchain download failed' >&2\nexit 1\n")
+	cmd := exec.Command("bash", "scripts/golangci-changed.sh", "--base", base, "--plan")
+	cmd.Dir, cmd.Env = dir, append(os.Environ(), "PATH="+fake+":"+os.Getenv("PATH"))
+	if b, err := cmd.CombinedOutput(); err == nil || strings.Contains(string(b), "nothing to lint") {
+		t.Errorf("a failing go list: err=%v, want a non-zero exit, not an empty scope:\n%s", err, b)
+	}
+
 	write("README.md", "more docs\n")
 	sh("git", "add", "-A")
 	sh("git", "commit", "-qm", "docs")
 	head := strings.TrimSpace(sh("git", "rev-parse", "HEAD^"))
 	// Without --plan: no package changed, so golangci-lint is never looked up.
-	cmd := exec.Command("bash", "scripts/golangci-changed.sh", "--base", head)
+	cmd = exec.Command("bash", "scripts/golangci-changed.sh", "--base", head)
 	cmd.Dir, cmd.Env = dir, append(os.Environ(), "PATH=/usr/bin:/bin")
 	if b, err := cmd.CombinedOutput(); err != nil || !strings.Contains(string(b), "nothing to lint") {
 		t.Errorf("a docs-only diff: err=%v, want a clean no-op:\n%s", err, b)

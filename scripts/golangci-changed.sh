@@ -51,18 +51,32 @@ git cat-file -e "${base}^{commit}" 2>/dev/null || { echo "golangci-changed: base
 # Directories with a changed (added, copied, modified, renamed) .go file, by
 # the merge gate's own rule (scripts/lint-scope.sh: existing directories, not
 # the root, not the nested sdk/go module), minus what the go tool ignores.
+# Every discovery step's output is captured and its exit status checked before
+# it is read: a step that fails (a process substitution's status is lost) would
+# otherwise read as an empty scope and pass with "nothing to lint".
+changed="$(git diff --name-only --diff-filter=ACMR "$base" HEAD -- '*.go')" ||
+  { echo "golangci-changed: git diff ${base} HEAD failed" >&2; exit 2; }
+scope=""
+if [ -n "$changed" ]; then
+  scope="$(printf '%s\n' "$changed" | scripts/lint-scope.sh)" ||
+    { echo "golangci-changed: scripts/lint-scope.sh failed" >&2; exit 2; }
+fi
 dirs=()
 while IFS= read -r d; do
+  [ -n "$d" ] || continue
   case "/$d/" in */testdata/*|*/_*|*/.*) continue ;; esac
   dirs+=("./$d")
-done < <(git diff --name-only --diff-filter=ACMR "$base" HEAD -- '*.go' | scripts/lint-scope.sh | tr , '\n' | grep . || true)
+done <<<"${scope//,/$'\n'}"
 
 pkgs=()
 if [ "${#dirs[@]}" -gt 0 ]; then
   # A directory whose every file a build tag excludes is no package to lint.
+  # -e keeps a broken package in the list (golangci-lint then reports it); a
+  # go list that still exits non-zero could not load the module at all.
+  listed="$(go list -e -f '{{if or .GoFiles .CgoFiles .TestGoFiles .XTestGoFiles}}{{.Dir}}{{end}}' "${dirs[@]}")" ||
+    { echo "golangci-changed: go list over ${#dirs[@]} changed director(ies) failed; refusing to report an empty scope" >&2; exit 2; }
   while IFS= read -r p; do [ -n "$p" ] && pkgs+=("$p"); done < <(
-    go list -e -f '{{if or .GoFiles .CgoFiles .TestGoFiles .XTestGoFiles}}{{.Dir}}{{end}}' "${dirs[@]}" 2>/dev/null \
-      | sed "s|^$(pwd -P)/|./|" | sort -u)
+    printf '%s\n' "$listed" | sed "s|^$(pwd -P)/|./|" | sort -u)
 fi
 
 if [ "${#pkgs[@]}" -eq 0 ]; then
