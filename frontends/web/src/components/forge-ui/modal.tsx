@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useId, useLayoutEffect, useMemo, useRef } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -94,6 +102,7 @@ interface DialogEntry {
   ref: React.RefObject<HTMLElement | null>;
   ancestors: React.RefObject<HTMLElement | null>[];
   containFocus: () => void;
+  external: HTMLElement | null;
 }
 const DialogAncestors = createContext<React.RefObject<HTMLElement | null>[]>([]);
 const openStack: DialogEntry[] = [];
@@ -209,6 +218,8 @@ function isolateBackground() {
   const panel = openStack[openStack.length - 1]?.panel;
   if (!panel) return;
   const external = externalAbove(panel);
+  const owner = openStack[openStack.length - 1];
+  if (owner && external) owner.external = external;
   const surfaces = modalSurfaces(external ?? panel).map(
     (el) => el.closest("[data-modal-layer]") ?? el,
   );
@@ -352,6 +363,14 @@ export function useModalDialog({
 }) {
   const ancestors = useContext(DialogAncestors);
   const callbacks = useRef({ onClose, initialFocus, returnFocus, fallbackFocus });
+  const passiveScrollSettlement = useRef<(() => void) | null>(null);
+  // Parent passive cleanup can precede a legacy child's passive cleanup.
+  // A microtask from this phase runs after both, unlike layout cleanup (which
+  // may run after the external portal DOM has already disappeared).
+  useEffect(() => {
+    if (!open) passiveScrollSettlement.current?.();
+    return () => passiveScrollSettlement.current?.();
+  }, [open]);
   useLayoutEffect(() => {
     callbacks.current = { onClose, initialFocus, returnFocus, fallbackFocus };
   });
@@ -384,7 +403,15 @@ export function useModalDialog({
           : (callbacks.current.initialFocus?.() ?? focusable()[0] ?? panel);
       target.focus({ preventScroll: true });
     };
-    registerDialog({ id, panel, ref: panelRef, ancestors, containFocus });
+    const entry: DialogEntry = {
+      id,
+      panel,
+      ref: panelRef,
+      ancestors,
+      containFocus,
+      external: null,
+    };
+    registerDialog(entry);
     lockScroll();
     // Release the lower dialog's isolation before focusing a new portal.
     // Its new background is isolated only AFTER focus has moved out of it.
@@ -458,7 +485,28 @@ export function useModalDialog({
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("focusin", onFocusIn);
       const wasTop = isTop(id);
-      const external = wasTop ? externalAbove(panel) : null;
+      const external = wasTop ? (externalAbove(panel) ?? entry.external) : null;
+      if (external) {
+        const snapshot = savedStyles;
+        passiveScrollSettlement.current = () => {
+          passiveScrollSettlement.current = null;
+          queueMicrotask(() => {
+            // Never restore over a reopened Forge or still-visible legacy
+            // owner, nor over a later generation's page-style snapshot.
+            if (
+              savedStyles === snapshot &&
+              lockCount === 0 &&
+              !externalLockActive(external) &&
+              !externalLockActive(pendingExternal)
+            ) {
+              pendingUnlock?.disconnect();
+              pendingUnlock = null;
+              pendingExternal = null;
+              restoreScroll();
+            }
+          });
+        };
+      }
       openStack.splice(
         openStack.findIndex((entry) => entry.id === id),
         1,
