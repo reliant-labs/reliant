@@ -298,16 +298,20 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
         canOpen={canOpen}
       />
 
-      <Tabs
-        tabs={tabs.map((id) => {
-          const state = tabSignal(id);
-          return state.kind === "idle" && id !== tab ? { id, label: TAB_LABELS[id], badge: state.badge, disabled: true } : { id, label: TAB_LABELS[id] };
-        })}
-        activeTab={tab}
-        // Leaving an explorer drops its keys (a log query means nothing on Events); the window stays.
-        onChange={(id) => onSearch({ tab: id === "overview" ? undefined : (id as WorkloadTab), range: search.range })}
-        ariaLabel={`${name} views`}
-      />
+      {/* Keep the full tab roster reachable without letting its intrinsic width
+          escape the shell's clipped scroller. Touch readers can pan to Config. */}
+      <div className="min-w-0 overflow-x-auto pb-1 [&_[role=tab]]:shrink-0 [&_[role=tab]]:whitespace-nowrap [@media(pointer:coarse)]:[&_[role=tab]]:min-h-[44px]">
+        <Tabs
+          tabs={tabs.map((id) => {
+            const state = tabSignal(id);
+            return state.kind === "idle" && id !== tab ? { id, label: TAB_LABELS[id], badge: state.badge, disabled: true } : { id, label: TAB_LABELS[id] };
+          })}
+          activeTab={tab}
+          // Leaving an explorer drops its keys (a log query means nothing on Events); the window stays.
+          onChange={(id) => onSearch({ tab: id === "overview" ? undefined : (id as WorkloadTab), range: search.range })}
+          ariaLabel={`${name} views`}
+        />
+      </div>
 
       {explorer ? (
         <div role="tabpanel" aria-label={TAB_LABELS[tab]}>
@@ -493,7 +497,7 @@ function WorkloadHeader({
           }
           className="mb-0 min-w-0 flex-1"
         />
-        <div className="flex shrink-0 flex-wrap items-center gap-2 pt-1" data-testid="workload-actions">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 pt-1 max-md:w-full [@media(pointer:coarse)]:[&_button]:min-h-[44px] [@media(pointer:coarse)]:[&_button]:min-w-[44px]" data-testid="workload-actions">
           {rangeControl}
           {canOpen("logs") && (
             <button type="button" className={BUTTON_SECONDARY} onClick={() => onTab("logs")}>
