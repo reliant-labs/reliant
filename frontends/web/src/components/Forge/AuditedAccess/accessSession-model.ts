@@ -12,18 +12,17 @@
  * dialog naming the environment (AccessReasonDialog), and then sends both on
  * every read.
  *
- * The answer is kept in sessionStorage, per surface and environment id: it
- * lasts as long as the tab (a reload keeps it, a new tab asks again) and never
- * outlives the session the person confirmed in. A reason is about one piece
- * of work; a permanent one would turn every later read into a misleading
- * audit row. The surfaces keep separate answers (`namespace`): a reason for
- * reading rows is not a reason for reading files, and each policy is its own.
- * The key is `forge.<namespace>.access.<environment id>`.
+ * The answer is kept per surface, environment, authenticated principal and
+ * in-memory auth epoch. Identity changes and reloads ask again. Legacy keys
+ * are discarded, never migrated as another person's authority. A reason is
+ * about one piece of work; the namespaces keep rows and files separate.
  *
  * Nothing else here: no policy is decided client-side. The server decides
  * from the recorded release shape, and a `confirmation_required` refusal
  * (policy changed, storage cleared) clears the kept answer and asks again.
  */
+
+import { getReaderSession, isCurrentReader, readerStorageScope, type ReaderSession } from "./readerSession";
 
 /** A recorded data-access policy, as the console reads it. `unknown`: not recorded or not understood, refused like deny. */
 export type AccessPolicyName = "open" | "audited" | "deny" | "unknown";
@@ -40,11 +39,13 @@ export type AccessNamespace = "data" | "storage";
 /** The servers' bound on reason (every audited request's reason max_len). */
 export const REASON_MAX = 500;
 
-export const accessStorageKey = (namespace: AccessNamespace, environmentId: string) => `forge.${namespace}.access.${environmentId}`;
+export const accessStorageKey = (namespace: AccessNamespace, environmentId: string, reader = getReaderSession()) => `forge.${namespace}.access.${readerStorageScope(reader)}.${environmentId}`;
 
-export function readAccess(namespace: AccessNamespace, environmentId: string): AccessConfirmation | null {
+export function readAccess(namespace: AccessNamespace, environmentId: string, reader = getReaderSession()): AccessConfirmation | null {
+  if (!isCurrentReader(reader)) return null;
   try {
-    const raw = window.sessionStorage.getItem(accessStorageKey(namespace, environmentId));
+    window.sessionStorage.removeItem(`forge.${namespace}.access.${environmentId}`);
+    const raw = window.sessionStorage.getItem(accessStorageKey(namespace, environmentId, reader));
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { reason?: unknown };
     const reason = typeof parsed.reason === "string" ? parsed.reason.trim() : "";
@@ -54,10 +55,11 @@ export function readAccess(namespace: AccessNamespace, environmentId: string): A
   }
 }
 
-export function writeAccess(namespace: AccessNamespace, environmentId: string, reason: string): AccessConfirmation {
+export function writeAccess(namespace: AccessNamespace, environmentId: string, reason: string, reader: ReaderSession = getReaderSession()): AccessConfirmation {
   const trimmed = reason.trim().slice(0, REASON_MAX);
+  if (!isCurrentReader(reader)) throw new DOMException("Reader session changed", "AbortError");
   try {
-    window.sessionStorage.setItem(accessStorageKey(namespace, environmentId), JSON.stringify({ reason: trimmed }));
+    window.sessionStorage.setItem(accessStorageKey(namespace, environmentId, reader), JSON.stringify({ reason: trimmed }));
   } catch {
     // Storage disabled: the confirmation holds for this page only.
   }

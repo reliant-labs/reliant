@@ -67,7 +67,7 @@ export interface PreviewText {
 
 /**
  * A text or JSON preview's bytes as text: UTF-8 with invalid sequences
- * replaced (the proto's promise), JSON pretty-printed when it parses. A cut
+ * replaced (the proto's promise), JSON validated but displayed verbatim. A cut
  * JSON document cannot parse, so it is shown as sent, with the cut said.
  */
 export function previewText(content: Uint8Array, kind: "text" | "json", size: number): PreviewText {
@@ -76,7 +76,11 @@ export function previewText(content: Uint8Array, kind: "text" | "json", size: nu
   if (kind !== "json") return { text, pretty: false, cut, unparsed: false };
   if (cut) return { text, pretty: false, cut, unparsed: true };
   try {
-    return { text: JSON.stringify(JSON.parse(text), null, 2), pretty: true, cut, unparsed: false };
+    // Validate only. A parse/stringify round trip rounds large IDs and decimals,
+    // drops duplicate keys and normalizes exponent notation. Display the exact
+    // decoded source instead of inventing a different customer document.
+    JSON.parse(text);
+    return { text, pretty: false, cut, unparsed: false };
   } catch {
     return { text, pretty: false, cut, unparsed: true };
   }

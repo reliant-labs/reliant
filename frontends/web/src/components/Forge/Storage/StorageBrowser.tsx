@@ -28,7 +28,9 @@ import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
 import type { StorageBucket } from "@/services/controlPlane/storageBrowser/storageBrowserApi";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { AccessReasonDialog } from "../AuditedAccess/AccessReasonDialog";
+import { getReaderSession, isCurrentReader, useReaderSession, subscribeReaderSession } from "../AuditedAccess/readerSession";
 import { isDenied, needsConfirmation, type AccessConfirmation } from "../AuditedAccess/accessSession-model";
 import { BucketSelector, StoragePolicyTag } from "./BucketSelector";
 import { ObjectListing } from "./ObjectListing";
@@ -59,7 +61,21 @@ export function defaultBucket(buckets: readonly StorageBucket[]): StorageBucket 
 
 const navigateTo = (url: string) => window.location.assign(url);
 
-export function StorageBrowser({ env, search, onNavigate, href, onDownloadUrl = navigateTo, pageSize }: StorageBrowserProps) {
+export function StorageBrowser(props: StorageBrowserProps) {
+  const reader = useReaderSession();
+  const client = useQueryClient();
+  useEffect(() => subscribeReaderSession(() => {
+    // Cancel and remove old content even when this client is not the app singleton.
+    const oldReader = (query: { queryKey: readonly unknown[] }) => query.queryKey[0] === "storage-browser" && query.queryKey[2] !== getReaderSession().epoch;
+    void client.cancelQueries({ predicate: oldReader });
+    client.removeQueries({ predicate: oldReader });
+  }), [client]);
+  if (!reader.principalId) return <StorageNote testId="storage-reader-required" title="Sign in to browse storage"><p>Storage reads need an authenticated reader.</p></StorageNote>;
+  return <ReaderStorageBrowser key={`${reader.epoch}:${props.env.id}`} {...props} />;
+}
+
+function ReaderStorageBrowser({ env, search, onNavigate, href, onDownloadUrl = navigateTo, pageSize }: StorageBrowserProps) {
+  const reader = useReaderSession();
   const listed = useBrowsableBuckets(env.id);
   const buckets = useMemo(() => listed.data?.buckets ?? [], [listed.data]);
   const policy = listed.data?.policy ?? "unknown";
@@ -79,11 +95,12 @@ export function StorageBrowser({ env, search, onNavigate, href, onDownloadUrl = 
   const [asking, setAsking] = useState(false);
   const [confirmationRequired, setConfirmationRequired] = useState(false);
   const confirmationLost = useCallback(() => {
+    if (!isCurrentReader(reader)) return;
     clearStorageAccess(env.id);
     setAccess(null);
     setConfirmationRequired(true);
     setAsking(true);
-  }, [env.id]);
+  }, [env.id, reader]);
 
   // A policy can change after the bucket list was read. The server's refusal
   // takes precedence over a cached OPEN policy.
@@ -160,6 +177,7 @@ export function StorageBrowser({ env, search, onNavigate, href, onDownloadUrl = 
           testIdPrefix="storage"
           initialReason={access?.reason ?? ""}
           onConfirm={(reason) => {
+            if (!isCurrentReader(reader)) return;
             setAccess(writeStorageAccess(env.id, reason));
             setAsking(false);
           }}

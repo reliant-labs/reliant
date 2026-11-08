@@ -50,11 +50,9 @@ describe("previewKindOf", () => {
 });
 
 describe("previewText", () => {
-  it("pretty-prints JSON that parses", () => {
-    const content = bytes('{"a":[1,2],"b":{"c":null}}');
-    const shown = previewText(content, "json", content.byteLength);
-    expect(shown).toMatchObject({ pretty: true, cut: false, unparsed: false });
-    expect(shown.text).toBe('{\n  "a": [\n    1,\n    2\n  ],\n  "b": {\n    "c": null\n  }\n}');
+  it.each(['{"a":[1,2],"b":{"c":null}}', '{"id":9007199254740993,"decimal":0.1234567890123456789,"exponent":1e999,"id":2}'])("preserves JSON source exactly: %s", (text) => {
+    const content = bytes(text);
+    expect(previewText(content, "json", content.byteLength)).toEqual({ text, pretty: false, cut: false, unparsed: false });
   });
 
   it("shows JSON that does not parse as stored", () => {

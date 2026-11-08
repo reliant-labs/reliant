@@ -237,8 +237,8 @@ describe("an object", () => {
     expect(metadata).toHaveTextContent("(57 bytes)");
     expect(within(pane).getByTestId("storage-user-metadata")).toHaveTextContent("cache-controlno-store");
     const text = await within(pane).findByTestId("storage-preview-text");
-    expect(text).toHaveAttribute("data-pretty", "true");
-    expect(text.textContent).toContain('"flags": [\n      "checkout-v2"');
+    expect(text).toHaveAttribute("data-pretty", "false");
+    expect(text.textContent).toContain('"checkout-v2"');
     expect(screen.getAllByTestId("storage-object").find((row) => row.dataset.key === "docs/config.json")!.querySelector("a")).toHaveAttribute("aria-current", "true");
   });
 

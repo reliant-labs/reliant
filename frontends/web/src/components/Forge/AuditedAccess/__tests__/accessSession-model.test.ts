@@ -1,13 +1,13 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The audited-environment confirmation, kept per surface and environment for
- * the tab session. The data browser's key (`forge.data.access.<env>`) is the
- * one its own copy of this module used, so the two unify without a reader
- * losing their kept reason.
+ * Confirmations are isolated per surface, environment and authenticated reader
+ * epoch. Legacy environment-only reasons are discarded, never migrated.
  */
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { getReaderSession, setReaderPrincipal } from "../readerSession";
+beforeEach(() => setReaderPrincipal("reader-A", true));
 
 import { accessStorageKey, clearAccess, isDenied, needsConfirmation, readAccess, REASON_MAX, validReason, writeAccess } from "../accessSession-model";
 
@@ -23,9 +23,19 @@ describe("the kept confirmation", () => {
     expect(writeAccess("data", "env-prod", "x".repeat(REASON_MAX + 20)).reason).toHaveLength(REASON_MAX);
   });
 
-  it("uses the data browser's key for the data namespace", () => {
-    expect(accessStorageKey("data", "env-prod")).toBe("forge.data.access.env-prod");
-    expect(accessStorageKey("storage", "env-prod")).toBe("forge.storage.access.env-prod");
+  it("discards legacy authority and isolates both namespaces by reader epoch", () => {
+    window.sessionStorage.setItem("forge.data.access.env-prod", JSON.stringify({ reason: "legacy" }));
+    expect(readAccess("data", "env-prod")).toBeNull();
+    const old = getReaderSession();
+    writeAccess("data", "env-prod", "A rows");
+    writeAccess("storage", "env-prod", "A files");
+    expect(accessStorageKey("data", "env-prod")).toContain("reader-A");
+    setReaderPrincipal("reader-B");
+    expect(readAccess("data", "env-prod")).toBeNull();
+    expect(readAccess("storage", "env-prod")).toBeNull();
+    expect(() => writeAccess("data", "env-prod", "late A", old)).toThrow();
+    setReaderPrincipal(null);
+    expect(() => writeAccess("storage", "env-prod", "signed out")).toThrow();
   });
 
   it("is cleared, and reads a damaged value as none", () => {
