@@ -240,9 +240,17 @@ func reconcileProjectDaemons(
 			continue
 		}
 
-		if err := database.UpsertProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch); err != nil {
+		// Recorded only if no detach committed since the detachments were
+		// read above: the probe can take seconds, and the write must not undo
+		// a detach that landed meanwhile.
+		recorded, err := database.RecordObservedProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch)
+		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" reconcile: failed to upsert project_daemon",
 				"error", err, "userID", userID, "daemonID", daemonID, "projectID", project.ID)
+			skipped++
+			continue
+		}
+		if !recorded {
 			skipped++
 			continue
 		}

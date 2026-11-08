@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -447,4 +448,87 @@ func TestListProjectDaemons_NamesEachMachineAndWhenItWasVerified(t *testing.T) {
 	require.NotNil(t, found.VerifiedAt)
 	_, err = time.Parse(time.RFC3339, *found.VerifiedAt)
 	assert.NoError(t, err)
+}
+
+// Two detaches of a project's last two checkouts, at once: the guard runs
+// under the project's catalog lock, so the second sees the first's commit and
+// is refused. One checkout always survives.
+func TestDetachProjectFromDaemon_ConcurrentDetachesLeaveOneCheckout(t *testing.T) {
+	f := newMachinesFixture(t)
+	p := f.project(t, "race", "/home/workspace/race-"+uuid.NewString(), f.cloud, nil)
+	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, p.ID, f.laptop, "/Users/me/race", nil))
+
+	errs := make(chan error, 2)
+	var wg sync.WaitGroup
+	for _, id := range []string{f.cloud, f.laptop} {
+		wg.Add(1)
+		go func(daemonID string) {
+			defer wg.Done()
+			_, err := f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+				ProjectId: p.ID, DaemonId: daemonID,
+			}))
+			errs <- err
+		}(id)
+	}
+	wg.Wait()
+	close(errs)
+	var ok, refused int
+	for err := range errs {
+		switch {
+		case err == nil:
+			ok++
+		case codeOf(err) == connect.CodeFailedPrecondition && strings.Contains(err.Error(), "only machine"):
+			refused++
+		default:
+			t.Fatalf("unexpected detach error: %v", err)
+		}
+	}
+	assert.Equal(t, 1, ok)
+	assert.Equal(t, 1, refused)
+	assert.Len(t, f.rows(t, p.ID), 1, "one checkout survives")
+}
+
+// moveBeforeDetach is the repository with an attach that moves the checkout
+// landing between the detach's unlocked read and its locked one.
+type moveBeforeDetach struct {
+	Repository
+	move func(ctx context.Context)
+}
+
+func (m moveBeforeDetach) DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string, guard func(context.Context) error) error {
+	m.move(ctx)
+	return m.Repository.DetachProjectFromDaemon(ctx, projectID, daemonID, path, guard)
+}
+
+// A checkout moved by a concurrent attach is not detached under its old path:
+// that would delete the new row and tombstone the old path, and the moved
+// checkout's watcher would then make a duplicate project. The detach is
+// refused, nothing changes, and a retry detaches the new path.
+func TestDetachProjectFromDaemon_RefusesACheckoutMovedUnderIt(t *testing.T) {
+	f := newMachinesFixture(t)
+	p := f.project(t, "m", "/home/workspace/m-"+uuid.NewString(), f.cloud, nil)
+	oldPath, newPath := "/Users/me/m-"+uuid.NewString(), "/Users/me/moved-"+uuid.NewString()
+	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, p.ID, f.laptop, oldPath, nil))
+	svc := newProjectService(t, moveBeforeDetach{Repository: f.repo, move: func(ctx context.Context) {
+		require.NoError(t, f.repo.UpsertProjectDaemon(ctx, p.ID, f.laptop, newPath, nil))
+	}}, f.disk)
+
+	_, err := svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+		ProjectId: p.ID, DaemonId: f.laptop,
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeAborted, codeOf(err))
+	assert.Equal(t, newPath, f.rows(t, p.ID)[f.laptop], "the moved checkout's row stays")
+	detached, err := f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
+	require.NoError(t, err)
+	assert.Empty(t, detached, "no tombstone for the path it moved away from")
+
+	_, err = f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+		ProjectId: p.ID, DaemonId: f.laptop,
+	}))
+	require.NoError(t, err)
+	detached, err = f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
+	require.NoError(t, err)
+	require.Len(t, detached, 1)
+	assert.Equal(t, newPath, detached[0].Path)
 }

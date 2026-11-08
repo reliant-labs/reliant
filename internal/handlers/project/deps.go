@@ -25,6 +25,7 @@ type Repository interface {
 	DeleteProject(ctx context.Context, id string, userID string) error
 
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
+	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)
 	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
@@ -35,7 +36,7 @@ type Repository interface {
 	// DetachProjectFromDaemon forgets a checkout without touching its files
 	// and records the detachment, which ListProjectDaemonDetachmentsForDaemon
 	// reads back so the connect heal leaves the pair alone.
-	DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string) error
+	DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string, guard func(ctx context.Context) error) error
 	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
 
 	CreateRepo(ctx context.Context, repo *core.Repo) error

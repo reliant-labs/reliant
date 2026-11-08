@@ -241,7 +241,8 @@ func (s *Service) ensureProjectDirsOnDaemon(userID, daemonID string) error {
 		// probed before the mkdir landed — the outcome no longer depends on
 		// which finishes first. Neither ever removes a row, and both write the
 		// same (project, machine, path).
-		if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch); err != nil {
+		// Never over a detach that committed while the mkdir ran.
+		if _, err := s.deps.Repo.RecordObservedProjectDaemon(ctx, project.ID, daemonID, project.Path, project.DefaultBranch); err != nil {
 			logging.Warn("project-dir-heal: made the folder but could not record it; the next connect's reconcile records it",
 				"error", err, "userID", userID, "daemonID", daemonID, "projectID", project.ID)
 		}
