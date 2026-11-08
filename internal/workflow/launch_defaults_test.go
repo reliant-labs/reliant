@@ -49,8 +49,11 @@ func launchDefaultsWorkflowDirs() []string {
 }
 
 func TestEveryWorkflowsLaunchFormDefaultsValidate(t *testing.T) {
+	// One workflow per subtest, each parsed and validated on its own: they run
+	// in parallel rather than one after another.
 	for _, file := range builtinWorkflowFiles(t) {
 		t.Run("builtin/"+file, func(t *testing.T) {
+			t.Parallel()
 			assertLaunchDefaultsValidate(t, parseBuiltinWorkflow(t, file))
 		})
 	}
@@ -60,6 +63,7 @@ func TestEveryWorkflowsLaunchFormDefaultsValidate(t *testing.T) {
 		sort.Strings(files)
 		for _, path := range files {
 			t.Run(path, func(t *testing.T) {
+				t.Parallel()
 				data, err := os.ReadFile(path)
 				require.NoError(t, err)
 				wf, err := runtime.ParseWorkflowProtoBytes(data)

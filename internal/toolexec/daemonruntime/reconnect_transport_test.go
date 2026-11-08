@@ -83,13 +83,16 @@ func TestReconnectingDaemonReusesOneGatewayConnection(t *testing.T) {
 	defer srv.Close()
 
 	client := newDaemonClientForTest(t, t.TempDir(), srv.URL)
+	// The production backoff (1s, then 2s) would spend three seconds waiting;
+	// connection reuse does not depend on how long the daemon waits between
+	// sessions.
+	client.reconnectMinDelay = 25 * time.Millisecond
 
 	// When the loop below sees the last session, the daemon may still be
 	// recording it in its data dir; startDaemon waits for it to stop.
 	startDaemon(t, client)
 
-	// Three sessions is enough to tell reuse from per-session dialing, and the
-	// daemon's reconnect backoff (1s, then 2s) keeps it under a few seconds.
+	// Three sessions is enough to tell reuse from per-session dialing.
 	const wantSessions = 3
 	deadline := time.Now().Add(30 * time.Second)
 	for gateway.sessions.Load() < wantSessions {

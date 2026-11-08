@@ -52,7 +52,9 @@ function VisitTour({ tipKey }: { tipKey: DemoTipKey }) {
   if (drawerOpen) return null;
   return (
     <>
-      {open ? <PageCallout tipKey={tipKey} onDismiss={dismiss} /> : null}
+      {/* Register with the shell's capture-phase Escape protocol. Keep our
+          handler at window bubble so a nested dialog handles Escape first. */}
+      {open ? <div data-escape-layer="" className="contents"><PageCallout tipKey={tipKey} onDismiss={dismiss} /></div> : null}
       {!open && (mobile ? <MobilePageCallout><button type="button" onClick={() => setOpen(true)} className="inline-flex min-h-[44px] items-center gap-2 rounded-md border border-border px-3 text-sm text-ink" data-testid="demo-page-info"><CircleHelp className="h-4 w-4" aria-hidden="true" />About {tip.title}</button></MobilePageCallout> : <DemoCorner order={1}>
         <div className="flex items-center justify-end gap-2" data-testid="demo-corner-bar">
           <button type="button" aria-label={`About ${tip.title}`} onClick={() => setOpen(true)} className="touch-target inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-popover text-ink shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" data-testid="demo-page-info"><CircleHelp className="h-5 w-5" aria-hidden="true" /></button>

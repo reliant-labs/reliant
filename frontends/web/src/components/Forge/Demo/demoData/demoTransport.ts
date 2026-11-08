@@ -43,7 +43,7 @@ export const REMOTE_TIMEOUT_MS = 4_000;
  * watch or stream, or that describe, preview or plan a change without making
  * it. Every other name is a write.
  */
-const READ_VERB = /^(List|Get|Search|Query|Compare|Watch|Stream|Describe|Preview|Plan|Check|Resolve)/;
+const READ_VERB = /^(List|Get|Search|Query|Compare|Watch|Stream|Describe|Browse|Preview|Plan|Check|Resolve)/;
 
 /**
  * The reads the demo may make. The proto's own word wins: a method declared

@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { scaffoldFixtures, type ScaffoldCast, type ScaffoldManifest } from "./fixtures";
 import { ScaffoldPanel } from "./ScaffoldPanel";
 import { TerminalReplay } from "./TerminalReplay";
+import { BuildSummary } from "./BuildSummary";
 
 export interface HowThisAppWasBuiltProps {
   /** Default: the recorded run in data/. */
@@ -37,24 +38,19 @@ export function HowThisAppWasBuilt({ cast, manifest, onBack, className, autoPlay
   const fixtures = cast && manifest ? { cast, manifest } : scaffoldFixtures();
   const recorded = new Date(fixtures.manifest.captured_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   return (
-    <div className={cn("space-y-6", className)} data-testid="how-built">
-      {leadWithRecording && <TerminalReplay cast={fixtures.cast} autoPlay={false} />}
-      <div className="flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1 space-y-1">
-          <p className="max-w-3xl text-sm text-ink-muted">
-            The traces and errors in this console are sample data. This part is not: it is the real run that made shop&apos;s code. One{" "}
-            <code>forge</code> command made the project, a person added one entity and one rpc to each service&apos;s proto, and{" "}
-            <code>forge scaffold</code> did the rest.
-            Then <code>forge lint</code> and <code>go build</code> checked it. Recorded with forge {fixtures.manifest.forge_version} on {recorded}.
-          </p>
+    <div className={cn("space-y-10", className)} data-testid="how-built">
+      <section className="space-y-5 rounded-xl border border-border bg-surface p-4 sm:p-6" aria-label="The recorded build">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <BuildSummary />
+          {onBack && <Button className="min-h-[44px]" variant="outline" leftIcon={<ArrowLeft />} onClick={onBack} data-testid="how-built-back">Back to the console</Button>}
         </div>
-        {onBack && (
-          <Button size="sm" variant="outline" leftIcon={<ArrowLeft />} onClick={onBack} data-testid="how-built-back">
-            Back to the console
-          </Button>
-        )}
-      </div>
-      {!leadWithRecording && <TerminalReplay cast={fixtures.cast} autoPlay={autoPlay} />}
+        <TerminalReplay cast={fixtures.cast} autoPlay={leadWithRecording ? false : autoPlay} />
+        <p className="text-sm leading-relaxed text-ink">In this recording, API definitions were added, then Forge generated the supporting code. It shows code generation, code checks and a successful Go build—not a deployment or a test-suite run. The console&apos;s monitoring data is a separate sample.</p>
+        <details className="border-t border-border pt-3 text-sm text-ink-muted">
+          <summary className="min-h-[44px] cursor-pointer py-3 font-medium text-ink">About this recording</summary>
+          <p>Recorded with Forge {fixtures.manifest.forge_version} on {recorded}. The commands and code below are unchanged from that run.</p>
+        </details>
+      </section>
       <ScaffoldPanel manifest={fixtures.manifest} cast={fixtures.cast} />
     </div>
   );

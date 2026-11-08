@@ -29,7 +29,7 @@ describe("<HowThisAppWasBuilt>", () => {
     render(<HowThisAppWasBuilt />);
     const t = manifest.totals;
     expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(
-      `You wrote ${n(t.you_wrote_lines)} lines of proto in ${t.you_wrote_files} files. forge generated ${n(t.forge_lines)} lines across ${n(t.files)} files.`
+      `${n(t.you_wrote_lines)} lines of API definitions in ${t.you_wrote_files} files. Forge generated ${n(t.forge_lines)} lines across ${n(t.files)} files.`
     );
     const totals = screen.getByTestId("scaffold-totals");
     const s = summarize(manifest, cast);
@@ -77,6 +77,39 @@ describe("<HowThisAppWasBuilt>", () => {
     expect(panel()).toHaveAttribute("data-excerpt", "migration");
   });
 
+  it("gives the stepper keyboard navigation and labelled current content", () => {
+    render(<HowThisAppWasBuilt />);
+    const first = screen.getByTestId("scaffold-chain-tab-proto");
+    expect(first).toHaveAttribute("tabindex", "0");
+    first.focus();
+    fireEvent.keyDown(first, {key:"ArrowRight"});
+    const second = screen.getByTestId("scaffold-chain-tab-migration");
+    expect(second).toHaveFocus();
+    expect(second).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByTestId("scaffold-chain-panel")).toHaveAttribute("aria-labelledby", second.id);
+    fireEvent.keyDown(second, {key:"End"});
+    expect(screen.getByTestId("scaffold-chain-panel")).toHaveAttribute("data-excerpt", "test");
+    fireEvent.keyDown(screen.getByTestId("scaffold-chain-tab-test"), {key:"Home"});
+    expect(first).toHaveFocus();
+    expect(first).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("leads with a shared plain-language API summary and separates recording provenance", () => {
+    render(<HowThisAppWasBuilt leadWithRecording />);
+    const summary = screen.getByTestId("build-summary");
+    expect(summary).toHaveTextContent("Your agent defines the data and API");
+    expect(summary).toHaveTextContent("writes your app's custom behavior");
+    expect(summary).not.toHaveTextContent(/rpc|proto|A person|You write the message/i);
+    expect(screen.getByRole("heading", {name:"Tell your agent what to build. Forge gives it the foundation.",level:2})).toBeVisible();
+    expect(screen.getByTestId("how-built")).toHaveTextContent("In this recording, API definitions were added");
+    expect(screen.getByTestId("scaffold-headline")).not.toHaveTextContent(/person|agent/i);
+    expect(CHAIN_COPY.proto.title).toBe("The agent defines the API");
+    expect(CHAIN_COPY.proto.body).toMatch(/^Your agent defines/);
+    expect(CHAIN_COPY.handler.body).toContain("your agent implements your app's rules");
+    expect(screen.getByRole("heading", {name:"What Forge generated",level:2})).toBeVisible();
+    expect(screen.getByText("About this recording").closest("details")).not.toHaveAttribute("open");
+  });
+
   it("offers Back only when it is given somewhere to go", () => {
     const onBack = vi.fn();
     const { unmount } = render(<HowThisAppWasBuilt />);
@@ -94,7 +127,7 @@ describe("<BuiltTourStep> (the tour's card)", () => {
     expect(screen.getByTestId("scaffold-replay")).toBeInTheDocument();
     const t = manifest.totals;
     expect(screen.getByTestId("built-tour-totals")).toHaveTextContent(
-      `You write ${n(t.you_wrote_lines)} lines of proto. forge writes ${n(t.forge_lines)} lines across ${n(t.files)} files`
+      `${n(t.you_wrote_lines)} lines of API definitions. Forge generated ${n(t.forge_lines)} lines across ${n(t.files)} files`
     );
     expect(screen.getByTestId("built-tour-totals")).toHaveTextContent("How this app was built");
     expect(allPaths).toContain("AGENTS.md");
