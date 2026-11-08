@@ -147,9 +147,42 @@ const spawnStringProvidersVersion workflow.Version = 1
 const spawnStringProvidersChangeID = "spawn-string-providers"
 
 // spawnStringProvidersVersionID is the change id gating one spawn call's
-// stringified `providers`.
-func spawnStringProvidersVersionID(toolCallID string) string {
-	return spawnStringProvidersChangeID + "/" + toolCallID
+// stringified `providers`: the call's id plus how many earlier calls with
+// that id this run already asked about. Tool-call ids come from the model
+// and may repeat across turns, and Temporal keeps one decision per change
+// id, so the id alone would hand a later call an earlier call's decision.
+func spawnStringProvidersVersionID(toolCallID string, occurrence int) string {
+	return fmt.Sprintf("%s/%s/%d", spawnStringProvidersChangeID, toolCallID, occurrence)
+}
+
+// spawnVersionOccurrences counts, per tool-call id, the spawn version
+// decisions one workflow run has asked for. It lives in the workflow context
+// (installed at the workflow root, like StreamIDTracker) and is advanced only
+// by workflow code driven by history, so a replay numbers every call the way
+// the original run did. Workflow code is cooperatively scheduled: no locking.
+type spawnVersionOccurrences struct {
+	seen map[string]int
+}
+
+type spawnVersionOccurrencesKey struct{}
+
+// withSpawnVersionOccurrences installs a fresh counter in the workflow context.
+func withSpawnVersionOccurrences(ctx workflow.Context) workflow.Context {
+	return workflow.WithValue(ctx, spawnVersionOccurrencesKey{}, &spawnVersionOccurrences{seen: map[string]int{}})
+}
+
+// nextSpawnStringProvidersVersionID returns the change id for this
+// occurrence of toolCallID and advances the count. Without a counter in the
+// context (tests that call parseSpawnToolCall directly) every call is the
+// first occurrence.
+func nextSpawnStringProvidersVersionID(ctx workflow.Context, toolCallID string) string {
+	occ, _ := ctx.Value(spawnVersionOccurrencesKey{}).(*spawnVersionOccurrences)
+	if occ == nil {
+		return spawnStringProvidersVersionID(toolCallID, 0)
+	}
+	n := occ.seen[toolCallID]
+	occ.seen[toolCallID] = n + 1
+	return spawnStringProvidersVersionID(toolCallID, n)
 }
 
 // maxStringifiedDepth bounds how many layers of JSON string encoding

@@ -427,7 +427,7 @@ func (s *SpawnTestSuite) TestParseSpawnToolCall_StringifiedProviders_Accepted() 
 // it again rather than start a child the history never started.
 func (s *SpawnTestSuite) TestParseSpawnToolCall_StringifiedProviders_ReplaysRefusal() {
 	env := s.NewTestWorkflowEnvironment()
-	env.OnGetVersion(spawnStringProvidersVersionID("tc-old"), workflow.DefaultVersion, spawnStringProvidersVersion).
+	env.OnGetVersion(spawnStringProvidersVersionID("tc-old", 0), workflow.DefaultVersion, spawnStringProvidersVersion).
 		Return(workflow.DefaultVersion)
 
 	var result *spawnChildWorkflowConfig
@@ -441,6 +441,37 @@ func (s *SpawnTestSuite) TestParseSpawnToolCall_StringifiedProviders_ReplaysRefu
 	s.Nil(result)
 	s.Require().Error(parseErr)
 	s.Contains(parseErr.Error(), "cannot unmarshal string")
+}
+
+// Tool-call ids come from the model and can repeat across turns. Each
+// occurrence gets its own version decision, so a history whose first call
+// with an id was recorded before the fix (refused) and whose second was
+// recorded after it (accepted) replays both as recorded.
+func (s *SpawnTestSuite) TestParseSpawnToolCall_StringifiedProviders_RepeatedIDDecidesPerOccurrence() {
+	s.NotEqual(spawnStringProvidersVersionID("tc-dup", 0), spawnStringProvidersVersionID("tc-dup", 1))
+
+	env := s.NewTestWorkflowEnvironment()
+	env.OnGetVersion(spawnStringProvidersVersionID("tc-dup", 0), workflow.DefaultVersion, spawnStringProvidersVersion).
+		Return(workflow.DefaultVersion)
+	env.OnGetVersion(spawnStringProvidersVersionID("tc-dup", 1), workflow.DefaultVersion, spawnStringProvidersVersion).
+		Return(spawnStringProvidersVersion)
+
+	var first, second *spawnChildWorkflowConfig
+	var firstErr, secondErr error
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		ctx = withSpawnVersionOccurrences(ctx)
+		first, firstErr = parseSpawnToolCall(ctx, stringProvidersSpawnCall("tc-dup"), "parent-wf-dup")
+		second, secondErr = parseSpawnToolCall(ctx, stringProvidersSpawnCall("tc-dup"), "parent-wf-dup")
+		return nil
+	})
+
+	s.NoError(env.GetWorkflowError())
+	s.Nil(first)
+	s.Require().Error(firstErr, "the pre-fix occurrence replays its refusal")
+	s.Require().NoError(secondErr, "the later occurrence keeps its own decision")
+	s.Require().NotNil(second)
+	s.Require().NotNil(second.providers)
+	s.Equal([]string{"codex"}, second.providers.Prefer)
 }
 
 func (s *SpawnTestSuite) TestParseSpawnToolCall_InvalidJSON() {

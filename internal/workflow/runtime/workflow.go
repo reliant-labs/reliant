@@ -951,6 +951,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// allocated-but-unfinalized assistant message ids. workflow.WithValue is
 	// not a Temporal command — safe for all histories.
 	ctx = WithStreamIDTracker(ctx, NewStreamIDTracker())
+	// Numbers each spawn call's version decision (spawn_node.go); like the
+	// tracker above, not a Temporal command.
+	ctx = withSpawnVersionOccurrences(ctx)
 
 	// on_failure: where the run failed, the handler to run for it and the
 	// outputs the run had produced when it did. The latter two are filled in
@@ -3529,7 +3532,7 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 	// See spawn_node.go for what a spawn tool call says.
 	parsed, err := parseSpawnToolInput(spawnToolCall.GetInput())
 	if parsed.providersFromString &&
-		workflow.GetVersion(ctx, spawnStringProvidersVersionID(toolCallID), workflow.DefaultVersion, spawnStringProvidersVersion) == workflow.DefaultVersion {
+		workflow.GetVersion(ctx, nextSpawnStringProvidersVersionID(ctx, toolCallID), workflow.DefaultVersion, spawnStringProvidersVersion) == workflow.DefaultVersion {
 		// Recorded by a build that refused a stringified `providers`:
 		// refuse it again, or the replay would start a child it never did.
 		err = parsed.strictProvidersErr
