@@ -255,7 +255,7 @@ describe('OAuthCallback — credential disclosure protection', () => {
   })
 
   it('exchanges the boot-captured PKCE code after the URL is safe for telemetry', async () => {
-    window.history.replaceState(null, '', `/auth/callback?${new URLSearchParams({ code: secret, state: 'FAKE_STATE', returnTo: ONBOARDING_URL })}#refresh_token=FAKE_REFRESH`)
+    window.history.replaceState(null, '', `/auth/callback?${new URLSearchParams({ code: secret, state: 'FAKE_STATE', returnTo: ONBOARDING_URL })}`)
     captureOAuthCallbackCredentials()
     mockSearch = { returnTo: ONBOARDING_URL }
     const { container } = render(<OAuthCallback />)
@@ -263,6 +263,30 @@ describe('OAuthCallback — credential disclosure protection', () => {
     expect(exchangeCodeForSessionMock).toHaveBeenCalledWith(secret)
     expect(mockNavigate).toHaveBeenCalledWith({ href: ONBOARDING_URL })
     assertNoDisclosure(container)
+  })
+
+  it.each([
+    '?code=FAKE_FIRST&code=FAKE_SECOND',
+    '#code=FAKE_FIRST&code=FAKE_SECOND',
+    '?code=FAKE_FIRST#code=FAKE_SECOND',
+    '?token_hash=FAKE_FIRST&token_hash=FAKE_SECOND&type=email',
+    '?token_hash=FAKE_FIRST&type=email#type=signup',
+    '?error=FAKE_FIRST#error=FAKE_SECOND',
+    '?error_description=FAKE_FIRST#error_description=FAKE_SECOND',
+    '?code=FAKE_FIRST#error_description=FAKE_SECOND',
+    '?code=FAKE_FIRST#access_token=FAKE_SECOND',
+    '?code=FAKE_FIRST#token_hash=FAKE_SECOND',
+  ])('rejects ambiguous callback %s without exchanging either credential', async (suffix) => {
+    window.history.replaceState(null, '', `/auth/callback${suffix}`)
+    captureOAuthCallbackCredentials()
+    mockSearch = {}
+    const { container, findByText } = render(<OAuthCallback />)
+    await findByText(/start sign-in again/i)
+    const visible = container.textContent + window.location.href + JSON.stringify(vi.mocked(logger.error).mock.calls)
+    expect(visible).not.toMatch(/FAKE_FIRST|FAKE_SECOND/)
+    expect(exchangeCodeForSessionMock).not.toHaveBeenCalled()
+    expect(verifyOtpMock).not.toHaveBeenCalled()
+    expect(setSession).not.toHaveBeenCalled()
   })
 
   it('consumes a captured code only once under StrictMode and recovers after a true remount', async () => {
