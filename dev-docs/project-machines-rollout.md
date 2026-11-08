@@ -67,7 +67,18 @@ Clean up: delete the `rollout-check` project and the folders on A and B.
   before this PR). A remove or reclone that succeeds while a workspace of
   that checkout remains (or is created while it runs: the guard and the
   daemon command hold the checkout's exclusive lock,
-  `Repo.WithProjectCheckoutExclusive`, which a workspace insert shares) is
+  `Repo.TearDownProjectCheckout`, which a workspace insert shares) is
   also a server defect: fix forward there, and rebuild the workspace from its
   branch if the branch was pushed.
-- **No data migration** ships, so either half rolls back alone.
+- **A workspace create is refused with "has not reported whether it
+  finished".** A remove or reclone of that checkout timed out (or the server
+  died while waiting), so `project_daemons.teardown_pending_at` stays set
+  while the machine may still be deleting. Expected: run the remove or
+  reclone again with the machine online, which clears it. A mark left on a
+  checkout whose remove or reclone did answer is a server defect
+  (`teardownSettled`, `internal/handlers/project/rpc_project_daemons.go`):
+  fix forward; as a stopgap clear that one row's `teardown_pending_at`.
+- **One additive migration** ships (`project_daemons.teardown_pending_at`,
+  nullable, unread by the previous release), so either half still rolls back
+  alone. During a rolling deploy a previous-release server neither sets nor
+  reads the mark.

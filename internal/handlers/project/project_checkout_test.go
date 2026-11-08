@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	project "github.com/reliant-labs/reliant/internal/handlers/project"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // pinnedRecorder records the machine and path every command went to, and
@@ -356,9 +357,10 @@ func (r *lockedRecorder) SendDaemonCommandToDaemon(ctx context.Context, userID, 
 }
 
 // Remove and reclone read the machine's workspaces and send the command that
-// deletes the checkout inside ONE exclusive section on that checkout (which a
-// workspace's insert shares, internal/db TestWithProjectCheckoutExclusive_*):
-// a workspace created after the guard read cannot land before the delete.
+// deletes the checkout inside ONE TearDownProjectCheckout on that checkout
+// (its exclusive lock, which a workspace's insert shares, and its pending
+// mark; internal/db TestTearDownProjectCheckout_*): a workspace created after
+// the guard read cannot land before the delete.
 func TestProjectOnDaemonCommands_RemoveAndRecloneGuardAndDeleteUnderTheCheckoutLock(t *testing.T) {
 	t.Parallel()
 	ctx := project.AuthedContext(t)
@@ -370,13 +372,18 @@ func TestProjectOnDaemonCommands_RemoveAndRecloneGuardAndDeleteUnderTheCheckoutL
 			t.Parallel()
 			store := onDaemon(t)
 			inLock, sections := false, 0
-			store.WithProjectCheckoutExclusiveFunc = func(ctx context.Context, projectID, daemonID string, fn func(context.Context) error) error {
+			var settled []bool
+			store.TearDownProjectCheckoutFunc = func(ctx context.Context, projectID, daemonID string, guard func(context.Context) error, destroy func(context.Context) bool) error {
 				assert.Equal(t, "p-1", projectID)
 				assert.Equal(t, "d-1", daemonID)
 				sections++
 				inLock = true
 				defer func() { inLock = false }()
-				return fn(ctx)
+				if err := guard(ctx); err != nil {
+					return err
+				}
+				settled = append(settled, destroy(ctx))
+				return nil
 			}
 			var guardInLock []bool
 			store.ListWorktreesFunc = func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error) {
@@ -393,6 +400,66 @@ func TestProjectOnDaemonCommands_RemoveAndRecloneGuardAndDeleteUnderTheCheckoutL
 				assert.True(t, in, "the workspace guard reads under the checkout lock")
 			}
 			assert.Equal(t, []bool{true}, router.commands, "the delete runs under the same lock")
+			assert.Equal(t, []bool{true}, settled, "an answered delete settles the checkout's workspaces")
 		})
+	}
+}
+
+// A remove or reclone whose wait for the machine ends without an answer (a
+// timeout, an interrupted connection, the wait cancelled) leaves its outcome
+// unknown: the machine may still be deleting the checkout. It reports the
+// round trip unsettled, so TearDownProjectCheckout keeps the checkout's
+// workspaces refused and the remove's row stays. An answer, the machine's own
+// failure, or a command that never reached it settles it.
+func TestProjectOnDaemonCommands_RemoveAndRecloneSettleOnlyOnAKnownOutcome(t *testing.T) {
+	t.Parallel()
+	ctx := project.AuthedContext(t)
+	outcomes := map[string]struct {
+		err     error
+		settled bool
+	}{
+		"answered":           {nil, true},
+		"machine's failure":  {toolexec.DaemonReportedFailure("git.remove", "remove clone: permission denied"), true},
+		"never dispatched":   {fmt.Errorf("send: %w", toolexec.ErrNotDispatched), true},
+		"timed out":          {fmt.Errorf("daemon command git.remove via NATS failed: %w: %w", toolexec.ErrDaemonTimeout, context.DeadlineExceeded), false},
+		"wait cancelled":     {fmt.Errorf("daemon command git.remove via NATS failed: %w", context.Canceled), false},
+		"connection dropped": {fmt.Errorf("daemon command failed: %w", toolexec.ErrDaemonConnectionInterrupted), false},
+	}
+	for name, call := range projectOnDaemonCalls(ctx, "p-1", "d-1") {
+		if name == "pull" {
+			continue
+		}
+		for outcome, want := range outcomes {
+			t.Run(name+"/"+outcome, func(t *testing.T) {
+				t.Parallel()
+				store := onDaemon(t)
+				var settled []bool
+				store.TearDownProjectCheckoutFunc = func(ctx context.Context, _, _ string, guard func(context.Context) error, destroy func(context.Context) bool) error {
+					if err := guard(ctx); err != nil {
+						return err
+					}
+					settled = append(settled, destroy(ctx))
+					return nil
+				}
+				deleted := false
+				store.DeleteProjectDaemonFunc = func(context.Context, string, string) error { deleted = true; return nil }
+				store.UpsertProjectDaemonFunc = func(context.Context, string, string, string, *string) error { return nil }
+				router := newPinnedRecorder()
+				router.fakeDaemon = func(string, []byte) ([]byte, error) {
+					if want.err != nil {
+						return nil, want.err
+					}
+					return []byte(`{"success":true}`), nil
+				}
+				err := call(newService(t, store, router))
+				assert.Equal(t, []bool{want.settled}, settled)
+				if want.err == nil {
+					require.NoError(t, err)
+					return
+				}
+				require.Error(t, err)
+				assert.False(t, deleted, "the row stays while the remove did not report success")
+			})
+		}
 	}
 }

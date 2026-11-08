@@ -38,11 +38,13 @@ type Repository interface {
 	// reads back so the connect heal leaves the pair alone.
 	DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string, guard func(ctx context.Context) error) error
 	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
-	// WithProjectCheckoutExclusive runs fn holding the exclusive lock on the
-	// project's checkout on the machine, which a branch workspace's insert
-	// shares: a remove or reclone's workspace guard and its daemon command
-	// run in it, so no workspace is admitted between the two.
-	WithProjectCheckoutExclusive(ctx context.Context, projectID, daemonID string, fn func(ctx context.Context) error) error
+	// TearDownProjectCheckout runs a remove or reclone's workspace guard and
+	// its daemon command holding the exclusive lock on the project's checkout
+	// on the machine, which a branch workspace's insert shares, and keeps the
+	// checkout's workspaces refused until destroy reports the outcome
+	// settled: no workspace is admitted between the guard and the end of the
+	// delete, even one the machine finishes after the server stopped waiting.
+	TearDownProjectCheckout(ctx context.Context, projectID, daemonID string, guard func(ctx context.Context) error, destroy func(ctx context.Context) (settled bool)) error
 
 	CreateRepo(ctx context.Context, repo *core.Repo) error
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)

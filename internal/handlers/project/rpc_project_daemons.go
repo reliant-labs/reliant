@@ -617,8 +617,11 @@ func (s *Service) RemoveProjectFromDaemon(
 	// Deleting the checkout breaks every branch workspace of the project on
 	// that machine: they are git worktrees of it. Refused until they are
 	// archived, as a detach is. The guard and the delete run under the
-	// checkout's exclusive lock, which a workspace's insert shares, so no
-	// workspace is admitted between the guard's read and the delete.
+	// checkout's exclusive lock, which a workspace's insert shares, and the
+	// checkout is marked torn down until the machine answers
+	// (TearDownProjectCheckout): no workspace is admitted from the guard's
+	// read until the delete is known to be over, even when the wait for the
+	// machine times out while it is still deleting.
 	//
 	// The row goes only once the machine has removed the checkout. It is the
 	// only record of a checkout on that machine: dropped while the clone is
@@ -628,12 +631,11 @@ func (s *Service) RemoveProjectFromDaemon(
 	// from here; a machine that is gone for good releases its rows when it
 	// is removed (db.Repo.RemoveDaemon).
 	var sendErr error
-	if err := s.deps.Repo.WithProjectCheckoutExclusive(ctx, project.ID, req.Msg.DaemonId, func(lockedCtx context.Context) error {
-		if err := s.requireNoWorkspacesOn(lockedCtx, project, req.Msg.DaemonId, s.machineName(lockedCtx, req.Msg.DaemonId), "removing the project from that machine"); err != nil {
-			return err
-		}
+	if err := s.deps.Repo.TearDownProjectCheckout(ctx, project.ID, req.Msg.DaemonId, func(lockedCtx context.Context) error {
+		return s.requireNoWorkspacesOn(lockedCtx, project, req.Msg.DaemonId, s.machineName(lockedCtx, req.Msg.DaemonId), "removing the project from that machine")
+	}, func(lockedCtx context.Context) bool {
 		sendErr = s.sendToDaemon(lockedCtx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp)
-		return nil
+		return teardownSettled(sendErr)
 	}); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to lock the project's checkout on the machine"))
 	}
@@ -657,6 +659,19 @@ func (s *Service) RemoveProjectFromDaemon(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project_daemons row"))
 	}
 	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
+}
+
+// teardownSettled reports whether a remove or reclone's daemon round trip
+// ended with its outcome known: the machine answered (success or its own
+// failure), or the command provably never reached it. A timeout, an
+// interrupted connection or a cancelled wait is not settled: the machine may
+// still be deleting the checkout, so TearDownProjectCheckout keeps its
+// workspaces refused until a later remove or reclone settles.
+func teardownSettled(err error) bool {
+	return err == nil ||
+		toolexec.IsDaemonReportedFailure(err) ||
+		errors.Is(err, toolexec.ErrNotDispatched) ||
+		daemonerr.Unreachable(err)
 }
 
 // removeFromOfflineMachine is RemoveProjectFromDaemon's refusal for a machine
@@ -698,15 +713,14 @@ func (s *Service) RecloneProjectOnDaemon(
 	}
 	// The reclone deletes the checkout first, breaking the project's branch
 	// workspaces on that machine (git worktrees of it), as a remove does: the
-	// guard and the reclone run under the checkout's exclusive lock, as a
-	// remove's do. A workspace queued behind it builds on the fresh clone.
+	// guard and the reclone are a TearDownProjectCheckout, as a remove's are.
+	// A workspace queued behind it builds on the fresh clone.
 	var sendErr error
-	if err := s.deps.Repo.WithProjectCheckoutExclusive(ctx, project.ID, req.Msg.DaemonId, func(lockedCtx context.Context) error {
-		if err := s.requireNoWorkspacesOn(lockedCtx, project, req.Msg.DaemonId, s.machineName(lockedCtx, req.Msg.DaemonId), "recloning the project on that machine"); err != nil {
-			return err
-		}
+	if err := s.deps.Repo.TearDownProjectCheckout(ctx, project.ID, req.Msg.DaemonId, func(lockedCtx context.Context) error {
+		return s.requireNoWorkspacesOn(lockedCtx, project, req.Msg.DaemonId, s.machineName(lockedCtx, req.Msg.DaemonId), "recloning the project on that machine")
+	}, func(lockedCtx context.Context) bool {
 		sendErr = s.sendToDaemon(lockedCtx, userID, req.Msg.DaemonId, "git.reclone", payload, &recloneResp)
-		return nil
+		return teardownSettled(sendErr)
 	}); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to lock the project's checkout on the machine"))
 	}

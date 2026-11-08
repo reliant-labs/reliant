@@ -1414,6 +1414,14 @@ func DaemonReportedFailure(commandType, text string) error {
 	return fmt.Errorf("daemon command %q failed: %w", commandType, daemonReportedFailure(text))
 }
 
+// IsDaemonReportedFailure reports whether err is a daemon command's failure
+// in its own daemon's words: the daemon ran the command and answered, so its
+// outcome is known. A failed round trip (a timeout, an interruption, a
+// cancelled wait) is not one.
+func IsDaemonReportedFailure(err error) bool {
+	return errors.Is(err, errDaemonReportedFailure)
+}
+
 // DaemonReportedText returns the failure a daemon command's own daemon
 // answered with — the daemon's words, from the user's own machine (a git
 // rejection, a missing path) — and whether err carries one. A failure of the

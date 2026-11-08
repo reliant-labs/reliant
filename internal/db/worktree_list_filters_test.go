@@ -124,7 +124,7 @@ func TestListWorktrees_DaemonIDNarrowsToThatMachineAndPages(t *testing.T) {
 	ctx := context.Background()
 	project, err := repo.GetProject(ctx, "test-project")
 	require.NoError(t, err)
-	base := time.Now().UTC().Add(-time.Hour)
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	here, elsewhere := "d-here", "d-elsewhere"
 	seed := func(id, daemonID string, lastActive time.Time) {
 		require.NoError(t, repo.CreateWorktree(ctx, &Worktree{

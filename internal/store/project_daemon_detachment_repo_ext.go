@@ -75,6 +75,38 @@ func LockProjectCheckout(ctx context.Context, db orm.Context, projectID, daemonI
 	return nil
 }
 
+// SetProjectCheckoutTeardownPending stamps the checkout's
+// teardown_pending_at (pending) or clears it: set before a remove or reclone
+// is sent, cleared once its outcome is known. A missing row is not an error.
+func SetProjectCheckoutTeardownPending(ctx context.Context, db orm.Context, projectID, daemonID string, pending bool) error {
+	set := "teardown_pending_at = NULL"
+	if pending {
+		set = "teardown_pending_at = NOW()"
+	}
+	if _, err := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil)).
+		Set(set).
+		Where("project_id = ?", projectID).
+		Where("daemon_id = ?", daemonID).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("failed to record the checkout's pending teardown: %w", err)
+	}
+	return nil
+}
+
+// ProjectCheckoutTeardownPending reports whether a remove or reclone of the
+// project's checkout on the machine was sent and its outcome never heard.
+func ProjectCheckoutTeardownPending(ctx context.Context, db orm.Context, projectID, daemonID string) (bool, error) {
+	pending, err := db.Bun().NewSelect().Model((*ProjectDaemon)(nil)).
+		Where("project_id = ?", projectID).
+		Where("daemon_id = ?", daemonID).
+		Where("teardown_pending_at IS NOT NULL").
+		Exists(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to read the checkout's pending teardown: %w", err)
+	}
+	return pending, nil
+}
+
 // RecordProjectDaemonDetachment records that the user detached the project
 // from the machine, at the checkout path it had there. A second detach of the
 // same pair moves its path and time.
