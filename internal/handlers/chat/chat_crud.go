@@ -750,13 +750,14 @@ func (s *Service) GetChatUpdates(
 	}
 
 	// Convert to proto messages
+	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoUpdates := make([]*reliantv1.ChatUpdate, len(updates))
-	var sent messageproto.TranscriptBytes
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
 	for i, update := range updates {
 		data := []byte(update.Data)
 		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
 			// The same tool-result preview every client-facing read sends.
-			data = messageproto.PreviewMessageUpdate(data)
+			data = messageproto.PreviewMessageUpdate(data, toolBodies)
 		}
 		dataJSON := string(data)
 		sent.AddChatUpdate(update.UpdateType, dataJSON)

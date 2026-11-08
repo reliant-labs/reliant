@@ -1,8 +1,7 @@
 # Lazy tool bodies: open a chat without its tool inputs and outputs
 
-Status: **design, owner-approved direction (2026-11-08); five decisions are
-open (see the end).** No production code yet. Branch
-`feat/chat-lazy-tool-bodies`.
+Status: **owner-approved (2026-11-08); the five decisions are recorded at the
+end.** PR 1 (protocol + server) is on branch `feat/chat-lazy-tool-bodies`.
 
 The direction: a chat opens without the full inputs and outputs of its
 finished tool calls. The client fetches a call's body when the user expands
@@ -556,6 +555,34 @@ baseline.
   migrate back.
 
 ## Decisions for the owner
+
+**Decided (owner, 2026-11-08):**
+
+1. Detailed mode's default-expanded file diffs: **(a)**, fetch on mount,
+   batched and bounded by virtualization. `edit`/`write`/`patch` inputs are
+   elided like any other.
+2. Live frames: **kept full**.
+3. Thinking content: **elided** in STUB mode (`stubThinking` in
+   `internal/messageproto/stub.go`).
+4. Kill switch: **shipped** as `RELIANT_TRANSCRIPT_TOOL_BODY_STUBS=off`
+   (`ReliantConfig.transcript.tool_body_stubs`, `on`/`off`, default `on`,
+   any other value refused at load). It is on the root config, not
+   `ApiServerConfig`, because the handlers read settings through their
+   `Deps.Config` (forge's `forge-config-deps` lint refuses a scalar Deps
+   field).
+5. The new rpc in the Go SDK's public API: **exported**, but not in PR 1.
+   The SDK PR (PR 2) covers both SDKs: it adds
+   `export ChatService/GetContentBlockBodies` to `proto/public-api.txt` along
+   with the TypeScript work.
+
+PR 1 landing note: `chat.proto` is generated into the SDK module
+(`sdk/go/gen`), which the app links at the version `go.mod` pins, so PR 1 is
+two commits: the protos and their SDK output first, then the server on a pin
+of that commit (the #2337 pattern). After its squash merge the pin must move
+to the squash commit on main (as #2391 did), because the branch commit stops
+being fetchable once the branch is deleted.
+
+The options as they were put:
 
 1. **Detailed mode's default-expanded file diffs** (`fileWrite: false`).
    (a) Fetch on mount, batched and bounded by virtualization: most of the

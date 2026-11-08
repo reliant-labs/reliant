@@ -72,6 +72,27 @@ message ReliantConfig {
   LogConfig log = 1;
   RuntimeConfig runtime = 2;
   StorageReaperConfig storage_reaper = 3;
+  TranscriptConfig transcript = 4;
+}
+
+// TranscriptConfig is how the transcript read paths (ListMessages,
+// GetMessage, the chat stream, GetChatUpdates) send a chat's messages. The
+// handlers that serve them read it through their Deps.Config, so it is on the
+// root config; only the API server serves those rpcs.
+message TranscriptConfig {
+  // The kill switch for TOOL_BODY_MODE_STUB reads
+  // (dev-docs/design/chat-lazy-tool-bodies.md): off answers every read that
+  // asks for STUB as if it asked for FULL, so a stub regression is undone by
+  // a config flip, not a client release. Clients act on each block's flags,
+  // never on the mode they asked for, so either value is safe for every
+  // client version. Only on and off: a kill switch must not fail open on a
+  // typo.
+  string tool_body_stubs = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS"
+    default_value: "on"
+    allowed_values: ["on", "off"]
+    description: "Transcript reads may leave finished tool calls' bodies out when a client asks (on) or always send them whole (off)"
+  }];
 }
 
 // RuntimeConfig is where the process is running. The entrypoint hands it to
