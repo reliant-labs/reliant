@@ -508,13 +508,18 @@ func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnect
 	if err != nil {
 		return nil, false, err
 	}
-	if detached.path(path) {
-		return nil, false, errProjectDetached
-	}
+	// The machine's checkout at path wins over a detachment recorded at the
+	// same path: the user can detach project A from a folder and then attach
+	// project B to it, and A's detachment must not drop B's reports. A pair
+	// never has both a checkout and a detachment (recording one clears the
+	// other), so a checkout here is never one the user detached.
 	if own, err := s.machineCheckoutAt(ctx, conn, path); err != nil {
 		return nil, false, err
 	} else if own != nil {
 		return own, false, nil
+	}
+	if detached.path(path) {
+		return nil, false, errProjectDetached
 	}
 
 	project, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)

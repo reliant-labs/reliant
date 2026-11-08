@@ -115,6 +115,38 @@ func TestDetachedProject_ItsOtherPathIsNotANewProject(t *testing.T) {
 	assert.Len(t, projects, 1)
 }
 
+// Detaching project A from a folder and then attaching project B to the same
+// folder: the machine's reports of the folder are B's, not dropped by A's
+// detachment, and B's snapshot from the machine is synced.
+func TestDetachedProject_AnotherProjectAttachedAtItsPathSyncs(t *testing.T) {
+	f := newDetachedFixture(t)
+	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
+	require.NoError(t, f.repo.DetachProjectFromDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
+
+	now := time.Unix(1_800_000_000, 0).UTC()
+	other := &db.Project{ID: uuid.NewString(), UserID: f.userID, Name: "other",
+		Path: "/home/workspace/other-" + uuid.NewString(), CreatedAt: now, UpdatedAt: now, LastActive: now}
+	require.NoError(t, f.repo.CreateProject(f.ctx, other))
+	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, other.ID, f.laptop, f.localPath, nil))
+	svc := newTestService(f.repo)
+
+	got, err := svc.ensureOwnedProjectForPath(f.ctx, newTestConn(f.userID, f.laptop, nil), f.localPath, nil)
+	require.NoError(t, err)
+	assert.Equal(t, other.ID, got.ID, "the folder is the attached project's")
+
+	synced, err := f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
+		ProjectID: other.ID, DaemonID: f.laptop, PushedAt: now,
+	}, true)
+	require.NoError(t, err)
+	assert.True(t, synced, "the attached project's snapshot from the machine is synced")
+
+	// A stays detached from the machine.
+	detached, err := f.repo.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.laptop)
+	require.NoError(t, err)
+	require.Len(t, detached, 1)
+	assert.Equal(t, f.project.ID, detached[0].ProjectID)
+}
+
 // detachDuringIntakeRepo starts a detach right after the path resolution has
 // read the machine's detachments, before it reads the machine's checkout.
 type detachDuringIntakeRepo struct {
