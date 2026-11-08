@@ -92,13 +92,16 @@ func (s *Service) GetMessage(
 	// the caller has not said which thread it is reading as. Statuses are
 	// reported exactly as persisted; the branch-aware reinterpretation belongs
 	// to ListMessages, which knows the thread being displayed.
+	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessage := messageproto.FromDB(msg, blocks, attachments, &messageproto.Options{
 		ToolCallStatusByCallID: toolCallStatusByCallID,
 		SenderTitlesByThreadID: messageproto.SenderTitles(ctx, s.deps.Repo, []*db.Message{msg}),
+		ToolBodies:             toolBodies,
 	})
 
-	// What this read sent, by block kind, on the RPC's span.
-	var sent messageproto.TranscriptBytes
+	// What this read sent, by block kind, on the RPC's span (after the stub
+	// policy).
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
 	sent.AddMessages(protoMessage)
 	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 

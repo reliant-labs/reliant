@@ -55,6 +55,7 @@ type (
 	ConfigScope                              = sdk.ConfigScope
 	ConnectorPolicy                          = sdk.ConnectorPolicy
 	ContentBlock                             = sdk.ContentBlock
+	ContentBlockBody                         = sdk.ContentBlockBody
 	ContentBlockType                         = sdk.ContentBlockType
 	CreateTriggerRequest                     = sdk.CreateTriggerRequest
 	CreateTriggerResponse                    = sdk.CreateTriggerResponse
@@ -129,6 +130,8 @@ type (
 	GetChatResponse                          = sdk.GetChatResponse
 	GetChatUpdatesRequest                    = sdk.GetChatUpdatesRequest
 	GetChatUpdatesResponse                   = sdk.GetChatUpdatesResponse
+	GetContentBlockBodiesRequest             = sdk.GetContentBlockBodiesRequest
+	GetContentBlockBodiesResponse            = sdk.GetContentBlockBodiesResponse
 	GetLaunchEventRequest                    = sdk.GetLaunchEventRequest
 	GetLaunchEventResponse                   = sdk.GetLaunchEventResponse
 	GetRunRequest                            = sdk.GetRunRequest
@@ -359,6 +362,7 @@ type (
 	TerminalSessionEvent_EventType           = sdk.TerminalSessionEvent_EventType
 	TerminateChatRequest                     = sdk.TerminateChatRequest
 	TerminateChatResponse                    = sdk.TerminateChatResponse
+	ToolBodyMode                             = sdk.ToolBodyMode
 	ToolCallStatus                           = sdk.ToolCallStatus
 	ToolExecutionBackground                  = sdk.ToolExecutionBackground
 	ToolExecutionCancel                      = sdk.ToolExecutionCancel
@@ -570,6 +574,9 @@ const (
 	TerminalSessionEvent_EVENT_TYPE_CREATED                                    = sdk.TerminalSessionEvent_EVENT_TYPE_CREATED
 	TerminalSessionEvent_EVENT_TYPE_ERROR                                      = sdk.TerminalSessionEvent_EVENT_TYPE_ERROR
 	TerminalSessionEvent_EVENT_TYPE_UNSPECIFIED                                = sdk.TerminalSessionEvent_EVENT_TYPE_UNSPECIFIED
+	ToolBodyMode_TOOL_BODY_MODE_FULL                                           = sdk.ToolBodyMode_TOOL_BODY_MODE_FULL
+	ToolBodyMode_TOOL_BODY_MODE_STUB                                           = sdk.ToolBodyMode_TOOL_BODY_MODE_STUB
+	ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED                                    = sdk.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED
 	ToolCallStatus_TOOL_CALL_STATUS_BACKGROUNDED                               = sdk.ToolCallStatus_TOOL_CALL_STATUS_BACKGROUNDED
 	ToolCallStatus_TOOL_CALL_STATUS_CANCELLED                                  = sdk.ToolCallStatus_TOOL_CALL_STATUS_CANCELLED
 	ToolCallStatus_TOOL_CALL_STATUS_COMPLETED                                  = sdk.ToolCallStatus_TOOL_CALL_STATUS_COMPLETED
@@ -705,6 +712,8 @@ var (
 	StreamingState_value                 = sdk.StreamingState_value
 	TerminalSessionEvent_EventType_name  = sdk.TerminalSessionEvent_EventType_name
 	TerminalSessionEvent_EventType_value = sdk.TerminalSessionEvent_EventType_value
+	ToolBodyMode_name                    = sdk.ToolBodyMode_name
+	ToolBodyMode_value                   = sdk.ToolBodyMode_value
 	ToolCallStatus_name                  = sdk.ToolCallStatus_name
 	ToolCallStatus_value                 = sdk.ToolCallStatus_value
 	ToolExecutionStatus_name             = sdk.ToolExecutionStatus_name

@@ -71,7 +71,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ChatService
-  // forge:hash=c36c1104c71fab8660f294984c70119524c7d5a8ebccbaa947cdfd9b72aca043
+  // forge:hash=09d33b6f662839715991f26af9e36981bb159739175d9ad324390c9f9749941a
   & {
     "reliant.v1.ChatService/StartChat"?: (req: import("@/gen/reliant/v1/chat_pb").StartChatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").StartChatResponseSchema>>;
     "reliant.v1.ChatService/RunNow"?: (req: import("@/gen/reliant/v1/chat_pb").RunNowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").RunNowResponseSchema>>;
@@ -90,6 +90,7 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ChatService/InterruptThread"?: (req: import("@/gen/reliant/v1/chat_pb").InterruptThreadRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").InterruptThreadResponseSchema>>;
     "reliant.v1.ChatService/ListMessages"?: (req: import("@/gen/reliant/v1/chat_pb").ListMessagesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").ListMessagesResponseSchema>>;
     "reliant.v1.ChatService/GetToolResult"?: (req: import("@/gen/reliant/v1/chat_pb").GetToolResultRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").GetToolResultResponseSchema>>;
+    "reliant.v1.ChatService/GetContentBlockBodies"?: (req: import("@/gen/reliant/v1/chat_pb").GetContentBlockBodiesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").GetContentBlockBodiesResponseSchema>>;
     "reliant.v1.ChatService/UpdateChatState"?: (req: import("@/gen/reliant/v1/chat_pb").UpdateChatStateRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").UpdateChatStateResponseSchema>>;
     "reliant.v1.ChatService/TerminateChat"?: (req: import("@/gen/reliant/v1/chat_pb").TerminateChatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").TerminateChatResponseSchema>>;
     "reliant.v1.ChatService/PauseChat"?: (req: import("@/gen/reliant/v1/chat_pb").PauseChatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").PauseChatResponseSchema>>;

@@ -26,6 +26,8 @@ plugins:
       # What /react drives besides the stream: transcript paging and the run
       # controls, the gates (approvals and questions), the inbox and run reads.
       - reliant.v1.ChatService.ListMessages
+      # The bodies a TOOL_BODY_MODE_STUB transcript read left out.
+      - reliant.v1.ChatService.GetContentBlockBodies
       - reliant.v1.ChatService.PauseChat
       - reliant.v1.ChatService.ResumeChat
       - reliant.v1.ChatService.InterruptThread

@@ -1326,6 +1326,9 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		// Whether the loop took this turn on a hint (see
 		// RuntimeContext.SpeculativeTurn).
 		rtx.SpeculativeTurn = e.childTracker.isSpeculativeTurn(rtx.Thread)
+		// Whether this is the first turn of a loop resumed mid-work (see
+		// RuntimeContext.ResumeTurn). Consumed here, so it marks one turn.
+		rtx.ResumeTurn = e.childTracker.takeResumeTurn(rtx.Thread)
 		// The catalog the run started with: the spawn tool describes its
 		// presets from it (catalog_pin.go).
 		rtx.CatalogPin = catalogPinFrom(e.ctx)

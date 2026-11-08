@@ -104,6 +104,19 @@ func ListContentBlocksForMessages(ctx context.Context, db orm.Context, messageID
 	return contentBlocksFromRows(rows), nil
 }
 
+// ListContentBlocksByIDs reads blocks by primary key, in one query. An id no
+// row holds is simply absent from the result; order is unspecified.
+func ListContentBlocksByIDs(ctx context.Context, db orm.Context, ids []string) ([]*core.MessageContentBlock, error) {
+	if len(ids) == 0 {
+		return []*core.MessageContentBlock{}, nil
+	}
+	rows, err := ListMessageContentBlock(ctx, db, orm.WhereIn(MessageContentBlockFieldID, ids))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list content blocks by id: %w", err)
+	}
+	return contentBlocksFromRows(rows), nil
+}
+
 // AppendToContentBlock appends one streamed delta to a block's content and
 // counts it in version — the hottest write on the streaming path, one per
 // provider delta. The delta's bytes travel inside the statement text (bun
