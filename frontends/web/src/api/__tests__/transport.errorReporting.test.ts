@@ -245,6 +245,25 @@ describe("what a caller holds after the transport decided", () => {
     expect(isRpcFailureDecided(held)).toBe(true);
   });
 
+  // Prod d2ceb843 (reliant #2395): a preview on a machine without the
+  // project is a FailedPrecondition the viewer renders with its way out. Not
+  // a report, and the viewer's console.error of it stays out of the SDK.
+  it("does not report a project that is not checked out on the chat's machine", async () => {
+    const { isRpcFailureDecided } = await import("@/lib/handledRpcFailures");
+    const call = await chainFailingWith(
+      () =>
+        new ConnectError(
+          `"growth" isn't checked out on "cicd": switch to "default", which has it, or clone it onto "cicd" to browse its files`,
+          Code.FailedPrecondition,
+        ),
+    );
+    const held = await call("reliant.v1.FileSystemService", "GetFilePreviewInfo").catch((e: unknown) => e);
+    expect((held as ConnectError).code).toBe(Code.FailedPrecondition);
+    expect(reporting.reportError).not.toHaveBeenCalled();
+    expect(reporting.reportFailure).not.toHaveBeenCalled();
+    expect(isRpcFailureDecided(held)).toBe(true);
+  });
+
   it("does not mark an Error the transport never saw", async () => {
     const { isRpcFailureDecided } = await import("@/lib/handledRpcFailures");
     expect(isRpcFailureDecided(new ConnectError("stream reset", Code.Internal))).toBe(false);
