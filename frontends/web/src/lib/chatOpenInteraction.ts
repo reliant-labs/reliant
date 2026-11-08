@@ -13,6 +13,7 @@
  *                        was left) | timeout
  *   chat.sync            snapshot | replay | none (the stream was already live)
  *   chat.overlay_shown   whether the catch-up overlay came up
+ *   chat.tool_bodies     stub | full (lib/toolBodies.ts), to compare open times
  *
  * One open at a time, keyed by its chat: nothing about another chat ever
  * marks or ends it. Best-effort throughout: the runtime never throws, and
@@ -27,6 +28,7 @@ import {
   type InteractionAttributes,
 } from "@reliantlabs/forge-web-runtime";
 import type { ChatSyncKind } from "@reliantlabs/sdk/client";
+import { TRANSCRIPT_TOOL_BODIES } from "./toolBodies";
 
 export const CHAT_OPEN_INTERACTION = "chat.open";
 
@@ -73,6 +75,8 @@ export function beginChatOpen(
     "chat.id": chatId,
     "chat.sync": "none",
     "chat.overlay_shown": false,
+    // stub | full: whether the transcript opened without finished tool bodies.
+    "chat.tool_bodies": TRANSCRIPT_TOOL_BODIES,
     ...attributes,
   });
   publish({ chatId, op, armed: false });

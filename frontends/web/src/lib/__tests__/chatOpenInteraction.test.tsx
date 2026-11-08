@@ -15,6 +15,7 @@ import { ChatStreamingService } from "../../api/chat-streaming-grpc";
 import { ChatUpdateType } from "../../api/streaming-grpc";
 import type { ChatStreamEvent } from "../../gen/reliant/v1/streaming_pb";
 import { installRecordingTracer, type RecordedSpan } from "../../test/recordingTracer";
+import { TRANSCRIPT_TOOL_BODIES } from "../toolBodies";
 
 // The chat.open interaction against the real web runtime, recorded by a fake
 // tracer: when it starts, which phases land on it, and that it ends on the
@@ -78,6 +79,8 @@ describe("chat.open interaction", () => {
       "chat.cached_messages": 4,
       "chat.sync": "none",
       "chat.overlay_shown": false,
+      // Open times are compared by how the transcript sent its tool bodies.
+      "chat.tool_bodies": TRANSCRIPT_TOOL_BODIES,
     });
     expect(lastOpen().ended).toBe(false);
   });
