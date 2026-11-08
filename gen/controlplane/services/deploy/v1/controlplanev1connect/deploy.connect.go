@@ -137,6 +137,9 @@ const (
 	DeployServiceRecordBundleProcedure = "/controlplane.v1.DeployService/RecordBundle"
 	// DeployServiceGetBundleProcedure is the fully-qualified name of the DeployService's GetBundle RPC.
 	DeployServiceGetBundleProcedure = "/controlplane.v1.DeployService/GetBundle"
+	// DeployServiceGetWorkloadConfigProcedure is the fully-qualified name of the DeployService's
+	// GetWorkloadConfig RPC.
+	DeployServiceGetWorkloadConfigProcedure = "/controlplane.v1.DeployService/GetWorkloadConfig"
 	// DeployServiceListConvergencesProcedure is the fully-qualified name of the DeployService's
 	// ListConvergences RPC.
 	DeployServiceListConvergencesProcedure = "/controlplane.v1.DeployService/ListConvergences"
@@ -170,6 +173,9 @@ const (
 	// DeployServiceReportLocalSessionProcedure is the fully-qualified name of the DeployService's
 	// ReportLocalSession RPC.
 	DeployServiceReportLocalSessionProcedure = "/controlplane.v1.DeployService/ReportLocalSession"
+	// DeployServiceMintLocalTelemetryTokenProcedure is the fully-qualified name of the DeployService's
+	// MintLocalTelemetryToken RPC.
+	DeployServiceMintLocalTelemetryTokenProcedure = "/controlplane.v1.DeployService/MintLocalTelemetryToken"
 	// DeployServiceImportLedgerProcedure is the fully-qualified name of the DeployService's
 	// ImportLedger RPC.
 	DeployServiceImportLedgerProcedure = "/controlplane.v1.DeployService/ImportLedger"
@@ -407,6 +413,9 @@ type DeployServiceClient interface {
 	// created=false.
 	RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error)
 	GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error)
+	// Values require BOTH deploy:read and deploy:config:read. Every read is
+	// synchronously audited. The names-only GetBundle endpoint is unchanged.
+	GetWorkloadConfig(context.Context, *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error)
 	// ListConvergences returns an environment's OBSERVATION TIMELINE, newest
 	// first, keyset-paged for ListPromotions' reason: rows arrive while a reader
 	// pages, so an offset would skip or repeat one.
@@ -522,6 +531,27 @@ type DeployServiceClient interface {
 	// plane being reachable is a worse product than one with a gap in a
 	// dashboard.
 	ReportLocalSession(context.Context, *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error)
+	// MintLocalTelemetryToken issues the two short-lived credentials a local
+	// dev stack exports its telemetry to the hosted store with
+	// (docs/design/dev-telemetry-to-hosted.md §2): a process token for the
+	// stack's host processes and a browser token for its dev server's /_otel
+	// proxy. Both are ES256 JWTs from the telemetry-token issuer, live one hour
+	// and carry the instance (`sid`), its owner (`uid`) and an ingest class.
+	//
+	// The caller must own a LIVE session (ReportLocalSession) of a LOCAL
+	// environment, in an org whose admin has not switched dev telemetry off,
+	// on a control plane whose local_telemetry_mode admits the org. Every
+	// refusal is one forge maps to "keep telemetry local, print why":
+	// FailedPrecondition with reason dev_telemetry_disabled (the org switch),
+	// dev_telemetry_not_enabled (the platform gate) or session_not_live;
+	// NotFound for an unknown session or environment; PermissionDenied for a
+	// session someone else owns. Unimplemented means a control plane that
+	// predates this rpc.
+	//
+	// Idempotent per session: each call re-mints and refreshes the instance's
+	// grant (local_telemetry_grants). forge calls it again at each token's
+	// half-life.
+	MintLocalTelemetryToken(context.Context, *connect.Request[v1.MintLocalTelemetryTokenRequest]) (*connect.Response[v1.MintLocalTelemetryTokenResponse], error)
 	// ImportLedger loads a project's existing file-based deploy history into the
 	// hosted ledger, in one transaction.
 	//
@@ -782,6 +812,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
 			connect.WithClientOptions(opts...),
 		),
+		getWorkloadConfig: connect.NewClient[v1.GetWorkloadConfigRequest, v1.GetWorkloadConfigResponse](
+			httpClient,
+			baseURL+DeployServiceGetWorkloadConfigProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("GetWorkloadConfig")),
+			connect.WithClientOptions(opts...),
+		),
 		listConvergences: connect.NewClient[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse](
 			httpClient,
 			baseURL+DeployServiceListConvergencesProcedure,
@@ -848,6 +884,12 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("ReportLocalSession")),
 			connect.WithClientOptions(opts...),
 		),
+		mintLocalTelemetryToken: connect.NewClient[v1.MintLocalTelemetryTokenRequest, v1.MintLocalTelemetryTokenResponse](
+			httpClient,
+			baseURL+DeployServiceMintLocalTelemetryTokenProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("MintLocalTelemetryToken")),
+			connect.WithClientOptions(opts...),
+		),
 		importLedger: connect.NewClient[v1.ImportLedgerRequest, v1.ImportLedgerResponse](
 			httpClient,
 			baseURL+DeployServiceImportLedgerProcedure,
@@ -901,6 +943,7 @@ type deployServiceClient struct {
 	listUsage               *connect.Client[v1.ListDeployUsageRequest, v1.ListDeployUsageResponse]
 	recordBundle            *connect.Client[v1.RecordDeployBundleRequest, v1.RecordDeployBundleResponse]
 	getBundle               *connect.Client[v1.GetDeployBundleRequest, v1.GetDeployBundleResponse]
+	getWorkloadConfig       *connect.Client[v1.GetWorkloadConfigRequest, v1.GetWorkloadConfigResponse]
 	listConvergences        *connect.Client[v1.ListDeployConvergencesRequest, v1.ListDeployConvergencesResponse]
 	openDeployAttempt       *connect.Client[v1.OpenDeployAttemptRequest, v1.OpenDeployAttemptResponse]
 	reportDeployAttempt     *connect.Client[v1.ReportDeployAttemptRequest, v1.ReportDeployAttemptResponse]
@@ -912,6 +955,7 @@ type deployServiceClient struct {
 	planDeploy              *connect.Client[v1.PlanDeployRequest, v1.PlanDeployResponse]
 	checkDeployCapacity     *connect.Client[v1.CheckDeployCapacityRequest, v1.CheckDeployCapacityResponse]
 	reportLocalSession      *connect.Client[v1.ReportLocalSessionRequest, v1.ReportLocalSessionResponse]
+	mintLocalTelemetryToken *connect.Client[v1.MintLocalTelemetryTokenRequest, v1.MintLocalTelemetryTokenResponse]
 	importLedger            *connect.Client[v1.ImportLedgerRequest, v1.ImportLedgerResponse]
 	getDrift                *connect.Client[v1.GetDeployDriftRequest, v1.GetDeployDriftResponse]
 }
@@ -1096,6 +1140,11 @@ func (c *deployServiceClient) GetBundle(ctx context.Context, req *connect.Reques
 	return c.getBundle.CallUnary(ctx, req)
 }
 
+// GetWorkloadConfig calls controlplane.v1.DeployService.GetWorkloadConfig.
+func (c *deployServiceClient) GetWorkloadConfig(ctx context.Context, req *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error) {
+	return c.getWorkloadConfig.CallUnary(ctx, req)
+}
+
 // ListConvergences calls controlplane.v1.DeployService.ListConvergences.
 func (c *deployServiceClient) ListConvergences(ctx context.Context, req *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error) {
 	return c.listConvergences.CallUnary(ctx, req)
@@ -1149,6 +1198,11 @@ func (c *deployServiceClient) CheckDeployCapacity(ctx context.Context, req *conn
 // ReportLocalSession calls controlplane.v1.DeployService.ReportLocalSession.
 func (c *deployServiceClient) ReportLocalSession(ctx context.Context, req *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error) {
 	return c.reportLocalSession.CallUnary(ctx, req)
+}
+
+// MintLocalTelemetryToken calls controlplane.v1.DeployService.MintLocalTelemetryToken.
+func (c *deployServiceClient) MintLocalTelemetryToken(ctx context.Context, req *connect.Request[v1.MintLocalTelemetryTokenRequest]) (*connect.Response[v1.MintLocalTelemetryTokenResponse], error) {
+	return c.mintLocalTelemetryToken.CallUnary(ctx, req)
 }
 
 // ImportLedger calls controlplane.v1.DeployService.ImportLedger.
@@ -1391,6 +1445,9 @@ type DeployServiceHandler interface {
 	// created=false.
 	RecordBundle(context.Context, *connect.Request[v1.RecordDeployBundleRequest]) (*connect.Response[v1.RecordDeployBundleResponse], error)
 	GetBundle(context.Context, *connect.Request[v1.GetDeployBundleRequest]) (*connect.Response[v1.GetDeployBundleResponse], error)
+	// Values require BOTH deploy:read and deploy:config:read. Every read is
+	// synchronously audited. The names-only GetBundle endpoint is unchanged.
+	GetWorkloadConfig(context.Context, *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error)
 	// ListConvergences returns an environment's OBSERVATION TIMELINE, newest
 	// first, keyset-paged for ListPromotions' reason: rows arrive while a reader
 	// pages, so an offset would skip or repeat one.
@@ -1506,6 +1563,27 @@ type DeployServiceHandler interface {
 	// plane being reachable is a worse product than one with a gap in a
 	// dashboard.
 	ReportLocalSession(context.Context, *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error)
+	// MintLocalTelemetryToken issues the two short-lived credentials a local
+	// dev stack exports its telemetry to the hosted store with
+	// (docs/design/dev-telemetry-to-hosted.md §2): a process token for the
+	// stack's host processes and a browser token for its dev server's /_otel
+	// proxy. Both are ES256 JWTs from the telemetry-token issuer, live one hour
+	// and carry the instance (`sid`), its owner (`uid`) and an ingest class.
+	//
+	// The caller must own a LIVE session (ReportLocalSession) of a LOCAL
+	// environment, in an org whose admin has not switched dev telemetry off,
+	// on a control plane whose local_telemetry_mode admits the org. Every
+	// refusal is one forge maps to "keep telemetry local, print why":
+	// FailedPrecondition with reason dev_telemetry_disabled (the org switch),
+	// dev_telemetry_not_enabled (the platform gate) or session_not_live;
+	// NotFound for an unknown session or environment; PermissionDenied for a
+	// session someone else owns. Unimplemented means a control plane that
+	// predates this rpc.
+	//
+	// Idempotent per session: each call re-mints and refreshes the instance's
+	// grant (local_telemetry_grants). forge calls it again at each token's
+	// half-life.
+	MintLocalTelemetryToken(context.Context, *connect.Request[v1.MintLocalTelemetryTokenRequest]) (*connect.Response[v1.MintLocalTelemetryTokenResponse], error)
 	// ImportLedger loads a project's existing file-based deploy history into the
 	// hosted ledger, in one transaction.
 	//
@@ -1762,6 +1840,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("GetBundle")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceGetWorkloadConfigHandler := connect.NewUnaryHandler(
+		DeployServiceGetWorkloadConfigProcedure,
+		svc.GetWorkloadConfig,
+		connect.WithSchema(deployServiceMethods.ByName("GetWorkloadConfig")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceListConvergencesHandler := connect.NewUnaryHandler(
 		DeployServiceListConvergencesProcedure,
 		svc.ListConvergences,
@@ -1826,6 +1910,12 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		DeployServiceReportLocalSessionProcedure,
 		svc.ReportLocalSession,
 		connect.WithSchema(deployServiceMethods.ByName("ReportLocalSession")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceMintLocalTelemetryTokenHandler := connect.NewUnaryHandler(
+		DeployServiceMintLocalTelemetryTokenProcedure,
+		svc.MintLocalTelemetryToken,
+		connect.WithSchema(deployServiceMethods.ByName("MintLocalTelemetryToken")),
 		connect.WithHandlerOptions(opts...),
 	)
 	deployServiceImportLedgerHandler := connect.NewUnaryHandler(
@@ -1914,6 +2004,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceRecordBundleHandler.ServeHTTP(w, r)
 		case DeployServiceGetBundleProcedure:
 			deployServiceGetBundleHandler.ServeHTTP(w, r)
+		case DeployServiceGetWorkloadConfigProcedure:
+			deployServiceGetWorkloadConfigHandler.ServeHTTP(w, r)
 		case DeployServiceListConvergencesProcedure:
 			deployServiceListConvergencesHandler.ServeHTTP(w, r)
 		case DeployServiceOpenDeployAttemptProcedure:
@@ -1936,6 +2028,8 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceCheckDeployCapacityHandler.ServeHTTP(w, r)
 		case DeployServiceReportLocalSessionProcedure:
 			deployServiceReportLocalSessionHandler.ServeHTTP(w, r)
+		case DeployServiceMintLocalTelemetryTokenProcedure:
+			deployServiceMintLocalTelemetryTokenHandler.ServeHTTP(w, r)
 		case DeployServiceImportLedgerProcedure:
 			deployServiceImportLedgerHandler.ServeHTTP(w, r)
 		case DeployServiceGetDriftProcedure:
@@ -2093,6 +2187,10 @@ func (UnimplementedDeployServiceHandler) GetBundle(context.Context, *connect.Req
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetBundle is not implemented"))
 }
 
+func (UnimplementedDeployServiceHandler) GetWorkloadConfig(context.Context, *connect.Request[v1.GetWorkloadConfigRequest]) (*connect.Response[v1.GetWorkloadConfigResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.GetWorkloadConfig is not implemented"))
+}
+
 func (UnimplementedDeployServiceHandler) ListConvergences(context.Context, *connect.Request[v1.ListDeployConvergencesRequest]) (*connect.Response[v1.ListDeployConvergencesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListConvergences is not implemented"))
 }
@@ -2135,6 +2233,10 @@ func (UnimplementedDeployServiceHandler) CheckDeployCapacity(context.Context, *c
 
 func (UnimplementedDeployServiceHandler) ReportLocalSession(context.Context, *connect.Request[v1.ReportLocalSessionRequest]) (*connect.Response[v1.ReportLocalSessionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ReportLocalSession is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) MintLocalTelemetryToken(context.Context, *connect.Request[v1.MintLocalTelemetryTokenRequest]) (*connect.Response[v1.MintLocalTelemetryTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.MintLocalTelemetryToken is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) ImportLedger(context.Context, *connect.Request[v1.ImportLedgerRequest]) (*connect.Response[v1.ImportLedgerResponse], error) {

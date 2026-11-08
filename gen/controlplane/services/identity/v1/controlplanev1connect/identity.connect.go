@@ -39,6 +39,8 @@ const (
 	// IdentityServiceListUsersProcedure is the fully-qualified name of the IdentityService's ListUsers
 	// RPC.
 	IdentityServiceListUsersProcedure = "/controlplane.v1.IdentityService/ListUsers"
+	// IdentityServiceGetUserProcedure is the fully-qualified name of the IdentityService's GetUser RPC.
+	IdentityServiceGetUserProcedure = "/controlplane.v1.IdentityService/GetUser"
 	// IdentityServiceInviteUserProcedure is the fully-qualified name of the IdentityService's
 	// InviteUser RPC.
 	IdentityServiceInviteUserProcedure = "/controlplane.v1.IdentityService/InviteUser"
@@ -76,6 +78,14 @@ type IdentityServiceClient interface {
 	GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error)
 	// ListUsers lists the instance's human users with their state and roles.
 	ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error)
+	// GetUser reads one human user of the instance by its identity-provider
+	// subject id (IdentityUser.user_id, the token's sub), with the same state,
+	// roles and sign-in fields ListUsers returns: what a console deep-links to.
+	// Admission is ListUsers': any member, or a machine credential with
+	// identity:read. NotFound for an id the environment's instance does not
+	// hold, a service account, or a deleted user; an id from another org's
+	// instance is simply not in this one.
+	GetUser(context.Context, *connect.Request[v1.GetIdentityUserRequest]) (*connect.Response[v1.GetIdentityUserResponse], error)
 	// InviteUser creates the account if needed and grants the console-managed
 	// roles. An account with no credential yet (a new one, or one never set up)
 	// gets a password-set code: emailed as a link when the environment has mail
@@ -133,6 +143,13 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+IdentityServiceListUsersProcedure,
 			connect.WithSchema(identityServiceMethods.ByName("ListUsers")),
+			connect.WithClientOptions(opts...),
+		),
+		getUser: connect.NewClient[v1.GetIdentityUserRequest, v1.GetIdentityUserResponse](
+			httpClient,
+			baseURL+IdentityServiceGetUserProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("GetUser")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		inviteUser: connect.NewClient[v1.InviteIdentityUserRequest, v1.InviteIdentityUserResponse](
@@ -196,6 +213,7 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 type identityServiceClient struct {
 	getIdentityStatus *connect.Client[v1.GetIdentityStatusRequest, v1.GetIdentityStatusResponse]
 	listUsers         *connect.Client[v1.ListIdentityUsersRequest, v1.ListIdentityUsersResponse]
+	getUser           *connect.Client[v1.GetIdentityUserRequest, v1.GetIdentityUserResponse]
 	inviteUser        *connect.Client[v1.InviteIdentityUserRequest, v1.InviteIdentityUserResponse]
 	setUserRoles      *connect.Client[v1.SetIdentityUserRolesRequest, v1.SetIdentityUserRolesResponse]
 	sendPasswordReset *connect.Client[v1.SendIdentityPasswordResetRequest, v1.SendIdentityPasswordResetResponse]
@@ -215,6 +233,11 @@ func (c *identityServiceClient) GetIdentityStatus(ctx context.Context, req *conn
 // ListUsers calls controlplane.v1.IdentityService.ListUsers.
 func (c *identityServiceClient) ListUsers(ctx context.Context, req *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error) {
 	return c.listUsers.CallUnary(ctx, req)
+}
+
+// GetUser calls controlplane.v1.IdentityService.GetUser.
+func (c *identityServiceClient) GetUser(ctx context.Context, req *connect.Request[v1.GetIdentityUserRequest]) (*connect.Response[v1.GetIdentityUserResponse], error) {
+	return c.getUser.CallUnary(ctx, req)
 }
 
 // InviteUser calls controlplane.v1.IdentityService.InviteUser.
@@ -270,6 +293,14 @@ type IdentityServiceHandler interface {
 	GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error)
 	// ListUsers lists the instance's human users with their state and roles.
 	ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error)
+	// GetUser reads one human user of the instance by its identity-provider
+	// subject id (IdentityUser.user_id, the token's sub), with the same state,
+	// roles and sign-in fields ListUsers returns: what a console deep-links to.
+	// Admission is ListUsers': any member, or a machine credential with
+	// identity:read. NotFound for an id the environment's instance does not
+	// hold, a service account, or a deleted user; an id from another org's
+	// instance is simply not in this one.
+	GetUser(context.Context, *connect.Request[v1.GetIdentityUserRequest]) (*connect.Response[v1.GetIdentityUserResponse], error)
 	// InviteUser creates the account if needed and grants the console-managed
 	// roles. An account with no credential yet (a new one, or one never set up)
 	// gets a password-set code: emailed as a link when the environment has mail
@@ -323,6 +354,13 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		IdentityServiceListUsersProcedure,
 		svc.ListUsers,
 		connect.WithSchema(identityServiceMethods.ByName("ListUsers")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceGetUserHandler := connect.NewUnaryHandler(
+		IdentityServiceGetUserProcedure,
+		svc.GetUser,
+		connect.WithSchema(identityServiceMethods.ByName("GetUser")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	identityServiceInviteUserHandler := connect.NewUnaryHandler(
@@ -385,6 +423,8 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceGetIdentityStatusHandler.ServeHTTP(w, r)
 		case IdentityServiceListUsersProcedure:
 			identityServiceListUsersHandler.ServeHTTP(w, r)
+		case IdentityServiceGetUserProcedure:
+			identityServiceGetUserHandler.ServeHTTP(w, r)
 		case IdentityServiceInviteUserProcedure:
 			identityServiceInviteUserHandler.ServeHTTP(w, r)
 		case IdentityServiceSetUserRolesProcedure:
@@ -418,6 +458,10 @@ func (UnimplementedIdentityServiceHandler) GetIdentityStatus(context.Context, *c
 
 func (UnimplementedIdentityServiceHandler) ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.ListUsers is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) GetUser(context.Context, *connect.Request[v1.GetIdentityUserRequest]) (*connect.Response[v1.GetIdentityUserResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.GetUser is not implemented"))
 }
 
 func (UnimplementedIdentityServiceHandler) InviteUser(context.Context, *connect.Request[v1.InviteIdentityUserRequest]) (*connect.Response[v1.InviteIdentityUserResponse], error) {
