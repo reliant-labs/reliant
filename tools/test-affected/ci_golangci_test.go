@@ -106,8 +106,11 @@ func TestMergeQueueGolangciGates(t *testing.T) {
 		}
 	}
 
-	// The script against a fake gh that answers with one state per call.
-	run := func(waitS string, states ...string) (bool, string) {
+	// The script against a fake gh that answers with one state per call. Each
+	// run owns its directory, so the cases after the harness check run in
+	// parallel: one bash run is ~0.5s on a loaded host, nine in a row were 5s.
+	run := func(t *testing.T, waitS string, states ...string) (bool, string) {
+		t.Helper()
 		dir := t.TempDir()
 		var answers strings.Builder
 		for _, s := range states {
@@ -132,20 +135,26 @@ printf '%s\n' "$line"
 		}
 		return ciShell(t, wait.Run, env)
 	}
-	if ok, out := run("0", "completed success"); !ok {
+	if ok, out := run(t, "0", "completed success"); !ok {
 		t.Fatalf("harness: a passed job fails the step, so the cases below prove nothing:\n%s", out)
 	}
-	if ok, out := run("60", "queued ", "in_progress ", "fail", "completed success"); !ok {
-		t.Errorf("a job that passes after queuing, running and one API error fails the step:\n%s", out)
-	}
+	t.Run("passes after queuing, running and one API error", func(t *testing.T) {
+		t.Parallel()
+		if ok, out := run(t, "60", "queued ", "in_progress ", "fail", "completed success"); !ok {
+			t.Errorf("a job that passes after queuing, running and one API error fails the step:\n%s", out)
+		}
+	})
 	for _, bad := range [][]string{
 		{"completed failure"}, {"completed cancelled"}, {"completed skipped"}, {"completed timed_out"},
 		{"in_progress "}, {"absent "}, {"fail"},
 	} {
-		// WAIT_S=0: one poll, then the deadline has passed.
-		if ok, out := run("0", bad...); ok {
-			t.Errorf("CI result passes with golangci at %q:\n%s", bad, out)
-		}
+		t.Run(strings.Join(bad, " "), func(t *testing.T) {
+			t.Parallel()
+			// WAIT_S=0: one poll, then the deadline has passed.
+			if ok, out := run(t, "0", bad...); ok {
+				t.Errorf("CI result passes with golangci at %q:\n%s", bad, out)
+			}
+		})
 	}
 }
 
@@ -162,7 +171,8 @@ func TestCIRunGolangciGates(t *testing.T) {
 		t.Fatal("ci-result does not need golangci: a finding would not fail the check")
 	}
 	_, gate := wf.job(t, "ci-result").step(t, "ci-result", "Every job that ran passed")
-	pr := func(golangci string) bool {
+	pr := func(t *testing.T, golangci string) bool {
+		t.Helper()
 		r := map[string]string{}
 		for _, n := range needs {
 			r[n] = "skipped"
@@ -171,13 +181,17 @@ func TestCIRunGolangciGates(t *testing.T) {
 		ok, _ := ciShell(t, gate.Run, map[string]string{"RESULTS": needsJSON(r), "EVENT_NAME": "pull_request", "CI_RUN": "true"})
 		return ok
 	}
-	if !pr("success") {
+	if !pr(t, "success") {
 		t.Fatal("harness: CI result fails a ci:run PR with golangci green")
 	}
 	for _, bad := range []string{"failure", "cancelled", "skipped"} {
-		if pr(bad) {
-			t.Errorf("CI result passes a ci:run PR whose golangci result is %q", bad)
-		}
+		// Independent bash runs: in parallel, not one after another.
+		t.Run(bad, func(t *testing.T) {
+			t.Parallel()
+			if pr(t, bad) {
+				t.Errorf("CI result passes a ci:run PR whose golangci result is %q", bad)
+			}
+		})
 	}
 }
 

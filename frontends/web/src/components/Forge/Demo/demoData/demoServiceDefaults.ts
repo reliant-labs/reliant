@@ -8,11 +8,10 @@
  *
  * Each line is what forge's generator writes per service
  * (`src/mocks/services/<service>_gen.ts`: `export const xDefaults =
- * serviceDefaults(XService)`). Until the web-runtime release that ships
- * serviceDefaults, the engine is vendored (forgeMockValues/) and the list is
- * here, limited to the console's services so the demo bundle carries no other
- * contract. On that bump: run `forge generate`, import the generated
- * registry, and delete this file and forgeMockValues/.
+ * serviceDefaults(XService)`). The engine is the published forge runtime;
+ * this list stays product-owned and limited to the console's services so
+ * the demo bundle carries no other contract. The app-wide generated mock
+ * registry also includes Reliant services, so it is not this bundle's input.
  *
  * Writes are never answered by these: the transport refuses them first
  * (demoTransport.ts isDemoRead).
@@ -29,12 +28,13 @@ import { DeliveryInsightsService } from "@/gen/controlplane/services/delivery_in
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { DomainService } from "@/gen/controlplane/services/domain/v1/domain_pb";
 import { IssuesService } from "@/gen/controlplane/services/issues/v1/issues_pb";
+import { IdentityService } from "@/gen/controlplane/services/identity/v1/identity_pb";
 import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
 import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 
-import { serviceDefaults, type AnyServiceDefaults, type MockHandlers } from "./forgeMockValues/mock-values";
+import { serviceDefaults, type AnyServiceDefaults, type MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 /** The services the forge console's tabs read. */
 export const DEMO_DEFAULT_SERVICES: readonly DescService[] = [
@@ -46,6 +46,7 @@ export const DEMO_DEFAULT_SERVICES: readonly DescService[] = [
   DeployService,
   DomainService,
   IssuesService,
+  IdentityService,
   ObservabilityService,
   ObservabilityBillingService,
   RumService,
@@ -56,8 +57,8 @@ export const demoServiceDefaults: readonly AnyServiceDefaults[] = DEMO_DEFAULT_S
 
 /**
  * The defaults as scenario handlers, keyed "pkg.Service/Method": the last
- * rung of the dispatch (a scenario handler wins), as the engine's `services`
- * option will be once it ships.
+ * rung of the dispatch (a scenario handler wins). This materializes the
+ * demo's deliberately limited service list for its composed scenario.
  */
 export function defaultHandlers(services: readonly AnyServiceDefaults[] = demoServiceDefaults): MockHandlers {
   const out: MockHandlers = {};
@@ -71,8 +72,9 @@ export function defaultHandlers(services: readonly AnyServiceDefaults[] = demoSe
 
 /**
  * Handlers whose plain-object answers are completed into the method's
- * response message (the engine's F5 contract, which the pinned engine lacks):
- * a built message passes through.
+ * response message. The published transport also completes final responses;
+ * this scenario-composition seam retains full messages before outer handlers
+ * inspect them. A built message passes through.
  */
 export function completed(service: DescService, handlers: MockHandlers): MockHandlers {
   const out: MockHandlers = {};
@@ -90,8 +92,9 @@ export function completed(service: DescService, handlers: MockHandlers): MockHan
 /**
  * Handlers that receive their request as the full message, whatever the
  * caller passed: a Connect client hands the transport the init object it was
- * given (`{}` for "no filters"), and the pinned engine passes it on as is, so
- * a handler reading `req.query` would see undefined instead of "".
+ * given (`{}` for "no filters"). The scenario's scope layer reads those
+ * fields before dispatch, so normalize here rather than depending on when
+ * the transport completes requests for individual handlers.
  */
 export function withMessageRequests(handlers: MockHandlers, services: readonly DescService[] = DEMO_DEFAULT_SERVICES): MockHandlers {
   const inputs = new Map<string, DescMessage>();

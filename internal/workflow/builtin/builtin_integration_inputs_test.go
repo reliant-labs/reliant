@@ -32,6 +32,8 @@ func TestBuiltinValidationIsIndependentOfIntegrationInputTypes(t *testing.T) {
 			continue
 		}
 		t.Run(name, func(t *testing.T) {
+			// Two full validations per workflow: in parallel, not in series.
+			t.Parallel()
 			wf, err := parseBuiltin(name)
 			require.NoError(t, err)
 			for _, in := range wf.GetInputs() {

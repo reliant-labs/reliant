@@ -107,6 +107,8 @@ func TestBuiltinWorkflowsValidate(t *testing.T) {
 		}
 
 		t.Run(entry.Name(), func(t *testing.T) {
+			// Each workflow validates on its own: in parallel, not in series.
+			t.Parallel()
 			data, err := builtin.BuiltinWorkflowsFS.ReadFile(entry.Name())
 			if err != nil {
 				t.Fatalf("Failed to read %s: %v", entry.Name(), err)

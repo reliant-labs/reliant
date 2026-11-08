@@ -10,12 +10,12 @@
 //    - a request to any origin but the site's own (the demo reaches no backend);
 //    - a 4xx/5xx response from the site itself (other than /_otel);
 //    - an uncaught page error, or a console error naming CORS;
-//    - `/` not landing on the console overview (/forge/p/<project>);
+//    - `/` not landing on the visual build story (/forge/demo?section=built);
 //    - a page with no `[data-shell=demo]` root.
 //    Per page it also prints how often "Sample data isn't available" showed (an
 //    RPC the demo has no sample data for): a content gap, not a failure.
 //
-// 2. NAV: starts at `/` and CLICKS every item of the console's left nav, at
+// 2. NAV: starts at `/`, clicks Explore the running app, then every console nav item, at
 //    desktop 1440×900 and phone 390×844 (where the nav is a drawer behind
 //    "Open navigation"). Sections that fold (Observability, Environments) are
 //    unfolded first, so their sub-items are clicked too. An item is dead, and
@@ -143,7 +143,11 @@ try {
     const landed = new URL(page.url());
     const text = await page.locator("body").innerText().catch(() => "");
     const unavailable = (text.match(/Sample data isn't available/g) ?? []).length;
-    if (path === "/" && landed.pathname !== home) problems.push(`/ landed on ${landed.pathname}, not ${home}`);
+    if (path === "/") {
+      if (landed.pathname !== "/forge/demo" || landed.searchParams.get("section") !== "built") problems.push(`/ did not land on /forge/demo?section=built: ${landed.pathname}${landed.search}`);
+      if (!(await page.getByTestId("demo-welcome").isVisible())) problems.push("build story has no visible summary and explore/tour choice");
+      if (!(await page.getByTestId("how-built").isVisible())) problems.push("build story has no recorded build");
+    }
     if (path !== "/" && landed.pathname !== path) problems.push(`${path} landed on ${landed.pathname}`);
     if (!(await page.locator("[data-shell='demo']").count())) problems.push("no [data-shell=demo] root");
     if (process.env.SCREENSHOT_DIR) {
@@ -159,6 +163,8 @@ try {
   for (const viewport of viewports) {
     const { context, page, problems } = await openPage(viewport);
     await page.goto(`${base}/`, { waitUntil: "load" });
+    await page.getByRole("button", { name: "Explore the running app", exact: true }).click();
+    await page.waitForURL((url) => url.pathname === home);
     await page.waitForTimeout(settle);
     const reveal = await revealNav(page, viewport);
     if (reveal || !(await markNav(page))) {

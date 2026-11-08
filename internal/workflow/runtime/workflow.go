@@ -353,6 +353,10 @@ type ChildWorkflowTracker struct {
 	// on a hint rather than on known input — see setSpeculativeTurn.
 	speculativeTurns map[string]bool
 
+	// resumeTurns marks the threads whose next call_llm turn is the first of
+	// a loop resumed mid-work — see markResumeTurn.
+	resumeTurns map[string]bool
+
 	// userInputs counts, per recipient thread, the thread wakes a PERSON
 	// rang (ThreadWakeSignal.FromUser) — a subset of threadWakes. An ask_user
 	// wait yields to these and not to another agent's spawn_send: the user
@@ -554,6 +558,38 @@ func (t *ChildWorkflowTracker) setSpeculativeTurn(thread string, speculative boo
 // hint (see setSpeculativeTurn).
 func (t *ChildWorkflowTracker) isSpeculativeTurn(thread string) bool {
 	return t != nil && t.speculativeTurns[thread]
+}
+
+// resumeCutOffTurnChangeID gates marking a resumed loop's first turn
+// (markResumeTurn). A history recorded before it replays without the mark,
+// and its turn yields on an assistant tail as it did.
+const resumeCutOffTurnChangeID = "resume-continues-cut-off-turn"
+
+// markResumeTurn records that thread's next call_llm turn is the first of a
+// loop resumed after it stopped mid-work (RuntimeContext.ResumeTurn), under
+// the resumeCutOffTurnChangeID gate. Workflow code only: the mark is part of
+// the run's state, so a replay marks the same turn.
+func (t *ChildWorkflowTracker) markResumeTurn(ctx workflow.Context, thread string) {
+	if t == nil || thread == "" {
+		return
+	}
+	if workflow.GetVersion(ctx, resumeCutOffTurnChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return
+	}
+	if t.resumeTurns == nil {
+		t.resumeTurns = make(map[string]bool)
+	}
+	t.resumeTurns[thread] = true
+}
+
+// takeResumeTurn reports whether thread's turn about to run is the first of
+// a resumed loop, and clears the mark: it describes exactly one turn.
+func (t *ChildWorkflowTracker) takeResumeTurn(thread string) bool {
+	if t == nil || !t.resumeTurns[thread] {
+		return false
+	}
+	delete(t.resumeTurns, thread)
+	return true
 }
 
 // hasLiveDetachedSpawns reports whether thread has any background spawns
@@ -951,6 +987,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// allocated-but-unfinalized assistant message ids. workflow.WithValue is
 	// not a Temporal command — safe for all histories.
 	ctx = WithStreamIDTracker(ctx, NewStreamIDTracker())
+	// Numbers each spawn call's version decision (spawn_node.go); like the
+	// tracker above, not a Temporal command.
+	ctx = withSpawnVersionOccurrences(ctx)
 
 	// on_failure: where the run failed, the handler to run for it and the
 	// outputs the run had produced when it did. The latter two are filled in
@@ -1409,6 +1448,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			"checkpointNode", input.Resume.NodeID,
 			"yamlOverride", wf.GetResumeNode(),
 		)
+		// The predecessor stopped inside this loop (it failed, was lost, or
+		// handed off mid-loop), so an assistant turn at the root thread's
+		// tail was cut off. A successor run that only resumes stopped agents
+		// is not one: its root's loop had finished.
+		if input.Resume != nil && !input.Resume.RecoveryOnly && len(input.Resume.ResumeStopped) == 0 && !input.Resume.ResumeAllStopped {
+			childTracker.markResumeTurn(ctx, thread)
+		}
 		pendingResumeStep = &core.TriggeredNode{
 			Node: resumeTarget,
 			Event: &core.WorkflowEvent{
@@ -3528,8 +3574,16 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 
 	// See spawn_node.go for what a spawn tool call says.
 	parsed, err := parseSpawnToolInput(spawnToolCall.GetInput())
+	if parsed.providersFromString &&
+		workflow.GetVersion(ctx, nextSpawnStringProvidersVersionID(ctx, toolCallID), workflow.DefaultVersion, spawnStringProvidersVersion) == workflow.DefaultVersion {
+		// Recorded by a build that refused a stringified `providers`:
+		// refuse it again, or the replay would start a child it never did.
+		err = parsed.strictProvidersErr
+	}
 	if err != nil {
-		logger.Error("[ExecuteTools] Failed to parse spawn tool input",
+		// The model wrote these arguments, and the error goes back to it as
+		// the tool's result to correct: an outcome of the run, not a fault.
+		logger.Warn("[ExecuteTools] Failed to parse spawn tool input",
 			"error", err, "tool_call_id", toolCallID, "preset", parsed.preset)
 		return nil, err
 	}

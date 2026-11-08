@@ -870,6 +870,18 @@ func (r *Repo) ListContentBlocksForMessages(ctx context.Context, messageIDs []st
 	return store.ListContentBlocksForMessages(ctx, r.ORM(), messageIDs)
 }
 
+// ListContentBlocksByIDs reads blocks by primary key, in one query. An id no
+// row holds is absent from the result.
+func (r *Repo) ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*MessageContentBlock, error) {
+	return store.ListContentBlocksByIDs(ctx, r.ORM(), ids)
+}
+
+// ListMessagesByIDs reads messages by primary key, in one query. An id no
+// row holds is absent from the result.
+func (r *Repo) ListMessagesByIDs(ctx context.Context, ids []string) ([]*Message, error) {
+	return store.ListMessagesByIDs(ctx, r.ORM(), ids)
+}
+
 func (r *Repo) AppendToContentBlock(ctx context.Context, blockID string, delta string) error {
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
@@ -2791,6 +2803,14 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 // thread, which the reconciler's ReapOrphanedThreads repaired and paged on as
 // a missed cascade (prod, 2026-10-30..11-04: every reap was a stopped spawn,
 // its thread reaped 1-60s before the loop's own write).
+//
+// The subtree's still-queued mail is resolved in the same commit, for the
+// same reason: a stopped agent takes no further turn, so what it had not read
+// is undelivered as of the stop. Left queued under a cancelled thread, the
+// reconciler's orphaned-mailbox sweep found it and reported it at ERROR as a
+// broken loop invariant (reliant #2394: three spawn_send rows to a sub-agent
+// parked on a question, which its parent then stopped). It is the stop's
+// expected outcome, recorded by the rows themselves.
 func (r *Repo) CancelStoppedSpawn(ctx context.Context, workflowID string) (bool, error) {
 	if workflowID == "" {
 		return false, fmt.Errorf("workflow ID cannot be empty")
@@ -2816,6 +2836,15 @@ func (r *Repo) CancelStoppedSpawn(ctx context.Context, workflowID string) (bool,
 		}
 		if err := r.CascadeTerminalStatusToThreadSubtree(txCtx, workflowID, StopReasonCancelled); err != nil {
 			return fmt.Errorf("cascade cancel to the threads of spawn %s: %w", workflowID, err)
+		}
+		resolved, err := store.MarkQueuedAgentMessagesUndeliveredForWorkflowSubtree(txCtx, r.ORM(), workflowID)
+		if err != nil {
+			return fmt.Errorf("resolve the mailboxes of stopped spawn %s: %w", workflowID, err)
+		}
+		if resolved > 0 {
+			if wf, err := r.GetWorkflow(txCtx, workflowID); err == nil && wf != nil && wf.ChatID != "" {
+				r.announceAgentMailboxChanged(txCtx, wf.ChatID)
+			}
 		}
 		return nil
 	})

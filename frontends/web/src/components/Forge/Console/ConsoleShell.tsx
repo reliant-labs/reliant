@@ -70,8 +70,8 @@ export interface ConsoleNavInput {
   starred?: ConsoleNavDashboard[];
   /** The open dashboard's title, for the breadcrumb (its key until the index answers). */
   dashboardTitle?: string;
-  /** Omitted/unknown keeps useful views visible; false means a definite empty read. */
-  optionalViews?: { sessions: boolean; profiles: boolean };
+  /** Omitted/unknown keeps useful views visible; false means a definite empty read. Sessions is always listed. */
+  optionalViews?: { profiles: boolean };
   /**
    * Where a row (and a crumb) links. Default: the page's console path,
    * carrying the scope. The forge demo (Forge/Demo) keeps every link on its
@@ -119,7 +119,7 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
       row("Observability", { kind: "obs-view", view: OBS_NAV_VIEWS[0] }, icon(Gauge), {
         active: false,
         children: OBS_NAV_VIEWS.filter((view) =>
-          (view !== "sessions" && view !== "profiles") || optionalViews?.[view] !== false || (page.kind === "obs-view" && page.view === view)
+          view !== "profiles" || optionalViews?.[view] !== false || (page.kind === "obs-view" && page.view === view)
         ).map((view) => {
           const nested = view === "dashboards" ? starred.slice(0, NAV_STARRED_MAX) : [];
           const openStar = (candidate: ConsoleNavDashboard) =>
@@ -283,7 +283,7 @@ export function ConsoleShell({
                 {nav.project}
               </Link>
               {crumbs.map((crumb, index) => (
-                <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5">
+                <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
                   <span aria-hidden="true" className="text-ink-subtle">
                     ›
                   </span>

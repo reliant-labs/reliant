@@ -45,7 +45,7 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
   return (
     <div
       role="note"
-      className="-mx-1 mb-4 space-y-1 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-ink sm:sticky sm:top-0 sm:z-20"
+      className="mb-4 space-y-1 rounded-lg border border-warning-border bg-surface px-3 py-2 text-sm text-ink"
       data-testid="forge-demo-banner"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

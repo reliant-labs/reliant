@@ -88,6 +88,11 @@ type daemonClient struct {
 	gatewayClient reliantv1connect.ToolsDaemonServiceClient
 	gatewayURL    string
 
+	// reconnectMinDelay is the first wait of run()'s reconnect backoff; zero
+	// means transport.ReconnectMinDelay. Only tests set it, so proving the
+	// reconnect behaviour does not cost the production backoff's seconds.
+	reconnectMinDelay time.Duration
+
 	mcpManager    *mcp.Manager
 	localExecutor *toolexec.LocalToolExecutor
 	capabilities  []string
@@ -960,7 +965,11 @@ func isFatalError(err error) bool {
 }
 
 func (d *daemonClient) run(ctx context.Context) error {
-	delay := transport.ReconnectMinDelay
+	minDelay := transport.ReconnectMinDelay
+	if d.reconnectMinDelay > 0 {
+		minDelay = d.reconnectMinDelay
+	}
+	delay := minDelay
 	for {
 		if ctx.Err() != nil {
 			d.stopAllStreams()
@@ -975,7 +984,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 		if errors.Is(err, errGatewayMoving) {
 			// Make before break: the draining replica's stream is still
 			// open and serving, so dial its successor now, with no backoff.
-			delay = transport.ReconnectMinDelay
+			delay = minDelay
 			continue
 		}
 		if err != nil && !errors.Is(err, context.Canceled) {
@@ -1091,7 +1100,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 		// Reset backoff after a session that lasted long enough to be considered
 		// successful (e.g. it stayed connected for at least 30 seconds).
 		if time.Since(sessionStart) >= 30*time.Second {
-			delay = transport.ReconnectMinDelay
+			delay = minDelay
 		}
 
 		timer := time.NewTimer(delay)
@@ -1947,16 +1956,6 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	// Before the tool can do anything a restart would cut short.
 	d.results.persistRunning(req.RequestId)
 
-	releaseRecovery, admissionErr := beginRecoveryWork()
-	if admissionErr != nil {
-		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
-			Success: false, IsError: true, Content: admissionErr.Error(),
-			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
-		})
-		return
-	}
-	defer releaseRecovery()
-
 	execCtx, cancel := context.WithCancel(dispatchContext(req))
 	// Registered under both ids. request_id is the transport's correlation key
 	// (a fresh timestamp per dispatch, known only to the server that sent it);
@@ -1997,6 +1996,17 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	// daemon was serving. Empty for a call with no project context, which
 	// only a $HOME fault refuses.
 	workspaceRoot := resolveProjectPathFromContext(contextMap, "", "")
+	// Admitted where the call works, before it does anything: it holds only
+	// that worktree, and a worktree being retired refuses it.
+	releaseRecovery, admissionErr := beginRecoveryWorkIn(workspaceRoot)
+	if admissionErr != nil {
+		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
+			Success: false, IsError: true, Content: admissionErr.Error(),
+			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
+		})
+		return
+	}
+	defer releaseRecovery()
 	if refused := d.guard.preflight(workspaceRoot); refused != nil {
 		d.sendToolResult(s, req.RequestId, refused)
 		return

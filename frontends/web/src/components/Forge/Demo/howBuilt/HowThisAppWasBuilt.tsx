@@ -27,13 +27,18 @@ export interface HowThisAppWasBuiltProps {
   /** Shows a "Back to the console" button that calls it (the demo console). */
   onBack?: () => void;
   className?: string;
+  /** Contextual help never starts playback without a request. */
+  autoPlay?: boolean;
+  /** Public entry puts the real build before its provenance paragraph. */
+  leadWithRecording?: boolean;
 }
 
-export function HowThisAppWasBuilt({ cast, manifest, onBack, className }: HowThisAppWasBuiltProps) {
+export function HowThisAppWasBuilt({ cast, manifest, onBack, className, autoPlay, leadWithRecording = false }: HowThisAppWasBuiltProps) {
   const fixtures = cast && manifest ? { cast, manifest } : scaffoldFixtures();
   const recorded = new Date(fixtures.manifest.captured_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   return (
     <div className={cn("space-y-6", className)} data-testid="how-built">
+      {leadWithRecording && <TerminalReplay cast={fixtures.cast} autoPlay={false} />}
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1 space-y-1">
           <p className="max-w-3xl text-sm text-ink-muted">
@@ -49,7 +54,7 @@ export function HowThisAppWasBuilt({ cast, manifest, onBack, className }: HowThi
           </Button>
         )}
       </div>
-      <TerminalReplay cast={fixtures.cast} />
+      {!leadWithRecording && <TerminalReplay cast={fixtures.cast} autoPlay={autoPlay} />}
       <ScaffoldPanel manifest={fixtures.manifest} cast={fixtures.cast} />
     </div>
   );

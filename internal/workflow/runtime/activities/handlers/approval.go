@@ -223,10 +223,11 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		}
 
 		// Mark chat as unread so UI shows notification badge
+		// A failed write has aborted this transaction, so it is returned for
+		// RunTx to retry the whole approval: a serialization failure on the
+		// user's update counter is the expected one (reliant #2393).
 		if err := a.repo.UpdateChatUnread(txCtx, input.ChatID, true, "approval_required"); err != nil {
-			logger.Warn("[ApprovalCreate] Failed to mark chat as unread",
-				"error", err,
-				"chatID", input.ChatID)
+			return fmt.Errorf("failed to mark chat unread: %w", err)
 		}
 
 		// Build chat_update data

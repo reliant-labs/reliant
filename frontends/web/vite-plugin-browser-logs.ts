@@ -44,7 +44,7 @@ import type { Plugin } from "vite";
  * — how a batching client flushes on pagehide — sends `text/plain`.
  */
 
-/** Endpoint the client posts to. Keep in sync with lib/browser-log-forward.ts. */
+/** Endpoint the forge runtime client posts to (DEV_LOG_ENDPOINT). */
 export const BROWSER_LOG_ENDPOINT = "/__forge/log";
 
 /** Cap one line so a render loop cannot flood the log. */

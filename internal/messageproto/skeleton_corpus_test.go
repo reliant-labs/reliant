@@ -1,0 +1,154 @@
+// Copyright (c) 2026 Reliant Labs
+
+package messageproto
+
+import (
+	"bytes"
+	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+var updateSkeletonCorpus = flag.Bool("update", false, "rewrite testdata/skeleton_corpus.json from InputSkeleton")
+
+// skeletonCorpusPath is shared with the web: toolFormatters.skeleton.test.ts
+// reads the same file and asserts that every formatter labels a call the
+// same from its skeleton as from its full input. A formatter that starts
+// reading a key the skeleton cuts fails there, instead of the UI drifting.
+const skeletonCorpusPath = "testdata/skeleton_corpus.json"
+
+// skeletonCorpusEntry is one finished tool call: its stored input, and what
+// a STUB read sends for it (stubInput: the skeleton, or the input whole when
+// it is small or its tool is always-full).
+type skeletonCorpusEntry struct {
+	Name     string `json:"name"`
+	Tool     string `json:"tool"`
+	Input    string `json:"input"`
+	Skeleton string `json:"skeleton"`
+	// Elided is whether the skeleton left anything out. False means a STUB
+	// read sends the input whole.
+	Elided bool `json:"elided"`
+}
+
+type skeletonCorpus struct {
+	Comment string                `json:"_comment"`
+	Entries []skeletonCorpusEntry `json:"entries"`
+}
+
+func corpusInput(v any) string {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		panic(err)
+	}
+	return strings.TrimSuffix(buf.String(), "\n")
+}
+
+// skeletonCorpusInputs are real-shaped inputs of the tools whose collapsed
+// rows the web labels: one per formatter, plus the shapes the skeleton has a
+// rule for (command, patch_text, edits[], message).
+func skeletonCorpusInputs() []skeletonCorpusEntry {
+	body := strings.Repeat("\tfmt.Println(\"a line of a long file\")\n", 120)
+	longText := strings.Repeat("A paragraph of a long prompt that explains the task in detail. ", 40)
+	return []skeletonCorpusEntry{
+		{Name: "edit", Tool: "edit", Input: corpusInput(map[string]any{
+			"file_path": "internal/messageproto/stub.go", "old_string": body, "new_string": body + "\t// done\n",
+		})},
+		{Name: "edit with edits[]", Tool: "edit", Input: corpusInput(map[string]any{
+			"file_path": "internal/a.go",
+			"edits": []any{
+				map[string]any{"file_path": "internal/a.go", "old_string": body, "new_string": "x"},
+				map[string]any{"file_path": "internal/b.go", "old_string": "y", "new_string": body},
+			},
+		})},
+		{Name: "write", Tool: "write", Input: corpusInput(map[string]any{
+			"file_path": "frontends/web/src/hooks/content-block-bodies.ts", "content": body,
+		})},
+		{Name: "patch", Tool: "patch", Input: corpusInput(map[string]any{
+			"patch_text": "*** Begin Patch\n*** Update File: internal/a.go\n@@ func A()\n-" + body + "+" + body +
+				"*** Add File: internal/c.go\n+" + body + "*** Delete File: internal/old.go\n" +
+				"*** Update File: internal/d.go\n*** Move to: internal/e.go\n@@\n-x\n+y\n*** End Patch",
+		})},
+		{Name: "patch without headers", Tool: "patch", Input: corpusInput(map[string]any{
+			"patch_text": "@@\n-" + body + "+" + body,
+		})},
+		{Name: "shell heredoc", Tool: "shell", Input: corpusInput(map[string]any{
+			"command":     "cat > /tmp/notes.md <<'EOF'\n" + strings.Repeat("a note line\n", 600) + "EOF",
+			"description": "Write the notes file",
+		})},
+		{Name: "shell deploy behind a long chain", Tool: "shell", Input: corpusInput(map[string]any{
+			"command":     strings.Repeat("go test ./internal/... && ", 60) + "reliant forge env deploy staging",
+			"description": "Test, then deploy staging",
+		})},
+		{Name: "spawn", Tool: "spawn", Input: corpusInput(map[string]any{
+			"title": "Implement the SDK half", "preset": "general", "prompt": longText,
+		})},
+		{Name: "spawn_send", Tool: "spawn_send", Input: corpusInput(map[string]any{
+			"agent_id": "380817b7-dd89", "subject": "Owner confirmed decisions", "message": longText,
+		})},
+		{Name: "git commit message", Tool: "shell", Input: corpusInput(map[string]any{
+			"command": "git commit -F -", "message": "feat(chat): ToolBodyMode STUB on transcript reads\n\n" + longText,
+		})},
+		{Name: "websearch", Tool: "websearch", Input: corpusInput(map[string]any{
+			"query": "protobuf additive enum field compatibility", "count": 10,
+		})},
+		{Name: "update_task", Tool: "update_task", Input: corpusInput(map[string]any{
+			"task_id": "task_123", "status": "completed", "description": longText,
+		})},
+		{Name: "request_machine", Tool: "request_machine", Input: corpusInput(map[string]any{
+			"reason": "The build needs docker. " + longText,
+		})},
+		{Name: "not a JSON object", Tool: "shell", Input: strings.Repeat("raw provider input ", 100)},
+	}
+}
+
+func buildSkeletonCorpus() skeletonCorpus {
+	entries := skeletonCorpusInputs()
+	for i := range entries {
+		entries[i].Skeleton, entries[i].Elided = stubInput(entries[i].Tool, entries[i].Input)
+	}
+	return skeletonCorpus{
+		Comment: "Generated by TestSkeletonCorpus (internal/messageproto); rewrite with " +
+			"`go test ./internal/messageproto -run TestSkeletonCorpus -update`. " +
+			"The web's formatter test reads it: dev-docs/design/chat-lazy-tool-bodies.md.",
+		Entries: entries,
+	}
+}
+
+// TestSkeletonCorpus fails when testdata/skeleton_corpus.json is not what
+// InputSkeleton makes of its inputs today.
+func TestSkeletonCorpus(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	require.NoError(t, enc.Encode(buildSkeletonCorpus()))
+	want := buf.Bytes()
+
+	if *updateSkeletonCorpus {
+		require.NoError(t, os.MkdirAll(filepath.Dir(skeletonCorpusPath), 0o755))
+		require.NoError(t, os.WriteFile(skeletonCorpusPath, want, 0o644))
+	}
+	got, err := os.ReadFile(skeletonCorpusPath)
+	require.NoError(t, err)
+	require.Equal(t, string(want), string(got),
+		"%s is stale: run go test ./internal/messageproto -run TestSkeletonCorpus -update, and check the web's formatter test still passes", skeletonCorpusPath)
+
+	// Every entry the corpus labels as elided really is shorter, and every
+	// JSON input keeps JSON.
+	for _, e := range buildSkeletonCorpus().Entries {
+		if e.Elided {
+			require.Less(t, len(e.Skeleton), len(e.Input), e.Name)
+		}
+		if json.Valid([]byte(e.Input)) {
+			require.True(t, json.Valid([]byte(e.Skeleton)), e.Name)
+		}
+	}
+}
