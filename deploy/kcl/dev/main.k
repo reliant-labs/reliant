@@ -55,6 +55,17 @@ LOGS. `.forge/logs/dev/<workload>.log` in this checkout: reliant-api-server.log,
 reliant-temporal-worker.log and daemon-gateway.log (named as in
 control-plane's stack), and frontend_web.log (browser console included). Host
 infra logs to its data dir (.forge/hostinfra/<name>/<engine>.log).
+
+TELEMETRY. `dev_telemetry = "auto"` (observability below): when you are signed
+in to Reliant, `forge env up dev` ships this stack's traces, metrics, logs and
+browser telemetry to the org's hosted store, keyed by this stack as an
+instance (`forge obs ... --instance`), for the retention declared below.
+Otherwise — not signed in, the control plane refuses, or it is unreachable —
+it falls back to local and prints why. Local here means no telemetry at all:
+this stack runs no container, so there is no local ClickStack, and the
+processes get no OTLP endpoint (as before this was declared).
+`forge env status dev` says which was decided. Opt out with
+`forge env up dev --telemetry=local` or FORGE_DEV_TELEMETRY=local.
 """
 
 import forge
@@ -167,6 +178,31 @@ _bundle = forge.Bundle {
     # This machine's own stack: forge creates everything it runs, so it may
     # hold plaintext dev secrets (FileSecrets).
     lifecycle = "local"
+    # Reliant cloud (the same `forge.ControlPlane {}` as deploy/kcl/demo):
+    # what dev_telemetry = "auto" mints this stack's telemetry tokens from.
+    # It is forge's control plane only. The PRODUCT's control plane stays
+    # unset (config.k: RELIANT_CONTROL_PLANE_URL), so every server role keeps
+    # its self-hosted path.
+    control_plane = forge.ControlPlane {}
+    # Hosted dev telemetry (forge observability/destination, "Hosted dev
+    # telemetry"); see TELEMETRY above. No destination and no local_port: the
+    # local fallback injects no endpoint and starts nothing, because this
+    # stack is container-free.
+    observability = forge.Observability {
+        dev_telemetry = "auto"
+        retention = forge.ObservabilityRetention {
+            traces_days = 3
+            metrics_days = 3
+            logs_days = 3
+            browser_days = 3
+            overrides = [
+                # The worker logs every activity, tool call and LLM round
+                # trip: by far the chattiest stream, and rarely read after
+                # the day it was written.
+                forge.RetentionOverride {service = "reliant-temporal-worker", signal = "logs", days = 1}
+            ]
+        }
+    }
     workloads = [_migrate, _api, _worker, _gateway]
     frontends = [_web]
     infra = [
