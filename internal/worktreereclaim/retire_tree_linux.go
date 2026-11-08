@@ -37,10 +37,11 @@ type retirementTree struct {
 	subtree bool
 	// path is the checkout's absolute path, for the git questions below.
 	path string
-	// tracked is every path HEAD tracks in the checkout and every directory
-	// on the way to one, read only when the inventory first meets a
-	// never-listed name (trackedPath); head is the commit it was read from.
-	tracked     map[string]bool
+	// tracked is every regular file HEAD tracks in the checkout and every
+	// directory on the way to one, with its kind, read only when the
+	// inventory first meets a never-listed name (trackedPath); head is the
+	// commit it was read from.
+	tracked     map[string]trackedKind
 	head        string
 	trackedRead bool
 }
@@ -408,15 +409,15 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 			if rel != "" {
 				path = rel + "/" + name
 			}
-			if !inPackage && neverListed(path) && !t.trackedPath(ctx, path) {
-				return fmt.Errorf("protected descendant: %s", path)
-			}
 			if name == ".git" && (rel != "" || t.subtree) {
 				return errors.New("nested repository in retirement tree")
 			}
 			var s unix.Stat_t
 			if err := unix.Fstatat(int(dir.Fd()), name, &s, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 				return err
+			}
+			if !inPackage && neverListed(path) && !t.trackedPath(ctx, path, s.Mode) {
+				return fmt.Errorf("protected descendant: %s", path)
 			}
 			if s.Dev != st.Dev {
 				return errors.New("retirement crosses filesystem")
@@ -487,8 +488,12 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 	return entries, bytes, newest, nil
 }
 
-// trackedPath reports whether rel is a file HEAD tracks in this checkout, or
-// a directory holding one. The never-list protects the user's data: an
+// trackedPath reports whether rel is a regular file HEAD tracks in this
+// checkout, or a directory holding one, AND is that same kind on disk (mode,
+// from lstat). A symlink or submodule HEAD tracks under a never-listed name
+// is never exempt, nor is a path whose kind on disk is not HEAD's: a
+// `secrets` HEAD tracks as a file but that is a symlink (or a directory) here
+// is the user's, whatever its name in the commit. The never-list protects the user's data: an
 // ignored .env, a local database, a secrets directory nothing commits. A
 // tracked deploy/secrets/ or internal/secrets/ package is source, in a commit
 // the classifier proves is on the remote, and the classifier proves the
@@ -500,7 +505,7 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 // The exemption is tied to the commit it was read from (validate), so a
 // HEAD that moves after inspection holds the tree. A checkout git cannot
 // read exempts nothing. A regenerable subtree never consults it.
-func (t *retirementTree) trackedPath(ctx context.Context, rel string) bool {
+func (t *retirementTree) trackedPath(ctx context.Context, rel string, mode uint32) bool {
 	if t.subtree {
 		return false
 	}
@@ -508,32 +513,57 @@ func (t *retirementTree) trackedPath(ctx context.Context, rel string) bool {
 		t.trackedRead = true
 		t.head, t.tracked = trackedInHead(ctx, t.path)
 	}
-	return t.tracked[rel]
+	switch t.tracked[rel] {
+	case trackedFile:
+		return mode&unix.S_IFMT == unix.S_IFREG
+	case trackedDir:
+		return mode&unix.S_IFMT == unix.S_IFDIR
+	default:
+		return false
+	}
 }
+
+// trackedKind is what HEAD's tree holds at a path, for trackedPath.
+type trackedKind byte
+
+const (
+	trackedNone trackedKind = iota
+	trackedFile
+	trackedDir
+)
 
 // trackedInHead is the commit HEAD names in checkout and the set of paths its
 // tree holds, directories on the way to each included; "" and nil when git
 // cannot say.
-func trackedInHead(ctx context.Context, checkout string) (string, map[string]bool) {
+func trackedInHead(ctx context.Context, checkout string) (string, map[string]trackedKind) {
 	head, err := git(ctx, checkout, nil, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil || head == "" {
 		return "", nil
 	}
-	out, err := gitRaw(ctx, checkout, nil, "ls-tree", "-r", "-z", "--full-tree", "--name-only", head)
+	out, err := gitRaw(ctx, checkout, nil, "ls-tree", "-r", "-z", "--full-tree", head)
 	if err != nil {
 		return "", nil
 	}
 	return head, trackedSet(out)
 }
 
-// trackedSet is the paths of NUL-separated `git ls-tree -r -z --name-only`
-// output and every directory on the way to each.
-func trackedSet(lsTree []byte) map[string]bool {
-	tracked := map[string]bool{}
-	for _, p := range strings.Split(string(lsTree), "\x00") {
-		for p != "" && p != "." && !tracked[p] {
-			tracked[p] = true
-			p = path.Dir(p)
+// trackedSet is the regular files of NUL-separated `git ls-tree -r -z`
+// output (`<mode> <type> <object>\t<path>`; modes 100644 and 100755) and
+// every directory on the way to each. Symlinks (120000) and submodules
+// (160000) are left out: what they name is not in the commit.
+func trackedSet(lsTree []byte) map[string]trackedKind {
+	tracked := map[string]trackedKind{}
+	for _, rec := range strings.Split(string(lsTree), "\x00") {
+		meta, p, ok := strings.Cut(rec, "\t")
+		if !ok || p == "" {
+			continue
+		}
+		if mode, _, _ := strings.Cut(meta, " "); mode != "100644" && mode != "100755" {
+			continue
+		}
+		tracked[p] = trackedFile
+		for d := path.Dir(p); d != "" && d != "." && tracked[d] == trackedNone; d = path.Dir(d) {
+			tracked[d] = trackedDir
 		}
 	}
 	return tracked

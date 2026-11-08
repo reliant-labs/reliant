@@ -4,25 +4,73 @@ package worktreereclaim
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 func TestTrackedSetIncludesEveryDirectoryOnTheWay(t *testing.T) {
 	t.Parallel()
-	got := trackedSet([]byte("deploy/secrets/README.md\x00internal/secrets/key.go\x00main.go\x00"))
-	for _, p := range []string{"deploy", "deploy/secrets", "deploy/secrets/README.md", "internal", "internal/secrets", "internal/secrets/key.go", "main.go"} {
-		if !got[p] {
-			t.Errorf("trackedSet is missing %q", p)
+	ls := func(recs ...string) []byte { return []byte(strings.Join(recs, "\x00") + "\x00") }
+	got := trackedSet(ls(
+		"100644 blob aaaa\tdeploy/secrets/README.md",
+		"100755 blob bbbb\tinternal/secrets/key.go",
+		"100644 blob cccc\tmain.go",
+		"120000 blob dddd\tsecrets",
+		"160000 commit eeee\tvendor/creds",
+		"120000 blob ffff\tlinks/only/secrets",
+	))
+	for p, want := range map[string]trackedKind{
+		"deploy": trackedDir, "deploy/secrets": trackedDir, "deploy/secrets/README.md": trackedFile,
+		"internal": trackedDir, "internal/secrets": trackedDir, "internal/secrets/key.go": trackedFile,
+		"main.go": trackedFile,
+	} {
+		if got[p] != want {
+			t.Errorf("trackedSet[%q] = %v, want %v", p, got[p], want)
 		}
 	}
-	for _, p := range []string{"", ".", "deploy/secrets/dev.yaml", "secrets"} {
-		if got[p] {
-			t.Errorf("trackedSet names %q, which nothing tracks", p)
+	// A symlink or submodule is not in the commit's content: never exempt,
+	// nor are directories that hold only them.
+	for _, p := range []string{"", ".", "deploy/secrets/dev.yaml", "secrets", "vendor", "vendor/creds", "links", "links/only/secrets"} {
+		if got[p] != trackedNone {
+			t.Errorf("trackedSet names %q (%v), which no regular file makes tracked", p, got[p])
 		}
 	}
 	if len(trackedSet(nil)) != 0 {
 		t.Error("no output names nothing")
+	}
+}
+
+// HEAD tracks a never-listed name as a symlink: the link is not exempt (what
+// it points at is not in the commit), so it holds the checkout as an
+// untracked one would.
+func TestRetirementTreeDoesNotExemptATrackedSymlink(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "builds a git fixture")
+	f := newFixture(t)
+	if err := os.Symlink("/nonexistent/vault", filepath.Join(f.project, "secrets")); err != nil {
+		t.Fatal(err)
+	}
+	run(t, f.project, "add", ".")
+	run(t, f.project, "commit", "-q", "-m", "tracked secrets link")
+	run(t, f.project, "push", "-q", "origin", "main")
+	w := f.worktree("tracked-link", "feat/tracked-link")
+	if fi, err := os.Lstat(filepath.Join(w.Path, "secrets")); err != nil || fi.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("fixture: want the checkout's secrets to be the tracked symlink: %v", err)
+	}
+
+	tree, err := inspectRetirementTree(context.Background(), w.Path)
+	if tree != nil {
+		tree.close()
+	}
+	if err == nil || !strings.Contains(err.Error(), "protected descendant: secrets") {
+		t.Fatalf("a tracked never-listed symlink was exempt: err = %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(w.Path, "secrets")); err != nil {
+		t.Fatal("inspection deleted the link")
 	}
 }
 
@@ -93,5 +141,29 @@ func TestReconcile_TrackedSecretsDirectoryDoesNotHold(t *testing.T) {
 	}
 	if exists(w.Path) {
 		t.Fatal("directory still exists")
+	}
+}
+
+// A path HEAD tracks is exempt only as the kind HEAD tracks it as: a file HEAD
+// has at `secrets` that is a symlink or a directory on disk is the user's.
+func TestTrackedPathRequiresTheKindHeadTracks(t *testing.T) {
+	t.Parallel()
+	tree := &retirementTree{trackedRead: true, tracked: map[string]trackedKind{"secrets": trackedFile, "deploy/secrets": trackedDir}}
+	for _, c := range []struct {
+		rel  string
+		mode uint32
+		want bool
+	}{
+		{"secrets", unix.S_IFREG, true},
+		{"secrets", unix.S_IFLNK, false},
+		{"secrets", unix.S_IFDIR, false},
+		{"deploy/secrets", unix.S_IFDIR, true},
+		{"deploy/secrets", unix.S_IFLNK, false},
+		{"deploy/secrets", unix.S_IFREG, false},
+		{"other", unix.S_IFREG, false},
+	} {
+		if got := tree.trackedPath(context.Background(), c.rel, c.mode); got != c.want {
+			t.Errorf("trackedPath(%q, %o) = %v, want %v", c.rel, c.mode, got, c.want)
+		}
 	}
 }
