@@ -85,7 +85,15 @@ describe("the demo shell's boot", () => {
 });
 
 describe("the demo shell's routes", () => {
-  it.each(["/", "/auth", "/oauth/cli?port=1", "/claim", "/apps", "/forge/p/shop/env/prod", "/workflows"])(
+  it("leads bare entry with the build story, without starting a tour", async () => {
+    const router = renderDemoShell("/?rid=abcdefgh1234&utm_source=landing");
+    await screen.findByTestId("demo-console");
+    expect(router.state.location.pathname).toBe("/forge/demo");
+    expect(searchOf(router)).toMatchObject({section:"built", rid:"abcdefgh1234", utm_source:"landing"});
+    expect(searchOf(router).tour).toBeUndefined();
+    expect(screen.queryByTestId("tour-callout")).toBeNull();
+  });
+  it.each(["/auth", "/oauth/cli?port=1", "/claim", "/apps", "/forge/p/shop/env/prod", "/workflows"])(
     "sends %s to the sample app's console overview",
     async (path) => {
       const router = renderDemoShell(path);
@@ -138,7 +146,7 @@ describe("the demo shell's routes", () => {
 
 describe("every demo page entry starts its own concise tour", () => {
   it("opens the current-page callout automatically without a tour query or Take-tour click", async () => {
-    const router = renderDemoShell("/");
+    const router = renderDemoShell("/forge/p/shop");
     await screen.findByTestId("console-overview");
     await waitFor(() => expect(screen.getByTestId("tour-callout")).toBeInTheDocument());
     expect(searchOf(router).tour).toBeUndefined();
@@ -147,7 +155,7 @@ describe("every demo page entry starts its own concise tour", () => {
   });
 
   it("dismisses for this visit without navigating the site", async () => {
-    const router = renderDemoShell("/");
+    const router = renderDemoShell("/forge/p/shop");
     await screen.findByTestId("console-overview");
     await waitFor(() => fireEvent.click(screen.getByTestId("tour-next")));
     await waitFor(() => expect(screen.queryByTestId("tour-callout")).toBeNull());
