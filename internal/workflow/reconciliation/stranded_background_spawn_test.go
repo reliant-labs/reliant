@@ -3,12 +3,14 @@ package reconciliation
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/enums/v1"
 )
 
 func strandedBackgroundSpawn(toolCallID, chatID, parentThreadID, childThreadID string, status db.WorkflowStatus) *db.StrandedBackgroundSpawn {
@@ -335,6 +337,81 @@ func TestRepairStrandedBackgroundSpawns_UndeliverableIsIdempotent(t *testing.T) 
 	assert.Equal(t, core.ToolCallStatusCancelled, repo.toolCalls["tc-idem"].Status)
 }
 
+// A stopped spawn is not stranded while the chat's execution that runs it is
+// still open: SpawnStopper writes the child's row cancelled the moment it
+// signals, and the spawn's goroutine enqueues its "cancelled" report only at
+// its next turn boundary, seconds to minutes later. Every prod repair from
+// 11-04 to 11-07 was that window (reliant #2394): stop signalled at
+// 22:24:56, a "lost in transit (worker interruption)" placeholder written at
+// 22:25:10.4, the goroutine's real report 40ms later.
+func TestRepairStrandedBackgroundSpawns_LeavesAStoppedSpawnToItsOpenRun(t *testing.T) {
+	before := anomalyCount("stranded_background_spawn_repaired")
+	repo := newMockRepo()
+	repo.chats["chat-1"] = &db.Chat{ID: "chat-1", WorkflowID: ptrTo("root-wf")}
+	repo.withBackgroundedToolCall("tc-stopped", "chat-1")
+	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
+		strandedBackgroundSpawn("tc-stopped", "chat-1", "parent-thread-1", "child-thread-1", db.Cancelled()),
+	}
+	temporal := &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{
+		"root-wf": {resp: makeRunningDescribeResp("run-1")},
+	}}
+	reconciler := NewReconciler(repo, temporal, DefaultConfig())
+
+	repaired, err := reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
+	require.NoError(t, err)
+	assert.Equal(t, 0, repaired)
+	assert.Empty(t, repo.enqueuedAgentMessages,
+		"the open run reports the stop itself; a placeholder here tells the parent a lie about a worker interruption")
+	assert.Equal(t, core.ToolCallStatusBackgrounded, repo.toolCalls["tc-stopped"].Status,
+		"the goroutine settles its own tool call")
+	assert.Equal(t, before, anomalyCount("stranded_background_spawn_repaired"))
+
+	// Once the run has closed, nothing else can report the stop: the repair
+	// writes it, as before.
+	temporal.describeResponses["root-wf"] = mockDescribeResponse{resp: makeTerminalDescribeResp(enums.WORKFLOW_EXECUTION_STATUS_COMPLETED)}
+	repaired, err = reconciler.repairStrandedBackgroundSpawns(context.Background(), &passStats{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, repaired)
+	require.Len(t, repo.enqueuedAgentMessages, 1)
+	assert.Equal(t, core.AgentMessageKindCancelled, repo.enqueuedAgentMessages[0].Kind)
+}
+
+// Temporal that cannot be asked decides nothing: the stopped spawn is left
+// for the next pass rather than given a report that may be false.
+func TestRepairStrandedBackgroundSpawns_StoppedSpawnWaitsWhenTemporalCannotBeAsked(t *testing.T) {
+	repo := newMockRepo()
+	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
+		strandedBackgroundSpawn("tc-stopped", "chat-1", "parent-thread-1", "child-thread-1", db.Cancelled()),
+	}
+	temporal := &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{
+		"chat-1": {err: errors.New("connection refused")},
+	}}
+
+	repaired, err := NewReconciler(repo, temporal, DefaultConfig()).repairStrandedBackgroundSpawns(context.Background(), &passStats{})
+	require.NoError(t, err)
+	assert.Equal(t, 0, repaired)
+	assert.Empty(t, repo.enqueuedAgentMessages)
+}
+
+// A completed child is still repaired while its run is open: its goroutine
+// writes the report BEFORE the terminal status, so a terminal completed child
+// with no report really did lose it (a failed enqueue).
+func TestRepairStrandedBackgroundSpawns_RepairsACompletedChildEvenWhileItsRunIsOpen(t *testing.T) {
+	repo := newMockRepo()
+	repo.chats["chat-1"] = &db.Chat{ID: "chat-1", WorkflowID: ptrTo("root-wf")}
+	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
+		strandedBackgroundSpawn("tc-done", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
+	}
+	temporal := &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{
+		"root-wf": {resp: makeRunningDescribeResp("run-1")},
+	}}
+
+	repaired, err := NewReconciler(repo, temporal, DefaultConfig()).repairStrandedBackgroundSpawns(context.Background(), &passStats{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, repaired)
+	require.Len(t, repo.enqueuedAgentMessages, 1)
+}
+
 // TestReconcileRunningWorkflows_RepairsStrandedBackgroundSpawns confirms the
 // sweep is actually wired into the background pass, not just callable in
 // isolation.
@@ -351,3 +428,5 @@ func TestReconcileRunningWorkflows_RepairsStrandedBackgroundSpawns(t *testing.T)
 	require.Len(t, repo.enqueuedAgentMessages, 1)
 	assert.Contains(t, repo.callOrder, "repair_stranded_background_spawns")
 }
+
+func ptrTo(s string) *string { return &s }
