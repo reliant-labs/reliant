@@ -125,6 +125,12 @@ type Plan struct {
 	// (writableFor): Wrap refuses the command and names them, rather than
 	// run it with less than it declared.
 	Rejected []string `json:"-"`
+	// LinkParents are directories holding a symlink on the way to a trusted
+	// path (a credential helper, an included git config, the home's
+	// config): rebuilt as Seal's are, so the link cannot be replaced for
+	// real while its target is read-only. checkSeals refuses one that cannot
+	// be rebuilt while the command could write it.
+	LinkParents []string `json:",omitempty"`
 	// Conflicts are credential helpers that do not exist yet and would be
 	// created inside a directory the command's writable_checkouts named:
 	// plantable there, and sealing that directory would lose what the command
@@ -368,10 +374,10 @@ func Wrap(cmd *exec.Cmd, credentials string, writable Writable) (refusal string)
 // conflictRefusal is what a command reports when a credential helper the git
 // config names would live in a directory it declared it writes.
 func conflictRefusal(helpers []string) string {
-	return fmt.Sprintf("reliant: `credentials: none` command not run: the git credential helper %s does not exist yet, "+
-		"and it would be created in a directory the command's writable_checkouts names, "+
-		"where the command could plant it for a later credentialed git. Point the git config's credential.helper outside "+
-		"that directory, or create the helper first.", strings.Join(helpers, ", "))
+	return fmt.Sprintf("reliant: `credentials: none` command not run: %s, a git credential helper (or a link on the way to "+
+		"one, or to a config git trusts) that does not exist yet or is a link, is in a directory the command's "+
+		"writable_checkouts names, where the command could plant or replace it for a later credentialed git. Move it "+
+		"out of that directory, or create the helper itself there in place of the link.", strings.Join(helpers, ", "))
 }
 
 // rejectedRefusal is what a command whose declared writable directories the

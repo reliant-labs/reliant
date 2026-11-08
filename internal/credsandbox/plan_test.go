@@ -361,6 +361,25 @@ func TestPlan_AnAbsentHelperInAHandOffIsAConflict(t *testing.T) {
 	assert.NotContains(t, p.Seal, inOwn)
 }
 
+// symlinksOn names every link on the way to a path by the link's own path: a
+// linked directory, the last component, and a chain of links.
+func TestSymlinksOn(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	real := filepath.Join(root, "real")
+	require.NoError(t, os.MkdirAll(filepath.Join(real, "bin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(real, "bin", "tool"), nil, 0o755))
+	require.NoError(t, os.Symlink("real", filepath.Join(root, "dirlink")))
+	require.NoError(t, os.Symlink(filepath.Join(root, "dirlink", "bin", "tool"), filepath.Join(root, "hop1")))
+	require.NoError(t, os.Symlink("hop1", filepath.Join(root, "hop2")))
+
+	assert.Empty(t, symlinksOn(filepath.Join(real, "bin", "tool")), "no link on the way")
+	assert.Equal(t, []string{filepath.Join(root, "dirlink")}, symlinksOn(filepath.Join(root, "dirlink", "bin", "tool")))
+	assert.Equal(t, []string{filepath.Join(root, "hop2"), filepath.Join(root, "hop1"), filepath.Join(root, "dirlink")},
+		symlinksOn(filepath.Join(root, "hop2")))
+	assert.Empty(t, symlinksOn(filepath.Join(root, "missing", "x")))
+}
+
 // `helper = store` runs git's own credential-store: a git-credential-store on
 // PATH is never run, so it is no candidate. A helper git does not have is
 // looked up on PATH, so each PATH directory is a candidate.

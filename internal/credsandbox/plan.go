@@ -404,7 +404,36 @@ func buildPlan(base Plan, in planEnv) Plan {
 		}
 	}
 
+	// A trusted path reached through a symlink is read-only only at its
+	// target (makeReadOnly resolves it), so the link itself — or a link
+	// anywhere on the way, a linked directory included — could be replaced by
+	// the command for a later credentialed git to follow. The directory
+	// holding each link is rebuilt (Plan.LinkParents), as a sealed path's is,
+	// so a replaced link does not outlive the command. One inside a directory
+	// already read-only needs nothing; one in a declared output conflicts.
+	trusted := append([]string(nil), helpersPresent...)
+	trusted = append(trusted, trustedConfigPaths(home, in.env)...)
+	if home != "" {
+		for _, rel := range append(append([]string(nil), readOnlyReliantRel...), sealedHomeRel...) {
+			trusted = append(trusted, filepath.Join(home, rel))
+		}
+	}
+	var linkParents []string
+	for _, c := range trusted {
+		for _, link := range symlinksOn(c) {
+			d := filepath.Dir(link)
+			switch {
+			case protected(d):
+			case under(d, declared...):
+				conflicts = append(conflicts, link)
+			default:
+				linkParents = append(linkParents, d)
+			}
+		}
+	}
+
 	p.ReadOnly = roAll
+	p.LinkParents = cleanAbs(append(p.LinkParents, linkParents...))
 	p.Seal = cleanAbs(append(p.Seal, seal...))
 	p.Writable = onlyUnderReadOnly(cleanAbs(append(p.Writable, writable...)), p.ReadOnly)
 	p.Overlay = dedupeOverlays(append(p.Overlay, keep...))
@@ -718,6 +747,44 @@ func credentialHelpers(home string, env []string) (present, absent, absentPath [
 		}
 	}
 	return present, absent, absentPath
+}
+
+// symlinksOn returns every symlink resolving path passes through, each named
+// by the path of the link itself: a linked directory on the way, the final
+// component, and every link those point at in turn. Nothing when path does not
+// exist past a link, or resolves through none.
+func symlinksOn(path string) []string {
+	var links []string
+	rest := strings.Split(strings.TrimPrefix(filepath.Clean(path), "/"), "/")
+	cur := "/"
+	for hops := 0; len(rest) > 0 && hops < 40; {
+		comp := rest[0]
+		rest = rest[1:]
+		if comp == "" || comp == "." {
+			continue
+		}
+		next := filepath.Join(cur, comp)
+		fi, err := os.Lstat(next)
+		if err != nil {
+			return links
+		}
+		if fi.Mode()&os.ModeSymlink == 0 {
+			cur = next
+			continue
+		}
+		target, err := os.Readlink(next)
+		if err != nil {
+			return links
+		}
+		hops++
+		links = append(links, next)
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(cur, target)
+		}
+		rest = append(strings.Split(strings.TrimPrefix(filepath.Clean(target), "/"), "/"), rest...)
+		cur = "/"
+	}
+	return links
 }
 
 // gitBuiltinHelpers are the credential helpers git has built in (`helper =

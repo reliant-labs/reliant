@@ -749,6 +749,17 @@ func hideAndSeal(p Plan, mounts []mountInfo) ([]string, error) {
 			rebuild[d] = nil
 		}
 	}
+	// A directory holding a link to a trusted path is rebuilt whole: the link
+	// is recreated in the tmpfs, so replacing it changes nothing outside the
+	// command, and its target is made read-only below.
+	for _, d := range dedupe(append(append([]string(nil), p.LinkParents...), aliasPaths(p.LinkParents, mounts)...)) {
+		if !sealable(d) {
+			continue // checkLinkParents refused one the command could write
+		}
+		if _, ok := rebuild[d]; !ok {
+			rebuild[d] = nil
+		}
+	}
 
 	// Shallowest first: a directory rebuilt inside one that was already rebuilt
 	// is rebuilt from the bind mounts the outer rebuild made.

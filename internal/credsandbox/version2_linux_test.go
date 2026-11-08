@@ -513,6 +513,54 @@ echo ran`)
 	assert.True(t, os.IsNotExist(err), "a planted credential helper outlived the credentials-none command: %v", err)
 }
 
+// R15.B1: a trusted path that is a symlink is read-only only at its target, so
+// the link itself could be replaced: a helper the git config names, and a
+// config file it includes, each a link outside every protected root. The
+// command replaces both links; on the host both still name the trusted
+// originals, which are unchanged.
+func TestSandbox_ALinkedHelperAndIncludedConfigCannotBeReplaced(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	// Under this checkout, not /tmp: the command's /tmp is private.
+	root, err := os.MkdirTemp(".", ".credsandbox-links-")
+	require.NoError(t, err)
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	realHelper := filepath.Join(root, "real", "git-credential-custom")
+	realInclude := filepath.Join(root, "real", "include.gitconfig")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "real"), 0o755))
+	require.NoError(t, os.WriteFile(realHelper, []byte("#!/bin/sh\necho password=trusted\n"), 0o755))
+	require.NoError(t, os.WriteFile(realInclude, []byte("[user]\n\tname = trusted\n"), 0o644))
+	links := filepath.Join(root, "links")
+	require.NoError(t, os.MkdirAll(links, 0o755))
+	helper := filepath.Join(links, "helper")
+	include := filepath.Join(links, "include")
+	require.NoError(t, os.Symlink("../real/git-credential-custom", helper))
+	require.NoError(t, os.Symlink(realInclude, include))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"),
+		[]byte("[credential]\n\thelper = "+helper+"\n[include]\n\tpath = "+include+"\n"), 0o644))
+
+	out := runWrapped(t, "none", home, home, `
+rm -f '`+helper+`' '`+include+`' 2>/dev/null
+printf '#!/bin/sh\necho password=planted\n' > '`+helper+`' 2>/dev/null && chmod +x '`+helper+`' 2>/dev/null
+printf '[credential]\n\thelper = !planted\n' > '`+include+`' 2>/dev/null
+echo ran`)
+	assert.Contains(t, out, "ran")
+	for link, want := range map[string]string{helper: "../real/git-credential-custom", include: realInclude} {
+		got, err := os.Readlink(link)
+		assert.NoError(t, err, "%s is no longer a link on the host", link)
+		assert.Equal(t, want, got, "the command replaced the trusted link %s", link)
+	}
+	b, err := os.ReadFile(helper)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "password=trusted", "the helper a credentialed git runs changed")
+	b, err = os.ReadFile(include)
+	require.NoError(t, err)
+	assert.Contains(t, string(b), "name = trusted", "the config a credentialed git includes changed")
+}
+
 // R9.B1: the same helper inside a cache hand-off its run node named, which
 // the sandbox keeps real and writable over the private cache root, is still
 // sealed: the hand-off's real writes persist, the helper does not.

@@ -125,6 +125,9 @@ func prepareOverlays(p Plan) (Plan, error) {
 	if err := checkSeals(p.Seal); err != nil {
 		return p, err
 	}
+	if err := checkLinkParents(p.LinkParents); err != nil {
+		return p, err
+	}
 
 	writable := map[string]bool{}
 	for _, w := range p.Writable {
@@ -164,6 +167,19 @@ func checkSeals(seal []string) error {
 		if !sealable(d) {
 			return fmt.Errorf("%s must not come to exist, and its directory %s cannot be sealed: point the variable that names it somewhere deeper", s, d)
 		}
+	}
+	return nil
+}
+
+// checkLinkParents refuses a plan with a directory holding a link to a trusted
+// path that the sandbox cannot rebuild (sealable) while the daemon's user can
+// write it: the command could replace the link for real.
+func checkLinkParents(dirs []string) error {
+	for _, d := range dirs {
+		if under(d, "/tmp", "/var/tmp") || unix.Access(d, unix.W_OK) != nil || sealable(d) {
+			continue
+		}
+		return fmt.Errorf("%s holds a link to a file a credentialed git trusts, and it cannot be sealed: replace the link with the file it names", d)
 	}
 	return nil
 }
