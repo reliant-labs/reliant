@@ -1,4 +1,3 @@
-import { useContext } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TurnWorkFold } from "../TurnWorkFold";
@@ -7,20 +6,13 @@ import { ToolCallStatus, type Message } from "../../../gen/reliant/v1/chat_pb";
 import type { TurnWork } from "../thread-views/simplifiedTurns";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 
-vi.mock("../ChatMessage", async () => {
-  const { DeployCardShownOutside } = await import("../../Apps/DeployedAppCard");
-  return {
-    ChatMessage: ({ message, slice }: { message: Message; slice?: { role: string; segmentIndexes: number[] } }) => (
-      <div
-        data-testid={`row-${slice?.role}`}
-        data-message={message.id}
-        data-deploy-card-outside={String(useContext(DeployCardShownOutside))}
-      >
-        {slice?.role}:{message.id}:{slice?.segmentIndexes.join(",")}
-      </div>
-    ),
-  };
-});
+vi.mock("../ChatMessage", () => ({
+  ChatMessage: ({ message, slice }: { message: Message; slice?: { role: string; segmentIndexes: number[]; callIds?: string[] } }) => (
+    <div data-testid={`row-${slice?.role}`} data-message={message.id} data-calls={slice?.callIds?.join(",")}>
+      {slice?.role}:{message.id}:{slice?.segmentIndexes.join(",")}
+    </div>
+  ),
+}));
 
 vi.mock("../AgentMessageCard", () => ({
   isAgentMessage: (message: Message) => message.id.startsWith("agent-"),
@@ -104,7 +96,7 @@ describe("TurnWorkFold", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it("is collapsed by default, with the done headline, its counts and surfaced rows", () => {
+  it("is collapsed by default, with the done headline and its counts, and nothing of the run outside it", () => {
     render(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
     const button = toggle();
     expect(button.getAttribute("aria-expanded")).toBe("false");
@@ -112,8 +104,7 @@ describe("TurnWorkFold", () => {
     expect(button.textContent).toContain("Activity · 1 file read · 1 command");
     expect(button.getAttribute("aria-label")).toBe("Activity, 1 file read · 1 command");
     expect(screen.getByRole("timer").textContent).toBe("1:12");
-    expect(screen.queryAllByTestId("row-work")).toHaveLength(0);
-    expect(screen.getAllByTestId("row-work-surfaced")).toHaveLength(2);
+    expect(screen.getByTestId("turn-work-fold").querySelectorAll("[data-testid^='row-']")).toHaveLength(0);
   });
 
   it("carries a message row's chrome: the run's end time and a branch from its last message", () => {
@@ -169,24 +160,32 @@ describe("TurnWorkFold", () => {
     expect(screen.queryByRole("button", { name: "Branch from message" })).toBeNull();
   });
 
-  it("toggles the work rows open and closed; surfaced rows stay", () => {
+  it("toggles the work rows open and closed", () => {
     render(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
     const button = toggle();
     fireEvent.click(button);
     expect(button.getAttribute("aria-expanded")).toBe("true");
     expect(button.getAttribute("aria-controls")).toBe(screen.getByTestId("turn-work-body").id);
     expect(screen.getAllByTestId("row-work")).toHaveLength(2);
-    expect(screen.getAllByTestId("row-work-surfaced")).toHaveLength(2);
     fireEvent.click(button);
     expect(screen.queryAllByTestId("row-work")).toHaveLength(0);
-    expect(screen.getAllByTestId("row-work-surfaced")).toHaveLength(2);
   });
 
-  it("leaves a deploy's card to the surfaced rows, so an open fold never shows it twice", () => {
-    render(<TurnWorkFold work={makeWork()} chatId="chat-1" />);
+  it("renders and counts only the calls a part holds when a surfaced call cut its segment", () => {
+    const m1 = message("m1", "2024-01-01T00:00:00.000Z", [
+      toolBlock("c1", "view", { path: "a.ts" }, "2024-01-01T00:00:10.000Z"),
+      { ...toolBlock("ask", "ask_user", {}), id: "b-ask", index: 1 },
+    ] as Message["contentBlocks"]);
+    render(
+      <TurnWorkFold
+        work={{ key: "work-m1-0", thread: "chat-1", parts: [{ message: m1, segmentIndexes: [0], callIds: ["c1"] }] }}
+        chatId="chat-1"
+      />,
+    );
+    expect(toggle().textContent).toContain("Activity · 1 file read");
+    expect(toggle().textContent).not.toContain("other tool");
     fireEvent.click(toggle());
-    for (const row of screen.getAllByTestId("row-work")) expect(row.dataset.deployCardOutside).toBe("true");
-    for (const row of screen.getAllByTestId("row-work-surfaced")) expect(row.dataset.deployCardOutside).toBe("false");
+    expect(screen.getByTestId("row-work").dataset.calls).toBe("c1");
   });
 
   it("keeps failures explained and inspectable in the disclosure", () => {

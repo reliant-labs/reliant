@@ -42,14 +42,6 @@ vi.mock("../AskUserCard", () => ({
 vi.mock("../MessageGeneratedImages", () => ({
   MessageGeneratedImages: () => <div data-testid="generated-images">images</div>,
 }));
-vi.mock("../../Apps/DeployedAppCard", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../Apps/DeployedAppCard")>()),
-  DeployedAppCard: ({ deploy }: { deploy: { env: string } }) => (
-    <div data-testid="deployed-app-card" data-env={deploy.env}>
-      deployed:{deploy.env}
-    </div>
-  ),
-}));
 vi.mock("../MessageGeneratedVideos", () => ({
   MessageGeneratedVideos: () => <div data-testid="generated-videos">videos</div>,
   isVideoMimeType: (mime: string) => mime.startsWith("video/"),
@@ -58,7 +50,6 @@ vi.mock("../MessageGeneratedVideos", () => ({
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
   useToolResultsByCallId: () => ({
-    "call-deploy": { content: JSON.stringify({ exit_code: 0, output: "released" }), is_error: false },
     "call-img": {
       content: "Image generated.",
       is_error: false,
@@ -246,28 +237,20 @@ describe("ChatMessage slice", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("work renders narration and tool rows in order, without chrome, cards or media", () => {
-    render(<ChatMessage message={turn()} chatId="chat-1" slice={slice("work", [0, 1, 2, 3])} />);
+  it("work renders narration and tool rows in order, without chrome", () => {
+    render(<ChatMessage message={turn()} chatId="chat-1" slice={slice("work", [0, 1, 2])} />);
 
     const order = Array.from(
       document.querySelectorAll('[data-testid="text-run"], [data-testid="tool-card"]'),
     ).map((el) => el.textContent);
     expect(order).toEqual(["Looking into it.", "tool:bash", "Found the cause."]);
-    expect(screen.queryByTestId("ask-user-card")).toBeNull();
     expect(screen.queryByRole("button", { name: /copy message/i })).toBeNull();
     expect(document.querySelector("time")).toBeNull();
     expect(screen.queryByTestId("message-msg-1")).toBeNull();
+    expect(screen.getByTestId("message-msg-1-work")).toBeInTheDocument();
   });
 
-  it("work does not render generated images or videos", () => {
-    const message = assistant([text(0, "Drawing."), tool(1, "generate_image", "call-img")]);
-    render(<ChatMessage message={message} chatId="chat-1" slice={slice("work", [0, 1])} />);
-
-    expect(screen.getByTestId("tool-card")).toBeInTheDocument();
-    expect(screen.queryByTestId("generated-images")).toBeNull();
-  });
-
-  it("work renders any other tool's media under its tool row", () => {
+  it("work renders a tool's media under its tool row", () => {
     const message = assistant([tool(0, "take_screenshot", "call-shot")]);
     render(<ChatMessage message={message} chatId="chat-1" slice={slice("work", [0])} />);
 
@@ -277,23 +260,38 @@ describe("ChatMessage slice", () => {
     expect(order).toEqual(["tool-card", "generated-images"]);
   });
 
-  it("work-surfaced renders only user cards, not narration or tool rows", () => {
-    render(<ChatMessage message={turn()} chatId="chat-1" slice={slice("work-surfaced", [0, 1, 2, 3])} />);
+  // One tools segment: bash, ask_user, bash — cut by the ask_user.
+  const mixed = () =>
+    assistant([tool(0, "bash", "call-a"), tool(1, "ask_user", "call-ask"), tool(2, "bash", "call-b")]);
+
+  it("renders only the calls a slice names of a mixed tools segment", () => {
+    render(
+      <ChatMessage message={mixed()} chatId="chat-1" slice={{ role: "work", segmentIndexes: [0], callIds: ["call-a"] }} />,
+    );
+
+    expect(screen.getAllByTestId("tool-card")).toHaveLength(1);
+    expect(screen.queryByTestId("ask-user-card")).toBeNull();
+  });
+
+  it("surfaced renders its call's card alone, as its own row without chrome", () => {
+    render(
+      <ChatMessage message={mixed()} chatId="chat-1" slice={{ role: "surfaced", segmentIndexes: [0], callIds: ["call-ask"] }} />,
+    );
 
     expect(screen.getByTestId("ask-user-card")).toBeInTheDocument();
-    expect(texts()).toEqual([]);
     expect(screen.queryByTestId("tool-card")).toBeNull();
+    expect(screen.getByTestId("message-msg-1-surfaced")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /copy message/i })).toBeNull();
   });
 
-  it("work-surfaced surfaces a tool call awaiting approval", () => {
+  it("surfaced renders a call awaiting approval as its tool row, never the narration", () => {
     const message = assistant([text(0, "Running it."), tool(1, "bash", "call-bash")]);
     render(
       <ChatMessage
         message={message}
         chatId="chat-1"
         approvals={[pendingApproval("b1")]}
-        slice={slice("work-surfaced", [0, 1])}
+        slice={slice("surfaced", [0, 1])}
       />,
     );
 
@@ -303,37 +301,14 @@ describe("ChatMessage slice", () => {
     expect(texts()).toEqual([]);
   });
 
-  it("work-surfaced hides a tool call whose approval is settled", () => {
-    const approved = create(ApprovalSchema, {
-      id: "approval-1",
-      chatId: "chat-1",
-      entityId: "b1",
-      status: ApprovalStatus.APPROVED,
-      createdAt: new Date().toISOString(),
-    });
-    const message = assistant([tool(0, "bash", "call-bash")]);
-    const { container } = render(
-      <ChatMessage message={message} chatId="chat-1" approvals={[approved]} slice={slice("work-surfaced", [0])} />,
-    );
+  it("surfaced renders a generated image under the call that made it", () => {
+    const message = assistant([tool(0, "generate_image", "call-img")]);
+    render(<ChatMessage message={message} chatId="chat-1" slice={slice("surfaced", [0])} />);
 
-    expect(container).toBeEmptyDOMElement();
-  });
-
-  it("work-surfaced surfaces generated images", () => {
-    const message = assistant([text(0, "Drawing."), tool(1, "generate_image", "call-img")]);
-    render(<ChatMessage message={message} chatId="chat-1" slice={slice("work-surfaced", [0, 1])} />);
-
-    expect(screen.getByTestId("generated-images")).toBeInTheDocument();
-    expect(screen.queryByTestId("tool-card")).toBeNull();
-  });
-
-  it("work-surfaced leaves another tool's media in the fold", () => {
-    const message = assistant([text(0, "Looking."), tool(1, "take_screenshot", "call-shot")]);
-    const { container } = render(
-      <ChatMessage message={message} chatId="chat-1" slice={slice("work-surfaced", [0, 1])} />,
-    );
-
-    expect(container).toBeEmptyDOMElement();
+    const order = Array.from(
+      document.querySelectorAll('[data-testid="tool-card"], [data-testid="generated-images"]'),
+    ).map((el) => el.getAttribute("data-testid"));
+    expect(order).toEqual(["tool-card", "generated-images"]);
   });
 
   it("without a slice still renders every tool's media", () => {
@@ -341,25 +316,6 @@ describe("ChatMessage slice", () => {
     render(<ChatMessage message={message} chatId="chat-1" />);
 
     expect(screen.getByTestId("generated-images")).toBeInTheDocument();
-  });
-
-  it("work-surfaced surfaces what a deploy put live", () => {
-    const deploy = { ...tool(1, "shell", "call-deploy"), input: JSON.stringify({ command: "reliant forge env deploy prod" }) };
-    const message = assistant([text(0, "Shipping it."), deploy]);
-    render(<ChatMessage message={message} chatId="chat-1" slice={slice("work-surfaced", [0, 1])} />);
-
-    expect(screen.getByTestId("deployed-app-card")).toHaveAttribute("data-env", "prod");
-    expect(screen.queryByTestId("tool-card")).toBeNull();
-    expect(texts()).toEqual([]);
-  });
-
-  it("work-surfaced renders nothing when there is nothing to surface", () => {
-    const message = assistant([text(0, "Reading."), tool(1, "bash", "call-bash")]);
-    const { container } = render(
-      <ChatMessage message={message} chatId="chat-1" slice={slice("work-surfaced", [0, 1])} />,
-    );
-
-    expect(container).toBeEmptyDOMElement();
   });
 
   it("only renders the segments the slice lists", () => {

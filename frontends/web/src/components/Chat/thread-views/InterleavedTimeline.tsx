@@ -41,6 +41,7 @@ import { sortMessagesForDisplay } from "../../../lib/messageOrder";
 import { cleanTemporalErrorMessage } from "../../../lib/temporalErrors";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads, isSpawnOrigin } from "./threadUtils";
 import { useActiveThreads } from "../../../store/threadActivityStore";
+import { useToolResultsByCallId } from "../../../store/chatStoreHooks";
 import { logger } from "../../../lib/logger";
 import { settingsSync, SETTINGS_KEYS } from "../../../services/settingsSync";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
@@ -53,6 +54,7 @@ import {
   type MessageSlice,
   type WorkItem,
 } from "./simplifiedTurns";
+import { createSurfacedPredicate } from "./surfacedExecutions";
 import { TurnWorkFold } from "../TurnWorkFold";
 import { LiveTurnFoldContext } from "./liveTurnContext";
 import {
@@ -168,6 +170,34 @@ function timelineItemKey(item: TimelineItem): string {
     case "run_output":
       return `run-${item.runOutput.id}`;
   }
+}
+
+/** When a timeline item happened, for placing timestamped events among them. */
+function timelineItemTime(item: TimelineItem): number | null {
+  const at =
+    item.type === "message" ? item.message.createdAt
+      : item.type === "error" ? item.error.timestamp
+        : item.type === "info" ? item.info.timestamp
+          : item.type === "run_output" ? item.runOutput.timestamp
+            : undefined;
+  if (!at) return null;
+  const ms = new Date(at).getTime();
+  return Number.isNaN(ms) ? null : ms;
+}
+
+/**
+ * Where an event that happened at `time` goes: after the last item at or
+ * before it — a message, or an event already placed. Anchoring on messages
+ * alone put every event after the same message at that message's index, so
+ * the later-inserted one landed first: two errors after one message rendered
+ * newest first, and an info always ahead of an error it followed.
+ */
+function insertionIndex(items: readonly TimelineItem[], time: number): number {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const at = timelineItemTime(items[i]);
+    if (at !== null && at <= time) return i + 1;
+  }
+  return 0;
 }
 
 /**
@@ -610,9 +640,12 @@ const TransitionDivider = memo(function TransitionDivider({
   );
 });
 
+/** A stable default: the simplified pass is memoized on the approvals list. */
+const NO_APPROVALS: Approval[] = [];
+
 export const InterleavedTimeline = memo(function InterleavedTimeline({
   messages,
-  approvals = [],
+  approvals = NO_APPROVALS,
   errorEvents = [],
   infoEvents = [],
   runOutputs = [],
@@ -877,19 +910,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       const error = group.error;
       const errorTime = new Date(error.timestamp).getTime();
 
-      // Find insertion point: after last item with timestamp <= error time
-      let insertIdx = items.length;
-      for (let i = items.length - 1; i >= 0; i--) {
-        const item = items[i];
-        if (item.type === "message") {
-          const msgTime = new Date(item.message.createdAt || "").getTime();
-          if (msgTime <= errorTime) {
-            insertIdx = i + 1;
-            break;
-          }
-        }
-        if (i === 0) insertIdx = 0;
-      }
+      const insertIdx = insertionIndex(items, errorTime);
 
       // An error older than every loaded message happened somewhere in the
       // history not loaded yet. Its place is among those messages, not stacked
@@ -909,21 +930,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     for (const info of infoEvents) {
       const infoTime = new Date(info.timestamp).getTime();
 
-      // Find insertion point: after last item with timestamp <= info time
-      let insertIdx = items.length;
-      for (let i = items.length - 1; i >= 0; i--) {
-        const item = items[i];
-        if (item.type === "message") {
-          const msgTime = new Date(item.message.createdAt || "").getTime();
-          if (msgTime <= infoTime) {
-            insertIdx = i + 1;
-            break;
-          }
-        }
-        if (i === 0) insertIdx = 0;
-      }
-
-      items.splice(insertIdx, 0, {
+      items.splice(insertionIndex(items, infoTime), 0, {
         type: "info",
         info,
       });
@@ -933,21 +940,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     for (const runOutput of runOutputs) {
       const runOutputTime = new Date(runOutput.timestamp).getTime();
 
-      // Find insertion point: after last item with timestamp <= runOutput time
-      let insertIdx = items.length;
-      for (let i = items.length - 1; i >= 0; i--) {
-        const item = items[i];
-        if (item.type === "message") {
-          const msgTime = new Date(item.message.createdAt || "").getTime();
-          if (msgTime <= runOutputTime) {
-            insertIdx = i + 1;
-            break;
-          }
-        }
-        if (i === 0) insertIdx = 0;
-      }
-
-      items.splice(insertIdx, 0, {
+      items.splice(insertionIndex(items, runOutputTime), 0, {
         type: "run_output",
         runOutput,
       });
@@ -960,13 +953,21 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   // simplifiedTurns.ts). The reader memoizes per message object, so the pass
   // stays a cheap linear walk on every streamed delta.
   const segmentReader = useMemo(() => createSegmentReader(), []);
+  // Some calls leave their fold when a result or an approval arrives (a
+  // deploy's card, a call waiting on the user), so the pass follows both.
+  const toolResultsByCallId = useToolResultsByCallId(chatId);
+  const isSurfaced = useMemo(
+    () => createSurfacedPredicate(toolResultsByCallId, approvals),
+    [toolResultsByCallId, approvals],
+  );
   const timelineItems = useMemo((): TimelineItem[] => {
     if (!simplified) return detailedTimelineItems;
     return buildSimplifiedTimeline(detailedTimelineItems, {
       segmentsOf: segmentReader,
       workflowOf: (item) => item.workflow,
+      isSurfaced,
     }) as TimelineItem[];
-  }, [simplified, detailedTimelineItems, segmentReader]);
+  }, [simplified, detailedTimelineItems, segmentReader, isSurfaced]);
 
   // The fold still being worked on: the last row, while streaming. Its own
   // surfaced content renders inside it, so anything after it — the agent's

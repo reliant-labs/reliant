@@ -13,9 +13,10 @@ import {
 
 /** Message fields a fixture may override (a protobuf init, not a full message). */
 type MessageExtra = Omit<Partial<Message>, "$typeName" | "$unknown">;
+import type { ToolExecution } from "../../../lib/messageProcessor";
 import { buildSimplifiedTimeline, createSegmentReader, isSurfacedMediaTool } from "./simplifiedTurns";
 
-type Block = { t: string } | { call: string };
+type Block = { t: string } | { call: string; tool?: string };
 type Item =
   | { type: "message"; message: Message; workflow: { thread: string } }
   | { type: "thread-start" }
@@ -39,7 +40,7 @@ function msg(
             id: `${id}-b${index}`,
             index,
             type: ContentBlockType.TOOL_CALL,
-            toolName: "bash",
+            toolName: b.tool ?? "bash",
             toolCallId: b.call,
             input: "{}",
           },
@@ -55,35 +56,42 @@ function row(message: Message, thread = "t1"): Item {
   return { type: "message", message, workflow: { thread } };
 }
 
-function build(items: Item[]) {
+// Stands in for surfacedExecutions.ts: these tools stay on screen.
+const SURFACED = new Set(["ask_user", "generate_image"]);
+
+function build(items: Item[], isSurfaced: (execution: ToolExecution) => boolean = (e) => SURFACED.has(e.call.name)) {
   return buildSimplifiedTimeline(items, {
     segmentsOf: createSegmentReader(),
     workflowOf: (item) => item.workflow,
+    isSurfaced,
   });
 }
 
 type Sliced = Extract<Item, { type: "message" }> & {
-  slice?: { segmentIndexes: readonly number[]; role: string; chrome?: boolean };
+  slice?: { segmentIndexes: readonly number[]; role: string; chrome?: boolean; callIds?: readonly string[] };
   key?: string;
 };
 
+const calls = (ids: readonly string[] | undefined) => (ids ? `~${ids.join(",")}` : "");
+
 /**
- * One line per row: `work:<key>[<message>:<segments> ...]+<events>`,
- * `prose:<message>:<segments>` (`*` = carries the chrome, `@key` = its own
- * row key), or `msg:<message>` for a whole message.
+ * One line per row: `work:<key>[<message>:<segments>~<calls> ...]+<events>`,
+ * `prose|surfaced:<message>:<segments>~<calls>` (`*` = carries the chrome,
+ * `@key` = its own row key), or `msg:<message>` for a whole message.
+ * `~<calls>` appears only when a row holds part of a tools segment.
  */
 function summarize(out: ReturnType<typeof build>) {
   return out.map((o) => {
     if (o.type === "work") {
       const events = o.work.events?.length ? `+${o.work.events.map((e) => `${e.message.id}@${e.afterPart}`).join(",")}` : "";
       return `work:${o.work.key}[${o.work.parts
-        .map((p) => `${p.message.id}:${p.segmentIndexes.join(",")}`)
+        .map((p) => `${p.message.id}:${p.segmentIndexes.join(",")}${calls(p.callIds)}`)
         .join(" ")}]${events}`;
     }
     if (o.type === "message") {
       const m = o as Sliced;
       if (!m.slice) return `msg:${m.message.id}`;
-      return `${m.slice.role}:${m.message.id}:${m.slice.segmentIndexes.join(",")}${m.slice.chrome ? "*" : ""}${m.key ? `@${m.key}` : ""}`;
+      return `${m.slice.role}:${m.message.id}:${m.slice.segmentIndexes.join(",")}${calls(m.slice.callIds)}${m.slice.chrome ? "*" : ""}${m.key ? `@${m.key}` : ""}`;
     }
     return o.type;
   });
@@ -323,6 +331,95 @@ describe("buildSimplifiedTimeline", () => {
     it("does not fold mail into another thread's run", () => {
       const out = build([row(asst("a1", [{ call: "c1" }]), "t2"), mail("m1")]);
       expect(summarize(out)).toEqual(["work:work-a1-0[a1:0]", "msg:m1"]);
+    });
+  });
+
+  describe("surfaced calls stay at their place", () => {
+    const ask = { call: "ask", tool: "ask_user" };
+    const img = { call: "img", tool: "generate_image" };
+
+    it("tool, ask_user, tool: fold / card / fold", () => {
+      const out = build([
+        row(asst("a1", [{ call: "c1" }])),
+        row(asst("a2", [ask])),
+        row(asst("a3", [{ call: "c3" }])),
+      ]);
+      expect(summarize(out)).toEqual([
+        "work:work-a1-0[a1:0]",
+        "surfaced:a2:0~ask@a2:0:ask",
+        "work:work-a3-0[a3:0]",
+      ]);
+    });
+
+    it("cuts one tools segment around a generated image in the middle of the run", () => {
+      const a1 = asst("a1", [{ call: "c1" }, img, { call: "c2" }]);
+      expect(summarize(build([row(a1), row(asst("a2", [{ call: "c3" }]))]))).toEqual([
+        "work:work-a1-0[a1:0~c1]",
+        "surfaced:a1:0~img@a1:0:img",
+        "work:work-a1-0:c2[a1:0~c2 a2:0]",
+      ]);
+    });
+
+    it("keeps prose, ordinary calls and a surfaced call of one message in order", () => {
+      const a1 = asst("a1", [{ t: "Drawing it" }, { call: "c1" }, img, { t: "Here it is" }]);
+      expect(summarize(build([row(a1)]))).toEqual([
+        "prose:a1:0",
+        "work:work-a1-1[a1:1~c1]",
+        "surfaced:a1:1~img@a1:1:img",
+        "prose:a1:2*@a1:2",
+      ]);
+    });
+
+    it("shares one row between adjacent surfaced calls of a segment", () => {
+      const a1 = asst("a1", [img, { call: "img2", tool: "generate_image" }, { call: "c1" }]);
+      expect(summarize(build([row(a1)]))).toEqual([
+        "surfaced:a1:0~img,img2@a1:0:img",
+        "work:work-a1-0:c1[a1:0~c1]",
+      ]);
+    });
+
+    it("keeps mail on its side of the card", () => {
+      const out = build([
+        row(asst("a1", [{ call: "c1" }])),
+        mail("m1"),
+        row(asst("a2", [ask])),
+        mail("m2"),
+        row(asst("a3", [{ call: "c3" }])),
+      ]);
+      expect(summarize(out)).toEqual([
+        "work:work-a1-0[a1:0]+m1@1",
+        "surfaced:a2:0~ask@a2:0:ask",
+        "work:work-m2[a3:0]+m2@0",
+      ]);
+    });
+
+    it("keeps the fold's key when its last call surfaces (a deploy finished, an approval arrived)", () => {
+      const items = [row(asst("a1", [{ call: "c1" }, { call: "c2" }]))];
+      const before = build(items, () => false);
+      const after = build(items, (e) => e.call.id === "c2");
+      expect(summarize(before)).toEqual(["work:work-a1-0[a1:0]"]);
+      expect(summarize(after)).toEqual(["work:work-a1-0[a1:0~c1]", "surfaced:a1:0~c2@a1:0:c2"]);
+    });
+
+    it("keeps the fold's key as the run grows past the card", () => {
+      const first = build([row(asst("a1", [{ call: "c1" }, ask]))]);
+      const grown = build([row(asst("a1", [{ call: "c1" }, ask])), row(asst("a2", [{ call: "c2" }]))]);
+      expect(summarize(grown)).toEqual(["work:work-a1-0[a1:0~c1]", "surfaced:a1:0~ask@a1:0:ask", "work:work-a2-0[a2:0]"]);
+      expect((first[0] as { work: { key: string } }).work.key).toBe((grown[0] as { work: { key: string } }).work.key);
+    });
+
+    it("gives every row a distinct key", () => {
+      const a1 = asst("a1", [{ t: "one" }, { call: "c1" }, ask, { call: "c2" }, { t: "two" }, img]);
+      const keys = build([row(a1)]).map((o) =>
+        o.type === "work" ? o.work.key : ((o as Sliced).key ?? (o as Sliced).message.id));
+      expect(keys).toEqual(["a1", "work-a1-1", "a1:1:ask", "work-a1-1:c2", "a1:2", "a1:3:img"]);
+    });
+
+    it("leaves a run cut down to blank text unfolded", () => {
+      expect(summarize(build([row(asst("a1", [ask])), row(asst("a2", [{ t: " " }]))]))).toEqual([
+        "surfaced:a1:0~ask@a1:0:ask",
+        "msg:a2",
+      ]);
     });
   });
 

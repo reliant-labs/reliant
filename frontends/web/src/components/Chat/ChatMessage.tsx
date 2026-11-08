@@ -22,7 +22,6 @@ import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
 import { DraftAutomationCard, isDraftAutomationTool } from "./tool-renderers/DraftAutomationToolRenderer";
 import { AskUserCard } from "./AskUserCard";
-import { DeployedAppCard, deployOfToolCall } from "../Apps/DeployedAppCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
@@ -34,7 +33,7 @@ import { CodeContextPill } from "./CodeContextPill";
 import { FailedSendStatus } from "./FailedSendStatus";
 import { clientIdOfFailedSend } from "../../lib/pendingSends";
 import type { Message } from "../../api/client";
-import { ApprovalStatus, type Approval } from "../../gen/reliant/v1/approval_pb";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import {
   useActiveChatId,
@@ -54,7 +53,7 @@ import {
 } from "../../lib/messageProcessor";
 import * as chatActions from "../../hooks/chat-actions";
 import { isQuietToolRun } from "./thread-views/transcriptPresentation";
-import { isSurfacedMediaTool, type MessageSlice } from "./thread-views/simplifiedTurns";
+import type { MessageSlice } from "./thread-views/simplifiedTurns";
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
 
@@ -119,11 +118,13 @@ interface ChatMessageProps {
 function sameSlice(a: MessageSlice | undefined, b: MessageSlice | undefined): boolean {
   if (a === b) return true;
   if (!a || !b || a.role !== b.role || Boolean(a.chrome) !== Boolean(b.chrome)) return false;
-  if (a.segmentIndexes === b.segmentIndexes) return true;
-  return (
-    a.segmentIndexes.length === b.segmentIndexes.length &&
-    a.segmentIndexes.every((idx, i) => idx === b.segmentIndexes[i])
-  );
+  return sameList(a.segmentIndexes, b.segmentIndexes) && sameList(a.callIds, b.callIds);
+}
+
+function sameList<T>(a: readonly T[] | undefined, b: readonly T[] | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((value, i) => value === b[i]);
 }
 
 // Re-export for components that import from here
@@ -568,7 +569,7 @@ function ChatMessageComponent({
   // A prose slice without the chrome is text alone: no actions, timestamp or
   // attachments (those are the message's last prose slice's).
   const hasChrome = !slice || Boolean(slice.chrome);
-  // A slice judges visibility from its own segments. work / work-surfaced rows
+  // A slice judges visibility from its own segments. work / surfaced rows
   // only know once they have rendered, so they are checked after the helpers.
   const hasVisibleContent = slice
     ? sliceRole !== "prose" ||
@@ -719,38 +720,10 @@ function ChatMessageComponent({
     segIdx: number,
   ): JSX.Element | null => {
     const keyBase = `${message.id}-seg-${segIdx}`;
-    // A prose row carries no tools; the work fold renders the rows, with the
-    // media of any tool but a generation tool beside them. Cards and
-    // generated media are the work-surfaced row's.
+    // A prose row carries no tools. A fold's work row and a surfaced call's
+    // row render what they were given exactly as the detailed transcript
+    // does: the simplified pass decides which calls go where.
     if (sliceRole === "prose") return null;
-    if (sliceRole === "work") {
-      if (hideToolExecutions) return null;
-      // A call awaiting approval is the work-surfaced row's, which stays on
-      // screen whether or not the fold is open: rendering it here too would
-      // put two sets of approve/deny buttons on screen.
-      const rows = executions.filter(
-        (exec) =>
-          !isRequestMachineTool(exec.call.name) &&
-          exec.call.name !== "ask_user" &&
-          exec.approval?.status !== ApprovalStatus.PENDING,
-      );
-      const run = renderToolRun(rows, keyBase);
-      // A screenshot or a viewed image is a record of the work, not its
-      // result: it stays in the fold, under the tool that produced it.
-      const workMedia = rows
-        .filter((exec) => !isSurfacedMediaTool(exec.call.name))
-        .flatMap((exec) => exec.result?.attachments ?? []);
-      const workVideos = workMedia.filter((a) => isVideoMimeType(a.mimeType));
-      const workImages = workMedia.filter((a) => !isVideoMimeType(a.mimeType));
-      if (!run && workMedia.length === 0) return null;
-      return (
-        <Fragment key={keyBase}>
-          {run}
-          {workImages.length > 0 && <MessageGeneratedImages attachments={workImages} />}
-          {workVideos.length > 0 && <MessageGeneratedVideos attachments={workVideos} />}
-        </Fragment>
-      );
-    }
 
     // request_machine is a question to the user, not a record of
     // work: it renders as its own card, outside the tool rows and
@@ -789,7 +762,7 @@ function ChatMessageComponent({
         />
       ));
     const userCards = [...machineRequestCards, ...askUserCards, ...draftCards];
-    if (hideToolExecutions && sliceRole !== "work-surfaced") {
+    if (hideToolExecutions) {
       return userCards.length > 0 ? <Fragment key={keyBase}>{userCards}</Fragment> : null;
     }
     const runExecutions = executions.filter(
@@ -801,10 +774,7 @@ function ChatMessageComponent({
     // Emitting them per-segment rather than once at the end of the
     // message keeps text -> image -> text ordering intact when a
     // turn generates an image and then keeps talking.
-    // Under a fold only a generation tool's media stays out (see "work").
-    const runAttachments = runExecutions
-      .filter((exec) => sliceRole !== "work-surfaced" || isSurfacedMediaTool(exec.call.name))
-      .flatMap((exec) => exec.result?.attachments ?? []);
+    const runAttachments = runExecutions.flatMap((exec) => exec.result?.attachments ?? []);
     const runVideos = runAttachments.filter((a) => isVideoMimeType(a.mimeType));
     const runImages = runAttachments.filter((a) => !isVideoMimeType(a.mimeType));
     const media = (
@@ -813,48 +783,6 @@ function ChatMessageComponent({
         {runVideos.length > 0 && <MessageGeneratedVideos attachments={runVideos} />}
       </>
     );
-
-    if (sliceRole === "work-surfaced") {
-      // What must stay visible while the fold is collapsed: a call waiting
-      // on the user's approval, the cards and media above, and what a deploy
-      // put live (its tool rows in the fold leave their own card out).
-      const pending = runExecutions.filter((exec) => exec.approval?.status === ApprovalStatus.PENDING);
-      const deployCards = runExecutions.flatMap((exec) => {
-        const deploy = exec.approval?.status === ApprovalStatus.PENDING
-          ? null
-          : deployOfToolCall(exec.call.name, exec.call.input, exec.result);
-        return deploy
-          ? [<DeployedAppCard key={`${keyBase}-deploy-${exec.call.id}`} deploy={deploy} standalone />]
-          : [];
-      });
-      if (pending.length + userCards.length + deployCards.length + runImages.length + runVideos.length === 0) return null;
-      return (
-        <Fragment key={keyBase}>
-          {pending.length > 0 && (
-            <div className="space-y-1">
-              {pending.map((exec) => (
-                <ToolExecution
-                  key={exec.call.content_block_id || exec.call.id}
-                  toolCall={exec.call}
-                  toolResult={exec.result}
-                  status={exec.status}
-                  onCancel={exec.onCancel}
-                  onConvertToBackground={exec.onConvertToBackground}
-                  approval={exec.approval}
-                  chatId={chatId || undefined}
-                  showRichContent
-                  onSelectThread={onSelectThread}
-                  density={toolDensity}
-                />
-              ))}
-            </div>
-          )}
-          {userCards}
-          {deployCards}
-          {media}
-        </Fragment>
-      );
-    }
 
     return (
       <Fragment key={keyBase}>
@@ -865,25 +793,35 @@ function ChatMessageComponent({
     );
   };
 
+  // A slice that names calls renders only those of its tools segments.
+  const sliceCalls = slice?.callIds ? new Set(slice.callIds) : null;
+
   // Tool-run segments show during streaming too (preparing state).
   const renderSegment = (segment: MessageSegment, segIdx: number): JSX.Element | null => {
     if (segment.kind === "text") {
-      return sliceRole === "work-surfaced" ? null : renderTextSegment(segment.text, segIdx);
+      return sliceRole === "surfaced" ? null : renderTextSegment(segment.text, segIdx);
     }
     const executions = segment.executions
+      .filter((exec) => !sliceCalls || sliceCalls.has(exec.call.id))
       .map((exec) => enhancedById.get(exec.call.id))
       .filter((e): e is EnhancedToolExecution => e !== undefined);
     return renderToolsSegment(executions, segIdx);
   };
 
-  // The fold's rows carry none of a message's chrome (avatar, timestamp,
-  // actions): they are part of the turn's work, not a message of their own.
-  if (sliceRole === "work" || sliceRole === "work-surfaced") {
+  // A fold's work rows and a surfaced call's row carry none of a message's
+  // chrome (avatar, timestamp, actions): they are part of the turn's work,
+  // not a message of their own.
+  if (sliceRole === "work" || sliceRole === "surfaced") {
     const rendered = visibleSegments.map(({ segment, segIdx }) => renderSegment(segment, segIdx));
     if (rendered.every((node) => node === null)) return null;
     return (
       <div
-        className={cn("space-y-1", isMobile && "select-text")}
+        className={cn(
+          "space-y-1",
+          // A surfaced row stands in the transcript: aligned with prose.
+          sliceRole === "surfaced" && "message-content mb-1 w-full px-2",
+          isMobile && "select-text",
+        )}
         data-testid={`message-${message.id}-${sliceRole}`}
       >
         {rendered}

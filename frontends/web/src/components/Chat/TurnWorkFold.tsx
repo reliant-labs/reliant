@@ -16,10 +16,9 @@ import {
   type TurnWorkExecution,
 } from "./turnWorkSummary";
 import { BranchFromMessageButton, MessageTimestamp } from "./MessageChrome";
-import type { TurnWork } from "./thread-views/simplifiedTurns";
+import type { MessageSlice, TurnWork } from "./thread-views/simplifiedTurns";
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useMinimumDwell } from "./useMinimumDwell";
-import { DeployCardShownOutside } from "../Apps/DeployedAppCard";
 import { AgentMessageCard, isAgentMessage } from "./AgentMessageCard";
 import { SystemNotificationMessage } from "./SystemNotificationMessage";
 
@@ -34,6 +33,11 @@ interface TurnWorkFoldProps {
 }
 
 const NO_APPROVALS: Approval[] = [];
+
+const workSlice = (part: TurnWork["parts"][number]): MessageSlice =>
+  part.callIds
+    ? { segmentIndexes: part.segmentIndexes, role: "work", callIds: part.callIds }
+    : { segmentIndexes: part.segmentIndexes, role: "work" };
 
 /** How long each step stays on the live line before the next replaces it. */
 const STEP_MIN_DWELL_MS = 1200;
@@ -69,10 +73,12 @@ function TurnWorkFoldComponent({
     const out: TurnWorkExecution[] = [];
     for (const part of work.parts) {
       const { segments } = getProcessedMessage(part.message, toolResultsByCallId, approvals);
+      const held = part.callIds ? new Set(part.callIds) : null;
       for (const index of part.segmentIndexes) {
         const segment = segments[index];
         if (segment?.kind !== "tools") continue;
         for (const execution of segment.executions) {
+          if (held && !held.has(execution.call.id)) continue;
           const state = toolCallStates.get(execution.call.id);
           const childWorkflowId = execution.call.childWorkflowId ?? state?.childWorkflowId;
           out.push({
@@ -244,31 +250,18 @@ function TurnWorkFoldComponent({
               {summary.failed} {summary.failed === 1 ? "step failed" : "steps failed"}. Expand the steps below to inspect their errors.
             </p>
           )}
-          {/* A deploy's card is the surfaced row's, on screen open or closed. */}
-          <DeployCardShownOutside.Provider value={true}>
-            {renderEvents(0)}
-            {work.parts.map((part, index) => (
-              <Fragment key={`${part.message.id}-work`}>
-                <ChatMessage
-                  message={part.message}
-                  slice={{ segmentIndexes: part.segmentIndexes, role: "work" }}
-                  {...common}
-                />
-                {renderEvents(index + 1)}
-              </Fragment>
-            ))}
-          </DeployCardShownOutside.Provider>
+          {renderEvents(0)}
+          {work.parts.map((part, index) => (
+            <Fragment key={`${part.message.id}-work`}>
+              <ChatMessage message={part.message} slice={workSlice(part)} {...common} />
+              {renderEvents(index + 1)}
+            </Fragment>
+          ))}
         </div>
       )}
-
-      {work.parts.map((part) => (
-        <ChatMessage
-          key={`${part.message.id}-surfaced`}
-          message={part.message}
-          slice={{ segmentIndexes: part.segmentIndexes, role: "work-surfaced" }}
-          {...common}
-        />
-      ))}
+      {/* Nothing of the run renders outside the body: what must stay on
+          screen (a question, an approval, a generated image, a deploy) is a
+          timeline row of its own, at its place between folds. */}
     </div>
   );
 }
