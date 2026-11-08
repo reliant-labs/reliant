@@ -16,7 +16,7 @@ Owner approved narrow API, 2026-11-07. Work ONLY in this registered worktree, ne
 
 CLI-delegated helpers were routed to another machine and could not access this checkout. Main agent performed implementation; no owner/shared checkout edits. Friction report: 817d05ff-7f01-4403-8689-546bf7942e39.
 
-Owner explicitly approved additive durable thread policy after discovery that coarse recovery discards runtime maps. Migration 20261108044411_thread_ambient_memory_exclusion.up.sql adds false-default boolean. Thread creation latches in the existing transaction; CallLLM reads recursive lineage and latches before provider send, fails closed on errors. API false/unset cannot reset an excluded thread. Runtime contexts/continue-as-new also carry policy.
+Owner explicitly approved additive durable thread policy after discovery that coarse recovery discards runtime maps. Migration 20261108064904_thread_ambient_memory_exclusion.up.sql adds false-default boolean. Thread creation latches in the existing transaction; CallLLM reads recursive lineage and latches before provider send, fails closed on errors. API false/unset cannot reset an excluded thread. Runtime contexts/continue-as-new also carry policy.
 
 Scoped short suites passed: handlers, runtime, threads, store, db, workflow/yaml, runtime/schema. New runtime/provider/store tests repeated 3x passed. Provider tests include real OpenAI HTTP request capture, driver-boundary retry capture, fresh-handler recovery, stopped-child lineage, minimal machine-less context. No whole-repo gates or daemon updates.
 
