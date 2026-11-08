@@ -547,10 +547,37 @@ jobs:
         with:
           go: "false"
           node: "true"
+      # Electron's postinstall and electron-builder fetch Electron and its
+      # packaging tools (AppImage runtime, fpm, ...) from github.com releases
+      # into these caches, so they are restored before deps. On
+      # 2026-11-08 those downloads answered 504 for hours and this job failed
+      # at packaging. They are keyed on the two versions that decide their
+      # contents, restored everywhere, and saved on a push to main only (the
+      # setup action's header rule).
+      - name: Read the Electron versions
+        id: electron-versions
+        run: |
+          echo "key=electron-dl-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron"].version + "-" + .packages["node_modules/electron-builder"].version' electron/package-lock.json)" >> "$GITHUB_OUTPUT"
+      - name: Restore Electron downloads
+        id: electron-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ steps.electron-versions.outputs.key }}
       - name: task deps:web deps:electron
         run: task deps:web deps:electron
       - name: task build:electron:smoke
         run: task build:electron:smoke
+      - name: Save Electron downloads (main only)
+        if: steps.electron-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ steps.electron-versions.outputs.key }}
 
   # ── One verdict ───────────────────────────────────────────────────────────
   # Green only when every job that ran passed. On an unlabelled PR nothing
