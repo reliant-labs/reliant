@@ -280,7 +280,7 @@ func (s *Service) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, st
 //
 // Each round, and each read inside it, has its own span (chat_snapshot.*), so
 // a slow open shows which read it waited on.
-func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow) (snapshot *reliantv1.ChatSyncSnapshot, latestSeq int64, err error) {
+func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow, toolBodies reliantv1.ToolBodyMode) (snapshot *reliantv1.ChatSyncSnapshot, latestSeq int64, err error) {
 	chatID := chat.ID
 	ctx, span := startSpan(ctx, "chat_snapshot.build", attribute.String("chat.id", chatID))
 	defer func() {
@@ -559,9 +559,10 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow) (snap
 	// pass SequenceNumber alone, which left live spawns with no thread to
 	// preview: they showed "Starting…" until something else refetched them.
 	_, assembleSpan := startSpan(ctx, "chat_snapshot.assemble")
-	assembledMessages := messageproto.Assemble(displayable, messageBlocks, attachmentMap, lookups, mainThread, latestSeq)
+	assembledMessages := messageproto.Assemble(displayable, messageBlocks, attachmentMap, lookups, mainThread, latestSeq, toolBodies)
 	otherUpdates = append(otherUpdates, snapshotToolCalls(allBlocks, lookups.ToolCalls, liveToolCalls, mainThread, latestSeq)...)
-	var sent messageproto.TranscriptBytes
+	// Counted after the stub policy: what the snapshot really sends.
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
 	sent.AddMessages(assembledMessages...)
 	assembleSpan.SetAttributes(sent.Attributes("transcript")...)
 	assembleSpan.End()
@@ -1030,13 +1031,13 @@ func toolCallStatusString(status core.ToolCallStatus) string {
 // number in the payload into a float64 on the way through). Only the top
 // level is decoded, to see whether the payload is already wrapped and to
 // reject one that is not a JSON object.
-func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.RawMessage) string {
+func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.RawMessage, toolBodies reliantv1.ToolBodyMode) string {
 	if updateType != reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
 		return string(rawData)
 	}
 	// Large tool output goes to the client as a preview, the same one the
 	// snapshot and ListMessages send (GetToolResult has the rest).
-	rawData = messageproto.PreviewMessageUpdate(rawData)
+	rawData = messageproto.PreviewMessageUpdate(rawData, toolBodies)
 
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(rawData, &top); err != nil || top == nil {

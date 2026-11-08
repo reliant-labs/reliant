@@ -144,6 +144,7 @@ func TestTranscriptBytes_Attributes(t *testing.T) {
 		ToolResult: BlockBytes{Blocks: 1, Bytes: 30},
 		Thinking:   BlockBytes{Blocks: 1, Bytes: 40},
 		Other:      BlockBytes{Blocks: 1, Bytes: 50},
+		Elided:     BlockBytes{Blocks: 2, Bytes: 60},
 	}
 	got := map[attribute.Key]int64{}
 	for _, kv := range tb.Attributes("transcript.live") {
@@ -163,5 +164,7 @@ func TestTranscriptBytes_Attributes(t *testing.T) {
 		"transcript.live.thinking_blocks":    1,
 		"transcript.live.other_bytes":        50,
 		"transcript.live.other_blocks":       1,
-	}, got)
+		"transcript.live.blocks_elided":      2,
+		"transcript.live.bytes_elided":       60,
+	}, got, "no transcript.live.tool_bodies: ToolBodies is unset")
 }

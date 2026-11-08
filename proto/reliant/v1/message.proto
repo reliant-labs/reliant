@@ -18,6 +18,9 @@ service MessageService {
 // GetMessageRequest requests a single message by ID
 message GetMessageRequest {
   string message_id = 1;
+  // How finished tool calls' bodies are sent. Unset is
+  // TOOL_BODY_MODE_FULL: inputs whole, results previewed.
+  optional ToolBodyMode tool_bodies = 2;
 }
 
 // GetMessageResponse returns the message with its content blocks

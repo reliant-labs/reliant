@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/config.proto.
  */
 export const file_reliant_config_v1_config: GenFile = /*@__PURE__*/
-  fileDesc("Ch5yZWxpYW50L2NvbmZpZy92MS9jb25maWcucHJvdG8SEXJlbGlhbnQuY29uZmlnLnYxIrwBCg1SZWxpYW50Q29uZmlnEikKA2xvZxgBIAEoCzIcLnJlbGlhbnQuY29uZmlnLnYxLkxvZ0NvbmZpZxIxCgdydW50aW1lGAIgASgLMiAucmVsaWFudC5jb25maWcudjEuUnVudGltZUNvbmZpZxI+Cg5zdG9yYWdlX3JlYXBlchgDIAEoCzImLnJlbGlhbnQuY29uZmlnLnYxLlN0b3JhZ2VSZWFwZXJDb25maWc6DcrBGAkKB3JlbGlhbnQiiAEKDVJ1bnRpbWVDb25maWcSdwoLZW52aXJvbm1lbnQYASABKAlCYoLOGF4KC1JFTElBTlRfRU5WKkNFbnZpcm9ubWVudCB0aWVyOiBkZXYsIHRlc3Qgb3IgcHJvZCAodW5zZXQgb3IgdW5yZWNvZ25pc2VkIGlzIHByb2QpWgoKCE5PREVfRU5WIuoBCglMb2dDb25maWcSZwoFbGV2ZWwYASABKAlCWILOGFQKEVJFTElBTlRfTE9HX0xFVkVMEglsb2ctbGV2ZWwqNExvZyBsZXZlbDogZGVidWcsIGluZm8sIHdhcm4gb3IgZXJyb3IgKGRlZmF1bHQgaW5mbykSdAoGZm9ybWF0GAIgASgJQmSCzhhgCgpMT0dfRk9STUFUEgpsb2ctZm9ybWF0KkZMb2cgbGluZSBmb3JtYXQ6IHRleHQgb3IganNvbiAoZGVmYXVsdCB0ZXh0OyBqc29uIGZvciBhIGhvc3RlZCBkYWVtb24pIqwGChNTdG9yYWdlUmVhcGVyQ29uZmlnEpQBCgRtb2RlGAEgASgJQoUBgs4YgAEKFlJFTElBTlRfU1RPUkFHRV9SRUFQRVIaBGF1dG8qUVJ1biBmb3JnZSdzIHN0b3JhZ2UgcmVhcGVyIG9uIGEgc2NoZWR1bGU6IGF1dG8gKG1hbmFnZWQgZGFlbW9ucyBvbmx5KSwgb24sIG9yIG9mZkoEYXV0b0oCb25KA29mZhKEAQoIaW50ZXJ2YWwYAiABKAlCcoLOGG4KH1JFTElBTlRfU1RPUkFHRV9SRUFQRVJfSU5URVJWQUwaAjFoKkdJbnRlcnZhbCBvZiB0aGUgc2NoZWR1bGVkIHN0b3JhZ2UgcmVhcGVyIHBhc3MgKEdvIGR1cmF0aW9uLCBtaW5pbXVtIDVtKRK2AQoRcHJlc3N1cmVfaW50ZXJ2YWwYAyABKAlCmgGCzhiVAQooUkVMSUFOVF9TVE9SQUdFX1JFQVBFUl9QUkVTU1VSRV9JTlRFUlZBTBoDMTBtKmRNaW5pbXVtIGdhcCBiZXR3ZWVuIHN0b3JhZ2UgcmVhcGVyIHBhc3NlcyB3aGlsZSBhIHZvbHVtZSBpcyB1bmRlciBwcmVzc3VyZSAoR28gZHVyYXRpb24sIG1pbmltdW0gMW0pEoIBCgtwb2xpY3lfcGF0aBgEIAEoCUJtgs4YaQoURk9SR0VfU1RPUkFHRV9QT0xJQ1kqUUZvcmdlIG1hY2hpbmUgc3RvcmFnZSBwb2xpY3kgZmlsZSAoZGVmYXVsdDogPHVzZXIgY29uZmlnIGRpcj4vZm9yZ2Uvc3RvcmFnZS5qc29uKRK4AQoQZ29jYWNoZV9pbnRlcnZhbBgFIAEoCUKdAYLOGJgBCidSRUxJQU5UX1NUT1JBR0VfUkVBUEVSX0dPQ0FDSEVfSU5URVJWQUwaAzEwbSpoSW50ZXJ2YWwgb2YgdGhlIEdvLWNhY2hlIHRyaW0gYmV0d2VlbiBmdWxsIHN0b3JhZ2UgcmVhcGVyIHBhc3NlcyAoR28gZHVyYXRpb24sIG1pbmltdW0gMm07IG9mZiBkaXNhYmxlcylCQFo+Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_forge_v1_forge]);
+  fileDesc("Ch5yZWxpYW50L2NvbmZpZy92MS9jb25maWcucHJvdG8SEXJlbGlhbnQuY29uZmlnLnYxIvUBCg1SZWxpYW50Q29uZmlnEikKA2xvZxgBIAEoCzIcLnJlbGlhbnQuY29uZmlnLnYxLkxvZ0NvbmZpZxIxCgdydW50aW1lGAIgASgLMiAucmVsaWFudC5jb25maWcudjEuUnVudGltZUNvbmZpZxI+Cg5zdG9yYWdlX3JlYXBlchgDIAEoCzImLnJlbGlhbnQuY29uZmlnLnYxLlN0b3JhZ2VSZWFwZXJDb25maWcSNwoKdHJhbnNjcmlwdBgEIAEoCzIjLnJlbGlhbnQuY29uZmlnLnYxLlRyYW5zY3JpcHRDb25maWc6DcrBGAkKB3JlbGlhbnQi2QEKEFRyYW5zY3JpcHRDb25maWcSxAEKD3Rvb2xfYm9keV9zdHVicxgBIAEoCUKqAYLOGKUBCiJSRUxJQU5UX1RSQU5TQ1JJUFRfVE9PTF9CT0RZX1NUVUJTGgJvbipyVHJhbnNjcmlwdCByZWFkcyBtYXkgbGVhdmUgZmluaXNoZWQgdG9vbCBjYWxscycgYm9kaWVzIG91dCB3aGVuIGEgY2xpZW50IGFza3MgKG9uKSBvciBhbHdheXMgc2VuZCB0aGVtIHdob2xlIChvZmYpSgJvbkoDb2ZmIogBCg1SdW50aW1lQ29uZmlnEncKC2Vudmlyb25tZW50GAEgASgJQmKCzhheCgtSRUxJQU5UX0VOVipDRW52aXJvbm1lbnQgdGllcjogZGV2LCB0ZXN0IG9yIHByb2QgKHVuc2V0IG9yIHVucmVjb2duaXNlZCBpcyBwcm9kKVoKCghOT0RFX0VOViLqAQoJTG9nQ29uZmlnEmcKBWxldmVsGAEgASgJQliCzhhUChFSRUxJQU5UX0xPR19MRVZFTBIJbG9nLWxldmVsKjRMb2cgbGV2ZWw6IGRlYnVnLCBpbmZvLCB3YXJuIG9yIGVycm9yIChkZWZhdWx0IGluZm8pEnQKBmZvcm1hdBgCIAEoCUJkgs4YYAoKTE9HX0ZPUk1BVBIKbG9nLWZvcm1hdCpGTG9nIGxpbmUgZm9ybWF0OiB0ZXh0IG9yIGpzb24gKGRlZmF1bHQgdGV4dDsganNvbiBmb3IgYSBob3N0ZWQgZGFlbW9uKSKsBgoTU3RvcmFnZVJlYXBlckNvbmZpZxKUAQoEbW9kZRgBIAEoCUKFAYLOGIABChZSRUxJQU5UX1NUT1JBR0VfUkVBUEVSGgRhdXRvKlFSdW4gZm9yZ2UncyBzdG9yYWdlIHJlYXBlciBvbiBhIHNjaGVkdWxlOiBhdXRvIChtYW5hZ2VkIGRhZW1vbnMgb25seSksIG9uLCBvciBvZmZKBGF1dG9KAm9uSgNvZmYShAEKCGludGVydmFsGAIgASgJQnKCzhhuCh9SRUxJQU5UX1NUT1JBR0VfUkVBUEVSX0lOVEVSVkFMGgIxaCpHSW50ZXJ2YWwgb2YgdGhlIHNjaGVkdWxlZCBzdG9yYWdlIHJlYXBlciBwYXNzIChHbyBkdXJhdGlvbiwgbWluaW11bSA1bSkStgEKEXByZXNzdXJlX2ludGVydmFsGAMgASgJQpoBgs4YlQEKKFJFTElBTlRfU1RPUkFHRV9SRUFQRVJfUFJFU1NVUkVfSU5URVJWQUwaAzEwbSpkTWluaW11bSBnYXAgYmV0d2VlbiBzdG9yYWdlIHJlYXBlciBwYXNzZXMgd2hpbGUgYSB2b2x1bWUgaXMgdW5kZXIgcHJlc3N1cmUgKEdvIGR1cmF0aW9uLCBtaW5pbXVtIDFtKRKCAQoLcG9saWN5X3BhdGgYBCABKAlCbYLOGGkKFEZPUkdFX1NUT1JBR0VfUE9MSUNZKlFGb3JnZSBtYWNoaW5lIHN0b3JhZ2UgcG9saWN5IGZpbGUgKGRlZmF1bHQ6IDx1c2VyIGNvbmZpZyBkaXI+L2ZvcmdlL3N0b3JhZ2UuanNvbikSuAEKEGdvY2FjaGVfaW50ZXJ2YWwYBSABKAlCnQGCzhiYAQonUkVMSUFOVF9TVE9SQUdFX1JFQVBFUl9HT0NBQ0hFX0lOVEVSVkFMGgMxMG0qaEludGVydmFsIG9mIHRoZSBHby1jYWNoZSB0cmltIGJldHdlZW4gZnVsbCBzdG9yYWdlIHJlYXBlciBwYXNzZXMgKEdvIGR1cmF0aW9uLCBtaW5pbXVtIDJtOyBvZmYgZGlzYWJsZXMpQkBaPmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge]);
 
 /**
  * ReliantConfig is the reliant binary's root config: the surface every
@@ -35,6 +35,11 @@ export type ReliantConfig = Message<"reliant.config.v1.ReliantConfig"> & {
    * @generated from field: reliant.config.v1.StorageReaperConfig storage_reaper = 3;
    */
   storageReaper?: StorageReaperConfig | undefined;
+
+  /**
+   * @generated from field: reliant.config.v1.TranscriptConfig transcript = 4;
+   */
+  transcript?: TranscriptConfig | undefined;
 };
 
 /**
@@ -43,6 +48,36 @@ export type ReliantConfig = Message<"reliant.config.v1.ReliantConfig"> & {
  */
 export const ReliantConfigSchema: GenMessage<ReliantConfig> = /*@__PURE__*/
   messageDesc(file_reliant_config_v1_config, 0);
+
+/**
+ * TranscriptConfig is how the transcript read paths (ListMessages,
+ * GetMessage, the chat stream, GetChatUpdates) send a chat's messages. The
+ * handlers that serve them read it through their Deps.Config, so it is on the
+ * root config; only the API server serves those rpcs.
+ *
+ * @generated from message reliant.config.v1.TranscriptConfig
+ */
+export type TranscriptConfig = Message<"reliant.config.v1.TranscriptConfig"> & {
+  /**
+   * The kill switch for TOOL_BODY_MODE_STUB reads
+   * (dev-docs/design/chat-lazy-tool-bodies.md): off answers every read that
+   * asks for STUB as if it asked for FULL, so a stub regression is undone by
+   * a config flip, not a client release. Clients act on each block's flags,
+   * never on the mode they asked for, so either value is safe for every
+   * client version. Only on and off: a kill switch must not fail open on a
+   * typo.
+   *
+   * @generated from field: string tool_body_stubs = 1;
+   */
+  toolBodyStubs: string;
+};
+
+/**
+ * Describes the message reliant.config.v1.TranscriptConfig.
+ * Use `create(TranscriptConfigSchema)` to create a new message.
+ */
+export const TranscriptConfigSchema: GenMessage<TranscriptConfig> = /*@__PURE__*/
+  messageDesc(file_reliant_config_v1_config, 1);
 
 /**
  * RuntimeConfig is where the process is running. The entrypoint hands it to
@@ -69,7 +104,7 @@ export type RuntimeConfig = Message<"reliant.config.v1.RuntimeConfig"> & {
  * Use `create(RuntimeConfigSchema)` to create a new message.
  */
 export const RuntimeConfigSchema: GenMessage<RuntimeConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_config, 1);
+  messageDesc(file_reliant_config_v1_config, 2);
 
 /**
  * LogConfig is how a process's logger is built. Both fields carry the value
@@ -101,7 +136,7 @@ export type LogConfig = Message<"reliant.config.v1.LogConfig"> & {
  * Use `create(LogConfigSchema)` to create a new message.
  */
 export const LogConfigSchema: GenMessage<LogConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_config, 2);
+  messageDesc(file_reliant_config_v1_config, 3);
 
 /**
  * StorageReaperConfig is how the daemon schedules forge's storage reaper
@@ -168,5 +203,5 @@ export type StorageReaperConfig = Message<"reliant.config.v1.StorageReaperConfig
  * Use `create(StorageReaperConfigSchema)` to create a new message.
  */
 export const StorageReaperConfigSchema: GenMessage<StorageReaperConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_config, 3);
+  messageDesc(file_reliant_config_v1_config, 4);
 
