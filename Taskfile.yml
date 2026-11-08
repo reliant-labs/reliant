@@ -549,6 +549,9 @@ tasks:
     desc: "No committed binaries since BASE (default origin/main), shippable release config, .github/scripts and hook tests"
     vars:
       BASE: '{{.BASE | default "origin/main"}}'
+    env:
+      # forge-demo-env.test.mjs evaluates deploy/kcl/demo with the pinned forge.
+      FORGE_CMD: '{{.FORGE}}'
     cmds:
       - .githooks/check-binary-files.sh --range {{.BASE}} HEAD
       - node .github/scripts/sync-release-config.mjs --check

@@ -1818,10 +1818,11 @@ enum WorkloadKind {
 message DeclaredWorkload {
   string name = 1;
   WorkloadKind kind = 2;
-  // True when the bundle carries the workload's spec (a snapshot), so the
-  // fields below are the declaration. False for a bundle recorded before
-  // snapshots: only name, kind and replicas are known, and an absent value
-  // there means "not recorded", never "not declared".
+  // True when the control plane holds the workload's spec — from the bundle's
+  // snapshot, or decoded from its manifests layer — so the fields below are the
+  // declaration. False otherwise: only name, kind and replicas are known (and
+  // image, when the shape pins one), an absent value there means "not
+  // recorded", never "not declared", and spec_gap says why.
   bool spec_recorded = 3;
   // The declared replica count; unset when the declaration has none.
   optional int32 replicas = 4;
@@ -1851,6 +1852,26 @@ message DeclaredWorkload {
   // Only those switches are read, and only this verdict leaves: never a value.
   // Meaningless when spec_recorded is false.
   repeated string telemetry_off = 16;
+  // Why spec_recorded is false. UNSPECIFIED when it is true, and from a
+  // control plane that predates this field.
+  DeclaredSpecGap spec_gap = 17;
+}
+
+// DeclaredSpecGap is why a declared workload's spec is not recorded.
+enum DeclaredSpecGap {
+  DECLARED_SPEC_GAP_UNSPECIFIED = 0;
+  // The control plane has not read this bundle's manifests yet. A bundle
+  // recorded before specs were decoded from them is read in the background,
+  // so this clears without a deploy.
+  DECLARED_SPEC_GAP_PENDING = 1;
+  // The bundle's manifests cannot be read: they are in a registry the control
+  // plane does not reach (bring-your-own), the registry no longer holds them,
+  // or the bundle carries no manifests layer. A deploy that pushes to the
+  // platform registry records the spec.
+  DECLARED_SPEC_GAP_UNREADABLE = 2;
+  // The manifests were read and hold no runnable object for this workload
+  // (the shape names it, the rendered objects do not).
+  DECLARED_SPEC_GAP_NOT_IN_MANIFESTS = 3;
 }
 
 message DeclaredPort {

@@ -37,6 +37,8 @@ import type { ComponentType, ReactNode } from 'react'
 import { createRootRoute, createRoute, createRouter, Navigate, Outlet, useRouterState, type AnyRoute } from '@tanstack/react-router'
 
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
+// The workflows journey's content: its step ids still resolve here (the demo bundle leaves it out).
+import './components/Onboarding/journeys/catalog'
 import { ForgeAuthGuard } from './components/ForgeShell/ForgeAuthGuard'
 import { ForgeLandingJourney } from './components/ForgeShell/ForgeLandingJourney'
 import { ForgeShellLayout } from './components/ForgeShell/ForgeShellLayout'
@@ -50,6 +52,7 @@ import { ModalLayer } from './components/Modals/ModalLayer'
 import { NewBuildPrompt } from './components/NewBuildPrompt'
 import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundary'
 import { createForgeConsoleRoutes } from './forgeConsoleRoutes'
+import { forgeConsolePages } from './forgeConsolePages'
 import { getIsDev } from './lib/constants'
 import { lazyRoute } from './lib/lazyRoute'
 import { SurfaceProvider } from './lib/surfaceContext'
@@ -75,9 +78,6 @@ const ForgeAppsPage = lazyRoute(() => import('./components/ForgeShell/ForgeAppsP
 const ForgeSitesPage = lazyRoute(() => import('./components/ForgeShell/ForgeSitesPage'), 'ForgeSitesPage')
 const ForgeUsagePage = lazyRoute(() => import('./components/ForgeShell/ForgeUsagePage'), 'ForgeUsagePage')
 const ForgeSettingsPage = lazyRoute(() => import('./components/ForgeShell/ForgeSettingsPage'), 'ForgeSettingsPage')
-
-const ForgeLayout = lazyRoute(() => import('./components/Forge/ForgeLayout'), 'ForgeLayout')
-const ConsoleLayout = lazyRoute(() => import('./components/Forge/Console/ConsoleLayout'), 'ConsoleLayout')
 
 function ForgeRootShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
@@ -249,28 +249,7 @@ export function buildForgeShellTree({
 
   // The console: every page as Reliant mounts it, minus ForgeGate (the forge
   // shell IS the feature) — the pages themselves hide what needs a daemon.
-  const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRoute, {
-    layout: ForgeLayout,
-    console: ConsoleLayout,
-    overview: lazyRoute(() => import('./components/Forge/Workloads/WorkloadPages'), 'OverviewPage'),
-    workload: lazyRoute(() => import('./components/Forge/Workloads/WorkloadPages'), 'WorkloadPage'),
-    releases: lazyRoute(() => import('./components/Forge/Releases/ReleasesPages'), 'ReleasesPage'),
-    release: lazyRoute(() => import('./components/Forge/Releases/ReleasesPages'), 'ReleasePage'),
-    observabilityView: lazyRoute(() => import('./components/Forge/Console/ConsolePages'), 'ObservabilityViewPage'),
-    dashboards: lazyRoute(() => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardsPage'),
-    dashboard: lazyRoute(() => import('./components/Forge/Observability/Dashboards/DashboardsPages'), 'DashboardPage'),
-    environments: lazyRoute(() => import('./components/Forge/Overview/EnvironmentsPage'), 'EnvironmentsPage'),
-    environment: lazyRoute(() => import('./components/Forge/EnvPage/ForgeEnvPage'), 'ForgeEnvPage'),
-    secrets: lazyRoute(() => import('./components/Forge/Console/ConsolePages'), 'SecretsPage'),
-    domains: lazyRoute(() => import('./components/Forge/Domains/ForgeDomainsPage'), 'ForgeDomainsPage'),
-    activity: lazyRoute(() => import('./components/Forge/Console/ConsolePages'), 'ActivityPage'),
-    orgLayout: lazyRoute(() => import('./components/Forge/Org'), 'OrgConsoleLayout'),
-    orgObservability: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'OrgObservabilityRoute'),
-    landing: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute'),
-    legacyEnv: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyEnvRoute'),
-    legacyDomains: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyDomainsRoute'),
-    legacyCommand: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyCommandRoute'),
-  })
+  const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRoute, forgeConsolePages)
 
   return rootRoute.addChildren([
     authRoute,

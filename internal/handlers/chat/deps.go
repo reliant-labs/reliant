@@ -43,6 +43,8 @@ type Repository interface {
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
+	// MoveChatToProject moves an idle chat, with its plans, to another project.
+	MoveChatToProject(ctx context.Context, m db.ChatMove) (bool, error)
 	// ListCapacityWakeTargets lists the root runs of a user's chats that may
 	// have a thread blocked on a provider (WakeUserChats).
 	ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error)

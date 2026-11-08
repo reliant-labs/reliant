@@ -65,6 +65,22 @@ describe("classifyRpcFailure", () => {
     expect(classifyRpcFailure(new ConnectError("x", Code.Internal), reliant)).toBe("report");
     expect(classifyRpcFailure(new Error("x"), reliant)).toBe("report");
   });
+
+  it("reads NotFound from DeleteSetting as already absent, and only there", () => {
+    const deleteSetting = {
+      serviceTypeName: "reliant.v1.SettingsService",
+      methodName: "DeleteSetting",
+      signalAborted: false,
+    };
+    const notFound = new ConnectError("setting not found", Code.NotFound);
+    expect(classifyRpcFailure(notFound, deleteSetting)).toBe("already-absent");
+    // A read of the same service finding nothing is still just expected.
+    expect(classifyRpcFailure(notFound, { ...deleteSetting, methodName: "GetSetting" })).toBe("expected");
+    // A real failure of the delete still reports.
+    expect(classifyRpcFailure(new ConnectError("boom", Code.Internal), deleteSetting)).toBe("report");
+    // An aborted delete is an abort.
+    expect(classifyRpcFailure(notFound, { ...deleteSetting, signalAborted: true })).toBe("aborted");
+  });
 });
 
 describe("forge_api_disabled", () => {

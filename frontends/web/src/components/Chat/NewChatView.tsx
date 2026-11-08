@@ -47,6 +47,7 @@ import { MachinePicker } from "./MachinePicker";
 import { useMakeDefaultMachine } from "@/hooks/useMakeDefaultMachine";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { ChatInput, type ComposerPrefill } from "./ChatInput";
+import { newChatAttachmentDraftId } from "./NewChatDraftBoundary";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { LoadMoreWorktreesRow } from "../Worktrees/LoadMoreWorktreesRow";
@@ -403,11 +404,9 @@ export function NewChatView({
         onChatCreated(chat.id);
       }
 
-      const { clearAttachments } = useAttachmentStore.getState();
-      clearAttachments("temp");
-
       const projectId = useProjectStore.getState().currentProject?.id;
       if (projectId) {
+        useAttachmentStore.getState().clearAttachments(newChatAttachmentDraftId(projectId));
         useWorkspaceStateStore.getState().clearNewChatDraft(projectId);
       }
     } catch (error) {
@@ -783,6 +782,8 @@ export function NewChatView({
           <ChatInput
             ref={chatInputRef}
             onSend={handleCreateAndSend}
+            // The project's new-chat draft, like the text beside it, so both survive a reload.
+            attachmentDraftId={currentProject ? newChatAttachmentDraftId(currentProject.id) : undefined}
             disabled={isCreating || !machineReady || Boolean(placementBlock)}
             worktreeId={selectedWorkspaceId || mainWorktree?.id}
             prefill={restoredPrefill ?? composerPrefill}

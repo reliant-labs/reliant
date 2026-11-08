@@ -888,6 +888,9 @@ type WorkflowResult struct {
 }
 
 func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *WorkflowResult, retErr error) {
+	// Only the in-memory scenario wrapper supplies fixtures. Consume them at
+	// entry so child workflows cannot inherit the root's seeded outputs.
+	scenarioState, ctx := takeScenarioState(ctx)
 	logger := workflow.GetLogger(ctx)
 	info := workflow.GetInfo(ctx)
 	workflowID := info.WorkflowExecution.ID
@@ -1443,6 +1446,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// is injected directly into the first batch of triggered steps below.
 	// Track outputs from completed nodes using NodeOutputStore for centralized management
 	nodeOutputStore := NewNodeOutputStore(input.WorkflowName)
+	nodeOutputStore.MergeMap(scenarioState)
 	nodeOutputs := nodeOutputStore.AsMap() // Backwards compatible - existing code can use the map directly
 	failureNodeOutputs = nodeOutputs
 

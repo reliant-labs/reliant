@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { AlertInstance } from "@/services/controlPlane/observability/alertingTypes";
-import type { ReleasePromotion } from "@/services/forge/releases";
+import type { ReleaseComparison, ReleasePromotion } from "@/services/forge/releases";
 
 import {
   attentionItems,
@@ -21,7 +21,11 @@ import {
   previewsCell,
   replicasText,
   serviceRows,
+  specGapNote,
   stripCell,
+  workloadChange,
+  workloadDigestOf,
+  workloadReleaseRows,
   worstUsage,
 } from "../workloadModel";
 import { FIXTURE_JOBS, STRIP_ENVS, fixtureWorkloadList } from "../__fixtures__/workloadFixtures";
@@ -198,6 +202,7 @@ describe("deploy history", () => {
     gates: [],
     bundleId: "",
     bundleDigest: "",
+    resolvedArtifacts: {},
   });
   // Cut order, newest first: v3 is the newest release.
   const rank = new Map([["v3", 0], ["v2", 1], ["v1", 2]]);
@@ -219,6 +224,98 @@ describe("deploy history", () => {
 
   it("does not judge a release outside the loaded list", () => {
     expect(deployHistory([p("2", "v0"), p("1", "v3")], "api", rank, names)[0]!.rollback).toBe(false);
+  });
+
+  it("gives each release row the release it replaced for this workload, its checks and its frozen artifacts", () => {
+    const failed = { name: "smoke", status: "failed" as const, rawStatus: "", summary: "", url: "", recordedBy: "", source: "recorded" as const };
+    const ledger = [
+      { ...p("4", "v2"), gates: [failed], resolvedArtifacts: { api: "sha256:2222" } },
+      p("3", "v3"),
+      p("2", "v3", ["web"]),
+      p("1", "v2"),
+    ];
+    const rows = workloadReleaseRows(ledger, "api", rank, names);
+    // The scoped deploy of another component is not in api's chain: v3 replaced v2, and v2 replaced v3.
+    expect(rows.map((r) => [r.version, r.previousVersion, r.rollback])).toEqual([
+      ["v2", "v3", true],
+      ["v3", "v2", false],
+      ["v2", null, false],
+    ]);
+    expect(rows[0]!.checks).toMatchObject({ failed: 1, total: 1 });
+    expect(rows[1]!.checks).toBeNull();
+    expect(rows[0]!.resolvedArtifacts).toEqual({ api: "sha256:2222" });
+  });
+});
+
+describe("what a release changed in one workload", () => {
+  const comparison = (objects: Partial<ReleaseComparison["objects"]>): ReleaseComparison => ({
+    from: null,
+    to: null,
+    commits: { state: "computed", reverts: false, commits: [], total: 0, truncated: false, releases: [] },
+    artifacts: [],
+    unchangedArtifacts: 0,
+    objects: { state: "compared", detail: "", deltas: [], unchanged: 0, summariesMissing: false, workload: "", ...objects },
+  });
+  const delta = (over: Partial<ReleaseComparison["objects"]["deltas"][number]>) => ({
+    change: "modified" as const,
+    cluster: "hub",
+    kind: "Deployment",
+    namespace: "cp",
+    name: "api",
+    workload: "api",
+    summary: "",
+    images: [],
+    ...over,
+  });
+  const row = { version: "v3", previousVersion: "v2" };
+
+  it("names the first release and a re-promotion without a comparison", () => {
+    expect(workloadChange({ version: "v1", previousVersion: null }, undefined, "api")).toEqual({ kind: "first" });
+    expect(workloadChange({ version: "v1", previousVersion: "v1" }, undefined, "api")).toEqual({ kind: "same-release" });
+    expect(workloadChange(row, undefined, "api")).toBeNull();
+  });
+
+  it("keeps only this workload's objects, even from a server that compared every object", () => {
+    const change = workloadChange(
+      row,
+      comparison({
+        deltas: [
+          delta({ summary: "image api; env FOO added", images: [{ artifact: "api", from: "sha256:1111", to: "sha256:2222" }] }),
+          delta({ kind: "ConfigMap", name: "api", workload: "", change: "added", summary: "keys a" }),
+          delta({ name: "web", workload: "web", summary: "image web" }),
+          delta({ kind: "Service", name: "unrelated", workload: "" }),
+        ],
+      }),
+      "api"
+    );
+    expect(change).toEqual({
+      kind: "changed",
+      lines: ["modified Deployment api: image api; env FOO added", "added ConfigMap api: keys a"],
+      image: { artifact: "api", from: "sha256:1111", to: "sha256:2222" },
+    });
+    expect(workloadDigestOf({ resolvedArtifacts: {} }, change, "api")).toBe("sha256:2222");
+  });
+
+  it("says nothing changed, and passes on why objects could not be compared", () => {
+    expect(workloadChange(row, comparison({ deltas: [delta({ name: "web", workload: "web" })], workload: "api", unchanged: 3 }), "api")).toEqual({ kind: "unchanged", unchanged: 3 });
+    expect(workloadChange(row, comparison({ state: "bundle-missing", detail: "no bundle for v2" }), "api")).toEqual({ kind: "not-compared", detail: "no bundle for v2" });
+  });
+
+  it("takes the digest from the frozen artifact named like the workload, and never guesses another", () => {
+    expect(workloadDigestOf({ resolvedArtifacts: { api: "sha256:abcd" } }, { kind: "unchanged", unchanged: 0 }, "api")).toBe("sha256:abcd");
+    expect(workloadDigestOf({ resolvedArtifacts: { "control-plane": "sha256:abcd" } }, null, "api")).toBe("");
+    expect(workloadDigestOf({ resolvedArtifacts: { api: "0123abc" } }, null, "api")).toBe("");
+  });
+});
+
+describe("the Config tab's not-recorded note", () => {
+  it("tells the truth for each reason, and promises a deploy fixes it only where one does", () => {
+    expect(specGapNote("pending", "api", "prod")).toMatch(/has not read the manifests .* without a deploy/);
+    expect(specGapNote("unreadable", "api", "prod")).toMatch(/registry Reliant cannot read.*A deploy that pushes its bundle to the platform registry records the rest/);
+    expect(specGapNote("not-in-manifests", "api", "prod")).toMatch(/names api, but its rendered manifests hold no object/);
+    for (const gap of ["pending", "not-in-manifests", "unknown", null] as const) {
+      expect(specGapNote(gap, "api", "prod")).not.toMatch(/next deploy/i);
+    }
   });
 });
 

@@ -18,10 +18,8 @@ import { useCoarsePointer } from "./useCoarsePointer";
 import { CodeContextChip } from "./CodeContextChip";
 import { detectPlatform } from "../../lib/keyboard/platform";
 import { useComposerUploads } from "./useComposerUploads";
-import { useLongPaste } from "./useLongPaste";
-import { LongPastePreview } from "./LongPastePreview";
-import { useLongPastePreferences } from "../../hooks/useLongPastePreferences";
-import { useAttachmentStore } from "../../store/attachmentStore";
+import { legacyPasteDraftKeys, migrateLegacyPasteDrafts, pastedTextFilename, useLongPaste } from "./useLongPaste";
+import { isDraftAttachmentPersisted, useAttachmentStore } from "../../store/attachmentStore";
 import { useAuthStore } from "../../store/authStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useActiveChatId } from "../../store/chatStoreHooks";
@@ -1118,6 +1116,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const clearAttachments = useAttachmentStore(
       (state) => state.clearAttachments
     );
+    const replaceAttachment = useAttachmentStore((state) => state.replaceAttachment);
     const uploading = useAttachmentStore((state) => state.uploading);
 
     // Use tabId to isolate attachments per tab when no chatId exists
@@ -1177,13 +1176,43 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     }, [isStreaming, effectiveStreaming, isChatBusy, chatId]);
 
     const uploadQueue = useComposerUploads(attachFile, removeAttachment, attachmentSessionId);
-    const longPastePreferences = useLongPastePreferences();
-    const pasteUserId = useAuthStore((state) => state.user?.id);
-    const longPaste = useLongPaste({
-      session: JSON.stringify([pasteUserId, currentProjectFromStore?.id, attachmentSessionId]), textarea: textareaRef, input, setInput: replaceInput,
-      preferences: longPastePreferences, queue: uploadQueue,
+    // A long paste is an ordinary upload, named after the draft's other files.
+    useLongPaste({
+      textarea: textareaRef,
+      input,
+      setInput: replaceInput,
+      attach: (text) => {
+        const name = pastedTextFilename([
+          ...attachments.map((attachment) => attachment.filename),
+          ...uploadQueue.uploads.map((upload) => upload.file.name),
+        ]);
+        void uploadQueue.add(attachmentSessionId, [new File([text], name, { type: "text/plain" })]);
+      },
       disabled: !canAttach || disabled || sending || queueing,
     });
+
+    // Long pastes a v1.10 composer stored for this draft become its attachments.
+    const pasteUserId = useAuthStore((state) => state.user?.id);
+    const pasteProjectId = currentProjectFromStore?.id;
+    useEffect(() => {
+      if (!canAttach) return;
+      const keys = legacyPasteDraftKeys({
+        userId: pasteUserId,
+        projectId: pasteProjectId,
+        sessionId: attachmentSessionId,
+        newChat: !chatId,
+      });
+      if (keys.length === 0) return;
+      void migrateLegacyPasteDrafts(
+        keys,
+        async (text) => {
+          const taken = useAttachmentStore.getState().getAttachments(attachmentSessionId).map((a) => a.filename);
+          const attachment = await attachFile(attachmentSessionId, new File([text], pastedTextFilename(taken), { type: "text/plain" }));
+          return attachment.id;
+        },
+        (id) => isDraftAttachmentPersisted(attachmentSessionId, id),
+      );
+    }, [canAttach, pasteUserId, pasteProjectId, attachmentSessionId, chatId, attachFile]);
     // Drag and drop functionality
     const handleFileDrop = async (files: File[]) => {
       if (!canAttach || disabled || sendingRef.current || queueingRef.current) return;
@@ -1223,27 +1252,13 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       return () => document.removeEventListener("paste", handlePasteEvent);
     }, [handlePaste]);
 
-    // Forget submitted generated files from the local draft, never the server.
-    // Ordinary failed-queue attachments and any newer draft files stay intact.
-    const capturePasteDraftCleanup = () => {
-      const ids = new Set(longPaste.rows.flatMap((row) => {
-        const id = row.upload === undefined ? undefined : uploadQueue.attachmentId(row.upload);
-        return id ? [id] : [];
-      }));
-      return () => useAttachmentStore.setState((state) => {
-        const next = new Map(state.attachments);
-        next.set(attachmentSessionId, (next.get(attachmentSessionId) ?? []).filter((attachment) => !ids.has(attachment.id)));
-        return { attachments: next };
-      });
-    };
-
     const handleQuestionSubmit = useCallback(async (answer: { answers: Array<{ question: string; selected: string[]; freetext?: string }> }) => {
       if (!chatId || !pendingQuestion) return;
       await answerQuestion(chatId, pendingQuestion.questionId, answer);
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {
-      if (disabled || sendingRef.current || queueingRef.current || uploading || uploadQueue.hasPending() || longPaste.needsRecovery) return;
+      if (disabled || sendingRef.current || queueingRef.current || uploading || uploadQueue.hasPending()) return;
       if (canConfigure && hasUnsetParams) {
         // The server refuses a run missing a required input; take the user
         // straight to where they can fill it in.
@@ -1273,9 +1288,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         // referenced content is appended below as code blocks.
         const messageText = fromText.text.trim();
         const attachmentIds = attachments.map((a) => a.id);
-        // The send owns these IDs before context reads can yield or unmount.
-        const detachSubmittedPaste = capturePasteDraftCleanup();
-        longPaste.submitting();
         
         // Format code contexts as part of the message
         // Read file content and include it directly in the message text
@@ -1383,7 +1395,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             undefined, // targetThread
             Object.keys(presetsToSend).length > 0 ? presetsToSend : undefined
           );
-          longPaste.sent();
           if (clearSubmittedDraft) {
             // attachmentSessionId is the submitted draft's bucket, captured
             // with this send. The code-context chips are this composer's own
@@ -1392,10 +1403,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             if (clearSubmittedDraft()) clearContexts();
           }
         } catch (error) {
-          // Submitted IDs belong to the send, even on a transport failure:
-          // it may have committed, and retryFailedSend reuses these IDs.
-          detachSubmittedPaste();
-          longPaste.sendFailed();
           // ChatContainer already reported this to the user before rethrowing.
           // Swallow it here so an Enter keypress — which cannot await this
           // handler — doesn't surface as an unhandled rejection.
@@ -1457,7 +1464,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       // The mailbox requires a body; attachment-only submissions get an
       // explicit description rather than a fabricated blank message.
       const message = input.trim() || (attachments.length ? `Attached: ${attachments.map((a) => a.filename).join(", ")}` : "");
-      if (!message || sendingRef.current || queueingRef.current || disabled || uploading || uploadQueue.hasPending() || longPaste.needsRecovery) return;
+      if (!message || sendingRef.current || queueingRef.current || disabled || uploading || uploadQueue.hasPending()) return;
       if (!chatId || !targetThreadId) {
         toast.error("Can't queue a message: this chat has no running agent yet.");
         return;
@@ -1475,10 +1482,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
       queueingRef.current = true;
       setQueueing(true);
-      // Transfer before dispatch: neither unmount nor recovery may delete IDs
-      // which a pending (possibly committed) mailbox request references.
-      const detachSubmittedPaste = capturePasteDraftCleanup();
-      longPaste.submitting();
       let queued = false;
       try {
         beginQueuedSend({ chatId, thread: targetThreadId, row });
@@ -1501,7 +1504,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         }
         queued = true;
         clearAttachments(attachmentSessionId);
-          longPaste.sent();
       } catch (error) {
         logger.error("[ChatInput] Failed to queue agent message", {
           error,
@@ -1514,10 +1516,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         queueingRef.current = false;
         setQueueing(false);
         if (!queued) {
-          // Detach the submitted snapshot locally; IDs remain valid for a
-          // mailbox request whose response failed after committing.
-          detachSubmittedPaste();
-          longPaste.sendFailed();
           initEventBus().emit("agentMailbox:drained", {
             chatId,
             thread: targetThreadId,
@@ -1541,7 +1539,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       disabled,
       uploading,
       uploadQueue,
-      longPaste,
     ]);
 
     const handleAttachClick = () => {
@@ -1726,8 +1723,26 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       event.target.value = "";
     };
 
+    // A submission in flight owns the draft's attachments: removing or
+    // replacing one now would delete what the message references.
     const handleRemoveAttachment = (attachmentId: string) => {
-      if (sendingRef.current || queueingRef.current || uploadQueue.isSendOwned(attachmentId)) return;
+      if (sendingRef.current || queueingRef.current) return;
+      removeAttachment(attachmentSessionId, attachmentId);
+    };
+
+    const handleSaveTextAttachment = async (attachmentId: string, filename: string, text: string) => {
+      if (sendingRef.current || queueingRef.current) throw new Error("A message is being sent");
+      const type = attachments.find((attachment) => attachment.id === attachmentId)?.mime_type || "text/plain";
+      await replaceAttachment(attachmentSessionId, attachmentId, new File([text], filename, { type }));
+    };
+
+    const handleInsertTextAttachment = (attachmentId: string, text: string) => {
+      if (sendingRef.current || queueingRef.current) return;
+      const el = textareaRef.current;
+      const current = latestInputRef.current;
+      const start = el?.selectionStart ?? current.length;
+      const end = el?.selectionEnd ?? start;
+      replaceInput(current.slice(0, start) + text + current.slice(end));
       removeAttachment(attachmentSessionId, attachmentId);
     };
 
@@ -1891,7 +1906,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const hasText = input.trim().length > 0;
     const hasContent = hasText || attachments.length > 0 || contexts.length > 0;
-    const sendDisabled = disabled || sending || queueing || uploading || uploadQueue.uploads.length > 0 || longPaste.needsRecovery || !isMessagingAllowed;
+    const sendDisabled = disabled || sending || queueing || uploading || uploadQueue.uploads.length > 0 || !isMessagingAllowed;
     const { isMac } = detectPlatform();
     const sendKeyHint = coarsePointer ? (isMac ? "⌘↵" : "Ctrl+Enter") : "Enter";
 
@@ -2000,7 +2015,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             onRemove={() => removeContext(context.id)}
                           />
                         ))}
-                        {uploadQueue.uploads.filter((upload) => !longPaste.rows.some((row) => row.upload === upload.id)).map((upload) => (
+                        {uploadQueue.uploads.map((upload) => (
                           <UploadChip
                             key={upload.id}
                             name={upload.file.name}
@@ -2010,8 +2025,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           />
                         ))}
                         <AttachmentPreview
-                          attachments={attachments.filter((attachment) => !longPaste.rows.some((row) => row.upload !== undefined && uploadQueue.attachmentId(row.upload) === attachment.id))}
+                          attachments={attachments}
                           onRemove={handleRemoveAttachment}
+                          onSave={sending || queueing ? undefined : handleSaveTextAttachment}
+                          onInsert={sending || queueing ? undefined : handleInsertTextAttachment}
                         />
                         {threadBorderColor && (
                           <ComposerChip
@@ -2053,7 +2070,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                     </div>
 
                     <div className="composer-text">
-                      <LongPastePreview key={`${pasteUserId}:${currentProjectFromStore?.id}:${attachmentSessionId}`} paste={longPaste} disabled={disabled || sending || queueing} />
                       <ChatTextArea
                         ref={textareaRef}
                         value={input}

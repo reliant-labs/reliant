@@ -3,6 +3,7 @@
   "input": {
     "project": "reliant",
     "frontend_services": [
+      "reliant-forge-demo",
       "reliant-web"
     ]
   },

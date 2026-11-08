@@ -45,6 +45,10 @@ nodes:
 
 To authenticate, save an API-key or basic-auth connection for the `http` integration and name it with `connection:`. The credential is sent only to the host the request started at, so a redirect to another site does not carry it along. An API-key connection picks its header from a fixed list, because this integration does not know any particular API.
 
+**A saved generic HTTP connection is not bound to an initial destination.** The workflow chooses that destination with `url`; any public HTTPS host can receive the selected credential. Redirect protection prevents forwarding it to a second host, but does not establish that the first host is trusted. Secret redaction also does not prevent disclosure to the remote server.
+
+For authenticated requests, use a literal trusted origin in the workflow, or a named integration whose manifest constrains its hosts. Do not construct the origin from caller input, model output, or fetched content. If an input must be retained for compatibility, check it against an independently fixed trusted origin before any authenticated action; an allowlist supplied by that same caller is not a trust boundary. Disabling redirects alone does not fix an untrusted initial URL.
+
 ## Secrets
 
 A workflow can authenticate a request with a stored secret, such as an API key, without the value ever appearing in anything a step or a model can read. Declare the secrets at the top of the workflow, then put one in a **credential slot**:
