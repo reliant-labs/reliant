@@ -90,6 +90,15 @@ func TestMergeVetIncludesProductionPackageWithoutTests(t *testing.T) {
 		t.Fatal("vet dispatch block end missing")
 	}
 	block := src[start : start+end]
+	// The block delegates to scripts/vet.sh; read it here too so an edit to
+	// it invalidates this test's cache entry.
+	vetScript, err := os.ReadFile(filepath.Join(repoRoot, "scripts/vet.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(vetScript), `go vet "$@"`) || !strings.Contains(string(vetScript), `go vet -vettool=`) {
+		t.Fatalf("scripts/vet.sh no longer runs go vet and the model vettool:\n%s", vetScript)
+	}
 	// jq and Bash execute the actual dispatch; go is a shell spy. No real
 	// vet/build or dependency on external files hidden from the Go test cache.
 	cmd := exec.Command("bash", "-c", `set -euo pipefail
@@ -102,13 +111,16 @@ pids=()
 phase() { printf 'phase: %s\n' "$1"; shift; "$@"; }
 env() { shift; "$@"; }
 go() { printf 'go: %s\n' "$*"; }
+export -f go
 `+block+`
 for p in "${pids[@]}"; do wait "$p"; done`, "vet-dispatch", filepath.Join(dir, "plan.json"))
+	cmd.Dir = repoRoot
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("vet dispatch: %v\n%s", err, out)
 	}
-	if !strings.Contains(string(out), "phase: vet\ngo: vet ./cmd/no_tests ./tools/docgen/cli") {
+	if !strings.Contains(string(out), "phase: vet\ngo: vet ./cmd/no_tests ./tools/docgen/cli\n") ||
+		!strings.Contains(string(out), "/modelvet ./cmd/no_tests ./tools/docgen/cli\n") {
 		t.Fatalf("production command was not vetted: %s", out)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "vet.row"), []byte("vet 0 1 0\n"), 0600); err != nil {

@@ -133,6 +133,14 @@ enum InboxItemKind {
   // valid version lands. It replaces those automations' own failing items.
   // Informational.
   INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN = 11;
+  // A machine's worktree reclaim proposes removing idle worktrees that hold
+  // uncommitted, unpushed or reflog-only work, and will not remove any
+  // without the person's approval. One item per machine per set of
+  // proposals: it lists each worktree with what it holds and a reviewing
+  // agent's note, and WorktreeReclaimService.DecideWorktreeReclaim answers
+  // it, worktree by worktree.
+  // Informational: no run waits on it.
+  INBOX_ITEM_KIND_WORKTREE_RECLAIM = 12;
 }
 
 message ListInboxRequest {
@@ -171,7 +179,8 @@ message InboxItem {
   // Stable key for dismissal and de-duplication, prefixed by kind
   // ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
   // "automation_launch_failed:", "storage:",
-  // "automation_needs_setup:", "automation_run_paused:"). An automation run
+  // "automation_needs_setup:", "automation_run_paused:", "worktree_reclaim:").
+  // An automation run
   // paused embeds the chat id and when the failure that paused it happened,
   // so a later pause is a new item. Approvals and questions
   // embed their row id; waiting-for-machine embeds the chat id and when the
@@ -212,6 +221,7 @@ message InboxItem {
     RecoveryInboxItem recovery = 28;
     InboxAutomationRunPaused automation_run_paused = 29;
     InboxAutomationDefinitionBroken automation_definition_broken = 30;
+    InboxWorktreeReclaim worktree_reclaim = 31;
   }
   // 25 was run_finished (InboxRunFinished); see INBOX_ITEM_KIND 6.
   reserved 25;
@@ -395,6 +405,27 @@ message HeldWorktree {
   // it ("no-machine-on-record"), at least one machine is connected, and every
   // connected machine answered that it does not have the folder.
   bool forgettable = 10;
+}
+
+// InboxWorktreeReclaim is one machine's pending worktree-reclaim proposals,
+// as it last reported them (DiskReport.worktree_reclaim). The item's id names
+// the machine and the set of proposals (worktree_reclaim:<daemon>:<digest>):
+// a new or changed proposal makes a new item, and a dismissal holds for the
+// set it was made about.
+message InboxWorktreeReclaim {
+  string daemon_id = 1;
+  string daemon_name = 2;
+  // False when the machine is offline: the item still lists what it last
+  // reported, but a decision cannot reach it until it reconnects.
+  bool online = 3;
+  // RFC 3339 of the machine's last report.
+  string reported_at = 4;
+  // "dry-run" or "on". In dry-run an approved worktree is reclaimed once the
+  // machine's reclaim is switched on.
+  string mode = 5;
+  // Oldest proposal first, at most 50; total counts them all.
+  repeated WorktreeReclaimProposal proposals = 6;
+  int32 total = 7;
 }
 
 message ForgetStorageWorktreeRequest {

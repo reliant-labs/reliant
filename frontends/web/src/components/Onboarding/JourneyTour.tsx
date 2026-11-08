@@ -34,6 +34,7 @@ import {
 } from "./journeys/registry";
 import { formatTourParam, otherJourney, type JourneyId } from "./tourParam";
 import { getTourShell } from "./tourShell";
+import { isLegacyDemoTourLink } from "./legacyDemoTour";
 import type { JourneyStep } from "./types";
 import { isOnRoute, useTourNavigation, type TourNavigation } from "./useTourNavigation";
 
@@ -336,6 +337,7 @@ export function JourneyTour() {
   const nav = useTourNavigation();
   const initialized = useTourStore((state) => state.isInitialized);
   const resumeStep = useTourStore((state) => state.resumeStep);
+  const location = useLocation();
 
   // Progress, versions and context (a slug a step's route needs) load first.
   // Reliant's OnboardingWizard loads it too; loadState de-duplicates.
@@ -368,8 +370,10 @@ export function JourneyTour() {
   }
 
   const { journey, stepId, step } = nav.tour;
-  // The public demo explains the actual page, including legacy ?view= deep links.
-  // It never demands a prior action or sends exploration through the old single-page sequence.
+  // An old trace-less demo deep link (?view=logs&tour=forge:fg-logs) gets the
+  // page card instead (PageEntryTour): a guided step there would wait on an
+  // action that needs a trace the visitor does not have.
+  if (isLegacyDemoTourLink((location.search ?? {}) as Record<string, unknown>)) return null;
   return (
     <JourneyStepView
       key={formatTourParam(journey, stepId)}

@@ -705,9 +705,15 @@ tasks:
   # ── Lint and format ───────────────────────────────────────────────────
 
   lint:
-    desc: Run the pinned forge lint (golangci-lint, buf lint, the contract/convention/migration-safety lanes)
+    desc: Run pinned forge lint and the app-owned typed vet rules
     cmds:
       - '{{.FORGE}} lint'
+      - task: lint:models
+
+  lint:models:
+    desc: Run standard vet plus the typed model-serialization rule (optional package arguments)
+    cmds:
+      - bash scripts/vet.sh {{.CLI_ARGS}}
 
   lint:web:
     desc: Lint the web app
