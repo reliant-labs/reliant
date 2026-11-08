@@ -112,7 +112,9 @@ a release containing this change has to be withdrawn):
 2. **Stop the work in flight.** Find the affected runs: every chat whose thread
    lineage carries the opt-out: the threads with `exclude_ambient_memory =
    true` and every thread below them, including any descendant that has not
-   yet run a turn to latch the flag itself. Query the reliant DB, read-only:
+   yet run a turn to latch the flag itself. Pause names a **run** (a workflow
+   execution id), not a chat, so the query returns each such chat's root run,
+   `chats.workflow_id`, that has not finished. Query the reliant DB, read-only:
 
    ```sql
    WITH RECURSIVE opted AS (
@@ -120,13 +122,19 @@ a release containing this change has to be withdrawn):
      UNION
      SELECT t.id, t.chat_id FROM threads t JOIN opted o ON t.parent_thread_id = o.id
    )
-   SELECT DISTINCT chat_id FROM opted;
+   SELECT DISTINCT c.workflow_id
+   FROM opted o
+   JOIN chats c ON c.id = o.chat_id
+   JOIN workflows w ON w.id = c.workflow_id
+   WHERE w.completed_at IS NULL;
    ```
 
-   Run it again after pausing, because a run that was mid-turn can add
-   children. Pause each one
-   with `reliant workflow pause <execution-id>`. Pausing keeps the checkpoint.
-   Terminate only a run that must never resume.
+   Pause each one with `reliant workflow pause <workflow_id>`. Pausing keeps
+   the checkpoint; terminate (`reliant workflow terminate`) only a run that must
+   never resume. Check each pause with `reliant workflow status <workflow_id>`,
+   then run the query again: a run that was mid-turn can add children, and a
+   new root may have started before step 1 took effect. Repeat until every
+   root it returns is paused.
 3. **Keep the schema and the policy.** Do not revert the migration, do not
    clear the column, and do not write `false` anywhere. The code has no reset
    path, and that is deliberate.
