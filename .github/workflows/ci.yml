@@ -288,11 +288,31 @@ jobs:
           fi
           "$dir/temporal" --version
           echo "$dir" >> "$GITHUB_PATH"
+      # The web part's electron npm install downloads Electron's zip from
+      # github.com releases: restored from the entry the Electron package
+      # smoke job keeps (see that job), and saved here on main if missing.
+      - name: Read the Electron version
+        id: electron-version
+        if: ${{ matrix.part == 'web' }}
+        run: echo "zip=electron-zip-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron"].version' electron/package-lock.json)" >> "$GITHUB_OUTPUT"
+      - name: Restore the Electron zip
+        id: electron-zip
+        if: ${{ matrix.part == 'web' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/electron
+          key: ${{ steps.electron-version.outputs.zip }}
       - name: task release:gate (part ${{ matrix.label }})
         env:
           PART: ${{ matrix.part }}
           SHARD: ${{ matrix.shard }}
         run: RELEASE_GATE_DIR="${RUNNER_TEMP}/release-gate" task release:gate -- --part "${PART}" ${SHARD:+--shard "${SHARD}"} "${GITHUB_SHA}"
+      - name: Save the Electron zip (main only)
+        if: ${{ matrix.part == 'web' && steps.electron-zip.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/electron
+          key: ${{ steps.electron-version.outputs.zip }}
       - name: task ci:repo-checks
         if: ${{ !cancelled() && matrix.part == 'static' }}
         run: task ci:repo-checks BASE="${{ needs.lanes.outputs.base }}"
@@ -547,37 +567,47 @@ jobs:
         with:
           go: "false"
           node: "true"
-      # Electron's postinstall and electron-builder fetch Electron and its
-      # packaging tools (AppImage runtime, fpm, ...) from github.com releases
-      # into these caches, so they are restored before deps. On
-      # 2026-11-08 those downloads answered 504 for hours and this job failed
-      # at packaging. They are keyed on the two versions that decide their
-      # contents, restored everywhere, and saved on a push to main only (the
-      # setup action's header rule).
+      # Electron's postinstall fetches Electron's zip, and electron-builder its
+      # packaging tools (AppImage runtime, fpm, ...), from github.com releases.
+      # On 2026-11-08 those downloads answered 504 for hours and this job, and
+      # the release gate's web part (its electron npm install), failed. Each is
+      # cached by the version that decides its contents, restored before deps,
+      # and saved on a push to main only, after a green step (the setup
+      # action's header rule). The zip's entry is shared with the release gate.
       - name: Read the Electron versions
         id: electron-versions
         run: |
-          echo "key=electron-dl-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron"].version + "-" + .packages["node_modules/electron-builder"].version' electron/package-lock.json)" >> "$GITHUB_OUTPUT"
-      - name: Restore Electron downloads
-        id: electron-cache
+          lock=electron/package-lock.json
+          echo "zip=electron-zip-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron"].version' "$lock")" >> "$GITHUB_OUTPUT"
+          echo "builder=electron-builder-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron-builder"].version' "$lock")" >> "$GITHUB_OUTPUT"
+      - name: Restore the Electron zip
+        id: electron-zip
         uses: actions/cache/restore@v4
         with:
-          path: |
-            ~/.cache/electron
-            ~/.cache/electron-builder
-          key: ${{ steps.electron-versions.outputs.key }}
+          path: ~/.cache/electron
+          key: ${{ steps.electron-versions.outputs.zip }}
+      - name: Restore electron-builder's tools
+        id: electron-builder
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/electron-builder
+          key: ${{ steps.electron-versions.outputs.builder }}
       - name: task deps:web deps:electron
         run: task deps:web deps:electron
-      - name: task build:electron:smoke
-        run: task build:electron:smoke
-      - name: Save Electron downloads (main only)
-        if: steps.electron-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Save the Electron zip (main only)
+        if: steps.electron-zip.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@v4
         with:
-          path: |
-            ~/.cache/electron
-            ~/.cache/electron-builder
-          key: ${{ steps.electron-versions.outputs.key }}
+          path: ~/.cache/electron
+          key: ${{ steps.electron-versions.outputs.zip }}
+      - name: task build:electron:smoke
+        run: task build:electron:smoke
+      - name: Save electron-builder's tools (main only)
+        if: steps.electron-builder.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/electron-builder
+          key: ${{ steps.electron-versions.outputs.builder }}
 
   # ── One verdict ───────────────────────────────────────────────────────────
   # Green only when every job that ran passed. On an unlabelled PR nothing
