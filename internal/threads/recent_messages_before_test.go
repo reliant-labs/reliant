@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -43,6 +44,7 @@ func legacyRecentMessagesBefore(all []*db.Message, beforeSeq int64, limit int) (
 // past the end) at every page size, comparing ids, order, hasMore and
 // visual-thread normalization.
 func TestLoadRecentMessagesBefore_CompactedAndBranched_MatchesFullLoad(t *testing.T) {
+	testkit.Slow(t, "DB-backed: ~600 (cursor, limit) reads against pgtest's Postgres")
 	t.Parallel()
 
 	h := newTestHelper(t)
@@ -65,13 +67,19 @@ func TestLoadRecentMessagesBefore_CompactedAndBranched_MatchesFullLoad(t *testin
 	}
 	cursors = append(cursors, full[len(full)-1].Seq+100)
 
-	// One subtest per cursor, run in parallel: each sweeps every limit against
-	// the same read-only chain, and in series the ~600 reads cost seconds.
+	// One subtest per cursor: each sweeps every limit against the same
+	// read-only chain, and in series the ~600 reads cost seconds. At most
+	// recentPagesWorkers sweep at once, so the shared embedded Postgres sees a
+	// few concurrent readers rather than a burst of one per cursor.
+	const recentPagesWorkers = 4
+	slots := make(chan struct{}, recentPagesWorkers)
 	var checked atomic.Int64
 	t.Run("pages", func(t *testing.T) {
 		for _, cursor := range cursors {
 			t.Run(fmt.Sprintf("cursor=%d", cursor), func(t *testing.T) {
 				t.Parallel()
+				slots <- struct{}{}
+				defer func() { <-slots }()
 				checked.Add(checkRecentPagesAt(t, h, leaf, full, cursor))
 			})
 		}
