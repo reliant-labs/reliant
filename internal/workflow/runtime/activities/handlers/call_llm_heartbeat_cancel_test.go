@@ -11,13 +11,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/testsuite"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
 )
 
@@ -231,7 +231,7 @@ func TestWorkerStopKilledStream(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
+			env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 			stop := make(chan struct{})
 			if tt.stopWorker {
 				close(stop)
