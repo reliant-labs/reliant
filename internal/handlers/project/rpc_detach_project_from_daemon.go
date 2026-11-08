@@ -66,14 +66,22 @@ func (s *Service) DetachProjectFromDaemon(
 	// it, two concurrent detaches of the project's last two checkouts each saw
 	// the other's and both went through, leaving none.
 	guard := func(txCtx context.Context) error {
-		row, err := s.checkoutOn(txCtx, project.ID, daemonID)
+		locked, err := s.checkoutOn(txCtx, project.ID, daemonID)
 		if err != nil {
 			return err
 		}
-		if row == nil {
+		if locked == nil {
 			return db.ErrNothingToDetach
 		}
-		if row.InstallState == core.ProjectInstallInstalling {
+		// The detach deletes the row and records its tombstone at row.Path,
+		// read before the lock. A checkout an attach moved in between would
+		// lose its row while the tombstone named the old path, so its
+		// watcher's next sighting would make a duplicate project. Refuse it;
+		// a retry reads the new path.
+		if locked.Path != row.Path {
+			return svcerr.Aborted(fmt.Sprintf("%q moved on %s while it was being detached; try again", project.Name, machine))
+		}
+		if locked.InstallState == core.ProjectInstallInstalling {
 			return svcerr.FailedPrecondition(fmt.Sprintf("%q is still being cloned onto %s; wait for the clone to finish, then detach it", project.Name, machine))
 		}
 		if err := s.requireCheckoutElsewhere(txCtx, userID, project, daemonID, machine); err != nil {
