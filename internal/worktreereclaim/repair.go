@@ -427,7 +427,7 @@ func repairRegistration(ctx context.Context, adminDir string, opts RepairOptions
 		}
 		ours := underRoot || ReliantLock(reason)
 		if locked && !ReliantLock(reason) && (reason != "" || !underRoot) &&
-			!(underRoot && deadWorktreeAdd(lockPath, reason, opts)) {
+			(!underRoot || !deadWorktreeAdd(lockPath, reason, opts)) {
 			ours = false
 		}
 		if !ours {
