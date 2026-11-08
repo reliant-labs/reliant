@@ -29,6 +29,7 @@ import { DeliveryInsightsService } from "@/gen/controlplane/services/delivery_in
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { DomainService } from "@/gen/controlplane/services/domain/v1/domain_pb";
 import { IssuesService } from "@/gen/controlplane/services/issues/v1/issues_pb";
+import { IdentityService } from "@/gen/controlplane/services/identity/v1/identity_pb";
 import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { ObservabilityBillingService } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 import { RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
@@ -46,6 +47,7 @@ export const DEMO_DEFAULT_SERVICES: readonly DescService[] = [
   DeployService,
   DomainService,
   IssuesService,
+  IdentityService,
   ObservabilityService,
   ObservabilityBillingService,
   RumService,

@@ -1,0 +1,56 @@
+// Copyright (c) 2025 Reliant Labs
+
+/** Recorded, synthetic configuration: one immutable projection for YAML/tree,
+ * never a fetch of config.js or an OCI registry. The digest identifies this
+ * fake public bundle, NOT a secret or a secret-derived fingerprint.
+ */
+import type { JsonObject } from "@bufbuild/protobuf";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { dump } from "js-yaml";
+
+import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+
+import { DEMO_RELEASES, DEMO_WORKLOADS, RUNNING } from "./consoleScenario";
+import { completed } from "./demoServiceDefaults";
+import { DEMO_ENVS } from "./demoScope";
+import { mockService } from "./forgeMockValues/mock-values";
+
+export const DEMO_WITHHELD = "[withheld]";
+export const demoBundleId = (env: string, version: string) => `demo-bundle-${env}-${version}`;
+export function demoBundleDigest(env: string, version: string): string {
+  // A clearly synthetic but stable per-environment/release identity. Different
+  // namespace projections must not pretend to share the same immutable bundle.
+  const envIndex = DEMO_ENVS.findIndex((e) => e.id === env) + 1;
+  const releaseIndex = DEMO_RELEASES.findIndex((r) => r.version === version) + 1;
+  return `sha256:${`${envIndex}${releaseIndex}`.repeat(32)}`;
+}
+
+export function configScenarioHandlers() {
+  return completed(DeployService, mockService(DeployService, {
+    getWorkloadConfig: (req) => {
+      const env = DEMO_ENVS.find((e) => e.id === req.environmentId);
+      const workload = DEMO_WORKLOADS.find((w) => w.name === req.workload);
+      if (!env || !workload) throw new ConnectError("No such sample workload.", Code.NotFound);
+      if (req.bundleId !== undefined && req.releaseVersion !== undefined) throw new ConnectError("Choose one sample selector.", Code.InvalidArgument);
+      const version = req.bundleId !== undefined
+        ? DEMO_RELEASES.find((r) => demoBundleId(env.id, r.version) === req.bundleId)?.version
+        : req.releaseVersion ?? RUNNING[env.id].version;
+      const releaseIndex = DEMO_RELEASES.findIndex((r) => r.version === version);
+      if (!version || releaseIndex < 0) throw new ConnectError("No such recorded sample bundle.", Code.NotFound);
+      const objects: JsonObject[] = [{
+        apiVersion: "v1", kind: "ConfigMap", metadata: { name: `${workload.name}-config`, namespace: `shop-${env.name}` },
+        data: {
+          LOG_LEVEL: env.name === "dev" ? "debug" : "info", ORDER_TIMEOUT_MS: version === "v1.8.4" ? "5000" : "2000",
+          DATABASE_URL: DEMO_WITHHELD, PAYMENTS_API_KEY: DEMO_WITHHELD,
+        },
+      }];
+      // Both public representations originate from exactly these redacted objects.
+      return {
+        environmentId: env.id, workload: workload.name, bundleId: demoBundleId(env.id, version), releaseVersion: version,
+        bundleDigest: demoBundleDigest(env.id, version),
+        objects, renderedYaml: objects.map((object) => dump(object, { sortKeys: true, lineWidth: -1 })).join("---\n"),
+        frontendConfigUnsupportedReason: workload.name === "shop-web" ? "Sample only: no deployed config.js is fetched." : "",
+      };
+    },
+  }));
+}

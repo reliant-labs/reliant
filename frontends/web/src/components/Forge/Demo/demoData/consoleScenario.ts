@@ -137,7 +137,7 @@ export const DEMO_RELEASES = [
 ] as const;
 
 /** Which release each environment runs, and when it got it. */
-const RUNNING: Record<EnvId, { version: string; age: number; by: string }> = {
+export const RUNNING: Record<EnvId, { version: string; age: number; by: string }> = {
   "env-dev": { version: "v1.8.4", age: 20 * MINUTE, by: "maya" },
   "env-staging": { version: "v1.8.3", age: 3 * HOUR, by: "jon" },
   "env-prod": { version: "v1.8.3", age: 40 * MINUTE, by: "jon" },
