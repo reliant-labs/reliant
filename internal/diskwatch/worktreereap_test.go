@@ -10,6 +10,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"google.golang.org/protobuf/proto"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
 func gitT(t *testing.T, dir string, args ...string) {
@@ -214,6 +218,42 @@ func TestWorktreeReap_ApprovalRunsAnApprovedOnlySweepBetweenPasses(t *testing.T)
 	w.reaperTick(ctx)
 	if len(passes) != 2 {
 		t.Fatalf("the same approval ran another pass: %v", passes)
+	}
+}
+
+// The gateway stores a report again when the machine's reclaim proposals
+// change (a new proposal, a changed state, a decision, a note), so the inbox
+// item lists what the machine proposes now.
+func TestReclaimProposalsChangeTheReportSignature(t *testing.T) {
+	base := &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{{Label: "home", TotalBytes: 100, FreeBytes: 50}}}
+	with := func(edit func(p *reliantv1.WorktreeReclaimProposal)) *reliantv1.DiskReport {
+		r := proto.Clone(base).(*reliantv1.DiskReport)
+		p := &reliantv1.WorktreeReclaimProposal{Key: "p-1", Fingerprint: "fp-1"}
+		if edit != nil {
+			edit(p)
+		}
+		r.WorktreeReclaim = &reliantv1.WorktreeReclaimProposals{Mode: "on", Total: 1, Proposals: []*reliantv1.WorktreeReclaimProposal{p}}
+		return r
+	}
+	sigs := map[string]string{
+		"none":     Signature(base),
+		"proposed": Signature(with(nil)),
+		"changed":  Signature(with(func(p *reliantv1.WorktreeReclaimProposal) { p.Fingerprint = "fp-2" })),
+		"decided":  Signature(with(func(p *reliantv1.WorktreeReclaimProposal) { p.Decision = "approve" })),
+		"noted":    Signature(with(func(p *reliantv1.WorktreeReclaimProposal) { p.NoteAtMs = 5 })),
+	}
+	seen := map[string]string{}
+	for name, s := range sigs {
+		if other, dup := seen[s]; dup {
+			t.Fatalf("%s and %s have the same signature", name, other)
+		}
+		seen[s] = name
+	}
+	if Signature(with(func(p *reliantv1.WorktreeReclaimProposal) { p.IdleSeconds = 99 })) != sigs["proposed"] {
+		t.Fatal("idle time drifting re-stored the report")
+	}
+	if UrgentSignature(with(nil)) == UrgentSignature(base) {
+		t.Fatal("a new proposal is not urgent")
 	}
 }
 

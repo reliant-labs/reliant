@@ -50,7 +50,8 @@ it is proposed in the report, for a person to free by hand.
 RELIANT_WORKTREE_RECLAIM sets the mode: off, dry-run (report only) or on.`,
 	}
 	reclaim := &cobra.Command{Use: "reclaim", Short: "The daemon's last reclaim report, and decisions about proposed worktrees"}
-	reclaim.AddCommand(newWorktreeReportCmd(), newWorktreeScanCmd(), newWorktreeDecideCmd(worktreereclaim.DecisionApprove), newWorktreeDecideCmd(worktreereclaim.DecisionDecline))
+	reclaim.AddCommand(newWorktreeReportCmd(), newWorktreeScanCmd(), newWorktreeDecideCmd(worktreereclaim.DecisionApprove), newWorktreeDecideCmd(worktreereclaim.DecisionDecline),
+		newWorktreeProposalsCmd(), newWorktreeNoteCmd())
 	wt.AddCommand(reclaim, newWorktreeReclaimedCmd(), newWorktreeRestoreCmd())
 	return wt
 }
@@ -176,6 +177,87 @@ proposed worktree is to be kept; an agent's shell is refused that too.`,
 			return nil
 		},
 	}
+	stateDirFlag(c, &stateDir)
+	return c
+}
+
+func newWorktreeProposalsCmd() *cobra.Command {
+	var stateDir string
+	c := &cobra.Command{
+		Use:   "proposals",
+		Short: "Print the pending proposals as JSON",
+		Long: `Print the worktrees the last pass proposes for removal and that are not yet
+reclaimed, as JSON: each one's key, fingerprint, path, branch, what its unsaved
+work is, how long it has been idle, any reviewing agent's note and any decision
+already recorded. This is what the machine's Inbox item lists.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			set, err := worktreereclaim.PendingProposals(stateDir)
+			if errors.Is(err, os.ErrNotExist) {
+				return writeJSON(cmd.OutOrStdout(), worktreereclaim.ProposalSet{Proposals: []worktreereclaim.Proposal{}})
+			}
+			if err != nil {
+				return err
+			}
+			if set.Proposals == nil {
+				set.Proposals = []worktreereclaim.Proposal{}
+			}
+			return writeJSON(cmd.OutOrStdout(), set)
+		},
+	}
+	stateDirFlag(c, &stateDir)
+	return c
+}
+
+func newWorktreeNoteCmd() *cobra.Command {
+	var stateDir, fingerprint, fromFile string
+	c := &cobra.Command{
+		Use:   "note [<key> <text>]",
+		Short: "Attach a reviewing note to proposed worktrees",
+		Long: `Attach a short assessment to a proposal: what the unsaved work looks like,
+how recently it was touched, whether it looks abandoned. The person sees it on
+the machine's Inbox item next to approve and decline. A note binds to the
+proposal's fingerprint (--fingerprint, from ` + "`proposals`" + `), so a note about a
+state that has since changed is refused. It decides nothing.
+
+--from <file> (or - for stdin) records many at once: a JSON list of
+{"key", "fingerprint", "text"}.`,
+		Args: cobra.RangeArgs(0, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			var notes []worktreereclaim.Note
+			switch {
+			case fromFile != "":
+				var raw []byte
+				var err error
+				if fromFile == "-" {
+					raw, err = io.ReadAll(cmd.InOrStdin())
+				} else {
+					raw, err = os.ReadFile(fromFile)
+				}
+				if err != nil {
+					return err
+				}
+				if err := json.Unmarshal(raw, &notes); err != nil {
+					return fmt.Errorf("--from: a JSON list of {key, fingerprint, text}: %w", err)
+				}
+			case len(args) == 2 && fingerprint != "":
+				notes = []worktreereclaim.Note{{Key: args[0], Fingerprint: fingerprint, Text: args[1]}}
+			default:
+				return errors.New("name <key> <text> with --fingerprint, or --from <file>")
+			}
+			by := "cli"
+			if os.Getenv(daemonpolicy.AgentShellEnv) != "" { //nolint:forbidigo // the marker the daemon sets on agent shells (daemonpolicy.AgentShellEnv), a process signal, not configuration
+				by = "agent"
+			}
+			got, err := worktreereclaim.RecordNotes(cmd.Context(), stateDir, notes, by)
+			for _, n := range got {
+				fmt.Fprintf(cmd.OutOrStdout(), "noted %s\n", n.Key)
+			}
+			return err
+		},
+	}
+	c.Flags().StringVar(&fingerprint, "fingerprint", "", "the proposal's fingerprint the note is about")
+	c.Flags().StringVar(&fromFile, "from", "", "read notes from this JSON file (- for stdin)")
 	stateDirFlag(c, &stateDir)
 	return c
 }

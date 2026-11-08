@@ -208,6 +208,9 @@ type SweepEntry struct {
 	Bytes        int64        `json:"bytes,omitempty"`
 	// Fingerprint binds an approval to this exact state (needs approval).
 	Fingerprint string `json:"fingerprint,omitempty"`
+	// ProposedAt is when this exact state (Fingerprint) was first proposed;
+	// carried from pass to pass while it stays the same.
+	ProposedAt time.Time `json:"proposed_at,omitempty"`
 	// Work summarizes what only this worktree holds (needs approval): the
 	// changed files and the commits on no remote.
 	Work          string `json:"work,omitempty"`
@@ -386,6 +389,7 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 	rep.Entries = entries
 	rep.Totals = totals(entries)
 	rep.FinishedAt = r.now().UTC()
+	carryProposedAt(dir, entries, rep.FinishedAt)
 
 	if len(consumed) > 0 || !opts.ApprovedOnly {
 		settleApprovals(context.WithoutCancel(ctx), dir, consumed, r.now())

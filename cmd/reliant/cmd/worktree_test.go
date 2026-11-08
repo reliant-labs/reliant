@@ -3,7 +3,10 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +58,44 @@ func TestWorktreeReclaimConfig_DefaultsToDryRun(t *testing.T) {
 	assert.Equal(t, 24*time.Hour, on.ApprovalIdle, "below the minimum is raised to it")
 
 	assert.Equal(t, worktreereclaim.SweepOff, worktreeReclaimFor(t, map[string]string{"RELIANT_WORKTREE_RECLAIM": "off"}).Mode)
+}
+
+// A reviewing agent lists the proposals and attaches notes in one call each;
+// a note is not a decision, so an agent's shell may write one.
+func TestWorktreeProposalsAndNotes(t *testing.T) {
+	t.Setenv(daemonpolicy.AgentShellEnv, "1")
+	dir := t.TempDir()
+	rep := worktreereclaim.SweepReport{Version: 1, Mode: worktreereclaim.SweepOn, FinishedAt: time.Now(), Entries: []worktreereclaim.SweepEntry{{
+		Key: "p-1", Fingerprint: "fp-1", Path: "/tmp/wt", Class: worktreereclaim.ClassNeedsApproval, Outcome: worktreereclaim.OutcomeAwaiting,
+	}}}
+	b, _ := json.Marshal(rep)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "report.json"), b, 0o600))
+	run := func(stdin string, args ...string) (string, error) {
+		root := NewRootCmd()
+		var out bytes.Buffer
+		root.SetOut(&out)
+		root.SetErr(&out)
+		root.SetIn(strings.NewReader(stdin))
+		root.SetArgs(append(args, "--state-dir", dir))
+		err := root.Execute()
+		return out.String(), err
+	}
+	out, err := run("", "worktree", "reclaim", "proposals")
+	require.NoError(t, err)
+	var set worktreereclaim.ProposalSet
+	require.NoError(t, json.Unmarshal([]byte(out), &set))
+	require.Len(t, set.Proposals, 1)
+	assert.Equal(t, "fp-1", set.Proposals[0].Fingerprint)
+
+	out, err = run(`[{"key":"p-1","fingerprint":"fp-1","text":"looks abandoned"}]`, "worktree", "reclaim", "note", "--from", "-")
+	require.NoError(t, err)
+	assert.Contains(t, out, "noted p-1")
+	_, err = run("", "worktree", "reclaim", "note", "p-1", "stale", "--fingerprint", "fp-0")
+	require.Error(t, err)
+
+	set, err = worktreereclaim.PendingProposals(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "looks abandoned", set.Proposals[0].Note)
 }
 
 // Approving a reclaim is refused to everyone: no check this command could

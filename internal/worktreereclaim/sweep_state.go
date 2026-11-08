@@ -264,28 +264,7 @@ func RecordDecisions(ctx context.Context, stateDir string, decision Decision, ke
 		}
 		add = append(add, Approval{Key: k, Path: e.Path, Fingerprint: e.Fingerprint, Decision: decision, DecidedAt: time.Now().UTC(), DecidedBy: by})
 	}
-	unlock, err := approvalsLock(ctx, dir)
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	cur, err := readApprovals(dir)
-	if err != nil {
-		return nil, err
-	}
-	// A new decision about a key replaces any earlier one.
-	drop := map[string]bool{}
-	for _, d := range add {
-		drop[d.Key] = true
-	}
-	kept := cur.Approvals[:0]
-	for _, d := range cur.Approvals {
-		if !drop[d.Key] {
-			kept = append(kept, d)
-		}
-	}
-	cur.Approvals = append(kept, add...)
-	return add, writeApprovals(dir, cur)
+	return add, storeApprovals(ctx, dir, add)
 }
 
 // PendingApprovals reports whether approvals.json holds an approval made
