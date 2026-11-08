@@ -5240,6 +5240,7 @@ reliant forge env down [environment] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--all` | `bool` | - | Stop every forge stack running on this machine, across all projects (the only way to reach a stack whose project directory is gone) |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 
 ---
 
