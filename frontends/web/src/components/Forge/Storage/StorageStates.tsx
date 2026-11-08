@@ -135,7 +135,7 @@ export function StorageError({
           canRetry || actions ? (
             <>
               {canRetry && (
-                <Button variant="outline" size="sm" onClick={onRetry} loading={retrying} disabled={retrying} leftIcon={<RefreshCw className="h-3 w-3" />}>
+                <Button variant="outline" size="sm" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0" onClick={onRetry} loading={retrying} disabled={retrying} leftIcon={<RefreshCw className="h-3 w-3" />}>
                   Try again
                 </Button>
               )}

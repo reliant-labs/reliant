@@ -91,11 +91,12 @@ export function ObjectListing({ env, bucket, search, access, onNavigate, href, o
     <div className="min-w-0 space-y-3" data-testid="storage-listing" data-prefix={prefix}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Breadcrumb bucket={bucket} prefix={prefix} link={link} />
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Narrow key={prefix} initial={narrowing} folder={folder} onNarrow={(typed) => onNavigate(patchStorageSearch(search, { prefix: folder + typed || undefined }))} />
           <Button
             variant="ghost"
             size="xs"
+            className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0"
             onClick={() => void listing.refetch()}
             disabled={listing.isFetching}
             leftIcon={<RefreshCw className={cn("h-3 w-3", listing.isFetching && "animate-spin motion-reduce:animate-none")} />}
@@ -143,7 +144,7 @@ export function ObjectListing({ env, bucket, search, access, onNavigate, href, o
           </p>
         </StorageNote>
       ) : (
-        <Card padding="none" className={cn("overflow-x-auto", listing.isPlaceholderData && "opacity-60")} aria-busy={listing.isPlaceholderData}>
+        <Card padding="none" className={cn("min-w-0 max-w-full overflow-x-auto", listing.isPlaceholderData && "opacity-60")} aria-busy={listing.isPlaceholderData}>
           <table className="min-w-full text-sm" aria-label={`${bucket}/${prefix}`} data-testid="storage-table">
             <thead>
               <tr className="text-left text-xs text-ink-muted">
@@ -168,7 +169,7 @@ export function ObjectListing({ env, bucket, search, access, onNavigate, href, o
               {page.prefixes.map((child) => (
                 <tr key={`p:${child}`} className="hover:bg-ink/5" data-testid="storage-folder" data-prefix={child}>
                   <td className="max-w-[28rem] border-b border-border/60 px-3 py-1.5">
-                    <Link href={link({ prefix: child })} className="flex min-w-0 items-center gap-2 text-ink hover:underline" title={child}>
+                    <Link href={link({ prefix: child })} className="flex min-h-[44px] min-w-0 items-center gap-2 sm:min-h-0 text-ink hover:underline" title={child}>
                       <Folder className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
                       <span className="truncate whitespace-pre font-mono">{shownSegment(entryName(prefix, child))}/</span>
                     </Link>
@@ -188,7 +189,7 @@ export function ObjectListing({ env, bucket, search, access, onNavigate, href, o
                       <Link
                         href={link({ object: object.key })}
                         aria-current={open ? "true" : undefined}
-                        className={cn("flex min-w-0 items-center gap-2 hover:underline", open ? "font-medium text-ink" : "text-ink")}
+                        className={cn("flex min-h-[44px] min-w-0 items-center gap-2 sm:min-h-0 hover:underline", open ? "font-medium text-ink" : "text-ink")}
                         title={object.key}
                       >
                         <File className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" />
@@ -224,15 +225,16 @@ export function ObjectListing({ env, bucket, search, access, onNavigate, href, o
             {number ? `Page ${number}` : "A later page"}
             {page.nextPageToken ? "" : " (the last)"}
           </span>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             {token && previous === null && (
-              <Button variant="ghost" size="xs" onClick={() => goToken("")} data-testid="storage-page-first">
+              <Button variant="ghost" size="xs" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0" onClick={() => goToken("")} data-testid="storage-page-first">
                 First page
               </Button>
             )}
             <Button
               variant="outline"
               size="xs"
+            className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0"
               onClick={() => previous !== null && goToken(previous)}
               disabled={previous === null || listing.isPlaceholderData}
               leftIcon={<ChevronLeft className="h-3 w-3" />}
@@ -243,6 +245,7 @@ export function ObjectListing({ env, bucket, search, access, onNavigate, href, o
             <Button
               variant="outline"
               size="xs"
+            className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0"
               onClick={() => {
                 setTrail(trailAfterNext(walked, token, page.nextPageToken));
                 goToken(page.nextPageToken);
@@ -268,8 +271,9 @@ function emptyTitle(bucket: string, folder: string, narrowing: string, token: st
 
 /** The bucket, then each segment of the prefix; the last is the level shown. */
 function Breadcrumb({ bucket, prefix, link }: { bucket: string; prefix: string; link: (patch: Partial<StorageSearch>) => string }) {
+  // The compact console uses a 15px rem: literal pixels keep touch targets at 44px.
   const crumbs = breadcrumbsOf(prefix);
-  const item = "inline-flex min-w-0 items-center rounded px-1 py-0.5";
+  const item = "inline-flex min-h-[44px] min-w-[44px] max-w-full items-center break-all rounded px-1 py-0.5 sm:min-h-0 sm:min-w-0";
   return (
     <nav aria-label="Folder" className="min-w-0" data-testid="storage-breadcrumb">
       <ol className="flex min-w-0 flex-wrap items-center gap-0.5 font-mono text-sm">
@@ -336,7 +340,7 @@ function Narrow({ initial, folder, onNarrow }: { initial: string; folder: string
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="Starts with…"
-          className={cn(CONTROL_FIELD, "h-7 w-48 pl-8 pr-7 font-mono text-xs")}
+          className={cn(CONTROL_FIELD, "h-[44px] w-48 max-w-full pl-8 pr-12 font-mono text-xs sm:h-7 sm:pr-7")}
           data-testid="storage-narrow-input"
         />
       </label>
@@ -344,7 +348,7 @@ function Narrow({ initial, folder, onNarrow }: { initial: string; folder: string
         <button
           type="button"
           onClick={() => onNarrow("")}
-          className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-ink-muted hover:text-ink"
+          className="absolute right-0 top-1/2 flex min-h-[44px] min-w-[44px] -translate-y-1/2 items-center justify-center rounded p-0.5 text-ink-muted hover:text-ink sm:right-1.5 sm:min-h-0 sm:min-w-0"
           aria-label="Clear the narrowing"
           data-testid="storage-narrow-clear"
         >

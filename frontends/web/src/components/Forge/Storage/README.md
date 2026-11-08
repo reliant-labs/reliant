@@ -12,6 +12,31 @@ access; `case=deny|denied|empty|shape|rate|slow` selects other states. `dark=1` 
 `scheme=pure-black` select appearance. Downloads in this harness only increment a
 counter; they never navigate to the fixture URL.
 
+## Source and verification
+
+The public clients are regenerated with `task contract:controlplane:sync` from
+control-plane **0d897467b06f718c4b5e61af6096106e6e000847**, the actual merge
+commit of CP #2150 (2026-11-08 20:25:32 UTC), not its reviewed branch head.
+`task contract:controlplane:check` reproduces that export and verifies main
+ancestry. The exporter uses CP's public API allowlist only; no private
+implementation is copied. The additive Config, Identity and Data contracts in
+that source remain intact.
+
+A real Chromium fixture check observed internal wide-table scrolling, no page
+overflow and 44px interactive targets at 320px and 390px. Literal pixels are
+deliberate: the compact console's 15px rem makes `min-h-11` only 41.25px.
+The attempted new browser harness was removed after repeated live-Vite runs
+proved unreliable; it is not a passing automated gate. Deterministic component
+tests cover empty/denied/audited states and a deferred-API loading-to-empty
+transition. These are client proofs, not evidence of live provider reads or
+server grant enforcement.
+
+Server design and release-owner acceptance/recovery remain in CP's
+`docs/storage-browser.md` and `docs/storage-browser-rollout.md` at that source.
+No deployment, reader IAM, production bucket enablement or grants are changed
+by this UI. Production functionality is not claimed before an authorized release
+and its live acceptance checks.
+
 ## API gaps
 
 The vendored StorageBrowserService is authoritative:

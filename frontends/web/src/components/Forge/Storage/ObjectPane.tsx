@@ -72,7 +72,7 @@ export function ObjectPane({ env, bucket, objectKey, access, closeHref, onConfir
             {objectKey}
           </p>
         </div>
-        <Link href={closeHref} className="shrink-0 rounded p-1 text-ink-muted hover:bg-ink/5 hover:text-ink" aria-label="Close the object" data-testid="storage-object-close">
+        <Link href={closeHref} className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded p-1 text-ink-muted hover:bg-ink/5 hover:text-ink sm:min-h-0 sm:min-w-0" aria-label="Close the object" data-testid="storage-object-close">
           <X className="h-4 w-4" />
         </Link>
       </div>
@@ -95,6 +95,7 @@ export function ObjectPane({ env, bucket, objectKey, access, closeHref, onConfir
               <Button
                 variant="primary"
                 size="sm"
+                className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0"
                 onClick={startDownload}
                 loading={download.isPending}
                 disabled={download.isPending}
@@ -241,7 +242,7 @@ function ImagePreview({ preview, alt, onReload }: { preview: StoragePreview; alt
         icon={<ImageOff className="h-4 w-4" />}
         title="The image didn't load"
         actions={
-          <Button variant="outline" size="sm" onClick={() => { setFailed(null); onReload(); }} leftIcon={<RefreshCw className="h-3 w-3" />}>
+          <Button variant="outline" size="sm" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0" onClick={() => { setFailed(null); onReload(); }} leftIcon={<RefreshCw className="h-3 w-3" />}>
             Load again
           </Button>
         }

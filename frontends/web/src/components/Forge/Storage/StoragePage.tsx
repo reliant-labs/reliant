@@ -32,7 +32,7 @@ import { pickStorageSearch, type StorageSearch } from "./storageUrl-model";
 
 function Frame({ children }: { children: ReactNode }) {
   return (
-    <div className="space-y-4" data-testid="console-storage">
+    <div className="min-w-0 space-y-4" data-testid="console-storage">
       <PageHeader density="compact" title="Storage" className="mb-0" />
       {children}
     </div>
@@ -79,7 +79,7 @@ export function StoragePage() {
           icon={<Layers className="h-4 w-4" />}
           title="Choose an environment"
           actions={recorded.map((candidate) => (
-            <Button key={candidate.name} variant="outline" size="sm" onClick={() => setEnv(candidate.name)} data-testid={`storage-env-${candidate.name}`}>
+            <Button key={candidate.name} variant="outline" size="sm" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0" onClick={() => setEnv(candidate.name)} data-testid={`storage-env-${candidate.name}`}>
               {candidate.name}
             </Button>
           ))}

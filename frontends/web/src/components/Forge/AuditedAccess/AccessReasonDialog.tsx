@@ -61,11 +61,11 @@ export function AccessReasonDialog({
       description={description}
       size="md"
       footer={
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onCancel} data-testid={`${testIdPrefix}-access-cancel`}>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0" onClick={onCancel} data-testid={`${testIdPrefix}-access-cancel`}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={submit} disabled={!valid} data-testid={`${testIdPrefix}-access-confirm`}>
+          <Button variant="primary" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0" onClick={submit} disabled={!valid} data-testid={`${testIdPrefix}-access-confirm`}>
             Read {env}&apos;s {subject}
           </Button>
         </div>

@@ -70,7 +70,7 @@ export function BucketSelector({ buckets, selected, onSelect }: { buckets: Stora
               onClick={() => onSelect(bucket.name)}
               data-testid={`storage-bucket-${bucket.name}`}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors",
+                "inline-flex min-h-[44px] min-w-[44px] max-w-full items-center gap-1.5 rounded-md px-2.5 py-1 text-sm transition-colors sm:min-h-0 sm:min-w-0",
                 bucket.reachable ? segmentTone(on) : "cursor-not-allowed text-ink-subtle"
               )}
             >

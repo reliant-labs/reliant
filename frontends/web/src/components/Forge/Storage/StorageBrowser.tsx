@@ -132,7 +132,7 @@ export function StorageBrowser({ env, search, onNavigate, href, onDownloadUrl = 
   const readable = !!selected && selected.name === search.bucket && selected.reachable && !isDenied(policy);
 
   return (
-    <div className="space-y-4" data-testid="storage-browser" data-env={env.name} data-bucket={selected?.name ?? ""}>
+    <div className="min-w-0 space-y-4" data-testid="storage-browser" data-env={env.name} data-bucket={selected?.name ?? ""}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <BucketSelector buckets={buckets} selected={selected?.name ?? null} onSelect={(name) => go(patchStorageSearch(search, { bucket: name }))} />
         <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
@@ -142,7 +142,7 @@ export function StorageBrowser({ env, search, onNavigate, href, onDownloadUrl = 
               <span className="max-w-[24rem] truncate" title={access.reason}>
                 Reading as: <span className="text-ink">{access.reason}</span>
               </span>
-              <button type="button" className="text-primary-ink hover:underline" onClick={() => setAsking(true)} data-testid="storage-reason-change">
+              <button type="button" className="min-h-[44px] min-w-[44px] text-primary-ink hover:underline sm:min-h-0 sm:min-w-0" onClick={() => setAsking(true)} data-testid="storage-reason-change">
                 Change
               </button>
             </span>
@@ -179,7 +179,7 @@ export function StorageBrowser({ env, search, onNavigate, href, onDownloadUrl = 
           icon={<ShieldCheck className="h-4 w-4" />}
           title={`${env.name} is audited: reads need a reason`}
           actions={
-            <Button variant="primary" size="sm" onClick={() => setAsking(true)} data-testid="storage-give-reason">
+            <Button variant="primary" size="sm" className="min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0" onClick={() => setAsking(true)} data-testid="storage-give-reason">
               Give a reason
             </Button>
           }
