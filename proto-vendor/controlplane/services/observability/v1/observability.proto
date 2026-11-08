@@ -55,8 +55,8 @@ service ObservabilityService {
   }
 
   // ListTraces returns one summary row per trace in the range (root span, total
-  // duration, span and error counts, services touched) plus a RED summary of
-  // the matched traces. Max range 7 days.
+  // duration, span and error counts, services touched) plus, on the first
+  // page, a RED summary of the matched traces. Max range 7 days.
   rpc ListTraces(ListTracesRequest) returns (ListTracesResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -697,9 +697,12 @@ message ListTracesResponse {
   repeated TraceSummary traces = 1;
   string next_page_token = 2;
   // RED summary of the matched traces in the range (not just this page).
+  // Populated on the first page only (an empty request.page_token): it covers
+  // the whole range, so a cursor page leaves it unset rather than recompute it.
   TraceRedSummary red = 3;
   // One RED summary per distinct group (request.group_by), busiest first, at
-  // most 50. Empty without group_by.
+  // most 50. Empty without group_by, and on every page after the first (as
+  // red).
   repeated TraceRedGroup red_groups = 4;
 }
 
@@ -1666,13 +1669,15 @@ message QueryPanelResponse {
   // with `value` set over the whole range (metrics panels: the most recent
   // bucket's value); an ungrouped number panel also fills `points`, a short
   // series over the range for a sparkline (step_seconds wide).
-  // sql panels whose first column is a time: one entry per (numeric column x
-  // group of the string columns), with points.
+  // sql panels folded as a time series (draw "line"; by default, when the first
+  // column is a time): one entry per (numeric column x group of the string
+  // columns), with points.
   repeated PanelSeriesResult series = 4;
   // table and bar panels: the columns after the group-by columns, in series
   // order, heaviest group first (bar: at most panel.limit, default 10).
-  // sql panels that are not a time series: the numeric columns; each row's
-  // group holds the other columns by name.
+  // sql panels that are not a time series (Panel.draw "table" asks for this
+  // whatever the columns): the numeric columns; each row's group holds the
+  // other columns by name, so sql_columns gives every row back in SELECT order.
   repeated string columns = 5;
   repeated PanelTableRow rows = 6;
   int32 step_seconds = 7;
@@ -1725,6 +1730,11 @@ message QueryPanelResponse {
   // (a sql panel's statement included), so a caller can record exactly what
   // its numbers came from. Unset when the request sent the panel itself.
   Panel panel = 20;
+  // sql panels: what the result was folded as, "line", "number", "table" or
+  // "bar" (Panel.draw resolved against the result's columns). "line" fills
+  // series; every other draw fills columns and rows. Empty with explain, for
+  // every other kind, and from a server older than Panel.draw.
+  string draw = 21;
 }
 
 // What one PanelSeriesResult of a metrics panel measures, so a client can
@@ -1951,6 +1961,13 @@ message Panel {
   string sql = 18;
   // Optional declared presentation section; no implicit query filtering.
   string section = 19;
+  // sql panels only: how the result is folded, as QueryDatabasePanelRequest's
+  // draw: "auto" (or empty), "line", "number", "table" or "bar". "line" folds
+  // to series over the first date or time column; anything but "line" folds to
+  // rows (sql_columns, columns and rows of the response), whatever the column
+  // types. Empty or "auto" is a time series when the first column is a time
+  // (and something follows it), rows otherwise. Refused on other kinds.
+  string draw = 20 [(buf.validate.field).string.max_len = 16];
 }
 
 // The definition a funnel panel draws (forge.Funnel): product event names in

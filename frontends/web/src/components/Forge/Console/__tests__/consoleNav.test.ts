@@ -19,17 +19,26 @@ const ENVS = [
 ];
 
 describe("buildConsoleNav", () => {
-  it("is Overview, Releases, Observability ›, then Configure, with Activity pinned last", () => {
+  it("is Overview, Releases, Observability ›, Storage, then Configure, with Activity pinned last", () => {
     const { items, footer } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS });
     expect(items.map((item) => [item.label, item.section ?? ""])).toEqual([
       ["Overview", ""],
       ["Releases", ""],
       ["Observability", ""],
+      ["Storage", ""],
       ["Environments", "Configure"],
       ["Secrets", "Configure"],
       ["Domains", "Configure"],
     ]);
     expect(footer.map((item) => item.label)).toEqual(["Activity"]);
+  });
+
+  it("links Storage with the scope, lights it on its page, and crumbs it", () => {
+    const { items } = buildConsoleNav({ project: "shop", page: { kind: "storage" }, env: "staging", envs: ENVS });
+    const storage = items.find((item) => item.label === "Storage")!;
+    expect(storage.href).toBe("/forge/p/shop/storage?env=staging");
+    expect(storage.active).toBe(true);
+    expect(consoleCrumbs("shop", { kind: "storage" }, "staging")).toEqual([{ label: "Storage" }]);
   });
 
   it("opens Observability on Dashboards from its row: it has no home of its own", () => {

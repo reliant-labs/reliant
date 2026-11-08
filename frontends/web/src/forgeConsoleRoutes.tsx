@@ -17,6 +17,7 @@
  *       /releases, /releases/$version
  *       /observability/$view
  *       /observability/dashboards, /observability/dashboards/$kind/$key
+ *       /storage                            the storage browser (the scope's buckets)
  *       /environments, /environments/$env
  *       /secrets, /domains, /activity
  *       /observability, /monitoring, /settings → retired, redirected (paths.ts)
@@ -39,6 +40,7 @@ import {
   forgeConsoleReleasesSearchSchema,
   forgeConsoleSearchSchema,
   forgeConsoleSecretsSearchSchema,
+  forgeConsoleStorageSearchSchema,
   forgeConsoleWorkloadSearchSchema,
   forgeLegacyEnvSearchSchema,
   forgeLegacySearchSchema,
@@ -60,6 +62,8 @@ export interface ForgeConsoleComponents {
   /** Observability › Dashboards, and one dashboard. */
   dashboards: RouteComponent
   dashboard: RouteComponent
+  /** Storage: the scoped environment's buckets, read-only. */
+  storage: RouteComponent
   environments: RouteComponent
   environment: RouteComponent
   secrets: RouteComponent
@@ -208,6 +212,13 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     },
     component: components.dashboard,
   })
+  // The storage browser: the scoped environment's buckets (components/Forge/Storage).
+  const storageRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'storage',
+    validateSearch: forgeConsoleStorageSearchSchema,
+    component: components.storage,
+  })
   const environmentsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: 'environments',
@@ -275,6 +286,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       observabilityViewRoute,
       dashboardsRoute,
       dashboardRoute,
+      storageRoute,
       environmentsRoute,
       environmentRoute,
       secretsRoute,

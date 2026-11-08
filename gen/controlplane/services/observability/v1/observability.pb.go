@@ -3192,9 +3192,12 @@ type ListTracesResponse struct {
 	Traces        []*TraceSummary `protobuf:"bytes,1,rep,name=traces,proto3" json:"traces,omitempty"`
 	NextPageToken string          `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	// RED summary of the matched traces in the range (not just this page).
+	// Populated on the first page only (an empty request.page_token): it covers
+	// the whole range, so a cursor page leaves it unset rather than recompute it.
 	Red *TraceRedSummary `protobuf:"bytes,3,opt,name=red,proto3" json:"red,omitempty"`
 	// One RED summary per distinct group (request.group_by), busiest first, at
-	// most 50. Empty without group_by.
+	// most 50. Empty without group_by, and on every page after the first (as
+	// red).
 	RedGroups     []*TraceRedGroup `protobuf:"bytes,4,rep,name=red_groups,json=redGroups,proto3" json:"red_groups,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -7806,13 +7809,15 @@ type QueryPanelResponse struct {
 	// with `value` set over the whole range (metrics panels: the most recent
 	// bucket's value); an ungrouped number panel also fills `points`, a short
 	// series over the range for a sparkline (step_seconds wide).
-	// sql panels whose first column is a time: one entry per (numeric column x
-	// group of the string columns), with points.
+	// sql panels folded as a time series (draw "line"; by default, when the first
+	// column is a time): one entry per (numeric column x group of the string
+	// columns), with points.
 	Series []*PanelSeriesResult `protobuf:"bytes,4,rep,name=series,proto3" json:"series,omitempty"`
 	// table and bar panels: the columns after the group-by columns, in series
 	// order, heaviest group first (bar: at most panel.limit, default 10).
-	// sql panels that are not a time series: the numeric columns; each row's
-	// group holds the other columns by name.
+	// sql panels that are not a time series (Panel.draw "table" asks for this
+	// whatever the columns): the numeric columns; each row's group holds the
+	// other columns by name, so sql_columns gives every row back in SELECT order.
 	Columns     []string         `protobuf:"bytes,5,rep,name=columns,proto3" json:"columns,omitempty"`
 	Rows        []*PanelTableRow `protobuf:"bytes,6,rep,name=rows,proto3" json:"rows,omitempty"`
 	StepSeconds int32            `protobuf:"varint,7,opt,name=step_seconds,json=stepSeconds,proto3" json:"step_seconds,omitempty"`
@@ -7864,7 +7869,12 @@ type QueryPanelResponse struct {
 	// With QueryPanelRequest.panel_ref: the panel the server ran, as it holds it
 	// (a sql panel's statement included), so a caller can record exactly what
 	// its numbers came from. Unset when the request sent the panel itself.
-	Panel         *Panel `protobuf:"bytes,20,opt,name=panel,proto3" json:"panel,omitempty"`
+	Panel *Panel `protobuf:"bytes,20,opt,name=panel,proto3" json:"panel,omitempty"`
+	// sql panels: what the result was folded as, "line", "number", "table" or
+	// "bar" (Panel.draw resolved against the result's columns). "line" fills
+	// series; every other draw fills columns and rows. Empty with explain, for
+	// every other kind, and from a server older than Panel.draw.
+	Draw          string `protobuf:"bytes,21,opt,name=draw,proto3" json:"draw,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8037,6 +8047,13 @@ func (x *QueryPanelResponse) GetPanel() *Panel {
 		return x.Panel
 	}
 	return nil
+}
+
+func (x *QueryPanelResponse) GetDraw() string {
+	if x != nil {
+		return x.Draw
+	}
+	return ""
 }
 
 // What one PanelSeriesResult of a metrics panel measures, so a client can
@@ -9175,7 +9192,14 @@ type Panel struct {
 	// {envs:Array(String)} and {services:Array(String)}.
 	Sql string `protobuf:"bytes,18,opt,name=sql,proto3" json:"sql,omitempty"`
 	// Optional declared presentation section; no implicit query filtering.
-	Section       string `protobuf:"bytes,19,opt,name=section,proto3" json:"section,omitempty"`
+	Section string `protobuf:"bytes,19,opt,name=section,proto3" json:"section,omitempty"`
+	// sql panels only: how the result is folded, as QueryDatabasePanelRequest's
+	// draw: "auto" (or empty), "line", "number", "table" or "bar". "line" folds
+	// to series over the first date or time column; anything but "line" folds to
+	// rows (sql_columns, columns and rows of the response), whatever the column
+	// types. Empty or "auto" is a time series when the first column is a time
+	// (and something follows it), rows otherwise. Refused on other kinds.
+	Draw          string `protobuf:"bytes,20,opt,name=draw,proto3" json:"draw,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9339,6 +9363,13 @@ func (x *Panel) GetSql() string {
 func (x *Panel) GetSection() string {
 	if x != nil {
 		return x.Section
+	}
+	return ""
+}
+
+func (x *Panel) GetDraw() string {
+	if x != nil {
+		return x.Draw
 	}
 	return ""
 }
@@ -11736,7 +11767,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x18\n" +
 	"\anumeric\x18\x03 \x01(\bR\anumeric\x12\x12\n" +
-	"\x04time\x18\x04 \x01(\bR\x04time\"\x94\a\n" +
+	"\x04time\x18\x04 \x01(\bR\x04time\"\xa8\a\n" +
 	"\x12QueryPanelResponse\x12\x19\n" +
 	"\bpanel_id\x18\x01 \x01(\tR\apanelId\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
@@ -11760,7 +11791,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\bwarnings\x18\x11 \x03(\tR\bwarnings\x12%\n" +
 	"\x0ebucket_seconds\x18\x12 \x01(\x05R\rbucketSeconds\x12'\n" +
 	"\x0fbucket_timezone\x18\x13 \x01(\tR\x0ebucketTimezone\x12,\n" +
-	"\x05panel\x18\x14 \x01(\v2\x16.controlplane.v1.PanelR\x05panel\"\xbe\x02\n" +
+	"\x05panel\x18\x14 \x01(\v2\x16.controlplane.v1.PanelR\x05panel\x12\x12\n" +
+	"\x04draw\x18\x15 \x01(\tR\x04draw\"\xbe\x02\n" +
 	"\x0fPanelSeriesMeta\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x16\n" +
 	"\x06metric\x18\x02 \x01(\tR\x06metric\x12<\n" +
@@ -11863,7 +11895,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\tpanel_ids\x18\x05 \x03(\tR\bpanelIds\"C\n" +
 	"\x13DashboardAnnotation\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x14\n" +
-	"\x05label\x18\x02 \x01(\tR\x05label\"\xa4\x04\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\"\xb8\x04\n" +
 	"\x05Panel\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12 \n" +
@@ -11884,7 +11916,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\aformula\x18\x10 \x01(\tR\aformula\x12\x14\n" +
 	"\x05limit\x18\x11 \x01(\x05R\x05limit\x12\x10\n" +
 	"\x03sql\x18\x12 \x01(\tR\x03sql\x12\x18\n" +
-	"\asection\x18\x13 \x01(\tR\asection\"K\n" +
+	"\asection\x18\x13 \x01(\tR\asection\x12\x12\n" +
+	"\x04draw\x18\x14 \x01(\tR\x04draw\"K\n" +
 	"\vPanelFunnel\x12\x14\n" +
 	"\x05steps\x18\x01 \x03(\tR\x05steps\x12\x16\n" +
 	"\x06window\x18\x02 \x01(\tR\x06window\x12\x0e\n" +

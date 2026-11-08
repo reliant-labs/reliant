@@ -99,8 +99,8 @@ type ObservabilityServiceClient interface {
 	// default, with cursor pagination. Max range 7 days.
 	SearchLogs(context.Context, *connect.Request[v1.SearchLogsRequest]) (*connect.Response[v1.SearchLogsResponse], error)
 	// ListTraces returns one summary row per trace in the range (root span, total
-	// duration, span and error counts, services touched) plus a RED summary of
-	// the matched traces. Max range 7 days.
+	// duration, span and error counts, services touched) plus, on the first
+	// page, a RED summary of the matched traces. Max range 7 days.
 	ListTraces(context.Context, *connect.Request[v1.ListTracesRequest]) (*connect.Response[v1.ListTracesResponse], error)
 	// GetTrace returns every span of one trace, for the waterfall. Max range 7
 	// days (the traces TTL).
@@ -479,8 +479,8 @@ type ObservabilityServiceHandler interface {
 	// default, with cursor pagination. Max range 7 days.
 	SearchLogs(context.Context, *connect.Request[v1.SearchLogsRequest]) (*connect.Response[v1.SearchLogsResponse], error)
 	// ListTraces returns one summary row per trace in the range (root span, total
-	// duration, span and error counts, services touched) plus a RED summary of
-	// the matched traces. Max range 7 days.
+	// duration, span and error counts, services touched) plus, on the first
+	// page, a RED summary of the matched traces. Max range 7 days.
 	ListTraces(context.Context, *connect.Request[v1.ListTracesRequest]) (*connect.Response[v1.ListTracesResponse], error)
 	// GetTrace returns every span of one trace, for the waterfall. Max range 7
 	// days (the traces TTL).

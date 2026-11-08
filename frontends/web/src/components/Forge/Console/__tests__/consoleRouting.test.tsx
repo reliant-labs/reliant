@@ -217,6 +217,7 @@ function renderAt(initialEntry: string) {
     observabilityView: probe("observability-view"),
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
+    storage: probe("storage"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
@@ -425,6 +426,20 @@ describe("the environment scope", () => {
     await user.click(screen.getByTestId("env-scope-more"));
     await user.click(within(screen.getByRole("menu")).getByRole("menuitemradio", { name: "pr-7" }));
     await landsOn(router, "/forge/p/alpha/releases", { env: "pr-7" });
+  });
+
+  it("routes the storage browser, keeping its view in the URL as text", async () => {
+    const router = renderAt(
+      `/forge/p/alpha/storage?env=e2e&bucket=uploads&prefix=${encodeURIComponent('"2026/"')}&object=${encodeURIComponent('"2026/a b%#?.png"')}&token=opaque-1`
+    );
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
+    await landsOn(router, "/forge/p/alpha/storage", { env: "e2e", bucket: "uploads", prefix: "2026/", object: "2026/a b%#?.png", token: "opaque-1" });
+  });
+
+  it("reads a numeric-looking key back as the text it is", async () => {
+    const router = renderAt("/forge/p/alpha/storage?env=e2e&bucket=uploads&prefix=2026");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
+    await landsOn(router, "/forge/p/alpha/storage", { env: "e2e", bucket: "uploads", prefix: "2026" });
   });
 
   it("is left alone on a page that pins its own environment", async () => {
