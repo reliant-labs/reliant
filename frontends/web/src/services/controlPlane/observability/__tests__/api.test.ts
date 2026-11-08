@@ -20,7 +20,7 @@ import {
   WorkloadPodState,
   WorkloadReleaseBasis,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
-import { WorkloadKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
+import { DeclaredSpecGap, WorkloadKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
 import {
   composeLogQuery,
@@ -576,6 +576,7 @@ describe("workloads: the server's verdict, pods, jobs and the declaration", () =
       name: "api",
       kind: "statefulset",
       specRecorded: true,
+      specGap: null,
       replicas: 2,
       cpuRequestMillicores: 250,
       cpuLimitMillicores: 1000,
@@ -589,5 +590,24 @@ describe("workloads: the server's verdict, pods, jobs and the declaration", () =
       sourceCommit: "992bb09",
       bundleId: "b1",
     });
+  });
+
+  it.each([
+    [DeclaredSpecGap.PENDING, "pending"],
+    [DeclaredSpecGap.UNREADABLE, "unreadable"],
+    [DeclaredSpecGap.NOT_IN_MANIFESTS, "not-in-manifests"],
+    [DeclaredSpecGap.UNSPECIFIED, "unknown"],
+  ] as const)("says why a declared spec is not recorded (%s → %s)", async (gap, want) => {
+    client.getWorkload.mockResolvedValue({
+      stepSeconds: 60,
+      truncated: false,
+      series: [],
+      events: [],
+      imageChanges: [],
+      versionChanges: [],
+      workloads: [wire({ declared: { name: "api", kind: WorkloadKind.DEPLOYMENT, specRecorded: false, specGap: gap, envNames: [], ports: [] } })],
+    });
+    const detail = await getWorkload({ ...env, window, workload: "api" });
+    expect(detail.workloads[0]!.declared).toMatchObject({ specRecorded: false, specGap: want });
   });
 });

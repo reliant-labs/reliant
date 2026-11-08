@@ -58,6 +58,6 @@ describe('ApiKeySetupModal OAuth cancellation', () => {
     render(<ApiKeySetupModal />)
 
     expect(screen.queryByText('Reliant')).not.toBeInTheDocument()
-    expect(screen.getByText(/sync your Reliant access automatically/i)).toBeInTheDocument()
+    expect(screen.getByText(/Choose a provider to sign in or add an API key/i)).toBeInTheDocument()
   })
 })

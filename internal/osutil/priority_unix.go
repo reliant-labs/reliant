@@ -26,7 +26,7 @@ import (
 // too. The check is made per process, never once for the group: one
 // setpriority(PRIO_PGRP) would set every member to ChildNiceValue, raising a
 // member that already runs nicer. So the leader is lowered on its own, then
-// each other live member the process table lists (GroupMembers; Linux). Where
+// each other live member the process table lists (GroupMembers; Linux, macOS). Where
 // the table cannot be read only the leader is lowered; the grandchildren it
 // forks after this call inherit its niceness anyway.
 //

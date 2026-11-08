@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2025 Reliant Labs
 
 /**
@@ -33,7 +34,10 @@ describe("the scaffold fixtures", () => {
     expect(script).toContain(`export const CAST_SCHEMA = "${CAST_SCHEMA}";`);
     expect(script).toContain(`export const MANIFEST_SCHEMA = "${MANIFEST_SCHEMA}";`);
     expect(script).toContain(`const PRODUCER = "${CAPTURE_PRODUCER}";`);
-    expect(read(CAPTURE_PRODUCER.replace(/^frontends\/web\//, ""))).toContain("capture-forge-scaffold.mjs");
+    // Named as a literal, not read through CAPTURE_PRODUCER, so the merge
+    // gate's reader scan (tools/test-affected) runs this test when it changes.
+    expect(CAPTURE_PRODUCER).toBe("frontends/web/scripts/demo/capture-forge-scaffold.sh");
+    expect(read("scripts/demo/capture-forge-scaffold.sh")).toContain("capture-forge-scaffold.mjs");
 
     const { cast, manifest } = scaffoldFixtures();
     for (const fixture of [cast, manifest]) {

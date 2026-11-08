@@ -245,12 +245,10 @@ describe("the forge demo console", () => {
       const banner = await screen.findByTestId("forge-demo-banner", {}, { timeout: 15_000 });
       expect(banner).toHaveTextContent("Nothing you click here changes anything.");
       expect(within(banner).queryByTestId("forge-demo-exit")).toBeNull();
-      expect(within(banner).getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("/auth?utm_source=demo&utm_medium=banner"));
+      expect(within(banner).queryByTestId("demo-cta-signup")).toBeNull();
       expect(within(banner).getByTestId("forge-demo-telemetry-notice")).toHaveTextContent("This demo records usage and session replays to improve the product.");
-      await user.click(within(banner).getByTestId("demo-cta-install"));
-      const sheet = await screen.findByTestId("demo-install-sheet");
-      expect(sheet).toHaveTextContent("brew install reliant-labs/reliant/forge");
-      expect(sheet).toHaveTextContent("forge start");
+      expect(within(banner).queryByTestId("demo-cta-install")).toBeNull();
+      void user; // Screen actions are mounted by DemoTips at the shell root, not the banner.
       expectNothingTouched();
     }, 30_000);
   });

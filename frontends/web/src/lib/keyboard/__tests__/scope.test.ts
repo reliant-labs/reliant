@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Every shortcut declares what it does off the workspace.
  *

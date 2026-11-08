@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HANDOFF_TTL_MS, useComposerHandoffStore } from "../composerHandoffStore";

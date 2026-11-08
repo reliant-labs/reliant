@@ -65,6 +65,7 @@ export class SettingsSyncService {
   private settingsAppliedToDOM = false;
   private settingsCache = new Map<string, Setting>();
   private initPromise: Promise<void> | null = null;
+  private initListeners = new Set<() => void>();
 
   /**
    * Initialize the settings sync service by loading all settings from the database
@@ -124,11 +125,18 @@ export class SettingsSyncService {
         }
 
         this.initialized = true;
-        logger.info(`[SettingsSync] ✅ Settings loaded successfully: ${loadedCount} settings from database`);
+        // Only the appearance/toolcalls/notifications keys are mirrored into
+        // localStorage; the rest stay in the cache above. Say both numbers, or
+        // "Received 6" followed by "loaded 0" reads like a failure.
+        logger.info(
+          `[SettingsSync] ✅ Applied ${loadedCount} of ${settings.length} settings to localStorage (appearance/toolcalls/notifications)`,
+        );
         if (appearanceSettings.length > 0) {
           logger.info(`[SettingsSync] Appearance settings found: ${appearanceSettings.join(', ')}`);
         } else {
-          logger.warn(`[SettingsSync] ⚠️ No appearance settings found in database! Will use localStorage values.`);
+          // The normal case for a user who never changed an appearance
+          // setting, so not a warning.
+          logger.info(`[SettingsSync] No saved appearance settings; keeping localStorage/default values`);
         }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
@@ -162,6 +170,40 @@ export class SettingsSyncService {
     };
     
     await attemptLoad();
+    this.notifyInitialized();
+  }
+
+  /**
+   * Run `listener` once initialization has completed — immediately if it
+   * already has. Returns an unsubscribe.
+   *
+   * Initialization happens after sign-in (AuthInitializer), well after the
+   * app's first render, so a reader that only checks isInitialized() on mount
+   * always finds it false. This is how such a reader waits without polling,
+   * and without starting the authenticated ListSettings itself (initialize()
+   * would, even on the sign-in screen).
+   */
+  onInitialized(listener: () => void): () => void {
+    if (this.initialized) {
+      listener();
+      return () => {};
+    }
+    this.initListeners.add(listener);
+    return () => {
+      this.initListeners.delete(listener);
+    };
+  }
+
+  private notifyInitialized(): void {
+    const listeners = [...this.initListeners];
+    this.initListeners.clear();
+    for (const listener of listeners) {
+      try {
+        listener();
+      } catch (error) {
+        logger.error("[SettingsSync] Initialization listener failed:", error);
+      }
+    }
   }
 
   /**
@@ -376,7 +418,9 @@ export class SettingsSyncService {
     const hasColorScheme = localStorage.getItem(SETTINGS_KEYS.COLOR_SCHEME);
     
     if (!hasTheme && !hasColorScheme) {
-      logger.warn('[SettingsSync] No appearance settings found in localStorage - using defaults. Settings may not have loaded from database.');
+      // A user who never picked a theme has neither: not a warning. A failed
+      // database load is logged where it fails, in initialize().
+      logger.debug('[SettingsSync] No theme or color scheme saved - using defaults');
     }
 
 

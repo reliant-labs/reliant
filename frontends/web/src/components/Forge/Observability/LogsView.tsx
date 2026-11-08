@@ -436,7 +436,7 @@ function LogList({
   };
 
   return (
-    <Card padding="none" className="overflow-hidden">
+    <Card padding="none" className="overflow-hidden" data-testid="obs-logs-table">
       <div
         aria-hidden="true"
         className={cn(ROW_GRID, "border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-ink-muted max-md:hidden")}

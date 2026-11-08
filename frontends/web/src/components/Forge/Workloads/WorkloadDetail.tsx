@@ -12,8 +12,9 @@
  *   tabs     Overview (requests, errors, CPU and memory against their limits,
  *            each with release markers; pods), Logs / Traces / Profiles (the
  *            existing explorers, pre-filtered to this workload), Events,
- *            History (versions and images over the window), Config (the
- *            declared spec: source, resources, ports, env var NAMES).
+ *            History (the releases that moved it here, with what changed in
+ *            it; versions and images over the window), Config (the declared
+ *            spec: source, resources, ports, env var NAMES).
  *   rail     provenance, rollout history, recent events, jump-to.
  *
  * A Job or CronJob has no pods to restart or replicas to scale: its page shows
@@ -81,10 +82,14 @@ import {
   lastExitOf,
   podAgeMs,
   replicasText,
+  specGapNote,
   WORKLOAD_TABS,
+  workloadReleaseRows,
   type DeployHistoryEntry,
+  type WorkloadReleaseRow,
   type WorkloadTab,
 } from "./workloadModel";
+import { WorkloadReleases } from "./WorkloadReleases";
 import { ActionDialog, DriftTag, HealthStatus, WorkloadRelease } from "./workloadParts";
 import { OVERVIEW_RANGE } from "./OverviewHome";
 import { eventHeadline, eventRawReason, exitPhrase, jobFailurePhrase, plainErrorText } from "./plainHealth";
@@ -314,7 +319,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
                 <OverviewTab scope={scope} range={range} env={env} name={name} detail={detail.data ?? null} summary={summary} onLogs={() => onSearch({ tab: "logs", range: search.range })} />
               ))}
             {tab === "events" && <EventsPanel events={detail.data?.events ?? []} range={range} />}
-            {tab === "history" && <HistoryTab detail={detail.data ?? null} envId={env.id} runs={runs} history={history} hrefs={hrefs} />}
+            {tab === "history" && <HistoryTab project={project} env={env} name={name} detail={detail.data ?? null} runs={runs} history={history} hrefs={hrefs} />}
             {tab === "config" && <ConfigTab summary={summary} env={env.name} />}
           </div>
           <Rail
@@ -339,6 +344,8 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
 /** This workload's deploy history in the environment: the ledger, the promoters' names and cut order, joined. */
 interface DeployHistory {
   entries: DeployHistoryEntry[];
+  /** The same promotions with what the History tab's Releases panel shows of each. */
+  rows: WorkloadReleaseRow[];
   loading: boolean;
   failed: boolean;
 }
@@ -348,11 +355,11 @@ function useDeployHistory(project: string, envId: string, name: string): DeployH
   const ledger = ledgers.get(envId);
   const releases = useProjectReleases(project);
   const names = usePromoterNames(project);
-  const entries = useMemo(() => {
+  const { entries, rows } = useMemo(() => {
     const rank = new Map((releases.data ?? []).map((r, index) => [r.version, index]));
-    return deployHistory(ledger?.data ?? [], name, rank, names);
+    return { entries: deployHistory(ledger?.data ?? [], name, rank, names), rows: workloadReleaseRows(ledger?.data ?? [], name, rank, names) };
   }, [ledger?.data, releases.data, name, names]);
-  return { entries, loading: !!ledger?.isLoading, failed: !!ledger?.error };
+  return { entries, rows, loading: !!ledger?.isLoading, failed: !!ledger?.error };
 }
 
 // ── Header ──────────────────────────────────────────────────────────────────
@@ -1182,25 +1189,28 @@ function EventsPanel({ events, range }: { events: WorkloadEvent[]; range: RangeP
 }
 
 function HistoryTab({
+  project,
+  env,
+  name,
   detail,
-  envId,
   runs,
   history,
   hrefs,
 }: {
+  project: string;
+  env: { id: string; name: string };
+  name: string;
   detail: WorkloadDetailData | null;
-  envId: string;
   runs: WorkloadJob[];
   history: DeployHistory;
   hrefs: WorkloadDetailHrefs;
 }) {
+  const envId = env.id;
   const versions = [...(detail?.versionChanges ?? [])].filter((v) => v.envId === envId).reverse();
   const images = [...(detail?.imageChanges ?? [])].filter((c) => c.envId === envId).reverse();
   return (
     <>
-      <Panel title="Release history" meta="Promotion history lives with each release" testId="workload-history-deploys">
-        <ReleaseHistoryLinks history={history} hrefs={hrefs} />
-      </Panel>
+      <WorkloadReleases project={project} env={env} workload={name} rows={history.rows} loading={history.loading} failed={history.failed} releaseHref={hrefs.release} />
       <Panel title="Versions" meta="The service.version it reported, newest first" testId="workload-history-versions">
         {versions.length === 0 ? (
           <p className="text-sm text-ink-muted">It reported no version in the window.</p>
@@ -1258,7 +1268,7 @@ function ConfigTab({ summary, env }: { summary: Workload | null; env: string }) 
     <>
       {!declared.specRecorded && (
         <Note tone="neutral" testId="workload-config-partial">
-          This bundle was recorded before specs were: only the name, kind and replicas are known. The next deploy records the rest.
+          {specGapNote(declared.specGap, declared.name, env)}
         </Note>
       )}
       <Panel title="Declared spec" meta="From the recorded bundle; names and numbers only" testId="workload-config">
@@ -1481,23 +1491,6 @@ function Rail({
         </nav>
       </Panel>
     </aside>
-  );
-}
-
-/** Contextual, de-duplicated release links — not another promotion event feed. */
-function ReleaseHistoryLinks({ history, hrefs }: { history: DeployHistory; hrefs: WorkloadDetailHrefs }) {
-  if (history.loading) return <p className="text-xs text-ink-muted" aria-busy="true">Loading release links…</p>;
-  if (history.failed) return <p className="text-xs text-ink-muted">Release links could not be read right now.</p>;
-  const versions = [...new Set(history.entries.map((entry) => entry.version))];
-  if (!versions.length) return <p className="text-xs text-ink-muted">No recorded release has moved this workload yet.</p>;
-  return (
-    <ul className="flex flex-wrap gap-3" aria-label="Releases that moved this workload">
-      {versions.map((version) => <li key={version}>
-        <Link href={hrefs.release(version)} className={`${INK_LINK} text-xs`} title={version} aria-label={`Promotion history for ${version}`}>
-          {shortVersion(version)}
-        </Link>
-      </li>)}
-    </ul>
   );
 }
 

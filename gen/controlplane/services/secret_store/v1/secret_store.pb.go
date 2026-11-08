@@ -95,8 +95,15 @@ type GrantHostedHTTPUseRequest struct {
 	Origin        string                 `protobuf:"bytes,8,opt,name=origin,proto3" json:"origin,omitempty"`
 	Method        string                 `protobuf:"bytes,9,opt,name=method,proto3" json:"method,omitempty"`
 	Path          string                 `protobuf:"bytes,10,opt,name=path,proto3" json:"path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// workflow_permissions are the powers the workflow DECLARES in its
+	// `permissions:` (reliant Workflow.permissions). The only value is
+	// "approvals:decide". A grant whose path is a Reliant ApprovalService rpc
+	// that approves or denies is refused unless this lists it, and the
+	// controller refuses to use such a grant at execution without it. Unknown
+	// values are rejected.
+	WorkflowPermissions []string `protobuf:"bytes,11,rep,name=workflow_permissions,json=workflowPermissions,proto3" json:"workflow_permissions,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GrantHostedHTTPUseRequest) Reset() {
@@ -183,6 +190,13 @@ func (x *GrantHostedHTTPUseRequest) GetPath() string {
 		return x.Path
 	}
 	return ""
+}
+
+func (x *GrantHostedHTTPUseRequest) GetWorkflowPermissions() []string {
+	if x != nil {
+		return x.WorkflowPermissions
+	}
+	return nil
 }
 
 type GrantHostedHTTPUseResponse struct {
@@ -1831,7 +1845,7 @@ var File_services_secret_store_v1_secret_store_proto protoreflect.FileDescriptor
 
 const file_services_secret_store_v1_secret_store_proto_rawDesc = "" +
 	"\n" +
-	"+services/secret_store/v1/secret_store.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb4\x02\n" +
+	"+services/secret_store/v1/secret_store.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xe7\x02\n" +
 	"\x19GrantHostedHTTPUseRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1f\n" +
 	"\vsecret_name\x18\x02 \x01(\tR\n" +
@@ -1843,7 +1857,8 @@ const file_services_secret_store_v1_secret_store_proto_rawDesc = "" +
 	"\x06origin\x18\b \x01(\tR\x06origin\x12\x16\n" +
 	"\x06method\x18\t \x01(\tR\x06method\x12\x12\n" +
 	"\x04path\x18\n" +
-	" \x01(\tR\x04pathJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\x11workflow_revisionR\rworkflow_hash\"7\n" +
+	" \x01(\tR\x04path\x121\n" +
+	"\x14workflow_permissions\x18\v \x03(\tR\x13workflowPermissionsJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\x11workflow_revisionR\rworkflow_hash\"7\n" +
 	"\x1aGrantHostedHTTPUseResponse\x12\x19\n" +
 	"\bgrant_id\x18\x01 \x01(\tR\agrantId\"^\n" +
 	"\x1aRevokeHostedHTTPUseRequest\x12%\n" +

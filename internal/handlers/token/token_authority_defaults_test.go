@@ -19,7 +19,8 @@ func TestExchangeToken_AllUserOrgCapabilities(t *testing.T) {
 	want := fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeClusterManage,
 		fat.ScopeSecretRead, fat.ScopeSecretWrite,
 		fat.ScopeDomainRead, fat.ScopeDomainWrite, fat.ScopeIdentityRead, fat.ScopeIdentityManage,
-		fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery, fat.ScopeBillingRead)
+		fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery, fat.ScopeBillingRead,
+		fat.ScopeDeployConfigRead, fat.ScopeStorageRead)
 	if got := fat.SetOf(exchangeableScopes...); !reflect.DeepEqual(got, want) {
 		t.Fatalf("exchangeable = %s, want %s", got, want)
 	}
@@ -59,6 +60,39 @@ func TestExchangeToken_BillingReadRequiresHeldExplicitScope(t *testing.T) {
 	}
 	if child.Scopes.Has(fat.ScopeBillingRead) {
 		t.Fatal("default exchange widened an existing restricted token")
+	}
+}
+
+// TestExchangeToken_ConfigAndStorageReadRequireHeldScope: deploy:config:read
+// and storage:read joined the exchangeable set with forge's catalog, and like
+// billing:read they are delegated only when the parent holds them.
+func TestExchangeToken_ConfigAndStorageReadRequireHeldScope(t *testing.T) {
+	authority := tokenauthority.NewMemory()
+	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
+	bearer := mintSession(t, authority, "restricted-user", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeObsRead}})
+	for _, scope := range []fat.Scope{fat.ScopeDeployConfigRead, fat.ScopeStorageRead} {
+		_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{
+			Audience: testControlPlane, Scopes: []string{string(scope)},
+		}))
+		if svcerr.Code(err) != connect.CodePermissionDenied {
+			t.Fatalf("unheld %s was delegated: %v", scope, err)
+		}
+	}
+	resp, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := authority.Introspect(context.Background(), resp.Msg.GetToken())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scope := range []fat.Scope{fat.ScopeDeployConfigRead, fat.ScopeStorageRead} {
+		if child.Scopes.Has(scope) {
+			t.Fatalf("default exchange widened a restricted token with %s", scope)
+		}
+	}
+	if !reflect.DeepEqual(child.Scopes, fat.SetOf(fat.ScopeObsRead)) {
+		t.Fatalf("child = %s, want obs:read alone", child.Scopes)
 	}
 }
 

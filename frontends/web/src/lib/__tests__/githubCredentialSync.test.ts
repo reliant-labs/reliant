@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Copyright (c) 2025 Reliant Labs
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'

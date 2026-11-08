@@ -266,14 +266,10 @@ func applyPlan(p Plan) error {
 	// every other mount of the same filesystem. The workspace disk is mounted at
 	// /home/workspace and again at /mnt/workspace-disk, so a file hidden under
 	// one is otherwise one `cat` away under the other.
-	var targets []string
-	for _, h := range p.Hide {
-		targets = append(targets, canonical(h))
-	}
-	targets = dedupe(append(targets, aliasPaths(targets, mounts)...))
+	targets := hideTargets(p.Hide, mounts, isNullDevice)
 
 	rebuild := map[string][]string{}
-	var cover []string
+	var cover, coverDirs []string
 	for _, t := range targets {
 		fi, err := os.Lstat(t)
 		if err != nil {
@@ -281,7 +277,14 @@ func applyPlan(p Plan) error {
 		}
 		parent := filepath.Dir(t)
 		if fi.Mode()&os.ModeSocket != 0 || scratchDirs[parent] {
-			cover = append(cover, t)
+			// /dev/null can cover a file, never a directory (ENOTDIR): a
+			// credential directory in a scratch dir (GH_CONFIG_DIR or
+			// DOCKER_CONFIG under /tmp) is covered with an empty one.
+			if fi.IsDir() {
+				coverDirs = append(coverDirs, t)
+			} else {
+				cover = append(cover, t)
+			}
 			continue
 		}
 		rebuild[parent] = append(rebuild[parent], filepath.Base(t))
@@ -304,6 +307,11 @@ func applyPlan(p Plan) error {
 			return fmt.Errorf("covering %s: %w", c, err)
 		}
 	}
+	for _, c := range coverDirs {
+		if err := unix.Mount("tmpfs", c, "tmpfs", unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, "size=4k,mode=0555"); err != nil {
+			return fmt.Errorf("covering %s: %w", c, err)
+		}
+	}
 	for _, ro := range p.ReadOnly {
 		if err := makeReadOnly(canonical(ro)); err != nil {
 			return err
@@ -322,6 +330,41 @@ func canonical(path string) string {
 		return filepath.Join(real, base)
 	}
 	return path
+}
+
+// hideTargets is every path hide names, canonical, and every other path each
+// has through another mount of the same filesystem (aliasPaths), less any that
+// is already the null device. A command run with no credentials from inside
+// another such command (a pipeline gate's test, an agent in a sandboxed step)
+// starts in a namespace where the outer sandbox already covered the sockets
+// and scratch-dir files with /dev/null. Such a path hides nothing more, and
+// its "alias" through the cover's mount is /dev/null itself: hiding that
+// rebuilt /dev without it, and every cover mount after it failed ("covering
+// /run/docker.sock: no such file or directory"), so the nested command was
+// refused (exit 126).
+func hideTargets(hide []string, mounts []mountInfo, isNull func(string) bool) []string {
+	var named []string
+	for _, h := range hide {
+		if c := canonical(h); !isNull(c) {
+			named = append(named, c)
+		}
+	}
+	var out []string
+	for _, t := range dedupe(append(named, aliasPaths(named, mounts)...)) {
+		if !isNull(t) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// isNullDevice reports whether path is (a cover of) the null device, 1:3.
+func isNullDevice(path string) bool {
+	var st unix.Stat_t
+	if unix.Lstat(path, &st) != nil {
+		return false
+	}
+	return st.Mode&unix.S_IFMT == unix.S_IFCHR && st.Rdev == unix.Mkdev(1, 3)
 }
 
 func dedupe(in []string) []string {

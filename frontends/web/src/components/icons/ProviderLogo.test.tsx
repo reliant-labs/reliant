@@ -11,6 +11,7 @@ const PROVIDER_IDS = [
   "copilot",
   "anthropic",
   "openai",
+  "gemini",
   "openrouter",
 ];
 

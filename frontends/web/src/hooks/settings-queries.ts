@@ -27,7 +27,6 @@ import type { MessageInitShape } from "@bufbuild/protobuf";
 import { ConfigScope } from "../gen/reliant/v1/common_pb";
 import {
   HiddenItemType,
-  SettingsService,
   type CompleteAntigravityOAuthRequestSchema,
   type CompleteClaudeOAuthRequestSchema,
   type CompleteCodexOAuthRequestSchema,
@@ -44,12 +43,12 @@ import {
   type UpdatePreferencesRequestSchema,
   type UpdateShortcutsResponse,
 } from "../gen/reliant/v1/settings_pb";
-import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "@/store/authStore";
 import {
   settingsServiceKeys,
+  settingsServiceMutations,
   settingsServiceQueries,
   useGetPreferences,
   useGetProviderStatuses,
@@ -133,15 +132,17 @@ export function invalidateProviderStatuses(): void {
 //
 // Stores, services and the OAuth flows run outside React, so the generated
 // hooks are out of reach. A read goes through the generated query options, so
-// it shares the hook's cache entry; a write calls the generated client and
-// invalidates what it made stale, by the generated keys. Both work on the
-// wire types: there is no second, hand-written shape of a setting.
+// it shares the hook's cache entry; a write uses the generated mutations,
+// which invalidate the same service scope as the hook on success. Provider
+// flows also refresh statuses on failure: the server may have saved a
+// credential before failing. Both work on the wire types, with no second,
+// hand-written shape of a setting.
 //
 // Reads here pass `retry: false`: each caller already decides what a failure
 // means (settingsSync retries on its own schedule, the shortcuts store falls
 // back to defaults), and the query client's retry ladder would only delay it.
 
-const settingsClient = connectClient(SettingsService);
+const settingsMutations = settingsServiceMutations(queryClient);
 
 /** ListSettings, refetched, through the generated query's cache entry. */
 export function fetchSettings(projectId?: string): Promise<ListSettingsResponse> {
@@ -160,18 +161,15 @@ export async function batchUpsertSettings(
   projectId?: string,
 ): Promise<Setting[]> {
   if (settings.length === 0) return [];
-  const response = await settingsClient.batchUpsertSettings({
+  const response = await settingsMutations.batchUpsertSettings({
     settings: settings.map((s) => ({ ...s, valueType: s.valueType ?? "string" })),
     projectId,
   });
-  void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.listSettings.all });
   return response.settings;
 }
 
-export async function deleteSetting(key: string, projectId?: string): Promise<DeleteSettingResponse> {
-  const response = await settingsClient.deleteSetting({ key, projectId });
-  void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.listSettings.all });
-  return response;
+export function deleteSetting(key: string, projectId?: string): Promise<DeleteSettingResponse> {
+  return settingsMutations.deleteSetting({ key, projectId });
 }
 
 /** The saved shortcut overrides (a JSON document), refetched. */
@@ -182,10 +180,8 @@ export async function fetchShortcuts(): Promise<string> {
   return response.shortcuts;
 }
 
-export async function updateShortcuts(shortcuts: string): Promise<UpdateShortcutsResponse> {
-  const response = await settingsClient.updateShortcuts({ shortcuts });
-  void queryClient.invalidateQueries({ queryKey: settingsServiceKeys.getShortcuts.all });
-  return response;
+export function updateShortcuts(shortcuts: string): Promise<UpdateShortcutsResponse> {
+  return settingsMutations.updateShortcuts({ shortcuts });
 }
 
 /**
@@ -196,9 +192,12 @@ export async function updateShortcuts(shortcuts: string): Promise<UpdateShortcut
  */
 export async function syncReliantProvider(forceRotate = false): Promise<SyncReliantProviderResponse> {
   try {
-    return await settingsClient.syncReliantProvider({ forceRotate });
-  } finally {
+    return await settingsMutations.syncReliantProvider({ forceRotate });
+  } catch (error) {
+    // Success refreshes through the generated service mutation. Keep the
+    // failure refresh too: the credential may have changed before failure.
     invalidateProviderStatuses();
+    throw error;
   }
 }
 
@@ -236,21 +235,22 @@ function signInOutcome(response: SignInResponse): SignInOutcome {
 async function completeSignIn(call: () => Promise<SignInResponse>): Promise<SignInOutcome> {
   try {
     return signInOutcome(await call());
-  } finally {
+  } catch (error) {
     invalidateProviderStatuses();
+    throw error;
   }
 }
 
 export function completeCodexOAuth(
   req: MessageInitShape<typeof CompleteCodexOAuthRequestSchema>,
 ): Promise<SignInOutcome> {
-  return completeSignIn(() => settingsClient.completeCodexOAuth(req));
+  return completeSignIn(() => settingsMutations.completeCodexOAuth(req));
 }
 
 export function completeClaudeOAuth(
   req: MessageInitShape<typeof CompleteClaudeOAuthRequestSchema>,
 ): Promise<SignInOutcome> {
-  return completeSignIn(() => settingsClient.completeClaudeOAuth(req));
+  return completeSignIn(() => settingsMutations.completeClaudeOAuth(req));
 }
 
 /**
@@ -261,7 +261,7 @@ export function completeClaudeOAuth(
 export function completeAntigravityOAuth(
   req: MessageInitShape<typeof CompleteAntigravityOAuthRequestSchema>,
 ): Promise<SignInOutcome> {
-  return completeSignIn(() => settingsClient.completeAntigravityOAuth(req));
+  return completeSignIn(() => settingsMutations.completeAntigravityOAuth(req));
 }
 
 /**
@@ -270,7 +270,7 @@ export function completeAntigravityOAuth(
  * pollCopilotDeviceAuth.
  */
 export function startCopilotDeviceAuth(): Promise<StartCopilotDeviceAuthResponse> {
-  return settingsClient.startCopilotDeviceAuth({});
+  return settingsMutations.startCopilotDeviceAuth({});
 }
 
 /** One poll of a Copilot device flow. On AUTHORIZED the backend has saved the credential. */
@@ -283,7 +283,7 @@ export async function pollCopilotDeviceAuth(
   }
 > {
   try {
-    const response = await settingsClient.pollCopilotDeviceAuth(req);
+    const response = await settingsMutations.pollCopilotDeviceAuth(req);
     return {
       status: response.status,
       errorMessage: response.errorMessage,
@@ -291,8 +291,9 @@ export async function pollCopilotDeviceAuth(
       identityMismatch: response.identityMismatch || undefined,
       accountLabel: response.account?.label || undefined,
     };
-  } finally {
+  } catch (error) {
     invalidateProviderStatuses();
+    throw error;
   }
 }
 
@@ -592,64 +593,6 @@ export function useToggleHiddenItem() {
       togglePresetVisibility: toggle(HiddenItemType.PRESET),
     };
   }, [qc, mutateAsync]);
-}
-
-// --- Composer: automatic long-paste attachments (in `additional`) ---
-
-export interface LongPastePreferences {
-  enabled: boolean;
-  characterThreshold: number;
-  lineThreshold: number;
-}
-
-export const DEFAULT_LONG_PASTE_PREFERENCES: LongPastePreferences = {
-  enabled: true,
-  characterThreshold: 5000,
-  lineThreshold: 100,
-};
-
-const LONG_PASTE_KEYS = {
-  enabled: "longPaste.enabled",
-  characterThreshold: "longPaste.characterThreshold",
-  lineThreshold: "longPaste.lineThreshold",
-} as const;
-
-function positiveThreshold(raw: string | undefined, fallback: number): number {
-  const value = Number(raw);
-  return Number.isSafeInteger(value) && value > 0 ? value : fallback;
-}
-
-function longPastePreferencesOf(response: GetPreferencesResponse): LongPastePreferences {
-  const values = response.additional;
-  return {
-    enabled: values[LONG_PASTE_KEYS.enabled] !== "false",
-    characterThreshold: positiveThreshold(values[LONG_PASTE_KEYS.characterThreshold], 5000),
-    lineThreshold: positiveThreshold(values[LONG_PASTE_KEYS.lineThreshold], 100),
-  };
-}
-
-export function useLongPastePreferencesQuery() {
-  const hasSession = useHasSession();
-  return useGetPreferences({}, { staleTime: 60_000, enabled: hasSession, select: longPastePreferencesOf });
-}
-
-export function useUpdateLongPastePreferences() {
-  const rpc = usePreferencesWrite();
-  return {
-    isPending: rpc.isPending,
-    mutateAsync: (prefs: Partial<LongPastePreferences>) => {
-      const additional: Record<string, string> = {};
-      for (const field of ["enabled", "characterThreshold", "lineThreshold"] as const) {
-        const value = prefs[field];
-        if (value === undefined) continue;
-        if (field !== "enabled" && (!Number.isSafeInteger(value) || Number(value) <= 0)) {
-          return Promise.reject(new Error("Thresholds must be positive whole numbers."));
-        }
-        additional[LONG_PASTE_KEYS[field]] = String(value);
-      }
-      return rpc.mutateAsync({ additional });
-    },
-  };
 }
 
 // --- Browser: default page, bookmarks (in `additional`) ---

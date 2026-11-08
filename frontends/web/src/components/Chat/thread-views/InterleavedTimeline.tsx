@@ -1693,7 +1693,17 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       )}
       <div
         ref={setScrollerEl}
-        className="h-full overflow-y-auto"
+        className="h-full overflow-y-auto overflow-x-hidden"
+        // overflow-x-hidden alone does not stop sideways scrolling: a hidden
+        // axis is still scrollable by everything but the wheel — scrollIntoView,
+        // focus, a drag-select, find-in-page, a touch pan on iOS. So a row too
+        // wide for the transcript left the whole conversation parked to the
+        // right, with no scrollbar to get back. The guard that holds is the
+        // overflow-x-clip on the virtual container below: clipped overflow is
+        // not scrollable overflow, so this element's horizontal scroll range is
+        // always zero. A wide row must still wrap or scroll inside itself;
+        // e2e/chat-width.spec.ts checks every row's geometry for that.
+        //
         // "contain": the end-of-list bounce stays (it is macOS's native
         // rubber-band; its length is set by the OS, not here), but a scroll
         // past either end never chains to the page behind the transcript.
@@ -1714,8 +1724,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       >
         {/* The virtual space: as tall as every row measured or estimated,
             with only the rows near the viewport actually rendered. */}
-        {/* Height is written by the virtualizer (directDomUpdates), not JSX. */}
-        <div ref={virtualizer.containerRef} className="relative w-full">
+        {/* Height is written by the virtualizer (directDomUpdates), not JSX.
+            overflow-x-clip, not hidden: clip makes no scroll container, so the
+            y axis stays visible and the rows' sticky toolbars still stick to
+            the scroller, while nothing a row pushes past the column edge can
+            give the scroller a horizontal range (see the scroller above). */}
+        <div ref={virtualizer.containerRef} className="relative w-full overflow-x-clip">
           {/* The space paddingStart reserves above row 0: the manual
               "load more" affordance, or the start-of-history marker. Fixed
               height in every state, so it never moves the rows below it.

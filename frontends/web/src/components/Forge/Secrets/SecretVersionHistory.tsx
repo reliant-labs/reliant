@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 import type { ManagedSecretVersion } from "@/services/forge/secretStore";
 import { authorLabel } from "@/services/forge/secretSurface";
 import { Ago } from "../Releases/releaseParts";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 
 export interface SecretVersionHistoryProps {
   name: string;
@@ -235,12 +236,14 @@ function RowAction({
   disabled?: boolean;
   danger?: boolean;
 }) {
+  // The demo console: every version action is off, saying why (obsReadOnly.tsx).
+  const lock = useObsReadOnly();
   return (
-    <Tooltip content={title} side="bottom" delay={300} triggerClassName="inline-flex">
+    <Tooltip content={lock.readOnly ? (lock.reason ?? title) : title} side="bottom" delay={300} triggerClassName="inline-flex">
 <button
       type="button"
       onClick={onClick}
-      disabled={disabled}
+      disabled={disabled || lock.readOnly}
       className={cn(
         "inline-flex items-center gap-1.5 rounded px-2 py-1 text-xs transition-colors",
         "text-ink-muted",
