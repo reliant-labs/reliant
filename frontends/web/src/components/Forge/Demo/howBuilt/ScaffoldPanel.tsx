@@ -8,7 +8,7 @@
  * instrumentation. Every number on it is read from the manifest or the cast.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 
 import { LightweightCodeViewer } from "@/components/shared/LightweightCodeViewer";
@@ -49,22 +49,26 @@ export function summarize(manifest: ScaffoldManifest, cast: ScaffoldCast) {
 export function ScaffoldPanel({ manifest, cast }: { manifest: ScaffoldManifest; cast: ScaffoldCast }) {
   const s = useMemo(() => summarize(manifest, cast), [manifest, cast]);
   return (
-    <section className="space-y-6" data-testid="scaffold-panel" aria-labelledby="scaffold-panel-title">
-      <div className="space-y-2" data-testid="scaffold-totals">
-        <h3 id="scaffold-panel-title" className="text-base font-semibold text-ink">
-          What forge generated
-        </h3>
+    <section className="space-y-10" data-testid="scaffold-panel" aria-labelledby="scaffold-panel-title">
+      <div className="space-y-4 rounded-xl border border-border bg-surface p-4 sm:p-6" data-testid="scaffold-totals">
+        <h2 id="scaffold-panel-title" className="text-xl font-semibold text-ink sm:text-2xl">
+          What Forge generated
+        </h2>
         <p className="text-lg text-ink" data-testid="scaffold-headline">
           A person wrote <strong>{n(s.youLines)}</strong> lines of API definitions in {s.youFiles} files. Forge generated{" "}
           <strong>{n(s.forgeLines)}</strong> lines across <strong>{n(s.files)}</strong> files.
         </p>
-        <p className="text-sm text-ink-muted">
+        <p className="text-base leading-relaxed text-ink">Some files are starting points you can customize. Others are regenerated: change their inputs instead. Your app&apos;s custom behavior still needs your rules.</p>
+        <details className="border-t border-border pt-2">
+          <summary className="min-h-[44px] cursor-pointer py-3 text-sm font-medium text-ink">How these files are counted and maintained</summary>
+        <p className="text-sm leading-relaxed text-ink-muted">
           <code>forge project new</code> wrote {n(s.newFiles)} files; <code>forge scaffold</code> then added {n(s.scaffoldAdded)} and changed{" "}
           {n(s.scaffoldChanged)}. Of Forge&apos;s lines, {n(s.regenLines)} are in files it rewrites on every <code>forge generate</code>:
           change their inputs rather than editing those files. These include {n(s.machineLines)} lines of generated Go and TypeScript API code.
           It wrote the other {n(s.onceLines)} once: starting code and pages you can customize, not a finished product.
           Not counted: {s.lockfiles} dependency lockfiles, and Forge&apos;s own working files in <code>.forge/</code>.
         </p>
+        </details>
       </div>
 
       <CategoryBreakdown categories={manifest.categories} />
@@ -103,9 +107,9 @@ export function ScaffoldPanel({ manifest, cast }: { manifest: ScaffoldManifest; 
 
 function Explainer({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-border p-3">
-      <h4 className="mb-1 text-sm font-semibold text-ink">{title}</h4>
-      <p className="text-sm text-ink-muted">{children}</p>
+    <div className="rounded-xl border border-border bg-surface p-4 sm:p-5">
+      <h3 className="mb-3 text-lg font-semibold text-ink">{title}</h3>
+      <p className="text-sm leading-relaxed text-ink">{children}</p>
     </div>
   );
 }
@@ -118,8 +122,8 @@ function CategoryBreakdown({ categories }: { categories: ManifestCategory[] }) {
   });
   const widest = Math.max(...rows.map((r) => r.cat.lines));
   return (
-    <div data-testid="scaffold-categories">
-      <h4 className="mb-2 text-sm font-semibold text-ink">By category</h4>
+    <div className="space-y-4 border-t border-border pt-8" data-testid="scaffold-categories">
+      <h2 className="text-xl font-semibold text-ink sm:text-2xl">Explore the generated files</h2>
       <ul className="divide-y divide-border rounded-lg border border-border">
         {rows.map(({ id, label, detail, cat }) => {
           const expanded = open === id;
@@ -173,32 +177,59 @@ const VIEWER_LANG: Record<string, string> = { protobuf: "plaintext", sql: "sql",
 function EntityChain({ manifest }: { manifest: ScaffoldManifest }) {
   const chain = manifest.chain;
   const [index, setIndex] = useState(0);
+  const id = useId();
+  const tabs = useRef<(HTMLButtonElement | null)[]>([]);
+  const rail = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const selected = tabs.current[index];
+    const host = rail.current;
+    if (!selected || !host) return;
+    // Reveal only within this horizontal rail; never move the page vertically.
+    const item = selected.getBoundingClientRect();
+    const viewport = host.getBoundingClientRect();
+    if (item.left < viewport.left) host.scrollLeft -= viewport.left - item.left + 12;
+    else if (item.right > viewport.right) host.scrollLeft += item.right - viewport.right + 12;
+  }, [index]);
   const excerpt = chain[index];
   const copy = CHAIN_COPY[excerpt.id];
   return (
-    <div data-testid="scaffold-chain">
-      <h4 className="mb-1 text-sm font-semibold text-ink">Follow an order through the generated code</h4>
-      <p className="mb-2 text-sm text-ink-muted">From the API&apos;s order data to database setup, server and browser code, and a test—all from this recording.</p>
-      <div role="tablist" aria-label="The Order example, step by step" className="mb-2 flex flex-wrap gap-1">
+    <div className="space-y-4 border-t border-border pt-8" data-testid="scaffold-chain">
+      <h2 className="text-xl font-semibold text-ink sm:text-2xl">Follow an order through the generated code</h2>
+      <p className="text-sm leading-relaxed text-ink">From the API&apos;s order data to database setup, server and browser code, and a test—all from this recording.</p>
+      <p className="text-sm font-medium text-ink" aria-live="polite">Step {index + 1} of {chain.length}: {copy.title}</p>
+      <div ref={rail} role="tablist" aria-label="The Order example, step by step" className="flex gap-2 overflow-x-auto rounded-xl border border-border bg-surface-sunken p-3 xl:grid xl:grid-cols-6" onKeyDown={(event) => {
+        let next = index;
+        if (event.key === "ArrowRight") next = (index + 1) % chain.length;
+        else if (event.key === "ArrowLeft") next = (index - 1 + chain.length) % chain.length;
+        else if (event.key === "Home") next = 0;
+        else if (event.key === "End") next = chain.length - 1;
+        else return;
+        event.preventDefault(); setIndex(next); tabs.current[next]?.focus();
+      }}>
         {chain.map((step, i) => (
           <button
             key={step.id}
             type="button"
             role="tab"
+            id={`${id}-step-${i}`}
+            aria-controls={`${id}-panel`}
             aria-selected={i === index}
+            tabIndex={i === index ? 0 : -1}
+            ref={(el) => { tabs.current[i] = el; }}
             onClick={() => setIndex(i)}
             className={cn(
-              "rounded-md px-2 py-1 text-xs font-medium",
-              // The app colours [aria-selected] with primary-ink (index.css); the selected tab is a primary tint to match.
-              i === index ? "bg-primary/10 text-primary-ink ring-1 ring-primary/30" : "bg-surface-muted text-ink-muted hover:text-ink"
+              "flex min-h-[56px] min-w-44 shrink-0 items-center gap-3 rounded-lg border px-3 py-3 text-left text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring xl:min-w-0 xl:flex-col xl:items-start xl:gap-2",
+              i === index ? "border-primary bg-surface text-ink" : "border-border bg-surface text-ink hover:bg-ink/5"
             )}
             data-testid={`scaffold-chain-tab-${step.id}`}
           >
-            {i + 1}. {CHAIN_COPY[step.id].title}
+            <span aria-hidden="true" className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm", i === index ? "border-primary bg-primary text-primary-foreground" : "border-border text-ink")}>{i + 1}</span>
+            <span>{CHAIN_COPY[step.id].title}<span className="mt-1 block text-xs font-normal text-ink-muted">{i === index ? "Current step" : i < index ? "Previous step" : i === index + 1 ? "Next step" : "Upcoming"}</span></span>
+            {i < chain.length - 1 && <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-ink-muted xl:hidden" aria-hidden="true" />}
           </button>
         ))}
       </div>
-      <div role="tabpanel" className="rounded-lg border border-border" data-testid="scaffold-chain-panel" data-excerpt={excerpt.id}>
+      <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-step-${index}`} tabIndex={0} className="rounded-xl border border-border bg-surface" data-testid="scaffold-chain-panel" data-excerpt={excerpt.id}>
         <div className="flex flex-wrap items-baseline gap-x-3 border-b border-border px-3 py-2">
           <span className="text-sm font-medium text-ink">{copy.title}</span>
           <code className="text-xs text-ink-muted" data-testid="scaffold-chain-path">
@@ -206,20 +237,20 @@ function EntityChain({ manifest }: { manifest: ScaffoldManifest }) {
             {excerpt.truncated ? ` (its first ${excerpt.end_line - excerpt.start_line + 1} lines)` : ""}
           </code>
         </div>
-        <p className="px-3 pt-2 text-sm text-ink-muted">{copy.body}</p>
+        <p className="px-4 py-4 text-base leading-relaxed text-ink">{copy.body}</p>
         <div className="p-2">
           <LightweightCodeViewer content={excerpt.code} language={VIEWER_LANG[excerpt.lang] ?? "plaintext"} maxHeight={360} noBorder />
         </div>
         <div className="flex items-center justify-between border-t border-border px-3 py-2">
-          <Button size="sm" variant="ghost" leftIcon={<ChevronLeft />} disabled={index === 0} onClick={() => setIndex(index - 1)} data-testid="scaffold-chain-prev">
+          <Button className="min-h-[44px]" variant="outline" leftIcon={<ChevronLeft />} disabled={index === 0} onClick={() => setIndex(index - 1)} data-testid="scaffold-chain-prev">
             Back
           </Button>
           <span className="text-xs text-ink-muted">
             {index + 1} of {chain.length}
           </span>
           <Button
-            size="sm"
-            variant="ghost"
+            className="min-h-[44px]"
+            variant="primary"
             rightIcon={<ChevronRight />}
             disabled={index === chain.length - 1}
             onClick={() => setIndex(index + 1)}

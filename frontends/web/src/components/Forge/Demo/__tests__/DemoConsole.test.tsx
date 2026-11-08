@@ -115,7 +115,7 @@ describe("the forge demo console", () => {
     fireEvent.click(await screen.findByTestId("forge-demo-how-built", {}, { timeout: 15_000 }));
     await waitFor(() => expect(search(router).section).toBe("built"));
     expect(await screen.findByTestId("scaffold-replay", {}, { timeout: 15_000 })).toBeInTheDocument();
-    expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(/You wrote \d+ lines of proto/);
+    expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(/A person wrote \d+ lines of API definitions/);
     expect(screen.queryByTestId("obs-overview")).toBeNull();
     // Already open: the banner no longer offers it.
     expect(screen.queryByTestId("forge-demo-how-built")).toBeNull();
