@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -95,6 +96,11 @@ func (s *Service) GetMessage(
 		ToolCallStatusByCallID: toolCallStatusByCallID,
 		SenderTitlesByThreadID: messageproto.SenderTitles(ctx, s.deps.Repo, []*db.Message{msg}),
 	})
+
+	// What this read sent, by block kind, on the RPC's span.
+	var sent messageproto.TranscriptBytes
+	sent.AddMessages(protoMessage)
+	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
 	return connect.NewResponse(&reliantv1.GetMessageResponse{
 		Message: protoMessage,

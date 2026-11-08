@@ -561,6 +561,9 @@ func (s *Service) buildChatSnapshot(ctx context.Context, chat *db.ChatRow) (snap
 	_, assembleSpan := startSpan(ctx, "chat_snapshot.assemble")
 	assembledMessages := messageproto.Assemble(displayable, messageBlocks, attachmentMap, lookups, mainThread, latestSeq)
 	otherUpdates = append(otherUpdates, snapshotToolCalls(allBlocks, lookups.ToolCalls, liveToolCalls, mainThread, latestSeq)...)
+	var sent messageproto.TranscriptBytes
+	sent.AddMessages(assembledMessages...)
+	assembleSpan.SetAttributes(sent.Attributes("transcript")...)
 	assembleSpan.End()
 
 	// Calculate pagination metadata.

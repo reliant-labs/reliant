@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/streaming"
 )
 
@@ -139,6 +140,12 @@ func (s *Service) StreamChatUpdates(
 	heartbeatTicker := time.NewTicker(s.heartbeatInterval)
 	defer heartbeatTicker.Stop()
 
+	// The transcript the live frames carried after the initial sync, by
+	// block kind, summed over the stream's life and put on the RPC span as
+	// it ends (the initial sync's own spans carry theirs).
+	var liveSent messageproto.TranscriptBytes
+	defer func() { rpcSpan.SetAttributes(liveSent.Attributes("transcript.live")...) }()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -150,7 +157,7 @@ func (s *Service) StreamChatUpdates(
 				continue
 			}
 			lastChatSeq = event.SequenceNumber
-			if err := s.sendSingleChatUpdate(event.Payload, lastChatSeq, stream); err != nil {
+			if err := s.sendSingleChatUpdate(event.Payload, lastChatSeq, &liveSent, stream); err != nil {
 				return err
 			}
 
@@ -294,12 +301,15 @@ func chatUpdateToProto(update db.ChatUpdate) *reliantv1.ChatUpdateData {
 	}
 }
 
-// sendSingleChatUpdate sends a single chat update event received from the UpdateHub.
-func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) error {
+// sendSingleChatUpdate sends a single chat update event received from the
+// UpdateHub, counting what it carried into sent.
+func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, sent *messageproto.TranscriptBytes, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) error {
+	protoUpdate := chatUpdateToProto(update)
+	sent.AddChatUpdate(protoUpdate.UpdateType, protoUpdate.DataJson)
 	event := &reliantv1.ChatStreamEvent{
 		Event: &reliantv1.ChatStreamEvent_Updates{
 			Updates: &reliantv1.ChatUpdateBatch{
-				Updates:        []*reliantv1.ChatUpdateData{chatUpdateToProto(update)},
+				Updates:        []*reliantv1.ChatUpdateData{protoUpdate},
 				LatestSequence: latestSeq,
 			},
 		},
@@ -416,7 +426,10 @@ func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, stream
 // sendChatUpdateBatches replays the chat updates in (startSeq, latestSeq].
 func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, startSeq, latestSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (err error) {
 	ctx, span := startSpan(ctx, "chat_stream.replay", attribute.Int64("chat_stream.replay_from", startSeq), attribute.Int64("chat_stream.replay_to", latestSeq))
+	// What the replay sent, by block kind, over all its batches.
+	var sent messageproto.TranscriptBytes
 	defer func() {
+		span.SetAttributes(sent.Attributes("transcript")...)
 		observe.RecordSpanError(span, err)
 		span.End()
 	}()
@@ -438,7 +451,9 @@ func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, star
 			if update.SequenceNumber > maxSeq {
 				maxSeq = update.SequenceNumber
 			}
-			protoUpdates = append(protoUpdates, chatUpdateToProto(update))
+			protoUpdate := chatUpdateToProto(update)
+			sent.AddChatUpdate(protoUpdate.UpdateType, protoUpdate.DataJson)
+			protoUpdates = append(protoUpdates, protoUpdate)
 		}
 
 		event := &reliantv1.ChatStreamEvent{
