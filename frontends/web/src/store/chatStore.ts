@@ -2078,9 +2078,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // This request is unbounded (no `recent`), so it returns the whole chat —
       // assert that explicitly. Without it a stale hasMore from an earlier
       // bounded snapshot would survive and offer scroll-back that can only ever
-      // come back empty. hasMore is trustworthy here specifically BECAUSE
-      // beforeSeq is 0: the server's `|| beforeSeq > 0` disjunct, which
-      // makes it useless for paged requests, does not apply.
+      // come back empty.
       setMessagesInCache(chatId, messages, {
         total: response.total,
         hasMore: response.hasMore,
@@ -2160,22 +2158,27 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         normalizeMessageAttachmentFields,
       );
 
-      // End of history is read off the page itself: an empty page means
-      // nothing lies below the cursor, and a page shorter than requested
-      // (below) means this one consumed the remainder. The server's has_more
-      // is accurate on this path, but the page answers the same question
-      // without a second source of truth to disagree with.
+      // End of history is the server's has_more: it probes one row past the
+      // page, so it is exact. The page's LENGTH cannot answer the question —
+      // the server sizes a page on the transcript's rows and a page can come
+      // back shorter than requested with more history below it (an older
+      // server counts LLM-only HIDDEN rows and then drops them from the
+      // response). Reading a short page as the end is what put "Start of
+      // conversation" in the middle of a long chat and stopped scroll-back.
+      //
+      // A page that cannot move the cursor still ends paging whatever
+      // has_more says, so no server can make this loop: an empty page, or
+      // one holding nothing strictly below the cursor.
       if (older.length === 0) {
         logger.debug("[ChatStore] Reached the start of chat history", {
           chatId: chatId.slice(0, 8),
+          serverHasMore: response.hasMore,
         });
         setMessagesMetaInCache(chatId, { hasMore: false });
         return false;
       }
-
-      // A short page means the server had fewer than we asked for below the
-      // cursor, i.e. we just consumed the remainder. Serve it, then stop.
-      const reachedStart = older.length < OLDER_MESSAGES_PAGE_SIZE;
+      const movesCursor = older.some((m) => Number(m.seq) < beforeSeq);
+      const reachedStart = !response.hasMore || !movesCursor;
 
       // The page is folded by the SDK's reducer like any other history: it is
       // prepended (the newer messages already rendered stay), its tool results

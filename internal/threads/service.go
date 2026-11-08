@@ -55,10 +55,11 @@ type Repository interface {
 	// Bounded message operations for the display walk
 	// (recentDisplayMessagesBeforeFromCW) and CountCurrentMessages -- these
 	// bound the read or count in SQL, one window at a time, instead of
-	// resolving a thread's whole history.
+	// resolving a thread's whole history. The walk's read leaves out
+	// DISPLAY_STYLE_HIDDEN rows, so its limit counts transcript rows.
 	CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error)
 	CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error)
-	ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error)
+	ListRecentTranscriptMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error)
 
 	// Message operations (for SaveMessage)
 	CreateMessage(ctx context.Context, msg *db.Message) error
