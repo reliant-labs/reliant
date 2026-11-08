@@ -288,6 +288,9 @@ func buildPlan(base Plan, in planEnv) Plan {
 		case optInRejected:
 			rejected = append(rejected, w)
 		case optInOwn:
+			// Writable anyway, but declared written all the same: a helper
+			// there conflicts rather than being sealed over its output.
+			declared = append(declared, w)
 		}
 	}
 	readOnlyShared := map[string]bool{}

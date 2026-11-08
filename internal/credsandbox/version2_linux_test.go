@@ -539,6 +539,16 @@ echo ran`
 	_, err := os.Lstat(helper)
 	assert.True(t, os.IsNotExist(err), "the refused command ran: %v", err)
 
+	// R12.B1: started in the declared output itself, which makes it the
+	// command's own: refused all the same, never sealed over its output.
+	cmd = exec.Command("bash", "-c", script)
+	cmd.Dir = out
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + home, "XDG_CACHE_HOME=" + xdg}
+	refusal = Wrap(cmd, "none", Writable{Paths: []string{out}})
+	assert.Contains(t, refusal, helper, "a helper in the declared output the command starts in: refused, naming it")
+	_, err = os.Lstat(filepath.Join(out, "result"))
+	assert.True(t, os.IsNotExist(err), "the refused command ran: %v", err)
+
 	// With the helper outside the hand-off, the command runs and what it
 	// writes in the hand-off is real: it persists after it exits.
 	elsewhere := filepath.Join(home, "bin", "helper")

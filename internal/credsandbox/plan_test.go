@@ -344,6 +344,21 @@ func TestPlan_AnAbsentHelperInAHandOffIsAConflict(t *testing.T) {
 	for _, c := range []string{inHandOff, inCarveOut, private} {
 		assert.NotContains(t, p.Seal, c, "sealing %s would lose the directory's writes, or is not needed", c)
 	}
+
+	// R12.B1: the declared output is the command's own already, because it
+	// starts there or it is inside its own checkout: still declared written,
+	// so a helper there conflicts rather than being sealed.
+	p = m.plan(out, env, out)
+	assert.Contains(t, p.Conflicts, inHandOff, "a declared output the command starts in is still declared: a helper there conflicts")
+	assert.NotContains(t, p.Seal, inHandOff)
+
+	ownOut := filepath.Join(m.wt, "a", "out")
+	inOwn := filepath.Join(ownOut, "helper")
+	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".gitconfig"), []byte(
+		"[credential]\n\thelper = "+inOwn+"\n"), 0o644))
+	p = m.plan(filepath.Join(m.wt, "a"), env, ownOut)
+	assert.Contains(t, p.Conflicts, inOwn, "a declared output inside the command's own checkout is still declared: a helper there conflicts")
+	assert.NotContains(t, p.Seal, inOwn)
 }
 
 // `helper = store` runs git's own credential-store: a git-credential-store on
