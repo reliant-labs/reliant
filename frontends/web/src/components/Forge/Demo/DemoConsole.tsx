@@ -51,6 +51,7 @@ import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fix
 import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadOnly";
 import { createDemoApi } from "./demoData/demoApi";
 import { DemoBanner } from "./DemoBanner";
+import { DemoWelcome } from "./DemoWelcome";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 import { HowBuiltLink } from "./howBuilt/HowBuiltLink";
 
@@ -158,13 +159,13 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
                 }
                 brandCollapsed={<ProjectMonogram name={FIXTURE_PROJECT} />}
               >
-                <DemoBanner shell={shell} />
+                {!(isDemoShell() && search.section === DEMO_SECTION_BUILT) && <DemoBanner shell={shell} />}
                 <div className="space-y-4" data-testid="forge-demo">
                   {search.section === DEMO_SECTION_BUILT ? (
                     <>
-                      <PageHeader density="compact" title="How this app was built" className="mb-0" />
+                      {isDemoShell() ? <DemoWelcome /> : <PageHeader density="compact" title="How this app was built" className="mb-0" />}
                       <Suspense fallback={<p className="text-sm text-ink-muted">Loading the recorded run…</p>}>
-                        <HowThisAppWasBuilt onBack={leaveBuilt} />
+                        <HowThisAppWasBuilt onBack={isDemoShell() ? undefined : leaveBuilt} autoPlay={false} leadWithRecording={isDemoShell()} />
                       </Suspense>
                     </>
                   ) : (
