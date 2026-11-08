@@ -327,6 +327,18 @@ func TestRepair_DeadWorktreeAddIsPrunedOnceOld(t *testing.T) {
 	if rep := RepairRepo(context.Background(), commonDir, at(DefaultRepairMinAge-time.Second)); !exists(admin) || len(rep.PrunedRegistrations) != 0 {
 		t.Fatalf("a dead add younger than MinAge was pruned: %+v", rep)
 	}
+	// While any add holds the add lock, the checkout could be made again
+	// behind the final check: nothing is pruned, and the registration is
+	// reported as skipped for the next repair.
+	release, err := LockWorktreeAdd(context.Background(), f.project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep := RepairRepo(context.Background(), commonDir, at(DefaultRepairMinAge+time.Second)); !exists(admin) || len(rep.PrunedRegistrations) != 0 || len(rep.SkippedRegistrations) != 1 {
+		release()
+		t.Fatalf("a registration was pruned while an add held the add lock: %+v", rep)
+	}
+	release()
 	rep := RepairRepo(context.Background(), commonDir, at(DefaultRepairMinAge+time.Second))
 	if exists(admin) || len(rep.PrunedRegistrations) != 1 || len(rep.SkippedRegistrations) != 0 {
 		t.Fatalf("report = %+v, want the dead add's registration pruned", rep)

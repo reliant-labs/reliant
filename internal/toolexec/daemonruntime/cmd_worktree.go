@@ -235,6 +235,20 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
+	// `git worktree add` runs under the repository's add lock, shared, so
+	// the repair never prunes a registration while an add may be making it
+	// (worktreereclaim/addlock.go). Released as soon as git exits.
+	releaseAdd, err := worktreereclaim.LockWorktreeAdd(ctx, req.ProjectPath)
+	if err != nil {
+		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf("failed to create worktree: %v", err)})
+	}
+	addLocked := true
+	defer func() {
+		if addLocked {
+			releaseAdd()
+		}
+	}()
+
 	// Whether the checkout's directory predates this call decides what a
 	// failure may take back: only a directory this call made is wholly ours.
 	_, statErr := os.Lstat(worktreePath)
@@ -291,7 +305,10 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	worktreeCmd.Dir = req.ProjectPath
 
 	checkoutStart := time.Now()
-	if output, err := worktreeCmd.CombinedOutput(); err != nil {
+	output, err := worktreeCmd.CombinedOutput()
+	releaseAdd()
+	addLocked = false
+	if err != nil {
 		// Roll back the directory this call created.
 		//
 		// MkdirAll above runs BEFORE git, so a failing `git worktree add`

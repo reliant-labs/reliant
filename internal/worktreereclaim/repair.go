@@ -438,9 +438,26 @@ func repairRegistration(ctx context.Context, adminDir string, opts RepairOptions
 			}
 			return // unlocked and outside the root: git's own prune expiry decides
 		}
+		// The final check and the removal run under the add lock, exclusive:
+		// no reliant `git worktree add` is running between them, so the
+		// checkout cannot be made again behind this check (addlock.go). An
+		// add in flight leaves the registration for the next repair.
+		release, ok, err := tryLockPrune(filepath.Dir(filepath.Dir(adminDir)))
+		if err != nil {
+			rep.problem("pruning registration %s: taking the worktree add lock: %v", name, err)
+			return
+		}
+		if !ok {
+			rep.SkippedRegistrations = append(rep.SkippedRegistrations, fmt.Sprintf("%s: %s (a worktree add is in progress)", name, checkout))
+			return
+		}
+		defer release()
 		// Re-check right before acting: a `git worktree move` may have just
-		// rewritten the gitdir file.
+		// rewritten the gitdir file, or an add finished before the lock.
 		if checkout != "" && (checkoutOf(adminDir) != checkout || !checkoutGone(checkout, opts.WorktreeRoot)) {
+			return
+		}
+		if checkout == "" && checkoutOf(adminDir) != "" {
 			return
 		}
 		if err := os.RemoveAll(adminDir); err != nil {
