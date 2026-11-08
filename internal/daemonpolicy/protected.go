@@ -107,6 +107,11 @@ func daemonDataDir() string {
 	return dataDir
 }
 
+// DaemonDataDir is the directory SetDaemonDataDir recorded, or "". Every
+// credentials-none command has had it hidden since the first sandbox, so what
+// the daemon records there no such command could have written.
+func DaemonDataDir() string { return daemonDataDir() }
+
 // ProtectedCredentials returns every credential location for the process's
 // user, cleaned and de-duplicated: the home-relative stores, the shared forge
 // credentials file wherever FORGE_HOME or XDG_CONFIG_HOME put it (with the

@@ -567,6 +567,35 @@ nodes:
 	}
 }
 
+// writable_checkouts is additive: a run node that names none parses as it
+// always did, and one that names some carries them.
+func TestNodeDispatch_RunWritableCheckouts(t *testing.T) {
+	wf, err := ParseWorkflow([]byte(`
+name: test
+nodes:
+  - id: gen
+    type: run
+    args:
+      command: "make gen"
+      credentials: none
+      writable_checkouts: [reliant, ../forge/gen]
+  - id: plain
+    type: run
+    args:
+      command: "make test"
+      credentials: none
+`))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if got := wf.Nodes[0].GetRun().GetWritableCheckouts(); len(got) != 2 || got[0] != "reliant" || got[1] != "../forge/gen" {
+		t.Errorf("writable_checkouts: got %v", got)
+	}
+	if got := wf.Nodes[1].GetRun().GetWritableCheckouts(); len(got) != 0 {
+		t.Errorf("a node without writable_checkouts: got %v", got)
+	}
+}
+
 func TestNodeDispatch_Workflow(t *testing.T) {
 	yaml := `
 name: test

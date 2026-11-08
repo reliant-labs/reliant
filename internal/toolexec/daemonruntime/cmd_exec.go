@@ -138,9 +138,11 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// credentials: none is a sandbox, not just a scrubbed environment: the
 	// command runs where the daemon's credential files are absent. It wraps
 	// OUTSIDE the heavy-slot rewrite above, so the slot wrapper runs inside it.
-	if refusal := credsandbox.Wrap(cmd, credentials); refusal != "" {
+	if refusal := credsandbox.Wrap(cmd, credentials, req.SandboxWritable()); refusal != "" {
 		return json.Marshal(daemon.CommandResult{ExitCode: credsandbox.RefusedExitCode, Stderr: refusal, Combined: refusal})
 	}
+	// A return before Start must not keep the sandbox's descriptors open.
+	defer credsandbox.Release(cmd)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	// Output stamps activity, so if the command is detached into the
@@ -181,6 +183,8 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 
 	start := time.Now()
 	err = cmd.Start()
+	// The child holds its own copies of the sandbox's descriptors now.
+	credsandbox.Release(cmd)
 	if err != nil {
 		tree.Started(0)
 	}
@@ -282,6 +286,7 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		WorkingDir:  req.WorkingDir,
 		Env:         req.Env,
 		Credentials: credentials,
+		Writable:    req.SandboxWritable(),
 		// Tag the process with the grant that started it, so a later
 		// bg_output/bg_kill from a different connector cannot reach it.
 		// Empty for first-party callers.

