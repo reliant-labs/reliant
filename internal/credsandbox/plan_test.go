@@ -144,15 +144,16 @@ func TestPlan_CredentialHelpersFoundOnPathAreProtected(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(tools, "gh"), []byte("#!/bin/sh\n"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".gitconfig"), []byte(
-		"[credential]\n\thelper = store\n\thelper = \"!gh auth git-credential\"\n\thelper = ./relative-helper\n"), 0o644))
+		"[credential]\n\thelper = vault\n\thelper = store\n\thelper = \"!gh auth git-credential\"\n\thelper = ./relative-helper\n"), 0o644))
 	env := []string{"HOME=" + m.home, "PATH=" + tools + ":" + gobin + ":/usr/bin:/bin"}
 
 	p := m.plan(m.a, env)
 	assert.Contains(t, p.ReadOnly, filepath.Join(tools, "gh"), "a `!` helper found on PATH, in the command's own tools")
-	assert.Contains(t, p.Seal, filepath.Join(tools, "git-credential-store"), "git-credential-<name> cannot be planted there")
+	assert.Contains(t, p.Seal, filepath.Join(tools, "git-credential-vault"), "git-credential-<name> cannot be planted there")
+	assert.NotContains(t, p.Seal, filepath.Join(tools, "git-credential-store"), "git runs its own credential-store, never one on PATH")
 	assert.Contains(t, p.Seal, filepath.Join(m.home, ".bashrc"), "(the home's own seals are unchanged)")
-	assert.NotContains(t, p.Seal, filepath.Join(gobin, "git-credential-store"), "a private PATH directory needs no seal")
-	assert.NotContains(t, p.Seal, "/usr/bin/git-credential-store", "nor the system's")
+	assert.NotContains(t, p.Seal, filepath.Join(gobin, "git-credential-vault"), "a private PATH directory needs no seal")
+	assert.NotContains(t, p.Seal, "/usr/bin/git-credential-vault", "nor the system's")
 	var overlaid []string
 	for _, o := range p.Overlay {
 		overlaid = append(overlaid, o.Path)
@@ -320,7 +321,11 @@ func TestFirstWord(t *testing.T) {
 // R9.B1: an absent absolute credential helper inside a cache root is sealed
 // when a hand-off its run node named makes that directory real, and when it
 // is in a carve-out of a read-only checkout; a private one needs no seal.
-func TestPlan_AnAbsentHelperInAHandOffIsSealed(t *testing.T) {
+// A helper that would be created inside a hand-off or a writable carve-out is
+// plantable there, and sealing would lose the command's declared output: a
+// conflict, which Wrap refuses. A builtin helper's name is never looked up on
+// PATH, so a directory on PATH that is a hand-off conflicts with nothing.
+func TestPlan_AnAbsentHelperInAHandOffIsAConflict(t *testing.T) {
 	m := newMachine(t)
 	xdg := filepath.Join(m.root, "xdg")
 	out := filepath.Join(xdg, "pipeline", "out")
@@ -334,7 +339,21 @@ func TestPlan_AnAbsentHelperInAHandOffIsSealed(t *testing.T) {
 
 	p := m.plan(m.multi, env, out, filepath.Join(m.a, "tools"))
 	assert.Contains(t, p.Passthrough, out)
-	assert.Contains(t, p.Seal, inHandOff, "the hand-off is real and writable: the helper must not be plantable there")
-	assert.Contains(t, p.Seal, inCarveOut, "a writable carve-out of a read-only checkout is real too")
-	assert.NotContains(t, p.Seal, private, "a private directory's writes do not outlive the command")
+	assert.ElementsMatch(t, []string{inHandOff, inCarveOut}, p.Conflicts,
+		"the hand-off and a writable carve-out of a read-only checkout are real and declared written: a helper there conflicts")
+	for _, c := range []string{inHandOff, inCarveOut, private} {
+		assert.NotContains(t, p.Seal, c, "sealing %s would lose the directory's writes, or is not needed", c)
+	}
+}
+
+// `helper = store` runs git's own credential-store: a git-credential-store on
+// PATH is never run, so it is no candidate. A helper git does not have is
+// looked up on PATH, so each PATH directory is a candidate.
+func TestCredentialHelpers_ABuiltinHelperIsNotLookedUpOnPath(t *testing.T) {
+	home := t.TempDir()
+	bin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"),
+		[]byte("[credential]\n\thelper = store\n\thelper = cache --timeout 60\n\thelper = vault\n"), 0o644))
+	_, absent, _ := credentialHelpers(home, []string{"PATH=" + bin})
+	assert.Equal(t, []string{filepath.Join(bin, "git-credential-vault")}, absent)
 }

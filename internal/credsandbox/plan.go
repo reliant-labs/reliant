@@ -268,7 +268,9 @@ func buildPlan(base Plan, in planEnv) Plan {
 	// An opt-in naming a shared checkout makes it the command's own; one
 	// inside a shared checkout is a carve-out of it; one inside a cache root
 	// stays real there (below). Anything else is refused.
-	var writable, handOffs, rejected []string
+	// declared are the directories its writable_checkouts named: outputs a
+	// later step reads, so what it writes there must persist.
+	var writable, handOffs, rejected, declared []string
 	shared = dedupe(shared)
 	ownBefore := append([]string(nil), own...)
 	for _, w := range in.optIn {
@@ -276,10 +278,13 @@ func buildPlan(base Plan, in planEnv) Plan {
 		switch writableFor(w, in.handOffsOnly, ownBefore, shared, cwd, cwdOwn, roots, tools) {
 		case optInSharedCheckout:
 			own = append(own, w)
+			declared = append(declared, w)
 		case optInInsideShared:
 			writable = append(writable, w)
+			declared = append(declared, w)
 		case optInHandOff:
 			handOffs = append(handOffs, w)
+			declared = append(declared, w)
 		case optInRejected:
 			rejected = append(rejected, w)
 		case optInOwn:
@@ -367,12 +372,19 @@ func buildPlan(base Plan, in planEnv) Plan {
 	protected := func(d string) bool {
 		return (under(d, keptPaths...) || under(d, roAll...)) && !under(d, exposed...)
 	}
+	// One in a declared hand-off or carve-out cannot be sealed: sealing
+	// rebuilds the directory above it, so the output the command declared it
+	// writes there would be gone when it exits. The two promises conflict,
+	// and Wrap refuses the command (Plan.Conflicts).
+	declared = cleanAbs(declared)
+	var conflicts []string
 	for _, c := range helpersAbsent {
 		d := filepath.Dir(c)
-		if protected(d) {
-			continue
-		}
-		if under(d, exposed...) || (home != "" && under(d, home)) || under(d, own...) || (cwdOwn && under(d, cwd)) {
+		switch {
+		case protected(d):
+		case under(d, declared...):
+			conflicts = append(conflicts, c)
+		case under(d, exposed...) || (home != "" && under(d, home)) || under(d, own...) || (cwdOwn && under(d, cwd)):
 			seal = append(seal, c)
 		}
 	}
@@ -380,10 +392,14 @@ func buildPlan(base Plan, in planEnv) Plan {
 	// is (credentialHelpers); checkSeals refuses the command when its
 	// directory is writable and cannot be sealed.
 	for _, c := range helpersAbsentPath {
-		if protected(filepath.Dir(c)) {
-			continue
+		d := filepath.Dir(c)
+		switch {
+		case protected(d):
+		case under(d, declared...):
+			conflicts = append(conflicts, c)
+		default:
+			seal = append(seal, c)
 		}
-		seal = append(seal, c)
 	}
 
 	p.ReadOnly = roAll
@@ -392,6 +408,7 @@ func buildPlan(base Plan, in planEnv) Plan {
 	p.Overlay = dedupeOverlays(append(p.Overlay, keep...))
 	p.Passthrough = cleanAbs(append(p.Passthrough, passthrough...))
 	p.Rejected = cleanAbs(append(p.Rejected, rejected...))
+	p.Conflicts = cleanAbs(append(p.Conflicts, conflicts...))
 	return p
 }
 
@@ -665,6 +682,8 @@ func credentialHelpers(home string, env []string) (present, absent, absentPath [
 		case strings.ContainsRune(h.name, '/'):
 			// Relative to whatever directory the credentialed git runs in:
 			// not a path this plan can name.
+		case !h.shell && gitBuiltinHelpers[h.name]:
+			// git runs its own: nothing on PATH is ever looked up.
 		default:
 			name := h.name
 			if !h.shell {
@@ -682,6 +701,12 @@ func credentialHelpers(home string, env []string) (present, absent, absentPath [
 	}
 	return present, absent, absentPath
 }
+
+// gitBuiltinHelpers are the credential helpers git has built in (`helper =
+// store` runs `git credential-store`: a git builtin, or in older gits a program
+// in git's exec-path, which git puts ahead of PATH). A program of that name on
+// PATH is never run, so it is no helper to protect.
+var gitBuiltinHelpers = map[string]bool{"store": true, "cache": true}
 
 // gitHelper is one `helper = ...` value of a git config: the program it runs
 // and whether it is a `!` shell helper.

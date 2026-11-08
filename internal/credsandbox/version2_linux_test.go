@@ -527,13 +527,29 @@ func TestSandbox_AnAbsentCredentialHelperInAHandOffCannotBePlanted(t *testing.T)
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"),
 		[]byte("[credential]\n\thelper = "+helper+"\n"), 0o644))
 
-	cmd := wrappedWritable(t, home, home, []string{out}, `
-printf '#!/bin/sh\necho password=planted\n' > '`+helper+`' 2>/dev/null && chmod +x '`+helper+`' 2>/dev/null
-echo kept > '`+out+`/result'
-echo ran`, "XDG_CACHE_HOME="+xdg)
-	b, err := cmd.CombinedOutput()
+	script := `
+printf '#!/bin/sh\necho password=planted\n' > '` + helper + `' 2>/dev/null && chmod +x '` + helper + `' 2>/dev/null
+echo kept > '` + out + `/result'
+echo ran`
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Dir = home
+	cmd.Env = []string{"PATH=/usr/bin:/bin", "HOME=" + home, "XDG_CACHE_HOME=" + xdg}
+	refusal := Wrap(cmd, "none", Writable{Paths: []string{out}})
+	assert.Contains(t, refusal, helper, "a helper the command could plant in its declared output: refused, naming it")
+	_, err := os.Lstat(helper)
+	assert.True(t, os.IsNotExist(err), "the refused command ran: %v", err)
+
+	// With the helper outside the hand-off, the command runs and what it
+	// writes in the hand-off is real: it persists after it exits.
+	elsewhere := filepath.Join(home, "bin", "helper")
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"),
+		[]byte("[credential]\n\thelper = "+elsewhere+"\n"), 0o644))
+	b, err := wrappedWritable(t, home, home, []string{out}, strings.ReplaceAll(script, helper, elsewhere), "XDG_CACHE_HOME="+xdg).CombinedOutput()
 	require.NoError(t, err, "%s", b)
 	assert.Contains(t, string(b), "ran")
-	_, err = os.Lstat(helper)
+	got, err := os.ReadFile(filepath.Join(out, "result"))
+	require.NoError(t, err, "the command's declared output did not persist")
+	assert.Equal(t, "kept\n", string(got))
+	_, err = os.Lstat(elsewhere)
 	assert.True(t, os.IsNotExist(err), "a planted credential helper outlived the credentials-none command: %v", err)
 }

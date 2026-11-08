@@ -125,6 +125,11 @@ type Plan struct {
 	// (writableFor): Wrap refuses the command and names them, rather than
 	// run it with less than it declared.
 	Rejected []string `json:"-"`
+	// Conflicts are credential helpers that do not exist yet and would be
+	// created inside a directory the command's writable_checkouts named:
+	// plantable there, and sealing that directory would lose what the command
+	// writes in it. Wrap refuses the command and names them.
+	Conflicts []string `json:"-"`
 }
 
 // Overlay is one directory the command sees through a private overlay.
@@ -354,7 +359,19 @@ func Wrap(cmd *exec.Cmd, credentials string, writable Writable) (refusal string)
 	if len(plan.Rejected) > 0 && Available(self) == nil {
 		return rejectedRefusal(plan.Rejected, writable.HandOffsOnly)
 	}
+	if len(plan.Conflicts) > 0 && Available(self) == nil {
+		return conflictRefusal(plan.Conflicts)
+	}
 	return Apply(cmd, self, plan)
+}
+
+// conflictRefusal is what a command reports when a credential helper the git
+// config names would live in a directory it declared it writes.
+func conflictRefusal(helpers []string) string {
+	return fmt.Sprintf("reliant: `credentials: none` command not run: the git credential helper %s does not exist yet, "+
+		"and it would be created in a directory the command's writable_checkouts names, "+
+		"where the command could plant it for a later credentialed git. Point the git config's credential.helper outside "+
+		"that directory, or create the helper first.", strings.Join(helpers, ", "))
 }
 
 // rejectedRefusal is what a command whose declared writable directories the
