@@ -27,8 +27,8 @@ export const CATEGORY_COPY: { id: CategoryId; label: string; detail: string }[] 
 
 export const CHAIN_COPY: Record<ChainExcerpt["id"], { title: string; body: string }> = {
   proto: {
-    title: "The API definition",
-    body: "You define the order's fields and mark it for Forge to build on. Forge adds an ID, creation and update times, and API operations for creating, viewing, listing, updating and deleting orders.",
+    title: "The agent defines the API",
+    body: "Your agent defines the order's fields and marks it for Forge to build on. Forge adds an ID, creation and update times, and API operations for creating, viewing, listing, updating and deleting orders.",
   },
   migration: {
     title: "The database setup",
@@ -40,7 +40,7 @@ export const CHAIN_COPY: Record<ChainExcerpt["id"], { title: string; body: strin
   },
   handler: {
     title: "The server code",
-    body: "Creating, viewing, listing, updating and deleting orders are wired up for you. Custom API actions still need your app's rules: CancelOrder starts as a placeholder that returns Unimplemented until you or your agent implement it.",
+    body: "Creating, viewing, listing, updating and deleting orders are wired up for you. Custom API actions still need your app's rules: CancelOrder starts as a placeholder that returns Unimplemented until your agent implements your app's rules.",
   },
   hook: {
     title: "The browser's API helpers",
@@ -48,7 +48,7 @@ export const CHAIN_COPY: Record<ChainExcerpt["id"], { title: string; body: strin
   },
   test: {
     title: "The test",
-    body: "This test creates, reads, lists, updates and deletes orders against a real Postgres database with your migrations applied. Forge writes it once; you extend it as your app grows. The recording shows the test code being generated, not the test being run.",
+    body: "This test creates, reads, lists, updates and deletes orders against a real Postgres database with your migrations applied. Forge writes it once; your agent extends it as your app grows. The recording shows the test code being generated, not the test being run.",
   },
 };
 

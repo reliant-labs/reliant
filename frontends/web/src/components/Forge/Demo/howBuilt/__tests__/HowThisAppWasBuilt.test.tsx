@@ -29,7 +29,7 @@ describe("<HowThisAppWasBuilt>", () => {
     render(<HowThisAppWasBuilt />);
     const t = manifest.totals;
     expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(
-      `A person wrote ${n(t.you_wrote_lines)} lines of API definitions in ${t.you_wrote_files} files. Forge generated ${n(t.forge_lines)} lines across ${n(t.files)} files.`
+      `${n(t.you_wrote_lines)} lines of API definitions in ${t.you_wrote_files} files. Forge generated ${n(t.forge_lines)} lines across ${n(t.files)} files.`
     );
     const totals = screen.getByTestId("scaffold-totals");
     const s = summarize(manifest, cast);
@@ -97,10 +97,15 @@ describe("<HowThisAppWasBuilt>", () => {
   it("leads with a shared plain-language API summary and separates recording provenance", () => {
     render(<HowThisAppWasBuilt leadWithRecording />);
     const summary = screen.getByTestId("build-summary");
-    expect(summary).toHaveTextContent("data and API");
-    expect(summary).toHaveTextContent("custom behavior");
-    expect(summary).not.toHaveTextContent(/rpc|proto/i);
-    expect(screen.getByRole("heading", {name:"You define the app. Forge builds the foundation.",level:2})).toBeVisible();
+    expect(summary).toHaveTextContent("Your agent defines the data and API");
+    expect(summary).toHaveTextContent("writes your app's custom behavior");
+    expect(summary).not.toHaveTextContent(/rpc|proto|A person|You write the message/i);
+    expect(screen.getByRole("heading", {name:"Tell your agent what to build. Forge gives it the foundation.",level:2})).toBeVisible();
+    expect(screen.getByTestId("how-built")).toHaveTextContent("In this recording, API definitions were added");
+    expect(screen.getByTestId("scaffold-headline")).not.toHaveTextContent(/person|agent/i);
+    expect(CHAIN_COPY.proto.title).toBe("The agent defines the API");
+    expect(CHAIN_COPY.proto.body).toMatch(/^Your agent defines/);
+    expect(CHAIN_COPY.handler.body).toContain("your agent implements your app's rules");
     expect(screen.getByRole("heading", {name:"What Forge generated",level:2})).toBeVisible();
     expect(screen.getByText("About this recording").closest("details")).not.toHaveAttribute("open");
   });
@@ -122,7 +127,7 @@ describe("<BuiltTourStep> (the tour's card)", () => {
     expect(screen.getByTestId("scaffold-replay")).toBeInTheDocument();
     const t = manifest.totals;
     expect(screen.getByTestId("built-tour-totals")).toHaveTextContent(
-      `A person wrote ${n(t.you_wrote_lines)} lines of API definitions. Forge generated ${n(t.forge_lines)} lines across ${n(t.files)} files`
+      `${n(t.you_wrote_lines)} lines of API definitions. Forge generated ${n(t.forge_lines)} lines across ${n(t.files)} files`
     );
     expect(screen.getByTestId("built-tour-totals")).toHaveTextContent("How this app was built");
     expect(allPaths).toContain("AGENTS.md");

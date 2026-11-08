@@ -45,7 +45,7 @@ export function HowThisAppWasBuilt({ cast, manifest, onBack, className, autoPlay
           {onBack && <Button className="min-h-[44px]" variant="outline" leftIcon={<ArrowLeft />} onClick={onBack} data-testid="how-built-back">Back to the console</Button>}
         </div>
         <TerminalReplay cast={fixtures.cast} autoPlay={leadWithRecording ? false : autoPlay} />
-        <p className="text-sm leading-relaxed text-ink">This is a real build recording, not the console&apos;s sample monitoring data. It shows code generation, code checks and a successful Go build—not a deployment or a test-suite run.</p>
+        <p className="text-sm leading-relaxed text-ink">In this recording, API definitions were added, then Forge generated the supporting code. It shows code generation, code checks and a successful Go build—not a deployment or a test-suite run. The console&apos;s monitoring data is a separate sample.</p>
         <details className="border-t border-border pt-3 text-sm text-ink-muted">
           <summary className="min-h-[44px] cursor-pointer py-3 font-medium text-ink">About this recording</summary>
           <p>Recorded with Forge {fixtures.manifest.forge_version} on {recorded}. The commands and code below are unchanged from that run.</p>

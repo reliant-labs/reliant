@@ -55,17 +55,17 @@ export function ScaffoldPanel({ manifest, cast }: { manifest: ScaffoldManifest; 
           What Forge generated
         </h2>
         <p className="text-lg text-ink" data-testid="scaffold-headline">
-          A person wrote <strong>{n(s.youLines)}</strong> lines of API definitions in {s.youFiles} files. Forge generated{" "}
+          <strong>{n(s.youLines)}</strong> lines of API definitions in {s.youFiles} files. Forge generated{" "}
           <strong>{n(s.forgeLines)}</strong> lines across <strong>{n(s.files)}</strong> files.
         </p>
-        <p className="text-base leading-relaxed text-ink">Some files are starting points you can customize. Others are regenerated: change their inputs instead. Your app&apos;s custom behavior still needs your rules.</p>
+        <p className="text-base leading-relaxed text-ink">Your agent customizes the starting files and implements your app&apos;s rules. Regenerated files come from their inputs instead of direct edits. The project and its code remain yours.</p>
         <details className="border-t border-border pt-2">
           <summary className="min-h-[44px] cursor-pointer py-3 text-sm font-medium text-ink">How these files are counted and maintained</summary>
         <p className="text-sm leading-relaxed text-ink-muted">
           <code>forge project new</code> wrote {n(s.newFiles)} files; <code>forge scaffold</code> then added {n(s.scaffoldAdded)} and changed{" "}
           {n(s.scaffoldChanged)}. Of Forge&apos;s lines, {n(s.regenLines)} are in files it rewrites on every <code>forge generate</code>:
           change their inputs rather than editing those files. These include {n(s.machineLines)} lines of generated Go and TypeScript API code.
-          It wrote the other {n(s.onceLines)} once: starting code and pages you can customize, not a finished product.
+          It wrote the other {n(s.onceLines)} once: starting code and pages your agent can customize, not a finished product.
           Not counted: {s.lockfiles} dependency lockfiles, and Forge&apos;s own working files in <code>.forge/</code>.
         </p>
         </details>
