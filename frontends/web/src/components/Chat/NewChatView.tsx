@@ -71,6 +71,7 @@ import Tooltip from "../forge-ui/tooltip";
 import { trackEvent } from "../../lib/analytics";
 import { PendingFirstMessage } from "./PendingFirstMessage";
 import { useCurrentWorktree, useCachedWorktrees, getCachedWorktree } from "../../hooks/worktree-queries";
+import { useNewChatMachineStore } from "../../store/newChatMachineStore";
 
 // Text handed back after a failed start goes through the composer's prefill.
 // Its ids count up from here, so they can never equal a host's prefill id
@@ -205,6 +206,15 @@ export function NewChatView({
       canChoose(placement, machineChoice);
     if (!keep) setMachineChoice(null);
   }
+  // The screen that opened this view named the machine the chat is for (Add
+  // project's folder or clone, newChatMachineStore): it is the user's choice,
+  // taken once its project is current, after the reset above.
+  const requestedMachine = useNewChatMachineStore((state) => state.pending);
+  useEffect(() => {
+    if (!currentProject?.id || requestedMachine?.projectId !== currentProject.id) return;
+    const daemonId = useNewChatMachineStore.getState().take(currentProject.id);
+    if (daemonId) setMachineChoice(daemonId);
+  }, [currentProject?.id, requestedMachine]);
   // A branch workspace is a checkout on one machine, so selecting one selects
   // its machine (lib/workspaceMachine.ts); the server refuses anything else.
   const machineIds = new Set(daemons.map((d) => d.daemonId));

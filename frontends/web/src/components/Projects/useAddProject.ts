@@ -22,7 +22,7 @@ import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useListProjectDaemons } from "../../hooks/project-service-hooks_gen";
 import { invalidateDaemonList } from "../../hooks/daemon-registry-queries";
 import { useGitHubCredential } from "../../hooks/useGitHubCredential";
-import { createProject, createProjectFromRepo, fetchProjects, type Project } from "../../hooks/project-queries";
+import { createProjectFromRepo, createProjectWithResult, fetchProjects, type Project } from "../../hooks/project-queries";
 import { machineDisplayName } from "../../lib/machineName";
 import { markMachineGone, useGoneMachinesVersion, withoutGoneMachines } from "../../lib/goneMachines";
 import { basename } from "../../lib/pathUtils";
@@ -51,13 +51,18 @@ function isAlreadyExistsError(error: unknown): boolean {
   return error instanceof ConnectError && error.code === Code.AlreadyExists;
 }
 
-/** Open a project that was just added (or that already existed). */
-export async function openAddedProject(project: Pick<Project, "id">): Promise<void> {
+/**
+ * Open a project that was just added (or that already existed), with a new
+ * chat on `daemonId` when one is named: the machine the folder or clone is
+ * on. Without it, a folder that attached to a project already installed on
+ * the default machine would open a chat there instead.
+ */
+export async function openAddedProject(project: Pick<Project, "id">, daemonId?: string): Promise<void> {
   const filter = useWorkspaceStateStore.getState().projectFilterId;
   if (filter && filter !== project.id) {
     await useProjectStore.getState().setProjectFilter(project.id);
   }
-  await openNewChat({ projectId: project.id });
+  await openNewChat({ projectId: project.id, daemonId });
 }
 
 interface UseAddProjectOptions {
@@ -117,8 +122,8 @@ export function useAddProject({ onAdded, onChooseClone, onChooseFolderInBrowser 
     (cloneState.kind === "ready" ? cloneState.target.daemonId : null);
 
   const finish = useCallback(
-    async (project: Project) => {
-      await openAddedProject(project);
+    async (project: Project, daemonId?: string) => {
+      await openAddedProject(project, daemonId);
       onAdded?.(project);
     },
     [onAdded],
@@ -151,7 +156,7 @@ export function useAddProject({ onAdded, onChooseClone, onChooseFolderInBrowser 
         if (result.project) {
           const openedId = result.project.id;
           const opened = (await fetchProjects({ fresh: true })).find((p) => p.id === openedId);
-          if (opened) await finish(opened);
+          if (opened) await finish(opened, result.projectDaemon?.daemon_id || targetDaemonId);
         }
       } catch (err) {
         if (isCloneTargetGone(err)) {
@@ -174,14 +179,14 @@ export function useAddProject({ onAdded, onChooseClone, onChooseFolderInBrowser 
       const projectName = basename(selectedPath) || selectedPath || "Untitled project";
       const loadingToast = toast.loading(`Opening ${projectName}…`);
       try {
-        const created = await createProject({
+        const created = await createProjectWithResult({
           name: projectName,
           path: selectedPath,
           description: "",
           default_branch: "main",
           daemon_id: daemonId,
         });
-        await finish(created);
+        await finish(created.project, created.projectDaemon?.daemon_id || daemonId);
       } catch (error) {
         if (isAlreadyExistsError(error)) {
           const machines = await refetchProjectMachines();
@@ -189,7 +194,7 @@ export function useAddProject({ onAdded, onChooseClone, onChooseFolderInBrowser 
           const found = (await fetchProjects({ fresh: true })).find((p) => existing ? p.id === existing.projectId : !daemonId && p.path === selectedPath);
           if (found) {
             toast.success(`Opening ${found.name}, which is already a project`);
-            await finish(found);
+            await finish(found, existing?.daemonId || daemonId);
             return;
           }
         }
