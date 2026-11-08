@@ -855,6 +855,11 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 	if err := e.loadSubWorkflow(); err != nil {
 		return nil, fmt.Errorf("failed to load loop sub-workflow: %w", err)
 	}
+	// Listed as a thread an agent reads while this loop runs, so a message
+	// to the run can find it (agent_loop_threads.go).
+	if release := e.registerAgentLoop(); release != nil {
+		defer release()
+	}
 
 	// If the sequential loop has an items expression, resolve it upfront
 	// so iter.item is available on each iteration.
