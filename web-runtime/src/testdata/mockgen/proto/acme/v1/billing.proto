@@ -1,0 +1,43 @@
+// A vendored contract: another team's package, generated beside the app's
+// own. Its TelemetryService shares a short name with sample.v1's, which is
+// what makes the generator qualify both mock module names.
+syntax = "proto3";
+
+package acme.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message Invoice {
+  string id = 1;
+  string customer_email = 2;
+  int64 amount_cents = 3;
+  google.protobuf.Timestamp created_at = 4;
+  map<string, LineItem> lines = 5;
+}
+
+message LineItem {
+  string description = 1;
+  int32 quantity = 2;
+}
+
+message GetInvoiceRequest {
+  string id = 1;
+}
+
+message GetInvoiceResponse {
+  Invoice invoice = 1;
+}
+
+message PingRequest {}
+
+message PingResponse {
+  string version = 1;
+}
+
+service BillingService {
+  rpc GetInvoice(GetInvoiceRequest) returns (GetInvoiceResponse);
+}
+
+service TelemetryService {
+  rpc Ping(PingRequest) returns (PingResponse);
+}

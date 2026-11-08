@@ -1,0 +1,715 @@
+# The `-tags e2e` suite. All of it.
+#
+# WHAT THIS FIXES. forge's e2e tests live behind `//go:build e2e`. Until this
+# workflow existed, nothing in CI passed that tag except a fixture-corpus
+# workflow that narrowed itself with `-run 'TestE2EFixtureCorpus'`. Net: 5 of
+# the suite's 52 tests ran. The other 47 — every scaffold-shape test, every
+# frontend build gate, the lint-clean invariants, the KCL renders — had never
+# executed in CI, while three green checkmarks said the opposite. `go test
+# -race ./...` in ci.yml does not compile these files; neither does
+# golangci-lint, which is configured with no build tags. They were invisible to
+# every gate forge had.
+#
+# WHEN IT RUNS. Every push to main, nightly (nightly.yml, `select: all`), on
+# demand (workflow_dispatch), and on a pull request that carries the `ci:e2e`
+# label (informational, never part of `CI gate`). It used to run on every pull
+# request, and at 7-12 minutes a shard (20 on average, 42 at worst, for the
+# workflow) it was half of a pull request's wall time. A pull request's budget
+# is about five minutes (ci.yml, "TWO TIERS"), so the suite moved to main,
+# where a regression is bisected from the merge that caused it. Label a pull
+# request `ci:e2e` when it changes what the suite exercises — scaffolding,
+# generate, the frontend build — and you want the verdict before merging
+# rather than after.
+#
+# It also ran, unlabelled, on every pull request that touched the scaffold,
+# the templates, the generators or generate (a `changes` job). That was 40 of
+# 100 pull-request events on 2026-10-25/26: six jobs and ~21 minutes each,
+# for a verdict no gate read, holding runners from the org's 20 that every
+# pull request's `CI gate` queues for. It is label-only now (the owner's
+# rule: e2e runs on main and nightly, not before the merge).
+#
+# What stayed on every pull request is the compile check: ci.yml's
+# `e2e-compile` job runs `go vet -tags e2e` over the tagged packages, because
+# the cheapest and commonest breakage in a tagged file is that it stopped
+# compiling, and golangci-lint (no build tags) cannot see it. It used to be
+# this workflow's `compile` job.
+#
+# THREE JOBS.
+#
+#   prepare   BUILD ONCE, PLAN ONCE. Compiles the e2e test binary, forge, and
+#             the codegen plugins `forge tools install` provides; lists the
+#             tests from that binary; plans the shards by recorded duration
+#             (internal/e2eshard); and hands all of it to the shards as one
+#             artifact. Each shard used to compile all of it again: ~100s
+#             installing forge and its plugins, ~35s compiling the binary
+#             for `go test -list`, then the same binary again to run it.
+#
+#   suite     the selected tests, sharded. A shard compiles nothing of forge:
+#             it runs the prebuilt test binary under test2json, and the tests
+#             use the prebuilt forge (FORGE_E2E_BINARY).
+#
+#   ledger    aggregates the shards into ONE report: what ran, what did not,
+#             and whether the shards between them covered every selected
+#             test. Runs `if: always()`, because a job that only reports what
+#             ran when it passed is the exact failure mode this workflow exists
+#             to delete.
+#
+# WHICH TESTS. Exactly the e2e tests, by name: a test is an e2e test when its
+# name starts with TestE2E, and internal/e2eshard's naming guard (run by
+# ci.yml's test-short shards on every PR) fails if a test in an e2e-tagged file is named
+# otherwise or a TestE2E test lives in an untagged file. So
+# `-test.list '^TestE2E'` on the compiled binary IS the tagged set. The
+# shards used to run all ~3,200 tests in the package — the ~3,100 untagged
+# ones a second time, after ci.yml's Test (internal/cli) job had already run
+# them under -race.
+#
+# A push to main (and a labelled pull request) runs `-select pr`: every e2e test but
+# the TestE2ENightly* ones. nightly.yml calls this workflow with
+# `select: all`, which runs those too. Moving a test to nightly is a rename,
+# and its doc comment says why.
+#
+# THE SHARD PARTITION IS DERIVED AND AUDITED, NOT MAINTAINED. Sharding
+# introduces a way to silently drop a test, which is the disease being treated
+# here, so it is nailed down three times over:
+#
+#   1. The list comes from the compiled test binary's `-test.list` — the same
+#      enumeration `go test` itself uses. Nobody types a test name.
+#   2. The plan (longest recorded duration first, onto the least-loaded
+#      shard) assigns every listed test to exactly one shard and leaves none
+#      empty; internal/e2eshard's tests prove it for the real suite.
+#   3. Each shard PRINTS the tests it owns and asserts that the number of
+#      top-level tests the run actually reported equals the number it was
+#      assigned; the ledger then asserts the union of the shards equals the
+#      selection and that no shard is missing entirely.
+#
+# RECORDED DURATIONS. .github/e2e-timings.json, refreshed from a CI run by
+# scripts/e2e-timings.sh. A test with no entry yet is planned at the median
+# and named in the plan's summary; a stale entry only unbalances the shards,
+# it never drops a test.
+#
+# NO -race. The suite's work happens in subprocesses (forge, go build, npm,
+# kcl); the race detector cannot see into them, and it roughly doubles the
+# compile cost of the in-process half. ci.yml keeps -race where it pays: the
+# unit lanes.
+name: E2E Suite
+
+on:
+  push:
+    branches: [main]
+  # Gated on the `ci:e2e` label (see WHEN IT RUNS): `labeled` so that adding
+  # the label starts a run without another push.
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+  # nightly.yml: the whole suite, TestE2ENightly* included.
+  workflow_call:
+    inputs:
+      select:
+        description: "pr (all but TestE2ENightly*) or all"
+        type: string
+        default: pr
+  # A manual run, e.g. to record fresh durations for every test.
+  workflow_dispatch:
+    inputs:
+      select:
+        description: "pr (all but TestE2ENightly*) or all"
+        type: choice
+        options: [all, pr]
+        default: all
+
+permissions:
+  contents: read
+
+# Cancel the run in progress on a pull request only; on main it always
+# finishes, and a newer push supersedes the pending one (ci.yml says why). The
+# event is part of the group so nightly.yml's call, which shares main's ref,
+# never queues behind — or supersedes — a push run's pending one.
+#
+# Adding some OTHER label to a pull request is a `labeled` event too. Its run
+# gets a group of its own (the run id), so it cannot cancel a `ci:e2e` run in
+# progress; all of its jobs then skip.
+concurrency:
+  group: e2e-suite-${{ github.event_name }}-${{ github.ref }}${{ github.event.action == 'labeled' && github.event.label.name != 'ci:e2e' && format('-{0}', github.run_id) || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Every one of October 2026's e2e reds on main came from a change to the
+  # scaffold, the templates, the generators or generate, which the suite
+  # never saw before merging: label such a pull request `ci:e2e` when its
+  # author wants the verdict first. Otherwise main finds it, and the red is
+  # bisected from the merge that caused it.
+  #
+  # INFORMATIONAL. This workflow is not part of ci.yml's `CI gate`, and no
+  # check of it is required: a red here is a verdict to read before merging,
+  # not a gate. One run per pull-request head: a new push cancels the run in
+  # progress (the concurrency group above). A `labeled` event for some other
+  # label never auto-runs (its run is in a group of its own and would only
+  # duplicate the one already going).
+  prepare:
+    name: prepare (build once, plan shards)
+    # Everything else needs this job, so this one condition gates the
+    # workflow: on a pull request, it runs only with the `ci:e2e` label.
+    if: >-
+      ${{ github.event_name != 'pull_request'
+        || contains(github.event.pull_request.labels.*.name, 'ci:e2e') }}
+    runs-on: ubuntu-latest
+    env:
+      # THE shard count. The suite's matrix and the ledger both read it from
+      # this job's outputs, so it is set here and nowhere else. Four: each
+      # shard still pays ~1 minute of toolchain setup, and at four the
+      # slowest single tests (~5 minutes on a busy runner) are already close
+      # to a shard's floor.
+      E2E_SHARDS: 4
+      E2E_SELECT: ${{ inputs.select || 'pr' }}
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      # This job's own build cache, restored on every run and saved only from
+      # main, once a UTC day (ci.yml's "Build-cache note"): it is the one job
+      # that compiles forge for the suite, so it is the one worth keeping warm.
+      - uses: ./.github/actions/restore-go-caches
+        id: go-caches
+        with:
+          scope: e2e-prepare
+          refresh: daily
+      # The binary under test must come from THIS commit, so all three are
+      # built from the checkout. forge is built exactly as the tests' own
+      # buildforgeBinary builds it (`go build -o <bin> ./cmd/forge` with
+      # DevForgeRoot stamped to the checkout, devForgeRootLDFlag in
+      # internal/cli/scaffold_e2e_test.go; the same checkout path on every
+      # runner), so the prebuilt one is the
+      # binary a shard would have built. The plugins are what the generate
+      # pipeline's buf `local:` plugins and goimports expect on PATH, at the
+      # versions go.mod resolves; --force so a runner image's own copy can
+      # never stand in for one.
+      - name: Build the e2e test binary, forge and the codegen plugins
+        run: |
+          set -euo pipefail
+          dist="$RUNNER_TEMP/e2e-dist"
+          mkdir -p "$dist/bin"
+          go test -c -tags e2e -o "$dist/e2e.test" ./internal/cli/
+          go build -ldflags "-X github.com/reliant-labs/forge/internal/buildinfo.DevForgeRoot=$PWD" -o "$dist/bin/forge" ./cmd/forge
+          GOBIN="$dist/bin" PATH="$dist/bin:$PATH" "$dist/bin/forge" tools install --force
+          ls -la "$dist" "$dist/bin"
+      - name: List the e2e tests and plan the shards
+        id: plan
+        run: |
+          set -euo pipefail
+          dist="$RUNNER_TEMP/e2e-dist"
+          # -test.list is the enumeration `go test` itself uses, run from the
+          # package directory as `go test` runs it.
+          (cd internal/cli && "$dist/e2e.test" -test.list '^TestE2E') | { grep '^TestE2E' || true; } > "$dist/listed-tests.txt"
+          total=$(wc -l < "$dist/listed-tests.txt" | tr -d ' ')
+          if [ "$total" -lt 50 ]; then
+            echo "::error::-test.list found only $total TestE2E tests in ./internal/cli/ — the e2e tag did not take, and a shard that enumerates nothing passes everything"
+            exit 1
+          fi
+          go run ./internal/e2eshard plan \
+            -list "$dist/listed-tests.txt" -timings .github/e2e-timings.json \
+            -shards "$E2E_SHARDS" -select "$E2E_SELECT" \
+            -out "$dist/plan" -summary "$GITHUB_STEP_SUMMARY"
+          echo "shards=$(jq -cn --argjson n "$E2E_SHARDS" '[range($n)]')" >> "$GITHUB_OUTPUT"
+          echo "count=$E2E_SHARDS" >> "$GITHUB_OUTPUT"
+      # One tar, not a directory: an artifact does not keep the executable
+      # bit, and one large file uploads faster than a tree of them.
+      - name: Pack
+        run: tar -C "$RUNNER_TEMP" -cf e2e-dist.tar e2e-dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: e2e-dist
+          path: e2e-dist.tar
+          retention-days: 1
+          if-no-files-found: error
+          # Binaries: level 1 keeps most of the size win at a fraction of
+          # level 6's time.
+          compression-level: 1
+      - name: Save the Go caches (main only, once a day)
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: ./.github/actions/save-go-caches
+        with:
+          build-key: ${{ steps.go-caches.outputs.build-key }}
+          build-hit: ${{ steps.go-caches.outputs.build-hit }}
+          mod-key: ${{ steps.go-caches.outputs.mod-key }}
+          mod-hit: ${{ steps.go-caches.outputs.mod-hit }}
+
+  suite:
+    name: e2e shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    needs: [prepare]
+    # EXPLICIT, and load-bearing. With no `if:`, a job runs on `success()`,
+    # which is false when ANY job upstream of it was skipped — transitively,
+    # not just its direct `needs`. `changes` is skipped on every push, nightly
+    # call and dispatch (it only applies to pull requests), so from #1056 on
+    # this job skipped on main while prepare succeeded, and the suite ran on
+    # no push to main at all: the ledger's "expected 4 shard results, found 0"
+    # was the only trace. Run whenever prepare did.
+    if: ${{ !cancelled() && needs.prepare.result == 'success' }}
+    timeout-minutes: 75
+    strategy:
+      # One shard's failure must not cancel the others: the ledger's job is to
+      # report the WHOLE picture, and it cannot do that from a cancelled run.
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.prepare.outputs.shards) }}
+    env:
+      # ── The whole point of this workflow ─────────────────────────────
+      # internal/cli's requireTool skips a missing tool on a laptop and
+      # FAILS on a missing tool here. Without this, every install step
+      # below could break and the suite would report green having skipped
+      # everything it could not run. Set explicitly rather than leaning on
+      # GitHub's CI=true so the requirement is written down next to the
+      # installs that satisfy it.
+      FORGE_E2E_REQUIRE_TOOLS: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      # Go is still needed: the tests run `go build`, `go mod tidy` and
+      # `go test` in the projects they scaffold. Only forge itself arrives
+      # prebuilt.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      # Restore only. The scaffolded projects build through forge's goexec,
+      # which adds -trimpath: the artifacts `checks` keeps warm in the tools
+      # scope (ci.yml's "Build-cache note").
+      - uses: ./.github/actions/restore-go-caches
+        with:
+          scope: tools
+
+      # ── Toolchain. Every tool the suite reaches for, because with
+      # FORGE_E2E_REQUIRE_TOOLS=1 a missing one is now a red job, not a
+      # quiet skip. The set is enumerated from requireTool call sites plus
+      # every exec.LookPath under internal/cli/*_e2e_test.go.
+
+      # A scaffolded frontend pins pnpm (package.json packageManager,
+      # templates.PnpmVersion); TestPnpmVersionIsPinnedEverywhere keeps this
+      # version equal to it.
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12.15.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          # See ci.yml: unauthenticated release lookups share a 60/hour
+          # per-runner-IP budget and fail the job for a reason unrelated
+          # to the commit. This workflow runs 4 shards, so it spends that
+          # budget faster than any other.
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # KCL is NOT cached, and there is no ~/.kcl. Both were a
+      # misunderstanding of where the installer puts things: on Linux it
+      # installs to /usr/local/bin, so ~/.kcl was never created, the cache
+      # stored an EMPTY directory (a 227-byte entry, in the logs as
+      # "Cache Size: ~0 MB (227 B)"), and every later run took a cache HIT,
+      # skipped the install, and then failed tool verification with
+      # "e2e suite requires kcl". That took out all four shards before a
+      # single test ran — and re-keying the cache only moved the poison,
+      # because the next run saved the same empty directory under the new key.
+      #
+      # The install is ~1s, so caching it was never worth a step that can
+      # wedge the whole suite. The trailing verification refuses to let a
+      # silently failed install reach the tests as a confusing error later.
+      #
+      # KCL_VERSION is pinned deliberately, matching ci.yml. Left unset, the
+      # installer resolves "latest" through an UNAUTHENTICATED api.github.com
+      # call, rate-limited to 60/hour per runner IP and shared across every
+      # job on that host — when it is exhausted the script gets an empty tag
+      # and dies with "The KCL version is not found", failing CI for a reason
+      # that has nothing to do with the commit. This suite fans out to four
+      # shards, so it burns that budget faster than any other lane. The pin
+      # is templates.KCLVersion (TestKCLVersionIsPinnedEverywhere).
+      - name: Install KCL
+        env:
+          KCL_VERSION: v0.13.2
+        run: |
+          curl -fsSL https://kcl-lang.io/script/install-cli.sh | bash
+          command -v kcl
+          kcl --version
+
+      - name: Put $HOME/go/bin on PATH
+        run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      # pre-commit runs a scaffold's own hooks on its first commit
+      # (TestE2EScaffoldFirstCommitPassesItsHooks). Pinned, so the install
+      # cannot change the verdict without a commit.
+      - name: Install pre-commit
+        run: |
+          pipx install pre-commit==4.7.0
+          pre-commit --version
+
+      # golangci-lint at templates.GolangciLintVersion — the same pin as
+      # ci.yml's lint job, scripts/bootstrap.sh, and the CI workflow and
+      # bootstrap forge SCAFFOLDS (TestGolangciLintVersionIsPinnedEverywhere
+      # keeps them equal). This used to be `latest` on the theory that "a real
+      # user has latest". They no longer do: a scaffolded project installs the
+      # pinned version, so the pin IS what a real user has. `latest` here
+      # only made this lane's verdict change without a commit.
+      - name: Install golangci-lint
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/v2.14.0/install.sh \
+            | sh -s -- -b "$(go env GOPATH)/bin" v2.14.0
+          golangci-lint --version
+
+      # The package managers' stores: pnpm's (scaffolded frontends) and npm's
+      # (web-runtime's own install). setup-node's `cache:` keys on a
+      # checked-in lockfile and every lockfile here is generated at test
+      # time, so key on the template that decides the dependency set
+      # instead.
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.npm
+            ~/.local/share/pnpm/store
+          key: e2e-npm-${{ runner.os }}-${{ hashFiles('internal/templates/frontend/nextjs/package.json.tmpl') }}
+          restore-keys: e2e-npm-${{ runner.os }}-
+
+      # pkg/pgtest boots ONE embedded postgres per test process and shares
+      # it (see sharedTestPostgres); the action keeps its download off
+      # Maven Central.
+      - uses: ./.github/actions/embedded-postgres-cache
+
+      # `forge db` commands the tests drive shell out to the golang-migrate CLI.
+      - name: Install golang-migrate CLI
+        uses: ./.github/actions/install-migrate
+
+      # Flux e2e tests (flux_reconcile_e2e_test.go) create real k3d clusters
+      # and need k3d, kubectl, helm and docker. docker, kubectl and helm ship
+      # on ubuntu-latest; k3d does not. Pinned, not "latest", so the install
+      # cannot change the verdict without a commit.
+      - name: Install k3d
+        env:
+          K3D_VERSION: v5.8.3
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \
+            | TAG="$K3D_VERSION" bash
+          k3d version
+
+      # What prepare built: the e2e test binary, forge and the codegen
+      # plugins (bin/), and the shard plan (plan/).
+      - uses: actions/download-artifact@v8
+        with:
+          name: e2e-dist
+          path: ${{ runner.temp }}
+      - name: Unpack the prebuilt binaries and the plan
+        run: |
+          set -euo pipefail
+          tar -C "$RUNNER_TEMP" -xf "$RUNNER_TEMP/e2e-dist.tar"
+          echo "$RUNNER_TEMP/e2e-dist/bin" >> "$GITHUB_PATH"
+
+      - name: Verify every required tool resolves
+        # Fail here, in five seconds, with the tool named — rather than 20
+        # minutes in when the test that needs it does. This list must stay
+        # equal to the tools requireTool asks for.
+        run: |
+          set -euo pipefail
+          missing=()
+          # docker: TestE2ENextjsDockerfileStaticImageBuilds builds a real
+          # frontend image. ubuntu-latest ships the engine; the `docker info`
+          # below proves the daemon answers, which `command -v` cannot.
+          for tool in go node npm npx pnpm kcl golangci-lint buf protoc-gen-go protoc-gen-connect-go goimports pre-commit forge git migrate docker k3d kubectl helm; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              printf '  ok       %-24s %s\n' "$tool" "$(command -v "$tool")"
+            else
+              printf '  MISSING  %s\n' "$tool"
+              missing+=("$tool")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::e2e suite requires ${missing[*]} — a step above did not do its job"
+            exit 1
+          fi
+          # `docker version`, not `docker info --format`: with no daemon the
+          # latter prints the error, an empty version and EXITS 0, so it
+          # could never fail this step.
+          server=$(docker version --format '{{.Server.Version}}' 2>/dev/null || true)
+          if [ -z "$server" ]; then
+            echo "::error::the docker CLI is present but no daemon answers — the image build and k3d tests cannot run"
+            exit 1
+          fi
+          printf '  ok       %-24s %s\n' "docker daemon" "$server"
+
+      # ── The partition. Planned once by prepare, printed and checked here.
+      - name: Assign this shard its tests
+        env:
+          SHARD: ${{ matrix.shard }}
+          SHARDS: ${{ needs.prepare.outputs.count }}
+        run: |
+          set -euo pipefail
+          plan="$RUNNER_TEMP/e2e-dist/plan"
+          # Outside the checkout. Every fixture bridges this checkout
+          # (go.work `use`), and this job's files used to land in its root:
+          # all-tests.txt, shard-tests.txt and the test2json log, which grows
+          # for the whole run. forge's bridge-skew check then read the
+          # prebuilt binary as skewed from "uncommitted changes" and handed
+          # every command to a forge rebuilt from the checkout, keyed on the
+          # log's mtime — a different binary for each re-run of `forge
+          # generate`, which so never recorded its fixed point (CRUDLifecycle,
+          # CPForgeShaped, ZeroService on main). forge now counts only edits
+          # a build of it can read (internal/forgecompat sourceEdit); the
+          # shard writes nothing into the code under test regardless.
+          out="$RUNNER_TEMP/e2e-shard"
+          mkdir -p "$out"
+          echo "SHARD_OUT=$out" >> "$GITHUB_ENV"
+          cp "$plan/selected-tests.txt" "$out/all-tests.txt"
+          cp "$plan/shard-$SHARD.txt" "$out/shard-tests.txt"
+          total=$(wc -l < "$out/all-tests.txt" | tr -d ' ')
+          mine=$(wc -l < "$out/shard-tests.txt" | tr -d ' ')
+          if [ "$mine" -eq 0 ]; then
+            echo "::error::shard $SHARD of $SHARDS was assigned 0 of $total tests"
+            exit 1
+          fi
+          echo "EXPECTED_TESTS=$mine" >> "$GITHUB_ENV"
+          # LOG WHAT THIS SHARD RUNS. A shard that covers a subset without
+          # saying which subset is the bug this workflow exists to fix.
+          echo "::group::shard $SHARD of $SHARDS — $mine of $total tests"
+          cat "$out/shard-tests.txt"
+          echo "::endgroup::"
+          {
+            echo "### shard $SHARD of $SHARDS"
+            echo
+            echo "Running **$mine of $total** tests, as prepare planned them by recorded"
+            echo "duration; the ledger job proves the union is the whole selection."
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # No hand-written -run. The regex is the shard's planned list,
+      # anchored so a name cannot match a longer one.
+      #
+      # The prebuilt binary runs under test2json exactly as `go test -json`
+      # would run it: from the package directory, with -test.paniconexit0,
+      # and its exit status passed through. -json is teed to a file for the
+      # ledger; the jq stage re-renders the identical `-v` text to the
+      # console live, so the log reads as it would without it.
+      #
+      # jq runs in -R (raw line) mode with `fromjson? // {…}`: a line that is
+      # not JSON — a toolchain message that escaped test2json, say — is
+      # passed through verbatim instead of aborting jq mid-stream and taking
+      # the run down with a SIGPIPE. A renderer that can hide output is not
+      # a renderer this file is allowed to use.
+      - name: Run this shard
+        env:
+          FORGE_E2E_BINARY: ${{ runner.temp }}/e2e-dist/bin/forge
+        run: |
+          set -euo pipefail
+          RUN="^($(paste -sd'|' "$SHARD_OUT/shard-tests.txt"))$"
+          out="$SHARD_OUT/e2e-shard-${{ matrix.shard }}.json"
+          cd internal/cli
+          go tool test2json -t -p github.com/reliant-labs/forge/internal/cli \
+            "$RUNNER_TEMP/e2e-dist/e2e.test" -test.v=test2json -test.paniconexit0 \
+            -test.count=1 -test.timeout=60m -test.run "$RUN" \
+            | tee "$out" \
+            | jq -R -r --unbuffered \
+                '(fromjson? // {Action:"output",Output:.}) | select(.Action == "output") | .Output | sub("\n$";"")'
+
+      # The third nail: what the shard was ASSIGNED must equal what it
+      # REPORTED. A regex that silently matched nothing, or a test that
+      # vanished between the plan and the run, fails here instead of
+      # shrinking coverage behind a green check.
+      - name: This shard ran everything it was assigned
+        if: always()
+        run: |
+          set -euo pipefail
+          # This step is always(), so it can land after the assignment step
+          # itself failed. Say that plainly instead of dying on an unbound var.
+          if [ -z "${EXPECTED_TESTS:-}" ] || [ -z "${SHARD_OUT:-}" ]; then
+            echo "::error::this shard was never assigned any tests — the assignment step did not complete"
+            exit 1
+          fi
+          f="$SHARD_OUT/e2e-shard-${{ matrix.shard }}.json"
+          [ -s "$f" ] || { echo "::error::shard produced no test output"; exit 1; }
+          ran=$(jq -R -r 'fromjson?
+                  | select((.Action=="pass" or .Action=="fail" or .Action=="skip") and has("Test"))
+                  | select(.Test | contains("/") | not) | .Test' "$f" | sort -u | wc -l | tr -d ' ')
+          echo "assigned=$EXPECTED_TESTS ran=$ran"
+          if [ "$ran" -ne "$EXPECTED_TESTS" ]; then
+            echo "::error::shard ${{ matrix.shard }} was assigned $EXPECTED_TESTS tests but reported $ran. Coverage silently shrank — that is the defect this workflow exists to catch, in the workflow itself."
+            comm -23 "$SHARD_OUT/shard-tests.txt" <(jq -R -r 'fromjson?
+                  | select((.Action=="pass" or .Action=="fail" or .Action=="skip") and has("Test"))
+                  | select(.Test | contains("/") | not) | .Test' "$f" | sort -u) | sed 's/^/  never reported: /'
+            exit 1
+          fi
+
+      - name: Upload shard results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-shard-${{ matrix.shard }}
+          # One directory, so the artifact's root holds the three files
+          # directly — the layout the ledger reads.
+          path: |
+            ${{ env.SHARD_OUT }}/e2e-shard-${{ matrix.shard }}.json
+            ${{ env.SHARD_OUT }}/shard-tests.txt
+            ${{ env.SHARD_OUT }}/all-tests.txt
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload generated trees on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-shard-${{ matrix.shard }}-trees
+          path: /tmp/TestE2E*
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Main only: keeps any archive this job had to fetch, so the next run
+      # does not (see embedded-postgres-cache's header).
+      - name: Save the embedded postgres archives (main only)
+        if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: ./.github/actions/embedded-postgres-cache-save
+
+  ledger:
+    name: coverage ledger
+    runs-on: ubuntu-latest
+    needs: [prepare, suite]
+    # ALWAYS — unless prepare was skipped on purpose (a pull request without
+    # the `ci:e2e` label), when there is no run to account for. The ledger's
+    # whole job is to say what did NOT run, which is most valuable exactly
+    # when something went wrong.
+    if: ${{ always() && needs.prepare.result != 'skipped' }}
+    env:
+      # ── The skip ratchet ─────────────────────────────────────────────
+      # A test that skips is a test that did not run, and this workflow
+      # exists because tests that did not run were reported as passing.
+      # Every skip is named in the summary below, and the total may not
+      # exceed this number.
+      #
+      # Measured: 0. It was 16 while the shards also ran internal/cli's
+      # untagged tests, several of which skip by design outside a developer
+      # machine; across the last seven runs before the shards were narrowed
+      # to TestE2E*, no e2e test skipped.
+      #
+      # THIS NUMBER MAY ONLY GO DOWN. Raising it is a decision to cover
+      # less, and it has to be made in a diff someone reviews.
+      FORGE_E2E_MAX_SKIPS: "0"
+      EXPECTED_SHARDS: ${{ needs.prepare.outputs.count }}
+    steps:
+      - name: prepare must have run
+        if: needs.prepare.result != 'success'
+        run: |
+          echo "::error::prepare did not succeed (${{ needs.prepare.result }}): nothing was built or planned, so no shard ran a test"
+          exit 1
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: e2e-shard-*
+          path: shards
+          merge-multiple: false
+
+      - name: Aggregate — what ran, and what did not
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+
+          # A shard whose artifact is missing did not run, and a summary
+          # built from the shards that survived would understate the gap
+          # exactly the way this workflow exists to stop.
+          jsons=(shards/e2e-shard-*/e2e-shard-*.json)
+          if [ "${#jsons[@]}" -ne "$EXPECTED_SHARDS" ]; then
+            echo "::error::expected $EXPECTED_SHARDS shard results, found ${#jsons[@]}. A shard did not report; its tests did not run."
+            {
+              echo "## e2e suite coverage"
+              echo
+              echo "> **INCOMPLETE:** ${#jsons[@]} of $EXPECTED_SHARDS shards reported."
+              echo "> The tests in the missing shard(s) did not run."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          cat "${jsons[@]}" > all.json
+          names() {
+            jq -R -r --arg a "$1" 'fromjson?
+              | select(.Action == $a and has("Test"))
+              | select(.Test | contains("/") | not) | .Test' all.json | sort -u
+          }
+          passed=$(names pass | wc -l | tr -d ' ')
+          failed=$(names fail | wc -l | tr -d ' ')
+          skipped_list=$(names skip)
+          skipped=$(printf '%s' "$skipped_list" | grep -c . || true)
+
+          # Totality: the union of the shards must be the whole selection.
+          # Every shard uploaded the plan's selection; they must agree, and
+          # the tests they collectively reported must be all of it.
+          sort -u shards/e2e-shard-*/all-tests.txt > union-expected.txt
+          for f in shards/e2e-shard-*/all-tests.txt; do
+            if ! diff -q <(sort -u "$f") union-expected.txt >/dev/null; then
+              echo "::error::shards disagree about which tests were selected ($f) — they ran different plans"
+              exit 1
+            fi
+          done
+          cat shards/e2e-shard-*/shard-tests.txt | sort -u > union-assigned.txt
+          if ! diff -u union-expected.txt union-assigned.txt > partition.diff; then
+            echo "::error::the shards do not partition the selection — some test is assigned to no shard"
+            sed 's/^/  /' partition.diff
+            exit 1
+          fi
+          expected_total=$(wc -l < union-expected.txt | tr -d ' ')
+          reported_total=$(( passed + failed + skipped ))
+
+          {
+            echo "## e2e suite coverage"
+            echo
+            echo "| outcome | tests |"
+            echo "| --- | --- |"
+            echo "| passed | $passed |"
+            echo "| failed | $failed |"
+            echo "| **skipped — did NOT run** | **$skipped** |"
+            echo "| total reported / selected | $reported_total / $expected_total |"
+            echo
+            echo "Shard durations are planned from \`.github/e2e-timings.json\`;"
+            echo "\`scripts/e2e-timings.sh ${{ github.run_id }}\` records this run's."
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$reported_total" -ne "$expected_total" ]; then
+            echo "::error::$reported_total tests reported but $expected_total were selected. Coverage shrank somewhere between planning and execution."
+            comm -23 union-expected.txt <(names pass; names fail; names skip | sort -u) | sed 's/^/  never reported: /'
+            exit 1
+          fi
+
+          if [ "$skipped" -gt 0 ]; then
+            {
+              echo "### Skipped — these tests did not check anything"
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+            while IFS= read -r test; do
+              [ -n "$test" ] || continue
+              reason=$(jq -R -r --arg t "$test" \
+                'fromjson? | select(.Action == "output" and .Test == $t) | .Output' all.json \
+                | grep -v '^=== \|^--- ' | head -n 2 | tr -d '\n' | sed 's/  */ /g')
+              echo "- \`$test\` — ${reason:-no reason recorded}" >> "$GITHUB_STEP_SUMMARY"
+              echo "::warning::e2e test skipped (did not run): $test — ${reason:-no reason recorded}"
+            done <<< "$skipped_list"
+            echo >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "skipped=$skipped ceiling=$FORGE_E2E_MAX_SKIPS"
+          if [ "$skipped" -gt "$FORGE_E2E_MAX_SKIPS" ]; then
+            echo "::error::$skipped tests skipped, ceiling is $FORGE_E2E_MAX_SKIPS. A skip is a test that did not run. Fix the skip, or raise FORGE_E2E_MAX_SKIPS in this workflow with a reason — in a diff someone reviews."
+            {
+              echo "> **FAILED the skip ratchet:** $skipped skipped, ceiling $FORGE_E2E_MAX_SKIPS."
+              echo "> A skip is a test that did not run. This job refuses to look greener than it is."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+      # The shards report their own pass/fail; this makes the ledger job
+      # itself red when any of them was, so a single required check covers
+      # the whole lane.
+      - name: Fail if any shard failed
+        if: needs.suite.result != 'success'
+        run: |
+          echo "::error::at least one e2e shard did not succeed (result: ${{ needs.suite.result }})"
+          exit 1

@@ -1,0 +1,20 @@
+# Allowlist for skills_validation_test.go.
+#
+# Format (one entry per line):
+#   <skill rel path under skills/>|<exact claim text>|<justification>
+#
+# A claim is either a command reference ("forge <chain>") or a path
+# reference exactly as the validator reports it. Use skill path "*" to
+# allowlist a claim across every skill. Every entry REQUIRES a
+# justification — unexplained entries fail the test. Entries whose claim
+# no longer appears in the named skill fail TestSkillsAllowlistEntriesStillNeeded.
+
+*|forge will not overwrite this file|canonical "yours" ownership banner text quoted in code blocks — prose, not a forge subcommand
+forge/deploy/SKILL.md|forge env deploy --env|Counter-example, not a claim: the sentence exists to tell the reader the environment is a POSITIONAL arg — "`forge env deploy dev`, not `forge env deploy --env dev`". Deleting the wrong spelling would delete the correction.
+forge/auth/dev-loop/SKILL.md|.forge/idp/pat.txt|Runtime artifact, not a scaffolded file: the dev IdP WRITES this path on its first boot (forge sets it as ZITADEL_FIRSTINSTANCE_PATPATH, and .gitignore excludes .forge/*). The skill must name it because forge reads the credential from there when it registers the browser application, and a developer debugging a failed bring-up needs to know where to look.
+forge/auth/dev-loop/SKILL.md|.forge/hostinfra/idp/zitadel.log|Runtime artifact, not a scaffolded file: the host-process dev IdP writes its stdout/stderr there (internal/hostinfra/zitadel.go), and it is the first thing to read when the IdP never comes up. .gitignore excludes .forge/*.
+forge/auth/dev-loop/SKILL.md|.forge/hostinfra/<name>/|Runtime artifact, not a scaffolded file: a host-process mailpit keeps its message store (mailpit.db) in its entry's data directory, which defaults to .forge/hostinfra/<name>/ (internal/hostinfra Spec.dataDir, mailpit.go). .gitignore excludes .forge/*.
+forge/observability/query/SKILL.md|forge env releases at prod|Real usage: `at <env> <timestamp|trace-id|duration>`, and every example's second positional (2026-10-21T14:05:00Z, a hex trace id, 2h) starts with a digit, where the chain tokenizer stops, so it sees one positional of the two ExactArgs requires. The verb and the env are checked; the forms are those of `forge env releases at --help`.
+forge/architecture/SKILL.md|.forge/generate-hooks/<name>.log|Runtime artifact, not a scaffolded file: every forge generate writes each generate hook's output there (generateHooksLogDir in internal/cli/generate_hooks.go), and a failing hook's report points at it. .gitignore excludes .forge/*.
+forge/db/query/SKILL.md|.forge/audit/<env>.jsonl|Runtime artifact, not a scaffolded file: every forge db query appends its audit record there (dbQueryAuditPath in internal/cli/db_query_audit.go), and the JSON output's audit.record names the file. .gitignore excludes .forge/*.
+forge/deploy/lifecycle/SKILL.md|.forge/hosted-projects.json|Runtime artifact, not a scaffolded file: forge writes the project's hosted bindings there the first time it deploys to a control plane (internal/cli/hosted_project.go hostedProjectBindingFile), and env teardown/--endpoint reads it. .gitignore excludes .forge/*.
