@@ -1,9 +1,11 @@
+// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageRole } from '../../gen/reliant/v1/chat_pb';
 import { setTransport } from '../../lib/connect';
 import { mockTransport } from '../../lib/test-utils';
-import { startChat, sendMessage } from '../chat-actions';
+import { startChat, sendMessage, updateWorkflowParams } from '../chat-actions';
+import { unsyncedParams } from '../../lib/paramUtils';
 import { buildWorkflowParamsPayload } from '../chat-model';
 
 // The server, at the transport: each fake receives the request on the wire.
@@ -47,6 +49,15 @@ describe('chat workflow_params payload contracts', () => {
       success: true,
       message: 'ok',
     });
+  });
+
+  it.each([undefined, 'thread-1'])('serializes an explicit reset for root/thread %s', async (threadId) => {
+    const patch = unsyncedParams({ temperature: 0.5 }, { mode: 'plan' });
+    await updateWorkflowParams('chat-1', patch, threadId);
+    const request = mocks.updateWorkflowParams.mock.calls[0][0];
+    expect(request.threadId).toBe(threadId);
+    expect(request.params.mode.kind.case).toBe('nullValue');
+    expect(request.params.temperature.kind).toEqual({ case: 'numberValue', value: 0.5 });
   });
 
   it('buildWorkflowParamsPayload keeps nested workflow_params structure only', () => {

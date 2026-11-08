@@ -14,7 +14,11 @@ import {
   resolveTour,
   stepPosition,
   validateJourneys,
+  WORKFLOWS_ELSEWHERE,
 } from "../journeys/registry";
+import { workflowsJourney } from "../journeys/workflows";
+// The workflows journey's content is registered by the Reliant shells (journeys/catalog.ts).
+import "../journeys/catalog";
 import { parseTourParam } from "../tourParam";
 import { setTourShell } from "../tourShell";
 import { clearForgeUIPreference, setForgeUIEnabled } from "../../../lib/forgeFeature";
@@ -102,7 +106,7 @@ describe("journey registry", () => {
     it("redirects the retired single tour's ids to their successor journey", () => {
       expect(resolve("chat-and-sidebars")).toMatchObject({ journey: "workflows", stepId: "wf-new" });
       expect(resolve("workflow-builder")).toMatchObject({ journey: "workflows", stepId: "wf-new" });
-      expect(resolve("deployments")).toMatchObject({ journey: "forge", stepId: "fg-console" });
+      expect(resolve("deployments")).toMatchObject({ journey: "forge", stepId: "fg-intro" });
     });
 
     it("is null for an unknown id or a journey that doesn't run here", () => {
@@ -150,5 +154,23 @@ describe("journey registry", () => {
       expect(presentStep(step).description).toBe("forge copy");
       expect(presentStep(step, 1)).toMatchObject({ description: "phase b", target: "#b", title: "T" });
     });
+  });
+});
+
+describe("the workflows placeholder (the forge demo bundle, where the content isn't loaded)", () => {
+  it("says what the real journey says: version, title, shells and where it runs", () => {
+    expect(WORKFLOWS_ELSEWHERE).toMatchObject({
+      id: workflowsJourney.id,
+      version: workflowsJourney.version,
+      title: workflowsJourney.title,
+      description: workflowsJourney.description,
+      shells: workflowsJourney.shells,
+    });
+    expect(WORKFLOWS_ELSEWHERE.elsewhere?.label).toBe(workflowsJourney.elsewhere?.label);
+    expect(WORKFLOWS_ELSEWHERE.elsewhere?.href()).toBe(workflowsJourney.elsewhere?.href());
+  });
+
+  it("is replaced by the content once the catalog registers it", () => {
+    expect(JOURNEYS.workflows).toBe(workflowsJourney);
   });
 });

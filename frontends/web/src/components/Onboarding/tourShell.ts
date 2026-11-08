@@ -121,3 +121,26 @@ export function setTourStorage(next: TourStorage): void {
 export function getTourStorage(): TourStorage {
   return storage;
 }
+
+/**
+ * What only the Reliant shell does when a tour ends: land on the chat, and
+ * ask for an API key if none is set. Installed by journeys/catalog.ts, so the
+ * engine imports no chat or settings code (the forge demo's bundle carries
+ * the engine, and may not carry those). Unset, a tour just closes.
+ */
+export interface ReliantTourHooks {
+  /** A journey with no `finish` target ended in the Reliant shell. */
+  landOnChat: (navigate: (options: never) => Promise<void>) => Promise<void>;
+  /** After a tour ends or the picker is dismissed from onboarding. */
+  afterTour: () => Promise<void>;
+}
+
+let reliantHooks: ReliantTourHooks | null = null;
+
+export function setReliantTourHooks(hooks: ReliantTourHooks | null): void {
+  reliantHooks = hooks;
+}
+
+export function getReliantTourHooks(): ReliantTourHooks | null {
+  return reliantHooks;
+}

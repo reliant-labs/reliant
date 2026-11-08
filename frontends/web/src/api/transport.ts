@@ -390,6 +390,7 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     const duration = Date.now() - startTime;
     const kind = classifyRpcFailure(error, {
       serviceTypeName: req.service.typeName,
+      methodName: req.method.name,
       signalAborted: req.signal.aborted,
     });
     const context = {
@@ -409,6 +410,12 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     }
     if (kind === "account-required") {
       logger.info("[gRPC Client] Account required", context);
+      throw error;
+    }
+    if (kind === "already-absent") {
+      // An idempotent delete found nothing to delete: the caller's goal
+      // holds. Still thrown, so a caller that cares can tell.
+      logger.debug("[gRPC Client] Delete target already absent", context);
       throw error;
     }
     if (kind === "machine-wait") {

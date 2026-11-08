@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Muted text (`text-muted-foreground`) meets WCAG AA (4.5:1) on every surface
  * it is drawn on, in every color scheme, light and dark.

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect } from 'vitest';
 import { formatToolParams, isSkillTool, isLoadToolTool, isSpawnSendTool, isSpawnTool } from './toolFormatters';
 

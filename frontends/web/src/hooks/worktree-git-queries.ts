@@ -13,7 +13,11 @@
  * map them to the plain types below with `select`.
  */
 
-import type { QueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
+import { DaemonStatus } from "../gen/reliant/v1/daemon_registry_pb";
+import { daemonListQuery } from "./daemon-registry-queries";
+import { useWorktreeById } from "./worktree-queries";
 
 import type { FileChangeStatus } from "../gen/reliant/v1/common_pb";
 import type {
@@ -147,6 +151,87 @@ function repoStatusesFromProto(response: ListWorktreeRepoStatusesResponse): Work
     changed_files: s.changedFiles,
     error: s.error,
   }));
+}
+
+// Branch is deliberately not a wire field. Extend the generated key, keeping
+// its request object intact for invalidateWorktreeQueries. The generated query
+// factory is also what useGetWorktreePR uses; its hook cannot extend the key.
+
+export type PullRequestLookup = {
+  status: "loading" | "found" | "absent" | "error";
+  existing: { exists: boolean; url: string; number: number; state: string; title: string } | null;
+  error: string | null;
+  refreshing: boolean;
+  retry: () => void;
+};
+
+export function useWorktreePR({
+  worktreeId, repoId, branch, enabled = true, visible = true, machineActive = false,
+}: {
+  worktreeId?: string;
+  repoId?: string;
+  branch?: string;
+  enabled?: boolean;
+  visible?: boolean;
+  /** Positive evidence only: automatic metadata reads must not wake a machine. */
+  machineActive?: boolean;
+}): PullRequestLookup {
+  const request = changesRequest(worktreeId ?? "", repoId);
+  const options = worktreeServiceQueries.getWorktreePR(request);
+  const [documentVisible, setDocumentVisible] = useState(() => document.visibilityState !== "hidden");
+  useEffect(() => {
+    const update = () => setDocumentVisible(document.visibilityState !== "hidden");
+    document.addEventListener("visibilitychange", update);
+    return () => document.removeEventListener("visibilitychange", update);
+  }, []);
+
+  const active = enabled && visible && documentVisible && machineActive && !!worktreeId && branch !== undefined;
+  const query = useQuery({
+    ...options,
+    queryKey: [...options.queryKey, "observed-branch", branch ?? ""],
+    // Do not resurrect a previous visit's branch association. In-flight results
+    // are scoped to their own key, and concurrent readers still deduplicate.
+    gcTime: 0,
+    enabled: active,
+    retry: false,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
+    refetchIntervalInBackground: false,
+    // One minute normally, exponential error backoff capped at five minutes.
+    refetchInterval: (q) => active
+      ? q.state.status === "error" ? Math.min(300_000, 60_000 * 2 ** Math.min(q.state.errorUpdateCount, 3)) : 60_000
+      : false,
+  });
+  const data = branch !== undefined ? query.data : undefined;
+  const error = branch !== undefined && query.error ? query.error.message
+    : !machineActive && branch !== undefined ? "Connect or wake the workspace machine to check its pull request." : null;
+  const existing = data?.exists && data.url ? {
+    exists: true, url: data.url, number: data.number ?? 0,
+    state: data.state ?? "", title: data.title ?? "",
+  } : null;
+  return {
+    status: existing ? "found" : error ? "error" : data && !data.exists ? "absent" : "loading",
+    existing,
+    error,
+    refreshing: query.isFetching,
+    retry: () => { if (worktreeId && branch !== undefined) void query.refetch(); },
+  };
+}
+
+/** Registry reads do not contact or wake the machine. Backstop push invalidation
+ * so a sleeping machine becoming active is observed even without another reader. */
+export function useWorktreeMachineActive(worktreeId?: string) {
+  const worktree = useWorktreeById(worktreeId);
+  const { data: daemons } = useQuery(daemonListQuery({
+    enabled: !!worktreeId,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
+  }));
+  return !!worktree?.daemon_id && !!daemons?.some((d) => d.daemonId === worktree.daemon_id && d.status === DaemonStatus.ACTIVE);
 }
 
 // ── Reads ───────────────────────────────────────────────────────────────────

@@ -350,34 +350,6 @@
     }
   }
 
-  /* Live headline of a simplified-thread work fold: a soft highlight sweeps
-     across muted text. Reduced motion keeps the plain muted text. */
-  @keyframes turnWorkShimmer {
-    from { background-position: 100% 0; }
-    to { background-position: -100% 0; }
-  }
-
-  .turn-work-shimmer {
-    background-image: linear-gradient(
-      90deg,
-      hsl(var(--muted-foreground)) 35%,
-      hsl(var(--foreground)) 50%,
-      hsl(var(--muted-foreground)) 65%
-    );
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation: turnWorkShimmer 2s linear infinite;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .turn-work-shimmer {
-      background-image: none;
-      -webkit-text-fill-color: currentColor;
-      animation: none;
-    }
-  }
 }
 
 /* Syntax highlighting themes - using .dark class instead of media queries */
@@ -1437,6 +1409,21 @@
     flex-direction: column;
     align-items: flex-start;
     width: 100%;
+  }
+
+  /*
+   * flex-start sizes each child to fit its content, and that size never goes
+   * below the child's min-content width. min-w-0 does not help: it relaxes
+   * the main (vertical) axis, not this one. A `truncate` line's min-content is
+   * the whole unwrapped line, so an agent message's long subject, or a tool
+   * group's long command on a phone, sized its box past the column and the
+   * whole transcript scrolled sideways instead of the line truncating. Capped
+   * at the column, the child keeps its fit-content width when it is narrow
+   * and truncates, wraps or scrolls inside itself when it is not.
+   * :where() keeps this at zero specificity, so a child's own max-w-* wins.
+   */
+  :where(.message-content) > * {
+    max-width: 100%;
   }
 
   /* User message content - removed blue left border highlight */

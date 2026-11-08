@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { beforeEach, afterEach, describe, expect, it } from "vitest";
 import { ApprovalStatus, type ListApprovalsByChatResponse } from "../../gen/reliant/v1/approval_pb";
 import { queryClient } from "../../lib/query-client";

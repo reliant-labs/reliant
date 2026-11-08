@@ -20,6 +20,8 @@ import { useAttachmentStore } from "../../../store/attachmentStore";
 import { useWorkspaceStateStore } from "../../../store/workspaceStateStore";
 import { useChatParamsStore } from "../../../store/chatParamsStore";
 import { foldCount } from "../composerPriority";
+import { useAuthStore } from "../../../store/authStore";
+import { legacyPasteDraftKey } from "../useLongPaste";
 
 globalThis.ResizeObserver ??= class {
   observe() {}
@@ -80,6 +82,12 @@ vi.mock("../../../hooks/preset-queries", async (importOriginal) => ({
   fetchDefaultPresets: vi.fn().mockResolvedValue({}),
   useDefaultPresets: () => ({ defaults: {}, loading: false }),
 }));
+// A draft attachment without local bytes (restored after a reload) reads its text from the server.
+vi.mock("../../../hooks/attachment-queries", async (importActual) => ({
+  ...(await importActual<typeof import("../../../hooks/attachment-queries")>()),
+  fetchAttachmentBlob: vi.fn(async () => ({ text: async () => "hello" }) as Blob),
+  deleteAttachment: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => <span data-testid="inline-workflow" /> }));
 vi.mock("../../../store/chatStoreHooks", () => ({ useActiveChatId: () => undefined }));
 
@@ -107,6 +115,124 @@ beforeEach(() => {
   useChatParamsStore.getState().clearTempNewChatParams();
 });
 afterEach(() => vi.unstubAllGlobals());
+
+describe("long paste", () => {
+  const LONG = "long text\n".repeat(600);
+  function pasteLong(text = LONG) {
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: { files: [], items: [], getData: () => text } });
+    act(() => { composer().dispatchEvent(event); });
+    return event;
+  }
+  function fileText(file: File) {
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsText(file);
+    });
+  }
+  const textAttachment = (id: string, filename: string) => ({ id, filename, mime_type: "text/plain", size: 5, url: "", attachment_type: "file_reference" as const });
+
+  it("attaches each long paste as a numbered pasted-text chip, sent like any attachment", async () => {
+    const original = useAttachmentStore.getState().attachFile;
+    let next = 0;
+    const attachFile = vi.fn(async (session: string, file: File) => {
+      const attachment = textAttachment(`paste-${++next}`, file.name);
+      const map = new Map(useAttachmentStore.getState().attachments);
+      map.set(session, [...(map.get(session) ?? []), attachment]);
+      useAttachmentStore.setState({ attachments: map });
+      return attachment;
+    });
+    useAttachmentStore.setState({ attachFile });
+    try {
+      const onSend = vi.fn().mockResolvedValue(undefined);
+      renderWithQuery(<ChatInput onSend={onSend} attachmentDraftId="paste-test" />);
+      const event = pasteLong("exact 😀\r\n".repeat(600));
+      expect(event.defaultPrevented).toBe(true);
+      expect(composer().value).toBe("");
+      await waitFor(() => expect(screen.getByRole("button", { name: "Open pasted-text.txt" })).toBeInTheDocument());
+      expect(await fileText(attachFile.mock.calls[0][1])).toBe("exact 😀\r\n".repeat(600));
+      expect(attachFile.mock.calls[0][1].type).toBe("text/plain");
+      pasteLong();
+      await waitFor(() => expect(screen.getByRole("button", { name: "Open pasted-text(2).txt" })).toBeInTheDocument());
+      // No banner, no inline panel: the chips are the whole UI.
+      expect(screen.queryByText(/Long paste attached/)).toBeNull();
+      // Send stays disabled until the upload queue settles; clicking earlier is a no-op.
+      await waitFor(() => expect(screen.getByTestId("send-button")).not.toBeDisabled());
+      fireEvent.click(screen.getByTestId("send-button"));
+      await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+      expect(onSend.mock.calls[0][1]).toEqual(["paste-1", "paste-2"]);
+    } finally {
+      act(() => useAttachmentStore.setState({ attachFile: original }));
+    }
+  });
+
+  it("migrates a v1.10 new-chat paste only into the project it was pasted in", async () => {
+    // v1.10 stored the desktop new chat's paste under [user, project, "temp"]
+    // (its ChatInput keyed the store by JSON [userId, project id, session]).
+    const p1Key = legacyPasteDraftKey("u1", "p1", "temp");
+    localStorage.setItem(p1Key, JSON.stringify([{ id: 1, text: "p1's private paste" }]));
+    const original = useAttachmentStore.getState().attachFile;
+    const attachFile = vi.fn(async (_session: string, file: File) => textAttachment("migrated", file.name));
+    useAttachmentStore.setState({ attachFile });
+    act(() => useAuthStore.setState({ user: { id: "u1" } as never }));
+    try {
+      // A new chat in p2: p1's paste is neither attached nor removed.
+      act(() => useProjectStore.setState({ currentProject: { id: "p2" } as never }));
+      const view = renderWithQuery(<ChatInput onSend={vi.fn()} attachmentDraftId="new-chat:project:p2" />);
+      await act(async () => {});
+      expect(attachFile).not.toHaveBeenCalled();
+      expect(JSON.parse(localStorage.getItem(p1Key)!)).toEqual([{ id: 1, text: "p1's private paste" }]);
+      view.unmount();
+
+      // Back in p1, its own new chat takes it.
+      act(() => useProjectStore.setState({ currentProject: { id: "p1" } as never }));
+      renderWithQuery(<ChatInput onSend={vi.fn()} attachmentDraftId="new-chat:project:p1" />);
+      await waitFor(() => expect(attachFile).toHaveBeenCalledTimes(1));
+      expect(attachFile.mock.calls[0][0]).toBe("new-chat:project:p1");
+    } finally {
+      localStorage.removeItem(p1Key);
+      act(() => {
+        useAttachmentStore.setState({ attachFile: original });
+        useAuthStore.setState({ user: null } as never);
+      });
+    }
+  });
+
+  it("opens a text chip to edit: Save replaces the attachment, Insert puts the text in the message", async () => {
+    const original = useAttachmentStore.getState().replaceAttachment;
+    const originalRemove = useAttachmentStore.getState().removeAttachment;
+    const replaceAttachment = vi.fn().mockResolvedValue(undefined);
+    const removeAttachment = vi.fn();
+    useAttachmentStore.setState({
+      replaceAttachment,
+      removeAttachment,
+      attachments: new Map([["paste-edit", [textAttachment("t1", "pasted-text.txt")]]]),
+    });
+    try {
+      renderWithQuery(<ChatInput onSend={vi.fn()} attachmentDraftId="paste-edit" />);
+      fireEvent.click(screen.getByRole("button", { name: "Open pasted-text.txt" }));
+      const editor = await screen.findByLabelText("Edit pasted-text.txt");
+      expect((editor as HTMLTextAreaElement).value).toBe("hello");
+      expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+      fireEvent.change(editor, { target: { value: "hello, edited" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(replaceAttachment).toHaveBeenCalledTimes(1));
+      const [session, id, file] = replaceAttachment.mock.calls[0];
+      expect([session, id, file.name]).toEqual(["paste-edit", "t1", "pasted-text.txt"]);
+      expect(await fileText(file)).toBe("hello, edited");
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+      fireEvent.click(screen.getByRole("button", { name: "Open pasted-text.txt" }));
+      await screen.findByLabelText("Edit pasted-text.txt");
+      fireEvent.click(screen.getByRole("button", { name: "Insert as text" }));
+      expect(composer().value).toBe("hello");
+      expect(removeAttachment).toHaveBeenCalledWith("paste-edit", "t1");
+    } finally {
+      act(() => useAttachmentStore.setState({ replaceAttachment: original, removeAttachment: originalRemove }));
+    }
+  });
+});
 
 describe("action slot", () => {
   it("idle and empty: Send, disabled", () => {

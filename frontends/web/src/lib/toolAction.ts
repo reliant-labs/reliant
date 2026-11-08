@@ -31,9 +31,10 @@ const VERBS: Record<string, readonly [live: string, done: string]> = {
   shell_kill: ["Stopping", "Stopped"],
   websearch: ["Searching the web for", "Searched the web for"],
   fetch: ["Fetching", "Fetched"],
-  spawn: ["Spawning", "Spawned"],
-  spawn_send: ["Messaging", "Messaged"],
-  spawn_status: ["Checking", "Checked"],
+  spawn: ["Starting sub-agent", "Started sub-agent"],
+  spawn_send: ["Messaging sub-agent", "Messaged sub-agent"],
+  spawn_status: ["Checking sub-agent", "Checked sub-agent"],
+  spawn_stop: ["Stopping sub-agent", "Stopped sub-agent"],
   create_plan: ["Planning", "Planned"],
   update_plan: ["Updating the plan", "Updated the plan"],
   ask_user: ["Asking", "Asked"],
@@ -45,7 +46,15 @@ export function toolBaseName(rawName: string): string {
 }
 
 /** The verb a row leads with, or null for a tool with no plain-words form. */
-export function toolActionVerb(rawName: string, phase: ToolActionPhase): string | null {
+export function toolActionVerb(rawName: string, phase: ToolActionPhase, input?: unknown): string | null {
+  // The same tool resumes an existing agent when agent_id is supplied.
+  if (
+    toolBaseName(rawName).toLowerCase() === "spawn" &&
+    input && typeof input === "object" && "agent_id" in input &&
+    typeof input.agent_id === "string" && input.agent_id.trim()
+  ) {
+    return phase === "live" ? "Resuming sub-agent" : "Resumed sub-agent";
+  }
   const verbs = VERBS[toolBaseName(rawName).toLowerCase()];
   if (!verbs) return null;
   return phase === "live" ? verbs[0] : verbs[1];

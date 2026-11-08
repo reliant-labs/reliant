@@ -61,6 +61,8 @@ export type RpcFailureKind =
   | "account-required"
   /** A code that describes the caller's input or state, not a defect. */
   | "expected"
+  /** A delete whose target was already gone: the state the caller asked for. */
+  | "already-absent"
   /** The user's machine is not serving yet; the UI waits on it. */
   | "machine-wait"
   /** The server's deadline passed (a busy machine); retryable, not a defect. */
@@ -97,11 +99,27 @@ const EXPECTED_CODES: ReadonlySet<Code> = new Set([
  */
 const PROBED_SERVICES: ReadonlySet<string> = new Set(["reliant.v1.ProviderAccountService"]);
 
+/**
+ * Deletes for which NotFound means "already gone" — the state the caller asked
+ * for, so a success in all but status code. Every startup deleted a retired
+ * tour key (`onboarding.current_step`) that most users no longer had, and each
+ * NotFound was logged as "[gRPC Client] Request failed" at error level.
+ *
+ * Listed per procedure, never as a blanket rule for NotFound: a missing row on
+ * a read or an update is still news to whoever asked. The error is still
+ * thrown — a caller that wants to know the row was absent still can.
+ */
+const IDEMPOTENT_DELETES: ReadonlySet<string> = new Set([
+  "reliant.v1.SettingsService/DeleteSetting",
+]);
+
 /** The services this app's own API serves. Other backends version separately. */
 const RELIANT_API_SERVICE_PREFIX = "reliant.v1.";
 
 export interface RpcFailureContext {
   serviceTypeName: string;
+  /** The rpc's method name (`DeleteSetting`); per-procedure rules need it. */
+  methodName?: string;
   /** Whether the request's own abort signal had fired when it failed. */
   signalAborted: boolean;
 }
@@ -149,6 +167,12 @@ export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcF
   // modal), and must not depend on the server's choice of status code.
   if (hasErrorReason(error, ACCOUNT_REQUIRED_REASON)) {
     return "account-required";
+  }
+  if (
+    error.code === Code.NotFound &&
+    IDEMPOTENT_DELETES.has(`${ctx.serviceTypeName}/${ctx.methodName ?? ""}`)
+  ) {
+    return "already-absent";
   }
   if (EXPECTED_CODES.has(error.code)) return "expected";
   if (error.code === Code.Unimplemented && PROBED_SERVICES.has(ctx.serviceTypeName)) {

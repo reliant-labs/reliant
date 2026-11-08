@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"time"
@@ -308,6 +309,12 @@ type ChildWorkflowTracker struct {
 	// A thread-scoped update (the __thread key) still targets these
 	// deliberately; only the blind global fan-out is held back.
 	threadOwnedKeys map[string]map[string]bool
+
+	// Reset state is captured before user overrides. Ownership here is only
+	// preset/node ownership, never the additional ownership of a user override.
+	// Keep it after unregister so stopped threads can still be reset.
+	threadResetInputs    map[string]map[string]interface{}
+	threadResetOwnedKeys map[string]map[string]bool
 
 	// liveDetachedSpawns is every background
 	// spawn currently in flight, keyed by its tool_call_id. This is the
@@ -695,12 +702,86 @@ func (t *ChildWorkflowTracker) spawnHandoffs() []SpawnHandoff {
 	return out
 }
 
-// RegisterThreadInputs registers a thread's input map for later query/update access.
-// The inputs map is the same pointer used by the inline executor, so updates are reflected live.
-//
-// ownedKeys names the inputs this thread set explicitly for itself (preset params
-// and node args). Those are protected from global param updates; see
-// ChildWorkflowTracker.threadOwnedKeys.
+// captureThreadResetInputs snapshots the resolved inputs before user overrides.
+func (t *ChildWorkflowTracker) captureThreadResetInputs(thread string, inputs map[string]interface{}, ownedKeys map[string]bool) {
+	if t == nil || thread == "" {
+		return
+	}
+	if t.threadResetInputs == nil {
+		t.threadResetInputs = make(map[string]map[string]interface{})
+		t.threadResetOwnedKeys = make(map[string]map[string]bool)
+	}
+	t.threadResetInputs[thread] = deepCopyJSONMap(inputs)
+	t.threadResetOwnedKeys[thread] = maps.Clone(ownedKeys)
+}
+
+func (t *ChildWorkflowTracker) getThreadResetInputs(thread string) (map[string]interface{}, error) {
+	inputs, ok := t.threadResetInputs[thread]
+	if !ok {
+		return nil, fmt.Errorf("reset inputs unavailable for thread %q", thread)
+	}
+	return deepCopyJSONMap(inputs), nil
+}
+
+// This updates stopped threads too, and ignores user-override ownership: a
+// user choice hides inheritance but must never freeze the reset destination.
+func (t *ChildWorkflowTracker) updateThreadResetInputs(update map[string]interface{}) {
+	for thread, inputs := range t.threadResetInputs {
+		for key, value := range update {
+			if _, exists := inputs[key]; exists && !strings.HasPrefix(key, "__") && !t.threadResetOwnedKeys[thread][key] {
+				inputs[key] = deepCopyJSONValue(value)
+			}
+		}
+	}
+}
+
+// consumeThreadResetKeys removes transport metadata and releases only the
+// ownership introduced by user overrides. Concrete reset values stay in update
+// for the running executor, but are not persisted as fresh user overrides.
+func (t *ChildWorkflowTracker) consumeThreadResetKeys(thread string, update map[string]interface{}) map[string]interface{} {
+	keys := make([]string, 0)
+	switch v := update["__reset_keys"].(type) {
+	case []string:
+		keys = v
+	case []interface{}:
+		for _, key := range v {
+			if s, ok := key.(string); ok {
+				keys = append(keys, s)
+			}
+		}
+	}
+	delete(update, "__reset_keys")
+	overrides := maps.Clone(update)
+	for _, key := range keys {
+		if _, present := update[key]; !present {
+			continue
+		}
+		// A global update can land between the backend's query and this
+		// signal. Reset to the current baseline, not that stale snapshot.
+		// If reconstruction has not restored a baseline, retain the concrete
+		// value supplied by the backend rather than assigning a missing/null value.
+		if value, available := t.threadResetInputs[thread][key]; available {
+			update[key] = deepCopyJSONValue(value)
+		}
+		delete(overrides, key)
+		delete(t.threadInputOverrides[thread], key)
+		if owned := t.threadOwnedKeys[thread]; owned != nil {
+			if t.threadResetOwnedKeys[thread][key] {
+				owned[key] = true
+			} else {
+				delete(owned, key)
+			}
+		}
+		// The stopped-input query overlays stored overrides on this snapshot.
+		if last := t.lastThreadInputs[thread]; last != nil {
+			last[key] = update[key]
+		}
+	}
+	return overrides
+}
+
+// RegisterThreadInputs registers the live executor's map for query/update access.
+// ownedKeys protects preset/node args and restored user overrides from globals.
 func (t *ChildWorkflowTracker) RegisterThreadInputs(thread string, inputs map[string]interface{}, ownedKeys map[string]bool) {
 	if t.threadInputs == nil {
 		t.threadInputs = make(map[string]map[string]interface{})
@@ -805,6 +886,9 @@ type WorkflowResult struct {
 }
 
 func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *WorkflowResult, retErr error) {
+	// Only the in-memory scenario wrapper supplies fixtures. Consume them at
+	// entry so child workflows cannot inherit the root's seeded outputs.
+	scenarioState, ctx := takeScenarioState(ctx)
 	logger := workflow.GetLogger(ctx)
 	info := workflow.GetInfo(ctx)
 	workflowID := info.WorkflowExecution.ID
@@ -1229,6 +1313,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		return nil, fmt.Errorf("failed to set thread inputs query handler: %w", err)
 	}
 
+	// Additive query only: baseline bookkeeping emits no history commands.
+	err = workflow.SetQueryHandler(ctx, "get_thread_reset_inputs", childTracker.getThreadResetInputs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set thread reset inputs query handler: %w", err)
+	}
+
 	// STEP 6.5: Notify UI that workflow has started and create workflow record
 	var statusOpts *workflowStatusOpts
 	if execCtx.Parent != nil || forkedFromThread != "" {
@@ -1349,6 +1439,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// is injected directly into the first batch of triggered steps below.
 	// Track outputs from completed nodes using NodeOutputStore for centralized management
 	nodeOutputStore := NewNodeOutputStore(input.WorkflowName)
+	nodeOutputStore.MergeMap(scenarioState)
 	nodeOutputs := nodeOutputStore.AsMap() // Backwards compatible - existing code can use the map directly
 	failureNodeOutputs = nodeOutputs
 
@@ -3071,7 +3162,8 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 					// Remembered for the thread itself, not only applied to
 					// the run in flight: a thread that is retried or resumed
 					// rebuilds its inputs, and must rebuild them with this.
-					childTracker.recordThreadInputOverride(targetThread, update)
+					overrides := childTracker.consumeThreadResetKeys(targetThread, update)
+					childTracker.recordThreadInputOverride(targetThread, overrides)
 					threadInputs := childTracker.GetThreadInputs(targetThread)
 					if threadInputs != nil {
 						for key, value := range update {
@@ -3093,6 +3185,8 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 						)
 					}
 				} else {
+					delete(update, "__reset_keys")
+					childTracker.updateThreadResetInputs(update)
 					switchedProvider := childTracker.applyProviderSwitch(ctx, workflowInputs, update)
 					// Global update: apply to root workflowInputs
 					for key, value := range update {

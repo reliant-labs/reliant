@@ -53,6 +53,12 @@ func (s *Service) resumePausedRun(
 	runInputs := s.runInputsForSend(ctx, workflowID)
 	inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, chat, workflowName, workflowID,
 		s.underSelection(ctx, chat.ID, workflowName, stateUpdate), runInputs)
+	if inputUpdate == nil {
+		inputUpdate = make(map[string]interface{})
+	}
+	if err := s.reconcileResumeMode(ctx, userID, chat, workflowName, inputUpdate, stateUpdate); err != nil {
+		return runs.ResumeOutcome{}, err
+	}
 	inputUpdate = s.withProviderPolicy(ctx, userID, chat, runInputs, inputUpdate)
 	inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, workflowName, inputUpdate)
 

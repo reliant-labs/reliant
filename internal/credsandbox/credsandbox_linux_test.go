@@ -289,7 +289,63 @@ func TestAliasPaths_FollowsTheSameDiskThroughOtherMounts(t *testing.T) {
 	assert.Empty(t, got, "a different device: its aliases are the other mounts of THAT device only")
 }
 
+// Inside an outer sandbox, the docker socket is already a bind of /dev/null:
+// it hides nothing more, and its alias through that bind is /dev/null itself,
+// which must never become a target (hiding it took /dev/null away from every
+// cover mount after it, and the nested command was refused).
+func TestHideTargets_SkipWhatAnOuterSandboxAlreadyCovered(t *testing.T) {
+	mounts := parseMounts(strings.Join([]string{
+		`1 1 8:0 /home /home/workspace rw - ext4 /dev/d rw`,
+		`2 1 8:0 / /mnt/workspace-disk rw - ext4 /dev/d rw`,
+		`3 1 0:5 / /dev rw - devtmpfs udev rw`,
+		`4 1 0:5 /null /run/docker.sock rw - devtmpfs udev rw`,
+	}, "\n"))
+	covered := map[string]bool{"/run/docker.sock": true, "/dev/null": true}
+	isNull := func(p string) bool { return covered[p] }
+
+	got := hideTargets([]string{"/run/docker.sock", "/home/workspace/.config/forge/credentials.json"}, mounts, isNull)
+	assert.Equal(t, []string{
+		"/home/workspace/.config/forge/credentials.json",
+		"/mnt/workspace-disk/home/.config/forge/credentials.json",
+	}, got)
+
+	// Not yet covered, the socket is a target, and still never /dev/null.
+	delete(covered, "/run/docker.sock")
+	got = hideTargets([]string{"/run/docker.sock"}, mounts, isNull)
+	assert.Equal(t, []string{"/run/docker.sock"}, got)
+}
+
+func TestIsNullDevice(t *testing.T) {
+	assert.True(t, isNullDevice("/dev/null"))
+	assert.False(t, isNullDevice("/dev/zero"))
+	assert.False(t, isNullDevice(t.TempDir()))
+	assert.False(t, isNullDevice(filepath.Join(t.TempDir(), "absent")))
+}
+
 func TestUnescapeMount(t *testing.T) {
 	assert.Equal(t, "/a b/c", unescapeMount(`/a\040b/c`))
 	assert.Equal(t, "/plain", unescapeMount("/plain"))
+}
+
+// A credential DIRECTORY in a scratch dir (an outer sandbox's GH_CONFIG_DIR,
+// a DOCKER_CONFIG under /tmp) cannot be covered with /dev/null: it is covered
+// with an empty read-only directory, and the command still runs.
+func TestSandbox_HidesACredentialDirectoryInAScratchDir(t *testing.T) {
+	requireSandbox(t)
+	dir, err := os.MkdirTemp("/tmp", "credsandbox-dir-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hosts.yml"), []byte("PAT-gh"), 0o600))
+
+	out, code := run(t, Plan{Hide: []string{dir}}, `
+cat "`+dir+`/hosts.yml" 2>/dev/null && echo LEAK
+ls -A "`+dir+`"
+touch "`+dir+`/planted" 2>/dev/null && echo PLANTED
+echo ran`)
+	require.Equal(t, 0, code, out)
+	assert.NotContains(t, out, "PAT-")
+	assert.NotContains(t, out, "LEAK")
+	assert.NotContains(t, out, "hosts.yml")
+	assert.NotContains(t, out, "PLANTED")
+	assert.Contains(t, out, "ran")
 }

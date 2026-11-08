@@ -1,5 +1,22 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Deliver the clipboard value as one operation, never a flag consumed by a
+// later paste. The composer cancels this event to insert without conversion;
+// native editable fields retain Chromium's input/undo/React event behavior.
+ipcRenderer.on('paste-plain-text', (_event, text) => {
+  if (typeof text !== 'string' || text === '') return;
+  const target = document.activeElement;
+  if (!target) return;
+  const event = new CustomEvent('reliant:paste-plain-text', {
+    bubbles: true,
+    cancelable: true,
+    detail: { text },
+  });
+  if (target.dispatchEvent(event)) {
+    document.execCommand('insertText', false, text);
+  }
+});
+
 // Store config in preload context
 let reliantConfig = null;
 

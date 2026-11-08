@@ -150,6 +150,9 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
               {listing && <WorkflowSourceBadge source={listing.source} />}
               {defaultWorkflow === workflowRef && <WorkflowBadge label="Default" variant="info" />}
               {isDraft && <WorkflowBadge label="Draft" variant="warning" />}
+              {listing?.permissions?.includes("approvals:decide") && (
+                <WorkflowBadge label="Can approve requests" variant="warning" testId="workflow-can-approve-badge" />
+              )}
             </>
           }
           subtitle={

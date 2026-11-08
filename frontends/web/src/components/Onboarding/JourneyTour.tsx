@@ -13,13 +13,14 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useLocation } from "@tanstack/react-router";
 import { trackEvent } from "../../lib/analytics";
+import { isDemoShell } from "../../lib/shell";
 import { isPhoneViewport } from "../../lib/mobileRedirect";
 import { useTourStore } from "../../store/tourStore";
 import { OnboardingSpotlight } from "./OnboardingSpotlight";
 import { OnboardingMultiSpotlight } from "./OnboardingMultiSpotlight";
-import { OnboardingModal } from "./OnboardingModal";
 import { OnboardingNavBar } from "./OnboardingNavBar";
 import { JourneyPicker } from "./JourneyPicker";
+import { TourActionHint, TourControls } from "./TourControls";
 import { conditionsOf, useAdvanceOn, useStepPhase } from "./advanceOn";
 import { trackJourneyStepViewed } from "./journeyAnalytics";
 import {
@@ -33,70 +34,99 @@ import {
   stepType,
 } from "./journeys/registry";
 import { formatTourParam, otherJourney, type JourneyId } from "./tourParam";
+import { getTourShell } from "./tourShell";
 import type { JourneyStep } from "./types";
 import { isOnRoute, useTourNavigation, type TourNavigation } from "./useTourNavigation";
 
 // ─── Page-redirect card ──────────────────────────────────────────────────────
 // Rendered when a step's page is not the current page. Keeps the user in
-// control of navigation — one button takes them there; Skip/Back stay on the
-// nav bar.
+// control of navigation: one button takes them there; the step's controls
+// (the nav bar, or the card's own footer) stay available.
 
-function OpenPageModal({
+function OpenPageCard({
   title,
   message,
   actionLabel,
   onOpen,
-  stepNumber,
-  totalSteps,
+  footer,
 }: {
   title: string;
   message: string;
   actionLabel: string;
   onOpen: () => void;
-  stepNumber: number;
-  totalSteps: number;
+  footer?: React.ReactNode;
 }) {
   return (
-    <OnboardingModal
-      isOpen={true}
+    <TourCard
       title={title}
-      stepNumber={stepNumber}
-      totalSteps={totalSteps}
-      hideNavigation
-      hideProgressBar
-    >
-      <div className="space-y-5">
-        <p className="text-sm text-muted-foreground text-center">{message}</p>
-        <div className="flex justify-center">
+      description={
+        <div className="space-y-4" data-testid="tour-open-page">
+          <p>{message}</p>
           <button
             type="button"
             onClick={onOpen}
-            className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
           >
             {actionLabel}
           </button>
         </div>
-      </div>
-    </OnboardingModal>
+      }
+      footer={footer}
+    />
   );
 }
 
-/** A step with no target: a card, centred above the nav bar. Non-modal. */
-function TourCard({ title, description }: { title: string; description: React.ReactNode }) {
+/**
+ * A step with no target: a card, centred above the nav bar. Non-modal by
+ * default; `modal` (JourneyStep.card) locks the page's scroll and stops clicks
+ * on the backdrop, and `wide` gives it room. Either way, no spotlight cutout.
+ */
+export function TourCard({
+  title,
+  description,
+  wide = false,
+  modal = false,
+  footer,
+  reserveBar = true,
+}: {
+  title: string;
+  description: React.ReactNode;
+  wide?: boolean;
+  modal?: boolean;
+  /** The step's own controls (Journey.controls "callout"). */
+  footer?: React.ReactNode;
+  /** Keep room below a modal card for the bottom nav bar. False when there is none ("callout"). */
+  reserveBar?: boolean;
+}) {
+  useEffect(() => {
+    if (!modal) return;
+    const els = [document.documentElement, document.body];
+    const before = els.map((el) => el.style.overflow);
+    for (const el of els) el.style.overflow = "hidden";
+    return () => els.forEach((el, i) => (el.style.overflow = before[i]));
+  }, [modal]);
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none">
-      <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
+    <div
+      className={`fixed inset-0 z-[100] flex items-center justify-center p-4 pointer-events-none ${modal ? (reserveBar ? "pt-6 pb-52" : "py-6") : ""}`}
+      data-testid="tour-card-layer"
+    >
+      {/* Modal: room below for the nav bar (z-[101], bottom-24). The backdrop takes the clicks and the wheel, so the page behind stays put. */}
+      <div className={`absolute inset-0 bg-black/60 ${modal ? "pointer-events-auto" : ""}`} aria-hidden="true" data-testid="tour-card-backdrop" />
       <section
-        role="status"
-        aria-live="polite"
+        role={modal ? "dialog" : "status"}
+        aria-modal={modal || undefined}
+        aria-live={modal ? undefined : "polite"}
         aria-labelledby="tour-card-title"
         data-testid="tour-card"
-        className="relative w-full max-w-md rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl pointer-events-auto"
+        className={`relative w-full rounded-xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl pointer-events-auto ${
+          wide ? "max-w-4xl max-h-full overflow-y-auto overscroll-contain" : "max-w-md"
+        }`}
       >
         <h3 id="tour-card-title" className="mb-2.5 text-lg font-semibold tracking-tight text-foreground">
           {title}
         </h3>
         <div className="text-sm leading-relaxed text-muted-foreground">{description}</div>
+        {footer}
       </section>
     </div>,
     document.body,
@@ -150,6 +180,8 @@ function JourneyStepView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The card's own controls (the default); "bar" keeps the retired bottom nav bar.
+  const compact = getJourney(journey).controls !== "bar";
   const { pending, satisfied } = useAdvanceOn(journey, step, stepKey, () => {
     void nav.advance("action", { journey, stepId });
   });
@@ -189,16 +221,35 @@ function JourneyStepView({
         ? { label: elsewhere.label, onClick: () => window.open(elsewhere.href(), "_blank", "noopener") }
         : undefined;
 
+  // The card's own controls: Step X of Y, Back, Next (disabled until a required action is
+  // done, then checked), and Exit. An auto-advancing step moves on by itself once done.
+  const footer = compact ? (
+    <TourControls
+      stepNumber={stepNumber}
+      totalSteps={total}
+      onExit={isLast ? undefined : () => void nav.skipAll()}
+      onBack={onBack}
+      onNext={onNext}
+      nextDisabled={nextHidden}
+      nextDisabledReason={step.actionHint}
+      actionDone={hasAction && satisfied}
+      nextLabel={isLast ? "Finish" : "Next"}
+      secondary={secondaryAction}
+      skip={step.skip?.label && !isLast && !(hasAction && satisfied) ? { label: step.skip.label, onClick: () => void nav.skipStep() } : undefined}
+    />
+  ) : undefined;
+  const hint = compact && hasAction && !satisfied ? <TourActionHint hint={step.actionHint} done={false} /> : undefined;
+  const callout = compact ? { footer, hint } : undefined;
+
   let body: React.ReactNode;
   if (step.route && !isOnRoute(step.route, pathname)) {
     body = (
-      <OpenPageModal
+      <OpenPageCard
         title={shown.title}
         message={step.route.message ?? `${step.route.label} to continue this step.`}
         actionLabel={step.route.label}
         onOpen={() => nav.openStepPage(journey, step.route!)}
-        stepNumber={stepNumber}
-        totalSteps={total}
+        footer={compact ? <TourControls stepNumber={stepNumber} totalSteps={total} onExit={() => void nav.skipAll()} /> : undefined}
       />
     );
   } else {
@@ -219,24 +270,38 @@ function JourneyStepView({
             spotlightConfig={step.spotlightConfig}
             keyboardNav={!hasAction}
             blockOutside={pending && step.blockOutside === true}
+            callout={callout}
           />
         );
         break;
       case "multi-spotlight":
         body = (
-          <OnboardingMultiSpotlight
-            targets={shown.targets ?? []}
-            stepNumber={stepNumber}
-            totalSteps={total}
-            onNext={nextHidden ? noop : onNext}
-            onBack={onBack}
-            onSkipAll={() => void nav.skipAll()}
-            keyboardNav={!hasAction}
-          />
+          <>
+            <OnboardingMultiSpotlight
+              targets={shown.targets ?? []}
+              stepNumber={stepNumber}
+              totalSteps={total}
+              onNext={nextHidden ? noop : onNext}
+              onBack={onBack}
+              onSkipAll={() => void nav.skipAll()}
+              keyboardNav={!hasAction}
+            />
+            {/* The labels name each target; with no bar, the step's copy and controls need a card of their own. */}
+            {compact && <TourCard title={shown.title} description={<>{description}{hint}</>} footer={footer} reserveBar={false} />}
+          </>
         );
         break;
       case "card":
-        body = <TourCard title={shown.title} description={description} />;
+        body = (
+          <TourCard
+            title={shown.title}
+            description={<>{description}{hint}</>}
+            wide={step.card?.wide}
+            modal={step.card?.modal}
+            footer={footer}
+            reserveBar={!compact}
+          />
+        );
         break;
     }
   }
@@ -244,22 +309,24 @@ function JourneyStepView({
   return (
     <>
       {body}
-      <OnboardingNavBar
-        stepNumber={stepNumber}
-        totalSteps={total}
-        stepTitle={shown.title}
-        onNext={onNext}
-        onBack={onBack}
-        onSkipAll={() => void nav.skipAll()}
-        nextLabel={isLast ? "Finish" : "Next"}
-        showSkipAll={!isLast}
-        nextHidden={nextHidden}
-        actionHint={step.actionHint}
-        actionDone={hasAction && satisfied}
-        onSkipStep={isLast || (hasAction && satisfied) ? undefined : () => void nav.skipStep()}
-        skipStepLabel={step.skip?.label}
-        secondaryAction={secondaryAction}
-      />
+      {!compact && (
+        <OnboardingNavBar
+          stepNumber={stepNumber}
+          totalSteps={total}
+          stepTitle={shown.title}
+          onNext={onNext}
+          onBack={onBack}
+          onSkipAll={() => void nav.skipAll()}
+          nextLabel={isLast ? "Finish" : "Next"}
+          showSkipAll={!isLast}
+          nextHidden={nextHidden}
+          actionHint={step.actionHint}
+          actionDone={hasAction && satisfied}
+          onSkipStep={isLast || (hasAction && satisfied) ? undefined : () => void nav.skipStep()}
+          skipStepLabel={step.skip?.label}
+          secondaryAction={secondaryAction}
+        />
+      )}
     </>
   );
 }
@@ -279,7 +346,9 @@ export function JourneyTour() {
 
   if (!nav.tour || !initialized) return null;
 
-  if (isPhoneViewport()) return <DeferredOnPhone onClose={nav.exitTour} />;
+  // Phones: Reliant's mobile surface has none of the desktop chrome a journey points at, so it
+  // defers there. The forge shell and the demo draw each step as a bottom sheet instead.
+  if (isPhoneViewport() && getTourShell() === "reliant") return <DeferredOnPhone onClose={nav.exitTour} />;
 
   if (nav.tour.kind === "picker") {
     return (
@@ -295,6 +364,9 @@ export function JourneyTour() {
   }
 
   const { journey, stepId, step } = nav.tour;
+  // The public demo explains the actual page, including legacy ?view= deep links.
+  // It never demands a prior action or sends exploration through the old single-page sequence.
+  if (journey === "forge" && isDemoShell()) return null; // DemoTips owns the page-local entry callout, including legacy links.
   return (
     <JourneyStepView
       key={formatTourParam(journey, stepId)}

@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.0.17-0.20261105225243-7ad8943ce387
+forge_version: v1.2.1-0.20261108014235-88cb28c2f5ab
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -129,6 +129,8 @@ generate:
         # control-plane's exported public contract. Both dirs are replaced
         # wholesale, only after buf succeeds.
         - name: controlplane-client
+          # Vendored descriptors are inputs to frontend hooks/mock projections.
+          phase: input
           command: [scripts/proto-generate-atomic.sh, buf.gen.controlplane.yaml, gen/controlplane, frontends/web/src/gen/controlplane]
           writes: [gen/controlplane, frontends/web/src/gen/controlplane]
         # The TypeScript SDK's generated protobuf subset (@reliantlabs/sdk),

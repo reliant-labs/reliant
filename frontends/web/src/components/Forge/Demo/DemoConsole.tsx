@@ -28,7 +28,7 @@
  * have (Releases, Environments, …) open its overview.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useMemo, useState } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
@@ -41,7 +41,8 @@ import { ObservabilityApiProvider } from "@/services/controlPlane/observability/
 import { ConsoleShell } from "../Console/ConsoleShell";
 import { ProjectMonogram } from "../Console/ConsoleProjectSwitcher";
 import { ENV_ALL } from "../Console/envScope";
-import { isObsNavView, withSearch, type ConsolePage } from "../Console/paths";
+import { consolePath, isObsNavView, withSearch, type ConsolePage } from "../Console/paths";
+import { isDemoShell } from "@/lib/shell";
 import { AskAgentModeProvider } from "../Observability/AskReliant/askAgentMode";
 import ObservabilityPanel, { type ObsPlace } from "../Observability/ObservabilityPanel";
 import { OBS_VIEW_LABELS, OBS_VIEWS, viewOf, type ObsNavigate, type ObsSearch, type ObsView } from "../Observability/obsSearch";
@@ -50,7 +51,11 @@ import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../Observability/__fixtures__/fix
 import { ObsReadOnlyProvider, type ObsReadOnly } from "../Observability/obsReadOnly";
 import { createDemoApi } from "./demoData/demoApi";
 import { DemoBanner } from "./DemoBanner";
-import { FORGE_DEMO_PATH } from "./demoPath";
+import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
+import { HowBuiltLink } from "./howBuilt/HowBuiltLink";
+
+// The recorded forge run and its fixtures: a chunk of their own, loaded when the section opens.
+const HowThisAppWasBuilt = lazy(() => import("./howBuilt/HowThisAppWasBuilt"));
 
 /** The fixture environments with what each declares (rules, routes, observability policy), for Alerts. */
 const ENVIRONMENTS = FIXTURE_ENVS.map((env) => ({ ...env, declared: FIXTURE_DECLARED[env.id] ?? null }));
@@ -74,6 +79,8 @@ const READ_ONLY: ObsReadOnly = { readOnly: true, reason: "Read-only demo" };
 
 /** Every nav row and crumb stays on the demo: a panel view by `view`, anything else the overview. */
 function demoLink(target: ConsolePage): string {
+  // The demo site mounts the real console (/forge/p/shop/…): every nav row goes to its page.
+  if (isDemoShell()) return consolePath(FIXTURE_PROJECT, target);
   if (target.kind === "obs-view" && (OBS_VIEWS as readonly string[]).includes(target.view)) {
     return withSearch(FORGE_DEMO_PATH, { view: target.view });
   }
@@ -93,7 +100,7 @@ export interface DemoConsoleProps {
 export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
   const shell = shellProp ?? getTourShell();
   const navigate = useNavigate();
-  const search = useSearch({ strict: false }) as ObsSearch & { tour?: string };
+  const search = useSearch({ strict: false }) as ObsSearch & { tour?: string; section?: string };
   const [collapsed, setCollapsed] = useState(false);
   // Its own client and API: nothing here shares a cache entry with a real project's console.
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }));
@@ -115,6 +122,16 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
     },
     [navigate]
   );
+  // "How this app was built" back to the console view it was opened from (`tour` rides along).
+  const leaveBuilt = useCallback(() => {
+    void navigate({ to: ".", search: ((prev: Record<string, unknown>) => ({ ...prev, section: undefined })) as never } as never);
+  }, [navigate]);
+  const openBuilt = useCallback(() => {
+    void navigate({
+      to: ".",
+      search: ((prev: Record<string, unknown>) => ({ ...prev, section: DEMO_SECTION_BUILT, trace: undefined, span: undefined, issue: undefined })) as never,
+    } as never);
+  }, [navigate]);
 
   return (
     <AskAgentModeProvider mode="handoff" cli={shell === "forge" ? "forge" : "reliant forge"} demo>
@@ -143,9 +160,22 @@ export function DemoConsole({ shell: shellProp }: DemoConsoleProps = {}) {
               >
                 <DemoBanner shell={shell} />
                 <div className="space-y-4" data-testid="forge-demo">
-                  {/* One compact row; the top bar's scope control says which environments. */}
-                  <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
-                  <ObservabilityPanel place={PLACE} search={{ ...search, view }} navigate={navigateObs} />
+                  {search.section === DEMO_SECTION_BUILT ? (
+                    <>
+                      <PageHeader density="compact" title="How this app was built" className="mb-0" />
+                      <Suspense fallback={<p className="text-sm text-ink-muted">Loading the recorded run…</p>}>
+                        <HowThisAppWasBuilt onBack={leaveBuilt} />
+                      </Suspense>
+                    </>
+                  ) : (
+                    <>
+                      {/* One compact row; the top bar's scope control says which environments. */}
+                      <PageHeader density="compact" title={OBS_VIEW_LABELS[view]} className="mb-0" />
+                      <ObservabilityPanel place={PLACE} search={{ ...search, view }} navigate={navigateObs} />
+                      {/* Last on the page, after the console's views. */}
+                      <HowBuiltLink onOpen={openBuilt} />
+                    </>
+                  )}
                 </div>
               </ConsoleShell>
             </ObservabilityBillingApiContext.Provider>

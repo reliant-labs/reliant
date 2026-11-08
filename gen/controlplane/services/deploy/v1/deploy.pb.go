@@ -3786,7 +3786,12 @@ type CompareDeployReleasesRequest struct {
 	// The org this request acts in (docs/orgs.md). Unset: the caller's default
 	// org. A person must be a member of it; a machine credential may name only
 	// its own org.
-	OrgId         *string `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Only this workload's objects: those whose forge workload is this name, or
+	// which belong to no workload and are named it. objects.unchanged then
+	// counts that workload's objects alone. Commits and artifacts are the
+	// release's and are not filtered. Unset compares every object.
+	Workload      *string `protobuf:"bytes,6,opt,name=workload,proto3,oneof" json:"workload,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3852,6 +3857,13 @@ func (x *CompareDeployReleasesRequest) GetEnvironmentId() string {
 func (x *CompareDeployReleasesRequest) GetOrgId() string {
 	if x != nil && x.OrgId != nil {
 		return *x.OrgId
+	}
+	return ""
+}
+
+func (x *CompareDeployReleasesRequest) GetWorkload() string {
+	if x != nil && x.Workload != nil {
+		return *x.Workload
 	}
 	return ""
 }
@@ -4135,8 +4147,13 @@ type DeployObjectComparison struct {
 	// summaries: objects are named without saying what they are or what in them
 	// changed.
 	SummariesMissing bool `protobuf:"varint,8,opt,name=summaries_missing,json=summariesMissing,proto3" json:"summaries_missing,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The workload the objects were filtered to, echoing the request's. Empty
+	// when every object was compared — including from a control plane that
+	// predates the filter, so a client that asked for one and reads "" filters
+	// the deltas itself.
+	Workload      string `protobuf:"bytes,9,opt,name=workload,proto3" json:"workload,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeployObjectComparison) Reset() {
@@ -4223,6 +4240,13 @@ func (x *DeployObjectComparison) GetSummariesMissing() bool {
 		return x.SummariesMissing
 	}
 	return false
+}
+
+func (x *DeployObjectComparison) GetWorkload() string {
+	if x != nil {
+		return x.Workload
+	}
+	return ""
 }
 
 // DeployObjectDelta is one object the two bundles disagree on.
@@ -7266,7 +7290,11 @@ type ReportLocalSessionRequest struct {
 	BundleDigest string `protobuf:"bytes,6,opt,name=bundle_digest,json=bundleDigest,proto3" json:"bundle_digest,omitempty"`
 	// running | stopped. `stopped` stamps stopped_at, which is what separates a
 	// clean exit from a session that merely went quiet.
-	State         string `protobuf:"bytes,7,opt,name=state,proto3" json:"state,omitempty"`
+	State string `protobuf:"bytes,7,opt,name=state,proto3" json:"state,omitempty"`
+	// The org this request acts in (docs/orgs.md). Unset: the caller's default
+	// org. A person must be a member of it; a machine credential may name only
+	// its own org.
+	OrgId         *string `protobuf:"bytes,8,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7346,6 +7374,13 @@ func (x *ReportLocalSessionRequest) GetBundleDigest() string {
 func (x *ReportLocalSessionRequest) GetState() string {
 	if x != nil {
 		return x.State
+	}
+	return ""
+}
+
+func (x *ReportLocalSessionRequest) GetOrgId() string {
+	if x != nil && x.OrgId != nil {
+		return *x.OrgId
 	}
 	return ""
 }
@@ -8566,15 +8601,17 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\brecorded\x18\x02 \x01(\bR\brecorded\"h\n" +
 	"\x12CutReleaseResponse\x128\n" +
 	"\arelease\x18\x01 \x01(\v2\x1e.controlplane.v1.DeployReleaseR\arelease\x12\x18\n" +
-	"\acreated\x18\x02 \x01(\bR\acreated\"\xc8\x01\n" +
+	"\acreated\x18\x02 \x01(\bR\acreated\"\xf6\x01\n" +
 	"\x1cCompareDeployReleasesRequest\x12!\n" +
 	"\ffrom_version\x18\x01 \x01(\tR\vfromVersion\x12\x1d\n" +
 	"\n" +
 	"to_version\x18\x02 \x01(\tR\ttoVersion\x12\x18\n" +
 	"\aproject\x18\x03 \x01(\tR\aproject\x12%\n" +
 	"\x0eenvironment_id\x18\x04 \x01(\tR\renvironmentId\x12\x1a\n" +
-	"\x06org_id\x18\x05 \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
-	"\a_org_id\"\xff\x02\n" +
+	"\x06org_id\x18\x05 \x01(\tH\x00R\x05orgId\x88\x01\x01\x12\x1f\n" +
+	"\bworkload\x18\x06 \x01(\tH\x01R\bworkload\x88\x01\x01B\t\n" +
+	"\a_org_idB\v\n" +
+	"\t_workload\"\xff\x02\n" +
 	"\x1dCompareDeployReleasesResponse\x122\n" +
 	"\x04from\x18\x01 \x01(\v2\x1e.controlplane.v1.DeployReleaseR\x04from\x12.\n" +
 	"\x02to\x18\x02 \x01(\v2\x1e.controlplane.v1.DeployReleaseR\x02to\x12A\n" +
@@ -8594,7 +8631,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x129\n" +
 	"\x06change\x18\x03 \x01(\x0e2!.controlplane.v1.DeployChangeKindR\x06change\x12\x12\n" +
 	"\x04from\x18\x04 \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\x05 \x01(\tR\x02to\"\xfa\x02\n" +
+	"\x02to\x18\x05 \x01(\tR\x02to\"\x96\x03\n" +
 	"\x16DeployObjectComparison\x12B\n" +
 	"\x05state\x18\x01 \x01(\x0e2,.controlplane.v1.DeployObjectComparisonStateR\x05state\x12\x16\n" +
 	"\x06detail\x18\x02 \x01(\tR\x06detail\x12%\n" +
@@ -8603,7 +8640,8 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x10to_bundle_digest\x18\x05 \x01(\tR\x0etoBundleDigest\x12:\n" +
 	"\x06deltas\x18\x06 \x03(\v2\".controlplane.v1.DeployObjectDeltaR\x06deltas\x12\x1c\n" +
 	"\tunchanged\x18\a \x01(\x05R\tunchanged\x12+\n" +
-	"\x11summaries_missing\x18\b \x01(\bR\x10summariesMissing\"\xd9\x02\n" +
+	"\x11summaries_missing\x18\b \x01(\bR\x10summariesMissing\x12\x1a\n" +
+	"\bworkload\x18\t \x01(\tR\bworkload\"\xd9\x02\n" +
 	"\x11DeployObjectDelta\x129\n" +
 	"\x06change\x18\x01 \x01(\x0e2!.controlplane.v1.DeployChangeKindR\x06change\x12\x18\n" +
 	"\acluster\x18\x02 \x01(\tR\acluster\x12\x12\n" +
@@ -8855,7 +8893,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x16ceiling_cpu_millicores\x18\x06 \x01(\x03R\x14ceilingCpuMillicores\x120\n" +
 	"\x14ceiling_memory_bytes\x18\a \x01(\x03R\x12ceilingMemoryBytes\x12.\n" +
 	"\x13ceiling_storage_gib\x18\b \x01(\x03R\x11ceilingStorageGib\x121\n" +
-	"\x05holds\x18\t \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holds\"\xb7\x02\n" +
+	"\x05holds\x18\t \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holds\"\xde\x02\n" +
 	"\x19ReportLocalSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x18\n" +
@@ -8866,7 +8904,9 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"provenance\x18\x05 \x01(\v2'.controlplane.v1.DeploySourceProvenanceR\n" +
 	"provenance\x12#\n" +
 	"\rbundle_digest\x18\x06 \x01(\tR\fbundleDigest\x12\x14\n" +
-	"\x05state\x18\a \x01(\tR\x05state\"[\n" +
+	"\x05state\x18\a \x01(\tR\x05state\x12\x1a\n" +
+	"\x06org_id\x18\b \x01(\tH\x00R\x05orgId\x88\x01\x01B\t\n" +
+	"\a_org_id\"[\n" +
 	"\x1aReportLocalSessionResponse\x12=\n" +
 	"\asession\x18\x01 \x01(\v2#.controlplane.v1.DeployLocalSessionR\asession\"\xdc\x03\n" +
 	"\x13ImportLedgerRequest\x12\x18\n" +
@@ -9503,6 +9543,7 @@ func file_services_deploy_v1_deploy_proto_init() {
 	file_services_deploy_v1_deploy_proto_msgTypes[94].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[96].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[99].OneofWrappers = []any{}
+	file_services_deploy_v1_deploy_proto_msgTypes[101].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[103].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[111].OneofWrappers = []any{}
 	type x struct{}

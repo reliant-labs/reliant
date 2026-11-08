@@ -3,7 +3,8 @@
 /**
  * The demo console's banner: this is sample data, and changes are off.
  *
- *  - In every shell: "Restart the tour" (hidden while a step is open).
+ *  - In every shell: "Guided tour" (hidden while a step is open), and
+ *    "How this app was built" (the recorded forge run, `?section=built`).
  *  - Reliant and the forge shell: "Leave the demo" (forge's Apps / the project
  *    picker).
  *  - The public demo (lib/shell.ts `demo`): Install forge and Sign up instead
@@ -13,28 +14,28 @@
  */
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { FlaskConical, RotateCcw } from "lucide-react";
+import { Compass, FlaskConical, Hammer } from "lucide-react";
 
 import { parseTourParam } from "@/components/Onboarding/tourParam";
 import type { TourShell } from "@/components/Onboarding/tourShell";
 import { useTourNavigation } from "@/components/Onboarding/useTourNavigation";
-import { PRIVACY_POLICY_URL } from "@/components/Settings/privacyLinks";
+import { PRIVACY_POLICY_URL } from "@/lib/privacyLinks";
 import { trackEvent } from "@/lib/analytics";
 import { browserOptedOut, demoTelemetry, demoTelemetryNotice } from "@/lib/demoTelemetry";
 import { isDemoShell } from "@/lib/shell";
 
-import { DemoCta } from "./DemoCta";
 import { useDemoDataStatus } from "./demoData/demoDataStatus";
+import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 
 /** Where "Leave the demo" goes: forge's Apps in Reliant, the project picker in the forge shell. */
 const exitHref = (shell: TourShell) => (shell === "forge" ? "/apps" : "/forge");
 
-const LINK = "no-color inline-flex items-center gap-1.5 text-sm font-medium text-ink underline-offset-2 hover:underline";
+const LINK = "no-color inline-flex touch-target items-center gap-1.5 text-sm font-medium text-ink underline-offset-2 hover:underline";
 
 export function DemoBanner({ shell }: { shell: TourShell }) {
   const navigate = useNavigate();
   const { startJourney } = useTourNavigation();
-  const search = useSearch({ strict: false }) as { tour?: unknown };
+  const search = useSearch({ strict: false }) as { tour?: unknown; section?: unknown };
   const tour = parseTourParam(search.tour);
   const demo = isDemoShell();
   const optedOut = demo && browserOptedOut();
@@ -44,7 +45,7 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
   return (
     <div
       role="note"
-      className="sticky top-0 z-20 -mx-1 mb-4 space-y-1 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-ink"
+      className="-mx-1 mb-4 space-y-1 rounded-lg border border-warning-border bg-warning-surface px-3 py-2 text-sm text-ink sm:sticky sm:top-0 sm:z-20"
       data-testid="forge-demo-banner"
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -52,7 +53,7 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
           <FlaskConical className="h-4 w-4" aria-hidden="true" />
           Demo data
         </span>
-        <span className="min-w-0 flex-1 text-ink-muted" data-testid="forge-demo-data" data-source={demo ? data : "fixtures"}>
+        <span className="min-w-0 flex-1 basis-56 text-ink-muted" data-testid="forge-demo-data" data-source={demo ? data : "fixtures"}>
           {!demo
             ? "Sample data from a made-up app called shop. Nothing here touches your projects."
             : data === "live"
@@ -71,13 +72,28 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
             }}
             data-testid="forge-demo-restart"
           >
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-            Restart the tour
+            <Compass className="h-3.5 w-3.5" aria-hidden="true" />
+            Guided tour
           </button>
         )}
-        {demo ? (
-          <DemoCta placement="banner" />
-        ) : (
+        {search.section !== DEMO_SECTION_BUILT && (
+          <button
+            type="button"
+            className={LINK}
+            onClick={() => {
+              trackEvent("demo_how_built_opened", { from: "banner" });
+              void navigate({
+                to: FORGE_DEMO_PATH,
+                search: ((prev: Record<string, unknown>) => ({ ...prev, section: DEMO_SECTION_BUILT, trace: undefined, span: undefined, issue: undefined })) as never,
+              } as never);
+            }}
+            data-testid="forge-demo-how-built"
+          >
+            <Hammer className="h-3.5 w-3.5" aria-hidden="true" />
+            How this app was built
+          </button>
+        )}
+        {!demo && (
           <a
             href={exitHref(shell)}
             onClick={(event) => {

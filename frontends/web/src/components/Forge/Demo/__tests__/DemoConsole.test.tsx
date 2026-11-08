@@ -9,7 +9,7 @@
  */
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createMemoryHistory, createRootRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import type { Transport } from "@connectrpc/connect";
@@ -103,6 +103,27 @@ describe("the forge demo console", () => {
     expect(nav).not.toBeNull();
     expect(within(nav!).getByRole("link", { name: /Overview/ })).toHaveAttribute("href", "/forge/demo");
     expect(within(nav!).getByRole("link", { name: /Releases/ })).toHaveAttribute("href", "/forge/demo");
+    expectNothingTouched();
+  }, 30_000);
+
+  it("opens How this app was built from the banner, on the recorded run, and goes back to the console", async () => {
+    const router = renderDemo("/forge/demo?view=overview");
+    fireEvent.click(await screen.findByTestId("forge-demo-how-built", {}, { timeout: 15_000 }));
+    await waitFor(() => expect(search(router).section).toBe("built"));
+    expect(await screen.findByTestId("scaffold-replay", {}, { timeout: 15_000 })).toBeInTheDocument();
+    expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(/You wrote \d+ lines of proto/);
+    expect(screen.queryByTestId("obs-overview")).toBeNull();
+    // Already open: the banner no longer offers it.
+    expect(screen.queryByTestId("forge-demo-how-built")).toBeNull();
+    fireEvent.click(screen.getByTestId("how-built-back"));
+    await waitFor(() => expect(search(router).section).toBeUndefined());
+    expect(await screen.findByTestId("obs-overview")).toBeInTheDocument();
+    // It is also last on the page, after the console's view.
+    const link = screen.getByTestId("how-built-link");
+    expect(screen.getByTestId("obs-overview").compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(link);
+    await waitFor(() => expect(search(router).section).toBe("built"));
+    expect(await screen.findByTestId("scaffold-replay")).toBeInTheDocument();
     expectNothingTouched();
   }, 30_000);
 
@@ -224,12 +245,10 @@ describe("the forge demo console", () => {
       const banner = await screen.findByTestId("forge-demo-banner", {}, { timeout: 15_000 });
       expect(banner).toHaveTextContent("Nothing you click here changes anything.");
       expect(within(banner).queryByTestId("forge-demo-exit")).toBeNull();
-      expect(within(banner).getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("/auth?utm_source=demo&utm_medium=banner"));
+      expect(within(banner).queryByTestId("demo-cta-signup")).toBeNull();
       expect(within(banner).getByTestId("forge-demo-telemetry-notice")).toHaveTextContent("This demo records usage and session replays to improve the product.");
-      await user.click(within(banner).getByTestId("demo-cta-install"));
-      const sheet = await screen.findByTestId("demo-install-sheet");
-      expect(sheet).toHaveTextContent("brew install reliant-labs/reliant/forge");
-      expect(sheet).toHaveTextContent("forge start");
+      expect(within(banner).queryByTestId("demo-cta-install")).toBeNull();
+      void user; // Screen actions are mounted by DemoTips at the shell root, not the banner.
       expectNothingTouched();
     }, 30_000);
   });

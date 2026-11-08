@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { ChatActivity } from "../../../gen/reliant/v1/chat_pb";
 import { chatListIndicators } from "../../../lib/runStatus";

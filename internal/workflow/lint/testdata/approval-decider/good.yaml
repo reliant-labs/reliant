@@ -1,0 +1,24 @@
+name: fixture
+entry: [approve]
+nodes:
+# lint:allow approval-decider — the on-call rotation bot approves staging deploys; its owner approved the card
+- id: approve
+  type: action
+  uses: http/request@1
+  hosted_use: reliant_approvals
+  with:
+    url: https://api.reliantlabs.io/reliant.v1.ApprovalService/Approve
+    method: POST
+    body: '{"approval_id": "a1"}'
+- id: ok
+  type: save_message
+  args: {role: assistant, content: approved}
+- id: failed
+  type: save_message
+  outcome: failure
+  args: {role: assistant, content: could not approve}
+edges:
+- from: approve
+  cases:
+  - {to: failed, condition: 'nodes.approve.is_error'}
+  default: ok

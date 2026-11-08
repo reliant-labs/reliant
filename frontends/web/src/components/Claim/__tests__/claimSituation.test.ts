@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Which stage of the settled flow a browser is at, from who is signed in and
  * the pending claim. Every row of the table in claimSituation.ts.

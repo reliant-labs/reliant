@@ -217,6 +217,80 @@ func UpdateChatActiveDaemon(ctx context.Context, db orm.Context, chatID string, 
 	return err
 }
 
+// ChatMove is a chat's move to another project: the worktree (the new
+// project's main checkout) and the machine it runs on there.
+type ChatMove struct {
+	ChatID        string
+	FromProjectID string
+	ToProjectID   string
+	WorktreeID    string
+	// DaemonID pins the chat's machine; nil clears the pin. Pinning one puts a
+	// no-machine chat on a machine, as UpdateChatActiveDaemon does.
+	DaemonID *string
+}
+
+// Chat activities (reliantv1.ChatActivity) a chat may be moved in: IDLE and
+// ERROR. Every other one is a run in progress, a question waiting for the
+// user, a paused run or a message queued for the chat's machine.
+const (
+	chatActivityIdle  = 0
+	chatActivityError = 3
+)
+
+// moveChatToProjectSQL moves the chat only while it is still in the project it
+// was read in and its activity, as chats_with_activity derives it, is one a
+// move may happen in. The check and the write are one statement, under the
+// chat row lock withChatWorktreeAdmission takes (which a workflow's admission
+// takes too), so a run cannot start between them. last_active does not move:
+// the sidebar orders by it, and moving a chat is not activity in it.
+const moveChatToProjectSQL = `
+UPDATE chats SET
+    project_id = ?0,
+    worktree_id = ?1,
+    active_daemon_id = ?2,
+    no_machine = no_machine AND ?2::text IS NULL,
+    updated_at = NOW()
+WHERE id = ?3
+  AND project_id = ?4
+  AND EXISTS (
+      SELECT 1 FROM chats_with_activity v
+      WHERE v.id = ?3 AND v.activity IN (?5, ?6)
+  )
+RETURNING id`
+
+// moveChatPlansSQL moves the chat's plans with it: plans.project_id cascades
+// on the project's deletion, so a plan left behind would vanish with the old
+// project while its chat lives on in the new one.
+const moveChatPlansSQL = `
+UPDATE plans SET project_id = ?0
+WHERE project_id = ?1
+  AND thread_id IN (SELECT id FROM threads WHERE chat_id = ?2)`
+
+// MoveChatToProject moves the chat and its plans to m.ToProjectID. moved is
+// false, and nothing is written, when the chat is gone, is no longer in
+// m.FromProjectID, or is not idle (or stopped on an error).
+func MoveChatToProject(ctx context.Context, db orm.Context, m ChatMove) (moved bool, err error) {
+	worktreeID := m.WorktreeID
+	err = withChatWorktreeAdmission(ctx, db, m.ChatID, &worktreeID, func(ctx context.Context) error {
+		var ids []string
+		if err := db.Bun().NewRaw(moveChatToProjectSQL,
+			m.ToProjectID, m.WorktreeID, m.DaemonID, m.ChatID, m.FromProjectID,
+			chatActivityIdle, chatActivityError,
+		).Scan(ctx, &ids); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("failed to move chat: %w", recoveryAdmissionError(err))
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		moved = true
+		if _, err := db.Bun().NewRaw(moveChatPlansSQL, m.ToProjectID, m.FromProjectID, m.ChatID).Exec(ctx); err != nil {
+			return fmt.Errorf("failed to move the chat's plans: %w", err)
+		}
+		return nil
+	})
+	return moved, err
+}
+
 // pinChatDaemonIfUnsetSQL pins an unpinned chat that is on a machine. A
 // no-machine chat has no daemon by constraint, so it is never matched. Neither
 // updated_at nor last_active moves: choosing where a chat runs is not

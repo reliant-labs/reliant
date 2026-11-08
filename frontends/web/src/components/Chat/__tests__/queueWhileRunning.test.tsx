@@ -60,6 +60,10 @@ vi.mock("../../../hooks/chat-queries", async () => {
       isLoading: false,
     }),
     getChatFromCache: () => undefined,
+    // The composer reads the chat's server-side selection on mount (a
+    // GetChat). Unmocked, that request reached the network guard only
+    // sometimes, failing a different case each time (reliant#2366).
+    useChatSelection: () => ({ data: undefined, isLoading: false }),
   };
 });
 
@@ -127,8 +131,7 @@ afterEach(() => setTransport(null));
 
 function typeInComposer(text: string) {
   const editor = screen.getByTestId("chat-input");
-  editor.textContent = text;
-  fireEvent.input(editor);
+  fireEvent.change(editor, { target: { value: text } });
   return editor;
 }
 
@@ -147,6 +150,17 @@ describe("queueing a message while the agent is running", () => {
     vi.clearAllMocks();
     useAttachmentStore.getState().reset();
     sendAgentMessageMock.mockResolvedValue({ success: true, message: "" });
+  });
+
+  it("queues an attachment-only message with a body naming its files", async () => {
+    useAttachmentStore.setState({
+      attachments: new Map([[CHAT_ID, [{ id: "att-1", filename: "pasted-text.txt", mime_type: "text/plain", size: 5, url: "", attachment_type: "file_reference" as const }]]]),
+    });
+    renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} isStreaming />);
+    fireEvent.click(screen.getByTestId("queue-send-button"));
+    await waitFor(() => expect(sendAgentMessageMock).toHaveBeenCalledTimes(1));
+    expect(sendAgentMessageMock).toHaveBeenCalledWith(expect.objectContaining({ message: "Attached: pasted-text.txt", attachments: ["att-1"] }));
+    await waitFor(() => expect(useAttachmentStore.getState().attachments.get(CHAT_ID)).toBeUndefined());
   });
 
   it("queues to the main thread on Enter while streaming, and consumes the key", async () => {

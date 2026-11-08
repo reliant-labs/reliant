@@ -1,6 +1,8 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import { renderWithQuery } from "../../../test/renderWithQuery";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { RecentChanges } from "../RecentChanges";
 import { FileChangeStatus } from "../../../gen/reliant/v1/common_pb";
 import { useProjectStore } from "../../../store/projectStore";
@@ -80,6 +82,8 @@ vi.mock("../../RightSidebar/shared", () => ({
 
 describe("RecentChanges", () => {
   beforeEach(() => {
+    // PR metadata subscribes to registry state even while changes are loading.
+    setTransport(mockTransport({ "DaemonRegistryService.ListDaemons": () => ({ daemons: [] }) }));
     getChangesMock.mockReset();
     getExistingPRMock.mockReset();
     getExistingPRMock.mockResolvedValue({ exists: false });
@@ -98,6 +102,8 @@ describe("RecentChanges", () => {
       },
     });
   });
+
+  afterEach(() => setTransport(null));
 
   it("ignores stale worktree responses after switching chats", async () => {
     let resolveOld!: (value: unknown) => void;

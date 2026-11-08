@@ -133,6 +133,13 @@ export interface JourneyStep extends StepPresentation {
   description: React.ReactNode;
   tooltipPadding?: number;
   spotlightConfig?: SpotlightConfig;
+  /**
+   * A card step (no target) drawn as the step's own view: `wide` for content
+   * that needs room (a player, a table), `modal` to hold the page still behind
+   * it (scroll locked, clicks on the backdrop stopped) so nothing on the page
+   * moves out from under the step. Default: a narrow, non-modal card.
+   */
+  card?: { wide?: boolean; modal?: boolean };
   /** Per-shell overrides of title / description / target. */
   copyByShell?: Partial<Record<TourShell, StepPresentation>>;
   /** Shells the step appears in. Default both. */
@@ -226,6 +233,16 @@ export interface Journey {
    * → "Try AI workflows in Reliant").
    */
   elsewhere?: { label: string; href: () => string };
+  /**
+   * How a step's controls are drawn.
+   *  - "bar" (default): the bottom nav bar (progress, Back, Skip step, Next, End tour).
+   *  - "callout": no bar. Each card carries its own small controls: the step
+   *    count, Exit tour, and Next only on a step with no required action. A
+   *    required action moves the tour on as soon as it's done (`autoAdvance`
+   *    defaults to true; set it false to hold the step, e.g. to read what
+   *    the action opened). No Skip step, no Back button (← still goes back).
+   */
+  controls?: "bar" | "callout";
 }
 
 /** How a step was completed, for `journey_step_completed.via`. */

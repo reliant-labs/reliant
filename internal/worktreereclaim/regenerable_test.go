@@ -87,6 +87,20 @@ func TestRebuildablePath_Entries(t *testing.T) {
 		".tools/.env":                  false,
 		".forge/hostinfra/pg/data":     false,
 		".forge/generate-cache.json.x": false,
+		// forge generate's own outputs and env up's dev runtime document.
+		".forge/generate-hooks/integrations.log":                        true,
+		".forge/fixtures/frontends/web/generated-from.json":             true,
+		".forge/generate-memo.json":                                     true,
+		".forge/failed-generate/error.txt":                              true,
+		".forge/failed-generate/secrets/dev.yaml":                       false, // the never-list still wins
+		"gen/forge_descriptor/.generated-from":                          true,
+		"gen/forge_descriptor/reliant/config/v1/api_server_config.json": true,
+		"sub/gen/forge_descriptor/x.json":                               false, // anchored at the checkout root
+		"frontends/web/public/config.js":                                true,
+		"frontends/web/public/other.js":                                 false,
+		"web/public/config.js":                                          false,
+		".forge/audit/prod.jsonl":                                       false, // an audit log is a record, not output
+		".forge/hosted-projects.json":                                   false, // a deploy binding
 	} {
 		if got := rebuildablePath(p); got != want {
 			t.Errorf("rebuildablePath(%q) = %v, want %v", p, got, want)

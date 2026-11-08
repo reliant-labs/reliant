@@ -84,7 +84,10 @@ export function SystemNotificationMessage({ message }: SystemNotificationMessage
         {getIcon()}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-xs leading-tight text-foreground">
+            {/* min-w-0 break-words: a flex item never shrinks below its
+                longest word by default, so an unbroken path or URL in a
+                notice was cut off at the card edge instead of wrapping. */}
+            <div className="min-w-0 break-words text-xs leading-tight text-foreground">
               {noticeKind
                 ? boldSegments(localizeNoticeTimes(content)).map((seg, i) =>
                     seg.bold ? (
