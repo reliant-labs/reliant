@@ -435,8 +435,12 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		timeoutMs = int(req.Timeout.Milliseconds())
 	}
 
+	requestID := req.RequestID
+	if !resultRequestIDPattern.MatchString(requestID) {
+		requestID = newRequestID()
+	}
 	execReq := &ToolExecutionRequest{
-		RequestID:  newRequestID(),
+		RequestID:  requestID,
 		ToolName:   req.ToolName,
 		ToolInput:  req.ToolInput,
 		ToolCallID: req.ToolCallID,
@@ -519,6 +523,12 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		}, nil
 	}
 
+	return daemonToolResult(req, resp, startTime), nil
+}
+
+// daemonToolResult is the ToolResult for resp, the daemon's (or its
+// gateway's) answer to req.
+func daemonToolResult(req *ToolRequest, resp *ToolExecutionResponse, startTime time.Time) *ToolResult {
 	// Error envelopes from the transport layer (e.g. the bridge's
 	// oversize-reply protection or DAEMON_ERROR replies) may carry only
 	// ErrorMessage. The LLM sees the tool result's Content, so fall back to
@@ -546,7 +556,60 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		EndTime:      time.Now(),
 		ErrorMessage: resp.ErrorMessage,
 		ErrorCode:    resp.ErrorCode,
-	}, nil
+	}
+}
+
+// ToolRequestReattacher is a DaemonRouter that can wait for the result of a
+// tool request another process sent: NATSDaemonRouter. Declared here, where
+// ReattachTool consumes it, so routers that cannot (test fakes, the local
+// router) need not implement it.
+type ToolRequestReattacher interface {
+	// ReattachToolRequest waits for the result of requestID on the daemon
+	// selector resolves to. attached is false when the daemon cannot vouch
+	// for the request — it has no record of it, its result is gone, or it is
+	// too old to be asked — and then nothing was waited for. err is set only
+	// for an attached wait that ended without the result (its deadline, a
+	// daemon that went away for good).
+	ReattachToolRequest(ctx context.Context, userID, requestID string, selector *DaemonSelector) (resp *ToolExecutionResponse, attached bool, err error)
+}
+
+// ReattachTool waits for the result of req, a daemon tool call an earlier
+// process sent under req.RequestID, WITHOUT sending it again: the retry of a
+// run step whose worker went away mid-command (handlers.ExecuteRunStep). It is
+// the result of the command that call started, whenever it ends.
+//
+// attached is false — and nothing ran or was waited for — when the request
+// cannot be reattached: no request id, a router that cannot ask, a daemon
+// that does not know the request (it restarted, or never got it) or no longer
+// holds its result, or a daemon too old to answer. The caller then decides
+// without the result, exactly as it would with no reattach at all.
+func (e *RemoteExecutor) ReattachTool(ctx context.Context, req *ToolRequest) (result *ToolResult, attached bool, err error) {
+	if req == nil || !resultRequestIDPattern.MatchString(req.RequestID) {
+		return nil, false, nil
+	}
+	reattacher, ok := e.router.(ToolRequestReattacher)
+	if !ok {
+		return nil, false, nil
+	}
+	startTime := time.Now()
+	resp, attached, err := reattacher.ReattachToolRequest(ctx, req.UserID, req.RequestID, req.DaemonSelector)
+	if !attached {
+		return nil, false, nil
+	}
+	if err != nil {
+		// Attached, then the wait ended without a result: like a sent call
+		// whose answer never came, its outcome is unknown.
+		return &ToolResult{
+			Success:      false,
+			IsError:      true,
+			Content:      fmt.Sprintf("Failed waiting for the tool on daemon: %s", err.Error()),
+			ErrorMessage: err.Error(),
+			ErrorCode:    ErrorCodeDaemonUnreached,
+			StartTime:    startTime,
+			EndTime:      time.Now(),
+		}, true, nil
+	}
+	return daemonToolResult(req, resp, startTime), true, nil
 }
 
 // Close cleans up resources (no-op currently).
