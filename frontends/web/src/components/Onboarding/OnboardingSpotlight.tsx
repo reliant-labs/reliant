@@ -50,7 +50,7 @@ interface OnboardingSpotlightProps {
    * (`hint`), no bottom bar to keep clear of, and the card beside the target
    * rather than below it.
    */
-  callout?: { footer: React.ReactNode; hint?: React.ReactNode; /** Keep an always-open page tour out of the desktop sidebar. */ viewportLeft?: number };
+  callout?: { footer: React.ReactNode; hint?: React.ReactNode; /** Keep an always-open page tour out of the desktop sidebar. */ viewportLeft?: number; /** Keep it below a fixed row above the page (the demo's screen actions), which stacks over the tour. */ viewportTop?: number };
 }
 
 interface Position {
@@ -105,15 +105,16 @@ function calculateTooltipPosition(
   targetGap: number = 16,
   bottomReserve: number = NAV_BAR_CLEARANCE,
   order: readonly CalloutSide[] = BELOW_FIRST,
-  viewportLeft = 0
+  viewportLeft = 0,
+  viewportTop = 0
 ): Position & { actualPosition: CalloutSide } {
   const placed = placeCallout(
-    { ...rect, left: rect.left - viewportLeft },
+    { ...rect, left: rect.left - viewportLeft, top: rect.top - viewportTop },
     tooltipSize,
-    { width: window.innerWidth - viewportLeft, height: window.innerHeight },
+    { width: window.innerWidth - viewportLeft, height: window.innerHeight - viewportTop },
     { preferred: position, order, gap: targetGap, margin: VIEWPORT_PADDING, bottomReserve }
   );
-  return { top: placed.top, left: placed.left + viewportLeft, actualPosition: placed.side };
+  return { top: placed.top + viewportTop, left: placed.left + viewportLeft, actualPosition: placed.side };
 }
 
 /** Below this width a callout is a bottom sheet (tailwind `sm`). */
@@ -293,10 +294,10 @@ export function OnboardingSpotlight({
     if (!spotlightRect) return;
     setTooltipPos(
       compact
-        ? calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, 0, BESIDE_FIRST, callout?.viewportLeft ?? 0)
+        ? calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, 0, BESIDE_FIRST, callout?.viewportLeft ?? 0, callout?.viewportTop ?? 0)
         : calculateTooltipPosition(spotlightRect, tooltipPosition, tooltipSize, tooltipPadding)
     );
-  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, compact, callout?.viewportLeft]);
+  }, [spotlightRect, tooltipPosition, tooltipSize, tooltipPadding, compact, callout?.viewportLeft, callout?.viewportTop]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(measureTooltip);
