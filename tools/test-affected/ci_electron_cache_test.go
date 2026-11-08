@@ -89,7 +89,8 @@ func runVersionStep(t *testing.T, script string) map[string]string {
 // checkElectronCaches asserts, for one job, that each cache's key follows the
 // lockfile version (per OS and arch), its restore runs before the step that
 // installs dependencies, and its save runs only after a green install, only
-// on a push to main, and only on a cache miss.
+// on a push to main, and only on a cache miss (and, when partIf is set, only
+// in that matrix part; the version step and the restores run in every part).
 func checkElectronCaches(t *testing.T, jobID, versionStep, installStep, partIf string, caches ...electronCache) {
 	t.Helper()
 	requireShellTools(t)
@@ -101,8 +102,9 @@ func checkElectronCaches(t *testing.T, jobID, versionStep, installStep, partIf s
 	if v.ID == "" {
 		t.Fatalf("%s: step %q has no id, so no step can read its outputs", jobID, versionStep)
 	}
-	if partIf != "" && !strings.Contains(v.If, partIf) {
-		t.Errorf("%s: step %q if=%q, want it limited to %s", jobID, versionStep, v.If, partIf)
+	// Every part reads and restores: each one's npm phase installs electron.
+	if v.If != "" {
+		t.Errorf("%s: step %q if=%q, want it in every part", jobID, versionStep, v.If)
 	}
 	outputs := runVersionStep(t, v.Run)
 
@@ -151,8 +153,8 @@ func checkElectronCaches(t *testing.T, jobID, versionStep, installStep, partIf s
 				t.Errorf("%s: %q if=%q uses %s, so it could save after a failed step", jobID, c.save, s.If, bad)
 			}
 		}
-		if partIf != "" && !strings.Contains(r.If, partIf) {
-			t.Errorf("%s: %q if=%q, want it limited to %s", jobID, c.restore, r.If, partIf)
+		if r.If != "" {
+			t.Errorf("%s: %q if=%q, want it in every part", jobID, c.restore, r.If)
 		}
 	}
 }
@@ -165,9 +167,11 @@ func TestElectronPackageCachesElectronDownloads(t *testing.T) {
 		electronZipCache, electronBuilderCache)
 }
 
-// TestReleaseGateWebCachesElectronZip pins the release gate's web part to the
-// same Electron zip entry: its electron npm install downloads that zip.
-func TestReleaseGateWebCachesElectronZip(t *testing.T) {
+// TestReleaseGateCachesElectronZip pins the release gate to the same Electron
+// zip entry: every part's npm phase installs electron, whose postinstall
+// downloads that zip (static and go 2/3 failed on it as well as web, at
+// 1f81a402e). Every part restores it; only the web part saves it (partIf).
+func TestReleaseGateCachesElectronZip(t *testing.T) {
 	checkElectronCaches(t, "release-gate", "Read the Electron version", "task release:gate (part ${{ matrix.label }})",
 		"matrix.part == 'web'", electronZipCache)
 }
