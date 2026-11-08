@@ -6614,6 +6614,21 @@ LOCAL SESSIONS (what this reports about itself)
   platform or on a cluster has no local presence to describe, and forge says
   which when it declines.
 
+TELEMETRY (where this stack's traces, metrics and logs are stored)
+
+  observability.dev_telemetry decides: "local" stores them in the local
+  ClickStack; "auto" (the default) sends them to your org's hosted store when
+  the env declares a control_plane and you are signed in to Reliant, and falls
+  back to local, saying why, when anything on the way fails; "hosted" fails
+  instead of falling back. --telemetry and FORGE_DEV_TELEMETRY override it,
+  and "local" from any of them wins.
+
+  A hosted stack is keyed by its session (above), which is then reported
+  before the services start. Its tokens live in .forge/obs/; a telemetry
+  keeper, one of the stack's tracked processes in either lifecycle, keeps the
+  session live and renews them until `forge env down`. No local
+  collector starts, so the stack needs no Docker for telemetry. `forge env status <env>` says where telemetry goes.
+
 ```
 reliant forge env up <environment> [-- <dev-server flags>] [flags]
 ```
@@ -6632,6 +6647,7 @@ reliant forge env up <environment> [-- <dev-server flags>] [flags]
 | `--no-seed` | `bool` | - | Skip the first-boot dev auto-seed. By default 'forge env up' seeds a dev database once when it is reachable and all seedable tables are empty. |
 | `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with 'forge env options <env>'. |
 | `--target` | `stringArray` | `[]` | Scope the whole run — build, deploy, host and frontend phases — to specific services/operators/frontends by name (repeatable). Targeting only host/frontend apps builds no images. An unknown name is an error listing the env's app names. Default: everything. |
+| `--telemetry` | `string` | - | Where this stack's telemetry is stored: auto (hosted when the env declares a control_plane and you are signed in to Reliant, else local), hosted (fail instead of falling back) or local (the local ClickStack). Overrides FORGE_DEV_TELEMETRY and observability.dev_telemetry; local anywhere wins. |
 | `--watch` | `bool` | - | Hold the foreground and tear the stack down on SIGINT/SIGTERM/SIGHUP even without a TTY: the way an agent or daemon runs env up as a tracked background process. Default without --watch/--background: hold when stdin is a TTY, otherwise return after start (non-TTY agent/CI path). |
 
 ---
@@ -8560,6 +8576,10 @@ JSON schema forge.obs.dashboards_audit/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   suggested
@@ -8675,6 +8695,10 @@ JSON schema forge.obs.endpoints/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   sort
@@ -8694,12 +8718,14 @@ reliant forge obs endpoints [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
@@ -8707,6 +8733,7 @@ reliant forge obs endpoints [env] [flags]
 | `--sort` | `string` | `requests` | requests | p95 | errors | rate |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--top` | `int` | `10` | most endpoints to return |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -8815,6 +8842,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -8891,6 +8922,7 @@ reliant forge obs issue <id> [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--events` | `int` | `5` | newest events to include (0 = none) |
@@ -8898,12 +8930,14 @@ reliant forge obs issue <id> [env] [flags]
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `72h0m0s` | how far back to read (ignored with --from) |
 | `--timeline-limit` | `int` | `10` | newest timeline entries (comments, status changes, assignment, linked chats) to include, oldest first (0 = none; at most 100) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -9012,6 +9046,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9180,6 +9218,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9344,6 +9386,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9509,6 +9555,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9674,6 +9724,10 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9821,6 +9875,10 @@ JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   sort
@@ -9840,6 +9898,7 @@ reliant forge obs issues [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--assignee` | `string` | - | only issues assigned to this user id, me (credential's acting user), or none (unassigned) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
@@ -9849,6 +9908,7 @@ reliant forge obs issues [env] [flags]
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--incident-window` | `duration` | `10m0s` | issues of one cause first seen within this long of each other are one incident (max 1h0m0s) |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `25` | most items to return |
 | `--page-token` | `string` | - | resume from a next_page_token |
@@ -9862,6 +9922,7 @@ reliant forge obs issues [env] [flags]
 | `--source` | `string` | - | list the issues of this issue source (issue.source) instead of errors, e.g. llm_bug_report |
 | `--status` | `stringArray` | `[]` | only issues in this state: new, unresolved, resolved, regressed, ignored (repeatable; default the open ones) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -9900,6 +9961,10 @@ JSON schema forge.obs.logs/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -9918,6 +9983,7 @@ reliant forge obs logs [env] [query] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
@@ -9925,6 +9991,7 @@ reliant forge obs logs [env] [query] [flags]
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--follow` | `bool` | - | keep polling for new logs (NDJSON with --json); stop with ^C |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--interval` | `duration` | `2s` | with --follow, how often to poll |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `100` | most items to return |
@@ -9936,6 +10003,7 @@ reliant forge obs logs [env] [query] [flags]
 | `--since` | `duration` | `15m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--trace` | `string` | - | only the logs of this trace id |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10057,6 +10125,10 @@ JSON schema forge.obs.metric/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -10076,18 +10148,21 @@ reliant forge obs metrics describe [env] <metric> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10129,6 +10204,10 @@ JSON schema forge.obs.metric_exemplars/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -10150,6 +10229,7 @@ reliant forge obs metrics exemplars [env] <metric> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--around` | `duration` | `2m0s` | with --at: how far either side of it |
 | `--at` | `string` | - | the moment to read exemplars around, RFC 3339 (the bucket a chart point is) |
@@ -10159,6 +10239,7 @@ reliant forge obs metrics exemplars [env] <metric> [flags]
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--group` | `stringArray` | `[]` | narrow to one series group: a --group-by KEY=VALUE (repeatable, one per key) |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `20` | most items to return |
 | `--min-value` | `float64` | `0` | only exemplars at or above this value |
@@ -10166,6 +10247,7 @@ reliant forge obs metrics exemplars [env] <metric> [flags]
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 | `--where` | `stringArray` | `[]` | narrow to series matching key=value or key!=value (repeatable) |
 
 ---
@@ -10208,6 +10290,10 @@ JSON schema forge.obs.metrics_list/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -10226,6 +10312,7 @@ reliant forge obs metrics list [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--contains` | `string` | - | only metrics whose name contains this (case-insensitive) |
@@ -10233,12 +10320,14 @@ reliant forge obs metrics list [env] [flags]
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10309,6 +10398,10 @@ JSON schema forge.obs.metrics_query/v2. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   series
@@ -10340,6 +10433,7 @@ reliant forge obs metrics query [env] <metric> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--agg` | `string` | - | aggregation of series A: rate, increase, sum, avg, min, max, last, count, quantile (p50, p95 and p99 are the quantiles 0.5, 0.95 and 0.99) (default: by the metric's kind) |
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--compare` | `string` | - | also read the range shifted back by this duration, or prev-release |
@@ -10349,6 +10443,7 @@ reliant forge obs metrics query [env] <metric> [flags]
 | `--formula` | `string` | - | plot an expression of the series, e.g. 'B / A * 100' |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--group-by` | `stringArray` | `[]` | split by this attribute key (repeatable, at most 3) |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--kind` | `string` | - | line (default), number, table or bar |
 | `--limit` | `int` | `50` | most series to return per panel series |
@@ -10361,6 +10456,7 @@ reliant forge obs metrics query [env] <metric> [flags]
 | `--step` | `duration` | `0s` | bucket width (default: about 120 points per series, never below the export interval) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--top` | `int` | `0` | a table or bar keeps the top N groups |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 | `--where` | `stringArray` | `[]` | narrow one series NAME:key=value or NAME:key!=value (repeatable) |
 
 ---
@@ -10472,6 +10568,10 @@ JSON schema forge.obs.query/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   statements
@@ -10490,12 +10590,14 @@ reliant forge obs query [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
 | `--panel` | `string` | - | a dashboard panel JSON file |
@@ -10507,6 +10609,7 @@ reliant forge obs query [env] [flags]
 | `--sql-file` | `string` | - | read the statement from this file (- for stdin) |
 | `--step` | `duration` | `0s` | the {step} parameter / a panel's bucket width (default: about 120 points) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10540,6 +10643,10 @@ JSON schema forge.obs.session/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   session
@@ -10590,12 +10697,14 @@ reliant forge obs session <id> [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `200` | most items to return |
 | `--page-token` | `string` | - | resume the timeline from a next_page_token |
@@ -10603,6 +10712,7 @@ reliant forge obs session <id> [env] [flags]
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `720h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10631,6 +10741,10 @@ JSON schema forge.obs.sessions/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   sessions
@@ -10662,6 +10776,7 @@ reliant forge obs sessions [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
@@ -10670,6 +10785,8 @@ reliant forge obs sessions [env] [flags]
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--has-error` | `bool` | - | only sessions with at least one browser error |
 | `--has-replay` | `bool` | - | only sessions with a recorded replay |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
+| `--instance-user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `25` | most items to return |
 | `--page-token` | `string` | - | resume from a next_page_token |
@@ -10762,6 +10879,10 @@ JSON schema forge.obs.status/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   services
@@ -10802,15 +10923,18 @@ reliant forge obs status [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `10` | most items to return |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10864,6 +10988,10 @@ JSON schema forge.obs.trace/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.to
   spans_shown
   spans_total
@@ -10908,6 +11036,7 @@ reliant forge obs trace <trace-id> [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
@@ -10915,12 +11044,14 @@ reliant forge obs trace <trace-id> [env] [flags]
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--full` | `bool` | - | lift the depth, span and collapse caps |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--logs` | `int` | `20` | most correlated log lines to include (0 = none) |
 | `--print-sql` | `bool` | - | alias of --explain |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `72h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -10945,6 +11076,10 @@ JSON schema forge.obs.traces/v1. --fields takes dotted paths of:
   scope.backend
   scope.env
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   sorted_from
@@ -10980,6 +11115,7 @@ reliant forge obs traces [env] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--errors` | `bool` | - | only traces with an error span |
@@ -10987,6 +11123,7 @@ reliant forge obs traces [env] [flags]
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value (repeatable): an allowlisted key, or any attribute as span.attr.<k> (traces), log.attr.<k> (logs) or resource.attr.<k> |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `50` | most items to return |
 | `--min-duration` | `duration` | `0s` | only traces at least this long, e.g. 500ms |
@@ -10997,6 +11134,7 @@ reliant forge obs traces [env] [flags]
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--slow` | `bool` | - | slowest first |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
@@ -11039,6 +11177,10 @@ JSON schema forge.obs.workloads/v1. --fields takes dotted paths of:
   scope.env
   scope.env_id
   scope.from
+  scope.instance
+  scope.instance.id
+  scope.instance.label
+  scope.instance.user
   scope.services
   scope.to
   suggested
@@ -11078,15 +11220,18 @@ reliant forge obs workloads [env] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--all` | `bool` | - | list every workload, healthy ones too |
+| `--all-instances` | `bool` | - | read every dev instance of the env, not only this checkout's |
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--instance` | `string` | - | read this dev `instance` of a hosted-dev env: its id (scope.instance.id, the control plane's) or its label (alice/fix-login, or the branch alone) as forge env up recorded it on this machine (default: this checkout's) |
 | `--jobs` | `string` | `failed` | which Job runs to list: failed | all | none |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `24h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--user` | `string` | - | read every dev instance of one `user` (the reliant.instance.user the gateway stamps; the control plane resolves an email) |
 
 ---
 
