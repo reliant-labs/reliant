@@ -2,6 +2,8 @@ package threads
 
 import (
 	"context"
+	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -63,32 +65,49 @@ func TestLoadRecentMessagesBefore_CompactedAndBranched_MatchesFullLoad(t *testin
 	}
 	cursors = append(cursors, full[len(full)-1].Seq+100)
 
-	checked := 0
-	for _, cursor := range cursors {
-		for limit := 1; limit <= len(full)+2; limit++ {
-			want, wantMore := legacyRecentMessagesBefore(full, cursor, limit)
-			got, gotMore, err := h.svc.LoadRecentMessagesBefore(ctx, leaf, cursor, limit)
-			if err != nil {
-				t.Fatalf("LoadRecentMessagesBefore(cursor=%d, limit=%d): %v", cursor, limit, err)
-			}
-			if gotMore != wantMore {
-				t.Fatalf("cursor=%d limit=%d: hasMore=%v, want %v", cursor, limit, gotMore, wantMore)
-			}
-			if len(got) != len(want) {
-				t.Fatalf("cursor=%d limit=%d: got %d messages %v, want %d %v",
-					cursor, limit, len(got), messageIDs(got), len(want), messageIDs(want))
-			}
-			for i := range want {
-				g, w := got[i], want[i]
-				if g.ID != w.ID || g.Seq != w.Seq || g.ThreadID != w.ThreadID || g.ChatID != w.ChatID || !samePtr(g.WorkflowID, w.WorkflowID) {
-					t.Fatalf("cursor=%d limit=%d: position %d is %s seq=%d thread=%s chat=%s, want %s seq=%d thread=%s chat=%s",
-						cursor, limit, i, g.ID, g.Seq, g.ThreadID, g.ChatID, w.ID, w.Seq, w.ThreadID, w.ChatID)
-				}
-			}
-			checked++
+	// One subtest per cursor, run in parallel: each sweeps every limit against
+	// the same read-only chain, and in series the ~600 reads cost seconds.
+	var checked atomic.Int64
+	t.Run("pages", func(t *testing.T) {
+		for _, cursor := range cursors {
+			t.Run(fmt.Sprintf("cursor=%d", cursor), func(t *testing.T) {
+				t.Parallel()
+				checked.Add(checkRecentPagesAt(t, h, leaf, full, cursor))
+			})
 		}
+	})
+	t.Logf("%d (cursor, limit) pages over a %d-message, 6-window transcript match the full load", checked.Load(), len(full))
+}
+
+// checkRecentPagesAt holds every limit's page before cursor to the full-load
+// answer, and returns how many it checked.
+func checkRecentPagesAt(t *testing.T, h *testHelper, leaf string, full []*db.Message, cursor int64) int64 {
+	t.Helper()
+	ctx := context.Background()
+	var checked int64
+	for limit := 1; limit <= len(full)+2; limit++ {
+		want, wantMore := legacyRecentMessagesBefore(full, cursor, limit)
+		got, gotMore, err := h.svc.LoadRecentMessagesBefore(ctx, leaf, cursor, limit)
+		if err != nil {
+			t.Fatalf("LoadRecentMessagesBefore(cursor=%d, limit=%d): %v", cursor, limit, err)
+		}
+		if gotMore != wantMore {
+			t.Fatalf("cursor=%d limit=%d: hasMore=%v, want %v", cursor, limit, gotMore, wantMore)
+		}
+		if len(got) != len(want) {
+			t.Fatalf("cursor=%d limit=%d: got %d messages %v, want %d %v",
+				cursor, limit, len(got), messageIDs(got), len(want), messageIDs(want))
+		}
+		for i := range want {
+			g, w := got[i], want[i]
+			if g.ID != w.ID || g.Seq != w.Seq || g.ThreadID != w.ThreadID || g.ChatID != w.ChatID || !samePtr(g.WorkflowID, w.WorkflowID) {
+				t.Fatalf("cursor=%d limit=%d: position %d is %s seq=%d thread=%s chat=%s, want %s seq=%d thread=%s chat=%s",
+					cursor, limit, i, g.ID, g.Seq, g.ThreadID, g.ChatID, w.ID, w.Seq, w.ThreadID, w.ChatID)
+			}
+		}
+		checked++
 	}
-	t.Logf("%d (cursor, limit) pages over a %d-message, 6-window transcript match the full load", checked, len(full))
+	return checked
 }
 
 // Walking a chat back page by page, the way the client scrolls, tiles the
