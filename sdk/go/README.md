@@ -48,7 +48,7 @@ reliant.WebhookBearer(token))` delivers with the trigger's own credential.
 
 | | |
 |---|---|
-| `Runs` | `Start`, `Get`, `List`, `LastPerWorkflow`, `Signal`, `Cancel`, `Pause`\*, `Resume`\*, `Interrupt`\*, `CancelWithResult`, `PauseWithResult`\*, `ResumeWithResult`\*, `Follow`, `Status`, `Nodes` |
+| `Runs` | `Start`, `Get`, `List`, `LastPerWorkflow`, `Signal`, `Cancel`, `Pause`\*, `Resume`\*, `Interrupt`\*, `CancelWithResult`, `PauseWithResult`\*, `ResumeWithResult`\*, `Follow`, `Status`, `Nodes`, `ContentBlockBodies` |
 | `Gates` | `Pending`, `Answer` |
 | `Inbox` | `List` (filters: project, kinds, automation; follows truncation), `Counts`, `Dismiss`, `Restore` |
 | `Approvals` | `List` (by chat), `ListForRun`, `Approve`, `Deny`, `BatchApprove`, `BatchDeny` (these four need an explicitly granted `approvals:decide`) |
