@@ -316,3 +316,25 @@ func TestFirstWord(t *testing.T) {
 	assert.Equal(t, "store", firstWord("store"))
 	assert.Equal(t, "", firstWord(`'unterminated`))
 }
+
+// R9.B1: an absent absolute credential helper inside a cache root is sealed
+// when a hand-off its run node named makes that directory real, and when it
+// is in a carve-out of a read-only checkout; a private one needs no seal.
+func TestPlan_AnAbsentHelperInAHandOffIsSealed(t *testing.T) {
+	m := newMachine(t)
+	xdg := filepath.Join(m.root, "xdg")
+	out := filepath.Join(xdg, "pipeline", "out")
+	private := filepath.Join(xdg, "pipeline", "private", "helper")
+	inHandOff := filepath.Join(out, "helper")
+	inCarveOut := filepath.Join(m.a, "tools", "helper")
+	require.NoError(t, os.MkdirAll(m.home, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".gitconfig"), []byte(
+		"[credential]\n\thelper = "+inHandOff+"\n\thelper = "+private+"\n\thelper = "+inCarveOut+"\n"), 0o644))
+	env := []string{"XDG_CACHE_HOME=" + xdg, "HOME=" + m.home}
+
+	p := m.plan(m.multi, env, out, filepath.Join(m.a, "tools"))
+	assert.Contains(t, p.Passthrough, out)
+	assert.Contains(t, p.Seal, inHandOff, "the hand-off is real and writable: the helper must not be plantable there")
+	assert.Contains(t, p.Seal, inCarveOut, "a writable carve-out of a read-only checkout is real too")
+	assert.NotContains(t, p.Seal, private, "a private directory's writes do not outlive the command")
+}

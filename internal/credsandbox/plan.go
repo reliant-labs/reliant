@@ -360,12 +360,19 @@ func buildPlan(base Plan, in planEnv) Plan {
 	for _, o := range keep {
 		keptPaths = append(keptPaths, o.Path)
 	}
+	// What is real and writable inside a kept or read-only directory: the
+	// Passthrough ones bound back over a private overlay, and the carve-outs
+	// inside a read-only one. A helper there is as plantable as anywhere.
+	exposed := append(append([]string(nil), passthrough...), cleanAbs(append(append([]string(nil), p.Writable...), writable...))...)
+	protected := func(d string) bool {
+		return (under(d, keptPaths...) || under(d, roAll...)) && !under(d, exposed...)
+	}
 	for _, c := range helpersAbsent {
 		d := filepath.Dir(c)
-		if under(d, keptPaths...) || under(d, roAll...) {
+		if protected(d) {
 			continue
 		}
-		if (home != "" && under(d, home)) || under(d, own...) || (cwdOwn && under(d, cwd)) {
+		if under(d, exposed...) || (home != "" && under(d, home)) || under(d, own...) || (cwdOwn && under(d, cwd)) {
 			seal = append(seal, c)
 		}
 	}
@@ -373,7 +380,7 @@ func buildPlan(base Plan, in planEnv) Plan {
 	// is (credentialHelpers); checkSeals refuses the command when its
 	// directory is writable and cannot be sealed.
 	for _, c := range helpersAbsentPath {
-		if under(filepath.Dir(c), keptPaths...) || under(filepath.Dir(c), roAll...) {
+		if protected(filepath.Dir(c)) {
 			continue
 		}
 		seal = append(seal, c)

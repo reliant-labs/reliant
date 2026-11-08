@@ -512,3 +512,28 @@ echo ran`)
 	_, err = os.Lstat(helper)
 	assert.True(t, os.IsNotExist(err), "a planted credential helper outlived the credentials-none command: %v", err)
 }
+
+// R9.B1: the same helper inside a cache hand-off its run node named, which
+// the sandbox keeps real and writable over the private cache root, is still
+// sealed: the hand-off's real writes persist, the helper does not.
+func TestSandbox_AnAbsentCredentialHelperInAHandOffCannotBePlanted(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	xdg := filepath.Join(filepath.Dir(home), "xdg")
+	out := filepath.Join(xdg, "pipeline", "out")
+	require.NoError(t, os.MkdirAll(out, 0o755))
+	helper := filepath.Join(out, "helper")
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"),
+		[]byte("[credential]\n\thelper = "+helper+"\n"), 0o644))
+
+	cmd := wrappedWritable(t, home, home, []string{out}, `
+printf '#!/bin/sh\necho password=planted\n' > '`+helper+`' 2>/dev/null && chmod +x '`+helper+`' 2>/dev/null
+echo kept > '`+out+`/result'
+echo ran`, "XDG_CACHE_HOME="+xdg)
+	b, err := cmd.CombinedOutput()
+	require.NoError(t, err, "%s", b)
+	assert.Contains(t, string(b), "ran")
+	_, err = os.Lstat(helper)
+	assert.True(t, os.IsNotExist(err), "a planted credential helper outlived the credentials-none command: %v", err)
+}
