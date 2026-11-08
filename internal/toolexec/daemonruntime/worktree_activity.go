@@ -48,9 +48,10 @@ type admissionScope struct {
 	// cwd says paths are the directories the work RUNS in, not paths it names.
 	// Only work running inside a leased path conflicts: a shell started in an
 	// ancestor ($HOME, /) or a sibling is elsewhere on the machine and must not
-	// hold the worktree (owner decision, 2026-11-08). Whatever it later does
-	// under the worktree (a cd, an open file) is seen by process inspection at
-	// every lease check.
+	// hold the worktree (owner decision, 2026-11-08). Whatever it does under
+	// the worktree before a lease check (a cd, an open file) is seen by process
+	// inspection there; what it does after one is fenced by the retirement
+	// itself (see managedRecoveryUse), not by the check.
 	cwd bool
 }
 
@@ -252,6 +253,16 @@ func (g *recoveryAdmission) acquire(paths []string) (*WorktreeRecoveryLease, err
 // archived worktree ever freed its disk. A shell that has since moved into the
 // worktree, or holds a file there, is seen by process inspection, which every
 // Check runs right after this.
+//
+// A Check is point-in-time, for managed and unmanaged processes alike, so it
+// is not what keeps a process that enters AFTER it from losing work. The
+// retirement fences that (worktreereclaim.retireWorkspace): the checkout is
+// moved to a fresh quarantine path before the checks that authorize deletion,
+// so its original path no longer exists to cd into; anything that entered
+// before the move is in the quarantined tree, where the next Check sees it;
+// and deletion unlinks one inventoried, unchanged entry at a time, so a file
+// written or changed after the last Check stops it with the remaining files
+// and the git pointer kept (TestRetirementTreeUseAfterTheFinalCheckStopsDeletion).
 func managedRecoveryUse(leased []string) error {
 	return managedUseIn(leased, managedWorkSnapshot())
 }
