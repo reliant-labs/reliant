@@ -1,6 +1,7 @@
 import { defineConfig, type Plugin, type ViteUserConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { forgeRuntimeConfig } from "@reliantlabs/forge-web-runtime/vite";
+import fs from "node:fs";
 import os from "node:os";
 import path from "path";
 import { browserLogSink } from "./vite-plugin-browser-logs";
@@ -115,6 +116,62 @@ const TEST_EXCLUDE = [
   "**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*",
 ];
 
+// ── Browser telemetry proxy (DEV ONLY) ──────────────────────────────────
+//
+// The page sends OTLP/HTTP to `/_otel/v1/{traces,logs}` on its own origin
+// (OTEL_ENDPOINT in config.js, lib/telemetry.ts) and holds no collector
+// address and no secret. The dev server forwards it to the base URL `forge env
+// up` gives it in OTEL_EXPORTER_OTLP_ENDPOINT, `/_otel` stripped.
+//
+// A HOSTED dev stack (observability.dev_telemetry, deploy/kcl/dev/main.k):
+// the endpoint is the org's hosted edge and FORGE_OTEL_HEADERS_FILE names the
+// file holding this stack's browser token, which forge renews in place. The
+// proxy reads it on EVERY request and attaches what it holds
+// (`authorization=Bearer …`) server-side, so the token never reaches the
+// bundle; the page's cookies and any authorization header it sent are never
+// forwarded, even when the file is missing. (forge's vite-spa template block,
+// as the observability/destination skill asks.)
+//
+// Unlike the template, there is no 127.0.0.1:4318 default: reliant's own dev
+// stack runs no local collector, so a guessed port is at best nothing and at
+// worst another stack's ClickStack. With no endpoint the telemetry is dropped
+// here (204), so a page on a stack whose telemetry is local-and-off sends
+// into a sink instead of logging a failed export every few seconds.
+const OTEL_UPSTREAM = (process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "").trim().replace(/\/+$/, "");
+const OTEL_HEADERS_FILE = process.env.FORGE_OTEL_HEADERS_FILE ?? "";
+const readOtelHeaders = (): Array<[string, string]> => {
+  let text = "";
+  try {
+    text = fs.readFileSync(OTEL_HEADERS_FILE, "utf8");
+  } catch {
+    return []; // not written yet, or removed: send nothing extra
+  }
+  const out: Array<[string, string]> = [];
+  for (const pair of text.split(/[\n,]/)) {
+    const i = pair.indexOf("=");
+    if (i <= 0) continue;
+    let value = pair.slice(i + 1).trim();
+    try {
+      value = decodeURIComponent(value);
+    } catch {
+      // Not percent-encoded: use it as written.
+    }
+    out.push([pair.slice(0, i).trim(), value]);
+  }
+  return out;
+};
+const otelSink = (): Plugin => ({
+  name: "reliant-otel-sink",
+  apply: "serve",
+  configureServer(server) {
+    if (OTEL_UPSTREAM) return;
+    server.middlewares.use("/_otel", (_req, res) => {
+      res.statusCode = 204;
+      res.end();
+    });
+  },
+});
+
 // https://vite.dev/config/
 const appConfig: ViteUserConfig = {
   // browserLogSink is dev-only (apply: "serve"): it gives a plain browser tab
@@ -141,7 +198,9 @@ const appConfig: ViteUserConfig = {
   // Latin file; see vite-plugin-preload-fonts.ts.
   // securityTxt (build-only) emits dist/.well-known/security.txt naming the
   // security and abuse contacts; see vite-plugin-security-txt.ts.
-  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), preloadGeistLatin(), securityTxt()],
+  // otelSink (dev-only) answers /_otel when there is nowhere to forward it;
+  // see the browser telemetry proxy above.
+  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), otelSink(), preloadGeistLatin(), securityTxt()],
   // Load .env files from the checkout root instead of frontends/web
   envDir: path.resolve(__dirname, "../.."),
   // Define global constants available in the app
@@ -337,6 +396,27 @@ const appConfig: ViteUserConfig = {
         changeOrigin: true,
         ws: true,
       },
+      // Browser telemetry; see the browser telemetry proxy above. Without an
+      // upstream, otelSink answers /_otel instead.
+      ...(OTEL_UPSTREAM
+        ? {
+            "/_otel": {
+              target: OTEL_UPSTREAM,
+              changeOrigin: true,
+              rewrite: (p: string) => p.replace(/^\/_otel/, ""),
+              configure: (proxy) => {
+                proxy.on("proxyReq", (proxyReq) => {
+                  // Only forge's token reaches the edge: never the page's
+                  // cookies, nor an authorization header the page sent.
+                  proxyReq.removeHeader("cookie");
+                  proxyReq.removeHeader("authorization");
+                  if (!OTEL_HEADERS_FILE) return;
+                  for (const [name, value] of readOtelHeaders()) proxyReq.setHeader(name, value);
+                });
+              },
+            },
+          }
+        : {}),
     },
   },
   test: {
