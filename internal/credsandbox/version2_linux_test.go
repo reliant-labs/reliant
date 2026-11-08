@@ -594,6 +594,107 @@ echo ran`)
 	assert.Equal(t, "[user]\n\tname = trusted\n", string(b), "the config a credentialed git reads changed")
 }
 
+// R17.B1: a read-only entry that is a link is protected through every mount of
+// its TARGET's filesystem, not only through the mounts that show the link.
+func TestReadOnlyPaths_ALinksTargetIsProtectedThroughItsOtherMounts(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+	target := filepath.Join(dir, "srv", "git.conf")
+	require.NoError(t, os.MkdirAll(filepath.Dir(target), 0o755))
+	require.NoError(t, os.WriteFile(target, []byte("[user]\n"), 0o644))
+	link := filepath.Join(dir, "home", "config")
+	require.NoError(t, os.MkdirAll(filepath.Dir(link), 0o755))
+	require.NoError(t, os.Symlink(target, link))
+
+	mounts := parseMounts(strings.Join([]string{
+		`1 1 8:0 / / rw - ext4 /dev/d rw`,
+		`2 1 8:0 / /mnt/workspace-disk rw - ext4 /dev/d rw`,
+	}, "\n"))
+	got := readOnlyPaths([]string{link}, mounts)
+	assert.Contains(t, got, link, "the link's own spelling")
+	assert.Contains(t, got, filepath.Join("/mnt/workspace-disk", link), "the link's other spelling")
+	assert.Contains(t, got, target, "the link's target")
+	assert.Contains(t, got, filepath.Join("/mnt/workspace-disk", target), "the target's other spelling")
+}
+
+// aliasMountEnv marks the re-executed run of the test below.
+const aliasMountEnv = "CREDSANDBOX_TEST_ALIAS_MOUNT"
+
+// R17.B1: ~/.config/git/config and a credential helper, each linked to a file
+// in a directory the filesystem also shows at a second mount point (as a cloud
+// machine's disk is also /mnt/workspace-disk). A credentials-none command
+// writes to both targets through both spellings; neither changes. The second
+// mount needs a mount namespace of the test's own, so the test re-executes
+// itself under unshare and does the work there.
+func TestSandbox_ALinkedTargetIsReadOnlyThroughItsOtherMounts(t *testing.T) {
+	testkit.Slow(t, "re-executes the test under unshare and builds real user, mount and PID namespaces")
+	if os.Getenv(aliasMountEnv) != "" {
+		linkedTargetThroughAnotherMount(t)
+		return
+	}
+	if err := exec.Command("unshare", "--user", "--map-root-user", "--mount", "true").Run(); err != nil {
+		t.Skipf("this host cannot make the second mount (unshare --user --mount: %v)", err)
+	}
+	requireSandbox(t)
+	cmd := exec.Command("unshare", "--user", "--map-root-user", "--mount", "--propagation", "private",
+		selfPath(t), "-test.run=^"+t.Name()+"$", "-test.v")
+	cmd.Env = append(os.Environ(), aliasMountEnv+"=1") //nolint:forbidigo // the re-executed test needs this one's environment
+	out, err := cmd.CombinedOutput()
+	if strings.Contains(string(out), "--- SKIP") {
+		t.Skipf("skipped inside the second mount namespace:\n%s", out)
+	}
+	require.NoError(t, err, "%s", out)
+	require.Contains(t, string(out), "--- PASS", "%s", out)
+}
+
+// linkedTargetThroughAnotherMount is the re-executed half of the test above,
+// as root of a user and mount namespace of its own: it mounts the targets'
+// directory a second time, links the trusted config and helper to it, and
+// runs the credentials-none command.
+func linkedTargetThroughAnotherMount(t *testing.T) {
+	requireSandbox(t)
+	// Under this checkout, not /tmp: the command's /tmp is private.
+	root, err := os.MkdirTemp(".", ".credsandbox-alias-")
+	require.NoError(t, err)
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	src, second := filepath.Join(root, "srv"), filepath.Join(root, "disk")
+	require.NoError(t, os.MkdirAll(src, 0o755))
+	require.NoError(t, os.MkdirAll(second, 0o755))
+	conf, helper := filepath.Join(src, "git.conf"), filepath.Join(src, "git-credential-custom")
+	const confBody, helperBody = "[user]\n\tname = trusted\n", "#!/bin/sh\necho password=trusted\n"
+	require.NoError(t, os.WriteFile(conf, []byte(confBody), 0o644))
+	require.NoError(t, os.WriteFile(helper, []byte(helperBody), 0o755))
+	require.NoError(t, unix.Mount(src, second, "", unix.MS_BIND, ""), "binding %s at %s", src, second)
+	t.Cleanup(func() { _ = unix.Unmount(second, unix.MNT_DETACH) })
+
+	home := wrapHome(t)
+	config := filepath.Join(home, ".config", "git", "config")
+	require.NoError(t, os.MkdirAll(filepath.Dir(config), 0o755))
+	require.NoError(t, os.Symlink(conf, config))
+	bin := filepath.Join(home, "bin")
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	helperLink := filepath.Join(bin, "git-credential-custom")
+	require.NoError(t, os.Symlink(helper, helperLink))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"),
+		[]byte("[credential]\n\thelper = "+helperLink+"\n"), 0o644))
+
+	var sh strings.Builder
+	for _, p := range []string{conf, helper, filepath.Join(second, "git.conf"), filepath.Join(second, "git-credential-custom")} {
+		sh.WriteString("printf 'planted\\n' > '" + p + "' 2>/dev/null && echo \"wrote " + p + "\"\n")
+	}
+	sh.WriteString("echo ran\n")
+	out := runWrapped(t, "none", home, home, sh.String())
+	assert.Contains(t, out, "ran")
+	assert.NotContains(t, out, "wrote", "a write reached a trusted target")
+	for p, want := range map[string]string{conf: confBody, helper: helperBody} {
+		b, err := os.ReadFile(p)
+		require.NoError(t, err)
+		assert.Equal(t, want, string(b), "%s changed", p)
+	}
+}
+
 // R9.B1: the same helper inside a cache hand-off its run node named, which
 // the sandbox keeps real and writable over the private cache root, is still
 // sealed: the hand-off's real writes persist, the helper does not.

@@ -438,11 +438,7 @@ func applyPlan(p Plan, runDir, cwd, tmpRoot string) error {
 		path     string
 		writable bool
 	}
-	var ro []string
-	for _, r := range p.ReadOnly {
-		ro = append(ro, canonical(r))
-	}
-	ro = dedupe(append(ro, aliasPaths(ro, mounts)...))
+	ro := readOnlyPaths(p.ReadOnly, mounts)
 	var ops []op
 	for _, r := range ro {
 		ops = append(ops, op{path: r})
@@ -820,6 +816,27 @@ func canonical(path string) string {
 		return filepath.Join(real, base)
 	}
 	return path
+}
+
+// readOnlyPaths is every path the read-only entries must be made read-only
+// through: each entry as named (canonical), what it resolves to when it is a
+// link, and the paths both have through other mounts of their filesystem.
+// makeReadOnly follows a link to its target, so the target is what a write
+// reaches: its aliases are computed from its own path, not the link's (a
+// ~/.config/git/config linked to /srv/git.conf is also
+// /mnt/workspace-disk/srv/git.conf when /srv is a mount of that disk). The
+// link's own spelling and its aliases stay, as before; its directory is
+// rebuilt as a LinkParent (hideAndSeal).
+func readOnlyPaths(readOnly []string, mounts []mountInfo) []string {
+	var ro []string
+	for _, r := range readOnly {
+		c := canonical(r)
+		ro = append(ro, c)
+		if real, err := filepath.EvalSymlinks(c); err == nil && real != c {
+			ro = append(ro, real)
+		}
+	}
+	return dedupe(append(ro, aliasPaths(ro, mounts)...))
 }
 
 // rebuildWithout replaces directory dir with a tmpfs holding a bind mount of

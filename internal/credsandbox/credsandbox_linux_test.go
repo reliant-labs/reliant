@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -107,6 +108,7 @@ func planFor(home string) Plan {
 }
 
 func TestSandbox_HidesCredentialFilesAndKeepsTheRest(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces and overlays for the command")
 	requireSandbox(t)
 	home := fakeHome(t)
 
