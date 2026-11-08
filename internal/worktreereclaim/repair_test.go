@@ -347,6 +347,73 @@ func TestRepair_DeadWorktreeAddIsPrunedOnceOld(t *testing.T) {
 	run(t, f.project, "worktree", "add", filepath.Join(f.root, "again"), "feat/killed")
 }
 
+// A git run outside the add lock — an agent's shell, the user — can replace a
+// registration between repair's last check and its removal: `git worktree add
+// -f -f` on a missing, locked checkout deletes that registration and makes the
+// new one under the same name. The repair must leave the live replacement
+// alone. Not parallel: it sets the package's beforePruneRename hook.
+func TestRepair_AForcedGitAddInThePruneWindowKeepsItsRegistration(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
+	f := newFixture(t)
+	w := f.worktree("raced", "feat/raced")
+	if err := os.RemoveAll(w.Path); err != nil {
+		t.Fatal(err)
+	}
+	admin := filepath.Join(f.project, ".git", "worktrees", "raced")
+	beforePruneRename = func(adminDir string) {
+		if adminDir == admin {
+			run(t, f.project, "worktree", "add", "-q", "-f", "-f", "-b", "feat/again", w.Path, "main")
+		}
+	}
+	t.Cleanup(func() { beforePruneRename = nil })
+
+	rep := RepairRepo(context.Background(), filepath.Join(f.project, ".git"), repairOpts(f))
+
+	if len(rep.PrunedRegistrations) != 0 || len(rep.Problems) != 0 {
+		t.Fatalf("report = %+v, want nothing pruned and no problem", rep)
+	}
+	if got := checkoutOf(admin); got != w.Path {
+		t.Fatalf("registration %s names %q, want the new checkout %s", admin, got, w.Path)
+	}
+	if got := run(t, w.Path, "rev-parse", "--abbrev-ref", "HEAD"); got != "feat/again" {
+		t.Fatalf("the checkout git just made is broken: HEAD = %q", got)
+	}
+	if out := run(t, f.project, "worktree", "list", "--porcelain"); !strings.Contains(out, w.Path) {
+		t.Fatalf("git no longer lists %s:\n%s", w.Path, out)
+	}
+	entries, _ := os.ReadDir(filepath.Join(f.project, ".git"))
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), pruningPrefix) {
+			t.Fatalf("left %s behind", e.Name())
+		}
+	}
+}
+
+// A repair that died between taking a registration out of worktrees/ and
+// removing it leaves the renamed dir: once stale it is removed, unless its
+// checkout exists, which is reported for a person.
+func TestRepair_StalePruningsAreRemoved(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	common := filepath.Join(f.project, ".git")
+	dead := filepath.Join(common, pruningPrefix+"dead-1")
+	write(t, filepath.Join(dead, "gitdir"), filepath.Join(f.root, "proj", "dead", ".git")+"\n")
+	live := f.worktree("live", "feat/live")
+	kept := filepath.Join(common, pruningPrefix+"kept-2")
+	write(t, filepath.Join(kept, "gitdir"), filepath.Join(live.Path, ".git")+"\n")
+
+	if rep := RepairRepo(context.Background(), common, RepairOptions{WorktreeRoot: f.root}); !exists(dead) {
+		t.Fatalf("a fresh pruning (a repair in flight) was removed: %+v", rep)
+	}
+	rep := RepairRepo(context.Background(), common, repairOpts(f))
+	if exists(dead) || !slices.Contains(rep.RemovedDebris, dead) {
+		t.Fatalf("report = %+v, want %s removed", rep, dead)
+	}
+	if !exists(kept) || len(rep.Problems) != 1 || !strings.Contains(rep.Problems[0], filepath.Join(common, "worktrees", "kept")) {
+		t.Fatalf("report = %+v, want %s kept and reported", rep, kept)
+	}
+}
+
 func TestRepair_MissingRootPrunesNothing(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)

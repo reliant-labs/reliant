@@ -165,6 +165,7 @@ func RepairRepo(ctx context.Context, commonDir string, opts RepairOptions) Repai
 	// Objects first: rebuilding an index reads HEAD's tree, which may have
 	// been one of the empty objects (git then finds the packed copy).
 	removed := repairObjects(commonDir, opts, &rep)
+	removeStalePrunings(commonDir, opts, &rep)
 
 	for _, adm := range worktreeAdminDirs(commonDir) {
 		repairRegistration(ctx, adm, opts, &rep)
@@ -460,11 +461,18 @@ func repairRegistration(ctx context.Context, adminDir string, opts RepairOptions
 		if checkout == "" && checkoutOf(adminDir) != "" {
 			return
 		}
-		if err := os.RemoveAll(adminDir); err != nil {
+		checked, err := os.Stat(adminDir)
+		if err != nil {
+			return // gone already: someone else pruned it
+		}
+		pruned, err := pruneRegistration(adminDir, checkout, checked, opts)
+		if err != nil {
 			rep.problem("pruning registration %s: %v", name, err)
 			return
 		}
-		rep.PrunedRegistrations = append(rep.PrunedRegistrations, name+": "+checkout)
+		if pruned {
+			rep.PrunedRegistrations = append(rep.PrunedRegistrations, name+": "+checkout)
+		}
 		return
 	}
 	if fi, err := os.Stat(checkout); err != nil || !fi.IsDir() {
@@ -473,6 +481,97 @@ func repairRegistration(ctx context.Context, adminDir string, opts RepairOptions
 	removeEmptyPseudoRefs(adminDir, opts, rep)
 	restoreEmptyHEAD(ctx, adminDir, checkout, opts, rep)
 	repairIndex(ctx, adminDir, checkout, opts, rep)
+}
+
+// pruningPrefix names an admin dir renamed out of <common>/worktrees to be
+// removed (pruneRegistration). Outside worktrees/, git does not see it as a
+// registration.
+const pruningPrefix = "reliant-pruning-"
+
+// beforePruneRename, when set (tests only), runs between the last check of a
+// registration and the rename that takes it out of worktrees/: the window a
+// git run outside the add lock can land in.
+var beforePruneRename func(adminDir string)
+
+// pruneRegistration removes adminDir, but only the registration that was
+// checked; it reports whether it did. The add lock orders the prune against
+// reliant's own adds, never against git run by anyone else (an agent's shell,
+// the user). A plain `git worktree add` cannot reach this registration: it
+// makes a fresh admin dir (mkdir, never an existing name) and refuses a path
+// that is still registered. But `add -f` (`-f -f` for a locked one) deletes
+// that registration and makes the new one under the SAME name, so a RemoveAll
+// after the last check could delete the metadata of the live checkout git
+// just made.
+//
+// So the admin dir is first renamed out of worktrees/, atomically: from then
+// on no git sees it as a registration, and a forced add finds nothing to
+// replace. It is removed only once the renamed dir proves to be the one that
+// was checked: the same directory, still naming the same gone checkout. git
+// makes a new registration's checkout directory before it writes its gitdir
+// file, so a replacement fails that check even if its inode number was
+// reused. Anything else is renamed back.
+func pruneRegistration(adminDir, checkout string, checked fs.FileInfo, opts RepairOptions) (bool, error) {
+	if beforePruneRename != nil {
+		beforePruneRename(adminDir)
+	}
+	common := filepath.Dir(filepath.Dir(adminDir))
+	tomb := filepath.Join(common, fmt.Sprintf("%s%s-%d", pruningPrefix, filepath.Base(adminDir), opts.Now().UnixNano()))
+	if err := os.Rename(adminDir, tomb); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil // pruned by git or another repair meanwhile
+		}
+		return false, err
+	}
+	info, err := os.Stat(tomb)
+	same := err == nil && os.SameFile(checked, info)
+	if same && checkout != "" {
+		same = checkoutOf(tomb) == checkout && checkoutGone(checkout, opts.WorktreeRoot)
+	}
+	if !same {
+		if err := os.Rename(tomb, adminDir); err != nil {
+			return false, fmt.Errorf("it was replaced before it could be removed, and putting the replacement back failed (it is at %s): %w", tomb, err)
+		}
+		return false, nil
+	}
+	if err := os.RemoveAll(tomb); err != nil {
+		return false, fmt.Errorf("removing %s: %w", tomb, err)
+	}
+	return true, nil
+}
+
+// removeStalePrunings removes what a repair that died mid-prune left: an
+// admin dir already renamed out of worktrees/ (so no longer a registration)
+// whose checkout is gone, once it is older than StaleTempAge.
+func removeStalePrunings(commonDir string, opts RepairOptions, rep *RepairReport) {
+	entries, err := os.ReadDir(commonDir)
+	if err != nil {
+		return
+	}
+	now := opts.Now()
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), pruningPrefix) {
+			continue
+		}
+		p := filepath.Join(commonDir, e.Name())
+		info, err := e.Info()
+		if err != nil || now.Sub(info.ModTime()) < opts.StaleTempAge {
+			continue
+		}
+		if c := checkoutOf(p); c != "" && !checkoutGone(c, opts.WorktreeRoot) {
+			name := strings.TrimPrefix(e.Name(), pruningPrefix)
+			if i := strings.LastIndex(name, "-"); i > 0 {
+				name = name[:i]
+			}
+			rep.problem("%s is the registration of %s, which exists, taken out of worktrees/; move it back to %s by hand",
+				p, c, filepath.Join(commonDir, "worktrees", name))
+			continue
+		}
+		if err := os.RemoveAll(p); err != nil {
+			rep.problem("removing stale %s: %v", p, err)
+			continue
+		}
+		rep.RemovedDebris = append(rep.RemovedDebris, p)
+	}
 }
 
 // gitAddLockReason is the lock `git worktree add` writes on the registration
