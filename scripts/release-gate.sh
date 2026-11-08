@@ -404,7 +404,7 @@ run_step() {
     build) go build ./... ;;
     webbuild) task build:web:verify ;;
     typecheck) npm --prefix frontends/web run --silent typecheck ;;
-    vet) go vet ./... ;;
+    vet) bash scripts/vet.sh ./... ;;
     test-go)
       local pkgs
       pkgs=$(go_shard_packages | tr '\n' ' ')
