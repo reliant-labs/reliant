@@ -518,6 +518,14 @@ gate's five minutes:
   the gate already failed. A group with no changed `.go` file finishes the job
   in seconds, before any toolchain is installed. A `ci:run` pull request runs
   the same job in `ci.yml`, and its `CI result` requires it too.
+- **What it costs.** Measured on GitHub's runners (2026-11-08) over the four
+  diffs of that day, each reproducing its finding: 96-179s of job wall time
+  (checkout ~13s, setup 63-107s, almost all of it restoring the Go module and
+  build caches, then the lint itself 9s for one file, 13s for one package,
+  60s for four, 61s for #2368's thirteen). `CI result` runs 230-390s on the
+  same runners, so the lint is done well before the gate and the wait step
+  costs nothing. A future diff where it is not shows up in the five-minute
+  budget step, which measures the whole run.
 - **What it still leaves to the release gate.** Packages the group did not
   change, findings on unchanged lines, the build-tagged pass, and buf lint.
 
