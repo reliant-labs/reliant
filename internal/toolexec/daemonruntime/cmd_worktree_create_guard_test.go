@@ -7,10 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
-	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,87 +27,6 @@ func guardRepoBranches(t *testing.T, projectPath string) string {
 func guardWorktrees(t *testing.T, projectPath string) string {
 	t.Helper()
 	return gitOutIn(t, projectPath, "worktree", "list", "--porcelain")
-}
-
-// The connection dropped while the first attempt ran, so the router sends the
-// same request again. The second attempt must answer with the checkout the
-// first made, not fail on the branch the first one holds.
-func TestWorktreeCreate_ResentRequestAnswersWithTheFirstAttemptsCheckout(t *testing.T) {
-	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
-	t.Parallel()
-	projectPath := diagnoseRepo(t)
-	workspaceID := uniqueWorkspaceID(t, "ws-resend")
-	req := map[string]any{
-		"project_path": projectPath,
-		"workspace_id": workspaceID,
-		"name":         "resend",
-		"branch":       "feat/resend",
-		"base_branch":  "main",
-		"worktree_id":  "wt-resend-1",
-	}
-
-	first := createFor(t, req)
-	require.True(t, first.Success, "first attempt: %s", first.Error)
-	head := gitOutIn(t, testWorktreePath(t, workspaceID), "rev-parse", "HEAD")
-
-	again := createFor(t, req)
-	require.True(t, again.Success, "the re-sent request must answer with the first attempt's checkout: %s", again.Error)
-	require.Equal(t, head, gitOutIn(t, testWorktreePath(t, workspaceID), "rev-parse", "HEAD"))
-	require.Equal(t, 1, strings.Count(guardWorktrees(t, projectPath), "branch refs/heads/feat/resend"))
-
-	// A DIFFERENT worktree asking for the same checkout path is not a
-	// re-send: it is refused, never handed someone else's checkout.
-	req["worktree_id"] = "wt-resend-2"
-	require.False(t, createFor(t, req).Success)
-}
-
-// `git worktree add` finished but the finish context ran out before the
-// worktree-id lock was written. The create must not report success, and must
-// leave the checkout for a re-send, which adopts and locks the same checkout
-// instead of failing on the branch it holds. Not parallel: it swaps
-// lockNewCheckout, and parallel tests start only after this one returns.
-func TestWorktreeCreate_LockLostToAnExpiredFinishIsRecoveredByTheResend(t *testing.T) {
-	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
-	projectPath := diagnoseRepo(t)
-	workspaceID := uniqueWorkspaceID(t, "ws-lock-expired")
-	req := map[string]any{
-		"project_path": projectPath,
-		"workspace_id": workspaceID,
-		"name":         "lockexp",
-		"branch":       "feat/lock-expired",
-		"base_branch":  "main",
-		"worktree_id":  "wt-lock-expired",
-	}
-	expired := func(ctx context.Context, checkout, worktreeID string) error {
-		ctx, cancel := context.WithDeadline(ctx, time.Now().Add(-time.Second))
-		defer cancel()
-		return worktreereclaim.LockCheckout(ctx, checkout, worktreeID)
-	}
-	lockNewCheckout = expired
-	t.Cleanup(func() { lockNewCheckout = worktreereclaim.LockCheckout })
-
-	first := createFor(t, req)
-	require.False(t, first.Success, "a checkout that is not locked for its worktree must not be reported as made")
-	checkout := testWorktreePath(t, workspaceID)
-	head := gitOutIn(t, checkout, "rev-parse", "HEAD")
-	list := guardWorktrees(t, projectPath)
-	require.Contains(t, list, "branch refs/heads/feat/lock-expired", "the finished checkout is kept for the re-send")
-	require.NotContains(t, list, worktreereclaim.LockReason("wt-lock-expired"))
-
-	// A re-send whose lock fails again still does not report success.
-	require.False(t, createFor(t, req).Success)
-
-	lockNewCheckout = worktreereclaim.LockCheckout
-	again := createFor(t, req)
-	require.True(t, again.Success, "the re-send must adopt the unlocked checkout: %s", again.Error)
-	require.Equal(t, head, gitOutIn(t, checkout, "rev-parse", "HEAD"))
-	list = guardWorktrees(t, projectPath)
-	require.Equal(t, 1, strings.Count(list, "branch refs/heads/feat/lock-expired"))
-	require.Contains(t, list, "locked "+worktreereclaim.LockReason("wt-lock-expired"))
-
-	// Once locked, a different worktree asking for the path is refused.
-	req["worktree_id"] = "wt-lock-expired-2"
-	require.False(t, createFor(t, req).Success)
 }
 
 // `git worktree add` failing after it populated the checkout (here a
@@ -140,82 +57,6 @@ func TestWorktreeCreate_FailedAddTakesBackItsCheckoutAndBranch(t *testing.T) {
 	require.True(t, os.IsNotExist(err), "the checkout and the workspace root it made must be gone: %v", err)
 	require.NotContains(t, guardWorktrees(t, projectPath), "feat/failed-add", "registration left behind")
 	require.NotContains(t, guardRepoBranches(t, projectPath), "feat/failed-add", "branch left behind")
-}
-
-// A forced create resets an existing branch to the start point with -B. When
-// that checkout then fails, the branch is user data, not this call's: it was
-// there before, and it now sits at the start point only because -B put it
-// there. It must survive the take-back, though its tip equals the start point.
-func TestWorktreeCreate_ForcedFailedAddKeepsABranchThatPredatesIt(t *testing.T) {
-	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
-	t.Parallel()
-	projectPath := diagnoseRepo(t)
-	// The branch carries a commit past main, which -B's reset to main would lose.
-	side := filepath.Join(t.TempDir(), "side")
-	gitOutIn(t, projectPath, "worktree", "add", "-q", "-b", "feat/predates", side, "main")
-	require.NoError(t, os.WriteFile(filepath.Join(side, "own.txt"), []byte("mine\n"), 0o644))
-	gitOutIn(t, side, "add", "own.txt")
-	gitOutIn(t, side, "-c", "user.name=t", "-c", "user.email=t@e.com", "commit", "-q", "-m", "own work")
-	tip := strings.TrimSpace(gitOutIn(t, projectPath, "rev-parse", "feat/predates"))
-	gitOutIn(t, projectPath, "worktree", "remove", "--force", side)
-	hooks := filepath.Join(t.TempDir(), "hooks")
-	require.NoError(t, os.MkdirAll(hooks, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-checkout"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
-	gitOutIn(t, projectPath, "config", "core.hooksPath", hooks)
-
-	workspaceID := uniqueWorkspaceID(t, "ws-forced-failed-add")
-	resp := createFor(t, map[string]any{
-		"project_path": projectPath,
-		"workspace_id": workspaceID,
-		"sub_path":     "repo",
-		"name":         "forced",
-		"branch":       "feat/predates",
-		"base_branch":  "main",
-		"force":        true,
-		"worktree_id":  "wt-forced-failed-add",
-	})
-	require.False(t, resp.Success, "the failing post-checkout hook must fail the create")
-
-	require.NotContains(t, guardWorktrees(t, projectPath), "feat/predates", "registration left behind")
-	require.Contains(t, guardRepoBranches(t, projectPath), "feat/predates", "a branch that predates the create was deleted")
-	require.Equal(t, tip, strings.TrimSpace(gitOutIn(t, projectPath, "rev-parse", "feat/predates")),
-		"the failed forced create must put the branch back at its own tip, not leave -B's reset to main")
-}
-
-// The failing post-checkout hook commits in the new checkout before it
-// exits: the branch has moved past -B's reset when the create fails. It is
-// still this create's doing (the checkout held the branch), so the branch goes
-// back to its own tip all the same.
-func TestWorktreeCreate_ForcedFailedAddRestoresABranchAHookMoved(t *testing.T) {
-	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
-	t.Parallel()
-	projectPath := diagnoseRepo(t)
-	side := filepath.Join(t.TempDir(), "side")
-	gitOutIn(t, projectPath, "worktree", "add", "-q", "-b", "feat/hooked", side, "main")
-	require.NoError(t, os.WriteFile(filepath.Join(side, "own.txt"), []byte("mine\n"), 0o644))
-	gitOutIn(t, side, "add", "own.txt")
-	gitOutIn(t, side, "-c", "user.name=t", "-c", "user.email=t@e.com", "commit", "-q", "-m", "own work")
-	tip := strings.TrimSpace(gitOutIn(t, projectPath, "rev-parse", "feat/hooked"))
-	gitOutIn(t, projectPath, "worktree", "remove", "--force", side)
-	hooks := filepath.Join(t.TempDir(), "hooks")
-	require.NoError(t, os.MkdirAll(hooks, 0o755))
-	hook := "#!/bin/sh\ngit -c user.name=h -c user.email=h@e.com commit -q --allow-empty -m hook\nexit 1\n"
-	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-checkout"), []byte(hook), 0o755))
-	gitOutIn(t, projectPath, "config", "core.hooksPath", hooks)
-
-	resp := createFor(t, map[string]any{
-		"project_path": projectPath,
-		"workspace_id": uniqueWorkspaceID(t, "ws-hook-moved"),
-		"sub_path":     "repo",
-		"name":         "hooked",
-		"branch":       "feat/hooked",
-		"base_branch":  "main",
-		"force":        true,
-		"worktree_id":  "wt-hook-moved",
-	})
-	require.False(t, resp.Success, "the failing post-checkout hook must fail the create")
-	require.Equal(t, tip, strings.TrimSpace(gitOutIn(t, projectPath, "rev-parse", "feat/hooked")),
-		"a hook's commit on top of -B's reset must not strand the branch's own tip")
 }
 
 // A checkout that predates the call is never taken back, nor a branch the
@@ -305,21 +146,34 @@ func TestWorktreeCreate_RefusesAPathOutsideTheWorkspace(t *testing.T) {
 	}
 }
 
-// Attempts at one checkout path run one at a time; a waiter whose deadline
-// passes gives up rather than blocking past it.
-func TestLockCreatePath_SerializesAndHonorsTheDeadline(t *testing.T) {
+// A forced create resets an existing branch to the start point with -B, so a
+// failed one cannot tell its own work from the branch's: it takes nothing
+// back. The checkout git left stays (the startup repair prunes a dead one) and
+// the branch, which predates the create, is never deleted.
+func TestWorktreeCreate_ForcedFailedAddTakesNothingBack(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
-	path := filepath.Join(t.TempDir(), "p")
-	unlock, err := lockCreatePath(context.Background(), path)
-	require.NoError(t, err)
+	projectPath := diagnoseRepo(t)
+	gitOutIn(t, projectPath, "branch", "feat/predates", "main")
+	hooks := filepath.Join(t.TempDir(), "hooks")
+	require.NoError(t, os.MkdirAll(hooks, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hooks, "post-checkout"), []byte("#!/bin/sh\nexit 1\n"), 0o755))
+	gitOutIn(t, projectPath, "config", "core.hooksPath", hooks)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-	defer cancel()
-	_, err = lockCreatePath(ctx, path)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+	workspaceID := uniqueWorkspaceID(t, "ws-forced-failed-add")
+	resp := createFor(t, map[string]any{
+		"project_path": projectPath,
+		"workspace_id": workspaceID,
+		"sub_path":     "repo",
+		"name":         "forced",
+		"branch":       "feat/predates",
+		"base_branch":  "main",
+		"force":        true,
+		"worktree_id":  "wt-forced-failed-add",
+	})
+	require.False(t, resp.Success, "the failing post-checkout hook must fail the create")
 
-	unlock()
-	unlock2, err := lockCreatePath(context.Background(), path)
-	require.NoError(t, err)
-	unlock2()
+	_, err := os.Stat(filepath.Join(testWorktreePath(t, workspaceID), "repo", ".git"))
+	require.NoError(t, err, "a failed forced create removed the checkout git made")
+	require.Contains(t, guardRepoBranches(t, projectPath), "feat/predates", "a branch that predates the create was deleted")
 }

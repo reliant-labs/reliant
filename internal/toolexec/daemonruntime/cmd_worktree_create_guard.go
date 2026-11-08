@@ -10,11 +10,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 // worktree.create runs on machines that are often saturated, and its caller
@@ -26,21 +24,22 @@ import (
 //     no proof its caller gave up (the caller's wait is not this context, and
 //     the answer can still reach it), so a finished checkout is never taken
 //     back: deleting one the server recorded as ACTIVE would lose the user's
-//     workspace. It is finished as usual, locked for its worktree id, so a
-//     re-sent request answers with it (finishedCreate).
+//     workspace. It is finished as usual, locked for its worktree id.
 //   - A `git worktree add` killed at the deadline. git cannot clean up after
 //     SIGKILL, so it leaves a half-written checkout and a registration locked
 //     "initializing" that holds the branch for good. The handler removes both
-//     whenever the directory was its own (abandonCheckout).
-//   - A connection that drops while the create runs. The daemon finishes it,
-//     but the answer is lost. The router sends the request again after the
-//     reconnect (reissuableDaemonCommands), and the second attempt waits for
-//     the first (lockCreatePath) and answers with what it made
-//     (finishedCreate), instead of failing on a branch it holds itself.
+//     whenever the directory was its own and the create was not forced
+//     (abandonCheckout); the startup repair prunes what is left.
 //   - A VM killed right after a create reported success. git does not fsync
 //     the files that make a checkout a worktree, so the gitfile, HEAD or
 //     branch ref can come back empty (llm bug reports, 2026-10-30). The
 //     handler fsyncs them before it answers (syncNewCheckout).
+//
+// A connection that drops while the create runs still loses the answer: the
+// create is not re-sent, and the checkout it finished is left for the server,
+// which knows the workspace failed, to clean up (owner decision 17 (a),
+// 2026-11-08: adopting a re-sent request's checkout from git state returns as
+// its own design).
 
 // worktreeCreatePath is where worktree.create puts a checkout:
 // <HOME>/.reliant/worktrees/<workspace_id>[/<sub_path>]. A sub_path of ""
@@ -82,88 +81,6 @@ func worktreeCreatePath(workspaceID, subPath string) (string, error) {
 // whose create's context ended after `git worktree add` succeeded.
 const worktreeFinishTimeout = 30 * time.Second
 
-// createPathLocks serializes worktree.create per checkout path: one channel of
-// capacity one per path this daemon process has created a checkout at. They
-// are never removed; a daemon creates a bounded number of workspaces in its
-// lifetime, and removing one safely would need a second lock.
-var createPathLocks sync.Map // string -> chan struct{}
-
-// lockCreatePath waits until no other worktree.create for path is running, or
-// ctx ends. The returned func releases it.
-func lockCreatePath(ctx context.Context, path string) (func(), error) {
-	v, _ := createPathLocks.LoadOrStore(path, make(chan struct{}, 1))
-	ch := v.(chan struct{})
-	select {
-	case ch <- struct{}{}:
-		return func() { <-ch }, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
-// lockNewCheckout locks a checkout worktree.create made for its worktree id.
-// A variable so a test can make it fail the way an expired context does.
-var lockNewCheckout = worktreereclaim.LockCheckout
-
-// finishedCreate answers a create that an earlier attempt of the same request
-// already made: checkout is a registered worktree of the project on the
-// requested branch, either locked for this request's worktree id (the lock is
-// the last thing a successful create writes, so a checkout locked for this id
-// was made by this request) or not locked at all. An unlocked one is what an
-// attempt leaves when `git worktree add` finished but the lock could not be
-// written (its finish context ran out): the path is this request's alone
-// (worktreeCreatePath), so it is adopted and locked now; a failed lock is
-// answered as an error, never as success. A checkout locked for anything
-// else, "initializing" included, is not this request's. ok is false when no
-// checkout is adopted, which the handler creates as usual.
-func finishedCreate(ctx context.Context, req worktreeCreateRequest, checkout string) (worktreeCreateResponse, bool) {
-	if req.WorktreeID == "" {
-		return worktreeCreateResponse{}, false
-	}
-	if _, err := os.Lstat(filepath.Join(checkout, ".git")); err != nil {
-		return worktreeCreateResponse{}, false
-	}
-	list := exec.CommandContext(ctx, "git", "worktree", "list", "--porcelain")
-	list.Dir = req.ProjectPath
-	out, err := list.Output()
-	if err != nil {
-		return worktreeCreateResponse{}, false
-	}
-	for _, wt := range parseWorktreePorcelain(string(out)) {
-		if !sameCheckoutPath(wt.Path, checkout) {
-			continue
-		}
-		if wt.Prunable || wt.Branch != req.Branch {
-			return worktreeCreateResponse{}, false
-		}
-		if wt.Locked && wt.LockReason != worktreereclaim.LockReason(req.WorktreeID) {
-			return worktreeCreateResponse{}, false
-		}
-		if req.ExpectedHead != "" && wt.Head != req.ExpectedHead {
-			return worktreeCreateResponse{}, false
-		}
-		if !wt.Locked {
-			if err := lockNewCheckout(ctx, checkout, req.WorktreeID); err != nil {
-				logging.WarnContext(ctx, "worktree.create found an earlier attempt's unlocked checkout but could not lock it",
-					"worktree_path", checkout, "worktree_id", req.WorktreeID, "error", err)
-				return worktreeCreateResponse{
-					Error:        fmt.Sprintf("an earlier attempt made this checkout but it could not be locked for its worktree; retry to finish it: %v", err),
-					WorktreePath: checkout,
-				}, true
-			}
-			syncNewCheckout(ctx, req.ProjectPath, checkout, req.Branch)
-		}
-		base := req.BaseBranch
-		if base == "" {
-			base = getRepositoryDefaultBranch(ctx, req.ProjectPath)
-		}
-		logging.InfoContext(ctx, "worktree.create found its checkout already made by an earlier attempt",
-			"worktree_path", checkout, "branch", req.Branch, "worktree_id", req.WorktreeID)
-		return worktreeCreateResponse{Success: true, WorktreePath: checkout, BaseBranch: base}, true
-	}
-	return worktreeCreateResponse{}, false
-}
-
 // sameCheckoutPath compares a path git reports with one this daemon built,
 // through symlinks when either side has one ($HOME may be a link).
 func sameCheckoutPath(a, b string) bool {
@@ -185,58 +102,6 @@ func localBranchAbsent(ctx context.Context, repoPath, branch string) bool {
 	cmd.Dir = repoPath
 	var exitErr *exec.ExitError
 	return errors.As(cmd.Run(), &exitErr) && exitErr.ExitCode() == 1
-}
-
-// localBranchTip is the commit refs/heads/branch names in repoPath, or "" when
-// there is no such local branch or it cannot be read.
-func localBranchTip(ctx context.Context, repoPath, branch string) string {
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"^{commit}")
-	cmd.Dir = repoPath
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
-// restoreForcedBranch puts a branch a failed forced create reset with -B back
-// at priorTip, its tip before the create. observed is the branch's tip read
-// when the create failed, while its checkout still held the branch (so only
-// that checkout, a hook in it, could have moved it): the reset itself
-// (startPoint), or commits a hook made on top of it. The restore is a
-// compare-and-swap from observed, and only when observed descends from the
-// start point: a branch that moved since, one no reset reached, or one this
-// create made (no priorTip) is left as it is. A hook's commits go with the
-// checkout being taken back. Best effort, on a context of its own, like
-// abandonCheckout.
-func restoreForcedBranch(ctx context.Context, repoPath, branch, priorTip, startPoint, observed string) {
-	if priorTip == "" || startPoint == "" || observed == "" || observed == priorTip {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), worktreeAbandonTimeout)
-	defer cancel()
-	start := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", startPoint+"^{commit}")
-	start.Dir = repoPath
-	out, err := start.Output()
-	if err != nil {
-		return
-	}
-	reset := strings.TrimSpace(string(out))
-	if reset != observed {
-		anc := exec.CommandContext(ctx, "git", "merge-base", "--is-ancestor", reset, observed)
-		anc.Dir = repoPath
-		if anc.Run() != nil {
-			return // not the reset, nor built on it: not this create's to undo
-		}
-	}
-	cmd := exec.CommandContext(ctx, "git", "update-ref", "-m", "reliant: a failed forced worktree create restores its branch", "refs/heads/"+branch, priorTip, observed)
-	cmd.Dir = repoPath
-	if err := cmd.Run(); err != nil {
-		logging.WarnContext(ctx, "worktree.create could not restore the branch its failed -B reset; its prior tip is in the reflog",
-			"branch", branch, "prior_tip", priorTip, "error", err)
-		return
-	}
-	logging.InfoContext(ctx, "worktree.create restored the branch its failed -B reset", "branch", branch, "prior_tip", priorTip)
 }
 
 // worktreeAbandonTimeout bounds taking back one checkout. It runs on a

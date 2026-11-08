@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,13 +58,11 @@ func TestWorktreeRefreshUsesFetchedHeadNotStaleLocalBranch(t *testing.T) {
 
 // A checkout that lands on the wrong head (here a post-checkout hook commits in
 // the new worktree, so HEAD moves after `git worktree add` passed the pre-add
-// check) is refused AND taken back. Left behind unlocked, its registration
-// would hold the branch at that path, so a re-send could neither adopt it
-// (its head is wrong) nor add it again: the checkout was stranded for good.
+// check) is refused AND taken back. Left behind, its registration would hold
+// the branch at that path, so a retry could not add it again: the checkout was
+// stranded for good.
 func TestWorktreeCreateTakesBackACheckoutOnTheWrongHead(t *testing.T) {
-	if testing.Short() {
-		t.Skip("real git origin, fetch, hooks and worktree; runs in full package tests")
-	}
+	testkit.Slow(t, "real git origin, fetch, hooks and worktree")
 	r := newBaseRepos(t)
 	head := r.run(r.clone, "rev-parse", "refs/remotes/origin/feat/x")
 	hook := filepath.Join(r.clone, ".git", "hooks", "post-checkout")
@@ -95,7 +94,7 @@ func TestWorktreeCreateTakesBackACheckoutOnTheWrongHead(t *testing.T) {
 	require.NotContains(t, r.run(r.clone, "worktree", "list", "--porcelain"), workspace,
 		"the wrong-head checkout must not stay registered")
 
-	// The hook gone, the re-sent request finishes cleanly on the expected head.
+	// The hook gone, the retried request finishes cleanly on the expected head.
 	require.NoError(t, os.Remove(hook))
 	out = create()
 	require.True(t, out.Success, out.Error)

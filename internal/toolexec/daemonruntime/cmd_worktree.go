@@ -159,22 +159,12 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		req.Branch = fmt.Sprintf("worktree/%s-%d", req.Name, time.Now().Unix())
 	}
 
-	// The request fixes the checkout's path, so every attempt at it — a
-	// re-send after a dropped connection included — runs one at a time, and
-	// one that finds an earlier attempt finished answers with its checkout
+	// The request fixes the checkout's path, and a failed create removes it
+	// whole, so it must stay inside the worktrees root
 	// (cmd_worktree_create_guard.go).
 	worktreePath, err := worktreeCreatePath(req.WorkspaceID, req.SubPath)
 	if err != nil {
 		return json.Marshal(worktreeCreateResponse{Error: err.Error()})
-	}
-	unlockPath, err := lockCreatePath(ctx, worktreePath)
-	if err != nil {
-		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf(
-			"an earlier attempt at this checkout (%s) was still running when this one ran out of time", worktreePath)})
-	}
-	defer unlockPath()
-	if done, ok := finishedCreate(ctx, req, worktreePath); ok {
-		return json.Marshal(done)
 	}
 
 	// Only a base the caller named is theirs to fix if it does not resolve;
@@ -282,17 +272,18 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	// point with --no-track: a base taken from origin is a starting commit,
 	// not the branch's upstream, exactly as a local base is.
 	var worktreeCmd *exec.Cmd
-	priorTip := ""
+	// A forced create (-B) resets an existing branch before the checkout
+	// runs. What a failed one may take back depends on that branch's prior
+	// tip, which this file does not track, so a forced create that fails is
+	// left as git left it (the startup repair prunes a dead registration).
+	forced := false
 	switch {
 	case reuseLocal:
 		// No -B and no --force: git itself refuses when the branch is
 		// checked out in another worktree.
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
 	case !req.ReuseBranch && (branchExists || req.Force):
-		// -B resets an existing local branch to the start point before the
-		// checkout runs. Its tip is kept, so a create that then fails puts the
-		// branch back where it was (restoreForcedBranch).
-		priorTip = localBranchTip(ctx, req.ProjectPath, req.Branch)
+		forced = true
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-B", req.Branch, worktreePath, startPoint)
 	default:
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-b", req.Branch, worktreePath, startPoint)
@@ -319,9 +310,10 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		// partial checkout before failing, and a `git worktree add` killed at
 		// the deadline leaves its registration locked "initializing", which
 		// holds the branch against every later create
-		// (cmd_worktree_create_guard.go). A directory that predates this call
-		// (a --force flow) is removed only when EMPTY: deleting a non-empty
-		// one could destroy work this function did not create.
+		// (cmd_worktree_create_guard.go). A directory that predates this call,
+		// or any directory of a forced create, is removed only when EMPTY:
+		// deleting a non-empty one could destroy work this function did not
+		// create, and a forced create's branch is not this call's to judge.
 		//
 		// BOTH levels are swept, because MkdirAll above creates
 		// filepath.Dir(worktreePath), not worktreePath itself:
@@ -343,15 +335,11 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 				_ = os.Remove(dir)
 			}
 		}
-		// Read before the checkout goes: while it is registered the branch is
-		// checked out there and nothing else can move it.
-		observed := localBranchTip(ctx, req.ProjectPath, req.Branch)
-		if preExisted {
+		if preExisted || forced {
 			removeIfEmpty(worktreePath)
 		} else {
 			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
 		}
-		restoreForcedBranch(ctx, req.ProjectPath, req.Branch, priorTip, startPoint, observed)
 		if parent := filepath.Dir(worktreePath); parent != worktreePath {
 			removeIfEmpty(parent)
 		}
@@ -368,7 +356,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	// the caller gave up: its wait is not this context, and the answer can
 	// still reach it, so a finished checkout is never taken back here. It is
 	// finished as usual on a context of its own, so it is locked for its
-	// worktree id and a re-sent request finds it (finishedCreate).
+	// worktree id: what names it if the answer is lost.
 	if ctx.Err() != nil {
 		logging.WarnContext(ctx, "worktree.create finished its checkout after its deadline; answering anyway",
 			"worktree_path", worktreePath, "error", ctx.Err())
@@ -385,16 +373,16 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		out, err := head.Output()
 		if err != nil || strings.TrimSpace(string(out)) != req.ExpectedHead {
 			// A checkout on the wrong head is never handed over, and it must
-			// not be left behind either: it is unlocked, so a re-send could
-			// not adopt it (finishedCreate checks the head), and its
-			// registration would hold the branch against the re-send's own
-			// `git worktree add`. Take it back as a failed add is taken
-			// back, so the retry starts clean. A directory that predates
-			// this call was empty (git adds only into an empty one), so it
-			// is put back empty.
-			observed := localBranchTip(ctx, req.ProjectPath, req.Branch)
+			// not be left behind either: its registration would hold the
+			// branch against the retry's own `git worktree add`. Take it back
+			// as a failed add is taken back, so the retry starts clean. A
+			// directory that predates this call was empty (git adds only into
+			// an empty one), so it is put back empty. A forced create's is
+			// left as git left it, as a failed forced add is.
+			if forced {
+				return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head", WorktreePath: worktreePath})
+			}
 			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
-			restoreForcedBranch(ctx, req.ProjectPath, req.Branch, priorTip, startPoint, observed)
 			if preExisted {
 				_ = os.MkdirAll(worktreePath, 0o755)
 			}
@@ -404,19 +392,12 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 
 	// Mark the checkout reliant-owned. forge's storage reaper skips locked
 	// worktrees, so this lock is what protects a clean, idle, pushed checkout
-	// from being removed under an active chat, and it is how a re-sent request
-	// knows the checkout is its own (finishedCreate). So success is reported
-	// only once the lock holds. A checkout left unlocked here (the finish
-	// context ran out, git failed) is kept, not taken back: a re-send of this
-	// request adopts it and locks it then (finishedCreate).
+	// from being removed under an active chat. Failing to lock is not fatal to
+	// creation: the reconcile pass locks every active worktree on its next run.
 	if req.WorktreeID != "" {
-		if err := lockNewCheckout(ctx, worktreePath, req.WorktreeID); err != nil {
-			logging.WarnContext(ctx, "worktree created but not locked; a re-sent request adopts it",
+		if err := worktreereclaim.LockCheckout(ctx, worktreePath, req.WorktreeID); err != nil {
+			logging.WarnContext(ctx, "worktree created but not locked; reconcile will retry",
 				"worktree_path", worktreePath, "error", err)
-			return json.Marshal(worktreeCreateResponse{
-				Error:        fmt.Sprintf("the checkout was made but could not be locked for its worktree; retry to finish it: %v", err),
-				WorktreePath: worktreePath,
-			})
 		}
 	}
 	syncNewCheckout(ctx, req.ProjectPath, worktreePath, req.Branch)
