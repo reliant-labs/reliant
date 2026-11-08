@@ -34,6 +34,9 @@ inputs:
   buf:
     description: Put go.mod's buf on PATH (forge lint's buf-lint lane refuses to run without it)
     default: "false"
+  golangci:
+    description: Put the pinned forge's golangci-lint on PATH, the release the release gate's forge lint runs (needs go)
+    default: "false"
 
 outputs:
   go-version:
@@ -225,6 +228,56 @@ runs:
       with:
         path: ~/.cache/ci-tools/buf-${{ steps.buf.outputs.version }}
         key: ci-tool-buf-${{ steps.buf.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
+    # The merge queue's `golangci (changed)` job (merge-queue.yml). The version
+    # is the pinned forge's templates.GolangciLintVersion, the release forge
+    # lint requires in the release gate, read from that module's source so the
+    # two can never disagree; a forge that moved the constant fails this step
+    # rather than installing a guess. Cached like buf, checked against the
+    # digest GitHub records for the asset (it is the release binary, built
+    # with a Go new enough for go.mod).
+    - name: Read the golangci-lint pin
+      id: golangci
+      if: inputs.golangci == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        dir="$(go mod download -json github.com/reliant-labs/forge | jq -r .Dir)"
+        v="$(sed -n 's/^const GolangciLintVersion = "v\([0-9][0-9.]*\)"$/\1/p' "${dir}/internal/templates/toolversions.go")"
+        [ -n "$v" ] || { echo "::error::no GolangciLintVersion in ${dir}/internal/templates/toolversions.go (the pinned forge moved it?)"; exit 1; }
+        echo "version=${v}" | tee -a "$GITHUB_OUTPUT"
+
+    - name: Restore golangci-lint
+      id: golangci-cache
+      if: inputs.golangci == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/ci-tools/golangci-lint-${{ steps.golangci.outputs.version }}
+        key: ci-tool-golangci-lint-${{ steps.golangci.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Install golangci-lint
+      if: inputs.golangci == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        V: ${{ steps.golangci.outputs.version }}
+      run: |
+        set -euo pipefail
+        d="$HOME/.cache/ci-tools/golangci-lint-${V}" f="golangci-lint-${V}-linux-amd64"
+        if [ ! -x "$d/golangci-lint" ]; then
+          mkdir -p "$d"
+          "${{ github.action_path }}/fetch-release-asset.sh" golangci/golangci-lint "v${V}" "${f}.tar.gz" "${RUNNER_TEMP}/golangci.tgz"
+          tar -xzf "${RUNNER_TEMP}/golangci.tgz" -C "${RUNNER_TEMP}" "${f}/golangci-lint"
+          install -m 0755 "${RUNNER_TEMP}/${f}/golangci-lint" "$d/golangci-lint"
+        fi
+        echo "$d" >> "$GITHUB_PATH"
+
+    - name: Save golangci-lint (main only)
+      if: inputs.golangci == 'true' && steps.golangci-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.cache/ci-tools/golangci-lint-${{ steps.golangci.outputs.version }}
+        key: ci-tool-golangci-lint-${{ steps.golangci.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
 
     # frontends/web installs with pnpm, at the version that wrote its
     # pnpm-lock.yaml (frontends/web/package.json engines.pnpm). The npm cache

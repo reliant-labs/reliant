@@ -14,15 +14,17 @@ name: CI
 #                                     The review itself is the separate
 #                                     "Reliant review" check (reliant-review.yml),
 #                                     which the ruleset also requires
-#   merge_group                       NOT HERE: merge-queue.yml, one job,
+#   merge_group                       NOT HERE: merge-queue.yml, one gate job,
 #                                     `task ci:merge -- --queue`, five-minute
-#                                     budget (owner, 2026-11-01)
+#                                     budget (owner, 2026-11-01), and beside
+#                                     it `task ci:golangci` (owner, 2026-11-08)
 #   push to main, schedule, dispatch  task release:gate  the whole suite plus
 #                                     every lane, recorded per sha; never
 #                                     blocks a merge, gates every release
 #
-# A pull request labelled `ci:run` gets the merge tier and the lanes its paths
-# reach, read on the next push (see `pull_request:` for why not on `labeled`).
+# A pull request labelled `ci:run` gets the merge tier (the merge gate and
+# golangci on the changed packages) and the lanes its paths reach, read on the
+# next push (see `pull_request:` for why not on `labeled`).
 #
 # A red main does not block merges: pipeline-health files a fix
 # (`pipeline:slo`), and `task release:tag` refuses a sha without a green
@@ -216,6 +218,28 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+  # The merge queue's golangci job (merge-queue.yml) on a ci:run pull request,
+  # beside the merge gate: golangci-lint on the changed packages, findings on
+  # changed files only. Main runs the whole module in the release gate's lint.
+  golangci:
+    name: golangci (changed)
+    needs: lanes
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ci:run')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BASE: ${{ needs.lanes.outputs.base }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          golangci: "true"
+          postgres-cache: "false"
+      - name: task ci:golangci
+        run: task ci:golangci -- --base "${BASE}"
+
   # ── The release tier (main, nightly, dispatch) ────────────────────────────
   # The whole suite on this commit, in a private checkout, recorded as a git
   # note pushed to origin, so `task release:tag` can cut a release from it. A
@@ -404,8 +428,12 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
+      # golangci: its cached binary is saved here, on main, for the merge
+      # queue's golangci job to restore.
       - uses: ./.github/actions/setup
         id: setup
+        with:
+          golangci: "true"
       - name: task build:packages
         run: task build:packages
       # The protoc plugins buf runs as `go tool`, so a pull request's generate
@@ -614,16 +642,16 @@ jobs:
   # heavy runs (REVIEW FIRST), so this is green within a minute and GitHub can
   # enqueue the PR once pr-review passes it (the separate, required "Reliant
   # review" check). On a ci:run PR a lane the change does not reach is
-  # skipped, which is fine, but the merge gate must have run. (The merge
-  # queue's CI result is merge-queue.yml's.) Off a PR every lane runs
-  # (scripts/ci-lanes.sh --full), so a skip there is a broken `if:`, never a
-  # pass: everything but the merge gate (merge tier only), go-cache (only a
-  # push runs it)
+  # skipped, which is fine, but the merge gate and golangci must have run and
+  # passed. (The merge queue's CI result is merge-queue.yml's.) Off a PR every
+  # lane runs (scripts/ci-lanes.sh --full), so a skip there is a broken `if:`,
+  # never a pass: everything but the merge gate and golangci (merge tier only;
+  # the release gate lints the whole module), go-cache (only a push runs it)
   # and cp-contract (only a change to the vendored contract does) must have
   # succeeded.
   ci-result:
     name: CI result
-    needs: [lanes, migration-order, merge-gate, release-gate, release-record, go-cache, cp-contract, web-bundle, playwright, electron-package]
+    needs: [lanes, migration-order, merge-gate, golangci, release-gate, release-record, go-cache, cp-contract, web-bundle, playwright, electron-package]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -646,8 +674,11 @@ jobs:
           gate=$([ "${merge_tier}" = true ] && echo merge-gate || echo release-record)
           [ "$(jq -r .lanes.result <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"lanes: no lane was selected"
           [ "$(jq -r --arg g "${gate}" '.[$g].result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"${gate}: must run and pass on ${EVENT_NAME}"
+          if [ "${merge_tier}" = true ]; then
+            [ "$(jq -r '.golangci.result' <<< "${RESULTS}")" = success ] || bad="${bad}"$'\n'"golangci: must run and pass on ${EVENT_NAME}"
+          fi
           if [ "${merge_tier}" != true ]; then
-            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
+            skipped=$(jq -r --arg e "${EVENT_NAME}" 'to_entries[] | select(.value.result == "skipped") | select(.key != "merge-gate" and .key != "golangci" and .key != "cp-contract" and (.key != "go-cache" or $e == "push")) | "\(.key): skipped on \($e), where every lane runs"' <<< "${RESULTS}")
             bad="${bad}"$'\n'"${skipped}"
           fi
           bad=$(grep . <<< "${bad}" | sort -u || true)

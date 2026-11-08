@@ -253,6 +253,7 @@ func TestSetupInstallsCachedTools(t *testing.T) {
 	}
 	sha := regexp.MustCompile(`^[0-9a-f]{64}$`)
 	const rgDir = "ripgrep-14.1.1-x86_64-unknown-linux-musl"
+	const glDir = "golangci-lint-2.14.0-linux-amd64"
 
 	for _, tc := range []struct {
 		install, restore, save string
@@ -283,10 +284,19 @@ func TestSetupInstallsCachedTools(t *testing.T) {
 			wantFetch: []string{"BurntSushi/ripgrep", "14.1.1", rgDir + ".tar.gz"}, pinned: true,
 			sudo: "install -m 0755 {dir}/rg /usr/local/bin/rg",
 		},
+		{
+			install: "Install golangci-lint", restore: "Restore golangci-lint", save: "Save golangci-lint (main only)",
+			cacheDir: "golangci-lint-2.14.0", binary: "golangci-lint",
+			asset: glDir + ".tar.gz", fixture: tgz(t, map[string]string{glDir + "/golangci-lint": "#!/bin/sh\necho golangci-lint\n", glDir + "/LICENSE": "x"}),
+			wantFetch: []string{"golangci/golangci-lint", "v2.14.0", glDir + ".tar.gz"}, onPath: true,
+		},
 	} {
 		run := step(tc.install).Run
 		// The restore and save steps must cache the directory the install writes.
-		wantPath := "~/.cache/ci-tools/" + strings.Replace(tc.cacheDir, "1.50.0", "${{ steps.buf.outputs.version }}", 1)
+		wantPath := "~/.cache/ci-tools/" + strings.NewReplacer(
+			"buf-1.50.0", "buf-${{ steps.buf.outputs.version }}",
+			"golangci-lint-2.14.0", "golangci-lint-${{ steps.golangci.outputs.version }}",
+		).Replace(tc.cacheDir)
 		for _, name := range []string{tc.restore, tc.save} {
 			if got := step(name).With["path"]; got != wantPath {
 				t.Errorf("%s caches %v, want %s", name, got, wantPath)
@@ -341,7 +351,7 @@ func TestSetupInstallsCachedTools(t *testing.T) {
 				}
 				cmd := exec.CommandContext(t.Context(), "bash", "-e", "-c", script)
 				cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "HOME="+home,
-					"RUNNER_TEMP="+tmp, "GITHUB_PATH="+ghPath, "GH_TOKEN=tok", "BUF_VERSION=1.50.0")
+					"RUNNER_TEMP="+tmp, "GITHUB_PATH="+ghPath, "GH_TOKEN=tok", "BUF_VERSION=1.50.0", "V=2.14.0")
 				if out, err := cmd.CombinedOutput(); err != nil {
 					t.Fatalf("%s: %v\n%s", tc.install, err, out)
 				}
@@ -377,7 +387,7 @@ func TestSetupInstallsCachedTools(t *testing.T) {
 				}
 				want := cached
 				if !hit {
-					want = map[string]string{"task": "#!/bin/sh\necho task\n", "buf": "#!/bin/sh\necho buf\n", "rg": "#!/bin/sh\necho rg\n"}[tc.binary]
+					want = map[string]string{"task": "#!/bin/sh\necho task\n", "buf": "#!/bin/sh\necho buf\n", "rg": "#!/bin/sh\necho rg\n", "golangci-lint": "#!/bin/sh\necho golangci-lint\n"}[tc.binary]
 				}
 				if string(got) != want {
 					t.Errorf("cached %s = %q, want %q", tc.binary, got, want)
