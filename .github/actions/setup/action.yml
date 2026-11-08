@@ -80,6 +80,16 @@ runs:
     # Only the binary is cached, never the archive, and it is saved on a push to
     # main only (the header). A PR restores main's copy.
     #
+    # Checking it after the merge: the first push to main runs "Save <tool>
+    # (main only)" in each job that installs it, and the next PR's "Restore
+    # <tool>" reports a cache hit and its install step downloads nothing.
+    # Rolling it back: revert the commit that added these steps (Task goes back
+    # to arduino/setup-task, buf to bufbuild/buf-action, ripgrep to plain curl);
+    # the ci-tool-* caches then go unread and GitHub evicts them after 7 days.
+    # A bad cached binary alone is dropped with `gh cache delete <key>` (keys
+    # are ci-tool-<tool>-<version>-<os>-<arch>), so the next run re-downloads
+    # and re-verifies it.
+    #
     # Taskfile.yml needs Task 3.38+ (`if:` on a task call). Pinned, not `3.x`:
     # a cached binary needs a fixed version and checksum. To bump it, change all
     # three lines together; the sha256 is the asset's (`gh api
