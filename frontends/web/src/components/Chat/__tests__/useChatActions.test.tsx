@@ -8,6 +8,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, renderHook, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createTestQueryClient } from "@/test/renderWithQuery";
+import { mockTransport } from "@/lib/test-utils";
+import { setTransport } from "@/lib/connect";
+import { useAuthStore } from "@/store/authStore";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import type { Surface } from "../../../lib/surface";
 
@@ -31,6 +36,7 @@ vi.mock("../../../hooks/chat-queries", () => ({
   useRenameChat: () => ({ mutateAsync: mocks.rename }),
   useArchiveChat: () => ({ mutateAsync: mocks.archive }),
   useUnarchiveChat: () => ({ mutate: mocks.unarchive }),
+  useMoveChatToProject: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 vi.mock("../../../hooks/message-queries", () => ({
   useMessages: () => ({ data: { messages: [] } }),
@@ -71,11 +77,23 @@ const { useChatActions } = await import("../useChatActions");
 const { ChatHeader } = await import("../ChatHeader");
 
 function wrapperFor(surface: Surface) {
-  return ({ children }: { children: ReactNode }) => <SurfaceProvider surface={surface}>{children}</SurfaceProvider>;
+  // ChatHeader mounts the real project picker even while closed. Match the
+  // app's query context, with a fresh client for every render/hook fixture.
+  const client = createTestQueryClient();
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <SurfaceProvider surface={surface}>{children}</SurfaceProvider>
+    </QueryClientProvider>
+  );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useAuthStore.setState({ session: { access_token: "t" } as never });
+  setTransport(mockTransport({
+    "ProjectService.ListProjects": { response: { projects: [{ id: "p2", name: "Other project" }] } },
+    "ProjectService.ListProjectDaemons": { response: { projectDaemons: [] } },
+  }));
   mocks.resolveWorktree.mockResolvedValue({ ...mainRow, id: "wt-1" });
   mocks.resolveMainWorktree.mockResolvedValue(mainRow);
 });
@@ -125,5 +143,19 @@ describe("ChatHeader menu runs the shared actions", () => {
     await user.click(screen.getByRole("button", { name: "Archive chat" }));
     expect(mocks.archive).toHaveBeenCalledWith("chat-1");
     await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith("Chat archived", expect.anything()));
+  });
+
+  it("opens the real project picker with the menu's query context", async () => {
+    const user = userEvent.setup();
+    render(<ChatHeader chatId="chat-1" />, { wrapper: wrapperFor("desktop") });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More options" }));
+    await user.click(screen.getByRole("button", { name: "Move to project…" }));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByRole("radio", { name: /Other project/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Move to project…" })).not.toBeInTheDocument();
+    expect(mocks.archive).not.toHaveBeenCalled();
   });
 });

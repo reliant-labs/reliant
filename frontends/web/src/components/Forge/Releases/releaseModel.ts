@@ -202,7 +202,8 @@ function rolledBackVersions(promotions: readonly ReleasePromotion[], rank: Reado
   return out;
 }
 
-function checksOf(gates: ReleaseGate[]): ChecksSummary | null {
+/** A promotion's checks, one verdict per gate name (the latest recorded wins); null when it recorded none. */
+export function checksOf(gates: ReleaseGate[]): ChecksSummary | null {
   if (gates.length === 0) return null;
   // One verdict per gate name: the latest recorded wins.
   const byName = new Map<string, ReleaseGate>();

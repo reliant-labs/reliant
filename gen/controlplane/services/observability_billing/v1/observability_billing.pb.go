@@ -282,9 +282,15 @@ type GetObservabilityUsageResponse struct {
 	// customer.
 	UnchargedBytes int64 `protobuf:"varint,24,opt,name=uncharged_bytes,json=unchargedBytes,proto3" json:"uncharged_bytes,omitempty"`
 	// When the cap was first reached this period; unset before.
-	CapReachedAt  *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=cap_reached_at,json=capReachedAt,proto3" json:"cap_reached_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	CapReachedAt *timestamppb.Timestamp `protobuf:"bytes,25,opt,name=cap_reached_at,json=capReachedAt,proto3" json:"cap_reached_at,omitempty"`
+	// The split of stored bytes across services and categories (by_service,
+	// browser_bytes, operator_bytes, metadata_bytes, and so used_bytes and each
+	// signal's billed_bytes) is an ESTIMATE for at least one hour of the period:
+	// weighted by row count instead of bytes. Only a billing-exempt org, which is
+	// never charged, is metered this way. stored bytes and rows stay exact.
+	BreakdownEstimated bool `protobuf:"varint,26,opt,name=breakdown_estimated,json=breakdownEstimated,proto3" json:"breakdown_estimated,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *GetObservabilityUsageResponse) Reset() {
@@ -492,6 +498,13 @@ func (x *GetObservabilityUsageResponse) GetCapReachedAt() *timestamppb.Timestamp
 	return nil
 }
 
+func (x *GetObservabilityUsageResponse) GetBreakdownEstimated() bool {
+	if x != nil {
+		return x.BreakdownEstimated
+	}
+	return false
+}
+
 type SignalUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "logs", "traces", "metrics" or "profiles".
@@ -564,9 +577,12 @@ func (x *SignalUsage) GetRows() int64 {
 type ServiceUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The service.name; empty for data that carried none.
-	Service       string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
-	Signal        string `protobuf:"bytes,2,opt,name=signal,proto3" json:"signal,omitempty"`
-	BilledBytes   int64  `protobuf:"varint,3,opt,name=billed_bytes,json=billedBytes,proto3" json:"billed_bytes,omitempty"`
+	Service     string `protobuf:"bytes,1,opt,name=service,proto3" json:"service,omitempty"`
+	Signal      string `protobuf:"bytes,2,opt,name=signal,proto3" json:"signal,omitempty"`
+	BilledBytes int64  `protobuf:"varint,3,opt,name=billed_bytes,json=billedBytes,proto3" json:"billed_bytes,omitempty"`
+	// billed_bytes is weighted by rows, not bytes, for at least one hour (see
+	// GetObservabilityUsageResponse.breakdown_estimated).
+	Estimated     bool `protobuf:"varint,4,opt,name=estimated,proto3" json:"estimated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -620,6 +636,13 @@ func (x *ServiceUsage) GetBilledBytes() int64 {
 		return x.BilledBytes
 	}
 	return 0
+}
+
+func (x *ServiceUsage) GetEstimated() bool {
+	if x != nil {
+		return x.Estimated
+	}
+	return false
 }
 
 type ListObservabilityUsageRequest struct {
@@ -1797,7 +1820,8 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"\n" +
 	"=services/observability_billing/v1/observability_billing.proto\x12\x18observability_billing.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"5\n" +
 	"\x1cGetObservabilityUsageRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\xe6\t\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\x97\n" +
+	"\n" +
 	"\x1dGetObservabilityUsageResponse\x12=\n" +
 	"\fperiod_start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vperiodStart\x129\n" +
 	"\n" +
@@ -1828,16 +1852,18 @@ const file_services_observability_billing_v1_observability_billing_proto_rawDesc
 	"\x0emetadata_bytes\x18\x16 \x01(\x03R\rmetadataBytes\x12#\n" +
 	"\rcharged_cents\x18\x17 \x01(\x03R\fchargedCents\x12'\n" +
 	"\x0funcharged_bytes\x18\x18 \x01(\x03R\x0eunchargedBytes\x12@\n" +
-	"\x0ecap_reached_at\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\fcapReachedAt\"\x7f\n" +
+	"\x0ecap_reached_at\x18\x19 \x01(\v2\x1a.google.protobuf.TimestampR\fcapReachedAt\x12/\n" +
+	"\x13breakdown_estimated\x18\x1a \x01(\bR\x12breakdownEstimated\"\x7f\n" +
 	"\vSignalUsage\x12\x16\n" +
 	"\x06signal\x18\x01 \x01(\tR\x06signal\x12!\n" +
 	"\fbilled_bytes\x18\x02 \x01(\x03R\vbilledBytes\x12!\n" +
 	"\fstored_bytes\x18\x03 \x01(\x03R\vstoredBytes\x12\x12\n" +
-	"\x04rows\x18\x04 \x01(\x03R\x04rows\"c\n" +
+	"\x04rows\x18\x04 \x01(\x03R\x04rows\"\x81\x01\n" +
 	"\fServiceUsage\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12\x16\n" +
 	"\x06signal\x18\x02 \x01(\tR\x06signal\x12!\n" +
-	"\fbilled_bytes\x18\x03 \x01(\x03R\vbilledBytes\"\xea\x04\n" +
+	"\fbilled_bytes\x18\x03 \x01(\x03R\vbilledBytes\x12\x1c\n" +
+	"\testimated\x18\x04 \x01(\bR\testimated\"\xea\x04\n" +
 	"\x1dListObservabilityUsageRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x120\n" +
 	"\x05start\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +

@@ -151,33 +151,45 @@ describe("useDaemonStatus before the list has answered", () => {
 });
 
 describe("a heartbeat from a machine the cached list calls down", () => {
+  // The list stays cached while timers run, as mounted readers keep it in the
+  // app; the test client otherwise collects an unobserved query at once.
+  beforeEach(() => client.setQueryDefaults(DAEMON_LIST_QUERY_KEY, { gcTime: Infinity }));
+
   it("re-reads the list, so the UI recovers without a reload", async () => {
     seedDaemonList(client, [daemon(DaemonStatus.DISCONNECTED)]);
     const invalidate = vi.spyOn(client, "invalidateQueries");
 
     reconcileDaemonHeartbeat(client, "d1", 1_000);
 
-    expect(invalidate).toHaveBeenCalledWith(expect.objectContaining({ queryKey: daemonRegistryServiceKeys.all }));
+    // Stale at once, so no reader trusts the "down" list…
     expect(client.getQueryState(DAEMON_LIST_QUERY_KEY)?.isInvalidated).toBe(true);
+    // …and re-read on the coalesced refetch that follows.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(invalidate).toHaveBeenCalledWith(expect.objectContaining({ queryKey: daemonRegistryServiceKeys.all }));
   });
 
-  it("re-reads at most once per window while the registry keeps disagreeing", () => {
+  it("re-reads at most once per window while the registry keeps disagreeing", async () => {
     seedDaemonList(client, [daemon(DaemonStatus.DISCONNECTED)]);
     const invalidate = vi.spyOn(client, "invalidateQueries");
     const listReads = () =>
       invalidate.mock.calls.filter(([f]) => JSON.stringify(f?.queryKey) === JSON.stringify(daemonRegistryServiceKeys.all)).length;
 
     reconcileDaemonHeartbeat(client, "d1", 1_000);
+    await vi.advanceTimersByTimeAsync(0);
     reconcileDaemonHeartbeat(client, "d1", 16_000);
+    await vi.advanceTimersByTimeAsync(0);
     expect(listReads()).toBe(1);
     reconcileDaemonHeartbeat(client, "d1", 1_000 + HEARTBEAT_CONTRADICTION_REFETCH_MS);
+    await vi.advanceTimersByTimeAsync(0);
     expect(listReads()).toBe(2);
   });
 
-  it("leaves a list that already shows the machine connected alone", () => {
+  it("leaves a list that already shows the machine connected alone", async () => {
     seedDaemonList(client, [daemon(DaemonStatus.ACTIVE)]);
     const invalidate = vi.spyOn(client, "invalidateQueries");
     reconcileDaemonHeartbeat(client, "d1", 1_000);
+    await vi.advanceTimersByTimeAsync(0);
     expect(invalidate).not.toHaveBeenCalled();
+    expect(client.getQueryState(DAEMON_LIST_QUERY_KEY)?.isInvalidated).toBe(false);
   });
 });

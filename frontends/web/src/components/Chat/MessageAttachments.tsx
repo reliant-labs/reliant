@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Attachment } from "../../api/client";
 import { FileIcon } from "../FileBrowser/FileIcon";
 import { ImagePreviewModal } from "./ImagePreviewModal";
+import { TextAttachmentModal, isTextAttachment } from "./TextAttachmentModal";
 import { isImageMimeType, useAttachmentBlobUrls } from "./useAttachmentBlobUrls";
 
 interface MessageAttachmentsProps {
@@ -25,6 +26,7 @@ export function MessageAttachments({
   className = "",
 }: MessageAttachmentsProps) {
   const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
+  const [openText, setOpenText] = useState<Attachment | null>(null);
   const { blobUrls, failedIds } = useAttachmentBlobUrls(attachments);
 
   if (!attachments || attachments.length === 0) return null;
@@ -77,22 +79,13 @@ export function MessageAttachments({
               )}
             </div>
           ) : (
-            <div
+            <FilePill
               key={attachment.id}
-              className="flex items-center gap-1 px-2 py-1 rounded-md text-xs"
-              style={{
-                backgroundColor: isUser
-                  ? 'var(--chat-button-bg)'
-                  : 'var(--secondary)',
-                border: '1px solid var(--chat-border)',
-                color: 'var(--chat-input-text)',
-                opacity: isUser ? 0.9 : 0.8,
-              }}
-              title={attachment.filename}
-            >
-              <FileIcon mimeType={mimeType} />
-              <span className="whitespace-nowrap">{attachment.filename}</span>
-            </div>
+              isUser={isUser}
+              mimeType={mimeType}
+              filename={attachment.filename}
+              onOpen={isTextAttachment(attachment.filename, mimeType) ? () => setOpenText(attachment) : undefined}
+            />
           );
         })}
       </div>
@@ -105,6 +98,51 @@ export function MessageAttachments({
           filename={previewImage.filename}
         />
       )}
+
+      {openText && (
+        <TextAttachmentModal
+          attachmentId={openText.id}
+          filename={openText.filename}
+          onClose={() => setOpenText(null)}
+        />
+      )}
     </>
+  );
+}
+
+/** A sent non-image attachment. Text ones open read-only in the text viewer. */
+function FilePill({ isUser, mimeType, filename, onOpen }: {
+  isUser: boolean;
+  mimeType: string;
+  filename: string;
+  onOpen?: () => void;
+}) {
+  const style = {
+    backgroundColor: isUser ? 'var(--chat-button-bg)' : 'var(--secondary)',
+    border: '1px solid var(--chat-border)',
+    color: 'var(--chat-input-text)',
+    opacity: isUser ? 0.9 : 0.8,
+  };
+  const body = (
+    <>
+      <FileIcon mimeType={mimeType} />
+      <span className="whitespace-nowrap">{filename}</span>
+    </>
+  );
+  return onOpen ? (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`Open ${filename}`}
+      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      style={style}
+      title={filename}
+    >
+      {body}
+    </button>
+  ) : (
+    <div className="flex items-center gap-1 px-2 py-1 rounded-md text-xs" style={style} title={filename}>
+      {body}
+    </div>
   );
 }

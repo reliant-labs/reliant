@@ -7,8 +7,16 @@
  * journey's arrays directly, so a step that doesn't apply is invisible rather
  * than a dead stop. The full static list still defines the URL schema: every
  * declared id is recognised, applicable or not.
+ *
+ * The forge journey is built in. The workflows journey is REGISTERED by the
+ * shells that run Reliant code (journeys/catalog.ts, imported by routes.tsx
+ * and forgeShellRoutes.tsx): its content pulls in Reliant's workflow hooks and
+ * stores, which the forge demo's own bundle must not contain. Until it is
+ * registered (the demo, forever) `workflows` is WORKFLOWS_ELSEWHERE: no steps,
+ * never available here, only its "Try it in Reliant" link for the end card.
  */
 
+import { reliantAppOrigin } from "../../../lib/shell";
 import type { Journey, JourneyStep, StepPresentation } from "../types";
 import {
   JOURNEY_IDS,
@@ -17,13 +25,38 @@ import {
   type ParsedTourParam,
 } from "../tourParam";
 import { getTourShell, inShell } from "../tourShell";
-import { workflowsJourney } from "./workflows";
 import { forgeJourney } from "./forge";
 
-export const JOURNEYS: Readonly<Record<JourneyId, Journey>> = {
-  workflows: workflowsJourney,
+/**
+ * The workflows journey where its content is not loaded (the forge demo
+ * bundle). Its version, title and link match journeys/workflows.tsx; a test
+ * holds them together.
+ */
+export const WORKFLOWS_ELSEWHERE: Journey = {
+  id: "workflows",
+  version: 2,
+  shells: ["reliant"],
+  elsewhere: { label: "Try AI workflows in Reliant", href: () => `${reliantAppOrigin()}/?journey=workflows` },
+  title: "Use AI workflows",
+  description:
+    "Build a workflow step by step: agents, loops and branches, a trigger that runs it for you, and the machine it runs on.",
+  steps: [],
+  isAvailable: () => false,
+};
+
+const journeys: Record<JourneyId, Journey> = {
+  workflows: WORKFLOWS_ELSEWHERE,
   forge: forgeJourney,
 };
+
+/** Every journey, by id. A live view: registerJourney replaces an entry. */
+export const JOURNEYS: Readonly<Record<JourneyId, Journey>> = journeys;
+
+/** Install a journey's content (journeys/catalog.ts). Validates the whole set again. */
+export function registerJourney(journey: Journey): void {
+  journeys[journey.id as JourneyId] = journey;
+  validateJourneys(journeys);
+}
 
 const STEP_ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -42,6 +75,8 @@ export function validateJourneys(journeys: Readonly<Record<JourneyId, Journey>>)
   const owner = new Map<string, JourneyId>();
   for (const id of JOURNEY_IDS) {
     const journey = journeys[id];
+    // The placeholder for content this bundle doesn't carry.
+    if (journey === WORKFLOWS_ELSEWHERE) continue;
     const where = `[Onboarding] journey "${id}"`;
     if (journey.id !== id) throw new Error(`${where}: declares id "${journey.id}"`);
     if (!Number.isInteger(journey.version) || journey.version < 1) {

@@ -256,7 +256,9 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
       data-testid="ask-user-card"
       data-mode={mode}
       data-collapsed={resolved ? "false" : undefined}
-      className="my-1.5 rounded-lg border border-border bg-card px-3 py-2.5"
+      // break-words: a question or answer is agent-written text, and an
+      // unbroken URL or path in it ran past the card instead of wrapping.
+      className="my-1.5 rounded-lg border border-border bg-card px-3 py-2.5 break-words"
     >
       {resolved ? (
         // The open settled card: its header closes it again.

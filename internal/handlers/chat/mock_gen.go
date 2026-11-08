@@ -23,7 +23,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=052d05f3d1615f74f7d0b9ec14d8bcbd026aa7d62b68cbe93359e448aa16a208
+// forge:hash=259042e92cb6aa68c04c1396953886bbbbd336b05a3adae29f4eb727f0293bba
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -46,6 +46,7 @@ type MockRepository struct {
 	SetChatDaemonBlockedFunc                       func(context.Context, string, bool) error
 	SetChatPausedForMachineFunc                    func(context.Context, string, bool) (bool, error)
 	SetChatQueuedForMachineFunc                    func(context.Context, string, bool) (bool, error)
+	MoveChatToProjectFunc                          func(context.Context, db.ChatMove) (bool, error)
 	ListCapacityWakeTargetsFunc                    func(context.Context, string) ([]string, error)
 	ListThreadsByConversationFunc                  func(context.Context, string) ([]*db.Thread, error)
 	ReviveThreadFunc                               func(context.Context, string) (int64, error)
@@ -299,6 +300,15 @@ func (m *MockRepository) SetChatQueuedForMachine(ctx context.Context, chatID str
 		return m.SetChatQueuedForMachineFunc(ctx, chatID, queued)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "SetChatQueuedForMachine")
+}
+
+// MoveChatToProject records the call and delegates to MoveChatToProjectFunc when set.
+func (m *MockRepository) MoveChatToProject(ctx context.Context, p1 db.ChatMove) (bool, error) {
+	m.Recorder.Record("MoveChatToProject", ctx, p1)
+	if m.MoveChatToProjectFunc != nil {
+		return m.MoveChatToProjectFunc(ctx, p1)
+	}
+	return false, contractkit.MockNotSet("MockRepository", "MoveChatToProject")
 }
 
 // ListCapacityWakeTargets records the call and delegates to ListCapacityWakeTargetsFunc when set.

@@ -21,7 +21,11 @@ tmp_dir = "tmp/air-worker"
   full_bin = "scripts/air-run-worker.sh"
   bin = "./tmp/air-worker/reliant"
   args_bin = ["server", "worker"]
-  cmd = "CGO_ENABLED=0 go build -buildvcs=false -o ./tmp/air-worker/reliant.tmp ./cmd/reliant && mv ./tmp/air-worker/reliant.tmp ./tmp/air-worker/reliant"
+  # scripts/air-build.sh builds ./cmd/reliant ONCE per save for every Air
+  # watcher (api, worker and gateway run the same binary), with -trimpath, and
+  # links the result here atomically. A failed build exits non-zero for every
+  # watcher and never replaces this binary.
+  cmd = "scripts/air-build.sh ./cmd/reliant ./tmp/air-worker/reliant"
   delay = 1000
   exclude_dir = ["assets", "tmp", "vendor", "testdata", "frontends", "web", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", ".reliant", "examples", "data", ".git", "scripts", "docs"]
   exclude_file = []

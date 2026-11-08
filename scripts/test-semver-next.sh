@@ -65,4 +65,55 @@ gb commit -q --allow-empty -m "feat: lost (#8)"; mid="$(gb rev-parse HEAD)"
 gb commit -q --allow-empty -m "fix: tip (#9)"
 rm -f "$B/.git/objects/${mid:0:2}/${mid:2}"
 expect "" 2 --repo "$B"
+
+# A reviewed retraction (API-BREAK-RETRACTED: <sha> <reason>) in a newer commit stops
+# exactly that breaking commit refusing; the version still bumps a minor.
+R="$T/retract"; mkdir "$R"
+gr() { git -C "$R" -c user.name=t -c user.email=t@t -c commit.gpgsign=false "$@"; }
+gr init -q -b main; gr commit -q --allow-empty -m "chore: init"; gr tag v1.1.0
+gr commit -q --allow-empty -m "fix: before the break (#20)"; pre="$(gr rev-parse HEAD)"
+gr commit -q --allow-empty -m "revert(pkg): remove it (#21)" -m "API-BREAK: playbook=x"
+brk="$(gr rev-parse HEAD)"
+gr checkout -q -b ok "$brk"
+gr commit -q --allow-empty -m "docs(pkg): deprecate (#22)" -m "API-BREAK-RETRACTED: ${brk:0:12} restored in the same squash"
+expect v1.2.0 0 --repo "$R" --head ok
+grep -q "note: ${brk:0:12} .* but $(gr rev-parse --short=12 ok) retracts it (API-BREAK-RETRACTED): restored in the same squash" "$T.err" \
+  || { echo "FAIL: retraction note does not name the retracted and retracting commits"; cat "$T.err"; fail=1; }
+# With --breaking-since before the break, the retraction (in SINCE..HEAD) is what
+# clears it: the train's case (forge's previous set predates both commits).
+expect v1.2.0 0 --repo "$R" --head ok --breaking-since "$pre"
+grep -q "note: ${brk:0:12} .* retracts it (API-BREAK-RETRACTED)" "$T.err" \
+  || { echo "FAIL: retraction after --breaking-since does not clear the break"; cat "$T.err"; fail=1; }
+# A retraction reachable from --breaking-since is not in SINCE..HEAD and never
+# counts; the break it names is then reachable too, so it is judged as carried.
+expect v1.2.0 0 --repo "$R" --head ok --breaking-since ok
+grep -q "note: ${brk:0:12} .* an earlier release candidate already carried it" "$T.err" \
+  && ! grep -q 'retracts it' "$T.err" \
+  || { echo "FAIL: a retraction reachable from --breaking-since was honoured"; cat "$T.err"; fail=1; }
+# It never covers another breaking commit, later in the same history.
+gr commit -q --allow-empty -m "fix: another break (#23)" -m "BREAKING CHANGE: z"
+expect "" 3 --repo "$R" --head ok
+grep -q '(#23)' "$T.err" && ! grep -q '^  .*(#21)' "$T.err" \
+  || { echo "FAIL: want #23 refused and #21 retracted"; cat "$T.err"; fail=1; }
+# A retraction naming a different sha (here the commit before the break) still refuses.
+gr checkout -q -b wrong "$brk"
+gr commit -q --allow-empty -m "docs: wrong sha (#24)" -m "API-BREAK-RETRACTED: ${pre:0:12} not the break"
+expect "" 3 --repo "$R" --head wrong
+grep -q '(#21)' "$T.err" || { echo "FAIL: wrong-sha retraction does not refuse #21"; fail=1; }
+# A retraction shorter than 12 hex chars, or with no reason, is not a retraction.
+gr checkout -q -b short "$brk"
+gr commit -q --allow-empty -m "docs: short (#25)" -m "API-BREAK-RETRACTED: ${brk:0:11} too short" \
+  -m "API-BREAK-RETRACTED: ${brk:0:12}"
+expect "" 3 --repo "$R" --head short
+# A retraction OLDER than the breaking commit (its ancestor) still refuses. A commit
+# cannot name a descendant's sha, so graft the break onto the retraction instead:
+# the break keeps its sha and the retraction becomes its parent.
+gr checkout -q -b older "$pre"
+gr commit -q --allow-empty -m "docs: early retraction (#26)" -m "API-BREAK-RETRACTED: ${brk:0:12} too early"
+gr replace --graft "$brk" "$(gr rev-parse older)"
+gr checkout -q older; gr reset -q --hard "$brk"
+gr merge-base --is-ancestor "$(gr rev-parse ':/early retraction')" "$brk" \
+  || { echo "FAIL: graft did not make the retraction an ancestor of the break"; fail=1; }
+expect "" 3 --repo "$R" --head older
+grep -q '(#21)' "$T.err" || { echo "FAIL: older retraction does not refuse #21"; fail=1; }
 exit "$fail"

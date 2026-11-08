@@ -13,6 +13,56 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.10.0" description="November 7, 2026">
+### 10 new features, 13 fixes and 11 other changes
+
+Every pull request merged since v1.9.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **web: say a billing-exempt org's observability usage split is estimated** [#2322](https://github.com/reliant-labs/reliant/pull/2322)
+- **workflow: warn on workflows that can approve or deny requests** [#2330](https://github.com/reliant-labs/reliant/pull/2330)
+- **web: filter the sidebar by machine** [#2333](https://github.com/reliant-labs/reliant/pull/2333)
+- **web: How this app was built — a recorded forge run in the forge demo** [#2326](https://github.com/reliant-labs/reliant/pull/2326)
+- **workflow: declare permissions: [approvals:decide] on a workflow** [#2331](https://github.com/reliant-labs/reliant/pull/2331)
+- **auth: restore `auth token create --scope` (narrow run, trigger and inbox tokens)** [#2329](https://github.com/reliant-labs/reliant/pull/2329)
+- **web: badge a workflow that can approve requests** [#2332](https://github.com/reliant-labs/reliant/pull/2332)
+- **web: add markdown preview toggle** [#2349](https://github.com/reliant-labs/reliant/pull/2349)
+- **chat: simplify thread activity and timers** [#2352](https://github.com/reliant-labs/reliant/pull/2352)
+- **chat: attach long pasted text as files** [#2351](https://github.com/reliant-labs/reliant/pull/2351)
+
+#### Changed
+
+- **toolexec: remove flaky TestStartNATSCluster_RetriesAStalledFormation (flake:removed #2320)** [#2321](https://github.com/reliant-labs/reliant/pull/2321)
+- **db: pointer fields for nullable step_execution and workflow_scenario columns** [#2278](https://github.com/reliant-labs/reliant/pull/2278)
+- **deps: bump forge to v1.1.1-0.20261106155323-b83896da0a2a** [#2327](https://github.com/reliant-labs/reliant/pull/2327)
+- **architecture: remove flaky TestStepAndScenarioModelsAreNeverSerialized** [#2341](https://github.com/reliant-labs/reliant/pull/2341)
+- **pin: adopt merged Forge startup and generation fixes** [#2358](https://github.com/reliant-labs/reliant/pull/2358)
+- **web: adopt generated imperative settings and provider mutations** [#2363](https://github.com/reliant-labs/reliant/pull/2363)
+- **web: remove flaky queueWhileRunning.test.tsx (unmocked GetChat race)** [#2367](https://github.com/reliant-labs/reliant/pull/2367)
+- **pin: forge@57e4e1a4 (generate 38% faster: forge #1904, #1905)** [#2369](https://github.com/reliant-labs/reliant/pull/2369)
+- **web: mock the composer's selection read in the ChatInput question tests; restore queueWhileRunning** [#2370](https://github.com/reliant-labs/reliant/pull/2370)
+- **web-test: DOM-free test files run in vitest's node environment** [#2372](https://github.com/reliant-labs/reliant/pull/2372)
+- **threads: resolve the full-load oracle once, not once per (cursor, limit) pair** [#2374](https://github.com/reliant-labs/reliant/pull/2374)
+
+#### Fixed
+
+- **osutil: LowerChildPriority leaves a child that already runs nicer than nice 10** [#2319](https://github.com/reliant-labs/reliant/pull/2319)
+- **test: nothing loads after a web test's teardown, TracesView fakes rrweb, and the forge skill catalog is discovered once** [#2324](https://github.com/reliant-labs/reliant/pull/2324)
+- **web: start AI provider accounts collapsed in settings** [#2328](https://github.com/reliant-labs/reliant/pull/2328)
+- **files: create root entries relative to the selected workspace** [#2343](https://github.com/reliant-labs/reliant/pull/2343)
+- **chat: reset execution mode end to end** [#2347](https://github.com/reliant-labs/reliant/pull/2347)
+- **electron: bound startup waits and propagate child failures** [#2350](https://github.com/reliant-labs/reliant/pull/2350)
+- **ci: the review check reads the bot's evidence re-review as the head's verdict** [#2354](https://github.com/reliant-labs/reliant/pull/2354)
+- **web: discover externally created pull requests** [#2353](https://github.com/reliant-labs/reliant/pull/2353)
+- **ci: green reliant main — goimports in #2347's two files; the apps e2e finds the turn fold by its new "Activity" headline (#2352)** [#2355](https://github.com/reliant-labs/reliant/pull/2355)
+- **web: clarify spawn actions as sub-agents** [#2345](https://github.com/reliant-labs/reliant/pull/2345)
+- **osutil: track process groups on macOS so cleanup reaches survivors** [#2361](https://github.com/reliant-labs/reliant/pull/2361)
+- **web: setup surfaces - copy buttons everywhere, provider marks, one machine row per plan, Continue instead of consent checkbox** [#2357](https://github.com/reliant-labs/reliant/pull/2357)
+- **test: the onboarding e2e finds the pairing panel's first step by #2357's "Download / install" heading** [#2371](https://github.com/reliant-labs/reliant/pull/2371)
+
+</Update>
+
 <Update label="v1.9.0" description="November 6, 2026">
 ### 20 new features, 17 fixes and 24 other changes
 

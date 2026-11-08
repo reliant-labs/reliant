@@ -250,6 +250,7 @@ function declaredOf(seed: Seed): DeclaredWorkload {
     name: seed.name,
     kind: seed.kind ?? "deployment",
     specRecorded: seed.name !== "litellm",
+    specGap: seed.name === "litellm" ? "unreadable" : null,
     replicas: seed.desired,
     cpuRequestMillicores: seed.cpu[1] ? Math.round(seed.cpu[1] * 500) : 0,
     cpuLimitMillicores: seed.cpu[1] ? Math.round(seed.cpu[1] * 1000) : 0,

@@ -22,11 +22,8 @@
 import { useCallback } from "react";
 import { useNavigate, useRouter, useSearch } from "@tanstack/react-router";
 import { useTourStore } from "../../store/tourStore";
-import { useChatStore } from "../../store/chatStore";
-import { useProjectStore } from "../../store/projectStore";
 import { dropLandingJourney } from "../../lib/landingAttribution";
 import { trackEvent } from "../../lib/analytics";
-import { chatRouteAfterTour } from "../OnboardingFlow/useOnboardingComplete";
 import {
   activeJourneySteps,
   firstStepId,
@@ -44,7 +41,7 @@ import {
   type JourneyId,
   type JourneySource,
 } from "./tourParam";
-import { getTourShell } from "./tourShell";
+import { getReliantTourHooks, getTourShell } from "./tourShell";
 import {
   trackJourneyCompleted,
   trackJourneySelected,
@@ -53,12 +50,10 @@ import {
 } from "./journeyAnalytics";
 import type { JourneyRoute, JourneyStep, RouteTarget, StepCompletionVia } from "./types";
 
+/** Reliant's API-key prompt after a tour (journeys/catalog.ts installs it; no other shell has one). */
 async function promptApiKeyIfNeededAfterTour(): Promise<void> {
   if (getTourShell() !== "reliant") return;
-  const { useApiKeySetupStore } = await import("../../store/apiKeySetupStore");
-  if (useApiKeySetupStore.getState().hasApiKey === true) return;
-  useApiKeySetupStore.setState({ hasChecked: false });
-  await useApiKeySetupStore.getState().ensureApiKeyOrShowModal();
+  await getReliantTourHooks()?.afterTour();
 }
 
 /** Whether `pathname` is on a step's page. */
@@ -217,10 +212,8 @@ export function useTourNavigation(): TourNavigation {
       const target = getJourney(journey).finish?.(shell);
       if (target) {
         await navigate({ to: target.to, params: target.params, search: { ...target.search, tour: undefined } } as never);
-      } else if (shell === "reliant") {
-        useChatStore.getState().clearCurrentChat();
-        const projectId = useProjectStore.getState().currentProject?.id;
-        await navigate(chatRouteAfterTour(projectId) as never);
+      } else if (shell === "reliant" && getReliantTourHooks()) {
+        await getReliantTourHooks()!.landOnChat(navigate as (options: never) => Promise<void>);
       } else {
         setTourParam(undefined);
       }

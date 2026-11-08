@@ -1,0 +1,27 @@
+syntax = "proto3";
+package demo.mock.echo;
+import "buf/validate/validate.proto";
+
+// Compiled to a real FileDescriptorSet by buf in forgeMockValues.test.ts.
+// Same-named request fields deliberately have different response constraints.
+message Request {
+  string fixed = 1;
+  string allowed = 2;
+  int32 count = 3;
+  oneof selection {
+    string alpha = 4;
+    string beta = 5;
+  }
+}
+message Response {
+  string fixed = 1 [(buf.validate.field).string.const = "required"];
+  string allowed = 2 [(buf.validate.field).string.in = "red", (buf.validate.field).string.in = "blue"];
+  int32 count = 3 [(buf.validate.field).int32 = {gte: 10, lte: 20}];
+  oneof selection {
+    string alpha = 4;
+    string beta = 5;
+  }
+}
+service EchoService {
+  rpc Read(Request) returns (Response);
+}

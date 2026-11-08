@@ -11,7 +11,7 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp } from "lucide-react";
 
-import { LightweightCodeViewer } from "@/components/Chat/LightweightCodeViewer";
+import { LightweightCodeViewer } from "@/components/shared/LightweightCodeViewer";
 import Button from "@/components/forge-ui/button";
 import { cn } from "@/lib/utils";
 

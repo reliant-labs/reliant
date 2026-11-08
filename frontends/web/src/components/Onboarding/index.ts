@@ -14,6 +14,7 @@ export { OnboardingNavBar } from "./OnboardingNavBar";
 export { JourneyPicker } from "./JourneyPicker";
 export { CHECKLIST_ITEMS, CHECKLIST_SETTINGS_KEYS } from "./constants";
 export { JOURNEYS } from "./journeys/registry";
+import "./journeys/catalog";
 export { tourEvents } from "./tourEvents";
 export type { TourEventMap, TourEventName } from "./tourEvents";
 export { whenStore } from "./advanceOn";
