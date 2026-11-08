@@ -25,7 +25,8 @@ it("leads bare entry with the visual build story while preserving explicit legac
 it("offers an inline summary and a choice without blocking the build", async () => {
   const router = mount("/forge/demo?section=built", true);
   const welcome = await screen.findByTestId("demo-welcome");
-  expect(welcome).toHaveTextContent("production framework");
+  expect(welcome).toHaveTextContent("agent-first production framework");
+  expect(welcome).toHaveTextContent("Tell your agent what the app should do");
   expect(welcome).toHaveTextContent(/read-only sample data/i);
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.queryByTestId("tour-callout")).toBeNull();
