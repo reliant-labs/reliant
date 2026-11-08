@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The vendored mock engine (forgeMockValues/, forge#1874 + forge#1878) on the
+ * The published forge mock engine (forge#1874 + forge#1878) on the
  * console's own contracts, plus a real compiled descriptor fixture for
  * response constraints and requested oneof cases. No upstream test assumed:
  *
@@ -22,7 +22,7 @@ import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { CreateReceiverRequestSchema, MatcherSchema } from "@/gen/controlplane/services/alerting/v1/alerting_pb";
 import { SaveAsCopyRequestSchema, SaveDashboardRequestSchema } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
 
-import { mockValue, serviceDefaults } from "../forgeMockValues/mock-values";
+import { mockValue, serviceDefaults } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 const NOW = Date.UTC(2026, 10, 6, 12, 0, 0);
 
@@ -71,7 +71,7 @@ describe("serviceDefaults descriptor regressions (R4.B1)", () => {
   });
 });
 
-describe("the vendored mock engine on the console's contracts", () => {
+describe("the published mock engine on the console's contracts", () => {
   it("meets every pattern a console message declares", () => {
     for (let i = 0; i < 5; i++) {
       const seed = `seed-${i}`;
