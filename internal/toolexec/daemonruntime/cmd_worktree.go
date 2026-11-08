@@ -159,6 +159,14 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		req.Branch = fmt.Sprintf("worktree/%s-%d", req.Name, time.Now().Unix())
 	}
 
+	// The request fixes the checkout's path, and a failed create removes it
+	// whole, so it must stay inside the worktrees root
+	// (cmd_worktree_create_guard.go).
+	worktreePath, err := worktreeCreatePath(req.WorkspaceID, req.SubPath)
+	if err != nil {
+		return json.Marshal(worktreeCreateResponse{Error: err.Error()})
+	}
+
 	// Only a base the caller named is theirs to fix if it does not resolve;
 	// one detected below that fails is our bug (diagnoseWorktreeAdd).
 	baseSupplied := req.BaseBranch != ""
@@ -227,18 +235,24 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
-	// Resolve the on-disk worktree path:
-	//   <HOME>/.reliant/worktrees/<workspace_id>[/<sub_path>]
-	// A sub_path of "" puts the checkout at the workspace root itself
-	// (single-repo project).
-	homeDir, err := os.UserHomeDir()
+	// `git worktree add` runs under the repository's add lock, shared, so
+	// the repair never prunes a registration while an add may be making it
+	// (worktreereclaim/addlock.go). Released as soon as git exits.
+	releaseAdd, err := worktreereclaim.LockWorktreeAdd(ctx, req.ProjectPath)
 	if err != nil {
-		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf("failed to get home directory: %v", err)})
+		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf("failed to create worktree: %v", err)})
 	}
-	worktreePath := filepath.Join(homeDir, ".reliant", "worktrees", req.WorkspaceID)
-	if req.SubPath != "" {
-		worktreePath = filepath.Join(worktreePath, req.SubPath)
-	}
+	addLocked := true
+	defer func() {
+		if addLocked {
+			releaseAdd()
+		}
+	}()
+
+	// Whether the checkout's directory predates this call decides what a
+	// failure may take back: only a directory this call made is wholly ours.
+	_, statErr := os.Lstat(worktreePath)
+	preExisted := !errors.Is(statErr, fs.ErrNotExist)
 
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(worktreePath), 0755); err != nil {
@@ -255,25 +269,52 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	branchCheckCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", req.Branch)
 	branchCheckCmd.Dir = req.ProjectPath
 	branchExists := branchCheckCmd.Run() == nil
+	// The branch a failed or abandoned create may delete again: only one
+	// this call made. Absence observed earlier proves nothing (any git
+	// process may create the branch between that check and the add, and its
+	// tip may well be the start point too), so a new branch is created here
+	// first, by a compare-and-swap that succeeds only while the ref does not
+	// exist (createBranch), and then checked out. The branch is this call's
+	// exactly when that swap succeeded, and a rollback deletes it only while
+	// it is provably still that branch: the reflog token createBranch wrote,
+	// checked under the ref's lock (deleteOwnedBranch), not its tip.
+	var createdBranch *ownedBranch
 
 	// Create the git worktree. A new branch starts from the resolved start
-	// point with --no-track: a base taken from origin is a starting commit,
+	// point with no upstream: a base taken from origin is a starting commit,
 	// not the branch's upstream, exactly as a local base is.
 	var worktreeCmd *exec.Cmd
+	// A forced create (-B) resets an existing branch before the checkout
+	// runs. What a failed one may take back depends on that branch's prior
+	// tip, which this file does not track, so a forced create that fails is
+	// left as git left it (the startup repair prunes a dead registration).
+	forced := false
+	var output []byte
 	switch {
 	case reuseLocal:
 		// No -B and no --force: git itself refuses when the branch is
 		// checked out in another worktree.
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
 	case !req.ReuseBranch && (branchExists || req.Force):
+		forced = true
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-B", req.Branch, worktreePath, startPoint)
 	default:
-		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-b", req.Branch, worktreePath, startPoint)
+		if beforeBranchCreate != nil {
+			beforeBranchCreate(req.ProjectPath, req.Branch)
+		}
+		if createdBranch, output, err = createBranch(ctx, req.ProjectPath, req.Branch, startPoint); err == nil {
+			worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
+		}
 	}
-	worktreeCmd.Dir = req.ProjectPath
 
 	checkoutStart := time.Now()
-	if output, err := worktreeCmd.CombinedOutput(); err != nil {
+	if worktreeCmd != nil {
+		worktreeCmd.Dir = req.ProjectPath
+		output, err = worktreeCmd.CombinedOutput()
+	}
+	releaseAdd()
+	addLocked = false
+	if err != nil {
 		// Roll back the directory this call created.
 		//
 		// MkdirAll above runs BEFORE git, so a failing `git worktree add`
@@ -287,11 +328,15 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		// to that worktree then failed with "no workspace path to scope this
 		// request to", which reads as a database problem and is not one.
 		//
-		// Removed only when EMPTY. git may have written a partial checkout
-		// before failing, and in a --force flow the directory can predate this
-		// call entirely; deleting a non-empty directory here could destroy
-		// work this function did not create. An empty directory is
-		// unambiguously ours and unambiguously useless.
+		// A checkout directory this call made is taken back whole, with its
+		// registration and the branch this call made: git may have written a
+		// partial checkout before failing, and a `git worktree add` killed at
+		// the deadline leaves its registration locked "initializing", which
+		// holds the branch against every later create
+		// (cmd_worktree_create_guard.go). A directory that predates this call,
+		// or any directory of a forced create, is removed only when EMPTY:
+		// deleting a non-empty one could destroy work this function did not
+		// create, and a forced create's branch is not this call's to judge.
 		//
 		// BOTH levels are swept, because MkdirAll above creates
 		// filepath.Dir(worktreePath), not worktreePath itself:
@@ -313,7 +358,11 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 				_ = os.Remove(dir)
 			}
 		}
-		removeIfEmpty(worktreePath)
+		if preExisted || forced {
+			removeIfEmpty(worktreePath)
+		} else {
+			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch)
+		}
 		if parent := filepath.Dir(worktreePath); parent != worktreePath {
 			removeIfEmpty(parent)
 		}
@@ -326,6 +375,19 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		})
 	}
 
+	// The context ended while git ran, but git finished. That is not proof
+	// the caller gave up: its wait is not this context, and the answer can
+	// still reach it, so a finished checkout is never taken back here. It is
+	// finished as usual on a context of its own, so it is locked for its
+	// worktree id: what names it if the answer is lost.
+	if ctx.Err() != nil {
+		logging.WarnContext(ctx, "worktree.create finished its checkout after its deadline; answering anyway",
+			"worktree_path", worktreePath, "error", ctx.Err())
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), worktreeFinishTimeout)
+		defer cancel()
+	}
+
 	if req.ExpectedHead != "" {
 		// Verify the postcondition on the actual checkout as well as the
 		// immutable starting argument; never report a wrong-head success.
@@ -333,7 +395,21 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		head.Dir = worktreePath
 		out, err := head.Output()
 		if err != nil || strings.TrimSpace(string(out)) != req.ExpectedHead {
-			return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head", WorktreePath: worktreePath})
+			// A checkout on the wrong head is never handed over, and it must
+			// not be left behind either: its registration would hold the
+			// branch against the retry's own `git worktree add`. Take it back
+			// as a failed add is taken back, so the retry starts clean. A
+			// directory that predates this call was empty (git adds only into
+			// an empty one), so it is put back empty. A forced create's is
+			// left as git left it, as a failed forced add is.
+			if forced {
+				return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head", WorktreePath: worktreePath})
+			}
+			abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch)
+			if preExisted {
+				_ = os.MkdirAll(worktreePath, 0o755)
+			}
+			return json.Marshal(worktreeCreateResponse{Error: "created checkout does not match verified expected head"})
 		}
 	}
 
@@ -346,6 +422,25 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 			logging.WarnContext(ctx, "worktree created but not locked; reconcile will retry",
 				"worktree_path", worktreePath, "error", err)
 		}
+	}
+	// A checkout whose git metadata did not reach the disk is not handed
+	// over: a VM killed now would leave a workspace reported created whose
+	// .git is empty. It is taken back as one on the wrong head is, so the
+	// caller's retry starts clean.
+	if err := syncNewCheckout(ctx, req.ProjectPath, worktreePath, req.Branch); err != nil {
+		msg := fmt.Sprintf("failed to create worktree: its git metadata could not be synced to disk: %v", err)
+		if forced {
+			return json.Marshal(worktreeCreateResponse{Error: msg, WorktreePath: worktreePath})
+		}
+		abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch)
+		if preExisted {
+			_ = os.MkdirAll(worktreePath, 0o755)
+		} else if parent := filepath.Dir(worktreePath); parent != worktreePath {
+			// The multi-repo workspace root this call made, as a failed add
+			// sweeps it: os.Remove refuses one that is not empty.
+			_ = os.Remove(parent)
+		}
+		return json.Marshal(worktreeCreateResponse{Error: msg})
 	}
 
 	// A new workspace waits on this whole command; say how long git took, so
@@ -546,15 +641,7 @@ type worktreeAdoptMoveResponse struct {
 }
 
 func workspaceCheckoutPath(workspaceID, subPath string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-	p := filepath.Join(home, ".reliant", "worktrees", workspaceID)
-	if subPath != "" {
-		p = filepath.Join(p, subPath)
-	}
-	return p, nil
+	return worktreeCreatePath(workspaceID, subPath)
 }
 
 func handleWorktreeAdoptMove(ctx context.Context, payload []byte) ([]byte, error) {
