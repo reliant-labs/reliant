@@ -469,6 +469,16 @@ const gitAddLockReason = "initializing"
 // killed (a deadline, a VM restart) or whose checkout was removed after it
 // died. Left in place it holds the branch: every later add of that branch
 // fails with "already used by worktree" (prod 2026-11-06, cicd).
+//
+// Why age is proof here, and not for a slow add: git's add_worktree writes
+// "initializing" and then, in the same process with no I/O between, creates
+// the checkout's directory (safe_create_leading_directories of <path>/.git),
+// before it writes gitdir or checks a single file out. However slow the
+// checkout, its directory exists for all of it, and a registration whose
+// checkout exists is never pruned (checkoutGone). An add still running with
+// its checkout gone is either inside those few syscalls, which is not
+// MinAge long short of a stopped process, or has had its directory removed
+// under it and is failing already.
 func deadWorktreeAdd(lockPath, reason string, opts RepairOptions) bool {
 	if reason != gitAddLockReason {
 		return false

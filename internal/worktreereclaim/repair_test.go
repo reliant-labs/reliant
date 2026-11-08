@@ -302,17 +302,32 @@ func TestRepair_DeadWorktreeAddIsPrunedOnceOld(t *testing.T) {
 	w := f.worktree("killed", "feat/killed")
 	admin := filepath.Join(f.project, ".git", "worktrees", "killed")
 	run(t, f.project, "worktree", "unlock", w.Path)
-	write(t, filepath.Join(admin, "locked"), gitAddLockReason+"\n")
+	lock := filepath.Join(admin, "locked")
+	write(t, lock, gitAddLockReason+"\n")
+	// The clock is fixed against the lock's own mtime, so neither side of
+	// MinAge depends on how long the fixture took.
+	info, err := os.Stat(lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := func(d time.Duration) RepairOptions {
+		return RepairOptions{WorktreeRoot: f.root, Now: func() time.Time { return info.ModTime().Add(d) }}
+	}
+	commonDir := filepath.Join(f.project, ".git")
+
+	// An add in flight has its checkout directory (git makes it right after
+	// the lock): however old the lock, that registration is never pruned.
+	if rep := RepairRepo(context.Background(), commonDir, at(DefaultRepairMinAge+time.Hour)); !exists(admin) || len(rep.PrunedRegistrations) != 0 {
+		t.Fatalf("a slow add whose checkout exists was pruned: %+v", rep)
+	}
+
 	if err := os.RemoveAll(w.Path); err != nil {
 		t.Fatal(err)
 	}
-
-	fresh := RepairRepo(context.Background(), filepath.Join(f.project, ".git"), RepairOptions{WorktreeRoot: f.root})
-	if !exists(admin) || len(fresh.PrunedRegistrations) != 0 {
-		t.Fatalf("an add younger than MinAge may still be running, and was pruned: %+v", fresh)
+	if rep := RepairRepo(context.Background(), commonDir, at(DefaultRepairMinAge-time.Second)); !exists(admin) || len(rep.PrunedRegistrations) != 0 {
+		t.Fatalf("a dead add younger than MinAge was pruned: %+v", rep)
 	}
-
-	rep := RepairRepo(context.Background(), filepath.Join(f.project, ".git"), repairOpts(f))
+	rep := RepairRepo(context.Background(), commonDir, at(DefaultRepairMinAge+time.Second))
 	if exists(admin) || len(rep.PrunedRegistrations) != 1 || len(rep.SkippedRegistrations) != 0 {
 		t.Fatalf("report = %+v, want the dead add's registration pruned", rep)
 	}
