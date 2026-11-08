@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -44,6 +45,9 @@ type retirementTree struct {
 	tracked     map[string]trackedKind
 	head        string
 	trackedRead bool
+	// pending is the file remove unlinked last, held open until the next
+	// inspection settles it; the inspection exempts this exact descriptor.
+	pending *os.File
 }
 
 // maxRetirementEntries bounds one inventory. A checkout with its installs
@@ -87,8 +91,10 @@ func retirementRoot(path string) (*retirementTree, error) {
 	}
 	return &retirementTree{root: root, parent: parent, name: filepath.Base(abs), path: abs}, nil
 }
-func (t *retirementTree) close()                      { t.root.Close(); t.parent.Close() }
-func (t *retirementTree) inspectionFiles() []*os.File { return []*os.File{t.root, t.parent} }
+func (t *retirementTree) close() { t.root.Close(); t.parent.Close() }
+func (t *retirementTree) inspectionFiles() []*os.File {
+	return []*os.File{t.root, t.parent, t.pending}
+}
 func retirementSame(a, b unix.Stat_t) bool {
 	return a.Dev == b.Dev && a.Ino == b.Ino && a.Mode == b.Mode && a.Size == b.Size && a.Mtim == b.Mtim && a.Ctim == b.Ctim && a.Nlink == b.Nlink
 }
@@ -647,11 +653,43 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 		}
 		return paths[i] < paths[j]
 	})
-	for _, p := range paths {
-		if err := ctx.Err(); err != nil {
+	// A regular file stays open after its unlink, until the next inspection
+	// has run (settle): a process that opened it between the last inspection
+	// and the unlink has either written by then (its size or mtime moved) or
+	// still holds it (the inspection sees the deleted file under the tree).
+	// Either way its bytes are put back and retirement stops. A name created
+	// after inspection is never inventoried, so the directory holding it
+	// fails AT_REMOVEDIR (ENOTEMPTY) and survives with it.
+	var pending *unlinkedFile
+	settle := func(checkErr error) error {
+		u := pending
+		if u == nil {
+			return checkErr
+		}
+		pending, t.pending = nil, nil
+		defer u.dir.Close()
+		defer u.file.Close()
+		var now unix.Stat_t
+		err := unix.Fstat(int(u.file.Fd()), &now)
+		if err == nil && checkErr == nil && now.Size == u.stat.Size && now.Mtim == u.stat.Mtim {
+			return nil
+		}
+		if rerr := u.restore(); rerr != nil {
+			return fmt.Errorf("%s changed at its deletion and could not be put back: %w", u.rel, rerr)
+		}
+		if checkErr != nil {
+			return checkErr
+		}
+		if err != nil {
 			return err
 		}
-		if err := check(); err != nil {
+		return fmt.Errorf("file written at its deletion, put back: %s", u.rel)
+	}
+	for _, p := range paths {
+		if err := ctx.Err(); err != nil {
+			return settle(err)
+		}
+		if err := settle(check()); err != nil {
 			return err
 		}
 		dir, err := retirementOpen(int(t.root.Fd()), filepath.ToSlash(filepath.Dir(p)), true)
@@ -676,6 +714,7 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 		if err == nil && ((isDir && !retirementIdentity(e.stat, st)) || (!isDir && !retirementSame(e.stat, st))) {
 			err = errors.New("entry changed at deletion boundary")
 		}
+		var held *os.File
 		if err == nil && !isLink {
 			// Openat2 supplies NO_XDEV for directories including same-device binds.
 			f, openErr := retirementOpen(int(dir.Fd()), base, isDir)
@@ -684,9 +723,13 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 			} else {
 				var opened unix.Stat_t
 				err = unix.Fstat(int(f.Fd()), &opened)
-				f.Close()
 				if err == nil && !retirementIdentity(st, opened) {
 					err = errors.New("entry replaced while opening")
+				}
+				if err == nil && !isDir {
+					held = f
+				} else {
+					f.Close()
 				}
 			}
 		}
@@ -697,12 +740,20 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 			}
 			err = unix.Unlinkat(int(dir.Fd()), base, flags)
 		}
+		if err == nil && held != nil {
+			pending = &unlinkedFile{dir: dir, base: base, rel: p, file: held, stat: e.stat}
+			t.pending = held
+			continue
+		}
+		if held != nil {
+			held.Close()
+		}
 		dir.Close()
 		if err != nil {
 			return err
 		}
 	}
-	if err := check(); err != nil {
+	if err := settle(check()); err != nil {
 		return err
 	}
 	if t.subtree {
@@ -733,6 +784,46 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 		return err
 	}
 	return t.removeRoot()
+}
+
+// unlinkedFile is a regular file remove has unlinked and still holds open:
+// its bytes stay reachable until the next inspection proves nobody wrote it.
+type unlinkedFile struct {
+	dir  *os.File // the inventoried directory that named it
+	base string
+	rel  string
+	file *os.File
+	stat unix.Stat_t // as inventoried
+}
+
+// restore writes the unlinked file's current bytes back under its name in
+// the directory that held it, or beside it when something new took the name
+// (that newcomer is never inventoried, so it is preserved too). Never
+// following a link, never replacing an existing name.
+func (u *unlinkedFile) restore() error {
+	flags := unix.O_WRONLY | unix.O_CREAT | unix.O_EXCL | unix.O_NOFOLLOW | unix.O_CLOEXEC
+	mode := u.stat.Mode & 0o7777
+	name := u.base
+	fd, err := unix.Openat(int(u.dir.Fd()), name, flags, mode)
+	if errors.Is(err, unix.EEXIST) {
+		name = u.base + ".retained"
+		fd, err = unix.Openat(int(u.dir.Fd()), name, flags, mode)
+	}
+	if err != nil {
+		return err
+	}
+	dst := os.NewFile(uintptr(fd), name)
+	err = unix.Fchmod(fd, mode)
+	if err == nil {
+		_, err = io.Copy(dst, io.NewSectionReader(u.file, 0, math.MaxInt64))
+	}
+	if err == nil {
+		err = dst.Sync()
+	}
+	if cerr := dst.Close(); err == nil {
+		err = cerr
+	}
+	return err
 }
 
 // removeRoot removes the now-empty inventoried directory itself, only while

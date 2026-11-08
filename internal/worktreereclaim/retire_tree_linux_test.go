@@ -262,6 +262,112 @@ func TestRetirementTreePartialFailureKeepsGitPointer(t *testing.T) {
 	}
 }
 
+// A process of unknown scope (an exec, a terminal shell) may open a file in
+// the tree just after an inspection passes and write it after the unlink.
+// The removal keeps the unlinked file open until the next inspection, sees
+// that it was written, puts its bytes back and stops. The inspections here
+// are the check callback: the writer opens after the first one and has
+// written and closed before the second, so neither inspection sees it.
+func TestRetirementTreePutsBackAFileWrittenAfterTheLastInspection(t *testing.T) {
+	root := retirementFixture(t)
+	tree, err := inspectRetirementTree(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tree.close()
+	// Deepest first: node_modules/pkg/index.js is the first entry unlinked.
+	target := filepath.Join(root, "node_modules", "pkg", "index.js")
+	var writer *os.File
+	calls := 0
+	err = tree.remove(context.Background(), func() error {
+		calls++
+		switch calls {
+		case 1:
+			f, err := os.OpenFile(target, os.O_WRONLY|os.O_APPEND, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writer = f
+		case 2:
+			if exists(target) {
+				t.Fatal("the first entry was not unlinked before the second inspection")
+			}
+			if _, err := writer.WriteString(" plus late work"); err != nil {
+				t.Fatal(err)
+			}
+			if err := writer.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "put back") {
+		t.Fatalf("a write after the last inspection must stop retirement, got %v", err)
+	}
+	got, readErr := os.ReadFile(target)
+	if readErr != nil || string(got) != "regenerable plus late work" {
+		t.Fatalf("late bytes lost: %q, %v", got, readErr)
+	}
+	if !exists(filepath.Join(root, ".git")) {
+		t.Fatal("stopped retirement discarded the recovery pointer")
+	}
+}
+
+// A process still holding an unlinked file is seen by the next inspection:
+// the file's bytes are put back before retirement stops.
+func TestRetirementTreePutsBackAFileHeldAtTheNextInspection(t *testing.T) {
+	root := retirementFixture(t)
+	tree, err := inspectRetirementTree(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tree.close()
+	target := filepath.Join(root, "node_modules", "pkg", "index.js")
+	calls := 0
+	err = tree.remove(context.Background(), func() error {
+		calls++
+		if calls == 2 {
+			return errors.New("workspace open by process 42")
+		}
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "open by process") {
+		t.Fatalf("inspection failure lost: %v", err)
+	}
+	if got, readErr := os.ReadFile(target); readErr != nil || string(got) != "regenerable" {
+		t.Fatalf("held file not put back: %q, %v", got, readErr)
+	}
+}
+
+// A name created after the last inspection is not in the inventory: it is
+// never unlinked, and the directory holding it is kept with it.
+func TestRetirementTreeKeepsAFileCreatedAfterTheLastInspection(t *testing.T) {
+	root := retirementFixture(t)
+	tree, err := inspectRetirementTree(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tree.close()
+	late := filepath.Join(root, "src", "late.go")
+	calls := 0
+	err = tree.remove(context.Background(), func() error {
+		calls++
+		if calls == 1 {
+			write(t, late, "late work")
+		}
+		return nil
+	})
+	if err == nil {
+		t.Fatal("a directory holding new work was removed")
+	}
+	if got, readErr := os.ReadFile(late); readErr != nil || string(got) != "late work" {
+		t.Fatalf("new file lost: %q, %v", got, readErr)
+	}
+	if !exists(filepath.Join(root, ".git")) {
+		t.Fatal("stopped retirement discarded the recovery pointer")
+	}
+}
+
 // Every node_modules holds symlinks (.bin, pnpm's whole layout) and pnpm
 // hard-links its store into it. Refusing either held every worktree that had
 // run an install, which were the worktrees that filled the disk. Removing a

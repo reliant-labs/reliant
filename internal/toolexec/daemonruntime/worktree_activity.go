@@ -65,9 +65,12 @@ func AcquireWorktreeRecovery(ctx context.Context, paths []string) (*WorktreeReco
 // clean and pushed there, and keeps both copies if the original path is
 // recreated. Known-scope work overlapping the paths still excludes it both
 // ways. Unknown-scope work (an exec, a shell) is neither refused while it is
-// held nor refuses it: the residual case, a process that later opens an
-// absolute path into a tree already parked and proven recoverable, is the
-// accepted trade-off. Anything that recovers uncommitted work keeps
+// held nor refuses it. A process that opens an absolute path into the parked
+// tree after an inspection cannot lose bytes to it: removal checks each entry
+// against its inventory at the unlink, keeps an unlinked file open until the
+// next inspection and puts it back if it was written or is still held, and a
+// name created after inspection keeps its directory (worktreereclaim's
+// retirementTree.remove). Anything that recovers uncommitted work keeps
 // AcquireWorktreeRecovery.
 func AcquireCleanWorktreeRetirement(ctx context.Context, paths []string) (*WorktreeRecoveryLease, error) {
 	lease, err := recoveryAdmissions.acquireEvidence(paths)

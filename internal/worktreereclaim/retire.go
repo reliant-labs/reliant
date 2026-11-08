@@ -65,9 +65,15 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 		return held(w, ReasonInUse, detail)
 	}
 	defer lease.Release()
-	var inspectionFiles []*os.File
+	// The trees whose pinned descriptors the inspection exempts, read at each
+	// check: a tree's held descriptors change while it is removed.
+	var inspected []*retirementTree
 	check := func() error {
-		probeCtx := withInspectionFiles(ctx, inspectionFiles)
+		var files []*os.File
+		for _, t := range inspected {
+			files = append(files, t.inspectionFiles()...)
+		}
+		probeCtx := withInspectionFiles(ctx, files)
 		if err := lease.Check(probeCtx); err != nil {
 			return err
 		}
@@ -153,7 +159,7 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 			original.close()
 			return rollback(ReasonUnverified, err.Error())
 		}
-		inspectionFiles = append(inspectionFiles, original.inspectionFiles()...)
+		inspected = append(inspected, original)
 		if err := check(); err != nil {
 			original.close()
 			_ = os.Remove(originMarker(q))
@@ -192,7 +198,7 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 			return rollback(ReasonUnverified, "parked checkout is unsafe: "+err.Error())
 		}
 		parked[len(parked)-1].tree = tree
-		inspectionFiles = append(inspectionFiles, tree.inspectionFiles()...)
+		inspected = append(inspected, tree)
 	}
 	for i := range parked {
 		p := &parked[i]
