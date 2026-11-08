@@ -28,7 +28,8 @@ import (
 //     machine to connect. Attach another machine first, or delete the project.
 //   - workspaces (branch worktrees) of the project on the machine. They are git
 //     worktrees of this very checkout, and their creation and cleanup run
-//     against it there. Archive them first.
+//     against it there. Archive them first; an archived one counts until its
+//     clean-up has removed its directory and any branch it asked to delete.
 //   - a clone still landing on the machine, whose outcome would land unrecorded.
 //
 // Chats pinned to the machine are left pinned. Their next tool call in the
@@ -112,37 +113,69 @@ func (s *Service) requireCheckoutElsewhere(ctx context.Context, userID string, p
 }
 
 // requireNoWorkspacesOn refuses an action on the project's checkout on a
-// machine (a detach, a remove, a reclone) while live branch workspaces of the
-// project are owned by that machine: they are git worktrees of that very
-// checkout. before names the action in the refusal ("detaching the project
-// from that machine"). It reads every page: ListWorktrees returns at most
-// one page of rows, and a workspace missed past it would lose its checkout.
+// machine (a detach, a remove, a reclone) while branch workspaces of the
+// project owned by that machine still depend on it: they are git worktrees of
+// that very checkout. A live workspace depends on it, and so does an archived
+// one whose clean-up has not finished (retainsCheckout): archiving keeps a
+// directory it cannot safely remove, and a branch it was asked to delete, for
+// a later settle in this checkout, so removing or forgetting the checkout
+// first would lose the directory's repository objects and strand the settle.
+// before names the action in the refusal ("detaching the project from that
+// machine"). It reads every page: ListWorktrees returns at most one page of
+// rows, and a workspace missed past it would lose its checkout.
 func (s *Service) requireNoWorkspacesOn(ctx context.Context, project *db.Project, daemonID, machine, before string) error {
 	const page = 100
-	n := 0
+	live, retained := 0, 0
 	for offset := 0; ; offset += page {
 		worktrees, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{
-			ProjectID: &project.ID, DaemonID: &daemonID, Limit: page, Offset: offset,
+			ProjectID: &project.ID, DaemonID: &daemonID, IncludeArchived: true, Limit: page, Offset: offset,
 		})
 		if err != nil {
 			return svcerr.WrapOr(err, svcerr.Internal("failed to read the project's workspaces"))
 		}
 		for _, wt := range worktrees {
-			if wt != nil && !wt.IsMain && wt.DeletedAt == nil && wt.DaemonID != nil && *wt.DaemonID == daemonID {
-				n++
+			if wt == nil || wt.IsMain || wt.DaemonID == nil || *wt.DaemonID != daemonID {
+				continue
+			}
+			switch {
+			case wt.DeletedAt == nil:
+				live++
+			case retainsCheckout(wt):
+				retained++
 			}
 		}
 		if len(worktrees) < page {
 			break
 		}
 	}
-	if n == 0 {
-		return nil
+	if live > 0 {
+		return svcerr.FailedPrecondition(fmt.Sprintf(
+			"%s of %q live on %s; archive them before %s", countWorkspaces(live), project.Name, machine, before))
 	}
-	noun := "workspaces"
+	if retained > 0 {
+		return svcerr.FailedPrecondition(fmt.Sprintf(
+			"%s of %q archived on %s still keep their files or branch there; clean them up or delete them permanently before %s",
+			countWorkspaces(retained), project.Name, machine, before))
+	}
+	return nil
+}
+
+// retainsCheckout reports whether an archived workspace still depends on its
+// machine's checkout: its directory is not recorded as removed, or a branch
+// deletion it asked for has not happened. A row with no cleanup metadata
+// counts as on disk, as the reclaim sweep reads it (cleanupMetadataPending in
+// internal/store); the archive stamp alone proves nothing about the disk.
+func retainsCheckout(wt *db.Worktree) bool {
+	m := wt.CleanupMetadata
+	if m == nil || !m.DirectoryDeleted {
+		return true
+	}
+	return m.DeleteBranch && !m.BranchDeleted
+}
+
+func countWorkspaces(n int) string {
 	if n == 1 {
-		noun = "workspace"
+		return "1 workspace"
 	}
-	return svcerr.FailedPrecondition(fmt.Sprintf(
-		"%d %s of %q live on %s; archive them before %s", n, noun, project.Name, machine, before))
+	return fmt.Sprintf("%d workspaces", n)
 }

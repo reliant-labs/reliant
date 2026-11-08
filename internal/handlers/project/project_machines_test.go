@@ -431,6 +431,49 @@ func TestDetachProjectFromDaemon_RefusesTheOnlyMachineAndOneWithWorkspaces(t *te
 	assert.Len(t, f.rows(t, p.ID), 2, "a refused detach changes nothing")
 }
 
+// Archiving a workspace does not free the checkout: an archived workspace
+// whose directory was kept (unmerged work) is a git worktree of the checkout
+// until its clean-up removes it, so the detach is still refused. Once the
+// directory is recorded removed, the detach goes through.
+func TestDetachProjectFromDaemon_RefusesWhileAnArchivedWorkspaceRetainsItsDirectory(t *testing.T) {
+	f := newMachinesFixture(t)
+	p := f.project(t, "kept", "/home/workspace/kept-"+uuid.NewString(), f.cloud, nil)
+	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, p.ID, f.laptop, "/Users/me/kept", nil))
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	wtID := uuid.NewString()
+	require.NoError(t, f.repo.CreateWorktree(f.ctx, &db.Worktree{
+		ID: wtID, Name: "unmerged", Path: "/home/workspace/.reliant/worktrees/kept", Branch: "unmerged",
+		BaseBranch: "main", ProjectID: p.ID, DaemonID: &f.cloud,
+		Status:    int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
+		CreatedAt: at, UpdatedAt: at, LastActive: at,
+	}))
+	require.NoError(t, f.repo.ArchiveWorktree(f.ctx, wtID))
+	require.NoError(t, f.repo.MergeWorktreeCleanupMetadata(f.ctx, wtID, func(m *db.CleanupMetadata, _ bool) bool {
+		m.HeldReason = "unmerged"
+		return true
+	}))
+
+	detach := func() error {
+		_, err := f.svc.DetachProjectFromDaemon(f.ctx, connect.NewRequest(&reliantv1.DetachProjectFromDaemonRequest{
+			ProjectId: p.ID, DaemonId: f.cloud,
+		}))
+		return err
+	}
+	err := detach()
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err))
+	assert.Contains(t, err.Error(), "archived")
+	assert.Len(t, f.rows(t, p.ID), 2, "a refused detach changes nothing")
+
+	require.NoError(t, f.repo.MergeWorktreeCleanupMetadata(f.ctx, wtID, func(m *db.CleanupMetadata, _ bool) bool {
+		m.HeldReason = ""
+		m.DirectoryDeleted = true
+		return true
+	}))
+	require.NoError(t, detach())
+	assert.Len(t, f.rows(t, p.ID), 1, "the cleaned-up workspace no longer holds the checkout")
+}
+
 func TestListProjectDaemons_NamesEachMachineAndWhenItWasVerified(t *testing.T) {
 	f := newMachinesFixture(t)
 	p := f.project(t, "h", "/home/workspace/h-"+uuid.NewString(), f.cloud, nil)

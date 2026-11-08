@@ -1201,8 +1201,9 @@ func (s *Service) ListDirectory(
 	}
 
 	return connect.NewResponse(&reliantv1.ListDirectoryResponse{
-		Path:    resolvedPath,
-		Entries: entries,
+		Path:     resolvedPath,
+		Entries:  entries,
+		DaemonId: pickerEcho(target),
 	}), nil
 }
 
@@ -1243,7 +1244,8 @@ func (s *Service) CreateDirectory(
 	}
 
 	return connect.NewResponse(&reliantv1.CreateDirectoryResponse{
-		Path: path,
+		Path:     path,
+		DaemonId: pickerEcho(target),
 	}), nil
 }
 
@@ -1262,6 +1264,17 @@ func (s *Service) pickerMachine(ctx context.Context, userID, daemonID string) (m
 		return machinewake.Target{}, svcerr.NotFound("machine")
 	}
 	return machinewake.Target{DaemonID: daemonID}, nil
+}
+
+// pickerEcho is the machine a picker response names: the request's machine,
+// or unset for the default machine. The client reads an unset echo on a
+// request that named a machine as a server too old to honor it.
+func pickerEcho(target machinewake.Target) *string {
+	if target.DaemonID == "" {
+		return nil
+	}
+	id := target.DaemonID
+	return &id
 }
 
 // fsProxyDirEntry mirrors the daemon's DirEntry JSON shape.

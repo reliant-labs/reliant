@@ -112,8 +112,16 @@ export function DirectoryPicker({
   // chosen as the new machine's, so it counts as no listing at all.
   // null: nothing listed since the picker opened.
   const [listedDaemonId, setListedDaemonId] = useState<string | undefined | null>(null);
+  // A listing asked of a named machine counts only when the server says it
+  // listed that machine. A server older than the request's daemonId ignores
+  // it and lists the default machine, echoing nothing: showing that listing
+  // under the chosen machine's name, or making a folder in it, would act on
+  // the wrong disk.
+  const listingIsOfChosenMachine = !chosenDaemonId || listing.data?.daemonId === chosenDaemonId;
+  const serverIgnoresMachine =
+    !!chosenDaemonId && !!listing.data && !listing.isPlaceholderData && !listingIsOfChosenMachine;
   useEffect(() => {
-    if (listing.data && !listing.isPlaceholderData) {
+    if (listing.data && !listing.isPlaceholderData && listingIsOfChosenMachine) {
       setLastListedPath(listing.data.path);
       setListedDaemonId(chosenDaemonId);
     }
@@ -121,14 +129,16 @@ export function DirectoryPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listing.data, listing.isPlaceholderData]);
   const otherMachinesListing = listing.isPlaceholderData && listedDaemonId !== chosenDaemonId;
-  const data = otherMachinesListing ? undefined : listing.data;
+  const data = otherMachinesListing || !listingIsOfChosenMachine ? undefined : listing.data;
 
   const resolvedPath = data?.path ?? lastListedPath;
   const entries = data?.entries ?? NO_ENTRIES;
   const isLoading = listing.isFetching && (listing.isPlaceholderData || !data);
   const error = listing.error
     ? describeMachineFolderError(listing.error, machineName) || "Failed to list directory"
-    : null;
+    : serverIgnoresMachine
+      ? `This Reliant server cannot browse ${machineName} yet: it would show another machine's folders. Update the server, or add the project from the machine itself.`
+      : null;
   const isSubmittingFolder = createDirectory.isPending;
 
   // Start at the home directory on open
@@ -176,7 +186,9 @@ export function DirectoryPicker({
       setCreateError("Enter a single folder name (no slashes)");
       return;
     }
-    if (!resolvedPath) {
+    // Only into a folder this machine listed: a server that ignores the
+    // machine would make it on another disk.
+    if (!resolvedPath || serverIgnoresMachine) {
       setCreateError("Open a directory first");
       return;
     }
@@ -186,9 +198,13 @@ export function DirectoryPicker({
     const targetPath = joinPath(resolvedPath, name);
     setCreateError(null);
     try {
-      await createDirectory.mutateAsync(
+      const created = await createDirectory.mutateAsync(
         chosenDaemonId ? { path: targetPath, daemonId: chosenDaemonId } : { path: targetPath },
       );
+      if (chosenDaemonId && created?.daemonId !== chosenDaemonId) {
+        setCreateError(`This Reliant server cannot create folders on ${machineName} yet. Update the server.`);
+        return;
+      }
       setIsCreatingFolder(false);
       setNewFolderName("");
     } catch (err) {
@@ -344,7 +360,7 @@ export function DirectoryPicker({
                 setNewFolderName("");
                 setIsCreatingFolder((v) => !v);
               }}
-              disabled={!resolvedPath}
+              disabled={!resolvedPath || serverIgnoresMachine}
               className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               title="Create a new folder here"
             >
@@ -367,7 +383,7 @@ export function DirectoryPicker({
         </div>
 
         {/* Inline "New folder" creator */}
-        {isCreatingFolder && (
+        {isCreatingFolder && !serverIgnoresMachine && (
           <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-background p-3">
             <div className="flex items-center gap-2">
               <FolderPlus className="w-4 h-4 text-primary-ink flex-shrink-0" />

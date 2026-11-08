@@ -22,6 +22,7 @@ type Repository interface {
 	// Thread operations
 	CreateThread(ctx context.Context, thread *db.Thread) (*db.Thread, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
+	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetThreadWithParent(ctx context.Context, id string) (*db.Thread, *string, error)
 	GetRootThread(ctx context.Context, conversationID string) (*db.Thread, error)
 	// SenderTitle is the heading for a message from threadID: its title, or
@@ -168,10 +169,11 @@ type CreateWorkflowWithThreadOpts struct {
 	Workflow *db.Workflow
 
 	// Thread
-	ThreadID     string  // Empty = generate new ID, exists = reuse/inherit, doesn't exist = create new
-	ChatID       string  // Required - the conversation this thread belongs to
-	ThreadTitle  *string // Optional human-readable title
-	ParentThread *string // Optional - parent thread ID for non-fork child threads (e.g., spawn)
+	ThreadID             string  // Empty = generate new ID, exists = reuse/inherit, doesn't exist = create new
+	ChatID               string  // Required - the conversation this thread belongs to
+	ThreadTitle          *string // Optional human-readable title
+	ParentThread         *string // Optional - parent thread ID for non-fork child threads (e.g., spawn)
+	ExcludeAmbientMemory bool
 
 	// Origin records how the thread was created — see db.ThreadOrigin. The
 	// fork paths override this to ThreadOriginFork, since fork metadata is
@@ -337,6 +339,13 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 			resultCW = cw
 		}
 
+		// Commit the runtime policy atomically with thread creation: a crash
+		// between creation and the child's first turn must not lose its cap.
+		excluded, err := s.repo.ResolveThreadAmbientMemoryExclusion(txCtx, opts.ChatID, resultThread.ID, opts.ExcludeAmbientMemory)
+		if err != nil {
+			return fmt.Errorf("persist thread memory exclusion: %w", err)
+		}
+		resultThread.ExcludeAmbientMemory = excluded
 		return nil
 	})
 

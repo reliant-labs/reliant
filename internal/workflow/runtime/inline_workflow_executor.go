@@ -187,7 +187,7 @@ func (e *InlineWorkflowExecutor) nodePath() string {
 // WithExecContext sets the unified execution context.
 // Required: This is the source of truth for execution state.
 func (e *InlineWorkflowExecutor) WithExecContext(ctx *ExecutionContext) *InlineWorkflowExecutor {
-	e.execContext = ctx
+	e.execContext = e.childTracker.ambientMemoryContext(ctx, e.evalResult)
 	return e
 }
 
@@ -1484,19 +1484,20 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 			}
 
 			if initErr := initChildWorkflow(ChildWorkflowInitOpts{
-				Ctx:              e.ctx,
-				ChatID:           e.chatID,
-				ParentWorkflowID: parentWorkflowID,
-				ChildWorkflowID:  e.workflowID, // Inline workflows use parent's workflow ID
-				ChildThreadID:    childExecCtx.Thread,
-				WorkflowName:     nestedWorkflowName,
-				ThreadMode:       model.NodeThreadMode(evalResult),
-				ForkFromThread:   childExecCtx.ForkedFrom,
-				ParentThread:     e.execContext.Thread, // Current execution's thread
-				SpawnedByNodeID:  nid,
-				LoopIteration:    loopIter,
-				InjectMessage:    injectMsg,
-				Logger:           e.logger,
+				Ctx:                  e.ctx,
+				ChatID:               e.chatID,
+				ParentWorkflowID:     parentWorkflowID,
+				ChildWorkflowID:      e.workflowID, // Inline workflows use parent's workflow ID
+				ChildThreadID:        childExecCtx.Thread,
+				ExcludeAmbientMemory: childExecCtx.ExcludeAmbientMemory || model.NodeThreadConfig(evalResult).GetExcludeAmbientMemory(),
+				WorkflowName:         nestedWorkflowName,
+				ThreadMode:           model.NodeThreadMode(evalResult),
+				ForkFromThread:       childExecCtx.ForkedFrom,
+				ParentThread:         e.execContext.Thread, // Current execution's thread
+				SpawnedByNodeID:      nid,
+				LoopIteration:        loopIter,
+				InjectMessage:        injectMsg,
+				Logger:               e.logger,
 			}); initErr != nil {
 				e.logger.Error("[InlineWorkflow] Failed to initialize nested workflow thread",
 					"nodeID", nid,

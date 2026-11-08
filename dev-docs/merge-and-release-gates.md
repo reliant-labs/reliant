@@ -71,6 +71,14 @@ target is measured on the `wall:` line, which starts once the slot is held.
 The phases:
 
 1. **plan**: `tools/test-affected plan -json`, which decides everything below.
+   **pgtest** follows it when the whole forge generate or any Go test is
+   selected: `go run ./tools/pgtest-check` asks forge pgtest for a scratch
+   database on the shared test Postgres, the server every DB-backed test and
+   forge generate's schema read use. It takes seconds. When the server cannot
+   be reached or booted, the gate fails there, naming the shared server, and
+   starts no other phase; before it, those phases failed minutes in, every
+   test "connection refused" (control-plane#2189). `MG_PGTEST_TIMEOUT`
+   (default 150s) bounds it.
 2. **generate** runs only if the plan's forge-generate lane is selected. It runs
    `task generate:forge`, the same command `task generate:check` runs, followed
    by `forge lint --conventions`. When every reason is Go code that a

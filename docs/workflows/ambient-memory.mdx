@@ -1,0 +1,93 @@
+---
+title: Excluding automatic saved memories
+description: Opt out of ambient memory injection without claiming full model context isolation
+---
+
+# Excluding automatic saved memories
+
+Reliant normally attaches saved global, project and repository memories to every
+model turn, including a new thread. Set `exclude_ambient_memory: true` to omit
+those automatic memory blocks:
+
+```yaml
+nodes:
+  - id: draft
+    type: call_llm
+    args:
+      model: flagship
+      exclude_ambient_memory: true
+      skills: []
+      tools_config:
+        preloaded_tools: []
+        loadable_tools: []
+      messages:
+        - role: user
+          content: "An explicitly approved brief"
+```
+
+Or set it on a workflow, loop or router thread boundary:
+
+```yaml
+thread:
+  mode: new
+  exclude_ambient_memory: true
+```
+
+Omitting the flag preserves existing behavior. An excluded ancestor cannot be
+re-enabled with `false` or an omitted flag. Exclusion is monotonic and durable
+for a thread: after its first excluded call (or excluded child initialization),
+subsequent turns, retries, coarse restarts and stopped-agent resumes retain it.
+A new/fork child also inherits excluded parent lineage. Use a separate fresh
+thread outside that lineage for work that needs the default memory behavior.
+The additive database field defaults to false for existing threads; it cannot
+prove what older runtimes already sent, nor retroactively remove prior content.
+Policy read/write failures stop the call rather than send memories by default.
+The lineage must reach a real root: missing ancestors, cycles, or ancestry beyond
+256 threads stop the call before any provider request, rather than treating
+unresolved policy as false. Repair that lineage before retrying.
+
+**This is not full context isolation or an approved-information-only mode.** It
+only excludes automatic saved-memory injection; it does not erase history or
+restrict tool permissions. A fork/inherited thread can still contain private
+messages, summaries, tool results and attachments. Explicit prompts and skills
+can contain private information too.
+
+## What still reaches the model
+
+- Reliant's identity/safety bootstrap and static capability routing guide.
+- Available working-directory/worktree and multi-repository names/paths.
+- The available skill catalog (names and descriptions), even with `skills: []`.
+- Explicit `system_prompt`, `messages`, thread injects, preloaded skill bodies
+  and any preset content that supplied those values. Forge start-here may be
+  added when preloading skills in a Forge project.
+- Conversation history, compaction summaries, attachments and tool results;
+  queued user/sub-agent messages delivered before history is loaded.
+- Offered tool names, descriptions and schemas, including project-specific MCP,
+  integration and spawn/preset descriptions when those tools are offered.
+- Machine-less and bug-report guidance when applicable; sandbox runtime guidance
+  is retained even though it historically shared the saved-memory block.
+- Provider-specific guidance and transport metadata. For example Claude Code's
+  base prompt, OpenAI-family tool guidance and Antigravity's managed prompt are
+  independent of saved memories.
+
+Empty `preloaded_tools` **and** `loadable_tools` suppress the tool array and
+future dynamic tool loading. Empty `skills` suppresses skill bodies, not the
+catalog announcement. These declarations do not suppress the system bootstrap.
+A machine-less run removes machine access, not model context. A project-less
+launch is not currently supported (`project_id` is required); an empty project
+configuration is not the same thing as no project. Captured-request tests verify
+that machine-less + empty tools/skills still carries bootstrap instructions and,
+when configured, the skill catalog.
+
+## Before enabling an approved-only application
+
+Independently inspect the complete serialized request for the intended provider
+and deployed runtime: system/bootstrap/provider instructions, history and
+summaries, attachments, explicit/preset prompts and skills, catalog metadata,
+tool schemas/results, queued messages, paths/repo metadata and transport fields.
+Exercise nested execution, retries and recovery, not just a memory formatter.
+Use synthetic private canaries; do not send real private data as a test.
+
+The Growth AI path remains disabled until that full boundary is proved and the
+runtime supporting this flag is deployed. This change does not deploy a daemon,
+release Reliant, or authorize enabling Growth AI.

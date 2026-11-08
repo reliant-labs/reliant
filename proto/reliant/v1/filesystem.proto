@@ -403,6 +403,12 @@ message ListDirectoryRequest {
 message ListDirectoryResponse {
   string path = 1; // The resolved absolute path that was listed
   repeated DirectoryEntry entries = 2;
+  // The machine that was listed: the request's daemon_id, echoed. Unset when
+  // the request named none (the default machine). A server older than
+  // ListDirectoryRequest.daemon_id ignores that field, lists the default
+  // machine and leaves this unset, so a client that named a machine and gets
+  // no echo knows the listing is not that machine's and must not show it.
+  optional string daemon_id = 3;
 }
 
 message DirectoryEntry {
@@ -426,6 +432,9 @@ message CreateDirectoryRequest {
 
 message CreateDirectoryResponse {
   string path = 1; // The absolute path that was created.
+  // The machine it was created on: the request's daemon_id, echoed, as in
+  // ListDirectoryResponse.daemon_id. Unset when the request named none.
+  optional string daemon_id = 2;
 }
 
 // ============================================

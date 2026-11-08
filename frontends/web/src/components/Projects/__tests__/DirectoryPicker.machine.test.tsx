@@ -5,8 +5,8 @@ import { DirectoryPicker } from "../DirectoryPicker";
 const calls = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn() }));
 vi.mock("@/hooks/useDaemonStatus", () => ({ useDaemonStatus: () => ({ daemons: [{ daemonId: "a", hostname: "Alpha", status: 1 }, { daemonId: "b", hostname: "Beta", status: 1 }] }) }));
 vi.mock("@/hooks/file-system-service-hooks_gen", () => ({
-  useListDirectory: (req: { daemonId: string }) => { calls.list(req); return { data: { path: req.daemonId === "b" ? "/beta" : "/alpha", entries: [] }, isFetching: false, isPlaceholderData: false }; },
-  useCreateDirectory: () => ({ mutateAsync: calls.create, isPending: false }),
+  useListDirectory: (req: { daemonId: string }) => { calls.list(req); return { data: { path: req.daemonId === "b" ? "/beta" : "/alpha", entries: [], daemonId: req.daemonId }, isFetching: false, isPlaceholderData: false }; },
+  useCreateDirectory: () => ({ mutateAsync: (req: { daemonId: string }) => { calls.create(req); return Promise.resolve({ daemonId: req.daemonId }); }, isPending: false }),
 }));
 it("switches disks, creates on the selected machine, and returns that machine", async () => {
   const select = vi.fn();

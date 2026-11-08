@@ -204,7 +204,8 @@ func TestProjectOnDaemonCommands_SendNothingForAnotherUsersProjectOrAnUnrecorded
 // on that machine are git worktrees of it. While one lives there, both are
 // refused (FailedPrecondition, saying to archive them), nothing is sent and
 // the row stays, as a detach is refused. A workspace on another machine, or
-// an archived one, does not hold the checkout. Pull deletes nothing.
+// an archived one whose clean-up finished, does not hold the checkout. Pull
+// deletes nothing.
 func TestProjectOnDaemonCommands_RemoveAndRecloneRefuseWhileWorkspacesLiveThere(t *testing.T) {
 	t.Parallel()
 	ctx := project.AuthedContext(t)
@@ -217,10 +218,14 @@ func TestProjectOnDaemonCommands_RemoveAndRecloneRefuseWhileWorkspacesLiveThere(
 			store.ListWorktreesFunc = func(_ context.Context, f db.WorktreeFilters) ([]*db.Worktree, error) {
 				require.NotNil(t, f.ProjectID)
 				assert.Equal(t, "p-1", *f.ProjectID)
+				assert.True(t, f.IncludeArchived, "archived workspaces can still hold the checkout")
 				return []*db.Worktree{
 					{ID: "main", IsMain: true, DaemonID: &here},
 					{ID: "live", DaemonID: &here},
-					{ID: "gone", DaemonID: &here, DeletedAt: &archived},
+					{ID: "gone", DaemonID: &here, DeletedAt: &archived, CleanupMetadata: &db.CleanupMetadata{DirectoryDeleted: true}},
+					{ID: "gone-branch", DaemonID: &here, DeletedAt: &archived, CleanupMetadata: &db.CleanupMetadata{
+						DirectoryDeleted: true, DeleteBranch: true, BranchDeleted: true,
+					}},
 					{ID: "other", DaemonID: &elsewhere},
 				}, nil
 			}
@@ -241,6 +246,50 @@ func TestProjectOnDaemonCommands_RemoveAndRecloneRefuseWhileWorkspacesLiveThere(
 			assert.Empty(t, router.commands, "nothing is deleted on the machine")
 			assert.False(t, deleted, "the row stays")
 		})
+	}
+}
+
+// An archived workspace whose clean-up has not finished still depends on the
+// checkout: archiving keeps a directory it cannot safely remove (unmerged
+// work), and a branch it asked to delete, for a later settle there. Remove and
+// reclone are refused until both are gone; the archive stamp alone proves
+// nothing about the disk.
+func TestProjectOnDaemonCommands_RemoveAndRecloneRefuseWhileArchivedWorkspacesRetainFiles(t *testing.T) {
+	t.Parallel()
+	ctx := project.AuthedContext(t)
+	here := "d-1"
+	archived := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	retained := map[string]*db.CleanupMetadata{
+		"no metadata":        nil,
+		"directory retained": {HeldReason: "unmerged"},
+		"branch pending":     {DirectoryDeleted: true, DeleteBranch: true},
+	}
+	for name, call := range projectOnDaemonCalls(ctx, "p-1", "d-1") {
+		if name == "pull" {
+			continue
+		}
+		for why, meta := range retained {
+			t.Run(name+"/"+why, func(t *testing.T) {
+				t.Parallel()
+				store := onDaemon(t)
+				store.ListWorktreesFunc = func(_ context.Context, f db.WorktreeFilters) ([]*db.Worktree, error) {
+					if !f.IncludeArchived {
+						return nil, nil
+					}
+					return []*db.Worktree{{ID: "kept", DaemonID: &here, DeletedAt: &archived, CleanupMetadata: meta}}, nil
+				}
+				deleted := false
+				store.DeleteProjectDaemonFunc = func(context.Context, string, string) error { deleted = true; return nil }
+				router := newPinnedRecorder()
+				err := call(newService(t, store, router))
+				requireCode(t, err, connect.CodeFailedPrecondition)
+				msg := svcerr.ToConnect(err).Message()
+				assert.Contains(t, msg, "1 workspace of")
+				assert.Contains(t, msg, "archived")
+				assert.Empty(t, router.commands, "nothing is deleted on the machine")
+				assert.False(t, deleted, "the row stays")
+			})
+		}
 	}
 }
 

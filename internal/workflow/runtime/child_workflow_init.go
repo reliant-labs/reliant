@@ -19,17 +19,18 @@ import (
 
 // ChildWorkflowInitOpts contains options for initializing a child workflow with its thread.
 type ChildWorkflowInitOpts struct {
-	Ctx              workflow.Context
-	ChatID           string
-	ParentWorkflowID string
-	ChildWorkflowID  string
-	ChildThreadID    string
-	WorkflowName     string
-	ThreadTitle      *string
-	ThreadMode       string // "inherit", "new", or "fork" — uses model.ThreadMode* constants
-	ForkFromThread   string // Only used when ThreadMode == model.ThreadModeFork
-	ParentThread     string // Parent thread ID for tracking lineage (set for both fork and new)
-	SpawnedByNodeID  string
+	Ctx                  workflow.Context
+	ChatID               string
+	ParentWorkflowID     string
+	ChildWorkflowID      string
+	ChildThreadID        string
+	WorkflowName         string
+	ThreadTitle          *string
+	ThreadMode           string // "inherit", "new", or "fork" — uses model.ThreadMode* constants
+	ForkFromThread       string // Only used when ThreadMode == model.ThreadModeFork
+	ParentThread         string // Parent thread ID for tracking lineage (set for both fork and new)
+	ExcludeAmbientMemory bool
+	SpawnedByNodeID      string
 	// Origin is how the thread came to exist ("spawn", "node", "fork", "main")
 	// — see db.ThreadOrigin. Distinct from SpawnedByNodeID, which records which
 	// graph node produced the workflow.
@@ -219,6 +220,9 @@ func initChildWorkflow(opts ChildWorkflowInitOpts) error {
 	}
 	if opts.ParentThread != "" {
 		createInput["parent_thread"] = opts.ParentThread
+	}
+	if opts.ExcludeAmbientMemory {
+		createInput["exclude_ambient_memory"] = true
 	}
 	if opts.SpawnedByNodeID != "" {
 		createInput["spawned_by_node_id"] = opts.SpawnedByNodeID

@@ -1038,9 +1038,14 @@ type ThreadConfig struct {
 	// true: Create thread once, reuse across iterations.
 	Memo *CelBool `protobuf:"bytes,2,opt,name=memo,proto3" json:"memo,omitempty"`
 	// Inject adds a message to the thread before execution.
-	Inject        *InjectConfig `protobuf:"bytes,3,opt,name=inject,proto3" json:"inject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Inject *InjectConfig `protobuf:"bytes,3,opt,name=inject,proto3" json:"inject,omitempty"`
+	// Excludes automatic global/project/repository memory injection in this
+	// execution and its descendants. False/unset never overrides an excluded
+	// ancestor; exclusion latches durably on the thread, including recovery.
+	// Does not remove history, skills, bootstrap context or tool access.
+	ExcludeAmbientMemory bool `protobuf:"varint,4,opt,name=exclude_ambient_memory,json=excludeAmbientMemory,proto3" json:"exclude_ambient_memory,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ThreadConfig) Reset() {
@@ -1092,6 +1097,13 @@ func (x *ThreadConfig) GetInject() *InjectConfig {
 		return x.Inject
 	}
 	return nil
+}
+
+func (x *ThreadConfig) GetExcludeAmbientMemory() bool {
+	if x != nil {
+		return x.ExcludeAmbientMemory
+	}
+	return false
 }
 
 // InjectConfig configures message injection into a thread.
@@ -2006,9 +2018,14 @@ type CallLLMArgs struct {
 	// a wedged thread recoverable. That guard stays the default; a loop that saw
 	// "incomplete" opts out of it for exactly the next turn by setting this from
 	// its own previous-iteration outputs.
-	ContinueTurn  *CelBool `protobuf:"bytes,15,opt,name=continue_turn,json=continueTurn,proto3" json:"continue_turn,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ContinueTurn *CelBool `protobuf:"bytes,15,opt,name=continue_turn,json=continueTurn,proto3" json:"continue_turn,omitempty"`
+	// Opt out of automatic global/project/repository memory injection for this
+	// call and descendants it spawns. Inherited exclusion cannot be re-enabled;
+	// exclusion latches durably on the thread for subsequent turns and recovery.
+	// Bootstrap prompts, history, explicit skills/messages and tools are unchanged.
+	ExcludeAmbientMemory bool `protobuf:"varint,16,opt,name=exclude_ambient_memory,json=excludeAmbientMemory,proto3" json:"exclude_ambient_memory,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *CallLLMArgs) Reset() {
@@ -2116,6 +2133,13 @@ func (x *CallLLMArgs) GetContinueTurn() *CelBool {
 		return x.ContinueTurn
 	}
 	return nil
+}
+
+func (x *CallLLMArgs) GetExcludeAmbientMemory() bool {
+	if x != nil {
+		return x.ExcludeAmbientMemory
+	}
+	return false
 }
 
 // ResponseTool defines a custom tool for structured LLM output.
@@ -8703,14 +8727,16 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\ftool_results\x18\x05 \x01(\v2\x15.reliant.v1.CelStringR\vtoolResults\x12\x92\x01\n" +
 	"\vattachments\x18\x06 \x01(\v2\x15.reliant.v1.CelStringBY\x82\xb5\x18U\n" +
 	"SAttachment IDs to attach to the saved message. CEL expression must return []string.R\vattachments\x12B\n" +
-	"\rdisplay_style\x18\a \x01(\v2\x15.reliant.v1.CelStringB\x06\x82\xb5\x18\x02 \x01R\fdisplayStyle\"\xa4\x02\n" +
+	"\rdisplay_style\x18\a \x01(\v2\x15.reliant.v1.CelStringB\x06\x82\xb5\x18\x02 \x01R\fdisplayStyle\"\xca\x03\n" +
 	"\fThreadConfig\x12X\n" +
 	"\x04mode\x18\x01 \x01(\tBD\x82\xb5\x18@\n" +
 	",Thread mode: inherit (default), new, or fork\x12\x10inherit|new|forkR\x04mode\x12_\n" +
 	"\x04memo\x18\x02 \x01(\v2\x13.reliant.v1.CelBoolB6\x82\xb5\x182\n" +
 	"0Whether to memoize thread across loop iterationsR\x04memo\x12Y\n" +
 	"\x06inject\x18\x03 \x01(\v2\x18.reliant.v1.InjectConfigB'\x82\xb5\x18#\n" +
-	"!Message injection into the threadR\x06inject\"\x94\x04\n" +
+	"!Message injection into the threadR\x06inject\x12\xa3\x01\n" +
+	"\x16exclude_ambient_memory\x18\x04 \x01(\bBm\x82\xb5\x18i\n" +
+	"gExclude automatic saved memories; inherited exclusion cannot be re-enabled. Not full context isolation.R\x14excludeAmbientMemory\"\x94\x04\n" +
 	"\fInjectConfig\x12i\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB>\x82\xb5\x18:\n" +
 	"!Message role for injected message\x12\x15user|system|assistantR\x04role\x12P\n" +
@@ -8784,7 +8810,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\n" +
 	"ToolsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
-	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01\"\xf3\x0e\n" +
+	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01\"\xa8\x10\n" +
 	"\vCallLLMArgs\x12\x97\x01\n" +
 	"\x05model\x18\x01 \x01(\v2\x1c.reliant.v1.CelModelSelectorBc\x82\xb5\x18_\n" +
 	";A model tag (flagship, fast, cheap) or an explicit model ID*\x05ModelJ\x05ModelZ\x05basicp\x01\x82\x01\bflagshipR\x05model\x12\xd4\x01\n" +
@@ -8808,7 +8834,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x06skills\x18\x0e \x01(\v2\x19.reliant.v1.CelStringListB\xa7\x01\x82\xb5\x18\xa2\x01\n" +
 	"VSkills to preload into this call, by path, so the model starts with their instructions*\x06PromptJ\x06SkillsZ\badvanced\x82\x01\x17[forge/db, code-review]\x8a\x01\x13list of skill pathsR\x06skills\x12\xb9\x01\n" +
 	"\rcontinue_turn\x18\x0f \x01(\v2\x13.reliant.v1.CelBoolB\x7f\x82\xb5\x18{\n" +
-	"VCall the provider even though history ends with the assistant (continue a paused turn) \x01*\x06PromptJ\rContinue turnZ\badvancedR\fcontinueTurn:\\\x8a\xb5\x18X\n" +
+	"VCall the provider even though history ends with the assistant (continue a paused turn) \x01*\x06PromptJ\rContinue turnZ\badvancedR\fcontinueTurn\x12\xb2\x01\n" +
+	"\x16exclude_ambient_memory\x18\x10 \x01(\bB|\x82\xb5\x18x\n" +
+	"LExclude automatic saved memories (default false); not full context isolation*\x06PromptJ\x16Exclude ambient memoryZ\badvancedR\x14excludeAmbientMemory:\\\x8a\xb5\x18X\n" +
 	"\bcall_llm\x12\bCall LLM\x1a4Send a prompt to a language model and get a response*\aagentic2\x03Bot\"\xa3\x01\n" +
 	"\fResponseTool\x12)\n" +
 	"\x04name\x18\x01 \x01(\v2\x15.reliant.v1.CelStringR\x04name\x127\n" +
