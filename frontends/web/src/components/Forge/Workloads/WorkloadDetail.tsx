@@ -49,6 +49,7 @@ import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/contro
 import { cloudErrorDetail, type RestartedWorkload, type RunStateRequest } from "@/services/forge/cloudEnvs";
 import { useDefaultBranch } from "@/services/forge/RepoMetaContext";
 import { workloadLastError, workloadOpenUrl, type ForgeHostedWorkload } from "@/services/forge/topology";
+import type { ConfigReader } from "@/services/forge/workloadConfig";
 
 import { UPlotChart, type ChartMarker } from "../Observability/charts/UPlotChart";
 import { ExploreLink } from "../Observability/Metrics/ExploreLink";
@@ -93,6 +94,7 @@ import { WorkloadReleases } from "./WorkloadReleases";
 import { ActionDialog, DriftTag, HealthStatus, WorkloadRelease } from "./workloadParts";
 import { OVERVIEW_RANGE } from "./OverviewHome";
 import { eventHeadline, eventRawReason, exitPhrase, jobFailurePhrase, plainErrorText } from "./plainHealth";
+import { WorkloadConfigViewer } from "./WorkloadConfigViewer";
 
 // Its own chunk, as on the Observability pages: the explorers load only when a tab shows them.
 const ObservabilityPanel = lazy(() =>
@@ -168,9 +170,11 @@ export interface WorkloadDetailProps {
   rollback?: WorkloadRollback;
   /** The environment's last recorded render declares this workload (a self-managed environment, where nothing may report). */
   declaredInRender?: boolean;
+  /** Explicit-action config transport; injectable for previews, never prefetched. */
+  readConfig?: ConfigReader;
 }
 
-export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, actions, hosted, rollback, declaredInRender = false }: WorkloadDetailProps) {
+export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, actions, hosted, rollback, declaredInRender = false, readConfig }: WorkloadDetailProps) {
   const range = (search.range as RangePreset | undefined) ?? OVERVIEW_RANGE;
   const tab: WorkloadTab = search.tab ?? "overview";
   const org = useObservabilityOrg();
@@ -320,7 +324,10 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
               ))}
             {tab === "events" && <EventsPanel events={detail.data?.events ?? []} range={range} />}
             {tab === "history" && <HistoryTab project={project} env={env} name={name} detail={detail.data ?? null} runs={runs} history={history} hrefs={hrefs} />}
-            {tab === "config" && <ConfigTab summary={summary} env={env.name} />}
+            {tab === "config" && <>
+              <WorkloadConfigViewer key={orgId} orgId={orgId ?? undefined} project={project} environmentId={env.id} environmentName={env.name} workload={name} readConfig={readConfig} />
+              <ConfigTab summary={summary} env={env.name} />
+            </>}
           </div>
           <Rail
             name={name}
@@ -1324,7 +1331,7 @@ function ConfigTab({ summary, env }: { summary: Workload | null; env: string }) 
           ]}
         />
       </Panel>
-      <Panel title="Environment variables" meta="By name; values never leave the bundle" testId="workload-config-env">
+      <Panel title="Environment variables" meta="Names only; config values require an explicit authorized read above" testId="workload-config-env">
         {!declared.specRecorded ? (
           <p className="text-sm text-ink-muted">Not recorded in this bundle.</p>
         ) : declared.envNames.length === 0 ? (

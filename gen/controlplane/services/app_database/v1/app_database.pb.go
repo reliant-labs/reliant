@@ -24,6 +24,321 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// BrowsableDatabaseKind is how the environment declares a database.
+type BrowsableDatabaseKind int32
+
+const (
+	BrowsableDatabaseKind_BROWSABLE_DATABASE_KIND_UNSPECIFIED BrowsableDatabaseKind = 0
+	// A forge.ManagedDatabase: forge provisions and runs it.
+	BrowsableDatabaseKind_BROWSABLE_DATABASE_KIND_MANAGED BrowsableDatabaseKind = 1
+	// A forge.ExternalDatabase: a Postgres the environment uses and forge does
+	// not run.
+	BrowsableDatabaseKind_BROWSABLE_DATABASE_KIND_EXTERNAL BrowsableDatabaseKind = 2
+)
+
+// Enum value maps for BrowsableDatabaseKind.
+var (
+	BrowsableDatabaseKind_name = map[int32]string{
+		0: "BROWSABLE_DATABASE_KIND_UNSPECIFIED",
+		1: "BROWSABLE_DATABASE_KIND_MANAGED",
+		2: "BROWSABLE_DATABASE_KIND_EXTERNAL",
+	}
+	BrowsableDatabaseKind_value = map[string]int32{
+		"BROWSABLE_DATABASE_KIND_UNSPECIFIED": 0,
+		"BROWSABLE_DATABASE_KIND_MANAGED":     1,
+		"BROWSABLE_DATABASE_KIND_EXTERNAL":    2,
+	}
+)
+
+func (x BrowsableDatabaseKind) Enum() *BrowsableDatabaseKind {
+	p := new(BrowsableDatabaseKind)
+	*p = x
+	return p
+}
+
+func (x BrowsableDatabaseKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BrowsableDatabaseKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_app_database_v1_app_database_proto_enumTypes[0].Descriptor()
+}
+
+func (BrowsableDatabaseKind) Type() protoreflect.EnumType {
+	return &file_services_app_database_v1_app_database_proto_enumTypes[0]
+}
+
+func (x BrowsableDatabaseKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BrowsableDatabaseKind.Descriptor instead.
+func (BrowsableDatabaseKind) EnumDescriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{0}
+}
+
+// DataAccessPolicy is the environment's recorded forge.DataAccess db_query
+// policy (the service header's POLICY).
+type DataAccessPolicy int32
+
+const (
+	// Not recorded or not understood: refused, as DENY.
+	DataAccessPolicy_DATA_ACCESS_POLICY_UNSPECIFIED DataAccessPolicy = 0
+	// Anyone who may query reads without a confirmation or reason.
+	DataAccessPolicy_DATA_ACCESS_POLICY_OPEN DataAccessPolicy = 1
+	// A person with the db:query grant, plus confirm_env_id and a reason on
+	// every call.
+	DataAccessPolicy_DATA_ACCESS_POLICY_AUDITED DataAccessPolicy = 2
+	// Every read is refused.
+	DataAccessPolicy_DATA_ACCESS_POLICY_DENY DataAccessPolicy = 3
+)
+
+// Enum value maps for DataAccessPolicy.
+var (
+	DataAccessPolicy_name = map[int32]string{
+		0: "DATA_ACCESS_POLICY_UNSPECIFIED",
+		1: "DATA_ACCESS_POLICY_OPEN",
+		2: "DATA_ACCESS_POLICY_AUDITED",
+		3: "DATA_ACCESS_POLICY_DENY",
+	}
+	DataAccessPolicy_value = map[string]int32{
+		"DATA_ACCESS_POLICY_UNSPECIFIED": 0,
+		"DATA_ACCESS_POLICY_OPEN":        1,
+		"DATA_ACCESS_POLICY_AUDITED":     2,
+		"DATA_ACCESS_POLICY_DENY":        3,
+	}
+)
+
+func (x DataAccessPolicy) Enum() *DataAccessPolicy {
+	p := new(DataAccessPolicy)
+	*p = x
+	return p
+}
+
+func (x DataAccessPolicy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DataAccessPolicy) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_app_database_v1_app_database_proto_enumTypes[1].Descriptor()
+}
+
+func (DataAccessPolicy) Type() protoreflect.EnumType {
+	return &file_services_app_database_v1_app_database_proto_enumTypes[1]
+}
+
+func (x DataAccessPolicy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DataAccessPolicy.Descriptor instead.
+func (DataAccessPolicy) EnumDescriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{1}
+}
+
+// DatabaseTableKind is what kind of relation a DatabaseTable is.
+type DatabaseTableKind int32
+
+const (
+	DatabaseTableKind_DATABASE_TABLE_KIND_UNSPECIFIED DatabaseTableKind = 0
+	// An ordinary or partitioned table.
+	DatabaseTableKind_DATABASE_TABLE_KIND_TABLE             DatabaseTableKind = 1
+	DatabaseTableKind_DATABASE_TABLE_KIND_VIEW              DatabaseTableKind = 2
+	DatabaseTableKind_DATABASE_TABLE_KIND_MATERIALIZED_VIEW DatabaseTableKind = 3
+	// A foreign table (postgres_fdw and the like).
+	DatabaseTableKind_DATABASE_TABLE_KIND_FOREIGN_TABLE DatabaseTableKind = 4
+)
+
+// Enum value maps for DatabaseTableKind.
+var (
+	DatabaseTableKind_name = map[int32]string{
+		0: "DATABASE_TABLE_KIND_UNSPECIFIED",
+		1: "DATABASE_TABLE_KIND_TABLE",
+		2: "DATABASE_TABLE_KIND_VIEW",
+		3: "DATABASE_TABLE_KIND_MATERIALIZED_VIEW",
+		4: "DATABASE_TABLE_KIND_FOREIGN_TABLE",
+	}
+	DatabaseTableKind_value = map[string]int32{
+		"DATABASE_TABLE_KIND_UNSPECIFIED":       0,
+		"DATABASE_TABLE_KIND_TABLE":             1,
+		"DATABASE_TABLE_KIND_VIEW":              2,
+		"DATABASE_TABLE_KIND_MATERIALIZED_VIEW": 3,
+		"DATABASE_TABLE_KIND_FOREIGN_TABLE":     4,
+	}
+)
+
+func (x DatabaseTableKind) Enum() *DatabaseTableKind {
+	p := new(DatabaseTableKind)
+	*p = x
+	return p
+}
+
+func (x DatabaseTableKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DatabaseTableKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_app_database_v1_app_database_proto_enumTypes[2].Descriptor()
+}
+
+func (DatabaseTableKind) Type() protoreflect.EnumType {
+	return &file_services_app_database_v1_app_database_proto_enumTypes[2]
+}
+
+func (x DatabaseTableKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DatabaseTableKind.Descriptor instead.
+func (DatabaseTableKind) EnumDescriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{2}
+}
+
+// BrowseFilterOp is a BrowseFilter's comparison.
+type BrowseFilterOp int32
+
+const (
+	// Refused.
+	BrowseFilterOp_BROWSE_FILTER_OP_UNSPECIFIED BrowseFilterOp = 0
+	// column = value
+	BrowseFilterOp_BROWSE_FILTER_OP_EQ BrowseFilterOp = 1
+	// column <> value. A NULL cell does not match.
+	BrowseFilterOp_BROWSE_FILTER_OP_NEQ BrowseFilterOp = 2
+	BrowseFilterOp_BROWSE_FILTER_OP_LT  BrowseFilterOp = 3
+	BrowseFilterOp_BROWSE_FILTER_OP_LTE BrowseFilterOp = 4
+	BrowseFilterOp_BROWSE_FILTER_OP_GT  BrowseFilterOp = 5
+	BrowseFilterOp_BROWSE_FILTER_OP_GTE BrowseFilterOp = 6
+	// column LIKE value, the value's % and _ as Postgres reads them. A text
+	// column only.
+	BrowseFilterOp_BROWSE_FILTER_OP_LIKE BrowseFilterOp = 7
+	// column ILIKE value. A text column only.
+	BrowseFilterOp_BROWSE_FILTER_OP_ILIKE BrowseFilterOp = 8
+	// column IS NULL
+	BrowseFilterOp_BROWSE_FILTER_OP_IS_NULL BrowseFilterOp = 9
+	// column IS NOT NULL
+	BrowseFilterOp_BROWSE_FILTER_OP_NOT_NULL BrowseFilterOp = 10
+	// column = ANY(values)
+	BrowseFilterOp_BROWSE_FILTER_OP_IN BrowseFilterOp = 11
+)
+
+// Enum value maps for BrowseFilterOp.
+var (
+	BrowseFilterOp_name = map[int32]string{
+		0:  "BROWSE_FILTER_OP_UNSPECIFIED",
+		1:  "BROWSE_FILTER_OP_EQ",
+		2:  "BROWSE_FILTER_OP_NEQ",
+		3:  "BROWSE_FILTER_OP_LT",
+		4:  "BROWSE_FILTER_OP_LTE",
+		5:  "BROWSE_FILTER_OP_GT",
+		6:  "BROWSE_FILTER_OP_GTE",
+		7:  "BROWSE_FILTER_OP_LIKE",
+		8:  "BROWSE_FILTER_OP_ILIKE",
+		9:  "BROWSE_FILTER_OP_IS_NULL",
+		10: "BROWSE_FILTER_OP_NOT_NULL",
+		11: "BROWSE_FILTER_OP_IN",
+	}
+	BrowseFilterOp_value = map[string]int32{
+		"BROWSE_FILTER_OP_UNSPECIFIED": 0,
+		"BROWSE_FILTER_OP_EQ":          1,
+		"BROWSE_FILTER_OP_NEQ":         2,
+		"BROWSE_FILTER_OP_LT":          3,
+		"BROWSE_FILTER_OP_LTE":         4,
+		"BROWSE_FILTER_OP_GT":          5,
+		"BROWSE_FILTER_OP_GTE":         6,
+		"BROWSE_FILTER_OP_LIKE":        7,
+		"BROWSE_FILTER_OP_ILIKE":       8,
+		"BROWSE_FILTER_OP_IS_NULL":     9,
+		"BROWSE_FILTER_OP_NOT_NULL":    10,
+		"BROWSE_FILTER_OP_IN":          11,
+	}
+)
+
+func (x BrowseFilterOp) Enum() *BrowseFilterOp {
+	p := new(BrowseFilterOp)
+	*p = x
+	return p
+}
+
+func (x BrowseFilterOp) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BrowseFilterOp) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_app_database_v1_app_database_proto_enumTypes[3].Descriptor()
+}
+
+func (BrowseFilterOp) Type() protoreflect.EnumType {
+	return &file_services_app_database_v1_app_database_proto_enumTypes[3]
+}
+
+func (x BrowseFilterOp) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BrowseFilterOp.Descriptor instead.
+func (BrowseFilterOp) EnumDescriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{3}
+}
+
+// BrowseCount is whether BrowseTable counts the matching rows.
+type BrowseCount int32
+
+const (
+	// As NONE.
+	BrowseCount_BROWSE_COUNT_UNSPECIFIED BrowseCount = 0
+	// No count: total is absent. The cheapest; has_more still says whether
+	// there is a next page.
+	BrowseCount_BROWSE_COUNT_NONE BrowseCount = 1
+	// The planner's estimate for the filtered query: total_is_estimate is set.
+	BrowseCount_BROWSE_COUNT_ESTIMATED BrowseCount = 2
+	// count(*) over the filtered query, stopping at a cap the server sets: past
+	// it, total is the cap and total_is_lower_bound is set.
+	BrowseCount_BROWSE_COUNT_EXACT BrowseCount = 3
+)
+
+// Enum value maps for BrowseCount.
+var (
+	BrowseCount_name = map[int32]string{
+		0: "BROWSE_COUNT_UNSPECIFIED",
+		1: "BROWSE_COUNT_NONE",
+		2: "BROWSE_COUNT_ESTIMATED",
+		3: "BROWSE_COUNT_EXACT",
+	}
+	BrowseCount_value = map[string]int32{
+		"BROWSE_COUNT_UNSPECIFIED": 0,
+		"BROWSE_COUNT_NONE":        1,
+		"BROWSE_COUNT_ESTIMATED":   2,
+		"BROWSE_COUNT_EXACT":       3,
+	}
+)
+
+func (x BrowseCount) Enum() *BrowseCount {
+	p := new(BrowseCount)
+	*p = x
+	return p
+}
+
+func (x BrowseCount) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BrowseCount) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_app_database_v1_app_database_proto_enumTypes[4].Descriptor()
+}
+
+func (BrowseCount) Type() protoreflect.EnumType {
+	return &file_services_app_database_v1_app_database_proto_enumTypes[4]
+}
+
+func (x BrowseCount) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BrowseCount.Descriptor instead.
+func (BrowseCount) EnumDescriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{4}
+}
+
 type QueryDatabaseRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The control-plane environment id (deploy_environments.id).
@@ -298,10 +613,15 @@ func (x *DatabaseColumn) GetPgType() string {
 
 // DatabaseRow is one result row: one JSON value per column.
 type DatabaseRow struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Values        []*structpb.Value      `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Values []*structpb.Value      `protobuf:"bytes,1,rep,name=values,proto3" json:"values,omitempty"`
+	// The 0-based indexes, into values, of the cells cut at 4 KiB, ascending;
+	// empty when none was. A cut cell's text also ends with a
+	// "…[truncated: N of M bytes shown]" marker, for a reader that shows the
+	// text as is.
+	TruncatedCells []int32 `protobuf:"varint,2,rep,packed,name=truncated_cells,json=truncatedCells,proto3" json:"truncated_cells,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DatabaseRow) Reset() {
@@ -337,6 +657,13 @@ func (*DatabaseRow) Descriptor() ([]byte, []int) {
 func (x *DatabaseRow) GetValues() []*structpb.Value {
 	if x != nil {
 		return x.Values
+	}
+	return nil
+}
+
+func (x *DatabaseRow) GetTruncatedCells() []int32 {
+	if x != nil {
+		return x.TruncatedCells
 	}
 	return nil
 }
@@ -984,6 +1311,1055 @@ func (x *DashboardColumn) GetPgType() string {
 	return ""
 }
 
+type ListBrowsableDatabasesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The control-plane environment id (deploy_environments.id).
+	EnvironmentId string `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBrowsableDatabasesRequest) Reset() {
+	*x = ListBrowsableDatabasesRequest{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBrowsableDatabasesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBrowsableDatabasesRequest) ProtoMessage() {}
+
+func (x *ListBrowsableDatabasesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBrowsableDatabasesRequest.ProtoReflect.Descriptor instead.
+func (*ListBrowsableDatabasesRequest) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListBrowsableDatabasesRequest) GetEnvironmentId() string {
+	if x != nil {
+		return x.EnvironmentId
+	}
+	return ""
+}
+
+type ListBrowsableDatabasesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Sorted by name.
+	Databases     []*BrowsableDatabase `protobuf:"bytes,1,rep,name=databases,proto3" json:"databases,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListBrowsableDatabasesResponse) Reset() {
+	*x = ListBrowsableDatabasesResponse{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListBrowsableDatabasesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListBrowsableDatabasesResponse) ProtoMessage() {}
+
+func (x *ListBrowsableDatabasesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListBrowsableDatabasesResponse.ProtoReflect.Descriptor instead.
+func (*ListBrowsableDatabasesResponse) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ListBrowsableDatabasesResponse) GetDatabases() []*BrowsableDatabase {
+	if x != nil {
+		return x.Databases
+	}
+	return nil
+}
+
+// BrowsableDatabase is one database of the environment, as the data browser's
+// database selector shows it.
+type BrowsableDatabase struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The name DescribeDatabase and BrowseTable take as database: the
+	// ManagedDatabase's or ExternalDatabase's name in the release shape.
+	Name string                `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Kind BrowsableDatabaseKind `protobuf:"varint,2,opt,name=kind,proto3,enum=controlplane.v1.BrowsableDatabaseKind" json:"kind,omitempty"`
+	// The data_access policy a read of this database runs under. AUDITED means
+	// DescribeDatabase and BrowseTable need confirm_env_id and a reason; DENY
+	// means they are refused.
+	Policy DataAccessPolicy `protobuf:"varint,3,opt,name=policy,proto3,enum=controlplane.v1.DataAccessPolicy" json:"policy,omitempty"`
+	// Whether the control plane can connect to the database. False: the
+	// database is listed but cannot be browsed, and unreachable_reason says why.
+	Reachable bool `protobuf:"varint,4,opt,name=reachable,proto3" json:"reachable,omitempty"`
+	// Why the database cannot be reached, for a person: "self-managed: no hosted
+	// placement", "external database not dialable from the control plane".
+	// Empty when reachable.
+	UnreachableReason string `protobuf:"bytes,5,opt,name=unreachable_reason,json=unreachableReason,proto3" json:"unreachable_reason,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *BrowsableDatabase) Reset() {
+	*x = BrowsableDatabase{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowsableDatabase) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowsableDatabase) ProtoMessage() {}
+
+func (x *BrowsableDatabase) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowsableDatabase.ProtoReflect.Descriptor instead.
+func (*BrowsableDatabase) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *BrowsableDatabase) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *BrowsableDatabase) GetKind() BrowsableDatabaseKind {
+	if x != nil {
+		return x.Kind
+	}
+	return BrowsableDatabaseKind_BROWSABLE_DATABASE_KIND_UNSPECIFIED
+}
+
+func (x *BrowsableDatabase) GetPolicy() DataAccessPolicy {
+	if x != nil {
+		return x.Policy
+	}
+	return DataAccessPolicy_DATA_ACCESS_POLICY_UNSPECIFIED
+}
+
+func (x *BrowsableDatabase) GetReachable() bool {
+	if x != nil {
+		return x.Reachable
+	}
+	return false
+}
+
+func (x *BrowsableDatabase) GetUnreachableReason() string {
+	if x != nil {
+		return x.UnreachableReason
+	}
+	return ""
+}
+
+type DescribeDatabaseRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The control-plane environment id (deploy_environments.id).
+	EnvironmentId string `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
+	// Which database of the environment: a BrowsableDatabase.name.
+	Database string `protobuf:"bytes,2,opt,name=database,proto3" json:"database,omitempty"`
+	// For an audited environment: must equal environment_id, as in
+	// QueryDatabaseRequest.
+	ConfirmEnvId *string `protobuf:"bytes,3,opt,name=confirm_env_id,json=confirmEnvId,proto3,oneof" json:"confirm_env_id,omitempty"`
+	// For an audited environment: why. Recorded in the audit row and the
+	// activity feed.
+	Reason        *string `protobuf:"bytes,4,opt,name=reason,proto3,oneof" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DescribeDatabaseRequest) Reset() {
+	*x = DescribeDatabaseRequest{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeDatabaseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeDatabaseRequest) ProtoMessage() {}
+
+func (x *DescribeDatabaseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeDatabaseRequest.ProtoReflect.Descriptor instead.
+func (*DescribeDatabaseRequest) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *DescribeDatabaseRequest) GetEnvironmentId() string {
+	if x != nil {
+		return x.EnvironmentId
+	}
+	return ""
+}
+
+func (x *DescribeDatabaseRequest) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *DescribeDatabaseRequest) GetConfirmEnvId() string {
+	if x != nil && x.ConfirmEnvId != nil {
+		return *x.ConfirmEnvId
+	}
+	return ""
+}
+
+func (x *DescribeDatabaseRequest) GetReason() string {
+	if x != nil && x.Reason != nil {
+		return *x.Reason
+	}
+	return ""
+}
+
+type DescribeDatabaseResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The database described: the request's.
+	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
+	// Every table and view forge_ro may SELECT, sorted by schema then name.
+	// System schemas (pg_catalog, information_schema, pg_toast) are absent.
+	Tables     []*DatabaseTable `protobuf:"bytes,2,rep,name=tables,proto3" json:"tables,omitempty"`
+	DurationMs int64            `protobuf:"varint,3,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	// The audit_log row that recorded this call.
+	AuditId       string `protobuf:"bytes,4,opt,name=audit_id,json=auditId,proto3" json:"audit_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DescribeDatabaseResponse) Reset() {
+	*x = DescribeDatabaseResponse{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DescribeDatabaseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DescribeDatabaseResponse) ProtoMessage() {}
+
+func (x *DescribeDatabaseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DescribeDatabaseResponse.ProtoReflect.Descriptor instead.
+func (*DescribeDatabaseResponse) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *DescribeDatabaseResponse) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *DescribeDatabaseResponse) GetTables() []*DatabaseTable {
+	if x != nil {
+		return x.Tables
+	}
+	return nil
+}
+
+func (x *DescribeDatabaseResponse) GetDurationMs() int64 {
+	if x != nil {
+		return x.DurationMs
+	}
+	return 0
+}
+
+func (x *DescribeDatabaseResponse) GetAuditId() string {
+	if x != nil {
+		return x.AuditId
+	}
+	return ""
+}
+
+// DatabaseTable is one table or view as forge_ro sees it.
+type DatabaseTable struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Schema string                 `protobuf:"bytes,1,opt,name=schema,proto3" json:"schema,omitempty"`
+	Name   string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Kind   DatabaseTableKind      `protobuf:"varint,3,opt,name=kind,proto3,enum=controlplane.v1.DatabaseTableKind" json:"kind,omitempty"`
+	// The planner's estimate (pg_class.reltuples), not a count. -1 when
+	// unknown: a view, or a table never analyzed.
+	EstimatedRows int64 `protobuf:"varint,4,opt,name=estimated_rows,json=estimatedRows,proto3" json:"estimated_rows,omitempty"`
+	// COMMENT ON TABLE, or empty.
+	Comment string `protobuf:"bytes,5,opt,name=comment,proto3" json:"comment,omitempty"`
+	// The columns forge_ro may SELECT, in table order. A column it cannot read
+	// (forge:secret) is absent.
+	Columns []*DatabaseTableColumn `protobuf:"bytes,6,rep,name=columns,proto3" json:"columns,omitempty"`
+	// The primary key's columns, in key order. Empty when the table has none
+	// (or is a view); the row page then has no stable address. A key column
+	// forge_ro cannot read makes this empty too.
+	PrimaryKey []string `protobuf:"bytes,7,rep,name=primary_key,json=primaryKey,proto3" json:"primary_key,omitempty"`
+	// The foreign keys declared on this table, pointing out of it: schema and
+	// table are this table's, ref_schema and ref_table the referenced one's.
+	// The referenced table may be absent from tables when forge_ro cannot read
+	// it; the value is still shown, without a link.
+	ForeignKeys []*DatabaseForeignKey `protobuf:"bytes,8,rep,name=foreign_keys,json=foreignKeys,proto3" json:"foreign_keys,omitempty"`
+	// The foreign keys of other readable tables that point at this one: schema
+	// and table are the referencing table's, ref_schema and ref_table this
+	// table's. A referencing table forge_ro cannot read is absent, so every
+	// entry can be browsed with an eq filter on its columns.
+	ReferencedBy  []*DatabaseForeignKey `protobuf:"bytes,9,rep,name=referenced_by,json=referencedBy,proto3" json:"referenced_by,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatabaseTable) Reset() {
+	*x = DatabaseTable{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatabaseTable) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatabaseTable) ProtoMessage() {}
+
+func (x *DatabaseTable) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatabaseTable.ProtoReflect.Descriptor instead.
+func (*DatabaseTable) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *DatabaseTable) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+func (x *DatabaseTable) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DatabaseTable) GetKind() DatabaseTableKind {
+	if x != nil {
+		return x.Kind
+	}
+	return DatabaseTableKind_DATABASE_TABLE_KIND_UNSPECIFIED
+}
+
+func (x *DatabaseTable) GetEstimatedRows() int64 {
+	if x != nil {
+		return x.EstimatedRows
+	}
+	return 0
+}
+
+func (x *DatabaseTable) GetComment() string {
+	if x != nil {
+		return x.Comment
+	}
+	return ""
+}
+
+func (x *DatabaseTable) GetColumns() []*DatabaseTableColumn {
+	if x != nil {
+		return x.Columns
+	}
+	return nil
+}
+
+func (x *DatabaseTable) GetPrimaryKey() []string {
+	if x != nil {
+		return x.PrimaryKey
+	}
+	return nil
+}
+
+func (x *DatabaseTable) GetForeignKeys() []*DatabaseForeignKey {
+	if x != nil {
+		return x.ForeignKeys
+	}
+	return nil
+}
+
+func (x *DatabaseTable) GetReferencedBy() []*DatabaseForeignKey {
+	if x != nil {
+		return x.ReferencedBy
+	}
+	return nil
+}
+
+// DatabaseTableColumn is one column of a DatabaseTable.
+type DatabaseTableColumn struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// The column's declared type as Postgres prints it (format_type), with
+	// its modifiers: "bigint", "character varying(40)", "timestamp with time
+	// zone", "text[]", an enum's name. For display: it is the spelling a
+	// person reads, not DatabaseColumn's internal name ("int8") that a
+	// BrowseTable result column carries.
+	PgType   string `protobuf:"bytes,2,opt,name=pg_type,json=pgType,proto3" json:"pg_type,omitempty"`
+	Nullable bool   `protobuf:"varint,3,opt,name=nullable,proto3" json:"nullable,omitempty"`
+	// COMMENT ON COLUMN, or empty.
+	Comment string `protobuf:"bytes,4,opt,name=comment,proto3" json:"comment,omitempty"`
+	// The column is part of the table's primary key.
+	IsPrimaryKey  bool `protobuf:"varint,5,opt,name=is_primary_key,json=isPrimaryKey,proto3" json:"is_primary_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatabaseTableColumn) Reset() {
+	*x = DatabaseTableColumn{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatabaseTableColumn) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatabaseTableColumn) ProtoMessage() {}
+
+func (x *DatabaseTableColumn) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatabaseTableColumn.ProtoReflect.Descriptor instead.
+func (*DatabaseTableColumn) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *DatabaseTableColumn) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *DatabaseTableColumn) GetPgType() string {
+	if x != nil {
+		return x.PgType
+	}
+	return ""
+}
+
+func (x *DatabaseTableColumn) GetNullable() bool {
+	if x != nil {
+		return x.Nullable
+	}
+	return false
+}
+
+func (x *DatabaseTableColumn) GetComment() string {
+	if x != nil {
+		return x.Comment
+	}
+	return ""
+}
+
+func (x *DatabaseTableColumn) GetIsPrimaryKey() bool {
+	if x != nil {
+		return x.IsPrimaryKey
+	}
+	return false
+}
+
+// DatabaseForeignKey is one foreign-key constraint, always written from the
+// referencing side: columns[i] of schema.table references ref_columns[i] of
+// ref_schema.ref_table.
+type DatabaseForeignKey struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The constraint's name.
+	Constraint string `protobuf:"bytes,1,opt,name=constraint,proto3" json:"constraint,omitempty"`
+	// The referencing table.
+	Schema string `protobuf:"bytes,2,opt,name=schema,proto3" json:"schema,omitempty"`
+	Table  string `protobuf:"bytes,3,opt,name=table,proto3" json:"table,omitempty"`
+	// The referencing columns, in constraint order.
+	Columns []string `protobuf:"bytes,4,rep,name=columns,proto3" json:"columns,omitempty"`
+	// The referenced table.
+	RefSchema string `protobuf:"bytes,5,opt,name=ref_schema,json=refSchema,proto3" json:"ref_schema,omitempty"`
+	RefTable  string `protobuf:"bytes,6,opt,name=ref_table,json=refTable,proto3" json:"ref_table,omitempty"`
+	// The referenced columns, in constraint order: as long as columns.
+	RefColumns    []string `protobuf:"bytes,7,rep,name=ref_columns,json=refColumns,proto3" json:"ref_columns,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DatabaseForeignKey) Reset() {
+	*x = DatabaseForeignKey{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatabaseForeignKey) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatabaseForeignKey) ProtoMessage() {}
+
+func (x *DatabaseForeignKey) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatabaseForeignKey.ProtoReflect.Descriptor instead.
+func (*DatabaseForeignKey) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *DatabaseForeignKey) GetConstraint() string {
+	if x != nil {
+		return x.Constraint
+	}
+	return ""
+}
+
+func (x *DatabaseForeignKey) GetSchema() string {
+	if x != nil {
+		return x.Schema
+	}
+	return ""
+}
+
+func (x *DatabaseForeignKey) GetTable() string {
+	if x != nil {
+		return x.Table
+	}
+	return ""
+}
+
+func (x *DatabaseForeignKey) GetColumns() []string {
+	if x != nil {
+		return x.Columns
+	}
+	return nil
+}
+
+func (x *DatabaseForeignKey) GetRefSchema() string {
+	if x != nil {
+		return x.RefSchema
+	}
+	return ""
+}
+
+func (x *DatabaseForeignKey) GetRefTable() string {
+	if x != nil {
+		return x.RefTable
+	}
+	return ""
+}
+
+func (x *DatabaseForeignKey) GetRefColumns() []string {
+	if x != nil {
+		return x.RefColumns
+	}
+	return nil
+}
+
+type BrowseTableRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The control-plane environment id (deploy_environments.id).
+	EnvironmentId string `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
+	// Which database of the environment: a BrowsableDatabase.name.
+	Database string `protobuf:"bytes,2,opt,name=database,proto3" json:"database,omitempty"`
+	// The table or view, schema-qualified and unquoted: "public.chats". It must
+	// equal schema + "." + name of one DescribeDatabase table.
+	Table string `protobuf:"bytes,3,opt,name=table,proto3" json:"table,omitempty"`
+	// The columns to return, in this order. Empty = every column forge_ro may
+	// read, in table order.
+	Columns []string `protobuf:"bytes,4,rep,name=columns,proto3" json:"columns,omitempty"`
+	// ANDed together.
+	Filters []*BrowseFilter `protobuf:"bytes,5,rep,name=filters,proto3" json:"filters,omitempty"`
+	// In priority order. Empty = the primary key ascending, or no ORDER BY when
+	// the table has none (pages are then not stable).
+	Sort []*BrowseSort `protobuf:"bytes,6,rep,name=sort,proto3" json:"sort,omitempty"`
+	// Rows in the page, 1 to 500.
+	Limit int32 `protobuf:"varint,7,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Rows skipped before the page. At most 1,000,000: past that, narrow with a
+	// filter or a sort instead.
+	Offset int64 `protobuf:"varint,8,opt,name=offset,proto3" json:"offset,omitempty"`
+	// Whether and how to count the rows that match the filters.
+	Count BrowseCount `protobuf:"varint,9,opt,name=count,proto3,enum=controlplane.v1.BrowseCount" json:"count,omitempty"`
+	// For an audited environment: must equal environment_id, as in
+	// QueryDatabaseRequest.
+	ConfirmEnvId *string `protobuf:"bytes,10,opt,name=confirm_env_id,json=confirmEnvId,proto3,oneof" json:"confirm_env_id,omitempty"`
+	// For an audited environment: why. Recorded in the audit row and the
+	// activity feed.
+	Reason        *string `protobuf:"bytes,11,opt,name=reason,proto3,oneof" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowseTableRequest) Reset() {
+	*x = BrowseTableRequest{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowseTableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowseTableRequest) ProtoMessage() {}
+
+func (x *BrowseTableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowseTableRequest.ProtoReflect.Descriptor instead.
+func (*BrowseTableRequest) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *BrowseTableRequest) GetEnvironmentId() string {
+	if x != nil {
+		return x.EnvironmentId
+	}
+	return ""
+}
+
+func (x *BrowseTableRequest) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *BrowseTableRequest) GetTable() string {
+	if x != nil {
+		return x.Table
+	}
+	return ""
+}
+
+func (x *BrowseTableRequest) GetColumns() []string {
+	if x != nil {
+		return x.Columns
+	}
+	return nil
+}
+
+func (x *BrowseTableRequest) GetFilters() []*BrowseFilter {
+	if x != nil {
+		return x.Filters
+	}
+	return nil
+}
+
+func (x *BrowseTableRequest) GetSort() []*BrowseSort {
+	if x != nil {
+		return x.Sort
+	}
+	return nil
+}
+
+func (x *BrowseTableRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *BrowseTableRequest) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *BrowseTableRequest) GetCount() BrowseCount {
+	if x != nil {
+		return x.Count
+	}
+	return BrowseCount_BROWSE_COUNT_UNSPECIFIED
+}
+
+func (x *BrowseTableRequest) GetConfirmEnvId() string {
+	if x != nil && x.ConfirmEnvId != nil {
+		return *x.ConfirmEnvId
+	}
+	return ""
+}
+
+func (x *BrowseTableRequest) GetReason() string {
+	if x != nil && x.Reason != nil {
+		return *x.Reason
+	}
+	return ""
+}
+
+// BrowseFilter is one condition on one column. Values are bound as text
+// parameters and converted by Postgres to the column's type, so "42",
+// "2026-01-31" and "true" all work against the matching types.
+type BrowseFilter struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Column string                 `protobuf:"bytes,1,opt,name=column,proto3" json:"column,omitempty"`
+	Op     BrowseFilterOp         `protobuf:"varint,2,opt,name=op,proto3,enum=controlplane.v1.BrowseFilterOp" json:"op,omitempty"`
+	// Exactly one for EQ through ILIKE; one or more for IN; none for IS_NULL
+	// and NOT_NULL.
+	Values        []string `protobuf:"bytes,3,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowseFilter) Reset() {
+	*x = BrowseFilter{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowseFilter) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowseFilter) ProtoMessage() {}
+
+func (x *BrowseFilter) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowseFilter.ProtoReflect.Descriptor instead.
+func (*BrowseFilter) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *BrowseFilter) GetColumn() string {
+	if x != nil {
+		return x.Column
+	}
+	return ""
+}
+
+func (x *BrowseFilter) GetOp() BrowseFilterOp {
+	if x != nil {
+		return x.Op
+	}
+	return BrowseFilterOp_BROWSE_FILTER_OP_UNSPECIFIED
+}
+
+func (x *BrowseFilter) GetValues() []string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+// BrowseSort orders the page by one column.
+type BrowseSort struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Column string                 `protobuf:"bytes,1,opt,name=column,proto3" json:"column,omitempty"`
+	// Descending, NULLs first (Postgres's default for DESC); ascending puts
+	// them last.
+	Desc          bool `protobuf:"varint,2,opt,name=desc,proto3" json:"desc,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowseSort) Reset() {
+	*x = BrowseSort{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowseSort) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowseSort) ProtoMessage() {}
+
+func (x *BrowseSort) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowseSort.ProtoReflect.Descriptor instead.
+func (*BrowseSort) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *BrowseSort) GetColumn() string {
+	if x != nil {
+		return x.Column
+	}
+	return ""
+}
+
+func (x *BrowseSort) GetDesc() bool {
+	if x != nil {
+		return x.Desc
+	}
+	return false
+}
+
+type BrowseTableResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The columns returned, in order: the request's, or every readable one.
+	Columns []*DatabaseColumn `protobuf:"bytes,1,rep,name=columns,proto3" json:"columns,omitempty"`
+	// In column order. A cell longer than 4 KiB is cut and marked.
+	Rows []*DatabaseRow `protobuf:"bytes,2,rep,name=rows,proto3" json:"rows,omitempty"`
+	// There are rows past this page. The next page is offset + len(rows): the
+	// response-size cap may cut a page shorter than limit.
+	HasMore bool `protobuf:"varint,3,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	// The matching rows, when count was ESTIMATED or EXACT. Absent for NONE.
+	Total *int64 `protobuf:"varint,4,opt,name=total,proto3,oneof" json:"total,omitempty"`
+	// total is the planner's estimate (count ESTIMATED).
+	TotalIsEstimate bool `protobuf:"varint,5,opt,name=total_is_estimate,json=totalIsEstimate,proto3" json:"total_is_estimate,omitempty"`
+	// total is the EXACT count's cap: at least this many rows match.
+	TotalIsLowerBound bool  `protobuf:"varint,6,opt,name=total_is_lower_bound,json=totalIsLowerBound,proto3" json:"total_is_lower_bound,omitempty"`
+	DurationMs        int64 `protobuf:"varint,7,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	// The audit_log row that recorded this call.
+	AuditId string `protobuf:"bytes,8,opt,name=audit_id,json=auditId,proto3" json:"audit_id,omitempty"`
+	// The database and table that answered, as the request named them.
+	Database string `protobuf:"bytes,9,opt,name=database,proto3" json:"database,omitempty"`
+	Table    string `protobuf:"bytes,10,opt,name=table,proto3" json:"table,omitempty"`
+	// Which server answered: "ro" (a read replica) or "rw" (the primary).
+	Replica string `protobuf:"bytes,11,opt,name=replica,proto3" json:"replica,omitempty"`
+	// The response-size cap cut the page short of limit: fewer rows came back
+	// than asked for although more match (has_more is set too). Continue from
+	// next_offset, not offset + limit.
+	Truncated bool `protobuf:"varint,12,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// The offset of the next page: the request's offset plus the rows
+	// returned. Meaningful when has_more is set.
+	NextOffset    int64 `protobuf:"varint,13,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BrowseTableResponse) Reset() {
+	*x = BrowseTableResponse{}
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BrowseTableResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrowseTableResponse) ProtoMessage() {}
+
+func (x *BrowseTableResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_app_database_v1_app_database_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrowseTableResponse.ProtoReflect.Descriptor instead.
+func (*BrowseTableResponse) Descriptor() ([]byte, []int) {
+	return file_services_app_database_v1_app_database_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *BrowseTableResponse) GetColumns() []*DatabaseColumn {
+	if x != nil {
+		return x.Columns
+	}
+	return nil
+}
+
+func (x *BrowseTableResponse) GetRows() []*DatabaseRow {
+	if x != nil {
+		return x.Rows
+	}
+	return nil
+}
+
+func (x *BrowseTableResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
+}
+
+func (x *BrowseTableResponse) GetTotal() int64 {
+	if x != nil && x.Total != nil {
+		return *x.Total
+	}
+	return 0
+}
+
+func (x *BrowseTableResponse) GetTotalIsEstimate() bool {
+	if x != nil {
+		return x.TotalIsEstimate
+	}
+	return false
+}
+
+func (x *BrowseTableResponse) GetTotalIsLowerBound() bool {
+	if x != nil {
+		return x.TotalIsLowerBound
+	}
+	return false
+}
+
+func (x *BrowseTableResponse) GetDurationMs() int64 {
+	if x != nil {
+		return x.DurationMs
+	}
+	return 0
+}
+
+func (x *BrowseTableResponse) GetAuditId() string {
+	if x != nil {
+		return x.AuditId
+	}
+	return ""
+}
+
+func (x *BrowseTableResponse) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *BrowseTableResponse) GetTable() string {
+	if x != nil {
+		return x.Table
+	}
+	return ""
+}
+
+func (x *BrowseTableResponse) GetReplica() string {
+	if x != nil {
+		return x.Replica
+	}
+	return ""
+}
+
+func (x *BrowseTableResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *BrowseTableResponse) GetNextOffset() int64 {
+	if x != nil {
+		return x.NextOffset
+	}
+	return 0
+}
+
 var File_services_app_database_v1_app_database_proto protoreflect.FileDescriptor
 
 const file_services_app_database_v1_app_database_proto_rawDesc = "" +
@@ -1014,9 +2390,10 @@ const file_services_app_database_v1_app_database_proto_rawDesc = "" +
 	"\bdatabase\x18\t \x01(\tR\bdatabase\"=\n" +
 	"\x0eDatabaseColumn\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
-	"\apg_type\x18\x02 \x01(\tR\x06pgType\"=\n" +
+	"\apg_type\x18\x02 \x01(\tR\x06pgType\"f\n" +
 	"\vDatabaseRow\x12.\n" +
-	"\x06values\x18\x01 \x03(\v2\x16.google.protobuf.ValueR\x06values\"\xae\x03\n" +
+	"\x06values\x18\x01 \x03(\v2\x16.google.protobuf.ValueR\x06values\x12'\n" +
+	"\x0ftruncated_cells\x18\x02 \x03(\x05R\x0etruncatedCells\"\xae\x03\n" +
 	"\x19QueryDatabasePanelRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1a\n" +
 	"\bdatabase\x18\x02 \x01(\tR\bdatabase\x12\x10\n" +
@@ -1074,11 +2451,141 @@ const file_services_app_database_v1_app_database_proto_rawDesc = "" +
 	"\acolumns\x18\x03 \x03(\v2 .controlplane.v1.DashboardColumnR\acolumns\">\n" +
 	"\x0fDashboardColumn\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
-	"\apg_type\x18\x02 \x01(\tR\x06pgType2\xde\x02\n" +
+	"\apg_type\x18\x02 \x01(\tR\x06pgType\"F\n" +
+	"\x1dListBrowsableDatabasesRequest\x12%\n" +
+	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\"b\n" +
+	"\x1eListBrowsableDatabasesResponse\x12@\n" +
+	"\tdatabases\x18\x01 \x03(\v2\".controlplane.v1.BrowsableDatabaseR\tdatabases\"\xeb\x01\n" +
+	"\x11BrowsableDatabase\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
+	"\x04kind\x18\x02 \x01(\x0e2&.controlplane.v1.BrowsableDatabaseKindR\x04kind\x129\n" +
+	"\x06policy\x18\x03 \x01(\x0e2!.controlplane.v1.DataAccessPolicyR\x06policy\x12\x1c\n" +
+	"\treachable\x18\x04 \x01(\bR\treachable\x12-\n" +
+	"\x12unreachable_reason\x18\x05 \x01(\tR\x11unreachableReason\"\xc2\x01\n" +
+	"\x17DescribeDatabaseRequest\x12%\n" +
+	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1a\n" +
+	"\bdatabase\x18\x02 \x01(\tR\bdatabase\x12)\n" +
+	"\x0econfirm_env_id\x18\x03 \x01(\tH\x00R\fconfirmEnvId\x88\x01\x01\x12\x1b\n" +
+	"\x06reason\x18\x04 \x01(\tH\x01R\x06reason\x88\x01\x01B\x11\n" +
+	"\x0f_confirm_env_idB\t\n" +
+	"\a_reason\"\xaa\x01\n" +
+	"\x18DescribeDatabaseResponse\x12\x1a\n" +
+	"\bdatabase\x18\x01 \x01(\tR\bdatabase\x126\n" +
+	"\x06tables\x18\x02 \x03(\v2\x1e.controlplane.v1.DatabaseTableR\x06tables\x12\x1f\n" +
+	"\vduration_ms\x18\x03 \x01(\x03R\n" +
+	"durationMs\x12\x19\n" +
+	"\baudit_id\x18\x04 \x01(\tR\aauditId\"\xa7\x03\n" +
+	"\rDatabaseTable\x12\x16\n" +
+	"\x06schema\x18\x01 \x01(\tR\x06schema\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x126\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\".controlplane.v1.DatabaseTableKindR\x04kind\x12%\n" +
+	"\x0eestimated_rows\x18\x04 \x01(\x03R\restimatedRows\x12\x18\n" +
+	"\acomment\x18\x05 \x01(\tR\acomment\x12>\n" +
+	"\acolumns\x18\x06 \x03(\v2$.controlplane.v1.DatabaseTableColumnR\acolumns\x12\x1f\n" +
+	"\vprimary_key\x18\a \x03(\tR\n" +
+	"primaryKey\x12F\n" +
+	"\fforeign_keys\x18\b \x03(\v2#.controlplane.v1.DatabaseForeignKeyR\vforeignKeys\x12H\n" +
+	"\rreferenced_by\x18\t \x03(\v2#.controlplane.v1.DatabaseForeignKeyR\freferencedBy\"\x9e\x01\n" +
+	"\x13DatabaseTableColumn\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x17\n" +
+	"\apg_type\x18\x02 \x01(\tR\x06pgType\x12\x1a\n" +
+	"\bnullable\x18\x03 \x01(\bR\bnullable\x12\x18\n" +
+	"\acomment\x18\x04 \x01(\tR\acomment\x12$\n" +
+	"\x0eis_primary_key\x18\x05 \x01(\bR\fisPrimaryKey\"\xd9\x01\n" +
+	"\x12DatabaseForeignKey\x12\x1e\n" +
+	"\n" +
+	"constraint\x18\x01 \x01(\tR\n" +
+	"constraint\x12\x16\n" +
+	"\x06schema\x18\x02 \x01(\tR\x06schema\x12\x14\n" +
+	"\x05table\x18\x03 \x01(\tR\x05table\x12\x18\n" +
+	"\acolumns\x18\x04 \x03(\tR\acolumns\x12\x1d\n" +
+	"\n" +
+	"ref_schema\x18\x05 \x01(\tR\trefSchema\x12\x1b\n" +
+	"\tref_table\x18\x06 \x01(\tR\brefTable\x12\x1f\n" +
+	"\vref_columns\x18\a \x03(\tR\n" +
+	"refColumns\"\xb9\x03\n" +
+	"\x12BrowseTableRequest\x12%\n" +
+	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x1a\n" +
+	"\bdatabase\x18\x02 \x01(\tR\bdatabase\x12\x14\n" +
+	"\x05table\x18\x03 \x01(\tR\x05table\x12\x18\n" +
+	"\acolumns\x18\x04 \x03(\tR\acolumns\x127\n" +
+	"\afilters\x18\x05 \x03(\v2\x1d.controlplane.v1.BrowseFilterR\afilters\x12/\n" +
+	"\x04sort\x18\x06 \x03(\v2\x1b.controlplane.v1.BrowseSortR\x04sort\x12\x14\n" +
+	"\x05limit\x18\a \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\b \x01(\x03R\x06offset\x122\n" +
+	"\x05count\x18\t \x01(\x0e2\x1c.controlplane.v1.BrowseCountR\x05count\x12)\n" +
+	"\x0econfirm_env_id\x18\n" +
+	" \x01(\tH\x00R\fconfirmEnvId\x88\x01\x01\x12\x1b\n" +
+	"\x06reason\x18\v \x01(\tH\x01R\x06reason\x88\x01\x01B\x11\n" +
+	"\x0f_confirm_env_idB\t\n" +
+	"\a_reason\"o\n" +
+	"\fBrowseFilter\x12\x16\n" +
+	"\x06column\x18\x01 \x01(\tR\x06column\x12/\n" +
+	"\x02op\x18\x02 \x01(\x0e2\x1f.controlplane.v1.BrowseFilterOpR\x02op\x12\x16\n" +
+	"\x06values\x18\x03 \x03(\tR\x06values\"8\n" +
+	"\n" +
+	"BrowseSort\x12\x16\n" +
+	"\x06column\x18\x01 \x01(\tR\x06column\x12\x12\n" +
+	"\x04desc\x18\x02 \x01(\bR\x04desc\"\xe6\x03\n" +
+	"\x13BrowseTableResponse\x129\n" +
+	"\acolumns\x18\x01 \x03(\v2\x1f.controlplane.v1.DatabaseColumnR\acolumns\x120\n" +
+	"\x04rows\x18\x02 \x03(\v2\x1c.controlplane.v1.DatabaseRowR\x04rows\x12\x19\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\x12\x19\n" +
+	"\x05total\x18\x04 \x01(\x03H\x00R\x05total\x88\x01\x01\x12*\n" +
+	"\x11total_is_estimate\x18\x05 \x01(\bR\x0ftotalIsEstimate\x12/\n" +
+	"\x14total_is_lower_bound\x18\x06 \x01(\bR\x11totalIsLowerBound\x12\x1f\n" +
+	"\vduration_ms\x18\a \x01(\x03R\n" +
+	"durationMs\x12\x19\n" +
+	"\baudit_id\x18\b \x01(\tR\aauditId\x12\x1a\n" +
+	"\bdatabase\x18\t \x01(\tR\bdatabase\x12\x14\n" +
+	"\x05table\x18\n" +
+	" \x01(\tR\x05table\x12\x18\n" +
+	"\areplica\x18\v \x01(\tR\areplica\x12\x1c\n" +
+	"\ttruncated\x18\f \x01(\bR\ttruncated\x12\x1f\n" +
+	"\vnext_offset\x18\r \x01(\x03R\n" +
+	"nextOffsetB\b\n" +
+	"\x06_total*\x8b\x01\n" +
+	"\x15BrowsableDatabaseKind\x12'\n" +
+	"#BROWSABLE_DATABASE_KIND_UNSPECIFIED\x10\x00\x12#\n" +
+	"\x1fBROWSABLE_DATABASE_KIND_MANAGED\x10\x01\x12$\n" +
+	" BROWSABLE_DATABASE_KIND_EXTERNAL\x10\x02*\x90\x01\n" +
+	"\x10DataAccessPolicy\x12\"\n" +
+	"\x1eDATA_ACCESS_POLICY_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17DATA_ACCESS_POLICY_OPEN\x10\x01\x12\x1e\n" +
+	"\x1aDATA_ACCESS_POLICY_AUDITED\x10\x02\x12\x1b\n" +
+	"\x17DATA_ACCESS_POLICY_DENY\x10\x03*\xc7\x01\n" +
+	"\x11DatabaseTableKind\x12#\n" +
+	"\x1fDATABASE_TABLE_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19DATABASE_TABLE_KIND_TABLE\x10\x01\x12\x1c\n" +
+	"\x18DATABASE_TABLE_KIND_VIEW\x10\x02\x12)\n" +
+	"%DATABASE_TABLE_KIND_MATERIALIZED_VIEW\x10\x03\x12%\n" +
+	"!DATABASE_TABLE_KIND_FOREIGN_TABLE\x10\x04*\xd8\x02\n" +
+	"\x0eBrowseFilterOp\x12 \n" +
+	"\x1cBROWSE_FILTER_OP_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13BROWSE_FILTER_OP_EQ\x10\x01\x12\x18\n" +
+	"\x14BROWSE_FILTER_OP_NEQ\x10\x02\x12\x17\n" +
+	"\x13BROWSE_FILTER_OP_LT\x10\x03\x12\x18\n" +
+	"\x14BROWSE_FILTER_OP_LTE\x10\x04\x12\x17\n" +
+	"\x13BROWSE_FILTER_OP_GT\x10\x05\x12\x18\n" +
+	"\x14BROWSE_FILTER_OP_GTE\x10\x06\x12\x19\n" +
+	"\x15BROWSE_FILTER_OP_LIKE\x10\a\x12\x1a\n" +
+	"\x16BROWSE_FILTER_OP_ILIKE\x10\b\x12\x1c\n" +
+	"\x18BROWSE_FILTER_OP_IS_NULL\x10\t\x12\x1d\n" +
+	"\x19BROWSE_FILTER_OP_NOT_NULL\x10\n" +
+	"\x12\x17\n" +
+	"\x13BROWSE_FILTER_OP_IN\x10\v*v\n" +
+	"\vBrowseCount\x12\x1c\n" +
+	"\x18BROWSE_COUNT_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11BROWSE_COUNT_NONE\x10\x01\x12\x1a\n" +
+	"\x16BROWSE_COUNT_ESTIMATED\x10\x02\x12\x16\n" +
+	"\x12BROWSE_COUNT_EXACT\x10\x032\xab\x05\n" +
 	"\x12AppDatabaseService\x12^\n" +
 	"\rQueryDatabase\x12%.controlplane.v1.QueryDatabaseRequest\x1a&.controlplane.v1.QueryDatabaseResponse\x12m\n" +
 	"\x12QueryDatabasePanel\x12*.controlplane.v1.QueryDatabasePanelRequest\x1a+.controlplane.v1.QueryDatabasePanelResponse\x12y\n" +
-	"\x16ListDashboardDatabases\x12..controlplane.v1.ListDashboardDatabasesRequest\x1a/.controlplane.v1.ListDashboardDatabasesResponseB\xde\x01\n" +
+	"\x16ListDashboardDatabases\x12..controlplane.v1.ListDashboardDatabasesRequest\x1a/.controlplane.v1.ListDashboardDatabasesResponse\x12~\n" +
+	"\x16ListBrowsableDatabases\x12..controlplane.v1.ListBrowsableDatabasesRequest\x1a/.controlplane.v1.ListBrowsableDatabasesResponse\"\x03\x90\x02\x01\x12l\n" +
+	"\x10DescribeDatabase\x12(.controlplane.v1.DescribeDatabaseRequest\x1a).controlplane.v1.DescribeDatabaseResponse\"\x03\x90\x02\x01\x12]\n" +
+	"\vBrowseTable\x12#.controlplane.v1.BrowseTableRequest\x1a$.controlplane.v1.BrowseTableResponse\"\x03\x90\x02\x01B\xde\x01\n" +
 	"\x13com.controlplane.v1B\x10AppDatabaseProtoP\x01ZXgithub.com/reliant-labs/reliant/gen/controlplane/services/app_database/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -1093,51 +2600,89 @@ func file_services_app_database_v1_app_database_proto_rawDescGZIP() []byte {
 	return file_services_app_database_v1_app_database_proto_rawDescData
 }
 
-var file_services_app_database_v1_app_database_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_services_app_database_v1_app_database_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_services_app_database_v1_app_database_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_services_app_database_v1_app_database_proto_goTypes = []any{
-	(*QueryDatabaseRequest)(nil),           // 0: controlplane.v1.QueryDatabaseRequest
-	(*QueryDatabaseResponse)(nil),          // 1: controlplane.v1.QueryDatabaseResponse
-	(*DatabaseColumn)(nil),                 // 2: controlplane.v1.DatabaseColumn
-	(*DatabaseRow)(nil),                    // 3: controlplane.v1.DatabaseRow
-	(*QueryDatabasePanelRequest)(nil),      // 4: controlplane.v1.QueryDatabasePanelRequest
-	(*QueryDatabasePanelResponse)(nil),     // 5: controlplane.v1.QueryDatabasePanelResponse
-	(*ListDashboardDatabasesRequest)(nil),  // 6: controlplane.v1.ListDashboardDatabasesRequest
-	(*ListDashboardDatabasesResponse)(nil), // 7: controlplane.v1.ListDashboardDatabasesResponse
-	(*DashboardDatabase)(nil),              // 8: controlplane.v1.DashboardDatabase
-	(*DashboardTable)(nil),                 // 9: controlplane.v1.DashboardTable
-	(*DashboardColumn)(nil),                // 10: controlplane.v1.DashboardColumn
-	(*structpb.Value)(nil),                 // 11: google.protobuf.Value
-	(*timestamppb.Timestamp)(nil),          // 12: google.protobuf.Timestamp
-	(*v1.PanelResultColumn)(nil),           // 13: controlplane.v1.PanelResultColumn
-	(*v1.PanelResultSeries)(nil),           // 14: controlplane.v1.PanelResultSeries
-	(*v1.PanelResultRow)(nil),              // 15: controlplane.v1.PanelResultRow
+	(BrowsableDatabaseKind)(0),             // 0: controlplane.v1.BrowsableDatabaseKind
+	(DataAccessPolicy)(0),                  // 1: controlplane.v1.DataAccessPolicy
+	(DatabaseTableKind)(0),                 // 2: controlplane.v1.DatabaseTableKind
+	(BrowseFilterOp)(0),                    // 3: controlplane.v1.BrowseFilterOp
+	(BrowseCount)(0),                       // 4: controlplane.v1.BrowseCount
+	(*QueryDatabaseRequest)(nil),           // 5: controlplane.v1.QueryDatabaseRequest
+	(*QueryDatabaseResponse)(nil),          // 6: controlplane.v1.QueryDatabaseResponse
+	(*DatabaseColumn)(nil),                 // 7: controlplane.v1.DatabaseColumn
+	(*DatabaseRow)(nil),                    // 8: controlplane.v1.DatabaseRow
+	(*QueryDatabasePanelRequest)(nil),      // 9: controlplane.v1.QueryDatabasePanelRequest
+	(*QueryDatabasePanelResponse)(nil),     // 10: controlplane.v1.QueryDatabasePanelResponse
+	(*ListDashboardDatabasesRequest)(nil),  // 11: controlplane.v1.ListDashboardDatabasesRequest
+	(*ListDashboardDatabasesResponse)(nil), // 12: controlplane.v1.ListDashboardDatabasesResponse
+	(*DashboardDatabase)(nil),              // 13: controlplane.v1.DashboardDatabase
+	(*DashboardTable)(nil),                 // 14: controlplane.v1.DashboardTable
+	(*DashboardColumn)(nil),                // 15: controlplane.v1.DashboardColumn
+	(*ListBrowsableDatabasesRequest)(nil),  // 16: controlplane.v1.ListBrowsableDatabasesRequest
+	(*ListBrowsableDatabasesResponse)(nil), // 17: controlplane.v1.ListBrowsableDatabasesResponse
+	(*BrowsableDatabase)(nil),              // 18: controlplane.v1.BrowsableDatabase
+	(*DescribeDatabaseRequest)(nil),        // 19: controlplane.v1.DescribeDatabaseRequest
+	(*DescribeDatabaseResponse)(nil),       // 20: controlplane.v1.DescribeDatabaseResponse
+	(*DatabaseTable)(nil),                  // 21: controlplane.v1.DatabaseTable
+	(*DatabaseTableColumn)(nil),            // 22: controlplane.v1.DatabaseTableColumn
+	(*DatabaseForeignKey)(nil),             // 23: controlplane.v1.DatabaseForeignKey
+	(*BrowseTableRequest)(nil),             // 24: controlplane.v1.BrowseTableRequest
+	(*BrowseFilter)(nil),                   // 25: controlplane.v1.BrowseFilter
+	(*BrowseSort)(nil),                     // 26: controlplane.v1.BrowseSort
+	(*BrowseTableResponse)(nil),            // 27: controlplane.v1.BrowseTableResponse
+	(*structpb.Value)(nil),                 // 28: google.protobuf.Value
+	(*timestamppb.Timestamp)(nil),          // 29: google.protobuf.Timestamp
+	(*v1.PanelResultColumn)(nil),           // 30: controlplane.v1.PanelResultColumn
+	(*v1.PanelResultSeries)(nil),           // 31: controlplane.v1.PanelResultSeries
+	(*v1.PanelResultRow)(nil),              // 32: controlplane.v1.PanelResultRow
 }
 var file_services_app_database_v1_app_database_proto_depIdxs = []int32{
-	2,  // 0: controlplane.v1.QueryDatabaseResponse.columns:type_name -> controlplane.v1.DatabaseColumn
-	3,  // 1: controlplane.v1.QueryDatabaseResponse.rows:type_name -> controlplane.v1.DatabaseRow
-	11, // 2: controlplane.v1.DatabaseRow.values:type_name -> google.protobuf.Value
-	12, // 3: controlplane.v1.QueryDatabasePanelRequest.from:type_name -> google.protobuf.Timestamp
-	12, // 4: controlplane.v1.QueryDatabasePanelRequest.to:type_name -> google.protobuf.Timestamp
-	13, // 5: controlplane.v1.QueryDatabasePanelResponse.sql_columns:type_name -> controlplane.v1.PanelResultColumn
-	14, // 6: controlplane.v1.QueryDatabasePanelResponse.series:type_name -> controlplane.v1.PanelResultSeries
-	15, // 7: controlplane.v1.QueryDatabasePanelResponse.rows:type_name -> controlplane.v1.PanelResultRow
-	12, // 8: controlplane.v1.QueryDatabasePanelResponse.as_of:type_name -> google.protobuf.Timestamp
-	12, // 9: controlplane.v1.QueryDatabasePanelResponse.from:type_name -> google.protobuf.Timestamp
-	12, // 10: controlplane.v1.QueryDatabasePanelResponse.to:type_name -> google.protobuf.Timestamp
-	8,  // 11: controlplane.v1.ListDashboardDatabasesResponse.databases:type_name -> controlplane.v1.DashboardDatabase
-	9,  // 12: controlplane.v1.DashboardDatabase.tables:type_name -> controlplane.v1.DashboardTable
-	10, // 13: controlplane.v1.DashboardTable.columns:type_name -> controlplane.v1.DashboardColumn
-	0,  // 14: controlplane.v1.AppDatabaseService.QueryDatabase:input_type -> controlplane.v1.QueryDatabaseRequest
-	4,  // 15: controlplane.v1.AppDatabaseService.QueryDatabasePanel:input_type -> controlplane.v1.QueryDatabasePanelRequest
-	6,  // 16: controlplane.v1.AppDatabaseService.ListDashboardDatabases:input_type -> controlplane.v1.ListDashboardDatabasesRequest
-	1,  // 17: controlplane.v1.AppDatabaseService.QueryDatabase:output_type -> controlplane.v1.QueryDatabaseResponse
-	5,  // 18: controlplane.v1.AppDatabaseService.QueryDatabasePanel:output_type -> controlplane.v1.QueryDatabasePanelResponse
-	7,  // 19: controlplane.v1.AppDatabaseService.ListDashboardDatabases:output_type -> controlplane.v1.ListDashboardDatabasesResponse
-	17, // [17:20] is the sub-list for method output_type
-	14, // [14:17] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	7,  // 0: controlplane.v1.QueryDatabaseResponse.columns:type_name -> controlplane.v1.DatabaseColumn
+	8,  // 1: controlplane.v1.QueryDatabaseResponse.rows:type_name -> controlplane.v1.DatabaseRow
+	28, // 2: controlplane.v1.DatabaseRow.values:type_name -> google.protobuf.Value
+	29, // 3: controlplane.v1.QueryDatabasePanelRequest.from:type_name -> google.protobuf.Timestamp
+	29, // 4: controlplane.v1.QueryDatabasePanelRequest.to:type_name -> google.protobuf.Timestamp
+	30, // 5: controlplane.v1.QueryDatabasePanelResponse.sql_columns:type_name -> controlplane.v1.PanelResultColumn
+	31, // 6: controlplane.v1.QueryDatabasePanelResponse.series:type_name -> controlplane.v1.PanelResultSeries
+	32, // 7: controlplane.v1.QueryDatabasePanelResponse.rows:type_name -> controlplane.v1.PanelResultRow
+	29, // 8: controlplane.v1.QueryDatabasePanelResponse.as_of:type_name -> google.protobuf.Timestamp
+	29, // 9: controlplane.v1.QueryDatabasePanelResponse.from:type_name -> google.protobuf.Timestamp
+	29, // 10: controlplane.v1.QueryDatabasePanelResponse.to:type_name -> google.protobuf.Timestamp
+	13, // 11: controlplane.v1.ListDashboardDatabasesResponse.databases:type_name -> controlplane.v1.DashboardDatabase
+	14, // 12: controlplane.v1.DashboardDatabase.tables:type_name -> controlplane.v1.DashboardTable
+	15, // 13: controlplane.v1.DashboardTable.columns:type_name -> controlplane.v1.DashboardColumn
+	18, // 14: controlplane.v1.ListBrowsableDatabasesResponse.databases:type_name -> controlplane.v1.BrowsableDatabase
+	0,  // 15: controlplane.v1.BrowsableDatabase.kind:type_name -> controlplane.v1.BrowsableDatabaseKind
+	1,  // 16: controlplane.v1.BrowsableDatabase.policy:type_name -> controlplane.v1.DataAccessPolicy
+	21, // 17: controlplane.v1.DescribeDatabaseResponse.tables:type_name -> controlplane.v1.DatabaseTable
+	2,  // 18: controlplane.v1.DatabaseTable.kind:type_name -> controlplane.v1.DatabaseTableKind
+	22, // 19: controlplane.v1.DatabaseTable.columns:type_name -> controlplane.v1.DatabaseTableColumn
+	23, // 20: controlplane.v1.DatabaseTable.foreign_keys:type_name -> controlplane.v1.DatabaseForeignKey
+	23, // 21: controlplane.v1.DatabaseTable.referenced_by:type_name -> controlplane.v1.DatabaseForeignKey
+	25, // 22: controlplane.v1.BrowseTableRequest.filters:type_name -> controlplane.v1.BrowseFilter
+	26, // 23: controlplane.v1.BrowseTableRequest.sort:type_name -> controlplane.v1.BrowseSort
+	4,  // 24: controlplane.v1.BrowseTableRequest.count:type_name -> controlplane.v1.BrowseCount
+	3,  // 25: controlplane.v1.BrowseFilter.op:type_name -> controlplane.v1.BrowseFilterOp
+	7,  // 26: controlplane.v1.BrowseTableResponse.columns:type_name -> controlplane.v1.DatabaseColumn
+	8,  // 27: controlplane.v1.BrowseTableResponse.rows:type_name -> controlplane.v1.DatabaseRow
+	5,  // 28: controlplane.v1.AppDatabaseService.QueryDatabase:input_type -> controlplane.v1.QueryDatabaseRequest
+	9,  // 29: controlplane.v1.AppDatabaseService.QueryDatabasePanel:input_type -> controlplane.v1.QueryDatabasePanelRequest
+	11, // 30: controlplane.v1.AppDatabaseService.ListDashboardDatabases:input_type -> controlplane.v1.ListDashboardDatabasesRequest
+	16, // 31: controlplane.v1.AppDatabaseService.ListBrowsableDatabases:input_type -> controlplane.v1.ListBrowsableDatabasesRequest
+	19, // 32: controlplane.v1.AppDatabaseService.DescribeDatabase:input_type -> controlplane.v1.DescribeDatabaseRequest
+	24, // 33: controlplane.v1.AppDatabaseService.BrowseTable:input_type -> controlplane.v1.BrowseTableRequest
+	6,  // 34: controlplane.v1.AppDatabaseService.QueryDatabase:output_type -> controlplane.v1.QueryDatabaseResponse
+	10, // 35: controlplane.v1.AppDatabaseService.QueryDatabasePanel:output_type -> controlplane.v1.QueryDatabasePanelResponse
+	12, // 36: controlplane.v1.AppDatabaseService.ListDashboardDatabases:output_type -> controlplane.v1.ListDashboardDatabasesResponse
+	17, // 37: controlplane.v1.AppDatabaseService.ListBrowsableDatabases:output_type -> controlplane.v1.ListBrowsableDatabasesResponse
+	20, // 38: controlplane.v1.AppDatabaseService.DescribeDatabase:output_type -> controlplane.v1.DescribeDatabaseResponse
+	27, // 39: controlplane.v1.AppDatabaseService.BrowseTable:output_type -> controlplane.v1.BrowseTableResponse
+	34, // [34:40] is the sub-list for method output_type
+	28, // [28:34] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_services_app_database_v1_app_database_proto_init() }
@@ -1146,18 +2691,22 @@ func file_services_app_database_v1_app_database_proto_init() {
 		return
 	}
 	file_services_app_database_v1_app_database_proto_msgTypes[0].OneofWrappers = []any{}
+	file_services_app_database_v1_app_database_proto_msgTypes[14].OneofWrappers = []any{}
+	file_services_app_database_v1_app_database_proto_msgTypes[19].OneofWrappers = []any{}
+	file_services_app_database_v1_app_database_proto_msgTypes[22].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_app_database_v1_app_database_proto_rawDesc), len(file_services_app_database_v1_app_database_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   11,
+			NumEnums:      5,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_services_app_database_v1_app_database_proto_goTypes,
 		DependencyIndexes: file_services_app_database_v1_app_database_proto_depIdxs,
+		EnumInfos:         file_services_app_database_v1_app_database_proto_enumTypes,
 		MessageInfos:      file_services_app_database_v1_app_database_proto_msgTypes,
 	}.Build()
 	File_services_app_database_v1_app_database_proto = out.File
