@@ -110,6 +110,8 @@ var RuntimeInjectedInputs = map[string]bool{
 	// What failed, for the nodes of an on_failure handler (runtime.Failure).
 	// Set by the runtime for the handler only, never taken from a client.
 	"__failure": true,
+	// Monotonic saved-memory exclusion passed to spawned workflows.
+	"_runtime_exclude_ambient_memory": true,
 }
 
 // NewWorkflowID generates a new random UUID for a root workflow.

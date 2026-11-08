@@ -129,6 +129,7 @@ type ApprovalResolveStore interface {
 // drain, history loading and the tool-call status writer.
 type CallLLMStore interface {
 	LLMUsageRecorder
+	ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)

@@ -39,6 +39,7 @@
               "features/git-integration",
               "features/threads",
               "workflows/spawn",
+              "workflows/ambient-memory",
               "features/attachments",
               "features/processes"
             ]

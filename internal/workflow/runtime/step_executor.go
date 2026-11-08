@@ -1270,6 +1270,16 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// Thread from execution context
 	if e.execContext != nil {
 		rtx.Thread = e.execContext.Thread
+		rtx.ExcludeAmbientMemory = e.execContext.ExcludeAmbientMemory
+	}
+	// A call's opt-out also caps any descendants it subsequently spawns on
+	// this thread. Never clear a previously recorded exclusion.
+	rtx.ExcludeAmbientMemory = rtx.ExcludeAmbientMemory || excludesAmbientMemory(e.workflowInputs) || e.childTracker.excludesAmbientMemory(rtx.Thread)
+	if node.GetCallLlm().GetExcludeAmbientMemory() {
+		rtx.ExcludeAmbientMemory = true
+	}
+	if rtx.ExcludeAmbientMemory {
+		e.childTracker.excludeAmbientMemory(rtx.Thread)
 	}
 
 	// Who this run's integration writes speak as (see InputKeyActingIdentity).

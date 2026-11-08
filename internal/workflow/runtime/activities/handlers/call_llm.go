@@ -397,6 +397,15 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 		ctx = nomachine.With(ctx)
 	}
 
+	// Latch before assembling or sending anything. Durable thread lineage is
+	// authoritative after coarse restarts and stopped-agent resumption, which
+	// may reconstruct runtime inputs without their former in-memory policy.
+	rtx.ExcludeAmbientMemory, err = a.repo.ResolveThreadAmbientMemoryExclusion(ctx, chat.ID, thread,
+		rtx.ExcludeAmbientMemory || args.GetExcludeAmbientMemory())
+	if err != nil {
+		return nil, fmt.Errorf("resolve ambient memory exclusion: %w", err)
+	}
+
 	// Hydrate the user's JWT into the in-memory auth map so the Reliant LLM
 	// driver can be resolved on workers that didn't see the originating gRPC
 	// request. The JWT travels through workflow inputs; see RuntimeContext.
@@ -1487,7 +1496,19 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// These are NOT saved to DB — re-injected each turn so the Anthropic
 	// cache handles deduplication.
 	var prefix []message.Message
-	if memoryContent := formatStoredMemories(projectCfg); memoryContent != "" {
+	// This excludes only automatic memory injection, not bootstrap prompts,
+	// history, explicit skills/messages or tool access. An inherited exclusion
+	// cannot be undone by this call's default/false value.
+	excludeAmbientMemory := rtx.ExcludeAmbientMemory || args.GetExcludeAmbientMemory()
+	var memoryContent string
+	if !excludeAmbientMemory {
+		memoryContent = formatStoredMemories(projectCfg)
+	} else if projectCfg != nil {
+		// The sandbox capability note shares the memory block historically,
+		// but is harness guidance, not user memory. Keep it under exclusion.
+		memoryContent = daemonRuntimeLimitationNote(projectCfg.DaemonRuntimeType)
+	}
+	if memoryContent != "" {
 		prefix = append(prefix, message.Message{
 			Role:  message.System,
 			Parts: []message.ContentPart{message.TextContent{Text: memoryContent}},
@@ -1497,7 +1518,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// config snapshot, within a share of this model's window (see
 	// repoMemoryBudgetFraction). Sorted by repo name for prefix-cache
 	// stability.
-	if projectCfg != nil && len(projectCfg.RepoMemories) > 0 {
+	if !excludeAmbientMemory && projectCfg != nil && len(projectCfg.RepoMemories) > 0 {
 		budget := repoMemoryBudgetChars(ceiling)
 		memMsgs, omitted := formatRepoMemoryMessages(projectCfg.RepoMemories, budget)
 		if len(memMsgs) > 0 {

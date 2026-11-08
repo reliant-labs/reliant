@@ -29,11 +29,13 @@ type ExecutionContext struct {
 
 	// Thread - THE authoritative thread for this execution
 	// This is the single source of truth - no lookups needed
-	Thread       string
-	ThreadMode   string // "new", "inherit", "fork" — uses model.ThreadMode* constants
-	ThreadTitle  string // Human-readable title for the thread (e.g., preset name or node ID)
-	ForkedFrom   string // If mode=fork, the parent thread we copied context from
-	ParentThread string // The parent's thread (used for mode=inherit and mode=fork resolution)
+	Thread      string
+	ThreadMode  string // "new", "inherit", "fork" — uses model.ThreadMode* constants
+	ThreadTitle string // Human-readable title for the thread (e.g., preset name or node ID)
+	// ExcludeAmbientMemory is monotonic within this execution and descendants.
+	ExcludeAmbientMemory bool   `json:",omitempty"`
+	ForkedFrom           string // If mode=fork, the parent thread we copied context from
+	ParentThread         string // The parent's thread (used for mode=inherit and mode=fork resolution)
 
 	// RouterDecision is set when this context was created by a router node.
 	// Contains the routing decision metadata for display in the UI.
@@ -269,18 +271,19 @@ func daemonSelectorFromCELResult(result interface{}) (*DaemonSelectorValue, erro
 // When reuseThread is false, each iteration gets a unique deterministic thread.
 func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *ExecutionContext {
 	child := &ExecutionContext{
-		WorkflowID:       ctx.WorkflowID,
-		ChatID:           ctx.ChatID,
-		WorkflowName:     ctx.WorkflowName,
-		ThreadMode:       ctx.ThreadMode,
-		ForkedFrom:       ctx.ForkedFrom,
-		ParentThread:     ctx.ParentThread,     // Preserve parent thread chain
-		ProjectPath:      ctx.ProjectPath,      // Inherit project path (can be overridden by loop's project config)
-		DaemonSelector:   ctx.DaemonSelector,   // Inherit daemon selector
-		SpawnDepth:       ctx.SpawnDepth,       // Inherit spawn depth (iterations don't increase depth)
-		ParentPermission: ctx.ParentPermission, // Inherit parent permission cap
-		Parent:           ctx.Parent,
-		UserJWT:          ctx.UserJWT, // Reliant provider is JWT-gated; dropping it here would exclude it from availableProviders inside the loop.
+		WorkflowID:           ctx.WorkflowID,
+		ChatID:               ctx.ChatID,
+		WorkflowName:         ctx.WorkflowName,
+		ThreadMode:           ctx.ThreadMode,
+		ForkedFrom:           ctx.ForkedFrom,
+		ParentThread:         ctx.ParentThread,     // Preserve parent thread chain
+		ProjectPath:          ctx.ProjectPath,      // Inherit project path (can be overridden by loop's project config)
+		DaemonSelector:       ctx.DaemonSelector,   // Inherit daemon selector
+		SpawnDepth:           ctx.SpawnDepth,       // Inherit spawn depth (iterations don't increase depth)
+		ParentPermission:     ctx.ParentPermission, // Inherit parent permission cap
+		Parent:               ctx.Parent,
+		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
+		UserJWT:              ctx.UserJWT, // Reliant provider is JWT-gated; dropping it here would exclude it from availableProviders inside the loop.
 	}
 
 	if reuseThread {
@@ -307,17 +310,18 @@ func (ctx *ExecutionContext) ForIteration(iteration int, reuseThread bool) *Exec
 // - mode: fork → new deterministic thread (caller should copy context from ForkedFrom)
 func (ctx *ExecutionContext) ForChild(stepID string, mode string, workflowName string, memo bool) *ExecutionContext {
 	child := &ExecutionContext{
-		WorkflowID:       ctx.WorkflowID, // Same workflow ID for inline execution
-		ChatID:           ctx.ChatID,
-		WorkflowName:     workflowName,
-		ThreadMode:       mode,
-		ParentThread:     ctx.Thread,           // Always track parent's thread for save_message
-		ProjectPath:      ctx.ProjectPath,      // Inherit project path (can be overridden by node's project config)
-		DaemonSelector:   ctx.DaemonSelector,   // Inherit daemon selector (can be overridden by node's daemon field)
-		SpawnDepth:       ctx.SpawnDepth,       // Inherit spawn depth (inline children don't increase depth)
-		ParentPermission: ctx.ParentPermission, // Inherit parent permission cap
-		Loop:             ctx.Loop,             // Inherit loop context
-		UserJWT:          ctx.UserJWT,          // Reliant provider is JWT-gated; child contexts must carry it.
+		WorkflowID:           ctx.WorkflowID, // Same workflow ID for inline execution
+		ChatID:               ctx.ChatID,
+		WorkflowName:         workflowName,
+		ThreadMode:           mode,
+		ParentThread:         ctx.Thread,           // Always track parent's thread for save_message
+		ProjectPath:          ctx.ProjectPath,      // Inherit project path (can be overridden by node's project config)
+		DaemonSelector:       ctx.DaemonSelector,   // Inherit daemon selector (can be overridden by node's daemon field)
+		SpawnDepth:           ctx.SpawnDepth,       // Inherit spawn depth (inline children don't increase depth)
+		ParentPermission:     ctx.ParentPermission, // Inherit parent permission cap
+		Loop:                 ctx.Loop,             // Inherit loop context
+		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
+		UserJWT:              ctx.UserJWT, // Reliant provider is JWT-gated; child contexts must carry it.
 		Parent: &ParentContext{
 			WorkflowID: ctx.WorkflowID,
 			StepPath:   stepID,
@@ -378,19 +382,20 @@ func (ctx *ExecutionContext) HasProjectPath() bool {
 // Clone creates a deep copy of the execution context.
 func (ctx *ExecutionContext) Clone() *ExecutionContext {
 	clone := &ExecutionContext{
-		WorkflowID:     ctx.WorkflowID,
-		ChatID:         ctx.ChatID,
-		WorkflowName:   ctx.WorkflowName,
-		RunID:          ctx.RunID,
-		Thread:         ctx.Thread,
-		ThreadMode:     ctx.ThreadMode,
-		ThreadTitle:    ctx.ThreadTitle,
-		ForkedFrom:     ctx.ForkedFrom,
-		ParentThread:   ctx.ParentThread,
-		ProjectPath:    ctx.ProjectPath,
-		DaemonSelector: ctx.DaemonSelector,
-		UserJWT:        ctx.UserJWT, // Reliant provider is JWT-gated; cloned contexts must carry it.
-		CatalogPin:     ctx.CatalogPin,
+		WorkflowID:           ctx.WorkflowID,
+		ChatID:               ctx.ChatID,
+		WorkflowName:         ctx.WorkflowName,
+		RunID:                ctx.RunID,
+		Thread:               ctx.Thread,
+		ThreadMode:           ctx.ThreadMode,
+		ThreadTitle:          ctx.ThreadTitle,
+		ForkedFrom:           ctx.ForkedFrom,
+		ParentThread:         ctx.ParentThread,
+		ProjectPath:          ctx.ProjectPath,
+		DaemonSelector:       ctx.DaemonSelector,
+		UserJWT:              ctx.UserJWT, // Reliant provider is JWT-gated; cloned contexts must carry it.
+		CatalogPin:           ctx.CatalogPin,
+		ExcludeAmbientMemory: ctx.ExcludeAmbientMemory,
 	}
 
 	if ctx.Loop != nil {
