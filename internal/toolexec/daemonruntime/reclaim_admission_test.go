@@ -2,12 +2,15 @@ package daemonruntime
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
@@ -92,6 +95,114 @@ func TestLandedStripExcludesNewCommandThroughDeletion(t *testing.T) {
 		t.Fatal("command admission not released after strip", err)
 	}
 	done()
+}
+
+// The owner decision of 2026-11-08 (bug c4a30cf1), end to end through the real
+// background registry: an archived worktree is retired while the machine runs
+// background processes elsewhere, and held while one runs inside it.
+func TestArchivedWorktreeRetiresOnBusyMachineAndHoldsForItsOwnShell(t *testing.T) {
+	testkit.Slow(t, "creates a temporary git worktree and starts real background processes")
+	base := t.TempDir()
+	project, root := filepath.Join(base, "project"), filepath.Join(base, "worktrees")
+	newRepo(t, project)
+	rcGit(t, project, "update-ref", "refs/remotes/origin/main", "HEAD")
+	path := filepath.Join(root, "workspace")
+	rcGit(t, project, "worktree", "add", "-b", "feature", path)
+	const id = "archived-busy"
+	if err := worktreereclaim.LockCheckout(context.Background(), path, id); err != nil {
+		t.Fatal(err)
+	}
+
+	startBG := func(dir string) string {
+		t.Helper()
+		payload, _ := json.Marshal(daemon.RunCommandRequest{Command: "sleep 120", WorkingDir: dir})
+		raw, err := handleExecBGStart(context.Background(), payload)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var started struct {
+			ProcessID string `json:"process_id"`
+		}
+		if err := json.Unmarshal(raw, &started); err != nil || started.ProcessID == "" {
+			t.Fatalf("start: %v %s", err, raw)
+		}
+		t.Cleanup(func() { _ = shell.GetBackgroundManager().KillProcess(started.ProcessID) })
+		return started.ProcessID
+	}
+	stopBG := func(processID string) {
+		t.Helper()
+		mgr := shell.GetBackgroundManager()
+		if err := mgr.KillProcess(processID); err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			p, err := mgr.GetProcess(processID)
+			if err != nil || p.StatusSafe() != "running" {
+				return
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("background process did not stop")
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+
+	// The busy machine: a background process and an in-flight command
+	// elsewhere, both of which used to hold every archived worktree.
+	// The real registries; only /proc inspection is stubbed, because an
+	// unrelated process on the host must not decide this test.
+	g := newTestRecoveryGate()
+	g.managedUse = managedRecoveryUse
+	g.processUse = func(context.Context, []string) error { return nil }
+	startBG(t.TempDir())
+	doneElsewhere, err := g.beginIn(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer doneElsewhere()
+	r := &worktreereclaim.Reclaimer{Root: root, Now: func() time.Time { return time.Now().Add(48 * time.Hour) }, Cwds: func(context.Context) ([]string, error) { return nil, nil },
+		ProcessUse: func(context.Context, []string) error { return nil }}
+	r.Acquire = func(_ context.Context, paths []string) (worktreereclaim.RecoveryLease, error) {
+		lease, err := g.acquire(paths)
+		if err != nil {
+			return nil, err
+		}
+		if err := lease.Check(context.Background()); err != nil {
+			lease.Release()
+			return nil, err
+		}
+		return lease, nil
+	}
+	w := worktreereclaim.Worktree{ID: id, Path: path, State: worktreereclaim.StateArchived, Fence: "123", Checkouts: []worktreereclaim.Checkout{{RepoPath: project, BaseBranch: "main"}}}
+	reconcile := func(remove bool) worktreereclaim.Result {
+		w.Remove = remove
+		return r.Reconcile(context.Background(), worktreereclaim.Request{Worktrees: []worktreereclaim.Worktree{w}}).Results[0]
+	}
+	if got := reconcile(false); got.Outcome != worktreereclaim.OutcomeClaimed {
+		t.Fatalf("claim: %+v", got)
+	}
+
+	// Its own background shell holds it.
+	inside := startBG(path)
+	if got := reconcile(true); got.Outcome != worktreereclaim.OutcomeHeld || got.Reason != worktreereclaim.ReasonInUse {
+		t.Fatalf("a background shell running in the worktree did not hold it: %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(path, "a.txt")); err != nil {
+		t.Fatal("held worktree was touched", err)
+	}
+
+	// Once it stops, only unrelated work is left, and the worktree goes.
+	stopBG(inside)
+	if got := reconcile(false); got.Outcome != worktreereclaim.OutcomeClaimed {
+		t.Fatalf("re-claim: %+v", got)
+	}
+	if got := reconcile(true); got.Outcome != worktreereclaim.OutcomeRemoved {
+		t.Fatalf("unrelated work on the machine held the archived worktree: %+v", got)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("archived worktree still on disk", err)
+	}
 }
 
 func TestEnsureDeferredRetirementNeverReportsPresent(t *testing.T) {
