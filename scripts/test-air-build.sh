@@ -10,7 +10,8 @@
 # inputs does not; a `go list` that fails, prints something unparseable or
 # reports package errors beside a successful build records nothing, so every
 # caller builds; an import added while a build runs (its old mtime kept), or an
-# edit made and reverted while it runs, leaves that build unrecorded, so the
+# edit made and reverted while it runs, or a go.mod created in an unlisted
+# directory while it runs, leaves that build unrecorded, so the
 # next caller builds and lists the new import; N concurrent callers make ONE
 # build; a save during a build makes the next caller rebuild; a failed build
 # never replaces a delivered binary and fails every caller for the same source
@@ -64,6 +65,7 @@ case \$1 in
     echo "P $R/internal/lib|data"
     echo "M $R/go.mod"
     while IFS= read -r d; do [ -z "\$d" ] || echo "D $R/\$d"; done <"$R/cmd/app/imports"
+    [ ! -e "$R/nested/go.mod" ] || echo "M $R/nested/go.mod"
     echo "D $T/modcache/dep@v1"
     echo "M $T/modcache/dep@v1/go.mod" ;;
   build)
@@ -214,6 +216,18 @@ FAKE_DURING_BUILD="echo broken >>'$R/internal/lib/lib.go' && cp '$T/lib.go.orig'
   expect "an edit reverted mid-build: the build is delivered" 0 $n tmp/a/app "binary $n"
 records && FAIL "an edit reverted mid-build: the build was recorded reusable"
 n=$((n + 1)); expect "an edit reverted mid-build: the next caller rebuilds" 0 $n tmp/b/app "binary $n"
+expect "and then reuses" 0 $n tmp/a/app "binary $n"
+# A go.mod created mid-build in a directory no listed package owns: no listed
+# byte changes, so only listing the graph again after the build can see it.
+mkdir -p "$R/nested"
+edit "$R/cmd/app/main.go"
+n=$((n + 1))
+FAKE_DURING_BUILD="echo 'module example.com/nested' >'$R/nested/go.mod'" \
+  expect "a go.mod created mid-build: the build is delivered" 0 $n tmp/a/app "binary $n"
+records && FAIL "a go.mod created mid-build: the build was recorded reusable"
+grep -q "package graph changed while it ran" "$T/out" || FAIL "a moved module boundary does not say why"
+n=$((n + 1)); expect "a go.mod created mid-build: the next caller rebuilds" 0 $n tmp/b/app "binary $n"
+grep -qx "1 $R/nested/go.mod" "$inputs" || FAIL "the rebuild did not list the new go.mod"
 expect "and then reuses" 0 $n tmp/a/app "binary $n"
 
 # N concurrent callers for one save: one build, every output delivered.

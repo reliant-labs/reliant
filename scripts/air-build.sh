@@ -48,16 +48,16 @@
 # landing mid-build could leave an inventory that does not describe the graph
 # the build compiled (an import added after go list read a file and before go
 # build did), and a later caller would trust it. So the inventory and its digest are taken BEFORE go build
-# starts, complete, and the digest is taken again over the same inventory
-# AFTER it ends. The build is recorded reusable only when the list was complete,
-# both digests are equal, and no input was written after the build began
-# (which also catches an edit reverted within the build). Every byte the build
-# could have read (the inventory is go list's projection of those very bytes,
-# so an import added changes them) was then the same from its start to its
-# end, and the binary is the build of exactly those bytes. Otherwise the binary
-# still goes to this caller, but nothing is recorded, and the next caller
-# builds again. (Not seen: a go.mod created in a directory that is no listed
-# package's, which moves a module boundary without touching a listed byte.)
+# starts, complete; AFTER it ends, the digest is taken again over the same
+# inventory and go list runs again. The build is recorded reusable only when
+# the list was complete, both digests are equal, the second list's inventory
+# equals the first (which catches a graph input no listed path holds, such as a
+# go.mod created in an unlisted directory, moving a module boundary), and no
+# input was written after the build began (which also catches an edit reverted
+# within the build). Every byte the build could have read was then the same
+# from its start to its end, and the binary is the build of exactly those
+# bytes. Otherwise the binary still goes to this caller, but nothing is
+# recorded, and the next caller builds again.
 #
 # A failed build never replaces a published binary: go build replaces its
 # target only on success. A failure recorded as above (`state=fail`) makes a
@@ -300,14 +300,19 @@ rc=0
 CGO_ENABLED=0 go build $flags -o "$dir/bin" "$pkg" >"$dir/log" 2>&1 || rc=$?
 cat "$dir/log" >&2
 
-# After: the same bytes again, over the same inventory. The inventory is what
-# go list derives from exactly those bytes (package files and directory
-# listings, embedded trees, go.mod/go.sum/go.work) under the key's toolchain,
-# so when they hash the same the graph did not move either, and listing again
-# could only repeat it. Bytes that moved under the build (an import added, a
-# file saved) change the digest, and so leave the build unrecorded.
+# After: the graph listed again, and the same bytes again over the pre-build
+# inventory. Bytes that moved under the build (an import added, a file saved)
+# change the digest. A graph input outside that inventory (a go.mod created in
+# a directory no listed package owns, which moves a module boundary) changes
+# no listed byte, so go list runs again and its inventory must equal the first.
 post_digest=
-case $pre_rc in 0 | 3) post_digest=$(digest "$dir/inputs.pre") || post_digest= ;; esac
+post_rc=0
+case $pre_rc in
+  0 | 3)
+    post_digest=$(digest "$dir/inputs.pre") || post_digest=
+    inventory "$dir/inputs.post" || post_rc=$?
+    ;;
+esac
 
 printf '%s\n' "$key" >"$dir/key"
 why=
@@ -318,6 +323,8 @@ elif [ "$rc" -eq 0 ] && [ "$pre_rc" -eq 3 ]; then
   why="go list reported package errors beside a successful build" # an incomplete list
 elif [ -z "$post_digest" ] || [ "$post_digest" != "$(cat "$dir/digest.pre")" ]; then
   why="its inputs changed while it ran"
+elif [ "$post_rc" -ne "$pre_rc" ] || ! cmp -s "$dir/inputs.pre" "$dir/inputs.post"; then
+  why="its package graph changed while it ran"
 elif [ -z "$precise" ]; then
   why="this filesystem's mtimes are too coarse to see writes during it"
 elif ! written=$(written_since "$dir/inputs.pre" "$dir/started") || [ -n "$written" ]; then
@@ -329,7 +336,7 @@ if [ -z "$why" ]; then
 else
   echo "air-build: not recording this build of $pkg ($why); the next caller builds again" >&2
 fi
-rm -f "$dir/inputs.pre" "$dir/digest.pre" \
+rm -f "$dir/inputs.pre" "$dir/inputs.post" "$dir/digest.pre" \
   "$dir/list.out" "$dir/list.err" "$dir/list.paths" "$dir/list.sorted" "$dir/digest.list" "$dir/in.1" "$dir/in.r"
 
 if [ "$rc" -ne 0 ]; then
