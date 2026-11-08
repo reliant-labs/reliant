@@ -7,6 +7,15 @@ control-plane `prod/reliant-web`: the new env is built, deployed and checked on 
 
 Use `forge`, which runs the forge version reliant's forge.yaml pins (`v1.0.17-0.20261105225243-7ad8943ce387`). `reliant forge` embeds v1.0.16 and warns about the version skew.
 
+## Current entry experience
+
+The public demo now leads bare `/` visits to `/forge/demo?section=built`: a visual
+build story, the real recorded Forge run, and explicit guided-tour/self-exploration
+choices. `/forge/p/shop` opens the running sample console directly; individual-page
+deep links remain direct. Contextual “How Forge builds this” help preserves the
+current page. The smoke script checks this entry-to-console path before nav clicks.
+The cutover steps below describe the original hosting migration.
+
 ## What changes
 
 | | Before | After |
