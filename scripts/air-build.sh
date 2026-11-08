@@ -65,7 +65,9 @@
 # rather than take the last good binary as if it were fresh (Air then keeps the
 # old binary, exactly as before). A failure is reused only for
 # AIR_BUILD_FAIL_TTL seconds, so a transient one (a killed build, a full disk)
-# is retried by the next caller rather than remembered.
+# is retried by the next caller rather than remembered. A failure whose go list
+# reported package errors (a syntax error, a missing import) is never
+# recorded: that list can omit inputs, so every caller builds until it is fixed.
 #
 # Builds use -trimpath: compiled packages are then keyed by module path, not by
 # this checkout's absolute path, so worktrees at the same commit share them in
@@ -190,8 +192,8 @@ written_since() {
 
 # inventory <file> writes what building $pkg reads, as `go list -deps` reports
 # it now, sorted. Exits 0 for a complete list, 3 for a list that parsed but
-# reported package errors (complete enough to pin a failed build to, not a
-# successful one), anything else for no usable list (go list's stderr is left
+# reported package errors (never recorded: it can omit what the failing
+# package reads), anything else for no usable list (go list's stderr is left
 # in $dir/list.err).
 inventory() {
   # One line per fact: "D <package dir>", "P <package dir>|<embed pattern>",
@@ -319,8 +321,11 @@ why=
 if [ "$pre_rc" -ne 0 ] && [ "$pre_rc" -ne 3 ]; then
   why="go list failed for $pkg"
   cat "$dir/list.err" >&2 2>/dev/null || true
-elif [ "$rc" -eq 0 ] && [ "$pre_rc" -eq 3 ]; then
-  why="go list reported package errors beside a successful build" # an incomplete list
+elif [ "$pre_rc" -eq 3 ]; then
+  # An incomplete list can omit what a package with errors reads (a package
+  # go list could not locate has no directory to list), so a later edit there
+  # would not change the digest: neither a success nor a failure is pinned to it.
+  why="go list reported package errors"
 elif [ -z "$post_digest" ] || [ "$post_digest" != "$(cat "$dir/digest.pre")" ]; then
   why="its inputs changed while it ran"
 elif [ "$post_rc" -ne "$pre_rc" ] || ! cmp -s "$dir/inputs.pre" "$dir/inputs.post"; then

@@ -15,7 +15,8 @@
 # next caller builds and lists the new import; N concurrent callers make ONE
 # build; a save during a build makes the next caller rebuild; a failed build
 # never replaces a delivered binary and fails every caller for the same source
-# without building again, until the fail TTL lapses.
+# without building again, until the fail TTL lapses, unless go list reported
+# package errors (it may omit inputs), when every caller builds again.
 #
 # The same file lives in control-plane and reliant; change both together.
 set -euo pipefail
@@ -36,7 +37,8 @@ for f in cmd/app/main.go cmd/app/imports internal/lib/lib.go internal/lib/data/s
 # internal/lib, which embeds the pattern "data", plus every directory named in
 # cmd/app/imports. FAKE_LIST=fail makes it print part of them and exit 1,
 # =garbage print a line in no known form, =incomplete report a package error
-# (as -e does). `go build` appends to $T/builds; with FAKE_BUILD_HOLD set it
+# (as -e does), =missing report internal/lib as an error and omit its
+# directory and embed (a package go list could not locate). `go build` appends to $T/builds; with FAKE_BUILD_HOLD set it
 # then creates $T/building and waits for $T/release; then it runs
 # $FAKE_DURING_BUILD (an edit landing mid-build), and fails while
 # internal/lib/BROKEN exists.
@@ -57,13 +59,15 @@ case \$1 in
     case \${FAKE_LIST:-} in
       fail) echo "D $R/cmd/app"; echo "go: something broke" >&2; exit 1 ;;
       garbage) echo "something unexpected" ;;
-      incomplete) echo "X example.com/app/internal/lib" ;;
+      incomplete | missing) echo "X example.com/app/internal/lib" ;;
     esac
     echo "D $R/cmd/app"
     echo "M $R/go.mod"
-    echo "D $R/internal/lib"
-    echo "P $R/internal/lib|data"
-    echo "M $R/go.mod"
+    if [ "\${FAKE_LIST:-}" != missing ]; then
+      echo "D $R/internal/lib"
+      echo "P $R/internal/lib|data"
+      echo "M $R/go.mod"
+    fi
     while IFS= read -r d; do [ -z "\$d" ] || echo "D $R/\$d"; done <"$R/cmd/app/imports"
     [ ! -e "$R/nested/go.mod" ] || echo "M $R/nested/go.mod"
     echo "D $T/modcache/dep@v1"
@@ -270,6 +274,17 @@ wait
 for s in c d e; do [ "$(cat "$T/rc.$s")" = 1 ] || FAIL "concurrent caller $s exited $(cat "$T/rc.$s") on a failed build"; done
 [ "$(builds)" = $((n + 1)) ] || FAIL "callers after a failure built again ($(builds))"
 AIR_BUILD_FAIL_TTL=0 expect "a failure older than the TTL is retried" 1 $((n + 2)) tmp/b/app "binary $n"
+n=$((n + 2))
+# A failure whose list reported package errors is never recorded: that list
+# can omit the failing package's inputs, so an edit there (here to a file
+# the list left out) must reach the next caller's build, inside the TTL too.
+good=$((n - 2))
+edit "$R/cmd/app/main.go"
+FAKE_LIST=missing expect "a failure on an incomplete list fails" 1 $((n + 1)) tmp/b/app "binary $good"
+records && FAIL "a failure on an incomplete list was recorded"
+grep -q "package errors" "$T/out" || FAIL "a failure on an incomplete list does not say why it is not recorded"
+edit "$R/internal/lib/lib.go"
+FAKE_LIST=missing expect "an omitted input edited after it: the next caller builds again" 1 $((n + 2)) tmp/b/app "binary $good"
 n=$((n + 2))
 
 rm "$R/internal/lib/BROKEN"
