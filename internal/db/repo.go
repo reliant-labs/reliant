@@ -1405,44 +1405,59 @@ func (r *Repo) ListChatsWaitingForMachine(ctx context.Context, userID string) ([
 	return store.ListChatsWaitingForMachine(ctx, r.ORM(), userID)
 }
 
-// UpdateChatUnread sets the unread flag on a chat and emits a user update.
+// UpdateChatUnread sets the unread flag on a chat and emits the user update
+// that tells connected clients, in one transaction: a client never sees the
+// flag change without its announcement, or the announcement without the flag.
+//
+// Run on its own, the transaction is retried on the repo's ladder like every
+// RunTx. Inside a caller's transaction it joins it, and a failure is returned
+// rather than logged and swallowed: a serialization failure (SQLSTATE 40001,
+// the counter row of a user whose updates race) aborts the WHOLE transaction,
+// so only the caller's RunTx can retry it, and only if the error reaches it.
+// Swallowing it left the caller committing a transaction Postgres had already
+// aborted, an ERROR log per conflict, and the retry happening only because
+// that COMMIT then failed too (reliant #2393).
+//
+// A chat deleted under the update is not a failure on its own transaction:
+// there is nothing left to mark. Inside a caller's transaction the refused
+// write has aborted it, so the error is the caller's.
 func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error {
-	chat, err := r.GetChat(ctx, chatID)
+	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
+		chat, err := r.GetChat(txCtx, chatID)
+		if err != nil {
+			return fmt.Errorf("failed to get chat: %w", err)
+		}
+
+		if err := store.UpdateChatUnread(txCtx, r.ORM(), chatID, unread); err != nil {
+			return err
+		}
+
+		dataJSON, err := json.Marshal(map[string]interface{}{
+			"unread":  unread,
+			"reason":  reason,
+			"chat_id": chatID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to marshal unread update: %w", err)
+		}
+
+		return r.CreateUserUpdate(txCtx, &UserUpdate{
+			UserID:     chat.UserID,
+			ProjectID:  &chat.ProjectID,
+			WorktreeID: chat.WorktreeID,
+			ChatID:     &chatID,
+			UpdateType: UserUpdateChatStateChange,
+			EntityType: EntityTypeChat,
+			EntityID:   chatID,
+			Data:       dataJSON,
+		})
+	})
+	if chatDeletedUnder(err) && !orm.InTx(ctx) {
+		logging.DebugContext(ctx, "Chat deleted before its unread change was announced", "chatID", chatID, "unread", unread)
+		return nil
+	}
 	if err != nil {
-		return fmt.Errorf("failed to get chat: %w", err)
-	}
-
-	if err := store.UpdateChatUnread(ctx, r.ORM(), chatID, unread); err != nil {
-		return err
-	}
-
-	updateData := map[string]interface{}{
-		"unread":  unread,
-		"reason":  reason,
-		"chat_id": chatID,
-	}
-
-	dataJSON, err := json.Marshal(updateData)
-	if err != nil {
-		return fmt.Errorf("failed to marshal unread update: %w", err)
-	}
-
-	userUpdate := &UserUpdate{
-		UserID:     chat.UserID,
-		ProjectID:  &chat.ProjectID,
-		WorktreeID: chat.WorktreeID,
-		ChatID:     &chatID,
-		UpdateType: UserUpdateChatStateChange,
-		EntityType: EntityTypeChat,
-		EntityID:   chatID,
-		Data:       dataJSON,
-	}
-
-	if err := r.CreateUserUpdate(ctx, userUpdate); err != nil {
-		logging.ErrorContext(ctx, "Failed to create user update for chat unread change",
-			"error", err,
-			"chatID", chatID,
-			"unread", unread)
+		return fmt.Errorf("update chat unread: %w", err)
 	}
 
 	logging.DebugContext(ctx, "Chat unread updated",
