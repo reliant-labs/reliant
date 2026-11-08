@@ -10,6 +10,7 @@ import { CircleHelp } from "lucide-react";
 import { isSheetViewport, OnboardingSpotlight } from "@/components/Onboarding/OnboardingSpotlight";
 import { watchUserScroll } from "@/components/Onboarding/userScroll";
 import { TourControls } from "@/components/Onboarding/TourControls";
+import { isLegacyDemoTourLink } from "@/components/Onboarding/legacyDemoTour";
 import { DemoCorner, useConsoleDrawerOpen } from "../DemoCorner";
 import { PageAgentHelp } from "./DemoTips";
 import { DEMO_TIPS } from "./tipCopy";
@@ -27,7 +28,9 @@ export function PageEntryTour() {
   const search = (location.search ?? {}) as Record<string, unknown>;
   const key = demoTipKey(location.pathname, search);
   const visit = demoPageVisit(location.pathname, search);
-  if (!key || search.tour) return null;
+  // A guided tour owns the page, except an old trace-less deep link, which
+  // keeps its page card (isLegacyDemoTourLink).
+  if (!key || (search.tour && !isLegacyDemoTourLink(search))) return null;
   // A route change unmounts visit-local dismissal. Refresh also starts fresh;
   // deliberately no seen/session storage can suppress an arrival callout.
   return <VisitTour key={visit} tipKey={key} />;

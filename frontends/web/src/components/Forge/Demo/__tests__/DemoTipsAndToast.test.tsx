@@ -8,6 +8,8 @@ import { resetShellForTests } from "@/lib/shell";
 import { DemoTips } from "../tips/DemoTips";
 import { demoSession, resetDemoSessionForTests } from "../demoSession";
 import { DEMO_TIPS, DEMO_TIP_KEYS } from "../tips";
+import { DEMO_TRACE_ID } from "@/components/Onboarding/journeys/forge";
+import { isLegacyDemoTourLink } from "@/components/Onboarding/legacyDemoTour";
 
 function renderDemo(path: string) {
   const root = createRootRoute({ component: () => <><Outlet /><DemoTips /><JourneyTour /></> });
@@ -82,6 +84,35 @@ it("explicit guided tour links suppress the automatic page card", async () => {
   expect(await screen.findByTestId("tour-card")).toHaveTextContent("What is forge?");
   expect(screen.queryByTestId("tour-callout")).toBeNull();
   expect(screen.getByTestId("tour-next")).toHaveTextContent("Next");
+});
+// Old shared links keep working (v1 back-compat, decided 2026-11-08): a
+// trace-less legacy fg-logs link gets the page card, never a guided step that
+// waits on "Click Logs for this trace".
+it("legacy logs tour link opens only logs; Done dismisses without a full-site sequence", async () => {
+  const {router}=renderDemo("/forge/demo?view=logs&tour=forge:fg-logs");
+  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
+  expect(screen.queryByTestId("tour-card")).toBeNull();
+  expect(screen.getByTestId("tour-next")).toBeEnabled();
+  fireEvent.click(screen.getByTestId("tour-next"));
+  await waitFor(()=>expect(screen.queryByTestId("tour-callout")).toBeNull());
+  expect(router.state.location.pathname).toBe("/forge/demo");
+  expect((router.state.location.search as {view:string}).view).toBe("logs");
+});
+it("only a trace-less link to a trace step is legacy; one that carries its trace, and other steps, stay guided", () => {
+  expect(isLegacyDemoTourLink({ view: "logs", tour: "forge:fg-logs" })).toBe(true);
+  expect(isLegacyDemoTourLink({ view: "traces", tour: "forge:fg-hops" })).toBe(true);
+  expect(isLegacyDemoTourLink({ view: "traces", trace: DEMO_TRACE_ID, tour: "forge:fg-logs" })).toBe(false);
+  expect(isLegacyDemoTourLink({ view: "overview", tour: "forge:fg-intro" })).toBe(false);
+  expect(isLegacyDemoTourLink({ view: "traces", tour: "forge:fg-trace" })).toBe(false);
+  expect(isLegacyDemoTourLink({ view: "logs" })).toBe(false);
+  resetShellForTests("reliant");
+  expect(isLegacyDemoTourLink({ view: "logs", tour: "forge:fg-logs" })).toBe(false);
+});
+it("a logs tour link that carries its trace runs the guided step, not the page card", async () => {
+  renderDemo(`/forge/demo?view=traces&trace=${DEMO_TRACE_ID}&tour=forge:fg-logs`);
+  const callout = await screen.findByTestId("tour-callout");
+  expect(callout).toHaveTextContent("What that request logged");
+  expect(callout).not.toHaveTextContent(DEMO_TIPS.logs.body);
 });
 it("persistent actions survive navigation and open build help without losing page context", async()=>{
   const {go,router}=renderDemo("/forge/p/shop");
