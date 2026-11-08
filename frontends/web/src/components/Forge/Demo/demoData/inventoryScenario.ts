@@ -17,7 +17,7 @@ import { IdentityService } from "@/gen/controlplane/services/identity/v1/identit
 
 import { completed } from "./demoServiceDefaults";
 import { demoEnvId } from "./demoScope";
-import { mockService } from "./forgeMockValues/mock-values";
+import { mockService } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 type Cell = string | number | boolean | null;
 type Row = Record<string, Cell>;

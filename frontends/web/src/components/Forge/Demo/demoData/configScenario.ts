@@ -13,7 +13,7 @@ import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { DEMO_RELEASES, DEMO_WORKLOADS, RUNNING, demoWorkloadName } from "./consoleScenario";
 import { completed } from "./demoServiceDefaults";
 import { DEMO_ENVS } from "./demoScope";
-import { mockService } from "./forgeMockValues/mock-values";
+import { mockService } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 export const DEMO_WITHHELD = "[withheld]";
 export const demoBundleId = (env: string, version: string) => `demo-bundle-${env}-${version}`;
