@@ -66,13 +66,13 @@ func (d *daemonClient) handleTerminalInput(
 	if sessionID == "" || len(data) == 0 {
 		return
 	}
-	// Admitted where the session was started. If its shell has since moved
-	// into a worktree, process inspection holds that worktree instead.
-	dir := ""
-	if session, ok := tm.GetSession(sessionID); ok {
-		dir = session.WorkingDir
-	}
-	releaseRecovery, admissionErr := beginRecoveryWorkIn(dir)
+	// Input can reach any path: the shell may have cd'd since it started, and
+	// the input itself may cd. So it is admitted with an unknown scope, held
+	// until Write returns: no worktree can be leased while input is being
+	// written, and input is refused while any worktree is being retired.
+	// Only the instant of a write is held, not the session's lifetime
+	// (managedRecoveryUse scopes that to where the session was started).
+	releaseRecovery, admissionErr := beginRecoveryWorkAnywhere()
 	if admissionErr != nil {
 		_ = d.send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_TerminalSessionEvent{
 			TerminalSessionEvent: &reliantv1.TerminalSessionEvent{SessionId: sessionID,

@@ -391,6 +391,10 @@ func beginRecoveryCommand(name string, payload []byte) (func(), error) {
 // is inside.
 func beginRecoveryWorkIn(dir string) (func(), error) { return recoveryAdmissions.beginIn(dir) }
 
+// beginRecoveryWorkAnywhere admits work whose reach cannot be bounded (terminal
+// input): it conflicts with every finalization while it is held.
+func beginRecoveryWorkAnywhere() (func(), error) { return recoveryAdmissions.begin(nil) }
+
 // Shared daemon observer, lazily constructed from the daemon's private data
 // directory. The caller owns Start and cancellation for each workspace.
 // Paths never leave the daemon, and persisted records contain only hashes.
