@@ -23,6 +23,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -35,14 +36,37 @@ func main() {
 	// boots one of its own: the default leaves room for both.
 	timeout := flag.Duration("timeout", 150*time.Second, "give up after this long")
 	flag.Parse()
+	os.Exit(run(context.Background(), *timeout, shutdownGrace, pgtest.New, pgtest.Shutdown, os.Stdout, os.Stderr))
+}
+
+// shutdownGrace bounds pgtest.Shutdown once the check is done.
+const shutdownGrace = 10 * time.Second
+
+// run checks, shuts pgtest down and returns the exit status, all within
+// timeout + grace. pgtest.Shutdown stops a server this process booted, and
+// takes the lock pgtest's boot holds: after a check that timed out, a boot
+// that never answers still holds it, and Shutdown would wait for ever. So it
+// gets grace, and then the process exits without it: exiting is what releases
+// everything this process holds.
+func run(ctx context.Context, timeout, grace time.Duration, newDB func() (*sql.DB, func(), error), shutdown func(), stdout, stderr io.Writer) int {
 	start := time.Now()
-	err := check(context.Background(), *timeout, pgtest.New)
-	pgtest.Shutdown()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, failure(err))
-		os.Exit(1)
+	err := check(ctx, timeout, newDB)
+	stopped := make(chan struct{})
+	go func() {
+		shutdown()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(grace):
+		fmt.Fprintf(stderr, "pgtest-check: pgtest did not shut down within %s; exiting without it\n", grace)
 	}
-	fmt.Printf("pgtest-check: forge pgtest's shared Postgres served a scratch database in %s\n", time.Since(start).Round(time.Millisecond))
+	if err != nil {
+		fmt.Fprintln(stderr, failure(err))
+		return 1
+	}
+	fmt.Fprintf(stdout, "pgtest-check: forge pgtest's shared Postgres served a scratch database in %s\n", time.Since(start).Round(time.Millisecond))
+	return 0
 }
 
 // check creates a scratch database with newDB (pgtest.New), queries it and
