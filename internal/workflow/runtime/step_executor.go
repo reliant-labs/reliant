@@ -509,11 +509,12 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	if IsUnattended(e.workflowInputs) && stepEvent != nil && stepEvent.Error == nil {
 		if err := e.pauseCtrl.ObserveRepeatedToolErrors(e.GetThread(), running.ActivityName, stepEvent); err != nil &&
 			workflow.GetVersion(e.ctx, repeatedToolErrorChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-			// Reported here, once: the loop, the inline workflow and the run
-			// pass it up and log it at DEBUG (markReported).
-			e.logger.Error("[StepExecutor] Ending the agent: its tool calls keep failing identically",
+			// Reported here, once, at WARN: the guard working as designed is
+			// an outcome, not a fault. The loop, the inline workflow and the
+			// run pass it up and log it at DEBUG (markReported).
+			stepEvent.Error = reportExpectedStop(e.logger, err,
+				"[StepExecutor] Ending the agent: its tool calls keep failing identically",
 				"stepID", running.StepID, "thread", e.GetThread(), "error", err)
-			stepEvent.Error = markReported(err)
 		}
 	}
 

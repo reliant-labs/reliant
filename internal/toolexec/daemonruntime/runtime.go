@@ -1947,16 +1947,6 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	// Before the tool can do anything a restart would cut short.
 	d.results.persistRunning(req.RequestId)
 
-	releaseRecovery, admissionErr := beginRecoveryWork()
-	if admissionErr != nil {
-		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
-			Success: false, IsError: true, Content: admissionErr.Error(),
-			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
-		})
-		return
-	}
-	defer releaseRecovery()
-
 	execCtx, cancel := context.WithCancel(dispatchContext(req))
 	// Registered under both ids. request_id is the transport's correlation key
 	// (a fresh timestamp per dispatch, known only to the server that sent it);
@@ -1997,6 +1987,17 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	// daemon was serving. Empty for a call with no project context, which
 	// only a $HOME fault refuses.
 	workspaceRoot := resolveProjectPathFromContext(contextMap, "", "")
+	// Admitted where the call works, before it does anything: it holds only
+	// that worktree, and a worktree being retired refuses it.
+	releaseRecovery, admissionErr := beginRecoveryWorkIn(workspaceRoot)
+	if admissionErr != nil {
+		d.sendToolResult(s, req.RequestId, &toolexec.ExecutionResult{
+			Success: false, IsError: true, Content: admissionErr.Error(),
+			ErrorMessage: admissionErr.Error(), ErrorCode: "RECOVERY_FINALIZING",
+		})
+		return
+	}
+	defer releaseRecovery()
 	if refused := d.guard.preflight(workspaceRoot); refused != nil {
 		d.sendToolResult(s, req.RequestId, refused)
 		return

@@ -2,7 +2,7 @@
  * Recent client errors, kept on the device for the in-app Diagnostics view.
  *
  * A phone has no devtools. What already exists does not reach the person
- * holding it: the browser-log mirror (lib/browser-log-forward.ts) is DEV ONLY
+ * holding it: the forge runtime's browser-log mirror is DEV ONLY
  * and writes to a file on the dev machine, and ClickStack browser
  * telemetry (lib/telemetry.ts) is consent-gated and land in dashboards the
  * user cannot see. So when a phone shows "something went wrong" there was

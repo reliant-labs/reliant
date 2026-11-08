@@ -45,7 +45,7 @@ import { SecretAuthorKind, SecretStoreService } from "@/gen/controlplane/service
 
 import { completed } from "./demoServiceDefaults";
 import { DEMO_ENVS, DEMO_PROJECT, demoEnvId, inDemoProject, type DemoEnvId } from "./demoScope";
-import { mockService, type MockHandlers } from "./forgeMockValues/mock-values";
+import { mockService, type MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 const REPO = "github.com/acme/shop";
 const FORGE_VERSION = "v1.0.17";

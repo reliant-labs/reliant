@@ -20,7 +20,7 @@
 
 import { create, isMessage, type DescMessage, type DescMethod, type DescService, type Message } from "@bufbuild/protobuf";
 
-import type { MockHandlers } from "./forgeMockValues/mock-values";
+import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 export const DEMO_PROJECT = "shop";
 

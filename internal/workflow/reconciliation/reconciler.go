@@ -2474,6 +2474,9 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 		if resumable {
 			continue
 		}
+		if !call.HasReport && r.stoppedSpawnStillReporting(ctx, call) {
+			continue
+		}
 		if call.HasReport {
 			// The parent was already told — by the detached goroutine's own
 			// enqueue, or by an earlier pass — so there is nothing to write
@@ -2603,6 +2606,56 @@ func (r *Reconciler) rootAwaitingResume(ctx context.Context, chatID string) bool
 	}
 	checkpoint, err := r.repo.GetWorkflowCheckpoint(ctx, rootID)
 	return err == nil && checkpoint != nil
+}
+
+// stoppedSpawnStillReporting reports whether a CANCELLED background spawn's
+// report is still on its way from the execution that runs it.
+//
+// A stop (spawn_stop, or the user cancelling a spawn card) goes through
+// SpawnStopper, which signals the chat's execution and then writes the
+// spawn's workflow row cancelled at once (CancelStoppedSpawn), so a reload
+// shows the stop. The spawn's goroutine sees the signal at its next turn
+// boundary and only then enqueues its "cancelled" report: 1s to 22min later
+// in prod, longer while the spawn is parked on a question. In that window the
+// row looked exactly like a spawn whose report was lost, and this repair wrote
+// a "lost in transit (worker interruption)" placeholder that the real report
+// superseded moments later. Every repair in prod from 11-04 to 11-07 was this
+// (reliant #2394): the stop at 22:24:56, the repair at 22:25:10, the
+// goroutine's report at 22:25:10.4.
+//
+// A completed or failed child has no such window: its goroutine writes the
+// report before the child's terminal status (spawnReportBeforeTerminalChangeID),
+// so it is not checked here. A cancelled one is still owed its report while
+// the chat's execution is open, because that execution is the only place the
+// goroutine can live. Once Temporal reports it closed (or does not have it),
+// the report can only come from here, and the repair proceeds.
+//
+// Fails toward waiting: a describe that errors leaves the spawn for the next
+// pass rather than writing a report that may be a lie.
+func (r *Reconciler) stoppedSpawnStillReporting(ctx context.Context, call *db.StrandedBackgroundSpawn) bool {
+	if call.WorkflowStatus != db.Cancelled() || r.tempClient == nil {
+		return false
+	}
+	executionID := call.ChatID
+	if chat, err := r.repo.GetChat(ctx, call.ChatID); err == nil && chat != nil && chat.MainThreadID() != "" {
+		executionID = chat.MainThreadID()
+	}
+	desc, err := r.tempClient.DescribeWorkflowExecution(ctx, executionID, "")
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) || strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
+			return false
+		}
+		logging.WarnContext(ctx, "[Reconciler] Could not ask Temporal whether a stopped spawn's run is still open; leaving it for the next pass",
+			"toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID, "workflowID", executionID, "error", err)
+		return true
+	}
+	if desc.GetWorkflowExecutionInfo().GetStatus() != enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return false
+	}
+	logging.DebugContext(ctx, "[Reconciler] Leaving a stopped background spawn: its run is still open and reports the stop itself",
+		"toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID, "workflowID", executionID)
+	return true
 }
 
 // recipientThreadIsTerminal reports whether a mailbox recipient's loop has

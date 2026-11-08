@@ -824,6 +824,33 @@ func heartbeatKilledStream(ctx context.Context) bool {
 	return true
 }
 
+// workerStopKilledStream reports whether ctx was cancelled because the worker
+// running this activity began stopping, rather than by a real instruction to
+// stop the turn.
+//
+// A real stop wins when both happened: a server-side cancel, pause or reset
+// recorded as the cause means the workflow no longer wants this attempt, and
+// retrying it on the next worker would run a turn nobody is waiting for. Only
+// a cancel with no such cause, on a worker whose stop channel is closed, is
+// the shutdown's own (ActivityWrapper's cancelForWorkerStop).
+func workerStopKilledStream(ctx context.Context) bool {
+	if !errors.Is(ctx.Err(), context.Canceled) || !activity.IsActivity(ctx) {
+		return false
+	}
+	cause := context.Cause(ctx)
+	if temporal.IsCanceledError(cause) ||
+		errors.Is(cause, activity.ErrActivityPaused) ||
+		errors.Is(cause, activity.ErrActivityReset) {
+		return false
+	}
+	select {
+	case <-activity.GetWorkerStopChannel(ctx):
+		return true
+	default:
+		return false
+	}
+}
+
 // reportContentFreeTurn puts the content-free turn on screen as an error.
 //
 // Best-effort by construction: the turn is over either way, and a chat that
@@ -2067,6 +2094,32 @@ streamLoop:
 			"toolCalls", len(streamState.toolCalls),
 		)
 		return nil, fmt.Errorf("heartbeat RPC cancelled the LLM stream: %w", context.Cause(ctx))
+	}
+
+	// The same holds for the worker going away under the turn: a rollout or a
+	// hot reload is not the user asking the agent to stop. ActivityWrapper
+	// cancels every in-flight activity the moment the worker begins stopping
+	// (cancelForWorkerStop, a plain cancel with no cause), so the stream
+	// arrives here looking like an interrupt. Treated as one, the partial was
+	// persisted as the turn's final answer and the activity returned success,
+	// which skipped the wrapper's WorkerShutdown retry: the loop then
+	// re-entered on a history that ended with that partial and yielded it as
+	// the agent's last word ("History ends with an assistant message after
+	// the mailbox drain", every prod event of which landed within seconds of
+	// a worker stop; chat 84e0a94f's sub-agent handed its parent a truncated
+	// answer that way). Failing here lets the wrapper rewrite the error to a
+	// retryable WorkerShutdown, and the next worker re-streams the turn under
+	// the same pre-allocated message id.
+	if streamInterrupted && workerStopKilledStream(ctx) {
+		activity.GetLogger(ctx).Info(
+			"[CallLLM] Stream cancelled because the worker is stopping, not by a real interrupt — "+
+				"failing the turn so the next worker retries it",
+			"chatID", chat.ID,
+			"thread", thread,
+			"responseChars", len(strings.Join(streamState.textParts, "")),
+			"toolCalls", len(streamState.toolCalls),
+		)
+		return nil, fmt.Errorf("worker stopped during the LLM stream: %w", context.Cause(ctx))
 	}
 
 	// The provider served the turn, so a chat that was returning to it is back.
