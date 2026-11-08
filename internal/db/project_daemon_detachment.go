@@ -49,6 +49,14 @@ func (r *Repo) DetachProjectFromDaemon(ctx context.Context, projectID, daemonID,
 		if err := store.LockProjectCatalog(txCtx, r.ORM(), projectID); err != nil {
 			return err
 		}
+		// Then the machine's: a path the machine reports is resolved under
+		// it (WithMachineCheckoutsLocked), so that resolution sees this
+		// detach whole or not at all. Always taken second, after the
+		// catalog lock; the resolution takes no catalog lock while it holds
+		// this one.
+		if err := store.LockMachineCheckouts(txCtx, r.ORM(), daemonID); err != nil {
+			return err
+		}
 		if guard != nil {
 			if err := guard(txCtx); err != nil {
 				return err
@@ -75,6 +83,24 @@ func (r *Repo) DetachProjectFromDaemon(ctx context.Context, projectID, daemonID,
 // checkout is already gone (another detach got there first): the detach ends
 // as a success, recording nothing.
 var ErrNothingToDetach = errors.New("no checkout to detach")
+
+// WithMachineCheckoutsLocked runs fn in a transaction holding the machine's
+// checkout lock, the one DetachProjectFromDaemon takes: every read and write
+// fn makes through this Repo with the ctx it is handed joins that
+// transaction, so a detach from the machine commits wholly before fn's reads
+// or after its writes. fn must not take a project's catalog lock (the detach
+// takes that one first). It may run more than once, on a deadlock retry.
+func (r *Repo) WithMachineCheckoutsLocked(ctx context.Context, daemonID string, fn func(ctx context.Context) error) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
+		if err := store.LockMachineCheckouts(txCtx, r.ORM(), daemonID); err != nil {
+			return err
+		}
+		return fn(txCtx)
+	})
+}
 
 // ListProjectDaemonDetachmentsForDaemon returns every project detached from
 // the machine.

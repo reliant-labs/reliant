@@ -46,6 +46,17 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
+// LockMachineCheckouts takes the transaction-scoped advisory lock that makes
+// a detach from a machine and the resolution of a path that machine reports
+// (its checkout, its detachments, a project created for the path) happen one
+// after the other, never interleaved. ctx must carry a transaction.
+func LockMachineCheckouts(ctx context.Context, db orm.Context, daemonID string) error {
+	if _, err := db.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "machine-checkouts:"+daemonID); err != nil {
+		return fmt.Errorf("failed to lock the machine's checkouts: %w", err)
+	}
+	return nil
+}
+
 // RecordProjectDaemonDetachment records that the user detached the project
 // from the machine, at the checkout path it had there. A second detach of the
 // same pair moves its path and time.

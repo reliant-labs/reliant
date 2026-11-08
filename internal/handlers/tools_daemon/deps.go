@@ -42,6 +42,10 @@ type Repository interface {
 	// checkout at a path (ensureOwnedProjectForPath).
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	CreateProject(ctx context.Context, project *db.Project) error
+	// WithMachineCheckoutsLocked runs fn under the lock a detach from the
+	// machine takes, so a reported path is resolved against the detach
+	// whole or not at all (ensureOwnedProjectForPath).
+	WithMachineCheckoutsLocked(ctx context.Context, daemonID string, fn func(ctx context.Context) error) error
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
 	SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool) (bool, error)
 	GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, daemonID string) (time.Time, error)

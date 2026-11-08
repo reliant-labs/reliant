@@ -3,6 +3,7 @@ package tools_daemon
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,7 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // detachedFixture is a user's project created at its path on "cloud", whose
@@ -109,6 +113,80 @@ func TestDetachedProject_ItsOtherPathIsNotANewProject(t *testing.T) {
 	projects, err := f.repo.ListProjects(f.ctx, db.ProjectFilters{UserID: f.userID})
 	require.NoError(t, err)
 	assert.Len(t, projects, 1)
+}
+
+// detachDuringIntakeRepo starts a detach right after the path resolution has
+// read the machine's detachments, before it reads the machine's checkout.
+type detachDuringIntakeRepo struct {
+	*db.Repo
+	once   sync.Once
+	detach func()
+}
+
+func (r *detachDuringIntakeRepo) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error) {
+	rows, err := r.Repo.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	r.once.Do(r.detach)
+	return rows, err
+}
+
+// A detach of the machine's checkout at a path other than the creation path,
+// committing between the intake's detachment read and its checkout read, is
+// seen whole: the intake resolves the project the detach is still waiting to
+// detach, never a new one for the folder, and the detach then stands. Without
+// the machine's checkout lock both reads came back empty and the folder came
+// back as a duplicate project.
+func TestEnsureOwnedProjectForPath_DetachBetweenItsReadsCreatesNoProject(t *testing.T) {
+	f := newDetachedFixture(t)
+	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil))
+
+	detachDone := make(chan error, 1)
+	repo := &detachDuringIntakeRepo{Repo: f.repo}
+	repo.detach = func() {
+		go func() {
+			detachDone <- f.repo.DetachProjectFromDaemon(f.ctx, f.project.ID, f.laptop, f.localPath, nil)
+		}()
+		// Hand control back once the detach either finished (no lock held it
+		// off) or is waiting on an advisory lock in this test's database.
+		for {
+			select {
+			case err := <-detachDone:
+				detachDone <- err
+				return
+			default:
+			}
+			var waiting bool
+			require.NoError(t, f.repo.ORM().Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM pg_locks
+				WHERE locktype = 'advisory' AND NOT granted
+				AND database = (SELECT oid FROM pg_database WHERE datname = current_database()))`).Scan(f.ctx, &waiting))
+			if waiting {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	svc := newTestService(repo)
+	conn := newTestConn(f.userID, f.laptop, nil)
+
+	got, err := svc.ensureOwnedProjectForPath(f.ctx, conn, f.localPath, nil)
+	require.NoError(t, err)
+	assert.Equal(t, f.project.ID, got.ID, "the intake resolved the checkout the detach had not yet removed")
+	require.NoError(t, <-detachDone)
+
+	projects, err := f.repo.ListProjects(f.ctx, db.ProjectFilters{UserID: f.userID})
+	require.NoError(t, err)
+	assert.Len(t, projects, 1, "no project is created for the detached folder")
+
+	// The detach stands: the folder's next report is dropped, and a snapshot
+	// of the project from the machine writes no catalog.
+	_, err = svc.ensureOwnedProjectForPath(f.ctx, conn, f.localPath, nil)
+	assert.True(t, errors.Is(err, errProjectDetached), "got %v", err)
+	synced, err := f.repo.SyncProjectConfigSnapshot(f.ctx, &db.ProjectConfigRecord{
+		ProjectID: f.project.ID, DaemonID: f.laptop, PushedAt: time.Unix(1_800_000_000, 0).UTC(),
+	}, true)
+	require.NoError(t, err)
+	assert.False(t, synced)
+	_, err = f.repo.GetProjectMachineCatalogPushedAt(f.ctx, f.project.ID, f.laptop)
+	assert.True(t, svcerr.IsNotFound(err), "no catalog for the detached machine, got %v", err)
 }
 
 // A detach that commits while the connect reconcile is probing the machine
