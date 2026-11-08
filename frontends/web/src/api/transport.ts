@@ -22,7 +22,12 @@
  *     ConnectError subclass with the numeric `.code`, metadata and details
  *     intact, so the `instanceof ConnectError` call sites keep working; it adds
  *     `.reason` / `.codeName` / `.status` / `.retryable` / `.traceId`, and its
- *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged);
+ *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged).
+ *     Being a runtime interceptor, it also records the open interaction (or
+ *     the caller's span) at call entry, before auth's await, so a call held
+ *     there while the user opens something else stays in the interaction it
+ *     started under (lib/chatOpenInteraction). An app interceptor that awaits
+ *     must never go above it without `interactionContextInterceptor()` first;
  *   - org snapshots synchronously before any auth await or timeout replacement:
  *     an operation started in A cannot become a write in B after a switch.
  *     Explicit caller orgs win; no selection stays unset across retries.
