@@ -113,7 +113,8 @@ func (s *Service) StreamChatUpdates(
 		userUpdateCh = userUpdateSub.Events()
 	}
 
-	lastChatSeq, err := s.sendInitialChatSync(ctx, chat, sinceSeq, stream)
+	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
+	lastChatSeq, err := s.sendInitialChatSync(ctx, chat, sinceSeq, toolBodies, stream)
 	if err != nil {
 		return err
 	}
@@ -143,7 +144,8 @@ func (s *Service) StreamChatUpdates(
 	// The transcript the live frames carried after the initial sync, by
 	// block kind, summed over the stream's life and put on the RPC span as
 	// it ends (the initial sync's own spans carry theirs).
-	var liveSent messageproto.TranscriptBytes
+	// Live frames are always FULL (sendSingleChatUpdate).
+	liveSent := messageproto.TranscriptBytes{ToolBodies: reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL}
 	defer func() { rpcSpan.SetAttributes(liveSent.Attributes("transcript.live")...) }()
 
 	for {
@@ -231,7 +233,7 @@ func (s *Service) StreamChatUpdates(
 // otherwise a replay of (sinceSeq, latest] — unless that replay should not be
 // attempted (see chatCursorNeedsSnapshot), which also gets a snapshot. It
 // returns the chat sequence the sync delivered up to.
-func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sinceSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (_ int64, err error) {
+func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sinceSeq int64, toolBodies reliantv1.ToolBodyMode, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (_ int64, err error) {
 	chatID := chat.ID
 	ctx, span := startSpan(ctx, "chat_stream.initial_sync", attribute.Int64("chat.since_seq", sinceSeq))
 	defer func() {
@@ -259,7 +261,7 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 		// The cursor comes from the snapshot's own high-water mark, not
 		// chatLatestSeq above: the snapshot reads it again, later, and
 		// anything committed in between is in the snapshot.
-		snapshotSeq, err := s.sendChatSnapshot(ctx, chat, stream)
+		snapshotSeq, err := s.sendChatSnapshot(ctx, chat, toolBodies, stream)
 		if err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat snapshot"))
 		}
@@ -268,7 +270,7 @@ func (s *Service) sendInitialChatSync(ctx context.Context, chat *db.ChatRow, sin
 
 	span.SetAttributes(attribute.String("chat_stream.sync", "replay"), attribute.Int64("chat.latest_sequence", chatLatestSeq))
 	if chatLatestSeq > sinceSeq {
-		if err := s.sendChatUpdateBatches(ctx, chatID, sinceSeq, chatLatestSeq, stream); err != nil {
+		if err := s.sendChatUpdateBatches(ctx, chatID, sinceSeq, chatLatestSeq, toolBodies, stream); err != nil {
 			return 0, svcerr.WrapOr(err, svcerr.Internal("failed to send chat updates"))
 		}
 	}
@@ -290,21 +292,26 @@ func chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq int64) bool {
 }
 
 // chatUpdateToProto converts a persisted chat update to its wire form.
-func chatUpdateToProto(update db.ChatUpdate) *reliantv1.ChatUpdateData {
+func chatUpdateToProto(update db.ChatUpdate, toolBodies reliantv1.ToolBodyMode) *reliantv1.ChatUpdateData {
 	return &reliantv1.ChatUpdateData{
 		UpdateType:     update.UpdateType,
 		SequenceNumber: update.SequenceNumber,
 		EntityId:       update.EntityID,
 		ChatId:         update.ChatID,
-		DataJson:       formatChatUpdateDataJSON(update.UpdateType, update.Data),
+		DataJson:       formatChatUpdateDataJSON(update.UpdateType, update.Data, toolBodies),
 		CreatedAt:      update.CreatedAt.Format(time.RFC3339Nano),
 	}
 }
 
 // sendSingleChatUpdate sends a single chat update event received from the
 // UpdateHub, counting what it carried into sent.
+//
+// A live frame is always FULL, whatever mode the stream asked for: it arrives
+// one at a time while someone watches, and detailed mode expands an edit's
+// diff the moment it lands (dev-docs/design/chat-lazy-tool-bodies.md, owner
+// decision 2).
 func (s *Service) sendSingleChatUpdate(update db.ChatUpdate, latestSeq int64, sent *messageproto.TranscriptBytes, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) error {
-	protoUpdate := chatUpdateToProto(update)
+	protoUpdate := chatUpdateToProto(update, reliantv1.ToolBodyMode_TOOL_BODY_MODE_FULL)
 	sent.AddChatUpdate(protoUpdate.UpdateType, protoUpdate.DataJson)
 	event := &reliantv1.ChatStreamEvent{
 		Event: &reliantv1.ChatStreamEvent_Updates{
@@ -399,8 +406,8 @@ func (s *Service) sendStreamingDeltas(chatID string, deltas []streaming.Streamin
 
 // sendChatSnapshot builds and sends the chat's snapshot, returning the chat
 // sequence it is current as of.
-func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (int64, error) {
-	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chat)
+func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, toolBodies reliantv1.ToolBodyMode, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (int64, error) {
+	snapshot, latestSeq, err := s.buildChatSnapshot(ctx, chat, toolBodies)
 	if err != nil {
 		return 0, err
 	}
@@ -424,10 +431,11 @@ func (s *Service) sendChatSnapshot(ctx context.Context, chat *db.ChatRow, stream
 }
 
 // sendChatUpdateBatches replays the chat updates in (startSeq, latestSeq].
-func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, startSeq, latestSeq int64, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (err error) {
+func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, startSeq, latestSeq int64, toolBodies reliantv1.ToolBodyMode, stream *connect.ServerStream[reliantv1.ChatStreamEvent]) (err error) {
 	ctx, span := startSpan(ctx, "chat_stream.replay", attribute.Int64("chat_stream.replay_from", startSeq), attribute.Int64("chat_stream.replay_to", latestSeq))
-	// What the replay sent, by block kind, over all its batches.
-	var sent messageproto.TranscriptBytes
+	// What the replay sent, by block kind, over all its batches (after the
+	// stub policy).
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
 	defer func() {
 		span.SetAttributes(sent.Attributes("transcript")...)
 		observe.RecordSpanError(span, err)
@@ -451,7 +459,7 @@ func (s *Service) sendChatUpdateBatches(ctx context.Context, chatID string, star
 			if update.SequenceNumber > maxSeq {
 				maxSeq = update.SequenceNumber
 			}
-			protoUpdate := chatUpdateToProto(update)
+			protoUpdate := chatUpdateToProto(update, toolBodies)
 			sent.AddChatUpdate(protoUpdate.UpdateType, protoUpdate.DataJson)
 			protoUpdates = append(protoUpdates, protoUpdate)
 		}

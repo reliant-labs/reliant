@@ -68,6 +68,8 @@ type Repository interface {
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
 	GetToolResultBlock(ctx context.Context, toolCallID string) (*db.MessageContentBlock, error)
 	ListToolResultBlocks(ctx context.Context, toolCallID string) ([]*db.MessageContentBlock, error)
+	ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error)
+	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
 	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
 
 	// The agent mailbox: messages queued for a thread until it can take them.

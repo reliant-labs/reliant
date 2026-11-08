@@ -55,55 +55,107 @@ func (s *Service) GetToolResult(
 }
 
 // chatToolResultBlock finds the tool_result block for toolCallID that chatID
-// displays, or nil. A block written in the chat itself wins. Otherwise the
-// chat may be a branch showing history it inherited: such a block is in
-// another chat of the same user, in a context window this chat's threads
-// reach through their parent links.
+// displays, or nil. A block written in the chat itself wins over one a branch
+// inherited (see chatBlockVisibility).
 func (s *Service) chatToolResultBlock(ctx context.Context, chatID, userID, toolCallID string) (*db.MessageContentBlock, error) {
 	blocks, err := s.deps.Repo.ListToolResultBlocks(ctx, toolCallID)
 	if err != nil {
 		return nil, err
 	}
-
-	type candidate struct {
-		block *db.MessageContentBlock
-		msg   *db.Message
-	}
-	var inherited []candidate
-	for _, block := range blocks {
-		msg, err := s.deps.Repo.GetMessage(ctx, block.MessageID)
-		if err != nil {
-			if svcerr.IsNotFound(err) {
-				continue
-			}
-			return nil, err
-		}
-		if msg.ChatID == chatID {
-			return block, nil
-		}
-		inherited = append(inherited, candidate{block: block, msg: msg})
-	}
-	if len(inherited) == 0 {
-		return nil, nil
-	}
-
-	reachable, err := s.reachableContextWindows(ctx, chatID)
+	msgs, err := s.blockMessages(ctx, blocks)
 	if err != nil {
 		return nil, err
 	}
-	for _, c := range inherited {
-		if !reachable[c.msg.ContextWindowID] {
+	for _, block := range blocks {
+		if msg := msgs[block.MessageID]; msg != nil && msg.ChatID == chatID {
+			return block, nil
+		}
+	}
+	vis := s.newChatBlockVisibility(chatID, userID)
+	for _, block := range blocks {
+		msg := msgs[block.MessageID]
+		if msg == nil {
 			continue
 		}
-		// A branch is always its source chat's user's, so this holds for
-		// every real inheritance; it is checked anyway, because what
-		// another user wrote must never be readable here.
-		if err := s.requireChatOwner(ctx, c.msg.ChatID, userID); err != nil {
-			continue
+		visible, err := vis.displays(ctx, msg)
+		if err != nil {
+			return nil, err
 		}
-		return c.block, nil
+		if visible {
+			return block, nil
+		}
 	}
 	return nil, nil
+}
+
+// blockMessages reads the messages blocks belong to, in one query, by id. A
+// message no row holds is absent.
+func (s *Service) blockMessages(ctx context.Context, blocks []*db.MessageContentBlock) (map[string]*db.Message, error) {
+	ids := make([]string, 0, len(blocks))
+	seen := make(map[string]bool, len(blocks))
+	for _, b := range blocks {
+		if !seen[b.MessageID] {
+			seen[b.MessageID] = true
+			ids = append(ids, b.MessageID)
+		}
+	}
+	if len(ids) == 0 {
+		return map[string]*db.Message{}, nil
+	}
+	rows, err := s.deps.Repo.ListMessagesByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	msgs := make(map[string]*db.Message, len(rows))
+	for _, m := range rows {
+		msgs[m.ID] = m
+	}
+	return msgs, nil
+}
+
+// chatBlockVisibility decides which messages a chat displays, for the reads
+// that return a block's body by an id the client names (GetToolResult,
+// GetContentBlockBodies). A message in the chat itself is displayed.
+// Otherwise the chat may be a branch showing history it inherited: such a
+// message is in another chat of the same user, in a context window this
+// chat's threads reach through their parent links. Anything else is not, and
+// the caller answers it as not found. The context-window walk and the owner
+// checks run at most once per chat, and only when an inherited message asks.
+type chatBlockVisibility struct {
+	s              *Service
+	chatID, userID string
+	reachable      map[string]bool
+	owned          map[string]bool
+}
+
+func (s *Service) newChatBlockVisibility(chatID, userID string) *chatBlockVisibility {
+	return &chatBlockVisibility{s: s, chatID: chatID, userID: userID, owned: make(map[string]bool)}
+}
+
+// displays reports whether the chat displays msg.
+func (v *chatBlockVisibility) displays(ctx context.Context, msg *db.Message) (bool, error) {
+	if msg.ChatID == v.chatID {
+		return true, nil
+	}
+	if v.reachable == nil {
+		reachable, err := v.s.reachableContextWindows(ctx, v.chatID)
+		if err != nil {
+			return false, err
+		}
+		v.reachable = reachable
+	}
+	if !v.reachable[msg.ContextWindowID] {
+		return false, nil
+	}
+	// A branch is always its source chat's user's, so this holds for every
+	// real inheritance; it is checked anyway, because what another user
+	// wrote must never be readable here.
+	owned, checked := v.owned[msg.ChatID]
+	if !checked {
+		owned = v.s.requireChatOwner(ctx, msg.ChatID, v.userID) == nil
+		v.owned[msg.ChatID] = owned
+	}
+	return owned, nil
 }
 
 // reachableContextWindows is every context window whose messages chatID's

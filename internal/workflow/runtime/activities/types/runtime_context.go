@@ -145,6 +145,18 @@ type RuntimeContext struct {
 	// means something upstream is wrong. Set on call_llm nodes only.
 	SpeculativeTurn bool `json:"speculative_turn,omitempty"`
 
+	// ResumeTurn marks the first call_llm turn of an agent loop resumed after
+	// it stopped mid-work: a sub-agent that stopped on a failure and is
+	// resumed (by a capacity wake, a message, or a successor run), or a root
+	// loop re-entered at its checkpointed position. Such a loop never
+	// finished its turn, so an assistant message at the tail of its history
+	// is the turn that was cut off, not an answer. When the resume brought no
+	// new input (the mailbox drain leaves that tail in place), call_llm adds
+	// a hidden "continue" user message and calls the provider, instead of
+	// yielding the cut-off turn as the agent's last word. Set on call_llm
+	// nodes only, for one turn.
+	ResumeTurn bool `json:"resume_turn,omitempty"`
+
 	// CatalogPin is the workflow catalog the run started with
 	// (db.Repo.PinProjectCatalog). call_llm reads the presets its spawn tool
 	// describes from it, so the model is offered the presets a spawn then

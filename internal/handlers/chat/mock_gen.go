@@ -23,7 +23,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=f3115bc41aa23558da14f1e017d609748279823aafbd39e3fbbc300460bac251
+// forge:hash=ca945957ee59e91a6e1ad4ad7112c5dc85b42fec6757e700eea73cf9224dfaa5
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -64,6 +64,8 @@ type MockRepository struct {
 	GetToolCallFunc                                          func(context.Context, string) (*db.ToolCall, error)
 	GetToolResultBlockFunc                                   func(context.Context, string) (*db.MessageContentBlock, error)
 	ListToolResultBlocksFunc                                 func(context.Context, string) ([]*db.MessageContentBlock, error)
+	ListContentBlocksByIDsFunc                               func(context.Context, []string) ([]*db.MessageContentBlock, error)
+	ListMessagesByIDsFunc                                    func(context.Context, []string) ([]*db.Message, error)
 	PendingQuestionsByThreadFunc                             func(context.Context, string) (map[string]*db.Question, error)
 	EnqueueAgentMessageFunc                                  func(context.Context, *db.AgentMessage) error
 	EnqueueAgentMessageOnceFunc                              func(context.Context, *db.AgentMessage) (bool, error)
@@ -463,6 +465,24 @@ func (m *MockRepository) ListToolResultBlocks(ctx context.Context, toolCallID st
 		return m.ListToolResultBlocksFunc(ctx, toolCallID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListToolResultBlocks")
+}
+
+// ListContentBlocksByIDs records the call and delegates to ListContentBlocksByIDsFunc when set.
+func (m *MockRepository) ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error) {
+	m.Recorder.Record("ListContentBlocksByIDs", ctx, ids)
+	if m.ListContentBlocksByIDsFunc != nil {
+		return m.ListContentBlocksByIDsFunc(ctx, ids)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListContentBlocksByIDs")
+}
+
+// ListMessagesByIDs records the call and delegates to ListMessagesByIDsFunc when set.
+func (m *MockRepository) ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error) {
+	m.Recorder.Record("ListMessagesByIDs", ctx, ids)
+	if m.ListMessagesByIDsFunc != nil {
+		return m.ListMessagesByIDsFunc(ctx, ids)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListMessagesByIDs")
 }
 
 // PendingQuestionsByThread records the call and delegates to PendingQuestionsByThreadFunc when set.

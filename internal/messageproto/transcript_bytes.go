@@ -37,6 +37,16 @@ type TranscriptBytes struct {
 	ToolResult BlockBytes // TOOL_RESULT: the content as sent (a preview when truncated)
 	Thinking   BlockBytes // THINKING and REDACTED_THINKING
 	Other      BlockBytes // everything else: images, file references, documents, unknown kinds
+
+	// ToolBodies is the mode the read was served in (ResolveToolBodyMode),
+	// set by the caller; unset records none.
+	ToolBodies reliantv1.ToolBodyMode
+	// Elided is the blocks a TOOL_BODY_MODE_STUB read sent body_elided, and
+	// the bytes of their stored bodies it left out: body_size less what was
+	// sent instead (a call's skeleton, a result's stub; nothing for
+	// thinking). The kinds above count what was sent, so they already
+	// exclude these.
+	Elided BlockBytes
 }
 
 // BlockBytes counts the blocks of one kind and the bytes of their bodies.
@@ -82,7 +92,11 @@ func (t *TranscriptBytes) AddMessages(messages ...*reliantv1.Message) {
 		t.Messages++
 		t.Bytes += int64(proto.Size(m))
 		for _, b := range m.GetContentBlocks() {
-			t.kind(b.GetType()).add(len(b.GetContent()) + len(b.GetInput()))
+			sent := len(b.GetContent()) + len(b.GetInput())
+			t.kind(b.GetType()).add(sent)
+			if b.GetBodyElided() {
+				t.Elided.add(int(max(b.GetBodySize()-int64(sent), 0)))
+			}
 		}
 	}
 }
@@ -92,9 +106,11 @@ func (t *TranscriptBytes) AddMessages(messages ...*reliantv1.Message) {
 // client receives, and leaving them undecoded skips unescaping and copying
 // every string just to measure it.
 type updateBlock struct {
-	Type    json.RawMessage `json:"type"`
-	Content json.RawMessage `json:"content"`
-	Input   json.RawMessage `json:"input"`
+	Type       json.RawMessage `json:"type"`
+	Content    json.RawMessage `json:"content"`
+	Input      json.RawMessage `json:"input"`
+	BodyElided bool            `json:"body_elided"`
+	BodySize   int64           `json:"body_size"`
 }
 
 type updateMessage struct {
@@ -134,7 +150,11 @@ func (t *TranscriptBytes) AddChatUpdate(updateType reliantv1.ChatUpdateType, dat
 		blocks = payload.Message.ContentBlocks
 	}
 	for _, b := range blocks {
-		t.kind(updateBlockType(b.Type)).add(jsonStringLen(b.Content) + jsonStringLen(b.Input))
+		sent := jsonStringLen(b.Content) + jsonStringLen(b.Input)
+		t.kind(updateBlockType(b.Type)).add(sent)
+		if b.BodyElided {
+			t.Elided.add(int(max(b.BodySize-int64(sent), 0)))
+		}
 	}
 }
 
@@ -165,8 +185,10 @@ func jsonStringLen(raw json.RawMessage) int {
 }
 
 // Attributes renders t as span attributes under prefix: prefix.messages,
-// prefix.bytes, prefix.blocks, and prefix.<kind>_bytes / prefix.<kind>_blocks
-// for kind in text, tool_input, tool_result, thinking and other.
+// prefix.bytes, prefix.blocks, prefix.<kind>_bytes / prefix.<kind>_blocks
+// for kind in text, tool_input, tool_result, thinking and other, and
+// prefix.blocks_elided / prefix.bytes_elided; plus prefix.tool_bodies when
+// ToolBodies is set.
 func (t *TranscriptBytes) Attributes(prefix string) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		attribute.Int(prefix+".messages", t.Messages),
@@ -186,6 +208,12 @@ func (t *TranscriptBytes) Attributes(prefix string) []attribute.KeyValue {
 		attrs = append(attrs,
 			attribute.Int64(prefix+"."+k.name+"_bytes", k.b.Bytes),
 			attribute.Int(prefix+"."+k.name+"_blocks", k.b.Blocks))
+	}
+	attrs = append(attrs,
+		attribute.Int(prefix+".blocks_elided", t.Elided.Blocks),
+		attribute.Int64(prefix+".bytes_elided", t.Elided.Bytes))
+	if t.ToolBodies != reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED {
+		attrs = append(attrs, attribute.String(prefix+".tool_bodies", t.ToolBodies.String()))
 	}
 	return attrs
 }

@@ -10,7 +10,7 @@ import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 import { useUnmountSafeTimeout } from "../../hooks/useUnmountSafeTimeout";
 import { BELOW_FIRST, BESIDE_FIRST, placeCallout, type CalloutSide } from "./calloutPlacement";
-import { watchUserScroll } from "./userScroll";
+import { holdUserScroll, watchUserScroll } from "./userScroll";
 import type { SpotlightConfig } from "./types";
 
 // Store last known positions for smooth transitions between steps
@@ -226,10 +226,13 @@ export function OnboardingSpotlight({
   // Once the reader scrolls a phone's page, the page is never scrolled for
   // them again, and the sheet stays while the dim and ring step aside: they
   // track the target from the main thread, so they trail a touch scroll. A
-  // pending required action keeps them (its click blockers follow the cutout).
+  // pending required action instead holds the page still (holdPage below):
+  // its click blockers follow the cutout, so nothing that tracks the target
+  // may move under a finger, and the target is always placed above the sheet.
   const [readerScrolled, setReaderScrolled] = useState(false);
-  const handsOff = callout?.autoScroll === false || readerScrolled;
-  const stepAside = sheet && handsOff && !blockOutside;
+  const holdPage = sheet && blockOutside;
+  const handsOff = !holdPage && (callout?.autoScroll === false || readerScrolled);
+  const stepAside = sheet && handsOff;
   // Read by the placement effect below, which must not re-run (and re-scroll) when they flip.
   const handsOffRef = useRef({ handsOff, stepAside });
   useEffect(() => {
@@ -247,6 +250,11 @@ export function OnboardingSpotlight({
   void _onSkipAll;
   const [spotlightRect, setSpotlightRect] = useState<SpotlightRect | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  // The sheet's own content still scrolls; the page under it does not.
+  useEffect(() => {
+    if (!holdPage) return;
+    return holdUserScroll(() => tooltipRef.current);
+  }, [holdPage]);
   const [tooltipSize, setTooltipSize] = useState<ElementSize>(DEFAULT_TOOLTIP_SIZE);
   // Initialize from last position for smooth tooltip transition between steps
   const [tooltipPos, setTooltipPos] = useState<Position & { actualPosition: string; maxHeight?: number }>(() => ({
@@ -578,7 +586,7 @@ export function OnboardingSpotlight({
         data-side={sheet ? "sheet" : tooltipPos.actualPosition}
         style={
           sheet
-            ? { left: 0, right: 0, bottom: 0, top: "auto", width: "100%", maxHeight: `${SHEET_MAX_VH}dvh`, overflowY: "auto", borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
+            ? { left: 0, right: 0, bottom: 0, top: "auto", width: "100%", maxHeight: `${SHEET_MAX_VH}dvh`, overflowY: "auto", overscrollBehavior: "contain", borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
             : { top: tooltipPos.top, left: tooltipPos.left, width: "min(20rem, calc(100vw - 2rem))", ...(tooltipPos.maxHeight === undefined ? {} : { maxHeight: tooltipPos.maxHeight, overflowY: "auto" as const }) }
         }
       >

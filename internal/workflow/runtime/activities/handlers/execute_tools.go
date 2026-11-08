@@ -272,6 +272,9 @@ type ExecuteToolsActivity struct {
 	// it reads (configMachine). Set by WithDaemonRouter; nil reads the
 	// project's union for any selector that names no id.
 	machines toolexec.DaemonRouter
+	// preemptionPoll is how often a preemptable call checks for mail; zero
+	// means preemptionPollInterval. Only tests set it.
+	preemptionPoll time.Duration
 }
 
 // NewExecuteToolsActivity creates a new ExecuteToolsActivity
@@ -395,7 +398,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 
 	// Mail for the thread ends the batch's waits early; see
 	// execute_tools_preemption.go.
-	ctx = withBatchPreemption(ctx, newBatchPreemption(a.repo, rtx.Thread))
+	ctx = withBatchPreemption(ctx, newBatchPreemption(a.repo, rtx.Thread, a.preemptionPoll))
 
 	// Execute all tool calls in parallel using goroutines
 	// This significantly improves performance when multiple tools are called together

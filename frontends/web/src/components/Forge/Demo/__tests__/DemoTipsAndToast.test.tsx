@@ -77,23 +77,23 @@ it("drawer hides the callout, then closing it reveals the new page without consu
     expect(screen.queryByTestId("tour-callout")).toBeNull();
   }finally{drawer.remove();}
 });
-it("legacy logs tour link opens only logs; Done dismisses without a full-site sequence", async () => {
-  const {router}=renderDemo("/forge/demo?view=logs&tour=forge:fg-logs");
-  expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
-  fireEvent.click(screen.getByTestId("tour-next"));
-  await waitFor(()=>expect(screen.queryByTestId("tour-callout")).toBeNull());
-  expect(router.state.location.pathname).toBe("/forge/demo");
-  expect((router.state.location.search as {view:string}).view).toBe("logs");
+it("explicit guided tour links suppress the automatic page card", async () => {
+  renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
+  expect(await screen.findByTestId("tour-card")).toHaveTextContent("What is forge?");
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  expect(screen.getByTestId("tour-next")).toHaveTextContent("Next");
 });
-it("persistent actions survive page navigation and open the existing build section", async()=>{
+it("persistent actions survive navigation and open build help without losing page context", async()=>{
   const {go,router}=renderDemo("/forge/p/shop");
   expect(await screen.findByTestId("demo-screen-actions")).toHaveTextContent("How Forge builds this");
   await go("/forge/p/shop/observability/logs");
   expect(screen.getByTestId("demo-screen-actions")).toHaveTextContent("Install Forge");
   expect(screen.getByTestId("tour-callout").querySelector('[data-testid="demo-cta-signup"]')).toBeNull();
-  fireEvent.click(screen.getByRole("link",{name:"How Forge builds this"}));
-  await waitFor(()=>expect(router.state.location.pathname).toBe("/forge/demo"));
-  expect(router.state.location.search).toMatchObject({section:"built"});
+  fireEvent.click(screen.getAllByRole("button",{name:"How Forge builds this"})[0]);
+  expect(await screen.findByRole("dialog", { name: "How Forge builds this" })).toBeVisible();
+  expect(router.state.location.pathname).toBe("/forge/p/shop/observability/logs");
+  fireEvent.click(screen.getByRole("button", {name:"Back to exploring"}));
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 it("keeps a page callout below the screen-action row, which stacks over the tour", async () => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });

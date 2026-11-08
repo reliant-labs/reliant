@@ -39,3 +39,31 @@ export function watchUserScroll(onScroll: () => void): () => void {
     stop();
   };
 }
+
+/**
+ * Hold the page still: cancel the reader's drags, wheels and scrolling keys,
+ * except inside `allowed()` (a sheet that scrolls its own content). Keys are
+ * held only when nothing is focused, so typing into the app is untouched.
+ * Returns the release.
+ */
+export function holdUserScroll(allowed: () => Element | null): () => void {
+  const inside = (event: Event) => {
+    const box = allowed();
+    return box !== null && event.target instanceof Node && box.contains(event.target);
+  };
+  const onMove = (event: Event) => {
+    if (!inside(event)) event.preventDefault();
+  };
+  const onKey = (event: KeyboardEvent) => {
+    const unfocused = event.target === document.body || event.target === document.documentElement;
+    if (unfocused && SCROLL_KEYS.has(event.key)) event.preventDefault();
+  };
+  window.addEventListener("touchmove", onMove, { capture: true, passive: false });
+  window.addEventListener("wheel", onMove, { capture: true, passive: false });
+  window.addEventListener("keydown", onKey, true);
+  return () => {
+    window.removeEventListener("touchmove", onMove, true);
+    window.removeEventListener("wheel", onMove, true);
+    window.removeEventListener("keydown", onKey, true);
+  };
+}

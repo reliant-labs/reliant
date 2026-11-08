@@ -6,13 +6,13 @@
  * ring step aside: they follow the target from the main thread, so on a phone
  * (where touch scrolling runs off it) they trailed every swipe.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { OnboardingSpotlight } from "../OnboardingSpotlight";
 
 const width = window.innerWidth;
 let target: HTMLElement;
-let scrollIntoView: ReturnType<typeof vi.fn>;
+let scrollIntoView: Mock<Element["scrollIntoView"]>;
 
 function renderSheet(autoScroll?: boolean) {
   return render(
@@ -36,7 +36,7 @@ beforeEach(() => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
   target = document.createElement("div");
   target.setAttribute("data-testid", "sheet-target");
-  scrollIntoView = vi.fn();
+  scrollIntoView = vi.fn<Element["scrollIntoView"]>();
   target.scrollIntoView = scrollIntoView;
   document.body.appendChild(target);
 });
@@ -77,6 +77,36 @@ describe("OnboardingSpotlight sheet and the reader's scroll", () => {
     renderSheet(false);
     expect(scrollIntoView).not.toHaveBeenCalled();
     expect(dim().getAttribute("data-stepped-aside")).toBe("true");
+  });
+
+  it("holds the page still under a pending required action, and places the target anyway", () => {
+    render(
+      <OnboardingSpotlight
+        targetSelector="[data-testid='sheet-target']"
+        title="Releases"
+        description="What shipped"
+        stepNumber={1}
+        totalSteps={1}
+        onNext={vi.fn()}
+        onSkipAll={vi.fn()}
+        keyboardNav={false}
+        blockOutside
+        callout={{ footer: null, autoScroll: false }}
+      />
+    );
+    // A required action's target must be in view, whatever the reader did first.
+    expect(scrollIntoView).toHaveBeenCalled();
+    const drag = new Event("touchmove", { bubbles: true, cancelable: true });
+    act(() => {
+      document.body.dispatchEvent(drag);
+    });
+    // The page does not move, so the dim, ring and click blockers never trail it.
+    expect(drag.defaultPrevented).toBe(true);
+    expect(dim().getAttribute("data-stepped-aside")).toBeNull();
+    // The sheet's own content still scrolls.
+    const inSheet = new Event("touchmove", { bubbles: true, cancelable: true });
+    screen.getByTestId("tour-callout").dispatchEvent(inSheet);
+    expect(inSheet.defaultPrevented).toBe(false);
   });
 
   it("does not take a programmatic scroll for the reader's", () => {

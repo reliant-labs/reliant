@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { watchUserScroll } from "../userScroll";
+import { holdUserScroll, watchUserScroll } from "../userScroll";
 
 describe("watchUserScroll", () => {
   it.each([
@@ -29,5 +29,42 @@ describe("watchUserScroll", () => {
     watchUserScroll(onScroll)();
     window.dispatchEvent(new Event("touchmove"));
     expect(onScroll).not.toHaveBeenCalled();
+  });
+});
+
+describe("holdUserScroll", () => {
+  const cancelable = (type: string) => new Event(type, { bubbles: true, cancelable: true });
+
+  it("cancels drags and wheels outside the allowed box, and lets them through inside it", () => {
+    const box = document.createElement("div");
+    document.body.appendChild(box);
+    const release = holdUserScroll(() => box);
+    for (const type of ["touchmove", "wheel"]) {
+      const outside = cancelable(type);
+      document.body.dispatchEvent(outside);
+      expect(outside.defaultPrevented).toBe(true);
+      const inside = cancelable(type);
+      box.dispatchEvent(inside);
+      expect(inside.defaultPrevented).toBe(false);
+    }
+    release();
+    const after = cancelable("touchmove");
+    document.body.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
+    box.remove();
+  });
+
+  it("holds scrolling keys only when nothing is focused", () => {
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    const release = holdUserScroll(() => null);
+    const onPage = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(onPage);
+    expect(onPage.defaultPrevented).toBe(true);
+    const typing = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+    input.dispatchEvent(typing);
+    expect(typing.defaultPrevented).toBe(false);
+    release();
+    input.remove();
   });
 });

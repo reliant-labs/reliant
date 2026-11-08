@@ -27,12 +27,12 @@ import type { DescMethod } from "@bufbuild/protobuf";
 import { MethodOptions_IdempotencyLevel } from "@bufbuild/protobuf/wkt";
 import type { Transport } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
+import { createMockTransport } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 import { loadConfig } from "@/lib/config_gen";
 
 import { createDemoScenario } from "./demoScenario";
 import { setDemoDataStatus } from "./demoDataStatus";
-import { createMockTransport } from "./forgeMockCompat";
 
 /** How long the gateway gets before the sample data answers instead. */
 export const REMOTE_TIMEOUT_MS = 4_000;
@@ -43,7 +43,7 @@ export const REMOTE_TIMEOUT_MS = 4_000;
  * watch or stream, or that describe, preview or plan a change without making
  * it. Every other name is a write.
  */
-const READ_VERB = /^(List|Get|Search|Query|Compare|Watch|Stream|Describe|Preview|Plan|Check|Resolve)/;
+const READ_VERB = /^(List|Get|Search|Query|Compare|Watch|Stream|Describe|Browse|Preview|Plan|Check|Resolve)/;
 
 /**
  * The reads the demo may make. The proto's own word wins: a method declared

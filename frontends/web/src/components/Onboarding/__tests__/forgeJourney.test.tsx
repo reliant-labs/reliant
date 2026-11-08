@@ -143,13 +143,26 @@ describe("the forge journey", () => {
     ]);
   });
 
-  it("opens with what forge is: any agent harness, production setup built in, and Install forge", () => {
+  it("explains the agent's work, Forge's foundation and the user's ownership", () => {
     resetShellForTests("demo");
     render(<>{presentStep(step("fg-intro")).description}</>);
-    expect(screen.getByText(/works with any coding agent: Claude Code, Codex, Cursor/)).toBeInTheDocument();
-    expect(screen.getByText(/skills and lints keep your agent on track/)).toBeInTheDocument();
+    expect(screen.getByText(/open-source toolkit.*Claude Code, Codex or Cursor/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Tell your agent what to build. Your agent defines the data and API and writes your app's custom behavior. Forge generates supporting code and production setup, with checks to guide the work. Its tools let the agent build, deploy and monitor the app; you own the code and decide what ships."
+      )
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("install-forge-link-tour_intro")).toBeNull();
     expect(conditionsOf(step("fg-intro"))).toEqual([]);
+  });
+
+  it("distinguishes sample monitoring data from the agent's work on a deployed app", () => {
+    render(<>{presentStep(step("fg-done")).description}</>);
+    expect(screen.getByText(/tour uses sample data/)).toBeInTheDocument();
+    expect(screen.getByText(/Ask your agent to add a service or background worker/)).toHaveTextContent(
+      /the agent implements the app's custom behavior and runs the checks/
+    );
+    expect(screen.getByText(/Once the app is deployed, the agent can inspect/)).toBeInTheDocument();
   });
 
   it("lives on the demo console, every step but the cards", () => {

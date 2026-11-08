@@ -97,6 +97,10 @@ describe("the forge demo console", () => {
     renderDemo("/forge/demo?view=overview");
     expect(await screen.findByTestId("forge-demo-banner", {}, { timeout: 15_000 })).toHaveTextContent("Demo data");
     expect(screen.getByTestId("forge-demo-banner")).toHaveTextContent("Sample data from a made-up app called shop. Nothing here touches your projects.");
+    // The notice belongs to the document flow, not a translucent sticky layer
+    // that paints over filters and chart actions as the page scrolls.
+    expect(screen.getByTestId("forge-demo-banner")).toHaveClass("bg-surface");
+    expect(screen.getByTestId("forge-demo-banner").className).not.toMatch(/sticky|fixed|bg-warning-surface/);
     expect(await screen.findByTestId("obs-overview")).toBeInTheDocument();
     // The console's nav (the journey's first spotlight), every row kept on the demo.
     const nav = document.querySelector<HTMLElement>("[data-tour='forge-console'] #sidebar-layout-nav");
@@ -111,7 +115,7 @@ describe("the forge demo console", () => {
     fireEvent.click(await screen.findByTestId("forge-demo-how-built", {}, { timeout: 15_000 }));
     await waitFor(() => expect(search(router).section).toBe("built"));
     expect(await screen.findByTestId("scaffold-replay", {}, { timeout: 15_000 })).toBeInTheDocument();
-    expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(/You wrote \d+ lines of proto/);
+    expect(screen.getByTestId("scaffold-headline")).toHaveTextContent(/\d+ lines of API definitions/);
     expect(screen.queryByTestId("obs-overview")).toBeNull();
     // Already open: the banner no longer offers it.
     expect(screen.queryByTestId("forge-demo-how-built")).toBeNull();

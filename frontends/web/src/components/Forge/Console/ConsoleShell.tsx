@@ -283,7 +283,7 @@ export function ConsoleShell({
                 {nav.project}
               </Link>
               {crumbs.map((crumb, index) => (
-                <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5">
+                <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
                   <span aria-hidden="true" className="text-ink-subtle">
                     ›
                   </span>

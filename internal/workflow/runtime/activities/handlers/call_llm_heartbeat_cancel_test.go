@@ -12,9 +12,12 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
 )
 
@@ -143,6 +146,114 @@ func TestCallLLM_HeartbeatCancelledStreamFailsForRetry(t *testing.T) {
 			"success reports a truncated turn as a completed one")
 	assert.Contains(t, err.Error(), "heartbeat",
 		"the failure must name the cause so it is greppable when it recurs")
+}
+
+// A stream cut because the worker is stopping (a rollout, a hot reload) must
+// FAIL the activity, so ActivityWrapper rewrites it to a retryable
+// WorkerShutdown and the next worker re-streams the turn.
+//
+// The wrapper cancels with a plain cancel the moment the stop channel closes,
+// which is exactly how a user interrupt looks. Before this, CallLLM took it
+// for one: it persisted the partial as the turn's final reply and returned
+// success, the wrapper's WorkerShutdown rewrite (errors only) never ran, and
+// the next CallLLM found history ending with that partial and yielded it as
+// the agent's answer — reliant #2394, the "History ends with an assistant
+// message after the mailbox drain" ERROR, every prod event of which sat
+// within seconds of a worker stop.
+func TestCallLLM_WorkerStopCancelledStreamFailsForRetry(t *testing.T) {
+	t.Parallel()
+
+	driver := &cancellingMockLLMDriver{ready: make(chan struct{})}
+	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+		return driver, nil
+	})
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "project-"+uuid.NewString(), "user-"+uuid.NewString())
+	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
+	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
+
+	activityInstance := NewCallLLMActivity(h.Repo(), &captureHub{}, nil, &staticConfigProvider{}, resolver, nil)
+
+	// Stop the worker mid-stream the way ActivityWrapper reacts to it: the
+	// stop channel closes, then the activity's context is cancelled with no
+	// cause of its own.
+	stop := make(chan struct{})
+	h.env.SetWorkerStopChannel(stop)
+	runWorkerStopped := func(actCtx context.Context, input ActivityInput) (*CallLLMOutput, error) {
+		cancelCtx, cancel := context.WithCancel(actCtx)
+		defer cancel()
+		go func() {
+			<-driver.ready
+			close(stop)
+			cancel()
+		}()
+		return activityInstance.Execute(cancelCtx, input)
+	}
+
+	h.env.RegisterActivity(runWorkerStopped)
+	_, err := h.env.ExecuteActivity(runWorkerStopped, callLLMInput(chat.ID, chat.ID, "mock-model"))
+	require.Error(t, err,
+		"a stream cut by the worker stopping must fail so the wrapper retries it on the next worker; "+
+			"returning success reports a truncated turn as the agent's answer")
+	assert.Contains(t, err.Error(), "worker stopped")
+
+	// The partial is not the turn's answer, so it must not become the
+	// thread's tail: the retry re-streams the whole turn.
+	msgs, err := h.Repo().ListMessages(ctx, chat.ID, db.MessageListOptions{})
+	require.NoError(t, err)
+	for _, m := range msgs {
+		assert.NotEqual(t, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, m.Role,
+			"a turn the worker's shutdown cut must not persist its partial as the reply")
+	}
+}
+
+// workerStopKilledStream tells the worker's own shutdown apart from a real
+// stop. A real stop wins when both happened: retrying an attempt the server
+// cancelled would run a turn nobody is waiting for.
+func TestWorkerStopKilledStream(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		cause      error
+		stopWorker bool
+		want       bool
+	}{
+		{name: "plain cancel while the worker stops is the shutdown's", stopWorker: true, want: true},
+		{name: "plain cancel on a running worker is an interrupt", stopWorker: false, want: false},
+		{name: "server cancel wins over a stopping worker", cause: temporal.NewCanceledError(), stopWorker: true, want: false},
+		{name: "pause wins over a stopping worker", cause: activity.ErrActivityPaused, stopWorker: true, want: false},
+		{name: "reset wins over a stopping worker", cause: activity.ErrActivityReset, stopWorker: true, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
+			stop := make(chan struct{})
+			if tt.stopWorker {
+				close(stop)
+			}
+			env.SetWorkerStopChannel(stop)
+			var got bool
+			probe := func(actCtx context.Context) error {
+				ctx, cancel := context.WithCancelCause(actCtx)
+				cancel(tt.cause)
+				got = workerStopKilledStream(ctx)
+				return nil
+			}
+			env.RegisterActivity(probe)
+			_, err := env.ExecuteActivity(probe)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+
+	t.Run("a live context is not a cancellation at all", func(t *testing.T) {
+		assert.False(t, workerStopKilledStream(context.Background()))
+	})
 }
 
 // A REAL interrupt keeps its existing behavior: persist the partial, return
