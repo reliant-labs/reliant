@@ -37,17 +37,32 @@ func persistRetirementState(path string, data []byte) error {
 // retireWorkspace is the automatic whole-worktree path. Unknown data is held,
 // never upgraded to disposable by an ignored ancestor or by Git's --force.
 // All checkouts are parked and verified before ANY content is removed.
-func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts []string, outside []string) Result {
+//
+// proven says the caller has just classified every checkout clean, holding no
+// history only it can reach, and on its remote. Only then is admission taken
+// on evidence (AcquireClean) rather than the machine-wide rule (Acquire). The
+// proof is taken again on each parked checkout below, binding its index and
+// refs through every unlink, so nothing is deleted on a proof that did not
+// hold after the move.
+func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts []string, outside []string, proven bool) Result {
 	if len(outside) != 0 {
 		return held(w, ReasonOutsideFiles, "whole-worktree retirement preserves loose root files")
 	}
-	if r.Acquire == nil || r.ProcessUse == nil {
+	acquire, admission := r.Acquire, "exclusive runtime admission unavailable"
+	if proven && r.AcquireClean != nil {
+		acquire, admission = r.AcquireClean, "retirement admission refused"
+	}
+	if acquire == nil || r.ProcessUse == nil {
 		return held(w, ReasonUnverified, "runtime/process safety dependencies unavailable")
 	}
 	paths := []string{w.Path, r.quarantineRoot(w.ID)}
-	lease, err := r.Acquire(ctx, paths)
+	lease, err := acquire(ctx, paths)
 	if err != nil || lease == nil {
-		return held(w, ReasonInUse, "exclusive runtime admission unavailable")
+		detail := admission
+		if err != nil {
+			detail += ": " + err.Error()
+		}
+		return held(w, ReasonInUse, detail)
 	}
 	defer lease.Release()
 	var inspectionFiles []*os.File

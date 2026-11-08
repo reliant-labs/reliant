@@ -767,6 +767,7 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 		}
 		return batchFailed
 	}
+	logRemoval(ctx, t, resp2.Results)
 	for _, r := range resp2.Results {
 		if c := byID[r.ID]; c != nil {
 			s.apply(ctx, t.userID, t.daemonID, c.Worktree, c.ProjectPath, r, false)
@@ -1471,6 +1472,43 @@ func logBatch(ctx context.Context, t target, results []worktreereclaim.Result) {
 	logging.InfoContext(ctx, "[WorktreeSweep] reconcile batch", "daemonID", t.daemonID, "rows", len(results),
 		"outcomes", outcomes, "held", held, "landed", landed, "recoverable_idle", recoverable,
 		"shed_rows", shed, "shed_bytes", shedBytes)
+}
+
+// removalSummary counts the outcomes of a removal request (phase two) and
+// names each row the daemon claimed but did not remove, with why.
+type removalSummary struct {
+	outcomes map[string]int
+	held     map[string]int
+	kept     []worktreereclaim.Result
+}
+
+func summarizeRemoval(results []worktreereclaim.Result) removalSummary {
+	sum := removalSummary{outcomes: map[string]int{}, held: map[string]int{}}
+	for _, r := range results {
+		sum.outcomes[string(r.Outcome)]++
+		if r.Outcome == worktreereclaim.OutcomeHeld {
+			sum.held[string(r.Reason)]++
+		}
+		if r.Outcome != worktreereclaim.OutcomeRemoved && r.Outcome != worktreereclaim.OutcomeGone {
+			sum.kept = append(sum.kept, r)
+		}
+	}
+	return sum
+}
+
+// logRemoval logs the removal request's outcomes, and one line per row that
+// was claimed and then kept. logBatch sees only the first request, so a row
+// claimed and then held at removal (by admission, a process using it, work
+// that appeared after the claim) used to leave no trace on the server
+// (2026-11-07: 46 archived rows on one machine, invisible here).
+func logRemoval(ctx context.Context, t target, results []worktreereclaim.Result) {
+	sum := summarizeRemoval(results)
+	logging.InfoContext(ctx, "[WorktreeSweep] removal batch", "daemonID", t.daemonID, "rows", len(results),
+		"outcomes", sum.outcomes, "held", sum.held)
+	for _, r := range sum.kept {
+		logging.InfoContext(ctx, "[WorktreeSweep] claimed worktree not removed", "daemonID", t.daemonID,
+			"worktreeID", r.ID, "outcome", string(r.Outcome), "reason", string(r.Reason), "detail", r.Detail, "error", r.Error)
+	}
 }
 
 // ptrString is *p, or "" for nil.

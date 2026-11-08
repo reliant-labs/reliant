@@ -39,6 +39,10 @@ type WorktreeRecoveryLease struct {
 	paths    []string
 	deadline time.Time
 	released bool // gate.mu
+	// evidence: a clean-retirement lease (AcquireCleanWorktreeRetirement). It
+	// excludes only work whose paths it knows overlap, and judges process use
+	// by inspection alone, never by a managed process or terminal existing.
+	evidence bool
 }
 
 // AcquireWorktreeRecovery excludes overlapping new work for a short final
@@ -47,6 +51,30 @@ type WorktreeRecoveryLease struct {
 // initial daemon command has already returned. Restart destroys all leases.
 func AcquireWorktreeRecovery(ctx context.Context, paths []string) (*WorktreeRecoveryLease, error) {
 	lease, err := recoveryAdmissions.acquire(paths)
+	return acquireChecked(ctx, lease, err)
+}
+
+// AcquireCleanWorktreeRetirement is the lease for retiring a workspace the
+// reclaimer has proven clean and on its remote (owner decision, 2026-11-07).
+// It drops AcquireWorktreeRecovery's machine-wide veto: a managed background
+// process or an open terminal ANYWHERE refused every retirement, and an agent
+// machine always has one, so no clean workspace was ever freed. What keeps
+// the retirement safe is evidence gathered immediately before each step:
+// Check inspects every process's cwd, executable, open files and mappings
+// under the lease's paths, and retirement parks the checkout, re-proves it
+// clean and pushed there, and keeps both copies if the original path is
+// recreated. Known-scope work overlapping the paths still excludes it both
+// ways. Unknown-scope work (an exec, a shell) is neither refused while it is
+// held nor refuses it: the residual case, a process that later opens an
+// absolute path into a tree already parked and proven recoverable, is the
+// accepted trade-off. Anything that recovers uncommitted work keeps
+// AcquireWorktreeRecovery.
+func AcquireCleanWorktreeRetirement(ctx context.Context, paths []string) (*WorktreeRecoveryLease, error) {
+	lease, err := recoveryAdmissions.acquireEvidence(paths)
+	return acquireChecked(ctx, lease, err)
+}
+
+func acquireChecked(ctx context.Context, lease *WorktreeRecoveryLease, err error) (*WorktreeRecoveryLease, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -119,6 +147,9 @@ func (g *recoveryAdmission) begin(paths []string) (func(), error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for _, lease := range g.leases {
+		if lease.evidence && len(canonical) == 0 {
+			continue // unknown scope: judged by the lease's process inspection
+		}
 		if admissionConflict(canonical, lease.paths) {
 			return nil, errRecoveryAdmission
 		}
@@ -130,6 +161,16 @@ func (g *recoveryAdmission) begin(paths []string) (func(), error) {
 	return func() { once.Do(func() { g.mu.Lock(); delete(g.work, id); g.mu.Unlock() }) }, nil
 }
 func (g *recoveryAdmission) acquire(paths []string) (*WorktreeRecoveryLease, error) {
+	return g.acquireLease(paths, false)
+}
+
+// acquireEvidence is acquire for a clean-retirement lease: no managed-use
+// veto, and in-flight work of unknown scope does not conflict.
+func (g *recoveryAdmission) acquireEvidence(paths []string) (*WorktreeRecoveryLease, error) {
+	return g.acquireLease(paths, true)
+}
+
+func (g *recoveryAdmission) acquireLease(paths []string, evidence bool) (*WorktreeRecoveryLease, error) {
 	if len(paths) == 0 {
 		return nil, errors.New("recovery paths required")
 	}
@@ -144,11 +185,14 @@ func (g *recoveryAdmission) acquire(paths []string) (*WorktreeRecoveryLease, err
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for _, work := range g.work {
+		if evidence && len(work) == 0 {
+			continue
+		}
 		if admissionConflict(canonical, work) {
 			return nil, errors.New("workspace has active daemon work")
 		}
 	}
-	if g.managedUse != nil {
+	if g.managedUse != nil && !evidence {
 		if err := g.managedUse(); err != nil {
 			return nil, err
 		}
@@ -159,7 +203,7 @@ func (g *recoveryAdmission) acquire(paths []string) (*WorktreeRecoveryLease, err
 		}
 	}
 	g.next++
-	lease := &WorktreeRecoveryLease{gate: g, id: g.next, paths: canonical, deadline: time.Now().Add(2 * time.Minute)}
+	lease := &WorktreeRecoveryLease{gate: g, id: g.next, paths: canonical, deadline: time.Now().Add(2 * time.Minute), evidence: evidence}
 	g.leases[lease.id] = lease
 	return lease, nil
 }
@@ -193,7 +237,7 @@ func (l *WorktreeRecoveryLease) Check(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if l.gate.managedUse != nil {
+	if l.gate.managedUse != nil && !l.evidence {
 		if err := l.gate.managedUse(); err != nil {
 			return err
 		}

@@ -70,6 +70,14 @@ type Reclaimer struct {
 	// Acquire excludes new runtime work through the final checks and shedding.
 	// Missing admission or process inspection fails closed: nothing is shed.
 	Acquire func(context.Context, []string) (RecoveryLease, error)
+	// AcquireClean is the admission for retiring a workspace already proven
+	// clean and on its remote: it refuses on evidence about these paths
+	// (overlapping work, a process using them), not on a managed process or
+	// terminal existing anywhere on the machine (owner decision, 2026-11-07).
+	// Retirement re-proves the parked checkout clean and pushed before any
+	// unlink, so a lease taken on a proof that later fails deletes nothing.
+	// Nil falls back to Acquire.
+	AcquireClean func(context.Context, []string) (RecoveryLease, error)
 	// ProcessUse checks executables, open and mapped files, not only cwd.
 	ProcessUse func(ctx context.Context, paths []string) error
 	// Now is the clock; nil means time.Now.
@@ -700,7 +708,9 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	if v := classifyAll(ctx, w, checkouts, r.probe()); !v.safe() {
 		return held(w, v.Reason, v.Detail)
 	}
-	return r.retireWorkspace(ctx, w, checkouts, sc.Outside)
+	// Every checkout was just proven clean, holding nothing only it can
+	// reach, and on its remote: retirement may be admitted on evidence.
+	return r.retireWorkspace(ctx, w, checkouts, sc.Outside, true)
 }
 
 // classifyAll classifies every checkout of a workspace, concurrently: each is

@@ -42,7 +42,7 @@ func TestRetirementRequiresAdmissionAndCompleteInspection(t *testing.T) {
 					return stripTestLease{check: func() error { return errors.New("expired") }, release: func() { released = true }}, nil
 				}
 			}
-			got := r.retireWorkspace(context.Background(), Worktree{Path: root}, []string{root}, nil)
+			got := r.retireWorkspace(context.Background(), Worktree{Path: root}, []string{root}, nil, false)
 			if !exists(target) || got.Outcome != OutcomeHeld {
 				t.Fatalf("unsafe retirement on %s: %+v", fail, got)
 			}

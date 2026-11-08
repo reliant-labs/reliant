@@ -2797,6 +2797,9 @@ func sharedWorktreeReclaimer() (*worktreereclaim.Reclaimer, error) {
 		r.Acquire = func(ctx context.Context, paths []string) (worktreereclaim.RecoveryLease, error) {
 			return AcquireWorktreeRecovery(ctx, paths)
 		}
+		r.AcquireClean = func(ctx context.Context, paths []string) (worktreereclaim.RecoveryLease, error) {
+			return AcquireCleanWorktreeRetirement(ctx, paths)
+		}
 		r.OnRepair = logRepairReport
 		worktreeReclaimers[root] = r
 		// Checkouts parked by a clean-up that a crash interrupted go back to
