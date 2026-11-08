@@ -407,6 +407,38 @@ func TestPlan_GitConfigIncludesAndTheirHelpersAreProtected(t *testing.T) {
 	assert.NotContains(t, p.Seal, helper)
 }
 
+// B1 (R13.B1): an include path with a trailing comment, quotes or escapes
+// protects the file git reads, not the raw text, and so the helper it names.
+func TestPlan_CommentedAndEscapedIncludesProtectWhatGitReads(t *testing.T) {
+	m := newMachine(t)
+	srv := filepath.Join(m.root, "srv")
+	conf := filepath.Join(srv, "config", "credentials.conf")
+	quoted := filepath.Join(srv, "config", "my creds.conf")
+	helper := filepath.Join(srv, "helpers", "auth")
+	quotedHelper := filepath.Join(srv, "helpers", "quoted")
+	for _, d := range []string{filepath.Dir(conf), filepath.Dir(helper)} {
+		require.NoError(t, os.MkdirAll(d, 0o755))
+	}
+	require.NoError(t, os.WriteFile(helper, []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.WriteFile(quotedHelper, []byte("#!/bin/sh\n"), 0o755))
+	require.NoError(t, os.WriteFile(conf, []byte(
+		"[credential]\n\thelper = "+helper+" # the shared one\n"), 0o644))
+	require.NoError(t, os.WriteFile(quoted, []byte(
+		"[credential]\n\thelper = \"!"+quotedHelper+" get\" ; quoted\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(m.home, ".gitconfig"), []byte(
+		"[include]\n\tpath = "+conf+" # shared credentials\n"+
+			"[include]\n\tpath = \""+filepath.Join(srv, "con\\\nfig", "my creds.conf")+"\"\n"), 0o644))
+
+	p := m.plan(m.multi, nil)
+	for _, ro := range []string{conf, helper, quoted, quotedHelper} {
+		assert.Contains(t, p.ReadOnly, ro, "the file git reads, and its helper, are read-only")
+	}
+	for _, s := range p.Seal {
+		assert.NotContains(t, s, "#", "a comment is no part of a path")
+		assert.NotContains(t, s, "\"", "a quote is no part of a path")
+	}
+}
+
 func TestCredentialHelpers_IncludesFollowGitsPathRules(t *testing.T) {
 	home := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(home, "inc"), 0o755))

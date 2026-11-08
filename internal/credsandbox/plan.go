@@ -3,7 +3,6 @@
 package credsandbox
 
 import (
-	"bufio"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -756,43 +755,22 @@ func (g *gitConfigs) read(path string, depth int) {
 		return
 	}
 	g.seen[path] = true
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return
 	}
-	defer func() { _ = f.Close() }()
 	var includes []string
-	section := ""
-	s := bufio.NewScanner(f)
-	for s.Scan() {
-		line := strings.TrimSpace(s.Text())
-		if strings.HasPrefix(line, "[") {
-			end := strings.IndexByte(line, ']')
-			if end < 0 {
-				continue
-			}
-			name, _, _ := strings.Cut(strings.TrimSpace(line[1:end]), " ")
-			name, _, _ = strings.Cut(name, "\"")
-			section = strings.ToLower(strings.TrimSpace(name))
-			line = strings.TrimSpace(line[end+1:])
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		key = strings.ToLower(strings.TrimSpace(key))
-		value = strings.TrimSpace(value)
-		value = strings.TrimPrefix(value, `"`)
-		value = strings.TrimSuffix(value, `"`)
+	for _, e := range parseGitConfig(data) {
 		switch {
-		case key == "helper":
+		case e.key == "helper":
+			value := e.value
 			shell := strings.HasPrefix(value, "!")
 			value = strings.TrimPrefix(value, "!")
 			if w := firstWord(value); w != "" {
 				g.helpers = append(g.helpers, gitHelper{program: w, shell: shell})
 			}
-		case key == "path" && (section == "include" || section == "includeif"):
-			if inc := g.includePath(path, value); inc != "" {
+		case e.key == "path" && (e.section == "include" || e.section == "includeif"):
+			if inc := g.includePath(path, e.value); inc != "" {
 				includes = append(includes, inc)
 			}
 		}

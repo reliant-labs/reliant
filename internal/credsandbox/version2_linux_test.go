@@ -587,8 +587,9 @@ func TestSandbox_AnIncludedGitConfigAndItsHelperCannotBeReplaced(t *testing.T) {
 	confBody := "[credential]\n\thelper = " + helper + "\n[includeIf \"gitdir:~/work/\"]\n\tpath = work.conf\n"
 	require.NoError(t, os.WriteFile(helper, []byte(trustedHelper), 0o755))
 	require.NoError(t, os.WriteFile(conf, []byte(confBody), 0o644))
+	// B1: a trailing comment, as git allows; git reads conf itself.
 	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"),
-		[]byte("[include]\n\tpath = "+conf+"\n"), 0o644))
+		[]byte("[include]\n\tpath = "+conf+" # shared credentials\n"), 0o644))
 
 	out := runWrapped(t, "none", home, home, `
 printf '#!/bin/sh\necho password=planted\n' > '`+helper+`' 2>/dev/null
