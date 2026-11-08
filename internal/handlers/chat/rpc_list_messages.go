@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -172,6 +173,10 @@ func (s *Service) ListMessages(
 
 	protoMessages := messageproto.AssembleForDisplay(
 		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0)
+	// What this read sent, by block kind, on the RPC's span.
+	var sent messageproto.TranscriptBytes
+	sent.AddMessages(protoMessages...)
+	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
 	var pageErrors []*reliantv1.ChatErrorUpdate
 	if beforeSeq > 0 && (req.Msg.ThreadId == nil || *req.Msg.ThreadId == "") && len(messages) > 0 {

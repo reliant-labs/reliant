@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/messageproto"
 	"github.com/reliant-labs/reliant/internal/planproto"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 )
 
@@ -750,20 +751,26 @@ func (s *Service) GetChatUpdates(
 
 	// Convert to proto messages
 	protoUpdates := make([]*reliantv1.ChatUpdate, len(updates))
+	var sent messageproto.TranscriptBytes
 	for i, update := range updates {
 		data := []byte(update.Data)
 		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
 			// The same tool-result preview every client-facing read sends.
 			data = messageproto.PreviewMessageUpdate(data)
 		}
+		dataJSON := string(data)
+		sent.AddChatUpdate(update.UpdateType, dataJSON)
 		protoUpdates[i] = &reliantv1.ChatUpdate{
 			SequenceNumber: update.SequenceNumber,
 			UpdateType:     update.UpdateType.String(),
 			EntityId:       update.EntityID,
-			Data:           string(data),
+			Data:           dataJSON,
 			CreatedAt:      update.CreatedAt.Format(time.RFC3339),
 		}
 	}
+
+	// What this read sent, by block kind, on the RPC's span.
+	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 
 	return connect.NewResponse(&reliantv1.GetChatUpdatesResponse{
 		Updates:        protoUpdates,
