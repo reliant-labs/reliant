@@ -10,24 +10,17 @@
 import { ExternalLink } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
-import type { StatusTone } from "@/components/forge-ui/status";
+import Status from "@/components/forge-ui/status";
 import Tooltip from "@/components/forge-ui/tooltip";
 import { useApps } from "@/hooks/apps-queries";
 import { cn } from "@/lib/utils";
 import { isLive, primaryLink } from "@/services/forge/apps";
 
 import { consolePath } from "../Forge/Console/paths";
-import { verdictTone } from "./appParts";
+import { verdictBusy, verdictTone } from "./appParts";
 
 /** Enough to be a shortcut; the Apps page holds the rest. */
 const MAX_LISTED = 3;
-
-const DOT: Record<StatusTone, string> = {
-  success: "bg-success",
-  warning: "bg-warning",
-  danger: "bg-destructive",
-  neutral: "bg-muted-foreground/50",
-};
 
 export function SidebarApps() {
   const navigate = useNavigate();
@@ -44,6 +37,8 @@ export function SidebarApps() {
         // The dot is the health of the environment the link opens, not of the app at large.
         const env = app.envs.find((candidate) => candidate.links.includes(link));
         const tone = env ? verdictTone(env.verdict) : "neutral";
+        // Mid-rollout the dot is a spinner, so a deploy never reads as a fault.
+        const busy = env ? verdictBusy(env.verdict) : false;
         return (
           <li key={app.name} className="group flex h-7 items-center gap-1 rounded-md pr-1 hover:bg-muted/50">
             <button
@@ -52,7 +47,7 @@ export function SidebarApps() {
               className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-sm text-foreground/85 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid={`sidebar-app-${app.name}`}
             >
-              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", DOT[tone])} aria-hidden="true" />
+              <Status tone={tone} size="sm" busy={busy} className="shrink-0" />
               <span className="min-w-0 truncate">{app.name}</span>
             </button>
             <Tooltip content={`Open ${link.host}`} side="right" delay={300} triggerClassName="inline-flex">

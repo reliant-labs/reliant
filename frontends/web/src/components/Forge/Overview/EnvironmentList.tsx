@@ -40,7 +40,7 @@ import {
   type LiveEnv,
 } from "@/services/forge/live";
 
-import { DEPLOY_RUN_LABEL, DEPLOY_RUN_TONE } from "../Deploy/DeployRuns";
+import { DEPLOY_RUN_LABEL, DEPLOY_RUN_TONE, deployRunBusy } from "../Deploy/DeployRuns";
 import { HealthChip } from "../EnvBadges";
 import { Ago, INK_LINK } from "../Releases/releaseParts";
 import type { EnvSummary, Fact } from "./environmentSummary";
@@ -126,7 +126,11 @@ function EnvironmentCard({ row, onOpen }: { row: EnvironmentRow; onOpen: (env: s
               anything else's only from its own telemetry, and without that
               the honest cell is "not observed from here". */}
           {isPlacedKind(env.kind) ? (
-            <HealthChip env={env.name} health={{ kind: "hosted", verdict: status?.verdict ?? "unknown", loading: statusLoading && !status }} />
+            <HealthChip
+              env={env.name}
+              health={{ kind: "hosted", verdict: status?.verdict ?? "unknown", loading: statusLoading && !status }}
+              deploying={summary?.lastDeploy ? deployRunBusy(summary.lastDeploy.state) : false}
+            />
           ) : summary ? (
             <FactValue fact={summary.health} testId={`telemetry-health-${env.name}`} />
           ) : (
@@ -190,7 +194,7 @@ function Term({ children }: { children: ReactNode }) {
 function FactValue({ fact, testId }: { fact: Fact; testId: string }) {
   return (
     <span className="flex min-w-0 flex-col gap-0.5" data-testid={testId} data-tone={fact.tone}>
-      <Status tone={fact.tone} label={fact.label} size="sm" />
+      <Status tone={fact.tone} label={fact.label} size="sm" busy={fact.busy} />
       {fact.detail !== "" && (
         <span className="truncate text-xs text-ink-muted" title={fact.detail}>
           {fact.detail}
@@ -207,7 +211,7 @@ function LastDeploy({ summary }: { summary: EnvSummary }) {
   return (
     <span className="flex min-w-0 flex-col gap-0.5" data-state={run.state}>
       <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-        <Status tone={DEPLOY_RUN_TONE[run.state]} label={DEPLOY_RUN_LABEL[run.state]} size="sm" />
+        <Status tone={DEPLOY_RUN_TONE[run.state]} label={DEPLOY_RUN_LABEL[run.state]} size="sm" busy={deployRunBusy(run.state)} />
         {run.release !== "" && <span className="font-mono text-xs text-ink">{run.release}</span>}
         <Ago at={run.finishedAt ?? run.startedAt} className="text-xs text-ink-muted" />
       </span>

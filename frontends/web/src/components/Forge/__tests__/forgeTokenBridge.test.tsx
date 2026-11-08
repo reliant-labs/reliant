@@ -97,13 +97,17 @@ function referencedTokens(): Map<string, string[]> {
   const pattern = new RegExp(
     // Not preceded by `-`: `bg-border-strong` is the token border-strong,
     // not a `border-` utility whose colour is "strong".
-    `(?<![\\w-])(?:${COLOR_PREFIXES.join("|")})-([a-z][a-z0-9-]*)`,
+    `(?<![\\w-])(${COLOR_PREFIXES.join("|")})-([a-z][a-z0-9-]*)`,
     "g",
   );
   for (const file of files) {
     const src = readFileSync(join(FORGE_UI_DIR, file), "utf8");
     for (const m of src.matchAll(pattern)) {
-      const token = m[1];
+      let token = m[2];
+      // A per-edge border colour (`border-t-ink-muted`, `border-x-border`)
+      // names its edge first: the token is what follows it.
+      const edge = m[1] === "border" ? /^[trblxyse]-(.+)$/.exec(token) : null;
+      if (edge) token = edge[1];
       if (NON_COLOR_SUFFIXES.has(token)) continue;
       // Tailwind palette colors (gray-500) are not semantic tokens.
       if (/-\d+$/.test(token)) continue;
