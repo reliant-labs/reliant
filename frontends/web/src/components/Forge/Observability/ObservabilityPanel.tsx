@@ -90,8 +90,12 @@ export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 /** The views with time-series charts, where release markers are drawn and listed. */
 const MARKED_VIEWS: readonly ObsView[] = ["overview"];
 
-/** The views that read the scope's telemetry, so "nothing has arrived yet" is true of them (not Alerts). */
-const NOTHING_YET_VIEWS: readonly ObsView[] = ["overview", "errors", "sessions", "logs", "traces", "profiles"];
+/**
+ * The views that read the scope's telemetry, so "nothing has arrived yet" is
+ * true of them (not Alerts). Not Sessions: its own empty state says how to turn
+ * replay on, which a brand-new project needs most.
+ */
+const NOTHING_YET_VIEWS: readonly ObsView[] = ["overview", "errors", "logs", "traces", "profiles"];
 
 export interface ObservabilityPanelProps {
   place: ObsPlace;

@@ -118,15 +118,13 @@ describe("ObservabilityPanel", () => {
     expect(screen.queryByTestId("obs-no-data")).not.toBeInTheDocument();
   });
 
-  it("says how a view's own data arrives when nothing has: Sessions' replay is opt-in, in two places, and masked", async () => {
+  it("leaves Sessions its own replay note when nothing has arrived: a brand-new project learns how to turn replay on", async () => {
     // The console nav picks the view (the panel draws no tabs): open it by URL.
-    renderPanel(createFixtureApi({ empty: true, signals: { services: [], truncated: false } }), { view: "sessions" });
-    const sessions = await screen.findByTestId("obs-nothing-yet");
-    expect(within(sessions).getByTestId("obs-nothing-yet-about")).toHaveTextContent("real users' browser sessions");
-    expect(sessions).toHaveTextContent("VITE_OTEL_REPLAY=true");
-    expect(sessions).toHaveTextContent("signals = forge.ObservabilitySignals {replay = True}");
-    expect(within(sessions).getByTestId("obs-nothing-yet-docs")).toHaveAttribute("href", expect.stringContaining("#session-replay"));
-    expect(screen.getAllByTestId("obs-nothing-yet")).toHaveLength(1);
+    renderPanel(createFixtureApi({ empty: true, sessions: "empty", signals: { services: [], truncated: false } }), { view: "sessions" });
+    const note = await screen.findByTestId("obs-sessions-replay-off");
+    expect(note).toHaveTextContent("VITE_OTEL_REPLAY=true");
+    expect(note).toHaveTextContent("signals = forge.ObservabilitySignals {replay = True}");
+    expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
   });
 
   it("keeps Alerts its own page when nothing has arrived", async () => {

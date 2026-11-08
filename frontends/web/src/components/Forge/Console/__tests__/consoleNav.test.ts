@@ -44,12 +44,15 @@ describe("buildConsoleNav", () => {
   });
 
   it("hides only known-empty optional views, retaining an active direct link", () => {
-    const base = { project: "shop", env: "prod", envs: ENVS, optionalViews: { sessions: false, profiles: false } };
+    const base = { project: "shop", env: "prod", envs: ENVS, optionalViews: { profiles: false } };
     const labels = (page: Parameters<typeof buildConsoleNav>[0]["page"]) => buildConsoleNav({ ...base, page }).items.find((item) => item.label === "Observability")!.children!.map((child) => child.label);
-    expect(labels({ kind: "overview" })).not.toContain("Sessions");
     expect(labels({ kind: "overview" })).not.toContain("Profiles");
-    expect(labels({ kind: "obs-view", view: "sessions" })).toContain("Sessions");
     expect(labels({ kind: "obs-view", view: "profiles" })).toContain("Profiles");
+  });
+
+  it("always lists Sessions: its empty state is where replay is discovered", () => {
+    const { items } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS, optionalViews: { profiles: false } });
+    expect(items.find((item) => item.label === "Observability")!.children!.map((child) => child.label)).toContain("Sessions");
   });
 
   it("files environments under Configure, previews collapsed into one entry", () => {

@@ -37,7 +37,7 @@ import { Place } from "../Place";
 import type { ReplayerCtor } from "./ReplayPlayer";
 import { SessionDetail } from "./SessionDetail";
 import { isReplayKnownUnplayable, rumScopeOf, sessionTitle } from "./sessionModel";
-import { SessionsNotConfigured } from "./SessionStates";
+import { SessionsNotConfigured, SessionsReplayOff } from "./SessionStates";
 import { ClientName, DeviceSummary } from "../Client";
 import { ClientFilters, hasClientFilters, NO_CLIENT_FILTERS, type ClientFilterValues } from "../ClientFilters";
 
@@ -130,6 +130,8 @@ function SessionList({ scope, rumScope, subject, range, service, text, hasError,
         ) : (
           <ObsError error={sessions.error} subject={subject} onRetry={() => void sessions.refetch()} retrying={sessions.isFetching} />
         )
+      ) : rows.length === 0 && page === 1 && !filtered ? (
+        <SessionsReplayOff range={range} onWiden={() => navigate({ range: "7d", ...FIRST_PAGE })} />
       ) : rows.length === 0 && page === 1 ? (
         <ObsNoData
           what="browser sessions"
