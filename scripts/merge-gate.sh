@@ -474,7 +474,7 @@ if [ "$fail" = 0 ]; then
   # scripts/lint-scope.sh and its self-test, scripts/test-lint-scope.sh.
   scope=$(echo "$files" | scripts/lint-scope.sh)
   if [ "$queue" = 1 ]; then
-    notes+=("queue tier: vet and forge lint run in the release gate$(echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$' || echo '; buf lint too (no proto changed)')")
+    notes+=("queue tier: golangci-lint on the changed packages is the golangci (changed) job beside this one; vet and forge lint run in the release gate$(echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$' || echo '; buf lint too (no proto changed)')")
   elif [ "$skip_lint" = 1 ]; then
     notes+=("--skip-lint: vet and forge lint run in the release gate")
   elif [ -n "$scope" ]; then

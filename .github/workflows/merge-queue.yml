@@ -12,20 +12,35 @@ name: Merge queue
 # proto changed; then each new or changed Go test three times, and the cheap
 # repo checks.
 #
-# WHAT DOES NOT: vet, forge lint, golangci, buf lint on an unchanged proto, the
+# BESIDE IT, golangci-lint on the changed packages (owner, 2026-11-08): the
+# `golangci` job, `task ci:golangci`, the Go packages the group changed since
+# its base, findings on changed lines only, the root .golangci.yml and the
+# pinned forge's golangci-lint release. It runs on its own runner AT THE SAME
+# TIME as the gate, so it adds nothing to the gate's five minutes, and `CI
+# result` waits for it at the end (the "golangci (changed) passed" step) and
+# fails unless it passed: the ruleset requires one check, and a job it does
+# not require stops nothing. On 2026-11-08 main went red three times on
+# findings only the release gate's whole-module lint saw (staticcheck QF1001
+# from #2293 and #2427, gosec G101 from #2368); this job reproduces all three.
+#
+# WHAT DOES NOT: vet, forge lint, golangci over packages the group did not
+# change, buf lint on an unchanged proto, the
 # race detector, slow and integration tests, the whole vitest suite, the
 # renderer's release build, Playwright and the electron package smoke. ci.yml
 # runs every one of them on each push to main and nightly, and the release
 # gate's record requires them, so a release (an RC set) is never cut over them.
 #
-# WHY ONE JOB. The org runs at most 20 jobs at once across every repository,
+# WHY ONE GATE JOB. The org runs at most 20 jobs at once across every repository,
 # and each job is a queue slot plus ~2 minutes of setup. The queue used to run
 # ci.yml here: eight jobs per group (lanes, migration order, review marker,
 # merge gate, web build, Playwright, CI result, plus Reliant review), and on
 # 2026-11-01 a group took 20-38 minutes, of which 5-15 were waiting for a
 # runner, five times, once per job hop. Its own review marker is not repeated
 # here: Reliant review (reliant-review.yml) is required too and runs the same
-# check from main.
+# check from main. The golangci job is not a hop: nothing waits for it to
+# START, both jobs queue for a runner at once, and `CI result` reads its
+# verdict from the run's jobs API instead of `needs:`-ing it (a `needs:` would
+# put the lint, then a second runner queue, in front of the gate).
 #
 # THE BUDGET is measured, not hoped for: the last step compares the run's wall
 # time with 300s and, when it is over, says so on the run and on one rolling
@@ -83,6 +98,35 @@ jobs:
       - name: task ci:repo-checks
         if: ${{ !cancelled() }}
         run: task ci:repo-checks BASE="${BASE}"
+      # The `golangci` job's verdict, read from this run attempt's jobs. It has
+      # almost always finished by now (a typical diff lints in about a minute);
+      # otherwise this waits for it, up to its own timeout. Not on a gate that
+      # already failed: the group is red anyway, and waiting would only hold
+      # every entry behind it.
+      - name: golangci (changed) passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          JOB: golangci (changed)
+          WAIT_S: "960"
+          POLL_S: "10"
+        run: |
+          set -euo pipefail
+          url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          deadline=$(( $(date +%s) + WAIT_S ))
+          while :; do
+            # shellcheck disable=SC2016 # $ENV.JOB is jq's, not the shell's
+            state=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}/jobs" \
+              --jq '[.jobs[] | select(.name == $ENV.JOB)][0] // {} | "\(.status // "absent") \(.conclusion // "")"' 2>/dev/null) || state="unreadable "
+            case "${state}" in
+              "completed success") echo "${JOB}: success"; exit 0 ;;
+              completed\ *) echo "::error title=${JOB} did not pass::${JOB}: ${state#completed } (${url}); its log names each finding"; exit 1 ;;
+            esac
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "::error title=${JOB} did not finish::${JOB} is still ${state% *} after ${WAIT_S}s (${url})"; exit 1
+            fi
+            echo "${JOB}: ${state% *}; waiting"
+            sleep "${POLL_S}"
+          done
       - name: Summary
         if: ${{ !cancelled() }}
         run: cat "${RUNNER_TEMP}/merge-gate/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
@@ -134,3 +178,34 @@ jobs:
           }
           report || true
           exit 0
+
+  # golangci-lint on the packages this group changed (header: BESIDE IT). Its
+  # own runner, started with the gate; `CI result`'s "golangci (changed)
+  # passed" step is what makes it gate. The job name is that step's key.
+  golangci:
+    name: golangci (changed)
+    runs-on: ubuntu-latest
+    # Below the wait in `CI result` (960s), so that wait sees a verdict.
+    timeout-minutes: 15
+    env:
+      BASE: ${{ github.event.merge_group.base_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      # No Go file changed: done in seconds, before any toolchain is set up.
+      - name: Changed Go files
+        id: changed
+        run: |
+          set -euo pipefail
+          n=$(git diff --name-only --diff-filter=ACMR "${BASE}" HEAD -- '*.go' | wc -l)
+          echo "${n} changed .go file(s) since ${BASE}"
+          echo "any=$([ "${n}" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/setup
+        if: steps.changed.outputs.any == 'true'
+        with:
+          golangci: "true"
+          postgres-cache: "false"
+      - name: task ci:golangci
+        if: steps.changed.outputs.any == 'true'
+        run: task ci:golangci -- --base "${BASE}"

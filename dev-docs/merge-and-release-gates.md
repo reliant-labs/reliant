@@ -304,7 +304,11 @@ These are the trade-offs. Each is caught by the release gate:
   `testing.Short()` skip) never runs before a merge.
 - **Vitest files further from the change.** Those more than two imports away,
   or more than one from a hub.
-- **golangci-lint and buf lint**, over any package, and **link errors**.
+- **golangci-lint and buf lint**, and **link errors**. The merge gate itself
+  runs neither linter; the merge queue lints the changed packages in a job
+  beside it ("golangci-lint in the queue", below), so what reaches main
+  unlinted is a finding on a line the diff did not change, in a package it
+  did not change, or behind a build tag.
 - **The race detector.** Nothing before a merge runs `-race`.
 - **Whole-project lint lanes.** golangci over packages the diff did not touch,
   the frontend lint, the graph, component-drift and config-reach lanes cannot
@@ -463,7 +467,8 @@ release build, Playwright and the electron smoke run on main, where the release
 record requires them. Its last step reports the run's wall time split into
 runner wait and run time, and files one rolling `pipeline:slo` issue when it is
 over budget (it does not fail the group: a slow runner is not the change's
-fault). That `merge_group` run is the only run of the merge gate an
+fault). Beside it runs one more job, `golangci (changed)`, which `CI result`
+waits for and requires (next section). That `merge_group` run is the only run of the merge gate an
 unlabelled PR gets. On the PR itself `CI result` passes within a minute (review
 first), which is what lets GitHub enqueue it: GitHub enqueues only a PR whose
 required checks are green on its head. Only the `pr-review` workflow enqueues,
@@ -483,6 +488,38 @@ Run `task ci:merge` locally before asking for a merge: it is the same gate CI's
 `Merge gate` job runs, and a red queue run costs every PR behind yours a retry
 (the queue builds up to five entries at once; a failure rebuilds those behind
 it).
+
+### golangci-lint in the queue (owner, 2026-11-08)
+
+On 2026-11-08 main went red three times on golangci findings that nothing
+before the merge ran: staticcheck QF1001 from #2293 and from #2427's test, and
+gosec G101 from #2368. Each was caught only by the release gate's unscoped
+`forge lint`, after the merge. So the queue lints again, without growing the
+gate's five minutes:
+
+- **What.** `task ci:golangci -- --base <the group's base>`
+  (`scripts/golangci-changed.sh`): `golangci-lint run --new-from-rev=<base>`
+  with the root `.golangci.yml`, over every package of this module with a
+  changed `.go` file (by `scripts/lint-scope.sh`'s rule, so not the root or
+  `sdk/go`; testdata and build-tag-only directories are dropped too).
+  Findings on lines the diff did not change are not reported, so the backlog
+  never turns an entry red. Run it locally with `task ci:golangci` (base: the
+  merge base with `origin/main`); `-- --plan` lists the packages.
+- **Which golangci-lint.** The pinned forge's `templates.GolangciLintVersion`,
+  the release the release gate's `forge lint` requires, read from the forge
+  module's source by the setup action (`golangci: "true"`) and installed from
+  its GitHub release, cached by version (saved by `go-cache` on main), with the
+  download's retries and API fallback.
+- **Parallel, and gating.** It is its own job, `golangci (changed)`, that
+  starts with `CI result`, not after it. `CI result`'s "golangci (changed)
+  passed" step reads that job's verdict from the run's jobs API (waiting for it
+  if it is still running) and fails unless it passed: the ruleset requires one
+  check, and a job it does not require stops nothing. The wait is skipped when
+  the gate already failed. A group with no changed `.go` file finishes the job
+  in seconds, before any toolchain is installed. A `ci:run` pull request runs
+  the same job in `ci.yml`, and its `CI result` requires it too.
+- **What it still leaves to the release gate.** Packages the group did not
+  change, findings on unchanged lines, the build-tagged pass, and buf lint.
 
 ### Backwards-compatibility checks in the queue
 
@@ -526,7 +563,7 @@ job is setup, then `task <name>`, so CI cannot disagree with a local run.
 | Event | Job | Runs |
 |---|---|---|
 | `pull_request` (each push) | `Review marker`, `CI result` | nothing heavy: a notice whether `pr-review` passed this head, and the verdict, green in about a minute. Label the PR **`ci:run`** to get the merge gate and the path lanes on it too; it is read on the next push (an empty commit will do), because `ci.yml` does not run on `labeled` (a label run would replace the head's `CI result`) |
-| `merge_group` (`merge-queue.yml`) | `CI result` (one job) | `task ci:merge -- --base <the group's base> --queue`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, then the five-minute budget check. No path lanes |
+| `merge_group` (`merge-queue.yml`) | `CI result`, and beside it `golangci (changed)` | `CI result`: `task ci:merge -- --base <the group's base> --queue`, `task test:flake` (each new or changed Go test three times), `task ci:repo-checks`, the `golangci (changed)` job's verdict, then the five-minute budget check. `golangci (changed)`: `task ci:golangci -- --base <the group's base>`. No path lanes |
 | push to `main`, nightly, `workflow_dispatch` | `Release gate (<part>)`, the path lanes, then `Release gate` | each part of the gate as its own job, `task release:gate -- --part <part> [--shard I/N] <sha>` (static, lint, go 1/3..3/3, web; `task ci:repo-checks` in static), then `Release gate` assembles the part records (`scripts/release-gate.sh assemble`) into the one record. On `main` it publishes it as the git note above, so a CI green counts for `task release:tag`. A missing part or shard fails the assembly closed, and so does a red release build, Playwright or electron smoke (no record) |
 
 ### Why the release gate runs as parts in CI

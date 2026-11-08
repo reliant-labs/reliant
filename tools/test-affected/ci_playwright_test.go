@@ -427,14 +427,14 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 		_, gate := wf.job(t, "ci-result").step(t, "ci-result", "Every job that ran passed")
 		needs := wf.job(t, "ci-result").needs()
 
-		// push: every lane runs; only the merge-tier gate and the contract
+		// push: every lane runs; only the merge-tier jobs and the contract
 		// check may be skipped.
 		push := func(playwright string) bool {
 			r := map[string]string{}
 			for _, n := range needs {
 				r[n] = "success"
 			}
-			r["merge-gate"], r["cp-contract"] = "skipped", "skipped"
+			r["merge-gate"], r["golangci"], r["cp-contract"] = "skipped", "skipped", "skipped"
 			r["playwright"] = playwright
 			ok, _ := ciShell(t, gate.Run, map[string]string{"RESULTS": needsJSON(r), "EVENT_NAME": "push", "CI_RUN": "false"})
 			return ok
@@ -446,7 +446,7 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 			for _, n := range needs {
 				r[n] = "skipped"
 			}
-			r["lanes"], r["merge-gate"] = "success", "success"
+			r["lanes"], r["merge-gate"], r["golangci"] = "success", "success", "success"
 			r["playwright"] = playwright
 			ok, _ := ciShell(t, gate.Run, map[string]string{"RESULTS": needsJSON(r), "EVENT_NAME": "pull_request", "CI_RUN": ciRun})
 			return ok
