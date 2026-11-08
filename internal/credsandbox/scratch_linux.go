@@ -37,7 +37,7 @@ import (
 
 // credScratchRecordName, in the daemon's data directory, holds the identity of
 // the credentialed scratch it made.
-const credScratchRecordName = "cred-scratch.identity"
+const credScratchRecordName = "cred-scratch.identity" //nolint:gosec // G101: a file name in the data directory, not a credential
 
 var scratchState struct {
 	sync.Mutex
