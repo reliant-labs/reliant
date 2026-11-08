@@ -134,10 +134,21 @@ const TEST_EXCLUDE = [
 //
 // Unlike the template, there is no 127.0.0.1:4318 default: reliant's own dev
 // stack runs no local collector, so a guessed port is at best nothing and at
-// worst another stack's ClickStack. With no endpoint the telemetry is dropped
-// here (204), so a page on a stack whose telemetry is local-and-off sends
-// into a sink instead of logging a failed export every few seconds.
+// worst another stack's ClickStack.
+//
+// WHETHER THE PAGE SENDS AT ALL is the dev server's decision too, because the
+// page reads OTEL_ENDPOINT only from config.js (config_gen.ts), never from
+// VITE_* build variables. When `forge env up` decides this stack's telemetry
+// is local and there is no local store, it gives the dev server
+// VITE_OTEL_ENDPOINT=off (forge#1950). otelDev applies the dev server's
+// endpoint to window.__FORGE_CONFIG__ right after config.js runs:
+// VITE_OTEL_ENDPOINT when it is set ("off" included), otherwise "off" when
+// there is no upstream to forward to, otherwise config.js's own value. So a
+// page on a local fallback starts no exporter. Anything that still reaches
+// /_otel with no upstream (a tab opened before the stack was decided) gets a
+// 204 rather than a failed export every few seconds.
 const OTEL_UPSTREAM = (process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "").trim().replace(/\/+$/, "");
+const DEV_BROWSER_OTEL_ENDPOINT = (process.env.VITE_OTEL_ENDPOINT ?? "").trim() || (OTEL_UPSTREAM ? "" : "off");
 const OTEL_HEADERS_FILE = process.env.FORGE_OTEL_HEADERS_FILE ?? "";
 const readOtelHeaders = (): Array<[string, string]> => {
   let text = "";
@@ -160,8 +171,8 @@ const readOtelHeaders = (): Array<[string, string]> => {
   }
   return out;
 };
-const otelSink = (): Plugin => ({
-  name: "reliant-otel-sink",
+const otelDev = (): Plugin => ({
+  name: "reliant-otel-dev",
   apply: "serve",
   configureServer(server) {
     if (OTEL_UPSTREAM) return;
@@ -169,6 +180,18 @@ const otelSink = (): Plugin => ({
       res.statusCode = 204;
       res.end();
     });
+  },
+  // Injected at the end of <head>, after the blocking config.js script and
+  // before the deferred module bundle reads the config.
+  transformIndexHtml() {
+    if (!DEV_BROWSER_OTEL_ENDPOINT) return [];
+    return [
+      {
+        tag: "script",
+        injectTo: "head",
+        children: `if (window.__FORGE_CONFIG__) window.__FORGE_CONFIG__.OTEL_ENDPOINT = ${JSON.stringify(DEV_BROWSER_OTEL_ENDPOINT)};`,
+      },
+    ];
   },
 });
 
@@ -198,9 +221,10 @@ const appConfig: ViteUserConfig = {
   // Latin file; see vite-plugin-preload-fonts.ts.
   // securityTxt (build-only) emits dist/.well-known/security.txt naming the
   // security and abuse contacts; see vite-plugin-security-txt.ts.
-  // otelSink (dev-only) answers /_otel when there is nowhere to forward it;
-  // see the browser telemetry proxy above.
-  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), otelSink(), preloadGeistLatin(), securityTxt()],
+  // otelDev (dev-only) applies the dev server's browser telemetry decision to
+  // config.js and answers /_otel when there is nowhere to forward it; see the
+  // browser telemetry proxy above.
+  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), otelDev(), preloadGeistLatin(), securityTxt()],
   // Load .env files from the checkout root instead of frontends/web
   envDir: path.resolve(__dirname, "../.."),
   // Define global constants available in the app
@@ -397,7 +421,7 @@ const appConfig: ViteUserConfig = {
         ws: true,
       },
       // Browser telemetry; see the browser telemetry proxy above. Without an
-      // upstream, otelSink answers /_otel instead.
+      // upstream, otelDev answers /_otel instead.
       ...(OTEL_UPSTREAM
         ? {
             "/_otel": {
