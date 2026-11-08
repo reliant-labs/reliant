@@ -94,12 +94,12 @@ func ResolveThreadAmbientMemoryExclusion(ctx context.Context, db orm.Context, ch
 	// Cross-chat ancestors are intentional: a conversation fork retains its
 	// source thread's policy, while the starting thread stays chat-scoped.
 	err := db.Bun().NewRaw(`WITH RECURSIVE lineage AS (
- SELECT id, parent_thread_id, exclude_ambient_memory, ARRAY[id] AS path
+ SELECT id, parent_thread_id, exclude_ambient_memory, ARRAY[id] AS visited
  FROM threads WHERE id = ?0 AND chat_id = ?1
  UNION ALL
- SELECT t.id, t.parent_thread_id, t.exclude_ambient_memory, p.path || t.id
- FROM threads t JOIN lineage p ON t.id = p.parent_thread_id
- WHERE cardinality(p.path) < 256 AND NOT (t.id = ANY(p.path))
+ SELECT t.id, t.parent_thread_id, t.exclude_ambient_memory, l.visited || t.id
+ FROM threads t JOIN lineage l ON t.id = l.parent_thread_id
+ WHERE cardinality(l.visited) < 256 AND NOT (t.id = ANY(l.visited))
  ) SELECT COALESCE(bool_or(exclude_ambient_memory), false) AS excluded,
  COALESCE(bool_or(id = ?0 AND exclude_ambient_memory), false) AS current_excluded,
  COALESCE(bool_or(parent_thread_id IS NULL), false) AS complete,

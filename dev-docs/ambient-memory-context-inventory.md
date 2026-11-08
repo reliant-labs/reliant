@@ -52,7 +52,7 @@ No new project-less or bootstrap-suppression architecture was added.
 ## Policy durability
 
 Approved follow-up: additive `threads.exclude_ambient_memory boolean NOT NULL
-DEFAULT false`, migration `20261107122606_thread_ambient_memory_exclusion.up.sql`.
+DEFAULT false`, migration `20261108044411_thread_ambient_memory_exclusion.up.sql`.
 `internal/store/thread_repo_ext.go`: `ResolveThreadAmbientMemoryExclusion` reads
 recursive parent lineage and monotonically latches true on the current thread.
 `call_llm.go` does this before request assembly; an error blocks provider send.
