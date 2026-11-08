@@ -22,7 +22,17 @@ import type { Plugin } from "vite";
  * a general proxy. Only a POST to exactly one of OTLP_PATHS is forwarded:
  * another method is 405, another path (a traversal like
  * `/_otel/v1/traces/../x` included: paths are compared as sent, never
- * normalized) is 404, and neither touches the upstream. A body over
+ * normalized) is 404, and neither touches the upstream. The caller must be
+ * this page on a loopback host (callerAllowed): its Origin must name the very
+ * host it sent the request to, that host must be loopback, and a browser's
+ * Sec-Fetch-Site, when sent, must be same-origin. Anything else is 403 before
+ * the body is read. CORS does not stop a foreign site from SENDING a simple
+ * cross-origin POST to the loopback dev server, only from reading the reply,
+ * so without this any page the developer visits could spend the org's
+ * ingestion allowance under the stack token; and a dev server reached through
+ * a tunnel (allowedHosts in vite.config.ts) has no caller credential to
+ * check, so its telemetry is refused rather than forwarded for anyone who
+ * can reach the tunnel. A body over
  * MAX_BODY_BYTES (the gateway's own max_request_body_size) is 413: a declared
  * Content-Length is refused before reading, and a chunked body is counted as
  * it streams and refused the moment it passes the cap, so at most the cap is
@@ -81,6 +91,35 @@ export function readHeadersFile(file: string): Array<[string, string]> {
     out.push([pair.slice(0, i).trim(), value]);
   }
   return out;
+}
+
+function isLoopbackHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === "localhost" || h.endsWith(".localhost") || h === "[::1]" || /^127(\.\d{1,3}){3}$/.test(h);
+}
+
+/**
+ * Whether the request is the dev page itself on a loopback host: an Origin
+ * naming exactly the Host the request was sent to, that host loopback, and
+ * no cross-site Sec-Fetch-Site. A browser always sends Origin on a POST, so
+ * a request without one is not the page.
+ */
+export function callerAllowed(req: IncomingMessage): boolean {
+  const origin = req.headers.origin;
+  const host = req.headers.host;
+  if (typeof origin !== "string" || typeof host !== "string" || !host) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  if (parsed.host.toLowerCase() !== host.toLowerCase()) return false;
+  if (!isLoopbackHost(parsed.hostname)) return false;
+  const site = req.headers["sec-fetch-site"];
+  if (site !== undefined && site !== "same-origin") return false;
+  return true;
 }
 
 function reply(res: ServerResponse, status: number, extra: Record<string, string> = {}): void {
@@ -145,6 +184,10 @@ export function otelProxyMiddleware(opts: OtelProxyOptions) {
     }
     if (req.method !== "POST") {
       reply(res, 405, { allow: "POST" });
+      return;
+    }
+    if (!callerAllowed(req)) {
+      reply(res, 403, { connection: "close" });
       return;
     }
     const declared = Number(req.headers["content-length"]);

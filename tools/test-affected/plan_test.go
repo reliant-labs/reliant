@@ -263,6 +263,48 @@ func TestInertPathsSelectNothing(t *testing.T) {
 	}
 }
 
+// cp#2189: unclaimed, each of these ran every lane in full (23 of 60 merge
+// gates in one day did so for no other reason). Claimed, each selects only
+// the tests that read it: the service catalog none (forge-generate judges
+// it), the demo files the tests naming them.
+func TestServiceCatalogAndDemoFilesSelectOnlyTheirReaders(t *testing.T) {
+	g := testGraph()
+	src := maps.Clone(webSrc)
+	src["frontends/web/src/demo/__tests__/fixtures.test.ts"] = `const read = (p) => readFileSync(resolve(WEB, p));
+read("scripts/demo/capture-forge-scaffold.mjs"); read("scripts/demo/capture-forge-scaffold.sh")`
+	src["frontends/web/vite-demo-target.test.ts"] = `path.resolve(__dirname, "demo.html")`
+	files := slices.Collect(maps.Keys(src))
+	g.Web = BuildWebGraph(files, func(p string) (string, bool) { s, ok := src[p]; return s, ok })
+	// The demo scripts are web code (.mjs) under frontends/web/: like any web
+	// module they also run the tests that walk its directories (guard.test.ts).
+	const walker = "src/lib/__tests__/guard.test.ts"
+	for p, want := range map[string][]string{
+		"gen/forge_service_catalog.json":                        nil,
+		"frontends/web/demo.html":                               {"vite-demo-target.test.ts"},
+		"frontends/web/scripts/demo/capture-forge-scaffold.mjs": {"src/demo/__tests__/fixtures.test.ts", walker},
+		"frontends/web/scripts/demo/capture-forge-scaffold.sh":  {"src/demo/__tests__/fixtures.test.ts", walker},
+		"frontends/web/scripts/demo/smoke-demo-site.mjs":        {walker},
+	} {
+		for _, mode := range []string{ReachAll, ReachDirect} {
+			pl := ClassifyReach([]Change{{Path: p}}, g, mode)
+			if pl.Go.Full || pl.Web.Full || pl.Electron.Full || pl.DocGen.Full {
+				t.Errorf("%s (%s) is claimed: no lane may run in full: go=%v web=%v electron=%v docs-generate=%v (%v)",
+					p, mode, pl.Go.Full, pl.Web.Full, pl.Electron.Full, pl.DocGen.Full, pl.Go.Reasons)
+			}
+			if len(pl.Go.Packages) != 0 {
+				t.Errorf("%s (%s): no Go test reads it, got %v", p, mode, pl.Go.Packages)
+			}
+			if !slices.Equal(pl.Web.Tests, want) {
+				t.Errorf("%s (%s): web tests %v, want %v", p, mode, pl.Web.Tests, want)
+			}
+		}
+	}
+	// The catalog is forge generate's output: the no-op check still runs.
+	if pl := classifyIn(g, "gen/forge_service_catalog.json"); !pl.ForgeGen.Full || strings.Contains(strings.Join(pl.ForgeGen.Reasons, " "), "fail-safe") {
+		t.Errorf("the service catalog runs forge-generate as its output, not as the fail-safe: %v", pl.ForgeGen.Reasons)
+	}
+}
+
 func TestForgeInputsRunForgeGenerate(t *testing.T) {
 	for _, p := range []string{
 		"proto/reliant/v1/chat.proto", "db/migrations/20261101000000_x.up.sql", "internal/vault/contract.go",

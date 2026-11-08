@@ -54,11 +54,15 @@ interface Sent {
   headers?: Record<string, string>;
   /** Written as separate chunks (chunked transfer unless content-length is set). */
   chunks?: Buffer[];
+  /** Send no Origin header; by default the request carries the page's own origin. */
+  noOrigin?: boolean;
 }
 
 function send(port: number, s: Sent): Promise<{ status: number; body: Buffer }> {
+  const headers: Record<string, string> = s.noOrigin ? {} : { origin: `http://127.0.0.1:${port}` };
+  Object.assign(headers, s.headers);
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: "127.0.0.1", port, method: s.method ?? "POST", path: s.path, headers: s.headers }, (res) => {
+    const req = http.request({ host: "127.0.0.1", port, method: s.method ?? "POST", path: s.path, headers }, (res) => {
       const parts: Buffer[] = [];
       res.on("data", (c: Buffer) => parts.push(c));
       res.on("end", () => resolve({ status: res.statusCode ?? 0, body: Buffer.concat(parts) }));
@@ -174,6 +178,39 @@ describe("otelProxyMiddleware", () => {
       expect((await send(port, { method: "GET", path: p })).status).toBe(299);
     }
     expect(forwarded).toHaveLength(0);
+  });
+
+  it("forwards a same-origin POST from the page on localhost", async () => {
+    const { port, forwarded } = await serve();
+    const res = await send(port, {
+      path: "/_otel/v1/traces",
+      headers: { host: `localhost:${port}`, origin: `http://localhost:${port}`, "sec-fetch-site": "same-origin" },
+      chunks: [Buffer.from("x")],
+    });
+    expect(res.status).toBe(200);
+    expect(forwarded).toHaveLength(1);
+  });
+
+  it.each<[string, Record<string, string>]>([
+    ["a foreign Origin", { origin: "https://evil.example", "content-type": "text/plain" }],
+    ["a cross-site Sec-Fetch-Site", { "sec-fetch-site": "cross-site" }],
+    ["an Origin naming another loopback port", { origin: "http://127.0.0.1:1" }],
+    ["an opaque Origin", { origin: "null" }],
+    ["a tunnel host", { host: "abc.trycloudflare.com", origin: "https://abc.trycloudflare.com" }],
+  ])("refuses %s with 403 and never forwards it", async (_name, headers) => {
+    const { port, forwarded } = await serve();
+    const res = await send(port, { path: "/_otel/v1/traces", headers, chunks: [Buffer.from('{"resourceSpans":[]}')] });
+    expect(res.status).toBe(403);
+    expect(forwarded).toHaveLength(0);
+  });
+
+  it("refuses a POST with no Origin with 403 and never forwards it, with or without an upstream", async () => {
+    for (const upstream of ["https://edge.example.test/", ""]) {
+      const { port, forwarded } = await serve({ upstream });
+      const res = await send(port, { path: "/_otel/v1/logs", noOrigin: true, chunks: [Buffer.from("x")] });
+      expect(res.status).toBe(403);
+      expect(forwarded).toHaveLength(0);
+    }
   });
 
   it("answers 502 when the upstream cannot be reached", async () => {

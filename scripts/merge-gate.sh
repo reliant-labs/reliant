@@ -23,6 +23,9 @@
 # Phases, each a row of the summary (slot wait vs run, seconds):
 #   plan       tools/test-affected plan: the ONE rule set (dev-docs/testing-affected.md)
 #   npm-*      npm ci (pnpm-* for a pnpm project) where a selected lane needs node_modules it lacks
+#   pgtest     tools/pgtest-check: forge pgtest's shared Postgres serves a
+#              scratch database, before generate or a Go test needs one; when
+#              it cannot, the gate stops there (MG_PGTEST_TIMEOUT, default 150s)
 #   generate   pinned forge generate must be a no-op; only when a forge input changed
 #   docs       every docs generator must be a no-op; only when a docs input changed
 #   build      compile (go list -export: no link) every package whose build
@@ -74,7 +77,7 @@ while [ $# -gt 0 ]; do
     --amend) amend=1; shift ;;
     --regen) regen=1; shift ;;
     --queue) queue=1; shift ;;
-    -h|--help) sed -n '2,63p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,69p' "$0"; exit 0 ;;
     *) echo "merge-gate: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -316,6 +319,22 @@ prepare_dependencies() {
 }
 prepare_dependencies
 
+# ── pgtest: the shared test Postgres serves, before anything needs it ─────
+# forge generate's schema read and every DB-backed Go test take a database
+# from forge pgtest's shared server. When it cannot serve one, they fail only
+# once they reach it, minutes in, each "connection refused" (control-plane
+# #2189: 15 of 60 gates in a day). tools/pgtest-check asks pgtest itself for a
+# scratch database: seconds when it can, a failure naming the shared server
+# when it cannot, and then no phase starts. Only when a phase needs one: the
+# whole forge generate (its hooks alone do not), or any Go test.
+if [ "$fail" = 0 ] && { { [ "$fgen" = true ] && [ "$hooks_only" != true ]; } || [ "$gofull" = true ] || [ "$ngo" -gt 0 ]; }; then
+  if ! phase pgtest go run ./tools/pgtest-check -timeout "${MG_PGTEST_TIMEOUT:-150s}"; then
+    fail=1
+    notes+=("pgtest: the shared test Postgres could not serve a database; no phase ran ($L/pgtest.log)")
+    cat "$L/pgtest.log" >&2
+  fi
+fi
+
 # ── generate → docs, then build ‖ test ‖ typecheck ‖ lint ‖ migsafety ──────
 # Where a generator's output becomes the tree the other phases judge, it runs
 # first, in place: in --amend mode (the merge queue's: a regenerate is folded
@@ -512,7 +531,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs plan-2 build test typecheck lint proto vet migsafety migorder; do
+  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck lint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"
