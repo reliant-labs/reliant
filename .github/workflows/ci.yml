@@ -288,16 +288,16 @@ jobs:
           fi
           "$dir/temporal" --version
           echo "$dir" >> "$GITHUB_PATH"
-      # The web part's electron npm install downloads Electron's zip from
-      # github.com releases: restored from the entry the Electron package
-      # smoke job keeps (see that job), and saved here on main if missing.
+      # Every part's npm phase installs electron, whose postinstall downloads
+      # Electron's zip from github.com releases (static and go 2/3 failed on
+      # it as well as web, 1f81a402e). Restored in every part from the entry
+      # the Electron package smoke job keeps (see that job); saved here by the
+      # web part on main if missing.
       - name: Read the Electron version
         id: electron-version
-        if: ${{ matrix.part == 'web' }}
         run: echo "zip=electron-zip-${RUNNER_OS}-${RUNNER_ARCH}-$(jq -r '.packages["node_modules/electron"].version' electron/package-lock.json)" >> "$GITHUB_OUTPUT"
       - name: Restore the Electron zip
         id: electron-zip
-        if: ${{ matrix.part == 'web' }}
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/electron
