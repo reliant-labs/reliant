@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import Link from "./link";
+import { useModalDialog } from "./modal";
 
 /**
  * What a nav entry shows after its label. Structured rather than a ReactNode
@@ -216,10 +218,6 @@ function Chevron({ open }: { open: boolean }) {
  * or a change of the current entry (the reader navigated). Rows grow to 44px
  * on a coarse pointer, and the page gutter tightens to 16px.
  *
- * (Reliant: forge's library copy has this since forge#1230. Reliant's
- * forge pin predates it, so `forge component install` at the pin would drop
- * it: re-install only from a forge that includes it.)
- *
  * Hover and selection are an ink wash (`bg-ink/5`, `bg-ink/8`), so they read
  * as "pressed" in light and dark alike whatever the palette maps surfaces to.
  */
@@ -247,39 +245,47 @@ export default function SidebarLayout({
   const drawerShown = narrow && drawerOpen;
   const navRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (!narrow) setDrawerOpen(false);
-  }, [narrow]);
   // Following a link closes the drawer, or it would stay open over the page
   // the reader just chose. The layout knows no router, but it does know which
-  // entry is current: when that changes, the reader has navigated.
+  // entry is current: when that changes, the reader has navigated. Widening
+  // past the drawer closes it too, so narrowing again does not bring it back.
+  // Both are adjusted while rendering, React's pattern for state that follows
+  // a prop: an effect would commit the stale open drawer first and render
+  // twice.
   const current = activeHrefs(navItems).concat(activeHrefs(footerItems)).join(" ");
+  const [drawerContext, setDrawerContext] = useState({ narrow, current });
+  if (drawerContext.narrow !== narrow || drawerContext.current !== current) {
+    setDrawerContext({ narrow, current });
+    if (drawerOpen && (drawerContext.current !== current || !narrow)) setDrawerOpen(false);
+  }
+  const navId = useId();
+  const titleId = useId();
+  const descriptionId = useId();
+  useModalDialog({
+    open: drawerShown,
+    panelRef: navRef,
+    onClose: () => setDrawerOpen(false),
+    // Safari pointer activation doesn't focus buttons: remember the trigger
+    // explicitly rather than whichever page element happened to have focus.
+    returnFocus: () => menuButtonRef.current,
+    initialFocus: () =>
+      navRef.current?.querySelector<HTMLElement>("nav a[href], nav button:not([disabled])") ??
+      navRef.current?.querySelector<HTMLElement>('[aria-label="Close navigation"]'),
+    // On a desktop transition the mobile trigger is hidden (or unmounted).
+    fallbackFocus: () =>
+      navRef.current?.querySelector<HTMLElement>("a[href], button:not([disabled])")?.focus(),
+  });
+  // A portal-to-column transition replaces the nav DOM. Its new ref isn't
+  // attached during the old modal's cleanup; focus the desktop nav after commit.
+  const wasDrawerShown = useRef(false);
   useEffect(() => {
-    setDrawerOpen(false);
-  }, [current]);
-  // Focus moves into the drawer when it opens and back to the menu button when
-  // it closes, so a keyboard or screen-reader user is never left behind it.
-  const wasShown = useRef(false);
-  useEffect(() => {
-    if (drawerShown) {
-      navRef.current?.querySelector<HTMLElement>("a[href], button:not([disabled])")?.focus();
-    } else if (wasShown.current) {
-      menuButtonRef.current?.focus();
+    if (wasDrawerShown.current && !narrow) {
+      navRef.current
+        ?.querySelector<HTMLElement>("nav a[href], nav button:not([disabled])")
+        ?.focus();
     }
-    wasShown.current = drawerShown;
-  }, [drawerShown]);
-  useEffect(() => {
-    if (!drawerShown) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      // The open drawer is `aria-modal`, so a page-level Escape binding that
-      // defers to open dialogs (a console's "leave") steps aside for it.
-      event.preventDefault();
-      setDrawerOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [drawerShown]);
+    wasDrawerShown.current = drawerShown;
+  }, [drawerShown, narrow]);
   const handleToggle = onToggle ?? (() => setInternalCollapsed((prev) => !prev));
   // A parent with children but no href of its own cannot open by navigating,
   // so it toggles locally instead.
@@ -394,12 +400,10 @@ export default function SidebarLayout({
     );
   }
 
-  return (
-    <div className="flex h-dvh overflow-hidden bg-surface-muted">
+  const sidebar = (
+    <>
       {drawerShown && (
-        // The scrim conveys nothing, so it is out of the accessibility tree;
-        // its click is a mouse convenience on top of the real dismissal,
-        // Escape (above), as in modal.tsx.
+        // Pointer convenience; the visible close control and Escape also dismiss.
         <div
           role="presentation"
           className="fixed inset-0 z-40 bg-black/50"
@@ -409,10 +413,21 @@ export default function SidebarLayout({
       {/* Sidebar — a column on desktop, an off-canvas drawer on a phone. */}
       <aside
         ref={navRef}
-        id="sidebar-layout-nav"
+        id={navId}
+        tabIndex={-1}
         role={drawerShown ? "dialog" : undefined}
         aria-modal={drawerShown ? true : undefined}
-        aria-label={drawerShown ? (navLabel ?? "Navigation") : undefined}
+        aria-labelledby={drawerShown ? titleId : undefined}
+        aria-describedby={drawerShown ? descriptionId : undefined}
+        onClick={(event) => {
+          // Including the already-current route: its active prop won't change.
+          if (
+            drawerShown &&
+            navRef.current?.contains(event.target as Node) &&
+            (event.target as Element).closest("a[href]")
+          )
+            setDrawerOpen(false);
+        }}
         className={`flex shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 motion-reduce:transition-none ${
           collapsed ? "w-14" : "w-60"
         } max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[min(18rem,85vw)] max-md:pb-[env(safe-area-inset-bottom)] max-md:pt-[env(safe-area-inset-top)] max-md:transition-transform ${
@@ -426,6 +441,33 @@ export default function SidebarLayout({
           }`}
         >
           {collapsed ? brandCollapsed : <div className="min-w-0 flex-1 truncate">{brand}</div>}
+          {drawerShown && (
+            <>
+              <h2 id={titleId} className="sr-only">
+                {navLabel ?? "Navigation"}
+              </h2>
+              <p id={descriptionId} className="sr-only">
+                Choose a page from the navigation.
+              </p>
+              <button
+                type="button"
+                aria-label="Close navigation"
+                onClick={() => setDrawerOpen(false)}
+                className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <svg
+                  aria-hidden="true"
+                  className="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </>
+          )}
         </div>
 
         {brandAccessory && !collapsed && (
@@ -500,7 +542,21 @@ export default function SidebarLayout({
           </button>
         </div>
       </aside>
+    </>
+  );
 
+  return (
+    <div className="flex h-dvh overflow-hidden bg-surface-muted">
+      {/* Only the mobile modal portals: desktop nav keeps its layout column.
+          Portal order also lets a later Modal stack above this drawer. */}
+      {drawerShown
+        ? createPortal(
+            <div data-modal-layer="" className="contents">
+              {sidebar}
+            </div>,
+            document.body,
+          )
+        : sidebar}
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top bar — omitted when there is nothing to put in it, so a page
@@ -512,7 +568,7 @@ export default function SidebarLayout({
               type="button"
               onClick={() => setDrawerOpen(true)}
               aria-label="Open navigation"
-              aria-controls="sidebar-layout-nav"
+              aria-controls={navId}
               aria-expanded={drawerShown}
               className="hidden h-[44px] w-[44px] shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent max-md:flex"
             >
