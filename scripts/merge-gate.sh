@@ -496,7 +496,7 @@ if [ "$fail" = 0 ]; then
     mapfile -t vet_pkgs < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
   fi
   if [ ${#vet_pkgs[@]} -gt 0 ] && [ "$skip_lint" != 1 ]; then
-    phase vet env GOMAXPROCS="$quarter" go vet "${vet_pkgs[@]}" & pids+=($!)
+    phase vet env GOMAXPROCS="$quarter" bash scripts/vet.sh "${vet_pkgs[@]}" & pids+=($!)
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
     # A migration declaring forge:breaks-rollback also needs the owner's
