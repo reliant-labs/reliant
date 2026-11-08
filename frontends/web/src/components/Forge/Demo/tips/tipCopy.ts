@@ -62,7 +62,7 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
   environments: {
     title: "Environments",
     body: "Environments are separate places to develop, test and run your app for users. Compare dev, staging and production to see what is running and whether it matches the project's configuration.",
-    help: "Your agent can compare environments and investigate a failed deployment using the same evidence.",
+    help: "Ask your agent to compare environments or investigate a failed deployment. It reads the same versions, configuration and health information.",
     command: "forge env list",
     target: tid("forge-env-list"),
   },

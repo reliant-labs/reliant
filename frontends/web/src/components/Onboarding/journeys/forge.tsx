@@ -112,8 +112,9 @@ function TryOnYourApp({ cli }: { cli: string }) {
       <p>The tour uses sample data to show the monitoring Forge sets up for an app. In your own project:</p>
       <TourCommands commands={scaffoldCommands(cli)} />
       <p className="mt-3">
-        New services and background workers include request-tracking setup. The tracing check helps find gaps in it.
-        Once you have deployed your app, inspect its real health information (use your own environment name):
+        Ask your agent to add a service or background worker. Forge generates the starting code and request-tracking setup;
+        the agent implements the app&apos;s custom behavior and runs the checks. Once the app is deployed, the agent can inspect
+        its real health information (use your own environment name):
       </p>
       <TourCommands commands={tryCommands(cli)} />
       <p className="mt-3">

@@ -13,9 +13,9 @@ export const FORGE_ONE_LINER =
 /** The toast's shorter version. */
 export const FORGE_SHORT = "forge is an open-source CLI and framework for building apps with any coding agent.";
 
-/** What forge does for the app, and what remains yours. */
+/** What the agent does with Forge, and what remains yours. */
 export const FORGE_WHAT_IT_DOES =
-  "You and your agent define the API and write the app's specific behavior. Forge provides starting code, production setup, and tools to build, deploy and monitor it. Its instructions and automated code checks help your agent keep the project consistent as it grows.";
+  "Tell your agent what to build. Your agent defines the data and API and writes your app's custom behavior. Forge generates supporting code and production setup, with checks to guide the work. Its tools let the agent build, deploy and monitor the app; you own the code and decide what ships.";
 
 /** The selling point the tips connect back to. */
 export const FORGE_ONE_TOOL =
