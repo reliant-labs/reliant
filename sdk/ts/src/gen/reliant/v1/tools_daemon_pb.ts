@@ -13,7 +13,138 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/tools_daemon.proto.
  */
 export const file_reliant_v1_tools_daemon: GenFile = /*@__PURE__*/
-  fileDesc("Ch1yZWxpYW50L3YxL3Rvb2xzX2RhZW1vbi5wcm90bxIKcmVsaWFudC52MSKGAQoNUHJvY2Vzc1JlcG9ydBINCgVjb3VudBgBIAEoBBINCgVsaW1pdBgCIAEoBBIWCg5yZWZ1c2luZ19oZWF2eRgDIAEoCBIZChFyZWZ1c2luZ19zaW5jZV9tcxgEIAEoAxIkCgN0b3AYBSADKAsyFy5yZWxpYW50LnYxLlByb2Nlc3NUcmVlImMKC1Byb2Nlc3NUcmVlEg8KB2NoYXRfaWQYASABKAkSDwoHY29tbWFuZBgCIAEoCRINCgV0YXNrcxgDIAEoBBIPCgd0cmFja2VkGAQgASgIEhIKCmNoYXRfdGl0bGUYBSABKAki/gIKCkRpc2tWb2x1bWUSDQoFbGFiZWwYASABKAkSDQoFcGF0aHMYAiADKAkSEwoLdG90YWxfYnl0ZXMYAyABKAQSEgoKZnJlZV9ieXRlcxgEIAEoBBIQCghwcmVzc3VyZRgFIAEoCBITCgtmaWxlc190b3RhbBgGIAEoBBISCgpmaWxlc19mcmVlGAcgASgEEisKCWNvbnN1bWVycxgIIAMoCzIYLnJlbGlhbnQudjEuRGlza0NvbnN1bWVyEiAKGGNvbnN1bWVyc19tZWFzdXJlZF9hdF9tcxgJIAEoAxIbChNsYXN0X25vX3NwYWNlX2F0X21zGAogASgDEikKBWd1YXJkGAsgASgOMhoucmVsaWFudC52MS5EaXNrR3VhcmRTdGF0ZRIXCg9yZWNsYWltZWRfYXRfbXMYDCABKAMSFwoPcmVjbGFpbWVkX2J5dGVzGA0gASgEEhEKCXJlY2xhaW1lZBgOIAMoCRISCgp1c2VkX2J5dGVzGA8gASgEIq8BCgxEaXNrQ29uc3VtZXISDAoEa2luZBgBIAEoCRINCgVsYWJlbBgCIAEoCRIQCghjYXRlZ29yeRgDIAEoCRIMCgRwYXRoGAQgASgJEg0KBWJ5dGVzGAUgASgEEhMKC2FwcHJveGltYXRlGAYgASgIEhkKEXJlY2xhaW1hYmxlX2J5dGVzGAcgASgEEhEKCWNsZWFyYWJsZRgIIAEoCBIQCghjbGVhcmluZxgJIAEoCCp4Cg5EaXNrR3VhcmRTdGF0ZRIgChxESVNLX0dVQVJEX1NUQVRFX1VOU1BFQ0lGSUVEEAASHwobRElTS19HVUFSRF9TVEFURV9SRUNMQUlNSU5HEAESIwofRElTS19HVUFSRF9TVEFURV9SRUZVU0lOR19IRUFWWRACQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
+  fileDesc("Ch1yZWxpYW50L3YxL3Rvb2xzX2RhZW1vbi5wcm90bxIKcmVsaWFudC52MSLmAgoXV29ya3RyZWVSZWNsYWltUHJvcG9zYWwSCwoDa2V5GAEgASgJEhMKC2ZpbmdlcnByaW50GAIgASgJEgwKBHBhdGgYAyABKAkSDAoEcmVwbxgEIAEoCRIOCgZicmFuY2gYBSABKAkSDgoGcmVhc29uGAYgASgJEg4KBmRldGFpbBgHIAEoCRIUCgx3b3JrX3N1bW1hcnkYCCABKAkSGAoQdW5wdXNoZWRfY29tbWl0cxgJIAEoBRIUCgxpZGxlX3NlY29uZHMYCiABKAMSGAoQbGFzdF9hY3Rpdml0eV9tcxgLIAEoAxISCgpzaXplX2J5dGVzGAwgASgDEg0KBW93bmVyGA0gASgJEg4KBnJvd19pZBgOIAEoCRIWCg5wcm9wb3NlZF9hdF9tcxgPIAEoAxIMCgRub3RlGBAgASgJEhIKCm5vdGVfYXRfbXMYESABKAMSEAoIZGVjaXNpb24YEiABKAkihgEKDVByb2Nlc3NSZXBvcnQSDQoFY291bnQYASABKAQSDQoFbGltaXQYAiABKAQSFgoOcmVmdXNpbmdfaGVhdnkYAyABKAgSGQoRcmVmdXNpbmdfc2luY2VfbXMYBCABKAMSJAoDdG9wGAUgAygLMhcucmVsaWFudC52MS5Qcm9jZXNzVHJlZSJjCgtQcm9jZXNzVHJlZRIPCgdjaGF0X2lkGAEgASgJEg8KB2NvbW1hbmQYAiABKAkSDQoFdGFza3MYAyABKAQSDwoHdHJhY2tlZBgEIAEoCBISCgpjaGF0X3RpdGxlGAUgASgJIv4CCgpEaXNrVm9sdW1lEg0KBWxhYmVsGAEgASgJEg0KBXBhdGhzGAIgAygJEhMKC3RvdGFsX2J5dGVzGAMgASgEEhIKCmZyZWVfYnl0ZXMYBCABKAQSEAoIcHJlc3N1cmUYBSABKAgSEwoLZmlsZXNfdG90YWwYBiABKAQSEgoKZmlsZXNfZnJlZRgHIAEoBBIrCgljb25zdW1lcnMYCCADKAsyGC5yZWxpYW50LnYxLkRpc2tDb25zdW1lchIgChhjb25zdW1lcnNfbWVhc3VyZWRfYXRfbXMYCSABKAMSGwoTbGFzdF9ub19zcGFjZV9hdF9tcxgKIAEoAxIpCgVndWFyZBgLIAEoDjIaLnJlbGlhbnQudjEuRGlza0d1YXJkU3RhdGUSFwoPcmVjbGFpbWVkX2F0X21zGAwgASgDEhcKD3JlY2xhaW1lZF9ieXRlcxgNIAEoBBIRCglyZWNsYWltZWQYDiADKAkSEgoKdXNlZF9ieXRlcxgPIAEoBCKvAQoMRGlza0NvbnN1bWVyEgwKBGtpbmQYASABKAkSDQoFbGFiZWwYAiABKAkSEAoIY2F0ZWdvcnkYAyABKAkSDAoEcGF0aBgEIAEoCRINCgVieXRlcxgFIAEoBBITCgthcHByb3hpbWF0ZRgGIAEoCBIZChFyZWNsYWltYWJsZV9ieXRlcxgHIAEoBBIRCgljbGVhcmFibGUYCCABKAgSEAoIY2xlYXJpbmcYCSABKAgqeAoORGlza0d1YXJkU3RhdGUSIAocRElTS19HVUFSRF9TVEFURV9VTlNQRUNJRklFRBAAEh8KG0RJU0tfR1VBUkRfU1RBVEVfUkVDTEFJTUlORxABEiMKH0RJU0tfR1VBUkRfU1RBVEVfUkVGVVNJTkdfSEVBVlkQAkI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z");
+
+/**
+ * WorktreeReclaimProposal is one worktree the reclaim asks to remove. A
+ * decision about it binds to fingerprint: the worktree changing (a commit, an
+ * edit, a new file) makes it a new proposal with a new fingerprint.
+ *
+ * @generated from message reliant.v1.WorktreeReclaimProposal
+ */
+export type WorktreeReclaimProposal = Message<"reliant.v1.WorktreeReclaimProposal"> & {
+  /**
+   * The worktree's capture key: its Reliant workspace id, or p-<hash> of its
+   * path for a worktree made outside Reliant.
+   *
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * @generated from field: string fingerprint = 2;
+   */
+  fingerprint: string;
+
+  /**
+   * @generated from field: string path = 3;
+   */
+  path: string;
+
+  /**
+   * The repository's main checkout.
+   *
+   * @generated from field: string repo = 4;
+   */
+  repo: string;
+
+  /**
+   * @generated from field: string branch = 5;
+   */
+  branch: string;
+
+  /**
+   * Why it is not removed on its own: "dirty", "unpushed" or
+   * "unreachable_history".
+   *
+   * @generated from field: string reason = 6;
+   */
+  reason: string;
+
+  /**
+   * The daemon's one-line description of the unsaved work.
+   *
+   * @generated from field: string detail = 7;
+   */
+  detail: string;
+
+  /**
+   * `git status --short` and the commits on no remote, shortened.
+   *
+   * @generated from field: string work_summary = 8;
+   */
+  workSummary: string;
+
+  /**
+   * @generated from field: int32 unpushed_commits = 9;
+   */
+  unpushedCommits: number;
+
+  /**
+   * How long nothing in it has changed (seconds), and when it last did.
+   *
+   * @generated from field: int64 idle_seconds = 10;
+   */
+  idleSeconds: bigint;
+
+  /**
+   * @generated from field: int64 last_activity_ms = 11;
+   */
+  lastActivityMs: bigint;
+
+  /**
+   * @generated from field: int64 size_bytes = 12;
+   */
+  sizeBytes: bigint;
+
+  /**
+   * "reliant" for a Reliant workspace's checkout, "unregistered" otherwise.
+   *
+   * @generated from field: string owner = 13;
+   */
+  owner: string;
+
+  /**
+   * The Reliant workspace id, when it is one.
+   *
+   * @generated from field: string row_id = 14;
+   */
+  rowId: string;
+
+  /**
+   * When this exact state (fingerprint) was first proposed (unix ms).
+   *
+   * @generated from field: int64 proposed_at_ms = 15;
+   */
+  proposedAtMs: bigint;
+
+  /**
+   * A reviewing agent's short assessment of this state, and when it wrote it.
+   *
+   * @generated from field: string note = 16;
+   */
+  note: string;
+
+  /**
+   * @generated from field: int64 note_at_ms = 17;
+   */
+  noteAtMs: bigint;
+
+  /**
+   * A decision already recorded for this state: "approve" (the daemon
+   * reclaims it on its next pass) or "decline". Empty while undecided.
+   *
+   * @generated from field: string decision = 18;
+   */
+  decision: string;
+};
+
+/**
+ * Describes the message reliant.v1.WorktreeReclaimProposal.
+ * Use `create(WorktreeReclaimProposalSchema)` to create a new message.
+ */
+export const WorktreeReclaimProposalSchema: GenMessage<WorktreeReclaimProposal> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_tools_daemon, 0);
 
 /**
  * ProcessReport is how close a machine is to its process limit, and whose
@@ -69,7 +200,7 @@ export type ProcessReport = Message<"reliant.v1.ProcessReport"> & {
  * Use `create(ProcessReportSchema)` to create a new message.
  */
 export const ProcessReportSchema: GenMessage<ProcessReport> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 0);
+  messageDesc(file_reliant_v1_tools_daemon, 1);
 
 /**
  * ProcessTree is one command's processes on a machine.
@@ -120,7 +251,7 @@ export type ProcessTree = Message<"reliant.v1.ProcessTree"> & {
  * Use `create(ProcessTreeSchema)` to create a new message.
  */
 export const ProcessTreeSchema: GenMessage<ProcessTree> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 1);
+  messageDesc(file_reliant_v1_tools_daemon, 2);
 
 /**
  * DiskVolume is one filesystem and what is using it.
@@ -244,7 +375,7 @@ export type DiskVolume = Message<"reliant.v1.DiskVolume"> & {
  * Use `create(DiskVolumeSchema)` to create a new message.
  */
 export const DiskVolumeSchema: GenMessage<DiskVolume> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 2);
+  messageDesc(file_reliant_v1_tools_daemon, 3);
 
 /**
  * DiskConsumer is one thing taking space on a volume.
@@ -326,7 +457,7 @@ export type DiskConsumer = Message<"reliant.v1.DiskConsumer"> & {
  * Use `create(DiskConsumerSchema)` to create a new message.
  */
 export const DiskConsumerSchema: GenMessage<DiskConsumer> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 3);
+  messageDesc(file_reliant_v1_tools_daemon, 4);
 
 /**
  * DiskGuardState is what the daemon's disk guard (internal/diskguard) is doing
