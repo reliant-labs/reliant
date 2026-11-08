@@ -104,20 +104,26 @@ deliver() {
   mv -f "$out.tmp" "$out"
 }
 
+# untouched_since <inputs> <stamp> succeeds when no path listed in <inputs> was
+# changed after <stamp> was written. Depth 0: a recorded file, or a directory
+# whose entries were added, removed or renamed. Depth 1: a file directly inside
+# a recorded directory (its subdirectories are other packages, recorded on
+# their own when imported). A recorded path that no longer exists makes find
+# fail: not untouched.
+untouched_since() {
+  newer=$(tr '\n' '\0' <"$1" | xargs -0 sh -c '
+    s=$1; shift
+    find "$@" -maxdepth 0 -newer "$s" -print &&
+      find "$@" -maxdepth 1 ! -type d -newer "$s" -print' sh "$2") || return 1
+  [ -z "$newer" ]
+}
+
 # unchanged succeeds when the last build attempt saw every input as it is now
 # and ran with the same toolchain and flags.
 unchanged() {
   [ -f "$dir/started" ] && [ -s "$dir/inputs" ] && [ -f "$dir/state" ] && [ -f "$dir/key" ] || return 1
   [ "$(cat "$dir/key")" = "$key" ] || return 1
-  # Depth 0: a recorded file, or a directory whose entries were added, removed
-  # or renamed. Depth 1: a file directly inside a recorded directory (its
-  # subdirectories are other packages, recorded on their own when imported).
-  # A recorded path that no longer exists makes find fail: not unchanged.
-  newer=$(tr '\n' '\0' <"$dir/inputs" | xargs -0 sh -c '
-    s=$1; shift
-    find "$@" -maxdepth 0 -newer "$s" -print &&
-      find "$@" -maxdepth 1 ! -type d -newer "$s" -print' sh "$dir/started") || return 1
-  [ -z "$newer" ]
+  untouched_since "$dir/inputs" "$dir/started"
 }
 
 if unchanged; then
@@ -201,13 +207,23 @@ CGO_ENABLED=0 go build $flags -o "$dir/bin" "$pkg" >"$dir/log" 2>&1 || rc=$?
 wait "$list_pid" || true
 cat "$dir/log" >&2
 
-mv -f "$dir/started.new" "$dir/started"
-printf '%s\n' "$key" >"$dir/key"
-if [ -s "$dir/inputs.new" ] && [ -n "$precise" ]; then
+# go list ran beside go build, so the two describe one source graph only if
+# nothing they read changed while they ran. Before started.new, both saw the
+# same tree. A graph change after it starts at an edit to a package (or
+# go.mod) that both still reach, which go list therefore recorded, and that
+# edit is newer than started.new. So publish the inputs only when none of them
+# changed during the build; otherwise record nothing and the next caller
+# rebuilds and enumerates again.
+if [ -s "$dir/inputs.new" ] && [ -n "$precise" ] &&
+  untouched_since "$dir/inputs.new" "$dir/started.new"; then
   mv -f "$dir/inputs.new" "$dir/inputs"
 else
-  rm -f "$dir/inputs.new" "$dir/inputs" # nothing recorded, or mtimes too coarse: never reuse
+  # Nothing recorded, mtimes too coarse, or the source changed mid-build:
+  # never reuse this build.
+  rm -f "$dir/inputs.new" "$dir/inputs"
 fi
+mv -f "$dir/started.new" "$dir/started"
+printf '%s\n' "$key" >"$dir/key"
 
 if [ "$rc" -ne 0 ]; then
   { echo "fail $(date +%s)"; cat "$dir/log"; } >"$dir/state.new"

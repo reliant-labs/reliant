@@ -5,7 +5,8 @@
 # Checks: the first caller builds and later callers reuse; any change to a
 # package file, an embedded file (or a file added beside one), a go.mod, or the
 # toolchain rebuilds; a file outside the build's inputs does not; N concurrent
-# callers make ONE build; a save during a build makes the next caller rebuild;
+# callers make ONE build; a save during a build makes the next caller rebuild
+# and leaves that build with no recorded inputs;
 # a failed build never replaces a delivered binary and fails every caller for
 # the same source without building again, until the fail TTL lapses.
 set -euo pipefail
@@ -119,10 +120,20 @@ for s in c d e; do
 done
 [ "$fail" = 1 ] || echo "ok: 3 concurrent callers share one build"
 
+# await_builds <n>: wait (up to 10s) until the fake go has begun build n.
+await_builds() {
+  local i=0
+  while [ "$(builds)" -lt "$1" ]; do
+    i=$((i + 1))
+    [ "$i" -le 1000 ] || { FAIL "build $1 never started"; return 1; }
+    sleep 0.01
+  done
+}
+
 # A save while a build runs: the waiting caller must not take that build.
 touch "$R/cmd/app/main.go"
-(FAKE_BUILD_SLEEP=2 run tmp/a/app) &
-sleep 1
+(FAKE_BUILD_SLEEP=1 run tmp/a/app) &
+await_builds 8
 : >"$R/internal/lib/lib.go" # now: after the running build began
 run tmp/b/app || FAIL "caller after a mid-build save failed"
 wait
@@ -130,23 +141,34 @@ wait
 [ "$(cat "$R/tmp/b/app")" = "binary 9" ] || FAIL "mid-build save: caller got '$(cat "$R/tmp/b/app")', want binary 9"
 [ "$fail" = 1 ] || echo "ok: a save during a build makes the next caller rebuild"
 
+# A build whose inputs changed while it ran records none, so its inputs list
+# (enumerated beside the build) is never trusted for reuse.
+touch "$R/cmd/app/main.go"
+(FAKE_BUILD_SLEEP=1 run tmp/a/app) &
+await_builds 10
+: >"$R/internal/lib/lib.go"
+wait
+[ ! -e "$R/tmp/air-build/cmd_app/inputs" ] || FAIL "a build whose inputs changed mid-build recorded them"
+expect "the next caller after a mid-build change rebuilds" 0 11 tmp/b/app "binary 11"
+expect "and then reuses" 0 11 tmp/c/app "binary 11"
+
 # Failure: no caller is handed the last good binary as if it were fresh.
 : >"$R/internal/lib/BROKEN"
-expect "a failed build exits non-zero and keeps the old binary" 1 10 tmp/b/app "binary 9"
+expect "a failed build exits non-zero and keeps the old binary" 1 12 tmp/b/app "binary 11"
 grep -q "syntax error" "$T/out" || FAIL "the failed build's error is not shown"
-expect "the next caller for the same source fails without building" 1 10 tmp/b/app "binary 9"
+expect "the next caller for the same source fails without building" 1 12 tmp/b/app "binary 11"
 grep -q "syntax error" "$T/out" || FAIL "a reused failure does not repeat the error"
 for s in c d e; do (rc=0; run "tmp/$s/app" || rc=$?; echo "$rc" >"$T/rc.$s") & done
 wait
 for s in c d e; do [ "$(cat "$T/rc.$s")" = 1 ] || FAIL "concurrent caller $s exited $(cat "$T/rc.$s") on a failed build"; done
-[ "$(builds)" = 10 ] || FAIL "callers after a failure built again ($(builds))"
-AIR_BUILD_FAIL_TTL=0 expect "a failure older than the TTL is retried" 1 11 tmp/b/app "binary 9"
+[ "$(builds)" = 12 ] || FAIL "callers after a failure built again ($(builds))"
+AIR_BUILD_FAIL_TTL=0 expect "a failure older than the TTL is retried" 1 13 tmp/b/app "binary 11"
 
 rm "$R/internal/lib/BROKEN"
-expect "the fix rebuilds" 0 12 tmp/a/app "binary 12"
+expect "the fix rebuilds" 0 14 tmp/a/app "binary 14"
 
 rm -rf "$R/tmp/air-build/cmd_app/inputs"
-expect "missing records rebuild" 0 13 tmp/a/app "binary 13"
-expect "and record again" 0 13 tmp/a/app "binary 13"
+expect "missing records rebuild" 0 15 tmp/a/app "binary 15"
+expect "and record again" 0 15 tmp/a/app "binary 15"
 
 exit "$fail"
