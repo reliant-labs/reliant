@@ -1,0 +1,13 @@
+# Smithery listing for `forge mcp` (https://smithery.ai). A local stdio server:
+# Smithery's clients start it with npx, which downloads the forge binary that
+# matches the package version on first run. Nothing to configure: every tool
+# takes an optional `dir`, and deploy_claimable needs no account.
+# Set the Smithery project's base directory to `npm/`.
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties: {}
+  commandFunction: |-
+    () => ({ command: 'npx', args: ['-y', '@reliantlabs/forge', 'mcp'] })
+  exampleConfig: {}

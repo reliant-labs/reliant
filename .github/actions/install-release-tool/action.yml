@@ -1,0 +1,104 @@
+# One pinned release binary on PATH: Task, buf or KCL, the tools CI used to get
+# from arduino/setup-task, bufbuild/buf-setup-action and KCL's install-cli.sh.
+# All three download from github.com/<owner>/<repo>/releases. From ~08:46Z on
+# 2026-11-08 those URLs answered 504 for every asset, and every job failed
+# while installing its tools.
+#
+# A CACHE HIT NEVER TOUCHES github.com. Each tool is cached by itself, keyed on
+# tool, version, OS and arch, and only the binary is cached, never the archive.
+# Like every cache here, it is restored everywhere and saved only on a push to
+# main (ci.yml's "Build-cache note"); a pull request restores main's copy.
+#
+# On a miss, fetch-release-asset.sh downloads it with retries, falls back to the
+# REST API's asset endpoint (which kept serving during that outage), and checks
+# the pinned sha256. The install keys on the binary itself, not on cache-hit, so
+# an empty or partial cache entry is reinstalled rather than trusted. That is the
+# failure that made ci.yml stop caching ~/.kcl.
+#
+# THE PINS. buf is templates.BufVersion and KCL is templates.KCLVersion
+# (TestReleaseToolPinsMatchForge). Task is 3.52.0, as before. To bump a tool,
+# change its version and sha256 together. The sha256 is the release asset's:
+# `gh api repos/<owner>/<repo>/releases/tags/<tag> --jq '.assets[] | .name + " " + .digest'`,
+# or the release's own checksum file where GitHub records no digest (buf 1.50.0).
+#
+# CHECK AFTER MERGE, AND ROLLBACK. The first push to main after this lands
+# runs every job on a cache miss (the github.com download, else the API
+# fallback) and saves one cache entry per tool; the second push's jobs log
+# a cache hit on "Restore <tool>". If installs fail there, revert the commit
+# that introduced this action: the workflows go back to
+# arduino/setup-task, bufbuild/buf-setup-action and KCL's install-cli.sh,
+# and the ci-tool-* cache entries it saved are ignored (nothing else reads
+# them) and age out.
+name: Install a pinned release tool
+description: Task, buf or KCL from a cache keyed on its version, else from GitHub releases (retried, API fallback, sha256-checked)
+
+inputs:
+  tool:
+    description: task, buf or kcl
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Pin ${{ inputs.tool }}
+      id: pin
+      shell: bash
+      env:
+        TOOL: ${{ inputs.tool }}
+      run: |
+        set -euo pipefail
+        case "$TOOL" in
+          #    repo           tag      asset                            sha256                                                            member
+          task) set -- go-task/task v3.52.0 task_linux_amd64.tar.gz 02c679ffae53dca791804847d78b31731615894e292948397c971c87ac9e95bd task ;;
+          buf)  set -- bufbuild/buf v1.50.0 buf-Linux-x86_64 154ea883ce098eac4fa106ff9ee4e4964bb97f809dd8ec9c34a432b466ce1494 - ;;
+          kcl)  set -- kcl-lang/cli v0.13.2 kcl-v0.13.2-linux-amd64.tar.gz 16db3412892e83ae7a4b34953cadcd99649f3abaebbd42f2fb830705173e7ae4 kcl ;;
+          *) echo "::error::install-release-tool: unknown tool '$TOOL' (task, buf or kcl)"; exit 1 ;;
+        esac
+        [ "$RUNNER_OS" = Linux ] && [ "$RUNNER_ARCH" = X64 ] \
+          || { echo "::error::install-release-tool pins linux-amd64 assets; this runner is $RUNNER_OS/$RUNNER_ARCH"; exit 1; }
+        {
+          echo "repo=$1"; echo "tag=$2"; echo "asset=$3"; echo "sha256=$4"; echo "member=$5"
+          echo "dir=$HOME/.cache/ci-tools/$TOOL-$2"
+          echo "key=ci-tool-$TOOL-$2-$RUNNER_OS-$RUNNER_ARCH"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Restore ${{ inputs.tool }}
+      id: cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.pin.outputs.dir }}
+        key: ${{ steps.pin.outputs.key }}
+
+    - name: Install ${{ inputs.tool }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TOOL: ${{ inputs.tool }}
+        DIR: ${{ steps.pin.outputs.dir }}
+        REPO: ${{ steps.pin.outputs.repo }}
+        TAG: ${{ steps.pin.outputs.tag }}
+        ASSET: ${{ steps.pin.outputs.asset }}
+        SHA256: ${{ steps.pin.outputs.sha256 }}
+        MEMBER: ${{ steps.pin.outputs.member }}
+      run: |
+        set -euo pipefail
+        if [ ! -x "$DIR/$TOOL" ]; then
+          mkdir -p "$DIR"
+          dl="$RUNNER_TEMP/$TOOL.download"
+          "$GITHUB_ACTION_PATH/fetch-release-asset.sh" "$REPO" "$TAG" "$ASSET" "$dl" "$SHA256"
+          if [ "$MEMBER" = - ]; then
+            install -m 0755 "$dl" "$DIR/$TOOL"
+          else
+            tar -xzf "$dl" -C "$DIR" "$MEMBER"
+          fi
+          rm -f "$dl"
+        fi
+        echo "$DIR" >> "$GITHUB_PATH"
+        "$DIR/$TOOL" --version
+
+    - name: Save ${{ inputs.tool }} (main only)
+      if: steps.cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ steps.pin.outputs.dir }}
+        key: ${{ steps.pin.outputs.key }}

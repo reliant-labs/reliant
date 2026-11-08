@@ -1,0 +1,505 @@
+"""
+The `{{.EnvName}}` environment of {{.ProjectName}}: the local dev loop.
+
+YOURS. forge scaffolds this file once and never rewrites it.
+
+This file BINDS; it does not declare. `deploy/kcl/workloads.k` states what
+each workload is (build, subcommand, ports, credentials). This file says
+where each one runs HERE, and states the values only this environment
+knows: ports on this machine, the dev database, the dev identity provider.
+
+Each workload is bound HERE, one line each, to where it runs in dev. The
+API and jobs run as HOST PROCESSES (`forge.OnHost`), so there is no docker
+build in the loop and no container runtime required. The API is ONE
+process — `_api`, the binary's `server`, every service on one Connect mux —
+because the frontend reaches it at one origin; air rebuilds and restarts it
+when a .go file changes. A job runs `go run ./cmd/{{.ProjectName}} <args>`.
+An operator or cron runs in the local k3d cluster, which a host process
+cannot be. The Dockerfile is still there and still correct; the cluster
+envs ship the image built from it.
+
+RENDER THIS THROUGH FORGE (`forge env render {{.EnvName}}`, `forge env up
+{{.EnvName}}`), not a bare `kcl run`: the ports below are declared with forge
+builtins (`plugin.resolve_port` / `plugin.allocate_port`) that exist only
+when forge evaluates the file. `output = forge.render(bundle)` is the one
+entrypoint.
+"""
+
+import forge
+import forge.workloads as fw
+
+# The port primitives — forge builtins, imported from the plugin namespace.
+import kcl_plugin.forge as plugin
+
+# What this project RUNS — declared once, shared by every env.
+import ..workloads as wl
+{{- if .HasFrontend}}
+
+# The users — declared once, shared by every env; only where they run differs.
+import ..identity as idn
+{{- end}}
+
+# Per-environment config values (the typed AppConfig instance in config.k,
+# next to this file); `config_gen.appConfigEnvMap` projects them into each
+# workload's env.
+import config_gen
+import .config as appcfg
+{{- if .IngressEnabled}}
+
+# Gateway API ingress topology — user-owned. Base lives in
+# `deploy/kcl/ingress.k`; this env may override hosts, ports, or TLS.
+import .ingress as ing
+{{- end}}
+
+# ---------------------------------------------------------------------------
+# PORTS — declared HERE, once, and referenced everywhere else.
+# ---------------------------------------------------------------------------
+# A port is a fact TWO things have to agree on: whatever binds it and
+# whatever dials it. Each one is a variable, and every reference reads it.
+#
+#   plugin.resolve_port(name, preferred) is AVAILABILITY-CHECKED: it takes
+#   `preferred` when free, steps to the next free port when not, and
+#   remembers the answer in the primary checkout's .forge/host-ports.json,
+#   scoped to this exact worktree and environment. Concurrent forge processes
+#   reserve under one lock, even before listeners start.
+#
+#   plugin.allocate_port(base, key) is DETERMINISTIC: it does NOT step off a
+#   busy port. Use it when something outside these declarations was already
+#   told the number (a cluster's pre-mapped ingress port).
+
+# The dev database. On a machine already running another stack on 5432 this
+# steps to 5433 and stays there, and the DSN below follows it.
+{{if not .DatabaseDisabled}}_postgres_port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-postgres", 5432){{end}}
+
+# The port each long-running host process BINDS (the API's mux, a split-out
+# worker's health endpoint). Host processes share this machine, so each one
+# gets its own availability-checked port instead of the container convention
+# (every pod owns :8080). The API (`_api`) holds the
+# `{{.ProjectName}}-{{.EnvName}}-api` key, which the frontend's dev config
+# (config.k) reads to find it.
+_port_of = lambda name: str -> int {
+    plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-api" if name == "{{.PrimaryWorkload}}" else "{{.ProjectName}}-{{.EnvName}}-" + name, 8085)
+}
+
+# The loopback pprof side-listener of each long-running host process. The
+# config default (127.0.0.1:6060) is one port for every process on the
+# machine: the second one to start loses it, and `forge env status` then
+# probes whichever process DID bind it and reports that process's profiles
+# as this app's. Each process gets its own, by the same rule as its PORT.
+_pprof_port_of = lambda name: str -> int {
+    plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-pprof-" + name, 6060)
+}
+{{- if .HasFrontend}}
+
+# The dev IdP's origin must stay stable BETWEEN runs. resolve_port chooses
+# a free port once, then reuses its reservation even while the IdP answers.
+# Unlike a fixed 100-port offset, it cannot land on another stack's HyperDX.
+_idp_port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-idp", 8080)
+_idp_origin = "http://localhost:${_idp_port}"
+
+# The dev mail catcher's SMTP port. Its web UI is on this port + 7000 (the
+# default 1025 puts it on http://localhost:8025, which `forge env up` prints).
+_mail_port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-mail", 1025)
+
+# The frontend's dev-server port. resolve_port: the one external consumer
+# (the issuer's registered login URI) is re-converged by `forge env up` on
+# the same run, so stepping off a busy 3000 is safe.
+_frontend_port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-web", 3000)
+_frontend_origin = "http://localhost:${_frontend_port}"
+{{- end}}
+
+# The dev database's connection string, composed from the port declared
+# above rather than written out a second time.
+{{if not .DatabaseDisabled}}_database_url = "postgres://postgres:postgres@localhost:${_postgres_port}/{{.ProjectName}}?sslmode=disable"{{end}}
+
+# This env's SECRET VALUES: the gitignored `secrets/{{.EnvName}}.yaml`, a flat
+# map of env-var name to value. A value reaches only a workload that names it
+# (`config_secrets`, or a forge.SecretRef in its env). Populate it with
+# `forge secret set --env {{.EnvName}} <KEY>` (value on stdin).
+_secret_store = forge.FileSecrets {path = "secrets/{{.EnvName}}.yaml"}
+
+# ── OBSERVABILITY — ON BY DEFAULT ───────────────────────────────────────────
+# Where this env's telemetry goes is DECLARED here, once, and forge renders the
+# plumbing. Apps never learn the backend: they export OTLP to a local endpoint
+# (`forge env up` gives every host process the standard OTEL_EXPORTER_OTLP_*
+# variables) and the collector behind it decides where the data lands.
+#
+#   * no destination (the default) runs docker-compose.yml's `clickstack`
+#     beside the stack: ClickHouse, the HyperDX UI and a collector in ONE
+#     container (HyperDX's no-auth local mode, ~0.8 GB resident). Traces and
+#     metrics arrive over OTLP; the collector tails .forge/logs/{{.EnvName}}/*.log
+#     for logs. `forge env up` lists the HyperDX URL with the other services.
+#   * a destination swaps ClickStack for a small forwarder (`otel-forwarder`)
+#     that sends all of it to YOUR OTLP endpoint instead. Its headers come from
+#     the secret store, never from this file:
+#
+#         _destination = forge.ObservabilityDestination {
+#             endpoint = "https://otlp.example.com"
+#             headers_secret = forge.ObservabilitySecretRef {name = "otlp", key = "OTLP_HEADERS"}
+#         }
+#
+#     then `forge secret set --env {{.EnvName}} OTLP_HEADERS` with
+#     {"authorization": "<key>"} on stdin.
+#
+# NO DOCKER (a cloud sandbox, a CI container)? These services are declared
+# `optional = True`, so `forge env up` skips them with one warning and brings up
+# everything else (Postgres and the IdP run as host processes). Drop `optional`
+# from a service to make it required: the run then fails, naming Docker.
+#
+# TO TURN IT OFF set `_observability = False`: no container starts and no
+# endpoint is exported, so processes run exactly as they did before
+# observability. The runtime still propagates trace context; it just has
+# nowhere to send spans.
+#
+# Everything the declaration controls (signals, sampling, retention) is on
+# `forge.Observability` below; see the `observability` skill.
+_observability = True
+_destination = None
+
+# The ports compose publishes on loopback and host processes export to.
+# resolve_port steps off a busy preferred port, so two worktrees never fight
+# over 4318. The declaration below reads them back, so the exported endpoint
+# cannot drift from the published port.
+_otlp_http_port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-otlp-http", 4318) if _observability else 0
+_otlp_grpc_port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-otlp-grpc", 4317) if _observability else 0
+_hyperdx_port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-hyperdx", 8180) if _observability and not _destination else 0
+# Continuous profiles go to their own collector (docker-compose.yml
+# `otel-profiles`), which writes into ClickStack's ClickHouse, so it runs only
+# beside ClickStack.
+_profiles_otlp_port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-otlp-profiles", 4328) if _observability and not _destination else 0
+# Alerts fire HERE too: the `alerts` workload below evaluates the env's
+# forge.Alerts against the local ClickStack and posts what fires to
+# docker-compose.yml's `alertmanager`, configured by the control plane's own
+# renderer. Its in-app receiver (the default route) lands in
+# .forge/logs/{{.EnvName}}/alerts.log; declare more in
+# `forge.Alerts.receivers` (a webhook, Slack, an Autopilot automation).
+_alertmanager_port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-alertmanager", 9093) if _observability and not _destination else 0
+_alerts_port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-alerts", 9095) if _observability and not _destination else 0
+
+_observability_decl = forge.Observability {
+    local_port = _otlp_http_port
+    alertmanager_port = _alertmanager_port
+    alerts_port = _alerts_port
+    # Where host processes push profiles. With the local ClickStack, profiles
+    # are ON by default (`signals.profiles` unset); set
+    # `signals = forge.ObservabilitySignals {profiles = False}` to turn them off.
+    profiles_port = _profiles_otlp_port
+    destination = _destination
+    # Retention hints (days), e.g. `retention = forge.ObservabilityRetention {logs_days = 7}`,
+    # become ClickStack's table TTL below. Sampling and signals live here too.
+} if _observability else None
+_ttl = forge.observability_ttl(_observability_decl) if _observability_decl else ""
+
+# ── OBJECT STORAGE — OFF UNTIL THE APP STORES FILES ─────────────────────────
+# Buckets the app uploads to and serves from (forge.Bucket), reached through
+# forge/pkg/blobstore, which speaks the S3 API. Here they live on MinIO,
+# docker-compose.yml's `minio`: `forge env up` starts it, creates every
+# bucket below, and hands each workload that references one the endpoint,
+# bucket and dev credentials. Turn it on and declare the buckets:
+#
+#     _object_storage = True
+#     _buckets = [forge.Bucket {name = "uploads", runtime = _minio}]
+#
+# then give a workload the connection in deploy/kcl/workloads.k:
+#
+#     env = forge.bucket_env("UPLOADS", "uploads")
+#
+# Every env a workload runs in must declare the buckets it references
+# (staging and prod on forge.BucketOnS3). `forge skill load storage/blobstore`
+# walks through it, from the declaration to an upload from the browser.
+_object_storage = False
+_minio = forge.BucketOnMinIO {
+    port = plugin.resolve_port("{{.ProjectName}}-{{.EnvName}}-minio", 9000)
+} if _object_storage else None
+_buckets: [forge.Bucket] = []
+
+# ---------------------------------------------------------------------------
+# Each workload's env here.
+# ---------------------------------------------------------------------------
+# The kinds that run as a long-lived process (and so bind a port).
+_LONG_RUNNING = ["service", "worker", "operator"]
+
+# The env every workload sees here, layered LAST-wins (a map, so a later
+# layer replaces an earlier one by name):
+#
+#   1. the typed per-env config (config.k), projecting a credential only
+#      into the workloads that list it in `config_secrets`;
+#   2. the workload's own declared env;
+#   3. this machine's facts. DATABASE_URL is composed from the port above
+#      and overrides the secret reference: a DSN seeded into the secret
+#      store at scaffold time names whatever port was free THEN, and a stale
+#      port is exactly what connects an app to another project's database.
+#
+# OTEL_SERVICE_NAME is not set here: forge.render gives every workload its
+# own name unless its env sets one.
+_env = lambda w: fw.Workload -> {str:} {
+    _machine = {
+{{if not .DatabaseDisabled}}        DATABASE_URL = _database_url{{end}}
+    }
+    _port = {
+        PORT = str(_port_of(w.name))
+        PPROF_ADDR = "127.0.0.1:${_pprof_port_of(w.name)}"
+    } if w.kind in _LONG_RUNNING else {}
+{{- if .HasFrontend}}
+    # The session cookie /auth/login sets only survives a cross-origin call
+    # when the browser is told credentials are allowed. In dev the API and the
+    # frontend are on different ports, so without this sign-in "does nothing".
+    _sign_in = {CORS_ALLOW_CREDENTIALS = "true"} if w.kind == "service" else {}
+    {{if .Roots}}config_gen.workloadEnvMap(appcfg.app_config, w){{else}}config_gen.appConfigEnvMap(appcfg.app_config, w.config_secrets){{end}} | w.env | _machine | _port | _sign_in
+{{- else}}
+    {{if .Roots}}config_gen.workloadEnvMap(appcfg.app_config, w){{else}}config_gen.appConfigEnvMap(appcfg.app_config, w.config_secrets){{end}} | w.env | _machine | _port
+{{- end}}
+}
+
+# The local k3d cluster (deploy/k3d.yaml, created by `forge cluster up`).
+# It runs what a host process cannot be — an operator watches the
+# Kubernetes API, a cron is scheduled by it — and this env's ingress Gateway.
+_k3d = forge.ClusterTarget {
+    cluster = "k3d-{{.ProjectName}}"
+    namespace = "{{.ProjectName}}-{{.EnvName}}"
+}
+
+# The image a pod in this env runs, on the k3d registry deploy/k3d.yaml
+# creates — `forge env up {{.EnvName}}` pushes here, and a k3d node can only
+# pull from a host-local registry. A workload declares its real image in
+# deploy/kcl/workloads.k; this env says what IT runs instead, and the
+# `_on_k3d` binder below sets it.
+#
+# It is an ordinary KCL string and an ordinary variable. forge has no helper
+# for composing it and prescribes no pattern: one constant here because every
+# workload this env puts on the cluster runs the same project image. A
+# workload that needs its own says so on its binding line:
+#
+#     _on_k3d(_api) | {image = "localhost:5050/something-else"}
+_LOCAL_IMAGE = "localhost:5050/{{.ProjectName}}"
+
+# ---------------------------------------------------------------------------
+# THE BINDINGS: where each workload runs in this env.
+# ---------------------------------------------------------------------------
+# There is no env-wide runtime. Every workload below states its own, through
+# one of these binders (each also applies this env's env vars). Rebinding a
+# workload is editing its one line:
+#
+#     _on_k3d(_api)       # run it as a pod in the local cluster instead
+#
+# A pod reaches the host processes through the target's `host_gateway`
+# (host.k3d.internal) when a workload names them with forge.WorkloadURL.
+
+# A long-running host process, on its own port (`listen_ports`, so the
+# pre-flight names a collision before anything starts).
+#
+# The binary's `server` — the API — runs under air: it rebuilds and restarts
+# the server when a .go file changes (HOT RELOAD). .air.toml's `entrypoint`
+# is that same `server` command, so air and this declaration cannot run
+# different things; `forge doctor` checks air is installed (`go install
+# github.com/air-verse/air@latest`). Anything else bound here — a worker or
+# service split out of `server` — runs `go run ./cmd/{{.ProjectName}} <args>`,
+# since air would run `server` for it, not its args.
+_on_host = lambda w: fw.Workload -> fw.Workload {
+    w | {env = _env(w), runtime = forge.OnHost {runner = "air" if w.args == ["server"] else "go-run", listen_ports = [_port_of(w.name)]}}
+}
+# A host job: run to completion, before whatever it gates.
+_on_host_job = lambda w: fw.Workload -> fw.Workload {
+    w | {env = _env(w), runtime = forge.OnHost {runner = "go-run"}}
+}
+# A pod in the local k3d cluster, from the image `forge build {{.EnvName}}`
+# pushes to the local registry.
+_on_k3d = lambda w: fw.Workload -> fw.Workload {
+    w | {
+        env = _env(w)
+        image = _LOCAL_IMAGE
+        runtime = forge.OnCluster {target = _k3d}
+    }
+}
+# Built, never run.
+_build_only = lambda w: fw.Workload -> fw.Workload {
+    w | {runtime = forge.BuildOnly {}}
+}
+
+# THE API, as ONE process: the binary's `server` command, which mounts every
+# service on one Connect mux and supervises every worker beside it — the same
+# workload staging and prod host.
+#
+# The frontend reaches the API at one origin: its Connect transport has one
+# base URL (a call is `/<package>.<Service>/<Method>`, so one origin serves
+# every service), and config.k resolves it at the
+# `{{.ProjectName}}-{{.EnvName}}-api` port, which `_port_of` gives `_api`.
+# A process per service would leave the frontend reaching one of them.
+#
+{{- if .Roots}}
+# `server` runs every service and worker, so `forge scaffold service|worker`
+# declares no workload and adds no line below for one, and `forge env up
+# {{.EnvName}} --target api` restarts the whole API. The binary has no
+# command per service: running one on its own — to debug it alone, say — is
+# a root of its own (a `//forge:root` struct in internal/app, then a
+# workload bound with `config_gen.root_of("<root>")`, see workloads.k).
+{{- else}}
+# workloads.k still declares each service and worker; here `server` runs
+# them, so `forge scaffold service|worker` adds no line below for one, and
+# `forge env up {{.EnvName}} --target api` restarts the whole API. Running one
+# on its own — to debug it alone, say — is its own line, `_on_host(wl.<name>)`,
+# and taking it out of `server`'s mount or worker list
+# (cmd/{{.ProjectName}}/cmd/server.go), or it runs twice.
+{{- end}}
+{{.APIWorkload}}
+
+# Every workload this env runs, one binding each. `forge scaffold` appends
+# a line here when it adds a workload; drop a line to not run it here.
+_workloads = [
+{{.Bindings}}
+]
+
+# The local collector, when `_observability` (above) is on: compose owns the
+# container, and this hands it the ports to publish. ClickStack stores what it
+# receives; with a destination the forwarder sends it on instead.
+_telemetry_workloads = ([fw.Workload {
+    name = "otel-forwarder"
+    runtime = forge.OnCompose {
+        service = "otel-forwarder"
+        optional = True
+        env = {
+            "OTEL_FORWARDER_HTTP_PORT" = str(_otlp_http_port)
+            "OTEL_FORWARDER_GRPC_PORT" = str(_otlp_grpc_port)
+        }
+    }
+}] if _destination else [fw.Workload {
+    name = "clickstack"
+    runtime = forge.OnCompose {
+        service = "clickstack"
+        optional = True
+        env = {
+            "CLICKSTACK_UI_PORT" = str(_hyperdx_port)
+            "CLICKSTACK_OTLP_HTTP_PORT" = str(_otlp_http_port)
+            "CLICKSTACK_OTLP_GRPC_PORT" = str(_otlp_grpc_port)
+        } | ({"CLICKSTACK_TABLES_TTL" = _ttl} if _ttl else {})
+    }
+}, fw.Workload {
+    # Continuous profiles: a contrib collector (feature gate on) that writes to
+    # the ClickHouse inside clickstack. Hosts push to CLICKSTACK_PROFILES_OTLP_PORT.
+    name = "otel-profiles"
+    runtime = forge.OnCompose {
+        service = "otel-profiles"
+        optional = True
+        env = {"CLICKSTACK_PROFILES_OTLP_PORT" = str(_profiles_otlp_port)}
+    }
+}, fw.Workload {
+    # Local alert delivery (see `_alertmanager_port` above).
+    name = "alertmanager"
+    runtime = forge.OnCompose {
+        service = "alertmanager"
+        optional = True
+        env = {"ALERTMANAGER_PORT" = str(_alertmanager_port)}
+    }
+}, fw.Workload {
+    # The evaluator: `forge` here is the forge running `forge env up`, never
+    # one from PATH. It listens on all interfaces because the Alertmanager
+    # container delivers to it through the docker bridge; a bearer token
+    # forge generates guards it. Drop this and `alertmanager` to stop local
+    # alerting (`forge obs alerts check` still evaluates once).
+    name = "alerts"
+    kind = "worker"
+    requires = ["clickstack", "alertmanager"]
+    command = ["forge", "obs", "alerts", "run", "--env", "{{.EnvName}}",
+        "--alertmanager", "http://127.0.0.1:${_alertmanager_port}", "--listen", "0.0.0.0:${_alerts_port}"]
+    runtime = forge.OnHost {listen_ports = [_alerts_port]}
+}]) if _observability else []
+
+{{if .HasFrontend}}_{{.FrontendIdent}}_frontend = forge.Frontend {
+    name = "{{.FrontendName}}"
+    path = "frontends/{{.FrontendName}}"
+{{if .FrontendRoutes}}    routes = [{{range .FrontendRoutes}}{{printf "%q" .}}, {{end}}]
+{{end}}    port = _frontend_port
+}
+_on_host_frontend = lambda f: forge.Frontend -> forge.Frontend {
+    f | {runtime = forge.OnHost {}}
+}
+{{end}}
+_bundle = forge.Bundle {
+    project = "{{.ProjectName}}"
+    # WHO APPLIES this env: forge, directly. This is YOUR machine's cluster
+    # (`k3d-{{.ProjectName}}`, created by `forge cluster up`), so the inner
+    # loop applies straight to it.
+    #
+    # A REAL environment declares NOTHING here. It is reconciled from a
+    # bundle instead (`forge env build` → Flux), which is why the field is
+    # optional and why unset means "a real env": an environment whose author
+    # forgot to declare it is treated as production, not as scratch. The
+    # other value is "ephemeral", for a throwaway per-run CI cluster.
+    #
+    # forge checks the claim rather than trusting it: a declared lifecycle
+    # may only target clusters forge creates, so a cloud env cannot keep
+    # direct apply by adding this line.
+    lifecycle = "local"
+    # Where the env's support objects (Namespace, gateways, routes) land.
+    cluster_target = _k3d
+    workloads = _workloads + _telemetry_workloads + ([forge.minio_workload(_minio, _buckets)] if _object_storage else [])
+    # The object-storage buckets declared above, on this env's MinIO.
+    buckets = _buckets
+    observability = _observability_decl
+    # ── THIS ENVIRONMENT'S INFRASTRUCTURE ─────────────────────────────────
+    #
+    # The servers the app DIALS but does not build, as HOST PROCESSES: forge
+    # fetches a pinned, checksummed binary once, caches it, supervises it,
+    # and reports it up only once it accepts connections. A REAL postgres
+    # (the one forge introspects your migrations with), with its data dir
+    # (.forge/hostinfra/postgres) persisting across runs.
+    #
+    # WANT CONTAINERS INSTEAD? docker-compose.yml still defines them; drop
+    # the entry here and add a compose-bound workload:
+    #
+    #     fw.Workload {name = "postgres", runtime = forge.OnCompose {service = "postgres"}}
+    infra = [
+{{if not .DatabaseDisabled}}        forge.HostInfra {
+            name = "postgres"
+            port = _postgres_port
+            database = "{{.ProjectName}}"
+        }{{end}}
+{{- if .HasFrontend}}
+        # The dev identity provider — a single static binary, supervised the
+        # same way. `idp-steps.yaml` is its declarative bootstrap; its state
+        # lives in its OWN database on the postgres above.
+        #
+        # NO SIGN-IN LOOP AT ALL? Drop this entry and `identity` below; the
+        # frontend then runs against its mock auth provider.
+        forge.HostInfra {
+            name = "idp"
+            engine = "zitadel"
+            port = _idp_port
+            idp_database_port = _postgres_port
+        }
+        # The dev mail catcher: the IdP's invitations, verification codes,
+        # password resets and magic links land here instead of in an inbox.
+        # Open the web UI `forge env up` prints (port + 7000).
+        forge.HostInfra {
+            name = "mail"
+            engine = "mailpit"
+            port = _mail_port
+        }
+{{- end}}
+    ]
+{{- if .HasFrontend}}
+    # The frontend's dev server (forge.OnHost — the same runtime a workload
+    # binds), with its port declared above so everything that must agree on
+    # it reads one variable.
+    frontends = [
+        _on_host_frontend(_{{.FrontendIdent}}_frontend)
+    ]
+{{- end}}
+{{- if .HasFrontend}}
+    # THE USERS, declared once in deploy/kcl/identity.k and run here on the dev
+    # IdP above. `forge env up` converges them with the same library the
+    # control plane runs for a hosted env, and fills the API's issuer,
+    # audience, client id, redirect and login URIs, IdP base and broker token
+    # from the result (forge.IdentityRef): nothing is copied by hand.
+    identity = idn.IDENTITY | {runtime = forge.IdentityOnHost {infra = "idp"}}
+{{- end}}
+    # SECRET VALUES for this env — `_secret_store`, declared above.
+    secret_provider = _secret_store
+{{- if .IngressEnabled}}
+    gateways = ing.GATEWAYS
+    http_routes = ing.HTTP_ROUTES
+    grpc_routes = ing.GRPC_ROUTES
+{{- end}}
+}
+
+output = forge.render(_bundle)

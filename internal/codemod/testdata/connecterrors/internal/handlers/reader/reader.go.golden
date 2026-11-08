@@ -1,0 +1,17 @@
+// Package reader is a handler package that reads a *connect.Error in
+// process (IsMissing). A bare svcerr kind would read as unknown there, so
+// every rewrite in this package stays a *connect.Error.
+package reader
+
+import (
+	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+)
+
+// Lookup fails the way a by-key get does.
+func Lookup() error {
+	return svcerr.ToConnect(svcerr.NotFound("row"))
+}
+
+// IsMissing is the in-process reader.
+func IsMissing(err error) bool { return connect.CodeOf(err) == connect.CodeNotFound }

@@ -1,0 +1,8 @@
+go {{.GoVersion}}
+
+use (
+	.
+{{- if .GenModule}}
+	gen
+{{- end}}
+)
