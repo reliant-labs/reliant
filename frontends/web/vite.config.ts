@@ -1,7 +1,6 @@
 import { defineConfig, type Plugin, type ViteUserConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { forgeRuntimeConfig } from "@reliantlabs/forge-web-runtime/vite";
-import fs from "node:fs";
 import os from "node:os";
 import path from "path";
 import { browserLogSink } from "./vite-plugin-browser-logs";
@@ -10,6 +9,7 @@ import { cspPlugin } from "./vite-plugin-csp";
 import { speedscopeStatic } from "./vite-plugin-speedscope";
 import { preloadGeistLatin } from "./vite-plugin-preload-fonts";
 import { securityTxt } from "./vite-plugin-security-txt";
+import { otelProxy } from "./vite-plugin-otel-proxy";
 import { demoBundleGuard, demoSubstitutes } from "./vite-plugin-demo-bundle";
 
 // Get worktree name from the checkout root
@@ -76,6 +76,8 @@ const asyncUtilTimeout = intEnv("VITEST_ASYNC_UTIL_TIMEOUT_MS") ?? Math.round(te
 const FORKS_POOL_FILES = [
   // Vite/esbuild requires TextEncoder and Uint8Array to share a real realm.
   "vite-demo-target.test.ts",
+  // A real node:http server and Buffers, which need the real realm too.
+  "vite-plugin-otel-proxy.test.ts",
   "src/__tests__/staleChunkUnloadLoop.test.tsx",
   "src/api/__tests__/transport.errorReporting.test.ts",
   "src/api/__tests__/transport.test.ts",
@@ -116,71 +118,29 @@ const TEST_EXCLUDE = [
   "**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*",
 ];
 
-// ── Browser telemetry proxy (DEV ONLY) ──────────────────────────────────
+// ── Browser telemetry (DEV ONLY) ────────────────────────────────────────
 //
-// The page sends OTLP/HTTP to `/_otel/v1/{traces,logs}` on its own origin
-// (OTEL_ENDPOINT in config.js, lib/telemetry.ts) and holds no collector
-// address and no secret. The dev server forwards it to the base URL `forge env
-// up` gives it in OTEL_EXPORTER_OTLP_ENDPOINT, `/_otel` stripped.
-//
-// A HOSTED dev stack (observability.dev_telemetry, deploy/kcl/dev/main.k):
-// the endpoint is the org's hosted edge and FORGE_OTEL_HEADERS_FILE names the
-// file holding this stack's browser token, which forge renews in place. The
-// proxy reads it on EVERY request and attaches what it holds
-// (`authorization=Bearer …`) server-side, so the token never reaches the
-// bundle; the page's cookies and any authorization header it sent are never
-// forwarded, even when the file is missing. (forge's vite-spa template block,
-// as the observability/destination skill asks.)
-//
-// Unlike the template, there is no 127.0.0.1:4318 default: reliant's own dev
-// stack runs no local collector, so a guessed port is at best nothing and at
-// worst another stack's ClickStack.
+// otelProxy (vite-plugin-otel-proxy.ts) owns `/_otel`: it forwards a POST to
+// /_otel/v1/{traces,logs,metrics} to OTEL_EXPORTER_OTLP_ENDPOINT, the base
+// URL `forge env up` gives this dev server, with the stack's browser token
+// from FORGE_OTEL_HEADERS_FILE (a HOSTED dev stack: observability.dev_telemetry,
+// deploy/kcl/dev/main.k), and refuses everything else. With no upstream it
+// answers an accepted request 204.
 //
 // WHETHER THE PAGE SENDS AT ALL is the dev server's decision too, because the
 // page reads OTEL_ENDPOINT only from config.js (config_gen.ts), never from
 // VITE_* build variables. When `forge env up` decides this stack's telemetry
 // is local and there is no local store, it gives the dev server
-// VITE_OTEL_ENDPOINT=off (forge#1950). otelDev applies the dev server's
-// endpoint to window.__FORGE_CONFIG__ right after config.js runs:
+// VITE_OTEL_ENDPOINT=off (forge#1950). otelBrowserConfig applies the dev
+// server's endpoint to window.__FORGE_CONFIG__ right after config.js runs:
 // VITE_OTEL_ENDPOINT when it is set ("off" included), otherwise "off" when
 // there is no upstream to forward to, otherwise config.js's own value. So a
-// page on a local fallback starts no exporter. Anything that still reaches
-// /_otel with no upstream (a tab opened before the stack was decided) gets a
-// 204 rather than a failed export every few seconds.
+// page on a local fallback starts no exporter.
 const OTEL_UPSTREAM = (process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "").trim().replace(/\/+$/, "");
 const DEV_BROWSER_OTEL_ENDPOINT = (process.env.VITE_OTEL_ENDPOINT ?? "").trim() || (OTEL_UPSTREAM ? "" : "off");
-const OTEL_HEADERS_FILE = process.env.FORGE_OTEL_HEADERS_FILE ?? "";
-const readOtelHeaders = (): Array<[string, string]> => {
-  let text = "";
-  try {
-    text = fs.readFileSync(OTEL_HEADERS_FILE, "utf8");
-  } catch {
-    return []; // not written yet, or removed: send nothing extra
-  }
-  const out: Array<[string, string]> = [];
-  for (const pair of text.split(/[\n,]/)) {
-    const i = pair.indexOf("=");
-    if (i <= 0) continue;
-    let value = pair.slice(i + 1).trim();
-    try {
-      value = decodeURIComponent(value);
-    } catch {
-      // Not percent-encoded: use it as written.
-    }
-    out.push([pair.slice(0, i).trim(), value]);
-  }
-  return out;
-};
-const otelDev = (): Plugin => ({
-  name: "reliant-otel-dev",
+const otelBrowserConfig = (): Plugin => ({
+  name: "reliant-otel-browser-config",
   apply: "serve",
-  configureServer(server) {
-    if (OTEL_UPSTREAM) return;
-    server.middlewares.use("/_otel", (_req, res) => {
-      res.statusCode = 204;
-      res.end();
-    });
-  },
   // Injected at the end of <head>, after the blocking config.js script and
   // before the deferred module bundle reads the config.
   transformIndexHtml() {
@@ -221,10 +181,9 @@ const appConfig: ViteUserConfig = {
   // Latin file; see vite-plugin-preload-fonts.ts.
   // securityTxt (build-only) emits dist/.well-known/security.txt naming the
   // security and abuse contacts; see vite-plugin-security-txt.ts.
-  // otelDev (dev-only) applies the dev server's browser telemetry decision to
-  // config.js and answers /_otel when there is nowhere to forward it; see the
-  // browser telemetry proxy above.
-  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), otelDev(), preloadGeistLatin(), securityTxt()],
+  // otelProxy and otelBrowserConfig (dev-only) are browser telemetry; see
+  // "Browser telemetry" above.
+  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), otelProxy({ upstream: OTEL_UPSTREAM, headersFile: process.env.FORGE_OTEL_HEADERS_FILE ?? "" }), otelBrowserConfig(), preloadGeistLatin(), securityTxt()],
   // Load .env files from the checkout root instead of frontends/web
   envDir: path.resolve(__dirname, "../.."),
   // Define global constants available in the app
@@ -420,27 +379,6 @@ const appConfig: ViteUserConfig = {
         changeOrigin: true,
         ws: true,
       },
-      // Browser telemetry; see the browser telemetry proxy above. Without an
-      // upstream, otelDev answers /_otel instead.
-      ...(OTEL_UPSTREAM
-        ? {
-            "/_otel": {
-              target: OTEL_UPSTREAM,
-              changeOrigin: true,
-              rewrite: (p: string) => p.replace(/^\/_otel/, ""),
-              configure: (proxy) => {
-                proxy.on("proxyReq", (proxyReq) => {
-                  // Only forge's token reaches the edge: never the page's
-                  // cookies, nor an authorization header the page sent.
-                  proxyReq.removeHeader("cookie");
-                  proxyReq.removeHeader("authorization");
-                  if (!OTEL_HEADERS_FILE) return;
-                  for (const [name, value] of readOtelHeaders()) proxyReq.setHeader(name, value);
-                });
-              },
-            },
-          }
-        : {}),
     },
   },
   test: {
