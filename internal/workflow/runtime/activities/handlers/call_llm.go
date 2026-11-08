@@ -616,6 +616,78 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 	}
 }
 
+// resumeContinueText is the hidden user message that continues a cut-off
+// turn on resume. It is LLM-only (DISPLAY_STYLE_HIDDEN): the transcript the
+// user sees is unchanged.
+const resumeContinueText = "Your previous turn was cut off before it finished, and the run has now resumed. " +
+	"Continue where you left off."
+
+// endsWithCutOffAssistantTurn reports whether history, past any trailing
+// system framing, ends with an assistant message that requested no tools:
+// on a resumed loop's first turn, the turn that was cut off (reasoning only,
+// or a partial reply). One with tool calls is not: the orphan repair already
+// gave its calls results, and the provider can be called as it is.
+func endsWithCutOffAssistantTurn(history []message.Message) bool {
+	tail := len(history) - 1
+	for tail >= 0 && history[tail].Role == message.System {
+		tail--
+	}
+	return tail >= 0 && history[tail].Role == message.Assistant && len(history[tail].ToolCalls()) == 0
+}
+
+// resumeCutOffTurn saves the hidden "continue" user message for a resumed
+// loop whose history ends with its cut-off turn, and returns it for this
+// request.
+//
+// Why: an agent stopped on a failure (a usage limit, a spent provider) whose
+// last saved turn was cut off is resumed with no new input by a capacity wake.
+// Its first turn found history ending with the assistant and yielded, so the
+// resumed agent did no work and "failed again" with the report its parent
+// already had (reliant #2394: sub-agent ae9723c5, a thinking-only turn).
+//
+// Saved, not only sent, so the conversation stays well-formed for the turns
+// after this one. Keyed on the turn's position (MessageIdempotencyKey), so a
+// retry of this activity finds the row it already wrote. A failed save is
+// logged and the message still goes on this request: the turn proceeding
+// matters more than the row.
+func (a *CallLLMActivity) resumeCutOffTurn(ctx context.Context, rtx RuntimeContext, chatID, thread string) message.Message {
+	continued := message.Message{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: resumeContinueText}},
+	}
+	key := rtx.MessageIdempotencyKey
+	if key == "" && activity.IsActivity(ctx) {
+		info := activity.GetInfo(ctx)
+		key = info.WorkflowExecution.ID + "-" + info.ActivityID
+	}
+	key += "|resume-continue"
+	var workflowID *string
+	if rtx.WorkflowID != "" {
+		workflowID = &rtx.WorkflowID
+	}
+	saved, err := threads.NewService(a.repo).SaveMessage(ctx, threads.SaveMessageOpts{
+		ChatID:       chatID,
+		Thread:       thread,
+		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_USER),
+		Content:      resumeContinueText,
+		WorkflowID:   workflowID,
+		StepID:       rtx.StepID,
+		ActivityID:   &key,
+		DisplayStyle: int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN),
+	})
+	if err != nil {
+		logging.WarnContext(ctx, "[CallLLM] Could not save the hidden continue message of a resumed turn; sending it anyway",
+			"chatID", chatID, "thread", thread, "error", err)
+		return continued
+	}
+	if saved != nil {
+		continued.ID = saved.MessageID
+	}
+	logging.InfoContext(ctx, "[CallLLM] Resumed loop's history ends with its cut-off turn; continuing it with a hidden message",
+		"chatID", chatID, "thread", thread)
+	return continued
+}
+
 // interruptedTurnWriteTimeout bounds the detached write of an interrupted
 // turn's partial. Short: one insert on a live pool, with the caller unwinding.
 const interruptedTurnWriteTimeout = 5 * time.Second
@@ -1628,6 +1700,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 		activity.GetLogger(ctx).Debug("[CallLLM] Appended injected messages",
 			"count", len(args.GetMessages()))
+	}
+
+	// A loop resumed mid-work with nothing new to read: continue its cut-off
+	// turn rather than yield it as the agent's last word (resumeCutOffTurn).
+	if rtx.ResumeTurn && !model.CelBoolValue(args.GetContinueTurn()) && endsWithCutOffAssistantTurn(history) {
+		history = append(history, a.resumeCutOffTurn(ctx, rtx, chat.ID, thread))
 	}
 
 	if err := validateToolNamesForLLMRequest(availableTools); err != nil {
