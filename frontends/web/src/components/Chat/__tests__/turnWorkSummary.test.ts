@@ -3,7 +3,7 @@ import { ToolCallStatus } from "../../../gen/reliant/v1/chat_pb";
 import {
   formatTurnWorkHeadline,
   formatTurnWorkElapsed,
-  formatTurnWorkDetails,
+  formatTurnWorkCounts,
   summarizeTurnWork,
   type TurnWorkExecution,
 } from "../turnWorkSummary";
@@ -126,14 +126,14 @@ describe("formatTurnWorkHeadline", () => {
     expect(formatTurnWorkHeadline(base, { live: true })).toBe("Thinking");
   });
 
-  it("done: duration and distinct nouns, zero counts omitted", () => {
+  it("done: plain Activity, counts noun-first with zeros omitted", () => {
     const s = summarizeTurnWork([
       ...Array.from({ length: 6 }, () => exec("view")),
       ...Array.from({ length: 3 }, () => exec("shell")),
       ...Array.from({ length: 3 }, () => exec("edit")),
     ]);
     expect(formatTurnWorkHeadline(s, { live: false, elapsedMs: 72_000 })).toBe("Activity");
-    expect(formatTurnWorkDetails(s)).toBe("read 6 files · ran 3 commands · edited 3 files");
+    expect(formatTurnWorkCounts(s)).toBe("6 files read · 3 commands · 3 files edited");
   });
 
   it("pluralizes each noun", () => {
@@ -141,16 +141,18 @@ describe("formatTurnWorkHeadline", () => {
       exec("view"), exec("grep"), exec("websearch"), exec("shell"),
       exec("edit"), exec("update_plan"), exec("spawn"), exec("mcp__x__y"),
     ]);
-    expect(formatTurnWorkDetails(one)).toBe(
-      "read 1 file · 1 search · 1 web lookup · ran 1 command · edited 1 file · 1 plan update · 1 sub-agent action · used 1 tool",
+    expect(formatTurnWorkCounts(one, { messages: 1 })).toBe(
+      "1 file read · 1 search · 1 web lookup · 1 command · 1 file edited · 1 plan update · 1 sub-agent action · 1 other tool · 1 agent message",
     );
     const many = summarizeTurnWork([
       exec("grep"), exec("grep"), exec("websearch"), exec("fetch"),
       exec("mcp__x__y"), exec("mcp__x__z"), exec("spawn"), exec("spawn"),
     ]);
-    expect(formatTurnWorkDetails(many)).toBe(
-      "2 searches · 2 web lookups · 2 sub-agent actions · used 2 tools",
+    expect(formatTurnWorkCounts(many, { messages: 4 })).toBe(
+      "2 searches · 2 web lookups · 2 sub-agent actions · 2 other tools · 4 agent messages",
     );
+    expect(formatTurnWorkCounts(base, { messages: 2 })).toBe("2 agent messages");
+    expect(formatTurnWorkCounts(base)).toBe("");
   });
 
   it.each([

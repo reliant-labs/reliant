@@ -1,6 +1,6 @@
 /**
  * `slice` cuts an assistant message into the rows of the simplified thread:
- * the answer, the folded work, and what the fold must keep visible.
+ * its prose, the folded work, and what the fold must keep visible.
  */
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -64,6 +64,13 @@ vi.mock("../../../store/chatStoreHooks", () => ({
       is_error: false,
       attachments: [
         { id: "att-1", filename: "a.png", size: BigInt(1), mimeType: "image/png", url: "/a" },
+      ],
+    },
+    "call-shot": {
+      content: "Screenshot taken.",
+      is_error: false,
+      attachments: [
+        { id: "att-2", filename: "shot.png", size: BigInt(1), mimeType: "image/png", url: "/s" },
       ],
     },
   }),
@@ -137,9 +144,10 @@ const turn = () =>
     text(4, "All done."),
   ]);
 
-const slice = (role: MessageSlice["role"], segmentIndexes: number[]): MessageSlice => ({
+const slice = (role: MessageSlice["role"], segmentIndexes: number[], chrome?: boolean): MessageSlice => ({
   role,
   segmentIndexes,
+  ...(chrome ? { chrome } : {}),
 });
 
 const pendingApproval = (blockId: string): Approval =>
@@ -164,8 +172,8 @@ describe("ChatMessage slice", () => {
     expect(screen.getByTestId("message-msg-1")).toBeInTheDocument();
   });
 
-  it("answer renders only the listed text, with the message chrome and no tool rows or cards", () => {
-    render(<ChatMessage message={turn()} chatId="chat-1" slice={slice("answer", [4])} />);
+  it("prose renders only the listed text, with the message chrome and no tool rows or cards", () => {
+    render(<ChatMessage message={turn()} chatId="chat-1" slice={slice("prose", [4], true)} />);
 
     expect(texts()).toEqual(["All done."]);
     expect(screen.queryByTestId("tool-card")).toBeNull();
@@ -174,42 +182,66 @@ describe("ChatMessage slice", () => {
     expect(screen.getByRole("button", { name: /copy message/i })).toBeInTheDocument();
   });
 
-  it("answer copies the answer text only", async () => {
-    render(<ChatMessage message={turn()} chatId="chat-1" slice={slice("answer", [4])} />);
+  it("prose copies the whole message's prose, never its tool work", async () => {
+    render(<ChatMessage message={turn()} chatId="chat-1" slice={slice("prose", [4], true)} />);
 
     fireEvent.click(screen.getByRole("button", { name: /copy message/i }));
 
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    expect(writeText).toHaveBeenCalledWith("All done.");
+    expect(writeText).toHaveBeenCalledWith("Looking into it.\n\nFound the cause.\n\nAll done.");
   });
 
-  it("answer keeps attachments", () => {
+  it("prose without the chrome is the text alone: no actions, timestamp or attachments", () => {
+    const message = assistant([text(0, "First."), tool(1, "bash", "call-bash"), text(2, "Second.")], {
+      attachments: [
+        create(AttachmentSchema, { id: "att-9", filename: "report.pdf", size: BigInt(10), mimeType: "application/pdf", url: "/r" }),
+      ],
+    });
+    render(<ChatMessage message={message} chatId="chat-1" slice={slice("prose", [0])} />);
+
+    expect(texts()).toEqual(["First."]);
+    expect(screen.queryByRole("button", { name: /copy message/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /branch from message/i })).toBeNull();
+    expect(document.querySelector("time")).toBeNull();
+    expect(screen.queryByText("report.pdf")).toBeNull();
+    expect(screen.getByTestId("message-msg-1-prose")).toBeInTheDocument();
+    expect(screen.queryByTestId("message-msg-1")).toBeNull();
+  });
+
+  it("prose with the chrome shows the timestamp and the branch action", () => {
+    render(<ChatMessage message={turn()} chatId="chat-1" slice={slice("prose", [4], true)} />);
+
+    expect(document.querySelector("time")).toHaveAttribute("dateTime", "2024-01-01T00:00:00.000Z");
+    expect(screen.getByRole("button", { name: /branch from message/i })).toBeInTheDocument();
+  });
+
+  it("prose keeps attachments on the chrome slice", () => {
     const message = assistant([text(0, "Here."), tool(1, "bash", "call-bash"), text(2, "File attached.")], {
       attachments: [
         create(AttachmentSchema, { id: "att-9", filename: "report.pdf", size: BigInt(10), mimeType: "application/pdf", url: "/r" }),
       ],
     });
-    render(<ChatMessage message={message} chatId="chat-1" slice={slice("answer", [2])} />);
+    render(<ChatMessage message={message} chatId="chat-1" slice={slice("prose", [2], true)} />);
 
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
   });
 
-  it("an answer with no segments still renders the message's attachments, and nothing else", () => {
+  it("a chrome slice with no segments still renders the message's attachments, and nothing else", () => {
     const message = assistant([text(0, "Working."), tool(1, "bash", "call-bash")], {
       attachments: [
         create(AttachmentSchema, { id: "att-9", filename: "report.pdf", size: BigInt(10), mimeType: "application/pdf", url: "/r" }),
       ],
     });
-    render(<ChatMessage message={message} chatId="chat-1" slice={slice("answer", [])} />);
+    render(<ChatMessage message={message} chatId="chat-1" slice={slice("prose", [], true)} />);
 
     expect(screen.getByText("report.pdf")).toBeInTheDocument();
     expect(texts()).toEqual([]);
     expect(screen.queryByTestId("tool-card")).toBeNull();
   });
 
-  it("an answer with no segments and no attachments renders nothing", () => {
+  it("a chrome slice with no segments and no attachments renders nothing", () => {
     const message = assistant([text(0, "Working."), tool(1, "bash", "call-bash")]);
-    const { container } = render(<ChatMessage message={message} chatId="chat-1" slice={slice("answer", [])} />);
+    const { container } = render(<ChatMessage message={message} chatId="chat-1" slice={slice("prose", [], true)} />);
 
     expect(container).toBeEmptyDOMElement();
   });
@@ -233,6 +265,16 @@ describe("ChatMessage slice", () => {
 
     expect(screen.getByTestId("tool-card")).toBeInTheDocument();
     expect(screen.queryByTestId("generated-images")).toBeNull();
+  });
+
+  it("work renders any other tool's media under its tool row", () => {
+    const message = assistant([tool(0, "take_screenshot", "call-shot")]);
+    render(<ChatMessage message={message} chatId="chat-1" slice={slice("work", [0])} />);
+
+    const order = Array.from(
+      document.querySelectorAll('[data-testid="tool-card"], [data-testid="generated-images"]'),
+    ).map((el) => el.getAttribute("data-testid"));
+    expect(order).toEqual(["tool-card", "generated-images"]);
   });
 
   it("work-surfaced renders only user cards, not narration or tool rows", () => {
@@ -285,6 +327,22 @@ describe("ChatMessage slice", () => {
     expect(screen.queryByTestId("tool-card")).toBeNull();
   });
 
+  it("work-surfaced leaves another tool's media in the fold", () => {
+    const message = assistant([text(0, "Looking."), tool(1, "take_screenshot", "call-shot")]);
+    const { container } = render(
+      <ChatMessage message={message} chatId="chat-1" slice={slice("work-surfaced", [0, 1])} />,
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("without a slice still renders every tool's media", () => {
+    const message = assistant([tool(0, "take_screenshot", "call-shot")]);
+    render(<ChatMessage message={message} chatId="chat-1" />);
+
+    expect(screen.getByTestId("generated-images")).toBeInTheDocument();
+  });
+
   it("work-surfaced surfaces what a deploy put live", () => {
     const deploy = { ...tool(1, "shell", "call-deploy"), input: JSON.stringify({ command: "reliant forge env deploy prod" }) };
     const message = assistant([text(0, "Shipping it."), deploy]);
@@ -313,13 +371,18 @@ describe("ChatMessage slice", () => {
 
   it("re-renders when the slice's indexes change even if the array identity is new", () => {
     const message = turn();
-    const { rerender } = render(<ChatMessage message={message} chatId="chat-1" slice={slice("answer", [4])} />);
+    const { rerender } = render(<ChatMessage message={message} chatId="chat-1" slice={slice("prose", [4])} />);
     expect(texts()).toEqual(["All done."]);
 
-    rerender(<ChatMessage message={message} chatId="chat-1" slice={slice("answer", [4])} />);
+    rerender(<ChatMessage message={message} chatId="chat-1" slice={slice("prose", [4])} />);
     expect(texts()).toEqual(["All done."]);
 
-    rerender(<ChatMessage message={message} chatId="chat-1" slice={slice("answer", [2, 4])} />);
+    rerender(<ChatMessage message={message} chatId="chat-1" slice={slice("prose", [2, 4])} />);
     expect(texts()).toEqual(["Found the cause.", "All done."]);
+
+    // Gaining the chrome (a later prose slice was cut off) re-renders too.
+    expect(screen.queryByRole("button", { name: /copy message/i })).toBeNull();
+    rerender(<ChatMessage message={message} chatId="chat-1" slice={slice("prose", [2, 4], true)} />);
+    expect(screen.getByRole("button", { name: /copy message/i })).toBeInTheDocument();
   });
 });

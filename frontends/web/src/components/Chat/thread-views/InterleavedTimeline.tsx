@@ -50,7 +50,6 @@ import { useChatThreadMode } from "./useChatThreadMode";
 import {
   buildSimplifiedTimeline,
   createSegmentReader,
-  isRoutineActivityMessage,
   type MessageSlice,
   type WorkItem,
 } from "./simplifiedTurns";
@@ -117,11 +116,13 @@ interface WorkflowDisplay {
 
 type TimelineItem =
   /**
-   * `slice` is set only in the simplified thread mode, on a turn's answer
-   * rows: the message renders just those segments (see simplifiedTurns.ts).
+   * `slice` is set only in the simplified thread mode, on the prose rows of a
+   * message that also did tool work: the message renders just those segments
+   * (see simplifiedTurns.ts). `key` names every such row but the message's
+   * first, since one message can then yield several rows.
    */
-  | { type: "message"; message: Message; workflow: WorkflowDisplay; slice?: MessageSlice }
-  /** Simplified thread mode only: one agent turn's folded work. */
+  | { type: "message"; message: Message; workflow: WorkflowDisplay; slice?: MessageSlice; key?: string }
+  /** Simplified thread mode only: one folded run of work. */
   | WorkItem<WorkflowDisplay>
   | { type: "thread-start"; workflow: WorkflowDisplay; parentName: string }
   | { type: "handoff"; toName: string; color: string; key: string }
@@ -151,7 +152,7 @@ type TimelineItem =
 function timelineItemKey(item: TimelineItem): string {
   switch (item.type) {
     case "message":
-      return item.message.id;
+      return item.key ?? item.message.id;
     case "work":
       return item.work.key;
     case "thread-start":
@@ -955,37 +956,26 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     return items;
   }, [messages, chatId, workflowExecution, selectedThreads, errorEvents, infoEvents, runOutputs, activeThreads, hasOlderMessages, simplified]);
 
-  // Simplified mode folds each agent turn's work into one row (see
+  // Simplified mode folds each run of non-text work into one row (see
   // simplifiedTurns.ts). The reader memoizes per message object, so the pass
   // stays a cheap linear walk on every streamed delta.
   const segmentReader = useMemo(() => createSegmentReader(), []);
   const timelineItems = useMemo((): TimelineItem[] => {
     if (!simplified) return detailedTimelineItems;
-    let lastMessageId: string | undefined;
-    for (let i = detailedTimelineItems.length - 1; i >= 0; i--) {
-      const item = detailedTimelineItems[i];
-      if (item.type === "message" && !isRoutineActivityMessage(item.message)) {
-        lastMessageId = item.message.id;
-        break;
-      }
-    }
     return buildSimplifiedTimeline(detailedTimelineItems, {
       segmentsOf: segmentReader,
-      isLiveTurn: (last) => isStreaming && last.id === lastMessageId,
       workflowOf: (item) => item.workflow,
     }) as TimelineItem[];
-  }, [simplified, detailedTimelineItems, segmentReader, isStreaming]);
+  }, [simplified, detailedTimelineItems, segmentReader]);
 
-  // The fold still being worked on: the last work row, when only its own
-  // answer rows follow it. Its header shows live status and an elapsed timer.
+  // The fold still being worked on: the last row, while streaming. Its own
+  // surfaced content renders inside it, so anything after it — the agent's
+  // prose included — means the run is over. Its header shows live status and
+  // an elapsed timer.
   const liveWorkIndex = useMemo(() => {
     if (!simplified || !isStreaming) return -1;
-    for (let i = timelineItems.length - 1; i >= 0; i--) {
-      const item = timelineItems[i];
-      if (item.type === "work") return i;
-      if (item.type !== "message" || item.slice?.role !== "answer") return -1;
-    }
-    return -1;
+    const last = timelineItems.length - 1;
+    return timelineItems[last]?.type === "work" ? last : -1;
   }, [simplified, isStreaming, timelineItems]);
 
   // `timelineItems` IS the list the virtualizer renders. There is deliberately
@@ -1235,27 +1225,34 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   // Jump to a specific message, e.g. from a chat-search hit. The target is
   // usually not rendered, so the jump is by index through the virtualizer.
-  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  // Keyed by row, not message: in the simplified thread one message can yield
+  // several rows, and only the one the jump landed on should ring.
+  const [highlightedRowKey, setHighlightedRowKey] = useState<string | null>(null);
 
   useEffect(() => {
     const handleScrollToMessage = (event: Event) => {
       const messageId = (event as CustomEvent<{ messageId?: string }>).detail?.messageId;
       if (!messageId) return;
-      // In the simplified thread a message's work lives inside its turn's
-      // fold, so a hit on that message lands on the fold.
-      const index = timelineItems.findIndex(
-        (item) =>
-          (item.type === "message" && item.message.id === messageId) ||
-          (item.type === "work" && (
-            item.work.parts.some((part) => part.message.id === messageId) ||
-            item.work.events?.some((event) => event.message.id === messageId)
-          )),
+      // In the simplified thread a message may be cut into prose rows and
+      // folded work. A hit lands on its first prose row (search matches
+      // text), or else on the fold that holds it.
+      let index = timelineItems.findIndex(
+        (item) => item.type === "message" && item.message.id === messageId,
       );
+      if (index === -1) {
+        index = timelineItems.findIndex(
+          (item) =>
+            item.type === "work" && (
+              item.work.parts.some((part) => part.message.id === messageId) ||
+              Boolean(item.work.events?.some((event) => event.message.id === messageId))
+            ),
+        );
+      }
       // Not in the loaded window — the message lives in a page we have not
       // fetched yet, so there is nothing to scroll to.
       if (index === -1) return;
       virtualizer.scrollToIndex(index, { align: "center", behavior: "auto" });
-      setHighlightedMessageId(messageId);
+      setHighlightedRowKey(timelineItemKey(timelineItems[index]));
       // Tell the requester to stop retrying; it cannot observe this otherwise.
       acknowledgeScrollToMessage(messageId);
     };
@@ -1266,10 +1263,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   // Clear the highlight once it has had time to register visually.
   useEffect(() => {
-    if (!highlightedMessageId) return;
-    const timer = setTimeout(() => setHighlightedMessageId(null), 2000);
+    if (!highlightedRowKey) return;
+    const timer = setTimeout(() => setHighlightedRowKey(null), 2000);
     return () => clearTimeout(timer);
-  }, [highlightedMessageId]);
+  }, [highlightedRowKey]);
 
   // "Focus the conversation" — hands the transcript keyboard focus so it can
   // be scrolled and read without the mouse.
@@ -1504,12 +1501,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   const renderRow = useCallback((index: number, item: TimelineItem) => {
     // After a search jump, briefly ring the target so the eye can find it —
     // landing mid-conversation with no cue makes the jump feel like it failed.
-    const isHighlighted =
-      highlightedMessageId !== null &&
-      item.type === "message" &&
-      item.message.id === highlightedMessageId;
-
     const rowKey = timelineItemKey(item);
+    const isHighlighted = highlightedRowKey !== null && rowKey === highlightedRowKey;
     const toolRowSpacing = getToolRowSpacing(timelineItems, index);
 
     return (
@@ -1542,7 +1535,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
               "rounded-lg ring-2 ring-primary/60 transition-shadow duration-500",
           )}
         >
-          {item.type === "message" && dateLabels.has(item.message.id) && (
+          {/* A message's later prose rows (keyed) never repeat its date. */}
+          {item.type === "message" && !item.key && dateLabels.has(item.message.id) && (
             <div className="flex items-center gap-3 py-3 text-xs text-muted-foreground">
               <span aria-hidden="true" className="h-px flex-1 bg-border" />
               <time dateTime={item.message.createdAt}>{dateLabels.get(item.message.id)}</time>
@@ -1553,7 +1547,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         </div>
       </div>
     );
-  }, [contentMaxWidthClass, dateLabels, highlightedMessageId, measureRow, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems]);
+  }, [contentMaxWidthClass, dateLabels, highlightedRowKey, measureRow, renderItem, timelineGapClass, timelineHorizontalPaddingClass, timelineItems]);
 
   if (timelineItems.length === 0) {
     return (

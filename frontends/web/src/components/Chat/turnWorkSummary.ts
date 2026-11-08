@@ -1,6 +1,6 @@
 /**
  * Action-first labels for a simplified-thread fold, with elapsed time and
- * expanded count details kept separate from the headline.
+ * the count suffix kept separate from the headline.
  *
  * Pure. Spawn status needs the child workflow tree (a hook), so the component
  * resolves it and hands it in as `spawnStatus`; everything else reads the
@@ -193,14 +193,14 @@ function plural(n: number, one: string, many: string): string {
 }
 
 const COUNT_PHRASES: ReadonlyArray<[TurnWorkCountKey, (n: number) => string]> = [
-  ["read", (n) => `read ${plural(n, "file", "files")}`],
+  ["read", (n) => `${plural(n, "file", "files")} read`],
   ["searched", (n) => plural(n, "search", "searches")],
   ["web", (n) => plural(n, "web lookup", "web lookups")],
-  ["ran", (n) => `ran ${plural(n, "command", "commands")}`],
-  ["edited", (n) => `edited ${plural(n, "file", "files")}`],
+  ["ran", (n) => plural(n, "command", "commands")],
+  ["edited", (n) => `${plural(n, "file", "files")} edited`],
   ["planned", (n) => plural(n, "plan update", "plan updates")],
   ["spawned", (n) => plural(n, "sub-agent action", "sub-agent actions")],
-  ["other", (n) => `used ${plural(n, "tool", "tools")}`],
+  ["other", (n) => plural(n, "other tool", "other tools")],
 ];
 
 export function formatTurnWorkElapsed(ms: number | null): string | null {
@@ -224,11 +224,18 @@ export function formatTurnWorkHeadline(
   return summary.current || "Thinking";
 }
 
-export function formatTurnWorkDetails(summary: TurnWorkSummary): string {
+/**
+ * The fold header's muted suffix: what the fold holds, noun first ("3 files
+ * read · 5 commands · 4 agent messages"); zero counts omitted. `messages` is
+ * the agent mail and notices folded in beside the tool calls.
+ */
+export function formatTurnWorkCounts(summary: TurnWorkSummary, opts: { messages?: number } = {}): string {
   const parts: string[] = [];
   for (const [key, phrase] of COUNT_PHRASES) {
     const n = summary.counts[key];
     if (n > 0) parts.push(phrase(n));
   }
+  const messages = opts.messages ?? 0;
+  if (messages > 0) parts.push(plural(messages, "agent message", "agent messages"));
   return parts.join(" · ");
 }
