@@ -17,10 +17,15 @@ import { mockTransport } from "@/lib/test-utils";
 
 // Scroll-back paging. The initial chat snapshot is BOUNDED to the newest N
 // messages, so loadOlderMessages is what makes the rest of a long chat
-// reachable. The behavior that most needs pinning is TERMINATION: the server's
-// has_more is `len(messages) < totalCount || beforeSeq > 0`, whose second
-// disjunct is permanently true for every paged request — so a loop that
-// trusted it would never stop. Termination must come from the empty/short page.
+// reachable. The behavior that most needs pinning is WHEN IT STOPS. The
+// server's has_more is exact (it probes one row past the page), and it is the
+// only signal that is: a page can come back shorter than requested with more
+// history below it (an older server sizes the page over LLM-only HIDDEN rows
+// and then drops them), and reading that short page as the end showed "Start
+// of conversation" in the middle of a long chat and stopped paging. So paging
+// goes on while has_more is true, and stops on has_more false — or on a page
+// that cannot move the cursor (empty, or nothing below it), so no server can
+// make it loop.
 
 const CHAT = "c-older";
 
@@ -62,15 +67,22 @@ function toolMessage(id: string, seq: number, toolCallId: string) {
   } as Partial<Message>);
 }
 
-/** A page response shaped like the real RPC, including its quirky has_more. */
-function page(messages: Message[], total: number) {
+/** A page response shaped like the real RPC. */
+function page(messages: Message[], total: number, hasMore = true) {
   return {
     messages,
     total,
-    // ALWAYS true for a paged request — this is the server quirk under test.
-    hasMore: true,
+    hasMore,
     oldestSeq: messages.length > 0 ? Number(messages[0].seq) : 0,
   };
+}
+
+/** `count` consecutive messages ending just below `belowSeq`, oldest first. */
+function run(count: number, belowSeq: number) {
+  return Array.from({ length: count }, (_, i) => {
+    const seq = belowSeq - count + i;
+    return msg(`m${seq}`, seq);
+  });
 }
 
 beforeEach(() => {
@@ -120,14 +132,60 @@ describe("loadOlderMessages", () => {
     expect(getMessagesMetaFromCache(CHAT)?.hasMore).toBe(false);
   });
 
-  it("terminates on a SHORT page even though the server says has_more", async () => {
-    setMessagesInCache(CHAT, [msg("m100", 100)], {
-      total: 102,
+  it("keeps paging after a SHORT page while the server says has_more", async () => {
+    // The regression: a page of 99 (the server dropped a hidden row it had
+    // counted) is not the start of history when has_more says there is more.
+    setMessagesInCache(CHAT, [msg("m1000", 1000)], {
+      total: 1000,
       hasMore: true,
-      oldestSeq: 100,
+      oldestSeq: 1000,
     });
-    // Fewer than PAGE_SIZE (100) → we just consumed the remainder.
-    listMessages.mockResolvedValue(page([msg("m1", 1), msg("m2", 2)], 102));
+    listMessages.mockResolvedValueOnce(page(run(99, 1000), 1000));
+
+    const more = await useChatStore.getState().loadOlderMessages(CHAT);
+
+    expect(more).toBe(true);
+    expect(getMessagesMetaFromCache(CHAT)?.hasMore).toBe(true);
+    expect(getMessagesMetaFromCache(CHAT)?.oldestSeq).toBe(901);
+
+    // The next scroll-back pages from the new oldest row.
+    listMessages.mockResolvedValueOnce(page(run(3, 901), 1000));
+    await useChatStore.getState().loadOlderMessages(CHAT);
+    expect(listMessages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ chatId: CHAT, recent: 100, beforeSeq: 901n }),
+    );
+    expect(getMessagesMetaFromCache(CHAT)?.oldestSeq).toBe(898);
+  });
+
+  it("stops when the server says has_more false, even on a FULL page", async () => {
+    setMessagesInCache(CHAT, [msg("m1000", 1000)], {
+      total: 1000,
+      hasMore: true,
+      oldestSeq: 1000,
+    });
+    listMessages.mockResolvedValue(page(run(100, 1000), 1000, false));
+
+    const more = await useChatStore.getState().loadOlderMessages(CHAT);
+
+    expect(more).toBe(false);
+    expect(getMessagesMetaFromCache(CHAT)?.hasMore).toBe(false);
+    // The page itself is still served.
+    expect(getMessagesFromCache(CHAT)).toHaveLength(101);
+
+    // And nothing more is fetched.
+    expect(await useChatStore.getState().loadOlderMessages(CHAT)).toBe(false);
+    expect(listMessages).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops on a page with nothing below the cursor even though the server says has_more", async () => {
+    // A page that cannot move the cursor would refetch the same window
+    // forever; it ends paging whatever has_more says.
+    setMessagesInCache(CHAT, [msg("m300", 300)], {
+      total: 400,
+      hasMore: true,
+      oldestSeq: 300,
+    });
+    listMessages.mockResolvedValue(page([msg("m300", 300)], 400));
 
     const more = await useChatStore.getState().loadOlderMessages(CHAT);
 
