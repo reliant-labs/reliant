@@ -44,7 +44,19 @@ Neither gate keeps a second copy of it.
 ```sh
 task ci:merge                    # your branch, against its merge-base with origin/main
 task ci:merge -- --base <rev>    # a stacked branch
+task ci:merge -- --skip-lint     # leave vet and forge lint to the release gate
 ```
+
+`--skip-lint` drops `go vet` and the scoped forge lint and changes nothing else:
+the diff base stays the merge-base with origin/main, and buf lint and the
+compat checks (`scripts/check-compat.sh`) run as they do in the merge tier.
+control-plane's pr-fix gates a PR branch with it (control-plane#2189): the
+merge queue never vets or lints and the release gate does both over the whole
+module, so there they decided nothing. `--queue` (the merge queue's tier, below)
+is `--skip-lint` plus queue-entry semantics, which are wrong on a PR branch:
+`CI_QUEUE_ENTRY=1` makes `check-compat.sh` require a single-parent HEAD and
+judge only `HEAD^..HEAD`, so a branch with several commits or a merge of main
+would fail, or pass, on the wrong diff. Never pass `--queue` outside the queue.
 
 It holds **one** host heavy slot for the whole run (`forge slot run`), and every
 phase nests inside that slot, within a CPU budget (below). It prints one row per phase:
@@ -444,8 +456,9 @@ and lists one bypass actor, the `reliant-01` account the pipeline acts as
 `merge_group`, so each queued PR is tested on main plus the entries ahead of it,
 and lands only if that run is green. It is ONE job, `CI result`, running
 `task ci:merge -- --queue`, and its budget is five minutes of wall time, runner
-queue included (owner, 2026-11-01): the queue tier leaves vet and forge lint to
-the release gate and runs buf lint only for a proto change, and the renderer's
+queue included (owner, 2026-11-01): the queue tier is `--skip-lint` (vet and
+forge lint left to the release gate) plus the queue entry's semantics: buf lint
+only for a proto change, and compat judged on the entry's own squash. The renderer's
 release build, Playwright and the electron smoke run on main, where the release
 record requires them. Its last step reports the run's wall time split into
 runner wait and run time, and files one rolling `pipeline:slo` issue when it is
