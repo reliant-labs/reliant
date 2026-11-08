@@ -1,0 +1,117 @@
+{
+  "schema": "forge.obs.check/v1",
+  "ok": false,
+  "exit_code": 1,
+  "error": "the release started 2026-10-22T11:40:00Z failed its health check: api: error rate 0.1% -\u003e 8.0% (+7.9%, limit +1.0%); new issue sfp1-deadbeefdeadbeef: boom: \u003cn\u003e (7 events)",
+  "scope": {
+    "env": "dev",
+    "backend": "local",
+    "from": "2026-10-22T11:25:00Z",
+    "to": "2026-10-22T11:55:00Z"
+  },
+  "query_mode": "structured",
+  "verdict": "FAIL",
+  "subject": {
+    "promoted_at": "2026-10-22T11:40:00Z"
+  },
+  "windows": {
+    "before": {
+      "from": "2026-10-22T11:25:00Z",
+      "to": "2026-10-22T11:40:00Z"
+    },
+    "after": {
+      "from": "2026-10-22T11:40:00Z",
+      "to": "2026-10-22T11:55:00Z"
+    },
+    "after_complete": true
+  },
+  "services": [
+    {
+      "service": "api",
+      "before": {
+        "requests": 1000,
+        "error_rate": 0.001,
+        "p50_ms": 10,
+        "p95_ms": 100,
+        "p99_ms": 300
+      },
+      "after": {
+        "requests": 1000,
+        "error_rate": 0.08,
+        "p50_ms": 10,
+        "p95_ms": 110,
+        "p99_ms": 300
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "error_rate",
+      "service": "api",
+      "value": 0.079,
+      "threshold": 0.01,
+      "policy": "fail",
+      "message": "api: error rate 0.1% -\u003e 8.0% (+7.9%, limit +1.0%)"
+    },
+    {
+      "code": "new_issue",
+      "service": "api",
+      "ref": "sfp1-deadbeefdeadbeef",
+      "value": 7,
+      "threshold": 3,
+      "policy": "fail",
+      "message": "new issue sfp1-deadbeefdeadbeef: boom: \u003cn\u003e (7 events)"
+    }
+  ],
+  "new_issues": [
+    {
+      "id": "sfp1-deadbeefdeadbeef",
+      "service": "api",
+      "title": "boom: \u003cn\u003e",
+      "culprit": "x.go in Handle",
+      "events": 7,
+      "first_seen_at": "2026-10-22T11:41:00Z"
+    }
+  ],
+  "thresholds": [
+    {
+      "name": "window",
+      "value": "15m",
+      "source": "default"
+    },
+    {
+      "name": "min_requests",
+      "value": "50",
+      "source": "default"
+    },
+    {
+      "name": "max_error_rate_increase",
+      "value": "0.01",
+      "source": "default"
+    },
+    {
+      "name": "max_p95_ratio",
+      "value": "1.5",
+      "source": "default"
+    },
+    {
+      "name": "new_issue_min_events",
+      "value": "3",
+      "source": "default"
+    },
+    {
+      "name": "fail_on",
+      "value": "alert_firing,error_rate,new_issue,regressed_issue",
+      "source": "default"
+    }
+  ],
+  "not_evaluated": [
+    "regressed_issue",
+    "alert_firing",
+    "workload_restarts"
+  ],
+  "suggested": [
+    "forge obs issue sfp1-deadbeefdeadbeef dev",
+    "forge obs endpoints dev --sort errors"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "schema": "forge.obs.test/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "dev"
+  },
+  "entries": [
+    {
+      "service": "api"
+    },
+    {
+      "service": "worker"
+    }
+  ],
+  "truncated": true,
+  "omitted": 4,
+  "next_page_token": "tok"
+}

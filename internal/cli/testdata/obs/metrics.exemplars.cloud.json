@@ -1,0 +1,41 @@
+{
+  "schema": "forge.obs.metric_exemplars/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "prod",
+    "backend": "cloud",
+    "env_id": "env-prod",
+    "from": "2026-10-22T11:28:00Z",
+    "to": "2026-10-22T11:33:00Z"
+  },
+  "query_mode": "structured",
+  "metric": "rpc.server.duration",
+  "window": {
+    "from": "2026-10-22T11:28:00Z",
+    "to": "2026-10-22T11:33:00Z"
+  },
+  "exemplars": [
+    {
+      "time": "2026-10-22T11:30:00Z",
+      "value": 812.5,
+      "trace_id": "0af7651916cd43dd8448eb211c80319c",
+      "span_id": "b7ad6b7169203331",
+      "trace_stored": true,
+      "attributes": {
+        "http.route": "/v1/jobs"
+      }
+    },
+    {
+      "time": "2026-10-22T11:31:00Z",
+      "value": 700,
+      "trace_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "span_id": "c1",
+      "trace_stored": false
+    }
+  ],
+  "truncated": false,
+  "suggested": [
+    "forge obs trace 0af7651916cd43dd8448eb211c80319c prod"
+  ]
+}
