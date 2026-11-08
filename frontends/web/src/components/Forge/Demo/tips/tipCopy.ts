@@ -61,14 +61,14 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
   },
   environments: {
     title: "Environments",
-    body: "Compare dev, staging and production without switching tools. Open an environment to see what is running and whether it matches what your app declares.",
+    body: "Environments are separate places to develop, test and run your app for users. Compare dev, staging and production to see what is running and whether it matches the project's configuration.",
     help: "Your agent can compare environments and investigate a failed deployment using the same evidence.",
     command: "forge env list",
     target: tid("forge-env-list"),
   },
   environment: {
     title: "One environment",
-    body: "See the version, services and health of this environment. Follow a service or deployment to understand what needs attention before making a change.",
+    body: "See which version and services run here, and whether they are healthy. Open a service or deployment to investigate what needs attention.",
     help: "Your agent can read the release, health and deployment status without needing to navigate this page.",
     command: "forge env status prod",
     target: tid("env-page-header"),

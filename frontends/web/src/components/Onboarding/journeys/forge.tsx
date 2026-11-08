@@ -109,11 +109,11 @@ const scaffoldCommands = (cli: string) => [`${cli} scaffold service inventory`, 
 function TryOnYourApp({ cli }: { cli: string }) {
   return (
     <>
-      <p>Everything in this tour came from code forge writes. In your own project:</p>
+      <p>The tour uses sample data to show the monitoring Forge sets up for an app. In your own project:</p>
       <TourCommands commands={scaffoldCommands(cli)} />
       <p className="mt-3">
-        A new service comes with its traced handlers and method wrapper, and a worker&apos;s every run is a trace of its own. The lint
-        finds where a trace would break. Then, on a deployed environment (use your own name):
+        New services and background workers include request-tracking setup. The tracing check helps find gaps in it.
+        Once you have deployed your app, inspect its real health information (use your own environment name):
       </p>
       <TourCommands commands={tryCommands(cli)} />
       <p className="mt-3">
@@ -230,7 +230,7 @@ export const forgeJourney: Journey = {
     },
     {
       id: "fg-instrumented",
-      title: "Instrumented from the start",
+      title: "Monitoring from the start",
       description:
         "Forge gives your app monitoring from the start, so you can find problems without adding it by hand. Follow a slow or failed request to its logs and the code doing the work; your agent can read the same evidence.",
       target: "[data-testid='obs-overview']",
@@ -267,12 +267,13 @@ export const forgeJourney: Journey = {
       description: (
         <>
           <p>
-            This is the CreateOrder method inside the api. The rows under it are its two queries, with the values replaced by ?, and the
-            payment call. Each layer is a span because forge owns that boundary, not because someone remembered to add one.
+            This is CreateOrder inside the api service. Below it are two database queries, with their values replaced by ?, and the
+            payment call. Each recorded piece of work is called a span; together they form the request timeline. Forge includes the setup
+            for recording these steps.
           </p>
           <p className="mt-2">
-            <code>forge lint --tracing</code> points out the places a trace would break, such as a log call without its context, so your
-            agent can&apos;t quietly break one either.
+            <code>forge lint --tracing</code> checks for common gaps, such as a log call missing the request&apos;s context, to help your
+            agent keep the timeline connected.
           </p>
         </>
       ),

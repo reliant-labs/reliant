@@ -8,14 +8,14 @@
 
 /** One line: what forge is. */
 export const FORGE_ONE_LINER =
-  "forge is an open-source CLI and framework that works with any coding agent: Claude Code, Codex, Cursor, or anything that speaks MCP.";
+  "Forge is an open-source toolkit for building and running apps with a coding agent, including Claude Code, Codex or Cursor.";
 
 /** The toast's shorter version. */
 export const FORGE_SHORT = "forge is an open-source CLI and framework for building apps with any coding agent.";
 
-/** What forge does for the app, in two sentences. */
+/** What forge does for the app, and what remains yours. */
 export const FORGE_WHAT_IT_DOES =
-  "It scaffolds your app with the production setup already in place: tracing, logs, profiles, releases and deploys. Its skills and lints keep your agent on track as the app grows.";
+  "You and your agent define the API and write the app's specific behavior. Forge provides starting code, production setup, and tools to build, deploy and monitor it. Its instructions and automated code checks help your agent keep the project consistent as it grows.";
 
 /** The selling point the tips connect back to. */
 export const FORGE_ONE_TOOL =
