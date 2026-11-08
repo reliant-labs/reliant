@@ -598,7 +598,7 @@ func (s *Service) RemoveProjectFromDaemon(
 	req *connect.Request[reliantv1.RemoveProjectFromDaemonRequest],
 ) (*connect.Response[reliantv1.RemoveProjectFromDaemonResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-	_, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
+	project, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
 	if err != nil {
 		// NotFound is treated as success — the row's already gone and
 		// there's nothing on disk to delete from our perspective. Anything
@@ -606,6 +606,12 @@ func (s *Service) RemoveProjectFromDaemon(
 		if svcerr.IsNotFound(err) {
 			return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
 		}
+		return nil, err
+	}
+	// Deleting the checkout breaks every branch workspace of the project on
+	// that machine: they are git worktrees of it. Refused until they are
+	// archived, as a detach is.
+	if err := s.requireNoWorkspacesOn(ctx, project, req.Msg.DaemonId, s.machineName(ctx, req.Msg.DaemonId), "removing the project from that machine"); err != nil {
 		return nil, err
 	}
 	var removeResp struct {
@@ -663,6 +669,11 @@ func (s *Service) RecloneProjectOnDaemon(
 	}
 	if project.RemoteURL == nil || *project.RemoteURL == "" {
 		return nil, svcerr.FailedPrecondition("project has no remote_url; cannot reclone")
+	}
+	// The reclone deletes the checkout first, breaking the project's branch
+	// workspaces on that machine (git worktrees of it), as a remove does.
+	if err := s.requireNoWorkspacesOn(ctx, project, req.Msg.DaemonId, s.machineName(ctx, req.Msg.DaemonId), "recloning the project on that machine"); err != nil {
+		return nil, err
 	}
 	branch := ""
 	if pd.DefaultBranch != nil {

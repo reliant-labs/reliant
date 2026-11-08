@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	project "github.com/reliant-labs/reliant/internal/handlers/project"
 )
@@ -142,6 +144,101 @@ func TestRemoveProjectFromDaemon_KeepsTheRowUntilTheRemoveRan(t *testing.T) {
 				connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: "p-1", DaemonId: "d-1"}))
 			require.Error(t, err)
 			assert.Zero(t, deleted, "the row outlives a remove that did not run")
+		})
+	}
+}
+
+// projectOnDaemonCalls are the three commands that act on one machine's
+// checkout, by request.
+func projectOnDaemonCalls(ctx context.Context, projectID, daemonID string) map[string]func(*project.Service) error {
+	return map[string]func(*project.Service) error{
+		"pull": func(s *project.Service) error {
+			_, err := s.PullProjectOnDaemon(ctx, connect.NewRequest(&pb.PullProjectOnDaemonRequest{ProjectId: projectID, DaemonId: daemonID}))
+			return err
+		},
+		"remove": func(s *project.Service) error {
+			_, err := s.RemoveProjectFromDaemon(ctx, connect.NewRequest(&pb.RemoveProjectFromDaemonRequest{ProjectId: projectID, DaemonId: daemonID}))
+			return err
+		},
+		"reclone": func(s *project.Service) error {
+			_, err := s.RecloneProjectOnDaemon(ctx, connect.NewRequest(&pb.RecloneProjectOnDaemonRequest{ProjectId: projectID, DaemonId: daemonID}))
+			return err
+		},
+	}
+}
+
+// Pull, remove and reclone reach a machine only for the caller's own project
+// and only on a machine that project is recorded on. Another user's project,
+// or a machine with no checkout of it, sends nothing: pull and reclone are
+// NotFound, and remove (idempotent) succeeds with nothing to remove.
+func TestProjectOnDaemonCommands_SendNothingForAnotherUsersProjectOrAnUnrecordedMachine(t *testing.T) {
+	t.Parallel()
+	ctx := project.AuthedContext(t)
+	for target, ids := range map[string][2]string{
+		"another user's project":        {"p-other", "d-1"},
+		"a machine without the project": {"p-1", "d-foreign"},
+	} {
+		for name, call := range projectOnDaemonCalls(ctx, ids[0], ids[1]) {
+			t.Run(target+"/"+name, func(t *testing.T) {
+				t.Parallel()
+				store := onDaemon(t)
+				store.DeleteProjectDaemonFunc = func(context.Context, string, string) error {
+					t.Error("no row may be deleted")
+					return nil
+				}
+				router := newPinnedRecorder()
+				err := call(newService(t, store, router))
+				if name == "remove" {
+					require.NoError(t, err)
+				} else {
+					requireCode(t, err, connect.CodeNotFound)
+				}
+				assert.Empty(t, router.commands, "nothing reaches any machine")
+			})
+		}
+	}
+}
+
+// Remove and reclone delete the checkout, and the project's branch workspaces
+// on that machine are git worktrees of it. While one lives there, both are
+// refused (FailedPrecondition, saying to archive them), nothing is sent and
+// the row stays, as a detach is refused. A workspace on another machine, or
+// an archived one, does not hold the checkout. Pull deletes nothing.
+func TestProjectOnDaemonCommands_RemoveAndRecloneRefuseWhileWorkspacesLiveThere(t *testing.T) {
+	t.Parallel()
+	ctx := project.AuthedContext(t)
+	here, elsewhere := "d-1", "d-2"
+	archived := time.Now()
+	for name, call := range projectOnDaemonCalls(ctx, "p-1", "d-1") {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store := onDaemon(t)
+			store.ListWorktreesFunc = func(_ context.Context, f db.WorktreeFilters) ([]*db.Worktree, error) {
+				require.NotNil(t, f.ProjectID)
+				assert.Equal(t, "p-1", *f.ProjectID)
+				return []*db.Worktree{
+					{ID: "main", IsMain: true, DaemonID: &here},
+					{ID: "live", DaemonID: &here},
+					{ID: "gone", DaemonID: &here, DeletedAt: &archived},
+					{ID: "other", DaemonID: &elsewhere},
+				}, nil
+			}
+			store.UpsertProjectDaemonFunc = func(context.Context, string, string, string, *string) error { return nil }
+			deleted := false
+			store.DeleteProjectDaemonFunc = func(context.Context, string, string) error { deleted = true; return nil }
+			router := newPinnedRecorder()
+			err := call(newService(t, store, router))
+			if name == "pull" {
+				require.NoError(t, err)
+				assert.Equal(t, []string{"git.pull"}, router.commands)
+				return
+			}
+			requireCode(t, err, connect.CodeFailedPrecondition)
+			msg := svcerr.ToConnect(err).Message()
+			assert.Contains(t, msg, "1 workspace of")
+			assert.Contains(t, msg, "archive")
+			assert.Empty(t, router.commands, "nothing is deleted on the machine")
+			assert.False(t, deleted, "the row stays")
 		})
 	}
 }

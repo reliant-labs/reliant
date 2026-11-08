@@ -87,7 +87,7 @@ func (s *Service) DetachProjectFromDaemon(
 		if err := s.requireCheckoutElsewhere(txCtx, userID, project, daemonID, machine); err != nil {
 			return err
 		}
-		return s.requireNoWorkspacesOn(txCtx, project, daemonID, machine)
+		return s.requireNoWorkspacesOn(txCtx, project, daemonID, machine, "detaching the project from that machine")
 	}
 	if err := s.deps.Repo.DetachProjectFromDaemon(ctx, project.ID, daemonID, row.Path, guard); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to detach the project from the machine"))
@@ -111,9 +111,12 @@ func (s *Service) requireCheckoutElsewhere(ctx context.Context, userID string, p
 		"%s is the only machine with %q; attach the project to another machine first, or delete the project", machine, project.Name))
 }
 
-// requireNoWorkspacesOn refuses a detach while live branch workspaces of the
-// project are owned by the machine.
-func (s *Service) requireNoWorkspacesOn(ctx context.Context, project *db.Project, daemonID, machine string) error {
+// requireNoWorkspacesOn refuses an action on the project's checkout on a
+// machine (a detach, a remove, a reclone) while live branch workspaces of the
+// project are owned by that machine: they are git worktrees of that very
+// checkout. before names the action in the refusal ("detaching the project
+// from that machine").
+func (s *Service) requireNoWorkspacesOn(ctx context.Context, project *db.Project, daemonID, machine, before string) error {
 	worktrees, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{ProjectID: &project.ID})
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to read the project's workspaces"))
@@ -132,5 +135,5 @@ func (s *Service) requireNoWorkspacesOn(ctx context.Context, project *db.Project
 		noun = "workspace"
 	}
 	return svcerr.FailedPrecondition(fmt.Sprintf(
-		"%d %s of %q live on %s; archive them before detaching the project from that machine", n, noun, project.Name, machine))
+		"%d %s of %q live on %s; archive them before %s", n, noun, project.Name, machine, before))
 }
