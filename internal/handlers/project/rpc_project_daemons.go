@@ -598,7 +598,7 @@ func (s *Service) RemoveProjectFromDaemon(
 	req *connect.Request[reliantv1.RemoveProjectFromDaemonRequest],
 ) (*connect.Response[reliantv1.RemoveProjectFromDaemonResponse], error) {
 	userID := auth.MustGetUserID(ctx)
-	project, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
+	_, pd, err := s.resolveProjectDaemonRow(ctx, req.Msg.ProjectId, req.Msg.DaemonId, userID)
 	if err != nil {
 		// NotFound is treated as success — the row's already gone and
 		// there's nothing on disk to delete from our perspective. Anything
@@ -614,15 +614,6 @@ func (s *Service) RemoveProjectFromDaemon(
 		Error   string `json:"error"`
 	}
 	payload := map[string]string{"path": pd.Path}
-	// Deleting the checkout breaks every branch workspace of the project on
-	// that machine: they are git worktrees of it. Refused until they are
-	// archived, as a detach is. The guard and the delete run under the
-	// checkout's exclusive lock, which a workspace's insert shares, and the
-	// checkout is marked torn down until the machine answers
-	// (TearDownProjectCheckout): no workspace is admitted from the guard's
-	// read until the delete is known to be over, even when the wait for the
-	// machine times out while it is still deleting.
-	//
 	// The row goes only once the machine has removed the checkout. It is the
 	// only record of a checkout on that machine: dropped while the clone is
 	// still on disk (the machine was offline, the remove failed), the machine
@@ -630,17 +621,7 @@ func (s *Service) RemoveProjectFromDaemon(
 	// user is told to clone what they already have. The remove is retried
 	// from here; a machine that is gone for good releases its rows when it
 	// is removed (db.Repo.RemoveDaemon).
-	var sendErr error
-	if err := s.deps.Repo.TearDownProjectCheckout(ctx, project.ID, req.Msg.DaemonId, func(lockedCtx context.Context) error {
-		return s.requireNoWorkspacesOn(lockedCtx, project, req.Msg.DaemonId, s.machineName(lockedCtx, req.Msg.DaemonId), "removing the project from that machine")
-	}, func(lockedCtx context.Context, earlierUnknown bool) bool {
-		earlierOver := !earlierUnknown || s.earlierTeardownsOver(lockedCtx, userID, req.Msg.DaemonId, pd.Path)
-		sendErr = s.sendToDaemon(lockedCtx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp)
-		return earlierOver && teardownSettled(sendErr)
-	}); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to lock the project's checkout on the machine"))
-	}
-	if err := sendErr; err != nil {
+	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp); err != nil {
 		if daemonerr.Unreachable(err) {
 			// Refused, with the two ways out: nothing else ever drops the
 			// row of a machine that never comes back.
@@ -660,42 +641,6 @@ func (s *Service) RemoveProjectFromDaemon(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project_daemons row"))
 	}
 	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
-}
-
-// teardownSettled reports whether a remove or reclone's daemon round trip
-// ended with its OWN outcome known: the machine answered (success or its own
-// failure), or the command provably never reached it. A timeout, an
-// interrupted connection or a cancelled wait is not settled: the machine may
-// still be deleting the checkout, so TearDownProjectCheckout keeps its
-// workspaces refused until a later remove or reclone settles. It says nothing
-// about an earlier command whose outcome was never heard: that is
-// earlierTeardownsOver's.
-func teardownSettled(err error) bool {
-	return err == nil ||
-		toolexec.IsDaemonReportedFailure(err) ||
-		errors.Is(err, toolexec.ErrNotDispatched) ||
-		daemonerr.Unreachable(err)
-}
-
-// earlierTeardownsOver reports whether the machine says no remove or reclone
-// of the checkout at path is running any more, so an earlier one whose
-// outcome the server never heard is over. The machine runs a checkout's
-// deletes one at a time and answers git.await_teardown only once every one
-// that reached it before has finished (daemonruntime checkoutTeardowns); a
-// retry's own answer proves nothing about the earlier delete, which may still
-// be running beside it. Anything but that answer (the machine unreachable,
-// the command never dispatched, the wait timed out, a release that does not
-// know the command) leaves the earlier outcome unknown.
-func (s *Service) earlierTeardownsOver(ctx context.Context, userID, daemonID, path string) bool {
-	var resp struct {
-		Idle bool `json:"idle"`
-	}
-	if err := s.sendToDaemon(ctx, userID, daemonID, "git.await_teardown", map[string]string{"path": path}, &resp); err != nil {
-		logging.WarnContext(ctx, "an earlier remove or reclone of the checkout is not known to be over; its workspaces stay refused",
-			"error", err, "daemon_id", daemonID)
-		return false
-	}
-	return resp.Idle
 }
 
 // removeFromOfflineMachine is RemoveProjectFromDaemon's refusal for a machine
@@ -735,22 +680,8 @@ func (s *Service) RecloneProjectOnDaemon(
 		"repo":   *project.RemoteURL,
 		"branch": branch,
 	}
-	// The reclone deletes the checkout first, breaking the project's branch
-	// workspaces on that machine (git worktrees of it), as a remove does: the
-	// guard and the reclone are a TearDownProjectCheckout, as a remove's are.
-	// A workspace queued behind it builds on the fresh clone.
-	var sendErr error
-	if err := s.deps.Repo.TearDownProjectCheckout(ctx, project.ID, req.Msg.DaemonId, func(lockedCtx context.Context) error {
-		return s.requireNoWorkspacesOn(lockedCtx, project, req.Msg.DaemonId, s.machineName(lockedCtx, req.Msg.DaemonId), "recloning the project on that machine")
-	}, func(lockedCtx context.Context, earlierUnknown bool) bool {
-		earlierOver := !earlierUnknown || s.earlierTeardownsOver(lockedCtx, userID, req.Msg.DaemonId, pd.Path)
-		sendErr = s.sendToDaemon(lockedCtx, userID, req.Msg.DaemonId, "git.reclone", payload, &recloneResp)
-		return earlierOver && teardownSettled(sendErr)
-	}); err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to lock the project's checkout on the machine"))
-	}
-	if sendErr != nil {
-		return nil, daemonerr.Error("git reclone", sendErr)
+	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.reclone", payload, &recloneResp); err != nil {
+		return nil, daemonerr.Error("git reclone", err)
 	}
 	// Refresh cloned_at — the row's path/branch are unchanged but the
 	// "Last cloned/pulled" column should now show "just now".

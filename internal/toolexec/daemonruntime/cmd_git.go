@@ -16,7 +16,6 @@ func init() {
 	RegisterCommand("git.pull", handleGitPull)
 	RegisterCommand("git.remove", handleGitRemove)
 	RegisterCommand("git.reclone", handleGitReclone)
-	RegisterCommand("git.await_teardown", handleGitAwaitTeardown)
 }
 
 // =============================================================================
@@ -268,7 +267,7 @@ type gitRemoveResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
-func handleGitRemove(ctx context.Context, payload []byte) ([]byte, error) {
+func handleGitRemove(_ context.Context, payload []byte) ([]byte, error) {
 	var req gitRemoveRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -276,13 +275,6 @@ func handleGitRemove(ctx context.Context, payload []byte) ([]byte, error) {
 	if req.Path == "" {
 		return nil, fmt.Errorf("path is required")
 	}
-	// Held until the delete is over, whatever becomes of ctx: see
-	// checkoutTeardowns.
-	unlock, err := checkoutTeardowns.lock(ctx, req.Path)
-	if err != nil {
-		return nil, fmt.Errorf("an earlier remove or reclone of %s is still running: %w", req.Path, err)
-	}
-	defer unlock()
 	// Refuse to remove paths that aren't clearly project clones to avoid
 	// turning a misconfigured path into `rm -rf /` style damage. We require
 	// the path to either not exist OR contain a .git directory/file.
@@ -335,11 +327,6 @@ func handleGitReclone(ctx context.Context, payload []byte) ([]byte, error) {
 	if req.Path == "" || req.Repo == "" {
 		return nil, fmt.Errorf("path and repo are required")
 	}
-	unlock, err := checkoutTeardowns.lock(ctx, req.Path)
-	if err != nil {
-		return nil, fmt.Errorf("an earlier remove or reclone of %s is still running: %w", req.Path, err)
-	}
-	defer unlock()
 	branch := req.Branch
 	if branch == "" {
 		branch = "main"
@@ -364,42 +351,6 @@ func handleGitReclone(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(gitRecloneResponse{Success: true, Path: req.Path})
-}
-
-// =============================================================================
-// git.await_teardown
-// =============================================================================
-//
-// Answers once no git.remove or git.reclone of the path is running: every one
-// that arrived before it has finished (checkoutTeardowns). The server sends it
-// before clearing the pending-teardown mark of a checkout whose earlier remove
-// or reclone it never heard back from. It changes nothing on disk. A machine
-// running a release without it answers "unknown command", which the server
-// reads as "not known to be over".
-
-type gitAwaitTeardownRequest struct {
-	Path string `json:"path"`
-}
-
-type gitAwaitTeardownResponse struct {
-	// Idle is true: no remove or reclone of the path is running.
-	Idle bool `json:"idle"`
-}
-
-func handleGitAwaitTeardown(ctx context.Context, payload []byte) ([]byte, error) {
-	var req gitAwaitTeardownRequest
-	if err := json.Unmarshal(payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid payload: %w", err)
-	}
-	if req.Path == "" {
-		return nil, fmt.Errorf("path is required")
-	}
-	unlock, err := checkoutTeardowns.lock(ctx, req.Path)
-	if err != nil {
-		return nil, fmt.Errorf("a remove or reclone of %s is still running: %w", req.Path, err)
-	}
-	unlock()
-	return json.Marshal(gitAwaitTeardownResponse{Idle: true})
 }
 
 // truncateGitOutput keeps git pull/clone output bounded so a noisy upstream

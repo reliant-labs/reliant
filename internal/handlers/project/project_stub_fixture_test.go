@@ -118,15 +118,5 @@ func onDaemon(t *testing.T) *project.MockRepository {
 		branch := "main"
 		return []*core.ProjectDaemon{{ProjectID: projectID, DaemonID: "d-1", Path: "/clone", DefaultBranch: &branch}}, nil
 	}
-	// No branch workspaces anywhere: a remove or reclone of the checkout is
-	// not refused for them.
-	store.ListWorktreesFunc = func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error) { return nil, nil }
-	store.TearDownProjectCheckoutFunc = func(ctx context.Context, _, _ string, guard func(context.Context) error, destroy func(context.Context, bool) bool) error {
-		if err := guard(ctx); err != nil {
-			return err
-		}
-		destroy(ctx, false)
-		return nil
-	}
 	return store
 }

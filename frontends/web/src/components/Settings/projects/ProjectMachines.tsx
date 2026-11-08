@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
-import { useListProjectDaemons, useDetachProjectFromDaemon, usePullProjectOnDaemon, useRecloneProjectOnDaemon, useRemoveProjectFromDaemon } from "@/hooks/project-service-hooks_gen";
+import { useListProjectDaemons, useDetachProjectFromDaemon, usePullProjectOnDaemon } from "@/hooks/project-service-hooks_gen";
 import { createProjectFromRepo, type Project } from "@/hooks/project-queries";
 import { ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { daemonStatusLabel } from "@/components/Automations/daemonChoices";
@@ -9,9 +9,13 @@ import { AttachProjectFolderDialog } from "@/components/Projects/AttachProjectFo
 import { MachineSelect } from "@/components/Projects/MachineSelect";
 import { describeMachineFolderError } from "@/components/Projects/machineFolderErrors";
 import Modal from "@/components/forge-ui/modal";
-import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 
-/** Machine rows are the checkout paths; the project's original path isn't a target on another disk. */
+/**
+ * Machine rows are the checkout paths; the project's original path isn't a target on another disk.
+ * Remove and reclone (which delete the checkout) are not offered here: making them safe against a
+ * workspace created while the machine is still deleting needs a teardown protocol (an owner design
+ * decision, its own issue). Detach keeps the files.
+ */
 export function ProjectMachines({ project }: { project: Project }) {
   const { daemons } = useDaemonStatus();
   const rows = useListProjectDaemons({}, {
@@ -19,8 +23,6 @@ export function ProjectMachines({ project }: { project: Project }) {
   });
   const detach = useDetachProjectFromDaemon({ meta: { silenceErrorToast: true } });
   const pull = usePullProjectOnDaemon({ meta: { silenceErrorToast: true } });
-  const reclone = useRecloneProjectOnDaemon({ meta: { silenceErrorToast: true } });
-  const remove = useRemoveProjectFromDaemon({ meta: { silenceErrorToast: true } });
   const [attaching, setAttaching] = useState(false);
   const [cloning, setCloning] = useState(false);
   const [target, setTarget] = useState<string | null>(null);
@@ -28,13 +30,12 @@ export function ProjectMachines({ project }: { project: Project }) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<{ daemonId: string; name: string; path: string; action: "remove" | "reclone" } | null>(null);
   const installs = (rows.data?.projectDaemons ?? []).filter((row) => row.projectId === project.id);
   const available = daemons.filter((daemon) => !installs.some((row) => row.daemonId === daemon.daemonId));
   const run = async (action: () => Promise<unknown>, success: string, machine: string) => {
     setBusy(true); setError(null); setNotice(null);
-    try { await action(); setNotice(success); setConfirmation(null); }
-    catch (err) { setError(describeMachineFolderError(err, machine)); setConfirmation(null); }
+    try { await action(); setNotice(success); }
+    catch (err) { setError(describeMachineFolderError(err, machine)); }
     finally { setBusy(false); }
   };
   const button = "rounded-md border border-border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50";
@@ -60,10 +61,8 @@ export function ProjectMachines({ project }: { project: Project }) {
           <p className="text-xs text-muted-foreground">Last verified: {row.verifiedAt ? new Date(row.verifiedAt).toLocaleString() : "Not yet verified"}</p>
           {row.installError && <p role="alert" className="text-sm text-destructive-ink">{row.installError}</p>}
           <div className="flex flex-wrap gap-2 pt-1">
-            {project.remote_url && <><button className={button} disabled={busy || installing} onClick={() => void run(() => pull.mutateAsync({ projectId: project.id, daemonId: row.daemonId }), `Pulled on ${name}`, name)}>Pull</button>
-              <button className={button} disabled={busy || installing} onClick={() => setConfirmation({ daemonId: row.daemonId, name, path: row.path, action: "reclone" })}>Reclone…</button></>}
+            {project.remote_url && <button className={button} disabled={busy || installing} onClick={() => void run(() => pull.mutateAsync({ projectId: project.id, daemonId: row.daemonId }), `Pulled on ${name}`, name)}>Pull</button>}
             <button className={button} disabled={busy || installing || installs.length <= 1} title={installs.length <= 1 ? "The project's only machine cannot be detached" : "Keeps files on disk"} onClick={() => void run(() => detach.mutateAsync({ projectId: project.id, daemonId: row.daemonId }), `Detached from ${name}; files kept`, name)}>Detach (keep files)</button>
-            <button className={`${button} text-destructive-ink`} disabled={busy || installing} onClick={() => setConfirmation({ daemonId: row.daemonId, name, path: row.path, action: "remove" })}>Remove from machine (delete files)…</button>
           </div>
         </div>;
       })}
@@ -84,10 +83,6 @@ export function ProjectMachines({ project }: { project: Project }) {
           }, "Clone queued", "the selected machine")}>Queue clone</button>
         </div>
       </Modal>}
-      <ConfirmationDialog open={!!confirmation} variant="danger" title={confirmation?.action === "reclone" ? "Delete files and reclone?" : "Delete this project's folder?"}
-        description={confirmation ? `${confirmation.path} on ${confirmation.name} will be deleted, including local changes. ${confirmation.action === "reclone" ? "A fresh clone will replace it." : "This cannot be undone. Use Detach instead to keep the files."}` : ""}
-        confirmLabel={confirmation?.action === "reclone" ? "Delete and reclone" : "Delete folder"} loading={busy}
-        onCancel={() => { if (!busy) setConfirmation(null); }} onConfirm={() => { if (!confirmation) return; const c = confirmation; void run(() => (c.action === "reclone" ? reclone : remove).mutateAsync({ projectId: project.id, daemonId: c.daemonId }), c.action === "reclone" ? "Reclone requested" : "Folder removed", c.name); }} />
     </section>
   );
 }

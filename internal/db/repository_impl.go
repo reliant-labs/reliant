@@ -1748,21 +1748,12 @@ func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
 		return store.InsertWorktree(ctx, r.ORM(), worktree)
 	}
 	// A branch workspace is a git worktree of the project's checkout on its
-	// machine: inserted under the shared side of the lock a remove, reclone
-	// or detach of that checkout holds (TearDownProjectCheckout), so it
-	// lands before their workspace guard reads or after they finished; and
-	// refused while a remove or reclone's outcome was never heard, since the
-	// machine may still be deleting the checkout.
+	// machine: inserted under the shared side of the lock a detach of that
+	// checkout holds (DetachProjectFromDaemon), so it lands before the
+	// detach's workspace guard reads or after the detach committed.
 	return r.RunTx(ctx, orm.ReadCommitted, func(txCtx context.Context) error {
 		if err := store.LockProjectCheckout(txCtx, r.ORM(), worktree.ProjectID, *worktree.DaemonID, true); err != nil {
 			return err
-		}
-		pending, err := store.ProjectCheckoutTeardownPending(txCtx, r.ORM(), worktree.ProjectID, *worktree.DaemonID)
-		if err != nil {
-			return err
-		}
-		if pending {
-			return core.ErrCheckoutTeardownPending
 		}
 		return store.InsertWorktree(txCtx, r.ORM(), worktree)
 	})

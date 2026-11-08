@@ -108,66 +108,6 @@ func (r *Repo) WithMachineCheckoutsLocked(ctx context.Context, daemonID string, 
 	})
 }
 
-// TearDownProjectCheckout runs an action that destroys the project's
-// checkout on the machine (a remove, a reclone): guard, then destroy, which
-// sends the daemon command. A branch workspace of the checkout is a git
-// worktree of it, so none may be admitted from guard's read until the machine
-// has finished deleting. Two things hold them back:
-//
-//   - the checkout's exclusive lock, held in one transaction across guard and
-//     destroy. A branch workspace is inserted under the shared side
-//     (CreateWorktree), so guard sees every workspace that committed and no
-//     new one lands while destroy waits for the machine;
-//   - project_daemons.teardown_pending_at, committed on its own after guard
-//     passes and before destroy runs, and cleared only when destroy reports
-//     the outcome settled (the machine answered, or the command provably never
-//     reached it). CreateWorktree refuses while it is set
-//     (core.ErrCheckoutTeardownPending). The lock ends with the transaction,
-//     and the machine does not stop deleting when the server stops waiting: a
-//     timeout, or the server dying mid-wait, leaves the mark, so admission
-//     stays refused until a remove or reclone run again settles it.
-//
-// destroy is told whether the mark was already set when it started
-// (earlierUnknown): an earlier remove or reclone's outcome was never heard,
-// and the machine may still be running it. Its settled then has to cover that
-// earlier command too, not only its own: a retry that never reached the
-// machine, or one that ran beside the earlier delete, says nothing about it.
-//
-// guard and destroy's reads and writes through this Repo with the ctx they
-// are handed join the transaction. That ctx is not cancelled with ctx: a
-// caller going away does not cut the wait for the machine short (destroy's
-// own request budget bounds it). It runs once (no retry): it sends a daemon
-// command.
-func (r *Repo) TearDownProjectCheckout(ctx context.Context, projectID, daemonID string, guard func(ctx context.Context) error, destroy func(ctx context.Context, earlierUnknown bool) (settled bool)) error {
-	if projectID == "" || daemonID == "" {
-		return fmt.Errorf("project ID and daemon ID cannot be empty")
-	}
-	base := context.WithoutCancel(ctx)
-	return r.RunTx(base, orm.ReadCommitted, func(txCtx context.Context) error {
-		if err := store.LockProjectCheckout(txCtx, r.ORM(), projectID, daemonID, false); err != nil {
-			return err
-		}
-		if guard != nil {
-			if err := guard(txCtx); err != nil {
-				return err
-			}
-		}
-		earlierUnknown, err := store.ProjectCheckoutTeardownPending(txCtx, r.ORM(), projectID, daemonID)
-		if err != nil {
-			return err
-		}
-		// base carries no transaction: the mark commits now, so it outlives
-		// this transaction whatever becomes of it.
-		if err := store.SetProjectCheckoutTeardownPending(base, r.ORM(), projectID, daemonID, true); err != nil {
-			return err
-		}
-		if !destroy(txCtx, earlierUnknown) {
-			return nil
-		}
-		return store.SetProjectCheckoutTeardownPending(txCtx, r.ORM(), projectID, daemonID, false)
-	})
-}
-
 // ListProjectDaemonDetachmentsForDaemon returns every project detached from
 // the machine.
 func (r *Repo) ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*ProjectDaemonDetachment, error) {

@@ -18,15 +18,6 @@ var ErrWorktreeNotFound = svcerr.NotFound("worktree")
 // not hold a name.
 var ErrWorktreeNameTaken = svcerr.AlreadyExists("a live worktree already has this name")
 
-// ErrCheckoutTeardownPending refuses a branch workspace of a project's
-// checkout on a machine while a remove or reclone of that checkout was sent
-// and its outcome never heard (project_daemons.teardown_pending_at): the
-// machine may still be deleting the repository the workspace would be a git
-// worktree of. Running the remove or reclone again settles it.
-var ErrCheckoutTeardownPending = svcerr.WithClass(svcerr.FailedPrecondition(
-	"a remove or reclone of the project on that machine has not reported whether it finished, "+
-		"so no workspace can be created there yet: run the remove or reclone again"), svcerr.ClassUser)
-
 // ErrProjectNotFound covers a missing project and one the caller may not see
 // alike, so ids are not an oracle. A svcerr NotFound with its own sentence.
 var ErrProjectNotFound = svcerr.WithMessage(svcerr.ErrNotFound, "project not found or access denied")

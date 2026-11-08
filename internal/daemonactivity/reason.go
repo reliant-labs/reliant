@@ -188,10 +188,6 @@ var backgroundCommands = map[string]bool{
 	// The gateway's link probe, sent on every reconnect: session plumbing.
 	"daemon.ping": true,
 
-	// Asked right before a remove or reclone, which is the activity; it
-	// changes nothing.
-	"git.await_teardown": true,
-
 	// Automatic preservation/verification/reclamation is housekeeping, not
 	// evidence of a human or agent actively using the machine.
 	"git.recovery_publish":       true,

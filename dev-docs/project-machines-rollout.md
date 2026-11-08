@@ -3,8 +3,11 @@
 The web app now browses, makes folders and creates projects on a machine the
 user names (`DirectoryPicker`'s machine selector, "Use a folder on
 <machine>", Settings → Projects → machines), and the API server refuses to
-remove or reclone a machine's checkout while branch workspaces of it remain
-(live, or archived with files or a branch still to clean up). Both halves are
+detach a machine's checkout while branch workspaces of it remain (live, or
+archived with files or a branch still to clean up). Remove and reclone are
+unchanged by this PR and are not offered in Settings → Projects → machines:
+making them safe against a concurrent workspace create needs a teardown
+protocol, which is an owner design decision (its own issue). Both halves are
 additive: `ListDirectoryResponse.daemon_id` and `CreateDirectoryResponse.daemon_id`
 are new optional fields, and no migration ships.
 
@@ -38,11 +41,11 @@ an empty scratch folder in its home directory.
    the toast "Added B to existing project …", not a second project.
 5. **Attach on A.** In Settings → Projects → machines, "Use a folder on A" for
    a checkout of the same repository. Expect A listed beside B.
-6. **Remove is guarded.** Create a branch workspace of the project on B, then
-   "Remove from machine (delete files)…" on B. Expect the refusal "1 workspace of … live on B;
-   archive them before removing …" and the folder still on B's disk. Archive
-   the workspace; once its clean-up has run, the remove succeeds and the
-   folder is gone from B. Repeat with "Reclone…".
+6. **Detach is guarded.** Create a branch workspace of the project on B, then
+   "Detach (keep files)" on B. Expect the refusal "1 workspace of … live on B;
+   archive them before detaching …" and B still listed. Archive the
+   workspace; once its clean-up has run, the detach succeeds, B is no longer
+   listed, and the folder is still on B's disk.
 7. **Older-server refusal** (only where a web build can be pointed at an older
    API server, e.g. dev): with the new web app against the previous API
    release, step 1 on B shows "This Reliant server cannot browse B yet", with
@@ -58,36 +61,15 @@ Clean up: delete the `rollout-check` project and the folders on A and B.
   `main` and redeploy the web app; the old web app never sends `daemon_id`, so
   every call goes back to the default machine. The API server's new response
   fields are ignored by the old web app and need no revert. Projects or
-  folders created on the wrong machine are removed by hand (Settings →
-  Projects, or the machine's disk).
-- **The remove/reclone guard misbehaves (step 6).** A refusal with no
-  workspace left is a server defect: fix forward in
-  `requireNoWorkspacesOn` (`internal/handlers/project/rpc_detach_project_from_daemon.go`),
-  or revert the server change (the remove and reclone then run unguarded, as
-  before this PR). A remove or reclone that succeeds while a workspace of
-  that checkout remains (or is created while it runs: the guard and the
-  daemon command hold the checkout's exclusive lock,
-  `Repo.TearDownProjectCheckout`, which a workspace insert shares) is
-  also a server defect: fix forward there, and rebuild the workspace from its
-  branch if the branch was pushed.
-- **A workspace create is refused with "has not reported whether it
-  finished".** A remove or reclone of that checkout timed out (or the server
-  died while waiting), so `project_daemons.teardown_pending_at` stays set
-  while the machine may still be deleting. Expected: run the remove or
-  reclone again with the machine online. The retry first asks the machine
-  `git.await_teardown`, which it answers only once no remove or reclone of
-  that checkout is running (the daemon runs them one at a time per path), and
-  clears the mark only on that answer plus the retry's own known outcome. A
-  retry that never reached the machine, or that the machine answered while
-  the earlier delete may still run, keeps it. A machine on a release before
-  this one answers "unknown command", so its mark stays until the machine
-  runs this release (then retry). A mark left after the machine answered
-  `git.await_teardown` idle and the retry answered is a server defect
-  (`earlierTeardownsOver` / `teardownSettled`,
-  `internal/handlers/project/rpc_project_daemons.go`): fix forward; as a
-  stopgap, once the machine shows the delete is over, clear that one row's
-  `teardown_pending_at`.
-- **One additive migration** ships (`project_daemons.teardown_pending_at`,
-  nullable, unread by the previous release), so either half still rolls back
-  alone. During a rolling deploy a previous-release server neither sets nor
-  reads the mark.
+  folders created on the wrong machine are cleaned up by hand: detach the
+  project from that machine (Settings → Projects), then delete the folder on
+  the machine's disk.
+- **The detach guard misbehaves (step 6).** A refusal with no workspace left
+  is a server defect: fix forward in `requireNoWorkspacesOn`
+  (`internal/handlers/project/rpc_detach_project_from_daemon.go`). A detach
+  that succeeds while a workspace of that checkout remains (or is created while
+  it runs: the guard runs under the checkout's exclusive lock,
+  `store.LockProjectCheckout`, which a workspace insert shares) is also a
+  server defect: fix forward there, and re-attach the folder (its files were
+  kept).
+- **No migration ships**, so either half still rolls back alone.

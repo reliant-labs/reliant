@@ -7,8 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // checkoutFixture is a project with a checkout recorded on two machines.
@@ -27,6 +25,8 @@ func newCheckoutFixture(t *testing.T) checkoutFixture {
 	require.NoError(t, err)
 	f := checkoutFixture{repo: repo, pid: project.ID, here: "d-here", elsewhere: "d-elsewhere"}
 	for _, id := range []string{f.here, f.elsewhere} {
+		// A detach records a detachment, which names a real machine.
+		require.NoError(t, repo.UpsertDaemon(ctx, &Daemon{ID: id, UserID: project.UserID}))
 		require.NoError(t, repo.UpsertProjectDaemon(ctx, f.pid, id, "/clone", nil))
 	}
 	return f
@@ -64,41 +64,38 @@ func (f checkoutFixture) waitForBlockedLockWaiter(t *testing.T, created <-chan e
 		}
 		select {
 		case err := <-created:
-			t.Fatalf("a workspace of the checkout was inserted while its remove held the lock (err %v)", err)
+			t.Fatalf("a workspace of the checkout was inserted while its detach held the lock (err %v)", err)
 		case <-time.After(5 * time.Millisecond):
 		}
 	}
 }
 
-// A remove or reclone runs its workspace guard and its daemon command under
-// the checkout's exclusive lock; a branch workspace of that checkout is
-// inserted under the shared side. So a create that arrives after the guard
-// read "no workspaces" waits until the destroyer is done, instead of landing
-// a workspace whose common repository the command then deletes; and one that
-// committed before is what the guard reads.
-func TestTearDownProjectCheckout_HoldsBackWorkspaceInsertsUntilDone(t *testing.T) {
+// A detach runs its workspace guard under the checkout's exclusive lock; a
+// branch workspace of that checkout is inserted under the shared side. So a
+// create that arrives after the guard read "no workspaces" waits until the
+// detach has committed, instead of landing a workspace of a checkout the
+// detach then forgets; and one that committed before is what the guard reads.
+func TestDetachProjectFromDaemon_HoldsBackWorkspaceInsertsUntilDone(t *testing.T) {
 	t.Parallel()
 	f := newCheckoutFixture(t)
 	ctx := context.Background()
 
-	// Committed before the destroyer takes the lock: its guard reads it.
+	// Committed before the detach takes the lock: its guard reads it.
 	require.NoError(t, f.repo.CreateWorktree(ctx, f.workspace("before", f.elsewhere)))
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.elsewhere, func(lockedCtx context.Context) error {
+	require.NoError(t, f.repo.DetachProjectFromDaemon(ctx, f.pid, f.elsewhere, "/clone", func(lockedCtx context.Context) error {
 		assert.Equal(t, 1, f.countOn(t, lockedCtx, f.elsewhere), "the guard reads a workspace committed before the lock")
-		return nil
-	}, func(context.Context, bool) bool { return true }))
+		return ErrNothingToDetach
+	}))
 
 	guarded, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
-		done <- f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, func(lockedCtx context.Context) error {
+		done <- f.repo.DetachProjectFromDaemon(ctx, f.pid, f.here, "/clone", func(lockedCtx context.Context) error {
 			if n := f.countOn(t, lockedCtx, f.here); n != 0 {
 				t.Errorf("the guard read %d workspaces, want 0", n)
 			}
-			return nil
-		}, func(context.Context, bool) bool {
 			close(guarded)
-			<-release // the daemon command deleting the checkout runs here
-			return true
+			<-release // the rest of the detach's transaction runs after this
+			return nil
 		})
 	}()
 	<-guarded
@@ -109,108 +106,10 @@ func TestTearDownProjectCheckout_HoldsBackWorkspaceInsertsUntilDone(t *testing.T
 	require.NoError(t, f.repo.CreateWorktree(ctx, f.workspace("other-machine", f.elsewhere)))
 	// The create is queued on the checkout's lock, not merely slow to start.
 	f.waitForBlockedLockWaiter(t, created)
-	assert.Equal(t, 0, f.countOn(t, ctx, f.here), "nothing landed between the guard and the delete")
+	assert.Equal(t, 0, f.countOn(t, ctx, f.here), "nothing landed between the guard and the detach's commit")
 
 	close(release)
 	require.NoError(t, <-done)
-	require.NoError(t, <-created, "the create proceeds once the remove is done")
+	require.NoError(t, <-created, "the create proceeds once the detach is done")
 	assert.Equal(t, 1, f.countOn(t, ctx, f.here))
-}
-
-// The machine does not stop deleting when the server stops waiting for it. A
-// remove whose wait ended without an answer (destroy reports it unsettled: a
-// timeout, a cancelled wait) releases the lock, but the checkout stays marked:
-// a workspace created afterwards, while the machine is still deleting, and
-// after it finished, is refused. Only a remove or reclone run again whose
-// outcome is known clears it; the other machine's checkout never waited.
-func TestTearDownProjectCheckout_KeepsWorkspacesRefusedWhileTheOutcomeIsUnknown(t *testing.T) {
-	t.Parallel()
-	f := newCheckoutFixture(t)
-	ctx := context.Background()
-
-	stillDeleting, deleted := make(chan struct{}), make(chan struct{})
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(context.Context, bool) bool {
-		// The request budget ran out; the machine's delete runs on.
-		go func() {
-			<-stillDeleting
-			close(deleted)
-		}()
-		return false
-	}))
-
-	err := f.repo.CreateWorktree(ctx, f.workspace("while-deleting", f.here))
-	require.ErrorIs(t, err, core.ErrCheckoutTeardownPending, "admitted while the machine may still be deleting")
-	close(stillDeleting)
-	<-deleted
-	err = f.repo.CreateWorktree(ctx, f.workspace("after-deleting", f.here))
-	require.ErrorIs(t, err, core.ErrCheckoutTeardownPending, "nothing has told the server the delete is over")
-	assert.Equal(t, 0, f.countOn(t, ctx, f.here))
-	require.NoError(t, f.repo.CreateWorktree(ctx, f.workspace("other-machine", f.elsewhere)))
-
-	// A second unsettled attempt keeps the mark; a settled one clears it.
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(context.Context, bool) bool { return false }))
-	require.ErrorIs(t, f.repo.CreateWorktree(ctx, f.workspace("still-unknown", f.here)), core.ErrCheckoutTeardownPending)
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(context.Context, bool) bool { return true }))
-	require.NoError(t, f.repo.CreateWorktree(ctx, f.workspace("settled", f.here)))
-	assert.Equal(t, 1, f.countOn(t, ctx, f.here))
-}
-
-// destroy is told whether an earlier remove or reclone's outcome is still
-// unknown, so a retry can hold the mark for that one too: a timed-out remove
-// followed by retries that settle only their own outcome (one never
-// dispatched, one answered beside the earlier delete) keeps the checkout's
-// workspaces refused until a retry covers the earlier one.
-func TestTearDownProjectCheckout_TellsDestroyAboutAnEarlierUnknownOutcome(t *testing.T) {
-	t.Parallel()
-	f := newCheckoutFixture(t)
-	ctx := context.Background()
-	var told []bool
-	destroy := func(settled func(earlierUnknown bool) bool) func(context.Context, bool) bool {
-		return func(_ context.Context, earlierUnknown bool) bool {
-			told = append(told, earlierUnknown)
-			return settled(earlierUnknown)
-		}
-	}
-	// Settles its own outcome only: what the handler reports for a retry the
-	// machine never got, or one it answered while the earlier one may run.
-	ownOnly := func(earlierUnknown bool) bool { return !earlierUnknown }
-
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, destroy(func(bool) bool { return false })))
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, destroy(ownOnly)))
-	require.ErrorIs(t, f.repo.CreateWorktree(ctx, f.workspace("retry-proved-nothing", f.here)), core.ErrCheckoutTeardownPending)
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, destroy(func(bool) bool { return true })))
-	require.NoError(t, f.repo.CreateWorktree(ctx, f.workspace("earlier-over", f.here)))
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.elsewhere, nil, destroy(ownOnly)))
-	assert.Equal(t, []bool{false, true, true, false}, told)
-}
-
-// A guard that refuses sends nothing and marks nothing: the checkout's
-// workspaces are not held back by a remove that never ran.
-func TestTearDownProjectCheckout_ARefusedGuardMarksNothing(t *testing.T) {
-	t.Parallel()
-	f := newCheckoutFixture(t)
-	ctx := context.Background()
-	refused := core.ErrCheckoutTeardownPending // any error
-	err := f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, func(context.Context) error { return refused },
-		func(context.Context, bool) bool {
-			t.Error("destroy ran after its guard refused")
-			return false
-		})
-	require.ErrorIs(t, err, refused)
-	require.NoError(t, f.repo.CreateWorktree(ctx, f.workspace("ws", f.here)))
-}
-
-// The caller going away does not cut the wait for the machine short, nor
-// abandon the mark: destroy runs on a context that is not cancelled with the
-// caller's.
-func TestTearDownProjectCheckout_OutlivesTheCallersCancellation(t *testing.T) {
-	t.Parallel()
-	f := newCheckoutFixture(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(lockedCtx context.Context, _ bool) bool {
-		cancel()
-		assert.NoError(t, lockedCtx.Err(), "the wait for the machine is not cancelled with the caller")
-		return false
-	}))
-	require.ErrorIs(t, f.repo.CreateWorktree(context.Background(), f.workspace("ws", f.here)), core.ErrCheckoutTeardownPending)
 }

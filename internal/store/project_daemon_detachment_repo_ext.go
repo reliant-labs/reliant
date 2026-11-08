@@ -58,11 +58,11 @@ func LockMachineCheckouts(ctx context.Context, db orm.Context, daemonID string) 
 }
 
 // LockProjectCheckout takes the transaction-scoped advisory lock on the
-// project's checkout on a machine: exclusive for an action that destroys or
-// forgets the checkout (remove, reclone, detach), shared for the insert of a
-// branch workspace that will be a git worktree of it. So a workspace either
-// committed before the destroyer's guard read the workspaces, or is inserted
-// after the destroyer finished, never in between. ctx must carry a
+// project's checkout on a machine: exclusive for an action that forgets the
+// checkout (a detach), shared for the insert of a branch workspace that will
+// be a git worktree of it. So a workspace either committed before the
+// detach's guard read the workspaces, or is inserted after the detach
+// committed, never in between. ctx must carry a
 // transaction.
 func LockProjectCheckout(ctx context.Context, db orm.Context, projectID, daemonID string, shared bool) error {
 	fn := "pg_advisory_xact_lock"
@@ -73,38 +73,6 @@ func LockProjectCheckout(ctx context.Context, db orm.Context, projectID, daemonI
 		return fmt.Errorf("failed to lock the project's checkout on the machine: %w", err)
 	}
 	return nil
-}
-
-// SetProjectCheckoutTeardownPending stamps the checkout's
-// teardown_pending_at (pending) or clears it: set before a remove or reclone
-// is sent, cleared once its outcome is known. A missing row is not an error.
-func SetProjectCheckoutTeardownPending(ctx context.Context, db orm.Context, projectID, daemonID string, pending bool) error {
-	set := "teardown_pending_at = NULL"
-	if pending {
-		set = "teardown_pending_at = NOW()"
-	}
-	if _, err := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil)).
-		Set(set).
-		Where("project_id = ?", projectID).
-		Where("daemon_id = ?", daemonID).
-		Exec(ctx); err != nil {
-		return fmt.Errorf("failed to record the checkout's pending teardown: %w", err)
-	}
-	return nil
-}
-
-// ProjectCheckoutTeardownPending reports whether a remove or reclone of the
-// project's checkout on the machine was sent and its outcome never heard.
-func ProjectCheckoutTeardownPending(ctx context.Context, db orm.Context, projectID, daemonID string) (bool, error) {
-	pending, err := db.Bun().NewSelect().Model((*ProjectDaemon)(nil)).
-		Where("project_id = ?", projectID).
-		Where("daemon_id = ?", daemonID).
-		Where("teardown_pending_at IS NOT NULL").
-		Exists(ctx)
-	if err != nil {
-		return false, fmt.Errorf("failed to read the checkout's pending teardown: %w", err)
-	}
-	return pending, nil
 }
 
 // RecordProjectDaemonDetachment records that the user detached the project
