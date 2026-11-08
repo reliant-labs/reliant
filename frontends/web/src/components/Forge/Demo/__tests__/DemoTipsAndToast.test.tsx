@@ -116,6 +116,28 @@ it("keeps a page callout below the screen-action row, which stacks over the tour
     vi.restoreAllMocks();
   }
 });
+it("on a window too short to fit the card below the action row, keeps the card on screen", async () => {
+  Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+  Object.defineProperty(window, "innerHeight", { configurable: true, value: 260 });
+  // The page below the 52px row leaves 208px; the 200px card plus margins needs 232px,
+  // and its target sits near the page's bottom.
+  const box = (top: number, left: number, width: number, height: number) => ({ top, left, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+  const original = Element.prototype.getBoundingClientRect;
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    if (this.tagName === "MAIN") return box(52, 260, 1180, 208);
+    if (this.getAttribute("data-testid") === "obs-log-row") return box(220, 260, 300, 28);
+    return original.call(this);
+  });
+  try {
+    renderDemo("/forge/p/shop/observability/logs");
+    await waitFor(() => expect(screen.getByTestId("tour-callout").getAttribute("data-side")).toBe("right"));
+    const top = parseFloat(screen.getByTestId("tour-callout").style.top);
+    expect(top).toBeGreaterThanOrEqual(16);
+    expect(top + 200).toBeLessThanOrEqual(260 - 16);
+  } finally {
+    vi.restoreAllMocks();
+  }
+});
 it("copy stays concise and permission-aware",()=>{
   for(const key of DEMO_TIP_KEYS){expect(DEMO_TIPS[key].body.length,key).toBeLessThan(480);expect(DEMO_TIPS[key].body).not.toMatch(/NATS|transport/);}
   expect(DEMO_TIPS.alerts.body).toMatch(/nothing deploys without configuration and permission/);

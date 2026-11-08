@@ -108,6 +108,9 @@ function calculateTooltipPosition(
   viewportLeft = 0,
   viewportTop = 0
 ): Position & { actualPosition: CalloutSide } {
+  // Keep only as much of the top inset as still leaves the card room on screen:
+  // on a short window a card kept below the inset would run off the bottom edge.
+  viewportTop = Math.min(Math.max(0, viewportTop), Math.max(0, window.innerHeight - bottomReserve - 2 * VIEWPORT_PADDING - tooltipSize.height));
   const placed = placeCallout(
     { ...rect, left: rect.left - viewportLeft, top: rect.top - viewportTop },
     tooltipSize,
