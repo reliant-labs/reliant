@@ -59,8 +59,8 @@ var sweepState struct {
 
 // prepareOverlays drops the overlays that would do nothing and creates the
 // missing caches, so a command cannot be the one to create them. A PATH
-// directory the daemon's user cannot write needs no overlay; one under home
-// that does not exist yet is sealed instead. It also creates the hand-off
+// directory the daemon's user cannot write needs no overlay and is made
+// read-only instead; one that does not exist yet is sealed. It also creates the hand-off
 // directories that stay real inside an overlay, and the hooks directory of a
 // shared git directory the command may write, so the command cannot create
 // either. Anything it cannot make is an error: the command would run with
@@ -92,6 +92,11 @@ func prepareOverlays(p Plan) (Plan, error) {
 			p.ReadOnly = append(p.ReadOnly, o.Path)
 			continue
 		case !o.Cache && unix.Access(o.Path, unix.W_OK) != nil:
+			// A PATH directory the daemon's user cannot write needs no
+			// overlay, but its files may still be the user's to overwrite
+			// in place (a 0555 directory of 0755 programs), and the user
+			// may chmod a directory it owns. Read-only, recursively.
+			p.ReadOnly = append(p.ReadOnly, o.Path)
 			continue
 		}
 		keep = append(keep, o)

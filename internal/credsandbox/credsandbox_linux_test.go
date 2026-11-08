@@ -334,3 +334,36 @@ echo ran`)
 	assert.NotContains(t, out, "PLANTED")
 	assert.Contains(t, out, "ran")
 }
+
+// The descriptors Apply hands the helper (the run directory, its parent and
+// the spec pipe) are closed in the parent once Start returns: os/exec does not
+// own a caller's ExtraFiles, and a long-lived daemon that kept them would run
+// out of descriptors. Not parallel: it counts this process's descriptors.
+func TestSandbox_ReleaseClosesTheParentsCopiesOfTheHelpersDescriptors(t *testing.T) {
+	requireSandbox(t)
+	openFDs := func() int {
+		entries, err := os.ReadDir("/proc/self/fd")
+		require.NoError(t, err)
+		return len(entries)
+	}
+	own, err := os.Open(os.DevNull)
+	require.NoError(t, err)
+	defer own.Close()
+	before := openFDs()
+	for i := 0; i < 10; i++ {
+		cmd := exec.Command("true")
+		cmd.Env = []string{"PATH=" + os.Getenv("PATH")} //nolint:forbidigo // the test's own PATH for the command under test
+		cmd.ExtraFiles = []*os.File{own}
+		require.Empty(t, Apply(cmd, selfPath(t), Plan{}))
+		require.NoError(t, cmd.Start())
+		Release(cmd)
+		Release(cmd) // idempotent
+		require.NoError(t, cmd.Wait())
+		_, held := sandboxFiles.Load(cmd)
+		require.False(t, held)
+	}
+	assert.LessOrEqual(t, openFDs(), before+2, "each sandboxed command left descriptors open in the parent")
+	// The caller's own ExtraFiles are the caller's: never closed.
+	_, err = own.Stat()
+	require.NoError(t, err)
+}

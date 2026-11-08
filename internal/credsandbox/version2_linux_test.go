@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sys/unix"
 )
 
 // Version 2 of the sandbox (SignalVersion), through Wrap as the daemon calls
@@ -450,4 +451,37 @@ func TestSandbox_ConcurrentTamperingWithACredentialedStepIsRefused(t *testing.T)
 		require.NoError(t, err)
 		assert.Equal(t, "echo trusted\n", string(got))
 	}
+}
+
+// A PATH directory the daemon's user cannot write is not thereby safe: the
+// user's own executable inside it can be overwritten in place, and the user
+// can chmod the directory it owns. Both are refused, so a credentials-none
+// command cannot poison a program a later credentialed command runs.
+func TestSandbox_AProgramInANonWritablePathDirectoryCannotBePoisoned(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	// Under this checkout, not /tmp: the command's /tmp is private.
+	root, err := os.MkdirTemp(".", ".credsandbox-pathdir-")
+	require.NoError(t, err)
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	bin := filepath.Join(root, "bin")
+	require.NoError(t, os.Mkdir(bin, 0o755))
+	prog := filepath.Join(bin, "tool")
+	require.NoError(t, os.WriteFile(prog, []byte("#!/bin/sh\necho trusted\n"), 0o755))
+	require.NoError(t, os.Chmod(bin, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(bin, 0o755); _ = os.RemoveAll(root) })
+	require.Error(t, unix.Access(bin, unix.W_OK), "fixture: the PATH directory must not be writable")
+
+	out := runWrapped(t, "none", home, home, `
+echo 'echo poisoned' > '`+prog+`' 2>/dev/null && echo OVERWROTE
+chmod u+w '`+bin+`' 2>/dev/null && echo CHMODDED
+echo ran`, "PATH="+bin+":/usr/bin:/bin")
+	assert.Contains(t, out, "ran")
+	assert.NotContains(t, out, "OVERWROTE")
+	assert.NotContains(t, out, "CHMODDED")
+	got, err := os.ReadFile(prog)
+	require.NoError(t, err)
+	assert.Equal(t, "#!/bin/sh\necho trusted\n", string(got))
 }

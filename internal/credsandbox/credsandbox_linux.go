@@ -126,6 +126,7 @@ func Apply(cmd *exec.Cmd, self string, plan Plan) (refusal string) {
 	cmd.Path = self
 	cmd.Args = []string{self, HelperArg}
 	cmd.ExtraFiles = append(cmd.ExtraFiles, runDirFile, parentFile, r)
+	sandboxFiles.Store(cmd, []*os.File{runDirFile, parentFile, r})
 	cmd.Env = append(cmd.Env, specFDEnv+"="+strconv.Itoa(first+2))
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}

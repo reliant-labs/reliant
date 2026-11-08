@@ -70,6 +70,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/reliant-labs/forge/pkg/credentials"
@@ -145,6 +146,27 @@ type Overlay struct {
 	// discarded: a cache root, where a step may have meant to leave
 	// something for the next one (cacheRootOverlays).
 	Notice bool `json:",omitempty"`
+}
+
+// sandboxFiles are the descriptors Apply added to a command's ExtraFiles for
+// the helper (the run directory, its parent and the spec pipe), keyed by the
+// *exec.Cmd. os/exec does not own a caller's ExtraFiles, so the parent's
+// copies stay open until something closes them: Release.
+var sandboxFiles sync.Map // *exec.Cmd -> []*os.File
+
+// Release closes the parent's copies of the descriptors Apply handed cmd's
+// helper. Call it once cmd.Start has returned, whether it succeeded (the
+// child holds its own copies by then) or failed; it is idempotent, and a
+// no-op for a command Apply did not rewrite. It never closes the caller's
+// own ExtraFiles.
+func Release(cmd *exec.Cmd) {
+	v, ok := sandboxFiles.LoadAndDelete(cmd)
+	if !ok {
+		return
+	}
+	for _, f := range v.([]*os.File) {
+		_ = f.Close()
+	}
 }
 
 // readOnlyHomeRel are paths under the user's home that later runs trust: what a

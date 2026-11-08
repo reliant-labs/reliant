@@ -831,6 +831,8 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	if refusal := credsandbox.Wrap(cmd, credentials, req.SandboxWritable()); refusal != "" {
 		return &CommandResult{ExitCode: credsandbox.RefusedExitCode, Stderr: refusal, Combined: refusal}, nil
 	}
+	// A return before Start must not keep the sandbox's descriptors open.
+	defer credsandbox.Release(cmd)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	// Output stamps activity, so if the command is detached into the
@@ -872,6 +874,8 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 
 	start := time.Now()
 	err = cmd.Start()
+	// The child holds its own copies of the sandbox's descriptors now.
+	credsandbox.Release(cmd)
 	if err != nil {
 		tree.Started(0)
 	}
