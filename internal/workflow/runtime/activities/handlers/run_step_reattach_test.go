@@ -212,6 +212,25 @@ func TestRunStep_ReattachedWaitThatEndsWithoutAResultIsNotRetried(t *testing.T) 
 	assert.Len(t, machine.ran(), 1)
 }
 
+// The machine restarted while the command ran, and answers the reattach with
+// its own "interrupted by a daemon restart" result: the command's effects are
+// unknown, so the step pauses (outcome unknown) rather than record a verdict,
+// and nothing is sent again.
+func TestRunStep_ReattachToADaemonRestartResultIsOutcomeUnknown(t *testing.T) {
+	t.Parallel()
+	tools := &reattachingToolExecutor{attached: true, result: &toolexec.ToolResult{IsError: true,
+		ErrorCode: toolexec.ErrorCodeDaemonRestarted, Content: "interrupted by a daemon restart"}}
+	repo := setupTestRepo(t)
+	act := NewExecuteRunStepActivity(repo, tools, nil)
+
+	out, err := runStepAttempt(t, act, createTestChat(t, repo), 2, stepRequestID)
+	requireNonRetryable(t, err, runStepOutcomeUnknownErrType)
+	assert.Zero(t, out.ExitCode)
+	require.NotNil(t, tools.req, "the retry reattached")
+	assert.Equal(t, stepRequestID, tools.req.RequestID)
+	assert.Empty(t, tools.requests(), "nothing is sent to the machine")
+}
+
 // The step's command travels under its request id; the log-file write after
 // it is another command and carries none.
 func TestRunStep_CommandCarriesTheStepsRequestID(t *testing.T) {
