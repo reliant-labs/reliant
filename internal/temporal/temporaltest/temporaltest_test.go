@@ -25,8 +25,13 @@ func slowWorkflowTask(workflow.Context) error {
 // The pair is the proof: the same task fails under the SDK's own suite and
 // completes under this one. The SDK half also pins the default this package
 // exists to override — if a Temporal upgrade changes it, this says so.
+//
+// Each half spins for 1.5s of wall time, so the halves (and the embedded case
+// below) run in parallel: the spin is the point, waiting for it serially is not.
 func TestWorkflowTestSuiteToleratesASlowWorkflowTask(t *testing.T) {
+	t.Parallel()
 	t.Run("SDK default fails it as a deadlock", func(t *testing.T) {
+		t.Parallel()
 		if os.Getenv("TEMPORAL_DEBUG") != "" {
 			t.Skip("TEMPORAL_DEBUG disables the SDK's deadlock detector")
 		}
@@ -41,6 +46,7 @@ func TestWorkflowTestSuiteToleratesASlowWorkflowTask(t *testing.T) {
 	})
 
 	t.Run("harness suite lets it finish", func(t *testing.T) {
+		t.Parallel()
 		var suite WorkflowTestSuite
 		env := suite.NewTestWorkflowEnvironment()
 		env.ExecuteWorkflow(slowWorkflowTask)
@@ -57,6 +63,7 @@ func TestWorkflowTestSuiteToleratesASlowWorkflowTask(t *testing.T) {
 // Embedding is how the testify suites in this repository use the SDK type, so
 // the shadowing method must win there too.
 func TestWorkflowTestSuiteShadowsWhenEmbedded(t *testing.T) {
+	t.Parallel()
 	var harness struct {
 		WorkflowTestSuite
 	}
