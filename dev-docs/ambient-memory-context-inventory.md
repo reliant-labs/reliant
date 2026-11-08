@@ -71,6 +71,9 @@ old worker that ignores the field is not safe for the opt-out workflow.
 
 - [ ] Deploy a runtime that understands/enforces the flag and its migration;
       confirm every worker/provider path used by Growth runs that version.
+      If this check fails, or anything regresses later, follow "If adoption
+      fails or regresses" below. Never downgrade the worker while an opt-out
+      run exists.
 - [ ] Fresh non-forked history contains only approved brief/messages; inspect
       summaries, attachments, mailbox/report inputs and prior tool results.
 - [ ] Approve or suppress all bootstrap bytes and project/repo/path metadata.
@@ -85,3 +88,54 @@ old worker that ignores the field is not safe for the opt-out workflow.
       outgoing request and approved context present. Do not test with real secrets.
 - [ ] Independently review exact-head evidence. Keep Growth AI disabled until all
       applicable boundary checks are proved; memory exclusion alone is insufficient.
+
+## If adoption fails or regresses
+
+Rolling back the worker is not a recovery here. An old worker ignores
+`threads.exclude_ambient_memory`, so it would send ambient memories for threads
+that are durably excluded. Recovery stops the affected execution, keeps the
+schema and the policy in place, and resumes only on a fixed runtime that knows
+about exclusion.
+
+**When the adoption check fails before Growth AI is enabled** (some worker or
+provider path used by Growth does not run the exclusion-aware version): leave
+Growth AI disabled and do not activate its workflows. Nothing has run, so
+nothing needs pausing. Fix the deploy so every path runs the exclusion-aware
+version, then repeat the check.
+
+**When anything regresses after opted-out workflows have started** (a canary
+shows up in an outgoing request, a worker on the wrong version takes a run, or
+a release containing this change has to be withdrawn):
+
+1. **Stop new work.** Deactivate every Growth workflow:
+   `reliant trigger deactivate --workflow <name>`, one call per workflow.
+2. **Stop the work in flight.** Find the affected runs: every chat whose thread
+   lineage carries the opt-out: the threads with `exclude_ambient_memory =
+   true` and every thread below them, including any descendant that has not
+   yet run a turn to latch the flag itself. Query the reliant DB, read-only:
+
+   ```sql
+   WITH RECURSIVE opted AS (
+     SELECT id, chat_id FROM threads WHERE exclude_ambient_memory
+     UNION
+     SELECT t.id, t.chat_id FROM threads t JOIN opted o ON t.parent_thread_id = o.id
+   )
+   SELECT DISTINCT chat_id FROM opted;
+   ```
+
+   Run it again after pausing, because a run that was mid-turn can add
+   children. Pause each one
+   with `reliant workflow pause <execution-id>`. Pausing keeps the checkpoint.
+   Terminate only a run that must never resume.
+3. **Keep the schema and the policy.** Do not revert the migration, do not
+   clear the column, and do not write `false` anywhere. The code has no reset
+   path, and that is deliberate.
+4. **Do not deploy an older worker** while any paused or running opt-out run
+   exists. If the release must be withdrawn, fix forward: ship a release that
+   still enforces the flag, and back out only the faulty change.
+5. **Resume only on a verified runtime.** Before resuming any run, repeat the
+   checklist's first check: every worker and provider path that Growth uses
+   runs an exclusion-aware version, and a canary run of a nested, forked and
+   continued-as-new opt-out workflow sends no ambient memory. Then run
+   `reliant workflow resume <execution-id>` for each paused run, and
+   `reliant trigger activate` for the workflows.
