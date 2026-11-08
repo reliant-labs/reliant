@@ -439,6 +439,36 @@ func MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, db orm.Con
 	return res.RowsAffected()
 }
 
+// markQueuedAgentMessagesUndeliveredForWorkflowSubtreeSQL resolves the
+// mailboxes of every thread owned by a workflow or any of its descendants:
+// the same subtree cascadeTerminalStatusToThreadSubtreeSQL ends.
+const markQueuedAgentMessagesUndeliveredForWorkflowSubtreeSQL = `
+WITH RECURSIVE subtree AS (
+    SELECT ?0::text AS id
+    UNION ALL
+    SELECT c.id FROM workflows c JOIN subtree s ON c.parent_id = s.id
+)
+UPDATE agent_messages AS m
+SET status = ?1::int
+FROM threads t, subtree
+WHERE m.to_thread_id = t.id
+  AND t.workflow_id = subtree.id
+  AND m.status = ?2::int`
+
+// MarkQueuedAgentMessagesUndeliveredForWorkflowSubtree marks every row still
+// queued for a thread of workflowID's subtree undelivered, for a subtree that
+// was told to stop: no loop of it will take another turn to drain them.
+// Guarded on queued, like the per-thread resolve. Returns how many rows it
+// moved.
+func MarkQueuedAgentMessagesUndeliveredForWorkflowSubtree(ctx context.Context, db orm.Context, workflowID string) (int64, error) {
+	res, err := db.Bun().NewRaw(markQueuedAgentMessagesUndeliveredForWorkflowSubtreeSQL,
+		workflowID, core.AgentMessageStatusUndelivered, core.AgentMessageStatusQueued).Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // ListThreadsWithOrphanedAgentMessages returns every thread that is ALREADY
 // terminal but still has queued mailbox rows: the backlog the live path
 // above missed (rows from before it existed, or a process that died between
