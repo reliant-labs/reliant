@@ -88,10 +88,9 @@ test.describe('Apps', () => {
     test("links to the app's live URLs", async ({ page }) => {
       await mockAppsBackend(page);
       await page.goto(`/m/chats/${DEPLOY_CHAT.id}`);
-      // The simplified thread folds the turn's tool work into one "Activity"
-      // line (#2352); the deploy's card is its outcome, so it stays on screen
-      // with the fold shut.
-      await expect(page.getByRole('button', { name: /^Activity\b/ })).toHaveAttribute('aria-expanded', 'false', { timeout: 15_000 });
+      // A deploy is a user-facing call, so the simplified thread renders it in
+      // place as its own row (#2441), not inside the turn's "Activity" fold.
+      // This turn's only call is the deploy, so there is no fold at all.
       const card = page.getByTestId('deployed-app-card');
       await expect(card).toBeVisible({ timeout: 15_000 });
       await expect(card).toHaveAttribute('data-env', 'prod');
@@ -100,9 +99,9 @@ test.describe('Apps', () => {
         'href',
         'https://bright-otter.reliantapps.dev',
       );
-      // Opening the fold shows the shell call, not a second card.
-      await page.getByRole('button', { name: /^Activity\b/ }).click();
+      // One card, and no fold to hide it in.
       await expect(page.getByTestId('deployed-app-card')).toHaveCount(1);
+      await expect(page.getByRole('button', { name: /^Activity\b/ })).toHaveCount(0);
       await card.getByTestId('deployed-app-open').click();
       await expect(page).toHaveURL(/\/forge\/p\/storefront/);
     });
