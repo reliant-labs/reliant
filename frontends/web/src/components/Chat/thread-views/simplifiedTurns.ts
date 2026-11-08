@@ -9,6 +9,11 @@
  * prose / fold / prose, and a turn of many LLM calls reads as its narration
  * with a fold wherever the agent went quiet and worked.
  *
+ * A tool call the user must see — a question, an approval, a generated image,
+ * a deploy — is a boundary just like prose: [tool, ask_user, tool] renders as
+ * fold / card / fold. Nothing that stays on screen is ever collected under a
+ * fold's header, away from where it happened.
+ *
  * Presentation only, like transcriptPresentation.ts: it never clones or
  * mutates a message. A row names a message plus the indexes of the
  * `ProcessedMessage.segments` it renders (a MessageSlice).
@@ -17,7 +22,7 @@
 import type { Message } from "../../../gen/reliant/v1/chat_pb";
 import { AgentMessageKind, ContentBlockType, DisplayStyle, MessageRole } from "../../../gen/reliant/v1/chat_pb";
 import { getProcessedMessage } from "../../../lib/messageProcessor";
-import type { MessageSegment, ToolResultsByCallId } from "../../../lib/messageProcessor";
+import type { MessageSegment, ToolExecution, ToolResultsByCallId } from "../../../lib/messageProcessor";
 import { toolBaseName } from "../../../lib/toolAction";
 import type { Approval } from "../../../gen/reliant/v1/approval_pb";
 
@@ -27,14 +32,13 @@ import type { Approval } from "../../../gen/reliant/v1/approval_pb";
  * - `prose`: assistant text, as a message row. With `chrome` it also carries
  *   the message's timestamp, actions and attachments — set on a message's LAST
  *   prose slice only, so a message cut in three shows them once.
- * - `work`: the fold's expanded body — tool rows (with the media of any tool
- *   but a generation tool), without the message chrome.
- * - `work-surfaced`: what must stay visible while the fold is COLLAPSED — the
- *   user cards (ask_user, request_machine, draft automation), tool calls
- *   awaiting approval, deploy cards and generated images/videos. Renders
- *   nothing when the slice has none.
+ * - `work`: a part of a fold's expanded body — tool rows and their media,
+ *   without the message chrome.
+ * - `surfaced`: tool calls that stay on screen as a row of their own (see
+ *   SurfacedExecutionPredicate), rendered as the detailed transcript renders
+ *   them — card, approval buttons, image — without the message chrome.
  */
-export type MessageSliceRole = "prose" | "work" | "work-surfaced";
+export type MessageSliceRole = "prose" | "work" | "surfaced";
 
 /** Which of a message's segments a row renders, and how. */
 export interface MessageSlice {
@@ -43,20 +47,39 @@ export interface MessageSlice {
   role: MessageSliceRole;
   /** `prose` only: this row carries the message's chrome. */
   chrome?: boolean;
+  /**
+   * The tool calls (by call id) the row renders of its tools segments, when
+   * not all of them: a surfaced call cuts its segment into fold / call / fold.
+   * Absent: every call of every listed segment.
+   */
+  callIds?: readonly string[];
 }
+
+/**
+ * Whether a tool call stays on screen as its own row, at its place, rather
+ * than inside a fold. Given the call as the segments carry it; a caller that
+ * judges by result or approval joins those in itself.
+ */
+export type SurfacedExecutionPredicate = (execution: ToolExecution) => boolean;
+
+const NEVER_SURFACED: SurfacedExecutionPredicate = () => false;
 
 /** One folded run of work: tool segments and the agent mail between them. */
 export interface TurnWork {
   /**
-   * `work-<message id>-<segment index>` of the run's first tool segment, or
-   * `work-<message id>` when the run opens on mail. Stable while the run grows
+   * `work-<message id>-<segment index>` of the run's first tool segment
+   * (`…:<call id>` when the run opens after a surfaced call of that segment),
+   * or `work-<message id>` when the run opens on mail. Stable while the run grows
    * at its end — the virtualizer re-finds rows by key, so a key that changed
    * as messages arrived would remount the fold and jump the scroll.
    */
   key: string;
   thread: string;
-  /** The run's tool work, in render order; each entry is one message's slice. */
-  parts: ReadonlyArray<{ message: Message; segmentIndexes: readonly number[] }>;
+  /**
+   * The run's tool work, in render order; each entry is one message's slice.
+   * `callIds` as in MessageSlice: set when a surfaced call cut a segment.
+   */
+  parts: ReadonlyArray<{ message: Message; segmentIndexes: readonly number[]; callIds?: readonly string[] }>;
   /** Agent mail and routine notices, retained in full in the expanded body.
    * afterPart is the number of parts preceding the message (0 means before all).
    * The original message supplies its timestamp and navigation metadata.
@@ -100,9 +123,9 @@ export function createSegmentReader(): SegmentReader {
 const NO_INDEXES: readonly number[] = [];
 
 /**
- * Tools whose media IS the result the user asked for. Their images and videos
- * stay on screen under a collapsed fold; any other tool's media (a browser
- * screenshot, a viewed image file) is a record of work and stays in the fold.
+ * Tools whose media IS the result the user asked for. Their calls stay on
+ * screen as rows of their own; any other tool's media (a browser screenshot,
+ * a viewed image file) is a record of work and stays in the fold.
  */
 const SURFACED_MEDIA_TOOLS = new Set(["generate_image", "generate_video"]);
 
@@ -153,10 +176,10 @@ function isBlankText(segment: MessageSegment): boolean {
  * does not change (non-message items, text-only messages, boundaries) are
  * returned as the same objects.
  *
- * A work run is a maximal sequence, on one thread, of tool segments, blank
- * text, and foldable activity messages. Non-blank assistant text, a human
- * message, errors, info, run outputs, thread changes, warnings and anything
- * else closes it. A run becomes a fold when it ran a tool or holds at least
+ * A work run is a maximal sequence, on one thread, of tool calls, blank
+ * text, and foldable activity messages. Non-blank assistant text, a surfaced
+ * tool call, a human message, errors, info, run outputs, thread changes,
+ * warnings and anything else closes it. A run becomes a fold when it ran a tool or holds at least
  * two activity messages; a lone message with no tool work stays its own row.
  */
 export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
@@ -164,12 +187,22 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
   opts: {
     segmentsOf: SegmentReader;
     workflowOf: (item: I & { type: "message" }) => W;
+    /**
+     * A tool call that stays on screen as its own row (see
+     * SurfacedExecutionPredicate). Default: none.
+     */
+    isSurfaced?: SurfacedExecutionPredicate;
   },
 ): Array<SlicedMessageItem<I> | WorkItem<W>> {
-  const { segmentsOf, workflowOf } = opts;
+  const { segmentsOf, workflowOf, isSurfaced = NEVER_SURFACED } = opts;
   const out: Array<SlicedMessageItem<I> | WorkItem<W>> = [];
 
-  type Part = { message: Message; segmentIndexes: number[] };
+  type Part = {
+    message: Message;
+    segments: readonly MessageSegment[];
+    segmentIndexes: number[];
+    callIds: string[];
+  };
   type Event = { type: "message"; message: Message; afterPart: number };
   type Run = {
     key: string;
@@ -196,7 +229,7 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
         work: {
           key: r.key,
           thread: r.thread,
-          parts: r.parts,
+          parts: r.parts.map(toTurnWorkPart),
           ...(r.events.length ? { events: r.events } : {}),
         },
         workflow: r.workflow,
@@ -214,15 +247,38 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
     return opened;
   };
 
-  const addWork = (message: Message, segmentIndex: number, isTools: boolean) => {
-    if (!run) return;
-    const last = run.parts[run.parts.length - 1];
-    // A message's work segments are contiguous within a run (its prose would
-    // have closed the run), so the last part is this message's if any is.
-    if (last?.message === message) last.segmentIndexes.push(segmentIndex);
-    else run.parts.push({ message, segmentIndexes: [segmentIndex] });
-    if (isTools) run.tools += 1;
+  // A part names whole segments, plus the calls it holds when a surfaced call
+  // cut one of its tools segments.
+  const toTurnWorkPart = ({ message, segments, segmentIndexes, callIds }: Part): TurnWork["parts"][number] => {
+    const held = new Set(callIds);
+    const partial = segmentIndexes.some((s) => {
+      const segment = segments[s];
+      return segment.kind === "tools" && segment.executions.some((execution) => !held.has(execution.call.id));
+    });
+    return partial ? { message, segmentIndexes, callIds } : { message, segmentIndexes };
   };
+
+  /** Adds segment `s` of `message` to the open run: one call of it, or blank text. */
+  const addWork = (message: Message, segments: readonly MessageSegment[], s: number, callId?: string) => {
+    if (!run) return;
+    let last = run.parts[run.parts.length - 1];
+    // A message's work segments are contiguous within a run (its prose or a
+    // surfaced call would have closed the run), so the last part is this
+    // message's if any is.
+    if (last?.message !== message) {
+      last = { message, segments, segmentIndexes: [], callIds: [] };
+      run.parts.push(last);
+    }
+    if (last.segmentIndexes[last.segmentIndexes.length - 1] !== s) last.segmentIndexes.push(s);
+    if (callId !== undefined) {
+      last.callIds.push(callId);
+      run.tools += 1;
+    }
+  };
+
+  // The latest surfaced-call row. Adjacent surfaced calls of one tools
+  // segment share it while it is still the last row out.
+  let surfaced = null as { row: SlicedMessageItem<I>; message: Message; s: number; callIds: string[] } | null;
 
   for (const item of items) {
     if (item.type !== "message") {
@@ -263,7 +319,7 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
       // yet) joins the open run, so a live fold stays the last row between
       // calls. Anything else here is prose: the whole message, as detailed.
       if (run && run.thread === thread && !hasAttachments && segments.every(isBlankText)) {
-        segments.forEach((_, s) => addWork(message, s, false));
+        segments.forEach((_, s) => addWork(message, segments, s));
         continue;
       }
       close();
@@ -271,7 +327,8 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
       continue;
     }
 
-    // A message with tool work: cut it into prose slices and work.
+    // A message with tool work: cut it into prose slices, work, and the
+    // surfaced calls' rows, each at its place.
     type ProseSlice = { segmentIndexes: number[]; role: "prose"; chrome?: boolean };
     let prose = null as ProseSlice | null;
     let lastProse = null as ProseSlice | null;
@@ -279,12 +336,34 @@ export function buildSimplifiedTimeline<I extends SimplifiableItem, W>(
       const segment = segments[s];
       if (segment.kind === "tools") {
         prose = null;
-        if (run && run.thread !== thread) close();
-        if (!run) open(`work-${message.id}-${s}`, thread, messageItem);
-        addWork(message, s, true);
+        segment.executions.forEach((execution, e) => {
+          const callId = execution.call.id;
+          if (isSurfaced(execution)) {
+            // A boundary, like prose: the run before it folds on its own.
+            close();
+            if (surfaced && surfaced.message === message && surfaced.s === s && out[out.length - 1] === surfaced.row) {
+              surfaced.callIds.push(callId);
+              return;
+            }
+            const callIds = [callId];
+            const row: SlicedMessageItem<I> = {
+              ...item,
+              slice: { segmentIndexes: [s], role: "surfaced", callIds },
+              key: `${message.id}:${s}:${callId}`,
+            };
+            out.push(row);
+            surfaced = { row, message, s, callIds };
+            return;
+          }
+          if (run && run.thread !== thread) close();
+          // A run opening mid-segment (after a surfaced call) names the call,
+          // so the folds either side of that call keep distinct keys.
+          if (!run) open(e === 0 ? `work-${message.id}-${s}` : `work-${message.id}-${s}:${callId}`, thread, messageItem);
+          addWork(message, segments, s, callId);
+        });
       } else if (isBlankText(segment)) {
         if (prose) prose.segmentIndexes.push(s);
-        else if (run && run.thread === thread) addWork(message, s, false);
+        else if (run && run.thread === thread) addWork(message, segments, s);
         // Otherwise there is nothing to attach it to, and it renders nothing.
       } else if (prose) {
         prose.segmentIndexes.push(s);

@@ -16,6 +16,7 @@ import type { Message } from "../../../../types/chat";
 import { ApprovalSchema, ApprovalStatus } from "../../../../gen/reliant/v1/approval_pb";
 import type { Approval } from "../../../../gen/reliant/v1/approval_pb";
 import { InterleavedTimeline } from "../InterleavedTimeline";
+import type { ErrorUpdate } from "../../../../types/streaming";
 import { SurfaceProvider } from "../../../../lib/surfaceContext";
 import { setChatThreadMode } from "../useChatThreadMode";
 
@@ -99,6 +100,9 @@ vi.mock("../../BranchOptionsMenu", () => ({ BranchOptionsMenu: () => null }));
 vi.mock("../../BranchToWorktreeModal", () => ({ BranchToWorktreeModal: () => null }));
 vi.mock("../../BranchToExistingWorktreeModal", () => ({ BranchToExistingWorktreeModal: () => null }));
 vi.mock("../../CodeContextPill", () => ({ CodeContextPill: () => null }));
+vi.mock("../../WorkflowErrorMessage", () => ({
+  WorkflowErrorMessage: ({ error }: { error: { error_summary?: string } }) => <div data-testid="error-row">{error.error_summary}</div>,
+}));
 
 vi.mock("../../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
@@ -202,11 +206,17 @@ const pendingApproval = (blockId: string): Approval =>
 
 function renderTimeline(
   messages: Message[],
-  props: { isStreaming?: boolean; approvals?: Approval[] } = {},
+  props: { isStreaming?: boolean; approvals?: Approval[]; errorEvents?: ErrorUpdate[] } = {},
 ) {
   const element = (next: Message[], p: typeof props) => (
     <SurfaceProvider surface="mobile">
-      <InterleavedTimeline messages={next} chatId="chat-1" isStreaming={p.isStreaming ?? false} approvals={p.approvals} />
+      <InterleavedTimeline
+        messages={next}
+        chatId="chat-1"
+        isStreaming={p.isStreaming ?? false}
+        approvals={p.approvals}
+        errorEvents={p.errorEvents}
+      />
     </SurfaceProvider>
   );
   const result = render(element(messages, props));
@@ -214,6 +224,19 @@ function renderTimeline(
 }
 
 const fold = () => screen.getByTestId("turn-work-fold");
+/** The timeline's rows, in order, each named by what it shows. */
+const rowSequence = () =>
+  Array.from(document.querySelectorAll("[data-timeline-index]"))
+    .sort((a, b) => Number(a.getAttribute("data-timeline-index")) - Number(b.getAttribute("data-timeline-index")))
+    .map((row) => {
+      if (row.querySelector('[data-testid="turn-work-fold"]')) return "fold";
+      if (row.querySelector('[data-testid="ask-user-card"]')) return "ask-card";
+      if (row.querySelector('[data-testid="error-row"]')) return "error";
+      const card = row.querySelector('[data-testid="tool-card"]');
+      if (card) return card.textContent?.replace(/Approve tool execution/, "") ?? "tool";
+      // The message itself, not the phone's date separator above it.
+      return row.querySelector('[data-testid^="message-"]')?.textContent?.trim() || "empty";
+    });
 const foldButton = () => within(fold()).getAllByRole("button")[0];
 const visible = (content: string) => screen.queryByText(content) !== null;
 
@@ -292,6 +315,94 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(screen.getByTestId("message-m2")).toHaveTextContent("Looks right.");
     expect(within(screen.getByTestId("message-m2")).getAllByRole("button", { name: "Message actions" })).toHaveLength(1);
     expect(within(screen.getByTestId("message-m2-prose")).queryByRole("button", { name: "Message actions" })).toBeNull();
+  });
+
+  it("keeps a question at its place: tool, ask_user, tool is fold / card / fold", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Set it up"),
+      assistant(2, [tool(0, "read_file", "call-read")]),
+      assistant(3, [tool(0, "ask_user", "call-ask")]),
+      assistant(4, [tool(0, "bash", "call-bash")]),
+      assistant(5, [text(0, "Set up.")]),
+    ]);
+
+    expect(rowSequence()).toEqual(["Set it up", "fold", "ask-card", "fold", "Set up."]);
+    // Opening a fold never brings the card in with it, or moves it.
+    for (const header of screen.getAllByTestId("turn-work-fold")) {
+      fireEvent.click(within(header).getAllByRole("button")[0]);
+    }
+    expect(screen.getAllByTestId("ask-user-card")).toHaveLength(1);
+    expect(rowSequence()).toEqual(["Set it up", "fold", "ask-card", "fold", "Set up."]);
+  });
+
+  it("keeps a generated image at its place in the middle of a run, even inside one tools segment", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Make a logo"),
+      assistant(2, [tool(0, "read_file", "call-read"), tool(1, "generate_image", "call-img"), tool(2, "bash", "call-bash")]),
+      assistant(3, [text(0, "Logo ready.")]),
+    ]);
+
+    expect(rowSequence()).toEqual(["Make a logo", "fold", "tool:generate_image", "fold", "Logo ready."]);
+  });
+
+  it("keeps a call awaiting approval at its place in the run", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Deploy it"),
+      assistant(2, [tool(0, "read_file", "call-read"), tool(1, "bash", "call-bash"), tool(2, "read_file", "call-read-2")]),
+    ], { approvals: [pendingApproval("m2-b1")] });
+
+    expect(rowSequence()).toEqual(["Deploy it", "fold", "tool:bash", "fold"]);
+    expect(screen.getAllByRole("button", { name: /approve tool execution/i })).toHaveLength(1);
+  });
+
+  it("puts an error that happened mid-run between the folds either side of it", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Go"),
+      assistant(2, [tool(0, "read_file", "call-read")]),
+      assistant(4, [tool(0, "bash", "call-bash")]),
+      assistant(5, [text(0, "Recovered.")]),
+    ], {
+      errorEvents: [{
+        id: "error-1",
+        update_type: "error",
+        chat_id: "chat-1",
+        activity_type: "CallLLM",
+        activity_id: "1",
+        error_message: "provider error",
+        error_summary: "Provider hiccup",
+        // Between m2 (00:00:20) and m4 (00:00:40).
+        timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, 30)).toISOString(),
+        sequence_number: 1,
+      } as ErrorUpdate],
+    });
+
+    expect(rowSequence()).toEqual(["Go", "fold", "error", "fold", "Recovered."]);
+  });
+
+  it.each(["simplified", "detailed"])("orders two events after the same message by time (%s)", (mode) => {
+    settings.store.set("appearance.chatThreadMode", mode);
+    const error = (id: string, summary: string, seconds: number) => ({
+      id: `error-${id}`,
+      update_type: "error",
+      chat_id: "chat-1",
+      activity_type: "CallLLM",
+      activity_id: id,
+      error_message: summary,
+      error_summary: summary,
+      timestamp: new Date(Date.UTC(2026, 0, 1, 0, 0, seconds)).toISOString(),
+      sequence_number: Number(id),
+    }) as ErrorUpdate;
+    renderTimeline([
+      user(1, "Go"),
+      assistant(2, [tool(0, "read_file", "call-read")]),
+      assistant(4, [text(0, "Recovered.")]),
+    ], { errorEvents: [error("1", "First failure", 25), error("2", "Second failure", 28)] });
+
+    expect(screen.getAllByTestId("error-row").map((row) => row.textContent)).toEqual(["First failure", "Second failure"]);
   });
 
   it("folds an orchestrator's sub-agent mail and tool runs into one row", () => {

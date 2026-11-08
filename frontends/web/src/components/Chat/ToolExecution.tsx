@@ -9,7 +9,7 @@
  */
 
 import Tooltip from "../forge-ui/tooltip";
-import { useState, memo, useCallback, useContext, useMemo, useEffect } from "react";
+import { useState, memo, useCallback, useMemo, useEffect } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -38,7 +38,7 @@ import {
 import { FileLink } from "./FileLink";
 import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool } from "../../lib/toolFormatters";
 import { formatToolDuration, toolActionVerb, toolDurationMs } from "../../lib/toolAction";
-import { DeployCardShownOutside, DeployedAppCard, deployOfToolCall } from "../Apps/DeployedAppCard";
+import { DeployedAppCard, deployOfToolCall } from "../Apps/DeployedAppCard";
 import { parseFilePath } from "../../lib/filePath";
 import { openFile, classifyPath } from "../../lib/fileOpener";
 import { toast } from "../../lib/toast-manager";
@@ -466,11 +466,10 @@ function ToolExecutionComponent({
   const durationLabel = durationMs !== null ? formatToolDuration(durationMs) : null;
   const actionVerb = toolActionVerb(toolCall.name, isCompleted || hasFailed || isCancelled ? "done" : "live", toolCall.input);
   // A shell call that deployed a forge app links to what it deployed
-  // (Apps/DeployedAppCard), unless the container already shows that card.
-  const deployCardShownOutside = useContext(DeployCardShownOutside);
+  // (Apps/DeployedAppCard).
   const shellDeploy = useMemo(
-    () => (deployCardShownOutside ? null : deployOfToolCall(toolNameLower, toolCall.input, toolResult)),
-    [deployCardShownOutside, toolNameLower, toolCall.input, toolResult]
+    () => deployOfToolCall(toolNameLower, toolCall.input, toolResult),
+    [toolNameLower, toolCall.input, toolResult]
   );
 
   // Approval logic - if backend created a pending approval, we need to show UI for it.
