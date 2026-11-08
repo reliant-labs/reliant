@@ -3528,8 +3528,16 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 
 	// See spawn_node.go for what a spawn tool call says.
 	parsed, err := parseSpawnToolInput(spawnToolCall.GetInput())
+	if parsed.providersFromString &&
+		workflow.GetVersion(ctx, spawnStringProvidersVersionID(toolCallID), workflow.DefaultVersion, spawnStringProvidersVersion) == workflow.DefaultVersion {
+		// Recorded by a build that refused a stringified `providers`:
+		// refuse it again, or the replay would start a child it never did.
+		err = parsed.strictProvidersErr
+	}
 	if err != nil {
-		logger.Error("[ExecuteTools] Failed to parse spawn tool input",
+		// The model wrote these arguments, and the error goes back to it as
+		// the tool's result to correct: an outcome of the run, not a fault.
+		logger.Warn("[ExecuteTools] Failed to parse spawn tool input",
 			"error", err, "tool_call_id", toolCallID, "preset", parsed.preset)
 		return nil, err
 	}

@@ -395,6 +395,54 @@ func (s *SpawnTestSuite) TestParseSpawnToolCall_Resumption() {
 	s.Equal(expectedID, result.childWorkflowID)
 }
 
+// stringProvidersSpawnCall is a spawn whose `providers` the model sent as a
+// JSON-encoded string (reliant #2392).
+func stringProvidersSpawnCall(toolCallID string) *reliantv1.ToolCallMsg {
+	inputJSON, _ := json.Marshal(map[string]interface{}{
+		"preset":    "code_reviewer",
+		"prompt":    "Review the diff",
+		"providers": `{"prefer":["codex"],"on_limit":"wait"}`,
+	})
+	return &reliantv1.ToolCallMsg{Name: "spawn", Id: toolCallID, Input: string(inputJSON)}
+}
+
+func (s *SpawnTestSuite) TestParseSpawnToolCall_StringifiedProviders_Accepted() {
+	env := s.NewTestWorkflowEnvironment()
+
+	var result *spawnChildWorkflowConfig
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		var err error
+		result, err = parseSpawnToolCall(ctx, stringProvidersSpawnCall("tc-str"), "parent-wf-str")
+		return err
+	})
+
+	s.NoError(env.GetWorkflowError())
+	s.Require().NotNil(result)
+	s.Require().NotNil(result.providers)
+	s.Equal([]string{"codex"}, result.providers.Prefer)
+	s.Equal("wait", result.providers.OnLimit)
+}
+
+// A history recorded before the fix refused the call; its replay must refuse
+// it again rather than start a child the history never started.
+func (s *SpawnTestSuite) TestParseSpawnToolCall_StringifiedProviders_ReplaysRefusal() {
+	env := s.NewTestWorkflowEnvironment()
+	env.OnGetVersion(spawnStringProvidersVersionID("tc-old"), workflow.DefaultVersion, spawnStringProvidersVersion).
+		Return(workflow.DefaultVersion)
+
+	var result *spawnChildWorkflowConfig
+	var parseErr error
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		result, parseErr = parseSpawnToolCall(ctx, stringProvidersSpawnCall("tc-old"), "parent-wf-old")
+		return nil
+	})
+
+	s.NoError(env.GetWorkflowError())
+	s.Nil(result)
+	s.Require().Error(parseErr)
+	s.Contains(parseErr.Error(), "cannot unmarshal string")
+}
+
 func (s *SpawnTestSuite) TestParseSpawnToolCall_InvalidJSON() {
 	env := s.NewTestWorkflowEnvironment()
 
