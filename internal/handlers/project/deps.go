@@ -44,7 +44,9 @@ type Repository interface {
 	// checkout's workspaces refused until destroy reports the outcome
 	// settled: no workspace is admitted between the guard and the end of the
 	// delete, even one the machine finishes after the server stopped waiting.
-	TearDownProjectCheckout(ctx context.Context, projectID, daemonID string, guard func(ctx context.Context) error, destroy func(ctx context.Context) (settled bool)) error
+	// destroy is told whether an earlier remove or reclone's outcome is still
+	// unknown, and settled must then cover that one too.
+	TearDownProjectCheckout(ctx context.Context, projectID, daemonID string, guard func(ctx context.Context) error, destroy func(ctx context.Context, earlierUnknown bool) (settled bool)) error
 
 	CreateRepo(ctx context.Context, repo *core.Repo) error
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)

@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=c92c01db7e982c01089b79570b8e665f3f132148c21f7cdfdc7ed12f38ea711d
+// forge:hash=7f50b2433643dcd4b1e9bffe2dc55abb5bc4f20356e65ed331541a744bc3d31a
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -47,7 +47,7 @@ type MockRepository struct {
 	DeleteProjectDaemonFunc                   func(context.Context, string, string) error
 	DetachProjectFromDaemonFunc               func(context.Context, string, string, string, func(ctx context.Context) error) error
 	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
-	TearDownProjectCheckoutFunc               func(context.Context, string, string, func(ctx context.Context) error, func(ctx context.Context) (settled bool)) error
+	TearDownProjectCheckoutFunc               func(context.Context, string, string, func(ctx context.Context) error, func(ctx context.Context, earlierUnknown bool) (settled bool)) error
 	CreateRepoFunc                            func(context.Context, *core.Repo) error
 	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
 	CreateWorktreeFunc                        func(context.Context, *db.Worktree) error
@@ -231,7 +231,7 @@ func (m *MockRepository) ListProjectDaemonDetachmentsForDaemon(ctx context.Conte
 }
 
 // TearDownProjectCheckout records the call and delegates to TearDownProjectCheckoutFunc when set.
-func (m *MockRepository) TearDownProjectCheckout(p0 context.Context, projectID string, daemonID string, guard func(ctx context.Context) error, destroy func(ctx context.Context) (settled bool)) error {
+func (m *MockRepository) TearDownProjectCheckout(p0 context.Context, projectID string, daemonID string, guard func(ctx context.Context) error, destroy func(ctx context.Context, earlierUnknown bool) (settled bool)) error {
 	m.Recorder.Record("TearDownProjectCheckout", p0, projectID, daemonID, guard, destroy)
 	if m.TearDownProjectCheckoutFunc != nil {
 		return m.TearDownProjectCheckoutFunc(p0, projectID, daemonID, guard, destroy)

@@ -74,10 +74,19 @@ Clean up: delete the `rollout-check` project and the folders on A and B.
   finished".** A remove or reclone of that checkout timed out (or the server
   died while waiting), so `project_daemons.teardown_pending_at` stays set
   while the machine may still be deleting. Expected: run the remove or
-  reclone again with the machine online, which clears it. A mark left on a
-  checkout whose remove or reclone did answer is a server defect
-  (`teardownSettled`, `internal/handlers/project/rpc_project_daemons.go`):
-  fix forward; as a stopgap clear that one row's `teardown_pending_at`.
+  reclone again with the machine online. The retry first asks the machine
+  `git.await_teardown`, which it answers only once no remove or reclone of
+  that checkout is running (the daemon runs them one at a time per path), and
+  clears the mark only on that answer plus the retry's own known outcome. A
+  retry that never reached the machine, or that the machine answered while
+  the earlier delete may still run, keeps it. A machine on a release before
+  this one answers "unknown command", so its mark stays until the machine
+  runs this release (then retry). A mark left after the machine answered
+  `git.await_teardown` idle and the retry answered is a server defect
+  (`earlierTeardownsOver` / `teardownSettled`,
+  `internal/handlers/project/rpc_project_daemons.go`): fix forward; as a
+  stopgap, once the machine shows the delete is over, clear that one row's
+  `teardown_pending_at`.
 - **One additive migration** ships (`project_daemons.teardown_pending_at`,
   nullable, unread by the previous release), so either half still rolls back
   alone. During a rolling deploy a previous-release server neither sets nor

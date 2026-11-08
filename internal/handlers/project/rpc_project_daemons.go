@@ -633,9 +633,10 @@ func (s *Service) RemoveProjectFromDaemon(
 	var sendErr error
 	if err := s.deps.Repo.TearDownProjectCheckout(ctx, project.ID, req.Msg.DaemonId, func(lockedCtx context.Context) error {
 		return s.requireNoWorkspacesOn(lockedCtx, project, req.Msg.DaemonId, s.machineName(lockedCtx, req.Msg.DaemonId), "removing the project from that machine")
-	}, func(lockedCtx context.Context) bool {
+	}, func(lockedCtx context.Context, earlierUnknown bool) bool {
+		earlierOver := !earlierUnknown || s.earlierTeardownsOver(lockedCtx, userID, req.Msg.DaemonId, pd.Path)
 		sendErr = s.sendToDaemon(lockedCtx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp)
-		return teardownSettled(sendErr)
+		return earlierOver && teardownSettled(sendErr)
 	}); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to lock the project's checkout on the machine"))
 	}
@@ -662,16 +663,39 @@ func (s *Service) RemoveProjectFromDaemon(
 }
 
 // teardownSettled reports whether a remove or reclone's daemon round trip
-// ended with its outcome known: the machine answered (success or its own
+// ended with its OWN outcome known: the machine answered (success or its own
 // failure), or the command provably never reached it. A timeout, an
 // interrupted connection or a cancelled wait is not settled: the machine may
 // still be deleting the checkout, so TearDownProjectCheckout keeps its
-// workspaces refused until a later remove or reclone settles.
+// workspaces refused until a later remove or reclone settles. It says nothing
+// about an earlier command whose outcome was never heard: that is
+// earlierTeardownsOver's.
 func teardownSettled(err error) bool {
 	return err == nil ||
 		toolexec.IsDaemonReportedFailure(err) ||
 		errors.Is(err, toolexec.ErrNotDispatched) ||
 		daemonerr.Unreachable(err)
+}
+
+// earlierTeardownsOver reports whether the machine says no remove or reclone
+// of the checkout at path is running any more, so an earlier one whose
+// outcome the server never heard is over. The machine runs a checkout's
+// deletes one at a time and answers git.await_teardown only once every one
+// that reached it before has finished (daemonruntime checkoutTeardowns); a
+// retry's own answer proves nothing about the earlier delete, which may still
+// be running beside it. Anything but that answer (the machine unreachable,
+// the command never dispatched, the wait timed out, a release that does not
+// know the command) leaves the earlier outcome unknown.
+func (s *Service) earlierTeardownsOver(ctx context.Context, userID, daemonID, path string) bool {
+	var resp struct {
+		Idle bool `json:"idle"`
+	}
+	if err := s.sendToDaemon(ctx, userID, daemonID, "git.await_teardown", map[string]string{"path": path}, &resp); err != nil {
+		logging.WarnContext(ctx, "an earlier remove or reclone of the checkout is not known to be over; its workspaces stay refused",
+			"error", err, "daemon_id", daemonID)
+		return false
+	}
+	return resp.Idle
 }
 
 // removeFromOfflineMachine is RemoveProjectFromDaemon's refusal for a machine
@@ -718,9 +742,10 @@ func (s *Service) RecloneProjectOnDaemon(
 	var sendErr error
 	if err := s.deps.Repo.TearDownProjectCheckout(ctx, project.ID, req.Msg.DaemonId, func(lockedCtx context.Context) error {
 		return s.requireNoWorkspacesOn(lockedCtx, project, req.Msg.DaemonId, s.machineName(lockedCtx, req.Msg.DaemonId), "recloning the project on that machine")
-	}, func(lockedCtx context.Context) bool {
+	}, func(lockedCtx context.Context, earlierUnknown bool) bool {
+		earlierOver := !earlierUnknown || s.earlierTeardownsOver(lockedCtx, userID, req.Msg.DaemonId, pd.Path)
 		sendErr = s.sendToDaemon(lockedCtx, userID, req.Msg.DaemonId, "git.reclone", payload, &recloneResp)
-		return teardownSettled(sendErr)
+		return earlierOver && teardownSettled(sendErr)
 	}); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to lock the project's checkout on the machine"))
 	}

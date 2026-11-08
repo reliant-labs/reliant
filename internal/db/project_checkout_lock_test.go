@@ -86,7 +86,7 @@ func TestTearDownProjectCheckout_HoldsBackWorkspaceInsertsUntilDone(t *testing.T
 	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.elsewhere, func(lockedCtx context.Context) error {
 		assert.Equal(t, 1, f.countOn(t, lockedCtx, f.elsewhere), "the guard reads a workspace committed before the lock")
 		return nil
-	}, func(context.Context) bool { return true }))
+	}, func(context.Context, bool) bool { return true }))
 
 	guarded, release, done := make(chan struct{}), make(chan struct{}), make(chan error, 1)
 	go func() {
@@ -95,7 +95,7 @@ func TestTearDownProjectCheckout_HoldsBackWorkspaceInsertsUntilDone(t *testing.T
 				t.Errorf("the guard read %d workspaces, want 0", n)
 			}
 			return nil
-		}, func(context.Context) bool {
+		}, func(context.Context, bool) bool {
 			close(guarded)
 			<-release // the daemon command deleting the checkout runs here
 			return true
@@ -129,7 +129,7 @@ func TestTearDownProjectCheckout_KeepsWorkspacesRefusedWhileTheOutcomeIsUnknown(
 	ctx := context.Background()
 
 	stillDeleting, deleted := make(chan struct{}), make(chan struct{})
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(context.Context) bool {
+	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(context.Context, bool) bool {
 		// The request budget ran out; the machine's delete runs on.
 		go func() {
 			<-stillDeleting
@@ -148,11 +148,40 @@ func TestTearDownProjectCheckout_KeepsWorkspacesRefusedWhileTheOutcomeIsUnknown(
 	require.NoError(t, f.repo.CreateWorktree(ctx, f.workspace("other-machine", f.elsewhere)))
 
 	// A second unsettled attempt keeps the mark; a settled one clears it.
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(context.Context) bool { return false }))
+	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(context.Context, bool) bool { return false }))
 	require.ErrorIs(t, f.repo.CreateWorktree(ctx, f.workspace("still-unknown", f.here)), core.ErrCheckoutTeardownPending)
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(context.Context) bool { return true }))
+	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(context.Context, bool) bool { return true }))
 	require.NoError(t, f.repo.CreateWorktree(ctx, f.workspace("settled", f.here)))
 	assert.Equal(t, 1, f.countOn(t, ctx, f.here))
+}
+
+// destroy is told whether an earlier remove or reclone's outcome is still
+// unknown, so a retry can hold the mark for that one too: a timed-out remove
+// followed by retries that settle only their own outcome (one never
+// dispatched, one answered beside the earlier delete) keeps the checkout's
+// workspaces refused until a retry covers the earlier one.
+func TestTearDownProjectCheckout_TellsDestroyAboutAnEarlierUnknownOutcome(t *testing.T) {
+	t.Parallel()
+	f := newCheckoutFixture(t)
+	ctx := context.Background()
+	var told []bool
+	destroy := func(settled func(earlierUnknown bool) bool) func(context.Context, bool) bool {
+		return func(_ context.Context, earlierUnknown bool) bool {
+			told = append(told, earlierUnknown)
+			return settled(earlierUnknown)
+		}
+	}
+	// Settles its own outcome only: what the handler reports for a retry the
+	// machine never got, or one it answered while the earlier one may run.
+	ownOnly := func(earlierUnknown bool) bool { return !earlierUnknown }
+
+	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, destroy(func(bool) bool { return false })))
+	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, destroy(ownOnly)))
+	require.ErrorIs(t, f.repo.CreateWorktree(ctx, f.workspace("retry-proved-nothing", f.here)), core.ErrCheckoutTeardownPending)
+	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, destroy(func(bool) bool { return true })))
+	require.NoError(t, f.repo.CreateWorktree(ctx, f.workspace("earlier-over", f.here)))
+	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.elsewhere, nil, destroy(ownOnly)))
+	assert.Equal(t, []bool{false, true, true, false}, told)
 }
 
 // A guard that refuses sends nothing and marks nothing: the checkout's
@@ -163,7 +192,7 @@ func TestTearDownProjectCheckout_ARefusedGuardMarksNothing(t *testing.T) {
 	ctx := context.Background()
 	refused := core.ErrCheckoutTeardownPending // any error
 	err := f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, func(context.Context) error { return refused },
-		func(context.Context) bool {
+		func(context.Context, bool) bool {
 			t.Error("destroy ran after its guard refused")
 			return false
 		})
@@ -178,7 +207,7 @@ func TestTearDownProjectCheckout_OutlivesTheCallersCancellation(t *testing.T) {
 	t.Parallel()
 	f := newCheckoutFixture(t)
 	ctx, cancel := context.WithCancel(context.Background())
-	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(lockedCtx context.Context) bool {
+	require.NoError(t, f.repo.TearDownProjectCheckout(ctx, f.pid, f.here, nil, func(lockedCtx context.Context, _ bool) bool {
 		cancel()
 		assert.NoError(t, lockedCtx.Err(), "the wait for the machine is not cancelled with the caller")
 		return false

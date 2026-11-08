@@ -373,7 +373,7 @@ func TestProjectOnDaemonCommands_RemoveAndRecloneGuardAndDeleteUnderTheCheckoutL
 			store := onDaemon(t)
 			inLock, sections := false, 0
 			var settled []bool
-			store.TearDownProjectCheckoutFunc = func(ctx context.Context, projectID, daemonID string, guard func(context.Context) error, destroy func(context.Context) bool) error {
+			store.TearDownProjectCheckoutFunc = func(ctx context.Context, projectID, daemonID string, guard func(context.Context) error, destroy func(context.Context, bool) bool) error {
 				assert.Equal(t, "p-1", projectID)
 				assert.Equal(t, "d-1", daemonID)
 				sections++
@@ -382,7 +382,7 @@ func TestProjectOnDaemonCommands_RemoveAndRecloneGuardAndDeleteUnderTheCheckoutL
 				if err := guard(ctx); err != nil {
 					return err
 				}
-				settled = append(settled, destroy(ctx))
+				settled = append(settled, destroy(ctx, false))
 				return nil
 			}
 			var guardInLock []bool
@@ -434,11 +434,11 @@ func TestProjectOnDaemonCommands_RemoveAndRecloneSettleOnlyOnAKnownOutcome(t *te
 				t.Parallel()
 				store := onDaemon(t)
 				var settled []bool
-				store.TearDownProjectCheckoutFunc = func(ctx context.Context, _, _ string, guard func(context.Context) error, destroy func(context.Context) bool) error {
+				store.TearDownProjectCheckoutFunc = func(ctx context.Context, _, _ string, guard func(context.Context) error, destroy func(context.Context, bool) bool) error {
 					if err := guard(ctx); err != nil {
 						return err
 					}
-					settled = append(settled, destroy(ctx))
+					settled = append(settled, destroy(ctx, false))
 					return nil
 				}
 				deleted := false
@@ -461,5 +461,94 @@ func TestProjectOnDaemonCommands_RemoveAndRecloneSettleOnlyOnAKnownOutcome(t *te
 				assert.False(t, deleted, "the row stays while the remove did not report success")
 			})
 		}
+	}
+}
+
+// An earlier remove or reclone timed out and left the checkout marked: the
+// machine may still be deleting it. A retry clears the mark only when the
+// machine says no delete of that checkout is running any more
+// (git.await_teardown, answered once every earlier one finished) AND the
+// retry's own outcome is known. A retry that never reached the machine, or
+// one answered while the earlier delete may still run beside it (the machine
+// runs commands concurrently), proves nothing about the earlier one.
+func TestProjectOnDaemonCommands_ARetryClearsAnEarlierUnknownTeardownOnlyWhenTheMachineSaysItIsOver(t *testing.T) {
+	t.Parallel()
+	ctx := project.AuthedContext(t)
+	notDispatched := fmt.Errorf("send: %w", toolexec.ErrNotDispatched)
+	timedOut := fmt.Errorf("daemon command via NATS failed: %w: %w", toolexec.ErrDaemonTimeout, context.DeadlineExceeded)
+	offline := svcerr.WithCause(svcerr.Unavailable("no daemon connected"), notDispatched)
+	cases := map[string]struct {
+		await, retry error
+		awaitAnswer  string
+		settled      bool
+	}{
+		"retry never dispatched":                    {await: notDispatched, retry: notDispatched},
+		"machine offline":                           {await: offline, retry: offline},
+		"earlier delete still running, retry ran":   {await: timedOut},
+		"machine does not know git.await_teardown":  {await: toolexec.DaemonReportedFailure("git.await_teardown", "unknown command type: git.await_teardown")},
+		"machine idle, retry timed out":             {awaitAnswer: `{"idle":true}`, retry: timedOut},
+		"machine idle, retry failed on the machine": {awaitAnswer: `{"idle":true}`, retry: toolexec.DaemonReportedFailure("git.remove", "permission denied"), settled: true},
+		"machine idle, retry answered":              {awaitAnswer: `{"idle":true}`, settled: true},
+		"an answer that does not say idle":          {awaitAnswer: `{}`},
+	}
+	for name, call := range projectOnDaemonCalls(ctx, "p-1", "d-1") {
+		if name == "pull" {
+			continue
+		}
+		for c, want := range cases {
+			t.Run(name+"/"+c, func(t *testing.T) {
+				t.Parallel()
+				store := onDaemon(t)
+				var settled []bool
+				store.TearDownProjectCheckoutFunc = func(ctx context.Context, _, _ string, guard func(context.Context) error, destroy func(context.Context, bool) bool) error {
+					if err := guard(ctx); err != nil {
+						return err
+					}
+					settled = append(settled, destroy(ctx, true))
+					return nil
+				}
+				store.DeleteProjectDaemonFunc = func(context.Context, string, string) error { return nil }
+				store.UpsertProjectDaemonFunc = func(context.Context, string, string, string, *string) error { return nil }
+				router := newPinnedRecorder()
+				router.fakeDaemon = func(commandType string, _ []byte) ([]byte, error) {
+					if commandType == "git.await_teardown" {
+						if want.await != nil {
+							return nil, want.await
+						}
+						return []byte(want.awaitAnswer), nil
+					}
+					if want.retry != nil {
+						return nil, want.retry
+					}
+					return []byte(`{"success":true}`), nil
+				}
+				_ = call(newService(t, store, router))
+				assert.Equal(t, []bool{want.settled}, settled)
+				require.Len(t, router.commands, 2)
+				assert.Equal(t, "git.await_teardown", router.commands[0], "the machine is asked about the earlier delete first")
+				assert.Equal(t, []string{"d-1", "d-1"}, router.daemons)
+				assert.Equal(t, []string{"/clone", "/clone"}, router.paths, "about the same checkout")
+			})
+		}
+	}
+}
+
+// With no earlier outcome unknown, the machine is not asked about one.
+func TestProjectOnDaemonCommands_NoEarlierUnknownTeardownAsksNothingExtra(t *testing.T) {
+	t.Parallel()
+	ctx := project.AuthedContext(t)
+	for name, call := range projectOnDaemonCalls(ctx, "p-1", "d-1") {
+		if name == "pull" {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store := onDaemon(t)
+			store.DeleteProjectDaemonFunc = func(context.Context, string, string) error { return nil }
+			store.UpsertProjectDaemonFunc = func(context.Context, string, string, string, *string) error { return nil }
+			router := newPinnedRecorder()
+			require.NoError(t, call(newService(t, store, router)))
+			assert.NotContains(t, router.commands, "git.await_teardown")
+		})
 	}
 }
