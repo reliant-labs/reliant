@@ -107,8 +107,8 @@ describe("builder header: workflows journey anchors still resolve", () => {
       .flatMap((s) => [s.target, ...(s.phases ?? []).map((p) => p.target)])
       .filter((t): t is string => typeof t === "string" && /workflow-(save|inputs|publish|unpublish|more)/.test(t));
 
-  it("the journey still names the Save and Inputs anchors", () => {
-    expect(builderTargets()).toEqual(expect.arrayContaining(["[data-testid='workflow-save']", "[data-tour='workflow-inputs']"]));
+  it("the journey still names the Inputs anchor", () => {
+    expect(builderTargets()).toEqual(expect.arrayContaining(["[data-tour='workflow-inputs']"]));
   });
 
   it("every header anchor the journey uses is on a visible control, never inside More", () => {

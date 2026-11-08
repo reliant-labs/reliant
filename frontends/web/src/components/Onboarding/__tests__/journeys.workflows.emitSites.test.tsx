@@ -67,12 +67,12 @@ describe("workflow:nodeAdded's anchor (CanvasInsertContext.insertNode)", () => {
   });
 });
 
-describe("NewWorkflowDialog's guided start (W1)", () => {
+describe("NewWorkflowDialog's Fix my PR start", () => {
   it("is offered only during the tour, preselected and prefilled, and seeds Fix my PR", async () => {
     seedFixMyPr.mockResolvedValue({ slug: "fix-my-pr", draftId: "d1", title: "Fix my PR" });
     const onCreated = vi.fn();
     render(React.createElement(NewWorkflowDialog, { open: true, projectId: "p1", onClose: vi.fn(), onCreated, guided: true }));
-    const guided = await screen.findByRole("radio", { name: /fix my pr \(guided\)/i });
+    const guided = await screen.findByRole("radio", { name: /fix my pr \(example\)/i });
     expect(guided).toBeChecked();
     expect(screen.getByLabelText("Name")).toHaveValue("Fix my PR");
     expect(document.querySelector("[data-tour='new-workflow-dialog']")).not.toBeNull();
@@ -85,7 +85,7 @@ describe("NewWorkflowDialog's guided start (W1)", () => {
 
   it("is absent outside the tour", () => {
     render(React.createElement(NewWorkflowDialog, { open: true, projectId: "p1", onClose: vi.fn(), onCreated: vi.fn() }));
-    expect(screen.queryByRole("radio", { name: /guided/i })).toBeNull();
+    expect(screen.queryByRole("radio", { name: /fix my pr \(example\)/i })).toBeNull();
     expect(screen.getByLabelText("Name")).toHaveValue("");
   });
 });

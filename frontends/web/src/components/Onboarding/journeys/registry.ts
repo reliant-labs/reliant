@@ -34,12 +34,12 @@ import { forgeJourney } from "./forge";
  */
 export const WORKFLOWS_ELSEWHERE: Journey = {
   id: "workflows",
-  version: 2,
+  version: 3,
   shells: ["reliant"],
   elsewhere: { label: "Try AI workflows in Reliant", href: () => `${reliantAppOrigin()}/?journey=workflows` },
   title: "Use AI workflows",
   description:
-    "Build a workflow step by step: agents, loops and branches, a trigger that runs it for you, and the machine it runs on.",
+    "See a finished workflow on the canvas: agent steps, edges, a loop, a branch that asks you first, a schedule, and where it runs.",
   steps: [],
   isAvailable: () => false,
 };
