@@ -27,6 +27,7 @@ import { useChatNavigationStore } from "./chatNavigationStore";
 import { patchBackgroundProcessPorts, upsertBackgroundProcess, type BackgroundProcess } from "../hooks/background-queries";
 import { upsertPackageProcess } from "../hooks/package-queries";
 import { logger } from "../lib/logger";
+import { failChatOpen } from "../lib/chatOpenInteraction";
 import { heartbeatOomKills, type ProcessOomKills } from "../lib/machineMemory";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
@@ -567,7 +568,10 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
       onChatContextUsage: (chatId, contextUsage) => get().handleChatContextUsage(chatId, contextUsage),
       onUserUpdates: (updates) => get().handleChatStreamUserUpdates(updates),
       onStatusChange: (status) => get().handleChatStreamStatusChange(status),
-      onError: (error) => logger.warn(`${LOG_PREFIX} Chat stream error: ${error}`),
+      onError: (error) => {
+        logger.warn(`${LOG_PREFIX} Chat stream error: ${error}`);
+        failChatOpen(get().chatStream?.getChatId(), "stream_error");
+      },
       // Delta resume: chatStore owns each chat's cached state, so it owns the
       // cursor describing it and decides whether a reopen may replay.
       onChatCursorRelease: (chatId, sequence) =>
@@ -577,6 +581,7 @@ function createChatStream(get: StoreGet, set: StoreSet): ChatStreamingService {
       onChatSyncPending: (chatId) =>
         useChatStore.getState().setChatSyncPending(chatId),
       onChatSubscriptionRejected: (chatId) => {
+        failChatOpen(chatId, "rejected");
         if (get().subscribedChatId === chatId) set({ subscribedChatId: null });
       },
     },

@@ -19,7 +19,7 @@ allowBuilds:
   esbuild: true
   protobufjs: false
 minimumReleaseAgeExclude:
-  - "@reliantlabs/forge-web-runtime@0.13.1 || 0.13.3 || 0.13.5 || 0.13.6"
+  - "@reliantlabs/forge-web-runtime@0.13.1 || 0.13.3 || 0.13.5 || 0.13.6 || 0.13.8"
 
 # Dependency versions forced past what a package pins.
 #   monaco-editor pins dompurify exactly (3.4.15 in 0.57.0); keep its copy on
