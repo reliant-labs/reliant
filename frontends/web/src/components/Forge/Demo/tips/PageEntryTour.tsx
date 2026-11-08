@@ -80,6 +80,9 @@ function PageCallout({ tipKey, onDismiss }: { tipKey: DemoTipKey; onDismiss: () 
   }, [tip.target]);
   const footer = <TourControls stepNumber={1} totalSteps={1} onNext={onDismiss} nextLabel="Done" />;
   const description = <>{tip.body}<PageAgentHelp tipKey={tipKey} /></>;
-  if (target) return <OnboardingSpotlight targetSelector={target} title={tip.title} description={description} stepNumber={1} totalSteps={1} onNext={onDismiss} onSkipAll={onDismiss} keyboardNav={false} callout={{ footer, viewportLeft: Math.max(0, document.querySelector('main')?.getBoundingClientRect().left ?? 0) }} />;
+  // Place the card inside the page's own box: right of the desktop sidebar and
+  // below the screen-action row, which stacks above the tour and would cover it.
+  const page = document.querySelector("main")?.getBoundingClientRect();
+  if (target) return <OnboardingSpotlight targetSelector={target} title={tip.title} description={description} stepNumber={1} totalSteps={1} onNext={onDismiss} onSkipAll={onDismiss} keyboardNav={false} callout={{ footer, viewportLeft: Math.max(0, page?.left ?? 0), viewportTop: Math.max(0, page?.top ?? 0) }} />;
   return <DemoCorner order={1}><section className="max-h-[70dvh] overflow-y-auto rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-xl" data-testid="tour-callout" data-page-tour={tipKey}><h3 className="text-sm font-semibold">{tip.title}</h3><div className="mt-1 text-sm leading-relaxed text-ink-muted">{description}</div>{footer}</section></DemoCorner>;
 }
