@@ -286,6 +286,20 @@ export default function SidebarLayout({
     }
     wasDrawerShown.current = drawerShown;
   }, [drawerShown, narrow]);
+  // Following any link in the open drawer closes it, the already-current
+  // route included (its active prop won't change). Delegated from the drawer
+  // with a native listener: the links are the interactive elements, and a
+  // click handler on the <aside> itself is what jsx-a11y rejects in a
+  // scaffolded project's lint.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!drawerShown || !nav) return;
+    const closeOnLink = (event: MouseEvent) => {
+      if (event.target instanceof Element && event.target.closest("a[href]")) setDrawerOpen(false);
+    };
+    nav.addEventListener("click", closeOnLink);
+    return () => nav.removeEventListener("click", closeOnLink);
+  }, [drawerShown]);
   const handleToggle = onToggle ?? (() => setInternalCollapsed((prev) => !prev));
   // A parent with children but no href of its own cannot open by navigating,
   // so it toggles locally instead.
@@ -419,15 +433,6 @@ export default function SidebarLayout({
         aria-modal={drawerShown ? true : undefined}
         aria-labelledby={drawerShown ? titleId : undefined}
         aria-describedby={drawerShown ? descriptionId : undefined}
-        onClick={(event) => {
-          // Including the already-current route: its active prop won't change.
-          if (
-            drawerShown &&
-            navRef.current?.contains(event.target as Node) &&
-            (event.target as Element).closest("a[href]")
-          )
-            setDrawerOpen(false);
-        }}
         className={`flex shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 motion-reduce:transition-none ${
           collapsed ? "w-14" : "w-60"
         } max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[min(18rem,85vw)] max-md:pb-[env(safe-area-inset-bottom)] max-md:pt-[env(safe-area-inset-top)] max-md:transition-transform ${

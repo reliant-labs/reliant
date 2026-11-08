@@ -40,7 +40,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/reliant-labs/forge v1.2.1-0.20261108203511-11fd93df8d8f
-	github.com/reliant-labs/reliant/sdk/go v0.0.0-20261108184528-fcbb88a3e632
+	github.com/reliant-labs/reliant/sdk/go v0.0.0-20261108205832-481a12e4bdfe
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.1.0
