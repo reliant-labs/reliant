@@ -14,7 +14,7 @@ name: Merge queue
 #
 # BESIDE IT, golangci-lint on the changed packages (owner, 2026-11-08): the
 # `golangci` job, `task ci:golangci`, the Go packages the group changed since
-# its base, findings on changed lines only, the root .golangci.yml and the
+# its base, findings in the files it changed only, the root .golangci.yml and the
 # pinned forge's golangci-lint release. It runs on its own runner AT THE SAME
 # TIME as the gate, so it adds nothing to the gate's five minutes, and `CI
 # result` waits for it at the end (the "golangci (changed) passed" step) and

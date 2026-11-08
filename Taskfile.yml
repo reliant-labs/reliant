@@ -506,11 +506,11 @@ tasks:
 
   ci:golangci:
     # golangci-lint on the Go packages the diff from --base changed, findings on
-    # changed lines only, root .golangci.yml. The merge queue runs it as its own
+    # changed files only, root .golangci.yml. The merge queue runs it as its own
     # job beside `CI result`, which fails unless it passed (owner, 2026-11-08);
     # the release gate's unscoped forge lint still runs the whole module.
     # `-- --plan` prints the packages without linting.
-    desc: "golangci-lint on the packages changed since `-- --base <rev>` (new findings only), the merge queue's lint"
+    desc: "golangci-lint on the packages changed since `-- --base <rev>` (findings in changed files), the merge queue's lint"
     cmds:
       - ./scripts/golangci-changed.sh {{.CLI_ARGS}}
 

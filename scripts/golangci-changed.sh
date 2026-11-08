@@ -2,8 +2,12 @@
 # golangci-changed.sh [--base <rev>] [--plan]   (task ci:golangci -- ...)
 #
 # golangci-lint over the Go packages the diff <rev>..HEAD changed, reporting
-# only findings on lines that diff added or changed (--new-from-rev), with the
-# root .golangci.yml. The merge queue's `golangci (changed)` job runs it
+# only findings in the files that diff changed (--new-from-rev --whole-files),
+# with the root .golangci.yml. Whole files, not only changed lines: a linter
+# that reports a block on its first line (forge #1930's nestif grew a block by
+# its inner lines) is missed line by line, and main is lint-clean (the release
+# gate's whole-module lint holds it there), so a changed file carries no
+# backlog. The merge queue's `golangci (changed)` job runs it
 # (.github/workflows/merge-queue.yml), beside `CI result`, which fails unless it
 # passed (owner, 2026-11-08: main went red three times in a day on staticcheck
 # and gosec findings that only the release gate's whole-module lint saw).
@@ -16,8 +20,8 @@
 # loads no tags, as the release gate's plain pass does not). No such package:
 # it says so and exits 0 without loading anything.
 #
-# What it does not: packages the diff did not touch, findings on unchanged
-# lines (the backlog never turns a queue entry red), and the build-tagged pass.
+# What it does not: packages the diff did not touch, findings in files it did
+# not change, and the build-tagged pass.
 # The release gate's unscoped `forge lint` still runs all of it on main.
 #
 # GOFLAGS=-trimpath: golangci-lint loads its packages through `go list
@@ -58,7 +62,7 @@ if [ "${#dirs[@]}" -gt 0 ]; then
   # A directory whose every file a build tag excludes is no package to lint.
   while IFS= read -r p; do [ -n "$p" ] && pkgs+=("$p"); done < <(
     go list -e -f '{{if or .GoFiles .CgoFiles .TestGoFiles .XTestGoFiles}}{{.Dir}}{{end}}' "${dirs[@]}" 2>/dev/null \
-      | sed "s|^$(pwd)/|./|" | sort -u)
+      | sed "s|^$(pwd -P)/|./|" | sort -u)
 fi
 
 if [ "${#pkgs[@]}" -eq 0 ]; then
@@ -71,4 +75,4 @@ printf '  %s\n' "${pkgs[@]}"
 
 command -v golangci-lint >/dev/null || { echo "golangci-changed: golangci-lint is not on PATH (CI: the setup action's golangci input)" >&2; exit 2; }
 golangci-lint version
-GOFLAGS="${GOFLAGS:+${GOFLAGS} }-trimpath" exec golangci-lint run --new-from-rev="$base" "${pkgs[@]}"
+GOFLAGS="${GOFLAGS:+${GOFLAGS} }-trimpath" exec golangci-lint run --new-from-rev="$base" --whole-files "${pkgs[@]}"

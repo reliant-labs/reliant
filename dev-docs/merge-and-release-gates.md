@@ -307,8 +307,8 @@ These are the trade-offs. Each is caught by the release gate:
 - **golangci-lint and buf lint**, and **link errors**. The merge gate itself
   runs neither linter; the merge queue lints the changed packages in a job
   beside it ("golangci-lint in the queue", below), so what reaches main
-  unlinted is a finding on a line the diff did not change, in a package it
-  did not change, or behind a build tag.
+  unlinted is a finding in a file the diff did not change, or behind a build
+  tag.
 - **The race detector.** Nothing before a merge runs `-race`.
 - **Whole-project lint lanes.** golangci over packages the diff did not touch,
   the frontend lint, the graph, component-drift and config-reach lanes cannot
@@ -498,12 +498,16 @@ gosec G101 from #2368. Each was caught only by the release gate's unscoped
 gate's five minutes:
 
 - **What.** `task ci:golangci -- --base <the group's base>`
-  (`scripts/golangci-changed.sh`): `golangci-lint run --new-from-rev=<base>`
-  with the root `.golangci.yml`, over every package of this module with a
-  changed `.go` file (by `scripts/lint-scope.sh`'s rule, so not the root or
-  `sdk/go`; testdata and build-tag-only directories are dropped too).
-  Findings on lines the diff did not change are not reported, so the backlog
-  never turns an entry red. Run it locally with `task ci:golangci` (base: the
+  (`scripts/golangci-changed.sh`): `golangci-lint run --new-from-rev=<base>
+  --whole-files` with the root `.golangci.yml`, over every package of this
+  module with a changed `.go` file (by `scripts/lint-scope.sh`'s rule, so not
+  the root or `sdk/go`; testdata and build-tag-only directories are dropped
+  too). It reports the findings in the files the diff changed, not only on its
+  lines: a linter that reports a block on its first line (forge #1930's
+  nestif, grown by lines inside an `if` it never touched) is invisible line by
+  line. Main is lint-clean (the release gate holds it there; the whole module
+  had 0 findings at 87450cd24), so a changed file carries no backlog to trip
+  over. Run it locally with `task ci:golangci` (base: the
   merge base with `origin/main`); `-- --plan` lists the packages.
 - **Which golangci-lint.** The pinned forge's `templates.GolangciLintVersion`,
   the release the release gate's `forge lint` requires, read from the forge
@@ -527,7 +531,8 @@ gate's five minutes:
   costs nothing. A future diff where it is not shows up in the five-minute
   budget step, which measures the whole run.
 - **What it still leaves to the release gate.** Packages the group did not
-  change, findings on unchanged lines, the build-tagged pass, and buf lint.
+  change, findings in files it did not change, the build-tagged pass, and buf
+  lint.
 
 ### Backwards-compatibility checks in the queue
 

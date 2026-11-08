@@ -220,7 +220,7 @@ jobs:
 
   # The merge queue's golangci job (merge-queue.yml) on a ci:run pull request,
   # beside the merge gate: golangci-lint on the changed packages, findings on
-  # changed lines only. Main runs the whole module in the release gate's lint.
+  # changed files only. Main runs the whole module in the release gate's lint.
   golangci:
     name: golangci (changed)
     needs: lanes
