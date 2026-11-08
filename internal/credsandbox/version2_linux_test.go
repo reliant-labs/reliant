@@ -485,3 +485,30 @@ echo ran`, "PATH="+bin+":/usr/bin:/bin")
 	require.NoError(t, err)
 	assert.Equal(t, "#!/bin/sh\necho trusted\n", string(got))
 }
+
+// A git credential helper configured as an absolute path that does not exist
+// yet, outside home, PATH and the command's checkouts, is sealed: a
+// credentials-none command that creates it there would supply every later
+// credentialed git's credential.
+func TestSandbox_AnAbsentAbsoluteCredentialHelperCannotBePlanted(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	// Under this checkout, not /tmp: the command's /tmp is private.
+	root, err := os.MkdirTemp(".", ".credsandbox-helper-")
+	require.NoError(t, err)
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	helper := filepath.Join(root, "helpers", "git-credential-custom")
+	require.NoError(t, os.MkdirAll(filepath.Dir(helper), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(home, ".gitconfig"),
+		[]byte("[credential]\n\thelper = "+helper+"\n"), 0o644))
+
+	out := runWrapped(t, "none", home, home, `
+printf '#!/bin/sh\necho password=planted\n' > '`+helper+`' 2>/dev/null && chmod +x '`+helper+`' 2>/dev/null
+echo ran`)
+	assert.Contains(t, out, "ran")
+	_, err = os.Lstat(helper)
+	assert.True(t, os.IsNotExist(err), "a planted credential helper outlived the credentials-none command: %v", err)
+}

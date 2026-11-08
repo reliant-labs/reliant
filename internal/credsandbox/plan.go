@@ -194,8 +194,11 @@ func buildPlan(base Plan, in planEnv) Plan {
 			ro = append(ro, real)
 		}
 	}
-	helpersPresent, helpersAbsent := credentialHelpers(home, in.env)
+	helpersPresent, helpersAbsent, helpersAbsentPath := credentialHelpers(home, in.env)
 	ro = append(ro, helpersPresent...)
+	// One that is absent is read-only too, should it appear before the command
+	// starts, and sealed below.
+	ro = append(ro, helpersAbsentPath...)
 	if home != "" {
 		for _, rel := range readOnlyReliantRel {
 			ro = append(ro, filepath.Join(home, rel))
@@ -365,6 +368,15 @@ func buildPlan(base Plan, in planEnv) Plan {
 		if (home != "" && under(d, home)) || under(d, own...) || (cwdOwn && under(d, cwd)) {
 			seal = append(seal, c)
 		}
+	}
+	// An absolute helper path that does not exist yet is sealed wherever it
+	// is (credentialHelpers); checkSeals refuses the command when its
+	// directory is writable and cannot be sealed.
+	for _, c := range helpersAbsentPath {
+		if under(filepath.Dir(c), keptPaths...) || under(filepath.Dir(c), roAll...) {
+			continue
+		}
+		seal = append(seal, c)
 	}
 
 	p.ReadOnly = roAll
@@ -598,8 +610,11 @@ func projectRoots(projectsDir string) []string {
 // helper as git-credential-<name> (git's own exec directory, root's, comes
 // first and needs nothing). Those are every candidate on the command's PATH:
 // existing ones (present) are made read-only; missing ones (absent) must not
-// be creatable where they would be found (buildPlan seals them).
-func credentialHelpers(home string, env []string) (present, absent []string) {
+// be creatable where they would be found (buildPlan seals them). A helper
+// configured as an absolute path that does not exist (absentPath) is sealed
+// wherever it is: git runs exactly that file, so whoever creates it first
+// supplies every later credentialed command's credential.
+func credentialHelpers(home string, env []string) (present, absent, absentPath []string) {
 	type helper struct {
 		name  string
 		shell bool // a `!` helper, or forge's: the name as it is
@@ -635,7 +650,11 @@ func credentialHelpers(home string, env []string) (present, absent []string) {
 		switch {
 		case h.name == "":
 		case filepath.IsAbs(h.name):
-			present = append(present, h.name)
+			if _, err := os.Lstat(h.name); err == nil {
+				present = append(present, h.name)
+			} else {
+				absentPath = append(absentPath, h.name)
+			}
 		case strings.ContainsRune(h.name, '/'):
 			// Relative to whatever directory the credentialed git runs in:
 			// not a path this plan can name.
@@ -654,7 +673,7 @@ func credentialHelpers(home string, env []string) (present, absent []string) {
 			}
 		}
 	}
-	return present, absent
+	return present, absent, absentPath
 }
 
 // gitHelper is one `helper = ...` value of a git config: the program it runs
