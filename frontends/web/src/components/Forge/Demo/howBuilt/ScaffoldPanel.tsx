@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 
 import { CATEGORY_COPY, CHAIN_COPY, NAMED_PATHS } from "./copy";
 import type { CategoryId, ManifestCategory, ScaffoldCast, ScaffoldManifest } from "./fixtures";
+import { categoryOwnership, recordedOwnership, OwnershipBadge, OwnershipGuide } from "./ownership";
 
 const n = (value: number) => value.toLocaleString("en-US");
 
@@ -59,6 +60,10 @@ export function ScaffoldPanel({ manifest, cast }: { manifest: ScaffoldManifest; 
           <strong>{n(s.forgeLines)}</strong> lines across <strong>{n(s.files)}</strong> files.
         </p>
         <p className="text-base leading-relaxed text-ink">Your agent customizes the starting files and implements your app&apos;s rules. Regenerated files come from their inputs instead of direct edits. The project and its code remain yours.</p>
+        <div className="grid gap-4 rounded-lg border border-border bg-surface-sunken p-4 sm:grid-cols-2" aria-label="Code ownership in this recording">
+          <div className="space-y-2"><OwnershipBadge ownership="regen" /><p className="text-sm text-ink">Change the source inputs, then regenerate. Direct edits are overwritten.</p></div>
+          <div className="space-y-2"><OwnershipBadge ownership="yours" /><p className="text-sm text-ink">Starting code your agent can edit directly. You own and control the project.</p></div>
+        </div>
         <details className="border-t border-border pt-2">
           <summary className="min-h-[44px] cursor-pointer py-3 text-sm font-medium text-ink">How these files are counted and maintained</summary>
         <p className="text-sm leading-relaxed text-ink-muted">
@@ -137,7 +142,8 @@ function CategoryBreakdown({ categories }: { categories: ManifestCategory[] }) {
               >
                 <span className="min-w-0">
                   <span className="block text-sm font-medium text-ink">{label}</span>
-                  <span className="block truncate text-xs text-ink-muted">{detail}</span>
+                  <span className="mt-1 block"><OwnershipBadge ownership={categoryOwnership(cat)} /></span>
+                  <span className="mt-1 block text-xs text-ink-muted">{detail}</span>
                 </span>
                 <span className="hidden h-2 rounded-full bg-surface-sunken md:block" aria-hidden="true">
                   <span className="block h-2 rounded-full bg-primary" style={{ width: `${Math.max(2, (cat.lines / widest) * 100)}%` }} />
@@ -152,12 +158,12 @@ function CategoryBreakdown({ categories }: { categories: ManifestCategory[] }) {
                   {[...cat.entries]
                     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
                     .map(([path, lines, yours, own]) => (
-                      <li key={path} className="flex items-center gap-2 py-0.5">
+                      <li key={path} className="flex flex-wrap items-center gap-2 border-b border-border py-2 last:border-0">
                         <span className="min-w-0 flex-1 truncate text-ink" title={path}>
                           {path}
                         </span>
                         {yours > 0 && <span className="text-primary-ink">{yours} yours</span>}
-                        <span className="text-ink-muted">{own === "regen" ? "regenerated" : "written once"}</span>
+                        <OwnershipBadge ownership={own} />
                         <span className="w-12 text-right text-ink-muted">{n(lines)}</span>
                       </li>
                     ))}
@@ -192,6 +198,7 @@ function EntityChain({ manifest }: { manifest: ScaffoldManifest }) {
   }, [index]);
   const excerpt = chain[index];
   const copy = CHAIN_COPY[excerpt.id];
+  const ownership = recordedOwnership(manifest, excerpt.path);
   return (
     <div className="space-y-4 border-t border-border pt-8" data-testid="scaffold-chain">
       <h2 className="text-xl font-semibold text-ink sm:text-2xl">Follow an order through the generated code</h2>
@@ -232,12 +239,14 @@ function EntityChain({ manifest }: { manifest: ScaffoldManifest }) {
       <div role="tabpanel" id={`${id}-panel`} aria-labelledby={`${id}-step-${index}`} tabIndex={0} className="rounded-xl border border-border bg-surface" data-testid="scaffold-chain-panel" data-excerpt={excerpt.id}>
         <div className="flex flex-wrap items-baseline gap-x-3 border-b border-border px-3 py-2">
           <span className="text-sm font-medium text-ink">{copy.title}</span>
-          <code className="text-xs text-ink-muted" data-testid="scaffold-chain-path">
+          <OwnershipBadge ownership={ownership} />
+          <code className="break-all text-xs text-ink-muted" data-testid="scaffold-chain-path">
             {excerpt.path}:{excerpt.start_line}–{excerpt.end_line}
             {excerpt.truncated ? ` (its first ${excerpt.end_line - excerpt.start_line + 1} lines)` : ""}
           </code>
         </div>
         <p className="px-4 py-4 text-base leading-relaxed text-ink">{copy.body}</p>
+        <div className="border-y border-border bg-surface-sunken px-4 py-3"><OwnershipGuide ownership={ownership} /></div>
         <div className="p-2">
           <LightweightCodeViewer content={excerpt.code} language={VIEWER_LANG[excerpt.lang] ?? "plaintext"} maxHeight={360} noBorder />
         </div>
