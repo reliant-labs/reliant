@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=f34d66b1328cd6a07a2638b4c464735cb6ef1522acb418cd0c1b374ddac419aa
+// forge:hash=399360577d02301ba5ee68a73364c51f7a3313768b7ea6621e9dbb6f6ce8a976
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -41,6 +41,7 @@ type MockRepository struct {
 	GetProjectByPathAndUserFunc               func(context.Context, string, string) (*db.Project, error)
 	GetProjectWithUserCheckFunc               func(context.Context, string, string) (*db.Project, error)
 	CreateProjectFunc                         func(context.Context, *db.Project) error
+	WithMachineCheckoutsLockedFunc            func(context.Context, string, func(ctx context.Context) error) error
 	ResolveQueuedProjectDaemonFunc            func(context.Context, string, string) error
 	SyncProjectConfigSnapshotFunc             func(context.Context, *db.ProjectConfigRecord, bool) (bool, error)
 	GetProjectMachineCatalogPushedAtFunc      func(context.Context, string, string) (time.Time, error)
@@ -177,6 +178,15 @@ func (m *MockRepository) CreateProject(ctx context.Context, project *db.Project)
 		return m.CreateProjectFunc(ctx, project)
 	}
 	return contractkit.MockNotSet("MockRepository", "CreateProject")
+}
+
+// WithMachineCheckoutsLocked records the call and delegates to WithMachineCheckoutsLockedFunc when set.
+func (m *MockRepository) WithMachineCheckoutsLocked(p0 context.Context, daemonID string, fn func(ctx context.Context) error) error {
+	m.Recorder.Record("WithMachineCheckoutsLocked", p0, daemonID, fn)
+	if m.WithMachineCheckoutsLockedFunc != nil {
+		return m.WithMachineCheckoutsLockedFunc(p0, daemonID, fn)
+	}
+	return contractkit.MockNotSet("MockRepository", "WithMachineCheckoutsLocked")
 }
 
 // ResolveQueuedProjectDaemon records the call and delegates to ResolveQueuedProjectDaemonFunc when set.
