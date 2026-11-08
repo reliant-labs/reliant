@@ -1,0 +1,35 @@
+-- forge:backward-compatible — validates existing rows against the widened access_tokens_scopes; every row already satisfied the narrower CHECK it replaced, and nothing is written.
+-- Migration: access_tokens_config_storage_scopes_validate
+-- Created: 2026-11-07T23:47:47Z
+--
+-- The schema is the 97 migration(s) in this directory, applied in order (newest: 20261107234731_access_tokens_config_storage_scopes.up.sql). To read it:
+--   forge project shapes --kind table          every table, with the file:line declaring it
+--   forge db introspect --dsn "$DATABASE_URL"  the schema a database actually has
+--   forge db migration new <name> --context    a new file with the schema written into it
+--
+-- Write your migration SQL below:
+
+-- 20261107234731_access_tokens_config_storage_scopes added the widened
+-- access_tokens_scopes NOT VALID. Validate it here, in its own transaction:
+-- VALIDATE CONSTRAINT holds SHARE UPDATE EXCLUSIVE, which does not block token
+-- reads or writes while it scans. lock_timeout bounds the wait.
+--
+-- Post-deploy verification (prod, once the release carrying this file is
+-- deployed):
+--
+--   1. The widened CHECK is installed and validated (both true):
+--        reliant forge db query prod --database reliant --confirm-env prod \
+--          --reason "verify access_tokens_scopes widened" \
+--          "SELECT bool_and(convalidated), bool_and(pg_get_constraintdef(oid) LIKE '%storage:read%') FROM pg_constraint WHERE conname = 'access_tokens_scopes' AND conrelid = 'public.access_tokens'::regclass"
+--      A failed VALIDATE fails this migration and the deploy, and leaves the
+--      NOT VALID constraint from 20261107234731 enforcing new rows.
+--
+-- Rollback: none needed for the schema. The CHECK only widens: every row the
+-- previous release writes satisfies it, so rolling the release back leaves it
+-- in place and the old binary keeps working. Restoring the narrower CHECK is
+-- only possible once no row holds a new scope; then re-issue 20261105212243's
+-- CHECK as a new forward migration (migrations are forward only; never edit
+-- this file after it is applied).
+SET LOCAL lock_timeout = '5s';
+ALTER TABLE access_tokens VALIDATE CONSTRAINT access_tokens_scopes;
+
