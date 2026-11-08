@@ -19,18 +19,74 @@ import (
 var errRecoveryAdmission = errors.New("workspace recovery finalization in progress; retry this operation")
 
 // This gate is daemon-process scoped (commands and stream input share it).
-// Empty work paths mean unknown scope and conflict with any finalization. Only
-// trusted handler code can obtain an exemption; payloads cannot supply one.
-var recoveryAdmissions = recoveryAdmission{work: map[uint64][]string{}, leases: map[uint64]*WorktreeRecoveryLease{}, managedUse: managedRecoveryUse}
+// Every admission names its scope (admissionScope). An unknown scope conflicts
+// with any finalization, so only work whose schema names neither a path nor a
+// working directory is admitted that way. Only trusted handler code can obtain
+// an exemption; payloads cannot supply one.
+var recoveryAdmissions = recoveryAdmission{work: map[uint64]admissionScope{}, leases: map[uint64]*WorktreeRecoveryLease{}, managedUse: managedRecoveryUse, processUse: worktreereclaim.CheckProcessUse}
 
 type recoveryAdmission struct {
 	mu     sync.Mutex
 	next   uint64
-	work   map[uint64][]string
+	work   map[uint64]admissionScope
 	leases map[uint64]*WorktreeRecoveryLease
-	// managedUse continues unknown-scope admission after a start command
-	// returns. It samples actual registry lifetimes, never initial cwd.
-	managedUse func() error
+	// managedUse continues admission after a start command returns: it vetoes
+	// a lease while a managed background process or terminal session runs
+	// inside one of the leased paths. It samples the registries afresh, so a
+	// process's whole lifetime counts, not just its start command.
+	managedUse func(leased []string) error
+	// processUse inspects every live process's cwd, executable, open and
+	// mapped files. nil means worktreereclaim.CheckProcessUse.
+	processUse func(context.Context, []string) error
+}
+
+// admissionScope is what one admitted piece of daemon work may touch.
+type admissionScope struct {
+	// paths are canonical. Empty means unknown, which conflicts with every
+	// lease.
+	paths []string
+	// cwd says paths are the directories the work RUNS in, not paths it names.
+	// Only work running inside a leased path conflicts: a shell started in an
+	// ancestor ($HOME, /) or a sibling is elsewhere on the machine and must not
+	// hold the worktree (owner decision, 2026-11-08). Whatever it later does
+	// under the worktree (a cd, an open file) is seen by process inspection at
+	// every lease check.
+	cwd bool
+}
+
+func (s admissionScope) conflicts(leased []string) bool {
+	if !s.cwd {
+		return admissionConflict(s.paths, leased)
+	}
+	if len(s.paths) == 0 || len(leased) == 0 {
+		return true
+	}
+	for _, dir := range s.paths {
+		for _, root := range leased {
+			if admissionWithin(root, dir) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// cwdScope is the scope of work running in dir. Empty dir is the daemon's own
+// working directory, which a child started with no Dir inherits. An error means
+// where it runs cannot be established.
+func cwdScope(dir string) (admissionScope, error) {
+	if dir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return admissionScope{}, err
+		}
+		dir = wd
+	}
+	p, err := canonicalAdmissionPath(dir)
+	if err != nil {
+		return admissionScope{}, err
+	}
+	return admissionScope{paths: []string{p}, cwd: true}, nil
 }
 
 type WorktreeRecoveryLease struct {
@@ -87,12 +143,14 @@ func canonicalAdmissionPath(path string) (string, error) {
 		cur = parent
 	}
 }
+
+// admissionWithin reports whether path is root or inside it.
+func admissionWithin(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
 func admissionOverlap(a, b string) bool {
-	within := func(root, path string) bool {
-		rel, err := filepath.Rel(root, path)
-		return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
-	}
-	return within(a, b) || within(b, a)
+	return admissionWithin(a, b) || admissionWithin(b, a)
 }
 func admissionConflict(a, b []string) bool {
 	if len(a) == 0 || len(b) == 0 {
@@ -107,6 +165,8 @@ func admissionConflict(a, b []string) bool {
 	}
 	return false
 }
+
+// begin admits work that names the paths it touches (nil: unknown).
 func (g *recoveryAdmission) begin(paths []string) (func(), error) {
 	canonical := make([]string, 0, len(paths))
 	for _, path := range paths {
@@ -116,16 +176,31 @@ func (g *recoveryAdmission) begin(paths []string) (func(), error) {
 		}
 		canonical = append(canonical, p)
 	}
+	return g.admit(admissionScope{paths: canonical})
+}
+
+// beginIn admits work that runs in dir: a command, a tool call, a background
+// process or a terminal. A dir whose location cannot be established is
+// admitted as unknown, which keeps every finalization out while it runs.
+func (g *recoveryAdmission) beginIn(dir string) (func(), error) {
+	scope, err := cwdScope(dir)
+	if err != nil {
+		scope = admissionScope{}
+	}
+	return g.admit(scope)
+}
+
+func (g *recoveryAdmission) admit(scope admissionScope) (func(), error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for _, lease := range g.leases {
-		if admissionConflict(canonical, lease.paths) {
+		if scope.conflicts(lease.paths) {
 			return nil, errRecoveryAdmission
 		}
 	}
 	g.next++
 	id := g.next
-	g.work[id] = canonical
+	g.work[id] = scope
 	var once sync.Once
 	return func() { once.Do(func() { g.mu.Lock(); delete(g.work, id); g.mu.Unlock() }) }, nil
 }
@@ -144,12 +219,12 @@ func (g *recoveryAdmission) acquire(paths []string) (*WorktreeRecoveryLease, err
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for _, work := range g.work {
-		if admissionConflict(canonical, work) {
+		if work.conflicts(canonical) {
 			return nil, errors.New("workspace has active daemon work")
 		}
 	}
 	if g.managedUse != nil {
-		if err := g.managedUse(); err != nil {
+		if err := g.managedUse(canonical); err != nil {
 			return nil, err
 		}
 	}
@@ -164,19 +239,52 @@ func (g *recoveryAdmission) acquire(paths []string) (*WorktreeRecoveryLease, err
 	return lease, nil
 }
 
-// managedRecoveryUse retains the unknown-scope veto for the entire managed
-// process/session lifetime. Arbitrary shells can sleep outside a workspace,
-// then open an absolute path inside it; cwd/fd probes cannot exclude that.
-// Start/creation admission remains held until registry publication, closing
-// the handoff race. Registry completion releases the veto without a poller.
-func managedRecoveryUse() error {
+// managedRecoveryUse vetoes a lease for the whole lifetime of a managed
+// background process or terminal session started inside a leased path. Start
+// and creation admission (beginIn) stays held until registry publication,
+// closing the handoff race; registry completion releases the veto without a
+// poller.
+//
+// One started anywhere else does NOT veto (owner decision, 2026-11-08; bug
+// c4a30cf1). This used to refuse while ANY managed process or terminal was open
+// on the machine, on the grounds that a shell can sleep outside a workspace and
+// later open an absolute path inside it. An agent machine always has one, so no
+// archived worktree ever freed its disk. A shell that has since moved into the
+// worktree, or holds a file there, is seen by process inspection, which every
+// Check runs right after this.
+func managedRecoveryUse(leased []string) error {
+	return managedUseIn(leased, managedWorkSnapshot())
+}
+
+// managedWork is one running background process or open terminal session, and
+// the directory it was started in ("" = the daemon's own).
+type managedWork struct{ kind, dir string }
+
+func managedWorkSnapshot() []managedWork {
+	var work []managedWork
 	for _, p := range shell.GetBackgroundManager().GetAllProcesses() {
 		if p.StatusSafe() == "running" {
-			return errors.New("managed background process has unknown filesystem scope")
+			work = append(work, managedWork{kind: "background process", dir: p.WorkingDir})
 		}
 	}
-	if tm := terminalManager(); tm != nil && len(tm.ListSessions()) != 0 {
-		return errors.New("open terminal session has unknown filesystem scope")
+	if tm := terminalManager(); tm != nil {
+		for _, s := range tm.ListSessions() {
+			work = append(work, managedWork{kind: "terminal session", dir: s.WorkingDir})
+		}
+	}
+	return work
+}
+
+func managedUseIn(leased []string, work []managedWork) error {
+	for _, w := range work {
+		scope, err := cwdScope(w.dir)
+		if err != nil {
+			// Where it runs cannot be established, so it may run here.
+			return fmt.Errorf("managed %s has an unknown working directory: %w", w.kind, err)
+		}
+		if scope.conflicts(leased) {
+			return fmt.Errorf("a managed %s was started in this workspace", w.kind)
+		}
 	}
 	return nil
 }
@@ -194,15 +302,20 @@ func (l *WorktreeRecoveryLease) Check(ctx context.Context) error {
 		return err
 	}
 	if l.gate.managedUse != nil {
-		if err := l.gate.managedUse(); err != nil {
+		if err := l.gate.managedUse(l.paths); err != nil {
 			return err
 		}
 	}
 	// No broad PID exclusions, including our own: an fd/cwd we hold under a
-	// recovery root is use too. Inspection uncertainty is not a safe idle result.
+	// recovery root is use too. Inspection uncertainty (an unreadable /proc)
+	// is not a safe idle result: it holds the worktree.
+	inspect := l.gate.processUse
+	if inspect == nil {
+		inspect = worktreereclaim.CheckProcessUse
+	}
 	probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if err := worktreereclaim.CheckProcessUse(probeCtx, l.paths); err != nil {
+	if err := inspect(probeCtx, l.paths); err != nil {
 		return err
 	}
 	l.gate.mu.Lock()
@@ -233,11 +346,25 @@ func recoveryLifecycleCommand(name string) bool {
 	}
 }
 
-// Only schemas whose complete path scope is known are inferred. Exec and
-// arbitrary tools are unknown: a cwd is not a confinement boundary. They are
-// refused conservatively during the short finalization window only.
+// selfAdmittedCommand names the commands whose handler takes its own
+// admission, scoped to the working directory it resolves (beginRecoveryWorkIn)
+// and held until the process or session it starts is in its registry.
+// Admitting them here as well would add an unknown-scope admission that vetoes
+// every finalization on the machine for as long as the command runs.
+func selfAdmittedCommand(name string) bool {
+	switch name {
+	case "exec.run", "exec.bg_start", "terminal.create":
+		return true
+	default:
+		return false
+	}
+}
+
+// Only schemas whose complete path scope is known are inferred; the rest are
+// unknown and refused conservatively during the short finalization window
+// only. Exec and terminals are scoped to where they run by their handlers.
 func beginRecoveryCommand(name string, payload []byte) (func(), error) {
-	if recoveryLifecycleCommand(name) {
+	if recoveryLifecycleCommand(name) || selfAdmittedCommand(name) {
 		return func() {}, nil
 	}
 	var paths []string
@@ -258,7 +385,11 @@ func beginRecoveryCommand(name string, payload []byte) (func(), error) {
 	}
 	return recoveryAdmissions.begin(paths)
 }
-func beginRecoveryWork() (func(), error) { return recoveryAdmissions.begin(nil) }
+
+// beginRecoveryWorkIn admits work that runs in dir ("" = the daemon's own
+// working directory): it conflicts only with a finalization of a worktree dir
+// is inside.
+func beginRecoveryWorkIn(dir string) (func(), error) { return recoveryAdmissions.beginIn(dir) }
 
 // Shared daemon observer, lazily constructed from the daemon's private data
 // directory. The caller owns Start and cancellation for each workspace.

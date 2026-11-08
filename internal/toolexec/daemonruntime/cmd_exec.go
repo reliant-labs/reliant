@@ -67,11 +67,6 @@ func buildExecCommand(ctx context.Context, req daemon.RunCommandRequest) *exec.C
 }
 
 func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
-	releaseRecovery, err := beginRecoveryWork()
-	if err != nil {
-		return nil, err
-	}
-	defer releaseRecovery()
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -86,6 +81,13 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.WorkingDir = resolvedDir
+	// Admitted where it runs, before it starts: it holds only a worktree it
+	// runs inside, and a worktree being retired refuses it.
+	releaseRecovery, err := beginRecoveryWorkIn(req.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseRecovery()
 
 	// Name a bad working directory before spawning, or the kernel's ENOENT
 	// comes back attributed to the shell binary instead of the directory.
@@ -257,11 +259,6 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 // =============================================================================
 
 func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
-	releaseRecovery, err := beginRecoveryWork()
-	if err != nil {
-		return nil, err
-	}
-	defer releaseRecovery()
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -274,6 +271,13 @@ func handleExecBGStart(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, err
 	}
 	req.WorkingDir = resolvedDir
+	// Held until the process is in the background registry, which then
+	// holds the worktree it runs in for its whole lifetime (managedRecoveryUse).
+	releaseRecovery, err := beginRecoveryWorkIn(req.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	defer releaseRecovery()
 	credentials, err := daemonpolicy.ParseCredentials(req.Credentials)
 	if err != nil {
 		return nil, err

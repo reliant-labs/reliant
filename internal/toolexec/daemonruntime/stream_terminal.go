@@ -56,15 +56,6 @@ func (t *terminalPumpTracker) stopAll() {
 func (d *daemonClient) handleTerminalInput(
 	msg *reliantv1.TerminalInputMessage,
 ) {
-	releaseRecovery, admissionErr := beginRecoveryWork()
-	if admissionErr != nil {
-		_ = d.send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_TerminalSessionEvent{
-			TerminalSessionEvent: &reliantv1.TerminalSessionEvent{SessionId: msg.GetSessionId(),
-				EventType: reliantv1.TerminalSessionEvent_EVENT_TYPE_ERROR, Message: admissionErr.Error()},
-		}})
-		return
-	}
-	defer releaseRecovery()
 	tm := terminalManager()
 	if tm == nil {
 		logging.Warn(logPrefix + " Terminal input received but terminal manager not initialized")
@@ -75,6 +66,21 @@ func (d *daemonClient) handleTerminalInput(
 	if sessionID == "" || len(data) == 0 {
 		return
 	}
+	// Admitted where the session was started. If its shell has since moved
+	// into a worktree, process inspection holds that worktree instead.
+	dir := ""
+	if session, ok := tm.GetSession(sessionID); ok {
+		dir = session.WorkingDir
+	}
+	releaseRecovery, admissionErr := beginRecoveryWorkIn(dir)
+	if admissionErr != nil {
+		_ = d.send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_TerminalSessionEvent{
+			TerminalSessionEvent: &reliantv1.TerminalSessionEvent{SessionId: sessionID,
+				EventType: reliantv1.TerminalSessionEvent_EVENT_TYPE_ERROR, Message: admissionErr.Error()},
+		}})
+		return
+	}
+	defer releaseRecovery()
 
 	if err := tm.Write(sessionID, data); err != nil {
 		terminalFailureLog(err, logPrefix+" Failed to write terminal input",
