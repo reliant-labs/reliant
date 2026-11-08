@@ -262,13 +262,17 @@ func TestRetirementTreePartialFailureKeepsGitPointer(t *testing.T) {
 	}
 }
 
-// A lease's Check is point-in-time: a process can enter the tree right after
-// the check that authorized an unlink. Deletion is therefore fenced at each
-// entry, not by the check: only the inventoried entry, unchanged, is unlinked,
-// and a directory with anything new in it cannot be removed. Here the "outside
-// process" writes inside the tree after the check has passed, before the first
-// unlink; whatever it wrote, and the recovery pointer, survive.
-func TestRetirementTreeUseAfterTheFinalCheckStopsDeletion(t *testing.T) {
+// A lease's Check is point-in-time. Each entry's deletion boundary re-checks
+// it against the inventory, so a change that lands after the check but before
+// that boundary stops deletion: only the inventoried entry, unchanged, is
+// unlinked, and a directory with anything new in it cannot be removed. Here
+// the "outside process" writes inside the tree after the check has passed and
+// before the first boundary; whatever it wrote, and the recovery pointer,
+// survive. The boundary check and its unlink are separate syscalls, so this is
+// not a fence for a write between the two: that window is bounded by the
+// full process check before every unlink, on a tree only its fresh quarantine
+// name reaches (see daemonruntime's managedRecoveryUse).
+func TestRetirementTreeChangeBeforeTheDeletionBoundaryStopsDeletion(t *testing.T) {
 	for name, enter := range map[string]func(root string){
 		"new file":      func(root string) { write(t, filepath.Join(root, "src", "late.go"), "written after the check") },
 		"modified file": func(root string) { write(t, filepath.Join(root, "src", "main.go"), "rewritten after the check") },

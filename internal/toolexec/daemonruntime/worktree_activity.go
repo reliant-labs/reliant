@@ -50,8 +50,8 @@ type admissionScope struct {
 	// ancestor ($HOME, /) or a sibling is elsewhere on the machine and must not
 	// hold the worktree (owner decision, 2026-11-08). Whatever it does under
 	// the worktree before a lease check (a cd, an open file) is seen by process
-	// inspection there; what it does after one is fenced by the retirement
-	// itself (see managedRecoveryUse), not by the check.
+	// inspection there; what bounds what it does after one is the retirement
+	// itself (see managedRecoveryUse), not that check.
 	cwd bool
 }
 
@@ -254,15 +254,21 @@ func (g *recoveryAdmission) acquire(paths []string) (*WorktreeRecoveryLease, err
 // worktree, or holds a file there, is seen by process inspection, which every
 // Check runs right after this.
 //
-// A Check is point-in-time, for managed and unmanaged processes alike, so it
-// is not what keeps a process that enters AFTER it from losing work. The
-// retirement fences that (worktreereclaim.retireWorkspace): the checkout is
-// moved to a fresh quarantine path before the checks that authorize deletion,
-// so its original path no longer exists to cd into; anything that entered
-// before the move is in the quarantined tree, where the next Check sees it;
-// and deletion unlinks one inventoried, unchanged entry at a time, so a file
-// written or changed after the last Check stops it with the remaining files
-// and the git pointer kept (TestRetirementTreeUseAfterTheFinalCheckStopsDeletion).
+// A Check is point-in-time, for managed and unmanaged processes alike. What
+// bounds a process that comes in after one is the retirement
+// (worktreereclaim.retireWorkspace), and the bound is reachability, not an
+// atomic test-and-unlink (none exists): the checkout is moved to a fresh,
+// random quarantine path before the checks that authorize deletion, so its
+// original path no longer exists to cd into or open; a full Check — every
+// process's cwd, open and mapped files — runs again immediately before EACH
+// unlink; and a process with no reference into the tree at that Check can get
+// one only by naming the fresh quarantine path, or from a process that had
+// one, which that Check saw. Changes that land before an entry's deletion
+// boundary also stop it, with the remaining files and the git pointer kept
+// (TestRetirementTreeChangeBeforeTheDeletionBoundaryStopsDeletion). A process
+// that opens the quarantine path by name between a Check and the next unlink
+// is not fenced; it never was for any process on the machine, managed or not,
+// so scoping managed work to its own directory does not widen it.
 func managedRecoveryUse(leased []string) error {
 	return managedUseIn(leased, managedWorkSnapshot())
 }
