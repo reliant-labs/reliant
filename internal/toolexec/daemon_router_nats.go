@@ -1592,6 +1592,16 @@ func (r *NATSDaemonRouter) SendToolRequestSyncWithSelector(ctx context.Context, 
 }
 
 func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error {
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for config load: %w", err)
+	}
+	return r.SendLoadProjectConfigsToDaemon(ctx, userID, resolvedDaemonID, projectPath, requestID)
+}
+
+// SendLoadProjectConfigsToDaemon is SendLoadProjectConfigs on one named
+// machine: for a checkout path that is true only on that machine's disk.
+func (r *NATSDaemonRouter) SendLoadProjectConfigsToDaemon(ctx context.Context, userID, daemonID string, projectPath string, requestID string) error {
 	payload, err := json.Marshal(map[string]string{
 		"project_path": projectPath,
 		"request_id":   requestID,
@@ -1599,11 +1609,7 @@ func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID st
 	if err != nil {
 		return err
 	}
-	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("resolving daemon for config load: %w", err)
-	}
-	subject := daemonSubject(configLoadSubject, userID, resolvedDaemonID)
+	subject := daemonSubject(configLoadSubject, userID, daemonID)
 	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.config.load", "publish").Inc()
@@ -1614,6 +1620,16 @@ func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID st
 }
 
 func (r *NATSDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID string, projectPath string, includeInitial bool) error {
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for config watch: %w", err)
+	}
+	return r.SendWatchProjectConfigsToDaemon(ctx, userID, resolvedDaemonID, projectPath, includeInitial)
+}
+
+// SendWatchProjectConfigsToDaemon is SendWatchProjectConfigs on one named
+// machine.
+func (r *NATSDaemonRouter) SendWatchProjectConfigsToDaemon(ctx context.Context, userID, daemonID string, projectPath string, includeInitial bool) error {
 	payload, err := json.Marshal(map[string]interface{}{
 		"project_path":    projectPath,
 		"include_initial": includeInitial,
@@ -1621,11 +1637,7 @@ func (r *NATSDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID s
 	if err != nil {
 		return err
 	}
-	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("resolving daemon for config watch: %w", err)
-	}
-	subject := daemonSubject(configWatchSubject, userID, resolvedDaemonID)
+	subject := daemonSubject(configWatchSubject, userID, daemonID)
 	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.config.watch", "publish").Inc()

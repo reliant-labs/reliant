@@ -697,6 +697,15 @@ func credentialHelpers(home string, env []string) (present, absent, absentPath [
 	cfg := gitConfigs{home: home, seen: map[string]bool{}}
 	for _, c := range configs {
 		cfg.read(c, 0)
+		// The config files themselves are as trusted as what they include:
+		// one that exists is read-only at its target (makeReadOnly resolves
+		// a link), and buildPlan walks the links on the way to it, so a
+		// ~/.config/git/config linked to a file elsewhere cannot be
+		// rewritten through its target. An absent one is sealed through
+		// sealedHomeRel and trustedConfigPaths; /etc's is the system's.
+		if _, err := os.Lstat(c); err == nil {
+			present = append(present, c)
+		}
 	}
 	for _, h := range cfg.helpers {
 		hs = append(hs, helper{name: h.program, shell: h.shell})

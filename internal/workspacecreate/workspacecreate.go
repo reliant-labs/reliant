@@ -324,15 +324,20 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			}, nil, commandTimeoutMs)
 		}
 
-		logging.ErrorContext(ctx, "Worktree creation failed", "error", reason, "worktreeID", wt.ID)
+		away := isMachineFailure(reason)
+		logging.LogContext(ctx, sendFailureLevel(away), "Worktree creation failed", "error", reason, "worktreeID", wt.ID)
 		wt.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 		// A create from the UI settles in the background, so the row is how
 		// the reason reaches the user. Only a reason that is theirs to fix
-		// is written: ours stays in the logs (and its issue), and the UI says
-		// the create did not finish.
+		// is written, or the state of their machine in the router's words:
+		// ours stays in the logs (and its issue), and the UI says the create
+		// did not finish.
 		wt.FailureReason = ""
-		if svcerr.IsUserError(reason) {
+		switch {
+		case svcerr.IsUserError(reason):
 			wt.FailureReason = reason.Error()
+		case away:
+			wt.FailureReason = svcerr.ToConnect(reason).Message()
 		}
 		// A FAILED row must carry NO path: filepreview.ResolveBasePath returns an
 		// existing row's path as-is, so a path to directories just deleted
@@ -399,8 +404,9 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}
 		err := m.Send(ctx, "worktree.create", payload, &createResp, commandTimeoutMs)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
-			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)
+			cause, away := machineFailure("checking out "+repo.Name, err)
+			logging.LogContext(ctx, sendFailureLevel(away), "Failed to create git worktree via daemon", "error", cause, "repo", repo.ID)
+			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, cause)
 		}
 		if !createResp.Success {
 			err := checkoutError(createResp, repo.Name, wt.Branch, adopting)
@@ -505,7 +511,8 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}, &copyResp, commandTimeoutMs)
 		switch {
 		case err != nil:
-			logging.ErrorContext(ctx, "Failed to copy paths into worktree", "error", err, "worktreeID", wt.ID)
+			cause, away := machineFailure("copying files into the workspace", err)
+			logging.LogContext(ctx, sendFailureLevel(away), "Failed to copy paths into worktree", "error", cause, "worktreeID", wt.ID)
 		case copyResp.Error != "" || len(copyResp.Failed) > 0:
 			logging.ErrorContext(ctx, "Some paths were not copied into worktree", "error", copyResp.Error,
 				"failed", copyResp.Failed, "worktreeID", wt.ID)

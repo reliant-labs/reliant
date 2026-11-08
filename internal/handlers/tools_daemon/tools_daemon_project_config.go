@@ -3,6 +3,7 @@ package tools_daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -62,7 +63,9 @@ func (s *Service) handleProjectDiscovery(ctx context.Context, conn *daemonConnec
 		discovered := projectsByPath[path]
 		// One unresolvable path must not abandon the rest of the daemon's
 		// projects, so this logs and moves on rather than returning.
-		if _, err := s.ensureOwnedProjectForPath(ctx, conn, path, discovered); err != nil {
+		if _, err := s.ensureOwnedProjectForPath(ctx, conn, path, discovered); errors.Is(err, errProjectDetached) {
+			continue
+		} else if err != nil {
 			logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Skipped discovered project that could not be resolved",
 				"error", err, "projectPath", path, "daemonID", conn.daemonID, "userID", conn.userID)
 			continue
@@ -283,6 +286,9 @@ func (s *Service) handleProjectConfigDelta(ctx context.Context, conn *daemonConn
 	}
 
 	project, err := s.ensureOwnedProjectForPath(ctx, conn, projectPath, nil)
+	if errors.Is(err, errProjectDetached) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -327,6 +333,11 @@ func (s *Service) persistProjectConfigSnapshot(ctx context.Context, conn *daemon
 	}
 
 	project, err := s.ensureOwnedProjectForPath(ctx, conn, projectPath, nil)
+	if errors.Is(err, errProjectDetached) {
+		logging.DebugContext(ctx, "[ToolsDaemon] Dropped a config snapshot of a project detached from this machine",
+			"projectPath", projectPath, "daemonID", conn.daemonID)
+		return nil
+	}
 	if err != nil {
 		// Dropping a snapshot is NOT recoverable by waiting: runProjectWatcher
 		// suppresses any delta whose content hash matches the last one it SENT,
@@ -409,68 +420,210 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 		return nil, fmt.Errorf("cannot resolve project %q: the daemon connection carries no user", path)
 	}
 
-	project, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)
-	if err != nil {
-		if !isNotFoundErr(err) {
-			return nil, err
-		}
-
-		// ospath.Base, not filepath.Base: on a Linux server the latter returns
-		// `C:\Users\sean\src\proj` whole, so a Windows daemon's discovered
-		// project would be named after its entire path.
-		name := ospath.Base(path)
-		isGitRepo := false
-		if discovered != nil {
-			if strings.TrimSpace(discovered.Name) != "" {
-				name = strings.TrimSpace(discovered.Name)
-			}
-			isGitRepo = discovered.IsGitRepo
-		}
-
-		now := time.Now().UTC()
-		createErr := s.deps.Repo.CreateProject(ctx, &db.Project{
-			ID:         uuid.New().String(),
-			UserID:     conn.userID,
-			Name:       name,
-			Path:       path,
-			IsGitRepo:  isGitRepo,
-			CreatedAt:  now,
-			UpdatedAt:  now,
-			LastActive: now,
-		})
-		// Read back scoped for the same reason the first lookup is: an
-		// unscoped read-back after a successful create can hand us a DIFFERENT
-		// user's row for this path. The createErr branch is the lost race with
-		// a concurrent create (UNIQUE (user_id, path)) — re-reading our own row
-		// is what makes it idempotent rather than fatal.
+	// The machine's own checkouts come first. projects.path is where a
+	// project was CREATED, on whichever machine created it; a machine whose
+	// checkout of it is elsewhere (cloned or attached at another path) pushes
+	// that path, and looked up by creation path alone it read as a brand-new
+	// project — a duplicate of one the machine already holds.
+	//
+	// The whole resolution (the machine's detachments, its checkout at the
+	// path, the creation-path lookup and the project created on a miss) runs
+	// under the machine's checkout lock, which DetachProjectFromDaemon takes
+	// too, so it sees a detach whole or not at all. Read without it, a detach
+	// committing between the detachment read and the checkout read (deleting
+	// the checkout, recording the detachment) left both reads empty, and a
+	// checkout at a path other than projects.path then read as a brand-new
+	// project: the detached folder came back as a duplicate, under an ID the
+	// per-project detachment checks downstream cannot recognize.
+	var (
+		project *db.Project
+		created bool
+	)
+	resolve := func(ctx context.Context) error {
+		var err error
+		project, created, err = s.resolveProjectForPath(ctx, conn, path, discovered)
+		return err
+	}
+	var err error
+	if strings.TrimSpace(conn.daemonID) == "" {
+		err = resolve(ctx)
+	} else {
+		err = s.deps.Repo.WithMachineCheckoutsLocked(ctx, conn.daemonID, resolve)
+	}
+	var lost *lostProjectCreateError
+	if errors.As(err, &lost) {
+		// The lost race with a concurrent create (UNIQUE (user_id, path)):
+		// the failed insert rolled the locked transaction back, and re-reading
+		// our own row is what makes it idempotent rather than fatal. Read back
+		// scoped for the same reason the first lookup is: an unscoped read can
+		// hand us a DIFFERENT user's row for this path.
 		project, err = s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)
 		if err != nil {
-			if createErr != nil {
-				return nil, fmt.Errorf("failed to create discovered project %s: %w", path, createErr)
-			}
-			return nil, err
+			return nil, fmt.Errorf("failed to create discovered project %s: %w", path, lost.err)
 		}
-		// The machine that reported it holds it, at this path: its own
-		// project_daemons row, which every chat in the project resolves its
-		// directory from. Without it the project would have no checkout on
-		// record until the machine next connected.
-		if createErr == nil && strings.TrimSpace(conn.daemonID) != "" {
-			if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, conn.daemonID, path, nil); err != nil {
-				logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record the discovering machine's checkout; reconcile will heal it",
-					"error", err, "projectID", project.ID, "daemonID", conn.daemonID)
-			}
+	} else if err != nil {
+		return nil, err
+	}
+
+	// The machine that reported it holds it, at this path: its own
+	// project_daemons row, which every chat in the project resolves its
+	// directory from. Without it the project would have no checkout on
+	// record until the machine next connected. Recorded after the locked
+	// resolution committed: it takes the new project's catalog lock, which
+	// is never taken under the machine's, and no detach can name a project
+	// that had no checkout until now.
+	if created && strings.TrimSpace(conn.daemonID) != "" {
+		if _, err := s.deps.Repo.RecordObservedProjectDaemon(ctx, project.ID, conn.daemonID, path, nil); err != nil {
+			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record the discovering machine's checkout; reconcile will heal it",
+				"error", err, "projectID", project.ID, "daemonID", conn.daemonID)
 		}
 	}
 
 	// Reconcile the cached git flag against what daemon discovery actually
 	// observed on disk (bidirectional; see projectfacts.ReconcileGitRepo).
-	if discovered != nil {
+	if discovered != nil && project != nil {
 		if updateErr := projectfacts.ReconcileGitRepo(ctx, s.deps.Repo, project, discovered.IsGitRepo); updateErr != nil {
 			logging.WarnContext(ctx, "ensureOwnedProjectForPath: failed to update git status", "error", updateErr, "projectID", project.ID)
 		}
 	}
 
 	return project, nil
+}
+
+// lostProjectCreateError is resolveProjectForPath's answer when its insert
+// of a discovered project failed, most likely a concurrent create of the
+// same (user_id, path): returned from the locked transaction, it rolls it
+// back, so the caller can re-read the row on a fresh connection.
+type lostProjectCreateError struct{ err error }
+
+func (e *lostProjectCreateError) Error() string { return e.err.Error() }
+func (e *lostProjectCreateError) Unwrap() error { return e.err }
+
+// resolveProjectForPath is ensureOwnedProjectForPath's resolution, with ctx
+// carrying the machine's checkout lock when the connection names a machine:
+// the machine's detachments, then its own checkout at path, then the user's
+// project created at path, then a new project for it (created reports so).
+func (s *Service) resolveProjectForPath(ctx context.Context, conn *daemonConnection, path string, discovered *reliantv1.DiscoveredProject) (*db.Project, bool, error) {
+	detached, err := s.detachedProjects(ctx, conn.daemonID)
+	if err != nil {
+		return nil, false, err
+	}
+	// The machine's checkout at path wins over a detachment recorded at the
+	// same path: the user can detach project A from a folder and then attach
+	// project B to it, and A's detachment must not drop B's reports. A pair
+	// never has both a checkout and a detachment (recording one clears the
+	// other), so a checkout here is never one the user detached.
+	if own, err := s.machineCheckoutAt(ctx, conn, path); err != nil {
+		return nil, false, err
+	} else if own != nil {
+		return own, false, nil
+	}
+	if detached.path(path) {
+		return nil, false, errProjectDetached
+	}
+
+	project, err := s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)
+	if err == nil && project != nil && detached.project(project.ID) {
+		// Found by its creation path, but the user detached it from this
+		// machine (at another path, or this one).
+		return nil, false, errProjectDetached
+	}
+	if err == nil {
+		return project, false, nil
+	}
+	if !isNotFoundErr(err) {
+		return nil, false, err
+	}
+
+	// ospath.Base, not filepath.Base: on a Linux server the latter returns
+	// `C:\Users\sean\src\proj` whole, so a Windows daemon's discovered
+	// project would be named after its entire path.
+	name := ospath.Base(path)
+	isGitRepo := false
+	if discovered != nil {
+		if strings.TrimSpace(discovered.Name) != "" {
+			name = strings.TrimSpace(discovered.Name)
+		}
+		isGitRepo = discovered.IsGitRepo
+	}
+
+	now := time.Now().UTC()
+	if err := s.deps.Repo.CreateProject(ctx, &db.Project{
+		ID:         uuid.New().String(),
+		UserID:     conn.userID,
+		Name:       name,
+		Path:       path,
+		IsGitRepo:  isGitRepo,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	}); err != nil {
+		return nil, false, &lostProjectCreateError{err: err}
+	}
+	// Read back scoped for the same reason the first lookup is: an unscoped
+	// read-back can hand us a DIFFERENT user's row for this path.
+	project, err = s.deps.Repo.GetProjectByPathAndUser(ctx, path, conn.userID)
+	if err != nil {
+		return nil, false, err
+	}
+	return project, true, nil
+}
+
+// errProjectDetached is ensureOwnedProjectForPath's answer for a path, or a
+// project, the user detached from the reporting machine: its discovery,
+// snapshots and deltas are dropped, quietly — the folder is still on the
+// machine's disk by design (DetachProjectFromDaemon), and its watcher runs
+// until the machine reconnects without being asked to watch it.
+var errProjectDetached = errors.New("project detached from this machine")
+
+// machineDetachments is what the user detached from one machine.
+type machineDetachments struct {
+	projects map[string]bool
+	paths    map[string]bool
+}
+
+func (d machineDetachments) project(id string) bool { return d.projects[id] }
+func (d machineDetachments) path(p string) bool     { return d.paths[ospath.Clean(p)] }
+
+// detachedProjects reads the machine's detachments; none for a connection
+// that names no machine.
+func (s *Service) detachedProjects(ctx context.Context, daemonID string) (machineDetachments, error) {
+	out := machineDetachments{projects: map[string]bool{}, paths: map[string]bool{}}
+	if strings.TrimSpace(daemonID) == "" {
+		return out, nil
+	}
+	rows, err := s.deps.Repo.ListProjectDaemonDetachmentsForDaemon(ctx, daemonID)
+	if err != nil {
+		return out, err
+	}
+	for _, d := range rows {
+		out.projects[d.ProjectID] = true
+		out.paths[ospath.Clean(d.Path)] = true
+	}
+	return out, nil
+}
+
+// machineCheckoutAt is the user's project whose checkout on the connected
+// machine is recorded at path, nil when none is.
+func (s *Service) machineCheckoutAt(ctx context.Context, conn *daemonConnection, path string) (*db.Project, error) {
+	if strings.TrimSpace(conn.daemonID) == "" {
+		return nil, nil
+	}
+	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, conn.daemonID)
+	if err != nil {
+		return nil, err
+	}
+	want := ospath.Clean(path)
+	for _, row := range rows {
+		if row == nil || ospath.Clean(row.Path) != want {
+			continue
+		}
+		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, conn.userID)
+		if err == nil && project != nil {
+			return project, nil
+		}
+	}
+	return nil, nil
 }
 
 // shouldApplyProjectConfigUpdate drops a delta older than the last push from

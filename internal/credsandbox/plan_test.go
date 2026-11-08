@@ -458,6 +458,35 @@ func TestPlan_CommentedAndEscapedIncludesProtectWhatGitReads(t *testing.T) {
 	}
 }
 
+// R16.B1: a git config file git reads directly is protected as an included
+// one is: ~/.config/git/config and $XDG_CONFIG_HOME/git/config linked to a
+// file outside every protected root are read-only (at their targets, which
+// makeReadOnly resolves), not only the directories holding the links.
+func TestPlan_DirectlyReadGitConfigFilesAreReadOnly(t *testing.T) {
+	m := newMachine(t)
+	srv := filepath.Join(m.root, "srv", "config")
+	xdg := filepath.Join(m.root, "xdg")
+	require.NoError(t, os.MkdirAll(srv, 0o755))
+	for _, d := range []string{filepath.Join(m.home, ".config", "git"), filepath.Join(xdg, "git")} {
+		require.NoError(t, os.MkdirAll(d, 0o755))
+	}
+	homeTarget := filepath.Join(srv, "home.conf")
+	xdgTarget := filepath.Join(srv, "xdg.conf")
+	for _, f := range []string{homeTarget, xdgTarget} {
+		require.NoError(t, os.WriteFile(f, []byte("[user]\n\tname = trusted\n"), 0o644))
+	}
+	homeConfig := filepath.Join(m.home, ".config", "git", "config")
+	xdgConfig := filepath.Join(xdg, "git", "config")
+	require.NoError(t, os.Symlink(homeTarget, homeConfig))
+	require.NoError(t, os.Symlink(xdgTarget, xdgConfig))
+
+	p := m.plan(m.multi, []string{"XDG_CONFIG_HOME=" + xdg})
+	for _, ro := range []string{homeConfig, xdgConfig} {
+		assert.Contains(t, p.ReadOnly, ro, "a config git reads directly is read-only, through its link")
+	}
+	assert.NotContains(t, p.LinkParents, filepath.Dir(homeConfig), "the link's directory is already read-only")
+}
+
 func TestCredentialHelpers_IncludesFollowGitsPathRules(t *testing.T) {
 	home := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(home, "inc"), 0o755))

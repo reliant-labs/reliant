@@ -5,43 +5,43 @@
 #   usage: scripts/air-build.sh <main package> <output path>
 #   e.g.   scripts/air-build.sh ./cmd/control-plane ./tmp/admin-server/control-plane
 #
+# The same file lives in control-plane and reliant; change both together.
+#
 # WHY THIS EXISTS
 # ---------------
 # Several dev processes are the SAME binary run under different subcommands,
 # each with its own Air watcher (separate processes, ports, logs and readiness
-# in forge's workload model). Every save used to make each watcher run an
-# identical `go build` at the same moment: N concurrent compiles and N links of
-# one binary. Go's build cache does not dedupe work that is in flight in
-# another process, so the N builds raced each other for the CPU instead.
+# in forge's workload model). Every save made each watcher run an identical
+# `go build` at the same moment: N concurrent compiles and N links of one
+# binary. Go's build cache does not dedupe work that is in flight in another
+# process, so the N builds raced each other for the CPU and memory instead.
 #
 # WHAT THIS DOES
 # --------------
-# Under an exclusive lock, the first caller builds into a shared path
-# (tmp/air-build/<package>/bin) and records:
-#   started  — a file whose mtime is the moment that build BEGAN
-#   inputs   — every repo-local file and directory the build read, as `go list
-#              -deps` reports it: each non-standard package's directory, its
-#              embedded files (and their directories), and the go.mod/go.sum of
-#              every module that is not in the read-only module cache. So a
-#              go.mod `replace`, a go.work member and a //go:embed are all
-#              covered, and no hand-kept exclusion list can drift.
-#   key      — the toolchain and flags (go version, GOOS/GOARCH, GOFLAGS, …)
-#   state    — ok, or fail plus the build's output
-# Every later caller takes the lock, and if no recorded input is newer than
-# `started` and the key matches, reuses that build instead of starting another.
-# Because `started` is stamped BEFORE `go build` reads anything, a file saved
-# while a build runs is newer than `started`, so the next caller rebuilds.
+# Every caller takes one exclusive lock, runs
+#   CGO_ENABLED=0 go build -trimpath -buildvcs=false -o tmp/air-build/<pkg>/bin <pkg>
+# and, when it succeeds, links that shared binary to its own output path. The
+# first caller after a save does the real compile and link. The callers queued
+# behind it then find every package in Go's cache and the shared binary
+# already up to date, so their go build neither relinks nor rewrites it (it
+# only refreshes the mtime) and takes about a second. So one compile and one
+# link per save.
 #
-# A failed build never replaces a published binary: it writes `state=fail`, so
-# a caller arriving for the same save prints the same error and exits non-zero
-# rather than taking the last good binary as if it were fresh (Air then keeps
-# the old binary, exactly as before). A failure is reused only for
-# AIR_BUILD_FAIL_TTL seconds, so a transient one (a killed build, a full disk)
-# is retried by the next caller rather than remembered.
+# WHY GO DECIDES WHAT IS STALE
+# ----------------------------
+# Whether a binary is current is exactly what go build's action IDs answer:
+# every source file, embedded file, go.mod, build constraint, toolchain and
+# flag that went into it. An earlier version of this script kept its own
+# record of the build's inputs (go list, mtimes, digests) so callers could
+# skip go build. Each review found another input it missed (an import added
+# while the list ran, nested embed directories, a new module boundary),
+# because it was re-implementing the cache Go already has. Asking go costs
+# about a second per extra caller and is correct by construction.
 #
-# A save that changes no compiled output (an unchanged file re-saved, a comment
-# appended) costs no link at all: go build finds the published binary already
-# up to date and leaves it be.
+# go build writes its target only on success, and then as a new file (remove,
+# then rename). So a failed build leaves the shared binary, and every running
+# process hard-linked to it, untouched. That caller exits with go's status,
+# and the next caller simply tries again.
 #
 # Builds use -trimpath: compiled packages are then keyed by module path, not by
 # this checkout's absolute path, so worktrees at the same commit share them in
@@ -49,12 +49,12 @@
 #
 # THE LOCK
 # --------
-# A kernel lock released when its holder dies, so a killed build never wedges
-# the next save: flock(1) (util-linux, and BusyBox in the alpine dev image),
-# else /usr/bin/lockf (every macOS; Homebrew's flock is not guaranteed there),
-# else perl's flock. A mkdir lock would need stale-pid recovery, which cannot be
-# made race-free. POSIX sh, so it also runs in the alpine dev image, which has
-# no bash.
+# A kernel lock that is released when its holder dies, so a killed build
+# never wedges the next save: flock(1) (util-linux, and BusyBox in the alpine
+# dev image), else /usr/bin/lockf (every macOS; Homebrew's flock is not
+# guaranteed there), else perl's flock. A mkdir lock would need stale-pid
+# recovery, which cannot be made race-free. POSIX sh, so it also runs in the
+# alpine dev image, which has no bash.
 set -eu
 
 if [ $# -ne 2 ]; then
@@ -87,149 +87,16 @@ fi
 
 # ── Holding the lock from here on. ──────────────────────────────────────────
 
-flags="-trimpath -buildvcs=false"
-key=$(printf '%s\n' "air-build v1" "$pkg" "CGO_ENABLED=0" "$flags" \
-  "$(go env GOVERSION GOOS GOARCH GOFLAGS GOWORK GOEXPERIMENT GOARM64 GOAMD64)")
+CGO_ENABLED=0 go build -trimpath -buildvcs=false -o "$dir/bin" "$pkg"
 
-# deliver hard-links (or, across filesystems, copies) the published binary to
-# the caller's output path through a rename, so a running process is never
-# handed a half-written file.
-deliver() {
-  # Already this build (a hard link): GNU mv refuses to move a file onto
-  # another link of itself.
-  [ "$dir/bin" -ef "$out" ] && return 0
-  mkdir -p "$(dirname "$out")"
-  rm -f "$out.tmp"
-  ln "$dir/bin" "$out.tmp" 2>/dev/null || cp "$dir/bin" "$out.tmp"
-  mv -f "$out.tmp" "$out"
-}
-
-# untouched_since <inputs> <stamp> succeeds when no path listed in <inputs> was
-# changed after <stamp> was written. Depth 0: a recorded file, or a directory
-# whose entries were added, removed or renamed. Depth 1: a file directly inside
-# a recorded directory (its subdirectories are other packages, recorded on
-# their own when imported). A recorded path that no longer exists makes find
-# fail: not untouched.
-untouched_since() {
-  newer=$(tr '\n' '\0' <"$1" | xargs -0 sh -c '
-    s=$1; shift
-    find "$@" -maxdepth 0 -newer "$s" -print &&
-      find "$@" -maxdepth 1 ! -type d -newer "$s" -print' sh "$2") || return 1
-  [ -z "$newer" ]
-}
-
-# unchanged succeeds when the last build attempt saw every input as it is now
-# and ran with the same toolchain and flags.
-unchanged() {
-  [ -f "$dir/started" ] && [ -s "$dir/inputs" ] && [ -f "$dir/state" ] && [ -f "$dir/key" ] || return 1
-  [ "$(cat "$dir/key")" = "$key" ] || return 1
-  untouched_since "$dir/inputs" "$dir/started"
-}
-
-if unchanged; then
-  state=$(head -n 1 "$dir/state")
-  case $state in
-    ok)
-      if [ -f "$dir/bin" ]; then
-        deliver
-        echo "air-build: $pkg unchanged since its last build; reused it"
-        exit 0
-      fi
-      ;;
-    fail\ *)
-      failed_at=${state#fail }
-      if [ $(($(date +%s) - failed_at)) -lt "${AIR_BUILD_FAIL_TTL:-60}" ]; then
-        tail -n +2 "$dir/state" >&2
-        echo "air-build: $pkg failed to build for this same source (above); not rebuilding" >&2
-        exit 1
-      fi
-      ;;
-  esac
-fi
-
-# ── Build. ──────────────────────────────────────────────────────────────────
-# A crash from here on leaves no state, so the next caller rebuilds.
-rm -f "$dir/state" "$dir/started.new" "$dir/inputs.new"
-: >"$dir/started.new"
-# Linux stamps files from a coarse clock (one tick, up to 10ms), so a save in
-# the same tick as this stamp has an equal mtime and does not count as newer.
-# Waiting out a tick before go build reads anything puts such a save before
-# the build, where it belongs.
-sleep 0.02
-# Reuse rests on find telling apart two mtimes 20ms apart. BusyBox find
-# compares whole seconds and some filesystems store no more, so a save in the
-# same second as a build start would look old: there, every caller builds, as
-# before this script.
-: >"$dir/probe"
-precise=$(find "$dir/probe" -newer "$dir/started.new" -print)
-
-# Record what the build reads, alongside the build itself. -e: a tree that
-# does not compile still lists its packages, so a failure is recorded against
-# the inputs that caused it.
-gomodcache=$(go env GOMODCACHE)
-goroot=$(go env GOROOT)
-(
-  # One line per fact: "D <package dir>", "E <package dir>|<embedded file,
-  # relative>", "M <go.mod>". awk expands an embedded file to itself plus every
-  # directory between it and its package (so a file added anywhere under an
-  # embedded directory is seen), and a go.mod to its go.sum and go.work
-  # siblings. Paths in the read-only module cache and GOROOT never change.
-  # shellcheck disable=SC2016 # a go template, not a shell expansion
-  CGO_ENABLED=0 go list -e -deps -f '{{if not .Standard}}D {{.Dir}}
-{{range .EmbedFiles}}E {{$.Dir}}|{{.}}
-{{end}}{{with .Module}}{{with .GoMod}}M {{.}}
-{{end}}{{end}}{{end}}' "$pkg" 2>/dev/null | awk -v cache="$gomodcache/" -v root="$goroot/" '
-    { kind = substr($0, 1, 1); p = substr($0, 3) }
-    kind == "E" {
-      bar = index(p, "|"); pdir = substr(p, 1, bar - 1); rel = substr(p, bar + 1)
-      p = pdir "/" rel
-      n = split(rel, parts, "/"); d = pdir
-      for (i = 1; i < n; i++) { d = d "/" parts[i]; out(d) }
-    }
-    { out(p) }
-    kind == "M" { sub(/\.mod$/, "", p); out(p ".sum"); out(p ".work"); out(p ".work.sum") }
-    function out(path) {
-      if (path == "" || index(path, cache) == 1 || index(path, root) == 1) return
-      print path
-    }' | sort -u | while IFS= read -r p; do
-    [ -e "$p" ] && printf '%s\n' "$p" # drop a go.sum or go.work that does not exist
-  done >"$dir/inputs.new"
-) &
-list_pid=$!
-
-# Straight onto the published path: go build links in its own work directory
-# and replaces the target only on success, with a new file (remove, then
-# rename), so a failed build leaves it alone and a running process, a hard link
-# to the old file, is never touched. And when the target already IS this
-# build (a save that changed no compiled output), go build skips the link.
-rc=0
-CGO_ENABLED=0 go build $flags -o "$dir/bin" "$pkg" >"$dir/log" 2>&1 || rc=$?
-wait "$list_pid" || true
-cat "$dir/log" >&2
-
-# go list ran beside go build, so the two describe one source graph only if
-# nothing they read changed while they ran. Before started.new, both saw the
-# same tree. A graph change after it starts at an edit to a package (or
-# go.mod) that both still reach, which go list therefore recorded, and that
-# edit is newer than started.new. So publish the inputs only when none of them
-# changed during the build; otherwise record nothing and the next caller
-# rebuilds and enumerates again.
-if [ -s "$dir/inputs.new" ] && [ -n "$precise" ] &&
-  untouched_since "$dir/inputs.new" "$dir/started.new"; then
-  mv -f "$dir/inputs.new" "$dir/inputs"
-else
-  # Nothing recorded, mtimes too coarse, or the source changed mid-build:
-  # never reuse this build.
-  rm -f "$dir/inputs.new" "$dir/inputs"
-fi
-mv -f "$dir/started.new" "$dir/started"
-printf '%s\n' "$key" >"$dir/key"
-
-if [ "$rc" -ne 0 ]; then
-  { echo "fail $(date +%s)"; cat "$dir/log"; } >"$dir/state.new"
-  mv -f "$dir/state.new" "$dir/state"
-  exit "$rc"
-fi
-echo ok >"$dir/state.new"
-mv -f "$dir/state.new" "$dir/state"
-deliver
+# Link the shared binary to the caller's output through a rename, so a running
+# process is never handed a half-written file. Already that file (a hard link
+# from an earlier save whose binary did not change): nothing to do, and GNU mv
+# refuses to move a file onto another link of itself. -ef is outside POSIX but
+# every sh this runs under (dash, bash, busybox ash, macOS sh) implements it.
+# shellcheck disable=SC3013
+[ "$dir/bin" -ef "$out" ] && exit 0
+mkdir -p "$(dirname "$out")"
+rm -f "$out.tmp"
+ln "$dir/bin" "$out.tmp" 2>/dev/null || cp "$dir/bin" "$out.tmp"
+mv -f "$out.tmp" "$out"

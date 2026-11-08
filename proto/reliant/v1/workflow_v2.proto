@@ -170,6 +170,11 @@ message ThreadConfig {
   CelBool memo = 2 [(reliant) = {description: "Whether to memoize thread across loop iterations"}];
   // Inject adds a message to the thread before execution.
   InjectConfig inject = 3 [(reliant) = {description: "Message injection into the thread"}];
+  // Excludes automatic global/project/repository memory injection in this
+  // execution and its descendants. False/unset never overrides an excluded
+  // ancestor; exclusion latches durably on the thread, including recovery.
+  // Does not remove history, skills, bootstrap context or tool access.
+  bool exclude_ambient_memory = 4 [(reliant) = {description: "Exclude automatic saved memories; inherited exclusion cannot be re-enabled. Not full context isolation."}];
 }
 
 // InjectConfig configures message injection into a thread.
@@ -510,6 +515,16 @@ message CallLLMArgs {
     label: "Continue turn"
     visibility_contexts: "advanced"
     hidden: true
+    category: "Prompt"
+  }];
+  // Opt out of automatic global/project/repository memory injection for this
+  // call and descendants it spawns. Inherited exclusion cannot be re-enabled;
+  // exclusion latches durably on the thread for subsequent turns and recovery.
+  // Bootstrap prompts, history, explicit skills/messages and tools are unchanged.
+  bool exclude_ambient_memory = 16 [(reliant) = {
+    description: "Exclude automatic saved memories (default false); not full context isolation"
+    label: "Exclude ambient memory"
+    visibility_contexts: "advanced"
     category: "Prompt"
   }];
 }

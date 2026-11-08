@@ -561,6 +561,39 @@ echo ran`)
 	assert.Contains(t, string(b), "name = trusted", "the config a credentialed git includes changed")
 }
 
+// R16.B1: ~/.config/git/config, which git reads directly, linked to a
+// writable file outside every protected root. The command overwrites the
+// link's target with a planted credential helper; on the host the target is
+// unchanged.
+func TestSandbox_ALinkedGitConfigsTargetCannotBeOverwritten(t *testing.T) {
+	testkit.Slow(t, "builds real user, mount and PID namespaces")
+	requireSandbox(t)
+	home := wrapHome(t)
+	// Under this checkout, not /tmp: the command's /tmp is private.
+	root, err := os.MkdirTemp(".", ".credsandbox-config-")
+	require.NoError(t, err)
+	root, err = filepath.Abs(root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	target := filepath.Join(root, "git.conf")
+	require.NoError(t, os.WriteFile(target, []byte("[user]\n\tname = trusted\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(home, ".config", "git"), 0o755))
+	config := filepath.Join(home, ".config", "git", "config")
+	require.NoError(t, os.Symlink(target, config))
+
+	out := runWrapped(t, "none", home, home, `
+printf '[credential]\n\thelper = !planted\n' > '`+target+`' 2>/dev/null
+printf '[credential]\n\thelper = !planted\n' > '`+config+`' 2>/dev/null
+echo ran`)
+	assert.Contains(t, out, "ran")
+	got, err := os.Readlink(config)
+	require.NoError(t, err, "the trusted config is no longer a link on the host")
+	assert.Equal(t, target, got)
+	b, err := os.ReadFile(target)
+	require.NoError(t, err)
+	assert.Equal(t, "[user]\n\tname = trusted\n", string(b), "the config a credentialed git reads changed")
+}
+
 // R9.B1: the same helper inside a cache hand-off its run node named, which
 // the sandbox keeps real and writable over the private cache root, is still
 // sealed: the hand-off's real writes persist, the helper does not.

@@ -1083,7 +1083,56 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	if path == "" {
 		return fmt.Errorf("path cannot be empty")
 	}
-	return store.RecordProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID, path, defaultBranch)
+	// Recording the checkout ends a detachment of the pair, in the same
+	// transaction: a pair never has both (project_daemon_detachment.go). It
+	// is the USER's choice (attach, create, clone), so it may; a checkout the
+	// platform merely found goes through RecordObservedProjectDaemon. The
+	// catalog lock orders it against a concurrent detach.
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
+			return err
+		}
+		if err := store.RecordProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID, path, defaultBranch); err != nil {
+			return err
+		}
+		return store.ClearProjectDaemonDetachment(ctx, r.ORM(), projectID, daemonID)
+	})
+}
+
+// RecordObservedProjectDaemon records a checkout the platform found on the
+// machine (the connect reconcile, the plain-folder heal, a discovered folder,
+// a pool member's restore), never one the user chose. A detachment of the
+// pair wins: it records nothing and reports false, and it never clears the
+// detachment. The check runs under the catalog lock DetachProjectFromDaemon
+// holds, so a detach that commits while the caller was probing the machine
+// is seen here rather than undone.
+func (r *Repo) RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error) {
+	if projectID == "" {
+		return false, fmt.Errorf("project ID cannot be empty")
+	}
+	if daemonID == "" {
+		return false, fmt.Errorf("daemon ID cannot be empty")
+	}
+	if path == "" {
+		return false, fmt.Errorf("path cannot be empty")
+	}
+	recorded := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		recorded = false
+		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
+			return err
+		}
+		detached, err := store.ProjectDaemonDetached(ctx, r.ORM(), projectID, daemonID)
+		if err != nil || detached {
+			return err
+		}
+		if err := store.RecordProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID, path, defaultBranch); err != nil {
+			return err
+		}
+		recorded = true
+		return nil
+	})
+	return recorded, err
 }
 
 // UpsertQueuedProjectDaemon records a clone that is queued but has not run.
@@ -1102,7 +1151,15 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 		// the project would sit in "installing" forever.
 		return fmt.Errorf("request ID cannot be empty for a queued clone")
 	}
-	return store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID)
+	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := store.LockProjectCatalog(ctx, r.ORM(), projectID); err != nil {
+			return err
+		}
+		if err := store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID); err != nil {
+			return err
+		}
+		return store.ClearProjectDaemonDetachment(ctx, r.ORM(), projectID, daemonID)
+	})
 }
 
 // ResolveQueuedProjectDaemon applies the outcome the daemon reported.
@@ -3475,6 +3532,11 @@ func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 
 func (r *Repo) ListThreadsByIDs(ctx context.Context, ids []string) ([]*Thread, error) {
 	return store.ListThreadsByIDs(ctx, r.ORM(), ids)
+}
+
+// ResolveThreadAmbientMemoryExclusion fails closed on persistence errors.
+func (r *Repo) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
+	return store.ResolveThreadAmbientMemoryExclusion(ctx, r.ORM(), chatID, threadID, requested)
 }
 
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {

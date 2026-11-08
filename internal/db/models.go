@@ -84,6 +84,9 @@ type Project = core.Project
 // model. Tracks per-daemon clones of a Project.
 type ProjectDaemon = core.ProjectDaemon
 
+// ProjectDaemonDetachment is a project the user detached from a machine.
+type ProjectDaemonDetachment = core.ProjectDaemonDetachment
+
 // ProjectConfigRecord is an alias to the shared core project config record.
 type ProjectConfigRecord = core.ProjectConfigRecord
 

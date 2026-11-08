@@ -12237,6 +12237,11 @@
               "Name": "path",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateDirectoryResponse": [
@@ -12507,6 +12512,11 @@
               "Name": "path",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ListDirectoryResponse": [
@@ -12727,6 +12737,11 @@
             {
               "name": "path",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateDirectoryResponse": [
@@ -13084,6 +13099,11 @@
           "reliant.v1.ListDirectoryRequest": [
             {
               "name": "path",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "daemon_id",
               "kind": "string",
               "optional": true
             }
@@ -20407,6 +20427,16 @@
       "proto_file": "reliant/v1/project.proto",
       "methods": [
         {
+          "id": "reliant.v1.ProjectService/AttachProjectToDaemon",
+          "name": "AttachProjectToDaemon",
+          "input": "reliant.v1.AttachProjectToDaemonRequest",
+          "output": "reliant.v1.AttachProjectToDaemonResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ProjectService/CreateProject",
           "name": "CreateProject",
           "input": "reliant.v1.CreateProjectRequest",
@@ -20431,6 +20461,16 @@
           "name": "DeleteProject",
           "input": "reliant.v1.DeleteProjectRequest",
           "output": "reliant.v1.DeleteProjectResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.ProjectService/DetachProjectFromDaemon",
+          "name": "DetachProjectFromDaemon",
+          "input": "reliant.v1.DetachProjectFromDaemonRequest",
+          "output": "reliant.v1.DetachProjectFromDaemonResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -21093,6 +21133,48 @@
             }
           },
           {
+            "Name": "AttachProjectToDaemon",
+            "InputType": "AttachProjectToDaemonRequest",
+            "OutputType": "AttachProjectToDaemonResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.AttachProjectToDaemonRequest",
+            "OutputTypeFQ": "reliant.v1.AttachProjectToDaemonResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "attach_to_daemon",
+              "TargetKind": "project",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "DetachProjectFromDaemon",
+            "InputType": "DetachProjectFromDaemonRequest",
+            "OutputType": "DetachProjectFromDaemonResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.DetachProjectFromDaemonRequest",
+            "OutputTypeFQ": "reliant.v1.DetachProjectFromDaemonResponse",
+            "InputProtoFile": "reliant/v1/project.proto",
+            "OutputProtoFile": "reliant/v1/project.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "detach_from_daemon",
+              "TargetKind": "project",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
             "Name": "RecloneProjectOnDaemon",
             "InputType": "RecloneProjectOnDaemonRequest",
             "OutputType": "RecloneProjectOnDaemonResponse",
@@ -21117,6 +21199,41 @@
         "ProtoFile": "reliant/v1/project.proto",
         "ModulePath": "github.com/reliant-labs/reliant",
         "Messages": {
+          "AttachProjectToDaemonRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "path",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "default_branch",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "AttachProjectToDaemonResponse": [
+            {
+              "Name": "project_daemon",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectDaemon"
+            },
+            {
+              "Name": "warnings",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
           "CreateProjectFromRepoRequest": [
             {
               "Name": "clone_url",
@@ -21188,6 +21305,11 @@
               "Name": "default_branch",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateProjectResponse": [
@@ -21196,6 +21318,17 @@
               "ProtoType": "message",
               "IsOptional": false,
               "MessageType": "reliant.v1.Project"
+            },
+            {
+              "Name": "project_daemon",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ProjectDaemon"
+            },
+            {
+              "Name": "attached",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "DeleteProjectRequest": [
@@ -21217,6 +21350,19 @@
               "IsOptional": false
             }
           ],
+          "DetachProjectFromDaemonRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "DetachProjectFromDaemonResponse": null,
           "GetProjectChangesRequest": [
             {
               "Name": "project_id",
@@ -21765,6 +21911,46 @@
         },
         "Audience": "user",
         "Schemas": {
+          "reliant.v1.AttachProjectToDaemonRequest": [
+            {
+              "name": "project_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "path",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "default_branch",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.AttachProjectToDaemonResponse": [
+            {
+              "name": "project_daemon",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectDaemon"
+            },
+            {
+              "name": "warnings",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
           "reliant.v1.CreateProjectFromRepoRequest": [
             {
               "name": "clone_url",
@@ -21828,6 +22014,11 @@
               "name": "default_branch",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateProjectResponse": [
@@ -21835,6 +22026,15 @@
               "name": "project",
               "kind": "message",
               "type_name": "reliant.v1.Project"
+            },
+            {
+              "name": "project_daemon",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectDaemon"
+            },
+            {
+              "name": "attached",
+              "kind": "bool"
             }
           ],
           "reliant.v1.DaemonRepository": [
@@ -21879,6 +22079,23 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.DetachProjectFromDaemonRequest": [
+            {
+              "name": "project_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            }
+          ],
+          "reliant.v1.DetachProjectFromDaemonResponse": [],
           "reliant.v1.FileChange": [
             {
               "name": "path",
@@ -22376,6 +22593,15 @@
             {
               "name": "install_error",
               "kind": "string"
+            },
+            {
+              "name": "verified_at",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
             }
           ],
           "reliant.v1.Prompt": [
@@ -22535,6 +22761,8 @@
           ]
         },
         "SchemaFiles": {
+          "reliant.v1.AttachProjectToDaemonRequest": "reliant/v1/project.proto",
+          "reliant.v1.AttachProjectToDaemonResponse": "reliant/v1/project.proto",
           "reliant.v1.CreateProjectFromRepoRequest": "reliant/v1/project.proto",
           "reliant.v1.CreateProjectFromRepoResponse": "reliant/v1/project.proto",
           "reliant.v1.CreateProjectRequest": "reliant/v1/project.proto",
@@ -22542,6 +22770,8 @@
           "reliant.v1.DaemonRepository": "reliant/v1/project.proto",
           "reliant.v1.DeleteProjectRequest": "reliant/v1/project.proto",
           "reliant.v1.DeleteProjectResponse": "reliant/v1/project.proto",
+          "reliant.v1.DetachProjectFromDaemonRequest": "reliant/v1/project.proto",
+          "reliant.v1.DetachProjectFromDaemonResponse": "reliant/v1/project.proto",
           "reliant.v1.FileChange": "reliant/v1/project.proto",
           "reliant.v1.GetProjectChangesRequest": "reliant/v1/project.proto",
           "reliant.v1.GetProjectChangesResponse": "reliant/v1/project.proto",
@@ -39015,6 +39245,10 @@
               "name": "continue_turn",
               "kind": "message",
               "type_name": "reliant.v1.CelBool"
+            },
+            {
+              "name": "exclude_ambient_memory",
+              "kind": "bool"
             }
           ],
           "reliant.v1.CallLLMMessageInput": [
@@ -41013,6 +41247,10 @@
               "name": "inject",
               "kind": "message",
               "type_name": "reliant.v1.InjectConfig"
+            },
+            {
+              "name": "exclude_ambient_memory",
+              "kind": "bool"
             }
           ],
           "reliant.v1.ToolBoundParams": [
