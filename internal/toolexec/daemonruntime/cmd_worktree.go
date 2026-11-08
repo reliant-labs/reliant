@@ -270,20 +270,16 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	branchCheckCmd.Dir = req.ProjectPath
 	branchExists := branchCheckCmd.Run() == nil
 	// The branch a failed or abandoned create may delete again: only one
-	// this call is about to make. -B (the Force path) resets an existing
-	// branch to the start point, so its tip matching the start point after a
-	// failure proves nothing about who made it; what decides is whether the
-	// local branch existed before git ran. That is asked of refs/heads/
-	// precisely, and only a clean "not found" (exit 1, git ran to the end)
-	// counts as absent: a check that could not run (a deadline, a git that
-	// failed) leaves the branch as someone else's.
+	// this call made. Absence observed earlier proves nothing (any git
+	// process may create the branch between that check and the add, and its
+	// tip may well be the start point too), so a new branch is created here
+	// first, by a compare-and-swap that succeeds only while the ref does not
+	// exist (createBranch), and then checked out. The branch is this call's
+	// exactly when that swap succeeded.
 	createdBranch := ""
-	if !reuseLocal && !branchExists && localBranchAbsent(ctx, req.ProjectPath, req.Branch) {
-		createdBranch = req.Branch
-	}
 
 	// Create the git worktree. A new branch starts from the resolved start
-	// point with --no-track: a base taken from origin is a starting commit,
+	// point with no upstream: a base taken from origin is a starting commit,
 	// not the branch's upstream, exactly as a local base is.
 	var worktreeCmd *exec.Cmd
 	// A forced create (-B) resets an existing branch before the checkout
@@ -291,6 +287,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	// tip, which this file does not track, so a forced create that fails is
 	// left as git left it (the startup repair prunes a dead registration).
 	forced := false
+	var output []byte
 	switch {
 	case reuseLocal:
 		// No -B and no --force: git itself refuses when the branch is
@@ -300,12 +297,20 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		forced = true
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-B", req.Branch, worktreePath, startPoint)
 	default:
-		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "--no-track", "-b", req.Branch, worktreePath, startPoint)
+		if beforeBranchCreate != nil {
+			beforeBranchCreate(req.ProjectPath, req.Branch)
+		}
+		if output, err = createBranch(ctx, req.ProjectPath, req.Branch, startPoint); err == nil {
+			createdBranch = req.Branch
+			worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
+		}
 	}
-	worktreeCmd.Dir = req.ProjectPath
 
 	checkoutStart := time.Now()
-	output, err := worktreeCmd.CombinedOutput()
+	if worktreeCmd != nil {
+		worktreeCmd.Dir = req.ProjectPath
+		output, err = worktreeCmd.CombinedOutput()
+	}
 	releaseAdd()
 	addLocked = false
 	if err != nil {
@@ -417,7 +422,25 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 				"worktree_path", worktreePath, "error", err)
 		}
 	}
-	syncNewCheckout(ctx, req.ProjectPath, worktreePath, req.Branch)
+	// A checkout whose git metadata did not reach the disk is not handed
+	// over: a VM killed now would leave a workspace reported created whose
+	// .git is empty. It is taken back as one on the wrong head is, so the
+	// caller's retry starts clean.
+	if err := syncNewCheckout(ctx, req.ProjectPath, worktreePath, req.Branch); err != nil {
+		msg := fmt.Sprintf("failed to create worktree: its git metadata could not be synced to disk: %v", err)
+		if forced {
+			return json.Marshal(worktreeCreateResponse{Error: msg, WorktreePath: worktreePath})
+		}
+		abandonCheckout(ctx, req.ProjectPath, worktreePath, createdBranch, startPoint)
+		if preExisted {
+			_ = os.MkdirAll(worktreePath, 0o755)
+		} else if parent := filepath.Dir(worktreePath); parent != worktreePath {
+			// The multi-repo workspace root this call made, as a failed add
+			// sweeps it: os.Remove refuses one that is not empty.
+			_ = os.Remove(parent)
+		}
+		return json.Marshal(worktreeCreateResponse{Error: msg})
+	}
 
 	// A new workspace waits on this whole command; say how long git took, so
 	// a slow create can be told apart from a slow copy (worktree.copy_paths

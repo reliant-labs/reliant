@@ -92,16 +92,28 @@ func sameCheckoutPath(a, b string) bool {
 	return errA == nil && errB == nil && ra == rb
 }
 
-// localBranchAbsent reports whether repoPath has no local branch named branch,
-// answering true only when git said so: `rev-parse --verify --quiet` exits 1
-// for a missing ref. Any other outcome (the ref exists, git could not run, the
-// context ended) is false, so a branch whose existence is unknown is never
-// treated as one this create made.
-func localBranchAbsent(ctx context.Context, repoPath, branch string) bool {
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+// beforeBranchCreate, when set (tests only), runs right before a create makes
+// its new branch: where another git process may make the same branch first.
+var beforeBranchCreate func(repoPath, branch string)
+
+// createBranch makes refs/heads/<branch> at startPoint's commit, only if no
+// such ref exists: `git update-ref <ref> <new> ""` is a compare-and-swap whose
+// expected old value is "absent", applied in git's own ref transaction. So it
+// succeeds only for the call that made the branch, whatever other git process
+// runs beside it, and that call alone may delete the branch again
+// (abandonCheckout). It records the reflog entry `git branch` would. On
+// failure it returns git's output.
+func createBranch(ctx context.Context, repoPath, branch, startPoint string) ([]byte, error) {
+	rev := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", startPoint+"^{commit}")
+	rev.Dir = repoPath
+	out, err := rev.Output()
+	if err != nil {
+		return []byte(fmt.Sprintf("fatal: invalid start point '%s'\n", startPoint)), err
+	}
+	cmd := exec.CommandContext(ctx, "git", "update-ref", "--create-reflog", "-m", "branch: Created from "+startPoint,
+		"refs/heads/"+branch, strings.TrimSpace(string(out)), "")
 	cmd.Dir = repoPath
-	var exitErr *exec.ExitError
-	return errors.As(cmd.Run(), &exitErr) && exitErr.ExitCode() == 1
+	return cmd.CombinedOutput()
 }
 
 // worktreeAbandonTimeout bounds taking back one checkout. It runs on a
@@ -201,7 +213,9 @@ func registrationOf(ctx context.Context, repoPath, checkout string) string {
 // that name them. git fsyncs none of them by default, and a VM killed in the
 // seconds after a create left them empty. The working tree's files are not
 // synced: they are git's objects checked out, which `git checkout` restores.
-func syncNewCheckout(ctx context.Context, repoPath, checkout, branch string) {
+// It returns an error naming every path that could not be synced: the create
+// must not report success then.
+func syncNewCheckout(ctx context.Context, repoPath, checkout, branch string) error {
 	paths := []string{filepath.Join(checkout, ".git"), checkout, filepath.Dir(checkout)}
 	admin := registrationOf(ctx, repoPath, checkout)
 	if admin != "" {
@@ -230,14 +244,19 @@ func syncNewCheckout(ctx context.Context, repoPath, checkout, branch string) {
 		}
 	}
 	if len(failed) > 0 {
-		logging.WarnContext(ctx, "worktree created but not all of its git metadata could be synced to disk",
+		logging.WarnContext(ctx, "worktree checked out but not all of its git metadata could be synced to disk",
 			"worktree_path", checkout, "failures", strings.Join(failed, "; "))
+		return errors.New(strings.Join(failed, "; "))
 	}
+	return nil
 }
 
-// fsyncPath flushes one file or directory to disk. A path that does not exist
+// fsyncPath is a variable so a test can make a sync fail.
+var fsyncPath = fsyncFile
+
+// fsyncFile flushes one file or directory to disk. A path that does not exist
 // (a packed ref, a branch kept only in packed-refs) is not a failure.
-func fsyncPath(p string) error {
+func fsyncFile(p string) error {
 	f, err := os.Open(p)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil

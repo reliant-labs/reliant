@@ -59,6 +59,69 @@ func TestWorktreeCreate_FailedAddTakesBackItsCheckoutAndBranch(t *testing.T) {
 	require.NotContains(t, guardRepoBranches(t, projectPath), "feat/failed-add", "branch left behind")
 }
 
+// Another git process makes the same branch, at the same start point, after
+// the create saw it absent and before its own branch exists. The create
+// fails, and the branch is not its own to delete: its tip matching the start
+// point proves nothing about who made it. Not parallel: it sets the
+// package's beforeBranchCreate hook.
+func TestWorktreeCreate_ABranchAnotherProcessMadeFirstIsKept(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
+	projectPath := diagnoseRepo(t)
+	beforeBranchCreate = func(repo, branch string) {
+		if repo == projectPath {
+			gitOutIn(t, projectPath, "branch", branch, "main")
+		}
+	}
+	t.Cleanup(func() { beforeBranchCreate = nil })
+
+	workspaceID := uniqueWorkspaceID(t, "ws-raced-branch")
+	resp := createFor(t, map[string]any{
+		"project_path": projectPath,
+		"workspace_id": workspaceID,
+		"sub_path":     "repo",
+		"name":         "raced",
+		"branch":       "feat/raced",
+		"base_branch":  "main",
+		"worktree_id":  "wt-raced-branch",
+	})
+	require.False(t, resp.Success, "the branch existed by the time the create made it")
+	require.Contains(t, guardRepoBranches(t, projectPath), "feat/raced", "the other process's branch was deleted")
+	_, err := os.Stat(testWorktreePath(t, workspaceID))
+	require.True(t, os.IsNotExist(err), "the workspace root the create made must be gone: %v", err)
+}
+
+// A checkout whose git metadata could not be synced is not reported created:
+// it is taken back with the branch the create made. Not parallel: it sets the
+// package's fsyncPath.
+func TestWorktreeCreate_AnUnsyncedCheckoutIsNotReportedCreated(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
+	projectPath := diagnoseRepo(t)
+	fsyncPath = func(p string) error {
+		if filepath.Base(p) == "HEAD" && strings.Contains(p, string(filepath.Separator)+"worktrees"+string(filepath.Separator)) {
+			return os.ErrPermission
+		}
+		return fsyncFile(p)
+	}
+	t.Cleanup(func() { fsyncPath = fsyncFile })
+
+	workspaceID := uniqueWorkspaceID(t, "ws-unsynced")
+	resp := createFor(t, map[string]any{
+		"project_path": projectPath,
+		"workspace_id": workspaceID,
+		"sub_path":     "repo",
+		"name":         "unsynced",
+		"branch":       "feat/unsynced",
+		"base_branch":  "main",
+		"worktree_id":  "wt-unsynced",
+	})
+	require.False(t, resp.Success, "a create whose registration HEAD was not synced reported success")
+	require.Contains(t, resp.Error, "synced")
+	_, err := os.Stat(testWorktreePath(t, workspaceID))
+	require.True(t, os.IsNotExist(err), "the unsynced checkout must be taken back: %v", err)
+	require.NotContains(t, guardWorktrees(t, projectPath), "feat/unsynced", "registration left behind")
+	require.NotContains(t, guardRepoBranches(t, projectPath), "feat/unsynced", "branch left behind")
+}
+
 // A checkout that predates the call is never taken back, nor a branch the
 // call did not make.
 func TestAbandonCheckout_KeepsABranchThatMoved(t *testing.T) {
