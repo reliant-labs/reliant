@@ -25,6 +25,7 @@ type Repository interface {
 	DeleteProject(ctx context.Context, id string, userID string) error
 
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
+	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)
 	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
@@ -32,6 +33,11 @@ type Repository interface {
 	// is, and what to call it in a sentence.
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error
+	// DetachProjectFromDaemon forgets a checkout without touching its files
+	// and records the detachment, which ListProjectDaemonDetachmentsForDaemon
+	// reads back so the connect heal leaves the pair alone.
+	DetachProjectFromDaemon(ctx context.Context, projectID, daemonID, path string, guard func(ctx context.Context) error) error
+	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
 
 	CreateRepo(ctx context.Context, repo *core.Repo) error
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
@@ -66,6 +72,16 @@ type Router interface {
 	EnqueueDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) (int, error)
 	SendLoadProjectConfigs(ctx context.Context, userID, projectPath, requestID string) error
 	SendWatchProjectConfigs(ctx context.Context, userID, projectPath string, includeInitial bool) error
+}
+
+// MachineConfigSync is a Router that can also ask ONE named machine to load
+// and watch a project's config: a checkout recorded on that machine is synced
+// from there. toolexec.NATSDaemonRouter is one. A router that is not has the
+// machine sync on its next connect, whose registration names every checkout
+// it holds.
+type MachineConfigSync interface {
+	SendLoadProjectConfigsToDaemon(ctx context.Context, userID, daemonID, projectPath, requestID string) error
+	SendWatchProjectConfigsToDaemon(ctx context.Context, userID, daemonID, projectPath string, includeInitial bool) error
 }
 
 // CloneDispatcher asks the control plane to clone a repository onto one of

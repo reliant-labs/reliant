@@ -104,6 +104,12 @@ const (
 	// ProjectServiceRemoveProjectFromDaemonProcedure is the fully-qualified name of the
 	// ProjectService's RemoveProjectFromDaemon RPC.
 	ProjectServiceRemoveProjectFromDaemonProcedure = "/reliant.v1.ProjectService/RemoveProjectFromDaemon"
+	// ProjectServiceAttachProjectToDaemonProcedure is the fully-qualified name of the ProjectService's
+	// AttachProjectToDaemon RPC.
+	ProjectServiceAttachProjectToDaemonProcedure = "/reliant.v1.ProjectService/AttachProjectToDaemon"
+	// ProjectServiceDetachProjectFromDaemonProcedure is the fully-qualified name of the
+	// ProjectService's DetachProjectFromDaemon RPC.
+	ProjectServiceDetachProjectFromDaemonProcedure = "/reliant.v1.ProjectService/DetachProjectFromDaemon"
 	// ProjectServiceRecloneProjectOnDaemonProcedure is the fully-qualified name of the ProjectService's
 	// RecloneProjectOnDaemon RPC.
 	ProjectServiceRecloneProjectOnDaemonProcedure = "/reliant.v1.ProjectService/RecloneProjectOnDaemon"
@@ -197,6 +203,33 @@ type ProjectServiceClient interface {
 	// deleted — other daemons may still host clones. Idempotent: succeeds even
 	// if the row was already absent (the on-disk delete is best-effort).
 	RemoveProjectFromDaemon(context.Context, *connect.Request[v1.RemoveProjectFromDaemonRequest]) (*connect.Response[v1.RemoveProjectFromDaemonResponse], error)
+	// AttachProjectToDaemon records that a folder already on one of the
+	// caller's machines is this project's checkout there — "it's already at
+	// /Users/me/properties on this machine". Nothing is cloned or created: the
+	// machine is asked first, and a path that does not exist there, or is not
+	// a folder, is refused (FailedPrecondition) instead of recorded. A machine
+	// that is offline is Unavailable. A folder that is not a git checkout of
+	// the project's remote is attached with a warning, not refused.
+	//
+	// Re-attaching the same machine at another path moves its checkout there.
+	// It also undoes DetachProjectFromDaemon for that machine.
+	//
+	// Prefer it to MarkProjectInstalled, which records a clone some other route
+	// made and checks nothing on the machine.
+	AttachProjectToDaemon(context.Context, *connect.Request[v1.AttachProjectToDaemonRequest]) (*connect.Response[v1.AttachProjectToDaemonResponse], error)
+	// DetachProjectFromDaemon forgets a project's checkout on one machine
+	// WITHOUT touching its files: the project_daemons row and that machine's
+	// synced config for the project go; the folder stays on disk, and the
+	// machine does not re-record it on its next connect. Contrast
+	// RemoveProjectFromDaemon, which deletes the folder.
+	//
+	// Refused (FailedPrecondition) when it would leave the project on no
+	// machine, or while workspaces (branch worktrees) of the project live on
+	// that machine. Chats pinned to the machine are left as they are: their
+	// next tool call is refused with the machines that do have the project,
+	// and switching machine (or attaching it again) continues them.
+	// Idempotent: a machine the project is not on succeeds.
+	DetachProjectFromDaemon(context.Context, *connect.Request[v1.DetachProjectFromDaemonRequest]) (*connect.Response[v1.DetachProjectFromDaemonResponse], error)
 	// RecloneProjectOnDaemon removes the existing on-disk clone and re-clones
 	// it from the project's remote_url at the recorded default branch. Any
 	// local-only changes are lost; UI must confirm before calling. The
@@ -353,6 +386,18 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(projectServiceMethods.ByName("RemoveProjectFromDaemon")),
 			connect.WithClientOptions(opts...),
 		),
+		attachProjectToDaemon: connect.NewClient[v1.AttachProjectToDaemonRequest, v1.AttachProjectToDaemonResponse](
+			httpClient,
+			baseURL+ProjectServiceAttachProjectToDaemonProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("AttachProjectToDaemon")),
+			connect.WithClientOptions(opts...),
+		),
+		detachProjectFromDaemon: connect.NewClient[v1.DetachProjectFromDaemonRequest, v1.DetachProjectFromDaemonResponse](
+			httpClient,
+			baseURL+ProjectServiceDetachProjectFromDaemonProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("DetachProjectFromDaemon")),
+			connect.WithClientOptions(opts...),
+		),
 		recloneProjectOnDaemon: connect.NewClient[v1.RecloneProjectOnDaemonRequest, v1.RecloneProjectOnDaemonResponse](
 			httpClient,
 			baseURL+ProjectServiceRecloneProjectOnDaemonProcedure,
@@ -387,6 +432,8 @@ type projectServiceClient struct {
 	listRepositoriesForDaemon   *connect.Client[v1.ListRepositoriesForDaemonRequest, v1.ListRepositoriesForDaemonResponse]
 	pullProjectOnDaemon         *connect.Client[v1.PullProjectOnDaemonRequest, v1.PullProjectOnDaemonResponse]
 	removeProjectFromDaemon     *connect.Client[v1.RemoveProjectFromDaemonRequest, v1.RemoveProjectFromDaemonResponse]
+	attachProjectToDaemon       *connect.Client[v1.AttachProjectToDaemonRequest, v1.AttachProjectToDaemonResponse]
+	detachProjectFromDaemon     *connect.Client[v1.DetachProjectFromDaemonRequest, v1.DetachProjectFromDaemonResponse]
 	recloneProjectOnDaemon      *connect.Client[v1.RecloneProjectOnDaemonRequest, v1.RecloneProjectOnDaemonResponse]
 }
 
@@ -505,6 +552,16 @@ func (c *projectServiceClient) RemoveProjectFromDaemon(ctx context.Context, req 
 	return c.removeProjectFromDaemon.CallUnary(ctx, req)
 }
 
+// AttachProjectToDaemon calls reliant.v1.ProjectService.AttachProjectToDaemon.
+func (c *projectServiceClient) AttachProjectToDaemon(ctx context.Context, req *connect.Request[v1.AttachProjectToDaemonRequest]) (*connect.Response[v1.AttachProjectToDaemonResponse], error) {
+	return c.attachProjectToDaemon.CallUnary(ctx, req)
+}
+
+// DetachProjectFromDaemon calls reliant.v1.ProjectService.DetachProjectFromDaemon.
+func (c *projectServiceClient) DetachProjectFromDaemon(ctx context.Context, req *connect.Request[v1.DetachProjectFromDaemonRequest]) (*connect.Response[v1.DetachProjectFromDaemonResponse], error) {
+	return c.detachProjectFromDaemon.CallUnary(ctx, req)
+}
+
 // RecloneProjectOnDaemon calls reliant.v1.ProjectService.RecloneProjectOnDaemon.
 func (c *projectServiceClient) RecloneProjectOnDaemon(ctx context.Context, req *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error) {
 	return c.recloneProjectOnDaemon.CallUnary(ctx, req)
@@ -598,6 +655,33 @@ type ProjectServiceHandler interface {
 	// deleted — other daemons may still host clones. Idempotent: succeeds even
 	// if the row was already absent (the on-disk delete is best-effort).
 	RemoveProjectFromDaemon(context.Context, *connect.Request[v1.RemoveProjectFromDaemonRequest]) (*connect.Response[v1.RemoveProjectFromDaemonResponse], error)
+	// AttachProjectToDaemon records that a folder already on one of the
+	// caller's machines is this project's checkout there — "it's already at
+	// /Users/me/properties on this machine". Nothing is cloned or created: the
+	// machine is asked first, and a path that does not exist there, or is not
+	// a folder, is refused (FailedPrecondition) instead of recorded. A machine
+	// that is offline is Unavailable. A folder that is not a git checkout of
+	// the project's remote is attached with a warning, not refused.
+	//
+	// Re-attaching the same machine at another path moves its checkout there.
+	// It also undoes DetachProjectFromDaemon for that machine.
+	//
+	// Prefer it to MarkProjectInstalled, which records a clone some other route
+	// made and checks nothing on the machine.
+	AttachProjectToDaemon(context.Context, *connect.Request[v1.AttachProjectToDaemonRequest]) (*connect.Response[v1.AttachProjectToDaemonResponse], error)
+	// DetachProjectFromDaemon forgets a project's checkout on one machine
+	// WITHOUT touching its files: the project_daemons row and that machine's
+	// synced config for the project go; the folder stays on disk, and the
+	// machine does not re-record it on its next connect. Contrast
+	// RemoveProjectFromDaemon, which deletes the folder.
+	//
+	// Refused (FailedPrecondition) when it would leave the project on no
+	// machine, or while workspaces (branch worktrees) of the project live on
+	// that machine. Chats pinned to the machine are left as they are: their
+	// next tool call is refused with the machines that do have the project,
+	// and switching machine (or attaching it again) continues them.
+	// Idempotent: a machine the project is not on succeeds.
+	DetachProjectFromDaemon(context.Context, *connect.Request[v1.DetachProjectFromDaemonRequest]) (*connect.Response[v1.DetachProjectFromDaemonResponse], error)
 	// RecloneProjectOnDaemon removes the existing on-disk clone and re-clones
 	// it from the project's remote_url at the recorded default branch. Any
 	// local-only changes are lost; UI must confirm before calling. The
@@ -750,6 +834,18 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		connect.WithSchema(projectServiceMethods.ByName("RemoveProjectFromDaemon")),
 		connect.WithHandlerOptions(opts...),
 	)
+	projectServiceAttachProjectToDaemonHandler := connect.NewUnaryHandler(
+		ProjectServiceAttachProjectToDaemonProcedure,
+		svc.AttachProjectToDaemon,
+		connect.WithSchema(projectServiceMethods.ByName("AttachProjectToDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceDetachProjectFromDaemonHandler := connect.NewUnaryHandler(
+		ProjectServiceDetachProjectFromDaemonProcedure,
+		svc.DetachProjectFromDaemon,
+		connect.WithSchema(projectServiceMethods.ByName("DetachProjectFromDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
 	projectServiceRecloneProjectOnDaemonHandler := connect.NewUnaryHandler(
 		ProjectServiceRecloneProjectOnDaemonProcedure,
 		svc.RecloneProjectOnDaemon,
@@ -804,6 +900,10 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServicePullProjectOnDaemonHandler.ServeHTTP(w, r)
 		case ProjectServiceRemoveProjectFromDaemonProcedure:
 			projectServiceRemoveProjectFromDaemonHandler.ServeHTTP(w, r)
+		case ProjectServiceAttachProjectToDaemonProcedure:
+			projectServiceAttachProjectToDaemonHandler.ServeHTTP(w, r)
+		case ProjectServiceDetachProjectFromDaemonProcedure:
+			projectServiceDetachProjectFromDaemonHandler.ServeHTTP(w, r)
 		case ProjectServiceRecloneProjectOnDaemonProcedure:
 			projectServiceRecloneProjectOnDaemonHandler.ServeHTTP(w, r)
 		default:
@@ -905,6 +1005,14 @@ func (UnimplementedProjectServiceHandler) PullProjectOnDaemon(context.Context, *
 
 func (UnimplementedProjectServiceHandler) RemoveProjectFromDaemon(context.Context, *connect.Request[v1.RemoveProjectFromDaemonRequest]) (*connect.Response[v1.RemoveProjectFromDaemonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.RemoveProjectFromDaemon is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) AttachProjectToDaemon(context.Context, *connect.Request[v1.AttachProjectToDaemonRequest]) (*connect.Response[v1.AttachProjectToDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.AttachProjectToDaemon is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) DetachProjectFromDaemon(context.Context, *connect.Request[v1.DetachProjectFromDaemonRequest]) (*connect.Response[v1.DetachProjectFromDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.DetachProjectFromDaemon is not implemented"))
 }
 
 func (UnimplementedProjectServiceHandler) RecloneProjectOnDaemon(context.Context, *connect.Request[v1.RecloneProjectOnDaemonRequest]) (*connect.Response[v1.RecloneProjectOnDaemonResponse], error) {

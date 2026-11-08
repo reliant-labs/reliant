@@ -47,7 +47,7 @@ type CheckoutRestoreStore interface {
 	ListMachinePoolsForUser(ctx context.Context, userID string) ([]*db.MachinePool, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
-	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
+	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)
 	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
 }
@@ -159,9 +159,16 @@ func restorePoolMemberCheckouts(ctx context.Context, store CheckoutRestoreStore,
 			failRestore(ctx, store, project, row, daemonID, failure.Error())
 			continue
 		}
-		if err := store.UpsertProjectDaemon(ctx, project.ID, daemonID, row.Path, row.DefaultBranch); err != nil {
+		recorded, err := store.RecordObservedProjectDaemon(ctx, project.ID, daemonID, row.Path, row.DefaultBranch)
+		if err != nil {
 			logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: cloned, but could not record it",
 				"error", err, "daemonID", daemonID, "projectID", project.ID)
+			continue
+		}
+		if !recorded {
+			// The user detached it from this machine while the clone ran.
+			logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: cloned, but the project was detached from the machine meanwhile; not recorded",
+				"daemonID", daemonID, "projectID", project.ID, "path", row.Path)
 			continue
 		}
 		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" restore: put a pool member's checkout back",
