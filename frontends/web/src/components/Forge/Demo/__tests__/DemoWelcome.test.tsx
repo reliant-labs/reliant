@@ -26,7 +26,7 @@ it("offers an inline summary and a choice without blocking the build", async () 
   const router = mount("/forge/demo?section=built", true);
   const welcome = await screen.findByTestId("demo-welcome");
   expect(welcome).toHaveTextContent("production framework");
-  expect(welcome).toHaveTextContent("read-only sample data");
+  expect(welcome).toHaveTextContent(/read-only sample data/i);
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.queryByTestId("tour-callout")).toBeNull();
   fireEvent.click(within(welcome).getByRole("button", {name:"Explore the running app"}));
@@ -69,7 +69,7 @@ it("How help preserves URL, pauses playback, and restores trigger focus on Escap
   expect(screen.getByTestId("tour-callout")).toBeVisible();
 });
 it("mobile explanations AND their collapsed control are in flow, hidden behind the drawer", async () => {
-  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("767px"), media:query, onchange:null, addListener:vi.fn(),removeListener:vi.fn(),addEventListener:vi.fn(),removeEventListener:vi.fn(),dispatchEvent:vi.fn() }));
+  vi.stubGlobal("matchMedia", (query: string) => ({ matches: query.includes("1023px"), media:query, onchange:null, addListener:vi.fn(),removeListener:vi.fn(),addEventListener:vi.fn(),removeEventListener:vi.fn(),dispatchEvent:vi.fn() }));
   mount();
   const card = await screen.findByTestId("tour-callout");
   expect(card.closest("main")).not.toBeNull();

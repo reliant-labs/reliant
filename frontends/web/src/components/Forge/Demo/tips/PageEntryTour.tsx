@@ -34,7 +34,7 @@ export function PageEntryTour() {
 
 function VisitTour({ tipKey }: { tipKey: DemoTipKey }) {
   const [open, setOpen] = useState(true);
-  const mobile = useMediaQuery("(max-width: 767px)");
+  const mobile = useMediaQuery("(max-width: 1023px)");
   const drawerOpen = useConsoleDrawerOpen();
   const tip = DEMO_TIPS[tipKey];
   const dismiss = () => {
@@ -47,8 +47,7 @@ function VisitTour({ tipKey }: { tipKey: DemoTipKey }) {
     const escape = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) dismiss(); };
     window.addEventListener("keydown", escape);
     return () => window.removeEventListener("keydown", escape);
-    // Dismissal changes only visit-local state and the legacy tour query.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Dismissal changes only visit-local state.
   }, [open, drawerOpen]);
   if (drawerOpen) return null;
   return (
@@ -85,7 +84,7 @@ function MobilePageCallout({ children }: { children: ReactNode }) {
 function PageCallout({ tipKey, onDismiss }: { tipKey: DemoTipKey; onDismiss: () => void }) {
   const tip = DEMO_TIPS[tipKey];
   const [target, setTarget] = useState<string | null>(null);
-  const mobile = useMediaQuery("(max-width: 767px)");
+  const mobile = useMediaQuery("(max-width: 1023px)");
   useEffect(() => {
     if (mobile) return;
     // Lazy page chunks may mount after the visit. Upgrade to their anchor once,
