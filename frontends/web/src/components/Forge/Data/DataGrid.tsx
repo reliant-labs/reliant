@@ -41,6 +41,7 @@ import {
   nextSort,
   offsetOf,
   pageSizeOf,
+  patchSearch,
   previousOffset,
   servable,
   visibleColumns,
@@ -157,6 +158,8 @@ export function DataGrid({ env, database, table, tables, search, access, onSearc
             stale={query.isPlaceholderData || (query.isFetching && !query.isPending)}
             onSort={(column, additive) => onSearch({ sort: nextSort(sort, column, table, additive).map(encodeSort) })}
             linkTo={linkTo}
+            // A row opens on the grid's whole view, so the row page's Back returns to it.
+            rowHref={(row) => linkTo(patchSearch(search, { row }))}
           />
           {page.truncated && (
             <p className="text-xs text-ink-muted" data-testid="data-page-cut">
@@ -243,6 +246,7 @@ function GridTable({
   stale,
   onSort,
   linkTo,
+  rowHref,
 }: {
   page: BrowsePage;
   table: DbTable;
@@ -252,6 +256,7 @@ function GridTable({
   stale: boolean;
   onSort: (column: string, additive: boolean) => void;
   linkTo: (target: DataSearch) => string;
+  rowHref: (row: string) => string;
 }) {
   const [open, setOpen] = useState<OpenCell | null>(null);
   const meta = useMemo(() => new Map(table.columns.map((c) => [c.name, c])), [table.columns]);
@@ -332,7 +337,7 @@ function GridTable({
                   <td className="sticky left-0 z-[1] h-8 border-b border-border/60 bg-surface px-1 group-hover:bg-surface-sunken">
                     {rowParam !== null && (
                       <Link
-                        href={linkTo({ table: qualifiedName(table), row: rowParam })}
+                        href={rowHref(rowParam)}
                         aria-label={`Open row ${table.primaryKey.map((k) => `${k} ${record.get(k)}`).join(", ")}`}
                         className="flex h-6 w-6 items-center justify-center rounded text-ink-muted hover:bg-ink/5 hover:text-ink"
                         data-testid="data-row-open"

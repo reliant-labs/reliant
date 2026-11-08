@@ -189,6 +189,19 @@ describe("the grid", () => {
     expect(searchOf(within(first).getByTestId("data-row-open").getAttribute("href"))).toEqual({ db: "shop", table: "public.orders", row: "1000" });
   });
 
+  it("opens a row on the grid's whole view, so the row page's Back returns to that view", async () => {
+    const grid = { db: "shop", table: "public.orders", f: ["status.eq.pending"], sort: ["id.desc"], cols: ["id", "status", "total_cents"], offset: 25, size: 25 };
+    const view = renderBrowser(createDataFixtureApi({ onlyShop: true }), grid);
+    await gridReady();
+    const open = searchOf(within(screen.getAllByTestId("data-row")[0]!).getByTestId("data-row-open").getAttribute("href"));
+    expect(open).toEqual({ ...grid, row: open.row });
+    expect(open.row).toBeDefined();
+
+    view.go(open);
+    await waitFor(() => expect(screen.getByTestId("data-row-page")).toHaveAttribute("data-state", "ready"));
+    expect(searchOf(screen.getByTestId("data-row-back").getAttribute("href"))).toEqual(grid);
+  });
+
   it("hides columns with the picker, still reading the key so rows open", async () => {
     const api = createDataFixtureApi({ onlyShop: true });
     const view = renderBrowser(api, { db: "shop", table: "public.orders" });
