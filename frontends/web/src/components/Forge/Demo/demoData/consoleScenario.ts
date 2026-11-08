@@ -159,6 +159,10 @@ const HISTORY: Record<EnvId, { version: string; age: number; by: string }[]> = {
   ],
 };
 
+/** Observability calls the storefront `web`; the release ledger calls it
+ * `shop-web`. Keep this alias at the fixture boundary, not in production UI. */
+export const demoWorkloadName = (name: string): string => name === "web" ? "shop-web" : name;
+
 export const DEMO_WORKLOADS = [
   { name: "api", tier: DeployTier.BACKEND, replicas: 2, path: "api" },
   { name: "worker", tier: DeployTier.BACKEND, replicas: 1, path: "" },

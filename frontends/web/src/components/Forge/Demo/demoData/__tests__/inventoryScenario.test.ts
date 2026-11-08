@@ -77,6 +77,26 @@ describe("public demo inventory wire reads", () => {
     await expect(data.browseTable({ ...request, offset: -1n })).rejects.toMatchObject({ code: 3 });
   });
 
+  it("keeps synthetic inventory prices in cents on the wire, including typed price filtering and sorting", async () => {
+    const data = createClient(AppDatabaseService, transport());
+    const inventory = { ...request, table: "public.inventory", columns: ["id", "price_cents"] };
+    const all = await data.browseTable(inventory);
+    expect(all.columns.map((column) => column.name)).toEqual(["id", "price_cents"]);
+    expect(all.rows[0].values.map(cell)).toEqual(["sku-001", 1200]);
+    expect(all.rows[31].values.map(cell)).toEqual(["sku-032", 4300]);
+    const filtered = await data.browseTable({
+      ...inventory,
+      filters: [{ column: "price_cents", op: BrowseFilterOp.GTE, values: ["4100"] }],
+      sort: [{ column: "price_cents", desc: true }],
+    });
+    expect(filtered.rows.map((row) => row.values.map(cell))).toEqual([
+      ["sku-032", 4300], ["sku-031", 4200], ["sku-030", 4100],
+    ]);
+    await expect(data.browseTable({
+      ...inventory, filters: [{ column: "price_cents", op: BrowseFilterOp.EQ, values: ["12.00"] }],
+    })).rejects.toMatchObject({ code: 3 });
+  });
+
   it("requires prod confirmation plus reason, isolates foreign environments/databases", async () => {
     const data = createClient(AppDatabaseService, transport());
     await expect(data.describeDatabase({ environmentId: "env-prod", database: "shop" })).rejects.toMatchObject({ code: 7 });
@@ -102,6 +122,32 @@ describe("public demo inventory wire reads", () => {
       expect(detail.workloads[0].declared?.bundleId).toBe(config.bundleId);
       expect(detail.workloads[0].containers.every((c) => c.imageTag === config.releaseVersion)).toBe(true);
       expect(promotions.promotions[0].releaseVersion).toBe(config.releaseVersion);
+    }
+  });
+
+  it("links the observability frontend alias to its declared bundle and scoped config identity", async () => {
+    const api = createDemoApi({ wire: false });
+    const deploy = createClient(DeployService, transport());
+    for (const environmentId of ["env-dev", "env-staging", "env-prod"]) {
+      const req = { orgId: "org-demo", projectId: "shop", envIds: [environmentId], filters: [], window: { startMs: 1_794_168_000_000, endMs: 1_794_171_600_000 } };
+      const list = await api.listWorkloads(req);
+      expect(list.workloads.find((row) => row.workload === "web")).toBeDefined();
+      const detail = await api.getWorkload({ ...req, workload: "web" });
+      const frontend = detail.workloads.find((row) => row.workload === "web")!;
+      const config = await deploy.getWorkloadConfig({ environmentId, workload: "web" });
+      const canonical = await deploy.getWorkloadConfig({ environmentId, workload: "shop-web", bundleId: config.bundleId });
+      expect(frontend.declared?.bundleId).toBe(config.bundleId);
+      expect(frontend.declared?.name).toBe("web");
+      expect(frontend.releaseVersion).toBe(config.releaseVersion);
+      // Echo the caller's addressed identity so the real config adapter accepts
+      // either route, while resolving both to one immutable fixture projection.
+      expect(config.workload).toBe("web");
+      expect(canonical.workload).toBe("shop-web");
+      expect(config.objects).toEqual(canonical.objects);
+      expect(config.renderedYaml).toBe(canonical.renderedYaml);
+      expect(config.bundleDigest).toBe(canonical.bundleDigest);
+      expect(config.frontendConfigUnsupportedReason).toBe("Sample only: no deployed config.js is fetched.");
+      expect(frontend.declared?.image).toBe(`registry.example.com/shop/shop-web:${config.releaseVersion}`);
     }
   });
 

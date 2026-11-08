@@ -7,7 +7,7 @@ import type { ObservabilityApi } from "@/services/controlPlane/observability/Obs
 import type { Workload } from "@/services/controlPlane/observability/types";
 
 import { demoBundleId } from "./configScenario";
-import { DEMO_RELEASES, DEMO_WORKLOADS, RUNNING } from "./consoleScenario";
+import { DEMO_RELEASES, DEMO_WORKLOADS, RUNNING, demoWorkloadName } from "./consoleScenario";
 import { DEMO_ENVS, demoEnvId } from "./demoScope";
 
 function currentWorkload(row: Workload, detail: boolean): Workload {
@@ -16,7 +16,7 @@ function currentWorkload(row: Workload, detail: boolean): Workload {
   const env = DEMO_ENVS.find((e) => e.id === envId)!;
   const current = RUNNING[envId];
   const release = DEMO_RELEASES.find((r) => r.version === current.version)!;
-  const declared = DEMO_WORKLOADS.find((w) => w.name === row.workload);
+  const declared = DEMO_WORKLOADS.find((w) => w.name === demoWorkloadName(row.workload));
   return {
     ...row, serviceVersion: current.version, releaseVersion: current.version,
     containers: row.containers.map((container) => ({ ...container, imageTag: current.version })),
@@ -26,7 +26,7 @@ function currentWorkload(row: Workload, detail: boolean): Workload {
       memoryRequestBytes: 128 * 1024 * 1024, memoryLimitBytes: 512 * 1024 * 1024,
       ports: row.workload === "api" ? [{ name: "http", port: 8080, protocol: "TCP" }] : [],
       envNames: ["LOG_LEVEL", "ORDER_TIMEOUT_MS", "DATABASE_URL", "PAYMENTS_API_KEY"],
-      image: `registry.example.com/shop/${row.workload}:${current.version}`,
+      image: `registry.example.com/shop/${declared.name}:${current.version}`,
       sourcePath: `deploy/kcl/${env.name}/main.k`, sourceRepo: "github.com/acme/shop", sourceCommit: release.commit,
       bundleId: demoBundleId(envId, current.version),
     } : null,

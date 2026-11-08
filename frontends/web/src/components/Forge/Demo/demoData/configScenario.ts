@@ -10,7 +10,7 @@ import { dump } from "js-yaml";
 
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 
-import { DEMO_RELEASES, DEMO_WORKLOADS, RUNNING } from "./consoleScenario";
+import { DEMO_RELEASES, DEMO_WORKLOADS, RUNNING, demoWorkloadName } from "./consoleScenario";
 import { completed } from "./demoServiceDefaults";
 import { DEMO_ENVS } from "./demoScope";
 import { mockService } from "./forgeMockValues/mock-values";
@@ -29,7 +29,7 @@ export function configScenarioHandlers() {
   return completed(DeployService, mockService(DeployService, {
     getWorkloadConfig: (req) => {
       const env = DEMO_ENVS.find((e) => e.id === req.environmentId);
-      const workload = DEMO_WORKLOADS.find((w) => w.name === req.workload);
+      const workload = DEMO_WORKLOADS.find((w) => w.name === demoWorkloadName(req.workload));
       if (!env || !workload) throw new ConnectError("No such sample workload.", Code.NotFound);
       if (req.bundleId !== undefined && req.releaseVersion !== undefined) throw new ConnectError("Choose one sample selector.", Code.InvalidArgument);
       const version = req.bundleId !== undefined
@@ -46,7 +46,9 @@ export function configScenarioHandlers() {
       }];
       // Both public representations originate from exactly these redacted objects.
       return {
-        environmentId: env.id, workload: workload.name, bundleId: demoBundleId(env.id, version), releaseVersion: version,
+        // Match the addressed alias for the real adapter's scope check; the
+        // immutable object projection above always uses the canonical name.
+        environmentId: env.id, workload: req.workload, bundleId: demoBundleId(env.id, version), releaseVersion: version,
         bundleDigest: demoBundleDigest(env.id, version),
         objects, renderedYaml: objects.map((object) => dump(object, { sortKeys: true, lineWidth: -1 })).join("---\n"),
         frontendConfigUnsupportedReason: workload.name === "shop-web" ? "Sample only: no deployed config.js is fetched." : "",
