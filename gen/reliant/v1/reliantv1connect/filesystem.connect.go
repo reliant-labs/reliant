@@ -101,7 +101,8 @@ type FileSystemServiceClient interface {
 	// ReplaceInFiles replaces text in files across the workspace
 	ReplaceInFiles(context.Context, *connect.Request[v1.ReplaceInFilesRequest]) (*connect.Response[v1.ReplaceInFilesResponse], error)
 	// ListDirectory lists entries in an arbitrary filesystem directory.
-	// Used by the project picker in browser mode (no Electron).
+	// Used by the project picker in browser mode (no Electron). daemon_id
+	// names the machine to browse; unset browses the default machine.
 	ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error)
 	// CreateDirectory creates a new directory at an arbitrary absolute path.
 	// Used by the project picker in browser mode to make a "New folder" while
@@ -308,7 +309,8 @@ type FileSystemServiceHandler interface {
 	// ReplaceInFiles replaces text in files across the workspace
 	ReplaceInFiles(context.Context, *connect.Request[v1.ReplaceInFilesRequest]) (*connect.Response[v1.ReplaceInFilesResponse], error)
 	// ListDirectory lists entries in an arbitrary filesystem directory.
-	// Used by the project picker in browser mode (no Electron).
+	// Used by the project picker in browser mode (no Electron). daemon_id
+	// names the machine to browse; unset browses the default machine.
 	ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error)
 	// CreateDirectory creates a new directory at an arbitrary absolute path.
 	// Used by the project picker in browser mode to make a "New folder" while

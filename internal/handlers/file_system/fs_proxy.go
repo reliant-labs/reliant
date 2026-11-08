@@ -1170,8 +1170,13 @@ func (s *Service) ListDirectory(
 		Path    string            `json:"path"`
 		Entries []fsProxyDirEntry `json:"entries"`
 	}
-	// No workspace to follow: the project picker browses the default machine.
-	if err := s.sendCommand(ctx, userID, machinewake.Target{}, "fs.list_dir", cmdReq, &cmdResp, 5000); err != nil {
+	// No workspace to follow: the project picker browses the machine it
+	// names, else the default machine.
+	target, err := s.pickerMachine(ctx, userID, req.Msg.GetDaemonId())
+	if err != nil {
+		return nil, err
+	}
+	if err := s.sendCommand(ctx, userID, target, "fs.list_dir", cmdReq, &cmdResp, 5000); err != nil {
 		return nil, err
 	}
 
@@ -1202,7 +1207,8 @@ func (s *Service) ListDirectory(
 }
 
 // CreateDirectory creates a new directory at an arbitrary absolute path by
-// forwarding an fs.mkdir command to the user's daemon. Mirrors ListDirectory:
+// forwarding an fs.mkdir command to the machine the request names, else the
+// user's default machine. Mirrors ListDirectory:
 // the path is an absolute filesystem path on the daemon (not project-scoped).
 func (s *Service) CreateDirectory(
 	ctx context.Context,
@@ -1227,14 +1233,35 @@ func (s *Service) CreateDirectory(
 	cmdReq := map[string]any{
 		"path": path,
 	}
+	target, err := s.pickerMachine(ctx, userID, req.Msg.GetDaemonId())
+	if err != nil {
+		return nil, err
+	}
 	var cmdResp struct{}
-	if err := s.sendCommand(ctx, userID, machinewake.Target{}, "fs.mkdir", cmdReq, &cmdResp, 5000); err != nil {
+	if err := s.sendCommand(ctx, userID, target, "fs.mkdir", cmdReq, &cmdResp, 5000); err != nil {
 		return nil, err
 	}
 
 	return connect.NewResponse(&reliantv1.CreateDirectoryResponse{
 		Path: path,
 	}), nil
+}
+
+// pickerMachine is the machine the project picker's ListDirectory and
+// CreateDirectory run on: the one the request names, which must be the
+// caller's (another user's is NotFound, the same as a missing one), else the
+// default machine (the zero Target), as before requests could name one. A
+// named machine that is asleep is woken and one that is offline is reported
+// by sendCommand, like any pinned command.
+func (s *Service) pickerMachine(ctx context.Context, userID, daemonID string) (machinewake.Target, error) {
+	if daemonID == "" {
+		return machinewake.Target{}, nil
+	}
+	d, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	if err != nil || d == nil || d.UserID != userID {
+		return machinewake.Target{}, svcerr.NotFound("machine")
+	}
+	return machinewake.Target{DaemonID: daemonID}, nil
 }
 
 // fsProxyDirEntry mirrors the daemon's DirEntry JSON shape.

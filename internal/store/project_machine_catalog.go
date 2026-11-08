@@ -202,6 +202,17 @@ WHERE project_id = $1 AND daemon_id = $2`,
 	return nil
 }
 
+// DeleteProjectMachineCatalog deletes one machine's catalog row of a project:
+// the project was detached from the machine, so what it synced no longer
+// belongs in the project's union. None is not an error. ctx must carry the
+// transaction holding LockProjectCatalog, which rewrites the union after.
+func DeleteProjectMachineCatalog(ctx context.Context, db orm.Context, projectID, daemonID string) error {
+	if _, err := db.Exec(ctx, `DELETE FROM project_machine_catalogs WHERE project_id = $1 AND daemon_id = $2`, projectID, daemonID); err != nil {
+		return fmt.Errorf("failed to delete machine %s's catalog of project %s: %w", daemonID, projectID, err)
+	}
+	return nil
+}
+
 // ProjectConfigUnion is the per-file content of a project's record, unioned
 // over every machine's (see db.Repo.SyncProjectConfigSnapshot).
 type ProjectConfigUnion struct {

@@ -230,6 +230,57 @@ service ProjectService {
     };
   }
 
+  // AttachProjectToDaemon records that a folder already on one of the
+  // caller's machines is this project's checkout there — "it's already at
+  // /Users/me/properties on this machine". Nothing is cloned or created: the
+  // machine is asked first, and a path that does not exist there, or is not
+  // a folder, is refused (FailedPrecondition) instead of recorded. A machine
+  // that is offline is Unavailable. A folder that is not a git checkout of
+  // the project's remote is attached with a warning, not refused.
+  //
+  // Re-attaching the same machine at another path moves its checkout there.
+  // It also undoes DetachProjectFromDaemon for that machine.
+  //
+  // Prefer it to MarkProjectInstalled, which records a clone some other route
+  // made and checks nothing on the machine.
+  rpc AttachProjectToDaemon(AttachProjectToDaemonRequest) returns (AttachProjectToDaemonResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "attach_to_daemon"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+        detail: ["daemon_id", "path"]
+      }
+    };
+  }
+
+  // DetachProjectFromDaemon forgets a project's checkout on one machine
+  // WITHOUT touching its files: the project_daemons row and that machine's
+  // synced config for the project go; the folder stays on disk, and the
+  // machine does not re-record it on its next connect. Contrast
+  // RemoveProjectFromDaemon, which deletes the folder.
+  //
+  // Refused (FailedPrecondition) when it would leave the project on no
+  // machine, or while workspaces (branch worktrees) of the project live on
+  // that machine. Chats pinned to the machine are left as they are: their
+  // next tool call is refused with the machines that do have the project,
+  // and switching machine (or attaching it again) continues them.
+  // Idempotent: a machine the project is not on succeeds.
+  rpc DetachProjectFromDaemon(DetachProjectFromDaemonRequest) returns (DetachProjectFromDaemonResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "detach_from_daemon"
+        target: {
+          kind: "project"
+          id: "project_id"
+        }
+        detail: ["daemon_id"]
+      }
+    };
+  }
+
   // RecloneProjectOnDaemon removes the existing on-disk clone and re-clones
   // it from the project's remote_url at the recorded default branch. Any
   // local-only changes are lost; UI must confirm before calling. The
@@ -297,6 +348,15 @@ message ProjectDaemon {
   ProjectInstallState install_state = 6;
   // Why the clone failed. Empty unless install_state is FAILED.
   string install_error = 7;
+  // When the machine last showed the checkout on its disk (RFC 3339): a
+  // completed clone, an attach, or a connect that found it. Unset when it
+  // never has.
+  optional string verified_at = 8;
+  // The machine's display name (its name, else its hostname, else a short
+  // id), so a list of a project's machines needs no second lookup. Set by
+  // ListProjectDaemons, ListProjectDaemonsForDaemon and the attach and
+  // create responses.
+  string daemon_name = 9;
 }
 
 // CreateProjectRequest creates a new project
@@ -305,11 +365,28 @@ message CreateProjectRequest {
   string path = 2;
   optional string description = 3;
   optional string default_branch = 4;
+  // The machine the folder is on, one of the caller's daemons. Unset (or
+  // empty) is the user's default machine, as before this field existed.
+  //
+  // Set, everything runs on that machine (which must be online), and an
+  // existing project is attached rather than refused: when the folder is
+  // the creation path of one of the caller's projects, or a git checkout of
+  // one's remote, and that project is not on this machine yet, the folder
+  // becomes its checkout here (response.attached). A folder that is already
+  // a project's checkout on this machine is AlreadyExists, as is a project
+  // that is already on this machine at another path.
+  optional string daemon_id = 5;
 }
 
 // CreateProjectResponse returns the created project
 message CreateProjectResponse {
   Project project = 1;
+  // The project's checkout on the requested machine. Set only when the
+  // request named daemon_id.
+  ProjectDaemon project_daemon = 2;
+  // True when the folder was attached to an EXISTING project (see
+  // CreateProjectRequest.daemon_id) instead of creating a new one.
+  bool attached = 3;
 }
 
 // ListProjectsRequest lists projects with optional filters
@@ -672,6 +749,34 @@ message RemoveProjectFromDaemonRequest {
 
 // RemoveProjectFromDaemonResponse is empty on success.
 message RemoveProjectFromDaemonResponse {}
+
+// AttachProjectToDaemonRequest names a folder on one of the caller's machines
+// as the project's checkout there.
+message AttachProjectToDaemonRequest {
+  string project_id = 1 [(buf.validate.field).required = true];
+  string daemon_id = 2 [(buf.validate.field).required = true];
+  // Absolute path of the folder on that machine.
+  string path = 3 [(buf.validate.field).required = true];
+  optional string default_branch = 4;
+}
+
+message AttachProjectToDaemonResponse {
+  // The recorded checkout, installed and verified now.
+  ProjectDaemon project_daemon = 1;
+  // What the machine showed that does not stop the attach, in sentences for
+  // the user: the folder is not a git checkout, or its remote is not the
+  // project's.
+  repeated string warnings = 2;
+}
+
+// DetachProjectFromDaemonRequest names the machine to forget a project on.
+message DetachProjectFromDaemonRequest {
+  string project_id = 1 [(buf.validate.field).required = true];
+  string daemon_id = 2 [(buf.validate.field).required = true];
+}
+
+// DetachProjectFromDaemonResponse is empty on success.
+message DetachProjectFromDaemonResponse {}
 
 // RecloneProjectOnDaemonRequest blows away the on-disk clone and re-clones
 // from the project's remote_url.

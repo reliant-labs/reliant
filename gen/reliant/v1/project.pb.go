@@ -254,7 +254,16 @@ type ProjectDaemon struct {
 	// after a clone had completed.
 	InstallState ProjectInstallState `protobuf:"varint,6,opt,name=install_state,json=installState,proto3,enum=reliant.v1.ProjectInstallState" json:"install_state,omitempty"`
 	// Why the clone failed. Empty unless install_state is FAILED.
-	InstallError  string `protobuf:"bytes,7,opt,name=install_error,json=installError,proto3" json:"install_error,omitempty"`
+	InstallError string `protobuf:"bytes,7,opt,name=install_error,json=installError,proto3" json:"install_error,omitempty"`
+	// When the machine last showed the checkout on its disk (RFC 3339): a
+	// completed clone, an attach, or a connect that found it. Unset when it
+	// never has.
+	VerifiedAt *string `protobuf:"bytes,8,opt,name=verified_at,json=verifiedAt,proto3,oneof" json:"verified_at,omitempty"`
+	// The machine's display name (its name, else its hostname, else a short
+	// id), so a list of a project's machines needs no second lookup. Set by
+	// ListProjectDaemons, ListProjectDaemonsForDaemon and the attach and
+	// create responses.
+	DaemonName    string `protobuf:"bytes,9,opt,name=daemon_name,json=daemonName,proto3" json:"daemon_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -338,6 +347,20 @@ func (x *ProjectDaemon) GetInstallError() string {
 	return ""
 }
 
+func (x *ProjectDaemon) GetVerifiedAt() string {
+	if x != nil && x.VerifiedAt != nil {
+		return *x.VerifiedAt
+	}
+	return ""
+}
+
+func (x *ProjectDaemon) GetDaemonName() string {
+	if x != nil {
+		return x.DaemonName
+	}
+	return ""
+}
+
 // CreateProjectRequest creates a new project
 type CreateProjectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -345,6 +368,17 @@ type CreateProjectRequest struct {
 	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	Description   *string                `protobuf:"bytes,3,opt,name=description,proto3,oneof" json:"description,omitempty"`
 	DefaultBranch *string                `protobuf:"bytes,4,opt,name=default_branch,json=defaultBranch,proto3,oneof" json:"default_branch,omitempty"`
+	// The machine the folder is on, one of the caller's daemons. Unset (or
+	// empty) is the user's default machine, as before this field existed.
+	//
+	// Set, everything runs on that machine (which must be online), and an
+	// existing project is attached rather than refused: when the folder is
+	// the creation path of one of the caller's projects, or a git checkout of
+	// one's remote, and that project is not on this machine yet, the folder
+	// becomes its checkout here (response.attached). A folder that is already
+	// a project's checkout on this machine is AlreadyExists, as is a project
+	// that is already on this machine at another path.
+	DaemonId      *string `protobuf:"bytes,5,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -407,10 +441,23 @@ func (x *CreateProjectRequest) GetDefaultBranch() string {
 	return ""
 }
 
+func (x *CreateProjectRequest) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
+}
+
 // CreateProjectResponse returns the created project
 type CreateProjectResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Project       *Project               `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Project *Project               `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	// The project's checkout on the requested machine. Set only when the
+	// request named daemon_id.
+	ProjectDaemon *ProjectDaemon `protobuf:"bytes,2,opt,name=project_daemon,json=projectDaemon,proto3" json:"project_daemon,omitempty"`
+	// True when the folder was attached to an EXISTING project (see
+	// CreateProjectRequest.daemon_id) instead of creating a new one.
+	Attached      bool `protobuf:"varint,3,opt,name=attached,proto3" json:"attached,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -450,6 +497,20 @@ func (x *CreateProjectResponse) GetProject() *Project {
 		return x.Project
 	}
 	return nil
+}
+
+func (x *CreateProjectResponse) GetProjectDaemon() *ProjectDaemon {
+	if x != nil {
+		return x.ProjectDaemon
+	}
+	return nil
+}
+
+func (x *CreateProjectResponse) GetAttached() bool {
+	if x != nil {
+		return x.Attached
+	}
+	return false
 }
 
 // ListProjectsRequest lists projects with optional filters
@@ -3256,6 +3317,223 @@ func (*RemoveProjectFromDaemonResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_project_proto_rawDescGZIP(), []int{51}
 }
 
+// AttachProjectToDaemonRequest names a folder on one of the caller's machines
+// as the project's checkout there.
+type AttachProjectToDaemonRequest struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	DaemonId  string                 `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// Absolute path of the folder on that machine.
+	Path          string  `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	DefaultBranch *string `protobuf:"bytes,4,opt,name=default_branch,json=defaultBranch,proto3,oneof" json:"default_branch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachProjectToDaemonRequest) Reset() {
+	*x = AttachProjectToDaemonRequest{}
+	mi := &file_reliant_v1_project_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachProjectToDaemonRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachProjectToDaemonRequest) ProtoMessage() {}
+
+func (x *AttachProjectToDaemonRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachProjectToDaemonRequest.ProtoReflect.Descriptor instead.
+func (*AttachProjectToDaemonRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *AttachProjectToDaemonRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *AttachProjectToDaemonRequest) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *AttachProjectToDaemonRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *AttachProjectToDaemonRequest) GetDefaultBranch() string {
+	if x != nil && x.DefaultBranch != nil {
+		return *x.DefaultBranch
+	}
+	return ""
+}
+
+type AttachProjectToDaemonResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The recorded checkout, installed and verified now.
+	ProjectDaemon *ProjectDaemon `protobuf:"bytes,1,opt,name=project_daemon,json=projectDaemon,proto3" json:"project_daemon,omitempty"`
+	// What the machine showed that does not stop the attach, in sentences for
+	// the user: the folder is not a git checkout, or its remote is not the
+	// project's.
+	Warnings      []string `protobuf:"bytes,2,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachProjectToDaemonResponse) Reset() {
+	*x = AttachProjectToDaemonResponse{}
+	mi := &file_reliant_v1_project_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachProjectToDaemonResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachProjectToDaemonResponse) ProtoMessage() {}
+
+func (x *AttachProjectToDaemonResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachProjectToDaemonResponse.ProtoReflect.Descriptor instead.
+func (*AttachProjectToDaemonResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *AttachProjectToDaemonResponse) GetProjectDaemon() *ProjectDaemon {
+	if x != nil {
+		return x.ProjectDaemon
+	}
+	return nil
+}
+
+func (x *AttachProjectToDaemonResponse) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
+}
+
+// DetachProjectFromDaemonRequest names the machine to forget a project on.
+type DetachProjectFromDaemonRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	DaemonId      string                 `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DetachProjectFromDaemonRequest) Reset() {
+	*x = DetachProjectFromDaemonRequest{}
+	mi := &file_reliant_v1_project_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DetachProjectFromDaemonRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DetachProjectFromDaemonRequest) ProtoMessage() {}
+
+func (x *DetachProjectFromDaemonRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DetachProjectFromDaemonRequest.ProtoReflect.Descriptor instead.
+func (*DetachProjectFromDaemonRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *DetachProjectFromDaemonRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *DetachProjectFromDaemonRequest) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+// DetachProjectFromDaemonResponse is empty on success.
+type DetachProjectFromDaemonResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DetachProjectFromDaemonResponse) Reset() {
+	*x = DetachProjectFromDaemonResponse{}
+	mi := &file_reliant_v1_project_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DetachProjectFromDaemonResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DetachProjectFromDaemonResponse) ProtoMessage() {}
+
+func (x *DetachProjectFromDaemonResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_project_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DetachProjectFromDaemonResponse.ProtoReflect.Descriptor instead.
+func (*DetachProjectFromDaemonResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{55}
+}
+
 // RecloneProjectOnDaemonRequest blows away the on-disk clone and re-clones
 // from the project's remote_url.
 type RecloneProjectOnDaemonRequest struct {
@@ -3268,7 +3546,7 @@ type RecloneProjectOnDaemonRequest struct {
 
 func (x *RecloneProjectOnDaemonRequest) Reset() {
 	*x = RecloneProjectOnDaemonRequest{}
-	mi := &file_reliant_v1_project_proto_msgTypes[52]
+	mi := &file_reliant_v1_project_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3280,7 +3558,7 @@ func (x *RecloneProjectOnDaemonRequest) String() string {
 func (*RecloneProjectOnDaemonRequest) ProtoMessage() {}
 
 func (x *RecloneProjectOnDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[52]
+	mi := &file_reliant_v1_project_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3293,7 +3571,7 @@ func (x *RecloneProjectOnDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecloneProjectOnDaemonRequest.ProtoReflect.Descriptor instead.
 func (*RecloneProjectOnDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{52}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *RecloneProjectOnDaemonRequest) GetProjectId() string {
@@ -3320,7 +3598,7 @@ type RecloneProjectOnDaemonResponse struct {
 
 func (x *RecloneProjectOnDaemonResponse) Reset() {
 	*x = RecloneProjectOnDaemonResponse{}
-	mi := &file_reliant_v1_project_proto_msgTypes[53]
+	mi := &file_reliant_v1_project_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3332,7 +3610,7 @@ func (x *RecloneProjectOnDaemonResponse) String() string {
 func (*RecloneProjectOnDaemonResponse) ProtoMessage() {}
 
 func (x *RecloneProjectOnDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_project_proto_msgTypes[53]
+	mi := &file_reliant_v1_project_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3345,7 +3623,7 @@ func (x *RecloneProjectOnDaemonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecloneProjectOnDaemonResponse.ProtoReflect.Descriptor instead.
 func (*RecloneProjectOnDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_project_proto_rawDescGZIP(), []int{53}
+	return file_reliant_v1_project_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *RecloneProjectOnDaemonResponse) GetPath() string {
@@ -3383,7 +3661,7 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\f_descriptionB\x11\n" +
 	"\x0f_default_branchB\r\n" +
 	"\v_remote_urlB\x15\n" +
-	"\x13_forge_project_name\"\xa6\x02\n" +
+	"\x13_forge_project_name\"\xfd\x02\n" +
 	"\rProjectDaemon\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
@@ -3392,17 +3670,27 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\x0edefault_branch\x18\x04 \x01(\tH\x00R\rdefaultBranch\x88\x01\x01\x12\x1b\n" +
 	"\tcloned_at\x18\x05 \x01(\tR\bclonedAt\x12D\n" +
 	"\rinstall_state\x18\x06 \x01(\x0e2\x1f.reliant.v1.ProjectInstallStateR\finstallState\x12#\n" +
-	"\rinstall_error\x18\a \x01(\tR\finstallErrorB\x11\n" +
-	"\x0f_default_branch\"\xb4\x01\n" +
+	"\rinstall_error\x18\a \x01(\tR\finstallError\x12$\n" +
+	"\vverified_at\x18\b \x01(\tH\x01R\n" +
+	"verifiedAt\x88\x01\x01\x12\x1f\n" +
+	"\vdaemon_name\x18\t \x01(\tR\n" +
+	"daemonNameB\x11\n" +
+	"\x0f_default_branchB\x0e\n" +
+	"\f_verified_at\"\xe4\x01\n" +
 	"\x14CreateProjectRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12%\n" +
 	"\vdescription\x18\x03 \x01(\tH\x00R\vdescription\x88\x01\x01\x12*\n" +
-	"\x0edefault_branch\x18\x04 \x01(\tH\x01R\rdefaultBranch\x88\x01\x01B\x0e\n" +
+	"\x0edefault_branch\x18\x04 \x01(\tH\x01R\rdefaultBranch\x88\x01\x01\x12 \n" +
+	"\tdaemon_id\x18\x05 \x01(\tH\x02R\bdaemonId\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x11\n" +
-	"\x0f_default_branch\"F\n" +
+	"\x0f_default_branchB\f\n" +
+	"\n" +
+	"_daemon_id\"\xa4\x01\n" +
 	"\x15CreateProjectResponse\x12-\n" +
-	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\"C\n" +
+	"\aproject\x18\x01 \x01(\v2\x13.reliant.v1.ProjectR\aproject\x12@\n" +
+	"\x0eproject_daemon\x18\x02 \x01(\v2\x19.reliant.v1.ProjectDaemonR\rprojectDaemon\x12\x1a\n" +
+	"\battached\x18\x03 \x01(\bR\battached\"C\n" +
 	"\x13ListProjectsRequest\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\x05R\x05limit\x12\x16\n" +
 	"\x06offset\x18\x02 \x01(\x05R\x06offset\"]\n" +
@@ -3622,7 +3910,22 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
 	"\tdaemon_id\x18\x02 \x01(\tR\bdaemonId\"!\n" +
-	"\x1fRemoveProjectFromDaemonResponse\"[\n" +
+	"\x1fRemoveProjectFromDaemonResponse\"\xc5\x01\n" +
+	"\x1cAttachProjectToDaemonRequest\x12%\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12#\n" +
+	"\tdaemon_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\bdaemonId\x12\x1a\n" +
+	"\x04path\x18\x03 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x04path\x12*\n" +
+	"\x0edefault_branch\x18\x04 \x01(\tH\x00R\rdefaultBranch\x88\x01\x01B\x11\n" +
+	"\x0f_default_branch\"}\n" +
+	"\x1dAttachProjectToDaemonResponse\x12@\n" +
+	"\x0eproject_daemon\x18\x01 \x01(\v2\x19.reliant.v1.ProjectDaemonR\rprojectDaemon\x12\x1a\n" +
+	"\bwarnings\x18\x02 \x03(\tR\bwarnings\"l\n" +
+	"\x1eDetachProjectFromDaemonRequest\x12%\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12#\n" +
+	"\tdaemon_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\bdaemonId\"!\n" +
+	"\x1fDetachProjectFromDaemonResponse\"[\n" +
 	"\x1dRecloneProjectOnDaemonRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
@@ -3633,7 +3936,7 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"!PROJECT_INSTALL_STATE_UNSPECIFIED\x10\x00\x12$\n" +
 	" PROJECT_INSTALL_STATE_INSTALLING\x10\x01\x12#\n" +
 	"\x1fPROJECT_INSTALL_STATE_INSTALLED\x10\x02\x12 \n" +
-	"\x1cPROJECT_INSTALL_STATE_FAILED\x10\x032\xeb\x1a\n" +
+	"\x1cPROJECT_INSTALL_STATE_FAILED\x10\x032\xcf\x1d\n" +
 	"\x0eProjectService\x12\x9b\x01\n" +
 	"\rCreateProject\x12 .reliant.v1.CreateProjectRequest\x1a!.reliant.v1.CreateProjectResponse\"E\xa2\xbb\x18A:?\n" +
 	"\x06create\x125\n" +
@@ -3683,6 +3986,14 @@ const file_reliant_v1_project_proto_rawDesc = "" +
 	"\x17RemoveProjectFromDaemon\x12*.reliant.v1.RemoveProjectFromDaemonRequest\x1a+.reliant.v1.RemoveProjectFromDaemonResponse\"<\xa2\xbb\x188:6\n" +
 	"\x12remove_from_daemon\x12\x15\n" +
 	"\aproject\x12\n" +
+	"project_id*\tdaemon_id\x12\xae\x01\n" +
+	"\x15AttachProjectToDaemon\x12(.reliant.v1.AttachProjectToDaemonRequest\x1a).reliant.v1.AttachProjectToDaemonResponse\"@\xa2\xbb\x18<::\n" +
+	"\x10attach_to_daemon\x12\x15\n" +
+	"\aproject\x12\n" +
+	"project_id*\tdaemon_id*\x04path\x12\xb0\x01\n" +
+	"\x17DetachProjectFromDaemon\x12*.reliant.v1.DetachProjectFromDaemonRequest\x1a+.reliant.v1.DetachProjectFromDaemonResponse\"<\xa2\xbb\x188:6\n" +
+	"\x12detach_from_daemon\x12\x15\n" +
+	"\aproject\x12\n" +
 	"project_id*\tdaemon_id\x12\xa2\x01\n" +
 	"\x16RecloneProjectOnDaemon\x12).reliant.v1.RecloneProjectOnDaemonRequest\x1a*.reliant.v1.RecloneProjectOnDaemonResponse\"1\xa2\xbb\x18-:+\n" +
 	"\areclone\x12\x15\n" +
@@ -3702,7 +4013,7 @@ func file_reliant_v1_project_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_project_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_project_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
+var file_reliant_v1_project_proto_msgTypes = make([]protoimpl.MessageInfo, 58)
 var file_reliant_v1_project_proto_goTypes = []any{
 	(ProjectInstallState)(0),                    // 0: reliant.v1.ProjectInstallState
 	(*Project)(nil),                             // 1: reliant.v1.Project
@@ -3757,82 +4068,92 @@ var file_reliant_v1_project_proto_goTypes = []any{
 	(*PullProjectOnDaemonResponse)(nil),         // 50: reliant.v1.PullProjectOnDaemonResponse
 	(*RemoveProjectFromDaemonRequest)(nil),      // 51: reliant.v1.RemoveProjectFromDaemonRequest
 	(*RemoveProjectFromDaemonResponse)(nil),     // 52: reliant.v1.RemoveProjectFromDaemonResponse
-	(*RecloneProjectOnDaemonRequest)(nil),       // 53: reliant.v1.RecloneProjectOnDaemonRequest
-	(*RecloneProjectOnDaemonResponse)(nil),      // 54: reliant.v1.RecloneProjectOnDaemonResponse
-	(v1.FileChangeStatus)(0),                    // 55: reliant.v1.FileChangeStatus
+	(*AttachProjectToDaemonRequest)(nil),        // 53: reliant.v1.AttachProjectToDaemonRequest
+	(*AttachProjectToDaemonResponse)(nil),       // 54: reliant.v1.AttachProjectToDaemonResponse
+	(*DetachProjectFromDaemonRequest)(nil),      // 55: reliant.v1.DetachProjectFromDaemonRequest
+	(*DetachProjectFromDaemonResponse)(nil),     // 56: reliant.v1.DetachProjectFromDaemonResponse
+	(*RecloneProjectOnDaemonRequest)(nil),       // 57: reliant.v1.RecloneProjectOnDaemonRequest
+	(*RecloneProjectOnDaemonResponse)(nil),      // 58: reliant.v1.RecloneProjectOnDaemonResponse
+	(v1.FileChangeStatus)(0),                    // 59: reliant.v1.FileChangeStatus
 }
 var file_reliant_v1_project_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.ProjectDaemon.install_state:type_name -> reliant.v1.ProjectInstallState
 	1,  // 1: reliant.v1.CreateProjectResponse.project:type_name -> reliant.v1.Project
-	1,  // 2: reliant.v1.ListProjectsResponse.projects:type_name -> reliant.v1.Project
-	1,  // 3: reliant.v1.GetProjectResponse.project:type_name -> reliant.v1.Project
-	1,  // 4: reliant.v1.UpdateProjectResponse.project:type_name -> reliant.v1.Project
-	1,  // 5: reliant.v1.UpdateProjectMetadataResponse.project:type_name -> reliant.v1.Project
-	21, // 6: reliant.v1.GetProjectGitBranchesResponse.branches:type_name -> reliant.v1.GitBranch
-	55, // 7: reliant.v1.FileChange.status:type_name -> reliant.v1.FileChangeStatus
-	28, // 8: reliant.v1.GetProjectChangesResponse.files:type_name -> reliant.v1.FileChange
-	31, // 9: reliant.v1.GetProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
-	31, // 10: reliant.v1.SaveProjectPromptsRequest.prompts:type_name -> reliant.v1.Prompt
-	31, // 11: reliant.v1.SaveProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
-	2,  // 12: reliant.v1.ListProjectDaemonsForDaemonResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
-	2,  // 13: reliant.v1.ListProjectDaemonsResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
-	2,  // 14: reliant.v1.MarkProjectInstalledResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	1,  // 15: reliant.v1.CreateProjectFromRepoResponse.project:type_name -> reliant.v1.Project
-	2,  // 16: reliant.v1.CreateProjectFromRepoResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
-	46, // 17: reliant.v1.ListRepositoriesForDaemonResponse.repositories:type_name -> reliant.v1.DaemonRepository
-	3,  // 18: reliant.v1.ProjectService.CreateProject:input_type -> reliant.v1.CreateProjectRequest
-	5,  // 19: reliant.v1.ProjectService.ListProjects:input_type -> reliant.v1.ListProjectsRequest
-	7,  // 20: reliant.v1.ProjectService.GetProject:input_type -> reliant.v1.GetProjectRequest
-	9,  // 21: reliant.v1.ProjectService.UpdateProject:input_type -> reliant.v1.UpdateProjectRequest
-	11, // 22: reliant.v1.ProjectService.DeleteProject:input_type -> reliant.v1.DeleteProjectRequest
-	13, // 23: reliant.v1.ProjectService.TouchProject:input_type -> reliant.v1.TouchProjectRequest
-	15, // 24: reliant.v1.ProjectService.GetProjectMetadata:input_type -> reliant.v1.GetProjectMetadataRequest
-	17, // 25: reliant.v1.ProjectService.UpdateProjectMetadata:input_type -> reliant.v1.UpdateProjectMetadataRequest
-	19, // 26: reliant.v1.ProjectService.GetProjectGitInfo:input_type -> reliant.v1.GetProjectGitInfoRequest
-	22, // 27: reliant.v1.ProjectService.GetProjectGitBranches:input_type -> reliant.v1.GetProjectGitBranchesRequest
-	24, // 28: reliant.v1.ProjectService.GetProjectInitStatus:input_type -> reliant.v1.GetProjectInitStatusRequest
-	26, // 29: reliant.v1.ProjectService.InitializeProject:input_type -> reliant.v1.InitializeProjectRequest
-	29, // 30: reliant.v1.ProjectService.GetProjectChanges:input_type -> reliant.v1.GetProjectChangesRequest
-	32, // 31: reliant.v1.ProjectService.GetProjectPrompts:input_type -> reliant.v1.GetProjectPromptsRequest
-	34, // 32: reliant.v1.ProjectService.SaveProjectPrompts:input_type -> reliant.v1.SaveProjectPromptsRequest
-	36, // 33: reliant.v1.ProjectService.InitializeGitRepo:input_type -> reliant.v1.InitializeGitRepoRequest
-	38, // 34: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:input_type -> reliant.v1.ListProjectDaemonsForDaemonRequest
-	40, // 35: reliant.v1.ProjectService.ListProjectDaemons:input_type -> reliant.v1.ListProjectDaemonsRequest
-	42, // 36: reliant.v1.ProjectService.MarkProjectInstalled:input_type -> reliant.v1.MarkProjectInstalledRequest
-	44, // 37: reliant.v1.ProjectService.CreateProjectFromRepo:input_type -> reliant.v1.CreateProjectFromRepoRequest
-	47, // 38: reliant.v1.ProjectService.ListRepositoriesForDaemon:input_type -> reliant.v1.ListRepositoriesForDaemonRequest
-	49, // 39: reliant.v1.ProjectService.PullProjectOnDaemon:input_type -> reliant.v1.PullProjectOnDaemonRequest
-	51, // 40: reliant.v1.ProjectService.RemoveProjectFromDaemon:input_type -> reliant.v1.RemoveProjectFromDaemonRequest
-	53, // 41: reliant.v1.ProjectService.RecloneProjectOnDaemon:input_type -> reliant.v1.RecloneProjectOnDaemonRequest
-	4,  // 42: reliant.v1.ProjectService.CreateProject:output_type -> reliant.v1.CreateProjectResponse
-	6,  // 43: reliant.v1.ProjectService.ListProjects:output_type -> reliant.v1.ListProjectsResponse
-	8,  // 44: reliant.v1.ProjectService.GetProject:output_type -> reliant.v1.GetProjectResponse
-	10, // 45: reliant.v1.ProjectService.UpdateProject:output_type -> reliant.v1.UpdateProjectResponse
-	12, // 46: reliant.v1.ProjectService.DeleteProject:output_type -> reliant.v1.DeleteProjectResponse
-	14, // 47: reliant.v1.ProjectService.TouchProject:output_type -> reliant.v1.TouchProjectResponse
-	16, // 48: reliant.v1.ProjectService.GetProjectMetadata:output_type -> reliant.v1.GetProjectMetadataResponse
-	18, // 49: reliant.v1.ProjectService.UpdateProjectMetadata:output_type -> reliant.v1.UpdateProjectMetadataResponse
-	20, // 50: reliant.v1.ProjectService.GetProjectGitInfo:output_type -> reliant.v1.GetProjectGitInfoResponse
-	23, // 51: reliant.v1.ProjectService.GetProjectGitBranches:output_type -> reliant.v1.GetProjectGitBranchesResponse
-	25, // 52: reliant.v1.ProjectService.GetProjectInitStatus:output_type -> reliant.v1.GetProjectInitStatusResponse
-	27, // 53: reliant.v1.ProjectService.InitializeProject:output_type -> reliant.v1.InitializeProjectResponse
-	30, // 54: reliant.v1.ProjectService.GetProjectChanges:output_type -> reliant.v1.GetProjectChangesResponse
-	33, // 55: reliant.v1.ProjectService.GetProjectPrompts:output_type -> reliant.v1.GetProjectPromptsResponse
-	35, // 56: reliant.v1.ProjectService.SaveProjectPrompts:output_type -> reliant.v1.SaveProjectPromptsResponse
-	37, // 57: reliant.v1.ProjectService.InitializeGitRepo:output_type -> reliant.v1.InitializeGitRepoResponse
-	39, // 58: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:output_type -> reliant.v1.ListProjectDaemonsForDaemonResponse
-	41, // 59: reliant.v1.ProjectService.ListProjectDaemons:output_type -> reliant.v1.ListProjectDaemonsResponse
-	43, // 60: reliant.v1.ProjectService.MarkProjectInstalled:output_type -> reliant.v1.MarkProjectInstalledResponse
-	45, // 61: reliant.v1.ProjectService.CreateProjectFromRepo:output_type -> reliant.v1.CreateProjectFromRepoResponse
-	48, // 62: reliant.v1.ProjectService.ListRepositoriesForDaemon:output_type -> reliant.v1.ListRepositoriesForDaemonResponse
-	50, // 63: reliant.v1.ProjectService.PullProjectOnDaemon:output_type -> reliant.v1.PullProjectOnDaemonResponse
-	52, // 64: reliant.v1.ProjectService.RemoveProjectFromDaemon:output_type -> reliant.v1.RemoveProjectFromDaemonResponse
-	54, // 65: reliant.v1.ProjectService.RecloneProjectOnDaemon:output_type -> reliant.v1.RecloneProjectOnDaemonResponse
-	42, // [42:66] is the sub-list for method output_type
-	18, // [18:42] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	2,  // 2: reliant.v1.CreateProjectResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	1,  // 3: reliant.v1.ListProjectsResponse.projects:type_name -> reliant.v1.Project
+	1,  // 4: reliant.v1.GetProjectResponse.project:type_name -> reliant.v1.Project
+	1,  // 5: reliant.v1.UpdateProjectResponse.project:type_name -> reliant.v1.Project
+	1,  // 6: reliant.v1.UpdateProjectMetadataResponse.project:type_name -> reliant.v1.Project
+	21, // 7: reliant.v1.GetProjectGitBranchesResponse.branches:type_name -> reliant.v1.GitBranch
+	59, // 8: reliant.v1.FileChange.status:type_name -> reliant.v1.FileChangeStatus
+	28, // 9: reliant.v1.GetProjectChangesResponse.files:type_name -> reliant.v1.FileChange
+	31, // 10: reliant.v1.GetProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
+	31, // 11: reliant.v1.SaveProjectPromptsRequest.prompts:type_name -> reliant.v1.Prompt
+	31, // 12: reliant.v1.SaveProjectPromptsResponse.prompts:type_name -> reliant.v1.Prompt
+	2,  // 13: reliant.v1.ListProjectDaemonsForDaemonResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
+	2,  // 14: reliant.v1.ListProjectDaemonsResponse.project_daemons:type_name -> reliant.v1.ProjectDaemon
+	2,  // 15: reliant.v1.MarkProjectInstalledResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	1,  // 16: reliant.v1.CreateProjectFromRepoResponse.project:type_name -> reliant.v1.Project
+	2,  // 17: reliant.v1.CreateProjectFromRepoResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	46, // 18: reliant.v1.ListRepositoriesForDaemonResponse.repositories:type_name -> reliant.v1.DaemonRepository
+	2,  // 19: reliant.v1.AttachProjectToDaemonResponse.project_daemon:type_name -> reliant.v1.ProjectDaemon
+	3,  // 20: reliant.v1.ProjectService.CreateProject:input_type -> reliant.v1.CreateProjectRequest
+	5,  // 21: reliant.v1.ProjectService.ListProjects:input_type -> reliant.v1.ListProjectsRequest
+	7,  // 22: reliant.v1.ProjectService.GetProject:input_type -> reliant.v1.GetProjectRequest
+	9,  // 23: reliant.v1.ProjectService.UpdateProject:input_type -> reliant.v1.UpdateProjectRequest
+	11, // 24: reliant.v1.ProjectService.DeleteProject:input_type -> reliant.v1.DeleteProjectRequest
+	13, // 25: reliant.v1.ProjectService.TouchProject:input_type -> reliant.v1.TouchProjectRequest
+	15, // 26: reliant.v1.ProjectService.GetProjectMetadata:input_type -> reliant.v1.GetProjectMetadataRequest
+	17, // 27: reliant.v1.ProjectService.UpdateProjectMetadata:input_type -> reliant.v1.UpdateProjectMetadataRequest
+	19, // 28: reliant.v1.ProjectService.GetProjectGitInfo:input_type -> reliant.v1.GetProjectGitInfoRequest
+	22, // 29: reliant.v1.ProjectService.GetProjectGitBranches:input_type -> reliant.v1.GetProjectGitBranchesRequest
+	24, // 30: reliant.v1.ProjectService.GetProjectInitStatus:input_type -> reliant.v1.GetProjectInitStatusRequest
+	26, // 31: reliant.v1.ProjectService.InitializeProject:input_type -> reliant.v1.InitializeProjectRequest
+	29, // 32: reliant.v1.ProjectService.GetProjectChanges:input_type -> reliant.v1.GetProjectChangesRequest
+	32, // 33: reliant.v1.ProjectService.GetProjectPrompts:input_type -> reliant.v1.GetProjectPromptsRequest
+	34, // 34: reliant.v1.ProjectService.SaveProjectPrompts:input_type -> reliant.v1.SaveProjectPromptsRequest
+	36, // 35: reliant.v1.ProjectService.InitializeGitRepo:input_type -> reliant.v1.InitializeGitRepoRequest
+	38, // 36: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:input_type -> reliant.v1.ListProjectDaemonsForDaemonRequest
+	40, // 37: reliant.v1.ProjectService.ListProjectDaemons:input_type -> reliant.v1.ListProjectDaemonsRequest
+	42, // 38: reliant.v1.ProjectService.MarkProjectInstalled:input_type -> reliant.v1.MarkProjectInstalledRequest
+	44, // 39: reliant.v1.ProjectService.CreateProjectFromRepo:input_type -> reliant.v1.CreateProjectFromRepoRequest
+	47, // 40: reliant.v1.ProjectService.ListRepositoriesForDaemon:input_type -> reliant.v1.ListRepositoriesForDaemonRequest
+	49, // 41: reliant.v1.ProjectService.PullProjectOnDaemon:input_type -> reliant.v1.PullProjectOnDaemonRequest
+	51, // 42: reliant.v1.ProjectService.RemoveProjectFromDaemon:input_type -> reliant.v1.RemoveProjectFromDaemonRequest
+	53, // 43: reliant.v1.ProjectService.AttachProjectToDaemon:input_type -> reliant.v1.AttachProjectToDaemonRequest
+	55, // 44: reliant.v1.ProjectService.DetachProjectFromDaemon:input_type -> reliant.v1.DetachProjectFromDaemonRequest
+	57, // 45: reliant.v1.ProjectService.RecloneProjectOnDaemon:input_type -> reliant.v1.RecloneProjectOnDaemonRequest
+	4,  // 46: reliant.v1.ProjectService.CreateProject:output_type -> reliant.v1.CreateProjectResponse
+	6,  // 47: reliant.v1.ProjectService.ListProjects:output_type -> reliant.v1.ListProjectsResponse
+	8,  // 48: reliant.v1.ProjectService.GetProject:output_type -> reliant.v1.GetProjectResponse
+	10, // 49: reliant.v1.ProjectService.UpdateProject:output_type -> reliant.v1.UpdateProjectResponse
+	12, // 50: reliant.v1.ProjectService.DeleteProject:output_type -> reliant.v1.DeleteProjectResponse
+	14, // 51: reliant.v1.ProjectService.TouchProject:output_type -> reliant.v1.TouchProjectResponse
+	16, // 52: reliant.v1.ProjectService.GetProjectMetadata:output_type -> reliant.v1.GetProjectMetadataResponse
+	18, // 53: reliant.v1.ProjectService.UpdateProjectMetadata:output_type -> reliant.v1.UpdateProjectMetadataResponse
+	20, // 54: reliant.v1.ProjectService.GetProjectGitInfo:output_type -> reliant.v1.GetProjectGitInfoResponse
+	23, // 55: reliant.v1.ProjectService.GetProjectGitBranches:output_type -> reliant.v1.GetProjectGitBranchesResponse
+	25, // 56: reliant.v1.ProjectService.GetProjectInitStatus:output_type -> reliant.v1.GetProjectInitStatusResponse
+	27, // 57: reliant.v1.ProjectService.InitializeProject:output_type -> reliant.v1.InitializeProjectResponse
+	30, // 58: reliant.v1.ProjectService.GetProjectChanges:output_type -> reliant.v1.GetProjectChangesResponse
+	33, // 59: reliant.v1.ProjectService.GetProjectPrompts:output_type -> reliant.v1.GetProjectPromptsResponse
+	35, // 60: reliant.v1.ProjectService.SaveProjectPrompts:output_type -> reliant.v1.SaveProjectPromptsResponse
+	37, // 61: reliant.v1.ProjectService.InitializeGitRepo:output_type -> reliant.v1.InitializeGitRepoResponse
+	39, // 62: reliant.v1.ProjectService.ListProjectDaemonsForDaemon:output_type -> reliant.v1.ListProjectDaemonsForDaemonResponse
+	41, // 63: reliant.v1.ProjectService.ListProjectDaemons:output_type -> reliant.v1.ListProjectDaemonsResponse
+	43, // 64: reliant.v1.ProjectService.MarkProjectInstalled:output_type -> reliant.v1.MarkProjectInstalledResponse
+	45, // 65: reliant.v1.ProjectService.CreateProjectFromRepo:output_type -> reliant.v1.CreateProjectFromRepoResponse
+	48, // 66: reliant.v1.ProjectService.ListRepositoriesForDaemon:output_type -> reliant.v1.ListRepositoriesForDaemonResponse
+	50, // 67: reliant.v1.ProjectService.PullProjectOnDaemon:output_type -> reliant.v1.PullProjectOnDaemonResponse
+	52, // 68: reliant.v1.ProjectService.RemoveProjectFromDaemon:output_type -> reliant.v1.RemoveProjectFromDaemonResponse
+	54, // 69: reliant.v1.ProjectService.AttachProjectToDaemon:output_type -> reliant.v1.AttachProjectToDaemonResponse
+	56, // 70: reliant.v1.ProjectService.DetachProjectFromDaemon:output_type -> reliant.v1.DetachProjectFromDaemonResponse
+	58, // 71: reliant.v1.ProjectService.RecloneProjectOnDaemon:output_type -> reliant.v1.RecloneProjectOnDaemonResponse
+	46, // [46:72] is the sub-list for method output_type
+	20, // [20:46] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_project_proto_init() }
@@ -3848,13 +4169,14 @@ func file_reliant_v1_project_proto_init() {
 	file_reliant_v1_project_proto_msgTypes[16].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[41].OneofWrappers = []any{}
 	file_reliant_v1_project_proto_msgTypes[43].OneofWrappers = []any{}
+	file_reliant_v1_project_proto_msgTypes[52].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_project_proto_rawDesc), len(file_reliant_v1_project_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   54,
+			NumMessages:   58,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
