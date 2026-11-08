@@ -330,3 +330,105 @@ func TestSweepRecoversAnInterruptedReclaim(t *testing.T) {
 		t.Fatal("the quarantine is still there")
 	}
 }
+
+// parkLikeACrash leaves orig the way reclaimEntry does just after its
+// `git worktree move` and before its reclaiming lock: parked at a fresh
+// quarantine path with the markers, unlocked.
+func parkLikeACrash(t *testing.T, s *sweepFixture, orig, key, prelock string) string {
+	t.Helper()
+	q := sweepQuarantinePath(orig, key)
+	if err := os.MkdirAll(filepath.Dir(q), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	marker, _ := json.Marshal(reclaimMarker{Key: key, Orig: orig})
+	for suffix, data := range map[string]string{".origin": orig, ".prelock": prelock, ".capture": string(marker)} {
+		write(t, q+suffix, data)
+	}
+	if prelock != "" {
+		run(t, s.project, "worktree", "unlock", orig)
+	}
+	run(t, s.project, "worktree", "move", orig, q)
+	return q
+}
+
+// A crash between the move and the reclaiming lock leaves a parked,
+// unlocked checkout with the markers. The next pass recovers it like any
+// interrupted reclaim: home, with its old lock, and the quarantine gone, so
+// its branch is no longer checked out at the parking path.
+func TestSweepRecoversACheckoutParkedBeforeItsLock(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~40 git processes")
+	s := newSweepFixture(t)
+	ctx := context.Background()
+	for _, tc := range []struct{ name, key, prelock, orig string }{
+		{"reliant workspace", "row-11", LockReason("row-11"), s.worktree("row-11", "feat/parked").Path},
+		{"agent worktree", "", "", s.plain(filepath.Join(s.tmp, "parked"), "agent/parked")},
+	} {
+		key := tc.key
+		if key == "" {
+			key = CaptureKey(tc.orig)
+		}
+		q := parkLikeACrash(t, s, tc.orig, key, tc.prelock)
+		opts := s.opts(SweepDryRun)
+		opts.Anchors = []string{s.project}
+		rep := s.r.SweepMachine(ctx, opts)
+		if e := entryFor(t, rep, tc.orig); e.Outcome != OutcomeMovedBack || e.Key != key {
+			t.Fatalf("%s: got %+v, want moved back under key %s", tc.name, e, key)
+		}
+		info, err := inspectLock(ctx, tc.orig)
+		if err != nil || !info.Registered || info.Locked != (tc.prelock != "") || info.Reason != tc.prelock {
+			t.Fatalf("%s: after recovery: %+v, %v; want registered at its path, lock %q", tc.name, info, err, tc.prelock)
+		}
+		if exists(q) || exists(q+".origin") {
+			t.Fatalf("%s: the quarantine is still there", tc.name)
+		}
+	}
+}
+
+// Recovery never touches a reclaim that is live: while another process
+// holds the key's lock (as reclaimEntry does from its first check to its
+// last step), a pass that finds the parked checkout holds it, moves
+// nothing and keeps the markers; a process with no admission lease (a CLI
+// scan) never moves one either. Once the lock is free, the daemon's pass
+// recovers it.
+func TestSweepRecoveryWaitsForALiveReclaim(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~40 git processes")
+	s := newSweepFixture(t)
+	ctx := context.Background()
+	orig := s.plain(filepath.Join(s.tmp, "live"), "agent/live")
+	key := CaptureKey(orig)
+	q := parkLikeACrash(t, s, orig, key, "")
+	run(t, s.project, "worktree", "lock", "--reason", reclaimingLock(key, "1"), q)
+	opts := s.opts(SweepDryRun)
+	opts.Anchors = []string{s.project}
+
+	live := SweepEntry{Key: key}
+	unlock, err := s.r.keyLock(ctx, s.state, &live)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := &Reclaimer{Root: s.r.Root, Now: s.r.Now, Acquire: s.r.Acquire, ProcessUse: s.r.ProcessUse, Cwds: s.r.Cwds}
+	assertParked := func(why string) {
+		t.Helper()
+		info, err := inspectLock(ctx, q)
+		if err != nil || !info.Registered || info.Reason != reclaimingLock(key, "1") || !exists(q+".origin") || exists(orig) {
+			t.Fatalf("%s: the parked checkout was touched: %+v, %v", why, info, err)
+		}
+	}
+	rep := other.SweepMachine(ctx, opts)
+	if e := entryFor(t, rep, q); e.Outcome == OutcomeMovedBack || e.Reason != ReasonQuarantined {
+		t.Fatalf("while a reclaim is live: %+v, want held", e)
+	}
+	assertParked("a live reclaim")
+	unlock()
+
+	cli := &Reclaimer{Root: s.r.Root, Now: s.r.Now}
+	cli.SweepMachine(ctx, opts)
+	assertParked("a scan with no admission lease")
+
+	rep = other.SweepMachine(ctx, opts)
+	if e := entryFor(t, rep, orig); e.Outcome != OutcomeMovedBack {
+		t.Fatalf("once the lock is free: %+v, want moved back", e)
+	}
+}

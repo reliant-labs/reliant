@@ -159,7 +159,7 @@ func TestAssembleForDisplay_ResultIsSentOnceAndPreviewed(t *testing.T) {
 		"m2": {result("big", ptr.Of("shell"), big), result("small", ptr.Of("shell"), small), result("plan", nil, planResult), result("write", ptr.Of("write"), small)},
 	}
 
-	msgs := AssembleForDisplay(context.Background(), staticToolCalls{}, []*db.Message{assistant, tool}, blocks, nil, "", 0)
+	msgs := AssembleForDisplay(context.Background(), staticToolCalls{}, []*db.Message{assistant, tool}, blocks, nil, "", 0, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 	require.Len(t, msgs, 2)
 
 	for _, b := range msgs[0].ContentBlocks {
@@ -229,7 +229,7 @@ func TestPreviewMessageUpdate(t *testing.T) {
 	}
 
 	for _, wrapped := range []bool{false, true} {
-		out := PreviewMessageUpdate(update(wrapped))
+		out := PreviewMessageUpdate(update(wrapped), reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 		var decoded map[string]any
 		dec := json.NewDecoder(strings.NewReader(string(out)))
 		dec.UseNumber()
@@ -255,6 +255,6 @@ func TestPreviewMessageUpdate(t *testing.T) {
 	}
 
 	small := []byte(`{"id":"m","content_blocks":[{"type":3,"content":"ok"}]}`)
-	assert.Equal(t, small, PreviewMessageUpdate(small), "a small update is returned as is")
-	assert.Equal(t, []byte(`not json`+strings.Repeat(" ", ToolResultPreviewBytes)+`"content_blocks"`), PreviewMessageUpdate([]byte(`not json`+strings.Repeat(" ", ToolResultPreviewBytes)+`"content_blocks"`)))
+	assert.Equal(t, small, PreviewMessageUpdate(small, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED), "a small update is returned as is")
+	assert.Equal(t, []byte(`not json`+strings.Repeat(" ", ToolResultPreviewBytes)+`"content_blocks"`), PreviewMessageUpdate([]byte(`not json`+strings.Repeat(" ", ToolResultPreviewBytes)+`"content_blocks"`), reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED))
 }

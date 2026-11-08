@@ -29,7 +29,8 @@ type ReliantConfig struct {
 	Log             *LogConfig             `protobuf:"bytes,1,opt,name=log,proto3" json:"log,omitempty"`
 	Runtime         *RuntimeConfig         `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
 	StorageReaper   *StorageReaperConfig   `protobuf:"bytes,3,opt,name=storage_reaper,json=storageReaper,proto3" json:"storage_reaper,omitempty"`
-	WorktreeReclaim *WorktreeReclaimConfig `protobuf:"bytes,4,opt,name=worktree_reclaim,json=worktreeReclaim,proto3" json:"worktree_reclaim,omitempty"`
+	Transcript      *TranscriptConfig      `protobuf:"bytes,4,opt,name=transcript,proto3" json:"transcript,omitempty"`
+	WorktreeReclaim *WorktreeReclaimConfig `protobuf:"bytes,5,opt,name=worktree_reclaim,json=worktreeReclaim,proto3" json:"worktree_reclaim,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -85,11 +86,73 @@ func (x *ReliantConfig) GetStorageReaper() *StorageReaperConfig {
 	return nil
 }
 
+func (x *ReliantConfig) GetTranscript() *TranscriptConfig {
+	if x != nil {
+		return x.Transcript
+	}
+	return nil
+}
+
 func (x *ReliantConfig) GetWorktreeReclaim() *WorktreeReclaimConfig {
 	if x != nil {
 		return x.WorktreeReclaim
 	}
 	return nil
+}
+
+// TranscriptConfig is how the transcript read paths (ListMessages,
+// GetMessage, the chat stream, GetChatUpdates) send a chat's messages. The
+// handlers that serve them read it through their Deps.Config, so it is on the
+// root config; only the API server serves those rpcs.
+type TranscriptConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The kill switch for TOOL_BODY_MODE_STUB reads
+	// (dev-docs/design/chat-lazy-tool-bodies.md): off answers every read that
+	// asks for STUB as if it asked for FULL, so a stub regression is undone by
+	// a config flip, not a client release. Clients act on each block's flags,
+	// never on the mode they asked for, so either value is safe for every
+	// client version. Only on and off: a kill switch must not fail open on a
+	// typo.
+	ToolBodyStubs string `protobuf:"bytes,1,opt,name=tool_body_stubs,json=toolBodyStubs,proto3" json:"tool_body_stubs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TranscriptConfig) Reset() {
+	*x = TranscriptConfig{}
+	mi := &file_reliant_config_v1_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TranscriptConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TranscriptConfig) ProtoMessage() {}
+
+func (x *TranscriptConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_config_v1_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TranscriptConfig.ProtoReflect.Descriptor instead.
+func (*TranscriptConfig) Descriptor() ([]byte, []int) {
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *TranscriptConfig) GetToolBodyStubs() string {
+	if x != nil {
+		return x.ToolBodyStubs
+	}
+	return ""
 }
 
 // RuntimeConfig is where the process is running. The entrypoint hands it to
@@ -109,7 +172,7 @@ type RuntimeConfig struct {
 
 func (x *RuntimeConfig) Reset() {
 	*x = RuntimeConfig{}
-	mi := &file_reliant_config_v1_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -121,7 +184,7 @@ func (x *RuntimeConfig) String() string {
 func (*RuntimeConfig) ProtoMessage() {}
 
 func (x *RuntimeConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_config_proto_msgTypes[1]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -134,7 +197,7 @@ func (x *RuntimeConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuntimeConfig.ProtoReflect.Descriptor instead.
 func (*RuntimeConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{1}
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *RuntimeConfig) GetEnvironment() string {
@@ -161,7 +224,7 @@ type LogConfig struct {
 
 func (x *LogConfig) Reset() {
 	*x = LogConfig{}
-	mi := &file_reliant_config_v1_config_proto_msgTypes[2]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -173,7 +236,7 @@ func (x *LogConfig) String() string {
 func (*LogConfig) ProtoMessage() {}
 
 func (x *LogConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_config_proto_msgTypes[2]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -186,7 +249,7 @@ func (x *LogConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogConfig.ProtoReflect.Descriptor instead.
 func (*LogConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{2}
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *LogConfig) GetLevel() string {
@@ -240,7 +303,7 @@ type StorageReaperConfig struct {
 
 func (x *StorageReaperConfig) Reset() {
 	*x = StorageReaperConfig{}
-	mi := &file_reliant_config_v1_config_proto_msgTypes[3]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -252,7 +315,7 @@ func (x *StorageReaperConfig) String() string {
 func (*StorageReaperConfig) ProtoMessage() {}
 
 func (x *StorageReaperConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_config_proto_msgTypes[3]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -265,7 +328,7 @@ func (x *StorageReaperConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StorageReaperConfig.ProtoReflect.Descriptor instead.
 func (*StorageReaperConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{3}
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StorageReaperConfig) GetMode() string {
@@ -336,7 +399,7 @@ type WorktreeReclaimConfig struct {
 
 func (x *WorktreeReclaimConfig) Reset() {
 	*x = WorktreeReclaimConfig{}
-	mi := &file_reliant_config_v1_config_proto_msgTypes[4]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -348,7 +411,7 @@ func (x *WorktreeReclaimConfig) String() string {
 func (*WorktreeReclaimConfig) ProtoMessage() {}
 
 func (x *WorktreeReclaimConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_config_v1_config_proto_msgTypes[4]
+	mi := &file_reliant_config_v1_config_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -361,7 +424,7 @@ func (x *WorktreeReclaimConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorktreeReclaimConfig.ProtoReflect.Descriptor instead.
 func (*WorktreeReclaimConfig) Descriptor() ([]byte, []int) {
-	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{4}
+	return file_reliant_config_v1_config_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *WorktreeReclaimConfig) GetMode() string {
@@ -396,13 +459,19 @@ var File_reliant_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xae\x02\n" +
+	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xf3\x02\n" +
 	"\rReliantConfig\x12.\n" +
 	"\x03log\x18\x01 \x01(\v2\x1c.reliant.config.v1.LogConfigR\x03log\x12:\n" +
 	"\aruntime\x18\x02 \x01(\v2 .reliant.config.v1.RuntimeConfigR\aruntime\x12M\n" +
-	"\x0estorage_reaper\x18\x03 \x01(\v2&.reliant.config.v1.StorageReaperConfigR\rstorageReaper\x12S\n" +
-	"\x10worktree_reclaim\x18\x04 \x01(\v2(.reliant.config.v1.WorktreeReclaimConfigR\x0fworktreeReclaim:\r\xca\xc1\x18\t\n" +
-	"\areliant\"\x96\x01\n" +
+	"\x0estorage_reaper\x18\x03 \x01(\v2&.reliant.config.v1.StorageReaperConfigR\rstorageReaper\x12C\n" +
+	"\n" +
+	"transcript\x18\x04 \x01(\v2#.reliant.config.v1.TranscriptConfigR\n" +
+	"transcript\x12S\n" +
+	"\x10worktree_reclaim\x18\x05 \x01(\v2(.reliant.config.v1.WorktreeReclaimConfigR\x0fworktreeReclaim:\r\xca\xc1\x18\t\n" +
+	"\areliant\"\xe8\x01\n" +
+	"\x10TranscriptConfig\x12\xd3\x01\n" +
+	"\x0ftool_body_stubs\x18\x01 \x01(\tB\xaa\x01\x82\xce\x18\xa5\x01\n" +
+	"\"RELIANT_TRANSCRIPT_TOOL_BODY_STUBS\x1a\x02on*rTranscript reads may leave finished tool calls' bodies out when a client asks (on) or always send them whole (off)J\x02onJ\x03offR\rtoolBodyStubs\"\x96\x01\n" +
 	"\rRuntimeConfig\x12\x84\x01\n" +
 	"\venvironment\x18\x01 \x01(\tBb\x82\xce\x18^\n" +
 	"\vRELIANT_ENV*CEnvironment tier: dev, test or prod (unset or unrecognised is prod)Z\n" +
@@ -450,24 +519,26 @@ func file_reliant_config_v1_config_proto_rawDescGZIP() []byte {
 	return file_reliant_config_v1_config_proto_rawDescData
 }
 
-var file_reliant_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_reliant_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_reliant_config_v1_config_proto_goTypes = []any{
 	(*ReliantConfig)(nil),         // 0: reliant.config.v1.ReliantConfig
-	(*RuntimeConfig)(nil),         // 1: reliant.config.v1.RuntimeConfig
-	(*LogConfig)(nil),             // 2: reliant.config.v1.LogConfig
-	(*StorageReaperConfig)(nil),   // 3: reliant.config.v1.StorageReaperConfig
-	(*WorktreeReclaimConfig)(nil), // 4: reliant.config.v1.WorktreeReclaimConfig
+	(*TranscriptConfig)(nil),      // 1: reliant.config.v1.TranscriptConfig
+	(*RuntimeConfig)(nil),         // 2: reliant.config.v1.RuntimeConfig
+	(*LogConfig)(nil),             // 3: reliant.config.v1.LogConfig
+	(*StorageReaperConfig)(nil),   // 4: reliant.config.v1.StorageReaperConfig
+	(*WorktreeReclaimConfig)(nil), // 5: reliant.config.v1.WorktreeReclaimConfig
 }
 var file_reliant_config_v1_config_proto_depIdxs = []int32{
-	2, // 0: reliant.config.v1.ReliantConfig.log:type_name -> reliant.config.v1.LogConfig
-	1, // 1: reliant.config.v1.ReliantConfig.runtime:type_name -> reliant.config.v1.RuntimeConfig
-	3, // 2: reliant.config.v1.ReliantConfig.storage_reaper:type_name -> reliant.config.v1.StorageReaperConfig
-	4, // 3: reliant.config.v1.ReliantConfig.worktree_reclaim:type_name -> reliant.config.v1.WorktreeReclaimConfig
-	4, // [4:4] is the sub-list for method output_type
-	4, // [4:4] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	3, // 0: reliant.config.v1.ReliantConfig.log:type_name -> reliant.config.v1.LogConfig
+	2, // 1: reliant.config.v1.ReliantConfig.runtime:type_name -> reliant.config.v1.RuntimeConfig
+	4, // 2: reliant.config.v1.ReliantConfig.storage_reaper:type_name -> reliant.config.v1.StorageReaperConfig
+	1, // 3: reliant.config.v1.ReliantConfig.transcript:type_name -> reliant.config.v1.TranscriptConfig
+	5, // 4: reliant.config.v1.ReliantConfig.worktree_reclaim:type_name -> reliant.config.v1.WorktreeReclaimConfig
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_config_proto_init() }
@@ -481,7 +552,7 @@ func file_reliant_config_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_config_v1_config_proto_rawDesc), len(file_reliant_config_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

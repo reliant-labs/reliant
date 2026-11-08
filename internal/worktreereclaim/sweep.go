@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -289,8 +291,8 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 	// Interrupted reclaims first: a checkout parked by a crash goes home
 	// before anything else looks at its repository.
 	for i := range entries {
-		if isReclaimingLock(entries[i].Lock) {
-			r.recoverReclaim(ctx, &entries[i])
+		if needsRecovery(entries[i]) {
+			r.recoverReclaim(ctx, &entries[i], dir)
 		}
 	}
 	// Cheapest-to-decide first is not the order that matters: what matters
@@ -691,17 +693,29 @@ func unpushedCount(ctx context.Context, checkout string) int {
 }
 
 // fingerprint binds an approval to one state of a checkout: its HEAD and
-// branch, every path `git status` reports (untracked included), the commits
-// only it reaches, and the newest change to any file. A commit, an edit or a
-// new file changes it. origPath is the checkout's path for the person (it is
-// computed again on the parked copy, under another path).
+// branch, every index entry (mode, blob and stage of each path: the staged
+// content itself), every path `git status` reports (untracked included) with
+// a hash of what is on disk at it, the commits only it reaches, and the
+// newest change to any file. A commit, a staging, an edit (even one to a file
+// already dirty, keeping its status and every mtime) or a new file changes
+// it. It writes nothing to the repository. origPath is the checkout's path
+// for the person (it is computed again on the parked copy, under another
+// path).
 func fingerprint(ctx context.Context, checkout, origPath string, newest time.Time) (string, error) {
 	head, err := git(ctx, checkout, nil, "rev-parse", "--verify", "HEAD^{commit}")
 	if err != nil {
 		return "", err
 	}
 	branch, _ := git(ctx, checkout, nil, "symbolic-ref", "-q", "HEAD")
+	index, err := gitRaw(ctx, checkout, nil, "ls-files", "-s", "-z")
+	if err != nil {
+		return "", err
+	}
 	status, err := gitRaw(ctx, checkout, nil, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames")
+	if err != nil {
+		return "", err
+	}
+	contents, err := statusContents(checkout, status)
 	if err != nil {
 		return "", err
 	}
@@ -711,10 +725,57 @@ func fingerprint(ctx context.Context, checkout, origPath string, newest time.Tim
 	}
 	sort.Strings(tips)
 	h := sha256.New()
-	for _, part := range []string{resolvePath(origPath), head, branch, string(status), strings.Join(tips, ","), strconv.FormatInt(newest.UnixNano(), 10)} {
+	for _, part := range []string{resolvePath(origPath), head, branch, string(index), string(status), contents, strings.Join(tips, ","), strconv.FormatInt(newest.UnixNano(), 10)} {
 		fmt.Fprintf(h, "%d:%s\n", len(part), part)
 	}
-	return "fp1-" + hex.EncodeToString(h.Sum(nil))[:32], nil
+	return "fp2-" + hex.EncodeToString(h.Sum(nil))[:32], nil
+}
+
+// statusContents hashes what is on disk at every path a `git status
+// --porcelain=v1 -z --no-renames` output names: a file's bytes, a symlink's
+// target, or that it is absent or a directory. One line per path, in status
+// order.
+func statusContents(checkout string, status []byte) (string, error) {
+	var b strings.Builder
+	for _, rec := range strings.Split(string(status), "\x00") {
+		if len(rec) <= 3 {
+			continue
+		}
+		rel := rec[3:]
+		p := filepath.Join(checkout, filepath.FromSlash(rel))
+		var sum string
+		fi, err := os.Lstat(p)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			sum = "absent"
+		case err != nil:
+			return "", err
+		case fi.Mode()&os.ModeSymlink != 0:
+			t, err := os.Readlink(p)
+			if err != nil {
+				return "", err
+			}
+			sum = "link:" + t
+		case fi.IsDir():
+			sum = "dir"
+		case fi.Mode().IsRegular():
+			f, err := os.Open(p)
+			if err != nil {
+				return "", err
+			}
+			fh := sha256.New()
+			_, err = io.Copy(fh, f)
+			f.Close()
+			if err != nil {
+				return "", err
+			}
+			sum = fmt.Sprintf("file:%o:%x", fi.Mode().Perm(), fh.Sum(nil))
+		default:
+			sum = "special:" + fi.Mode().Type().String()
+		}
+		fmt.Fprintf(&b, "%d:%s %s\n", len(rel), rel, sum)
+	}
+	return b.String(), nil
 }
 
 func (r *Reclaimer) cachedSize(ctx context.Context, path string) int64 {

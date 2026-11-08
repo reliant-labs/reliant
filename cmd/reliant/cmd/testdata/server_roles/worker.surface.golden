@@ -49,6 +49,7 @@ RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL kind=string flag="" default="10m" requir
 RELIANT_STORAGE_REAPER_INTERVAL kind=string flag="" default="1h" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL kind=string flag="" default="10m" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_TEST_INTEGRATION_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+RELIANT_TRANSCRIPT_TOOL_BODY_STUBS kind=string flag="" default="on" required=false optional=false sensitive=false allowed=[on off] aliases=[]
 RELIANT_VAULT_KEY kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT kind=int32 flag="" default="16" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_WORKER_EGRESS_REPLICAS kind=int32 flag="" default="1" required=false optional=false sensitive=false allowed=[] aliases=[]

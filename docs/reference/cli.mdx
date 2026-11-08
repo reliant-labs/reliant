@@ -15895,9 +15895,10 @@ fingerprint in that report: one that changes after it (a commit, an edit, a
 new file) is proposed again. The daemon acts on an approval within a minute:
 it captures the worktree, verifies the capture, and deletes it.
 
-This is a person's decision. An agent's shell is refused unless --answer
-names the user's answer that authorized it (a Reliant question or approval
-id), which is recorded with the decision.
+This is a person's decision, made in their own terminal. An agent's shell
+is refused outright: nothing it could name (a question or answer id it
+cannot prove is the user's) would show that a person approved these
+worktrees, so an agent asks the user to run the command themselves.
 
 ```
 reliant worktree reclaim approve <key>... [flags]
@@ -15907,7 +15908,6 @@ reliant worktree reclaim approve <key>... [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--answer` | `string` | - | the user's answer (question or approval id) that authorized this decision |
 | `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
 
 ---
@@ -15922,9 +15922,10 @@ fingerprint in that report: one that changes after it (a commit, an edit, a
 new file) is proposed again. The daemon acts on an approval within a minute:
 it captures the worktree, verifies the capture, and deletes it.
 
-This is a person's decision. An agent's shell is refused unless --answer
-names the user's answer that authorized it (a Reliant question or approval
-id), which is recorded with the decision.
+This is a person's decision, made in their own terminal. An agent's shell
+is refused outright: nothing it could name (a question or answer id it
+cannot prove is the user's) would show that a person approved these
+worktrees, so an agent asks the user to run the command themselves.
 
 ```
 reliant worktree reclaim decline <key>... [flags]
@@ -15934,7 +15935,6 @@ reliant worktree reclaim decline <key>... [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--answer` | `string` | - | the user's answer (question or approval id) that authorized this decision |
 | `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
 
 ---

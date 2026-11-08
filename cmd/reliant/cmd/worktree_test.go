@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"bytes"
+	"os"
 	"testing"
 	"time"
 
@@ -56,25 +57,37 @@ func TestWorktreeReclaimConfig_DefaultsToDryRun(t *testing.T) {
 	assert.Equal(t, worktreereclaim.SweepOff, worktreeReclaimFor(t, map[string]string{"RELIANT_WORKTREE_RECLAIM": "off"}).Mode)
 }
 
-// Approving a reclaim is a person's decision: an agent's shell is refused
-// unless it names the user's answer that authorized it.
-func TestWorktreeApproveRefusesAnAgentShellWithoutTheUsersAnswer(t *testing.T) {
+// Approving a reclaim is a person's decision: an agent's shell is refused,
+// whatever answer or approval id it names, and nothing is recorded.
+func TestWorktreeApproveRefusesAnAgentShell(t *testing.T) {
 	t.Setenv(daemonpolicy.AgentShellEnv, "1")
+	for _, decide := range []string{"approve", "decline"} {
+		for _, extra := range [][]string{nil, {"--answer", "q-1"}} {
+			state := t.TempDir()
+			root := NewRootCmd()
+			var out bytes.Buffer
+			root.SetOut(&out)
+			root.SetErr(&out)
+			root.SetArgs(append([]string{"worktree", "reclaim", decide, "p-0123456789abcdef", "--state-dir", state}, extra...))
+			err := root.Execute()
+			require.Error(t, err, "%s %v", decide, extra)
+			if extra == nil {
+				assert.Contains(t, err.Error(), "an agent cannot "+decide)
+			}
+			entries, rerr := os.ReadDir(state)
+			require.NoError(t, rerr)
+			assert.Empty(t, entries, "a refused decision wrote state")
+		}
+	}
+
+	// A person's shell gets as far as the report, which does not exist here.
+	t.Setenv(daemonpolicy.AgentShellEnv, "")
 	root := NewRootCmd()
 	var out bytes.Buffer
 	root.SetOut(&out)
 	root.SetErr(&out)
 	root.SetArgs([]string{"worktree", "reclaim", "approve", "p-0123456789abcdef", "--state-dir", t.TempDir()})
 	err := root.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "an agent cannot approve")
-
-	// With an answer it gets as far as the report, which does not exist here.
-	root = NewRootCmd()
-	root.SetOut(&out)
-	root.SetErr(&out)
-	root.SetArgs([]string{"worktree", "reclaim", "approve", "p-0123456789abcdef", "--answer", "q-1", "--state-dir", t.TempDir()})
-	err = root.Execute()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no sweep report")
 }

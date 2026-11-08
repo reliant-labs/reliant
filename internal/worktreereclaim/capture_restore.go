@@ -118,7 +118,7 @@ func applyCaptureTrees(ctx context.Context, checkout string, info CaptureInfo) e
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	if now, err := workTree(ctx, checkout, tmp, nil); err != nil || now != info.DiskTree {
+	if now, err := diskTree(ctx, checkout, tmp); err != nil || now != info.DiskTree {
 		return fmt.Errorf("restored files do not match the capture (tree %s, want %s): %v", short(now), short(info.DiskTree), err)
 	}
 	// ...then the index alone becomes the staged tree: what was unstaged is

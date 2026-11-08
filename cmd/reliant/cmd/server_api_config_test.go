@@ -234,6 +234,8 @@ func TestServerAPIAuthMisconfigurationFailsBoot(t *testing.T) {
 		{map[string]string{"MAX_UPLOAD_SIZE": "10MB"}, "MAX_UPLOAD_SIZE"},
 		{map[string]string{"MAX_UPLOAD_SIZE": "0"}, "MAX_UPLOAD_SIZE"},
 		{map[string]string{"RELIANT_WORKTREE_AUTO_ARCHIVE": "true"}, "worktree_auto_archive"},
+		// A kill switch must not fail open on a typo: only on and off.
+		{map[string]string{"RELIANT_TRANSCRIPT_TOOL_BODY_STUBS": "false"}, "tool_body_stubs"},
 	} {
 		t.Run(fmt.Sprint(tc.env), func(t *testing.T) {
 			isolateServerAPIConfigEnv(t)

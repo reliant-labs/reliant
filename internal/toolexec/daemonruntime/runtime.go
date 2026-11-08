@@ -89,6 +89,11 @@ type daemonClient struct {
 	gatewayClient reliantv1connect.ToolsDaemonServiceClient
 	gatewayURL    string
 
+	// reconnectMinDelay is the first wait of run()'s reconnect backoff; zero
+	// means transport.ReconnectMinDelay. Only tests set it, so proving the
+	// reconnect behaviour does not cost the production backoff's seconds.
+	reconnectMinDelay time.Duration
+
 	mcpManager    *mcp.Manager
 	localExecutor *toolexec.LocalToolExecutor
 	capabilities  []string
@@ -967,7 +972,11 @@ func isFatalError(err error) bool {
 }
 
 func (d *daemonClient) run(ctx context.Context) error {
-	delay := transport.ReconnectMinDelay
+	minDelay := transport.ReconnectMinDelay
+	if d.reconnectMinDelay > 0 {
+		minDelay = d.reconnectMinDelay
+	}
+	delay := minDelay
 	for {
 		if ctx.Err() != nil {
 			d.stopAllStreams()
@@ -982,7 +991,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 		if errors.Is(err, errGatewayMoving) {
 			// Make before break: the draining replica's stream is still
 			// open and serving, so dial its successor now, with no backoff.
-			delay = transport.ReconnectMinDelay
+			delay = minDelay
 			continue
 		}
 		if err != nil && !errors.Is(err, context.Canceled) {
@@ -1098,7 +1107,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 		// Reset backoff after a session that lasted long enough to be considered
 		// successful (e.g. it stayed connected for at least 30 seconds).
 		if time.Since(sessionStart) >= 30*time.Second {
-			delay = transport.ReconnectMinDelay
+			delay = minDelay
 		}
 
 		timer := time.NewTimer(delay)

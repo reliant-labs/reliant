@@ -133,7 +133,7 @@ captures nothing and deletes nothing.`,
 }
 
 func newWorktreeDecideCmd(decision worktreereclaim.Decision) *cobra.Command {
-	var stateDir, answer string
+	var stateDir string
 	verb := string(decision)
 	c := &cobra.Command{
 		Use:   verb + " <key>...",
@@ -144,20 +144,18 @@ fingerprint in that report: one that changes after it (a commit, an edit, a
 new file) is proposed again. The daemon acts on an approval within a minute:
 it captures the worktree, verifies the capture, and deletes it.
 
-This is a person's decision. An agent's shell is refused unless --answer
-names the user's answer that authorized it (a Reliant question or approval
-id), which is recorded with the decision.`,
+This is a person's decision, made in their own terminal. An agent's shell
+is refused outright: nothing it could name (a question or answer id it
+cannot prove is the user's) would show that a person approved these
+worktrees, so an agent asks the user to run the command themselves.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			answer = strings.TrimSpace(answer)
 			agent := os.Getenv(daemonpolicy.AgentShellEnv) != "" //nolint:forbidigo // the marker the daemon sets on agent shells (daemonpolicy.AgentShellEnv), a process signal, not configuration
-			if agent && answer == "" {
-				return fmt.Errorf("an agent cannot %s reclaiming a worktree on its own: ask the user, then pass --answer <their answer's id>", verb)
+			if agent {
+				return fmt.Errorf("an agent cannot %s reclaiming a worktree: this is the user's decision, so ask them to run `reliant worktree reclaim %s %s` in their own terminal", verb, verb, strings.Join(args, " "))
 			}
 			by := "cli"
-			if answer != "" {
-				by = "answer:" + answer
-			} else if u, err := user.Current(); err == nil {
+			if u, err := user.Current(); err == nil {
 				by = "cli:" + u.Username
 			}
 			got, err := worktreereclaim.RecordDecisions(cmd.Context(), stateDir, decision, args, by)
@@ -170,7 +168,6 @@ id), which is recorded with the decision.`,
 			return nil
 		},
 	}
-	c.Flags().StringVar(&answer, "answer", "", "the user's answer (question or approval id) that authorized this decision")
 	stateDirFlag(c, &stateDir)
 	return c
 }

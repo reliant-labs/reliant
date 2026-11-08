@@ -870,6 +870,18 @@ func (r *Repo) ListContentBlocksForMessages(ctx context.Context, messageIDs []st
 	return store.ListContentBlocksForMessages(ctx, r.ORM(), messageIDs)
 }
 
+// ListContentBlocksByIDs reads blocks by primary key, in one query. An id no
+// row holds is absent from the result.
+func (r *Repo) ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*MessageContentBlock, error) {
+	return store.ListContentBlocksByIDs(ctx, r.ORM(), ids)
+}
+
+// ListMessagesByIDs reads messages by primary key, in one query. An id no
+// row holds is absent from the result.
+func (r *Repo) ListMessagesByIDs(ctx context.Context, ids []string) ([]*Message, error) {
+	return store.ListMessagesByIDs(ctx, r.ORM(), ids)
+}
+
 func (r *Repo) AppendToContentBlock(ctx context.Context, blockID string, delta string) error {
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")

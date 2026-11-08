@@ -225,3 +225,114 @@ func TestApplyCaptureOntoRecreatedCheckout(t *testing.T) {
 		t.Fatalf("a refused apply touched the checkout:\n%s", out)
 	}
 }
+
+// A new file staged with `git add -f` over an ignore rule, then edited
+// further, is captured with its on-disk content and comes back on disk and
+// staged: the files-on-disk tree is built from the index, not from HEAD, so
+// an ignored path the index tracks is never dropped.
+func TestCaptureKeepsAForceAddedIgnoredFile(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~30 git processes")
+	f := newFixture(t)
+	ignore(t, f, "*.log\n")
+	path := filepath.Join(filepath.Dir(f.project), "tmp", "forced-wt")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run(t, f.project, "worktree", "add", "-q", "-b", "feat/forced", path, "main")
+	write(t, filepath.Join(path, "keep.log"), "staged\n")
+	run(t, path, "add", "-f", "keep.log")
+	write(t, filepath.Join(path, "keep.log"), "staged, then edited\n")
+	ctx := context.Background()
+
+	c, err := captureCheckout(ctx, path, CaptureKey(path), CaptureMeta{Path: path, Branch: "feat/forced"}, CaptureLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := run(t, f.project, "show", c.Ref+":keep.log"); got != "staged, then edited" {
+		t.Fatalf("captured keep.log = %q, want the edited content on disk", got)
+	}
+	if err := verifyCapture(ctx, path, c); err != nil {
+		t.Fatalf("an untouched checkout must verify: %v", err)
+	}
+	write(t, filepath.Join(path, "keep.log"), "edited after the capture\n")
+	if err := verifyCapture(ctx, path, c); !errors.Is(err, errCaptureMismatch) {
+		t.Fatalf("an edit to the force-added file: verify = %v, want a mismatch", err)
+	}
+	write(t, filepath.Join(path, "keep.log"), "staged, then edited\n")
+
+	run(t, f.project, "worktree", "remove", "--force", path)
+	if _, err := RestoreCapture(ctx, RestoreOptions{Repo: f.project, Ref: c.Ref}); err != nil {
+		t.Fatal(err)
+	}
+	if got := readFile(t, filepath.Join(path, "keep.log")); got != "staged, then edited\n" {
+		t.Fatalf("restored keep.log on disk = %q", got)
+	}
+	if got := run(t, path, "show", ":keep.log"); got != "staged" {
+		t.Fatalf("restored staged keep.log = %q, want %q", got, "staged")
+	}
+}
+
+// An approval's fingerprint is bound to content, not to status codes and the
+// newest mtime: an edit to a file that is already dirty, or a different
+// staged content, changes it even when every status code and every mtime
+// (here a future-dated file is the newest) is kept.
+func TestFingerprintBindsContent(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~30 git processes")
+	f := newFixture(t)
+	path := filepath.Join(filepath.Dir(f.project), "tmp", "fp-wt")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run(t, f.project, "worktree", "add", "-q", "-b", "feat/fp", path, "main")
+	ctx := context.Background()
+	future := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
+	past := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+	write(t, filepath.Join(path, "build.out"), "future-dated\n")
+	if err := os.Chtimes(filepath.Join(path, "build.out"), future, future); err != nil {
+		t.Fatal(err)
+	}
+	a := filepath.Join(path, "a.txt")
+	set := func(content string) {
+		write(t, a, content)
+		if err := os.Chtimes(a, past, past); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fp := func() string {
+		got, err := fingerprint(ctx, path, path, scanCheckout(ctx, path).Newest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+
+	set("staged one\n")
+	run(t, path, "add", "a.txt")
+	set("on disk one\n")
+	first := fp()
+	status := run(t, path, "status", "--porcelain", "--untracked-files=all")
+	if fp() != first {
+		t.Fatal("the fingerprint of an unchanged checkout is not stable")
+	}
+
+	set("on disk two\n")
+	if fp() == first {
+		t.Fatal("an edit to an already-dirty file left the fingerprint unchanged")
+	}
+	set("on disk one\n")
+	if fp() != first {
+		t.Fatal("undoing the edit did not restore the fingerprint")
+	}
+
+	set("staged two\n")
+	run(t, path, "add", "a.txt")
+	set("on disk one\n")
+	if got := run(t, path, "status", "--porcelain", "--untracked-files=all"); got != status {
+		t.Fatalf("the status changed (%q, was %q); the test needs it kept", got, status)
+	}
+	if fp() == first {
+		t.Fatal("different staged content with the same status codes left the fingerprint unchanged")
+	}
+}

@@ -41,9 +41,11 @@ import (
 //  7. `git worktree remove` (never --force) retires the registration. The
 //     branch is never deleted.
 //
-// A crash at any step is recovered on the next pass (recoverReclaim): a
-// parked checkout without .disposing goes back to its path, its old lock
-// restored; one with .disposing is held and reported, its capture intact.
+// A crash at any step is recovered on the next pass (recoverReclaim, under
+// the same key lock): a parked checkout without .disposing goes back to its
+// path, its old lock restored, whether or not its reclaiming lock was
+// installed yet; one with .disposing is held and reported, its capture
+// intact.
 
 const (
 	// reclaimQuarantineDir is the directory, beside a checkout, it is parked
@@ -109,6 +111,9 @@ func sweepQuarantinePath(orig, key string) string {
 
 // reclaimMarker is what .capture records.
 type reclaimMarker struct {
+	// Key is the reclaim's key, for the recovery of a checkout parked
+	// before its reclaiming lock was installed.
+	Key       string `json:"key,omitempty"`
 	Ref       string `json:"ref"`
 	CommonDir string `json:"common_dir"`
 	Orig      string `json:"orig"`
@@ -261,7 +266,7 @@ func (r *Reclaimer) reclaimEntry(ctx context.Context, e *SweepEntry, opts SweepO
 		e.hold(ReasonUnverified, err.Error())
 		return
 	}
-	marker, _ := json.Marshal(reclaimMarker{Ref: capt.Ref, CommonDir: capt.CommonDir, Orig: orig})
+	marker, _ := json.Marshal(reclaimMarker{Key: e.Key, Ref: capt.Ref, CommonDir: capt.CommonDir, Orig: orig})
 	dropMarkers := func() {
 		for _, s := range []string{".origin", ".prelock", ".capture", ".disposing"} {
 			_ = os.Remove(q + s)
@@ -428,31 +433,112 @@ func removeEmptyQuarantine(q string) {
 	}
 }
 
-// recoverReclaim settles a worktree whose lock says a reclaim was
-// interrupted (the daemon died mid-way). A parked copy with no .disposing
+// recoverLockWait is how long recovery waits for a key's lock. reclaimEntry
+// holds it for the whole of a reclaim, so a lock still held after this is a
+// live reclaim (this pass's, another daemon's), not an interrupted one.
+const recoverLockWait = 2 * time.Second
+
+// readReclaimMarkers reads the markers reclaimEntry puts down beside a
+// parking spot q before it moves a checkout there. ok is false without an
+// .origin.
+func readReclaimMarkers(q string) (orig, prelock string, m reclaimMarker, ok bool) {
+	b, err := os.ReadFile(q + ".origin")
+	if err != nil || len(b) == 0 {
+		return "", "", m, false
+	}
+	p, _ := os.ReadFile(q + ".prelock")
+	c, _ := os.ReadFile(q + ".capture")
+	_ = json.Unmarshal(c, &m)
+	return string(b), string(p), m, true
+}
+
+// parkedBySweep reports whether e is a checkout reclaimEntry parked and
+// never locked: unlocked, under a .reliant-reclaim directory, with an
+// .origin marker. A crash between the move and the reclaiming lock leaves
+// exactly that.
+func parkedBySweep(e SweepEntry) bool {
+	if e.Lock != "" {
+		return false
+	}
+	underSweep := false
+	for _, seg := range strings.Split(filepath.ToSlash(e.Path), "/") {
+		if seg == reclaimQuarantineDir {
+			underSweep = true
+		}
+	}
+	if !underSweep {
+		return false
+	}
+	_, _, _, ok := readReclaimMarkers(e.Path)
+	return ok
+}
+
+// needsRecovery reports whether e is what an interrupted reclaim leaves: a
+// reclaiming lock, or a parked checkout whose lock was never installed.
+func needsRecovery(e SweepEntry) bool { return isReclaimingLock(e.Lock) || parkedBySweep(e) }
+
+// recoverReclaim settles a worktree an interrupted reclaim left behind (the
+// daemon died mid-way; needsRecovery). A parked copy with no .disposing
 // marker goes back to its original path, with the lock it had; one being
 // disposed of is held, its capture named. A checkout at its own path with a
 // reclaiming lock gets its old lock back.
-func (r *Reclaimer) recoverReclaim(ctx context.Context, e *SweepEntry) {
-	k, ok := parseReclaimingLock(e.Lock)
-	if !ok {
+//
+// A reclaiming lock alone cannot tell an interrupted reclaim from a live
+// one, so recovery runs under the same cross-process key lock reclaimEntry
+// holds from its first check to its last step: one it cannot take within
+// recoverLockWait is a live reclaim, and the worktree is held. Under the
+// lock the registration and markers are read again, and nothing moves
+// without the daemon's admission lease on every path involved; a process
+// with no admission (a CLI scan) recovers nothing and leaves it to the
+// daemon.
+func (r *Reclaimer) recoverReclaim(ctx context.Context, e *SweepEntry, dir string) {
+	if k, ok := parseReclaimingLock(e.Lock); ok {
+		e.Key = k.Key
+	} else if parkedBySweep(*e) {
+		_, _, m, _ := readReclaimMarkers(e.Path)
+		e.Key = m.Key
+		if e.Key == "" {
+			e.Key = filepath.Base(filepath.Dir(e.Path))
+		}
+	} else {
 		e.hold(ReasonUnmanaged, "unrecognized reclaim lock")
 		return
 	}
-	common := e.CommonDir
-	readMarker := func(q string) (orig, prelock string, m reclaimMarker, ok bool) {
-		b, err := os.ReadFile(q + ".origin")
-		if err != nil || len(b) == 0 {
-			return "", "", m, false
-		}
-		p, _ := os.ReadFile(q + ".prelock")
-		c, _ := os.ReadFile(q + ".capture")
-		_ = json.Unmarshal(c, &m)
-		return string(b), string(p), m, true
+	if !strings.HasPrefix(e.Key, "p-") {
+		e.Owner, e.RowID = "reliant", e.Key
 	}
+	if r.Acquire == nil {
+		e.hold(ReasonQuarantined, "an interrupted reclaim holds it; the daemon puts it back")
+		return
+	}
+	lctx, cancel := context.WithTimeout(ctx, recoverLockWait)
+	unlock, err := r.keyLock(lctx, dir, e)
+	cancel()
+	if err != nil {
+		e.hold(ReasonQuarantined, "a reclaim of it is running (its lock is held); it is looked at again next pass")
+		return
+	}
+	defer unlock()
+
+	// Again, under the lock: what discovery read may have been a live
+	// reclaim's state, since settled.
+	info, err := inspectLock(ctx, e.Path)
+	if err != nil || !info.Registered {
+		e.hold(ReasonUnverified, "its registration changed while this pass waited for its lock")
+		return
+	}
+	e.Lock = ""
+	if info.Locked {
+		e.Lock = info.Reason
+	}
+	if !needsRecovery(*e) {
+		e.hold(ReasonInUse, "a reclaim of it settled while this pass waited; it is looked at again next pass")
+		return
+	}
+	common := info.CommonDir
 	if inQuarantine("", e.Path) {
 		q := e.Path
-		orig, prelock, m, ok := readMarker(q)
+		orig, prelock, m, ok := readReclaimMarkers(q)
 		if !ok {
 			e.hold(ReasonQuarantined, "parked at "+q+" with no record of where it came from; kept")
 			return
@@ -468,12 +554,29 @@ func (r *Reclaimer) recoverReclaim(ctx context.Context, e *SweepEntry) {
 			e.hold(ReasonQuarantined, fmt.Sprintf("parked at %s; its original path is occupied, so it was kept", q))
 			return
 		}
-		if _, err := git(ctx, "", nil, "--git-dir="+common, "worktree", "unlock", q); err == nil {
-			if _, err := git(ctx, "", nil, "--git-dir="+common, "worktree", "move", q, orig); err != nil {
-				_ = setLock(ctx, lockInfo{CommonDir: common}, q, e.Lock)
-				e.hold(ReasonQuarantined, fmt.Sprintf("parked at %s and could not be moved back: %v", q, err))
+		lease, err := r.Acquire(ctx, []string{q, orig})
+		if err != nil || lease == nil {
+			e.hold(ReasonInUse, "daemon work is running in it")
+			return
+		}
+		defer lease.Release()
+		if err := lease.Check(ctx); err != nil {
+			e.hold(ReasonInUse, err.Error())
+			return
+		}
+		held := e.Lock
+		if held != "" {
+			if _, err := git(ctx, "", nil, "--git-dir="+common, "worktree", "unlock", q); err != nil {
+				e.hold(ReasonQuarantined, fmt.Sprintf("parked at %s and could not be unlocked: %v", q, err))
 				return
 			}
+		} else {
+			held = reclaimingLock(e.Key, strconv.FormatInt(time.Now().UnixNano(), 10))
+		}
+		if _, err := git(ctx, "", nil, "--git-dir="+common, "worktree", "move", q, orig); err != nil {
+			_ = setLock(ctx, lockInfo{CommonDir: common}, q, held)
+			e.hold(ReasonQuarantined, fmt.Sprintf("parked at %s and could not be moved back: %v", q, err))
+			return
 		}
 		if prelock != "" {
 			_ = setLock(ctx, lockInfo{CommonDir: common}, orig, prelock)
@@ -488,15 +591,21 @@ func (r *Reclaimer) recoverReclaim(ctx context.Context, e *SweepEntry) {
 	}
 	// At its own path: the reclaim stopped before the move or after moving
 	// back. Its old lock is in the marker beside the parking spot, if any.
-	prelock := ""
-	if !strings.HasPrefix(k.Key, "p-") {
-		prelock = LockReason(k.Key)
+	lease, err := r.Acquire(ctx, []string{e.Path})
+	if err != nil || lease == nil {
+		e.hold(ReasonInUse, "daemon work is running in it")
+		return
 	}
-	pattern := filepath.Join(filepath.Dir(e.Path), reclaimQuarantineDir, sanitizeRefComponent(k.Key), "*.origin")
+	defer lease.Release()
+	prelock := ""
+	if !strings.HasPrefix(e.Key, "p-") {
+		prelock = LockReason(e.Key)
+	}
+	pattern := filepath.Join(filepath.Dir(e.Path), reclaimQuarantineDir, sanitizeRefComponent(e.Key), "*.origin")
 	matches, _ := filepath.Glob(pattern)
 	for _, mk := range matches {
 		q := strings.TrimSuffix(mk, ".origin")
-		if orig, p, _, ok := readMarker(q); ok && samePath(orig, e.Path) {
+		if orig, p, _, ok := readReclaimMarkers(q); ok && samePath(orig, e.Path) {
 			if _, err := os.Lstat(q); os.IsNotExist(err) {
 				prelock = p
 				for _, s := range []string{".origin", ".prelock", ".capture", ".disposing"} {
@@ -507,7 +616,7 @@ func (r *Reclaimer) recoverReclaim(ctx context.Context, e *SweepEntry) {
 		}
 	}
 	if prelock != "" {
-		_ = setLock(ctx, lockInfo{CommonDir: common}, e.Path, prelock)
+		_ = setLock(ctx, lockInfo{CommonDir: common, Locked: true}, e.Path, prelock)
 	} else {
 		_, _ = git(ctx, "", nil, "--git-dir="+common, "worktree", "unlock", e.Path)
 	}

@@ -85,13 +85,23 @@ func isStructuredResultTool(toolName string) bool {
 // renderer that parses it still can. Anything else is previewed as text: the
 // head and the tail, joined by a line naming how much was left out.
 func PreviewToolResult(toolName, content string) (preview string, truncated bool) {
-	if len(content) <= ToolResultPreviewBytes || isStructuredResultTool(toolName) {
+	if isStructuredResultTool(toolName) {
 		return content, false
 	}
-	if p, ok := previewJSONObject(content, ToolResultPreviewBytes); ok {
+	return previewContent(content, ToolResultPreviewBytes, minStringPreview)
+}
+
+// previewContent shortens content to about budget bytes, keeping a JSON
+// object valid JSON with none of its strings cut below minString (see
+// previewJSONObject). truncated reports whether it shortened anything.
+func previewContent(content string, budget, minString int) (preview string, truncated bool) {
+	if len(content) <= budget {
+		return content, false
+	}
+	if p, ok := previewJSONObject(content, budget, minString); ok {
 		return p, true
 	}
-	return previewText(content, ToolResultPreviewBytes), true
+	return previewText(content, budget), true
 }
 
 // previewText shortens s to about budget bytes: a head, an omission marker,
@@ -183,10 +193,10 @@ func snapTailToLine(tail string) string {
 
 // previewJSONObject shortens the strings inside a JSON object until it
 // marshals to at most budget bytes, keeping it valid JSON. It reports false
-// when s is not a JSON object, or when even its strings at minStringPreview
-// leave it over budget (a huge array of small values) — the caller then
-// previews it as text.
-func previewJSONObject(s string, budget int) (string, bool) {
+// when s is not a JSON object, or when even its strings at minString leave it
+// over budget (a huge array of small values) — the caller then previews it as
+// text.
+func previewJSONObject(s string, budget, minString int) (string, bool) {
 	trimmed := strings.TrimSpace(s)
 	if !strings.HasPrefix(trimmed, "{") {
 		return "", false
@@ -199,7 +209,7 @@ func previewJSONObject(s string, budget int) (string, bool) {
 	}
 
 	longest := longestString(doc)
-	if longest <= minStringPreview {
+	if longest <= minString {
 		return "", false
 	}
 	encode := func(limit int) (string, bool) {
@@ -214,7 +224,7 @@ func previewJSONObject(s string, budget int) (string, bool) {
 
 	// The marshaled size only grows with the per-string limit, so the
 	// largest limit that fits is found by bisection.
-	lo, hi := minStringPreview, longest
+	lo, hi := minString, longest
 	best, ok := encode(lo)
 	if !ok || len(best) > budget {
 		return "", false
@@ -278,11 +288,6 @@ func shortenStrings(v any, limit int) any {
 	}
 }
 
-// toolResultBlockType is how a live message update's JSON spells a
-// tool_result block's type: db.ContentBlockPayloadsWithToolCalls marshals the
-// proto enum as its number.
-var toolResultBlockType = json.Number(strconv.Itoa(int(reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)))
-
 // PreviewMessageUpdate applies PreviewToolResult to a live message update:
 // the JSON payload a CHAT_UPDATE_TYPE_MESSAGE row carries (its
 // content_blocks, possibly wrapped in {"message": ...}). Each tool_result
@@ -290,11 +295,24 @@ var toolResultBlockType = json.Number(strconv.Itoa(int(reliantv1.ContentBlockTyp
 // transcript read paths give it. The stored update row is not touched; this
 // runs when it is sent to a client.
 //
+// Under TOOL_BODY_MODE_STUB (a replayed update, never a live one) a result
+// gets the stub preview and thinking is elided, as on the transcript reads
+// (see stubResult, stubThinking), but a tool call's input stays whole: the
+// update carries the call's status from when it was written, so it cannot
+// tell a finished call from a running one.
+//
 // raw is returned as it is when nothing in it needs a preview, and when it is
 // not a payload this understands.
-func PreviewMessageUpdate(raw []byte) []byte {
-	if len(raw) <= ToolResultPreviewBytes || !bytes.Contains(raw, []byte(`"content_blocks"`)) {
+func PreviewMessageUpdate(raw []byte, mode reliantv1.ToolBodyMode) []byte {
+	stub := mode == reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB
+	if !bytes.Contains(raw, []byte(`"content_blocks"`)) {
+		return raw
+	}
+	if !stub && len(raw) <= ToolResultPreviewBytes {
 		return raw // no block in it can be over the cap
+	}
+	if stub && len(raw) <= StubBodyThreshold && !mayHoldThinking(raw) {
+		return raw // nothing in it can be elided; skip the decode
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber() // re-marshaling must not turn seq and ids into floats
@@ -311,14 +329,37 @@ func PreviewMessageUpdate(raw []byte) []byte {
 	changed := false
 	for _, b := range blocks {
 		block, ok := b.(map[string]any)
-		if !ok || !isToolResultBlockType(block["type"]) {
+		if !ok {
 			continue
 		}
 		content, ok := block["content"].(string)
 		if !ok {
 			continue
 		}
+		if stub && isThinkingBlockType(block["type"]) {
+			if stubThinking && content != "" {
+				delete(block, "content")
+				block["body_elided"] = true
+				block["body_size"] = len(content)
+				changed = true
+			}
+			continue
+		}
+		if !isToolResultBlockType(block["type"]) {
+			continue
+		}
 		toolName, _ := block["tool_name"].(string)
+		if stub {
+			if preview, elided := stubResult(toolName, content); elided {
+				block["content"] = preview
+				block["truncated"] = true
+				block["original_size"] = len(content)
+				block["body_elided"] = true
+				block["body_size"] = len(content)
+				changed = true
+			}
+			continue
+		}
 		if preview, truncated := PreviewToolResult(toolName, content); truncated {
 			block["content"] = preview
 			block["truncated"] = true
@@ -337,11 +378,39 @@ func PreviewMessageUpdate(raw []byte) []byte {
 }
 
 func isToolResultBlockType(v any) bool {
+	return isBlockType(v, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT)
+}
+
+// mayHoldThinking is a cheap byte test for a thinking block in a live
+// update's JSON, which spells a block type as its number. A false positive
+// costs only a decode.
+func mayHoldThinking(raw []byte) bool {
+	for _, t := range []reliantv1.ContentBlockType{
+		reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_THINKING,
+		reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING,
+	} {
+		if bytes.Contains(raw, []byte(`"type":`+strconv.Itoa(int(t)))) ||
+			bytes.Contains(raw, []byte(`"type":"`+t.String()+`"`)) {
+			return true
+		}
+	}
+	return false
+}
+
+func isThinkingBlockType(v any) bool {
+	return isBlockType(v, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_THINKING) ||
+		isBlockType(v, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING)
+}
+
+// isBlockType reports whether a live update's block "type" is want, spelled
+// as its number (what db.ContentBlockPayloadsWithToolCalls writes) or its
+// name.
+func isBlockType(v any, want reliantv1.ContentBlockType) bool {
 	switch t := v.(type) {
 	case json.Number:
-		return t == toolResultBlockType
+		return string(t) == strconv.Itoa(int(want))
 	case string:
-		return t == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT.String()
+		return t == want.String()
 	default:
 		return false
 	}

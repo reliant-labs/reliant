@@ -18,5 +18,5 @@ func (s *Service) buildChatSnapshotByID(ctx context.Context, chatID string) (*re
 	if chat == nil {
 		return nil, 0, fmt.Errorf("chat %s not found", chatID)
 	}
-	return s.buildChatSnapshot(ctx, chat)
+	return s.buildChatSnapshot(ctx, chat, reliantv1.ToolBodyMode_TOOL_BODY_MODE_UNSPECIFIED)
 }

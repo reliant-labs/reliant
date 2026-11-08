@@ -155,36 +155,74 @@ func untrackedEnvelope(ctx context.Context, checkout string, limits CaptureLimit
 	return bytes, files, nil
 }
 
+// copyIndex copies checkout's index file to dst, so a tree can be built from
+// it without the real index ever being locked or refreshed. ok is false when
+// the checkout has no index file.
+func copyIndex(checkout, dst string) (ok bool, err error) {
+	admin := adminDir(checkout)
+	if admin == "" {
+		return false, errors.New("not a linked worktree")
+	}
+	src, err := os.Open(filepath.Join(admin, "index"))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	defer src.Close()
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return false, err
+	}
+	_, err = io.Copy(out, src)
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	return err == nil, err
+}
+
 // stagedTree is the tree of the checkout's index, written from a COPY of the
 // index so the real one is never locked or refreshed. A checkout with no
 // index file stages nothing (HEAD's tree). An index with unmerged entries
 // (a conflict in progress) fails: there is no tree to record.
 func stagedTree(ctx context.Context, checkout, tmp string) (string, error) {
-	admin := adminDir(checkout)
-	if admin == "" {
-		return "", errors.New("not a linked worktree")
+	copyPath := filepath.Join(tmp, "staged-index")
+	ok, err := copyIndex(checkout, copyPath)
+	if err != nil {
+		return "", err
 	}
-	src, err := os.Open(filepath.Join(admin, "index"))
-	if errors.Is(err, os.ErrNotExist) {
+	if !ok {
 		return git(ctx, checkout, nil, "rev-parse", "--verify", "HEAD^{tree}")
 	}
-	if err != nil {
-		return "", err
-	}
-	defer src.Close()
-	copyPath := filepath.Join(tmp, "staged-index")
-	dst, err := os.OpenFile(copyPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return "", err
-	}
-	_, err = io.Copy(dst, src)
-	if cerr := dst.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return "", err
-	}
 	return git(ctx, checkout, []string{"GIT_INDEX_FILE=" + copyPath}, "write-tree")
+}
+
+// diskTree is the tree of the files on disk, built in a temporary index that
+// starts as a COPY of the checkout's index (HEAD's tree when it has none),
+// then takes every change on disk (`git add -A`). Starting from the index,
+// not from HEAD, is what keeps a path the index tracks but .gitignore
+// matches (a new file staged with `git add -f`): `add -A` updates a tracked
+// path whatever the ignore rules say, while one only HEAD names would be
+// dropped as ignored. A tracked file missing from disk (an unstaged
+// deletion) leaves the tree.
+func diskTree(ctx context.Context, checkout, tmp string) (string, error) {
+	idx := filepath.Join(tmp, "disk-index")
+	_ = os.Remove(idx)
+	env := []string{"GIT_INDEX_FILE=" + idx}
+	ok, err := copyIndex(checkout, idx)
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		if _, err := git(ctx, checkout, env, "read-tree", "HEAD"); err != nil {
+			return "", err
+		}
+	}
+	if _, err := git(ctx, checkout, env, "add", "-A"); err != nil {
+		return "", err
+	}
+	return git(ctx, checkout, env, "write-tree")
 }
 
 // captureCheckout writes a capture of checkout under key. The checkout's
@@ -214,7 +252,7 @@ func captureCheckout(ctx context.Context, checkout, key string, meta CaptureMeta
 	if err != nil {
 		return Capture{}, fmt.Errorf("staged state: %w", err)
 	}
-	disk, err := workTree(ctx, checkout, tmp, nil)
+	disk, err := diskTree(ctx, checkout, tmp)
 	if err != nil {
 		return Capture{}, fmt.Errorf("files on disk: %w", err)
 	}
@@ -290,7 +328,7 @@ func verifyCapture(ctx context.Context, checkout string, c Capture) error {
 	if index != c.IndexTree {
 		return fmt.Errorf("%w: the staged state changed", errCaptureMismatch)
 	}
-	disk, err := workTree(ctx, checkout, tmp, nil)
+	disk, err := diskTree(ctx, checkout, tmp)
 	if err != nil {
 		return err
 	}
