@@ -23,8 +23,11 @@
  * answered everything.
  */
 
-import { render, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
+import { fireEvent, render, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { logger } from '@/lib/logger'
+import { captureOAuthCallbackCredentials, takeOAuthCallbackCredentials } from '@/lib/oauthCallbackCredentials'
 
 const mockNavigate = vi.fn()
 let mockSearch: Record<string, unknown> = {}
@@ -77,6 +80,8 @@ const LINKED = {
 const ONBOARDING_URL = '/onboarding?plan=eyJzdGVwIjoiY2hlY2tvdXQifQ'
 
 beforeEach(() => {
+  takeOAuthCallbackCredentials()
+  window.history.replaceState(null, '', '/')
   vi.clearAllMocks()
   mockSearch = {}
   exchangeCodeForSessionMock.mockResolvedValue({ data: LINKED, error: null })
@@ -208,6 +213,109 @@ describe('OAuthCallback — the OAuth code path still works', () => {
     const { findByText } = render(<OAuthCallback />)
 
     expect(await findByText(/Invalid authentication callback/i)).toBeInTheDocument()
+  })
+})
+
+describe('OAuthCallback — credential disclosure protection', () => {
+  const secret = '4/0A_FAKE_NOT_A_REAL_AUTH_CODE'
+  const description = `Unable to exchange external code:${secret} person@example.test access_token=FAKE_ACCESS`
+  const assertNoDisclosure = (container: HTMLElement) => {
+    const output = container.textContent + JSON.stringify([vi.mocked(logger.error).mock.calls, vi.mocked(logger.info).mock.calls]) + window.location.href
+    for (const sensitive of [secret, 'person@example.test', 'FAKE_ACCESS', 'FAKE_REFRESH', 'FAKE_STATE']) {
+      expect(output).not.toContain(sensitive)
+    }
+  }
+
+  it('replaces raw upstream errors with retry instructions and bounded diagnostics', async () => {
+    mockSearch = { error: 'server_error', error_description: description }
+    const { container, findByText } = render(<OAuthCallback />)
+    expect(await findByText(/start sign-in again/i)).toBeInTheDocument()
+    assertNoDisclosure(container)
+    expect(logger.error).toHaveBeenCalledWith('[OAuthCallback] Error from provider', { stage: 'provider_callback', code: 'server_error', category: 'authentication_failed' })
+    expect(setUser).not.toHaveBeenCalled()
+    expect(setSession).not.toHaveBeenCalled()
+    expect(exchangeCodeForSessionMock).not.toHaveBeenCalled()
+  })
+
+  it('does not trust an arbitrary query error code as diagnostic metadata', async () => {
+    mockSearch = { error: description, error_description: description }
+    const { container, findByText } = render(<OAuthCallback />)
+    await findByText(/start sign-in again/i)
+    assertNoDisclosure(container)
+    expect(logger.error).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ code: 'unknown' }))
+  })
+
+  it('keeps an anonymous linked-account session and safe return intent intact', async () => {
+    mockSearch = { error: 'identity_already_exists', error_description: description, returnTo: '/claim' }
+    const { container, findByRole } = render(<OAuthCallback />)
+    fireEvent.click(await findByRole('button', { name: 'Continue' }))
+    expect(mockNavigate).toHaveBeenCalledWith({ href: '/claim' })
+    expect(setSession).not.toHaveBeenCalled()
+    assertNoDisclosure(container)
+  })
+
+  it('exchanges the boot-captured PKCE code after the URL is safe for telemetry', async () => {
+    window.history.replaceState(null, '', `/auth/callback?${new URLSearchParams({ code: secret, state: 'FAKE_STATE', returnTo: ONBOARDING_URL })}`)
+    captureOAuthCallbackCredentials()
+    mockSearch = { returnTo: ONBOARDING_URL }
+    const { container } = render(<OAuthCallback />)
+    await waitFor(() => expect(setSession).toHaveBeenCalledWith(LINKED.session))
+    expect(exchangeCodeForSessionMock).toHaveBeenCalledWith(secret)
+    expect(mockNavigate).toHaveBeenCalledWith({ href: ONBOARDING_URL })
+    assertNoDisclosure(container)
+  })
+
+  it.each([
+    '?code=FAKE_FIRST&code=FAKE_SECOND',
+    '#code=FAKE_FIRST&code=FAKE_SECOND',
+    '?code=FAKE_FIRST#code=FAKE_SECOND',
+    '?token_hash=FAKE_FIRST&token_hash=FAKE_SECOND&type=email',
+    '?token_hash=FAKE_FIRST&type=email#type=signup',
+    '?error=FAKE_FIRST#error=FAKE_SECOND',
+    '?error_description=FAKE_FIRST#error_description=FAKE_SECOND',
+    '?code=FAKE_FIRST#error_description=FAKE_SECOND',
+    '?code=FAKE_FIRST#access_token=FAKE_SECOND',
+    '?code=FAKE_FIRST#token_hash=FAKE_SECOND',
+  ])('rejects ambiguous callback %s without exchanging either credential', async (suffix) => {
+    window.history.replaceState(null, '', `/auth/callback${suffix}`)
+    captureOAuthCallbackCredentials()
+    mockSearch = {}
+    const { container, findByText } = render(<OAuthCallback />)
+    await findByText(/start sign-in again/i)
+    const visible = container.textContent + window.location.href + JSON.stringify(vi.mocked(logger.error).mock.calls)
+    expect(visible).not.toMatch(/FAKE_FIRST|FAKE_SECOND/)
+    expect(exchangeCodeForSessionMock).not.toHaveBeenCalled()
+    expect(verifyOtpMock).not.toHaveBeenCalled()
+    expect(setSession).not.toHaveBeenCalled()
+  })
+
+  it('consumes a captured code only once under StrictMode and recovers after a true remount', async () => {
+    window.history.replaceState(null, '', `/auth/callback?code=${encodeURIComponent(secret)}`)
+    captureOAuthCallbackCredentials()
+    const mounted = render(<StrictMode><OAuthCallback /></StrictMode>)
+    await waitFor(() => expect(setSession).toHaveBeenCalledWith(LINKED.session))
+    expect(exchangeCodeForSessionMock).toHaveBeenCalledTimes(1)
+    mounted.unmount()
+    const reloaded = render(<OAuthCallback />)
+    expect(await reloaded.findByText(/Invalid authentication callback.*start sign-in again/i)).toBeInTheDocument()
+    expect(exchangeCodeForSessionMock).toHaveBeenCalledTimes(1)
+    assertNoDisclosure(reloaded.container)
+  })
+
+  it.each(['exchange', 'verify', 'throw'] as const)('sanitizes %s failures without adopting a session', async (stage) => {
+    const error = Object.assign(new Error(description), { code: secret })
+    if (stage === 'verify') {
+      mockSearch = { token_hash: 'FAKE_EMAIL_HASH', type: 'email_change' }
+      verifyOtpMock.mockResolvedValue({ data: {}, error })
+    } else {
+      mockSearch = { code: secret }
+      if (stage === 'throw') exchangeCodeForSessionMock.mockRejectedValue(error)
+      else exchangeCodeForSessionMock.mockResolvedValue({ data: {}, error })
+    }
+    const { container, findByText } = render(<OAuthCallback />)
+    await findByText(/Please (start sign-in again|request a new one)/i)
+    assertNoDisclosure(container)
+    expect(setSession).not.toHaveBeenCalled()
   })
 })
 
