@@ -8,7 +8,7 @@ import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 
 export type ConfigSelector = { bundleId: string; releaseVersion?: never } | { releaseVersion: string; bundleId?: never } | { bundleId?: never; releaseVersion?: never };
-export type WorkloadConfigRequest = ConfigSelector & { environmentId: string; workload: string };
+export type WorkloadConfigRequest = ConfigSelector & { environmentId: string; workload: string; orgId?: string };
 export interface WorkloadConfig {
   environmentId: string;
   workload: string;
@@ -41,11 +41,11 @@ export function validateWorkloadConfig(result: WorkloadConfig, request: Workload
 }
 
 export const getWorkloadConfig: ConfigReader = async (request, signal) => {
-  const { environmentId, workload, bundleId, releaseVersion } = request;
+  const { environmentId, workload, bundleId, releaseVersion, orgId } = request;
   if (!environmentId || !workload || (bundleId !== undefined && !bundleId) || (releaseVersion !== undefined && !releaseVersion) || (bundleId !== undefined && releaseVersion !== undefined)) {
     throw new Error("Choose an environment, workload and at most one nonempty bundle or release selector.");
   }
-  const result = await getControlPlaneClient(DeployService).getWorkloadConfig({ environmentId, workload, bundleId, releaseVersion }, { signal });
+  const result = await getControlPlaneClient(DeployService).getWorkloadConfig({ environmentId, workload, bundleId, releaseVersion, ...(orgId ? { orgId } : {}) }, { signal });
   return validateWorkloadConfig({
     environmentId: result.environmentId,
     workload: result.workload,

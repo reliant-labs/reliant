@@ -325,7 +325,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, ac
             {tab === "events" && <EventsPanel events={detail.data?.events ?? []} range={range} />}
             {tab === "history" && <HistoryTab project={project} env={env} name={name} detail={detail.data ?? null} runs={runs} history={history} hrefs={hrefs} />}
             {tab === "config" && <>
-              <WorkloadConfigViewer key={orgId} project={project} environmentId={env.id} environmentName={env.name} workload={name} readConfig={readConfig} />
+              <WorkloadConfigViewer key={orgId} orgId={orgId ?? undefined} project={project} environmentId={env.id} environmentName={env.name} workload={name} readConfig={readConfig} />
               <ConfigTab summary={summary} env={env.name} />
             </>}
           </div>

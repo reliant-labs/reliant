@@ -23,6 +23,12 @@ describe("config wire adapter", () => {
     expect(getControlPlaneClient).toHaveBeenCalledWith(DeployService);
     expect(rpc).toHaveBeenCalledWith({ ...request, bundleId: undefined, releaseVersion: undefined }, { signal });
   });
+  it("pins the explicit organization in the typed request before authentication/retry", async () => {
+    rpc.mockResolvedValue(create(GetWorkloadConfigResponseSchema, result));
+    const signal = new AbortController().signal;
+    await getWorkloadConfig({ ...request, orgId: "org-selected" }, signal);
+    expect(rpc).toHaveBeenCalledWith({ ...request, bundleId: undefined, releaseVersion: undefined, orgId: "org-selected" }, { signal });
+  });
   it("maps Struct objects directly as JSON without parsing HTML, YAML or downloading artifacts", async () => {
     const objects = [{ data: { text: "<script>hostile</script>\nline", null: null } }];
     rpc.mockResolvedValue(create(GetWorkloadConfigResponseSchema, { ...result, objects, renderedYaml: "redacted" }));

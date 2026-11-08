@@ -831,6 +831,33 @@ service DeployService {
     };
   }
 
+  // MintLocalTelemetryToken issues the two short-lived credentials a local
+  // dev stack exports its telemetry to the hosted store with
+  // (docs/design/dev-telemetry-to-hosted.md §2): a process token for the
+  // stack's host processes and a browser token for its dev server's /_otel
+  // proxy. Both are ES256 JWTs from the telemetry-token issuer, live one hour
+  // and carry the instance (`sid`), its owner (`uid`) and an ingest class.
+  //
+  // The caller must own a LIVE session (ReportLocalSession) of a LOCAL
+  // environment, in an org whose admin has not switched dev telemetry off,
+  // on a control plane whose local_telemetry_mode admits the org. Every
+  // refusal is one forge maps to "keep telemetry local, print why":
+  // FailedPrecondition with reason dev_telemetry_disabled (the org switch),
+  // dev_telemetry_not_enabled (the platform gate) or session_not_live;
+  // NotFound for an unknown session or environment; PermissionDenied for a
+  // session someone else owns. Unimplemented means a control plane that
+  // predates this rpc.
+  //
+  // Idempotent per session: each call re-mints and refreshes the instance's
+  // grant (local_telemetry_grants). forge calls it again at each token's
+  // half-life.
+  rpc MintLocalTelemetryToken(MintLocalTelemetryTokenRequest) returns (MintLocalTelemetryTokenResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "dev-loop credential for a local session, renewed every half hour"}
+    };
+  }
+
   // ImportLedger loads a project's existing file-based deploy history into the
   // hosted ledger, in one transaction.
   //
@@ -1968,6 +1995,10 @@ message GetWorkloadConfigRequest {
   optional string bundle_id = 2;
   optional string release_version = 3;
   string workload = 4;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it; a machine credential may name only
+  // its own org.
+  optional string org_id = 5;
 }
 
 message GetWorkloadConfigResponse {
@@ -2330,6 +2361,74 @@ message ReportLocalSessionRequest {
 
 message ReportLocalSessionResponse {
   DeployLocalSession session = 1;
+}
+
+// === Local dev telemetry ===
+
+message MintLocalTelemetryTokenRequest {
+  // The session id forge reported to ReportLocalSession for this stack.
+  string session_id = 1;
+  // The environment, addressed as ReportLocalSession addresses it.
+  string project = 2;
+  string environment = 3;
+  // The retention the project declares for its dev telemetry. Unset, and any
+  // unset field in it, means the default of 3 days. Every value is clamped to
+  // [1, the org's tenant default for the signal].
+  LocalTelemetryRetention retention = 4;
+  // The org this request acts in (docs/orgs.md). Unset: the caller's default
+  // org. A person must be a member of it.
+  optional string org_id = 5;
+}
+
+// LocalTelemetryRetention is a dev instance's retention, in whole days per
+// signal, with per-service overrides.
+message LocalTelemetryRetention {
+  optional int32 traces_days = 1;
+  optional int32 metrics_days = 2;
+  optional int32 logs_days = 3;
+  optional int32 browser_days = 4;
+  repeated LocalTelemetryRetentionOverride overrides = 5 [(buf.validate.field).repeated.max_items = 200];
+}
+
+// LocalTelemetryRetentionOverride narrows one service's retention for one
+// signal.
+message LocalTelemetryRetentionOverride {
+  string service = 1;
+  // One of traces, metrics, logs, browser.
+  string signal = 2;
+  int32 days = 3;
+}
+
+// LocalTelemetryInstance is the instance the tokens attribute data to, as
+// `forge obs` scopes and renders it.
+message LocalTelemetryInstance {
+  // The instance id: the gateway stamps it as reliant.instance.id, and
+  // `forge obs` narrows on it. The control plane's id for this run of the
+  // stack AND this user (one per session server row and user; a session
+  // taken over by another user is a new instance), NOT the client's session
+  // id: that one repeats across a worktree's runs and across orgs.
+  string id = 1;
+  // "<user>/<worktree label>", e.g. "alice/fix-login".
+  string label = 2;
+  // The owner's email.
+  string user = 3;
+}
+
+message MintLocalTelemetryTokenResponse {
+  // For the stack's host processes: OTEL_EXPORTER_OTLP_HEADERS_FILE's
+  // `authorization=Bearer <process_token>`.
+  string process_token = 1;
+  // For the dev server's /_otel proxy only; never shipped to the browser.
+  string browser_token = 2;
+  // When both tokens expire. forge renews at half-life.
+  google.protobuf.Timestamp expires_at = 3;
+  // The OTLP/HTTP base URL to export to.
+  string endpoint = 4;
+  string org_id = 5;
+  string environment_id = 6;
+  LocalTelemetryInstance instance = 7;
+  // The effective retention, after clamping. Every signal field is set.
+  LocalTelemetryRetention retention = 8;
 }
 
 // === Ledger import ===

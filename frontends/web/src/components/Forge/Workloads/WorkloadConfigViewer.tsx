@@ -8,6 +8,7 @@ import { BUTTON_PRIMARY, BUTTON_SECONDARY, Note, Panel } from "../Releases/relea
 import { configRows, diffConfig, type ConfigDiffRow } from "./workloadConfigModel";
 
 interface Props {
+  orgId?: string;
   project: string;
   environmentId: string;
   environmentName: string;
@@ -18,10 +19,10 @@ interface Props {
 
 /** Keyed boundary discards sensitive state immediately on project/env/workload change. */
 export function WorkloadConfigViewer(props: Props) {
-  return <ConfigSession key={JSON.stringify([props.project, props.environmentId, props.workload])} {...props} />;
+  return <ConfigSession key={JSON.stringify([props.orgId, props.project, props.environmentId, props.workload])} {...props} />;
 }
 
-function ConfigSession({ environmentId, environmentName, workload, readConfig = getWorkloadConfig }: Props) {
+function ConfigSession({ orgId, environmentId, environmentName, workload, readConfig = getWorkloadConfig }: Props) {
   const [config, setConfig] = useState<WorkloadConfig | null>(null);
   const [comparison, setComparison] = useState<{ historical: WorkloadConfig; current: WorkloadConfig; rows: ConfigDiffRow[] } | null>(null);
   const [release, setRelease] = useState("");
@@ -54,7 +55,7 @@ function ConfigSession({ environmentId, environmentName, workload, readConfig = 
     setConfig(null);
     const read = async (request: WorkloadConfigRequest) => validateWorkloadConfig(await readConfig(request, controller.signal), request);
     try {
-      const scope = { environmentId, workload };
+      const scope = { environmentId, workload, ...(orgId ? { orgId } : {}) };
       if (historicalRelease && pinned) {
         // TWO independently authorized, audited reads. Pin the visible bundle,
         // not a promotion that might move while the comparison is loading.

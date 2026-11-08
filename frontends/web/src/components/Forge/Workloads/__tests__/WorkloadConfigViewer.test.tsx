@@ -151,6 +151,26 @@ describe("explicit configuration values", () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
 
+  it("pins organization on explicit reads and clears/aborts immediately when it changes", async () => {
+    const late = deferred<WorkloadConfig>();
+    const read = vi.fn<ConfigReader>().mockReturnValueOnce(late.promise).mockResolvedValue(result());
+    const { rerender } = render(<WorkloadConfigViewer {...props} orgId="org-one" readConfig={read} />);
+    expect(read).not.toHaveBeenCalled();
+    await view();
+    expect(read.mock.calls[0]?.[0]).toEqual({ environmentId: "env-prod", workload: "api", orgId: "org-one" });
+    rerender(<WorkloadConfigViewer {...props} orgId="org-two" readConfig={read} />);
+    expect(read.mock.calls[0]?.[1].aborted).toBe(true);
+    await act(async () => late.resolve(result()));
+    expect(screen.queryByLabelText("Server-redacted manifest YAML")).toBeNull();
+    expect(read).toHaveBeenCalledTimes(1);
+    await view();
+    await screen.findByLabelText("Server-redacted manifest YAML");
+    expect(read.mock.calls[1]?.[0]).toEqual({ environmentId: "env-prod", workload: "api", orgId: "org-two" });
+    rerender(<WorkloadConfigViewer {...props} orgId="org-three" readConfig={read} />);
+    expect(screen.queryByLabelText("Server-redacted manifest YAML")).toBeNull();
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
   it("aborts the peer read and shows no partial values when one comparison call refuses", async () => {
     const peer = deferred<WorkloadConfig>();
     const read = vi.fn<ConfigReader>().mockResolvedValueOnce(result()).mockReturnValueOnce(peer.promise).mockRejectedValueOnce(new ConnectError("denied", Code.PermissionDenied));
