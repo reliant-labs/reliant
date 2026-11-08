@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { memoryTourStorage, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
@@ -146,6 +146,38 @@ it("on a window too short to fit the card below the action row, shrinks the card
   } finally {
     vi.restoreAllMocks();
   }
+});
+describe("a page's anchor that mounts late (a lazy chunk)", () => {
+  const lateAnchor = () => {
+    const anchor = document.createElement("div");
+    anchor.setAttribute("data-testid", "releases-table");
+    const scrollIntoView = vi.fn();
+    anchor.scrollIntoView = scrollIntoView;
+    return { anchor, scrollIntoView };
+  };
+  it("is scrolled to when it turns up", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    renderDemo("/forge/p/shop/releases");
+    await screen.findByTestId("tour-callout");
+    const { anchor, scrollIntoView } = lateAnchor();
+    try {
+      act(() => { document.querySelector("main")!.appendChild(anchor); });
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    } finally { anchor.remove(); }
+  });
+  it("leaves the page where the reader put it once they have scrolled", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    renderDemo("/forge/p/shop/releases");
+    await screen.findByTestId("tour-callout");
+    act(() => { window.dispatchEvent(new Event("wheel")); });
+    const { anchor, scrollIntoView } = lateAnchor();
+    try {
+      act(() => { document.querySelector("main")!.appendChild(anchor); });
+      // The spotlight takes over from the corner card, without scrolling.
+      await waitFor(() => expect(screen.getByTestId("tour-callout").getAttribute("data-side")).not.toBeNull());
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally { anchor.remove(); }
+  });
 });
 it("copy stays concise and permission-aware",()=>{
   for(const key of DEMO_TIP_KEYS){expect(DEMO_TIPS[key].body.length,key).toBeLessThan(480);expect(DEMO_TIPS[key].body).not.toMatch(/NATS|transport/);}

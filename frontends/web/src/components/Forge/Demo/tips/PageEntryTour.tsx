@@ -4,7 +4,8 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { CircleHelp } from "lucide-react";
-import { OnboardingSpotlight } from "@/components/Onboarding/OnboardingSpotlight";
+import { isSheetViewport, OnboardingSpotlight } from "@/components/Onboarding/OnboardingSpotlight";
+import { watchUserScroll } from "@/components/Onboarding/userScroll";
 import { TourControls } from "@/components/Onboarding/TourControls";
 import { DemoCorner, useConsoleDrawerOpen } from "../DemoCorner";
 import { PageAgentHelp } from "./DemoTips";
@@ -63,26 +64,31 @@ function VisitTour({ tipKey }: { tipKey: DemoTipKey }) {
 function PageCallout({ tipKey, onDismiss }: { tipKey: DemoTipKey; onDismiss: () => void }) {
   const tip = DEMO_TIPS[tipKey];
   const [target, setTarget] = useState<string | null>(null);
+  // From the visit's start: a reader who scrolled before the anchor mounted keeps their place.
+  const [readerScrolled, setReaderScrolled] = useState(false);
   useEffect(() => {
     // Lazy page chunks may mount after the visit. Upgrade to their anchor once,
     // without restarting a dismissed tour or polling a fixed-duration timer.
+    let scrolled = false;
+    const stopWatching = watchUserScroll(() => { scrolled = true; setReaderScrolled(true); });
     const find = () => {
       if (!tip.target || !document.querySelector(tip.target)) return false;
       const element = document.querySelector(tip.target)!;
-      element.scrollIntoView?.({ block: "start", behavior: "auto" });
+      // On a phone the spotlight's sheet places the target itself (scrollAboveSheet).
+      if (!scrolled && !isSheetViewport()) element.scrollIntoView?.({ block: "start", behavior: "auto" });
       setTarget(tip.target);
       return true;
     };
-    if (find()) return;
+    if (find()) return stopWatching;
     const observer = new MutationObserver(() => { if (find()) observer.disconnect(); });
     observer.observe(document.body, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); stopWatching(); };
   }, [tip.target]);
   const footer = <TourControls stepNumber={1} totalSteps={1} onNext={onDismiss} nextLabel="Done" />;
   const description = <>{tip.body}<PageAgentHelp tipKey={tipKey} /></>;
   // Place the card inside the page's own box: right of the desktop sidebar and
   // below the screen-action row, which stacks above the tour and would cover it.
   const page = document.querySelector("main")?.getBoundingClientRect();
-  if (target) return <OnboardingSpotlight targetSelector={target} title={tip.title} description={description} stepNumber={1} totalSteps={1} onNext={onDismiss} onSkipAll={onDismiss} keyboardNav={false} callout={{ footer, viewportLeft: Math.max(0, page?.left ?? 0), viewportTop: Math.max(0, page?.top ?? 0) }} />;
+  if (target) return <OnboardingSpotlight targetSelector={target} title={tip.title} description={description} stepNumber={1} totalSteps={1} onNext={onDismiss} onSkipAll={onDismiss} keyboardNav={false} callout={{ footer, viewportLeft: Math.max(0, page?.left ?? 0), viewportTop: Math.max(0, page?.top ?? 0), autoScroll: !readerScrolled }} />;
   return <DemoCorner order={1}><section className="max-h-[70dvh] overflow-y-auto rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-xl" data-testid="tour-callout" data-page-tour={tipKey}><h3 className="text-sm font-semibold">{tip.title}</h3><div className="mt-1 text-sm leading-relaxed text-ink-muted">{description}</div>{footer}</section></DemoCorner>;
 }
