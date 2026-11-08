@@ -70,9 +70,23 @@ without testing that change. Keep public adapter return types and nested `repoId
 | `pushChanges` -> `.pushWorktree` | `afterWrite(id, false)` (no legacy git-status event) | cached PR/status refresh but no extra notify; mapped output preserved |
 | `pullChanges` -> `.pullWorktree` | `afterWrite(id)` | legacy notify preserved, failure no notify |
 | `createPullRequest` -> `.createWorktreePR` | body default, repoId, prUrl -> pr_url; notify=false | no accidental second PR, return mapping and PR cache refresh |
-| `getExistingPR` -> `worktreeServiceQueries.getWorktreePR(req)` via fetchQuery | empty wire fields -> undefined, repoId; require a fresh remote PR answer | concurrent read shares generated key, staleTime=0/retry=false; no negative-cache surprise |
+| **Implemented in this slice:** `getExistingPR` -> `worktreeServiceQueries.getWorktreePR(req)` via fetchQuery | empty wire fields -> undefined, repoId; require a fresh remote PR answer | concurrent read shares generated key, staleTime=0/retry=false/gcTime=0; no negative-cache surprise |
 
-Start with stage/unstage/revert, not all eight at once. Run scoped
+Follow-up at main `0874606bb`: the first independent unary adoption is only
+`getExistingPR`. It uses the already-pinned generated query definition, always
+revalidates and does not retry or retain unused remote branch metadata. UI
+`useWorktreePR` still adds its observed-branch key segment; that behavior is not
+changed or falsely claimed to share the exact imperative cache entry. Public v1
+adapter signature/result mapping is unchanged. Transport tests pin concurrent
+sharing, worktree/repo isolation, fresh negative answers and stale-success errors.
+No mutation/invalidation scope is changed in this slice. Verification: 5 scoped
+files / 24 tests, `tsc -b`, and changed-file eslint pass. `prove_test` confirms
+concurrent identical calls made two RPCs before the change and one afterward.
+
+Next consider stage/unstage/revert, not all seven writes at once: generated
+mutation helpers invalidate the whole service, whereas `afterWrite` is narrower.
+That observable broadening needs explicit tests before swapping call sites.
+Run scoped
 `RecentChanges.{flow,race,machineWake}.test.tsx` and new transport/cache tests;
 `tsc -b`. `afterWrite` also notifies `gitStatusStore`; do not delete it wholesale.
 
