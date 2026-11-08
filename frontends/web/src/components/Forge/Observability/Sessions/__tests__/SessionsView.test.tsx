@@ -163,14 +163,31 @@ describe("the session list", () => {
     expect(harness.current().os).toBeUndefined();
   });
 
-  it("explains an empty window, and an older control plane", async () => {
-    renderPanel(createFixtureApi({ sessions: "empty" }), { view: "sessions" }, ENV_PLACE);
-    expect(await screen.findByTestId("obs-no-data")).toHaveTextContent("No browser sessions");
-    // Other telemetry flowing says nothing about sessions: the empty state says how they and replays arrive.
-    const source = screen.getByTestId("obs-no-data-source");
-    expect(source).toHaveTextContent("A forge frontend sends sessions on its own");
-    expect(source).toHaveTextContent("VITE_OTEL_REPLAY=true");
-    expect(source).toHaveTextContent("no unmasked mode");
+  it("explains an empty unfiltered window as no replays, with both switches that turn replay on", async () => {
+    const harness = renderPanel(createFixtureApi({ sessions: "empty" }), { view: "sessions", range: "24h" }, ENV_PLACE);
+    const note = await screen.findByTestId("obs-sessions-replay-off");
+    expect(note).toHaveAttribute("role", "status");
+    expect(note).toHaveTextContent("No replays recorded in the last 24 hours");
+    // The console cannot see either switch: it says how to turn replay on, never that it is off.
+    expect(note).toHaveTextContent("If replay isn't on yet");
+    const steps = within(note).getByTestId("obs-sessions-replay-off-steps");
+    expect(steps).toHaveTextContent("VITE_OTEL_REPLAY=true");
+    expect(steps).toHaveTextContent("NEXT_PUBLIC_OTEL_REPLAY=true");
+    expect(steps).toHaveTextContent("forge.Observability");
+    expect(steps).toHaveTextContent("replay = True");
+    expect(note).toHaveTextContent("redeploy");
+    expect(note).toHaveTextContent("masked");
+    expect(within(note).getByTestId("obs-sessions-replay-off-docs")).toHaveAttribute("href", expect.stringContaining("#session-replay"));
+    expect(screen.queryByTestId("obs-no-data")).not.toBeInTheDocument();
+    await userEvent.setup().click(within(note).getByTestId("obs-widen"));
+    expect(harness.current().range).toBe("7d");
+  });
+
+  it("keeps the filtered empty state for a narrowed window", async () => {
+    renderPanel(createFixtureApi({ sessions: "empty" }), { view: "sessions", errors: true }, ENV_PLACE);
+    expect(await screen.findByTestId("obs-no-data")).toHaveTextContent("No browser sessions match");
+    expect(screen.getByTestId("obs-clear-filters")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-sessions-replay-off")).not.toBeInTheDocument();
   });
 
   it("explains a control plane without sessions", async () => {
