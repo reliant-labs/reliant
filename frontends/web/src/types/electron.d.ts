@@ -47,6 +47,13 @@ export interface ElectronAPI {
   restartBackend: () => Promise<{ success: boolean; error?: string }>;
   showErrorDialog: (title: string, content: string) => Promise<void>;
   selectDirectory: () => Promise<string | null>;
+  // The registry id of the daemon this desktop app runs (its `daemon-id`
+  // file), read fresh for the current account/server, or null while it has
+  // none. Optional: a desktop build that does not
+  // expose it leaves the renderer unable to tell which machine is this
+  // computer, and lib/localMachine.ts then never offers the native folder
+  // dialog for a machine (it could be another computer's folder).
+  getLocalDaemonId?: () => Promise<string | null>;
   openProjectDirectory: (path: string) => Promise<{ success: boolean; error?: string }>;
   openTerminal: (path: string) => Promise<{ success: boolean; error?: string }>;
   openExternal: (url: string) => Promise<void>;

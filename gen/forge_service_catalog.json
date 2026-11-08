@@ -12249,6 +12249,11 @@
               "Name": "path",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateFileOrFolderRequest": [
@@ -12530,6 +12535,11 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.DirectoryEntry"
+            },
+            {
+              "Name": "daemon_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ReplaceInFilesRequest": [
@@ -12748,6 +12758,11 @@
             {
               "name": "path",
               "kind": "string"
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateFileOrFolderRequest": [
@@ -13118,6 +13133,11 @@
               "kind": "message",
               "type_name": "reliant.v1.DirectoryEntry",
               "repeated": true
+            },
+            {
+              "name": "daemon_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.ReplaceInFilesRequest": [

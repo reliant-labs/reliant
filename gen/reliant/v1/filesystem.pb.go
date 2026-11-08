@@ -2168,9 +2168,15 @@ func (x *ListDirectoryRequest) GetDaemonId() string {
 }
 
 type ListDirectoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // The resolved absolute path that was listed
-	Entries       []*DirectoryEntry      `protobuf:"bytes,2,rep,name=entries,proto3" json:"entries,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Path    string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // The resolved absolute path that was listed
+	Entries []*DirectoryEntry      `protobuf:"bytes,2,rep,name=entries,proto3" json:"entries,omitempty"`
+	// The machine that was listed: the request's daemon_id, echoed. Unset when
+	// the request named none (the default machine). A server older than
+	// ListDirectoryRequest.daemon_id ignores that field, lists the default
+	// machine and leaves this unset, so a client that named a machine and gets
+	// no echo knows the listing is not that machine's and must not show it.
+	DaemonId      *string `protobuf:"bytes,3,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2217,6 +2223,13 @@ func (x *ListDirectoryResponse) GetEntries() []*DirectoryEntry {
 		return x.Entries
 	}
 	return nil
+}
+
+func (x *ListDirectoryResponse) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
+	}
+	return ""
 }
 
 type DirectoryEntry struct {
@@ -2350,8 +2363,11 @@ func (x *CreateDirectoryRequest) GetDaemonId() string {
 }
 
 type CreateDirectoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // The absolute path that was created.
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Path  string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // The absolute path that was created.
+	// The machine it was created on: the request's daemon_id, echoed, as in
+	// ListDirectoryResponse.daemon_id. Unset when the request named none.
+	DaemonId      *string `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3,oneof" json:"daemon_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2389,6 +2405,13 @@ func (*CreateDirectoryResponse) Descriptor() ([]byte, []int) {
 func (x *CreateDirectoryResponse) GetPath() string {
 	if x != nil {
 		return x.Path
+	}
+	return ""
+}
+
+func (x *CreateDirectoryResponse) GetDaemonId() string {
+	if x != nil && x.DaemonId != nil {
+		return *x.DaemonId
 	}
 	return ""
 }
@@ -2752,10 +2775,13 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x02 \x01(\tH\x01R\bdaemonId\x88\x01\x01B\a\n" +
 	"\x05_pathB\f\n" +
 	"\n" +
-	"_daemon_id\"a\n" +
+	"_daemon_id\"\x91\x01\n" +
 	"\x15ListDirectoryResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x124\n" +
-	"\aentries\x18\x02 \x03(\v2\x1a.reliant.v1.DirectoryEntryR\aentries\"\x97\x01\n" +
+	"\aentries\x18\x02 \x03(\v2\x1a.reliant.v1.DirectoryEntryR\aentries\x12 \n" +
+	"\tdaemon_id\x18\x03 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"\x97\x01\n" +
 	"\x0eDirectoryEntry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12!\n" +
@@ -2767,9 +2793,12 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12 \n" +
 	"\tdaemon_id\x18\x02 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
 	"\n" +
-	"_daemon_id\"-\n" +
+	"_daemon_id\"]\n" +
 	"\x17CreateDirectoryResponse\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"\xaa\x01\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12 \n" +
+	"\tdaemon_id\x18\x02 \x01(\tH\x00R\bdaemonId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_daemon_id\"\xaa\x01\n" +
 	"\x15GetFilePreviewRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
@@ -2934,7 +2963,9 @@ func file_reliant_v1_filesystem_proto_init() {
 	file_reliant_v1_filesystem_proto_msgTypes[20].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[24].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[27].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[28].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[30].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[31].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[32].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

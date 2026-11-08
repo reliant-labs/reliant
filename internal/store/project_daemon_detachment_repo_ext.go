@@ -57,6 +57,24 @@ func LockMachineCheckouts(ctx context.Context, db orm.Context, daemonID string) 
 	return nil
 }
 
+// LockProjectCheckout takes the transaction-scoped advisory lock on the
+// project's checkout on a machine: exclusive for an action that forgets the
+// checkout (a detach), shared for the insert of a branch workspace that will
+// be a git worktree of it. So a workspace either committed before the
+// detach's guard read the workspaces, or is inserted after the detach
+// committed, never in between. ctx must carry a
+// transaction.
+func LockProjectCheckout(ctx context.Context, db orm.Context, projectID, daemonID string, shared bool) error {
+	fn := "pg_advisory_xact_lock"
+	if shared {
+		fn = "pg_advisory_xact_lock_shared"
+	}
+	if _, err := db.Exec(ctx, `SELECT `+fn+`(hashtextextended($1, 0))`, "project-checkout:"+projectID+":"+daemonID); err != nil {
+		return fmt.Errorf("failed to lock the project's checkout on the machine: %w", err)
+	}
+	return nil
+}
+
 // RecordProjectDaemonDetachment records that the user detached the project
 // from the machine, at the checkout path it had there. A second detach of the
 // same pair moves its path and time.

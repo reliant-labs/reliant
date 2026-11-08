@@ -12,14 +12,17 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
+import { defaultMachineDaemon } from "../../lib/chatMachine";
+import { useCurrentMachineStore } from "../../store/currentMachineStore";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { FolderOpen, GitFork } from "lucide-react";
 
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { useListProjectDaemons } from "../../hooks/project-service-hooks_gen";
 import { invalidateDaemonList } from "../../hooks/daemon-registry-queries";
 import { useGitHubCredential } from "../../hooks/useGitHubCredential";
-import { createProject, createProjectFromRepo, fetchProjects, type Project } from "../../hooks/project-queries";
+import { createProjectFromRepo, createProjectWithResult, fetchProjects, type Project } from "../../hooks/project-queries";
 import { machineDisplayName } from "../../lib/machineName";
 import { markMachineGone, useGoneMachinesVersion, withoutGoneMachines } from "../../lib/goneMachines";
 import { basename } from "../../lib/pathUtils";
@@ -48,13 +51,18 @@ function isAlreadyExistsError(error: unknown): boolean {
   return error instanceof ConnectError && error.code === Code.AlreadyExists;
 }
 
-/** Open a project that was just added (or that already existed). */
-export async function openAddedProject(project: Pick<Project, "id">): Promise<void> {
+/**
+ * Open a project that was just added (or that already existed), with a new
+ * chat on `daemonId` when one is named: the machine the folder or clone is
+ * on. Without it, a folder that attached to a project already installed on
+ * the default machine would open a chat there instead.
+ */
+export async function openAddedProject(project: Pick<Project, "id">, daemonId?: string): Promise<void> {
   const filter = useWorkspaceStateStore.getState().projectFilterId;
   if (filter && filter !== project.id) {
     await useProjectStore.getState().setProjectFilter(project.id);
   }
-  await openNewChat({ projectId: project.id });
+  await openNewChat({ projectId: project.id, daemonId });
 }
 
 interface UseAddProjectOptions {
@@ -68,11 +76,12 @@ interface UseAddProjectOptions {
 
 export function useAddProject({ onAdded, onChooseClone, onChooseFolderInBrowser }: UseAddProjectOptions) {
   const queryClient = useQueryClient();
-  const isElectron = !!window.electronAPI?.selectDirectory;
+  const { refetch: refetchProjectMachines } = useListProjectDaemons({});
   const { daemons, activeDaemon, loading: daemonLoading } = useDaemonStatus();
-  // The browser reaches a folder only through a machine; with none attached
-  // there is no filesystem to open a folder on.
-  const machineReachable = isElectron || !!activeDaemon || daemonLoading;
+  const currentMachineId = useCurrentMachineStore((state) => state.daemonId);
+  const folderDaemonId = currentMachineId ?? defaultMachineDaemon(daemons)?.daemonId;
+  // Offline machines remain selectable: browsing explains how to reconnect.
+  const machineReachable = daemons.length > 0 || daemonLoading;
   const { hasToken: hasGitHubCredential } = useGitHubCredential();
   const [cloneStatus, setCloneStatus] = useState<string | null>(null);
 
@@ -113,8 +122,8 @@ export function useAddProject({ onAdded, onChooseClone, onChooseFolderInBrowser 
     (cloneState.kind === "ready" ? cloneState.target.daemonId : null);
 
   const finish = useCallback(
-    async (project: Project) => {
-      await openAddedProject(project);
+    async (project: Project, daemonId?: string) => {
+      await openAddedProject(project, daemonId);
       onAdded?.(project);
     },
     [onAdded],
@@ -147,7 +156,7 @@ export function useAddProject({ onAdded, onChooseClone, onChooseFolderInBrowser 
         if (result.project) {
           const openedId = result.project.id;
           const opened = (await fetchProjects({ fresh: true })).find((p) => p.id === openedId);
-          if (opened) await finish(opened);
+          if (opened) await finish(opened, result.projectDaemon?.daemon_id || targetDaemonId);
         }
       } catch (err) {
         if (isCloneTargetGone(err)) {
@@ -166,47 +175,43 @@ export function useAddProject({ onAdded, onChooseClone, onChooseFolderInBrowser 
 
   // Register (or reopen) a project for a folder the user picked.
   const openFolderPath = useCallback(
-    async (selectedPath: string) => {
+    async (selectedPath: string, daemonId: string | undefined = folderDaemonId) => {
       const projectName = basename(selectedPath) || selectedPath || "Untitled project";
       const loadingToast = toast.loading(`Opening ${projectName}…`);
       try {
-        const created = await createProject({
+        const created = await createProjectWithResult({
           name: projectName,
           path: selectedPath,
           description: "",
           default_branch: "main",
+          daemon_id: daemonId,
         });
-        await finish(created);
+        await finish(created.project, created.projectDaemon?.daemon_id || daemonId);
       } catch (error) {
         if (isAlreadyExistsError(error)) {
-          const found = (await fetchProjects({ fresh: true })).find((p) => p.path === selectedPath);
+          const machines = await refetchProjectMachines();
+          const existing = machines.data?.projectDaemons.find((row) => row.daemonId === daemonId && row.path === selectedPath);
+          const found = (await fetchProjects({ fresh: true })).find((p) => existing ? p.id === existing.projectId : !daemonId && p.path === selectedPath);
           if (found) {
             toast.success(`Opening ${found.name}, which is already a project`);
-            await finish(found);
+            await finish(found, existing?.daemonId || daemonId);
             return;
           }
         }
-        // createProject has already reported any other failure.
+        // createProject suppresses AlreadyExists for this recovery path.
+        if (isAlreadyExistsError(error)) toast.error(error);
       } finally {
         toast.dismiss(loadingToast);
       }
     },
-    [finish],
+    [finish, folderDaemonId, refetchProjectMachines],
   );
 
-  const chooseFolder = useCallback(async () => {
-    if (!isElectron) {
-      onChooseFolderInBrowser();
-      return;
-    }
-    let selectedPath: string | null = null;
-    try {
-      selectedPath = await window.electronAPI!.selectDirectory();
-    } catch (err) {
-      toast.error(err);
-    }
-    if (selectedPath) await openFolderPath(selectedPath);
-  }, [isElectron, onChooseFolderInBrowser, openFolderPath]);
+  // Always pick the machine first. DirectoryPicker offers the native dialog
+  // only when the desktop app can identify that machine as this computer.
+  const chooseFolder = useCallback(() => {
+    onChooseFolderInBrowser();
+  }, [onChooseFolderInBrowser]);
 
   // The two methods, the leading one first. Each stays visible and says why
   // when it cannot be used, so there is never a state with no way to add a
@@ -229,9 +234,7 @@ export function useAddProject({ onAdded, onChooseClone, onChooseFolderInBrowser 
     label: OPEN_FOLDER_LABEL,
     description: !machineReachable
       ? "Connect a machine first: a folder is opened on the machine that holds it."
-      : isElectron
-        ? "Choose a folder on this computer. Reliant works in it where it is."
-        : "Browse to a folder on your machine, or type its path. Reliant works in it where it is.",
+      : "Choose a machine, then browse to a folder or type its path. Reliant works in it where it is.",
     icon: FolderOpen,
     onClick: () => void chooseFolder(),
     disabled: !machineReachable,
@@ -243,6 +246,7 @@ export function useAddProject({ onAdded, onChooseClone, onChooseFolderInBrowser 
   return {
     actions,
     machineReachable,
+    folderDaemonId,
     cloudDaemons,
     effectiveCloneDaemonId,
     setChosenCloneDaemonId,

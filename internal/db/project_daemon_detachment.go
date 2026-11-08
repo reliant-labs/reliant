@@ -57,6 +57,12 @@ func (r *Repo) DetachProjectFromDaemon(ctx context.Context, projectID, daemonID,
 		if err := store.LockMachineCheckouts(txCtx, r.ORM(), daemonID); err != nil {
 			return err
 		}
+		// Then the checkout's, exclusive: a branch workspace of it is inserted
+		// under the shared side (CreateWorktree), so the guard sees every one
+		// that committed and none lands until the detach has.
+		if err := store.LockProjectCheckout(txCtx, r.ORM(), projectID, daemonID, false); err != nil {
+			return err
+		}
 		if guard != nil {
 			if err := guard(txCtx); err != nil {
 				return err

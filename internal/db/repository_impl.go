@@ -1744,7 +1744,19 @@ func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
 	if worktree.Name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
-	return store.InsertWorktree(ctx, r.ORM(), worktree)
+	if worktree.IsMain || worktree.DaemonID == nil || *worktree.DaemonID == "" {
+		return store.InsertWorktree(ctx, r.ORM(), worktree)
+	}
+	// A branch workspace is a git worktree of the project's checkout on its
+	// machine: inserted under the shared side of the lock a detach of that
+	// checkout holds (DetachProjectFromDaemon), so it lands before the
+	// detach's workspace guard reads or after the detach committed.
+	return r.RunTx(ctx, orm.ReadCommitted, func(txCtx context.Context) error {
+		if err := store.LockProjectCheckout(txCtx, r.ORM(), worktree.ProjectID, *worktree.DaemonID, true); err != nil {
+			return err
+		}
+		return store.InsertWorktree(txCtx, r.ORM(), worktree)
+	})
 }
 
 func (r *Repo) GetWorktree(ctx context.Context, id string) (*Worktree, error) {

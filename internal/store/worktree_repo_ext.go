@@ -175,6 +175,9 @@ func ListWorktrees(ctx context.Context, db orm.Context, f core.WorktreeFilters) 
 	if f.Status != nil {
 		q.Where("status = ?", *f.Status)
 	}
+	if f.DaemonID != nil {
+		q.Where("daemon_id = ?", *f.DaemonID)
+	}
 	if f.MainOnly {
 		q.Where("is_main")
 	}

@@ -64,10 +64,12 @@ func TestListDirectory_BrowsesTheNamedMachineElseTheDefault(t *testing.T) {
 	resp, err := svc.ListDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.ListDirectoryRequest{}))
 	require.NoError(t, err)
 	assert.Equal(t, "/home/me/src", resp.Msg.Entries[0].Path)
+	assert.Nil(t, resp.Msg.DaemonId, "the default machine is echoed as no machine")
 
 	machine := "mine"
-	_, err = svc.ListDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.ListDirectoryRequest{DaemonId: &machine}))
+	resp, err = svc.ListDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.ListDirectoryRequest{DaemonId: &machine}))
 	require.NoError(t, err)
+	assert.Equal(t, "mine", resp.Msg.GetDaemonId(), "the listed machine is echoed, so a client can tell an older server ignored it")
 
 	assert.Equal(t, []string{"", "mine"}, router.reached, "no daemon_id is the default machine, as before; a named one is pinned")
 }
@@ -94,10 +96,11 @@ func TestCreateDirectory_MakesTheFolderOnTheNamedMachine(t *testing.T) {
 	svc := newProxy(t, router, pickerMachines())
 
 	machine := "mine"
-	_, err := svc.CreateDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.CreateDirectoryRequest{
+	created, err := svc.CreateDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.CreateDirectoryRequest{
 		Path: "/home/me/new", DaemonId: &machine,
 	}))
 	require.NoError(t, err)
+	assert.Equal(t, "mine", created.Msg.GetDaemonId())
 	assert.Equal(t, []string{"mine"}, router.reached)
 
 	theirs := "theirs"
