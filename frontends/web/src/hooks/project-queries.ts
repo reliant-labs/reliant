@@ -415,6 +415,14 @@ export async function createProjectWithResult(input: CreateProjectInput): Promis
     await invalidateProjects();
     const project = projectFromProto(created);
     const projectDaemon = response.projectDaemon ? projectDaemonFromProto(response.projectDaemon) : undefined;
+    // A server that knows daemon_id always answers with the checkout on that
+    // machine. An older one ignores the field and registers the folder on the
+    // user's default machine: refuse rather than open it on the chosen one.
+    if (input.daemon_id && projectDaemon?.daemon_id !== input.daemon_id) {
+      throw new Error(
+        `The server registered ${project.name} without the machine you chose; it does not support adding a folder from another machine yet`,
+      );
+    }
     if (response.attached) {
       const machine = projectDaemon?.daemon_name || "this machine";
       toast.success(`Added ${machine} to existing project ${project.name}`);

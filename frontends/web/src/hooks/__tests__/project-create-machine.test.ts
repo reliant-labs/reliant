@@ -15,3 +15,17 @@ it("sends the selected daemon and distinguishes attaching an existing project", 
   expect(result).toMatchObject({ attached: true, project: { id: "p" }, projectDaemon: { daemon_id: "remote", daemon_name: "Server" } });
   expect(success).toHaveBeenCalledWith("Added Server to existing project API");
 });
+it("refuses a chosen machine an older server ignored instead of reporting success", async () => {
+  success.mockClear();
+  const create = vi.fn(async (_request: unknown) => ({ project: { id: "p", name: "API" }, attached: false }));
+  setTransport(mockTransport(serviceHandlers("ProjectService", { createProject: create })));
+  await expect(createProjectWithResult({ name: "repo", path: "/repo", daemon_id: "remote" })).rejects.toThrow(/without the machine you chose/);
+  expect(success).not.toHaveBeenCalled();
+});
+it("needs no machine echo when none was chosen", async () => {
+  const create = vi.fn(async (_request: unknown) => ({ project: { id: "p", name: "API" }, attached: false }));
+  setTransport(mockTransport(serviceHandlers("ProjectService", { createProject: create })));
+  const result = await createProjectWithResult({ name: "repo", path: "/repo" });
+  expect(result).toMatchObject({ attached: false, project: { id: "p" } });
+  expect(result.projectDaemon).toBeUndefined();
+});

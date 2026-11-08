@@ -318,6 +318,8 @@ type WorktreeFilters struct {
 	ProjectID *string
 	ChatID    *string
 	Status    *int32
+	// DaemonID narrows to the workspaces owned by that machine.
+	DaemonID *string
 	// IncludeArchived adds archived rows after the live ones.
 	IncludeArchived bool
 	// ArchivedOnly lists only archived rows, most recently archived first.

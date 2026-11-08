@@ -115,16 +115,25 @@ func (s *Service) requireCheckoutElsewhere(ctx context.Context, userID string, p
 // machine (a detach, a remove, a reclone) while live branch workspaces of the
 // project are owned by that machine: they are git worktrees of that very
 // checkout. before names the action in the refusal ("detaching the project
-// from that machine").
+// from that machine"). It reads every page: ListWorktrees returns at most
+// one page of rows, and a workspace missed past it would lose its checkout.
 func (s *Service) requireNoWorkspacesOn(ctx context.Context, project *db.Project, daemonID, machine, before string) error {
-	worktrees, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{ProjectID: &project.ID})
-	if err != nil {
-		return svcerr.WrapOr(err, svcerr.Internal("failed to read the project's workspaces"))
-	}
+	const page = 100
 	n := 0
-	for _, wt := range worktrees {
-		if wt != nil && !wt.IsMain && wt.DeletedAt == nil && wt.DaemonID != nil && *wt.DaemonID == daemonID {
-			n++
+	for offset := 0; ; offset += page {
+		worktrees, err := s.deps.Repo.ListWorktrees(ctx, db.WorktreeFilters{
+			ProjectID: &project.ID, DaemonID: &daemonID, Limit: page, Offset: offset,
+		})
+		if err != nil {
+			return svcerr.WrapOr(err, svcerr.Internal("failed to read the project's workspaces"))
+		}
+		for _, wt := range worktrees {
+			if wt != nil && !wt.IsMain && wt.DeletedAt == nil && wt.DaemonID != nil && *wt.DaemonID == daemonID {
+				n++
+			}
+		}
+		if len(worktrees) < page {
+			break
 		}
 	}
 	if n == 0 {

@@ -3,6 +3,7 @@ package project_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -208,7 +209,7 @@ func TestProjectOnDaemonCommands_RemoveAndRecloneRefuseWhileWorkspacesLiveThere(
 	t.Parallel()
 	ctx := project.AuthedContext(t)
 	here, elsewhere := "d-1", "d-2"
-	archived := time.Now()
+	archived := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	for name, call := range projectOnDaemonCalls(ctx, "p-1", "d-1") {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -239,6 +240,55 @@ func TestProjectOnDaemonCommands_RemoveAndRecloneRefuseWhileWorkspacesLiveThere(
 			assert.Contains(t, msg, "archive")
 			assert.Empty(t, router.commands, "nothing is deleted on the machine")
 			assert.False(t, deleted, "the row stays")
+		})
+	}
+}
+
+// The retained-workspace guard reads every page of the machine's workspaces:
+// ListWorktrees returns at most one page (100 by default), so a guard that
+// read only the first refused nothing once the live workspaces on the machine
+// sat past it. The mock pages as the store does.
+func TestProjectOnDaemonCommands_WorkspaceGuardReadsEveryPage(t *testing.T) {
+	t.Parallel()
+	ctx := project.AuthedContext(t)
+	here, elsewhere := "d-1", "d-2"
+	var all []*db.Worktree
+	for i := 0; i < 150; i++ {
+		all = append(all, &db.Worktree{ID: fmt.Sprintf("other-%d", i), DaemonID: &elsewhere})
+	}
+	for i := 0; i < 130; i++ {
+		all = append(all, &db.Worktree{ID: fmt.Sprintf("live-%d", i), DaemonID: &here})
+	}
+	for name, call := range projectOnDaemonCalls(ctx, "p-1", "d-1") {
+		if name == "pull" {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store := onDaemon(t)
+			store.ListWorktreesFunc = func(_ context.Context, f db.WorktreeFilters) ([]*db.Worktree, error) {
+				var rows []*db.Worktree
+				for _, wt := range all {
+					if f.DaemonID == nil || *wt.DaemonID == *f.DaemonID {
+						rows = append(rows, wt)
+					}
+				}
+				limit := f.Limit
+				if limit == 0 {
+					limit = 100
+				}
+				rows = rows[min(f.Offset, len(rows)):]
+				return rows[:min(limit, len(rows))], nil
+			}
+			store.DeleteProjectDaemonFunc = func(context.Context, string, string) error {
+				t.Error("the row stays")
+				return nil
+			}
+			router := newPinnedRecorder()
+			err := call(newService(t, store, router))
+			requireCode(t, err, connect.CodeFailedPrecondition)
+			assert.Contains(t, svcerr.ToConnect(err).Message(), "130 workspaces of")
+			assert.Empty(t, router.commands, "nothing is deleted on the machine")
 		})
 	}
 }
