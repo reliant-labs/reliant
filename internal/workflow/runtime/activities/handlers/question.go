@@ -199,10 +199,11 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 		// Mark chat as unread so UI shows notification badge. An async
 		// question waits on no one in the chat: the inbox is its notice.
 		if !input.Async {
+			// A failed write has aborted this transaction, so it is returned for
+			// RunTx to retry the whole question: a serialization failure on the
+			// user's update counter is the expected one (reliant #2393).
 			if err := a.repo.UpdateChatUnread(txCtx, input.ChatID, true, "question_pending"); err != nil {
-				logger.Warn("[QuestionCreate] Failed to mark chat as unread",
-					"error", err,
-					"chatID", input.ChatID)
+				return fmt.Errorf("failed to mark chat unread: %w", err)
 			}
 		}
 
