@@ -6,8 +6,8 @@
  * ES imports are hoisted: every `import` in a module is evaluated before any
  * statement in that module's body. So this in `main.tsx`
  *
- *     import { installBrowserLogForwarding } from "./lib/browser-log-forward";
- *     installBrowserLogForwarding();          // ← looks first, runs LAST
+ *     import { installDevLogging } from "@reliantlabs/forge-web-runtime";
+ *     installDevLogging({ dev: true });       // ← looks first, runs LAST
  *     import "./lib/debug.ts";
  *     import { Root } from "./components/Root";
  *
@@ -19,7 +19,7 @@
  * because imports are evaluated in ORDER: this module's side effect runs
  * during its own evaluation, before the later imports are evaluated at all.
  */
-import { installDevLogging } from "./browser-log-forward";
+import { installDevLogging } from "@reliantlabs/forge-web-runtime";
 import { installUpdateDepthStack } from "./updateDepthStack";
 import { installClientDiagnostics } from "./clientDiagnostics";
 
