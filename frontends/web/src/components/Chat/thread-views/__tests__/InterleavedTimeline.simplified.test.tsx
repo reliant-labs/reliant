@@ -1,7 +1,8 @@
 /**
  * The simplified thread through the real InterleavedTimeline, ChatMessage and
- * TurnWorkFold: each agent turn becomes one fold row plus its answer, and the
- * fold's contents come and go with its header.
+ * TurnWorkFold: the agent's prose stays on screen, each run of tool work
+ * between it becomes one fold row, and the fold's contents come and go with
+ * its header.
  *
  * Only the leaves are stubbed (virtualizer, markdown, tool cards, stores);
  * the timeline pass, the slicing and the fold are real.
@@ -240,38 +241,84 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(screen.getAllByTestId("tool-card")).toHaveLength(2);
   });
 
-  it("folds a finished turn into one collapsed header followed by the answer", () => {
+  it("keeps the agent's prose on screen and folds only the tool run between it", () => {
     settings.store.set("appearance.chatThreadMode", "simplified");
     renderTimeline(finishedTurn());
 
     expect(visible("Fix the flaky test")).toBe(true);
     expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
     expect(foldButton()).toHaveAttribute("aria-expanded", "false");
-    expect(foldButton()).toHaveTextContent(/^Activity/);
+    expect(foldButton()).toHaveTextContent(/^Activity · 2 other tools/);
+    expect(visible("Let me look at the test.")).toBe(true);
     expect(visible("Fixed: the race is gone.")).toBe(true);
-    expect(visible("Let me look at the test.")).toBe(false);
     expect(screen.queryAllByTestId("tool-card")).toHaveLength(0);
 
-    // The header sits between the question and the answer.
+    // question, narration, fold, answer — in transcript order.
     const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(follows(screen.getByText("Fix the flaky test"), fold())).toBe(true);
+    expect(follows(screen.getByText("Fix the flaky test"), screen.getByText("Let me look at the test."))).toBe(true);
+    expect(follows(screen.getByText("Let me look at the test."), fold())).toBe(true);
     expect(follows(fold(), screen.getByText("Fixed: the race is gone."))).toBe(true);
   });
 
-  it("reveals the interim narration and tool calls when the fold is expanded", () => {
+  it("reveals the tool calls when the fold is expanded, never a second copy of the prose", () => {
     settings.store.set("appearance.chatThreadMode", "simplified");
     renderTimeline(finishedTurn());
 
     fireEvent.click(foldButton());
 
     expect(foldButton()).toHaveAttribute("aria-expanded", "true");
-    expect(visible("Let me look at the test.")).toBe(true);
-    expect(screen.getAllByTestId("tool-card").length).toBeGreaterThan(0);
-    // The answer is not duplicated into the fold.
+    expect(screen.getAllByTestId("tool-card")).toHaveLength(2);
+    expect(screen.getAllByText("Let me look at the test.")).toHaveLength(1);
     expect(screen.getAllByText("Fixed: the race is gone.")).toHaveLength(1);
 
     fireEvent.click(foldButton());
-    expect(visible("Let me look at the test.")).toBe(false);
+    expect(screen.queryAllByTestId("tool-card")).toHaveLength(0);
+  });
+
+  it("cuts a message around its tool run and gives it one set of actions", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Check it"),
+      assistant(2, [text(0, "Reading first."), tool(1, "read_file", "call-read"), text(2, "Looks right.")]),
+    ]);
+
+    expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
+    const follows = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(screen.getByText("Reading first."), fold())).toBe(true);
+    expect(follows(fold(), screen.getByText("Looks right."))).toBe(true);
+    // The chrome is the message's last prose slice's alone (the phone's
+    // actions button; the user message has its own).
+    expect(screen.getByTestId("message-m2-prose")).toHaveTextContent("Reading first.");
+    expect(screen.getByTestId("message-m2")).toHaveTextContent("Looks right.");
+    expect(within(screen.getByTestId("message-m2")).getAllByRole("button", { name: "Message actions" })).toHaveLength(1);
+    expect(within(screen.getByTestId("message-m2-prose")).queryByRole("button", { name: "Message actions" })).toBeNull();
+  });
+
+  it("folds an orchestrator's sub-agent mail and tool runs into one row", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    const mail = (seq: number, subject: string): Message => ({
+      ...user(seq, `Full report ${seq}`),
+      sender: { threadId: `child-${seq}`, kind: 1, subject, title: `agent ${seq}` },
+    }) as unknown as Message;
+    renderTimeline([
+      user(1, "Fan out"),
+      assistant(2, [tool(0, "spawn", "call-spawn")]),
+      mail(3, "Research done"),
+      assistant(4, [tool(0, "bash", "call-bash")]),
+      mail(5, "Review done"),
+      mail(6, "Tests done"),
+      assistant(7, [text(0, "Everyone reported back.")]),
+    ]);
+
+    expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
+    expect(foldButton()).toHaveTextContent("3 agent messages");
+    expect(screen.queryByText("Research done")).toBeNull();
+    expect(visible("Everyone reported back.")).toBe(true);
+
+    fireEvent.click(foldButton());
+    expect(screen.getAllByTestId("agent-message-subject").map((el) => el.textContent)).toEqual([
+      "Research done", "Review done", "Tests done",
+    ]);
   });
 
   it("keeps a pending-approval call and an ask_user card visible while collapsed", () => {
@@ -285,7 +332,7 @@ describe("InterleavedTimeline simplified thread", () => {
     renderTimeline(messages, { approvals: [pendingApproval("m3-b0")] });
 
     expect(foldButton()).toHaveAttribute("aria-expanded", "false");
-    expect(visible("Checking first.")).toBe(false);
+    expect(visible("Checking first.")).toBe(true);
     expect(screen.getByRole("button", { name: /approve tool execution/i })).toBeInTheDocument();
     expect(screen.getByTestId("ask-user-card")).toBeInTheDocument();
     // Nothing else of the work leaks out: only the approval's own card.
@@ -321,7 +368,19 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(fold()).toHaveAttribute("data-live", "true");
     expect(foldButton()).toHaveTextContent(/^bash/);
     expect(foldButton()).toHaveAttribute("aria-expanded", "false");
-    expect(visible("Starting.")).toBe(false);
+    expect(visible("Starting.")).toBe(true);
+  });
+
+  it("is no longer live once the agent writes after its tool run", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([
+      user(1, "Run the suite"),
+      assistant(2, [tool(0, "bash", "call-bash")]),
+      assistant(3, [text(0, "All green.")], StreamingState.STREAMING),
+    ], { isStreaming: true });
+
+    expect(fold()).toHaveAttribute("data-live", "false");
+    expect(foldButton()).toHaveTextContent(/^Activity/);
   });
 
   it("keeps successful spawn notices inspectable inside one activity and unchanged in detailed mode", async () => {
@@ -356,11 +415,11 @@ describe("InterleavedTimeline simplified thread", () => {
 
     await act(async () => setChatThreadMode("simplified"));
     expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
-    expect(visible("Let me look at the test.")).toBe(false);
+    expect(screen.queryAllByTestId("tool-card")).toHaveLength(0);
 
     await act(async () => setChatThreadMode("detailed"));
     expect(screen.queryByTestId("turn-work-fold")).toBeNull();
-    expect(visible("Let me look at the test.")).toBe(true);
+    expect(screen.getAllByTestId("tool-card")).toHaveLength(2);
 
     await act(async () => setChatThreadMode("simplified"));
     expect(screen.getAllByTestId("turn-work-fold")).toHaveLength(1);
@@ -382,5 +441,18 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(scrollToIndex).toHaveBeenCalledTimes(1);
     const foldRow = fold().closest("[data-timeline-index]");
     expect(scrollToIndex).toHaveBeenCalledWith(Number(foldRow?.getAttribute("data-timeline-index")), expect.anything());
+  });
+
+  it("scroll-to-message for a message with prose lands on its prose row", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline(finishedTurn());
+
+    // m2 is cut in two: its narration row and its part of the fold.
+    act(() => {
+      window.dispatchEvent(new CustomEvent("scroll-to-message", { detail: { messageId: "m2" } }));
+    });
+
+    const proseRow = screen.getByText("Let me look at the test.").closest("[data-timeline-index]");
+    expect(scrollToIndex).toHaveBeenCalledWith(Number(proseRow?.getAttribute("data-timeline-index")), expect.anything());
   });
 });

@@ -28,9 +28,7 @@ import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
 import { MessageGeneratedImages } from "./MessageGeneratedImages";
 import { MessageGeneratedVideos, isVideoMimeType } from "./MessageGeneratedVideos";
-import { BranchOptionsMenu } from "./BranchOptionsMenu";
-import { BranchToWorktreeModal } from "./BranchToWorktreeModal";
-import { BranchToExistingWorktreeModal } from "./BranchToExistingWorktreeModal";
+import { MessageTimestamp, useMessageBranching } from "./MessageChrome";
 import { MessageActionsSheet, type MessageActionsSheetAction } from "./MessageActionsSheet";
 import { CodeContextPill } from "./CodeContextPill";
 import { FailedSendStatus } from "./FailedSendStatus";
@@ -47,9 +45,7 @@ import {
 import { useSurface, useCapability } from "../../lib/surfaceContext";
 
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
-import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
-import { toast } from "../../lib/toast-manager";
 import {
   getProcessedMessage,
   type ToolCallData,
@@ -58,7 +54,7 @@ import {
 } from "../../lib/messageProcessor";
 import * as chatActions from "../../hooks/chat-actions";
 import { isQuietToolRun } from "./thread-views/transcriptPresentation";
-import type { MessageSlice } from "./thread-views/simplifiedTurns";
+import { isSurfacedMediaTool, type MessageSlice } from "./thread-views/simplifiedTurns";
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
 
@@ -122,7 +118,7 @@ interface ChatMessageProps {
 
 function sameSlice(a: MessageSlice | undefined, b: MessageSlice | undefined): boolean {
   if (a === b) return true;
-  if (!a || !b || a.role !== b.role) return false;
+  if (!a || !b || a.role !== b.role || Boolean(a.chrome) !== Boolean(b.chrome)) return false;
   if (a.segmentIndexes === b.segmentIndexes) return true;
   return (
     a.segmentIndexes.length === b.segmentIndexes.length &&
@@ -239,8 +235,6 @@ function ChatMessageComponent({
   // tool calls at read time via the reference-keyed processMessage memo below.
   const toolResultsByCallId = useToolResultsByCallId(chatId || "");
 
-  const currentProject = useProjectStore((state) => state.currentProject);
-
   // Get worktree_id from chat data for file link context
   const currentChat = useChat(chatId || "");
   const chatWorktreeId = currentChat?.worktreeId;
@@ -248,16 +242,12 @@ function ChatMessageComponent({
   const [fontKey, setFontKey] = useState(0);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
-  const [branchMenuPosition, setBranchMenuPosition] = useState<{
-    x: number;
-    y: number;
-  } | null>(null);
-  const [showBranchToWorktreeModal, setShowBranchToWorktreeModal] =
-    useState(false);
-  const [
-    showBranchToExistingWorktreeModal,
-    setShowBranchToExistingWorktreeModal,
-  ] = useState(false);
+  const {
+    openBranchMenu,
+    branchInPlace: handleBranchChat,
+    branchToExistingWorkspace: handleBranchToExistingWorkspace,
+    branchUi,
+  } = useMessageBranching(chatId, message.id);
   const surface = useSurface();
   const isMobile = surface === "mobile";
   const canBranch = useCapability("chatBranching");
@@ -291,27 +281,6 @@ function ChatMessageComponent({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isExpanded]);
 
-  // Format timestamp to relative time (e.g., "2 minutes ago")
-  const formatTimestamp = (dateString: string) => {
-    const now = new Date();
-    const then = new Date(dateString);
-    const seconds = Math.floor((now.getTime() - then.getTime()) / 1000);
-
-    if (seconds < 60) return "less than a minute ago";
-    if (seconds < 120) return "1 minute ago";
-    if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
-    if (seconds < 7200) return "1 hour ago";
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
-    if (seconds < 172800) return "1 day ago";
-    if (seconds < 2592000) return `${Math.floor(seconds / 86400)} days ago`;
-    if (seconds < 5184000) return "1 month ago";
-    if (seconds < 31536000)
-      return `${Math.floor(seconds / 2592000)} months ago`;
-    return `${Math.floor(seconds / 31536000)} year${
-      Math.floor(seconds / 31536000) > 1 ? "s" : ""
-    } ago`;
-  };
-
   // OPTIMIZED: Memoize approvals by content_block_id to avoid re-filtering on every render
   const approvalsByContentBlockId = useMemo(() => {
     const map = new Map<string, Approval>();
@@ -332,53 +301,16 @@ function ChatMessageComponent({
     [approvalsByContentBlockId],
   );
 
-  // Show branch options menu when clicking the branch button
-  const handleBranchClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    setBranchMenuPosition({ x: rect.left, y: rect.bottom + 4 });
-  }, []);
-
-  // Branch chat in same worktree (original behavior)
-  const handleBranchChat = useCallback(async () => {
-    const effectiveChatId = chatId || activeChatId;
-    if (!effectiveChatId) {
-      logger.error("No chat ID available for branching");
-      return;
-    }
-    try {
-      logger.info("Branching chat:", {
-        chatId: effectiveChatId,
-        messageId: message.id,
-      });
-      await useChatStore.getState().branchChat(effectiveChatId, message.id);
-    } catch (error) {
-      logger.error("Failed to branch chat:", error);
-      const errorMessage =
-        error instanceof Error ? error.message : "Unknown error occurred";
-      toast.error(`Failed to branch chat: ${errorMessage}`, { duration: 5000 });
-    }
-  }, [activeChatId, chatId, message.id]);
-
-  // Open modal to branch chat to a new worktree
-  const handleBranchToWorkspace = useCallback(() => {
-    setShowBranchToWorktreeModal(true);
-  }, []);
-
-  // Open modal to branch chat to an existing worktree
-  const handleBranchToExistingWorkspace = useCallback(() => {
-    setShowBranchToExistingWorktreeModal(true);
-  }, []);
-
   const handleCopy = async () => {
     try {
       // Copy formatted content instead of raw JSON
       let contentToCopy = "";
 
-      if (sliceRole === "answer") {
-        // The answer row copies the answer, not the work folded above it.
-        contentToCopy += visibleSegments
-          .flatMap(({ segment }) => (segment.kind === "text" && segment.text ? [segment.text] : []))
+      if (sliceRole === "prose") {
+        // The message's prose, every slice of it — the chrome stands for the
+        // whole message — but never the work folded between its slices.
+        contentToCopy += parsed.segments
+          .flatMap((segment) => (segment.kind === "text" && segment.text.trim() ? [segment.text] : []))
           .join("\n\n");
       } else if (parsed.text) {
         // Include full text with code contexts for copy
@@ -633,11 +565,14 @@ function ChatMessageComponent({
         (isDraftAutomationTool(exec.call.name) && !!exec.result && !exec.result.is_error),
     ),
   );
+  // A prose slice without the chrome is text alone: no actions, timestamp or
+  // attachments (those are the message's last prose slice's).
+  const hasChrome = !slice || Boolean(slice.chrome);
   // A slice judges visibility from its own segments. work / work-surfaced rows
   // only know once they have rendered, so they are checked after the helpers.
   const hasVisibleContent = slice
-    ? sliceRole !== "answer" ||
-      hasAttachments ||
+    ? sliceRole !== "prose" ||
+      (hasChrome && hasAttachments) ||
       visibleSegments.some(({ segment }) => segment.kind === "text" && Boolean(segment.text))
     : parsed.text ||
       hasAttachments ||
@@ -784,9 +719,10 @@ function ChatMessageComponent({
     segIdx: number,
   ): JSX.Element | null => {
     const keyBase = `${message.id}-seg-${segIdx}`;
-    // The answer row carries no tools; the work fold renders the rows only,
-    // its cards and images being the work-surfaced row's.
-    if (sliceRole === "answer") return null;
+    // A prose row carries no tools; the work fold renders the rows, with the
+    // media of any tool but a generation tool beside them. Cards and
+    // generated media are the work-surfaced row's.
+    if (sliceRole === "prose") return null;
     if (sliceRole === "work") {
       if (hideToolExecutions) return null;
       // A call awaiting approval is the work-surfaced row's, which stays on
@@ -799,7 +735,21 @@ function ChatMessageComponent({
           exec.approval?.status !== ApprovalStatus.PENDING,
       );
       const run = renderToolRun(rows, keyBase);
-      return run ? <Fragment key={keyBase}>{run}</Fragment> : null;
+      // A screenshot or a viewed image is a record of the work, not its
+      // result: it stays in the fold, under the tool that produced it.
+      const workMedia = rows
+        .filter((exec) => !isSurfacedMediaTool(exec.call.name))
+        .flatMap((exec) => exec.result?.attachments ?? []);
+      const workVideos = workMedia.filter((a) => isVideoMimeType(a.mimeType));
+      const workImages = workMedia.filter((a) => !isVideoMimeType(a.mimeType));
+      if (!run && workMedia.length === 0) return null;
+      return (
+        <Fragment key={keyBase}>
+          {run}
+          {workImages.length > 0 && <MessageGeneratedImages attachments={workImages} />}
+          {workVideos.length > 0 && <MessageGeneratedVideos attachments={workVideos} />}
+        </Fragment>
+      );
     }
 
     // request_machine is a question to the user, not a record of
@@ -851,7 +801,10 @@ function ChatMessageComponent({
     // Emitting them per-segment rather than once at the end of the
     // message keeps text -> image -> text ordering intact when a
     // turn generates an image and then keeps talking.
-    const runAttachments = runExecutions.flatMap((exec) => exec.result?.attachments ?? []);
+    // Under a fold only a generation tool's media stays out (see "work").
+    const runAttachments = runExecutions
+      .filter((exec) => sliceRole !== "work-surfaced" || isSurfacedMediaTool(exec.call.name))
+      .flatMap((exec) => exec.result?.attachments ?? []);
     const runVideos = runAttachments.filter((a) => isVideoMimeType(a.mimeType));
     const runImages = runAttachments.filter((a) => !isVideoMimeType(a.mimeType));
     const media = (
@@ -942,7 +895,6 @@ function ChatMessageComponent({
   // A send that failed for good: still local-only (no branching from it), but
   // shown at full strength with a "Not sent" line rather than as pending.
   const failedClientMessageId = clientIdOfFailedSend(message.id);
-  const timestampText = message.createdAt ? formatTimestamp(message.createdAt) : "";
   const fullTimestampText = message.createdAt
     ? new Date(message.createdAt).toLocaleString()
     : "";
@@ -988,17 +940,9 @@ function ChatMessageComponent({
 
   const actionControls = (
     <>
-      {timestampText && (
-        <time
-          dateTime={message.createdAt}
-          className="px-1 text-xs leading-none text-muted-foreground"
-          title={fullTimestampText}
-        >
-          {timestampText}
-        </time>
-      )}
+      {message.createdAt && <MessageTimestamp at={message.createdAt} className="px-1" />}
       {/* Separates the timestamp (information) from the buttons (actions). */}
-      {timestampText && <span aria-hidden className="h-3 w-px bg-border" />}
+      {message.createdAt && <span aria-hidden className="h-3 w-px bg-border" />}
       <Tooltip content={copied ? "Copied" : "Copy message"} side="top" delay={300} triggerClassName="inline-flex">
       <button
         onClick={(e) => {
@@ -1031,7 +975,7 @@ function ChatMessageComponent({
       <button
         onClick={(e) => {
           e.stopPropagation();
-          handleBranchClick(e);
+          openBranchMenu(e);
         }}
         disabled={isOptimistic}
         aria-label="Branch from message"
@@ -1151,8 +1095,10 @@ function ChatMessageComponent({
   );
 
   // The pin is a breadcrumb of a message that already exists below; it gets no
-  // toolbar at all.
-  const showInlineActions = isLatestMessage && !pinned && !isMobile;
+  // toolbar at all. Nor does a prose slice without the chrome: the message's
+  // last prose slice carries it.
+  const hasToolbar = !pinned && hasChrome;
+  const showInlineActions = isLatestMessage && hasToolbar && !isMobile;
 
   // Only the floating variant overlaps the message, so only it needs the column
   // to reserve the band. Charging it unconditionally would push every message
@@ -1167,7 +1113,7 @@ function ChatMessageComponent({
   // on top of exactly those buttons the moment the row was hovered, so the
   // condition tracks "does this message float a toolbar", which is the same
   // test the render below uses.
-  const reservesToolbarBand = !pinned && !showInlineActions && !isMobile;
+  const reservesToolbarBand = hasToolbar && !showInlineActions && !isMobile;
 
   return (
     <div
@@ -1178,7 +1124,7 @@ function ChatMessageComponent({
         copied && "copied",
         isOptimistic && !failedClientMessageId && "opacity-60",
       )}
-      data-testid={`message-${message.id}`}
+      data-testid={hasChrome ? `message-${message.id}` : `message-${message.id}-prose`}
       data-chat-timeline-variant={timelineVariant}
     >
       <div className="message-layout lg:message-layout-lg">
@@ -1336,7 +1282,7 @@ function ChatMessageComponent({
               {visibleSegments.map(({ segment, segIdx }) => renderSegment(segment, segIdx))}
 
               {/* Attachments */}
-              {hasAttachments && (
+              {hasAttachments && hasChrome && (
                 <MessageAttachments
                   attachments={message.attachments}
                   isUser={isUser}
@@ -1351,8 +1297,8 @@ function ChatMessageComponent({
           {/* Rendered once, outside the role branches, so it anchors to the
               content column rather than to the user bubble or the assistant
               block. The pin is a breadcrumb and gets no toolbar at all. */}
-          {!pinned && !isMobile && !showInlineActions && floatingMessageActions}
-          {isMobile && !pinned && (
+          {hasToolbar && !isMobile && !showInlineActions && floatingMessageActions}
+          {isMobile && hasToolbar && (
             <button type="button" aria-label="Message actions" aria-haspopup="dialog"
               aria-expanded={showActionsSheet}
               onClick={() => setShowActionsSheet(true)}
@@ -1363,43 +1309,11 @@ function ChatMessageComponent({
         </div>
       </div>
 
-      {/* Branch options menu */}
-      {branchMenuPosition && (
-        <BranchOptionsMenu
-          position={branchMenuPosition}
-          onClose={() => setBranchMenuPosition(null)}
-          onBranchChat={handleBranchChat}
-          onBranchToWorkspace={handleBranchToWorkspace}
-          onBranchToExistingWorkspace={handleBranchToExistingWorkspace}
-        />
-      )}
-
-      {/* Branch to worktree modal */}
-      {showBranchToWorktreeModal && chatId && currentProject && (
-        <BranchToWorktreeModal
-          isOpen={showBranchToWorktreeModal}
-          onClose={() => setShowBranchToWorktreeModal(false)}
-          chatId={chatId}
-          messageId={message.id}
-          projectId={currentProject.id}
-          sourceWorktreeId={chatWorktreeId}
-        />
-      )}
-
-      {/* Branch to existing worktree modal */}
-      {showBranchToExistingWorktreeModal && chatId && currentProject && (
-        <BranchToExistingWorktreeModal
-          isOpen={showBranchToExistingWorktreeModal}
-          onClose={() => setShowBranchToExistingWorktreeModal(false)}
-          chatId={chatId}
-          messageId={message.id}
-          projectId={currentProject.id}
-          sourceWorktreeId={chatWorktreeId}
-        />
-      )}
+      {/* Branch options menu and its modals */}
+      {branchUi}
 
       {/* Explicit mobile actions leave native prose selection untouched. */}
-      {isMobile && (
+      {isMobile && hasToolbar && (
         <MessageActionsSheet
           isOpen={showActionsSheet}
           onClose={() => setShowActionsSheet(false)}
