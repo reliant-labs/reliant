@@ -123,4 +123,8 @@ import frontend_config_gen
 
 reliant_web_config: frontend_config_gen.ReliantWebConfig = {
     api_url = "http://localhost:" + str(plugin.resolve_port("reliant-dev-api", 8085))
+    # Browser telemetry goes to the dev server's own origin; vite.config.ts's
+    # /_otel entry forwards it to wherever `forge env up` decided this stack's
+    # telemetry goes (main.k, TELEMETRY), or drops it when that is nowhere.
+    otel_endpoint = "/_otel"
 }

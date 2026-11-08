@@ -326,8 +326,20 @@ var rules = []rule{
 	},
 	{
 		id:       "web-static",
-		patterns: []string{"frontends/web/index.html", "frontends/web/public/**", "frontends/web/design-sandbox/**"},
+		patterns: []string{"frontends/web/index.html", "frontends/web/demo.html", "frontends/web/public/**", "frontends/web/design-sandbox/**"},
 		note:     "served assets: only tests that name the file run",
+	},
+	{
+		// The forge demo's capture and smoke scripts (run by hand, never by
+		// vitest): the fixtures test reads the capture script's text, a web
+		// module importing one reaches it through the import graph, and the
+		// tests that walk frontends/web/ run as for any web module.
+		// Unclaimed, each edit ran every lane in full (cp#2189: 8 of 60 merge
+		// gates in one day).
+		id:       "web-demo-scripts",
+		patterns: []string{"frontends/web/scripts/demo/**"},
+		webSrc:   true,
+		note:     "the forge demo's scripts: only tests that import or name the file run",
 	},
 	{
 		// sdk/go is its own Go module (go.mod), which the root `go list ./...`
@@ -357,7 +369,10 @@ var rules = []rule{
 		id: "data",
 		patterns: []string{
 			"deploy/**", "config/**", "scripts/**", "e2e/**", "docker/**", "assets/**",
-			"generated/**", "examples/**", "gen/forge_descriptor.json", ".forge/**",
+			// gen/forge_service_catalog.json is forge generate's output, read by
+			// forge (deploy, obs) and by no test: the forge-generate lane judges
+			// it. Unclaimed, it ran every lane in full (cp#2189: 19 of 60).
+			"generated/**", "examples/**", "gen/forge_descriptor.json", "gen/forge_service_catalog.json", ".forge/**",
 			"bindings_generated.go", "proto/public-api.txt",
 		},
 		note: "data a test reads only if its sources name it",

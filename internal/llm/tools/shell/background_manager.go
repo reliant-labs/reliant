@@ -417,6 +417,9 @@ type StartProcessOptions struct {
 	// Credentials is daemonpolicy.CredentialsNone to start the process with no
 	// GitHub, git, ssh or cloud credentials.
 	Credentials string
+	// Writable is what a credentials-none process declared it writes
+	// (daemon.RunCommandRequest.SandboxWritable).
+	Writable credsandbox.Writable
 	// Argv, when set, runs the command with no shell (see
 	// daemon.RunCommandRequest.Argv). Command is used for display only.
 	Argv []string
@@ -496,10 +499,12 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	// credentials: none runs where the daemon's credential files are absent; see
 	// credsandbox. Outside the heavy-slot rewrite above, so the slot wrapper
 	// runs inside it.
-	if refusal := credsandbox.Wrap(cmd, opts.Credentials); refusal != "" {
+	if refusal := credsandbox.Wrap(cmd, opts.Credentials, opts.Writable); refusal != "" {
 		cancel()
 		return nil, errors.New(refusal)
 	}
+	// A return before Start must not keep the sandbox's descriptors open.
+	defer credsandbox.Release(cmd)
 
 	// Create buffers for output
 	stdout := &bytes.Buffer{}
@@ -550,8 +555,11 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	// Start: everything above may still rewrite what cmd execs.
 	process.tree = proctree.Default().Prepare(cmd, proctree.Owner{ChatID: cmp.Or(opts.AgentID, opts.ChatID), Command: opts.Command})
 
-	// Start the command
-	if err := cmd.Start(); err != nil {
+	// Start the command. The child holds its own copies of the sandbox's
+	// descriptors once Start returns.
+	err := cmd.Start()
+	credsandbox.Release(cmd)
+	if err != nil {
 		process.tree.Started(0)
 		cancel()
 		return nil, fmt.Errorf("failed to start command: %w", err)

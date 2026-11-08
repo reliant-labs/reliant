@@ -81,6 +81,23 @@ type ProjectDaemon struct {
 	// from ClonedAt (the queue time): a clone queued to a sleeping machine
 	// only starts when the machine wakes.
 	CloneStartedAt *time.Time `json:"clone_started_at,omitempty"`
+	// VerifiedAt is when the machine last showed the checkout on its disk: a
+	// completed clone, an attach, or a connect that found it. Nil when it
+	// never has.
+	VerifiedAt *time.Time `json:"verified_at,omitempty"`
+}
+
+// ProjectDaemonDetachment records that the user detached a project from a
+// machine (DetachProjectFromDaemon): the folder stays on its disk, and
+// nothing automatic records it there again — not the connect reconcile, the
+// plain-folder heal, the checkout restore nor the machine's config watcher.
+// Recording a checkout on the machine (attach, create, clone) deletes it.
+type ProjectDaemonDetachment struct {
+	ProjectID string `json:"project_id"`
+	DaemonID  string `json:"daemon_id"`
+	// Path is the checkout path the machine had when it was detached.
+	Path       string    `json:"path"`
+	DetachedAt time.Time `json:"detached_at"`
 }
 
 // ProjectInstallState is how far a project's checkout has got on one daemon.
@@ -301,6 +318,8 @@ type WorktreeFilters struct {
 	ProjectID *string
 	ChatID    *string
 	Status    *int32
+	// DaemonID narrows to the workspaces owned by that machine.
+	DaemonID *string
 	// IncludeArchived adds archived rows after the live ones.
 	IncludeArchived bool
 	// ArchivedOnly lists only archived rows, most recently archived first.

@@ -120,7 +120,7 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     body: "Read what your app recorded around a problem, without searching each service separately. Search or select a line, then follow its request to see the surrounding context.",
     help: "Your agent searches the same logs and can narrow them to one request with --trace <id>.",
     command: "forge obs logs prod 'service:api severity:error'",
-    target: tid("obs-logs-table"),
+    target: tid("obs-log-row"),
   },
   profiles: {
     title: "Profiles",
@@ -141,7 +141,7 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     body: "Know when your app needs attention: configure notifications by text, email or Slack where supported. An alert can also trigger a configured Reliant workflow to investigate, test a fix and propose or release it under your chosen approvals. Open an alert for evidence; nothing deploys without configuration and permission.",
     help: "Notification destinations and workflow actions depend on your setup. You choose the trigger, access and approval requirements; an alert alone does not authorize a deployment.",
     command: "forge obs status prod",
-    target: tid("obs-alerts-firing"),
+    target: tid("obs-alert-CheckoutP95High"),
   },
   sessions: {
     title: "Sessions",

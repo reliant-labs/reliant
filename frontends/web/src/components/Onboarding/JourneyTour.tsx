@@ -14,7 +14,6 @@ import { createPortal } from "react-dom";
 import { useLocation } from "@tanstack/react-router";
 import { trackEvent } from "../../lib/analytics";
 import { isDemoShell } from "../../lib/shell";
-import { DemoPageTour } from "../Forge/Demo/tips/DemoTips";
 import { isPhoneViewport } from "../../lib/mobileRedirect";
 import { useTourStore } from "../../store/tourStore";
 import { OnboardingSpotlight } from "./OnboardingSpotlight";
@@ -349,7 +348,12 @@ export function JourneyTour() {
 
   // Phones: Reliant's mobile surface has none of the desktop chrome a journey points at, so it
   // defers there. The forge shell and the demo draw each step as a bottom sheet instead.
-  if (isPhoneViewport() && getTourShell() === "reliant") return <DeferredOnPhone onClose={nav.exitTour} />;
+  // A journey with its own phone presentation (Journey.phone) shows that instead.
+  if (isPhoneViewport() && getTourShell() === "reliant") {
+    const Phone = nav.tour.kind === "step" ? getJourney(nav.tour.journey).phone : undefined;
+    if (Phone) return <Phone onFinish={() => void nav.finish()} onExit={() => void nav.skipAll()} />;
+    return <DeferredOnPhone onClose={nav.exitTour} />;
+  }
 
   if (nav.tour.kind === "picker") {
     return (
@@ -367,7 +371,7 @@ export function JourneyTour() {
   const { journey, stepId, step } = nav.tour;
   // The public demo explains the actual page, including legacy ?view= deep links.
   // It never demands a prior action or sends exploration through the old single-page sequence.
-  if (journey === "forge" && isDemoShell()) return <DemoPageTour />;
+  if (journey === "forge" && isDemoShell()) return null; // DemoTips owns the page-local entry callout, including legacy links.
   return (
     <JourneyStepView
       key={formatTourParam(journey, stepId)}

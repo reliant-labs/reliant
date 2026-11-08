@@ -184,7 +184,7 @@ describe("a stale route chunk while the workspace auto-save is mounted", () => {
     const { router } = renderAppAt("/", lazyRoute(staleChunk, "InboxPage"));
     await openInbox(router);
 
-    expect(await screen.findByRole("heading", { name: "Reliant was updated" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "This screen could not load" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Reload/ })).toBeInTheDocument();
     // The root route — and everything it renders beside the outlet — is still up.
     expect(screen.getByTestId("viewer-count")).toBeInTheDocument();

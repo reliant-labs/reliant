@@ -61,6 +61,8 @@ type RunExecutorContext struct {
 	// Credentials is the run node's `credentials` setting ("none" strips
 	// GitHub, git, ssh and cloud credentials from the command's environment).
 	Credentials string
+	// WritableCheckouts is the run node's `writable_checkouts`.
+	WritableCheckouts []string
 
 	// project is the chat's project, for resolveRunCheckout.
 	project *db.Project
@@ -90,6 +92,8 @@ type shellInput struct {
 	Command     string `json:"command"`
 	Timeout     int    `json:"timeout,omitempty"` // timeout in milliseconds
 	Credentials string `json:"credentials,omitempty"`
+	// WritableCheckouts: a shell tool older than the field ignores it.
+	WritableCheckouts []string `json:"writable_checkouts,omitempty"`
 }
 
 // ExecuteCommand routes a shell command through the daemon's shell tool.
@@ -102,9 +106,10 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 ) (CommandResult, error) {
 	// Build shell tool input
 	input := shellInput{
-		Command:     command,
-		Timeout:     timeoutMs,
-		Credentials: e.execCtx.Credentials,
+		Command:           command,
+		Timeout:           timeoutMs,
+		Credentials:       e.execCtx.Credentials,
+		WritableCheckouts: e.execCtx.WritableCheckouts,
 	}
 	inputJSON, err := json.Marshal(input)
 	if err != nil {

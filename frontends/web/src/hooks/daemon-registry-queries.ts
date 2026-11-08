@@ -30,6 +30,7 @@ import {
   type DaemonInfo,
   type ListDaemonsResponse,
 } from "../gen/reliant/v1/daemon_registry_pb";
+import { createCoalescedInvalidator, type CoalescedInvalidator } from "../lib/coalescedInvalidation";
 import { daemonRegistryServiceKeys, daemonRegistryServiceQueries } from "./daemon-registry-service-hooks_gen";
 
 /** ListDaemons takes no filter: the caller's machines, all of them. */
@@ -80,15 +81,28 @@ export async function fetchDaemonList(queryClient: QueryClient): Promise<DaemonI
   return response.daemons;
 }
 
+const daemonListInvalidators = new WeakMap<QueryClient, CoalescedInvalidator>();
+
 /**
- * Mark the daemon list (every DaemonRegistryService read) stale; observed
- * readers refetch at once. One entry serves them all, the onboarding gate
- * included, so one invalidation reaches every one.
+ * Mark the daemon list (every DaemonRegistryService read) stale at once;
+ * observed readers refetch on the next task. One entry serves them all, the
+ * onboarding gate included, so one invalidation reaches every one.
+ *
+ * Coalesced, with no interval: a burst of signals in one tick is one request,
+ * and signals arriving while that request is in flight collapse into one more,
+ * started once it lands — so the last answer always comes from a read that
+ * began after the last signal. A plain invalidateQueries per signal instead
+ * ABORTS the fetch in flight and starts another (cancelRefetch defaults to
+ * true): ten signals were ten requests, nine aborted at durationMs 0.
  */
 export function invalidateDaemonList(
   queryClient: QueryClient,
   options: { predicate?: (query: Query) => boolean } = {},
 ): void {
-  const { predicate } = options;
-  void queryClient.invalidateQueries({ queryKey: daemonRegistryServiceKeys.all, predicate });
+  let invalidator = daemonListInvalidators.get(queryClient);
+  if (!invalidator) {
+    invalidator = createCoalescedInvalidator(queryClient, 0);
+    daemonListInvalidators.set(queryClient, invalidator);
+  }
+  invalidator.invalidate(daemonRegistryServiceKeys.all, options.predicate);
 }

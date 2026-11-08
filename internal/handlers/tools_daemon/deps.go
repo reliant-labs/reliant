@@ -38,7 +38,14 @@ type Repository interface {
 	// config it pushes. GetProjectMachineCatalogPushedAt reads the one column
 	// the staleness check needs, never the whole (large) record.
 	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*db.Project, error)
+	// GetProjectWithUserCheck resolves the project of the machine's own
+	// checkout at a path (ensureOwnedProjectForPath).
+	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	CreateProject(ctx context.Context, project *db.Project) error
+	// WithMachineCheckoutsLocked runs fn under the lock a detach from the
+	// machine takes, so a reported path is resolved against the detach
+	// whole or not at all (ensureOwnedProjectForPath).
+	WithMachineCheckoutsLocked(ctx context.Context, daemonID string, fn func(ctx context.Context) error) error
 	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
 	SyncProjectConfigSnapshot(ctx context.Context, record *db.ProjectConfigRecord, force bool) (bool, error)
 	GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, daemonID string) (time.Time, error)
@@ -66,13 +73,18 @@ type ProjectReconcileStore interface {
 	// StartQueuedProjectDaemonClones starts the stuck-clone clock of the
 	// clones queued while the machine was away: they run from this connect.
 	StartQueuedProjectDaemonClones(ctx context.Context, daemonID string) error
-	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
+	// RecordObservedProjectDaemon records a checkout found on the machine,
+	// never over a detachment of the pair (reports false then).
+	RecordObservedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) (bool, error)
 	// MarkProjectDaemonInstalled and FailProjectDaemonInstall settle a clone
 	// whose outcome was lost, from the row's own path; the first also
 	// settles one from the machine's filesystem announcement.
 	MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error
 	FailProjectDaemonInstall(ctx context.Context, projectID, daemonID, installErr string) error
 	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*db.Project, error)
+	// ListProjectDaemonDetachmentsForDaemon is what the user detached from
+	// the machine: a folder there is left unrecorded (DetachProjectFromDaemon).
+	ListProjectDaemonDetachmentsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemonDetachment, error)
 	// UpdateProject also serves projectfacts.ReconcileGitRepo.
 	projectfacts.ProjectUpdater
 }

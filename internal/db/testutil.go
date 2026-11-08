@@ -133,6 +133,29 @@ func NewTestDatabase(tb testing.TB) (raw *sql.DB, dsn string) {
 	return raw, dsn
 }
 
+// PrepareTestDatabases attaches the test server and builds the migrated
+// template before any test runs, for a package's TestMain: the server boot and
+// the migrations are a one-time cost of the process, and without this the
+// first test to ask for a database is timed with them (seconds on a loaded
+// machine, against the merge gate's per-test budget). The returned release
+// holds the server for the process; call it after m.Run.
+func PrepareTestDatabases() (release func(), err error) {
+	key, err := migratedTemplateKey()
+	if err != nil {
+		return nil, fmt.Errorf("test template key: %w", err)
+	}
+	raw, _, cleanup, err := pgtest.NewFromTemplate(key, func(b *sql.DB, dsn string) error {
+		return buildMigratedTemplate(dsn, b)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("test database (template %s): %w", key, err)
+	}
+	return func() {
+		_ = raw.Close()
+		cleanup()
+	}, nil
+}
+
 // EnableTestCredentialSealing gives repo a vault with a throwaway key: provider
 // keys and sign-in tokens exist only sealed, so a test Repo cannot write them
 // without one.
@@ -186,17 +209,20 @@ func newTestDatabase(tb testing.TB) (*sql.DB, string, func()) {
 	if err != nil {
 		tb.Fatalf("test template key: %v", err)
 	}
-	return cloneTestTemplate(tb, key, func(dsn string, build *sql.DB) error {
-		// Migrate is the path a server boots on; it opens and closes its
-		// own connections.
-		if _, err := Migrate(context.Background(), dsn); err != nil {
-			return fmt.Errorf("migrate: %w", err)
-		}
-		if _, err := build.Exec(testSeedSQL); err != nil {
-			return fmt.Errorf("seed: %w", err)
-		}
-		return nil
-	})
+	return cloneTestTemplate(tb, key, buildMigratedTemplate)
+}
+
+// buildMigratedTemplate migrates and seeds the empty template database at dsn.
+func buildMigratedTemplate(dsn string, build *sql.DB) error {
+	// Migrate is the path a server boots on; it opens and closes its own
+	// connections.
+	if _, err := Migrate(context.Background(), dsn); err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+	if _, err := build.Exec(testSeedSQL); err != nil {
+		return fmt.Errorf("seed: %w", err)
+	}
+	return nil
 }
 
 // cloneTestTemplate copies key's template into a fresh database, building the

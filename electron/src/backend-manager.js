@@ -546,6 +546,21 @@ class BackendManager {
   }
 
   /**
+   * The registry id assigned to this instance, not the user's default daemon.
+   * Resolve the account/server's data dir and read afresh on EVERY request:
+   * sign-in, server changes and re-registration can all change the answer.
+   * This file contains only an id; never consult the shared credential store.
+   */
+  getLocalDaemonId() {
+    try {
+      return fs.readFileSync(path.join(this.daemonDataDir(), 'daemon-id'), 'utf8').trim() || null;
+    } catch {
+      // Not registered yet, unreadable file, or no resolvable instance.
+      return null;
+    }
+  }
+
+  /**
    * Read the daemon's runtime record, <data-dir>/daemon-state.json, written by
    * internal/toolexec/daemonstate. Returns null when it is absent, truncated,
    * or unparseable — a record that cannot be read is simply not evidence of a

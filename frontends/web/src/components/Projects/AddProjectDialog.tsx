@@ -43,6 +43,7 @@ export function AddProjectDialog() {
   const {
     actions,
     cloudDaemons,
+    folderDaemonId,
     effectiveCloneDaemonId,
     setChosenCloneDaemonId,
     cloneRepo,
@@ -117,10 +118,11 @@ export function AddProjectDialog() {
 
       <DirectoryPicker
         isOpen={isBrowsingFolders}
+        daemonId={folderDaemonId}
         onClose={() => setIsBrowsingFolders(false)}
-        onSelect={(path) => {
+        onSelect={(path, daemonId) => {
           setIsBrowsingFolders(false);
-          void openFolderPath(path);
+          void openFolderPath(path, daemonId);
         }}
       />
 

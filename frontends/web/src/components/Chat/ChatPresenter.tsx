@@ -6,6 +6,7 @@
  */
 
 import { useRef, useState, memo, useMemo, useEffect, useCallback } from "react";
+import { useCurrentMachineStore } from "../../store/currentMachineStore";
 import { GripHorizontal, GripVertical } from "lucide-react";
 import { ChatInputWrapper } from "./ChatInputWrapper";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
@@ -23,6 +24,7 @@ import {
   isTimelineCatchingUp,
 } from "../../lib/timelineCatchUp";
 import { useTimelineSync } from "../../store/chatStoreHooks";
+import { useChatOpenEnd } from "../../lib/chatOpenInteraction";
 import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
@@ -530,6 +532,11 @@ export const ChatPresenter = memo(function ChatPresenter({
   // so. The run's state does not gate it: chat 66a045ce's run was failing its
   // replay while its machine resumed, never reached the machine wait, and
   // read "Processing" throughout.
+  useEffect(() => {
+    if (isFocused && currentChat) {
+      useCurrentMachineStore.getState().setCurrentMachine(currentChat.noMachine ? null : currentChat.activeDaemonId ?? null);
+    }
+  }, [isFocused, currentChat]);
   const sendingThisChat = !!chatId && sendingChatId === chatId;
   const workWaitsOnMachine =
     !noMachine &&
@@ -677,6 +684,16 @@ export const ChatPresenter = memo(function ChatPresenter({
     }
     catchUpOverlayWasVisibleRef.current = catchUpOverlayVisible;
   }, [catchUpOverlayVisible, scrollToBottom]);
+  // The chat.open interaction selectChat started for this chat ends on the
+  // frame after the timeline is usable: caught up, overlay lifted.
+  useChatOpenEnd(chatId, {
+    catchingUp: timelineCatchingUp,
+    overlayVisible: catchUpOverlayVisible,
+    syncAbandoned:
+      timelineSync.chatSyncPending &&
+      connectionStatus !== "connecting" &&
+      connectionStatus !== "connected",
+  });
 
   // Render the timeline
   const renderTimeline = () => (

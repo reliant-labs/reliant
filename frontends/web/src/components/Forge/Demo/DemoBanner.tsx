@@ -24,7 +24,6 @@ import { trackEvent } from "@/lib/analytics";
 import { browserOptedOut, demoTelemetry, demoTelemetryNotice } from "@/lib/demoTelemetry";
 import { isDemoShell } from "@/lib/shell";
 
-import { DemoCta } from "./DemoCta";
 import { useDemoDataStatus } from "./demoData/demoDataStatus";
 import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
 
@@ -94,11 +93,7 @@ export function DemoBanner({ shell }: { shell: TourShell }) {
             How this app was built
           </button>
         )}
-        {demo ? (
-          <span className="w-full sm:w-auto">
-            <DemoCta placement="banner" size="lg" />
-          </span>
-        ) : (
+        {!demo && (
           <a
             href={exitHref(shell)}
             onClick={(event) => {

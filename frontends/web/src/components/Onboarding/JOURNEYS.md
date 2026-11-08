@@ -55,6 +55,7 @@ export const workflowsJourney: Journey = {
   elsewhere: { label: "Try AI workflows in Reliant", href: () => `${reliantAppOrigin()}/?journey=workflows` }, // lib/shell.ts: runtime config APP_URL
   isAvailable: () => true,          // e.g. a feature flag
   reshowAfterVersionBump: true,     // default true
+  phone: MyPhoneDeck,               // optional: shown on Reliant phones instead of "Open this on a computer"
   controls: "bar",                  // or "callout"; see "Controls"
 };
 ```
@@ -88,6 +89,10 @@ last step). There is no bottom nav bar and no generic Skip step.
   screen) and the target is scrolled into the space above it. Reliant's
   mobile surface defers instead ("Open this on a computer"); the forge shell
   and the demo use the sheet. Every control is at least 44px tall there.
+  A journey with its own phone presentation, `Journey.phone` (a component
+  taking `{ onFinish, onExit }`), shows that there instead, on the mobile
+  surface too: the workflows journey's lessons as a swipeable card deck with
+  still diagrams (`journeys/workflowsPhone.tsx`).
 - `controls: "bar"` keeps the retired bottom nav bar, for a journey that
   still needs it. Nothing ships with it.
 
@@ -389,16 +394,17 @@ accessible `?` restore button. Secondary agent help is a click/tap/keyboard
 disclosure, not hover-only. Sign up stays primary, Install forge secondary.
 There is no global toast or automatic local multi-stop sequence.
 
-Take the tour is optional. In the demo, `JourneyTour` delegates forge links
-to `DemoPageTour`: one explanation of the actual visible page, with controls
-inside its callout. Explicit Next/Back navigate Overview → Traces → Errors →
-Alerts at the real console paths; Exit stays on the page. Legacy
-`/forge/demo?view=logs&tour=forge:fg-logs` explains the visible logs rather
-than demanding an earlier action. No auth or modal is required to explore.
-Phone callouts use a bottom sheet; the corner and tour hide for the drawer.
+Every actual page entry automatically opens that page's explanation (including
+return visits, direct loads and refresh). `DemoTips` owns `PageEntryTour`, with
+Step 1 of 1, Dismiss and Done inside its callout. There is no full-site sequence
+or prerequisite action. Dismiss lasts for this visit; `?` replays it. Same-page
+filters, polling and rerenders do not restart it. No seen/session state suppresses
+an arrival. Legacy `/forge/demo?view=logs&tour=forge:fg-logs` explains Logs.
+Phone callouts use a bottom sheet after the drawer closes; their targets scroll
+into view above it. No auth or modal is required to explore.
 
 Copy and a single optional anchor live in `tips/tipCopy.ts`; page mapping is
-`tips/tipKeys.ts`. `DemoTipsAndToast.test.tsx` pins optional entry, Dismiss /
+`tips/tipKeys.ts`. `DemoTipsAndToast.test.tsx` pins automatic entry, Dismiss /
 restore, current-page legacy links, real navigation and plain-language copy.
 
 | Event | Props |

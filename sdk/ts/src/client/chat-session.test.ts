@@ -357,3 +357,69 @@ describe("sending", () => {
     expect(new Set(calls.map((c) => c.clientMessageId)).size).toBe(3);
   });
 });
+
+describe("chat stream sync hooks", () => {
+  // The next connection, however long its reconnect backoff (jittered) takes.
+  async function connection(n: number) {
+    for (let i = 0; i < 200 && server.chatStreams().length < n; i++) {
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    return server.chatStreams()[n - 1]!;
+  }
+
+  it("reports each connection's snapshot or replay, and its caught_up, once", async () => {
+    server = scriptedServer();
+    const hooks = {
+      onSnapshotReceived: vi.fn(),
+      onReplayStarted: vi.fn(),
+      onCaughtUp: vi.fn(),
+      onSnapshotApplied: vi.fn(),
+    };
+    const client = createReliantClient({ transport: server.transport, wake: noWake });
+    const session = client.chat({ chatId: CHAT, sleep: async () => {}, hooks }).start();
+    await flush();
+
+    // A first open: snapshot, then caught_up. Live updates after it are not a replay.
+    const first = server.chatStreams()[0]!;
+    first.push(snapshotFrame(10, [textMessage("m-1", 1, 1, "ship it")]));
+    first.push(caughtUpFrame(10));
+    first.push(updatesFrame([messageData(11, "m-2", "done")], 11));
+    await flush();
+    expect(hooks.onSnapshotReceived).toHaveBeenCalledWith({ chatId: CHAT, messages: 1, otherUpdates: 0 });
+    // Deprecated, still reported for existing consumers.
+    expect(hooks.onSnapshotApplied).toHaveBeenCalledOnce();
+    expect(hooks.onReplayStarted).not.toHaveBeenCalled();
+    expect(hooks.onCaughtUp).toHaveBeenCalledExactlyOnceWith({
+      chatId: CHAT,
+      sync: "snapshot",
+      initialSync: true,
+      replayedUpdates: 0,
+      latestSequence: 10,
+    });
+
+    // A reconnect replays from the cursor: a resync, not the initial sync.
+    first.fail(new ConnectError("connection reset", Code.Unavailable));
+    const second = await connection(2);
+    second.push(updatesFrame([messageData(12, "m-3", "a"), deltaData("message_start")], 12));
+    second.push(updatesFrame([messageData(13, "m-5", "b")], 13));
+    second.push(caughtUpFrame(13));
+    await flush();
+    expect(hooks.onReplayStarted).toHaveBeenCalledExactlyOnceWith({ chatId: CHAT, sinceSequence: 11, updates: 1 });
+    expect(hooks.onCaughtUp).toHaveBeenLastCalledWith({
+      chatId: CHAT,
+      sync: "replay",
+      initialSync: false,
+      replayedUpdates: 2,
+      latestSequence: 13,
+    });
+
+    // A replay of nothing sends only caught_up.
+    second.fail(new ConnectError("connection reset", Code.Unavailable));
+    (await connection(3)).push(caughtUpFrame(13));
+    await flush();
+    expect(hooks.onReplayStarted).toHaveBeenCalledOnce();
+    expect(hooks.onCaughtUp).toHaveBeenCalledTimes(3);
+    expect(hooks.onCaughtUp).toHaveBeenLastCalledWith(expect.objectContaining({ sync: "replay", replayedUpdates: 0 }));
+    session.close();
+  });
+});

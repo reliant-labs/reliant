@@ -170,6 +170,11 @@ message ThreadConfig {
   CelBool memo = 2 [(reliant) = {description: "Whether to memoize thread across loop iterations"}];
   // Inject adds a message to the thread before execution.
   InjectConfig inject = 3 [(reliant) = {description: "Message injection into the thread"}];
+  // Excludes automatic global/project/repository memory injection in this
+  // execution and its descendants. False/unset never overrides an excluded
+  // ancestor; exclusion latches durably on the thread, including recovery.
+  // Does not remove history, skills, bootstrap context or tool access.
+  bool exclude_ambient_memory = 4 [(reliant) = {description: "Exclude automatic saved memories; inherited exclusion cannot be re-enabled. Not full context isolation."}];
 }
 
 // InjectConfig configures message injection into a thread.
@@ -510,6 +515,16 @@ message CallLLMArgs {
     label: "Continue turn"
     visibility_contexts: "advanced"
     hidden: true
+    category: "Prompt"
+  }];
+  // Opt out of automatic global/project/repository memory injection for this
+  // call and descendants it spawns. Inherited exclusion cannot be re-enabled;
+  // exclusion latches durably on the thread for subsequent turns and recovery.
+  // Bootstrap prompts, history, explicit skills/messages and tools are unchanged.
+  bool exclude_ambient_memory = 16 [(reliant) = {
+    description: "Exclude automatic saved memories (default false); not full context isolation"
+    label: "Exclude ambient memory"
+    visibility_contexts: "advanced"
     category: "Prompt"
   }];
 }
@@ -1178,6 +1193,22 @@ message RunArgs {
     description: "Set to none to run the command with no GitHub, git, ssh or cloud credentials. Not a sandbox: files the daemon's user can read stay readable"
     example: "none"
     label: "Credentials"
+  }];
+  // WritableCheckouts are the shared project checkouts, or directories inside
+  // one, that a credentials: none command writes. On Linux such a command sees
+  // every project checkout other than its own (the one holding its working
+  // directory, and its Reliant worktree's) read-only, .git included, so it
+  // cannot plant hooks, config or scripts that a later credentialed step runs.
+  // It also writes the user's cache directories (XDG_CACHE_HOME, ~/.cache)
+  // privately, so it cannot change what one step hands another there; a
+  // directory inside one named here (a hand-off this step writes for a later
+  // one) is written for real. Relative paths are relative to the working
+  // directory. Ignored when the command has credentials; a daemon older than
+  // the field ignores it too.
+  repeated string writable_checkouts = 6 [(reliant) = {
+    description: "With credentials: none, the shared project checkouts, or hand-off directories under the cache directory, the command may write. Every other checkout but its own is read-only to it, and its cache writes are its own"
+    example: "reliant"
+    hidden: true
   }];
 }
 

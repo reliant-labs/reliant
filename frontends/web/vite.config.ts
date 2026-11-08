@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, type Plugin, type ViteUserConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { forgeRuntimeConfig } from "@reliantlabs/forge-web-runtime/vite";
 import os from "node:os";
@@ -9,6 +9,8 @@ import { cspPlugin } from "./vite-plugin-csp";
 import { speedscopeStatic } from "./vite-plugin-speedscope";
 import { preloadGeistLatin } from "./vite-plugin-preload-fonts";
 import { securityTxt } from "./vite-plugin-security-txt";
+import { otelProxy } from "./vite-plugin-otel-proxy";
+import { demoBundleGuard, demoSubstitutes } from "./vite-plugin-demo-bundle";
 
 // Get worktree name from the checkout root
 // When Vite runs, cwd is frontends/web, so the checkout is two levels up
@@ -72,6 +74,10 @@ const asyncUtilTimeout = intEnv("VITEST_ASYNC_UTIL_TIMEOUT_MS") ?? Math.round(te
 // deterministically (`TypeError: Cannot redefine property: location`), and the
 // fix is one line here.
 const FORKS_POOL_FILES = [
+  // Vite/esbuild requires TextEncoder and Uint8Array to share a real realm.
+  "vite-demo-target.test.ts",
+  // A real node:http server and Buffers, which need the real realm too.
+  "vite-plugin-otel-proxy.test.ts",
   "src/__tests__/staleChunkUnloadLoop.test.tsx",
   "src/api/__tests__/transport.errorReporting.test.ts",
   "src/api/__tests__/transport.test.ts",
@@ -112,8 +118,45 @@ const TEST_EXCLUDE = [
   "**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*",
 ];
 
+// ── Browser telemetry (DEV ONLY) ────────────────────────────────────────
+//
+// otelProxy (vite-plugin-otel-proxy.ts) owns `/_otel`: it forwards a POST to
+// /_otel/v1/{traces,logs,metrics} to OTEL_EXPORTER_OTLP_ENDPOINT, the base
+// URL `forge env up` gives this dev server, with the stack's browser token
+// from FORGE_OTEL_HEADERS_FILE (a HOSTED dev stack: observability.dev_telemetry,
+// deploy/kcl/dev/main.k), and refuses everything else. With no upstream it
+// answers an accepted request 204.
+//
+// WHETHER THE PAGE SENDS AT ALL is the dev server's decision too, because the
+// page reads OTEL_ENDPOINT only from config.js (config_gen.ts), never from
+// VITE_* build variables. When `forge env up` decides this stack's telemetry
+// is local and there is no local store, it gives the dev server
+// VITE_OTEL_ENDPOINT=off (forge#1950). otelBrowserConfig applies the dev
+// server's endpoint to window.__FORGE_CONFIG__ right after config.js runs:
+// VITE_OTEL_ENDPOINT when it is set ("off" included), otherwise "off" when
+// there is no upstream to forward to, otherwise config.js's own value. So a
+// page on a local fallback starts no exporter.
+const OTEL_UPSTREAM = (process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? "").trim().replace(/\/+$/, "");
+const DEV_BROWSER_OTEL_ENDPOINT = (process.env.VITE_OTEL_ENDPOINT ?? "").trim() || (OTEL_UPSTREAM ? "" : "off");
+const otelBrowserConfig = (): Plugin => ({
+  name: "reliant-otel-browser-config",
+  apply: "serve",
+  // Injected at the end of <head>, after the blocking config.js script and
+  // before the deferred module bundle reads the config.
+  transformIndexHtml() {
+    if (!DEV_BROWSER_OTEL_ENDPOINT) return [];
+    return [
+      {
+        tag: "script",
+        injectTo: "head",
+        children: `if (window.__FORGE_CONFIG__) window.__FORGE_CONFIG__.OTEL_ENDPOINT = ${JSON.stringify(DEV_BROWSER_OTEL_ENDPOINT)};`,
+      },
+    ];
+  },
+});
+
 // https://vite.dev/config/
-export default defineConfig({
+const appConfig: ViteUserConfig = {
   // browserLogSink is dev-only (apply: "serve"): it gives a plain browser tab
   // the file-backed logging that only the Electron build otherwise has. See
   // vite-plugin-browser-logs.ts.
@@ -138,12 +181,18 @@ export default defineConfig({
   // Latin file; see vite-plugin-preload-fonts.ts.
   // securityTxt (build-only) emits dist/.well-known/security.txt naming the
   // security and abuse contacts; see vite-plugin-security-txt.ts.
-  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), preloadGeistLatin(), securityTxt()],
+  // otelProxy and otelBrowserConfig (dev-only) are browser telemetry; see
+  // "Browser telemetry" above.
+  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig(), otelProxy({ upstream: OTEL_UPSTREAM, headersFile: process.env.FORGE_OTEL_HEADERS_FILE ?? "" }), otelBrowserConfig(), preloadGeistLatin(), securityTxt()],
   // Load .env files from the checkout root instead of frontends/web
   envDir: path.resolve(__dirname, "../.."),
   // Define global constants available in the app
   define: {
     __WORKTREE_NAME__: JSON.stringify(getWorktreeName()),
+    // Which build this is: the app, or the forge demo (demoConfig below).
+    // lib/shell.ts reads it, so the demo bundle is the demo shell whatever
+    // host serves it, and the app's build drops the check entirely.
+    __WEB_TARGET__: JSON.stringify("app"),
   },
   resolve: {
     // @reliantlabs/sdk is a workspace member, built from source here: the app
@@ -355,4 +404,71 @@ export default defineConfig({
       { extends: true, test: { name: "forks", pool: "forks", include: FORKS_POOL_FILES, exclude: TEST_EXCLUDE } },
     ],
   },
-});
+};
+
+// ── The forge demo: a second build of this package ──────────────────────────
+//
+// demo.reliantlabs.io serves the forge demo and nothing else: entry demo.html
+// → src/demoBundle/main.tsx, which mounts the demo shell's routes (demoShellRoutes.tsx).
+// It builds to dist-demo/, with demo.html published as its index.html, and
+// vite-plugin-demo-bundle.ts fails the build if a Reliant-only module (chat,
+// onboarding, auth, Supabase, daemon, settings) reaches it. Modules with a
+// `.demo.ts` twin (lib/connect.demo.ts: every RPC to the demo's transport) are
+// replaced by it there ("DEMO TWINS" in vite-plugin-demo-bundle.ts).
+//
+//   npm run build:demo        typecheck, then this build
+//   npm run dev:demo          the dev server, every page load the demo document
+//
+// Selected by `--mode demo` or by WEB_BUILD_TARGET=demo. The variable is how
+// forge builds it: a forge frontend's build is always `npm run build` in its
+// directory, with its `env_vars` as the build's environment, so the
+// `forge-demo` frontend (deploy/kcl/demo/main.k) is this package with
+// WEB_BUILD_TARGET=demo set.
+const DEMO_HTML = "demo.html";
+
+export function isDemoBuild(mode: string, env: NodeJS.ProcessEnv = process.env): boolean {
+  return mode === "demo" || env.WEB_BUILD_TARGET === "demo";
+}
+
+/** demo.html is the demo site's index.html: in the build's output, and for every page the dev server serves. */
+function demoDocument(): Plugin {
+  return {
+    name: "reliant:demo-document",
+    enforce: "post",
+    generateBundle(_options, bundle) {
+      const doc = bundle[DEMO_HTML];
+      if (doc) doc.fileName = "index.html";
+    },
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        const [pathname, query] = (req.url ?? "/").split("?");
+        if (req.headers.accept?.includes("text/html") && !path.extname(pathname)) {
+          req.url = `/${DEMO_HTML}${query ? `?${query}` : ""}`;
+        }
+        next();
+      });
+    },
+  };
+}
+
+function demoConfig(app: ViteUserConfig): ViteUserConfig {
+  // Not the editor's chunk: an object-form manual chunk is built whether or
+  // not anything imports it, and the demo has no editor.
+  const { "vendor-monaco": _monaco, ...manualChunks } = (app.build?.rollupOptions?.output as { manualChunks: Record<string, string[]> }).manualChunks;
+  return {
+    ...app,
+    plugins: [demoSubstitutes(), ...(app.plugins ?? []), demoDocument(), demoBundleGuard()],
+    define: { ...app.define, __WEB_TARGET__: JSON.stringify("demo") },
+    build: {
+      ...app.build,
+      outDir: "dist-demo",
+      rollupOptions: {
+        ...app.build?.rollupOptions,
+        input: { demo: path.resolve(__dirname, DEMO_HTML) },
+        output: { ...app.build?.rollupOptions?.output, manualChunks },
+      },
+    },
+  };
+}
+
+export default defineConfig(({ mode }) => (isDemoBuild(mode) ? demoConfig(appConfig) : appConfig));

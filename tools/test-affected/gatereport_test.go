@@ -96,6 +96,7 @@ func TestMergeVetIncludesProductionPackageWithoutTests(t *testing.T) {
 run_plan=$1
 gofull=false
 queue=0
+skip_lint=0
 quarter=2
 pids=()
 phase() { printf 'phase: %s\n' "$1"; shift; "$@"; }

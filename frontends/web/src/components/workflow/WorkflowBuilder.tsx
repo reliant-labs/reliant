@@ -48,6 +48,7 @@ import { TriggerPayloadPanel } from "./config/TriggerPayloadPanel";
 import { nodesEdgesToWorkflow } from "../../lib/nodes-edges-to-workflow";
 import { structurallyEqual } from "../../lib/structuralEqual";
 import { useFitViewWithPanels } from "./hooks/useFitViewWithPanels";
+import { useTourCanvas } from "./hooks/useTourCanvas";
 import { useWorkflowKeyboardShortcuts } from "./hooks/useWorkflowKeyboardShortcuts";
 import { useStepPaletteShortcutLabel, useWorkflowBuilderShortcuts } from "./hooks/useWorkflowBuilderShortcuts";
 import {
@@ -507,6 +508,11 @@ function WorkflowBuilderInner({
       return () => clearTimeout(timer);
     }
   }, [nodes.length, isViewReady, fitViewWithPanels]);
+
+  // The onboarding tour pans to the steps it explains, and "Try it yourself"
+  // lends the user one edge to draw (canvas/tourCanvas.ts).
+  useTourCanvas({ wrapperRef: reactFlowWrapper, isViewReady, setEdges, hasModifications, setHasModifications });
+
   const buildWorkflow = useCallback(
     (): Workflow =>
       nodesEdgesToWorkflow(nodes, edges, {

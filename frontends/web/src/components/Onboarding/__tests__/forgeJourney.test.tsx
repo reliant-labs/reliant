@@ -148,7 +148,7 @@ describe("the forge journey", () => {
     render(<>{presentStep(step("fg-intro")).description}</>);
     expect(screen.getByText(/works with any coding agent: Claude Code, Codex, Cursor/)).toBeInTheDocument();
     expect(screen.getByText(/skills and lints keep your agent on track/)).toBeInTheDocument();
-    expect(screen.getByTestId("install-forge-link-tour_intro")).toHaveTextContent("Install forge");
+    expect(screen.queryByTestId("install-forge-link-tour_intro")).toBeNull();
     expect(conditionsOf(step("fg-intro"))).toEqual([]);
   });
 
@@ -311,8 +311,8 @@ describe("the forge journey", () => {
       resetShellForTests("demo");
       render(<>{presentStep(step("fg-done")).description}</>);
       expect(screen.getByText("forge scaffold service inventory")).toBeInTheDocument();
-      expect(screen.getByTestId("demo-cta-end_card")).toBeInTheDocument();
-      expect(screen.getByTestId("demo-cta-signup")).toHaveAttribute("href", expect.stringContaining("utm_content=end_card"));
+      expect(screen.queryByTestId("demo-cta-end_card")).toBeNull();
+      expect(screen.queryByTestId("demo-cta-signup")).toBeNull();
     });
 
     it("says on each feature step what an agent does with it, with the shell's CLI", () => {

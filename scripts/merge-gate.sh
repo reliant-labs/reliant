@@ -5,7 +5,7 @@
 # release gate (scripts/release-gate.sh), on main, before a release is cut.
 # dev-docs/merge-and-release-gates.md is the design and the trade-offs.
 #
-#   scripts/merge-gate.sh [--base <rev>] [--amend] [--regen] [--queue]
+#   scripts/merge-gate.sh [--base <rev>] [--amend] [--regen] [--skip-lint] [--queue]
 #
 #   --base <rev>  diff base (default: the merge-base of HEAD and origin/main)
 #   --amend       a regenerate that changes only generated paths is amended
@@ -13,16 +13,26 @@
 #                 merge with main can leave generated files a step behind)
 #   --regen       run forge generate even if no forge input changed (the
 #                 merge queue resolved a generated-file conflict)
+#   --skip-lint   leave vet and the scoped forge lint to the release gate,
+#                 which runs both over the whole module; nothing else changes:
+#                 the diff base, buf lint and the compat checks are the merge
+#                 tier's (control-plane's pr-fix gates a PR branch with it,
+#                 control-plane#2189).
 #   --queue       the merge queue's tier (.github/workflows/merge-queue.yml),
 #                 whose budget is five minutes of wall time (owner, 2026-11-01):
-#                 vet and the scoped forge lint are left to the release gate,
-#                 which runs both over the whole module, and buf lint runs only
-#                 when a proto or buf config changed. Build, the affected
-#                 tests, typecheck, generate, docs, migsafety and migorder stay.
+#                 --skip-lint, plus queue-entry semantics: buf lint runs only
+#                 when a proto or buf config changed, and check-compat.sh
+#                 (CI_QUEUE_ENTRY=1) judges only the entry's own single-parent
+#                 squash against HEAD^, so never pass it on a PR branch. Build,
+#                 the affected tests, typecheck, generate, docs, migsafety and
+#                 migorder stay.
 #
 # Phases, each a row of the summary (slot wait vs run, seconds):
 #   plan       tools/test-affected plan: the ONE rule set (dev-docs/testing-affected.md)
 #   npm-*      npm ci (pnpm-* for a pnpm project) where a selected lane needs node_modules it lacks
+#   pgtest     tools/pgtest-check: forge pgtest's shared Postgres serves a
+#              scratch database, before generate or a Go test needs one; when
+#              it cannot, the gate stops there (MG_PGTEST_TIMEOUT, default 150s)
 #   generate   pinned forge generate must be a no-op; only when a forge input changed
 #   docs       every docs generator must be a no-op; only when a docs input changed
 #   build      compile (go list -export: no link) every package whose build
@@ -67,14 +77,17 @@
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 2
 
-base="" amend=0 regen=0 queue=0
+base="" amend=0 regen=0 queue=0 skip_lint=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) base=$2; shift 2 ;;
     --amend) amend=1; shift ;;
     --regen) regen=1; shift ;;
-    --queue) queue=1; shift ;;
-    -h|--help) sed -n '2,63p' "$0"; exit 0 ;;
+    --skip-lint) skip_lint=1; shift ;;
+    # The queue tier IS --skip-lint plus the queue entry's semantics, so the
+    # two cannot drift apart.
+    --queue) queue=1; skip_lint=1; shift ;;
+    -h|--help) sed -n '2,76p' "$0"; exit 0 ;;
     *) echo "merge-gate: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -88,7 +101,7 @@ export FORGE_NO_MERGE_DRIVER=1
 # (the pin) when set, else the forge on PATH.
 slotforge=${FORGE_BIN:-forge}
 if [ -z "${FORGE_SLOT_HELD:-}" ] && [ -z "${MG_IN_SLOT:-}" ] && "$slotforge" slot status --class heavy >/dev/null 2>&1; then
-  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "$slotforge" slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$queue" = 1 ] && echo --queue)
+  MG_SLOT_T0=$(date +%s) MG_IN_SLOT=1 exec "$slotforge" slot run --class heavy -- "$0" ${base:+--base "$base"} $([ "$amend" = 1 ] && echo --amend) $([ "$regen" = 1 ] && echo --regen) $([ "$skip_lint" = 1 ] && echo --skip-lint) $([ "$queue" = 1 ] && echo --queue)
 fi
 t0=$(date +%s)
 slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
@@ -137,8 +150,9 @@ base=$(git rev-parse "$base")
 L=${MG_LOGDIR:-${XDG_CACHE_HOME:-$HOME/.cache}/reliant-merge-gate/$(date -u +%Y%m%dT%H%M%SZ)-$$}
 mkdir -p "$L"
 echo "$slot_wait" >"$L/slot_wait"
-# gate-verify reads the tier: the queue's is not obliged to vet or lint.
-[ "$queue" = 1 ] && echo queue >"$L/tier"
+# gate-verify reads the tier: neither the queue's nor --skip-lint's is obliged
+# to vet or lint.
+if [ "$queue" = 1 ]; then echo queue >"$L/tier"; elif [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"; fi
 pin=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml | head -1)
 if [ -n "${FORGE_BIN:-}" ]; then forge=("$FORGE_BIN"); else forge=(env GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@$pin"); fi
 # Paths generators write. A regenerate in --amend mode may change only these.
@@ -316,6 +330,22 @@ prepare_dependencies() {
 }
 prepare_dependencies
 
+# ── pgtest: the shared test Postgres serves, before anything needs it ─────
+# forge generate's schema read and every DB-backed Go test take a database
+# from forge pgtest's shared server. When it cannot serve one, they fail only
+# once they reach it, minutes in, each "connection refused" (control-plane
+# #2189: 15 of 60 gates in a day). tools/pgtest-check asks pgtest itself for a
+# scratch database: seconds when it can, a failure naming the shared server
+# when it cannot, and then no phase starts. Only when a phase needs one: the
+# whole forge generate (its hooks alone do not), or any Go test.
+if [ "$fail" = 0 ] && { { [ "$fgen" = true ] && [ "$hooks_only" != true ]; } || [ "$gofull" = true ] || [ "$ngo" -gt 0 ]; }; then
+  if ! phase pgtest go run ./tools/pgtest-check -timeout "${MG_PGTEST_TIMEOUT:-150s}"; then
+    fail=1
+    notes+=("pgtest: the shared test Postgres could not serve a database; no phase ran ($L/pgtest.log)")
+    cat "$L/pgtest.log" >&2
+  fi
+fi
+
 # ── generate → docs, then build ‖ test ‖ typecheck ‖ lint ‖ migsafety ──────
 # Where a generator's output becomes the tree the other phases judge, it runs
 # first, in place: in --amend mode (the merge queue's: a regenerate is folded
@@ -445,6 +475,8 @@ if [ "$fail" = 0 ]; then
   scope=$(echo "$files" | scripts/lint-scope.sh)
   if [ "$queue" = 1 ]; then
     notes+=("queue tier: vet and forge lint run in the release gate$(echo "$files" | grep -qE '^proto/|^proto-vendor/|(^|/)buf[^/]*\.yaml$' || echo '; buf lint too (no proto changed)')")
+  elif [ "$skip_lint" = 1 ]; then
+    notes+=("--skip-lint: vet and forge lint run in the release gate")
   elif [ -n "$scope" ]; then
     notes+=("lint: forge's own lanes over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s); golangci-lint and buf lint run in the release gate")
     phase lint env GOMAXPROCS="$quarter" "${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope" "${lint_lanes[@]}" & pids+=($!)
@@ -463,7 +495,7 @@ if [ "$fail" = 0 ]; then
   if [ "$gofull" = true ]; then vet_pkgs=(./...); else
     mapfile -t vet_pkgs < <(jq -r '((.go.build // []) + (.go.packages // [])) | unique | .[]' "$run_plan")
   fi
-  if [ ${#vet_pkgs[@]} -gt 0 ] && [ "$queue" != 1 ]; then
+  if [ ${#vet_pkgs[@]} -gt 0 ] && [ "$skip_lint" != 1 ]; then
     phase vet env GOMAXPROCS="$quarter" go vet "${vet_pkgs[@]}" & pids+=($!)
   fi
   if echo "$files" | grep -qE '^db/migrations/|^forge\.yaml$'; then
@@ -512,7 +544,7 @@ end=$(date +%s)
   echo "| phase | result | seconds | started +s |"
   echo "|---|---|---|---|"
   echo "| heavy slot (queue) | - | $slot_wait | - |"
-  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es generate docs plan-2 build test typecheck lint proto vet migsafety migorder; do
+  for f in plan npm-r pnpm-frontends-web npm-electron npm-tools-protoc-gen-es pgtest generate docs plan-2 build test typecheck lint proto vet migsafety migorder; do
     [ -f "$L/$f.row" ] || continue
     read -r n rc s st <"$L/$f.row"
     echo "| $n | $([ "$rc" = 0 ] && echo PASS || echo "FAIL ($rc)") | $s | $st |"

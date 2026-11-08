@@ -314,6 +314,31 @@ func TestNodeArgsAsMap(t *testing.T) {
 	}
 }
 
+// A run node's writable_checkouts reach the run step's input under their proto
+// name (handlers.ExecuteRunStepInput), and a node without them adds no key.
+func TestNodeArgsAsMap_WritableCheckouts(t *testing.T) {
+	node := func(writable ...string) *reliantv1.Node {
+		return &reliantv1.Node{Type: "run", Args: &reliantv1.Node_Run{Run: &reliantv1.RunArgs{
+			Command:           &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "make gen"}},
+			WritableCheckouts: writable,
+		}}}
+	}
+	mapped, err := NodeArgsAsMap(node("reliant"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got, ok := mapped["writable_checkouts"].([]interface{}); !ok || len(got) != 1 || got[0] != "reliant" {
+		t.Errorf("writable_checkouts = %#v", mapped["writable_checkouts"])
+	}
+	mapped, err = NodeArgsAsMap(node())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := mapped["writable_checkouts"]; ok {
+		t.Errorf("a node without writable_checkouts maps one: %v", mapped)
+	}
+}
+
 // TestNodeArgsAsMap_CelStringUnwrap verifies that CelString wrapper types are
 // unwrapped to their literal values, preventing the proto serialization mismatch
 // that caused "proto: syntax error: unexpected token {" in ExecuteTools activity.

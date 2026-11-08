@@ -22,7 +22,12 @@
  *     ConnectError subclass with the numeric `.code`, metadata and details
  *     intact, so the `instanceof ConnectError` call sites keep working; it adds
  *     `.reason` / `.codeName` / `.status` / `.retryable` / `.traceId`, and its
- *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged);
+ *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged).
+ *     Being a runtime interceptor, it also records the open interaction (or
+ *     the caller's span) at call entry, before auth's await, so a call held
+ *     there while the user opens something else stays in the interaction it
+ *     started under (lib/chatOpenInteraction). An app interceptor that awaits
+ *     must never go above it without `interactionContextInterceptor()` first;
  *   - org snapshots synchronously before any auth await or timeout replacement:
  *     an operation started in A cannot become a write in B after a switch.
  *     Explicit caller orgs win; no selection stays unset across retries.
@@ -390,6 +395,7 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     const duration = Date.now() - startTime;
     const kind = classifyRpcFailure(error, {
       serviceTypeName: req.service.typeName,
+      methodName: req.method.name,
       signalAborted: req.signal.aborted,
     });
     const context = {
@@ -409,6 +415,12 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     }
     if (kind === "account-required") {
       logger.info("[gRPC Client] Account required", context);
+      throw error;
+    }
+    if (kind === "already-absent") {
+      // An idempotent delete found nothing to delete: the caller's goal
+      // holds. Still thrown, so a caller that cares can tell.
+      logger.debug("[gRPC Client] Delete target already absent", context);
       throw error;
     }
     if (kind === "machine-wait") {

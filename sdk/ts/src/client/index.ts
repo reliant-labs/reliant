@@ -37,9 +37,11 @@ export {
 export {
   ChatStream,
   traceIdFromTraceresponse,
+  type ChatCaughtUpInfo,
   type ChatStreamCallbacks,
   type ChatStreamHooks,
   type ChatStreamOptions,
+  type ChatSyncKind,
   type SnapshotTiming,
 } from "./chat-stream.js";
 export {

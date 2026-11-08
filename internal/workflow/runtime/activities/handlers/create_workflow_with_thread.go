@@ -23,10 +23,11 @@ type CreateWorkflowWithThreadInput struct {
 	LoopIteration    *int64  `json:"loop_iteration,omitempty"`
 
 	// Thread fields
-	ChatID       string  `json:"chat_id" reliant:"-"`
-	ThreadID     string  `json:"thread_id"`
-	ThreadTitle  *string `json:"thread_title,omitempty"`
-	ParentThread *string `json:"parent_thread,omitempty"` // Parent thread for non-fork child threads (e.g., spawn)
+	ChatID               string  `json:"chat_id" reliant:"-"`
+	ThreadID             string  `json:"thread_id"`
+	ThreadTitle          *string `json:"thread_title,omitempty"`
+	ParentThread         *string `json:"parent_thread,omitempty"` // Parent thread for non-fork child threads (e.g., spawn)
+	ExcludeAmbientMemory bool    `json:"exclude_ambient_memory,omitempty"`
 
 	// Origin records HOW the thread was created ("spawn", "node", "fork",
 	// "main"). This is the field readers use to tell a spawn thread from a
@@ -187,14 +188,15 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 
 	// Build the options for CreateWorkflowWithThread
 	opts := threads.CreateWorkflowWithThreadOpts{
-		Workflow:       workflow,
-		ThreadID:       input.ThreadID,
-		ChatID:         input.ChatID,
-		ThreadTitle:    input.ThreadTitle,
-		ParentThread:   input.ParentThread,
-		ForkFromThread: input.ForkFromThread,
-		OriginNodeID:   input.OriginNodeID,
-		WorktreeID:     threadWorktreeID,
+		Workflow:             workflow,
+		ThreadID:             input.ThreadID,
+		ChatID:               input.ChatID,
+		ThreadTitle:          input.ThreadTitle,
+		ParentThread:         input.ParentThread,
+		ForkFromThread:       input.ForkFromThread,
+		OriginNodeID:         input.OriginNodeID,
+		WorktreeID:           threadWorktreeID,
+		ExcludeAmbientMemory: input.ExcludeAmbientMemory,
 	}
 	if input.Origin != nil {
 		opts.Origin = *input.Origin

@@ -94,6 +94,7 @@ Thread configuration for node execution
 | `mode` | string | No | Thread mode: inherit (default), new, or fork |
 | `memo` | bool | No | Whether to memoize thread across loop iterations |
 | `inject` | message | No | Message injection into the thread |
+| `exclude_ambient_memory` | bool | No | Exclude automatic saved memories; inherited exclusion cannot be re-enabled. Not full context isolation. |
 
 ---
 

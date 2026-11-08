@@ -355,6 +355,10 @@ type interruption string
 func (e interruption) Error() string        { return string(e) }
 func (e interruption) Is(target error) bool { return target == ErrDaemonConnectionInterrupted }
 
+// ConnectionInterrupted marks the error for a consumer that cannot import
+// this package (see ErrDaemonConnectionInterrupted).
+func (interruption) ConnectionInterrupted() bool { return true }
+
 // ErrorClass implements svcerr.Classed: the machine's connection closed under
 // the request — the other end went away — which is the canceled class. The
 // code a caller receives is unchanged (Unavailable); without the class every
