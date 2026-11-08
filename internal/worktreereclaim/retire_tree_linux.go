@@ -4,11 +4,12 @@ package worktreereclaim
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -45,7 +46,7 @@ type retirementTree struct {
 	tracked     map[string]trackedKind
 	head        string
 	trackedRead bool
-	// pending is the file remove unlinked last, held open until the next
+	// pending is the file remove took last (unlinkedFile), held open until the next
 	// inspection settles it; the inspection exempts this exact descriptor.
 	pending *os.File
 }
@@ -653,13 +654,16 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 		}
 		return paths[i] < paths[j]
 	})
-	// A regular file stays open after its unlink, until the next inspection
-	// has run (settle): a process that opened it between the last inspection
-	// and the unlink has either written by then (its size or mtime moved) or
-	// still holds it (the inspection sees the deleted file under the tree).
-	// Either way its bytes are put back and retirement stops. A name created
-	// after inspection is never inventoried, so the directory holding it
-	// fails AT_REMOVEDIR (ENOTEMPTY) and survives with it.
+	// A regular file is not unlinked at once: it is renamed to a holding
+	// name in its own directory and held open until the next inspection has
+	// run (settle). A process that opened it between the last inspection and
+	// the rename has either written by then (its size or mtime moved) or
+	// still holds it (the inspection sees it under the tree). Either way the
+	// same inode is renamed back to its name, so a writer that keeps it open
+	// keeps writing the file the tree names, and retirement stops. Only a
+	// file the inspection proved untouched and unheld is unlinked. A name
+	// created after inspection is never inventoried, so the directory
+	// holding it fails AT_REMOVEDIR (ENOTEMPTY) and survives with it.
 	var pending *unlinkedFile
 	settle := func(checkErr error) error {
 		u := pending
@@ -672,7 +676,7 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 		var now unix.Stat_t
 		err := unix.Fstat(int(u.file.Fd()), &now)
 		if err == nil && checkErr == nil && now.Size == u.stat.Size && now.Mtim == u.stat.Mtim {
-			return nil
+			return u.unlink()
 		}
 		if rerr := u.restore(); rerr != nil {
 			return fmt.Errorf("%s changed at its deletion and could not be put back: %w", u.rel, rerr)
@@ -733,17 +737,19 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 				}
 			}
 		}
-		if err == nil {
+		if err == nil && held != nil {
+			u := &unlinkedFile{dir: dir, base: base, rel: p, file: held, stat: e.stat}
+			if err = u.hold(); err == nil {
+				pending = u
+				t.pending = held
+				continue
+			}
+		} else if err == nil {
 			flags := 0
 			if isDir {
 				flags = unix.AT_REMOVEDIR
 			}
 			err = unix.Unlinkat(int(dir.Fd()), base, flags)
-		}
-		if err == nil && held != nil {
-			pending = &unlinkedFile{dir: dir, base: base, rel: p, file: held, stat: e.stat}
-			t.pending = held
-			continue
 		}
 		if held != nil {
 			held.Close()
@@ -786,44 +792,97 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 	return t.removeRoot()
 }
 
-// unlinkedFile is a regular file remove has unlinked and still holds open:
-// its bytes stay reachable until the next inspection proves nobody wrote it.
+// unlinkedFile is a regular file remove has moved to a holding name in its
+// own directory and still holds open: the inode stays linked, so it can be
+// put back as itself, until the next inspection proves nobody wrote it.
+// An unlinked inode can never be linked again (linkat refuses a file with no
+// links), so a copy of its bytes would lose every later write of a process
+// still holding it; a rename keeps that process writing the named file.
 type unlinkedFile struct {
-	dir  *os.File // the inventoried directory that named it
-	base string
-	rel  string
-	file *os.File
-	stat unix.Stat_t // as inventoried
+	dir     *os.File // the inventoried directory that named it
+	base    string
+	holding string // the name it is held under until settled
+	rel     string
+	file    *os.File
+	stat    unix.Stat_t // as inventoried
 }
 
-// restore writes the unlinked file's current bytes back under its name in
-// the directory that held it, or beside it when something new took the name
-// (that newcomer is never inventoried, so it is preserved too). Never
-// following a link, never replacing an existing name.
-func (u *unlinkedFile) restore() error {
-	flags := unix.O_WRONLY | unix.O_CREAT | unix.O_EXCL | unix.O_NOFOLLOW | unix.O_CLOEXEC
-	mode := u.stat.Mode & 0o7777
-	name := u.base
-	fd, err := unix.Openat(int(u.dir.Fd()), name, flags, mode)
-	if errors.Is(err, unix.EEXIST) {
-		name = u.base + ".retained"
-		fd, err = unix.Openat(int(u.dir.Fd()), name, flags, mode)
+// retirementHoldingPrefix names a file retirement holds pending its next
+// inspection. It is never left behind on purpose; one a crash left is kept
+// (its directory fails AT_REMOVEDIR), never deleted unseen.
+const retirementHoldingPrefix = ".reliant-retiring-"
+
+// hold renames the file to a fresh holding name in its directory, never
+// replacing a name, and proves the renamed name is the inode held open: a
+// name swapped in between the open and the rename is renamed back and
+// stops retirement.
+func (u *unlinkedFile) hold() error {
+	for range 8 {
+		var b [8]byte
+		if _, err := rand.Read(b[:]); err != nil {
+			return err
+		}
+		name := retirementHoldingPrefix + hex.EncodeToString(b[:])
+		err := unix.Renameat2(int(u.dir.Fd()), u.base, int(u.dir.Fd()), name, unix.RENAME_NOREPLACE)
+		if errors.Is(err, unix.EEXIST) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		u.holding = name
+		if err := u.held(); err != nil {
+			if rerr := unix.Renameat2(int(u.dir.Fd()), name, int(u.dir.Fd()), u.base, unix.RENAME_NOREPLACE); rerr != nil {
+				return fmt.Errorf("%w; kept as %s: %v", err, name, rerr)
+			}
+			return err
+		}
+		return nil
 	}
-	if err != nil {
+	return errors.New("no free holding name for retirement")
+}
+
+// held reports whether the holding name still names the inode held open.
+func (u *unlinkedFile) held() error {
+	var named, open unix.Stat_t
+	if err := unix.Fstatat(int(u.dir.Fd()), u.holding, &named, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return err
 	}
-	dst := os.NewFile(uintptr(fd), name)
-	err = unix.Fchmod(fd, mode)
-	if err == nil {
-		_, err = io.Copy(dst, io.NewSectionReader(u.file, 0, math.MaxInt64))
+	if err := unix.Fstat(int(u.file.Fd()), &open); err != nil {
+		return err
 	}
-	if err == nil {
-		err = dst.Sync()
+	if !retirementIdentity(named, open) {
+		return errors.New("entry replaced at deletion boundary")
 	}
-	if cerr := dst.Close(); err == nil {
-		err = cerr
+	return nil
+}
+
+// unlink removes the holding name, only while it names the held inode.
+func (u *unlinkedFile) unlink() error {
+	if err := u.held(); err != nil {
+		return err
 	}
-	return err
+	return unix.Unlinkat(int(u.dir.Fd()), u.holding, 0)
+}
+
+// restore renames the held inode back under its name in the directory that
+// held it, or beside it when something new took the name (that newcomer is
+// never inventoried, so it is preserved too). It is the same inode, so a
+// process still holding it keeps writing the file the tree names. Never
+// replacing an existing name; when neither name is free it stays under its
+// holding name, still linked.
+func (u *unlinkedFile) restore() error {
+	if err := u.held(); err != nil {
+		return err
+	}
+	err := unix.Renameat2(int(u.dir.Fd()), u.holding, int(u.dir.Fd()), u.base, unix.RENAME_NOREPLACE)
+	if errors.Is(err, unix.EEXIST) {
+		err = unix.Renameat2(int(u.dir.Fd()), u.holding, int(u.dir.Fd()), u.base+".retained", unix.RENAME_NOREPLACE)
+	}
+	if err != nil {
+		return fmt.Errorf("kept as %s: %w", u.holding, err)
+	}
+	return nil
 }
 
 // removeRoot removes the now-empty inventoried directory itself, only while

@@ -339,6 +339,56 @@ func TestRetirementTreePutsBackAFileHeldAtTheNextInspection(t *testing.T) {
 	}
 }
 
+// A process that keeps the file open past the inspection that stops
+// retirement keeps writing it: the file put back is the same inode, so a
+// write after settle lands in the file the tree names.
+func TestRetirementTreeKeepsWritesOfAWriterStillOpenAfterPutBack(t *testing.T) {
+	root := retirementFixture(t)
+	tree, err := inspectRetirementTree(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tree.close()
+	target := filepath.Join(root, "node_modules", "pkg", "index.js")
+	var writer *os.File
+	calls := 0
+	err = tree.remove(context.Background(), func() error {
+		calls++
+		switch calls {
+		case 1:
+			f, err := os.OpenFile(target, os.O_WRONLY|os.O_APPEND, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writer = f
+		case 2:
+			return errors.New("workspace open by process 42")
+		}
+		return nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "open by process") {
+		t.Fatalf("inspection failure lost: %v", err)
+	}
+	if _, err := writer.WriteString(" plus later work"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got, readErr := os.ReadFile(target); readErr != nil || string(got) != "regenerable plus later work" {
+		t.Fatalf("write after put-back lost: %q, %v", got, readErr)
+	}
+	left, err := os.ReadDir(filepath.Dir(target))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range left {
+		if strings.HasPrefix(e.Name(), retirementHoldingPrefix) {
+			t.Fatalf("holding name left behind: %s", e.Name())
+		}
+	}
+}
+
 // A name created after the last inspection is not in the inventory: it is
 // never unlinked, and the directory holding it is kept with it.
 func TestRetirementTreeKeepsAFileCreatedAfterTheLastInspection(t *testing.T) {
