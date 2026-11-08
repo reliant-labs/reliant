@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=e86524d20f6b1ac6e413baa7116ce7b8808e66b1f79eea03a181bbbce8c3c1a9
+// forge:hash=cb810100cfa753f806b0c1f86342c563b07fd4850902198564582df72afad558
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -47,6 +47,7 @@ type MockRepository struct {
 	DeleteProjectDaemonFunc                   func(context.Context, string, string) error
 	DetachProjectFromDaemonFunc               func(context.Context, string, string, string, func(ctx context.Context) error) error
 	ListProjectDaemonDetachmentsForDaemonFunc func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
+	WithProjectCheckoutExclusiveFunc          func(context.Context, string, string, func(ctx context.Context) error) error
 	CreateRepoFunc                            func(context.Context, *core.Repo) error
 	ListReposByProjectFunc                    func(context.Context, string) ([]*core.Repo, error)
 	CreateWorktreeFunc                        func(context.Context, *db.Worktree) error
@@ -227,6 +228,15 @@ func (m *MockRepository) ListProjectDaemonDetachmentsForDaemon(ctx context.Conte
 		return m.ListProjectDaemonDetachmentsForDaemonFunc(ctx, daemonID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonDetachmentsForDaemon")
+}
+
+// WithProjectCheckoutExclusive records the call and delegates to WithProjectCheckoutExclusiveFunc when set.
+func (m *MockRepository) WithProjectCheckoutExclusive(p0 context.Context, projectID string, daemonID string, fn func(ctx context.Context) error) error {
+	m.Recorder.Record("WithProjectCheckoutExclusive", p0, projectID, daemonID, fn)
+	if m.WithProjectCheckoutExclusiveFunc != nil {
+		return m.WithProjectCheckoutExclusiveFunc(p0, projectID, daemonID, fn)
+	}
+	return contractkit.MockNotSet("MockRepository", "WithProjectCheckoutExclusive")
 }
 
 // CreateRepo records the call and delegates to CreateRepoFunc when set.

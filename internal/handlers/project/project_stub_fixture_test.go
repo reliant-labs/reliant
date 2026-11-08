@@ -121,5 +121,6 @@ func onDaemon(t *testing.T) *project.MockRepository {
 	// No branch workspaces anywhere: a remove or reclone of the checkout is
 	// not refused for them.
 	store.ListWorktreesFunc = func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error) { return nil, nil }
+	store.WithProjectCheckoutExclusiveFunc = func(ctx context.Context, _, _ string, fn func(context.Context) error) error { return fn(ctx) }
 	return store
 }

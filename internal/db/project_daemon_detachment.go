@@ -57,6 +57,12 @@ func (r *Repo) DetachProjectFromDaemon(ctx context.Context, projectID, daemonID,
 		if err := store.LockMachineCheckouts(txCtx, r.ORM(), daemonID); err != nil {
 			return err
 		}
+		// Then the checkout's, exclusive: a branch workspace of it is inserted
+		// under the shared side (CreateWorktree), so the guard sees every one
+		// that committed and none lands until the detach has.
+		if err := store.LockProjectCheckout(txCtx, r.ORM(), projectID, daemonID, false); err != nil {
+			return err
+		}
 		if guard != nil {
 			if err := guard(txCtx); err != nil {
 				return err
@@ -96,6 +102,32 @@ func (r *Repo) WithMachineCheckoutsLocked(ctx context.Context, daemonID string, 
 	}
 	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if err := store.LockMachineCheckouts(txCtx, r.ORM(), daemonID); err != nil {
+			return err
+		}
+		return fn(txCtx)
+	})
+}
+
+// WithProjectCheckoutExclusive runs fn in one transaction holding the
+// exclusive lock on the project's checkout on the machine, for an action that
+// destroys the checkout on disk (a remove, a reclone). A branch workspace of
+// the checkout is inserted under the shared side (CreateWorktree), so a
+// workspace guard fn runs first sees every workspace that committed, and no
+// new one is inserted until fn returns: the daemon command that deletes the
+// checkout runs inside fn, so it cannot pull the repository out from under a
+// workspace admitted after the guard. A create queued behind it inserts once
+// fn is done and finds the checkout gone (it fails, with nothing of it on
+// disk) or recloned (it builds on the fresh one).
+//
+// fn's reads and writes through this Repo with the ctx it is handed join the
+// transaction. It runs once (no retry): it sends a daemon command. The lock
+// and the transaction are held for as long as that command takes.
+func (r *Repo) WithProjectCheckoutExclusive(ctx context.Context, projectID, daemonID string, fn func(ctx context.Context) error) error {
+	if projectID == "" || daemonID == "" {
+		return fmt.Errorf("project ID and daemon ID cannot be empty")
+	}
+	return r.RunTx(ctx, orm.ReadCommitted, func(txCtx context.Context) error {
+		if err := store.LockProjectCheckout(txCtx, r.ORM(), projectID, daemonID, false); err != nil {
 			return err
 		}
 		return fn(txCtx)

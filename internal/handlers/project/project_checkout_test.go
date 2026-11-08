@@ -341,3 +341,58 @@ func TestProjectOnDaemonCommands_WorkspaceGuardReadsEveryPage(t *testing.T) {
 		})
 	}
 }
+
+// lockedRecorder records, per daemon command, whether it ran inside the
+// checkout's exclusive section.
+type lockedRecorder struct {
+	*pinnedRecorder
+	inLock   *bool
+	commands []bool
+}
+
+func (r *lockedRecorder) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	r.commands = append(r.commands, *r.inLock)
+	return r.pinnedRecorder.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payload, timeoutMs)
+}
+
+// Remove and reclone read the machine's workspaces and send the command that
+// deletes the checkout inside ONE exclusive section on that checkout (which a
+// workspace's insert shares, internal/db TestWithProjectCheckoutExclusive_*):
+// a workspace created after the guard read cannot land before the delete.
+func TestProjectOnDaemonCommands_RemoveAndRecloneGuardAndDeleteUnderTheCheckoutLock(t *testing.T) {
+	t.Parallel()
+	ctx := project.AuthedContext(t)
+	for name, call := range projectOnDaemonCalls(ctx, "p-1", "d-1") {
+		if name == "pull" {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store := onDaemon(t)
+			inLock, sections := false, 0
+			store.WithProjectCheckoutExclusiveFunc = func(ctx context.Context, projectID, daemonID string, fn func(context.Context) error) error {
+				assert.Equal(t, "p-1", projectID)
+				assert.Equal(t, "d-1", daemonID)
+				sections++
+				inLock = true
+				defer func() { inLock = false }()
+				return fn(ctx)
+			}
+			var guardInLock []bool
+			store.ListWorktreesFunc = func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error) {
+				guardInLock = append(guardInLock, inLock)
+				return nil, nil
+			}
+			store.UpsertProjectDaemonFunc = func(context.Context, string, string, string, *string) error { return nil }
+			store.DeleteProjectDaemonFunc = func(context.Context, string, string) error { return nil }
+			router := &lockedRecorder{pinnedRecorder: newPinnedRecorder(), inLock: &inLock}
+			require.NoError(t, call(newService(t, store, router)))
+			assert.Equal(t, 1, sections)
+			require.NotEmpty(t, guardInLock)
+			for _, in := range guardInLock {
+				assert.True(t, in, "the workspace guard reads under the checkout lock")
+			}
+			assert.Equal(t, []bool{true}, router.commands, "the delete runs under the same lock")
+		})
+	}
+}

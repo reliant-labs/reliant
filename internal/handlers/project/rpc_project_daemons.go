@@ -608,18 +608,18 @@ func (s *Service) RemoveProjectFromDaemon(
 		}
 		return nil, err
 	}
-	// Deleting the checkout breaks every branch workspace of the project on
-	// that machine: they are git worktrees of it. Refused until they are
-	// archived, as a detach is.
-	if err := s.requireNoWorkspacesOn(ctx, project, req.Msg.DaemonId, s.machineName(ctx, req.Msg.DaemonId), "removing the project from that machine"); err != nil {
-		return nil, err
-	}
 	var removeResp struct {
 		Success bool   `json:"success"`
 		Removed bool   `json:"removed"`
 		Error   string `json:"error"`
 	}
 	payload := map[string]string{"path": pd.Path}
+	// Deleting the checkout breaks every branch workspace of the project on
+	// that machine: they are git worktrees of it. Refused until they are
+	// archived, as a detach is. The guard and the delete run under the
+	// checkout's exclusive lock, which a workspace's insert shares, so no
+	// workspace is admitted between the guard's read and the delete.
+	//
 	// The row goes only once the machine has removed the checkout. It is the
 	// only record of a checkout on that machine: dropped while the clone is
 	// still on disk (the machine was offline, the remove failed), the machine
@@ -627,7 +627,17 @@ func (s *Service) RemoveProjectFromDaemon(
 	// user is told to clone what they already have. The remove is retried
 	// from here; a machine that is gone for good releases its rows when it
 	// is removed (db.Repo.RemoveDaemon).
-	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp); err != nil {
+	var sendErr error
+	if err := s.deps.Repo.WithProjectCheckoutExclusive(ctx, project.ID, req.Msg.DaemonId, func(lockedCtx context.Context) error {
+		if err := s.requireNoWorkspacesOn(lockedCtx, project, req.Msg.DaemonId, s.machineName(lockedCtx, req.Msg.DaemonId), "removing the project from that machine"); err != nil {
+			return err
+		}
+		sendErr = s.sendToDaemon(lockedCtx, userID, req.Msg.DaemonId, "git.remove", payload, &removeResp)
+		return nil
+	}); err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to lock the project's checkout on the machine"))
+	}
+	if err := sendErr; err != nil {
 		if daemonerr.Unreachable(err) {
 			// Refused, with the two ways out: nothing else ever drops the
 			// row of a machine that never comes back.
@@ -670,11 +680,6 @@ func (s *Service) RecloneProjectOnDaemon(
 	if project.RemoteURL == nil || *project.RemoteURL == "" {
 		return nil, svcerr.FailedPrecondition("project has no remote_url; cannot reclone")
 	}
-	// The reclone deletes the checkout first, breaking the project's branch
-	// workspaces on that machine (git worktrees of it), as a remove does.
-	if err := s.requireNoWorkspacesOn(ctx, project, req.Msg.DaemonId, s.machineName(ctx, req.Msg.DaemonId), "recloning the project on that machine"); err != nil {
-		return nil, err
-	}
 	branch := ""
 	if pd.DefaultBranch != nil {
 		branch = *pd.DefaultBranch
@@ -691,8 +696,22 @@ func (s *Service) RecloneProjectOnDaemon(
 		"repo":   *project.RemoteURL,
 		"branch": branch,
 	}
-	if err := s.sendToDaemon(ctx, userID, req.Msg.DaemonId, "git.reclone", payload, &recloneResp); err != nil {
-		return nil, daemonerr.Error("git reclone", err)
+	// The reclone deletes the checkout first, breaking the project's branch
+	// workspaces on that machine (git worktrees of it), as a remove does: the
+	// guard and the reclone run under the checkout's exclusive lock, as a
+	// remove's do. A workspace queued behind it builds on the fresh clone.
+	var sendErr error
+	if err := s.deps.Repo.WithProjectCheckoutExclusive(ctx, project.ID, req.Msg.DaemonId, func(lockedCtx context.Context) error {
+		if err := s.requireNoWorkspacesOn(lockedCtx, project, req.Msg.DaemonId, s.machineName(lockedCtx, req.Msg.DaemonId), "recloning the project on that machine"); err != nil {
+			return err
+		}
+		sendErr = s.sendToDaemon(lockedCtx, userID, req.Msg.DaemonId, "git.reclone", payload, &recloneResp)
+		return nil
+	}); err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to lock the project's checkout on the machine"))
+	}
+	if sendErr != nil {
+		return nil, daemonerr.Error("git reclone", sendErr)
 	}
 	// Refresh cloned_at — the row's path/branch are unchanged but the
 	// "Last cloned/pulled" column should now show "just now".
