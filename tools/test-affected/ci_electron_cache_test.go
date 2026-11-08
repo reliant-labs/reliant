@@ -131,7 +131,7 @@ func checkElectronCaches(t *testing.T, jobID, versionStep, installStep, partIf s
 		if r.ID == "" {
 			t.Fatalf("%s: %q has no id, so its save cannot skip a cache hit", jobID, c.restore)
 		}
-		if !(vIdx < rIdx && rIdx < installIdx) {
+		if vIdx >= rIdx || rIdx >= installIdx {
 			t.Errorf("%s: %q (step %d) must run after %q (step %d) and before %q (step %d)", jobID, c.restore, rIdx, versionStep, vIdx, installStep, installIdx)
 		}
 		if sIdx <= installIdx {
