@@ -96,6 +96,8 @@ const DEFAULT_TOOLTIP_SIZE: ElementSize = { width: 320, height: 200 };
 const VIEWPORT_PADDING = 16;
 // Height reserved for the OnboardingNavBar at the bottom of the screen
 const NAV_BAR_CLEARANCE = 176;
+// The shortest a callout kept below a top inset shrinks to: its title and Done button.
+const MIN_CALLOUT_HEIGHT = 120;
 
 /** Where the card goes: beside the target, never over it (calloutPlacement.ts). */
 function calculateTooltipPosition(
@@ -107,17 +109,23 @@ function calculateTooltipPosition(
   order: readonly CalloutSide[] = BELOW_FIRST,
   viewportLeft = 0,
   viewportTop = 0
-): Position & { actualPosition: CalloutSide } {
-  // Keep only as much of the top inset as still leaves the card room on screen:
-  // on a short window a card kept below the inset would run off the bottom edge.
-  viewportTop = Math.min(Math.max(0, viewportTop), Math.max(0, window.innerHeight - bottomReserve - 2 * VIEWPORT_PADDING - tooltipSize.height));
+): Position & { actualPosition: CalloutSide; maxHeight?: number } {
+  // On a window too short for the card below the top inset, the card shrinks
+  // (and scrolls) to the room the inset leaves, so it stays both below the
+  // inset and on screen. Only a window too short even for the smallest usable
+  // card gives up part of the inset.
+  const room = window.innerHeight - bottomReserve - 2 * VIEWPORT_PADDING;
+  viewportTop = Math.max(0, viewportTop);
+  const maxHeight = viewportTop > 0 ? Math.max(MIN_CALLOUT_HEIGHT, room - viewportTop) : undefined;
+  const height = maxHeight === undefined ? tooltipSize.height : Math.min(tooltipSize.height, maxHeight);
+  viewportTop = Math.min(viewportTop, Math.max(0, room - height));
   const placed = placeCallout(
     { ...rect, left: rect.left - viewportLeft, top: rect.top - viewportTop },
-    tooltipSize,
+    { width: tooltipSize.width, height },
     { width: window.innerWidth - viewportLeft, height: window.innerHeight - viewportTop },
     { preferred: position, order, gap: targetGap, margin: VIEWPORT_PADDING, bottomReserve }
   );
-  return { top: placed.top + viewportTop, left: placed.left + viewportLeft, actualPosition: placed.side };
+  return { top: placed.top + viewportTop, left: placed.left + viewportLeft, actualPosition: placed.side, maxHeight };
 }
 
 /** Below this width a callout is a bottom sheet (tailwind `sm`). */
@@ -211,7 +219,7 @@ export function OnboardingSpotlight({
   const tooltipRef = useRef<HTMLDivElement | null>(null);
   const [tooltipSize, setTooltipSize] = useState<ElementSize>(DEFAULT_TOOLTIP_SIZE);
   // Initialize from last position for smooth tooltip transition between steps
-  const [tooltipPos, setTooltipPos] = useState<Position & { actualPosition: string }>(() => ({
+  const [tooltipPos, setTooltipPos] = useState<Position & { actualPosition: string; maxHeight?: number }>(() => ({
     top: lastTooltipPosition?.top ?? window.innerHeight / 2,
     left: lastTooltipPosition?.left ?? window.innerWidth / 2,
     actualPosition: "bottom",
@@ -532,7 +540,7 @@ export function OnboardingSpotlight({
         style={
           sheet
             ? { left: 0, right: 0, bottom: 0, top: "auto", width: "100%", maxHeight: `${SHEET_MAX_VH}vh`, overflowY: "auto", borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
-            : { top: tooltipPos.top, left: tooltipPos.left, width: "min(20rem, calc(100vw - 2rem))" }
+            : { top: tooltipPos.top, left: tooltipPos.left, width: "min(20rem, calc(100vw - 2rem))", ...(tooltipPos.maxHeight === undefined ? {} : { maxHeight: tooltipPos.maxHeight, overflowY: "auto" as const }) }
         }
       >
         <div className={sheet ? "p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" : "p-5"}>

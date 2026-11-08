@@ -116,24 +116,33 @@ it("keeps a page callout below the screen-action row, which stacks over the tour
     vi.restoreAllMocks();
   }
 });
-it("on a window too short to fit the card below the action row, keeps the card on screen", async () => {
+it("on a window too short to fit the card below the action row, shrinks the card to stay below the row and on screen", async () => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
   Object.defineProperty(window, "innerHeight", { configurable: true, value: 260 });
-  // The page below the 52px row leaves 208px; the 200px card plus margins needs 232px,
-  // and its target sits near the page's bottom.
+  // The page below the 52px row leaves 208px; the card's natural 240px plus margins
+  // needs 272px, and its target sits near the page's bottom.
   const box = (top: number, left: number, width: number, height: number) => ({ top, left, width, height, right: left + width, bottom: top + height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
   const original = Element.prototype.getBoundingClientRect;
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     if (this.tagName === "MAIN") return box(52, 260, 1180, 208);
     if (this.getAttribute("data-testid") === "obs-log-row") return box(220, 260, 300, 28);
+    if (this.getAttribute("data-testid") === "tour-callout" && this instanceof HTMLElement) {
+      // The card measures at its natural height unless its max-height caps it.
+      const cap = parseFloat(this.style.maxHeight);
+      return box(parseFloat(this.style.top) || 0, parseFloat(this.style.left) || 0, 320, Number.isNaN(cap) ? 240 : Math.min(240, cap));
+    }
     return original.call(this);
   });
   try {
     renderDemo("/forge/p/shop/observability/logs");
     await waitFor(() => expect(screen.getByTestId("tour-callout").getAttribute("data-side")).toBe("right"));
-    const top = parseFloat(screen.getByTestId("tour-callout").style.top);
-    expect(top).toBeGreaterThanOrEqual(16);
-    expect(top + 200).toBeLessThanOrEqual(260 - 16);
+    const card = screen.getByTestId("tour-callout");
+    await waitFor(() => expect(card.style.maxHeight).not.toBe(""));
+    const top = parseFloat(card.style.top);
+    const height = Math.min(240, parseFloat(card.style.maxHeight));
+    expect(top).toBeGreaterThanOrEqual(52 + 16);
+    expect(top + height).toBeLessThanOrEqual(260 - 16);
+    expect(card.style.overflowY).toBe("auto");
   } finally {
     vi.restoreAllMocks();
   }
