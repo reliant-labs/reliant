@@ -21,6 +21,7 @@ import { controlPlaneObservabilityApi, type ObservabilityApi } from "@/services/
 import { isDemoShell } from "@/lib/shell";
 
 import { createDemoFixtures } from "./busyApp";
+import { withDemoWorkloadLedger } from "./workloadScenario";
 import { withReadOnly } from "../../Observability/readOnlyApi";
 import { DEMO_SCENARIO_RPCS, type DemoScenarioMethod } from "./demoScenario";
 
@@ -30,7 +31,7 @@ export interface DemoApiOptions {
 }
 
 export function createDemoApi({ wire = isDemoShell() && hasControlPlane }: DemoApiOptions = {}): ObservabilityApi {
-  const fixtures = createDemoFixtures();
+  const fixtures = withDemoWorkloadLedger(createDemoFixtures());
   if (!wire) return withReadOnly(fixtures);
   const overWire = Object.fromEntries(
     (Object.keys(DEMO_SCENARIO_RPCS) as DemoScenarioMethod[]).map((method) => [method, controlPlaneObservabilityApi[method]]),
