@@ -431,7 +431,9 @@ func (s *Service) CreateProject(
 
 	resp := &reliantv1.CreateProjectResponse{Project: projectToProto(project)}
 	if pinned != "" {
-		resp.ProjectDaemon = s.checkoutProto(ctx, justRecorded(project.ID, pinned, project.Path, project.DefaultBranch))
+		// The path the caller named on this machine (the project row was just
+		// made from it): the checkout it records.
+		resp.ProjectDaemon = s.checkoutProto(ctx, justRecorded(project.ID, pinned, req.Msg.Path, project.DefaultBranch))
 	}
 	return connect.NewResponse(resp), nil
 }
