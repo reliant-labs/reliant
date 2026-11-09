@@ -22,6 +22,7 @@ import { useChatParamsStore } from "../../../store/chatParamsStore";
 import { foldCount } from "../composerPriority";
 import { useAuthStore } from "../../../store/authStore";
 import { legacyPasteDraftKey } from "../useLongPaste";
+import { fetchAttachmentBlob } from "../../../hooks/attachment-queries";
 
 globalThis.ResizeObserver ??= class {
   observe() {}
@@ -110,7 +111,7 @@ beforeEach(() => {
   definition.result = STABLE_DEFINITION;
   useProjectStore.setState({ currentProject: { id: PROJECT_ID } as never });
   useWorkspaceStateStore.getState().clearNewChatDraft(PROJECT_ID);
-  useAttachmentStore.setState({ attachments: new Map() as never });
+  useAttachmentStore.setState({ attachments: new Map() as never, localFiles: new Map() });
   slash.action.mockReset();
   useChatParamsStore.getState().clearTempNewChatParams();
 });
@@ -231,6 +232,35 @@ describe("long paste", () => {
     } finally {
       act(() => useAttachmentStore.setState({ replaceAttachment: original, removeAttachment: originalRemove }));
     }
+  });
+
+  // The built app's CSP connect-src has no `blob:`, so a paste opened by
+  // fetching a blob URL failed with "Couldn't load pasted-text.txt".
+  it("opens a chip pasted this session from its local bytes, never a fetch", async () => {
+    const fetchSpy = vi.fn(() => Promise.reject(new TypeError("Failed to fetch")));
+    vi.stubGlobal("fetch", fetchSpy);
+    vi.mocked(fetchAttachmentBlob).mockClear();
+    useAttachmentStore.setState({
+      attachments: new Map([["paste-local", [textAttachment("t1", "pasted-text.txt")]]]),
+      // jsdom's Blob has no text(); every browser the app runs in does.
+      localFiles: new Map([["t1", { text: async () => "local paste" } as unknown as Blob]]),
+    });
+    renderWithQuery(<ChatInput onSend={vi.fn()} attachmentDraftId="paste-local" />);
+    fireEvent.click(screen.getByRole("button", { name: "Open pasted-text.txt" }));
+    expect(((await screen.findByLabelText("Edit pasted-text.txt")) as HTMLTextAreaElement).value).toBe("local paste");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(fetchAttachmentBlob).not.toHaveBeenCalled();
+  });
+
+  it("reads the server's copy when the local file can no longer be read", async () => {
+    const unreadable = { text: () => Promise.reject(new DOMException("gone", "NotReadableError")) } as unknown as Blob;
+    useAttachmentStore.setState({
+      attachments: new Map([["paste-gone", [textAttachment("t1", "notes.txt")]]]),
+      localFiles: new Map([["t1", unreadable]]),
+    });
+    renderWithQuery(<ChatInput onSend={vi.fn()} attachmentDraftId="paste-gone" />);
+    fireEvent.click(screen.getByRole("button", { name: "Open notes.txt" }));
+    expect(((await screen.findByLabelText("Edit notes.txt")) as HTMLTextAreaElement).value).toBe("hello");
   });
 });
 
