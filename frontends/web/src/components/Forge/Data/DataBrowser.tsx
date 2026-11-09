@@ -28,9 +28,9 @@ import Card from "@/components/forge-ui/card";
 import type { BrowsableDb, DataAccessConfirmation } from "@/services/controlPlane/observability/appDatabaseApi";
 import { dataBrowserErrorKind } from "@/services/controlPlane/observability/errors";
 
-import { useQueryClient } from "@tanstack/react-query";
 import { AccessReasonDialog } from "../AuditedAccess/AccessReasonDialog";
-import { getReaderSession, isCurrentReader, useReaderSession, subscribeReaderSession } from "../AuditedAccess/readerSession";
+import { isCurrentReader, useReaderSession } from "../AuditedAccess/readerSession";
+import { useReaderCacheCleanup } from "../AuditedAccess/useReaderCacheCleanup";
 import { clearAccess, isDenied, needsConfirmation, readAccess, writeAccess } from "./dataAccess-model";
 import { DatabaseSelector, PolicyTag } from "./DatabaseSelector";
 import { DataGrid } from "./DataGrid";
@@ -58,12 +58,7 @@ export function defaultDatabase(databases: readonly BrowsableDb[]): BrowsableDb 
 
 export function DataBrowser(props: DataBrowserProps) {
   const reader = useReaderSession();
-  const client = useQueryClient();
-  useEffect(() => subscribeReaderSession(() => {
-    const oldReader = (query: { queryKey: readonly unknown[] }) => query.queryKey[0] === "data-browser" && query.queryKey[2] !== getReaderSession().epoch;
-    void client.cancelQueries({ predicate: oldReader });
-    client.removeQueries({ predicate: oldReader });
-  }), [client]);
+  useReaderCacheCleanup("data-browser");
   if (!reader.principalId) return <DataNote testId="data-reader-required" title="Sign in to browse data"><p>Data reads need an authenticated reader.</p></DataNote>;
   return <ReaderDataBrowser key={`${reader.epoch}:${props.env.id}`} {...props} />;
 }
