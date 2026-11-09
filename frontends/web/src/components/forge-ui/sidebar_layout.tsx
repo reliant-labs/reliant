@@ -1,10 +1,8 @@
 "use client";
 
-import React, { useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useEffect, useRef, useState } from "react";
 
 import Link from "./link";
-import { useModalDialog } from "./modal";
 
 /**
  * What a nav entry shows after its label. Structured rather than a ReactNode
@@ -23,18 +21,7 @@ export type SidebarBadge =
 
 export interface SidebarNavItem {
   label: string;
-  /** Stable sibling identity. Supply when href/label is not unique or may change. */
-  id?: string;
   href?: string;
-  /**
-   * Opt into local disclosure control, initially expanded when true. The initial
-   * value is remembered per identity (including entries added later); changing
-   * it does not reset user choices. A separate disclosure button leaves href
-   * navigation intact. Explicit collapse wins even over an active descendant
-   * until the current route changes, which restores automatic active opening.
-   * Omit to retain legacy route-driven expansion (nested lists stay visible).
-   */
-  defaultExpanded?: boolean;
   icon?: React.ReactNode;
   /** This entry's own page is the current route. */
   active?: boolean;
@@ -47,13 +34,26 @@ export interface SidebarNavItem {
   /** Anything else after the label (a "Queued" mark). Hidden on the rail. */
   trailing?: React.ReactNode;
   /**
-   * Sub-pages. By default, clicking the row NAVIGATES to its own overview
-   * (`href`); the group containing the active route opens automatically.
-   * Groups without href toggle locally, but an active descendant holds them
-   * open. Nested lists remain visible whenever their parent is open.
-   * Set defaultExpanded to opt this entry into independent disclosure control.
+   * Sub-pages. An entry with children shows a `›` chevron; clicking it
+   * NAVIGATES to its own overview (`href`) and its children expand inline
+   * under it. The group holding the current route stays open and every other
+   * group closes (an accordion) — so open/closed is derived from `active`,
+   * never stored (unless `defaultExpanded`, below). A sub-page may carry a short list of its own (starred
+   * dashboards under Dashboards), shown indented and muted whenever its
+   * group is open.
    */
   children?: SidebarNavItem[];
+  /**
+   * The group is a standing section rather than an accordion: it is expanded
+   * on every page, not only its own, and its chevron becomes a button of its
+   * own that collapses it (the row still navigates, and reopens it). Hidden,
+   * its current sub-page is marked on the parent, as on the rail.
+   */
+  defaultExpanded?: boolean;
+  /** Controlled `defaultExpanded` (forge#2011's API): the reader's choice, kept by the caller (to remember it). */
+  open?: boolean;
+  /** Called when the reader expands or collapses a `defaultExpanded`/`open` group. */
+  onOpenChange?: (open: boolean) => void;
 }
 
 export interface SidebarUserInfo {
@@ -121,28 +121,26 @@ function useNarrow(): boolean {
   return narrow;
 }
 
-function itemKey(item: SidebarNavItem, parent: string): string {
-  // Hierarchical JSON tuples separate nested, section and footer namespaces;
-  // position is never identity, so insertion/reordering cannot move a choice.
-  return JSON.stringify([parent, item.section ?? "", item.id ?? item.href ?? item.label]);
+// Resolve on each keypress: collapsing a group changes the drawer's tab stops.
+// CSS-hidden desktop controls must not become the mobile trap's last stop.
+function drawerTabStops(panel: HTMLElement): HTMLElement[] {
+  return Array.from(
+    panel.querySelectorAll<HTMLElement>(
+      'a[href], button, input, select, textarea, [tabindex], [contenteditable="true"]',
+    ),
+  ).filter((element) => {
+    if (element.tabIndex < 0 || element.matches(":disabled") || element.closest("[inert], [hidden]")) return false;
+    for (let ancestor: HTMLElement | null = element; ancestor; ancestor = ancestor.parentElement) {
+      const style = window.getComputedStyle(ancestor);
+      if (style.display === "none" || style.visibility === "hidden") return false;
+      if (ancestor === panel) break;
+    }
+    return true;
+  });
 }
 
-type ExpansionState = Record<string, { initial: boolean; override?: boolean }>;
-
-function seedExpansion(
-  items: SidebarNavItem[],
-  parent: string,
-  state: ExpansionState,
-): ExpansionState {
-  let next = state;
-  for (const item of items) {
-    const key = itemKey(item, parent);
-    if (item.defaultExpanded !== undefined && !Object.hasOwn(next, key)) {
-      next = { ...next, [key]: { initial: item.defaultExpanded } };
-    }
-    next = seedExpansion(item.children ?? [], key, next);
-  }
-  return next;
+function itemKey(item: SidebarNavItem, i: number): string {
+  return `${item.href ?? item.label}:${i}`;
 }
 
 /** The hrefs of every current entry, at any depth: what changes when the route does. */
@@ -247,6 +245,10 @@ function Chevron({ open }: { open: boolean }) {
  * or a change of the current entry (the reader navigated). Rows grow to 44px
  * on a coarse pointer, and the page gutter tightens to 16px.
  *
+ * (Reliant: forge's library copy has this since forge#1230. Reliant's
+ * forge pin predates it, so `forge component install` at the pin would drop
+ * it: re-install only from a forge that includes it.)
+ *
  * Hover and selection are an ink wash (`bg-ink/5`, `bg-ink/8`), so they read
  * as "pressed" in light and dark alike whatever the palette maps surfaces to.
  */
@@ -274,79 +276,59 @@ export default function SidebarLayout({
   const drawerShown = narrow && drawerOpen;
   const navRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!narrow) setDrawerOpen(false);
+  }, [narrow]);
   // Following a link closes the drawer, or it would stay open over the page
   // the reader just chose. The layout knows no router, but it does know which
-  // entry is current: when that changes, the reader has navigated. Widening
-  // past the drawer closes it too, so narrowing again does not bring it back.
-  // Both are adjusted while rendering, React's pattern for state that follows
-  // a prop: an effect would commit the stale open drawer first and render
-  // twice.
-  const current = JSON.stringify(activeHrefs(navItems).concat(activeHrefs(footerItems)));
-  const [drawerContext, setDrawerContext] = useState({ narrow, current });
-  if (drawerContext.narrow !== narrow || drawerContext.current !== current) {
-    setDrawerContext({ narrow, current });
-    if (drawerOpen && (drawerContext.current !== current || !narrow)) setDrawerOpen(false);
-  }
-  const navId = useId();
-  const titleId = useId();
-  const descriptionId = useId();
-  useModalDialog({
-    open: drawerShown,
-    panelRef: navRef,
-    onClose: () => setDrawerOpen(false),
-    // Safari pointer activation doesn't focus buttons: remember the trigger
-    // explicitly rather than whichever page element happened to have focus.
-    returnFocus: () => menuButtonRef.current,
-    initialFocus: () =>
-      navRef.current?.querySelector<HTMLElement>("nav a[href], nav button:not([disabled])") ??
-      navRef.current?.querySelector<HTMLElement>('[aria-label="Close navigation"]'),
-    // On a desktop transition the mobile trigger is hidden (or unmounted).
-    fallbackFocus: () =>
-      navRef.current?.querySelector<HTMLElement>("a[href], button:not([disabled])")?.focus(),
-  });
-  // A portal-to-column transition replaces the nav DOM. Its new ref isn't
-  // attached during the old modal's cleanup; focus the desktop nav after commit.
-  const wasDrawerShown = useRef(false);
+  // entry is current: when that changes, the reader has navigated.
+  const current = activeHrefs(navItems).concat(activeHrefs(footerItems)).join(" ");
   useEffect(() => {
-    if (wasDrawerShown.current && !narrow) {
-      navRef.current
-        ?.querySelector<HTMLElement>("nav a[href], nav button:not([disabled])")
-        ?.focus();
+    setDrawerOpen(false);
+  }, [current]);
+  // Focus moves into the drawer when it opens and back to the menu button when
+  // it closes, so a keyboard or screen-reader user is never left behind it.
+  const wasShown = useRef(false);
+  useEffect(() => {
+    if (drawerShown && navRef.current) {
+      (drawerTabStops(navRef.current)[0] ?? navRef.current).focus();
+    } else if (wasShown.current) {
+      menuButtonRef.current?.focus();
     }
-    wasDrawerShown.current = drawerShown;
-  }, [drawerShown, narrow]);
-  // Following any link in the open drawer closes it, the already-current
-  // route included (its active prop won't change). Delegated from the drawer
-  // with a native listener: the links are the interactive elements, and a
-  // click handler on the <aside> itself is what jsx-a11y rejects in a
-  // scaffolded project's lint.
+    wasShown.current = drawerShown;
+  }, [drawerShown]);
   useEffect(() => {
-    const nav = navRef.current;
-    if (!drawerShown || !nav) return;
-    const closeOnLink = (event: MouseEvent) => {
-      if (event.target instanceof Element && event.target.closest("a[href]")) setDrawerOpen(false);
+    if (!drawerShown) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      const panel = navRef.current;
+      if (!panel) return;
+      // A nested modal (including a portalled one) owns its own keyboard cycle.
+      const active = document.activeElement;
+      const owner = active instanceof Element ? active.closest('[aria-modal="true"]') : null;
+      if (owner && owner !== panel) return;
+      if (event.key === "Escape") {
+        // Page-level Escape bindings defer to this open modal.
+        event.preventDefault();
+        setDrawerOpen(false);
+      } else if (event.key === "Tab") {
+        const stops = drawerTabStops(panel);
+        const first = stops[0];
+        const last = stops[stops.length - 1];
+        // Also recover focus from page siblings/portals outside the inert column.
+        const outside = !panel.contains(active) || active === panel;
+        if (!first || outside || (event.shiftKey ? active === first : active === last)) {
+          event.preventDefault();
+          (event.shiftKey ? last ?? panel : first ?? panel).focus();
+        }
+      }
     };
-    nav.addEventListener("click", closeOnLink);
-    return () => nav.removeEventListener("click", closeOnLink);
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [drawerShown]);
   const handleToggle = onToggle ?? (() => setInternalCollapsed((prev) => !prev));
-  // Keep legacy no-href toggles independent of opt-in disclosure state.
+  // A parent with children but no href of its own cannot open by navigating,
+  // so it toggles locally instead — as does an uncontrolled `defaultExpanded` group.
   const [openLocal, setOpenLocal] = useState<Record<string, boolean>>({});
-  const [expansion, setExpansion] = useState<{ route: string; items: ExpansionState }>({
-    route: current,
-    items: {},
-  });
-  const initialItems =
-    expansion.route === current
-      ? expansion.items
-      : Object.fromEntries(
-          Object.entries(expansion.items).map(([key, value]) => [key, { initial: value.initial }]),
-        );
-  const seeded = seedExpansion(footerItems, "footer", seedExpansion(navItems, "nav", initialItems));
-  // Snapshot defaults once per identity, including entries loaded after mount.
-  // Unlike a live fallback, later prop edits cannot undo an explicit collapse.
-  // Route changes expire overrides; visiting an old route never revives them.
-  if (seeded !== expansion.items) setExpansion({ route: current, items: seeded });
 
   const sections: { label: string; items: SidebarNavItem[] }[] = [];
   for (const item of navItems) {
@@ -359,15 +341,13 @@ export default function SidebarLayout({
   const rowBase =
     "relative flex items-center rounded-lg text-sm text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent [@media(pointer:coarse)]:min-h-[44px]";
 
-  function renderChild(item: SidebarNavItem, parent: string, depth = 1): React.ReactNode {
-    if (item.defaultExpanded !== undefined) return renderItem(item, parent, depth);
-    const key = itemKey(item, parent);
+  function renderChild(item: SidebarNavItem, i: number) {
     return (
-      <li key={key}>
+      <li key={itemKey(item, i)}>
         <Link
           href={item.href ?? "#"}
           aria-current={item.active ? "page" : undefined}
-          className={`${rowBase} h-8 gap-2 ${depth === 1 ? "pl-9.5" : "pl-12.5"} pr-2 ${
+          className={`${rowBase} h-8 gap-2 pl-9.5 pr-2 ${
             item.active ? "bg-ink/8" : "hover:bg-ink/5"
           }`}
         >
@@ -377,58 +357,43 @@ export default function SidebarLayout({
         </Link>
         {item.children && item.children.length > 0 && (
           <ul className="flex flex-col gap-px">
-            {item.children.map((grandchild) =>
-              grandchild.defaultExpanded !== undefined ? (
-                renderItem(grandchild, key, depth + 1)
-              ) : (
-                <li key={itemKey(grandchild, key)}>
-                  <Link
-                    href={grandchild.href ?? "#"}
-                    aria-current={grandchild.active ? "page" : undefined}
-                    className={`${rowBase} h-8 pl-12.5 pr-2 ${
-                      grandchild.active
-                        ? "bg-ink/8"
-                        : "text-ink-muted hover:bg-ink/5 hover:text-ink"
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{grandchild.label}</span>
-                  </Link>
-                </li>
-              ),
-            )}
+            {item.children.map((grandchild, gi) => (
+              <li key={itemKey(grandchild, gi)}>
+                <Link
+                  href={grandchild.href ?? "#"}
+                  aria-current={grandchild.active ? "page" : undefined}
+                  className={`${rowBase} h-8 pl-12.5 pr-2 ${
+                    grandchild.active ? "bg-ink/8" : "text-ink-muted hover:bg-ink/5 hover:text-ink"
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{grandchild.label}</span>
+                </Link>
+              </li>
+            ))}
           </ul>
         )}
       </li>
     );
   }
 
-  function renderItem(item: SidebarNavItem, parent: string, depth = 0): React.ReactNode {
-    const key = itemKey(item, parent);
+  function renderItem(item: SidebarNavItem, i: number) {
+    const key = itemKey(item, i);
     const hasChildren = !!item.children && item.children.length > 0;
-    const localDisclosure = item.defaultExpanded !== undefined;
-    const choice = seeded[key];
-    const open =
-      hasChildren &&
-      (localDisclosure
-        ? (choice?.override ?? (containsActive(item) || !!choice?.initial))
-        : containsActive(item) || (!item.href && !!openLocal[key]));
-    const groupId = `${navId}-${encodeURIComponent(key)}`;
-    const toggle = () => {
-      if (localDisclosure) {
-        setExpansion((prev) => ({
-          ...prev,
-          items: {
-            ...prev.items,
-            [key]: { initial: prev.items[key]?.initial ?? !!item.defaultExpanded, override: !open },
-          },
-        }));
-      } else {
-        setOpenLocal((prev) => ({ ...prev, [key]: !prev[key] }));
-      }
+    // A standing group is open by the reader's choice, whatever the route.
+    const standing = hasChildren && (item.defaultExpanded !== undefined || item.open !== undefined);
+    const open = standing
+      ? (item.open ?? openLocal[key] ?? (!!item.defaultExpanded || containsActive(item)))
+      : hasChildren && (containsActive(item) || (!item.href && !!openLocal[key]));
+    const setOpen = (next: boolean) => {
+      setOpenLocal((prev) => ({ ...prev, [key]: next }));
+      item.onOpenChange?.(next);
     };
-    // On the rail the sub-pages are hidden, so the parent stands in for
-    // whichever of them is current.
-    const marked = collapsed ? containsActive(item) : !!item.active;
+    // On the rail (or in a collapsed group) the sub-pages are hidden, so the
+    // parent stands in for whichever of them is current.
+    const marked = collapsed || !open ? containsActive(item) : !!item.active;
+    // A standing group with a page of its own needs a separate expand button:
+    // its row is a link, and a button cannot sit inside one.
+    const ownToggle = standing && !!item.href && !collapsed;
     const inner = (
       <>
         {item.icon && (
@@ -448,76 +413,73 @@ export default function SidebarLayout({
         )}
         {item.badge && <NavBadge badge={item.badge} rail={collapsed} />}
         {!collapsed && item.trailing && <span className="shrink-0">{item.trailing}</span>}
-        {!collapsed && hasChildren && !(localDisclosure && item.href) && <Chevron open={open} />}
+        {!collapsed && hasChildren && !ownToggle && <Chevron open={open} />}
       </>
     );
     const cls = `${rowBase} h-9 w-full ${
-      collapsed
-        ? "justify-center px-0"
-        : `gap-2.5 ${depth === 0 ? "pl-3" : depth === 1 ? "pl-9.5" : "pl-12.5"} pr-2`
+      collapsed ? "justify-center px-0" : `gap-2.5 pl-3 ${ownToggle ? "pr-9" : "pr-2"}`
     } ${marked ? "bg-ink/8" : "hover:bg-ink/5"}`;
+    const listId = `sidebar-group-${key.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+
+    const row =
+      hasChildren && !item.href ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => (standing ? setOpen(!open) : setOpenLocal((prev) => ({ ...prev, [key]: !prev[key] })))}
+          className={`${cls} text-left`}
+          title={collapsed ? item.label : undefined}
+        >
+          {inner}
+        </button>
+      ) : (
+        <Link
+          href={item.href ?? "#"}
+          aria-current={item.active ? "page" : undefined}
+          aria-expanded={hasChildren && !ownToggle ? open : undefined}
+          // Following the row opens its group, as an accordion's does.
+          onClick={ownToggle && !open ? () => setOpen(true) : undefined}
+          className={cls}
+          title={collapsed ? item.label : undefined}
+        >
+          {inner}
+        </Link>
+      );
 
     return (
       <li key={key}>
-        {localDisclosure && hasChildren && item.href && !collapsed ? (
-          <div className="flex items-center">
-            <Link
-              href={item.href}
-              aria-current={item.active ? "page" : undefined}
-              className={`${cls} min-w-0 flex-1`}
-            >
-              {inner}
-            </Link>
+        {ownToggle ? (
+          <div className="relative">
+            {row}
             <button
               type="button"
-              aria-label={`${open ? "Collapse" : "Expand"} ${item.label}`}
               aria-expanded={open}
-              aria-controls={groupId}
-              onClick={toggle}
-              className={`${rowBase} h-[44px] w-[44px] shrink-0 justify-center`}
+              aria-controls={open ? listId : undefined}
+              aria-label={`${item.label} pages`}
+              onClick={() => setOpen(!open)}
+              className="absolute inset-y-0 right-1 my-auto grid h-7 w-7 place-items-center rounded-md hover:bg-ink/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11"
             >
               <Chevron open={open} />
             </button>
           </div>
-        ) : hasChildren && !item.href ? (
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={localDisclosure ? groupId : undefined}
-            onClick={toggle}
-            className={`${cls} text-left ${localDisclosure ? "min-h-[44px]" : ""}`}
-            title={collapsed ? item.label : undefined}
-          >
-            {inner}
-          </button>
         ) : (
-          <Link
-            href={item.href ?? "#"}
-            aria-current={item.active ? "page" : undefined}
-            aria-expanded={hasChildren ? open : undefined}
-            className={cls}
-            title={collapsed ? item.label : undefined}
-          >
-            {inner}
-          </Link>
+          row
         )}
-        {hasChildren && !collapsed && (open || localDisclosure) && (
-          <ul
-            id={localDisclosure ? groupId : undefined}
-            hidden={!open}
-            className="mb-1 mt-px flex flex-col gap-px"
-          >
-            {open && item.children!.map((child) => renderChild(child, key, depth + 1))}
+        {open && !collapsed && (
+          <ul id={listId} className="mb-1 mt-px flex flex-col gap-px">
+            {item.children!.map(renderChild)}
           </ul>
         )}
       </li>
     );
   }
 
-  const sidebar = (
-    <>
+  return (
+    <div className="flex h-dvh overflow-hidden bg-surface-muted">
       {drawerShown && (
-        // Pointer convenience; the visible close control and Escape also dismiss.
+        // The scrim conveys nothing, so it is out of the accessibility tree;
+        // its click is a mouse convenience on top of the real dismissal,
+        // Escape (above), as in modal.tsx.
         <div
           role="presentation"
           className="fixed inset-0 z-40 bg-black/50"
@@ -527,12 +489,11 @@ export default function SidebarLayout({
       {/* Sidebar — a column on desktop, an off-canvas drawer on a phone. */}
       <aside
         ref={navRef}
-        id={navId}
-        tabIndex={-1}
+        id="sidebar-layout-nav"
         role={drawerShown ? "dialog" : undefined}
         aria-modal={drawerShown ? true : undefined}
-        aria-labelledby={drawerShown ? titleId : undefined}
-        aria-describedby={drawerShown ? descriptionId : undefined}
+        aria-label={drawerShown ? (navLabel ?? "Navigation") : undefined}
+        tabIndex={drawerShown ? -1 : undefined}
         className={`flex shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 motion-reduce:transition-none ${
           collapsed ? "w-14" : "w-60"
         } max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:w-[min(18rem,85vw)] max-md:pb-[env(safe-area-inset-bottom)] max-md:pt-[env(safe-area-inset-top)] max-md:transition-transform ${
@@ -546,33 +507,6 @@ export default function SidebarLayout({
           }`}
         >
           {collapsed ? brandCollapsed : <div className="min-w-0 flex-1 truncate">{brand}</div>}
-          {drawerShown && (
-            <>
-              <h2 id={titleId} className="sr-only">
-                {navLabel ?? "Navigation"}
-              </h2>
-              <p id={descriptionId} className="sr-only">
-                Choose a page from the navigation.
-              </p>
-              <button
-                type="button"
-                aria-label="Close navigation"
-                onClick={() => setDrawerOpen(false)}
-                className="flex h-[44px] w-[44px] shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <svg
-                  aria-hidden="true"
-                  className="h-5 w-5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={2}
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </>
-          )}
         </div>
 
         {brandAccessory && !collapsed && (
@@ -594,16 +528,12 @@ export default function SidebarLayout({
                 ) : (
                   <p className="px-3 pb-1.5 pt-4 text-xs text-ink-muted">{section.label}</p>
                 ))}
-              <ul className="flex flex-col gap-px">
-                {section.items.map((item) => renderItem(item, "nav"))}
-              </ul>
+              <ul className="flex flex-col gap-px">{section.items.map(renderItem)}</ul>
             </div>
           ))}
           {navAppendix && !collapsed && <div className="mt-3">{navAppendix}</div>}
           {footerItems.length > 0 && (
-            <ul className="mt-auto flex flex-col gap-px pt-3">
-              {footerItems.map((item) => renderItem(item, "footer"))}
-            </ul>
+            <ul className="mt-auto flex flex-col gap-px pt-3">{footerItems.map(renderItem)}</ul>
           )}
         </nav>
 
@@ -651,23 +581,9 @@ export default function SidebarLayout({
           </button>
         </div>
       </aside>
-    </>
-  );
 
-  return (
-    <div className="flex h-dvh overflow-hidden bg-surface-muted">
-      {/* Only the mobile modal portals: desktop nav keeps its layout column.
-          Portal order also lets a later Modal stack above this drawer. */}
-      {drawerShown
-        ? createPortal(
-            <div data-modal-layer="" className="contents">
-              {sidebar}
-            </div>,
-            document.body,
-          )
-        : sidebar}
-      {/* Main */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      {/* Inert clears in the closing commit, before focus returns to the trigger. */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden" inert={drawerShown}>
         {/* Top bar — omitted when there is nothing to put in it, so a page
             that owns its own header does not sit under an empty bar. */}
         {(headerContent || narrow) && (
@@ -677,7 +593,7 @@ export default function SidebarLayout({
               type="button"
               onClick={() => setDrawerOpen(true)}
               aria-label="Open navigation"
-              aria-controls={navId}
+              aria-controls="sidebar-layout-nav"
               aria-expanded={drawerShown}
               className="hidden h-[44px] w-[44px] shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent max-md:flex"
             >
