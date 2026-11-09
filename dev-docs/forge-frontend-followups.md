@@ -111,6 +111,39 @@ Read acceptance: existing `src/api/__tests__/fileSystem.{inflight,chatMachine}.t
 and file viewer/tree tests. Write acceptance: add request/result/failure transport
 rows and assert editor/search/git effects; never introduce mutation retries.
 
+## Filesystem writes: contract hardening, NOT helper migration complete
+
+Fresh independent slice at main `3773fd8bc`; no competing write PR. Existing
+pinned generated client is retained with explicitly app-owned refreshes: the
+published runtime still lacks the `invalidate` override, so adopting its broad
+service invalidation would change editor/search/cache behavior.
+
+- [x] Actual bug fixed: `moveFile` now captures project/chat once for copy AND
+  delete. Previously a UI switch while copy was pending made the public delete
+  adapter resolve another chat/project and potentially delete on another disk.
+  Copy must finish before delete; failed/canceled copy never deletes, failed
+  delete rejects without retries or success refresh; full success refreshes once.
+- [x] New `fileSystem.writes.test.ts` pins save/create-file/create-folder/delete/
+  copy/move/replace wire paths, project/chat/worktree, save no-project no-op,
+  no retries/failure refresh, replace result mapping, successful-only editor
+  rewrite notifications and exact search-only invalidation. Other content
+  entries stay untouched. 5 scoped files / 36 tests, typecheck and lint pass;
+  `prove_test` confirms move-scope regression fails before and passes after.
+- [ ] Generated mutation-helper adoption remains outstanding for ALL filesystem
+  writes. This contract/fix slice does not cosmetically relabel adapters as
+  migrated. Recursive-copy routing/lifecycle is separately product-owned.
+
+### Forthcoming runtime package dependency (read-only metadata proof)
+
+Newest published npm package is **0.13.9**, gitHead `56e8024f38c5` (before #1989).
+The release planner's compute-only `--plan` mode (no worktree/build/tag/publish)
+reports **0.13.10 / web-runtime/v0.13.10** for merged #1989 commit `7944403df090`
+and current forge main `3afc116e704b`: patch over 0.13.9, state `planned`.
+That is the forthcoming package containing the seam **if released from these
+commits**, not evidence that it is on npm yet. Recheck actual tarball declarations
+and coordinate consumer pin after publication. No release cut, pin PR or local
+package patch was performed.
+
 ## Owner decisions left open
 
 - Streaming wrappers now delegate to Reliant SDK `UserStream`, `ChatStream` and

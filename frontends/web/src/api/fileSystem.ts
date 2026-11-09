@@ -573,9 +573,15 @@ export async function copyDirectoryRecursive(sourcePath: string, destinationPath
 export async function moveFile(sourcePath: string, destinationPath: string, worktreeId?: string): Promise<void> {
   try {
     const projectId = requireProjectId();
-    // Move = copy + delete
-    await copyOnServer(projectId, sourcePath, destinationPath, worktreeId);
-    await deleteFileOrFolder(sourcePath, worktreeId);
+    // A move is two RPCs on ONE captured machine/project. Re-entering the
+    // public delete adapter after the copy would re-read active UI scope: a
+    // chat switch while copy is pending could delete from a different disk.
+    const chatId = await activeChatIdForAPI();
+    await client.copyFile({ projectId, sourcePath, destinationPath, worktreeId, chatId });
+    await client.deleteFileOrFolder({ projectId, path: sourcePath, worktreeId, chatId });
+    // Preserve the old one post-success refresh (copyOnServer never emitted
+    // one). Failure/cancellation must not delete early or announce success.
+    triggerGitStatusRefresh(worktreeId, projectId);
   } catch (error) {
     console.error("Failed to move file:", error);
     throw error;
