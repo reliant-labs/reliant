@@ -8,13 +8,11 @@
 packages:
   - "."
   - "../../sdk/ts"
-
 # Refuse to install on a Node outside package.json's engines.node, before any
 # install script runs. Without it pnpm only warns, and on a Node with no
 # better-sqlite3 prebuild (26, say) the install dies a minute later in
 # node-gyp with a V8 compile error that never names the Node version.
 engineStrict: true
-
 # Install scripts pnpm may run; an unlisted one fails the install
 # (ERR_PNPM_IGNORED_BUILDS) rather than being skipped silently.
 #   better-sqlite3: fetches (or compiles) its native addon.
@@ -25,8 +23,8 @@ allowBuilds:
   esbuild: true
   protobufjs: false
 minimumReleaseAgeExclude:
-  - "@reliantlabs/forge-web-runtime@0.13.1 || 0.13.3 || 0.13.5 || 0.13.6 || 0.13.8"
-
+  - '@reliantlabs/forge-web-runtime@0.13.1'
+  - '@reliantlabs/forge-web-runtime@0.13.9'
 # Dependency versions forced past what a package pins.
 #   monaco-editor pins dompurify exactly (3.4.15 in 0.57.0); keep its copy on
 #   the same patched release as ours.
