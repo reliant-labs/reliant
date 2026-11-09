@@ -44,7 +44,6 @@ _runtime_config = {
     # sending Do Not Track or Global Privacy Control is never recorded.
     OTEL_ENDPOINT = "/_otel"
     DEMO_TELEMETRY = "replay"
-    OTEL_REPLAY = "true"
 }
 
 _forge_demo = forge.Frontend {
@@ -61,6 +60,7 @@ _forge_demo = forge.Frontend {
     asset_dir = "assets"
     image = "forge-demo"
     runtime_config = _runtime_config
+    telemetry = forge.BrowserTelemetry {replay = True}
     runtime = forge.OnHosted {}
 }
 
@@ -70,8 +70,6 @@ output = forge.render(forge.Bundle {
     # Reliant cloud: needed by OnHosted.
     control_plane = forge.ControlPlane {}
     # The platform keeps replay events only for an env that opts in.
-    observability = forge.Observability {
-        signals = forge.ObservabilitySignals {replay = True}
-    }
+    observability = forge.Observability {}
     frontends = [_forge_demo]
 })
