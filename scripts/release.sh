@@ -17,12 +17,15 @@
 # 2. Update the version in electron/package.json (+ lockfile)
 # 3. Open a PR against main
 #
-# Then, once that PR has MERGED:
-#
-#   ./scripts/release-tag.sh        # phase 2 — tags the merged commit on main
-#
-# Phase 2 is what creates the tag and triggers `Release Electron App` and
-# `Build & Push Image`.
+# Then, once that PR has MERGED, phase 2 tags it. That is control-plane's
+# rc-train, not a person: it names each release candidate after the version
+# electron/package.json declares on main, and when it promotes a candidate it
+# runs `./scripts/release-tag.sh <v> --commit <rc sha> --rc`, which creates the
+# tag and triggers `Release Electron App` and `Build & Push Image`. Until this
+# PR merges, every candidate carries the version already released, so the
+# train publishes NO desktop release (the tag is "burned"); the PR carries
+# `release:asap` so its merge cuts a candidate at once. `./scripts/release-tag.sh`
+# by hand is the hotfix path only (dev-docs/merge-and-release-gates.md).
 #
 # ── WHY THE TAG MOVED OUT OF THIS SCRIPT ────────────────────────────────────
 #
@@ -267,16 +270,21 @@ git push origin HEAD
 echo -e "${YELLOW}📋 Creating pull request...${NC}"
 PR_BODY="Version bump for v$NEW_VERSION.
 
-**This PR does not create the tag.** After it merges, run:
+**Why it matters.** control-plane's rc-train names every reliant release
+candidate after the version \`electron/package.json\` declares on \`main\`. While
+\`main\` still declares a version that is already tagged, each candidate it
+promotes finds that tag taken (\"burned\") and publishes **no desktop app**: the
+backend and web ship, the desktop app does not. Merging this PR is what lets the
+next promoted candidate ship v$NEW_VERSION to desktop users.
 
-\`\`\`
-./scripts/release-tag.sh
-\`\`\`
-
-That tags the *merged* commit on \`main\` and triggers \`Release Electron App\`
-and \`Build & Push Image\`. Tagging this branch instead would strand the tag off
-the trunk once the PR is squash-merged — which is how v1.7.8 through v1.7.12
-ended up unreachable from \`main\`."
+**This PR does not create the tag, and nobody runs anything after it merges.**
+The rc-train cuts a candidate from \`main\`, gates it, and on promotion runs
+\`./scripts/release-tag.sh v$NEW_VERSION --commit <rc sha> --rc\`, which tags the
+candidate and triggers \`Release Electron App\` and \`Build & Push Image\`. Label
+this PR \`release:asap\` so its merge cuts that candidate at once instead of on
+the 2h cadence. Tagging this branch by hand would strand the tag off the trunk
+once the PR is squash-merged, which is how v1.7.8 through v1.7.12 ended up
+unreachable from \`main\`."
 
 if command -v gh >/dev/null 2>&1; then
     gh pr create --title "chore: release v$NEW_VERSION" --body "$PR_BODY" --base main --head "$VERSION_BRANCH"
@@ -301,8 +309,8 @@ fi
 echo ""
 echo -e "${YELLOW}⚠️  NO TAG WAS CREATED, AND NOTHING IS BUILDING YET.${NC}"
 echo -e "${YELLOW}   Next steps:${NC}"
-echo -e "${BLUE}     1. Review and merge the PR above${NC}"
-echo -e "${BLUE}     2. ./scripts/release-tag.sh${NC}"
+echo -e "${BLUE}     1. Label the PR above release:asap; review merges it${NC}"
+echo -e "${BLUE}     2. control-plane's rc-train cuts, gates and promotes a candidate,${NC}"
+echo -e "${BLUE}        and tags v$NEW_VERSION on it (release-tag.sh --rc). Nothing to run by hand.${NC}"
 echo ""
-echo -e "${BLUE}   Step 2 tags the merged commit on main and starts the builds.${NC}"
-echo -e "${BLUE}   Preview it any time with: ./scripts/release-tag.sh --dry-run${NC}"
+echo -e "${BLUE}   A hotfix that cannot wait for the train: ./scripts/release-tag.sh (preview with --dry-run).${NC}"

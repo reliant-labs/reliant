@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 type SendToRunParams struct {
 	RunID   string `json:"run_id" jsonschema:"required,description=The run id (chat id), from start_run or list_runs."`
 	Message string `json:"message" jsonschema:"required,description=The message to deliver to the run."`
+	Thread  string `json:"thread,omitempty" jsonschema:"description=Optional. Which agent of the run the message is for: a thread id of the run, or the node name of an agent running in it (e.g. implement). Omit it to reach the run's one running agent; when several run in parallel the call is refused with the list, so name one."`
 	Subject string `json:"subject,omitempty" jsonschema:"description=Optional one-line summary of the message (at most 100 characters). The target chat shows the message collapsed to it; without one it shows the message's first line."`
 }
 
@@ -23,6 +25,8 @@ ONLY LIVE RUNS: a run that is running or paused. If the run has finished, or has
 A PAUSED run is resumed by the message, exactly as if the user had typed into the paused chat. If you do not want that, do not send it.
 
 THE RECEIPT IS HONEST: delivered means the message was saved to the run's thread and the run was nudged to look. It does NOT mean the run has read it or acted on it. Check with get_run.
+
+WHO READS IT: the message goes to the agent of the run that is running now (an agent chat's own agent, or a workflow's one running agent step). If several agents of the run are running in parallel, say which with thread (a thread id, or the node name of the agent, as get_run or the refusal lists them); the run never guesses. If no agent is running in it right now (a workflow between its agent steps), nothing is delivered and it says so.
 
 You cannot message the run you are executing in, and you can only message runs the user owns. To message a sub-agent you spawned, use spawn_send.`
 )
@@ -97,9 +101,14 @@ func (s *sendToRunTool) Execute(rctx *rctx.ToolContext, params SendToRunParams) 
 	// The message is the calling run's, never its user's: the target chat
 	// shows it as from this run (by its main thread), and so does its model.
 	from := RunSender{ThreadID: caller.chat.MainThreadID(), Subject: subject}
-	delivery, err := s.messenger.DeliverToRun(rctx.Context, caller.userID, chat.ID, params.Message, from)
+	delivery, err := s.messenger.DeliverToRun(rctx.Context, caller.userID, chat.ID, strings.TrimSpace(params.Thread), params.Message, from)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Could not deliver to run %s: %v", chat.ID, err)), nil
+	}
+	if !delivery.Delivered && delivery.NotDeliveredReason == errreason.RunNoListeningAgent {
+		return WithResponseMetadata(NewTextResponse(fmt.Sprintf(
+			"Not delivered: no agent is running in run %s right now (it is %s, between its agent steps), so nothing was sent. "+
+				"Nothing was queued for later; check its progress with get_run.", chat.ID, state)), meta), nil
 	}
 	if !delivery.Delivered {
 		return WithResponseMetadata(NewTextResponse(fmt.Sprintf(

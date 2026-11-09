@@ -3,6 +3,9 @@ package cmd
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,7 +29,7 @@ func TestTranscriptKillSwitchReachesTheAPIServer(t *testing.T) {
 		testkit.Inputs("deploy/kcl/**"))
 
 	const fixture = "deploy/kcl/testdata/transcript_kill_switch.k"
-	project := kcleval.Options{ProjectDir: "../../.."}
+	project := kcleval.Options{ProjectDir: "../../..", Binary: pinnedForge(t)}
 	for _, tc := range []struct {
 		selector string
 		wantEnv  string
@@ -54,4 +57,19 @@ func TestTranscriptKillSwitchReachesTheAPIServer(t *testing.T) {
 				reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB, cfg.GetTranscript().GetToolBodyStubs()))
 		})
 	}
+}
+
+// pinnedForge returns the forge this module pins: $FORGE_BIN when set (the
+// Taskfile's own override), else github.com/reliant-labs/forge/cmd/forge built
+// at go.mod's require into the test's temp dir. Never the forge on PATH: CI
+// runners have none, and a developer's is routinely another version.
+func pinnedForge(t *testing.T) string {
+	t.Helper()
+	if bin := os.Getenv("FORGE_BIN"); bin != "" {
+		return bin
+	}
+	bin := filepath.Join(t.TempDir(), "forge")
+	out, err := exec.Command("go", "build", "-trimpath", "-o", bin, "github.com/reliant-labs/forge/cmd/forge").CombinedOutput()
+	require.NoError(t, err, "building the pinned forge: %s", out)
+	return bin
 }

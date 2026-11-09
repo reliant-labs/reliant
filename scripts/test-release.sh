@@ -65,7 +65,30 @@ expect_ok() {
   if [ "$rc" != 0 ] || [ "$got" != "release-$want" ] || ! grep -q "chore: release v$want" "$GH_LOG" \
      || [ "$(node -p "require('$R/electron/package.json').version")" != "$want" ]; then
     echo "FAIL: release.sh $* -> exit $rc, pushed '$got' (want release-$want)"; cat "$R.out"; fail=1
+  elif ! handoff_ok "$want"; then
+    cat "$R.out"; fail=1
   else echo "ok: release.sh $* -> v$want"; fi
+}
+
+# handoff_ok <version>: the PR body (in the gh log) and the terminal output hand
+# phase 2 to control-plane's rc-train, not to the person who ran release.sh.
+handoff_ok() {
+  local v="$1" pat
+  for pat in "rc-train" "release-tag.sh v$v --commit <rc sha> --rc" "release:asap" \
+             "nobody runs anything after it merges"; do
+    grep -qF -- "$pat" "$GH_LOG" || { echo "FAIL: PR body lacks '$pat'"; return 1; }
+  done
+  for pat in "rc-train" "release:asap" "Nothing to run by hand"; do
+    grep -qF -- "$pat" "$R.out" || { echo "FAIL: terminal guidance lacks '$pat'"; return 1; }
+  done
+  # The retired manual handoff: "After it merges, run: ./scripts/release-tag.sh"
+  # in the body, and "2. ./scripts/release-tag.sh" as a next step.
+  if grep -qF "After it merges, run:" "$GH_LOG"; then
+    echo "FAIL: PR body tells the author to tag by hand"; return 1
+  fi
+  if grep -qE '[0-9]\. \./scripts/release-tag\.sh' "$R.out"; then
+    echo "FAIL: terminal next steps tell the author to tag by hand"; return 1
+  fi
 }
 
 # expect_refused <stderr pattern> <release.sh args...>

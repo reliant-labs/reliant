@@ -27,6 +27,7 @@ import {
 } from "../lib/chatStreamReducers";
 import {
   createChatState,
+  mergeToolResults,
   reduceChat,
   type ChatState as SdkChatState,
   type Logger as SdkLogger,
@@ -2048,13 +2049,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // merged over anything already known for this chat, so processMessage can
       // resolve call→result the same way the live stream path does. The server
       // does not copy a result onto its call block: this index is the join.
-      const loadedToolResults: ToolResultsByCallId = {
-        ...(state.toolResultsByCallId[chatId] || {}),
-      };
+      // A stub of a result already held whole never replaces it.
+      const foundToolResults: ToolResultsByCallId = {};
       for (const message of messages) {
         if (message.role !== MessageRole.TOOL) continue;
-        foldToolResultMessage(message, loadedToolResults);
+        foldToolResultMessage(message, foundToolResults);
       }
+      const loadedToolResults = mergeToolResults(
+        state.toolResultsByCallId[chatId] || {},
+        foundToolResults,
+      );
 
       // Warm the reference-keyed processMessage memo so the first render after
       // a tab switch reads cached parses instead of reparsing every message —
@@ -2103,11 +2107,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     for (const message of messages) {
       if (message.role === MessageRole.TOOL) foldToolResultMessage(message, found);
     }
+    // A result already indexed is the same one re-delivered, kept unless it
+    // is a stub and this read has its body (mergeToolResults).
     const existing = get().toolResultsByCallId[chatId] || {};
-    const added = Object.keys(found).filter((id) => !(id in existing));
-    if (added.length === 0) return;
-    const merged: ToolResultsByCallId = { ...existing };
-    for (const id of added) merged[id] = found[id];
+    const merged = mergeToolResults(existing, found);
+    if (merged === existing) return;
     set((state) => ({
       toolResultsByCallId: { ...state.toolResultsByCallId, [chatId]: merged },
     }));

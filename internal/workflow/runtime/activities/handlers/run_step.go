@@ -3,6 +3,8 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -147,6 +149,23 @@ func (a *ExecuteRunStepActivity) Category() schema.ActivityCategory {
 // - ✅ Error handling
 // - ✅ Step execution tracking (UI-only)
 func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunStepInput) (ExecuteRunStepOutput, error) {
+	info := activity.GetInfo(ctx)
+	return a.execute(ctx, input, info.Attempt, runStepRequestID(info))
+}
+
+// runStepRequestID is the transport id of a run step's command: the same on
+// every attempt of one scheduled activity, and on no other. Temporal keeps
+// the activity id across retries and never reuses it within a run, and the
+// run id tells runs apart, so a resume (a new activity) gets a new id. A
+// hash, so it fits the request-id alphabet whatever the ids contain.
+func runStepRequestID(info activity.Info) string {
+	sum := sha256.Sum256([]byte(info.WorkflowExecution.ID + "\x00" + info.WorkflowExecution.RunID + "\x00" + info.ActivityID))
+	return "runstep-" + hex.EncodeToString(sum[:16])
+}
+
+// execute is Execute for attempt number attempt, whose command travels as
+// requestID.
+func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunStepInput, attempt int32, requestID string) (ExecuteRunStepOutput, error) {
 	startTime := time.Now()
 
 	// IDEMPOTENCY: a shell command runs at most once per step dispatch.
@@ -156,11 +175,19 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	// failure that proves nothing — a timeout, a dropped connection — fails the
 	// step without a retry (runStepTransportFailure). So a Temporal retry
 	// reaches this point only after an attempt that ended with no verdict at
-	// all (a worker that died, a heartbeat timeout) and may have started the
-	// command: it is refused, once, and not retried again. The workflow
-	// pauses the step (RetryExhausted) and a resume dispatches it afresh.
-	attemptNumber := activity.GetInfo(ctx).Attempt
-	if attemptNumber > 1 {
+	// all (a worker that died or was released by its drain, a heartbeat
+	// timeout) and may have started the command.
+	//
+	// The retry never sends it. It reattaches, best effort: the command went
+	// out under requestID, the same on every attempt, and the machine keeps
+	// it — running, or finished with its result held — so the retry waits for
+	// THAT command and returns its real output and exit status. When the
+	// machine cannot vouch for it (it restarted, its result is gone, it is too
+	// old to be asked, or this attempt cannot even resolve where it ran) the
+	// retry is refused, once, and not retried again: the workflow pauses the
+	// step (RetryExhausted) and a resume dispatches it afresh.
+	retry := attempt > 1
+	refuse := func() (ExecuteRunStepOutput, error) {
 		msg := "Error: the previous attempt at this command ended without a result and may have started it; it was not run again"
 		return ExecuteRunStepOutput{
 			Stderr:   msg,
@@ -168,7 +195,7 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 			ExitCode: -1,
 			Duration: time.Since(startTime).Milliseconds(),
 		}, temporal.NewApplicationErrorWithOptions(
-			fmt.Sprintf("activity retry detected (attempt %d): the previous attempt may have started the shell command, refusing to re-execute it", attemptNumber),
+			fmt.Sprintf("activity retry detected (attempt %d): the previous attempt may have started the shell command, refusing to re-execute it", attempt),
 			runStepRetryRefusedErrType, temporal.ApplicationErrorOptions{
 				NonRetryable: true,
 				// Benign: refusing is the designed at-most-once outcome, not a
@@ -189,6 +216,13 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	// Resolve execution context from chat -> project -> worktree
 	execCtx, err := resolveRunExecutorContext(ctx, a.repo, input.ChatID)
 	if err != nil {
+		// A retry resolves where its command ran the way the attempt that
+		// sent it did. Anything that stops it here, or at any of the checks
+		// below, may be a verdict the first attempt returned without running
+		// the command, or may not: the retry cannot know, so it refuses.
+		if retry {
+			return refuse()
+		}
 		return ExecuteRunStepOutput{}, fmt.Errorf("failed to resolve working directory: %w", err)
 	}
 
@@ -198,6 +232,9 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	// Temporal retries nor enters the retry-exhaustion pause waiting for a
 	// machine that is not coming.
 	if execCtx.NoMachine {
+		if retry {
+			return refuse()
+		}
 		refusal := nomachine.Refusal(model.NodeTypeRun)
 		return ExecuteRunStepOutput{Stderr: refusal, Output: refusal, ExitCode: -1,
 			Duration: time.Since(startTime).Milliseconds()}, nil
@@ -217,6 +254,9 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	if err != nil {
 		// A typo must not run the command with credentials the author meant to
 		// withhold: fail the step as a command verdict, with no retry.
+		if retry {
+			return refuse()
+		}
 		msg := "run node: " + err.Error()
 		return ExecuteRunStepOutput{Stderr: msg, Output: msg, ExitCode: -1,
 			Duration: time.Since(startTime).Milliseconds()}, nil
@@ -228,6 +268,9 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	// A machine without one fails the command with the reason and the way
 	// out (exit -1), never a stuck step.
 	if err := resolveRunCheckout(ctx, a.repo, a.router, &execCtx); err != nil {
+		if retry {
+			return refuse()
+		}
 		refusal := missingRefusal(err)
 		return ExecuteRunStepOutput{Stderr: refusal, Output: refusal, ExitCode: -1,
 			Duration: time.Since(startTime).Milliseconds()}, nil
@@ -254,8 +297,26 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 	if wait == nil {
 		wait = defaultMachineWait()
 	}
-	observe := a.observeMachine(execCtx)
-	result, err := executeUntilDelivered(ctx, executor, wait, observe, input.Command, workingDir, timeout)
+	var result CommandResult
+	if retry {
+		reattacher, ok := executor.(RunReattacher)
+		if !ok {
+			return refuse()
+		}
+		var attached bool
+		result, attached, err = reattacher.ReattachCommand(ctx, requestID, timeout)
+		if !attached {
+			activity.GetLogger(ctx).Info("[RunStep] retry found no command to reattach to; refusing to run it again",
+				"chat_id", input.ChatID, "step_id", input.StepID, "attempt", attempt, "request_id", requestID)
+			return refuse()
+		}
+		activity.GetLogger(ctx).Info("[RunStep] retry reattached to the command the previous attempt started",
+			"chat_id", input.ChatID, "step_id", input.StepID, "attempt", attempt, "request_id", requestID,
+			"exit_code", result.ExitCode, "error", err)
+	} else {
+		observe := a.observeMachine(execCtx)
+		result, err = executeUntilDelivered(withRunRequestID(ctx, requestID), executor, wait, observe, input.Command, workingDir, timeout)
+	}
 	stdout, stderr, exitCode, interrupted := result.Stdout, result.Stderr, result.ExitCode, result.Interrupted
 	if err != nil {
 		// The machine never took the command within the wait (or is gone):

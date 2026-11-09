@@ -15,6 +15,7 @@ import { scaffoldFixtures } from "../fixtures";
 import { BuiltTourStep } from "../BuiltTourStep";
 import { HowThisAppWasBuilt } from "../HowThisAppWasBuilt";
 import { summarize } from "../ScaffoldPanel";
+import { recordedOwnership, categoryOwnership } from "../ownership";
 
 const { cast, manifest } = scaffoldFixtures();
 const n = (value: number) => value.toLocaleString("en-US");
@@ -108,6 +109,26 @@ describe("<HowThisAppWasBuilt>", () => {
     expect(CHAIN_COPY.handler.body).toContain("your agent implements your app's rules");
     expect(screen.getByRole("heading", {name:"What Forge generated",level:2})).toBeVisible();
     expect(screen.getByText("About this recording").closest("details")).not.toHaveAttribute("open");
+  });
+
+  it("labels recorded ownership for each excerpt without inferring it from language", () => {
+    render(<HowThisAppWasBuilt />);
+    const expected = {proto:"yours",migration:"yours",orm:"regen",handler:"yours",hook:"regen",test:"yours"};
+    for (const excerpt of manifest.chain) {
+      expect(recordedOwnership(manifest, excerpt.path)).toBe(expected[excerpt.id]);
+      fireEvent.click(screen.getByTestId(`scaffold-chain-tab-${excerpt.id}`));
+      const panel = screen.getByTestId("scaffold-chain-panel");
+      expect(panel.querySelector(`[data-ownership="${expected[excerpt.id]}"]`)).not.toBeNull();
+      const guide = within(panel).getByTestId("scaffold-ownership-guide");
+      expect(guide).toHaveTextContent(expected[excerpt.id] === "regen" ? "direct edits here would be overwritten" : "edit it directly");
+    }
+    const apiStub = manifest.categories.flatMap(c=>c.entries).find(e=>e[0].startsWith("gen/") && e[3] === "regen")!;
+    expect(apiStub).toBeDefined();
+    expect(recordedOwnership(manifest, apiStub[0])).toBe("regen");
+    expect(recordedOwnership(manifest,"unknown.go")).toBeNull();
+    const mixed = manifest.categories.find(c=>c.id === "contract")!;
+    expect(categoryOwnership(mixed)).toBe("mixed");
+    expect(screen.getByTestId("scaffold-category-contract")).toHaveTextContent("Mixed ownership");
   });
 
   it("offers Back only when it is given somewhere to go", () => {

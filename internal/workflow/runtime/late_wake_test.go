@@ -73,12 +73,38 @@ func runLateWakeCheck(t *testing.T, setup func(ctx workflow.Context, tracker *Ch
 func TestLateWakeCheck_SeesAWakeTheHandlerHasNotCountedYet(t *testing.T) {
 	t.Parallel()
 	d := runLateWakeCheck(t, func(ctx workflow.Context, tracker *ChildWorkflowTracker) {
+		ranAgentLoopOnRoot(tracker, "t")
 		tracker.recordTurnStart("t")
 		deliverWakeLikeTemporal(ctx, "t")
 	})
 	require.Zero(t, d.CountedBeforeCheck, "precondition: the handler has not run, so nothing is counted yet")
 	require.True(t, d.ContinuedAsNew, "the check must let the handler count the wake and continue as a run for it")
 	require.False(t, d.SuccessorResume, "the successor starts at graph entry")
+}
+
+// ranAgentLoopOnRoot makes thread the run's root and records that an agent
+// loop ran on it, as the root loop of an agent chat does.
+func ranAgentLoopOnRoot(tracker *ChildWorkflowTracker, thread string) {
+	tracker.rootThread = thread
+	release := tracker.registerAgentLoop(thread, "agent_loop")
+	release()
+}
+
+// A pending message never restarts a workflow (reliant #2394). A graph run's
+// root thread runs no agent loop (pr-fix works in a `workflow` node on a
+// thread of its own), so a wake on it is input nothing in the run can read.
+// Continuing at graph entry re-ran the whole workflow and still left the
+// message unread; the run must end instead.
+func TestLateWakeCheck_AGraphRunWithNoRootAgentIsNotReRun(t *testing.T) {
+	t.Parallel()
+	d := runLateWakeCheck(t, func(ctx workflow.Context, tracker *ChildWorkflowTracker) {
+		tracker.rootThread = "t"
+		// An agent ran in the run, but on a node's thread, not the root's.
+		tracker.registerAgentLoop("implement-thread", "implement.agent_loop")()
+		tracker.recordTurnStart("t")
+		deliverWakeLikeTemporal(ctx, "t")
+	})
+	require.False(t, d.ContinuedAsNew, "a wake on a root no agent reads must not continue the run at graph entry")
 }
 
 // A wake that a turn has since seen is not a reason to go round again.

@@ -11221,6 +11221,11 @@
               "name": "processes",
               "kind": "message",
               "type_name": "reliant.v1.ProcessReport"
+            },
+            {
+              "name": "worktree_reclaim",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimProposals"
             }
           ],
           "reliant.v1.DiskVolume": [
@@ -11661,6 +11666,100 @@
               "kind": "message",
               "type_name": "reliant.v1.DaemonInfo"
             }
+          ],
+          "reliant.v1.WorktreeReclaimProposal": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "fingerprint",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
+            },
+            {
+              "name": "work_summary",
+              "kind": "string"
+            },
+            {
+              "name": "unpushed_commits",
+              "kind": "int32"
+            },
+            {
+              "name": "idle_seconds",
+              "kind": "int64"
+            },
+            {
+              "name": "last_activity_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "size_bytes",
+              "kind": "int64"
+            },
+            {
+              "name": "owner",
+              "kind": "string"
+            },
+            {
+              "name": "row_id",
+              "kind": "string"
+            },
+            {
+              "name": "proposed_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            },
+            {
+              "name": "note_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "decision",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WorktreeReclaimProposals": [
+            {
+              "name": "mode",
+              "kind": "string"
+            },
+            {
+              "name": "pass_finished_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "proposals",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimProposal",
+              "repeated": true
+            },
+            {
+              "name": "total",
+              "kind": "int32"
+            }
           ]
         },
         "SchemaFiles": {
@@ -11703,7 +11802,9 @@
           "reliant.v1.SetLocalModelEndpointsRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.SetMachineLabelsRequest": "reliant/v1/daemon_registry.proto",
-          "reliant.v1.SetMachineLabelsResponse": "reliant/v1/daemon_registry.proto"
+          "reliant.v1.SetMachineLabelsResponse": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.WorktreeReclaimProposal": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.WorktreeReclaimProposals": "reliant/v1/tools_daemon.proto"
         },
         "Enums": {
           "reliant.v1.DaemonLifecyclePhase": [
@@ -15562,6 +15663,12 @@
               "kind": "message",
               "type_name": "reliant.v1.InboxAutomationDefinitionBroken",
               "oneof": "payload"
+            },
+            {
+              "name": "worktree_reclaim",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxWorktreeReclaim",
+              "oneof": "payload"
             }
           ],
           "reliant.v1.InboxQuestion": [
@@ -15644,6 +15751,38 @@
             {
               "name": "daemon_name",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.InboxWorktreeReclaim": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "online",
+              "kind": "bool"
+            },
+            {
+              "name": "reported_at",
+              "kind": "string"
+            },
+            {
+              "name": "mode",
+              "kind": "string"
+            },
+            {
+              "name": "proposals",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimProposal",
+              "repeated": true
+            },
+            {
+              "name": "total",
+              "kind": "int32"
             }
           ],
           "reliant.v1.ListInboxRequest": [
@@ -15870,6 +16009,80 @@
               "name": "message",
               "kind": "string"
             }
+          ],
+          "reliant.v1.WorktreeReclaimProposal": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "fingerprint",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
+            },
+            {
+              "name": "work_summary",
+              "kind": "string"
+            },
+            {
+              "name": "unpushed_commits",
+              "kind": "int32"
+            },
+            {
+              "name": "idle_seconds",
+              "kind": "int64"
+            },
+            {
+              "name": "last_activity_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "size_bytes",
+              "kind": "int64"
+            },
+            {
+              "name": "owner",
+              "kind": "string"
+            },
+            {
+              "name": "row_id",
+              "kind": "string"
+            },
+            {
+              "name": "proposed_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            },
+            {
+              "name": "note_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "decision",
+              "kind": "string"
+            }
           ]
         },
         "SchemaFiles": {
@@ -15894,6 +16107,7 @@
           "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
           "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxWorktreeReclaim": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
           "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
@@ -15903,7 +16117,8 @@
           "reliant.v1.RestoreInboxItemResponse": "reliant/v1/inbox.proto",
           "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
-          "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto"
+          "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto",
+          "reliant.v1.WorktreeReclaimProposal": "reliant/v1/tools_daemon.proto"
         },
         "Enums": {
           "reliant.v1.ApprovalType": [
@@ -15932,7 +16147,8 @@
             "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP",
             "INBOX_ITEM_KIND_RECOVERY",
             "INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED",
-            "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN"
+            "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN",
+            "INBOX_ITEM_KIND_WORKTREE_RECLAIM"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -15971,7 +16187,8 @@
             8,
             9,
             10,
-            11
+            11,
+            12
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
@@ -23596,6 +23813,10 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "using_credits",
+              "kind": "bool"
             }
           ],
           "reliant.v1.RefreshProviderAccountUsageRequest": [
@@ -29328,6 +29549,10 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "using_credits",
+              "kind": "bool"
             }
           ],
           "reliant.v1.ProviderStatus": [
@@ -34554,6 +34779,11 @@
               "name": "processes",
               "kind": "message",
               "type_name": "reliant.v1.ProcessReport"
+            },
+            {
+              "name": "worktree_reclaim",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimProposals"
             }
           ],
           "reliant.v1.DiskVolume": [
@@ -35586,6 +35816,100 @@
               "name": "account_email",
               "kind": "string"
             }
+          ],
+          "reliant.v1.WorktreeReclaimProposal": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "fingerprint",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
+            },
+            {
+              "name": "work_summary",
+              "kind": "string"
+            },
+            {
+              "name": "unpushed_commits",
+              "kind": "int32"
+            },
+            {
+              "name": "idle_seconds",
+              "kind": "int64"
+            },
+            {
+              "name": "last_activity_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "size_bytes",
+              "kind": "int64"
+            },
+            {
+              "name": "owner",
+              "kind": "string"
+            },
+            {
+              "name": "row_id",
+              "kind": "string"
+            },
+            {
+              "name": "proposed_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            },
+            {
+              "name": "note_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "decision",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WorktreeReclaimProposals": [
+            {
+              "name": "mode",
+              "kind": "string"
+            },
+            {
+              "name": "pass_finished_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "proposals",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimProposal",
+              "repeated": true
+            },
+            {
+              "name": "total",
+              "kind": "int32"
+            }
           ]
         },
         "SchemaFiles": {
@@ -35647,7 +35971,9 @@
           "reliant.v1.UnwatchProjectConfigsRequest": "reliant/v1/tools_daemon.proto",
           "reliant.v1.WatchProjectConfigsRequest": "reliant/v1/tools_daemon.proto",
           "reliant.v1.WhoAmIRequest": "reliant/v1/tools_daemon.proto",
-          "reliant.v1.WhoAmIResponse": "reliant/v1/tools_daemon.proto"
+          "reliant.v1.WhoAmIResponse": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.WorktreeReclaimProposal": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.WorktreeReclaimProposals": "reliant/v1/tools_daemon.proto"
         },
         "Enums": {
           "reliant.v1.DiskGuardState": [

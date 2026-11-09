@@ -19,6 +19,7 @@ import { BranchFromMessageButton, MessageTimestamp } from "./MessageChrome";
 import type { MessageSlice, TurnWork } from "./thread-views/simplifiedTurns";
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useMinimumDwell } from "./useMinimumDwell";
+import { elidedBlockIdsOf, prefetchContentBlockBodies } from "../../hooks/content-block-bodies";
 import { AgentMessageCard, isAgentMessage } from "./AgentMessageCard";
 import { SystemNotificationMessage } from "./SystemNotificationMessage";
 
@@ -33,6 +34,12 @@ interface TurnWorkFoldProps {
 }
 
 const NO_APPROVALS: Approval[] = [];
+
+/** A fold's execution: what the summary reads, plus the bodies its rows may fetch. */
+type FoldExecution = TurnWorkExecution & {
+  call: TurnWorkExecution["call"] & { inputElided?: boolean; content_block_id?: string };
+  result?: TurnWorkExecution["result"] & { elided?: boolean; block_id?: string };
+};
 
 const workSlice = (part: TurnWork["parts"][number]): MessageSlice =>
   part.callIds
@@ -65,12 +72,12 @@ function TurnWorkFoldComponent({
   const toolCallStates = useToolCallStates(chatId || "");
   const { allWorkflows } = useWorkflowExecutions(chatId || null);
 
-  const executions = useMemo((): TurnWorkExecution[] => {
+  const executions = useMemo((): FoldExecution[] => {
     const approvalsByBlock = new Map<string, Approval>();
     for (const approval of approvals) {
       if (approval.entityId) approvalsByBlock.set(approval.entityId, approval);
     }
-    const out: TurnWorkExecution[] = [];
+    const out: FoldExecution[] = [];
     for (const part of work.parts) {
       const { segments } = getProcessedMessage(part.message, toolResultsByCallId, approvals);
       const held = part.callIds ? new Set(part.callIds) : null;
@@ -175,6 +182,16 @@ function TurnWorkFoldComponent({
   // Collapsed by default, even while live: the header carries the live state.
   const [expanded, setExpanded] = useState(false);
   const toggle = useCallback(() => setExpanded((open) => !open), []);
+
+  // Opening the fold reads the bodies its rows were sent without (a stub
+  // read) in one batch, so the rows that render expanded do not each start a
+  // request and the ones the user opens next are already here.
+  const elidedIds = useMemo(() => elidedBlockIdsOf(executions), [executions]);
+  const elidedKey = elidedIds.join(",");
+  useEffect(() => {
+    if (!expanded || !chatId || elidedKey === "") return;
+    prefetchContentBlockBodies(chatId, elidedKey.split(","));
+  }, [expanded, chatId, elidedKey]);
 
   const common = { chatId, approvals, isStreaming, onSelectThread, timelineVariant };
   const renderEvents = (afterPart: number) => (work.events ?? [])

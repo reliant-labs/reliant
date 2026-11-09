@@ -47,6 +47,10 @@ export const ERROR_REASONS = [
   // ── reliant: handlers ──
   /** SendMessage on a chat whose root run has not started (handlers/chat). */
   "chat_not_started",
+  /** Input to a live run in which no agent is running right now; nothing was queued (handlers/chat run_recipient.go). */
+  "run_no_listening_agent",
+  /** Input to a run with several agents running in parallel that names none of them; the message lists them (handlers/chat run_recipient.go). */
+  "run_recipient_ambiguous",
   /** A save raced a newer revision of the same definition (handlers/workflow). */
   "stale_revision",
   /** Killing a process that already exited (handlers/package_commands, background). */

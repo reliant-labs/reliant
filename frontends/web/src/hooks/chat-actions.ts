@@ -32,6 +32,7 @@ import type { WorktreeSummary } from "../gen/reliant/v1/worktree_pb";
 import { ToolCallService } from "../gen/reliant/v1/tool_call_pb";
 import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
+import { TRANSCRIPT_TOOL_BODY_MODE } from "../lib/toolBodies";
 import type { Chat, Message } from "../types/chat";
 import type { BranchChatRequest, StartChatRequest, UpdateChatRequest } from "../types/api";
 import {
@@ -407,6 +408,8 @@ export async function listMessages(
     recent: options?.recent,
     beforeSeq: options?.beforeSeq ? BigInt(options.beforeSeq) : undefined,
     threadId: options?.threadId,
+    // Finished calls' bodies are fetched when shown (hooks/content-block-bodies.ts).
+    toolBodies: TRANSCRIPT_TOOL_BODY_MODE,
   });
   return {
     messages: response.messages.map(convertProtoMessage),

@@ -15,6 +15,15 @@ the provider sent them. Re-capture with `reliant-dev provider-usage probe
 | claude_profile.json | `GET api.anthropic.com/api/oauth/profile` (HTTP 200) | `account.{uuid,email,has_claude_max,has_claude_pro}`, `organization.{uuid,name,organization_type:"claude_max",rate_limit_tier:"default_claude_max_20x",subscription_status}`; there is no plan string, so the plan is derived from `organization_type` + `rate_limit_tier` |
 | codex_usage.json | `GET chatgpt.com/backend-api/wham/usage` (HTTP 200) | top-level (not wrapped) `plan_type:"prolite"`, `rate_limit.{allowed,limit_reached,primary_window,secondary_window}`; this plan has ONE weekly window in `primary_window` (`limit_window_seconds` 604800) and `secondary_window: null`; while 100% used it still says `allowed:true, limit_reached:false`, so status comes from the window math |
 
+`codex_usage_team_credits.json` is a LIVE capture too, redacted the same way,
+taken 2026-11-08 from a ChatGPT Team workspace whose weekly window was spent
+(read with the account's own Codex CLI credential and shared by its owner). It
+says `allowed:false, limit_reached:true` with `secondary_window.used_percent`
+100, and `credits.has_credits:true` with neither `overage_limit_reached` nor
+`spend_control.reached`: the Codex CLI kept answering on that account, so the
+workspace's credits were paying for requests past the window. It is the
+`overage` status, not `rejected`.
+
 The remaining files are SYNTHETIC, written by hand to cover shapes the live
 accounts did not produce. They pin parser behaviour for those shapes only:
 

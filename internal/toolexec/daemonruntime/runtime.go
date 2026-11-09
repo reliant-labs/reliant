@@ -1997,6 +1997,11 @@ func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest
 	if contextMap["user_id"] == nil {
 		contextMap["user_id"] = d.currentUserID()
 	}
+	// A run step's result outlives its acknowledgement for a while, so a
+	// retry whose worker went away can still reattach to it (result_retain.go).
+	if runStep, _ := contextMap[toolexec.RunStepContextKey].(bool); runStep {
+		d.results.markRetain(req.RequestId)
+	}
 
 	// The worktree or project this call works in: recorded the first time it
 	// is seen, and refused while it (or $HOME) is no longer the directory the

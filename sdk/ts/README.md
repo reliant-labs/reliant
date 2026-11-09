@@ -31,11 +31,40 @@ Electron renderer, a worker or a server.
 | `ChatUpdate`, `decodeChatUpdate`, `decodeUserUpdate` | The typed events and the one place that decodes them from the wire's JSON payloads. |
 | `reduceChat`, `createChatState` | The pure fold of a chat's stream: snapshot replaces, replay merges, deltas build a placeholder under the pre-allocated message id, finalize markers retire it, tools never regress, results join their calls. `(state, action) -> state`, no clock, no store. |
 | `ChatSession` | A chat, live: the stream, the state, and `send`/`retry` with ids that make a retry safe. Bind it to any framework with `subscribe`/`getState`. |
+| `fetchContentBlockBodies` | The tool inputs, results and thinking a `toolBodies: "stub"` read left out, by block id: batched 100 a request, deferred ids asked again. Also `ChatSession.fetchContentBlockBodies`. |
 
 The host owns what it must: `AuthTokenProvider` (storage, refresh, sign-out),
 the `WakeSource` (online/visibility signals; the default listens on `window`
 when there is one), and any extra interceptors (upgrade prompts, error
 reporting).
+
+### Tool bodies on demand
+
+A long agent chat is mostly tool inputs and outputs. `toolBodies: "stub"` (on
+`reliant.chat(...)` or `reliant.streams.chat(...)`) opens it without the
+bodies of its finished calls: the snapshot, the replay and `loadOlder`'s pages
+send each such block with `bodyElided` set and `bodySize` its stored length. A
+call's `input` is then a skeleton (every key kept, long strings cut) that
+labels the call but must not be rendered as its input; a result is a short
+stub, also `truncated`, and its `toolResults` entry has `elided: true` and the
+`block_id` to fetch it by. Live frames and calls in flight are always whole.
+
+```ts
+const chat = reliant.chat({ chatId, toolBodies: "stub" }).start();
+// The user expands a call: its input by the call block's id, its result by the result block's.
+const { bodies, notFound } = await chat.fetchContentBlockBodies(
+  [callBlock.id, chat.getState().toolResults[callId].block_id],
+  { full: false }, // true: results as stored, for copy and export
+);
+```
+
+Bodies stay out of `ChatState` (a finished call's body never changes: cache
+them yourself, per block id). The reducer keeps what it holds: a stub never
+displaces a body it has, by block id, in a message or in `toolResults`, and a
+body always replaces a stub, so a reconnect does not blank a call watched live.
+The default is `"full"`, what every client has always had; a server that
+predates the option sends full bodies, so act on each block's `bodyElided`,
+never on the mode asked for.
 
 ### Peer dependencies
 

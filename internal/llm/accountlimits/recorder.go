@@ -145,13 +145,14 @@ func (r *Recorder) observe(userID, accountID string, s ratelimit.Snapshot) {
 // past it. window uses the vocabulary of ratelimit.UsageLimitError.Window
 // ("five_hour", "seven_day").
 //
-// A poll is scheduled to confirm the reset 30 s after the bench ends.
+// A poll is scheduled at benchRecheckAt: within benchRecheckEvery, or 30 s
+// after the bench ends if that is sooner.
 func (r *Recorder) Bench(ctx context.Context, userID, accountID string, until time.Time, window string) (time.Time, error) {
 	eff, err := bench(ctx, r.store, r.clock(), userID, accountID, until, window)
 	if err != nil {
 		return time.Time{}, err
 	}
-	r.schedulePoll(ctx, accountID, eff.Add(confirmAfterReset))
+	r.schedulePoll(ctx, accountID, benchRecheckAt(eff, r.clock()))
 	return eff, nil
 }
 
@@ -234,7 +235,7 @@ func (r *Recorder) write(ctx context.Context, it flushItem, now time.Time) error
 		if eff, err := bench(ctx, r.store, now, it.userID, it.accountID, ex.Until, ex.Window); err != nil {
 			logging.WarnContext(ctx, "benching account from its rate-limit snapshot failed", "account_id", it.accountID, "error", err)
 		} else {
-			r.schedulePoll(ctx, it.accountID, eff.Add(confirmAfterReset))
+			r.schedulePoll(ctx, it.accountID, benchRecheckAt(eff, now))
 		}
 		return nil
 	}

@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/runs"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -61,6 +62,19 @@ func (c *absorbTestTemporalClient) SignalWorkflow(
 	_ context.Context, _, _ string, _ string, _ interface{},
 ) error {
 	return nil
+}
+
+// A send to a live run asks it which threads its agents read
+// (run_recipient.go). This run cannot say, as a worker from before that
+// query cannot, so the message goes where input to a run always went. Every
+// other query is the embedded client's, as before.
+func (c *absorbTestTemporalClient) QueryWorkflowWithOptions(
+	ctx context.Context, req *client.QueryWorkflowWithOptionsRequest,
+) (*client.QueryWorkflowWithOptionsResponse, error) {
+	if req.QueryType == v2.AgentLoopThreadsQuery {
+		return nil, assertNotFound{}
+	}
+	return c.Client.QueryWorkflowWithOptions(ctx, req)
 }
 
 type assertNotFound struct{}

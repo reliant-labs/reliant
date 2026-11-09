@@ -184,7 +184,7 @@ func (x TerminalSessionEvent_EventType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use TerminalSessionEvent_EventType.Descriptor instead.
 func (TerminalSessionEvent_EventType) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{54, 0}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{56, 0}
 }
 
 type WhoAmIRequest struct {
@@ -1629,9 +1629,15 @@ type DiskReport struct {
 	// capacity guard, internal/procguard). It travels with the disk report
 	// because both are the machine's resources and both feed its storage inbox
 	// item; unset for daemons that cannot count processes (macOS, Windows).
-	Processes     *ProcessReport `protobuf:"bytes,5,opt,name=processes,proto3" json:"processes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Processes *ProcessReport `protobuf:"bytes,5,opt,name=processes,proto3" json:"processes,omitempty"`
+	// The worktrees the daemon's machine-wide reclaim proposes for removal and
+	// will not remove without the person's approval (worktreereclaim: they hold
+	// uncommitted, unpushed or reflog-only work and have been idle about five
+	// days). Unset when the reclaim is off, has not run, or proposes nothing.
+	// It feeds the machine's worktree-reclaim inbox item.
+	WorktreeReclaim *WorktreeReclaimProposals `protobuf:"bytes,6,opt,name=worktree_reclaim,json=worktreeReclaim,proto3" json:"worktree_reclaim,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DiskReport) Reset() {
@@ -1699,6 +1705,284 @@ func (x *DiskReport) GetProcesses() *ProcessReport {
 	return nil
 }
 
+func (x *DiskReport) GetWorktreeReclaim() *WorktreeReclaimProposals {
+	if x != nil {
+		return x.WorktreeReclaim
+	}
+	return nil
+}
+
+// WorktreeReclaimProposals is a machine's pending reclaim proposals, from the
+// daemon's last pass.
+type WorktreeReclaimProposals struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The reclaim's mode on the machine: "dry-run" or "on". In dry-run an
+	// approval is recorded and acted on once the machine is switched on.
+	Mode string `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
+	// When the pass that found them finished (unix ms).
+	PassFinishedAtMs int64 `protobuf:"varint,2,opt,name=pass_finished_at_ms,json=passFinishedAtMs,proto3" json:"pass_finished_at_ms,omitempty"`
+	// At most 50, oldest proposal first; total says how many there are.
+	Proposals     []*WorktreeReclaimProposal `protobuf:"bytes,3,rep,name=proposals,proto3" json:"proposals,omitempty"`
+	Total         int32                      `protobuf:"varint,4,opt,name=total,proto3" json:"total,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorktreeReclaimProposals) Reset() {
+	*x = WorktreeReclaimProposals{}
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorktreeReclaimProposals) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorktreeReclaimProposals) ProtoMessage() {}
+
+func (x *WorktreeReclaimProposals) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorktreeReclaimProposals.ProtoReflect.Descriptor instead.
+func (*WorktreeReclaimProposals) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *WorktreeReclaimProposals) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposals) GetPassFinishedAtMs() int64 {
+	if x != nil {
+		return x.PassFinishedAtMs
+	}
+	return 0
+}
+
+func (x *WorktreeReclaimProposals) GetProposals() []*WorktreeReclaimProposal {
+	if x != nil {
+		return x.Proposals
+	}
+	return nil
+}
+
+func (x *WorktreeReclaimProposals) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+// WorktreeReclaimProposal is one worktree the reclaim asks to remove. A
+// decision about it binds to fingerprint: the worktree changing (a commit, an
+// edit, a new file) makes it a new proposal with a new fingerprint.
+type WorktreeReclaimProposal struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The worktree's capture key: its Reliant workspace id, or p-<hash> of its
+	// path for a worktree made outside Reliant.
+	Key         string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Fingerprint string `protobuf:"bytes,2,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	Path        string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	// The repository's main checkout.
+	Repo   string `protobuf:"bytes,4,opt,name=repo,proto3" json:"repo,omitempty"`
+	Branch string `protobuf:"bytes,5,opt,name=branch,proto3" json:"branch,omitempty"`
+	// Why it is not removed on its own: "dirty", "unpushed" or
+	// "unreachable_history".
+	Reason string `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	// The daemon's one-line description of the unsaved work.
+	Detail string `protobuf:"bytes,7,opt,name=detail,proto3" json:"detail,omitempty"`
+	// `git status --short` and the commits on no remote, shortened.
+	WorkSummary     string `protobuf:"bytes,8,opt,name=work_summary,json=workSummary,proto3" json:"work_summary,omitempty"`
+	UnpushedCommits int32  `protobuf:"varint,9,opt,name=unpushed_commits,json=unpushedCommits,proto3" json:"unpushed_commits,omitempty"`
+	// How long nothing in it has changed (seconds), and when it last did.
+	IdleSeconds    int64 `protobuf:"varint,10,opt,name=idle_seconds,json=idleSeconds,proto3" json:"idle_seconds,omitempty"`
+	LastActivityMs int64 `protobuf:"varint,11,opt,name=last_activity_ms,json=lastActivityMs,proto3" json:"last_activity_ms,omitempty"`
+	SizeBytes      int64 `protobuf:"varint,12,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// "reliant" for a Reliant workspace's checkout, "unregistered" otherwise.
+	Owner string `protobuf:"bytes,13,opt,name=owner,proto3" json:"owner,omitempty"`
+	// The Reliant workspace id, when it is one.
+	RowId string `protobuf:"bytes,14,opt,name=row_id,json=rowId,proto3" json:"row_id,omitempty"`
+	// When this exact state (fingerprint) was first proposed (unix ms).
+	ProposedAtMs int64 `protobuf:"varint,15,opt,name=proposed_at_ms,json=proposedAtMs,proto3" json:"proposed_at_ms,omitempty"`
+	// A reviewing agent's short assessment of this state, and when it wrote it.
+	Note     string `protobuf:"bytes,16,opt,name=note,proto3" json:"note,omitempty"`
+	NoteAtMs int64  `protobuf:"varint,17,opt,name=note_at_ms,json=noteAtMs,proto3" json:"note_at_ms,omitempty"`
+	// A decision already recorded for this state: "approve" (the daemon
+	// reclaims it on its next pass) or "decline". Empty while undecided.
+	Decision      string `protobuf:"bytes,18,opt,name=decision,proto3" json:"decision,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorktreeReclaimProposal) Reset() {
+	*x = WorktreeReclaimProposal{}
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorktreeReclaimProposal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorktreeReclaimProposal) ProtoMessage() {}
+
+func (x *WorktreeReclaimProposal) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorktreeReclaimProposal.ProtoReflect.Descriptor instead.
+func (*WorktreeReclaimProposal) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *WorktreeReclaimProposal) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetFingerprint() string {
+	if x != nil {
+		return x.Fingerprint
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetRepo() string {
+	if x != nil {
+		return x.Repo
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetBranch() string {
+	if x != nil {
+		return x.Branch
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetWorkSummary() string {
+	if x != nil {
+		return x.WorkSummary
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetUnpushedCommits() int32 {
+	if x != nil {
+		return x.UnpushedCommits
+	}
+	return 0
+}
+
+func (x *WorktreeReclaimProposal) GetIdleSeconds() int64 {
+	if x != nil {
+		return x.IdleSeconds
+	}
+	return 0
+}
+
+func (x *WorktreeReclaimProposal) GetLastActivityMs() int64 {
+	if x != nil {
+		return x.LastActivityMs
+	}
+	return 0
+}
+
+func (x *WorktreeReclaimProposal) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *WorktreeReclaimProposal) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetRowId() string {
+	if x != nil {
+		return x.RowId
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetProposedAtMs() int64 {
+	if x != nil {
+		return x.ProposedAtMs
+	}
+	return 0
+}
+
+func (x *WorktreeReclaimProposal) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+func (x *WorktreeReclaimProposal) GetNoteAtMs() int64 {
+	if x != nil {
+		return x.NoteAtMs
+	}
+	return 0
+}
+
+func (x *WorktreeReclaimProposal) GetDecision() string {
+	if x != nil {
+		return x.Decision
+	}
+	return ""
+}
+
 // ProcessReport is how close a machine is to its process limit, and whose
 // processes are using it. On 2026-10-30 a machine ran out of processes (one
 // command re-running a CI gate inside itself) and had to be restarted; this is
@@ -1725,7 +2009,7 @@ type ProcessReport struct {
 
 func (x *ProcessReport) Reset() {
 	*x = ProcessReport{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[15]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1737,7 +2021,7 @@ func (x *ProcessReport) String() string {
 func (*ProcessReport) ProtoMessage() {}
 
 func (x *ProcessReport) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[15]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1750,7 +2034,7 @@ func (x *ProcessReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessReport.ProtoReflect.Descriptor instead.
 func (*ProcessReport) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ProcessReport) GetCount() uint64 {
@@ -1809,7 +2093,7 @@ type ProcessTree struct {
 
 func (x *ProcessTree) Reset() {
 	*x = ProcessTree{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[16]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1821,7 +2105,7 @@ func (x *ProcessTree) String() string {
 func (*ProcessTree) ProtoMessage() {}
 
 func (x *ProcessTree) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[16]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1834,7 +2118,7 @@ func (x *ProcessTree) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessTree.ProtoReflect.Descriptor instead.
 func (*ProcessTree) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ProcessTree) GetChatId() string {
@@ -1919,7 +2203,7 @@ type DiskVolume struct {
 
 func (x *DiskVolume) Reset() {
 	*x = DiskVolume{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[17]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1931,7 +2215,7 @@ func (x *DiskVolume) String() string {
 func (*DiskVolume) ProtoMessage() {}
 
 func (x *DiskVolume) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[17]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1944,7 +2228,7 @@ func (x *DiskVolume) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiskVolume.ProtoReflect.Descriptor instead.
 func (*DiskVolume) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *DiskVolume) GetLabel() string {
@@ -2085,7 +2369,7 @@ type DiskConsumer struct {
 
 func (x *DiskConsumer) Reset() {
 	*x = DiskConsumer{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[18]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2097,7 +2381,7 @@ func (x *DiskConsumer) String() string {
 func (*DiskConsumer) ProtoMessage() {}
 
 func (x *DiskConsumer) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[18]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2110,7 +2394,7 @@ func (x *DiskConsumer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiskConsumer.ProtoReflect.Descriptor instead.
 func (*DiskConsumer) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DiskConsumer) GetKind() string {
@@ -2209,7 +2493,7 @@ type ServerMessage struct {
 
 func (x *ServerMessage) Reset() {
 	*x = ServerMessage{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[19]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2221,7 +2505,7 @@ func (x *ServerMessage) String() string {
 func (*ServerMessage) ProtoMessage() {}
 
 func (x *ServerMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[19]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2234,7 +2518,7 @@ func (x *ServerMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerMessage.ProtoReflect.Descriptor instead.
 func (*ServerMessage) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ServerMessage) GetMessage() isServerMessage_Message {
@@ -2589,7 +2873,7 @@ type GatewayHello struct {
 
 func (x *GatewayHello) Reset() {
 	*x = GatewayHello{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[20]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2601,7 +2885,7 @@ func (x *GatewayHello) String() string {
 func (*GatewayHello) ProtoMessage() {}
 
 func (x *GatewayHello) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[20]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2614,7 +2898,7 @@ func (x *GatewayHello) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GatewayHello.ProtoReflect.Descriptor instead.
 func (*GatewayHello) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{22}
 }
 
 // GatewayDrain tells a daemon that the replica serving this stream is shutting
@@ -2639,7 +2923,7 @@ type GatewayDrain struct {
 
 func (x *GatewayDrain) Reset() {
 	*x = GatewayDrain{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[21]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2651,7 +2935,7 @@ func (x *GatewayDrain) String() string {
 func (*GatewayDrain) ProtoMessage() {}
 
 func (x *GatewayDrain) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[21]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2664,7 +2948,7 @@ func (x *GatewayDrain) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GatewayDrain.ProtoReflect.Descriptor instead.
 func (*GatewayDrain) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *GatewayDrain) GetDeadlineUnixMs() int64 {
@@ -2689,7 +2973,7 @@ type ToolResultAck struct {
 
 func (x *ToolResultAck) Reset() {
 	*x = ToolResultAck{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[22]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2701,7 +2985,7 @@ func (x *ToolResultAck) String() string {
 func (*ToolResultAck) ProtoMessage() {}
 
 func (x *ToolResultAck) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[22]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2714,7 +2998,7 @@ func (x *ToolResultAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolResultAck.ProtoReflect.Descriptor instead.
 func (*ToolResultAck) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ToolResultAck) GetRequestId() string {
@@ -2744,7 +3028,7 @@ type ToolRequest struct {
 
 func (x *ToolRequest) Reset() {
 	*x = ToolRequest{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[23]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2756,7 +3040,7 @@ func (x *ToolRequest) String() string {
 func (*ToolRequest) ProtoMessage() {}
 
 func (x *ToolRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[23]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2769,7 +3053,7 @@ func (x *ToolRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolRequest.ProtoReflect.Descriptor instead.
 func (*ToolRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ToolRequest) GetRequestId() string {
@@ -2846,7 +3130,7 @@ type ServerHeartbeat struct {
 
 func (x *ServerHeartbeat) Reset() {
 	*x = ServerHeartbeat{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[24]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2858,7 +3142,7 @@ func (x *ServerHeartbeat) String() string {
 func (*ServerHeartbeat) ProtoMessage() {}
 
 func (x *ServerHeartbeat) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[24]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2871,7 +3155,7 @@ func (x *ServerHeartbeat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServerHeartbeat.ProtoReflect.Descriptor instead.
 func (*ServerHeartbeat) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{24}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ServerHeartbeat) GetTimestamp() int64 {
@@ -2906,7 +3190,7 @@ type RegistrationAck struct {
 
 func (x *RegistrationAck) Reset() {
 	*x = RegistrationAck{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[25]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2918,7 +3202,7 @@ func (x *RegistrationAck) String() string {
 func (*RegistrationAck) ProtoMessage() {}
 
 func (x *RegistrationAck) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[25]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2931,7 +3215,7 @@ func (x *RegistrationAck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegistrationAck.ProtoReflect.Descriptor instead.
 func (*RegistrationAck) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{25}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *RegistrationAck) GetAccepted() bool {
@@ -2979,7 +3263,7 @@ type LoadProjectConfigsRequest struct {
 
 func (x *LoadProjectConfigsRequest) Reset() {
 	*x = LoadProjectConfigsRequest{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[26]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2991,7 +3275,7 @@ func (x *LoadProjectConfigsRequest) String() string {
 func (*LoadProjectConfigsRequest) ProtoMessage() {}
 
 func (x *LoadProjectConfigsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[26]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3004,7 +3288,7 @@ func (x *LoadProjectConfigsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadProjectConfigsRequest.ProtoReflect.Descriptor instead.
 func (*LoadProjectConfigsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{26}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *LoadProjectConfigsRequest) GetProjectPath() string {
@@ -3032,7 +3316,7 @@ type LoadProjectConfigsResponse struct {
 
 func (x *LoadProjectConfigsResponse) Reset() {
 	*x = LoadProjectConfigsResponse{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[27]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3044,7 +3328,7 @@ func (x *LoadProjectConfigsResponse) String() string {
 func (*LoadProjectConfigsResponse) ProtoMessage() {}
 
 func (x *LoadProjectConfigsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[27]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3057,7 +3341,7 @@ func (x *LoadProjectConfigsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoadProjectConfigsResponse.ProtoReflect.Descriptor instead.
 func (*LoadProjectConfigsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{27}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *LoadProjectConfigsResponse) GetRequestId() string {
@@ -3091,7 +3375,7 @@ type WatchProjectConfigsRequest struct {
 
 func (x *WatchProjectConfigsRequest) Reset() {
 	*x = WatchProjectConfigsRequest{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[28]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3103,7 +3387,7 @@ func (x *WatchProjectConfigsRequest) String() string {
 func (*WatchProjectConfigsRequest) ProtoMessage() {}
 
 func (x *WatchProjectConfigsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[28]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3116,7 +3400,7 @@ func (x *WatchProjectConfigsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchProjectConfigsRequest.ProtoReflect.Descriptor instead.
 func (*WatchProjectConfigsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{28}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *WatchProjectConfigsRequest) GetProjectPath() string {
@@ -3142,7 +3426,7 @@ type UnwatchProjectConfigsRequest struct {
 
 func (x *UnwatchProjectConfigsRequest) Reset() {
 	*x = UnwatchProjectConfigsRequest{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[29]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3154,7 +3438,7 @@ func (x *UnwatchProjectConfigsRequest) String() string {
 func (*UnwatchProjectConfigsRequest) ProtoMessage() {}
 
 func (x *UnwatchProjectConfigsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[29]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3167,7 +3451,7 @@ func (x *UnwatchProjectConfigsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UnwatchProjectConfigsRequest.ProtoReflect.Descriptor instead.
 func (*UnwatchProjectConfigsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{29}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *UnwatchProjectConfigsRequest) GetProjectPath() string {
@@ -3210,7 +3494,7 @@ type ProjectConfigSnapshot struct {
 
 func (x *ProjectConfigSnapshot) Reset() {
 	*x = ProjectConfigSnapshot{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[30]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3222,7 +3506,7 @@ func (x *ProjectConfigSnapshot) String() string {
 func (*ProjectConfigSnapshot) ProtoMessage() {}
 
 func (x *ProjectConfigSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[30]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3235,7 +3519,7 @@ func (x *ProjectConfigSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectConfigSnapshot.ProtoReflect.Descriptor instead.
 func (*ProjectConfigSnapshot) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{30}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ProjectConfigSnapshot) GetProjectPath() string {
@@ -3367,7 +3651,7 @@ type SyncedRepoState struct {
 
 func (x *SyncedRepoState) Reset() {
 	*x = SyncedRepoState{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[31]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3379,7 +3663,7 @@ func (x *SyncedRepoState) String() string {
 func (*SyncedRepoState) ProtoMessage() {}
 
 func (x *SyncedRepoState) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[31]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3392,7 +3676,7 @@ func (x *SyncedRepoState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncedRepoState.ProtoReflect.Descriptor instead.
 func (*SyncedRepoState) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{31}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *SyncedRepoState) GetRepo() string {
@@ -3450,7 +3734,7 @@ type ProjectConfigDelta struct {
 
 func (x *ProjectConfigDelta) Reset() {
 	*x = ProjectConfigDelta{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[32]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3462,7 +3746,7 @@ func (x *ProjectConfigDelta) String() string {
 func (*ProjectConfigDelta) ProtoMessage() {}
 
 func (x *ProjectConfigDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[32]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3475,7 +3759,7 @@ func (x *ProjectConfigDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectConfigDelta.ProtoReflect.Descriptor instead.
 func (*ProjectConfigDelta) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{32}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ProjectConfigDelta) GetProjectPath() string {
@@ -3524,7 +3808,7 @@ type ChangedFile struct {
 
 func (x *ChangedFile) Reset() {
 	*x = ChangedFile{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[33]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3536,7 +3820,7 @@ func (x *ChangedFile) String() string {
 func (*ChangedFile) ProtoMessage() {}
 
 func (x *ChangedFile) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[33]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3549,7 +3833,7 @@ func (x *ChangedFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangedFile.ProtoReflect.Descriptor instead.
 func (*ChangedFile) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{33}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ChangedFile) GetRelativePath() string {
@@ -3585,7 +3869,7 @@ type FileSystemChanged struct {
 
 func (x *FileSystemChanged) Reset() {
 	*x = FileSystemChanged{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[34]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3597,7 +3881,7 @@ func (x *FileSystemChanged) String() string {
 func (*FileSystemChanged) ProtoMessage() {}
 
 func (x *FileSystemChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[34]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3610,7 +3894,7 @@ func (x *FileSystemChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileSystemChanged.ProtoReflect.Descriptor instead.
 func (*FileSystemChanged) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{34}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *FileSystemChanged) GetProjectPath() string {
@@ -3646,7 +3930,7 @@ type DaemonCommandFailed struct {
 
 func (x *DaemonCommandFailed) Reset() {
 	*x = DaemonCommandFailed{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[35]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3658,7 +3942,7 @@ func (x *DaemonCommandFailed) String() string {
 func (*DaemonCommandFailed) ProtoMessage() {}
 
 func (x *DaemonCommandFailed) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[35]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3671,7 +3955,7 @@ func (x *DaemonCommandFailed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonCommandFailed.ProtoReflect.Descriptor instead.
 func (*DaemonCommandFailed) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{35}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DaemonCommandFailed) GetRequestId() string {
@@ -3716,7 +4000,7 @@ type IndexedWorkflow struct {
 
 func (x *IndexedWorkflow) Reset() {
 	*x = IndexedWorkflow{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[36]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3728,7 +4012,7 @@ func (x *IndexedWorkflow) String() string {
 func (*IndexedWorkflow) ProtoMessage() {}
 
 func (x *IndexedWorkflow) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[36]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3741,7 +4025,7 @@ func (x *IndexedWorkflow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexedWorkflow.ProtoReflect.Descriptor instead.
 func (*IndexedWorkflow) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{36}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *IndexedWorkflow) GetSlug() string {
@@ -3799,7 +4083,7 @@ type IndexedPreset struct {
 
 func (x *IndexedPreset) Reset() {
 	*x = IndexedPreset{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[37]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3811,7 +4095,7 @@ func (x *IndexedPreset) String() string {
 func (*IndexedPreset) ProtoMessage() {}
 
 func (x *IndexedPreset) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[37]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3824,7 +4108,7 @@ func (x *IndexedPreset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexedPreset.ProtoReflect.Descriptor instead.
 func (*IndexedPreset) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{37}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *IndexedPreset) GetName() string {
@@ -3876,7 +4160,7 @@ type IndexedScenario struct {
 
 func (x *IndexedScenario) Reset() {
 	*x = IndexedScenario{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[38]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3888,7 +4172,7 @@ func (x *IndexedScenario) String() string {
 func (*IndexedScenario) ProtoMessage() {}
 
 func (x *IndexedScenario) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[38]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3901,7 +4185,7 @@ func (x *IndexedScenario) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexedScenario.ProtoReflect.Descriptor instead.
 func (*IndexedScenario) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{38}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *IndexedScenario) GetWorkflowSlug() string {
@@ -3978,7 +4262,7 @@ type IndexedSkill struct {
 
 func (x *IndexedSkill) Reset() {
 	*x = IndexedSkill{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[39]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3990,7 +4274,7 @@ func (x *IndexedSkill) String() string {
 func (*IndexedSkill) ProtoMessage() {}
 
 func (x *IndexedSkill) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[39]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4003,7 +4287,7 @@ func (x *IndexedSkill) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexedSkill.ProtoReflect.Descriptor instead.
 func (*IndexedSkill) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{39}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *IndexedSkill) GetSkillPath() string {
@@ -4128,7 +4412,7 @@ type ProjectDiscovery struct {
 
 func (x *ProjectDiscovery) Reset() {
 	*x = ProjectDiscovery{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[40]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4140,7 +4424,7 @@ func (x *ProjectDiscovery) String() string {
 func (*ProjectDiscovery) ProtoMessage() {}
 
 func (x *ProjectDiscovery) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[40]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4153,7 +4437,7 @@ func (x *ProjectDiscovery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectDiscovery.ProtoReflect.Descriptor instead.
 func (*ProjectDiscovery) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{40}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ProjectDiscovery) GetProjects() []*DiscoveredProject {
@@ -4175,7 +4459,7 @@ type DiscoveredProject struct {
 
 func (x *DiscoveredProject) Reset() {
 	*x = DiscoveredProject{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[41]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4187,7 +4471,7 @@ func (x *DiscoveredProject) String() string {
 func (*DiscoveredProject) ProtoMessage() {}
 
 func (x *DiscoveredProject) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[41]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4200,7 +4484,7 @@ func (x *DiscoveredProject) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscoveredProject.ProtoReflect.Descriptor instead.
 func (*DiscoveredProject) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{41}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *DiscoveredProject) GetPath() string {
@@ -4235,7 +4519,7 @@ type ToolExecutionCancel struct {
 
 func (x *ToolExecutionCancel) Reset() {
 	*x = ToolExecutionCancel{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[42]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4247,7 +4531,7 @@ func (x *ToolExecutionCancel) String() string {
 func (*ToolExecutionCancel) ProtoMessage() {}
 
 func (x *ToolExecutionCancel) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[42]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4260,7 +4544,7 @@ func (x *ToolExecutionCancel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolExecutionCancel.ProtoReflect.Descriptor instead.
 func (*ToolExecutionCancel) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{42}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ToolExecutionCancel) GetRequestId() string {
@@ -4299,7 +4583,7 @@ type ToolExecutionBackground struct {
 
 func (x *ToolExecutionBackground) Reset() {
 	*x = ToolExecutionBackground{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[43]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4311,7 +4595,7 @@ func (x *ToolExecutionBackground) String() string {
 func (*ToolExecutionBackground) ProtoMessage() {}
 
 func (x *ToolExecutionBackground) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[43]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4324,7 +4608,7 @@ func (x *ToolExecutionBackground) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolExecutionBackground.ProtoReflect.Descriptor instead.
 func (*ToolExecutionBackground) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{43}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ToolExecutionBackground) GetRequestId() string {
@@ -4361,7 +4645,7 @@ type ReportToolResultRequest struct {
 
 func (x *ReportToolResultRequest) Reset() {
 	*x = ReportToolResultRequest{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[44]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4373,7 +4657,7 @@ func (x *ReportToolResultRequest) String() string {
 func (*ReportToolResultRequest) ProtoMessage() {}
 
 func (x *ReportToolResultRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[44]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4386,7 +4670,7 @@ func (x *ReportToolResultRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportToolResultRequest.ProtoReflect.Descriptor instead.
 func (*ReportToolResultRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{44}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ReportToolResultRequest) GetRequestId() string {
@@ -4468,7 +4752,7 @@ type ReportToolResultResponse struct {
 
 func (x *ReportToolResultResponse) Reset() {
 	*x = ReportToolResultResponse{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[45]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4480,7 +4764,7 @@ func (x *ReportToolResultResponse) String() string {
 func (*ReportToolResultResponse) ProtoMessage() {}
 
 func (x *ReportToolResultResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[45]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4493,7 +4777,7 @@ func (x *ReportToolResultResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReportToolResultResponse.ProtoReflect.Descriptor instead.
 func (*ReportToolResultResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{45}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ReportToolResultResponse) GetAccepted() bool {
@@ -4513,7 +4797,7 @@ type DaemonKillProcessRequest struct {
 
 func (x *DaemonKillProcessRequest) Reset() {
 	*x = DaemonKillProcessRequest{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[46]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4525,7 +4809,7 @@ func (x *DaemonKillProcessRequest) String() string {
 func (*DaemonKillProcessRequest) ProtoMessage() {}
 
 func (x *DaemonKillProcessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[46]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4538,7 +4822,7 @@ func (x *DaemonKillProcessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonKillProcessRequest.ProtoReflect.Descriptor instead.
 func (*DaemonKillProcessRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{46}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *DaemonKillProcessRequest) GetProcessId() string {
@@ -4560,7 +4844,7 @@ type DaemonKillProcessResponse struct {
 
 func (x *DaemonKillProcessResponse) Reset() {
 	*x = DaemonKillProcessResponse{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[47]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4572,7 +4856,7 @@ func (x *DaemonKillProcessResponse) String() string {
 func (*DaemonKillProcessResponse) ProtoMessage() {}
 
 func (x *DaemonKillProcessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[47]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4585,7 +4869,7 @@ func (x *DaemonKillProcessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonKillProcessResponse.ProtoReflect.Descriptor instead.
 func (*DaemonKillProcessResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{47}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *DaemonKillProcessResponse) GetProcessId() string {
@@ -4638,7 +4922,7 @@ type DaemonCommandRequest struct {
 
 func (x *DaemonCommandRequest) Reset() {
 	*x = DaemonCommandRequest{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[48]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4650,7 +4934,7 @@ func (x *DaemonCommandRequest) String() string {
 func (*DaemonCommandRequest) ProtoMessage() {}
 
 func (x *DaemonCommandRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[48]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4663,7 +4947,7 @@ func (x *DaemonCommandRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonCommandRequest.ProtoReflect.Descriptor instead.
 func (*DaemonCommandRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{48}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *DaemonCommandRequest) GetRequestId() string {
@@ -4738,7 +5022,7 @@ type ConnectorPolicy struct {
 
 func (x *ConnectorPolicy) Reset() {
 	*x = ConnectorPolicy{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[49]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4750,7 +5034,7 @@ func (x *ConnectorPolicy) String() string {
 func (*ConnectorPolicy) ProtoMessage() {}
 
 func (x *ConnectorPolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[49]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4763,7 +5047,7 @@ func (x *ConnectorPolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectorPolicy.ProtoReflect.Descriptor instead.
 func (*ConnectorPolicy) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{49}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ConnectorPolicy) GetGrantId() string {
@@ -4828,7 +5112,7 @@ type DaemonCommandResponse struct {
 
 func (x *DaemonCommandResponse) Reset() {
 	*x = DaemonCommandResponse{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[50]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4840,7 +5124,7 @@ func (x *DaemonCommandResponse) String() string {
 func (*DaemonCommandResponse) ProtoMessage() {}
 
 func (x *DaemonCommandResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[50]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4853,7 +5137,7 @@ func (x *DaemonCommandResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonCommandResponse.ProtoReflect.Descriptor instead.
 func (*DaemonCommandResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{50}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *DaemonCommandResponse) GetRequestId() string {
@@ -4909,7 +5193,7 @@ type TerminalInputMessage struct {
 
 func (x *TerminalInputMessage) Reset() {
 	*x = TerminalInputMessage{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[51]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4921,7 +5205,7 @@ func (x *TerminalInputMessage) String() string {
 func (*TerminalInputMessage) ProtoMessage() {}
 
 func (x *TerminalInputMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[51]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4934,7 +5218,7 @@ func (x *TerminalInputMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalInputMessage.ProtoReflect.Descriptor instead.
 func (*TerminalInputMessage) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{51}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *TerminalInputMessage) GetSessionId() string {
@@ -4963,7 +5247,7 @@ type TerminalResizeMessage struct {
 
 func (x *TerminalResizeMessage) Reset() {
 	*x = TerminalResizeMessage{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[52]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4975,7 +5259,7 @@ func (x *TerminalResizeMessage) String() string {
 func (*TerminalResizeMessage) ProtoMessage() {}
 
 func (x *TerminalResizeMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[52]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4988,7 +5272,7 @@ func (x *TerminalResizeMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalResizeMessage.ProtoReflect.Descriptor instead.
 func (*TerminalResizeMessage) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{52}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *TerminalResizeMessage) GetSessionId() string {
@@ -5023,7 +5307,7 @@ type TerminalOutputMessage struct {
 
 func (x *TerminalOutputMessage) Reset() {
 	*x = TerminalOutputMessage{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[53]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5035,7 +5319,7 @@ func (x *TerminalOutputMessage) String() string {
 func (*TerminalOutputMessage) ProtoMessage() {}
 
 func (x *TerminalOutputMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[53]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5048,7 +5332,7 @@ func (x *TerminalOutputMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalOutputMessage.ProtoReflect.Descriptor instead.
 func (*TerminalOutputMessage) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{53}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *TerminalOutputMessage) GetSessionId() string {
@@ -5078,7 +5362,7 @@ type TerminalSessionEvent struct {
 
 func (x *TerminalSessionEvent) Reset() {
 	*x = TerminalSessionEvent{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[54]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5090,7 +5374,7 @@ func (x *TerminalSessionEvent) String() string {
 func (*TerminalSessionEvent) ProtoMessage() {}
 
 func (x *TerminalSessionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[54]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5103,7 +5387,7 @@ func (x *TerminalSessionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalSessionEvent.ProtoReflect.Descriptor instead.
 func (*TerminalSessionEvent) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{54}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *TerminalSessionEvent) GetSessionId() string {
@@ -5147,7 +5431,7 @@ type TerminalOutputSubscribeMessage struct {
 
 func (x *TerminalOutputSubscribeMessage) Reset() {
 	*x = TerminalOutputSubscribeMessage{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[55]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5159,7 +5443,7 @@ func (x *TerminalOutputSubscribeMessage) String() string {
 func (*TerminalOutputSubscribeMessage) ProtoMessage() {}
 
 func (x *TerminalOutputSubscribeMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[55]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5172,7 +5456,7 @@ func (x *TerminalOutputSubscribeMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminalOutputSubscribeMessage.ProtoReflect.Descriptor instead.
 func (*TerminalOutputSubscribeMessage) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{55}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *TerminalOutputSubscribeMessage) GetSessionId() string {
@@ -5193,7 +5477,7 @@ type ProcessOutputSubscribeMessage struct {
 
 func (x *ProcessOutputSubscribeMessage) Reset() {
 	*x = ProcessOutputSubscribeMessage{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[56]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5205,7 +5489,7 @@ func (x *ProcessOutputSubscribeMessage) String() string {
 func (*ProcessOutputSubscribeMessage) ProtoMessage() {}
 
 func (x *ProcessOutputSubscribeMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[56]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5218,7 +5502,7 @@ func (x *ProcessOutputSubscribeMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessOutputSubscribeMessage.ProtoReflect.Descriptor instead.
 func (*ProcessOutputSubscribeMessage) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{56}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ProcessOutputSubscribeMessage) GetProcessId() string {
@@ -5245,7 +5529,7 @@ type ProcessOutputUnsubscribeMessage struct {
 
 func (x *ProcessOutputUnsubscribeMessage) Reset() {
 	*x = ProcessOutputUnsubscribeMessage{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[57]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5257,7 +5541,7 @@ func (x *ProcessOutputUnsubscribeMessage) String() string {
 func (*ProcessOutputUnsubscribeMessage) ProtoMessage() {}
 
 func (x *ProcessOutputUnsubscribeMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[57]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5270,7 +5554,7 @@ func (x *ProcessOutputUnsubscribeMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessOutputUnsubscribeMessage.ProtoReflect.Descriptor instead.
 func (*ProcessOutputUnsubscribeMessage) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{57}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ProcessOutputUnsubscribeMessage) GetProcessId() string {
@@ -5295,7 +5579,7 @@ type ProcessOutputChunkMessage struct {
 
 func (x *ProcessOutputChunkMessage) Reset() {
 	*x = ProcessOutputChunkMessage{}
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[58]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5307,7 +5591,7 @@ func (x *ProcessOutputChunkMessage) String() string {
 func (*ProcessOutputChunkMessage) ProtoMessage() {}
 
 func (x *ProcessOutputChunkMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[58]
+	mi := &file_reliant_v1_tools_daemon_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5320,7 +5604,7 @@ func (x *ProcessOutputChunkMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessOutputChunkMessage.ProtoReflect.Descriptor instead.
 func (*ProcessOutputChunkMessage) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{58}
+	return file_reliant_v1_tools_daemon_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ProcessOutputChunkMessage) GetProcessId() string {
@@ -5487,14 +5771,42 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x04disk\x18\x06 \x01(\v2\x16.reliant.v1.DiskReportR\x04disk\x12/\n" +
 	"\x14tool_calls_in_flight\x18\a \x01(\rR\x11toolCallsInFlight\x12\x1b\n" +
 	"\toom_kills\x18\b \x01(\x04R\boomKills\x12,\n" +
-	"\x13last_oom_kill_at_ms\x18\t \x01(\x03R\x0flastOomKillAtMs\"\xef\x01\n" +
+	"\x13last_oom_kill_at_ms\x18\t \x01(\x03R\x0flastOomKillAtMs\"\xc0\x02\n" +
 	"\n" +
 	"DiskReport\x120\n" +
 	"\avolumes\x18\x01 \x03(\v2\x16.reliant.v1.DiskVolumeR\avolumes\x12$\n" +
 	"\x0ereported_at_ms\x18\x02 \x01(\x03R\freportedAtMs\x12*\n" +
 	"\x11pressure_since_ms\x18\x03 \x01(\x03R\x0fpressureSinceMs\x12$\n" +
 	"\x0eguard_since_ms\x18\x04 \x01(\x03R\fguardSinceMs\x127\n" +
-	"\tprocesses\x18\x05 \x01(\v2\x19.reliant.v1.ProcessReportR\tprocesses\"\xb9\x01\n" +
+	"\tprocesses\x18\x05 \x01(\v2\x19.reliant.v1.ProcessReportR\tprocesses\x12O\n" +
+	"\x10worktree_reclaim\x18\x06 \x01(\v2$.reliant.v1.WorktreeReclaimProposalsR\x0fworktreeReclaim\"\xb6\x01\n" +
+	"\x18WorktreeReclaimProposals\x12\x12\n" +
+	"\x04mode\x18\x01 \x01(\tR\x04mode\x12-\n" +
+	"\x13pass_finished_at_ms\x18\x02 \x01(\x03R\x10passFinishedAtMs\x12A\n" +
+	"\tproposals\x18\x03 \x03(\v2#.reliant.v1.WorktreeReclaimProposalR\tproposals\x12\x14\n" +
+	"\x05total\x18\x04 \x01(\x05R\x05total\"\x98\x04\n" +
+	"\x17WorktreeReclaimProposal\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12 \n" +
+	"\vfingerprint\x18\x02 \x01(\tR\vfingerprint\x12\x12\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\x12\x12\n" +
+	"\x04repo\x18\x04 \x01(\tR\x04repo\x12\x16\n" +
+	"\x06branch\x18\x05 \x01(\tR\x06branch\x12\x16\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\x12\x16\n" +
+	"\x06detail\x18\a \x01(\tR\x06detail\x12!\n" +
+	"\fwork_summary\x18\b \x01(\tR\vworkSummary\x12)\n" +
+	"\x10unpushed_commits\x18\t \x01(\x05R\x0funpushedCommits\x12!\n" +
+	"\fidle_seconds\x18\n" +
+	" \x01(\x03R\vidleSeconds\x12(\n" +
+	"\x10last_activity_ms\x18\v \x01(\x03R\x0elastActivityMs\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\f \x01(\x03R\tsizeBytes\x12\x14\n" +
+	"\x05owner\x18\r \x01(\tR\x05owner\x12\x15\n" +
+	"\x06row_id\x18\x0e \x01(\tR\x05rowId\x12$\n" +
+	"\x0eproposed_at_ms\x18\x0f \x01(\x03R\fproposedAtMs\x12\x12\n" +
+	"\x04note\x18\x10 \x01(\tR\x04note\x12\x1c\n" +
+	"\n" +
+	"note_at_ms\x18\x11 \x01(\x03R\bnoteAtMs\x12\x1a\n" +
+	"\bdecision\x18\x12 \x01(\tR\bdecision\"\xb9\x01\n" +
 	"\rProcessReport\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x04R\x05count\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x04R\x05limit\x12%\n" +
@@ -5846,7 +6158,7 @@ func file_reliant_v1_tools_daemon_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_tools_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 67)
+var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 69)
 var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	(FileChangeType)(0),                     // 0: reliant.v1.FileChangeType
 	(DiskGuardState)(0),                     // 1: reliant.v1.DiskGuardState
@@ -5866,138 +6178,142 @@ var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	(*ToolResponseMedia)(nil),               // 15: reliant.v1.ToolResponseMedia
 	(*DaemonHeartbeat)(nil),                 // 16: reliant.v1.DaemonHeartbeat
 	(*DiskReport)(nil),                      // 17: reliant.v1.DiskReport
-	(*ProcessReport)(nil),                   // 18: reliant.v1.ProcessReport
-	(*ProcessTree)(nil),                     // 19: reliant.v1.ProcessTree
-	(*DiskVolume)(nil),                      // 20: reliant.v1.DiskVolume
-	(*DiskConsumer)(nil),                    // 21: reliant.v1.DiskConsumer
-	(*ServerMessage)(nil),                   // 22: reliant.v1.ServerMessage
-	(*GatewayHello)(nil),                    // 23: reliant.v1.GatewayHello
-	(*GatewayDrain)(nil),                    // 24: reliant.v1.GatewayDrain
-	(*ToolResultAck)(nil),                   // 25: reliant.v1.ToolResultAck
-	(*ToolRequest)(nil),                     // 26: reliant.v1.ToolRequest
-	(*ServerHeartbeat)(nil),                 // 27: reliant.v1.ServerHeartbeat
-	(*RegistrationAck)(nil),                 // 28: reliant.v1.RegistrationAck
-	(*LoadProjectConfigsRequest)(nil),       // 29: reliant.v1.LoadProjectConfigsRequest
-	(*LoadProjectConfigsResponse)(nil),      // 30: reliant.v1.LoadProjectConfigsResponse
-	(*WatchProjectConfigsRequest)(nil),      // 31: reliant.v1.WatchProjectConfigsRequest
-	(*UnwatchProjectConfigsRequest)(nil),    // 32: reliant.v1.UnwatchProjectConfigsRequest
-	(*ProjectConfigSnapshot)(nil),           // 33: reliant.v1.ProjectConfigSnapshot
-	(*SyncedRepoState)(nil),                 // 34: reliant.v1.SyncedRepoState
-	(*ProjectConfigDelta)(nil),              // 35: reliant.v1.ProjectConfigDelta
-	(*ChangedFile)(nil),                     // 36: reliant.v1.ChangedFile
-	(*FileSystemChanged)(nil),               // 37: reliant.v1.FileSystemChanged
-	(*DaemonCommandFailed)(nil),             // 38: reliant.v1.DaemonCommandFailed
-	(*IndexedWorkflow)(nil),                 // 39: reliant.v1.IndexedWorkflow
-	(*IndexedPreset)(nil),                   // 40: reliant.v1.IndexedPreset
-	(*IndexedScenario)(nil),                 // 41: reliant.v1.IndexedScenario
-	(*IndexedSkill)(nil),                    // 42: reliant.v1.IndexedSkill
-	(*ProjectDiscovery)(nil),                // 43: reliant.v1.ProjectDiscovery
-	(*DiscoveredProject)(nil),               // 44: reliant.v1.DiscoveredProject
-	(*ToolExecutionCancel)(nil),             // 45: reliant.v1.ToolExecutionCancel
-	(*ToolExecutionBackground)(nil),         // 46: reliant.v1.ToolExecutionBackground
-	(*ReportToolResultRequest)(nil),         // 47: reliant.v1.ReportToolResultRequest
-	(*ReportToolResultResponse)(nil),        // 48: reliant.v1.ReportToolResultResponse
-	(*DaemonKillProcessRequest)(nil),        // 49: reliant.v1.DaemonKillProcessRequest
-	(*DaemonKillProcessResponse)(nil),       // 50: reliant.v1.DaemonKillProcessResponse
-	(*DaemonCommandRequest)(nil),            // 51: reliant.v1.DaemonCommandRequest
-	(*ConnectorPolicy)(nil),                 // 52: reliant.v1.ConnectorPolicy
-	(*DaemonCommandResponse)(nil),           // 53: reliant.v1.DaemonCommandResponse
-	(*TerminalInputMessage)(nil),            // 54: reliant.v1.TerminalInputMessage
-	(*TerminalResizeMessage)(nil),           // 55: reliant.v1.TerminalResizeMessage
-	(*TerminalOutputMessage)(nil),           // 56: reliant.v1.TerminalOutputMessage
-	(*TerminalSessionEvent)(nil),            // 57: reliant.v1.TerminalSessionEvent
-	(*TerminalOutputSubscribeMessage)(nil),  // 58: reliant.v1.TerminalOutputSubscribeMessage
-	(*ProcessOutputSubscribeMessage)(nil),   // 59: reliant.v1.ProcessOutputSubscribeMessage
-	(*ProcessOutputUnsubscribeMessage)(nil), // 60: reliant.v1.ProcessOutputUnsubscribeMessage
-	(*ProcessOutputChunkMessage)(nil),       // 61: reliant.v1.ProcessOutputChunkMessage
-	nil,                                     // 62: reliant.v1.LocalModelHTTPRequest.HeadersEntry
-	nil,                                     // 63: reliant.v1.LocalModelHTTPChunk.HeadersEntry
-	nil,                                     // 64: reliant.v1.DaemonRegister.LabelsEntry
-	nil,                                     // 65: reliant.v1.ToolRequest.TraceContextEntry
-	nil,                                     // 66: reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
-	nil,                                     // 67: reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
-	nil,                                     // 68: reliant.v1.IndexedSkill.MetadataEntry
-	nil,                                     // 69: reliant.v1.DaemonCommandRequest.TraceContextEntry
+	(*WorktreeReclaimProposals)(nil),        // 18: reliant.v1.WorktreeReclaimProposals
+	(*WorktreeReclaimProposal)(nil),         // 19: reliant.v1.WorktreeReclaimProposal
+	(*ProcessReport)(nil),                   // 20: reliant.v1.ProcessReport
+	(*ProcessTree)(nil),                     // 21: reliant.v1.ProcessTree
+	(*DiskVolume)(nil),                      // 22: reliant.v1.DiskVolume
+	(*DiskConsumer)(nil),                    // 23: reliant.v1.DiskConsumer
+	(*ServerMessage)(nil),                   // 24: reliant.v1.ServerMessage
+	(*GatewayHello)(nil),                    // 25: reliant.v1.GatewayHello
+	(*GatewayDrain)(nil),                    // 26: reliant.v1.GatewayDrain
+	(*ToolResultAck)(nil),                   // 27: reliant.v1.ToolResultAck
+	(*ToolRequest)(nil),                     // 28: reliant.v1.ToolRequest
+	(*ServerHeartbeat)(nil),                 // 29: reliant.v1.ServerHeartbeat
+	(*RegistrationAck)(nil),                 // 30: reliant.v1.RegistrationAck
+	(*LoadProjectConfigsRequest)(nil),       // 31: reliant.v1.LoadProjectConfigsRequest
+	(*LoadProjectConfigsResponse)(nil),      // 32: reliant.v1.LoadProjectConfigsResponse
+	(*WatchProjectConfigsRequest)(nil),      // 33: reliant.v1.WatchProjectConfigsRequest
+	(*UnwatchProjectConfigsRequest)(nil),    // 34: reliant.v1.UnwatchProjectConfigsRequest
+	(*ProjectConfigSnapshot)(nil),           // 35: reliant.v1.ProjectConfigSnapshot
+	(*SyncedRepoState)(nil),                 // 36: reliant.v1.SyncedRepoState
+	(*ProjectConfigDelta)(nil),              // 37: reliant.v1.ProjectConfigDelta
+	(*ChangedFile)(nil),                     // 38: reliant.v1.ChangedFile
+	(*FileSystemChanged)(nil),               // 39: reliant.v1.FileSystemChanged
+	(*DaemonCommandFailed)(nil),             // 40: reliant.v1.DaemonCommandFailed
+	(*IndexedWorkflow)(nil),                 // 41: reliant.v1.IndexedWorkflow
+	(*IndexedPreset)(nil),                   // 42: reliant.v1.IndexedPreset
+	(*IndexedScenario)(nil),                 // 43: reliant.v1.IndexedScenario
+	(*IndexedSkill)(nil),                    // 44: reliant.v1.IndexedSkill
+	(*ProjectDiscovery)(nil),                // 45: reliant.v1.ProjectDiscovery
+	(*DiscoveredProject)(nil),               // 46: reliant.v1.DiscoveredProject
+	(*ToolExecutionCancel)(nil),             // 47: reliant.v1.ToolExecutionCancel
+	(*ToolExecutionBackground)(nil),         // 48: reliant.v1.ToolExecutionBackground
+	(*ReportToolResultRequest)(nil),         // 49: reliant.v1.ReportToolResultRequest
+	(*ReportToolResultResponse)(nil),        // 50: reliant.v1.ReportToolResultResponse
+	(*DaemonKillProcessRequest)(nil),        // 51: reliant.v1.DaemonKillProcessRequest
+	(*DaemonKillProcessResponse)(nil),       // 52: reliant.v1.DaemonKillProcessResponse
+	(*DaemonCommandRequest)(nil),            // 53: reliant.v1.DaemonCommandRequest
+	(*ConnectorPolicy)(nil),                 // 54: reliant.v1.ConnectorPolicy
+	(*DaemonCommandResponse)(nil),           // 55: reliant.v1.DaemonCommandResponse
+	(*TerminalInputMessage)(nil),            // 56: reliant.v1.TerminalInputMessage
+	(*TerminalResizeMessage)(nil),           // 57: reliant.v1.TerminalResizeMessage
+	(*TerminalOutputMessage)(nil),           // 58: reliant.v1.TerminalOutputMessage
+	(*TerminalSessionEvent)(nil),            // 59: reliant.v1.TerminalSessionEvent
+	(*TerminalOutputSubscribeMessage)(nil),  // 60: reliant.v1.TerminalOutputSubscribeMessage
+	(*ProcessOutputSubscribeMessage)(nil),   // 61: reliant.v1.ProcessOutputSubscribeMessage
+	(*ProcessOutputUnsubscribeMessage)(nil), // 62: reliant.v1.ProcessOutputUnsubscribeMessage
+	(*ProcessOutputChunkMessage)(nil),       // 63: reliant.v1.ProcessOutputChunkMessage
+	nil,                                     // 64: reliant.v1.LocalModelHTTPRequest.HeadersEntry
+	nil,                                     // 65: reliant.v1.LocalModelHTTPChunk.HeadersEntry
+	nil,                                     // 66: reliant.v1.DaemonRegister.LabelsEntry
+	nil,                                     // 67: reliant.v1.ToolRequest.TraceContextEntry
+	nil,                                     // 68: reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
+	nil,                                     // 69: reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
+	nil,                                     // 70: reliant.v1.IndexedSkill.MetadataEntry
+	nil,                                     // 71: reliant.v1.DaemonCommandRequest.TraceContextEntry
 }
 var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	13, // 0: reliant.v1.DaemonMessage.register:type_name -> reliant.v1.DaemonRegister
 	14, // 1: reliant.v1.DaemonMessage.tool_response:type_name -> reliant.v1.ToolResponse
 	16, // 2: reliant.v1.DaemonMessage.heartbeat:type_name -> reliant.v1.DaemonHeartbeat
-	43, // 3: reliant.v1.DaemonMessage.project_discovery:type_name -> reliant.v1.ProjectDiscovery
-	30, // 4: reliant.v1.DaemonMessage.load_project_configs_response:type_name -> reliant.v1.LoadProjectConfigsResponse
-	35, // 5: reliant.v1.DaemonMessage.project_config_delta:type_name -> reliant.v1.ProjectConfigDelta
-	50, // 6: reliant.v1.DaemonMessage.kill_process_response:type_name -> reliant.v1.DaemonKillProcessResponse
-	53, // 7: reliant.v1.DaemonMessage.daemon_command_response:type_name -> reliant.v1.DaemonCommandResponse
-	56, // 8: reliant.v1.DaemonMessage.terminal_output:type_name -> reliant.v1.TerminalOutputMessage
-	57, // 9: reliant.v1.DaemonMessage.terminal_session_event:type_name -> reliant.v1.TerminalSessionEvent
-	61, // 10: reliant.v1.DaemonMessage.process_output_chunk:type_name -> reliant.v1.ProcessOutputChunkMessage
-	37, // 11: reliant.v1.DaemonMessage.file_system_changed:type_name -> reliant.v1.FileSystemChanged
-	38, // 12: reliant.v1.DaemonMessage.daemon_command_failed:type_name -> reliant.v1.DaemonCommandFailed
+	45, // 3: reliant.v1.DaemonMessage.project_discovery:type_name -> reliant.v1.ProjectDiscovery
+	32, // 4: reliant.v1.DaemonMessage.load_project_configs_response:type_name -> reliant.v1.LoadProjectConfigsResponse
+	37, // 5: reliant.v1.DaemonMessage.project_config_delta:type_name -> reliant.v1.ProjectConfigDelta
+	52, // 6: reliant.v1.DaemonMessage.kill_process_response:type_name -> reliant.v1.DaemonKillProcessResponse
+	55, // 7: reliant.v1.DaemonMessage.daemon_command_response:type_name -> reliant.v1.DaemonCommandResponse
+	58, // 8: reliant.v1.DaemonMessage.terminal_output:type_name -> reliant.v1.TerminalOutputMessage
+	59, // 9: reliant.v1.DaemonMessage.terminal_session_event:type_name -> reliant.v1.TerminalSessionEvent
+	63, // 10: reliant.v1.DaemonMessage.process_output_chunk:type_name -> reliant.v1.ProcessOutputChunkMessage
+	39, // 11: reliant.v1.DaemonMessage.file_system_changed:type_name -> reliant.v1.FileSystemChanged
+	40, // 12: reliant.v1.DaemonMessage.daemon_command_failed:type_name -> reliant.v1.DaemonCommandFailed
 	12, // 13: reliant.v1.DaemonMessage.local_model_http_chunk:type_name -> reliant.v1.LocalModelHTTPChunk
 	6,  // 14: reliant.v1.DaemonMessage.local_model_inventory:type_name -> reliant.v1.LocalModelInventory
 	7,  // 15: reliant.v1.LocalModelInventory.endpoints:type_name -> reliant.v1.LocalModelEndpoint
 	8,  // 16: reliant.v1.LocalModelEndpoint.models:type_name -> reliant.v1.LocalModelInfo
-	62, // 17: reliant.v1.LocalModelHTTPRequest.headers:type_name -> reliant.v1.LocalModelHTTPRequest.HeadersEntry
-	63, // 18: reliant.v1.LocalModelHTTPChunk.headers:type_name -> reliant.v1.LocalModelHTTPChunk.HeadersEntry
-	64, // 19: reliant.v1.DaemonRegister.labels:type_name -> reliant.v1.DaemonRegister.LabelsEntry
+	64, // 17: reliant.v1.LocalModelHTTPRequest.headers:type_name -> reliant.v1.LocalModelHTTPRequest.HeadersEntry
+	65, // 18: reliant.v1.LocalModelHTTPChunk.headers:type_name -> reliant.v1.LocalModelHTTPChunk.HeadersEntry
+	66, // 19: reliant.v1.DaemonRegister.labels:type_name -> reliant.v1.DaemonRegister.LabelsEntry
 	15, // 20: reliant.v1.ToolResponse.media:type_name -> reliant.v1.ToolResponseMedia
 	17, // 21: reliant.v1.DaemonHeartbeat.disk:type_name -> reliant.v1.DiskReport
-	20, // 22: reliant.v1.DiskReport.volumes:type_name -> reliant.v1.DiskVolume
-	18, // 23: reliant.v1.DiskReport.processes:type_name -> reliant.v1.ProcessReport
-	19, // 24: reliant.v1.ProcessReport.top:type_name -> reliant.v1.ProcessTree
-	21, // 25: reliant.v1.DiskVolume.consumers:type_name -> reliant.v1.DiskConsumer
-	1,  // 26: reliant.v1.DiskVolume.guard:type_name -> reliant.v1.DiskGuardState
-	26, // 27: reliant.v1.ServerMessage.tool_request:type_name -> reliant.v1.ToolRequest
-	27, // 28: reliant.v1.ServerMessage.heartbeat:type_name -> reliant.v1.ServerHeartbeat
-	28, // 29: reliant.v1.ServerMessage.registration_ack:type_name -> reliant.v1.RegistrationAck
-	45, // 30: reliant.v1.ServerMessage.tool_cancel:type_name -> reliant.v1.ToolExecutionCancel
-	29, // 31: reliant.v1.ServerMessage.load_project_configs:type_name -> reliant.v1.LoadProjectConfigsRequest
-	31, // 32: reliant.v1.ServerMessage.watch_project_configs:type_name -> reliant.v1.WatchProjectConfigsRequest
-	32, // 33: reliant.v1.ServerMessage.unwatch_project_configs:type_name -> reliant.v1.UnwatchProjectConfigsRequest
-	49, // 34: reliant.v1.ServerMessage.kill_process:type_name -> reliant.v1.DaemonKillProcessRequest
-	51, // 35: reliant.v1.ServerMessage.daemon_command:type_name -> reliant.v1.DaemonCommandRequest
-	54, // 36: reliant.v1.ServerMessage.terminal_input:type_name -> reliant.v1.TerminalInputMessage
-	55, // 37: reliant.v1.ServerMessage.terminal_resize:type_name -> reliant.v1.TerminalResizeMessage
-	59, // 38: reliant.v1.ServerMessage.process_output_subscribe:type_name -> reliant.v1.ProcessOutputSubscribeMessage
-	60, // 39: reliant.v1.ServerMessage.process_output_unsubscribe:type_name -> reliant.v1.ProcessOutputUnsubscribeMessage
-	58, // 40: reliant.v1.ServerMessage.terminal_output_subscribe:type_name -> reliant.v1.TerminalOutputSubscribeMessage
-	23, // 41: reliant.v1.ServerMessage.hello:type_name -> reliant.v1.GatewayHello
-	46, // 42: reliant.v1.ServerMessage.tool_background:type_name -> reliant.v1.ToolExecutionBackground
-	10, // 43: reliant.v1.ServerMessage.local_model_http_request:type_name -> reliant.v1.LocalModelHTTPRequest
-	11, // 44: reliant.v1.ServerMessage.local_model_http_cancel:type_name -> reliant.v1.LocalModelHTTPCancel
-	9,  // 45: reliant.v1.ServerMessage.local_model_refresh:type_name -> reliant.v1.LocalModelRefresh
-	24, // 46: reliant.v1.ServerMessage.drain:type_name -> reliant.v1.GatewayDrain
-	25, // 47: reliant.v1.ServerMessage.tool_result_ack:type_name -> reliant.v1.ToolResultAck
-	65, // 48: reliant.v1.ToolRequest.trace_context:type_name -> reliant.v1.ToolRequest.TraceContextEntry
-	33, // 49: reliant.v1.LoadProjectConfigsResponse.snapshot:type_name -> reliant.v1.ProjectConfigSnapshot
-	66, // 50: reliant.v1.ProjectConfigSnapshot.mcp_configs:type_name -> reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
-	39, // 51: reliant.v1.ProjectConfigSnapshot.workflows:type_name -> reliant.v1.IndexedWorkflow
-	40, // 52: reliant.v1.ProjectConfigSnapshot.presets:type_name -> reliant.v1.IndexedPreset
-	41, // 53: reliant.v1.ProjectConfigSnapshot.scenarios:type_name -> reliant.v1.IndexedScenario
-	42, // 54: reliant.v1.ProjectConfigSnapshot.skills:type_name -> reliant.v1.IndexedSkill
-	67, // 55: reliant.v1.ProjectConfigSnapshot.repo_memories_md:type_name -> reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
-	34, // 56: reliant.v1.ProjectConfigSnapshot.repo_states:type_name -> reliant.v1.SyncedRepoState
-	36, // 57: reliant.v1.ProjectConfigDelta.changed_files:type_name -> reliant.v1.ChangedFile
-	33, // 58: reliant.v1.ProjectConfigDelta.snapshot_if_compacted:type_name -> reliant.v1.ProjectConfigSnapshot
-	0,  // 59: reliant.v1.ChangedFile.change_type:type_name -> reliant.v1.FileChangeType
-	68, // 60: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
-	44, // 61: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
-	52, // 62: reliant.v1.DaemonCommandRequest.policy:type_name -> reliant.v1.ConnectorPolicy
-	69, // 63: reliant.v1.DaemonCommandRequest.trace_context:type_name -> reliant.v1.DaemonCommandRequest.TraceContextEntry
-	2,  // 64: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
-	5,  // 65: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
-	22, // 66: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
-	47, // 67: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
-	3,  // 68: reliant.v1.ToolsDaemonService.WhoAmI:input_type -> reliant.v1.WhoAmIRequest
-	22, // 69: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
-	5,  // 70: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
-	48, // 71: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
-	4,  // 72: reliant.v1.ToolsDaemonService.WhoAmI:output_type -> reliant.v1.WhoAmIResponse
-	69, // [69:73] is the sub-list for method output_type
-	65, // [65:69] is the sub-list for method input_type
-	65, // [65:65] is the sub-list for extension type_name
-	65, // [65:65] is the sub-list for extension extendee
-	0,  // [0:65] is the sub-list for field type_name
+	22, // 22: reliant.v1.DiskReport.volumes:type_name -> reliant.v1.DiskVolume
+	20, // 23: reliant.v1.DiskReport.processes:type_name -> reliant.v1.ProcessReport
+	18, // 24: reliant.v1.DiskReport.worktree_reclaim:type_name -> reliant.v1.WorktreeReclaimProposals
+	19, // 25: reliant.v1.WorktreeReclaimProposals.proposals:type_name -> reliant.v1.WorktreeReclaimProposal
+	21, // 26: reliant.v1.ProcessReport.top:type_name -> reliant.v1.ProcessTree
+	23, // 27: reliant.v1.DiskVolume.consumers:type_name -> reliant.v1.DiskConsumer
+	1,  // 28: reliant.v1.DiskVolume.guard:type_name -> reliant.v1.DiskGuardState
+	28, // 29: reliant.v1.ServerMessage.tool_request:type_name -> reliant.v1.ToolRequest
+	29, // 30: reliant.v1.ServerMessage.heartbeat:type_name -> reliant.v1.ServerHeartbeat
+	30, // 31: reliant.v1.ServerMessage.registration_ack:type_name -> reliant.v1.RegistrationAck
+	47, // 32: reliant.v1.ServerMessage.tool_cancel:type_name -> reliant.v1.ToolExecutionCancel
+	31, // 33: reliant.v1.ServerMessage.load_project_configs:type_name -> reliant.v1.LoadProjectConfigsRequest
+	33, // 34: reliant.v1.ServerMessage.watch_project_configs:type_name -> reliant.v1.WatchProjectConfigsRequest
+	34, // 35: reliant.v1.ServerMessage.unwatch_project_configs:type_name -> reliant.v1.UnwatchProjectConfigsRequest
+	51, // 36: reliant.v1.ServerMessage.kill_process:type_name -> reliant.v1.DaemonKillProcessRequest
+	53, // 37: reliant.v1.ServerMessage.daemon_command:type_name -> reliant.v1.DaemonCommandRequest
+	56, // 38: reliant.v1.ServerMessage.terminal_input:type_name -> reliant.v1.TerminalInputMessage
+	57, // 39: reliant.v1.ServerMessage.terminal_resize:type_name -> reliant.v1.TerminalResizeMessage
+	61, // 40: reliant.v1.ServerMessage.process_output_subscribe:type_name -> reliant.v1.ProcessOutputSubscribeMessage
+	62, // 41: reliant.v1.ServerMessage.process_output_unsubscribe:type_name -> reliant.v1.ProcessOutputUnsubscribeMessage
+	60, // 42: reliant.v1.ServerMessage.terminal_output_subscribe:type_name -> reliant.v1.TerminalOutputSubscribeMessage
+	25, // 43: reliant.v1.ServerMessage.hello:type_name -> reliant.v1.GatewayHello
+	48, // 44: reliant.v1.ServerMessage.tool_background:type_name -> reliant.v1.ToolExecutionBackground
+	10, // 45: reliant.v1.ServerMessage.local_model_http_request:type_name -> reliant.v1.LocalModelHTTPRequest
+	11, // 46: reliant.v1.ServerMessage.local_model_http_cancel:type_name -> reliant.v1.LocalModelHTTPCancel
+	9,  // 47: reliant.v1.ServerMessage.local_model_refresh:type_name -> reliant.v1.LocalModelRefresh
+	26, // 48: reliant.v1.ServerMessage.drain:type_name -> reliant.v1.GatewayDrain
+	27, // 49: reliant.v1.ServerMessage.tool_result_ack:type_name -> reliant.v1.ToolResultAck
+	67, // 50: reliant.v1.ToolRequest.trace_context:type_name -> reliant.v1.ToolRequest.TraceContextEntry
+	35, // 51: reliant.v1.LoadProjectConfigsResponse.snapshot:type_name -> reliant.v1.ProjectConfigSnapshot
+	68, // 52: reliant.v1.ProjectConfigSnapshot.mcp_configs:type_name -> reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
+	41, // 53: reliant.v1.ProjectConfigSnapshot.workflows:type_name -> reliant.v1.IndexedWorkflow
+	42, // 54: reliant.v1.ProjectConfigSnapshot.presets:type_name -> reliant.v1.IndexedPreset
+	43, // 55: reliant.v1.ProjectConfigSnapshot.scenarios:type_name -> reliant.v1.IndexedScenario
+	44, // 56: reliant.v1.ProjectConfigSnapshot.skills:type_name -> reliant.v1.IndexedSkill
+	69, // 57: reliant.v1.ProjectConfigSnapshot.repo_memories_md:type_name -> reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
+	36, // 58: reliant.v1.ProjectConfigSnapshot.repo_states:type_name -> reliant.v1.SyncedRepoState
+	38, // 59: reliant.v1.ProjectConfigDelta.changed_files:type_name -> reliant.v1.ChangedFile
+	35, // 60: reliant.v1.ProjectConfigDelta.snapshot_if_compacted:type_name -> reliant.v1.ProjectConfigSnapshot
+	0,  // 61: reliant.v1.ChangedFile.change_type:type_name -> reliant.v1.FileChangeType
+	70, // 62: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
+	46, // 63: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
+	54, // 64: reliant.v1.DaemonCommandRequest.policy:type_name -> reliant.v1.ConnectorPolicy
+	71, // 65: reliant.v1.DaemonCommandRequest.trace_context:type_name -> reliant.v1.DaemonCommandRequest.TraceContextEntry
+	2,  // 66: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
+	5,  // 67: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
+	24, // 68: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
+	49, // 69: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
+	3,  // 70: reliant.v1.ToolsDaemonService.WhoAmI:input_type -> reliant.v1.WhoAmIRequest
+	24, // 71: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
+	5,  // 72: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
+	50, // 73: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
+	4,  // 74: reliant.v1.ToolsDaemonService.WhoAmI:output_type -> reliant.v1.WhoAmIResponse
+	71, // [71:75] is the sub-list for method output_type
+	67, // [67:71] is the sub-list for method input_type
+	67, // [67:67] is the sub-list for extension type_name
+	67, // [67:67] is the sub-list for extension extendee
+	0,  // [0:67] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_tools_daemon_proto_init() }
@@ -6022,7 +6338,7 @@ func file_reliant_v1_tools_daemon_proto_init() {
 		(*DaemonMessage_LocalModelHttpChunk)(nil),
 		(*DaemonMessage_LocalModelInventory)(nil),
 	}
-	file_reliant_v1_tools_daemon_proto_msgTypes[19].OneofWrappers = []any{
+	file_reliant_v1_tools_daemon_proto_msgTypes[21].OneofWrappers = []any{
 		(*ServerMessage_ToolRequest)(nil),
 		(*ServerMessage_Heartbeat)(nil),
 		(*ServerMessage_RegistrationAck)(nil),
@@ -6045,14 +6361,14 @@ func file_reliant_v1_tools_daemon_proto_init() {
 		(*ServerMessage_Drain)(nil),
 		(*ServerMessage_ToolResultAck)(nil),
 	}
-	file_reliant_v1_tools_daemon_proto_msgTypes[48].OneofWrappers = []any{}
+	file_reliant_v1_tools_daemon_proto_msgTypes[50].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_tools_daemon_proto_rawDesc), len(file_reliant_v1_tools_daemon_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   67,
+			NumMessages:   69,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
