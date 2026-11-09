@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -46,6 +47,25 @@ func TestSandbox_AHandOffUnderANamedCacheDirectorySurvivesACd(t *testing.T) {
 		require.NoError(t, err, "%s", out)
 		assert.NoFileExists(t, filepath.Join(run, "regen.patch"))
 		assert.Contains(t, string(out), "credsandbox: discarded")
+	})
+
+	// No process a command started outlives it to write a kept directory after
+	// it exits: a background job, a setsid one and a nohup one. The control-plane
+	// pipeline's hand-off slots rely on it: once a run's command has ended,
+	// nothing of that run writes the slot the next run takes.
+	t.Run("no child writes after the command exits", func(t *testing.T) {
+		keep := filepath.Join(xdg, "pr-fix", "slot-1")
+		require.NoError(t, os.MkdirAll(keep, 0o755))
+		late := filepath.Join(keep, "late")
+		sh := `( sleep 1; echo a > '` + late + `-bg' ) & ` +
+			`setsid sh -c "sleep 1; echo b > '` + late + `-setsid'" & ` +
+			`nohup sh -c "sleep 1; echo c > '` + late + `-nohup'" >/dev/null 2>&1 & echo started`
+		out, err := wrappedWritable(t, project, home, []string{keep}, sh, env).CombinedOutput()
+		require.NoError(t, err, "%s", out)
+		time.Sleep(3 * time.Second)
+		for _, f := range []string{"-bg", "-setsid", "-nohup"} {
+			assert.NoFileExists(t, late+f, "a %s child wrote after its command exited", f[1:])
+		}
 	})
 
 	// A JS gate: pnpm installs into a store under the cache root, and a later
