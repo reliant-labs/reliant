@@ -200,6 +200,18 @@ func releaseSteps(t *testing.T) map[string][]ciStep {
 	return out
 }
 
+// prodWebBuildNodeMajor is the Node the PRODUCTION web bundle is built on,
+// outside this repo: control-plane's cut-release.yml checks out the pinned
+// reliant and `forge env build prod --release` installs and builds
+// frontends/web from source (reliant-web is a GitSource frontend) after
+// actions/setup-node with node-version '22'. engineStrict would refuse that
+// install if engines.node dropped Node 22, so 22 stays supported, at its
+// latest patch, and gets a real install below.
+const (
+	prodWebBuildNodeMajor = "22"
+	prodWebBuildNodeWhere = "control-plane cut-release.yml, which builds reliant-web for prod on Node 22"
+)
+
 // TestNodeEnginesAdmitSupportedNodes pins engines.node against the Node
 // releases installs actually run on. engineStrict turns that range into a
 // refusal, so a range that drifts away from CI's Node fails every CI install.
@@ -207,7 +219,11 @@ func TestNodeEnginesAdmitSupportedNodes(t *testing.T) {
 	// 22.12.0 is the oldest supported release (vite 7's floor on the 22 line);
 	// 24 is CI's, .nvmrc's and Electron 41's bundled Node. Each CI major is
 	// checked at a late patch, the release setup-node resolves "24" to.
-	admit := map[string]string{"22.12.0": "the oldest supported Node 22", "24.0.0": "the first Node 24"}
+	admit := map[string]string{
+		"22.12.0":                        "the oldest supported Node 22",
+		"24.0.0":                         "the first Node 24",
+		prodWebBuildNodeMajor + ".999.0": prodWebBuildNodeWhere,
+	}
 	for major, where := range ciNodeMajors(t) {
 		admit[major+".999.0"] = where
 	}
@@ -356,19 +372,16 @@ var webInstallInputs = []string{
 	"sdk/ts/package.json",
 }
 
-// requireTool skips the test when name is not on PATH, naming what is missing,
-// except in CI: every CI job that runs these tests installs Node and pnpm
-// (the setup action's node input), so there a missing tool means the setup
-// broke, and skipping would hide exactly that.
+// requireTool fails the test when name is not on PATH. It never skips: the
+// callers are testkit.Slow tests, already out of the -short tier, and the full
+// tier runs where a web install is possible (the release gate's setup action
+// installs Node and pnpm, and so does any machine that runs frontends/web). A
+// missing tool there means that setup broke, which a skip would hide.
 func requireTool(t *testing.T, name string) {
 	t.Helper()
-	if _, err := exec.LookPath(name); err == nil {
-		return
+	if _, err := exec.LookPath(name); err != nil {
+		t.Fatalf("%s is not on PATH: these install tests need it (CI's setup action installs it with node: \"true\"; locally, install pnpm %s, or run the -short tier)", name, rootPnpmVersion(t))
 	}
-	if os.Getenv("CI") != "" {
-		t.Fatalf("%s is not on PATH in CI: the setup action's pnpm/Node steps did not install it", name)
-	}
-	t.Skipf("%s not on PATH (CI installs it; this host lacks it)", name)
 }
 
 // copyWebInstallInputs copies webInstallInputs into a temp tree and returns
@@ -457,10 +470,11 @@ func fetchNode(t *testing.T, spec string) (bin, version string) {
 
 // TestPnpmFrozenInstallRunsItsBuildsOnSupportedNodes is the install a
 // contributor or CI actually does, under a real runtime of every supported
-// Node line: the oldest engines.node admits (22.12.0) and each major CI,
-// .nvmrc and release.yml name (24, at its latest patch, as setup-node
-// resolves it). Each runtime is fetched for the test (fetchNode), so it does
-// not depend on the host's Node.
+// Node line: the oldest engines.node admits (22.12.0), the latest 22 the prod
+// web build runs on (prodWebBuildNodeMajor), and each major CI, .nvmrc and
+// release.yml name (24), each major at its latest patch, as setup-node
+// resolves it. Each runtime is fetched for the test (fetchNode), so it does
+// not depend on the host's Node, and CI needs no setup-node step per major.
 //
 // Under each one, a frozen install of the committed web inputs with lifecycle
 // scripts on must pass engineStrict, run the allowed builds (better-sqlite3's
@@ -477,7 +491,7 @@ func TestPnpmFrozenInstallRunsItsBuildsOnSupportedNodes(t *testing.T) {
 			webInstallInputs...)...))
 	requireTool(t, "pnpm")
 
-	specs := map[string]string{"22.12.0": "the oldest supported Node"}
+	specs := map[string]string{"22.12.0": "the oldest supported Node", prodWebBuildNodeMajor: prodWebBuildNodeWhere}
 	for major, where := range ciNodeMajors(t) {
 		specs[major] = where
 	}
