@@ -560,19 +560,61 @@ jobs:
           path: ~/.cache/ms-playwright
           # Per suite: the desktop job installs Chromium only.
           key: playwright-${{ matrix.suite }}-${{ runner.os }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
+      # The browsers' system packages (WebKit's GStreamer/GTK set is ~114 MB),
+      # as the .deb files a main run downloaded. On 2026-11-09 the runner's
+      # Ubuntu mirror served ~100 KB/s and the responsive job was cancelled at
+      # its timeout still inside `playwright install --with-deps` (reliant
+      # main 74127457b, control-plane main-red #2372). Keyed on the exact
+      # runner image: the cached set is the packages THAT image lacks, and
+      # scripts/playwright-os-deps.sh installs it with dpkg, no mirror. No
+      # restore-keys: another image's set could downgrade its libraries.
+      # Rollback and rollout checks: dev-docs/responsive-ui-standards.md,
+      # "System-package cache". Repository variable PLAYWRIGHT_OS_DEPS_CACHE=off
+      # turns the cache off (back to --with-deps); PLAYWRIGHT_OS_DEPS_CACHE_VERSION
+      # moves every run off a bad entry.
+      - name: Read the runner image
+        id: runner-image
+        if: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' }}
+        run: echo "image=${ImageOS:-unknown}-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+      - name: Restore Playwright system packages
+        id: os-deps
+        if: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' }}
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-os-deps
+          key: playwright-os-deps-${{ vars.PLAYWRIGHT_OS_DEPS_CACHE_VERSION || 'v1' }}-${{ matrix.suite }}-${{ steps.runner-image.outputs.image }}-${{ hashFiles('frontends/web/pnpm-lock.yaml') }}
       - name: task deps:web
         run: task deps:web
       # desktop: the Chromium suite (which also runs the responsive journeys
       # with mouse input). responsive: the required production-route
       # assertions in Chromium touch and WebKit phone/tablet.
       - name: Browser guardrails (${{ matrix.suite }})
-        run: task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS=--with-deps
+        env:
+          OS_DEPS_CACHE: ${{ vars.PLAYWRIGHT_OS_DEPS_CACHE }}
+        run: |
+          if [ "$OS_DEPS_CACHE" = off ]; then
+            task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS=--with-deps
+          else
+            task test:web:e2e:${{ matrix.suite }} PLAYWRIGHT_DEPS_CACHE="$HOME/.cache/playwright-os-deps"
+          fi
       - name: Save Playwright browsers (main only)
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && steps.browsers.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
           path: ~/.cache/ms-playwright
           key: ${{ steps.browsers.outputs.cache-primary-key }}
+      # The script writes the cache only after the packages installed, so a
+      # failed install leaves nothing to save. (hashFiles cannot see ~.)
+      - name: Were the system packages recorded
+        id: os-deps-recorded
+        if: ${{ !cancelled() && vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off' && github.ref == 'refs/heads/main' && steps.os-deps.outputs.cache-hit != 'true' }}
+        run: if [ -f "$HOME/.cache/playwright-os-deps/browsers" ]; then echo "yes=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Save Playwright system packages (main only)
+        if: ${{ !cancelled() && steps.os-deps-recorded.outputs.yes == 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-os-deps
+          key: ${{ steps.os-deps.outputs.cache-primary-key }}
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:

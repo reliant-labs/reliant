@@ -493,3 +493,91 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 		})
 	})
 }
+
+// The browsers' system packages come from a cache of .deb files, never from
+// the Ubuntu mirror on every run: on 2026-11-09 the mirror served ~100 KB/s
+// and the responsive leg was cancelled at its timeout inside
+// `playwright install --with-deps` (control-plane main-red #2372).
+func TestPlaywrightSystemPackagesComeFromTheCache(t *testing.T) {
+	wf := loadCIWorkflow(t)
+	tf := parseTaskfile(t, filepath.Join(repoRoot, "Taskfile.yml"))
+	pw := wf.job(t, "playwright")
+
+	// The suite step's env (ciStep is shared with workflows whose steps
+	// declare env their own way, so it is read here).
+	var envOnly struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Run string            `yaml:"run"`
+				Env map[string]string `yaml:"env"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(readRepo(t, ".github/workflows/ci.yml"), &envOnly); err != nil {
+		t.Fatal(err)
+	}
+	var suiteEnv map[string]string
+	for _, s := range envOnly.Jobs["playwright"].Steps {
+		if strings.Contains(s.Run, "task test:web:e2e") {
+			suiteEnv = s.Env
+		}
+	}
+
+	var restore, save *ciStep
+	recordedIf := ""
+	for i := range pw.Steps {
+		s := &pw.Steps[i]
+		if strings.Contains(s.Run, "task test:web:e2e") {
+			// --with-deps (the mirror) only as the rollback, behind the variable.
+			if strings.Contains(s.Run, "--with-deps") &&
+				(!strings.Contains(s.Run, `if [ "$OS_DEPS_CACHE" = off ]`) || suiteEnv["OS_DEPS_CACHE"] != "${{ vars.PLAYWRIGHT_OS_DEPS_CACHE }}") {
+				t.Errorf("the suite step installs system packages from the mirror outside the PLAYWRIGHT_OS_DEPS_CACHE=off rollback (%q)", s.Run)
+			}
+			if !strings.Contains(s.Run, "PLAYWRIGHT_DEPS_CACHE=") {
+				t.Errorf("the suite step does not pass PLAYWRIGHT_DEPS_CACHE (%q)", s.Run)
+			}
+		}
+		if s.ID == "os-deps-recorded" {
+			recordedIf = s.If
+		}
+		if fmt.Sprint(s.With["path"]) != "~/.cache/playwright-os-deps" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(s.Uses, "actions/cache/restore@"):
+			restore = s
+		case strings.HasPrefix(s.Uses, "actions/cache/save@"):
+			save = s
+		}
+	}
+	if restore == nil || save == nil {
+		t.Fatalf("playwright job must restore and save ~/.cache/playwright-os-deps (restore=%v save=%v)", restore != nil, save != nil)
+	}
+	// The cached set is what ONE runner image lacks; another image's set
+	// could downgrade its libraries, so no prefix fallback.
+	if key := fmt.Sprint(restore.With["key"]); !strings.Contains(key, "steps.runner-image.outputs.image") {
+		t.Errorf("system-package cache key %q does not carry the runner image", key)
+	}
+	// The rollback: a version variable moves runs off a bad entry, and
+	// PLAYWRIGHT_OS_DEPS_CACHE=off skips the cache entirely.
+	if key := fmt.Sprint(restore.With["key"]); !strings.Contains(key, "vars.PLAYWRIGHT_OS_DEPS_CACHE_VERSION") {
+		t.Errorf("system-package cache key %q has no PLAYWRIGHT_OS_DEPS_CACHE_VERSION to move off a bad entry", key)
+	}
+	if !strings.Contains(restore.If, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") || !strings.Contains(recordedIf, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") {
+		t.Errorf("PLAYWRIGHT_OS_DEPS_CACHE=off does not skip the restore (if %q) and the save (check if %q)", restore.If, recordedIf)
+	}
+	if _, ok := restore.With["restore-keys"]; ok {
+		t.Error("system-package cache has restore-keys: another runner image's packages could be installed")
+	}
+	if !strings.Contains(recordedIf, "refs/heads/main") || !strings.Contains(save.If, "os-deps-recorded") {
+		t.Errorf("system packages must be saved on main only, after the script recorded them (save if %q, check if %q)", save.If, recordedIf)
+	}
+
+	var runCmds strings.Builder
+	for _, c := range tf.commands("web:e2e:run") {
+		runCmds.WriteString(c)
+	}
+	if !strings.Contains(runCmds.String(), "scripts/playwright-os-deps.sh '{{.PLAYWRIGHT_DEPS_CACHE}}' {{.BROWSERS}}") {
+		t.Error("web:e2e:run does not install the suite's system packages through scripts/playwright-os-deps.sh")
+	}
+}

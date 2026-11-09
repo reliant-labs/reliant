@@ -43,6 +43,9 @@ export   TriggerService/GetLaunchEvent
 partial  ChatService
 export   ChatService/GetChatUpdates
 export   ChatService/GetWorkflowExecutions
+# The bodies a TOOL_BODY_MODE_STUB read left out (GetChatUpdatesRequest's
+# tool_bodies), by block id. Owner decision (2026-11-08): exported.
+export   ChatService/GetContentBlockBodies
 
 partial  QuestionService
 export   QuestionService/ListPendingQuestions

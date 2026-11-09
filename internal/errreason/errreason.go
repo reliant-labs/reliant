@@ -35,6 +35,15 @@ const (
 	// ChatNotStarted: SendMessage on a chat whose root run has not started.
 	// FailedPrecondition; the client calls StartChat.
 	ChatNotStarted = "chat_not_started"
+	// RunNoListeningAgent: input to a live run in which no agent is running
+	// right now (a workflow between its agent steps). FailedPrecondition;
+	// nothing was queued. SignalRun reports it as delivered=false with this
+	// value in NotDeliveredHeader instead.
+	RunNoListeningAgent = "run_no_listening_agent"
+	// RunRecipientAmbiguous: input to a run with several agents running in
+	// parallel that names none of them. FailedPrecondition; the message lists
+	// them, and the caller resends naming one (target thread).
+	RunRecipientAmbiguous = "run_recipient_ambiguous"
 	// StaleRevision: a save raced a newer revision of the same definition.
 	// Aborted; reload and retry.
 	StaleRevision = "stale_revision"
@@ -54,3 +63,8 @@ const (
 	// it, unless the server has no control plane at all.
 	NoControlPlaneCredential = "no_control_plane_credential"
 )
+
+// NotDeliveredHeader is the response header SignalRun sets, beside
+// delivered=false, to say why a live run did not take the message: one of the
+// reasons above (RunNoListeningAgent). Absent for a run that was not live.
+const NotDeliveredHeader = "X-Reliant-Not-Delivered-Reason"

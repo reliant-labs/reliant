@@ -13,6 +13,32 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.12.0" description="November 9, 2026">
+### 3 new features, 4 fixes and 3 other changes
+
+Every pull request merged since v1.11.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **workflow: a run step's retry reattaches to the command its first attempt started** [#2473](https://github.com/reliant-labs/reliant/pull/2473)
+- **web: show a spinner while a hosted app is deploying** [#2476](https://github.com/reliant-labs/reliant/pull/2476)
+- **web,sdk: open chats with tool bodies fetched on expand; SDK toolBodies option and fetchContentBlockBodies (TS + Go)** [#2470](https://github.com/reliant-labs/reliant/pull/2470)
+
+#### Changed
+
+- **cmd: the transcript kill-switch test evaluates KCL with the pinned forge, not PATH's** [#2485](https://github.com/reliant-labs/reliant/pull/2485)
+- **web: use generated definitions for transient filesystem reads** [#2487](https://github.com/reliant-labs/reliant/pull/2487)
+- **pin: forge@56e8024f38c5 + @reliantlabs/forge-web-runtime@0.13.9, as promoted in v1.11.0-rc.2** [#2492](https://github.com/reliant-labs/reliant/pull/2492)
+
+#### Fixed
+
+- **dev: pin pnpm and Node so a dev install never edits tracked files** [#2463](https://github.com/reliant-labs/reliant/pull/2463)
+- **accountlimits: a Codex account served from credits past its weekly window is not limited** [#2484](https://github.com/reliant-labs/reliant/pull/2484)
+- **runs: input to a run reaches the agent running in it, and never restarts a workflow** [#2464](https://github.com/reliant-labs/reliant/pull/2464)
+- **web: keep filesystem move deletion on the captured machine** [#2488](https://github.com/reliant-labs/reliant/pull/2488)
+
+</Update>
+
 <Update label="v1.11.0" description="November 8, 2026">
 ### 10 new features, 27 fixes and 17 other changes
 

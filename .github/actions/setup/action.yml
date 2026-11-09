@@ -280,14 +280,16 @@ runs:
         key: ci-tool-golangci-lint-${{ steps.golangci.outputs.version }}-${{ runner.os }}-${{ runner.arch }}
 
     # frontends/web installs with pnpm, at the version that wrote its
-    # pnpm-lock.yaml (frontends/web/package.json engines.pnpm). The npm cache
-    # below covers the npm projects; pnpm fetches the web tree from the registry.
+    # pnpm-lock.yaml. The action reads it from the root package.json's
+    # packageManager field (the same pin frontends/web/package.json carries),
+    # so there is no version here: naming one beside that field fails the
+    # action ("Multiple versions of pnpm specified"). The npm cache below
+    # covers the npm projects; pnpm fetches the web tree from the registry.
     - name: Set up pnpm
       if: inputs.node == 'true'
       uses: pnpm/action-setup@v4
-      with:
-        version: 12.15.0
 
+    # The major .nvmrc names; package.json engines.node admits 22.12+ and 24.
     - name: Set up Node
       if: inputs.node == 'true'
       uses: actions/setup-node@v6

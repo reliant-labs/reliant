@@ -7,11 +7,17 @@ import { MessageRole, type ChatService } from "#gen/reliant/v1/chat_pb.js";
 import { createChatState, reduceChat } from "./chat-reducer.js";
 import type { ChatAction, ChatState } from "./chat-state.js";
 import { ChatStream, type ChatStreamHooks } from "./chat-stream.js";
+import {
+  fetchContentBlockBodies,
+  toolBodyModeOf,
+  type ContentBlockBodies,
+  type FetchContentBlockBodiesOptions,
+} from "./content-block-bodies.js";
 import type { ConnectionStatus, ErrorUpdate } from "./events.js";
 import type { StreamEnvironment } from "./reconnecting-stream.js";
 import { oldestSeqOf } from "./reducers.js";
 import { createAttemptIds, clientIdOfFailedSend, type AttemptIds } from "./send-ids.js";
-import type { Message } from "./types.js";
+import type { Message, ToolBodies } from "./types.js";
 import type { StreamingClient } from "./user-stream.js";
 
 export interface ChatSessionOptions {
@@ -24,6 +30,16 @@ export interface ChatSessionOptions {
   /** The project the user stream is scoped to. */
   projectId?: string;
   hooks?: ChatStreamHooks;
+  /**
+   * How the stream's snapshot and replay, and `loadOlder`'s pages, send the
+   * bodies of finished tool calls. "full" (the default) is what every client
+   * has always had, so a renderer that reads `input` keeps working. With
+   * "stub" they arrive elided (ContentBlock.body_elided; a result is also
+   * `elided` in `toolResults`): read a body with `fetchContentBlockBodies`
+   * when it is shown. A body the state already holds is never replaced by a
+   * stub of it.
+   */
+  toolBodies?: ToolBodies;
   /** Reducer clock; default is the wall clock. */
   now?: () => string;
   /** Ids for sends. Default: a fresh set for this session. */
@@ -77,6 +93,7 @@ export class ChatSession {
   private readonly ids: AttemptIds;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly chats: () => Client<typeof ChatService>;
+  private readonly toolBodies: ToolBodies | undefined;
   /** Failed sends by client message id, until retried or discarded. */
   private readonly failedSends = new Map<string, PendingSend>();
   private errorMessage: string | null = null;
@@ -90,6 +107,7 @@ export class ChatSession {
     this.ids = options.attemptIds ?? createAttemptIds();
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.chats = options.chats;
+    this.toolBodies = options.toolBodies;
     this.state = options.initialState ?? createChatState(options.chatId);
 
     const resumeFrom = options.initialState?.cursor ?? 0n;
@@ -98,6 +116,7 @@ export class ChatSession {
       client: options.streaming,
       projectId: options.projectId,
       hooks: options.hooks,
+      toolBodies: options.toolBodies,
       callbacks: {
         onChatSnapshot: (_chatId, updates) =>
           this.dispatch({ kind: "snapshot", updates, cursor: this.cursor() }),
@@ -282,7 +301,12 @@ export class ChatSession {
     this.olderInFlight = true;
     this.emit();
     try {
-      const response = await this.chats().listMessages({ chatId: this.chatId, recent: pageSize, beforeSeq: BigInt(beforeSeq) });
+      const response = await this.chats().listMessages({
+        chatId: this.chatId,
+        recent: pageSize,
+        beforeSeq: BigInt(beforeSeq),
+        toolBodies: toolBodyModeOf(this.toolBodies),
+      });
       const messages = response.messages as unknown as Message[];
       // An empty page is the start of history. Otherwise the server says whether
       // more lies below the cursor; a full page is more evidence of it, so an
@@ -306,6 +330,20 @@ export class ChatSession {
 
   /** Whether an older page is being fetched. */
   isLoadingOlder = (): boolean => this.olderInFlight;
+
+  /**
+   * Read the bodies of this chat's blocks that a "stub" read left out
+   * (ContentBlock.body_elided), by block id: a tool call's block id for its
+   * input, `toolResults[callId].block_id` for its result. Batched and
+   * re-asked as the server defers; see fetchContentBlockBodies. The state is
+   * not changed: keep the bodies in a cache of your own.
+   */
+  fetchContentBlockBodies(
+    blockIds: Iterable<string>,
+    options: FetchContentBlockBodiesOptions = {},
+  ): Promise<ContentBlockBodies> {
+    return fetchContentBlockBodies(this.chats(), this.chatId, blockIds, options);
+  }
 
   private cursor(): bigint {
     return BigInt(this.stream.getLastChatSequence());

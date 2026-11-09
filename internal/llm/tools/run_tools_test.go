@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/ctxkeys"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -64,6 +65,8 @@ func (f *fakeRunStarter) calls() []StartRunRequest {
 type fakeRunController struct {
 	pauses, resumes, cancels []string
 	deliveries               []string
+	threads                  []string
+	notDeliveredReason       string
 	senders                  []RunSender
 	resumeResult             RunResumeResult
 	delivered                bool
@@ -85,9 +88,13 @@ func (f *fakeRunController) CancelRun(_ context.Context, userID, chatID string) 
 	return f.err
 }
 
-func (f *fakeRunController) DeliverToRun(_ context.Context, userID, chatID, message string, from RunSender) (RunDelivery, error) {
+func (f *fakeRunController) DeliverToRun(_ context.Context, userID, chatID, thread, message string, from RunSender) (RunDelivery, error) {
+	f.threads = append(f.threads, thread)
 	f.deliveries = append(f.deliveries, userID+"/"+chatID+"/"+message)
 	f.senders = append(f.senders, from)
+	if !f.delivered {
+		return RunDelivery{NotDeliveredReason: f.notDeliveredReason}, f.err
+	}
 	return RunDelivery{Delivered: f.delivered, MessageID: "msg-1"}, f.err
 }
 
@@ -394,6 +401,32 @@ func TestSendToRun_NonLiveRunReportsNotDeliveredAndNeverStarts(t *testing.T) {
 			assert.Empty(t, ctl.deliveries, "nothing may reach a run that is not live")
 		})
 	}
+}
+
+// send_to_run names the agent a message is for with thread, and a live run
+// with no agent running says so plainly instead of claiming a delivery.
+func TestSendToRun_TargetsAThreadAndReportsNoRunningAgent(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	callerID := newCaller(t, repo)
+	target := uuid.NewString()
+	seedRun(t, repo, runSeed{id: target, user: runTestUser, status: db.Active()})
+
+	ctl := &fakeRunController{delivered: true}
+	resp := callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+		SendToRunToolName, SendToRunParams{RunID: target, Thread: " implement ", Message: "status?"})
+	require.False(t, resp.IsError, resp.Content)
+	assert.Equal(t, []string{"implement"}, ctl.threads, "the named agent reaches the messenger")
+
+	ctl = &fakeRunController{notDeliveredReason: errreason.RunNoListeningAgent}
+	resp = callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+		SendToRunToolName, SendToRunParams{RunID: target, Message: "anyone?"})
+	require.False(t, resp.IsError, resp.Content)
+	assert.Contains(t, resp.Content, "Not delivered: no agent is running in run "+target)
+	var meta SendToRunResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+	assert.False(t, meta.Delivered)
 }
 
 func TestSendToRun_LiveRunIsDeliveredThroughTheMessenger(t *testing.T) {

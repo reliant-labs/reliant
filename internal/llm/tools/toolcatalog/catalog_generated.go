@@ -827,6 +827,7 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"message": {},
 			"subject": {},
+			"thread":  {},
 		},
 		Unbindable: map[string]string{
 			"run_id": "identifies one run, which is chosen per call and cannot be known in advance",

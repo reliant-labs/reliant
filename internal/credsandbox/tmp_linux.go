@@ -94,6 +94,34 @@ func privateTmpPath(runDir, name string) (host, inSandbox string) {
 	return filepath.Join(runDir, "tmp", name), filepath.Join("/tmp", name)
 }
 
+// privateTmpTarget is one of privateTmpDirs as this machine has it: every
+// path the directory has, links resolved, the directory itself first.
+type privateTmpTarget struct {
+	path, entry string
+	targets     []string
+}
+
+// privateTmpTargets are the directories privateTmp covers, under every path
+// they have (mounts): nothing at or below one of them is visible to the
+// command but its own directory (ownTmpDir).
+func privateTmpTargets(mounts []mountInfo) []privateTmpTarget {
+	var out []privateTmpTarget
+	seen := map[string]bool{}
+	for _, d := range privateTmpDirs {
+		target, err := filepath.EvalSymlinks(d.path)
+		if err != nil || seen[target] {
+			continue // absent, or a link to one covered already (/var/tmp -> /tmp)
+		}
+		if fi, err := os.Stat(target); err != nil || !fi.IsDir() {
+			continue
+		}
+		seen[target] = true
+		out = append(out, privateTmpTarget{path: d.path, entry: d.entry,
+			targets: dedupe(append([]string{target}, aliasPaths([]string{target}, mounts)...))})
+	}
+	return out
+}
+
 // privateTmp mounts the run directory's stand-ins over /tmp and /var/tmp, and
 // over every other path the same directories have (mounts, the mount table as
 // it was before the sandbox changed it). Every source is opened before the
@@ -115,21 +143,13 @@ func privateTmp(runDir, cwd, tmpRoot string, mounts []mountInfo) error {
 			}
 		}
 	}()
-	seen := map[string]bool{}
-	for _, d := range privateTmpDirs {
-		target, err := filepath.EvalSymlinks(d.path)
-		if err != nil || seen[target] {
-			continue // absent, or a link to one covered already (/var/tmp -> /tmp)
-		}
-		if fi, err := os.Stat(target); err != nil || !fi.IsDir() {
-			continue
-		}
-		seen[target] = true
+	for _, d := range privateTmpTargets(mounts) {
 		src, err := unix.Open(filepath.Join(runDir, d.entry), unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
 		if err != nil {
 			return fmt.Errorf("opening the private %s: %w", d.path, err)
 		}
-		c := cover{targets: dedupe(append([]string{target}, aliasPaths([]string{target}, mounts)...)), src: src, carry: -1}
+		c := cover{targets: d.targets, src: src, carry: -1}
+		target := d.targets[0]
 		if name := ownTmpDir(target, canonicalDir(tmpRoot), canonicalDir(cwd)); name != "" {
 			fd, err := unix.Open(filepath.Join(target, name), unix.O_PATH|unix.O_DIRECTORY|unix.O_NOFOLLOW|unix.O_CLOEXEC, 0)
 			if err != nil {

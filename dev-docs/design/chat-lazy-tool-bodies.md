@@ -384,9 +384,12 @@ reads, checked against `turnWorkSummary.ts`, `TurnWorkFold.tsx` and
   of `reduceChat` (#2265) or `useChat` that renders inputs keeps getting what
   it renders. The SDK exports `fetchContentBlockBodies` and the new fields,
   and `buf.gen.sdk-ts.yaml` adds `reliant.v1.ChatService.GetContentBlockBodies`
-  to `types`. This is an additive minor version. The Go SDK is unchanged:
-  `proto/public-api.txt` keeps the new rpc withheld (it is listed only on
-  `partial ChatService` lines that are exported).
+  to `types`. This is an additive minor version. The Go SDK exports the rpc
+  too (decision 5): `export ChatService/GetContentBlockBodies` in
+  `proto/public-api.txt`, the generated `ChatServiceClient`, and
+  `Runs.ContentBlockBodies` (batched and deferral-aware, like the TS helper),
+  with `ToolBodiesFull`/`ToolBodiesStub` for `GetChatUpdatesRequest.tool_bodies`.
+  `Runs.Follow` keeps FULL.
 
 ### 4. The live → reload transition
 

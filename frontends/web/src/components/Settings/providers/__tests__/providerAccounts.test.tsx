@@ -270,6 +270,24 @@ describe("account rows", () => {
     expect(screen.getByText("Usage unknown")).toBeInTheDocument();
   });
 
+  it("says a spent window is being paid from credits, and nothing of the kind otherwise", async () => {
+    const onCredits = account({
+      id: "c",
+      provider: "codex",
+      email: "c@x.example",
+      label: "c@x.example",
+      usingCredits: true,
+      windows: [win({ name: "secondary", label: "Weekly", usedFraction: 1, resetsAt: iso(3000) })],
+    });
+    renderList([onCredits, alice]);
+    await expand("c@x.example");
+    expect(within(detailFor("c@x.example")).getByTestId("usage-using-credits")).toHaveTextContent(
+      "Plan limit used up · requests are now paid from credits",
+    );
+    await expand("alice@example.com");
+    expect(within(detailFor("alice@example.com")).queryByTestId("usage-using-credits")).not.toBeInTheDocument();
+  });
+
   it("colors bars amber from 80% and red when the window benched the account", async () => {
     const hot = account({
       id: "h",

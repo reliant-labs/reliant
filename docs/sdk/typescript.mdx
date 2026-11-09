@@ -84,6 +84,19 @@ The state has the chat's messages in order, a placeholder for the assistant mess
 
 `close()` stops the stream for good. The state stays readable afterward.
 
+### Open a chat without its tool bodies
+
+A long agent chat is mostly tool inputs and outputs: whole files written, diffs, command output. With `toolBodies: "stub"`, the snapshot, the replay and `loadOlder`'s pages leave out the bodies of finished tool calls, and the chat opens with a fraction of the bytes. Each such block is marked `bodyElided`, with `bodySize` the length of what was left out. A tool call's `input` is then a skeleton (the same JSON object, with every key kept and long strings cut), enough to label the call but not to render it. A result is a short stub, also marked `truncated`, and its entry in `toolResults` has `elided: true` and the `block_id` to fetch it by. Live frames, and calls still in flight, are always sent whole.
+
+```ts
+const chat = reliant.chat({ chatId, toolBodies: "stub" }).start();
+
+// When the user expands a call: its input by the call block's id, its result by the result's.
+const { bodies, notFound } = await chat.fetchContentBlockBodies([callBlock.id, chat.getState().toolResults[callId].block_id]);
+```
+
+`fetchContentBlockBodies` takes any number of ids, sends them 100 at a time, and asks again for the ones the server deferred. Pass `{ full: true }` for results as stored rather than as the 8 KiB preview an expanded row shows, for copy and export. The state keeps the bodies out of it on purpose: a finished call's body never changes, so keep them in a cache of your own. A body the state does hold is never replaced by a stub of it, so a reconnect does not blank a call that arrived live. The default is `"full"`, so a renderer that reads `input` keeps working, and a server that predates the option sends full bodies: act on each block's `bodyElided`, not on the mode you asked for.
+
 ### Send a message
 
 `send` delivers a user message. Network failures are routine in a browser, so a send is built to be repeated safely. Each logical send (the same text, attachments and thread) gets one client message id, and every attempt reuses it. If a response is lost on the way back, the retry returns the message the first attempt saved instead of saving it twice and taking a second turn.
@@ -159,7 +172,7 @@ stream.subscribeToChat(chatId);
 
 ## What is not here
 
-The TypeScript SDK exposes the chat and process streams and `SendMessage`, and nothing else. It cannot start a run, list runs, fire a trigger or answer a question; for those, call [the Go SDK](/sdk/go) from your server and pass your frontend what it needs. Like the Go SDK, it has no call that decides an approval or enables an automation. The chat state shows you pending approvals and questions so your UI can display them.
+The TypeScript SDK exposes the chat and process streams, `SendMessage` and the transcript reads a chat view needs, and nothing else. It cannot start a run, list runs, fire a trigger or answer a question; for those, call [the Go SDK](/sdk/go) from your server and pass your frontend what it needs. Like the Go SDK, it has no call that decides an approval or enables an automation. The chat state shows you pending approvals and questions so your UI can display them.
 
 ## Related topics
 

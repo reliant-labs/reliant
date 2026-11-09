@@ -78,6 +78,11 @@ describe("accountChipState", () => {
     const a = acct({ id: "alice", status: "limited", limitedUntil: iso(-1), windows: [win("5h", 0.4)] });
     expect(accountChipState(a, [a], NOW)).toBeNull();
   });
+
+  it("says the account is using credits rather than 100% of a spent window", () => {
+    const a = acct({ id: "alice", provider: "codex", usingCredits: true, windows: [win("secondary", 1, 5000, "Weekly")] });
+    expect(accountChipState(a, [a], NOW)).toEqual({ kind: "credits" });
+  });
 });
 
 describe("accountChipText", () => {
@@ -88,6 +93,13 @@ describe("accountChipText", () => {
     const t = accountChipText({ kind: "usage", percent: 82, windowLabel: "5h" }, alice, [alice, bob], NOW, false);
     expect(t.label).toBe("82% of 5h · alice@");
     expect(t.full).toContain("alice@acme.com");
+  });
+
+  it("using credits", () => {
+    const t = accountChipText({ kind: "credits" }, alice, [alice, bob], NOW, false);
+    expect(t.label).toBe("Using credits · alice@");
+    expect(t.full).toContain("paid from credits");
+    expect(accountChipText({ kind: "credits" }, alice, [alice], NOW, true).label).toBe("Using credits");
   });
 
   it("limited with a next account", () => {

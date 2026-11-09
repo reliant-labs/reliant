@@ -306,6 +306,87 @@ func TestParseCodexUsage_Limited(t *testing.T) {
 	}
 }
 
+// A Team workspace past its weekly window, live: allowed:false and
+// limit_reached:true judge the plan's windows, but the workspace's credits
+// were paying for requests (the Codex CLI kept answering). That is overage,
+// which must not bench the account.
+func TestParseCodexUsage_SpentWindowPaidByCreditsIsOverage(t *testing.T) {
+	s, err := ParseCodexUsage(fixture(t, "codex_usage_team_credits.json"), fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Status != ratelimit.StatusOverage || s.PlanType != "team" {
+		t.Fatalf("snapshot: %+v", s)
+	}
+	wantUsed(t, win(t, s, "primary"), 0)
+	sec := win(t, s, "secondary")
+	wantUsed(t, sec, 1)
+	if sec.Length != 7*24*time.Hour || !sec.ResetsAt.Equal(time.Unix(1794415733, 0).UTC()) {
+		t.Fatalf("secondary: %+v", sec)
+	}
+}
+
+// Credits pay only while they last and no cap stops them; otherwise a spent
+// window refuses requests as before.
+func TestParseCodexUsage_CreditsThatCannotPayLeaveItRejected(t *testing.T) {
+	const window = `"rate_limit":{"allowed":false,"limit_reached":true,
+	  "secondary_window":{"used_percent":100,"limit_window_seconds":604800,"reset_at":1794415733}}`
+	for name, tc := range map[string]struct {
+		extra string
+		want  ratelimit.Status
+	}{
+		"has credits":           {`"credits":{"has_credits":true,"unlimited":false}`, ratelimit.StatusOverage},
+		"unlimited credits":     {`"credits":{"has_credits":false,"unlimited":true}`, ratelimit.StatusOverage},
+		"no credits":            {`"credits":{"has_credits":false,"unlimited":false}`, ratelimit.StatusRejected},
+		"credits block absent":  {`"promo":null`, ratelimit.StatusRejected},
+		"overage limit reached": {`"credits":{"has_credits":true,"overage_limit_reached":true}`, ratelimit.StatusRejected},
+		"spend control reached": {`"credits":{"has_credits":true},"spend_control":{"reached":true}`, ratelimit.StatusRejected},
+		"a reached type is named": {`"credits":{"has_credits":true},"rate_limit_reached_type":{"type":"rate_limit_reached"}`,
+			ratelimit.StatusRejected},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, err := ParseCodexUsage([]byte(`{"plan_type":"team",`+window+`,`+tc.extra+`}`), fixedNow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.Status != tc.want {
+				t.Fatalf("status = %s, want %s", s.Status, tc.want)
+			}
+		})
+	}
+}
+
+// Credits are known to pay for the plan's windows, not an additional limit
+// family's. With one of those spent as well, the account cannot be said to be
+// served past everything, so a spent plan window stays rejected, matching the
+// header parser.
+func TestParseCodexUsage_SpentAdditionalFamilyBlocksOverage(t *testing.T) {
+	const head = `{"plan_type":"team","credits":{"has_credits":true},
+	  "rate_limit":{"allowed":false,"limit_reached":true,
+	    "secondary_window":{"used_percent":100,"limit_window_seconds":604800,"reset_at":1794415733}},`
+	for name, tc := range map[string]struct {
+		family string
+		want   ratelimit.Status
+	}{
+		"family window spent": {`"additional_rate_limits":[{"limit_name":"Spark","metered_feature":"codex_bengalfox","rate_limit":
+		  {"allowed":true,"limit_reached":false,"primary_window":{"used_percent":100,"reset_at":1794415733}}}]}`, ratelimit.StatusRejected},
+		"family says limit reached": {`"additional_rate_limits":[{"limit_name":"Spark","metered_feature":"codex_bengalfox","rate_limit":
+		  {"allowed":false,"limit_reached":true,"primary_window":{"used_percent":40,"reset_at":1794415733}}}]}`, ratelimit.StatusRejected},
+		"family with room": {`"additional_rate_limits":[{"limit_name":"Spark","metered_feature":"codex_bengalfox","rate_limit":
+		  {"allowed":true,"limit_reached":false,"primary_window":{"used_percent":40,"reset_at":1794415733}}}]}`, ratelimit.StatusOverage},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, err := ParseCodexUsage([]byte(head+tc.family), fixedNow)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.Status != tc.want {
+				t.Fatalf("status = %s, want %s", s.Status, tc.want)
+			}
+		})
+	}
+}
+
 func TestParseCodexUsage_AdditionalLimitDoesNotRejectSnapshot(t *testing.T) {
 	body := `{"plan_type":"plus","rate_limit":{"allowed":true,"limit_reached":false,
 	  "primary_window":{"used_percent":5,"limit_window_seconds":18000,"reset_at":1790003000}},

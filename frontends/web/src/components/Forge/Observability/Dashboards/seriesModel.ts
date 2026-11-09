@@ -18,6 +18,12 @@
  * isolating one changes what is drawn. Past six the palette repeats; a repeat
  * is drawn dotted so two series never look identical.
  *
+ * A dashboard may NAME a series' colour (display.colors, a palette key by
+ * series name; display.color for a chart of one): a named series takes its
+ * colour whatever its rank, and the rest are dealt the palette colours no
+ * named series holds, so naming two never repaints the others. An explicit
+ * colour wins over the error rule too: the author said what the series is.
+ *
  * ── ERRORS ARE NEVER FOLDED AWAY ───────────────────────────────────────────
  *
  * The tail past the top N folds into "Other", but its error series fold into
@@ -36,13 +42,13 @@
  * not a quantity, so it shows an average instead.
  */
 
-import type { Panel, PanelResult, Series, SeriesIntent, Unit } from "@/services/controlPlane/observability/types";
+import type { Panel, PanelDisplay, PanelResult, Series, SeriesIntent, Unit } from "@/services/controlPlane/observability/types";
 
-import { CHART_PALETTE, DANGER_PALETTE } from "../charts/chartPalette";
+import { CHART_PALETTE, DANGER_PALETTE, paletteToken } from "../charts/chartPalette";
 import { groupLabel } from "../obsFilters";
 
 // The palette is shared with every other chart (charts/chartPalette.ts).
-export { CHART_PALETTE, DANGER_PALETTE, OTHER_TOKEN, tokenColor } from "../charts/chartPalette";
+export { CHART_PALETTE, DANGER_PALETTE, OTHER_TOKEN, paletteToken, tokenColor } from "../charts/chartPalette";
 
 /** How many series a line draws before folding the rest into "Other": the palette's size, so no two drawn series repeat a colour. */
 export const DEFAULT_TOP_N = CHART_PALETTE.length;
@@ -184,21 +190,48 @@ export function seriesLabel(series: Pick<Series, "label" | "group">, panel: Pick
 const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
 
 /**
- * Deals colours over `items` in the order given (callers pass them largest
- * first), errors from the danger palette. Returns each item's token and
- * whether it is a palette repeat.
+ * The token a dashboard names for a series, by any of `names` (its label,
+ * then its group values, then its column: the first named wins); with
+ * `single`, the panel's one colour (display.color) when none is named.
+ * Undefined when the dashboard names none, or a key this console does not know.
  */
-export function dealColors<T>(items: readonly T[], errorOf: (item: T) => boolean): { token: string; repeat: boolean }[] {
+export function namedToken(display: PanelDisplay | undefined, names: readonly (string | undefined)[], single = false): string | undefined {
+  const colors = display?.colors;
+  if (colors) {
+    for (const name of names) {
+      if (name !== undefined && Object.hasOwn(colors, name)) {
+        const token = paletteToken(colors[name]);
+        if (token) return token;
+      }
+    }
+  }
+  return single ? paletteToken(display?.color) : undefined;
+}
+
+/**
+ * Deals colours over `items` in the order given (callers pass them largest
+ * first), errors from the danger palette. An item `namedOf` gives a token
+ * keeps it; the others are dealt the categorical colours no named item holds,
+ * then the palette again. Returns each item's token and whether it is a
+ * palette repeat.
+ */
+export function dealColors<T>(items: readonly T[], errorOf: (item: T) => boolean, namedOf: (item: T) => string | undefined = () => undefined): { token: string; repeat: boolean }[] {
   const out = new Array<{ token: string; repeat: boolean }>(items.length);
+  const named = items.map(namedOf);
+  const taken = new Set(named.filter((token): token is string => !!token));
+  const free = CHART_PALETTE.filter((token) => !taken.has(token));
+  const deck = free.length ? free : [...CHART_PALETTE];
   let normal = 0;
   let danger = 0;
   for (let index = 0; index < items.length; index++) {
-    const error = errorOf(items[index]);
-    if (error) {
+    const token = named[index];
+    if (token) {
+      out[index] = { token, repeat: false };
+    } else if (errorOf(items[index])) {
       out[index] = { token: DANGER_PALETTE[danger % DANGER_PALETTE.length], repeat: danger >= DANGER_PALETTE.length };
       danger++;
     } else {
-      out[index] = { token: CHART_PALETTE[normal % CHART_PALETTE.length], repeat: normal >= CHART_PALETTE.length };
+      out[index] = { token: deck[normal % deck.length], repeat: normal >= deck.length };
       normal++;
     }
   }
@@ -219,7 +252,8 @@ export function seriesEntries(
     return { source, label: seriesLabel(source, panel, keys), values, error: isErrorSeries(source, intentOf(source, panel)), stats: statsOf(values) };
   });
   const ranked = rankEntries(base, rank);
-  const colors = dealColors(ranked, (b) => b.error);
+  const single = data.series.length === 1;
+  const colors = dealColors(ranked, (b) => b.error, (b) => namedToken(panel.display, [b.label, ...Object.values(b.source.group), b.source.label], single));
   const colorOf = new Map(ranked.map((b, index) => [b, colors[index]]));
   return base.map((b) => ({
     key: seriesKey(b.source),

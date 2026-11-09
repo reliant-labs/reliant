@@ -38,6 +38,7 @@ type fake struct {
 
 	getChatUpdates        func(*reliantv1.GetChatUpdatesRequest) (*reliantv1.GetChatUpdatesResponse, error)
 	getWorkflowExecutions func(*reliantv1.GetWorkflowExecutionsRequest) (*reliantv1.GetWorkflowExecutionsResponse, error)
+	getContentBlockBodies func(*reliantv1.GetContentBlockBodiesRequest) (*reliantv1.GetContentBlockBodiesResponse, error)
 
 	listPendingQuestions func(*reliantv1.ListPendingQuestionsRequest) (*reliantv1.ListPendingQuestionsResponse, error)
 	resolveQuestion      func(*reliantv1.ResolveQuestionRequest) (*reliantv1.ResolveQuestionResponse, error)
@@ -110,6 +111,9 @@ func (s chatSvc) GetChatUpdates(_ context.Context, r *connect.Request[reliantv1.
 }
 func (s chatSvc) GetWorkflowExecutions(_ context.Context, r *connect.Request[reliantv1.GetWorkflowExecutionsRequest]) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
 	return call(s.f.getWorkflowExecutions, r.Msg)
+}
+func (s chatSvc) GetContentBlockBodies(_ context.Context, r *connect.Request[reliantv1.GetContentBlockBodiesRequest]) (*connect.Response[reliantv1.GetContentBlockBodiesResponse], error) {
+	return call(s.f.getContentBlockBodies, r.Msg)
 }
 
 type questionSvc struct {
