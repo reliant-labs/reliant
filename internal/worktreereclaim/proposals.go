@@ -34,6 +34,11 @@ const (
 	notesFile = "notes.json"
 	// MaxProposals bounds the proposals a heartbeat carries.
 	MaxProposals = 50
+	// MaxNotes bounds the notes one RecordNotes call takes, and
+	// MaxNotesInputBytes the JSON a caller may hand `reliant worktree note
+	// --from`: an agent shell may run it, so neither is unbounded.
+	MaxNotes           = MaxProposals
+	MaxNotesInputBytes = 256 << 10
 	// maxNoteBytes and maxSummaryBytes bound what a proposal carries.
 	maxNoteBytes    = 600
 	maxSummaryBytes = 600
@@ -81,8 +86,25 @@ func pendingOutcome(o SweepOutcome) bool {
 }
 
 // PendingProposals reads the last report, its approvals and its notes: every
-// needs-approval worktree not yet reclaimed, oldest proposal first.
+// needs-approval worktree not yet reclaimed, the undecided ones first and
+// oldest proposal first within each. Proposals holds at most MaxProposals, so
+// proposals a person already decided never crowd an undecided one out of the
+// Inbox; Total counts them all.
 func PendingProposals(stateDir string) (ProposalSet, error) {
+	set, err := allPendingProposals(stateDir)
+	if err != nil {
+		return ProposalSet{}, err
+	}
+	if len(set.Proposals) > MaxProposals {
+		set.Proposals = set.Proposals[:MaxProposals]
+	}
+	return set, nil
+}
+
+// allPendingProposals is PendingProposals without the MaxProposals cap: what
+// a note or decision is checked against, so a proposal past the first page
+// can still be noted and decided.
+func allPendingProposals(stateDir string) (ProposalSet, error) {
 	dir, err := stateDirOr(stateDir)
 	if err != nil {
 		return ProposalSet{}, err
@@ -110,15 +132,15 @@ func PendingProposals(stateDir string) (ProposalSet, error) {
 	}
 	sort.SliceStable(set.Proposals, func(i, j int) bool {
 		a, b := set.Proposals[i], set.Proposals[j]
+		if (a.Decision == "") != (b.Decision == "") {
+			return a.Decision == ""
+		}
 		if !a.ProposedAt.Equal(b.ProposedAt) {
 			return a.ProposedAt.Before(b.ProposedAt)
 		}
 		return a.Key < b.Key
 	})
 	set.Total = len(set.Proposals)
-	if len(set.Proposals) > MaxProposals {
-		set.Proposals = set.Proposals[:MaxProposals]
-	}
 	return set, nil
 }
 
@@ -174,13 +196,18 @@ func (d notesDoc) find(key, fingerprint string) (Note, bool) {
 // RecordNotes stores notes about proposals of the last report. A note whose
 // key and fingerprint the report does not list as a pending proposal is
 // refused, and named in the error; the others are stored. Notes about
-// states the report no longer lists are dropped.
+// states the report no longer lists are dropped. A call takes at most
+// MaxNotes notes, and notes.json holds at most one note per pending
+// proposal, each at most maxNoteBytes.
 func RecordNotes(ctx context.Context, stateDir string, notes []Note, by string) ([]Note, error) {
+	if len(notes) > MaxNotes {
+		return nil, fmt.Errorf("%d notes: at most %d at once", len(notes), MaxNotes)
+	}
 	dir, err := stateDirOr(stateDir)
 	if err != nil {
 		return nil, err
 	}
-	set, err := PendingProposals(dir)
+	set, err := allPendingProposals(dir)
 	if err != nil {
 		return nil, fmt.Errorf("no reclaim report to note: %w", err)
 	}
@@ -190,6 +217,7 @@ func RecordNotes(ctx context.Context, stateDir string, notes []Note, by string) 
 	}
 	var refused []string
 	var add []Note
+	at := map[string]int{} // key -> index in add: the last note about a key wins
 	now := time.Now().UTC()
 	for _, n := range notes {
 		if !pending[n.Key+"\x00"+n.Fingerprint] {
@@ -200,7 +228,13 @@ func RecordNotes(ctx context.Context, stateDir string, notes []Note, by string) 
 		if text == "" {
 			continue
 		}
-		add = append(add, Note{Key: n.Key, Fingerprint: n.Fingerprint, Text: truncateUTF8(text, maxNoteBytes), At: now, By: by})
+		note := Note{Key: n.Key, Fingerprint: n.Fingerprint, Text: truncateUTF8(text, maxNoteBytes), At: now, By: by}
+		if i, ok := at[n.Key]; ok {
+			add[i] = note
+			continue
+		}
+		at[n.Key] = len(add)
+		add = append(add, note)
 	}
 	unlock, err := approvalsLock(ctx, dir)
 	if err != nil {

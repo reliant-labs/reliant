@@ -65,7 +65,7 @@ func TestWorktreeReclaimConfig_DefaultsToDryRun(t *testing.T) {
 func TestWorktreeProposalsAndNotes(t *testing.T) {
 	t.Setenv(daemonpolicy.AgentShellEnv, "1")
 	dir := t.TempDir()
-	rep := worktreereclaim.SweepReport{Version: 1, Mode: worktreereclaim.SweepOn, FinishedAt: time.Now(), Entries: []worktreereclaim.SweepEntry{{
+	rep := worktreereclaim.SweepReport{Version: 1, Mode: worktreereclaim.SweepOn, FinishedAt: time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC), Entries: []worktreereclaim.SweepEntry{{
 		Key: "p-1", Fingerprint: "fp-1", Path: "/tmp/wt", Class: worktreereclaim.ClassNeedsApproval, Outcome: worktreereclaim.OutcomeAwaiting,
 	}}}
 	b, _ := json.Marshal(rep)
@@ -92,6 +92,12 @@ func TestWorktreeProposalsAndNotes(t *testing.T) {
 	assert.Contains(t, out, "noted p-1")
 	_, err = run("", "worktree", "reclaim", "note", "p-1", "stale", "--fingerprint", "fp-0")
 	require.Error(t, err)
+
+	// --from is bounded: an oversized input is refused before it is parsed,
+	// and the note already recorded stands.
+	huge := `[{"key":"p-1","fingerprint":"fp-1","text":"` + strings.Repeat("x", worktreereclaim.MaxNotesInputBytes) + `"}]`
+	_, err = run(huge, "worktree", "reclaim", "note", "--from", "-")
+	require.ErrorContains(t, err, "more than")
 
 	set, err = worktreereclaim.PendingProposals(dir)
 	require.NoError(t, err)

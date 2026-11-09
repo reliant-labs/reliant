@@ -28,7 +28,7 @@ func useReclaimStateDir(t *testing.T, proposals ...worktreereclaim.SweepEntry) s
 
 func writeSweepReport(t *testing.T, dir string, entries ...worktreereclaim.SweepEntry) {
 	t.Helper()
-	b, err := json.Marshal(worktreereclaim.SweepReport{Version: 1, Mode: worktreereclaim.SweepOn, FinishedAt: time.Now().UTC(), Entries: entries})
+	b, err := json.Marshal(worktreereclaim.SweepReport{Version: 1, Mode: worktreereclaim.SweepOn, FinishedAt: time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC), Entries: entries})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,7 +41,7 @@ func needsApproval(key, fp string) worktreereclaim.SweepEntry {
 	return worktreereclaim.SweepEntry{Key: key, Fingerprint: fp, Path: "/tmp/" + key, Repo: "/r", Branch: "feat/x", Owner: "unregistered",
 		Class: worktreereclaim.ClassNeedsApproval, Outcome: worktreereclaim.OutcomeAwaiting, Reason: worktreereclaim.ReasonUnpushed,
 		Detail: "HEAD is not on any remote branch\nmore", Work: "commits on no remote:\nabc wip", UnpushedCount: 1, IdleSeconds: 6 * 86400,
-		Bytes: 1 << 20, ProposedAt: time.Now().Add(-time.Hour)}
+		Bytes: 1 << 20, ProposedAt: time.Date(2026, 11, 8, 11, 0, 0, 0, time.UTC)}
 }
 
 // The heartbeat carries the pending proposals while the sweep is dry-run or
@@ -87,8 +87,9 @@ func TestReclaimDecideCommandRecordsTheDecisionShown(t *testing.T) {
 	if !worktreereclaim.PendingApprovals(dir, time.Time{}) {
 		t.Fatal("no approval pending for the sweep to act on")
 	}
+	// Undecided proposals list first, so p-2 now leads.
 	got := worktreeReclaimProposals(worktreereclaim.SweepOn)
-	if got.Proposals[0].Decision != "approve" || got.Proposals[1].Decision != "" {
+	if got.Proposals[0].Key != "p-2" || got.Proposals[0].Decision != "" || got.Proposals[1].Key != "p-1" || got.Proposals[1].Decision != "approve" {
 		t.Fatalf("after deciding: %+v", got.Proposals)
 	}
 	if _, err := handleWorktreeReclaimDecide(context.Background(), []byte(`{"decisions":[]}`)); err == nil {

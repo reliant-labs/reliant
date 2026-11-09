@@ -227,13 +227,7 @@ state that has since changed is refused. It decides nothing.
 			var notes []worktreereclaim.Note
 			switch {
 			case fromFile != "":
-				var raw []byte
-				var err error
-				if fromFile == "-" {
-					raw, err = io.ReadAll(cmd.InOrStdin())
-				} else {
-					raw, err = os.ReadFile(fromFile)
-				}
+				raw, err := readNotesInput(cmd.InOrStdin(), fromFile)
 				if err != nil {
 					return err
 				}
@@ -260,6 +254,28 @@ state that has since changed is refused. It decides nothing.
 	c.Flags().StringVar(&fromFile, "from", "", "read notes from this JSON file (- for stdin)")
 	stateDirFlag(c, &stateDir)
 	return c
+}
+
+// readNotesInput reads `note --from`'s JSON (- for stdin), refusing more than
+// worktreereclaim.MaxNotesInputBytes before it is all in memory.
+func readNotesInput(stdin io.Reader, from string) ([]byte, error) {
+	r := stdin
+	if from != "-" {
+		f, err := os.Open(from)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = f.Close() }()
+		r = f
+	}
+	raw, err := io.ReadAll(io.LimitReader(r, worktreereclaim.MaxNotesInputBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) > worktreereclaim.MaxNotesInputBytes {
+		return nil, fmt.Errorf("--from: more than %d bytes of notes", worktreereclaim.MaxNotesInputBytes)
+	}
+	return raw, nil
 }
 
 // reclaimedCapture is one row of `reliant worktree reclaimed`.
