@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file controlplane/v1/client.proto.
  */
 export const file_controlplane_v1_client: GenFile = /*@__PURE__*/
-  fileDesc("Chxjb250cm9scGxhbmUvdjEvY2xpZW50LnByb3RvEg9jb250cm9scGxhbmUudjEiowIKDUNsaWVudENvbnRleHQSFAoMYnJvd3Nlcl9uYW1lGAEgASgJEhcKD2Jyb3dzZXJfdmVyc2lvbhgCIAEoCRIPCgdvc19uYW1lGAMgASgJEhIKCm9zX3ZlcnNpb24YBCABKAkSEwoLZGV2aWNlX3R5cGUYBSABKAkSGAoQY2hyb21pdW1fdmVyc2lvbhgGIAEoCRIXCg9kZXNrdG9wX3ZlcnNpb24YByABKAkSGAoQZWxlY3Ryb25fdmVyc2lvbhgIIAEoCRIWCg52aWV3cG9ydF93aWR0aBgJIAEoBRIXCg92aWV3cG9ydF9oZWlnaHQYCiABKAUSFAoMc2NyZWVuX3dpZHRoGAsgASgFEhUKDXNjcmVlbl9oZWlnaHQYDCABKAUiMAoMU2VydmljZUJ1aWxkEg8KB3NlcnZpY2UYASABKAkSDwoHdmVyc2lvbhgCIAEoCULQAQoTY29tLmNvbnRyb2xwbGFuZS52MUILQ2xpZW50UHJvdG9QAVpPZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL2NvbnRyb2xwbGFuZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw");
+  fileDesc("Chxjb250cm9scGxhbmUvdjEvY2xpZW50LnByb3RvEg9jb250cm9scGxhbmUudjEiowIKDUNsaWVudENvbnRleHQSFAoMYnJvd3Nlcl9uYW1lGAEgASgJEhcKD2Jyb3dzZXJfdmVyc2lvbhgCIAEoCRIPCgdvc19uYW1lGAMgASgJEhIKCm9zX3ZlcnNpb24YBCABKAkSEwoLZGV2aWNlX3R5cGUYBSABKAkSGAoQY2hyb21pdW1fdmVyc2lvbhgGIAEoCRIXCg9kZXNrdG9wX3ZlcnNpb24YByABKAkSGAoQZWxlY3Ryb25fdmVyc2lvbhgIIAEoCRIWCg52aWV3cG9ydF93aWR0aBgJIAEoBRIXCg92aWV3cG9ydF9oZWlnaHQYCiABKAUSFAoMc2NyZWVuX3dpZHRoGAsgASgFEhUKDXNjcmVlbl9oZWlnaHQYDCABKAUiMAoMU2VydmljZUJ1aWxkEg8KB3NlcnZpY2UYASABKAkSDwoHdmVyc2lvbhgCIAEoCSI9Cg1JbnN0YW5jZVNjb3BlEhQKDGluc3RhbmNlX2lkcxgBIAMoCRIWCg5pbnN0YW5jZV91c2VycxgCIAMoCULQAQoTY29tLmNvbnRyb2xwbGFuZS52MUILQ2xpZW50UHJvdG9QAVpPZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL2NvbnRyb2xwbGFuZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw");
 
 /**
  * Which client a browser session, trace or error came from, shared by
@@ -141,4 +141,43 @@ export type ServiceBuild = Message<"controlplane.v1.ServiceBuild"> & {
  */
 export const ServiceBuildSchema: GenMessage<ServiceBuild> = /*@__PURE__*/
   messageDesc(file_controlplane_v1_client, 1);
+
+/**
+ * InstanceScope is a read's acknowledgement that it was narrowed to dev
+ * instances: the `forge env up` stacks whose telemetry the OTLP gateway stamped,
+ * from the dev token it accepted, with reliant.instance.id (the instance) and
+ * reliant.instance.user (the user id of the person who ran it). Shared by
+ * ObservabilityService, IssuesService and RumService, whose requests carry
+ * instance_ids / instance_users.
+ *
+ * A response carries it ONLY when the server applied the narrowing to every
+ * row the response holds, and it echoes the request's values exactly (an
+ * instance user as the email the client sent, not the user id it resolved
+ * to). A response to a narrowed request WITHOUT it was not narrowed: a server
+ * that predates the fields drops them, and a read that cannot narrow (a sql
+ * panel, the service graph, the usage meter) answers for the whole scope. A client must not present such an answer as the instance's.
+ *
+ * Both lists empty never happens: a read that narrowed nothing carries no
+ * InstanceScope at all.
+ *
+ * @generated from message controlplane.v1.InstanceScope
+ */
+export type InstanceScope = Message<"controlplane.v1.InstanceScope"> & {
+  /**
+   * @generated from field: repeated string instance_ids = 1;
+   */
+  instanceIds: string[];
+
+  /**
+   * @generated from field: repeated string instance_users = 2;
+   */
+  instanceUsers: string[];
+};
+
+/**
+ * Describes the message controlplane.v1.InstanceScope.
+ * Use `create(InstanceScopeSchema)` to create a new message.
+ */
+export const InstanceScopeSchema: GenMessage<InstanceScope> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_client, 2);
 

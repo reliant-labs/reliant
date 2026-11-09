@@ -6237,7 +6237,18 @@ type DeployLocalSession struct {
 	LastSeenAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
 	// Set when the client reported `state = stopped`. A clean exit, as distinct
 	// from a session that simply went quiet.
-	StoppedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=stopped_at,json=stoppedAt,proto3" json:"stopped_at,omitempty"`
+	StoppedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=stopped_at,json=stoppedAt,proto3" json:"stopped_at,omitempty"`
+	// The dev instance this session's telemetry is stamped with
+	// (reliant.instance.id, the dev token's `sid`): the telemetry grant
+	// DeployService.MintLocalTelemetryToken holds for the session and its
+	// reporter (owner). What `forge obs --instance <label>` resolves a label of
+	// another machine's stack to, and QueryScope.instance_ids takes. Empty when
+	// the session has no grant: it never minted a dev token, so it sent no
+	// telemetry to the hosted store.
+	InstanceId string `protobuf:"bytes,9,opt,name=instance_id,json=instanceId,proto3" json:"instance_id,omitempty"`
+	// The email of the person whose `forge env up` reported the session last.
+	// Empty when that user is gone.
+	Owner         string `protobuf:"bytes,10,opt,name=owner,proto3" json:"owner,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6326,6 +6337,20 @@ func (x *DeployLocalSession) GetStoppedAt() *timestamppb.Timestamp {
 		return x.StoppedAt
 	}
 	return nil
+}
+
+func (x *DeployLocalSession) GetInstanceId() string {
+	if x != nil {
+		return x.InstanceId
+	}
+	return ""
+}
+
+func (x *DeployLocalSession) GetOwner() string {
+	if x != nil {
+		return x.Owner
+	}
+	return ""
 }
 
 // DeployPlan is what a deploy WOULD do, computed before anyone approves it.
@@ -8007,7 +8032,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"has_report\x18\x17 \x01(\bR\thasReportB\f\n" +
 	"\n" +
-	"_exit_code\"\xaa\x03\n" +
+	"_exit_code\"\xe1\x03\n" +
 	"\x12DeployLocalSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12;\n" +
@@ -8021,7 +8046,11 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\flast_seen_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"lastSeenAt\x129\n" +
 	"\n" +
-	"stopped_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstoppedAt\"\xfa\x02\n" +
+	"stopped_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstoppedAt\x12\x1f\n" +
+	"\vinstance_id\x18\t \x01(\tR\n" +
+	"instanceId\x12\x14\n" +
+	"\x05owner\x18\n" +
+	" \x01(\tR\x05owner\"\xfa\x02\n" +
 	"\n" +
 	"DeployPlan\x12\x16\n" +
 	"\x06digest\x18\x01 \x01(\tR\x06digest\x12%\n" +

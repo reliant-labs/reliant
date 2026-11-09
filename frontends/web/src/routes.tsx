@@ -82,6 +82,8 @@ const UpgradeAccount = lazyRoute(
   () => import('./components/UpgradeAccount'), 'UpgradeAccount')
 const ClaimPage = lazyRoute(
   () => import('./components/Claim/ClaimPage'), 'ClaimPage')
+const AcceptInvitePage = lazyRoute(
+  () => import('./components/Orgs/AcceptInvitePage'), 'AcceptInvitePage')
 const DesignSandboxPage = lazyRoute(
   () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
 // Proving harness for the forge → reliant token bridge (see index.css).
@@ -483,6 +485,16 @@ const claimRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/claim',
   component: ClaimPage,
+})
+
+// Accept an org invitation (`/accept-invite#rinv_<token>`, from an invitation
+// email or a link an admin copied). Root-level and unguarded like /claim: a
+// signed-out invitee is sent through sign-in from the page, which returns
+// here. lib/inviteLinkBoot moves the token out of the fragment first.
+const acceptInviteRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/accept-invite',
+  component: AcceptInvitePage,
 })
 
 // Pathless layout route that owns the App shell + its shared search schema.
@@ -990,6 +1002,7 @@ const routeTree = rootRoute.addChildren([
   verifyEmailRoute,
   upgradeRoute,
   claimRoute,
+  acceptInviteRoute,
   designSandboxRoute,
   forgeTokenSandboxRoute,
   setupSurfacesPreviewRoute,

@@ -7,7 +7,7 @@
  *
  *   profile        the account: email, linked sign-ins, sign-out, deletion
  *   organization   which org you act in
- *   members        who holds which org permission
+ *   members        who is in the org, invitations, and who holds which permission
  *   tokens         API tokens for the forge CLI and CI
  *   billing        plans, wallet, usage consent and caps (Reliant's section)
  *
@@ -20,7 +20,7 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { useParams } from "@tanstack/react-router";
 
 import { AccountSettings } from "@/components/Settings/AccountSettings";
-import { MemberPermissions } from "@/components/Settings/cloud/MemberPermissions";
+import { MembersPage } from "@/components/Settings/cloud/members/MembersPage";
 import { SettingsPageHeader } from "@/components/Settings/SettingsPageHeader";
 import { OrgSwitcher } from "@/components/Orgs/OrgSwitcher";
 import { useActiveOrg } from "@/hooks/useOrgs";
@@ -115,7 +115,7 @@ function renderSection(section: ForgeSettingsSection): ReactNode {
         </div>
       );
     case "members":
-      return <MemberPermissions />;
+      return <MembersPage />;
     case "tokens":
       return <ForgeTokensSection />;
     case "billing":
