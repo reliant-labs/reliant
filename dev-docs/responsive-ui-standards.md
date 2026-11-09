@@ -100,8 +100,11 @@ that a wide tablet should automatically route there.
 Run `task test:web:e2e` for the full browser lane, or
 `task test:web:e2e -- e2e/mobile-responsive.spec.ts` for the focused guardrail.
 The task builds the renderer, installs Chromium **and WebKit**, forces production
-preview mode, and selects the four projects. CI supplies `PLAYWRIGHT_DEPS=--with-deps`
-for Linux system dependencies. CI runs the lane as two parallel jobs,
+preview mode, and selects the four projects. Locally, `PLAYWRIGHT_DEPS=--with-deps`
+also installs the Linux system dependencies. CI supplies
+`PLAYWRIGHT_DEPS_CACHE=<dir>` instead: `scripts/playwright-os-deps.sh` installs
+them from the `.deb` files a main run cached for that exact runner image, so a
+slow Ubuntu mirror cannot use up the job's timeout. CI runs the lane as two parallel jobs,
 `task test:web:e2e:desktop` (the Chromium project) and
 `task test:web:e2e:responsive` (the three touch projects), so the desktop suite
 never waits on WebKit's system-package install. `task test:e2e` is the Go story
@@ -114,6 +117,44 @@ their skips cannot stand in for this required route suite. Failure traces and
 screenshots are retained. No screenshot goldens are added until font rendering,
 timestamps, animation and engine/platform are fixed and the images are reviewed.
 Source-string/unit checks complement, never replace, rendered assertions.
+
+### System-package cache: rollout checks and rollback
+
+ci.yml's `playwright` job keys the cache
+`playwright-os-deps-<version>-<suite>-<ImageOS>-<ImageVersion>-<pnpm lock hash>`,
+and only a push to main saves it. `<version>` is the repository variable
+`PLAYWRIGHT_OS_DEPS_CACHE_VERSION`, or `v1` when it is unset. Its behaviour is
+tested in `tools/test-affected/playwright_os_deps_script_test.go`.
+
+**First main run on a runner image** (after merge, and again weekly when the
+image changes). For **both** suites, `desktop` and `responsive`:
+- The "Restore Playwright system packages" step misses.
+- The "Browser guardrails" log prints
+  `playwright-os-deps: installed from the mirror; cached N packages`.
+- "Save Playwright system packages (main only)" runs.
+- `gh cache list --repo reliant-labs/reliant --key playwright-os-deps-` shows one
+  entry per suite.
+
+This run still downloads from the mirror, so it is as slow as before.
+
+**Every later run on that image**, pull requests included:
+- The restore step hits.
+- The log prints `playwright-os-deps: cache hit, N cached packages installed
+  without the mirror`, with no `apt-get update` and no `install-deps` output.
+- The responsive suite finishes well inside its 15 minutes.
+
+**The sign of a bad entry:** on a restore hit, the log prints
+`playwright-os-deps: the cache did not install every package; repairing from
+the mirror`. Each such run is back on the mirror. It is still correct, but slow.
+
+**Rollback**, with no PR:
+1. `gh variable set PLAYWRIGHT_OS_DEPS_CACHE --body off --repo reliant-labs/reliant`.
+   This skips the cache restore and save and runs
+   `PLAYWRIGHT_DEPS=--with-deps`, exactly as before the cache existed.
+2. Move off the bad entry: set `PLAYWRIGHT_OS_DEPS_CACHE_VERSION` to a new value,
+   such as `v2`, or delete the entry with `gh cache delete <key>`.
+3. Re-enable with `gh variable delete PLAYWRIGHT_OS_DEPS_CACHE`. The next main
+   run then fills a fresh entry; check it as on a first run.
 
 ## Native acceptance remains separate
 
