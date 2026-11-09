@@ -66,9 +66,11 @@ func usageDashboard(t *testing.T) dashspec.Dashboard {
 // JOIN, unless it opens a subquery.
 var tableRef = regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+([^\s(]+)`)
 
-// The two predicates every product_events read must carry, so the scope the
-// console binds (the viewer's environments and the dashboard's service filter)
-// narrows every row the statement reads.
+// The two predicates every product_events read must carry: the viewer's
+// environment restriction and the dashboard's service filter. Each matches
+// every row when its bound list is empty (an unrestricted viewer, no service
+// chosen), so they are filters, not the authorization boundary: that is the
+// org's own database the statement runs in (TestUsageDashboardBindsTheViewersScope).
 const (
 	envPredicate     = "(empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))"
 	servicePredicate = "(empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))"
@@ -77,11 +79,11 @@ const (
 // TestUsageDashboardReadsOnlyScopedProductEvents: every panel of the shipped
 // product-usage dashboard is a sql panel whose statement reads only the
 // unqualified product_events table, and narrows each read of it by the
-// environment and service scope. An unqualified table resolves in the
+// environment and service filters. An unqualified table resolves in the
 // database the hosted executor runs the statement in (the org's own,
 // obsquery.Scope.Database), so the statement itself names no other tenant's
-// data; and a read without the scope predicates would ignore a restricted
-// viewer's environments.
+// data: that, not the predicates, is the isolation boundary. A read without
+// the predicates would ignore a restricted viewer's environments.
 func TestUsageDashboardReadsOnlyScopedProductEvents(t *testing.T) {
 	d := usageDashboard(t)
 	if len(d.Panels) == 0 {
@@ -125,8 +127,10 @@ func TestUsageDashboardReadsOnlyScopedProductEvents(t *testing.T) {
 // it binds: a viewer restricted to no environment gets a list no row matches
 // (so the env predicate above is false for every row), a viewer restricted to
 // one environment gets that environment alone, the service filter is bound,
-// and a scope that names the server's own database rather than an org's is
-// refused.
+// an unrestricted viewer gets empty lists (the predicates then match every row
+// of the org's own database: they filter, they do not authorize), and a scope
+// that names the server's own database rather than an org's is refused, which
+// is the boundary.
 func TestUsageDashboardBindsTheViewersScope(t *testing.T) {
 	d := usageDashboard(t)
 	end := time.Date(2026, 3, 16, 12, 0, 0, 0, time.UTC)
@@ -144,6 +148,10 @@ func TestUsageDashboardBindsTheViewersScope(t *testing.T) {
 		"restricted to no environment": {
 			scope:  org(func(s *obsquery.Scope) { s.EnvRestricted = true }),
 			envIDs: "['(none)']", services: "[]",
+		},
+		"unrestricted, no service filter": {
+			scope:  org(nil),
+			envIDs: "[]", services: "[]",
 		},
 		"restricted to one environment, one service": {
 			scope: org(func(s *obsquery.Scope) {
