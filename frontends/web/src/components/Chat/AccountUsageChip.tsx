@@ -44,6 +44,7 @@ function UsagePanel({ mobile, title, id, onClose, children }: { mobile: boolean;
 
 const TONE: Record<AccountChipState["kind"], string> = {
   usage: "border-warning/30 bg-warning/10 text-warning-ink",
+  credits: "border-warning/30 bg-warning/10 text-warning-ink",
   limited_next: "border-warning/30 bg-warning/10 text-warning-ink",
   limited_until: "border-destructive/30 bg-destructive/10 text-destructive-ink",
 };

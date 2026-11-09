@@ -51,6 +51,13 @@ const (
 	// confirming the reset and refreshing the bars.
 	confirmAfterReset = 30 * time.Second
 
+	// benchRecheckEvery is how often a benched account's usage is read again
+	// before the bench ends. A bench can outlive its cause by days: the user
+	// buys credits or spends a limit reset, the provider resets windows early,
+	// or the reading that benched it misjudged it. No request reaches a benched
+	// account, so no response headers would ever say so.
+	benchRecheckEvery = 30 * time.Minute
+
 	// UsageFloor is the minimum gap between two calls to one account's usage
 	// API, whoever makes them.
 	UsageFloor = 60 * time.Second

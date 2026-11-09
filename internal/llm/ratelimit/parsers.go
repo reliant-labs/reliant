@@ -186,8 +186,10 @@ func AnthropicBodyIsUsageLimit(errorType, message string) bool {
 // per limit family `x-<family>-{primary,secondary}-{used-percent,
 // window-minutes,reset-at}` (reset-at is Unix seconds), family "codex" by
 // default and others discovered from any `x-<family>-primary-used-percent`
-// header; `x-codex-rate-limit-reached-type` names a refused request. Older
-// backends sent `*-reset-after-seconds`, still accepted.
+// header; `x-codex-rate-limit-reached-type` names a refused request;
+// `x-codex-credits-{has-credits,unlimited}` say whether credits pay for
+// requests past an exhausted window (parse_credits_snapshot). Older backends
+// sent `*-reset-after-seconds`, still accepted.
 func ParseCodex(h http.Header, now time.Time) (Snapshot, bool) {
 	s := Snapshot{Status: StatusUnknown, ObservedAt: now.UTC(), LimitID: "codex"}
 	families := codexFamilies(h)
@@ -205,8 +207,20 @@ func ParseCodex(h http.Header, now time.Time) (Snapshot, bool) {
 	if len(s.Windows) == 0 && reached == "" {
 		return Snapshot{}, false
 	}
-	s.Status = codexStatus(s.Windows, reached != "")
+	s.Status = codexStatus(s.Windows, reached != "", codexHeaderCredits(h))
 	return s, true
+}
+
+// codexHeaderCredits reports whether the x-codex-credits-* headers say credits
+// can pay for requests: the account has credits, or unlimited ones.
+func codexHeaderCredits(h http.Header) bool {
+	return headerBool(h.Get("x-codex-credits-has-credits")) || headerBool(h.Get("x-codex-credits-unlimited"))
+}
+
+// headerBool reads "true"/"1" as true; anything else, absent included, is false.
+func headerBool(v string) bool {
+	v = strings.TrimSpace(v)
+	return strings.EqualFold(v, "true") || v == "1"
 }
 
 func codexFamilies(h http.Header) []string {
@@ -261,14 +275,23 @@ func codexHeaderWindow(h http.Header, prefix string, now time.Time) (Window, boo
 	return w, true
 }
 
-func codexStatus(ws []Window, reached bool) Status {
+// codexStatus derives the verdict from the windows. A spent window refuses
+// requests unless credits pay for them: then the account is in overage, which
+// does not limit it. Credits cover the plan's own windows only, so a spent
+// window of another limit family ("codex_other.primary") still refuses. The
+// dot is that family's mark: codexWindowName gives the default family's
+// windows bare slot names and every other family's "<family>.<slot>".
+func codexStatus(ws []Window, reached, credits bool) Status {
 	if reached {
 		return StatusRejected
 	}
 	st := StatusAllowed
 	for _, w := range ws {
 		if u, ok := w.Used(); ok && u >= 1 {
-			return StatusRejected
+			if !credits || strings.Contains(w.Name, ".") {
+				return StatusRejected
+			}
+			st = StatusOverage
 		}
 	}
 	return st
@@ -278,7 +301,8 @@ func codexStatus(ws []Window, reached bool) Status {
 // backend streams (codex-rs parse_rate_limit_event):
 // {"type":"codex.rate_limits","plan_type":"plus","rate_limits":{"primary":
 // {"used_percent":12.5,"window_minutes":300,"reset_at":1704069000},"secondary":
-// {...}},"metered_limit_name":"codex"}.
+// {...}},"credits":{"has_credits":true,"unlimited":false,"balance":"12"},
+// "metered_limit_name":"codex"}.
 func ParseCodexEvent(payload []byte, now time.Time) (Snapshot, bool) {
 	var ev struct {
 		Type       string `json:"type"`
@@ -289,6 +313,10 @@ func ParseCodexEvent(payload []byte, now time.Time) (Snapshot, bool) {
 			Primary   *codexEventWindow `json:"primary"`
 			Secondary *codexEventWindow `json:"secondary"`
 		} `json:"rate_limits"`
+		Credits *struct {
+			HasCredits bool `json:"has_credits"`
+			Unlimited  bool `json:"unlimited"`
+		} `json:"credits"`
 	}
 	if json.Unmarshal(payload, &ev) != nil || ev.Type != "codex.rate_limits" {
 		return Snapshot{}, false
@@ -315,7 +343,8 @@ func ParseCodexEvent(payload []byte, now time.Time) (Snapshot, bool) {
 	if len(s.Windows) == 0 {
 		return Snapshot{}, false
 	}
-	s.Status = codexStatus(s.Windows, false)
+	credits := ev.Credits != nil && (ev.Credits.HasCredits || ev.Credits.Unlimited)
+	s.Status = codexStatus(s.Windows, false, credits)
 	return s, true
 }
 
