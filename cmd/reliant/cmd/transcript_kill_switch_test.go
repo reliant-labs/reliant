@@ -3,6 +3,8 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,7 +28,8 @@ func TestTranscriptKillSwitchReachesTheAPIServer(t *testing.T) {
 		testkit.Inputs("deploy/kcl/**"))
 
 	const fixture = "deploy/kcl/testdata/transcript_kill_switch.k"
-	project := kcleval.Options{ProjectDir: "../../.."}
+	// FORGE_BIN is the pinned forge the release gate builds; unset, forge on PATH.
+	project := kcleval.Options{ProjectDir: "../../..", Binary: os.Getenv("FORGE_BIN")}
 	for _, tc := range []struct {
 		selector string
 		wantEnv  string
@@ -37,7 +40,13 @@ func TestTranscriptKillSwitchReachesTheAPIServer(t *testing.T) {
 	} {
 		t.Run(tc.selector, func(t *testing.T) {
 			var env map[string]any
-			require.NoError(t, kcleval.Select(context.Background(), fixture, tc.selector, &env, project))
+			err := kcleval.Select(context.Background(), fixture, tc.selector, &env, project)
+			if errors.Is(err, kcleval.ErrForgeNotFound) {
+				// The host has no forge (the Actions release gate puts none on
+				// PATH): a missing resource skips, it does not fail.
+				t.Skipf("no forge binary to evaluate %s: %v", fixture, err)
+			}
+			require.NoError(t, err)
 			got, ok := env["RELIANT_TRANSCRIPT_TOOL_BODY_STUBS"]
 			require.True(t, ok, "the api server's projected env has no RELIANT_TRANSCRIPT_TOOL_BODY_STUBS: %v", env)
 			require.Equal(t, tc.wantEnv, got)
