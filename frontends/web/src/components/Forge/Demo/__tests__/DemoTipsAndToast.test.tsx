@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { memoryTourStorage, setTourShell, setTourStorage } from "@/components/Onboarding/tourShell";
@@ -8,6 +8,8 @@ import { resetShellForTests } from "@/lib/shell";
 import { DemoTips } from "../tips/DemoTips";
 import { demoSession, resetDemoSessionForTests } from "../demoSession";
 import { DEMO_TIPS, DEMO_TIP_KEYS } from "../tips";
+import { DEMO_TRACE_ID } from "@/components/Onboarding/journeys/forge";
+import { isLegacyDemoTourLink } from "@/components/Onboarding/legacyDemoTour";
 
 function renderDemo(path: string) {
   const root = createRootRoute({ component: () => <><Outlet /><DemoTips /><JourneyTour /></> });
@@ -77,23 +79,52 @@ it("drawer hides the callout, then closing it reveals the new page without consu
     expect(screen.queryByTestId("tour-callout")).toBeNull();
   }finally{drawer.remove();}
 });
+it("explicit guided tour links suppress the automatic page card", async () => {
+  renderDemo("/forge/demo?view=overview&tour=forge:fg-intro");
+  expect(await screen.findByTestId("tour-card")).toHaveTextContent("What is forge?");
+  expect(screen.queryByTestId("tour-callout")).toBeNull();
+  expect(screen.getByTestId("tour-next")).toHaveTextContent("Next");
+});
+// Old shared links keep working (v1 back-compat, decided 2026-11-08): a
+// trace-less legacy fg-logs link gets the page card, never a guided step that
+// waits on "Click Logs for this trace".
 it("legacy logs tour link opens only logs; Done dismisses without a full-site sequence", async () => {
   const {router}=renderDemo("/forge/demo?view=logs&tour=forge:fg-logs");
   expect(await screen.findByTestId("tour-callout")).toHaveTextContent(DEMO_TIPS.logs.body);
+  expect(screen.queryByTestId("tour-card")).toBeNull();
+  expect(screen.getByTestId("tour-next")).toBeEnabled();
   fireEvent.click(screen.getByTestId("tour-next"));
   await waitFor(()=>expect(screen.queryByTestId("tour-callout")).toBeNull());
   expect(router.state.location.pathname).toBe("/forge/demo");
   expect((router.state.location.search as {view:string}).view).toBe("logs");
 });
-it("persistent actions survive page navigation and open the existing build section", async()=>{
+it("only a trace-less link to a trace step is legacy; one that carries its trace, and other steps, stay guided", () => {
+  expect(isLegacyDemoTourLink({ view: "logs", tour: "forge:fg-logs" })).toBe(true);
+  expect(isLegacyDemoTourLink({ view: "traces", tour: "forge:fg-hops" })).toBe(true);
+  expect(isLegacyDemoTourLink({ view: "traces", trace: DEMO_TRACE_ID, tour: "forge:fg-logs" })).toBe(false);
+  expect(isLegacyDemoTourLink({ view: "overview", tour: "forge:fg-intro" })).toBe(false);
+  expect(isLegacyDemoTourLink({ view: "traces", tour: "forge:fg-trace" })).toBe(false);
+  expect(isLegacyDemoTourLink({ view: "logs" })).toBe(false);
+  resetShellForTests("reliant");
+  expect(isLegacyDemoTourLink({ view: "logs", tour: "forge:fg-logs" })).toBe(false);
+});
+it("a logs tour link that carries its trace runs the guided step, not the page card", async () => {
+  renderDemo(`/forge/demo?view=traces&trace=${DEMO_TRACE_ID}&tour=forge:fg-logs`);
+  const callout = await screen.findByTestId("tour-callout");
+  expect(callout).toHaveTextContent("What that request logged");
+  expect(callout).not.toHaveTextContent(DEMO_TIPS.logs.body);
+});
+it("persistent actions survive navigation and open build help without losing page context", async()=>{
   const {go,router}=renderDemo("/forge/p/shop");
   expect(await screen.findByTestId("demo-screen-actions")).toHaveTextContent("How Forge builds this");
   await go("/forge/p/shop/observability/logs");
   expect(screen.getByTestId("demo-screen-actions")).toHaveTextContent("Install Forge");
   expect(screen.getByTestId("tour-callout").querySelector('[data-testid="demo-cta-signup"]')).toBeNull();
-  fireEvent.click(screen.getByRole("link",{name:"How Forge builds this"}));
-  await waitFor(()=>expect(router.state.location.pathname).toBe("/forge/demo"));
-  expect(router.state.location.search).toMatchObject({section:"built"});
+  fireEvent.click(screen.getAllByRole("button",{name:"How Forge builds this"})[0]);
+  expect(await screen.findByRole("dialog", { name: "How Forge builds this" })).toBeVisible();
+  expect(router.state.location.pathname).toBe("/forge/p/shop/observability/logs");
+  fireEvent.click(screen.getByRole("button", {name:"Back to exploring"}));
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 it("keeps a page callout below the screen-action row, which stacks over the tour", async () => {
   Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
@@ -146,6 +177,38 @@ it("on a window too short to fit the card below the action row, shrinks the card
   } finally {
     vi.restoreAllMocks();
   }
+});
+describe("a page's anchor that mounts late (a lazy chunk)", () => {
+  const lateAnchor = () => {
+    const anchor = document.createElement("div");
+    anchor.setAttribute("data-testid", "releases-table");
+    const scrollIntoView = vi.fn();
+    anchor.scrollIntoView = scrollIntoView;
+    return { anchor, scrollIntoView };
+  };
+  it("is scrolled to when it turns up", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    renderDemo("/forge/p/shop/releases");
+    await screen.findByTestId("tour-callout");
+    const { anchor, scrollIntoView } = lateAnchor();
+    try {
+      act(() => { document.querySelector("main")!.appendChild(anchor); });
+      await waitFor(() => expect(scrollIntoView).toHaveBeenCalled());
+    } finally { anchor.remove(); }
+  });
+  it("leaves the page where the reader put it once they have scrolled", async () => {
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    renderDemo("/forge/p/shop/releases");
+    await screen.findByTestId("tour-callout");
+    act(() => { window.dispatchEvent(new Event("wheel")); });
+    const { anchor, scrollIntoView } = lateAnchor();
+    try {
+      act(() => { document.querySelector("main")!.appendChild(anchor); });
+      // The spotlight takes over from the corner card, without scrolling.
+      await waitFor(() => expect(screen.getByTestId("tour-callout").getAttribute("data-side")).not.toBeNull());
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    } finally { anchor.remove(); }
+  });
 });
 it("copy stays concise and permission-aware",()=>{
   for(const key of DEMO_TIP_KEYS){expect(DEMO_TIPS[key].body.length,key).toBeLessThan(480);expect(DEMO_TIPS[key].body).not.toMatch(/NATS|transport/);}

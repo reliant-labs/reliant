@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 import { useUnmountSafeTimeout } from "../../hooks/useUnmountSafeTimeout";
 import { BELOW_FIRST, BESIDE_FIRST, placeCallout, type CalloutSide } from "./calloutPlacement";
+import { holdUserScroll, watchUserScroll } from "./userScroll";
 import type { SpotlightConfig } from "./types";
 
 // Store last known positions for smooth transitions between steps
@@ -50,7 +51,19 @@ interface OnboardingSpotlightProps {
    * (`hint`), no bottom bar to keep clear of, and the card beside the target
    * rather than below it.
    */
-  callout?: { footer: React.ReactNode; hint?: React.ReactNode; /** Keep an always-open page tour out of the desktop sidebar. */ viewportLeft?: number; /** Keep it below a fixed row above the page (the demo's screen actions), which stacks over the tour. */ viewportTop?: number };
+  callout?: {
+    footer: React.ReactNode;
+    hint?: React.ReactNode;
+    /** Keep an always-open page tour out of the desktop sidebar. */
+    viewportLeft?: number;
+    /** Keep it below a fixed row above the page (the demo's screen actions), which stacks over the tour. */
+    viewportTop?: number;
+    /**
+     * False when the reader scrolled before the target turned up (userScroll.ts):
+     * the page stays where they put it, and a phone's sheet shows without the dim.
+     */
+    autoScroll?: boolean;
+  };
 }
 
 interface Position {
@@ -176,7 +189,8 @@ function scrollAboveSheet(target: Element): () => void {
   if (rect.bottom <= free || rect.height > free - SHEET_TOP_GAP) return () => {};
   const scroller = scrollParent(target);
   const before = scroller.style.paddingBottom;
-  scroller.style.paddingBottom = `calc(${getComputedStyle(scroller).paddingBottom} + ${SHEET_MAX_VH}vh)`;
+  // dvh, like the sheet: `free` above is a share of innerHeight, the viewport a phone shows now.
+  scroller.style.paddingBottom = `calc(${getComputedStyle(scroller).paddingBottom} + ${SHEET_MAX_VH}dvh)`;
   scrollTo();
   return () => {
     scroller.style.paddingBottom = before;
@@ -209,6 +223,25 @@ export function OnboardingSpotlight({
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, [compact]);
+  // Once the reader scrolls a phone's page, the page is never scrolled for
+  // them again, and the sheet stays while the dim and ring step aside: they
+  // track the target from the main thread, so they trail a touch scroll. A
+  // pending required action instead holds the page still (holdPage below):
+  // its click blockers follow the cutout, so nothing that tracks the target
+  // may move under a finger, and the target is always placed above the sheet.
+  const [readerScrolled, setReaderScrolled] = useState(false);
+  const holdPage = sheet && blockOutside;
+  const handsOff = !holdPage && (callout?.autoScroll === false || readerScrolled);
+  const stepAside = sheet && handsOff;
+  // Read by the placement effect below, which must not re-run (and re-scroll) when they flip.
+  const handsOffRef = useRef({ handsOff, stepAside });
+  useEffect(() => {
+    handsOffRef.current = { handsOff, stepAside };
+  }, [handsOff, stepAside]);
+  useEffect(() => {
+    if (!sheet) return;
+    return watchUserScroll(() => setReaderScrolled(true));
+  }, [sheet]);
   // stepNumber/totalSteps are accepted for interface compatibility — the
   // OnboardingNavBar renders progress. onSkipAll is accepted but unused:
   // ESC no longer ends the tour; skipping happens via the nav bar button.
@@ -217,6 +250,11 @@ export function OnboardingSpotlight({
   void _onSkipAll;
   const [spotlightRect, setSpotlightRect] = useState<SpotlightRect | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
+  // The sheet's own content still scrolls; the page under it does not.
+  useEffect(() => {
+    if (!holdPage) return;
+    return holdUserScroll(() => tooltipRef.current);
+  }, [holdPage]);
   const [tooltipSize, setTooltipSize] = useState<ElementSize>(DEFAULT_TOOLTIP_SIZE);
   // Initialize from last position for smooth tooltip transition between steps
   const [tooltipPos, setTooltipPos] = useState<Position & { actualPosition: string; maxHeight?: number }>(() => ({
@@ -321,7 +359,7 @@ export function OnboardingSpotlight({
     const attemptUpdate = () => {
       const target = document.querySelector(targetSelector);
       if (target) {
-        if (sheet) unroom = scrollAboveSheet(target);
+        if (sheet && !handsOffRef.current.handsOff) unroom = scrollAboveSheet(target);
         updatePosition();
         setIsVisible(true);
         return true;
@@ -366,15 +404,20 @@ export function OnboardingSpotlight({
       }, 300);
     }
 
-    // Reposition on scroll/resize
-    window.addEventListener("resize", updatePosition);
-    window.addEventListener("scroll", updatePosition, true);
+    // Reposition on scroll/resize. A sheet that stepped aside draws nothing
+    // that follows the target, so the reader's scroll costs it no work.
+    const reposition = () => {
+      if (handsOffRef.current.stepAside) return;
+      updatePosition();
+    };
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
 
     return () => {
       if (retryInterval) clearInterval(retryInterval);
       if (settleTimeout) clearTimeout(settleTimeout);
-      window.removeEventListener("resize", updatePosition);
-      window.removeEventListener("scroll", updatePosition, true);
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
       unroom?.();
     };
   }, [updatePosition, targetSelector, autoSkipIfMissing, onNext, sheet]);
@@ -443,7 +486,11 @@ export function OnboardingSpotlight({
       )}
     >
       {/* Semi-transparent overlay with cutout */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none">
+      <svg
+        className={cn("absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-300", stepAside && "opacity-0")}
+        data-testid="onboarding-spotlight-dim"
+        data-stepped-aside={stepAside ? "true" : undefined}
+      >
         <defs>
           <mask id="spotlight-mask">
             <rect x="0" y="0" width="100%" height="100%" fill="white" />
@@ -509,7 +556,7 @@ export function OnboardingSpotlight({
           key={nudge}
           className={cn(
             "absolute pointer-events-none transition-opacity duration-300",
-            highlightVisible ? "opacity-100" : "opacity-0",
+            highlightVisible && !stepAside ? "opacity-100" : "opacity-0",
             nudge > 0 && "animate-pulse"
           )}
           style={{
@@ -539,7 +586,7 @@ export function OnboardingSpotlight({
         data-side={sheet ? "sheet" : tooltipPos.actualPosition}
         style={
           sheet
-            ? { left: 0, right: 0, bottom: 0, top: "auto", width: "100%", maxHeight: `${SHEET_MAX_VH}vh`, overflowY: "auto", borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
+            ? { left: 0, right: 0, bottom: 0, top: "auto", width: "100%", maxHeight: `${SHEET_MAX_VH}dvh`, overflowY: "auto", overscrollBehavior: "contain", borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
             : { top: tooltipPos.top, left: tooltipPos.left, width: "min(20rem, calc(100vw - 2rem))", ...(tooltipPos.maxHeight === undefined ? {} : { maxHeight: tooltipPos.maxHeight, overflowY: "auto" as const }) }
         }
       >

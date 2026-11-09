@@ -76,6 +76,9 @@ const (
 	// ChatServiceGetToolResultProcedure is the fully-qualified name of the ChatService's GetToolResult
 	// RPC.
 	ChatServiceGetToolResultProcedure = "/reliant.v1.ChatService/GetToolResult"
+	// ChatServiceGetContentBlockBodiesProcedure is the fully-qualified name of the ChatService's
+	// GetContentBlockBodies RPC.
+	ChatServiceGetContentBlockBodiesProcedure = "/reliant.v1.ChatService/GetContentBlockBodies"
 	// ChatServiceUpdateChatStateProcedure is the fully-qualified name of the ChatService's
 	// UpdateChatState RPC.
 	ChatServiceUpdateChatStateProcedure = "/reliant.v1.ChatService/UpdateChatState"
@@ -229,6 +232,13 @@ type ChatServiceClient interface {
 	// read paths send a truncated preview of a large result (ContentBlock.
 	// truncated); this is how the client gets the rest, on demand.
 	GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error)
+	// GetContentBlockBodies returns the bodies of content blocks that a
+	// transcript read sent elided (ContentBlock.body_elided), by block id. A
+	// block resolves when it belongs to chat_id, or to history a branch of it
+	// inherits (the same rule as GetToolResult). Any other id comes back in
+	// not_found, so the response never says whether an id exists elsewhere.
+	// forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
+	GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
 	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
 	// TerminateChat forcefully terminates the running workflow for a chat
@@ -409,6 +419,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
 			connect.WithClientOptions(opts...),
 		),
+		getContentBlockBodies: connect.NewClient[v1.GetContentBlockBodiesRequest, v1.GetContentBlockBodiesResponse](
+			httpClient,
+			baseURL+ChatServiceGetContentBlockBodiesProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
+			connect.WithClientOptions(opts...),
+		),
 		updateChatState: connect.NewClient[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse](
 			httpClient,
 			baseURL+ChatServiceUpdateChatStateProcedure,
@@ -551,6 +567,7 @@ type chatServiceClient struct {
 	interruptThread           *connect.Client[v1.InterruptThreadRequest, v1.InterruptThreadResponse]
 	listMessages              *connect.Client[v1.ListMessagesRequest, v1.ListMessagesResponse]
 	getToolResult             *connect.Client[v1.GetToolResultRequest, v1.GetToolResultResponse]
+	getContentBlockBodies     *connect.Client[v1.GetContentBlockBodiesRequest, v1.GetContentBlockBodiesResponse]
 	updateChatState           *connect.Client[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse]
 	terminateChat             *connect.Client[v1.TerminateChatRequest, v1.TerminateChatResponse]
 	pauseChat                 *connect.Client[v1.PauseChatRequest, v1.PauseChatResponse]
@@ -656,6 +673,11 @@ func (c *chatServiceClient) ListMessages(ctx context.Context, req *connect.Reque
 // GetToolResult calls reliant.v1.ChatService.GetToolResult.
 func (c *chatServiceClient) GetToolResult(ctx context.Context, req *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error) {
 	return c.getToolResult.CallUnary(ctx, req)
+}
+
+// GetContentBlockBodies calls reliant.v1.ChatService.GetContentBlockBodies.
+func (c *chatServiceClient) GetContentBlockBodies(ctx context.Context, req *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error) {
+	return c.getContentBlockBodies.CallUnary(ctx, req)
 }
 
 // UpdateChatState calls reliant.v1.ChatService.UpdateChatState.
@@ -854,6 +876,13 @@ type ChatServiceHandler interface {
 	// read paths send a truncated preview of a large result (ContentBlock.
 	// truncated); this is how the client gets the rest, on demand.
 	GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error)
+	// GetContentBlockBodies returns the bodies of content blocks that a
+	// transcript read sent elided (ContentBlock.body_elided), by block id. A
+	// block resolves when it belongs to chat_id, or to history a branch of it
+	// inherits (the same rule as GetToolResult). Any other id comes back in
+	// not_found, so the response never says whether an id exists elsewhere.
+	// forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
+	GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
 	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
 	// TerminateChat forcefully terminates the running workflow for a chat
@@ -1030,6 +1059,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("GetToolResult")),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceGetContentBlockBodiesHandler := connect.NewUnaryHandler(
+		ChatServiceGetContentBlockBodiesProcedure,
+		svc.GetContentBlockBodies,
+		connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
+		connect.WithHandlerOptions(opts...),
+	)
 	chatServiceUpdateChatStateHandler := connect.NewUnaryHandler(
 		ChatServiceUpdateChatStateProcedure,
 		svc.UpdateChatState,
@@ -1186,6 +1221,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceListMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceGetToolResultProcedure:
 			chatServiceGetToolResultHandler.ServeHTTP(w, r)
+		case ChatServiceGetContentBlockBodiesProcedure:
+			chatServiceGetContentBlockBodiesHandler.ServeHTTP(w, r)
 		case ChatServiceUpdateChatStateProcedure:
 			chatServiceUpdateChatStateHandler.ServeHTTP(w, r)
 		case ChatServiceTerminateChatProcedure:
@@ -1301,6 +1338,10 @@ func (UnimplementedChatServiceHandler) ListMessages(context.Context, *connect.Re
 
 func (UnimplementedChatServiceHandler) GetToolResult(context.Context, *connect.Request[v1.GetToolResultRequest]) (*connect.Response[v1.GetToolResultResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetToolResult is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetContentBlockBodies is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error) {

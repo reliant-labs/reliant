@@ -283,3 +283,55 @@ func TestSendAgentMessage_MainThreadOfAGraphRunRoutesToItsAgent(t *testing.T) {
 	assert.Contains(t, resp.Msg.Message, review)
 	assert.Contains(t, resp.Msg.Message, implement)
 }
+
+// addSpawnedThread is a sub-agent's thread and its run, spawned by the run
+// parentWorkflowID; status is the thread's (and so the sub-agent's) state.
+func addSpawnedThread(t *testing.T, ctx context.Context, repo *db.Repo, chatID, name, parentWorkflowID string, status db.ThreadStatus) string {
+	t.Helper()
+	id := chatID + "-" + name
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	_, err := repo.CreateThread(ctx, &db.Thread{
+		ID: id, ChatID: chatID, Origin: db.ThreadOriginSpawn, Status: status, CreatedAt: at,
+	})
+	require.NoError(t, err)
+	wfStatus := db.Active()
+	if core.ThreadStatusIsTerminal(status) {
+		wfStatus = db.Completed()
+	}
+	require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
+		ID: id + "-wf", ParentID: &parentWorkflowID, ChatID: chatID, WorkflowName: "builtin://agent",
+		Thread: id, Status: wfStatus, CreatedAt: at,
+	}))
+	return id
+}
+
+// A target that is a sub-agent spawned in this run reaches it; one left over
+// from an earlier run of the same chat (they share the root workflow id) has
+// finished, nothing reads its mailbox, and the send is refused rather than
+// stranded there.
+func TestSendMessage_TargetSubAgentMustBeRunningInThisRun(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
+	implement := addNodeThread(t, ctx, repo, fx.chatID, "implement")
+	live := addSpawnedThread(t, ctx, repo, fx.chatID, "live-helper", fx.rootThreadID, db.ThreadStatusRunning)
+	stale := addSpawnedThread(t, ctx, repo, fx.chatID, "earlier-run-helper", fx.rootThreadID, db.ThreadStatusCompleted)
+	temporal := &agentLoopTemporal{listeners: []v2.AgentLoopThread{{Thread: implement, Node: "implement.agent_loop"}}}
+	svc := routedService(repo, temporal)
+
+	toLive := sendMessageRequest(t, fx.chatID, "for the helper")
+	toLive.Msg.TargetThread = &live
+	_, err := svc.SendMessage(ctx, toLive)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"for the helper"}, queuedBodies(t, ctx, repo, live))
+
+	toStale := sendMessageRequest(t, fx.chatID, "for a finished helper")
+	toStale.Msg.TargetThread = &stale
+	_, err = svc.SendMessage(ctx, toStale)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, core.ErrRunNoListeningAgent))
+	assert.Contains(t, err.Error(), implement, "the refusal names the agent that does read")
+	assert.Empty(t, queuedBodies(t, ctx, repo, stale), "nothing is stranded on a sub-agent of an earlier run")
+	assert.Empty(t, queuedBodies(t, ctx, repo, implement))
+}

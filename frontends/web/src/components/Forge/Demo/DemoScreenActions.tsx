@@ -4,10 +4,11 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "@tanstack/react-router";
-import { trackEvent } from "@/lib/analytics";
+import Button from "@/components/forge-ui/button";
+import { DemoHowBuiltLink } from "./DemoHowBuiltLink";
 import { SignUpButton, InstallForgeLink } from "./DemoCta";
 import { useConsoleDrawerOpen } from "./DemoCorner";
-import { DEMO_SECTION_BUILT, FORGE_DEMO_PATH } from "./demoPath";
+
 
 export function DemoScreenActions() {
   const [host, setHost] = useState<HTMLElement | null>(null);
@@ -31,14 +32,15 @@ export function DemoScreenActions() {
   }, []);
   if (!host || drawerOpen) return null;
   return createPortal(
-    <nav aria-label="Demo actions" data-testid="demo-screen-actions" className="relative z-[101] flex min-h-[52px] flex-wrap items-center justify-end gap-x-3 gap-y-1 border-b border-border bg-surface px-3 py-1 text-xs">
-      <a href={`${FORGE_DEMO_PATH}?section=${DEMO_SECTION_BUILT}`} className="touch-target mr-auto inline-flex items-center font-medium text-primary-ink underline-offset-2 hover:underline sm:mr-0" onClick={(event) => {
-        if(event.button!==0||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
-        event.preventDefault(); trackEvent("demo_how_built_opened",{from:"banner"});
-        void navigate({to:FORGE_DEMO_PATH,search:{section:DEMO_SECTION_BUILT,tour:undefined}} as never);
-      }}>How Forge builds this</a>
-      <InstallForgeLink placement="banner">Install Forge</InstallForgeLink>
-      <SignUpButton placement="banner" size="md" />
+    <nav aria-label="Demo actions" data-testid="demo-screen-actions" className="relative z-[101] flex flex-wrap items-center gap-2 border-b border-border bg-surface px-3 py-2 text-sm">
+      <DemoHowBuiltLink placement="banner" />
+      <Button variant="ghost" className="min-h-[44px]" data-testid="demo-start-tour" onClick={() => {
+        void navigate({ to: "/forge/demo", search: { view: "overview", tour: "forge:fg-intro" } } as never);
+      }}>Start tour</Button>
+      <div className="ml-auto flex items-center gap-3">
+        <InstallForgeLink placement="banner">Install Forge</InstallForgeLink>
+        <SignUpButton placement="banner" size="md" />
+      </div>
     </nav>,host,
   );
 }

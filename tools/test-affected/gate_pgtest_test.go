@@ -63,6 +63,8 @@ func TestMergeGatePgtestPhase(t *testing.T) {
 			want: []string{"typecheck", "build"}, notWant: []string{"pgtest"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// Each case is its own bash run over its own directory.
+			t.Parallel()
 			dir := t.TempDir()
 			bin := filepath.Join(dir, "bin")
 			logs := filepath.Join(dir, "logs")

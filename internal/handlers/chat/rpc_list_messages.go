@@ -171,10 +171,13 @@ func (s *Service) ListMessages(
 		}
 	}
 
+	toolBodies := messageproto.ResolveToolBodyMode(req.Msg.GetToolBodies(), s.deps.Config.GetTranscript().GetToolBodyStubs())
 	protoMessages := messageproto.AssembleForDisplay(
-		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0)
-	// What this read sent, by block kind, on the RPC's span.
-	var sent messageproto.TranscriptBytes
+		ctx, s.deps.Repo, messages, blocksByMessageID, attachmentMap, viewingThreadID, 0, toolBodies)
+	// What this read sent, by block kind, on the RPC's span: counted after
+	// the stub policy, so a STUB read reports the bytes it really sent and
+	// what it left out (transcript.blocks_elided, transcript.bytes_elided).
+	sent := messageproto.TranscriptBytes{ToolBodies: toolBodies}
 	sent.AddMessages(protoMessages...)
 	trace.SpanFromContext(ctx).SetAttributes(sent.Attributes("transcript")...)
 

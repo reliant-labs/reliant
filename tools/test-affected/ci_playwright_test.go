@@ -393,7 +393,10 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 		t.Errorf("ci-result `if` = %q, want always() so a failed/cancelled needs fails it rather than skipping it", got)
 	}
 
+	// Every case below is its own bash run over a synthetic document: they
+	// run in parallel, which is what keeps this test under its -short budget.
 	t.Run("release record", func(t *testing.T) {
+		t.Parallel()
 		rr := wf.job(t, "release-record")
 		guardIdx, guard := rr.step(t, "release-record", "The path lanes passed")
 		assembleIdx, _ := rr.step(t, "release-record", "Assemble the record")
@@ -424,12 +427,14 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 	})
 
 	t.Run("ci result", func(t *testing.T) {
+		t.Parallel()
 		_, gate := wf.job(t, "ci-result").step(t, "ci-result", "Every job that ran passed")
 		needs := wf.job(t, "ci-result").needs()
 
 		// push: every lane runs; only the merge-tier jobs and the contract
 		// check may be skipped.
-		push := func(playwright string) bool {
+		push := func(t *testing.T, playwright string) bool {
+			t.Helper()
 			r := map[string]string{}
 			for _, n := range needs {
 				r[n] = "success"
@@ -441,7 +446,8 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 		}
 		// pull_request: the merge gate runs, and a lane the change does not
 		// reach is skipped.
-		pr := func(ciRun, playwright string) bool {
+		pr := func(t *testing.T, ciRun, playwright string) bool {
+			t.Helper()
 			r := map[string]string{}
 			for _, n := range needs {
 				r[n] = "skipped"
@@ -452,29 +458,38 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 			return ok
 		}
 
-		if !push("success") {
+		if !push(t, "success") {
 			t.Fatal("harness: ci-result fails on a push with every lane green, so the cases below prove nothing")
 		}
-		if !pr("true", "success") {
+		if !pr(t, "true", "success") {
 			t.Fatal("harness: ci-result fails on a ci:run PR with Playwright green, so the cases below prove nothing")
 		}
 		for _, bad := range []string{"failure", "cancelled", "skipped"} {
-			if push(bad) {
-				t.Errorf("CI result passes a push whose playwright result is %q", bad)
-			}
+			t.Run("push/"+bad, func(t *testing.T) {
+				t.Parallel()
+				if push(t, bad) {
+					t.Errorf("CI result passes a push whose playwright result is %q", bad)
+				}
+			})
 		}
 		for _, bad := range []string{"failure", "cancelled"} {
 			for _, ciRun := range []string{"true", "false"} {
-				if pr(ciRun, bad) {
-					t.Errorf("CI result passes a pull request (ci:run=%s) whose playwright result is %q", ciRun, bad)
-				}
+				t.Run("pull_request/ci:run="+ciRun+"/"+bad, func(t *testing.T) {
+					t.Parallel()
+					if pr(t, ciRun, bad) {
+						t.Errorf("CI result passes a pull request (ci:run=%s) whose playwright result is %q", ciRun, bad)
+					}
+				})
 			}
 		}
 		// The intended semantics for a path-selected lane: skipped is fine on
 		// a pull request, where the lanes job decides which lanes a change
 		// reaches.
-		if !pr("true", "skipped") {
-			t.Error("CI result must accept a skipped (not path-selected) playwright lane on a pull request")
-		}
+		t.Run("pull_request/skipped", func(t *testing.T) {
+			t.Parallel()
+			if !pr(t, "true", "skipped") {
+				t.Error("CI result must accept a skipped (not path-selected) playwright lane on a pull request")
+			}
+		})
 	})
 }

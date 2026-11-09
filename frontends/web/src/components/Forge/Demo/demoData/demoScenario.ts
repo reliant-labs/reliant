@@ -47,6 +47,8 @@ import type { AttributeOp, LogRecord, ObsScope, Severity, Span, TimeWindow, Trac
 
 import { createDemoFixtures } from "./busyApp";
 import { consoleScenarioHandlers } from "./consoleScenario";
+import { configScenarioHandlers } from "./configScenario";
+import { inventoryScenarioHandlers } from "./inventoryScenario";
 import { DEMO_DEFAULT_SERVICES, defaultHandlers, withMessageRequests } from "./demoServiceDefaults";
 import { scopedToDemo } from "./demoScope";
 
@@ -296,5 +298,5 @@ export function createDemoScenario(fixtures: ObservabilityApi = createDemoFixtur
   // (consoleScenario.ts: Releases, Environments, Secrets, Domains, Activity), then forge's
   // generated defaults for every other read of the console's services (demoServiceDefaults.ts).
   // A read naming another project or environment is answered empty first (demoScope.ts).
-  return { name: "demo", handlers: withMessageRequests(scopedToDemo({ ...defaultHandlers(), ...consoleScenarioHandlers(), ...handlers }, DEMO_DEFAULT_SERVICES)) as unknown as MockScenario["handlers"] };
+  return { name: "demo", handlers: withMessageRequests(scopedToDemo({ ...defaultHandlers(), ...consoleScenarioHandlers(), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...handlers }, DEMO_DEFAULT_SERVICES)) as unknown as MockScenario["handlers"] };
 }

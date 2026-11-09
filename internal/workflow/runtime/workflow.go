@@ -359,6 +359,9 @@ type ChildWorkflowTracker struct {
 	// rootRanAgentLoop records that an agent loop ran on the root thread in
 	// this execution, so a wake on that thread is input a turn can read.
 	rootRanAgentLoop bool
+	// resumeTurns marks the threads whose next call_llm turn is the first of
+	// a loop resumed mid-work — see markResumeTurn.
+	resumeTurns map[string]bool
 
 	// userInputs counts, per recipient thread, the thread wakes a PERSON
 	// rang (ThreadWakeSignal.FromUser) — a subset of threadWakes. An ask_user
@@ -561,6 +564,38 @@ func (t *ChildWorkflowTracker) setSpeculativeTurn(thread string, speculative boo
 // hint (see setSpeculativeTurn).
 func (t *ChildWorkflowTracker) isSpeculativeTurn(thread string) bool {
 	return t != nil && t.speculativeTurns[thread]
+}
+
+// resumeCutOffTurnChangeID gates marking a resumed loop's first turn
+// (markResumeTurn). A history recorded before it replays without the mark,
+// and its turn yields on an assistant tail as it did.
+const resumeCutOffTurnChangeID = "resume-continues-cut-off-turn"
+
+// markResumeTurn records that thread's next call_llm turn is the first of a
+// loop resumed after it stopped mid-work (RuntimeContext.ResumeTurn), under
+// the resumeCutOffTurnChangeID gate. Workflow code only: the mark is part of
+// the run's state, so a replay marks the same turn.
+func (t *ChildWorkflowTracker) markResumeTurn(ctx workflow.Context, thread string) {
+	if t == nil || thread == "" {
+		return
+	}
+	if workflow.GetVersion(ctx, resumeCutOffTurnChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return
+	}
+	if t.resumeTurns == nil {
+		t.resumeTurns = make(map[string]bool)
+	}
+	t.resumeTurns[thread] = true
+}
+
+// takeResumeTurn reports whether thread's turn about to run is the first of
+// a resumed loop, and clears the mark: it describes exactly one turn.
+func (t *ChildWorkflowTracker) takeResumeTurn(thread string) bool {
+	if t == nil || !t.resumeTurns[thread] {
+		return false
+	}
+	delete(t.resumeTurns, thread)
+	return true
 }
 
 // hasLiveDetachedSpawns reports whether thread has any background spawns
@@ -1428,6 +1463,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			"checkpointNode", input.Resume.NodeID,
 			"yamlOverride", wf.GetResumeNode(),
 		)
+		// The predecessor stopped inside this loop (it failed, was lost, or
+		// handed off mid-loop), so an assistant turn at the root thread's
+		// tail was cut off. A successor run that only resumes stopped agents
+		// is not one: its root's loop had finished.
+		if input.Resume != nil && !input.Resume.RecoveryOnly && len(input.Resume.ResumeStopped) == 0 && !input.Resume.ResumeAllStopped {
+			childTracker.markResumeTurn(ctx, thread)
+		}
 		pendingResumeStep = &core.TriggeredNode{
 			Node: resumeTarget,
 			Event: &core.WorkflowEvent{

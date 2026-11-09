@@ -213,6 +213,8 @@ edges:
 func TestActivationSnapshotApprovesBuiltinsThatReadRunTimeValues(t *testing.T) {
 	for _, name := range []string{"agent", "autopilot-agent", "autopilot-issue-worker", "autopilot-oncall", "autopilot-review-responder", "autopilot-security-review"} {
 		t.Run(name, func(t *testing.T) {
+			// Each builtin's snapshot is independent: in parallel, not in series.
+			t.Parallel()
 			raw, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
 			require.NoError(t, err)
 			snap, err := snapshotFor(t, string(raw), "", nil)

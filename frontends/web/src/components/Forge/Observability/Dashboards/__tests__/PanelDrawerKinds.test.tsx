@@ -146,7 +146,7 @@ describe("a sql panel", () => {
 
     const editor = await screen.findByLabelText("ClickHouse statement");
     await user.clear(editor);
-    await user.type(editor, "SELECT count() FROM system.tables");
+    await user.paste("SELECT count() FROM system.tables");
     expect(screen.getByText(/Edited since the last run/)).toBeInTheDocument();
     await user.click(screen.getByTestId("statement-run"));
     expect(await screen.findByTestId("statement-refusal")).toHaveTextContent(refusal);
@@ -172,7 +172,7 @@ describe("a postgres panel", () => {
 
     const editor = await screen.findByLabelText("Postgres statement");
     await user.clear(editor);
-    await user.type(editor, "DELETE FROM users");
+    await user.paste("DELETE FROM users");
     await user.click(screen.getByTestId("statement-run"));
     expect(await screen.findByTestId("statement-refusal")).toHaveTextContent("dbquery: refused (statement_not_read_only): the statement starts with DELETE");
   });
@@ -218,12 +218,16 @@ describe("a postgres panel", () => {
       await waitFor(() => expect(screen.getByTestId("statement-run")).toBeEnabled());
     };
 
+    // Statements are pasted, not typed: the editor here is a textarea standing
+    // in for Monaco, so a keystroke per character re-rendered the drawer for
+    // each one and ran this test into its timeout on a loaded host, where the
+    // still-typing keyboard then wrote into the next test's inputs.
     await runAndWait(1);
     await user.clear(editor);
-    await user.type(editor, "SELECT 2 AS tables");
+    await user.paste("SELECT 2 AS tables");
     await runAndWait(2);
     await user.clear(editor);
-    await user.type(editor, statementA.replace(/[{[]/g, (c) => c + c));
+    await user.paste(statementA);
     expect(editor).toHaveValue(statementA);
     await runAndWait(3);
     expect(reads()[2][1]).toMatchObject({ query: { sql: statementA } });

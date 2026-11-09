@@ -31,8 +31,10 @@ import (
 //     never a guess; else, with none running, "not delivered: no agent is
 //     running in this run", and nothing is queued.
 //   - A thread id of the run: that thread, when an agent reads it or it is a
-//     spawned sub-agent's (whose mailbox, stop and resume work as before);
-//     otherwise refused, listing the threads that do read.
+//     sub-agent spawned in this run that is still running (whose mailbox,
+//     stop and resume work as before); otherwise refused, listing the
+//     threads that do read. A sub-agent left over from an earlier run of the
+//     chat is refused: nothing would read its mailbox.
 //   - A node name ("implement", or a full node path such as
 //     "implement.agent_loop"): the one running agent at that node, or a
 //     refusal when none or several match.
@@ -106,7 +108,15 @@ func (s *Service) resolveRunRecipient(ctx context.Context, chat *db.Chat, workfl
 		if thread.ChatID != chat.ID {
 			return rec, svcerr.NotFound("thread")
 		}
-		if thread.Origin == db.ThreadOriginSpawn || hasListener(listeners, requested) {
+		if hasListener(listeners, requested) {
+			rec.thread = requested
+			return rec, nil
+		}
+		ofRun, err := s.isLiveSubAgentOfRun(ctx, chat, thread, workflowID)
+		if err != nil {
+			return rec, err
+		}
+		if ofRun {
 			rec.thread = requested
 			return rec, nil
 		}
@@ -139,6 +149,41 @@ func (s *Service) resolveRunRecipient(ctx context.Context, chat *db.Chat, workfl
 	default:
 		return rec, s.errRecipientAmbiguous(ctx, matches)
 	}
+}
+
+// maxSubAgentDepth bounds the walk from a sub-agent's run up to the run it
+// was spawned in, so a malformed parent chain cannot loop.
+const maxSubAgentDepth = 64
+
+// isLiveSubAgentOfRun reports whether thread is a sub-agent spawned in the
+// run rooted at workflowID that is still running, so its own loop reads its
+// mailbox.
+//
+// A chat's successive runs share one root workflow id (the chat's main
+// thread), so descending from it says only that the sub-agent was spawned in
+// SOME run of the chat. What says it belongs to the live one is that it has
+// not finished: when a run ends, the threads it owns take a terminal status
+// (core.ThreadStatusForStopReason), so a sub-agent of an earlier run reads as
+// completed, failed or cancelled, and a message queued there would never be
+// read (reliant #2464 review).
+func (s *Service) isLiveSubAgentOfRun(ctx context.Context, chat *db.Chat, thread *db.Thread, workflowID string) (bool, error) {
+	if thread.Origin != db.ThreadOriginSpawn || core.ThreadStatusIsTerminal(thread.Status) {
+		return false, nil
+	}
+	wf, err := s.deps.Repo.GetWorkflowByThread(ctx, chat.ID, thread.ID)
+	for depth := 0; depth < maxSubAgentDepth; depth++ {
+		if err != nil && !svcerr.IsNotFound(err) {
+			return false, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
+		}
+		if wf == nil || wf.ParentID == nil || *wf.ParentID == "" {
+			return false, nil
+		}
+		if *wf.ParentID == workflowID {
+			return true, nil
+		}
+		wf, err = s.deps.Repo.GetWorkflow(ctx, *wf.ParentID)
+	}
+	return false, nil
 }
 
 // agentLoopThreads asks the run which of its threads an agent loop runs on.

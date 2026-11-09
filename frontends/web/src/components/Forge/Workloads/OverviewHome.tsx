@@ -709,6 +709,8 @@ function NeedsAttention({
             Workload health could not be read, so only the firing alerts are listed.
           </p>
         )}
+        {/* On a phone the row is wider than the panel: it scrolls sideways here, not the whole page. */}
+        <div className="overflow-x-auto" data-testid="overview-attention-scroll">
         <table className="w-full text-sm" aria-label="Needs attention">
           <tbody>
             {items.map((item) => {
@@ -729,7 +731,8 @@ function NeedsAttention({
                   <td className="h-10 w-6 pl-4 pr-0">
                     <Status tone={item.tone} />
                   </td>
-                  <td className="h-10 max-w-0 px-3">
+                  {/* min-w: when the row outgrows a phone, the subject keeps room to read rather than the detail. */}
+                  <td className="h-10 min-w-40 max-w-0 px-3">
                     <Link href={href} className="no-color block truncate text-ink">
                       <span className="font-medium">{item.subject}</span> {item.what}
                     </Link>
@@ -775,6 +778,7 @@ function NeedsAttention({
             })}
           </tbody>
         </table>
+        </div>
         </>
       )}
     </Panel>

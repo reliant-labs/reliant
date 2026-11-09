@@ -50,17 +50,23 @@ type preemptionStore interface {
 // MarkQueuedAgentMessagesPreempting), so whichever call sees it first must end
 // all of them.
 type batchPreemption struct {
-	store   preemptionStore
-	thread  string
-	preempt chan struct{}
-	once    sync.Once
+	store    preemptionStore
+	thread   string
+	interval time.Duration
+	preempt  chan struct{}
+	once     sync.Once
 }
 
-func newBatchPreemption(store preemptionStore, thread string) *batchPreemption {
+// newBatchPreemption watches thread's mailbox every interval, or every
+// preemptionPollInterval when interval is zero.
+func newBatchPreemption(store preemptionStore, thread string, interval time.Duration) *batchPreemption {
 	if store == nil || thread == "" {
 		return nil
 	}
-	return &batchPreemption{store: store, thread: thread, preempt: make(chan struct{})}
+	if interval <= 0 {
+		interval = preemptionPollInterval
+	}
+	return &batchPreemption{store: store, thread: thread, interval: interval, preempt: make(chan struct{})}
 }
 
 func (b *batchPreemption) fire() {
@@ -93,7 +99,7 @@ func (b *batchPreemption) arm(ctx context.Context) (context.Context, func() bool
 	watcherDone := make(chan struct{})
 	go func() {
 		defer close(watcherDone)
-		ticker := time.NewTicker(preemptionPollInterval)
+		ticker := time.NewTicker(b.interval)
 		defer ticker.Stop()
 		for {
 			select {

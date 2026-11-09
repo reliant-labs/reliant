@@ -9,8 +9,8 @@
  *                   (forgeConsoleRoutes.tsx, forgeConsolePages.ts), so every
  *                   tab of its nav opens, on the demo transport's sample data
  *   /demo           → /forge/demo, keeping the query
- *   /               → the console's overview (/forge/p/shop), keeping the
- *                     query (`?tour=`, `rid`, `utm_*`)
+ *   /               → the visual build story (/forge/demo?section=built),
+ *                     keeping explicit tour/view links and attribution
  *   anything else   → the console's overview, keeping the query
  *
  * A tree of its own rather than a flag on the forge shell's: there is no
@@ -27,6 +27,7 @@ import { createRootRoute, createRoute, createRouter, Navigate, Outlet, redirect,
 
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
 import { bootDemoShell } from './components/Forge/Demo/demoShellBoot'
+import { demoEntryHref } from './components/Forge/Demo/demoEntry'
 import { DemoTourToast } from './components/Forge/Demo/DemoTourToast'
 import { DemoTips } from './components/Forge/Demo/tips'
 import { createForgeDemoRedirectRoute, createForgeDemoRoute } from './components/Forge/Demo/demoRoute'
@@ -85,7 +86,7 @@ export function buildDemoShellTree() {
     getParentRoute: () => rootRoute,
     path: '/',
     beforeLoad: ({ location }) => {
-      throw redirect({ href: `${DEMO_HOME}${location.searchStr}`, replace: true })
+      throw redirect({ href: demoEntryHref(location.searchStr), replace: true })
     },
   })
 
