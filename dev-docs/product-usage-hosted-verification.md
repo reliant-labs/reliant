@@ -45,12 +45,15 @@ environment/service filters, restricted-empty zero rows, cross-org/environment
 and revoked-member refusal before `ConnFor`/`Query`, and actual database-grant
 refusal of explicitly qualified foreign SQL. This test belongs to the private
 integration lane and must actually execute before shipment; a short-lane skip
-is not a pass. Private test PR control-plane #2315, commit `a22d5568e`, final actual execution
+is not a pass. Private test PR control-plane #2315, commit `a22d5568e`: direct actual execution
 **PASS 23.39s**. Its code is not reproduced here. The surrounding package's short
-tests and GOWORK=off build also pass. The full integration task wrapper could not
-start because the machine PATH Forge differed from that private project's older
-pin; that wrapper is not claimed passed. The new named integration test did
-actually execute, without -short, against real infrastructure.
+tests and GOWORK=off build pass. The initial integration task could not start
+because PATH Forge differed from that private project's older pin. After
+installing its exact existing `88cb28c2` pin in the isolated checkout, the named
+`task test:integration -- ./internal/handlers/observability/... -run
+'^TestConsumerProductUsageHostedTenantIsolation$'` actually executed under the
+race detector: **PASS 84.06s, 6 passed, 0 skipped, exit 0**. Exact-pinned scoped
+Forge lint passed too. This is not a claim that every integration test ran.
 
 The exact pinned Forge `0a3a89d52a00` test
 `internal/obsdash/TestProductUsageSQLOnClickHouse` was actually executed against
