@@ -15,6 +15,7 @@ import Status, { type StatusTone } from "@/components/forge-ui/status";
 import { DOCS } from "@/components/Forge/GettingStarted";
 import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
 
+import { ReplayBlockedFix, ReplayBuildFlagNote, ReplayOffFix, ReplayTurnOnSteps, turnOnPhrase } from "./replayGuidance";
 import { samplePercent, type FrontendReplayNote, type FrontendReplayNoteKind, type ReplayStatus } from "./replayStatus";
 
 export function SessionNote({ icon, title, children, testId, action }: { icon: ReactNode; title: string; children: ReactNode; testId: string; action?: ReactNode }) {
@@ -45,7 +46,6 @@ export function SessionsNotConfigured() {
 }
 
 const CODE = "font-mono text-ink";
-const TELEMETRY_REPLAY = "telemetry = forge.BrowserTelemetry {replay = True}";
 
 const NOTE_TONE: Record<FrontendReplayNoteKind, StatusTone> = {
   on: "success",
@@ -55,11 +55,13 @@ const NOTE_TONE: Record<FrontendReplayNoteKind, StatusTone> = {
   unknown: "neutral",
 };
 
-/** One frontend in one environment: its replay state and, when it is not on, the one change that turns it on. */
+/**
+ * One frontend in one environment: its replay state and, when it is not on,
+ * the change that turns it on. The switches it names are replayGuidance.tsx's.
+ */
 function FrontendReplayLine({ note }: { note: FrontendReplayNote }) {
   const fe = <code className={CODE}>{note.frontend}</code>;
   const env = <span className="font-medium text-ink">{note.envName}</span>;
-  const telemetry = <code className={CODE}>{TELEMETRY_REPLAY}</code>;
   return (
     <li className="flex items-start gap-2" data-testid={`obs-sessions-replay-frontend-${note.envId}-${note.frontend}`} data-state={note.kind}>
       <Status tone={NOTE_TONE[note.kind]} size="sm" className="mt-1.5 shrink-0" />
@@ -70,16 +72,15 @@ function FrontendReplayLine({ note }: { note: FrontendReplayNote }) {
           </>
         ) : note.kind === "off" ? (
           <>
-            Replay is off for {fe} in {env} — set {telemetry} on that frontend and redeploy.
+            Replay is off for {fe} in {env} — <ReplayOffFix env={env} />
           </>
         ) : note.kind === "build-flag" ? (
           <>
-            Replay is on for {fe} in {env} via the deprecated build flag — move it to {telemetry} on that frontend.
+            Replay is on for {fe} in {env} <ReplayBuildFlagNote />
           </>
         ) : note.kind === "blocked" ? (
           <>
-            {fe} records replays but {env}&apos;s observability policy drops them. The environment has to opt in to replay: newer forge derives
-            that from the frontend&apos;s <code className={CODE}>telemetry.replay</code>, so upgrade forge and redeploy.
+            {fe} records replays but {env}&apos;s observability policy drops them. <ReplayBlockedFix env={env} />
           </>
         ) : (
           <>
@@ -96,16 +97,7 @@ function HedgedReplaySteps({ lead }: { lead: string }) {
   return (
     <>
       <p>{lead}</p>
-      <ol className="list-decimal space-y-1 pl-4" data-testid="obs-sessions-replay-off-steps">
-        <li>
-          The browser build flag: <code className={CODE}>VITE_OTEL_REPLAY=true</code> for Vite, <code className={CODE}>NEXT_PUBLIC_OTEL_REPLAY=true</code> for
-          Next.js.
-        </li>
-        <li>
-          The environment&apos;s <code className={CODE}>forge.Observability</code> in KCL:{" "}
-          <code className={CODE}>signals = forge.ObservabilitySignals {"{replay = True}"}</code>.
-        </li>
-      </ol>
+      <ReplayTurnOnSteps />
     </>
   );
 }
@@ -163,10 +155,12 @@ export function SessionsReplayOff({ range, onWiden, status }: { range: RangePres
                 </li>
               ))}
             </ul>
-            {status.hedged && <HedgedReplaySteps lead="Where it isn't known, turn on both switches if replay isn't on yet, then redeploy:" />}
+            {status.hedged && <HedgedReplaySteps lead={`Where it isn't known, ${turnOnPhrase()} if replay isn't on yet, then redeploy:`} />}
           </>
         ) : (
-          <HedgedReplaySteps lead="Sessions lists browser sessions that have a replay. Replay is off by default, and every replay is masked when it is on. If replay isn't on yet, turn on both switches, then redeploy:" />
+          <HedgedReplaySteps
+            lead={`Sessions lists browser sessions that have a replay. Replay is off by default, and every replay is masked when it is on. If replay isn't on yet, ${turnOnPhrase()}, then redeploy:`}
+          />
         )}
         <p>Browser spans still arrive in Traces and browser errors in Errors without replay.</p>
       </div>

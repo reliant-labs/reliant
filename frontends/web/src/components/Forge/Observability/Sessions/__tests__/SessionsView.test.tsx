@@ -17,6 +17,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { FrontendReplay, FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { SessionSummary } from "@/services/controlPlane/observability/rumTypes";
 import type { PanelResult } from "@/services/controlPlane/observability/types";
 
 import { createFixtureApi, fixtureTrace } from "../../__fixtures__/fixtureApi";
@@ -227,21 +228,23 @@ describe("the empty list's replay state, per frontend", () => {
     expect(within(note).queryByTestId("obs-sessions-replay-off-steps")).not.toBeInTheDocument();
   });
 
-  it("says a frontend that is off is off, and the one setting that turns it on", async () => {
+  it("says a frontend that is off is off, and the switches the pinned forge has that turn it on", async () => {
     const onCall = vi.fn();
     renderPanel(createFixtureApi({ onCall, sessions: "empty", frontendReplay: replayList([frontend({ state: "off" })]) }), { view: "sessions", range: "24h" }, ENV_PLACE);
     const note = await known();
     expect(line("env-prod", "web")).toHaveAttribute("data-state", "off");
     expect(line("env-prod", "web")).toHaveTextContent(
-      "Replay is off for web in prod — set telemetry = forge.BrowserTelemetry {replay = True} on that frontend and redeploy."
+      "Replay is off for web in prod — set the build flag (VITE_OTEL_REPLAY=true for Vite, NEXT_PUBLIC_OTEL_REPLAY=true for Next.js) on that frontend and signals = forge.ObservabilitySignals {replay = True} in prod's forge.Observability, then redeploy."
     );
+    // forge.BrowserTelemetry.replay is not in the forge reliant pins (forge#1983): never name it.
+    expect(note).not.toHaveTextContent("BrowserTelemetry");
     expect(within(note).queryByTestId("obs-sessions-replay-off-steps")).not.toBeInTheDocument();
     // It looked for build-flag replays over the last 7 days in that environment, and found none.
     const evidence = listCalls(onCall).find((req) => (req as ListReq & { pageSize?: number }).pageSize === 100);
     expect(evidence).toMatchObject({ envIds: ["env-prod"], hasReplay: true });
   });
 
-  it("reads an off frontend whose replays still arrive as on via the deprecated build flag", async () => {
+  it("reads an off frontend whose replays still arrive as on via its build flag", async () => {
     const recorded = (await createFixtureApi().listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: true, userId: "", pathContains: "", pageSize: 1 })).sessions[0]!;
     const base = createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend({ state: "off" })]) });
     const api: ObservabilityApi = {
@@ -255,9 +258,44 @@ describe("the empty list's replay state, per frontend", () => {
     renderPanel(api, { view: "sessions", range: "1h" }, ENV_PLACE);
     await known();
     expect(line("env-prod", "web")).toHaveAttribute("data-state", "build-flag");
-    expect(line("env-prod", "web")).toHaveTextContent(
-      "Replay is on for web in prod via the deprecated build flag — move it to telemetry = forge.BrowserTelemetry {replay = True} on that frontend."
-    );
+    expect(line("env-prod", "web")).toHaveTextContent("Replay is on for web in prod via its build flag.");
+  });
+
+  /** The evidence read's pages: `pages[i]` is page i's sessions; every page but the last has a token. */
+  const pagedEvidence = (pages: SessionSummary[][], onEvidence: (pageToken: string | undefined) => void = () => {}): ObservabilityApi["listSessions"] => async (req) => {
+    if (req.window.endMs - req.window.startMs <= 24 * 3_600_000) return { sessions: [], nextPageToken: "" };
+    onEvidence(req.pageToken);
+    const at = req.pageToken ? Number(req.pageToken.replace(/^e:/, "")) : 0;
+    return { sessions: pages[at] ?? [], nextPageToken: at + 1 < pages.length ? `e:${at + 1}` : "" };
+  };
+
+  it("follows the evidence read's page token: a replay only on page two still counts", async () => {
+    const recorded = (await createFixtureApi().listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: true, userId: "", pathContains: "", pageSize: 1 })).sessions[0]!;
+    const other = { ...recorded, envId: "env-prod", service: "shop-admin" };
+    const tokens: (string | undefined)[] = [];
+    const base = createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend({ state: "off" }), frontend({ frontend: "docs", state: "off" })]) });
+    const api: ObservabilityApi = {
+      ...base,
+      listSessions: pagedEvidence([Array(100).fill(other), [{ ...recorded, envId: "env-prod", service: "shop-web" }]], (token) => tokens.push(token)),
+    };
+    renderPanel(api, { view: "sessions", range: "1h" }, ENV_PLACE);
+    await known();
+    expect(tokens).toEqual([undefined, "e:1"]);
+    expect(line("env-prod", "web")).toHaveAttribute("data-state", "build-flag");
+    // The read reached the end of the window: docs has no replay, so it is off.
+    expect(line("env-prod", "docs")).toHaveAttribute("data-state", "off");
+  });
+
+  it("stops the evidence read at 10 pages, and then does not call a frontend with no replay found off", async () => {
+    const recorded = (await createFixtureApi().listSessions({ orgId: "o", envIds: [], window: { startMs: 0, endMs: Date.now() + 1 }, hasError: false, hasReplay: true, userId: "", pathContains: "", pageSize: 1 })).sessions[0]!;
+    const tokens: (string | undefined)[] = [];
+    const base = createFixtureApi({ sessions: "empty", frontendReplay: replayList([frontend({ state: "off" })]) });
+    const pages = Array.from({ length: 12 }, () => [{ ...recorded, envId: "env-prod", service: "shop-admin" }]);
+    renderPanel({ ...base, listSessions: pagedEvidence(pages, (token) => tokens.push(token)) }, { view: "sessions", range: "1h" }, ENV_PLACE);
+    const note = await known();
+    expect(tokens).toHaveLength(10);
+    expect(line("env-prod", "web")).toHaveAttribute("data-state", "unknown");
+    expect(within(note).getByTestId("obs-sessions-replay-off-steps")).toBeInTheDocument();
   });
 
   it("says when a frontend records replays the environment's policy drops, and how to fix it", async () => {
@@ -266,9 +304,8 @@ describe("the empty list's replay state, per frontend", () => {
     const blocked = line("env-prod", "web");
     expect(blocked).toHaveAttribute("data-state", "blocked");
     expect(blocked).toHaveTextContent("web records replays but prod's observability policy drops them.");
-    expect(blocked).toHaveTextContent("The environment has to opt in to replay");
-    expect(blocked).toHaveTextContent("telemetry.replay");
-    expect(blocked).toHaveTextContent("upgrade forge and redeploy");
+    expect(blocked).toHaveTextContent("The environment has to opt in to replay: set signals = forge.ObservabilitySignals {replay = True} in prod's forge.Observability, then redeploy.");
+    expect(blocked).not.toHaveTextContent("telemetry.replay");
   });
 
   it("falls back to the generic how-to for a frontend whose state is unknown", async () => {

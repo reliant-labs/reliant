@@ -19,7 +19,7 @@ import { FilterUnsupportedError, obsRetryDelay, rumRetry } from "@/services/cont
 import type { FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useObsReadApi } from "./observability-queries";
-import type { RumScope, SessionList, Timeline } from "@/services/controlPlane/observability/rumTypes";
+import type { RumScope, SessionList, SessionSummary, Timeline } from "@/services/controlPlane/observability/rumTypes";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 
 export interface SessionFilters {
@@ -153,31 +153,52 @@ export function useFrontendReplay(scope: RumScope | null, enabled = true) {
 
 /** How far back the console looks for replays a frontend's config says it should not be recording. */
 export const REPLAY_EVIDENCE_RANGE: RangePreset = "7d";
-/** The server's page maximum: the evidence is the newest sessions, one page. */
+/** The server's page maximum. */
 export const REPLAY_EVIDENCE_PAGE_SIZE = 100;
+/** The most pages the evidence read follows: 1,000 sessions, then it stops and says so (`complete: false`). */
+export const REPLAY_EVIDENCE_MAX_PAGES = 10;
+
+/** The replays the evidence read saw, and whether it saw every one in the window. */
+export interface ReplayEvidencePages {
+  sessions: SessionSummary[];
+  /** False: it stopped at REPLAY_EVIDENCE_MAX_PAGES with more to read, so a frontend it found nothing for is unknown. */
+  complete: boolean;
+}
 
 /**
- * The newest sessions with a replay in `envIds` over REPLAY_EVIDENCE_RANGE:
+ * The sessions with a replay in `envIds` over REPLAY_EVIDENCE_RANGE, newest
+ * first, following the server's page token up to REPLAY_EVIDENCE_MAX_PAGES:
  * what reconciles a frontend whose runtime config reads "off" but that still
- * records through the deprecated build flag (ListFrontendReplay cannot see a
- * flag baked into the bundle).
+ * records through the build flag (ListFrontendReplay cannot see a flag baked
+ * into the bundle). One window for every page, as the token requires.
  */
 export function useReplayEvidence(scope: RumScope | null, envIds: readonly string[], enabled = true) {
   const api = useObsReadApi();
   return useQuery({
     queryKey: sessionKeys.replayEvidence(scope, envIds),
-    queryFn: ({ signal }): Promise<SessionList> =>
-      api.listSessions({
-        ...(scope as RumScope),
-        envIds: [...envIds],
-        services: [],
-        window: resolveWindow(REPLAY_EVIDENCE_RANGE),
-        hasError: false,
-        hasReplay: true,
-        userId: "",
-        pathContains: "",
-        pageSize: REPLAY_EVIDENCE_PAGE_SIZE,
-      }, { signal }),
+    queryFn: async ({ signal }): Promise<ReplayEvidencePages> => {
+      const window = resolveWindow(REPLAY_EVIDENCE_RANGE);
+      const sessions: SessionSummary[] = [];
+      let pageToken: string | undefined;
+      for (let page = 0; page < REPLAY_EVIDENCE_MAX_PAGES; page++) {
+        const result = await api.listSessions({
+          ...(scope as RumScope),
+          envIds: [...envIds],
+          services: [],
+          window,
+          hasError: false,
+          hasReplay: true,
+          userId: "",
+          pathContains: "",
+          pageSize: REPLAY_EVIDENCE_PAGE_SIZE,
+          pageToken,
+        }, { signal });
+        sessions.push(...result.sessions);
+        if (!result.nextPageToken) return { sessions, complete: true };
+        pageToken = result.nextPageToken;
+      }
+      return { sessions, complete: false };
+    },
     enabled: !!scope && enabled && envIds.length > 0,
     staleTime: 60_000,
     retry: rumRetry, retryDelay: obsRetryDelay,

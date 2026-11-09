@@ -4,8 +4,8 @@
  * The hooks behind the empty Sessions list's per-frontend replay state:
  * useFrontendReplay asks ListFrontendReplay for the scope and is not retried
  * on a control plane without it; useReplayEvidence looks for replays over the
- * last 7 days in only the environments it is given, and asks nothing when it
- * is given none. Both keys sit under sessionKeys.root(), so Refresh re-reads them.
+ * last 7 days in only the environments it is given, following the page token
+ * up to 10 pages, and asks nothing when it is given none. Both keys sit under sessionKeys.root(), so Refresh re-reads them.
  */
 
 import { renderHook, waitFor } from "@testing-library/react";
@@ -18,7 +18,7 @@ import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/cont
 import type { RumScope } from "@/services/controlPlane/observability/rumTypes";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 
-import { REPLAY_EVIDENCE_PAGE_SIZE, sessionKeys, useFrontendReplay, useReplayEvidence } from "../observability-session-queries";
+import { REPLAY_EVIDENCE_MAX_PAGES, REPLAY_EVIDENCE_PAGE_SIZE, sessionKeys, useFrontendReplay, useReplayEvidence } from "../observability-session-queries";
 
 const scope: RumScope = { orgId: "org-1", projectId: "shop", envIds: ["env-prod", "env-staging"], services: [] };
 
@@ -82,6 +82,29 @@ describe("useReplayEvidence", () => {
     const span = req.window.endMs - req.window.startMs;
     expect(span).toBe(7 * 24 * 60 * 60_000);
     expect(req.window.endMs).toBeGreaterThanOrEqual(now);
+  });
+
+  it("follows the page token with one window, and says when it stopped before the end", async () => {
+    const api = createFixtureApi();
+    const calls: { pageToken?: string; window: { startMs: number; endMs: number } }[] = [];
+    const listSessions: ObservabilityApi["listSessions"] = async (req) => {
+      calls.push({ pageToken: req.pageToken, window: req.window });
+      return { sessions: [], nextPageToken: `t:${calls.length}` };
+    };
+    const { wrapper } = setup({ ...api, listSessions });
+    const { result } = renderHook(() => useReplayEvidence(scope, ["env-prod"]), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(calls.map((c) => c.pageToken)).toEqual([undefined, ...Array.from({ length: REPLAY_EVIDENCE_MAX_PAGES - 1 }, (_, i) => `t:${i + 1}`)]);
+    expect(new Set(calls.map((c) => c.window.startMs)).size).toBe(1);
+    expect(result.current.data!.complete).toBe(false);
+  });
+
+  it("is complete when the last page has no token", async () => {
+    const { wrapper } = setup(createFixtureApi());
+    const { result } = renderHook(() => useReplayEvidence(scope, ["env-prod"]), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data!.complete).toBe(true);
+    expect(result.current.data!.sessions.every((s) => s.hasReplay && s.envId === "env-prod")).toBe(true);
   });
 
   it("asks nothing without an environment, or while disabled", () => {

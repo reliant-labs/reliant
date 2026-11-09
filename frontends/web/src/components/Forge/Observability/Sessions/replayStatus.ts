@@ -6,11 +6,11 @@
  * actually arrived. Pure, so every state is tested once, here.
  *
  * The server reads a frontend's runtime config, which cannot hold the
- * deprecated BUILD flag (VITE_OTEL_REPLAY / NEXT_PUBLIC_OTEL_REPLAY): a
- * frontend switched on that way reads "off" while its replays still arrive.
- * So an "off" frontend with a replay in the evidence window is on via the
- * build flag, and an "off" whose evidence could not be read is not asserted
- * at all.
+ * BUILD flag (VITE_OTEL_REPLAY / NEXT_PUBLIC_OTEL_REPLAY): a frontend
+ * switched on that way reads "off" while its replays still arrive. So an
+ * "off" frontend with a replay in the evidence window is on via the build
+ * flag, and an "off" the evidence cannot vouch for — it could not be read, or
+ * the read stopped before the end of the window — is unknown, never "off".
  */
 
 import type { FrontendReplay, FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
@@ -19,7 +19,7 @@ import type { SessionSummary } from "@/services/controlPlane/observability/rumTy
 /**
  *   on          on, and the environment ingests it: nothing recorded yet.
  *   off         its config does not turn replay on, and no replay arrived.
- *   build-flag  its config says off, but replays arrived: the deprecated build flag.
+ *   build-flag  its config says off, but replays arrived: the build flag.
  *   blocked     it records, and the environment's policy drops what it sends.
  *   unknown     nothing can be said: the console falls back to how to turn it on.
  */
@@ -39,6 +39,13 @@ export interface ReplayStatus {
   unavailableEnvs: { id: string; name: string }[];
   /** Something is unknown: the generic how-to-turn-it-on stays beside the per-frontend lines. */
   hedged: boolean;
+}
+
+/** The replays observed in the evidence window, and whether that is all of them. */
+export interface ReplayEvidence {
+  sessions: readonly Pick<SessionSummary, "envId" | "service">[];
+  /** False: the read stopped early, so a frontend with no replay found may still have one. */
+  complete: boolean;
 }
 
 /**
@@ -70,23 +77,23 @@ export function samplePercent(rate: number): string {
  * The per-frontend status, or null when there is nothing to say per frontend
  * (no rows and no unreadable environment): the generic note stands alone.
  *
- * `evidence` is the replays observed for the frontends that read "off": the
- * sessions themselves, `[]` when it is known none arrived, or null when that
- * could not be read (an "off" frontend is then unknown, not off).
+ * `evidence` is the replays observed for the frontends that read "off", or
+ * null when that could not be read. An "off" frontend with no replay found is
+ * "off" only when the evidence is complete; otherwise it is unknown.
  */
 export function replayStatus(
   list: FrontendReplayList,
-  evidence: readonly Pick<SessionSummary, "envId" | "service">[] | null,
+  evidence: ReplayEvidence | null,
   envName: (id: string) => string | undefined = () => undefined
 ): ReplayStatus | null {
   const observed = new Set<FrontendReplay>();
-  for (const session of evidence ?? []) {
+  for (const session of evidence?.sessions ?? []) {
     const row = rowOfSession(list.frontends, session);
     if (row) observed.add(row);
   }
   const frontends = list.frontends.map((row): FrontendReplayNote => {
     const kind: FrontendReplayNoteKind =
-      row.state === "off" ? (evidence === null ? "unknown" : observed.has(row) ? "build-flag" : "off") : row.state;
+      row.state !== "off" ? row.state : observed.has(row) ? "build-flag" : evidence?.complete ? "off" : "unknown";
     return { kind, envId: row.envId, envName: row.envName || envName(row.envId) || row.envId, frontend: row.frontend, sampleRate: row.sampleRate };
   });
   const unavailableEnvs = list.unavailableEnvIds.map((id) => ({ id, name: envName(id) || id }));

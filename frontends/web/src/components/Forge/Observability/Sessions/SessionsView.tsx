@@ -205,7 +205,7 @@ function SessionsNoReplays({
   const evidence = useReplayEvidence(rumScope, offEnvs, needEvidence);
   const status = useMemo(() => {
     if (!list || (needEvidence && evidence.isLoading)) return null;
-    const observed = !needEvidence ? [] : evidence.data ? evidence.data.sessions : null;
+    const observed = !needEvidence ? { sessions: [], complete: true } : (evidence.data ?? null);
     return replayStatus(list, observed, (id) => environments?.find((env) => env.id === id)?.name);
   }, [list, needEvidence, evidence.isLoading, evidence.data, environments]);
   return <SessionsReplayOff range={range} onWiden={onWiden} status={status} />;
