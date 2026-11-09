@@ -14,12 +14,15 @@
  *     must never overwrite, and can be megabytes;
  *   - the writes, each of which refreshes git status.
  *
- * Concurrent identical tree and content reads share one request through the
- * in-flight maps below. Nothing is cached once a request settles.
+ * These reads use forge's generated query definitions in an unobserved,
+ * transient QueryClient. Identical concurrent reads share one request; each
+ * query is removed as soon as it settles, with no retry or retained file bytes.
+ * The app's observed cache cannot refetch editor buffers behind the caller.
  */
 
 import { ConnectError, Code } from "@connectrpc/connect";
-import type { QueryClient } from "@tanstack/react-query";
+import { QueryClient, type FetchQueryOptions } from "@tanstack/react-query";
+import type { ConnectClientError } from "@reliantlabs/forge-web-runtime";
 import {
   FileNodeType,
   FileSystemService,
@@ -28,7 +31,7 @@ import {
   type FilePreviewInfo as ProtoFilePreviewInfo,
 } from "../gen/reliant/v1/filesystem_pb";
 import type { FileNode } from "../components/FileBrowser";
-import { fileSystemServiceKeys } from "../hooks/file-system-service-hooks_gen";
+import { fileSystemServiceKeys, fileSystemServiceQueries } from "../hooks/file-system-service-hooks_gen";
 import { connectClient } from "../lib/connect";
 import { notifyFilesRewritten } from "../lib/fileRewrites";
 import { queryClient as appQueryClient } from "../lib/query-client";
@@ -99,11 +102,27 @@ export const FILE_TREE_DEPTH_SERVER_DEFAULT = 0;
 // Request Deduplication
 // ============================================
 
-// In-flight getFileContent requests, by (project, worktree, chat, path).
-const pendingRequests = new Map<string, Promise<string>>();
+// Editor/tree reads use generated query definitions, but NOT the app's
+// observed server-state cache: an invalidation/focus refetch must never replace
+// an editor buffer or retain megabytes of preview data. Keep only in-flight
+// sharing; remove the query synchronously when it settles (gcTime alone is a
+// timer and can retain bytes until the next turn).
+const transientReads = new QueryClient();
+const transientReadOptions = { staleTime: 0, gcTime: 0, retry: false, networkMode: "always" as const };
 
-// In-flight getFileTree requests, by (project, worktree, chat, path, depth).
-const pendingFileTreeRequests = new Map<string, Promise<FileNode[]>>();
+async function freshRead<Response>(options: FetchQueryOptions<Response, ConnectClientError>): Promise<Response> {
+  const pending = transientReads.fetchQuery(options);
+  const query = transientReads.getQueryCache().find({ queryKey: options.queryKey, exact: true });
+  try {
+    return await pending;
+  } finally {
+    // An older concurrent waiter must not remove a NEW same-key read that
+    // started after the first waiter finished and evicted their shared query.
+    if (transientReads.getQueryCache().find({ queryKey: options.queryKey, exact: true }) === query) {
+      transientReads.removeQueries({ queryKey: options.queryKey, exact: true });
+    }
+  }
+}
 
 // ============================================
 // Conversion Functions: Proto -> Frontend
@@ -290,32 +309,13 @@ export async function getFileTree(path: string = "/", showHidden: boolean = fals
   // NOTE: this means the server walk always includes dot-directories no matter
   // what the caller asked for, which inflates every walk. Fixing it belongs
   // with the flat file-list RPC, not here.
-  // depth is part of the key so a depth-2 root fetch and a depth-1 subdir fetch
-  // never collide. The chat is in the key because the server reads from the
-  // chat's machine: the same path for two chats can be two different disks.
-  const cacheKey = `${projectId}:${worktreeId || 'main'}:${chatId || ''}:${path}:${depth}`;
-
-  let promise = pendingFileTreeRequests.get(cacheKey);
-  if (!promise) {
-    promise = (async () => {
-      try {
-        const response = await client.getFileTree({
-          projectId,
-          path,
-          showHidden: true,
-          worktreeId,
-          chatId,
-          depth,
-        });
-        return sortFileTree(response.files.map(protoFileNodeToFrontend));
-      } finally {
-        pendingFileTreeRequests.delete(cacheKey);
-      }
-    })();
-    pendingFileTreeRequests.set(cacheKey, promise);
-  }
-
-  const result = await promise;
+  // Generated request keys include project/worktree/chat/path/depth without
+  // delimiter collisions. The chat selects the disk, not merely UI context.
+  const response = await freshRead(fileSystemServiceQueries.getFileTree(
+    { projectId, path, showHidden: true, worktreeId, chatId, depth },
+    transientReadOptions,
+  ));
+  const result = sortFileTree(response.files.map(protoFileNodeToFrontend));
   return showHidden ? result : filterHiddenFiles(result);
 }
 
@@ -331,23 +331,11 @@ export async function getFileContent(path: string, worktreeId?: string): Promise
     const projectId = requireProjectId();
     const apiPath = await normalizeFilePathForAPI(path, worktreeId);
     const chatId = await activeChatIdForAPI();
-    // The chat is part of the key for the same reason as in getFileTree: it
-    // decides which machine is read.
-    const cacheKey = `${projectId}:${worktreeId || 'main'}:${chatId || ''}:${apiPath}`;
-
-    let promise = pendingRequests.get(cacheKey);
-    if (!promise) {
-      promise = (async () => {
-        try {
-          const response = await client.getFileContent({ projectId, path: apiPath, worktreeId, chatId });
-          return response.content;
-        } finally {
-          pendingRequests.delete(cacheKey);
-        }
-      })();
-      pendingRequests.set(cacheKey, promise);
-    }
-    return await promise;
+    const response = await freshRead(fileSystemServiceQueries.getFileContent(
+      { projectId, path: apiPath, worktreeId, chatId },
+      transientReadOptions,
+    ));
+    return response.content;
   } catch (error) {
     console.error("Failed to fetch file content:", error);
     throw error; // Re-throw to let FileViewer handle it
@@ -358,12 +346,12 @@ export async function getFilePreviewInfo(path: string, worktreeId?: string): Pro
   try {
     const projectId = requireProjectId();
     const apiPath = await normalizeFilePathForAPI(path, worktreeId);
-    const response = await client.getFilePreviewInfo({
+    const response = await freshRead(fileSystemServiceQueries.getFilePreviewInfo({
       projectId,
       path: apiPath,
       worktreeId,
       chatId: await activeChatIdForAPI(),
-    });
+    }, transientReadOptions));
     if (!response.info) {
       throw new Error("File preview info not found");
     }
@@ -377,12 +365,12 @@ export async function getFilePreviewInfo(path: string, worktreeId?: string): Pro
 export async function getFilePreviewBlob(path: string, worktreeId?: string): Promise<Blob> {
   const projectId = requireProjectId();
   const apiPath = await normalizeFilePathForAPI(path, worktreeId);
-  const response = await client.getFilePreview({
+  const response = await freshRead(fileSystemServiceQueries.getFilePreview({
     projectId,
     path: apiPath,
     worktreeId,
     chatId: await activeChatIdForAPI(),
-  });
+  }, transientReadOptions));
   return new Blob([response.content], { type: response.contentType });
 }
 

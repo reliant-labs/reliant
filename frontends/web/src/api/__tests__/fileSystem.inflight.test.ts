@@ -1,7 +1,7 @@
 // @vitest-environment node
 /**
- * The file tree and file content stay off the query cache (api/fileSystem.ts):
- * their only sharing is in flight. Two identical reads at once make one
+ * The file tree and file content use generated definitions in an unobserved
+ * transient query cache (api/fileSystem.ts): sharing lasts only in flight. Two identical reads at once make one
  * request, and the chat is part of "identical", because the server reads the
  * chat's machine: one path under two chats can be two disks.
  *
@@ -9,7 +9,9 @@
  * ones (lib/fileRewrites) and re-runs the mounted content searches.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { QueryClient, QueryObserver } from "@tanstack/react-query";
+import { QueryClient, QueryObserver, onlineManager } from "@tanstack/react-query";
+import { Code, ConnectError } from "@connectrpc/connect";
+import { FileNodeType, FileViewerKind } from "@/gen/reliant/v1/filesystem_pb";
 
 import { setTransport } from "@/lib/connect";
 import { subscribeFileRewrites, type FileRewrite } from "@/lib/fileRewrites";
@@ -31,7 +33,7 @@ vi.mock("../../store/gitStatusStore", () => ({
   triggerGitStatusRefresh: mocks.triggerGitStatusRefresh,
 }));
 
-import { getFileContent, getFileTree, replaceInFiles } from "../fileSystem";
+import { getFileContent, getFileTree, getFilePreviewInfo, getFilePreviewBlob, replaceInFiles } from "../fileSystem";
 
 /** A promise the test resolves, so two calls can overlap. */
 function gate<T>() {
@@ -45,6 +47,8 @@ function gate<T>() {
 const server = {
   getFileTree: vi.fn(),
   getFileContent: vi.fn(),
+  getFilePreviewInfo: vi.fn(),
+  getFilePreview: vi.fn(),
   replaceInFiles: vi.fn(),
   searchFiles: vi.fn(),
 };
@@ -59,6 +63,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setTransport(null);
+  onlineManager.setOnline(true);
 });
 
 describe("in-flight sharing", () => {
@@ -113,6 +118,90 @@ describe("in-flight sharing", () => {
 
     await expect(Promise.all([first, second])).resolves.toEqual(["hello", "hello"]);
     expect(server.getFileContent).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("generated transient read contracts", () => {
+  it("does not conflate delimiter-containing paths with a different chat", async () => {
+    // Former key: project:wt:chat:part:/src:1 for both valid requests.
+    const reply = gate<{ files: unknown[] }>();
+    server.getFileTree.mockReturnValue(reply.promise);
+    mocks.useChatStore.getState.mockReturnValue({ activeChatId: "chat" });
+    const first = getFileTree("part:/src", true, "wt", 1);
+    await vi.waitFor(() => expect(server.getFileTree).toHaveBeenCalledTimes(1));
+    mocks.useChatStore.getState.mockReturnValue({ activeChatId: "chat:part" });
+    const second = getFileTree("/src", true, "wt", 1);
+    await vi.waitFor(() => expect(server.getFileTree).toHaveBeenCalledTimes(2));
+    reply.open({ files: [] });
+    await Promise.all([first, second]);
+  });
+
+  it("does not let the app cache cancel or retain editor-buffer reads", async () => {
+    const reply = gate<{ content: string }>();
+    server.getFileContent.mockReturnValue(reply.promise);
+    const pending = getFileContent("a.ts", "wt");
+    await vi.waitFor(() => expect(server.getFileContent).toHaveBeenCalledTimes(1));
+    // App invalidation/removal must not cancel this unobserved editor read.
+    const { queryClient } = await import("@/lib/query-client");
+    await queryClient.cancelQueries({ queryKey: ["fileSystemService"] });
+    reply.open({ content: "still returned" });
+    expect(await pending).toBe("still returned");
+    expect(queryClient.getQueryCache().findAll({ queryKey: ["fileSystemService"] })).toEqual([]);
+  });
+
+  it("retains tree sorting, hidden filtering and unloaded boundary directories", async () => {
+    server.getFileTree.mockResolvedValue({ files: [
+      { name: "z.ts", path: "z.ts", type: FileNodeType.FILE, size: 9n },
+      { name: ".hidden", path: ".hidden", type: FileNodeType.FILE },
+      { name: "src", path: "src", type: FileNodeType.DIRECTORY, hasChildren: true },
+    ] });
+    const rows = await getFileTree("/", false, "wt", 1);
+    expect(rows.map((row) => row.name)).toEqual(["src", "z.ts"]);
+    expect(rows[0]?.children).toBeUndefined();
+    expect(rows[0]?.hasChildren).toBe(true);
+    expect(rows[1]?.size).toBe(9);
+    expect(server.getFileTree.mock.calls[0][0]).toMatchObject({ showHidden: true, depth: 1 });
+  });
+
+  it("uses fresh content/metadata/bytes after every settled read, preserving mapping", async () => {
+    mocks.resolveWorktree.mockResolvedValue({ path: "/workspace" });
+    server.getFileContent.mockResolvedValueOnce({ content: "old" }).mockResolvedValueOnce({ content: "new" });
+    server.getFilePreviewInfo.mockResolvedValue({ info: { path: "image.png", name: "image.png", size: 123n, viewerKind: FileViewerKind.IMAGE, mimeType: "image/png", isBinary: true } });
+    server.getFilePreview.mockResolvedValue({ content: new Uint8Array([0, 255, 17]), contentType: "image/png" });
+    expect(await getFileContent("/workspace/image.png", "wt")).toBe("old");
+    expect(await getFileContent("/workspace/image.png", "wt")).toBe("new");
+    const info = await getFilePreviewInfo("/workspace/image.png", "wt");
+    expect(info).toMatchObject({ size: 123, viewerKind: "image", mimeType: "image/png", isBinary: true });
+    const blob = await getFilePreviewBlob("/workspace/image.png", "wt");
+    expect(blob.type).toBe("image/png");
+    expect(new Uint8Array(await blob.arrayBuffer())).toEqual(new Uint8Array([0, 255, 17]));
+    for (const method of [server.getFileContent, server.getFilePreviewInfo, server.getFilePreview]) {
+      expect(method.mock.calls[0][0]).toMatchObject({ projectId: "project-1", path: "image.png", worktreeId: "wt", chatId: "chat-a" });
+    }
+  });
+
+  it("does not retry failed or canceled responses, and a later read recovers", async () => {
+    for (const code of [Code.Unavailable, Code.Canceled]) {
+      server.getFileContent.mockRejectedValueOnce(new ConnectError("read failed", code)).mockResolvedValueOnce({ content: "recovered" });
+      const before = server.getFileContent.mock.calls.length;
+      await expect(getFileContent("a.ts", "wt")).rejects.toMatchObject({ code });
+      expect(server.getFileContent).toHaveBeenCalledTimes(before + 1);
+      expect(await getFileContent("a.ts", "wt")).toBe("recovered");
+    }
+  });
+
+  it("still sends explicit filesystem reads while the browser reports offline", async () => {
+    onlineManager.setOnline(false);
+    server.getFileContent.mockResolvedValue({ content: "local daemon reachable" });
+    expect(await getFileContent("a.ts", "wt")).toBe("local daemon reachable");
+  });
+
+  it("retains missing-preview error and no-project behavior", async () => {
+    server.getFilePreviewInfo.mockResolvedValue({});
+    await expect(getFilePreviewInfo("a.ts", "wt")).rejects.toThrow("File preview info not found");
+    mocks.useProjectStore.getState.mockReturnValue({ currentProject: null });
+    expect(await getFileTree()).toEqual([]);
+    await expect(getFileContent("a.ts")).rejects.toThrow();
   });
 });
 

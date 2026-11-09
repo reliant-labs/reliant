@@ -1,12 +1,9 @@
 # Frontend migration: bounded follow-up checklist
 
-Verified against fresh main `f2759e070` on 2026-11-08. This branch is independent
-of the broader audit/devlog PR [#2448](https://github.com/reliant-labs/reliant/pull/2448),
-which was still open when ownership was checked. Do not duplicate its devlog
-adoption. This file supplements that PR's `forge-frontend-migration.md` without
-creating the same file independently and forcing a merge conflict. It records
-new completion rows and concrete next methods, not complete frontend/backend
-equivalence. Read both checklists once #2448 lands.
+Latest bounded read slice verified against fresh main `2a024bf71` on 2026-11-09.
+Audit/devlog #2448, demo mocks #2454 and imperative PR lookup #2480 are merged.
+Read this together with `forge-frontend-migration.md`; neither checklist claims
+complete frontend/backend equivalence. No competing filesystem read PR was found.
 
 ## Verified current/adopted
 
@@ -90,14 +87,42 @@ Run scoped
 `RecentChanges.{flow,race,machineWake}.test.tsx` and new transport/cache tests;
 `tsc -b`. `afterWrite` also notifies `gitStatusStore`; do not delete it wholesale.
 
-### Subsequent PRs: `src/api/fileSystem.ts`
+### Filesystem READ slice (implemented here); writes remain separate
+
+`getFileTree`, `getFileContent`, `getFilePreviewInfo` and `getFilePreviewBlob` now
+use the already-pinned generated query definitions. An unobserved transient
+QueryClient replaces delimiter-joined in-flight maps, removing each exact query
+synchronously after settlement; older waiters cannot evict a newer same-key read.
+This is deliberately not the app's observed cache: focus/invalidation cannot
+refetch an editor buffer, and no file/preview bytes persist after completion.
+Options are staleTime=0, gcTime=0, retry=false, networkMode=always (browser offline
+must not suppress an explicit local-daemon read). Generated queryFn forwards its
+AbortSignal; canceled RPC rejection remains a rejection, never cached fallback
+success. Public signatures, path normalization, chat/project/worktree/depth scope,
+hidden filtering, sorting, boundary children and wire/view/blob mapping stay.
+No write, git notification, error toast or optimistic policy changes.
+Validation: **6 scoped files / 29 tests**, `tsc -b` and changed-file eslint pass.
+`prove_test` confirms generated request keys fix the former delimiter-key
+collision between different chat/path scopes. Tests also preserve canceled/error
+rejection, no retries, offline explicit reads and app-cache cancellation isolation.
+
+Stage/unstage/revert dependency: forge#1989 merged but **newest published runtime
+0.13.9 still exposes only signal in ServiceMutationCallOptions**, not invalidate.
+Existing manifest is ^0.13.8 and no pin is changed here. Wait for actual published
+seam + coordinated pin; no local package patch or release cut. Commit/push/pull/
+create-PR and filesystem writes stay separate later slices.
+
+CP#2285 current repaired head 913f0eb2d has review:passed/merge:queue alongside a
+stale merge:failed label. Trusted numeric-ID evidence only reports failure on old
+abffb4cc7, not the repaired head; no active fix lease was found. Do not invent a
+new blocker or duplicate the steward. Live smoke guarantees remain in its PR.
 
 | Adapter -> generated target | Required preservation / test |
 |---|---|
-| `getFileTree` -> `.getFileTree` query | project/worktree/chat-machine/path/depth identity, showHidden=true wire request, frontend hidden filtering and sorting; empty project returns []; replace pending-map only with fresh, non-persistent cache semantics |
-| `getFileContent` -> `.getFileContent` query | normalize absolute/relative path before key; chat-machine isolation; concurrent dedup only, no stale editor content |
-| `getFilePreviewInfo` -> `.getFilePreviewInfo` query | missing info rejects, wire/view enum mapping, normalized path and chat machine |
-| `getFilePreviewBlob` -> `.getFilePreview` query | binary bytes and MIME preserved; bound/avoid persistent large blob caching |
+| [x] `getFileTree` -> `.getFileTree` query | project/worktree/chat-machine/path/depth identity, showHidden=true wire request, frontend hidden filtering and sorting; empty project returns []; replace pending-map only with fresh, non-persistent cache semantics |
+| [x] `getFileContent` -> `.getFileContent` query | normalize absolute/relative path before key; chat-machine isolation; concurrent dedup only, no stale editor content |
+| [x] `getFilePreviewInfo` -> `.getFilePreviewInfo` query | missing info rejects, wire/view enum mapping, normalized path and chat machine |
+| [x] `getFilePreviewBlob` -> `.getFilePreview` query | binary bytes and MIME preserved; bound/avoid persistent large blob caching |
 | `saveFileContent` -> mutations `.saveFileContent` | no-project no-op, normalized path, content, worktree/chat; git-status notification after success, never failure |
 | `createFile` -> `.createFileOrFolder` | FILE enum/content, require project, chat machine, one success notification |
 | `createFolder` -> `.createFileOrFolder` | DIRECTORY enum/empty content, same context and notification |
