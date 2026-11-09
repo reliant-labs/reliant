@@ -100,8 +100,11 @@ that a wide tablet should automatically route there.
 Run `task test:web:e2e` for the full browser lane, or
 `task test:web:e2e -- e2e/mobile-responsive.spec.ts` for the focused guardrail.
 The task builds the renderer, installs Chromium **and WebKit**, forces production
-preview mode, and selects the four projects. CI supplies `PLAYWRIGHT_DEPS=--with-deps`
-for Linux system dependencies. CI runs the lane as two parallel jobs,
+preview mode, and selects the four projects. Locally, `PLAYWRIGHT_DEPS=--with-deps`
+also installs the Linux system dependencies. CI supplies
+`PLAYWRIGHT_DEPS_CACHE=<dir>` instead: `scripts/playwright-os-deps.sh` installs
+them from the `.deb` files a main run cached for that exact runner image, so a
+slow Ubuntu mirror cannot use up the job's timeout. CI runs the lane as two parallel jobs,
 `task test:web:e2e:desktop` (the Chromium project) and
 `task test:web:e2e:responsive` (the three touch projects), so the desktop suite
 never waits on WebKit's system-package install. `task test:e2e` is the Go story

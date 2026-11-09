@@ -493,3 +493,61 @@ func TestPlaywrightFailsClosedInAggregation(t *testing.T) {
 		})
 	})
 }
+
+// The browsers' system packages come from a cache of .deb files, never from
+// the Ubuntu mirror on every run: on 2026-11-09 the mirror served ~100 KB/s
+// and the responsive leg was cancelled at its timeout inside
+// `playwright install --with-deps` (control-plane main-red #2372).
+func TestPlaywrightSystemPackagesComeFromTheCache(t *testing.T) {
+	wf := loadCIWorkflow(t)
+	tf := parseTaskfile(t, filepath.Join(repoRoot, "Taskfile.yml"))
+	pw := wf.job(t, "playwright")
+
+	var restore, save *ciStep
+	recordedIf := ""
+	for i := range pw.Steps {
+		s := &pw.Steps[i]
+		if strings.Contains(s.Run, "task test:web:e2e") {
+			if strings.Contains(s.Run, "--with-deps") {
+				t.Errorf("the suite step installs system packages from the mirror (%q)", s.Run)
+			}
+			if !strings.Contains(s.Run, "PLAYWRIGHT_DEPS_CACHE=") {
+				t.Errorf("the suite step does not pass PLAYWRIGHT_DEPS_CACHE (%q)", s.Run)
+			}
+		}
+		if s.ID == "os-deps-recorded" {
+			recordedIf = s.If
+		}
+		if fmt.Sprint(s.With["path"]) != "~/.cache/playwright-os-deps" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(s.Uses, "actions/cache/restore@"):
+			restore = s
+		case strings.HasPrefix(s.Uses, "actions/cache/save@"):
+			save = s
+		}
+	}
+	if restore == nil || save == nil {
+		t.Fatalf("playwright job must restore and save ~/.cache/playwright-os-deps (restore=%v save=%v)", restore != nil, save != nil)
+	}
+	// The cached set is what ONE runner image lacks; another image's set
+	// could downgrade its libraries, so no prefix fallback.
+	if key := fmt.Sprint(restore.With["key"]); !strings.Contains(key, "steps.runner-image.outputs.image") {
+		t.Errorf("system-package cache key %q does not carry the runner image", key)
+	}
+	if _, ok := restore.With["restore-keys"]; ok {
+		t.Error("system-package cache has restore-keys: another runner image's packages could be installed")
+	}
+	if !strings.Contains(recordedIf, "refs/heads/main") || !strings.Contains(save.If, "os-deps-recorded") {
+		t.Errorf("system packages must be saved on main only, after the script recorded them (save if %q, check if %q)", save.If, recordedIf)
+	}
+
+	var runCmds strings.Builder
+	for _, c := range tf.commands("web:e2e:run") {
+		runCmds.WriteString(c)
+	}
+	if !strings.Contains(runCmds.String(), "scripts/playwright-os-deps.sh '{{.PLAYWRIGHT_DEPS_CACHE}}' {{.BROWSERS}}") {
+		t.Error("web:e2e:run does not install the suite's system packages through scripts/playwright-os-deps.sh")
+	}
+}
