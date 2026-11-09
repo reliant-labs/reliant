@@ -32,8 +32,10 @@ from_mirror() {
   # apt-get downloads into an archive dir of its own for this one install,
   # and keeps what it downloaded: an image may turn keeping off, or clean
   # /var/cache/apt/archives after every install (Docker images do).
-  local conf=/etc/apt/apt.conf.d/99playwright-os-deps
-  local archives=/var/cache/apt/playwright-os-deps
+  # Both paths can be overridden for tests (tools/test-affected), which run
+  # the script against stub package managers without root.
+  local conf=${PLAYWRIGHT_OS_DEPS_APT_CONF:-/etc/apt/apt.conf.d/99playwright-os-deps}
+  local archives=${PLAYWRIGHT_OS_DEPS_ARCHIVES:-/var/cache/apt/playwright-os-deps}
   "${sudo[@]}" rm -rf "$archives"
   "${sudo[@]}" mkdir -p "$archives/partial"
   printf '%s\n' "Dir::Cache::Archives \"$archives/\";" \

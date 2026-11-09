@@ -503,13 +503,35 @@ func TestPlaywrightSystemPackagesComeFromTheCache(t *testing.T) {
 	tf := parseTaskfile(t, filepath.Join(repoRoot, "Taskfile.yml"))
 	pw := wf.job(t, "playwright")
 
+	// The suite step's env (ciStep is shared with workflows whose steps
+	// declare env their own way, so it is read here).
+	var envOnly struct {
+		Jobs map[string]struct {
+			Steps []struct {
+				Run string            `yaml:"run"`
+				Env map[string]string `yaml:"env"`
+			} `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	if err := yaml.Unmarshal(readRepo(t, ".github/workflows/ci.yml"), &envOnly); err != nil {
+		t.Fatal(err)
+	}
+	var suiteEnv map[string]string
+	for _, s := range envOnly.Jobs["playwright"].Steps {
+		if strings.Contains(s.Run, "task test:web:e2e") {
+			suiteEnv = s.Env
+		}
+	}
+
 	var restore, save *ciStep
 	recordedIf := ""
 	for i := range pw.Steps {
 		s := &pw.Steps[i]
 		if strings.Contains(s.Run, "task test:web:e2e") {
-			if strings.Contains(s.Run, "--with-deps") {
-				t.Errorf("the suite step installs system packages from the mirror (%q)", s.Run)
+			// --with-deps (the mirror) only as the rollback, behind the variable.
+			if strings.Contains(s.Run, "--with-deps") &&
+				(!strings.Contains(s.Run, `if [ "$OS_DEPS_CACHE" = off ]`) || suiteEnv["OS_DEPS_CACHE"] != "${{ vars.PLAYWRIGHT_OS_DEPS_CACHE }}") {
+				t.Errorf("the suite step installs system packages from the mirror outside the PLAYWRIGHT_OS_DEPS_CACHE=off rollback (%q)", s.Run)
 			}
 			if !strings.Contains(s.Run, "PLAYWRIGHT_DEPS_CACHE=") {
 				t.Errorf("the suite step does not pass PLAYWRIGHT_DEPS_CACHE (%q)", s.Run)
@@ -535,6 +557,14 @@ func TestPlaywrightSystemPackagesComeFromTheCache(t *testing.T) {
 	// could downgrade its libraries, so no prefix fallback.
 	if key := fmt.Sprint(restore.With["key"]); !strings.Contains(key, "steps.runner-image.outputs.image") {
 		t.Errorf("system-package cache key %q does not carry the runner image", key)
+	}
+	// The rollback: a version variable moves runs off a bad entry, and
+	// PLAYWRIGHT_OS_DEPS_CACHE=off skips the cache entirely.
+	if key := fmt.Sprint(restore.With["key"]); !strings.Contains(key, "vars.PLAYWRIGHT_OS_DEPS_CACHE_VERSION") {
+		t.Errorf("system-package cache key %q has no PLAYWRIGHT_OS_DEPS_CACHE_VERSION to move off a bad entry", key)
+	}
+	if !strings.Contains(restore.If, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") || !strings.Contains(recordedIf, "vars.PLAYWRIGHT_OS_DEPS_CACHE != 'off'") {
+		t.Errorf("PLAYWRIGHT_OS_DEPS_CACHE=off does not skip the restore (if %q) and the save (check if %q)", restore.If, recordedIf)
 	}
 	if _, ok := restore.With["restore-keys"]; ok {
 		t.Error("system-package cache has restore-keys: another runner image's packages could be installed")
