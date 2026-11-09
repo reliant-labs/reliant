@@ -27,7 +27,7 @@ import type {
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { Dashboard, Panel } from "@/services/controlPlane/observability/types";
 
-import { FIXTURE_ENVS, FIXTURE_PROJECT, fixtureDashboards, fixtureDayGrainedDashboard, fixtureReleaseDashboards } from "./fixtureApi";
+import { FIXTURE_ENVS, FIXTURE_PROJECT, fixtureDashboards, fixtureDayGrainedDashboard, fixtureHeadlineDashboard, fixtureReleaseDashboards } from "./fixtureApi";
 
 export interface DashboardFixtureOptions {
   /** The caller is not an org admin: reads work, every write is PermissionDenied. */
@@ -38,6 +38,8 @@ export interface DashboardFixtureOptions {
   dashboardsFailWith?: Code;
   /** Ships control-plane's day-grained product-usage dashboard (a 7d defaultRange, sql panels bucketed by day). */
   dashboardsDayGrained?: boolean;
+  /** Ships forge's Product usage shape: sections, figures with sparklines and a default comparison, a retention heatmap. */
+  dashboardsHeadline?: boolean;
   /** A control plane that predates DashboardSummary.group/tags: the page infers each group. */
   dashboardsUngrouped?: boolean;
   /** A young app: its overview and one service dashboard, nothing saved. */
@@ -278,6 +280,18 @@ export function createDashboardFixture(options: DashboardFixtureOptions, call: C
       releaseVersion: "v1.8.2",
       shippedAtMs: Date.now() - 16 * HOUR,
       filePath: "deploy/observability/dashboards/product-usage.json",
+      envIds: [prod],
+      changes: [{ releaseVersion: "v1.8.2", author: ROBOT, atMs: Date.now() - 16 * HOUR }],
+    });
+  }
+  if (options.dashboardsHeadline) {
+    const prod = FIXTURE_ENVS.find((e) => e.name === "prod")!.id;
+    state.releases.push({
+      spec: fixtureHeadlineDashboard(),
+      source: "generated",
+      releaseVersion: "v1.8.2",
+      shippedAtMs: Date.now() - 16 * HOUR,
+      filePath: "observability/dashboards/shop-usage_gen.json",
       envIds: [prod],
       changes: [{ releaseVersion: "v1.8.2", author: ROBOT, atMs: Date.now() - 16 * HOUR }],
     });

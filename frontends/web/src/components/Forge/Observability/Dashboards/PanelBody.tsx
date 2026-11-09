@@ -14,8 +14,9 @@
  *             ObsChartMarkersProvider; alert-firing bands; with a comparison,
  *             each series again, dashed, from the earlier window.
  *   number    the headline figure (one per series × group), its sparkline
- *             when the server sent one, the change against the comparison
- *             when one is on; or a gauge (display.style: gauge).
+ *             when the server sent one (or, on a sql panel, when its
+ *             trendSql answered), the change against the comparison when
+ *             one is on; or a gauge (display.style: gauge).
  *   bar       bars per group (upright, horizontal, stacked) or a pie or donut
  *             (CategoryChart).
  *   heatmap   time across, value buckets up, events per cell (HeatmapChart).
@@ -24,13 +25,18 @@
  *             figures; its rows as a funnel with display.style: funnel, and
  *             as bars with display.style: bars (a histogram, a top N: rows
  *             with no time column), laid along the y axis when the labels
- *             are long or many.
+ *             are long or many; as a grid of shaded cells with
+ *             display.style: heatmap (SqlHeatmap).
  *   search    a list of rows, which is what Logs and Traces do: a way in.
  *   text      the author's Markdown, with no query (TextPanel).
  *   funnel    product events in order: how many journeys reached each step,
  *             of the first, and the drop-off between (FunnelChart).
  *   issues    errors grouped by distinct stack, most events first.
  *   sessions  browser sessions, newest first, with what each hit.
+ *
+ * Colours: a series the dashboard names (display.colors) or a panel's one
+ * colour (display.color) is drawn in it; the rest are dealt by rank
+ * (seriesModel).
  *
  * A kind or a display style a newer forge added is never an error here: an
  * unknown kind says it is not drawn yet, an unknown style draws the kind's
@@ -65,7 +71,9 @@ import { CategoryChart } from "./CategoryChart";
 import { FunnelChart, funnelFromRows } from "./FunnelChart";
 import { HeatmapChart } from "./HeatmapChart";
 import { pointOf, TimeSeriesChart, type DrillTarget } from "./SeriesChart";
-import { CHART_PALETTE, DANGER_PALETTE, intentOf, seriesKey, seriesLabel, tokenColor } from "./seriesModel";
+import { CHART_PALETTE, DANGER_PALETTE, intentOf, namedToken, seriesKey, seriesLabel, tokenColor } from "./seriesModel";
+import { SqlHeatmap } from "./SqlHeatmap";
+import { sqlAggregate } from "./viewerModel";
 import { TextPanel } from "./TextPanel";
 
 export type { DrillTarget } from "./SeriesChart";
@@ -121,6 +129,8 @@ export interface PanelBodyProps {
   query: PanelQuery;
   /** The same panel over the comparison window, when a comparison is on. */
   compare?: { query: PanelQuery; label: string; offsetSec: number };
+  /** A sql panel's trendSql over the same window: the sparkline under its figure. */
+  trend?: PanelQuery;
   /** The in-place group-by, which replaces the panel's own (the drawer and variables). */
   groupBy?: string[];
   bands?: readonly ChartBand[];
@@ -131,7 +141,7 @@ export interface PanelBodyProps {
   compact?: boolean;
 }
 
-export function PanelBody({ panel, query, compare, groupBy, bands, links, height, compact = false }: PanelBodyProps) {
+export function PanelBody({ panel, query, compare, trend, groupBy, bands, links, height, compact = false }: PanelBodyProps) {
   if (panel.kind === "search") return <SearchLink panel={panel} href={links?.searchHref?.(panel)} />;
   if (panel.kind === "text") return <TextPanel markdown={panel.markdown ?? ""} compact={compact} />;
   if (!DRAWN_KINDS.has(panel.kind)) {
@@ -199,6 +209,7 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
     ? [...new Set([...data.rows, ...data.series].flatMap((row) => Object.keys(row.group)))]
     : groupBy?.length ? groupBy : (panel.groupBy ?? []);
   const sqlFunnel = panel.kind === "sql" && panel.display?.style === "funnel" ? funnelFromRows(data) : null;
+  const sqlHeatmap = panel.kind === "sql" && panel.display?.style === "heatmap";
   // "bars" on a sql panel draws its time series as bars; on rows with no time
   // column (a histogram's buckets, a top N) it draws the rows as bars.
   const sqlBars = panel.kind === "sql" && panel.display?.style === "bars" && data.series.length === 0 && data.rows.length > 0 && !sqlAggregate(data);
@@ -206,7 +217,9 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
   const kind = statement
     ? sqlFunnel
       ? "sql-funnel"
-      : data.series.length > 0
+      : sqlHeatmap
+        ? "sql-heatmap"
+        : data.series.length > 0
         ? "line"
         : draw === "bar" || sqlBars
           ? "bar"
@@ -228,7 +241,7 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
       return (
         <NumberFigures
           panel={panel}
-          data={statement ? sqlFigures(data) : data}
+          data={statement ? sqlFigures(data, trend?.data) : data}
           unit={unit}
           keys={keys}
           compare={statement && compare?.query.data ? sqlFigures(compare.query.data) : compare?.query.data}
@@ -247,6 +260,13 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
       return <FunnelChart steps={data.funnelSteps} compact={compact} />;
     case "sql-funnel":
       return <FunnelChart steps={sqlFunnel ?? []} compact={compact} label={data.columns[0] ?? "journeys"} />;
+    case "sql-heatmap":
+      return (
+        <>
+          <SqlHeatmap panel={panel} data={data} unit={unit} keys={keys} height={chartHeight} compact={compact} />
+          {truncated}
+        </>
+      );
     case "bar":
       return (
         <>
@@ -320,17 +340,23 @@ export function sqlBarPanel(panel: Panel, data: PanelResult, keys: string[]): Pa
   return { ...panel, display: { ...panel.display, horizontal: long } };
 }
 
-/** A single numeric-only row is an aggregate; never collapse multiple rows or groups. */
-function sqlAggregate(data: PanelResult): boolean {
-  return !data.truncated && data.rows.length === 1 && data.columns.length > 0 && Object.keys(data.rows[0].group).length === 0;
-}
 
-/** NumberFigures consumes Series.value, whereas SQL aggregates arrive as table values. */
-function sqlFigures(data: PanelResult): PanelResult {
+/**
+ * NumberFigures consumes Series.value, whereas SQL aggregates arrive as table
+ * values. A trend (the panel's trendSql, a time series) gives the figures
+ * their sparkline: the series named like the figure, or, for a single figure,
+ * the trend's only series.
+ */
+export function sqlFigures(data: PanelResult, trend?: PanelResult): PanelResult {
   if (!sqlAggregate(data)) return { ...data, series: [] };
+  const lines = (trend?.series ?? []).filter((s) => Object.keys(s.group).length === 0);
+  const lineOf = (label: string) => lines.find((s) => s.label === label) ?? (data.columns.length === 1 && lines.length === 1 ? lines[0] : undefined);
   return {
     ...data,
-    series: data.columns.map((label, index) => ({ label, group: {}, timestamps: [], values: [], value: data.rows[0].values[index] ?? null })),
+    series: data.columns.map((label, index) => {
+      const line = lineOf(label);
+      return { label, group: {}, timestamps: line?.timestamps ?? [], values: line?.values ?? [], value: data.rows[0].values[index] ?? null };
+    }),
   };
 }
 
@@ -426,14 +452,16 @@ function NumberFigures({
         const change = compareLabel ? describeChange(s.value, before, unit, compareLabel) : null;
         const label = seriesLabel(s, panel, keys);
         const thresholds = intentOf(s, panel)?.thresholds;
-        // The server sends an ungrouped number's trend with it; two points make a line.
+        // The server sends an ungrouped number's trend with it (a sql panel's
+        // comes from its trendSql); two points make a line.
         const trend = !compact && !gauge && s.values.filter((v) => v !== null).length > 1;
+        const token = namedToken(panel.display, [s.label, ...Object.values(s.group)], true) ?? CHART_PALETTE[0];
         return (
           <div key={`${s.label}-${index}`} className="min-w-0">
             <dt className={many ? "truncate text-xs text-ink-muted" : "sr-only"}>{label}</dt>
             {gauge ? (
               <dd>
-                <Gauge value={s.value} unit={unit} min={panel.display?.min} max={panel.display?.max} thresholds={thresholds} label={label} />
+                <Gauge value={s.value} unit={unit} min={panel.display?.min} max={panel.display?.max} thresholds={thresholds} label={label} token={token} />
               </dd>
             ) : (
               <dd className={cn("font-semibold tabular-nums", gradeInk(s.value, thresholds), compact ? "text-base" : many ? "text-lg" : "text-2xl")}>{formatValue(s.value, unit)}</dd>
@@ -448,7 +476,7 @@ function NumberFigures({
                 <UPlotChart
                   height={many ? 24 : 36}
                   timestamps={s.timestamps}
-                  series={[{ label, values: s.values, color: CHART_PALETTE[0] }]}
+                  series={[{ label, values: s.values, color: token }]}
                   unit={unit}
                   label={`${label}, over the window`}
                   compact
@@ -489,16 +517,16 @@ const GRADE_TOKEN: Record<Grade, string> = { good: "--success", fair: "--warning
 
 /**
  * A half-dial from min to max: the arc filled to the value, in the series'
- * threshold grade when it has thresholds, else the palette's first colour. A
+ * threshold grade when it has thresholds, else its colour (named, or the palette's first). A
  * conic gradient masked to a ring — no hand-drawn arc. Without a max, a
  * percent panel's scale is 0 to 1 (forge requires a max otherwise).
  */
-function Gauge({ value, unit, min = 0, max, thresholds, label }: { value: number | null; unit: Unit; min?: number; max?: number; thresholds?: { good: number; poor: number }; label: string }) {
+function Gauge({ value, unit, min = 0, max, thresholds, label, token = CHART_PALETTE[0] }: { value: number | null; unit: Unit; min?: number; max?: number; thresholds?: { good: number; poor: number }; label: string; token?: string }) {
   const top = max ?? (unit === "percent" ? 1 : Math.max(value ?? 0, 1));
   const span = top - min;
   const fraction = value === null || !(span > 0) ? 0 : Math.min(Math.max((value - min) / span, 0), 1);
   const grade = gradeOf(value, thresholds);
-  const fill = tokenColor(grade ? GRADE_TOKEN[grade] : CHART_PALETTE[0]);
+  const fill = tokenColor(grade ? GRADE_TOKEN[grade] : token);
   const track = "hsl(var(--foreground) / 0.08)";
   const degrees = fraction * 180;
   return (
