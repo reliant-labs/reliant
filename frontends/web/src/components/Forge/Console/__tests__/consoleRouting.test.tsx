@@ -218,6 +218,7 @@ function renderAt(initialEntry: string) {
     dashboards: probe("dashboards"),
     dashboard: probe("dashboard"),
     storage: probe("storage"),
+    data: probe("data"),
     environments: probe("environments"),
     environment: probe("environment"),
     secrets: probe("secrets"),
@@ -440,6 +441,23 @@ describe("the environment scope", () => {
     const router = renderAt("/forge/p/alpha/storage?env=e2e&bucket=uploads&prefix=2026");
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
     await landsOn(router, "/forge/p/alpha/storage", { env: "e2e", bucket: "uploads", prefix: "2026" });
+  });
+
+  it("routes the data browser, keeping its view in the URL", async () => {
+    const router = renderAt(
+      "/forge/p/alpha/data?env=e2e&db=shop&table=public.orders&f=%5B%22status.eq.paid%22%5D&sort=%5B%22id.desc%22%5D&cols=%5B%22id%22%5D&page=2&row=%221042%22"
+    );
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "data");
+    await landsOn(router, "/forge/p/alpha/data", {
+      env: "e2e",
+      db: "shop",
+      table: "public.orders",
+      f: ["status.eq.paid"],
+      sort: ["id.desc"],
+      cols: ["id"],
+      page: 2,
+      row: "1042",
+    });
   });
 
   it("is left alone on a page that pins its own environment", async () => {

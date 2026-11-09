@@ -6,7 +6,9 @@
 // pre-allocated message id until the persisted message (or a finalize marker)
 // retires it; a delta naming a finalized id is a stale tail and is dropped; a
 // stream that stopped settles its unfinished tools to "cancelled"; tool
-// statuses never regress; results join their calls by id, first write wins.
+// statuses never regress; results join their calls by id, first write wins;
+// and a body the chat holds is never displaced by a stub of it (a
+// toolBodies: "stub" read), while a body always replaces a stub.
 
 import { ContentBlockType, MessageRole, StreamingState } from "#gen/reliant/v1/chat_pb.js";
 import type { ChatAction, ChatState, ReduceEnv } from "./chat-state.js";
@@ -47,6 +49,8 @@ import { failedSendId, optimisticSendId } from "./send-ids.js";
 import {
   foldToolResultImages,
   foldToolResultMessage,
+  fullerToolResult,
+  mergeToolResults,
   resolvedToolResultFromBlock,
   type ToolResultsByCallId,
 } from "./tool-results.js";
@@ -105,7 +109,8 @@ export function reduceChat(state: ChatState, action: ChatAction, env: ReduceEnv 
       const held = new Set(state.messages.map((m) => m.id));
       const additions = action.messages.filter((m) => !held.has(m.id));
       // The page's results join the index; a result the chat already holds is
-      // the same one re-delivered (a call id is a primary key at rest).
+      // the same one re-delivered (a call id is a primary key at rest), kept
+      // unless the page has its body and the chat only a stub.
       const pageResults: ToolResultsByCallId = {};
       for (const message of additions) {
         if (message.role === MessageRole.TOOL) foldToolResultMessage(message, pageResults);
@@ -113,7 +118,7 @@ export function reduceChat(state: ChatState, action: ChatAction, env: ReduceEnv 
       return {
         ...state,
         messages: [...additions, ...state.messages].sort(compareMessagesWithinThread),
-        toolResults: { ...pageResults, ...state.toolResults },
+        toolResults: mergeToolResults(state.toolResults, pageResults),
         // The page's own errors arrive with the history they belong to; merged
         // by id, never replacing a newer attempt the stream already delivered.
         errors: action.errors.length > 0 ? applyHistoricalErrors(state.errors, action.errors) : state.errors,
@@ -281,7 +286,8 @@ function applyUpdates(
 
   // Tool results arrive as their own TOOL messages, often after the call.
   // tool_call_results.tool_call_id is a primary key at rest, so a second copy
-  // is the same result re-delivered: first write wins.
+  // is the same result re-delivered: first write wins, unless the first copy
+  // was a stub and the second has the body (fullerToolResult).
   const batchResults: ToolResultsByCallId = {};
   const sourceMsgId: Record<string, string> = {};
   let duplicatesInBatch = 0;
@@ -289,12 +295,15 @@ function applyUpdates(
     if (msg.role !== MessageRole.TOOL) continue;
     for (const block of msg.contentBlocks) {
       if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
+        const resolved = resolvedToolResultFromBlock(block);
         if (sourceMsgId[block.toolCallId] !== undefined) {
-          duplicatesInBatch++;
-          continue;
+          if (fullerToolResult(batchResults[block.toolCallId], resolved) !== resolved) {
+            duplicatesInBatch++;
+            continue;
+          }
         }
         sourceMsgId[block.toolCallId] = msg.id;
-        batchResults[block.toolCallId] = resolvedToolResultFromBlock(block);
+        batchResults[block.toolCallId] = resolved;
       }
     }
     foldToolResultImages(msg, batchResults, sourceMsgId);
@@ -316,15 +325,31 @@ function applyUpdates(
   // Re-delivery is the steady state, not an anomaly: every gap-resync re-sends a
   // window of up to 200 messages. So it is counted and reported once per batch;
   // only a copy whose CONTENT DIFFERS from the one held is suspicious (a stub
-  // that would clobber real output), and first write still wins.
+  // that would clobber real output), and first write still wins. A copy the
+  // server sent elided is expected to differ from the body held, and a body
+  // arriving over a held stub replaces it: neither is a conflict.
   const existingResults = snapshotReplaces ? {} : state.toolResults;
+  if (snapshotReplaces) {
+    // A replacing snapshot rebuilds the index from what it carries, but a stub
+    // of a result whose body the chat already holds (the same block) keeps
+    // the body: a reconnect must not blank a row the user has open.
+    for (const [id, incoming] of Object.entries(batchResults)) {
+      const held = state.toolResults[id];
+      if (incoming.elided && held && !held.elided && held.block_id && held.block_id === incoming.block_id) {
+        batchResults[id] = held;
+      }
+    }
+  }
   let alreadyRecorded = 0;
   const conflicting: string[] = [];
   for (const id of Object.keys(batchResults)) {
     if (!(id in existingResults)) continue;
     const held = existingResults[id]!;
     const incoming = batchResults[id]!;
-    if (held.content !== incoming.content || held.is_error !== incoming.is_error) conflicting.push(id);
+    if (fullerToolResult(held, incoming) === incoming) continue;
+    if (!incoming.elided && (held.content !== incoming.content || held.is_error !== incoming.is_error)) {
+      conflicting.push(id);
+    }
     alreadyRecorded++;
     delete batchResults[id];
   }

@@ -137,7 +137,7 @@ export const DEMO_RELEASES = [
 ] as const;
 
 /** Which release each environment runs, and when it got it. */
-const RUNNING: Record<EnvId, { version: string; age: number; by: string }> = {
+export const RUNNING: Record<EnvId, { version: string; age: number; by: string }> = {
   "env-dev": { version: "v1.8.4", age: 20 * MINUTE, by: "maya" },
   "env-staging": { version: "v1.8.3", age: 3 * HOUR, by: "jon" },
   "env-prod": { version: "v1.8.3", age: 40 * MINUTE, by: "jon" },
@@ -158,6 +158,10 @@ const HISTORY: Record<EnvId, { version: string; age: number; by: string }[]> = {
     { version: "v1.8.1", age: 8.5 * DAY, by: "maya" },
   ],
 };
+
+/** Observability calls the storefront `web`; the release ledger calls it
+ * `shop-web`. Keep this alias at the fixture boundary, not in production UI. */
+export const demoWorkloadName = (name: string): string => name === "web" ? "shop-web" : name;
 
 export const DEMO_WORKLOADS = [
   { name: "api", tier: DeployTier.BACKEND, replicas: 2, path: "api" },

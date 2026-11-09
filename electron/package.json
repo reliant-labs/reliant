@@ -1,6 +1,6 @@
 {
   "name": "reliant",
-  "version": "1.10.0",
+  "version": "1.12.0",
   "description": "AI-powered coding assistant with intelligent agents for professional software development",
   "author": "Reliant Labs <support@reliantlabs.io>",
   "homepage": "https://reliantlabs.io",
@@ -50,7 +50,7 @@
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@reliantlabs/forge-web-runtime": "^0.13.1",
+    "@reliantlabs/forge-web-runtime": "^0.13.9",
     "dotenv": "^17.4.1",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.6.2",

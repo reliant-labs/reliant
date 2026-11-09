@@ -17,6 +17,7 @@ import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
 import { pageActivity } from "../lib/pageActivity";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
+import { TRANSCRIPT_TOOL_BODIES } from "../lib/toolBodies";
 import { markChatOpen, noteChatOpenSync } from "../lib/chatOpenInteraction";
 import { StreamingService } from "../gen/reliant/v1/streaming_pb";
 import type { ChatStreamCallbacks } from "../types/streaming";
@@ -26,6 +27,9 @@ export class ChatStreamingService extends ChatStream {
     super({
       callbacks,
       projectId,
+      // The snapshot and replay send finished calls' bodies elided; live
+      // frames stay full (lib/toolBodies.ts).
+      toolBodies: TRANSCRIPT_TOOL_BODIES,
       client: () => connectClient(StreamingService),
       logger,
       onConnectionLost: () => pageActivity().noteConnectionLost(),

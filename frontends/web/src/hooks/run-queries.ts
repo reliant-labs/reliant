@@ -73,6 +73,7 @@ import {
   useResumeRun,
 } from "./run-service-hooks_gen";
 import { useGetLaunchEvent } from "./trigger-service-hooks_gen";
+import { TRANSCRIPT_TOOL_BODY_MODE } from "../lib/toolBodies";
 
 // ============================================
 // Frontend types
@@ -577,7 +578,8 @@ export function useFirstPrompt(chatId: string | undefined, enabled = true) {
     [id],
   );
   return useListMessages(
-    { chatId: id, recent: SEED_WINDOW, beforeSeq: BigInt(SEED_WINDOW) },
+    // Reads the prompt's TEXT only: tool bodies stay out.
+    { chatId: id, recent: SEED_WINDOW, beforeSeq: BigInt(SEED_WINDOW), toolBodies: TRANSCRIPT_TOOL_BODY_MODE },
     { enabled: !!chatId && enabled, staleTime: Infinity, select },
   );
 }

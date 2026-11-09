@@ -27,7 +27,8 @@ export function PageAgentHelp({ tipKey }: { tipKey: DemoTipKey }) {
     return () => { document.removeEventListener("pointerdown", close); window.removeEventListener("keydown", escape, true); };
   }, [open]);
   const rect = trigger.current?.getBoundingClientRect();
-  const width = Math.min(320, window.innerWidth - 24);
+  const viewportWidth = typeof window === "undefined" ? 344 : window.innerWidth;
+  const width = Math.min(320, viewportWidth - 24);
   return (
     <div className="mt-2 text-xs" data-testid="demo-agent-help">
       <button ref={trigger} type="button" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(true)} onFocus={() => setOpen(true)} className="touch-target inline-flex cursor-pointer items-center rounded px-1 font-medium text-primary-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">How an agent helps</button>

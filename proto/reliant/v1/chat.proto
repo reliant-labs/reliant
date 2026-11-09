@@ -355,6 +355,14 @@ service ChatService {
   // read paths send a truncated preview of a large result (ContentBlock.
   // truncated); this is how the client gets the rest, on demand.
   rpc GetToolResult(GetToolResultRequest) returns (GetToolResultResponse) {}
+
+  // GetContentBlockBodies returns the bodies of content blocks that a
+  // transcript read sent elided (ContentBlock.body_elided), by block id. A
+  // block resolves when it belongs to chat_id, or to history a branch of it
+  // inherits (the same rule as GetToolResult). Any other id comes back in
+  // not_found, so the response never says whether an id exists elsewhere.
+  // forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
+  rpc GetContentBlockBodies(GetContentBlockBodiesRequest) returns (GetContentBlockBodiesResponse) {}
   
   // UpdateChatState changes chat state (idle/archived)
   rpc UpdateChatState(UpdateChatStateRequest) returns (UpdateChatStateResponse) {
@@ -783,6 +791,29 @@ message ContentBlock {
   optional bool truncated = 14;
   // Byte length of the full content, set when truncated is.
   optional int64 original_size = 15;
+  // The body of this block was left out of a read that asked for
+  // TOOL_BODY_MODE_STUB. tool_call: input holds a skeleton (the same JSON
+  // object, every key kept, long strings cut) that is enough to label the
+  // call but not to render it. tool_result: content holds a stub preview,
+  // and truncated/original_size are set as for any preview. thinking:
+  // content is empty. GetContentBlockBodies returns the body by block id.
+  optional bool body_elided = 16;
+  // Byte length of the stored body (input for tool_call, content
+  // otherwise). Set when body_elided is.
+  optional int64 body_size = 17;
+}
+
+// ToolBodyMode is how a transcript read sends the bodies of finished tool
+// calls.
+enum ToolBodyMode {
+  // Today's behaviour: inputs whole, results previewed at 8 KiB. Every
+  // client that does not set the field gets this, forever (v1).
+  TOOL_BODY_MODE_UNSPECIFIED = 0;
+  // The same, said explicitly.
+  TOOL_BODY_MODE_FULL = 1;
+  // Finished calls' bodies are left out (ContentBlock.body_elided); the
+  // client reads them with GetContentBlockBodies when it shows them.
+  TOOL_BODY_MODE_STUB = 2;
 }
 
 // Attachment represents a file attachment
@@ -1200,6 +1231,10 @@ message ListMessagesRequest {
   // rendered "Starting..." over a child thread that already had hundreds of
   // messages -- indistinguishable from a spawn that truly hadn't started.
   optional string thread_id = 4;
+
+  // How finished tool calls' bodies are sent. Unset is
+  // TOOL_BODY_MODE_FULL: inputs whole, results previewed.
+  optional ToolBodyMode tool_bodies = 5;
 }
 
 // ListMessagesResponse returns messages with content blocks
@@ -1238,6 +1273,37 @@ message GetToolResultResponse {
   string content = 2;
   bool is_error = 3;
   int64 size = 4;                      // Byte length of content
+}
+
+// GetContentBlockBodiesRequest names content blocks of a chat the caller
+// owns, by block id.
+message GetContentBlockBodiesRequest {
+  string chat_id = 1 [(buf.validate.field).required = true];
+  // At most 100 ids; more is INVALID_ARGUMENT.
+  repeated string block_ids = 2;
+  // Results whole rather than as the 8 KiB display preview: for copy and
+  // export. Unset returns what an expanded row shows.
+  optional bool full = 3;
+}
+
+// ContentBlockBody is one block's body, as a FULL read would have sent it
+// (or, with full, as stored).
+message ContentBlockBody {
+  string block_id = 1;
+  optional string input = 2;          // tool_call: the stored input, whole
+  optional string content = 3;        // tool_result: display preview (or whole when full); thinking: whole
+  optional bool truncated = 4;        // as ContentBlock.truncated
+  optional int64 original_size = 5;   // as ContentBlock.original_size
+}
+
+// GetContentBlockBodiesResponse returns every requested id in exactly one of
+// its three lists.
+message GetContentBlockBodiesResponse {
+  repeated ContentBlockBody bodies = 1;
+  // Not a block this chat displays: unknown, another chat's, or hidden.
+  repeated string not_found = 2;
+  // Left out to keep the response under its byte budget: ask again.
+  repeated string deferred = 3;
 }
 
 // UpdateChatStateRequest changes chat state
@@ -1451,6 +1517,9 @@ message ChatUpdate {
 message GetChatUpdatesRequest {
   string chat_id = 1;
   int64 since_seq = 2;                 // Sequence number to fetch updates after
+  // How finished tool calls' bodies are sent in message updates. Unset is
+  // TOOL_BODY_MODE_FULL.
+  optional ToolBodyMode tool_bodies = 3;
 }
 
 // GetChatUpdatesResponse returns the updates

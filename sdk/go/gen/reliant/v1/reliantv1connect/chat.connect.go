@@ -35,6 +35,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// ChatServiceGetContentBlockBodiesProcedure is the fully-qualified name of the ChatService's
+	// GetContentBlockBodies RPC.
+	ChatServiceGetContentBlockBodiesProcedure = "/reliant.v1.ChatService/GetContentBlockBodies"
 	// ChatServiceGetChatUpdatesProcedure is the fully-qualified name of the ChatService's
 	// GetChatUpdates RPC.
 	ChatServiceGetChatUpdatesProcedure = "/reliant.v1.ChatService/GetChatUpdates"
@@ -45,6 +48,13 @@ const (
 
 // ChatServiceClient is a client for the reliant.v1.ChatService service.
 type ChatServiceClient interface {
+	// GetContentBlockBodies returns the bodies of content blocks that a
+	// transcript read sent elided (ContentBlock.body_elided), by block id. A
+	// block resolves when it belongs to chat_id, or to history a branch of it
+	// inherits (the same rule as GetToolResult). Any other id comes back in
+	// not_found, so the response never says whether an id exists elsewhere.
+	// forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
+	GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error)
 	// GetChatUpdates fetches chat updates since a sequence number
 	GetChatUpdates(context.Context, *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error)
 	// GetWorkflowExecutions returns the workflow execution tree for a chat
@@ -62,6 +72,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 	baseURL = strings.TrimRight(baseURL, "/")
 	chatServiceMethods := v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods()
 	return &chatServiceClient{
+		getContentBlockBodies: connect.NewClient[v1.GetContentBlockBodiesRequest, v1.GetContentBlockBodiesResponse](
+			httpClient,
+			baseURL+ChatServiceGetContentBlockBodiesProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
+			connect.WithClientOptions(opts...),
+		),
 		getChatUpdates: connect.NewClient[v1.GetChatUpdatesRequest, v1.GetChatUpdatesResponse](
 			httpClient,
 			baseURL+ChatServiceGetChatUpdatesProcedure,
@@ -79,8 +95,14 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // chatServiceClient implements ChatServiceClient.
 type chatServiceClient struct {
+	getContentBlockBodies *connect.Client[v1.GetContentBlockBodiesRequest, v1.GetContentBlockBodiesResponse]
 	getChatUpdates        *connect.Client[v1.GetChatUpdatesRequest, v1.GetChatUpdatesResponse]
 	getWorkflowExecutions *connect.Client[v1.GetWorkflowExecutionsRequest, v1.GetWorkflowExecutionsResponse]
+}
+
+// GetContentBlockBodies calls reliant.v1.ChatService.GetContentBlockBodies.
+func (c *chatServiceClient) GetContentBlockBodies(ctx context.Context, req *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error) {
+	return c.getContentBlockBodies.CallUnary(ctx, req)
 }
 
 // GetChatUpdates calls reliant.v1.ChatService.GetChatUpdates.
@@ -95,6 +117,13 @@ func (c *chatServiceClient) GetWorkflowExecutions(ctx context.Context, req *conn
 
 // ChatServiceHandler is an implementation of the reliant.v1.ChatService service.
 type ChatServiceHandler interface {
+	// GetContentBlockBodies returns the bodies of content blocks that a
+	// transcript read sent elided (ContentBlock.body_elided), by block id. A
+	// block resolves when it belongs to chat_id, or to history a branch of it
+	// inherits (the same rule as GetToolResult). Any other id comes back in
+	// not_found, so the response never says whether an id exists elsewhere.
+	// forge:custom — owner-checked batch read of block bodies, branch inheritance resolved
+	GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error)
 	// GetChatUpdates fetches chat updates since a sequence number
 	GetChatUpdates(context.Context, *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error)
 	// GetWorkflowExecutions returns the workflow execution tree for a chat
@@ -108,6 +137,12 @@ type ChatServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	chatServiceMethods := v1.File_reliant_v1_chat_proto.Services().ByName("ChatService").Methods()
+	chatServiceGetContentBlockBodiesHandler := connect.NewUnaryHandler(
+		ChatServiceGetContentBlockBodiesProcedure,
+		svc.GetContentBlockBodies,
+		connect.WithSchema(chatServiceMethods.ByName("GetContentBlockBodies")),
+		connect.WithHandlerOptions(opts...),
+	)
 	chatServiceGetChatUpdatesHandler := connect.NewUnaryHandler(
 		ChatServiceGetChatUpdatesProcedure,
 		svc.GetChatUpdates,
@@ -122,6 +157,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 	)
 	return "/reliant.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case ChatServiceGetContentBlockBodiesProcedure:
+			chatServiceGetContentBlockBodiesHandler.ServeHTTP(w, r)
 		case ChatServiceGetChatUpdatesProcedure:
 			chatServiceGetChatUpdatesHandler.ServeHTTP(w, r)
 		case ChatServiceGetWorkflowExecutionsProcedure:
@@ -134,6 +171,10 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 
 // UnimplementedChatServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedChatServiceHandler struct{}
+
+func (UnimplementedChatServiceHandler) GetContentBlockBodies(context.Context, *connect.Request[v1.GetContentBlockBodiesRequest]) (*connect.Response[v1.GetContentBlockBodiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetContentBlockBodies is not implemented"))
+}
 
 func (UnimplementedChatServiceHandler) GetChatUpdates(context.Context, *connect.Request[v1.GetChatUpdatesRequest]) (*connect.Response[v1.GetChatUpdatesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetChatUpdates is not implemented"))

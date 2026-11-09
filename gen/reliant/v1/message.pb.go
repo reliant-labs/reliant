@@ -26,8 +26,11 @@ const (
 
 // GetMessageRequest requests a single message by ID
 type GetMessageRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MessageId     string                 `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	MessageId string                 `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	// How finished tool calls' bodies are sent. Unset is
+	// TOOL_BODY_MODE_FULL: inputs whole, results previewed.
+	ToolBodies    *v1.ToolBodyMode `protobuf:"varint,2,opt,name=tool_bodies,json=toolBodies,proto3,enum=reliant.v1.ToolBodyMode,oneof" json:"tool_bodies,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -67,6 +70,13 @@ func (x *GetMessageRequest) GetMessageId() string {
 		return x.MessageId
 	}
 	return ""
+}
+
+func (x *GetMessageRequest) GetToolBodies() v1.ToolBodyMode {
+	if x != nil && x.ToolBodies != nil {
+		return *x.ToolBodies
+	}
+	return v1.ToolBodyMode(0)
 }
 
 // GetMessageResponse returns the message with its content blocks
@@ -119,10 +129,13 @@ var File_reliant_v1_message_proto protoreflect.FileDescriptor
 const file_reliant_v1_message_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/message.proto\x12\n" +
-	"reliant.v1\x1a\x15reliant/v1/chat.proto\"2\n" +
+	"reliant.v1\x1a\x15reliant/v1/chat.proto\"\x82\x01\n" +
 	"\x11GetMessageRequest\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x01 \x01(\tR\tmessageId\"C\n" +
+	"message_id\x18\x01 \x01(\tR\tmessageId\x12>\n" +
+	"\vtool_bodies\x18\x02 \x01(\x0e2\x18.reliant.v1.ToolBodyModeH\x00R\n" +
+	"toolBodies\x88\x01\x01B\x0e\n" +
+	"\f_tool_bodies\"C\n" +
 	"\x12GetMessageResponse\x12-\n" +
 	"\amessage\x18\x01 \x01(\v2\x13.reliant.v1.MessageR\amessage2_\n" +
 	"\x0eMessageService\x12M\n" +
@@ -145,17 +158,19 @@ var file_reliant_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_reliant_v1_message_proto_goTypes = []any{
 	(*GetMessageRequest)(nil),  // 0: reliant.v1.GetMessageRequest
 	(*GetMessageResponse)(nil), // 1: reliant.v1.GetMessageResponse
-	(*v1.Message)(nil),         // 2: reliant.v1.Message
+	(v1.ToolBodyMode)(0),       // 2: reliant.v1.ToolBodyMode
+	(*v1.Message)(nil),         // 3: reliant.v1.Message
 }
 var file_reliant_v1_message_proto_depIdxs = []int32{
-	2, // 0: reliant.v1.GetMessageResponse.message:type_name -> reliant.v1.Message
-	0, // 1: reliant.v1.MessageService.GetMessage:input_type -> reliant.v1.GetMessageRequest
-	1, // 2: reliant.v1.MessageService.GetMessage:output_type -> reliant.v1.GetMessageResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 0: reliant.v1.GetMessageRequest.tool_bodies:type_name -> reliant.v1.ToolBodyMode
+	3, // 1: reliant.v1.GetMessageResponse.message:type_name -> reliant.v1.Message
+	0, // 2: reliant.v1.MessageService.GetMessage:input_type -> reliant.v1.GetMessageRequest
+	1, // 3: reliant.v1.MessageService.GetMessage:output_type -> reliant.v1.GetMessageResponse
+	3, // [3:4] is the sub-list for method output_type
+	2, // [2:3] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_message_proto_init() }
@@ -163,6 +178,7 @@ func file_reliant_v1_message_proto_init() {
 	if File_reliant_v1_message_proto != nil {
 		return
 	}
+	file_reliant_v1_message_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

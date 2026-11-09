@@ -102,7 +102,7 @@ async function walkToEndCard(page: Page) {
   await expect(page.locator("[data-tour='forge-console']")).toBeVisible();
   await next(page);
 
-  await atStep(page, 3, T, 'Instrumented from the start');
+  await atStep(page, 3, T, 'Monitoring from the start');
   await expect(page.getByTestId('obs-overview')).toBeVisible();
   await next(page);
 

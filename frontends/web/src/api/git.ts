@@ -2,6 +2,7 @@ import { WorktreeService } from "../gen/reliant/v1/worktree_pb";
 import { invalidateWorktreeQueries, getCachedWorktree } from "../hooks/worktree-queries";
 import { connectClient } from "../lib/connect";
 import { queryClient } from "../lib/query-client";
+import { worktreeServiceQueries } from "../hooks/worktree-service-hooks_gen";
 import { triggerImmediateGitStatusRefresh } from "../store/gitStatusStore";
 import { useProjectStore } from "../store/projectStore";
 
@@ -149,7 +150,16 @@ export async function getExistingPR(
   worktreeId: string,
   repoId?: string
 ): Promise<ExistingPRResponse> {
-  const result = await client.getWorktreePR({ worktreeId, repoId: repoId ?? "" });
+  // Always revalidate remote PR state, without the global read retry ladder.
+  // Share only concurrent lookups of this exact worktree/repo; do not retain
+  // a branch association after the caller leaves (the UI adds branch scope
+  // to its own generated query definition in useWorktreePR).
+  const result = await queryClient.fetchQuery(
+    worktreeServiceQueries.getWorktreePR(
+      { worktreeId, repoId: repoId ?? "" },
+      { staleTime: 0, gcTime: 0, retry: false },
+    ),
+  );
   return {
     exists: result.exists,
     url: result.url || undefined,

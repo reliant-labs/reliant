@@ -14,6 +14,9 @@
  *                                             or a workspace one (`workspace/<slug>`)
  *   /forge/p/:project/storage                 Storage: the scoped environment's buckets, read-only
  *                                             (`bucket`, `prefix`, `object`, `token`: Storage/storageUrl-model.ts)
+ *   /forge/p/:project/data                    Data: the scoped environment's databases, read-only
+ *                                             (`db`, `table`, `f`, `sort`, `cols`, `page`, `size`, `row`:
+ *                                             Data/dataUrl-model.ts)
  *   /forge/p/:project/environments            Environments (Configure)
  *   /forge/p/:project/environments/:env       one environment, as a configured object
  *   /forge/p/:project/secrets                 Secrets
@@ -129,6 +132,8 @@ export type ConsolePage =
   | { kind: "dashboard"; dashKind: DashboardPageKind; key: string }
   /** The storage browser: the scoped environment's buckets (Storage/StoragePage.tsx). */
   | { kind: "storage" }
+  /** The data browser: the scoped environment's databases (Data/DataPage.tsx). */
+  | { kind: "data" }
   | { kind: "environments" }
   | { kind: "environment"; env: string }
   | { kind: "secrets" }
@@ -157,6 +162,8 @@ export function consolePath(project: string, page: ConsolePage): string {
       return `${base}/observability/dashboards/${page.dashKind}/${encodeURIComponent(page.key)}`;
     case "storage":
       return `${base}/storage`;
+    case "data":
+      return `${base}/data`;
     case "environments":
       return `${base}/environments`;
     case "environment":
@@ -205,6 +212,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "environments":
         return sub ? { kind: "environment", env: safeDecode(sub) } : { kind: "environments" };
       case "storage":
+      case "data":
       case "secrets":
       case "domains":
       case "activity":

@@ -28,6 +28,7 @@ import { Cpu, Rocket, Upload } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import Button from "@/components/forge-ui/button";
+import Status from "@/components/forge-ui/status";
 import Tooltip from "@/components/forge-ui/tooltip";
 import { cn } from "@/lib/utils";
 import { liveKindLabel, type LiveEnv } from "@/services/forge/live";
@@ -134,9 +135,8 @@ export function EnvPageHeader({
   );
 }
 
-const TONE_DOT: Record<HeadlineTone, string> = {
+const TONE_DOT: Record<Exclude<HeadlineTone, "progress">, string> = {
   ok: "bg-success",
-  progress: "bg-primary motion-safe:animate-pulse",
   problem: "bg-danger",
   quiet: "border border-ink-muted/60",
   // A ring around a fill: waiting is neither the hollow "nothing yet" nor a
@@ -165,7 +165,12 @@ function StatusLine({ headline }: { headline: EnvHeadline }) {
       data-testid="env-page-status"
       data-tone={headline.tone}
     >
-      <span className={cn("h-2 w-2 shrink-0 rounded-full", TONE_DOT[headline.tone])} aria-hidden="true" />
+      {headline.tone === "progress" ? (
+        // Rolling out: the console's one in-flight mark, the Status spinner.
+        <Status busy className="shrink-0" />
+      ) : (
+        <span className={cn("h-2 w-2 shrink-0 rounded-full", TONE_DOT[headline.tone])} aria-hidden="true" />
+      )}
       <span className="truncate">{headline.text}</span>
       {headline.detail !== "" && <span className="sr-only">. {headline.detail}</span>}
     </span>

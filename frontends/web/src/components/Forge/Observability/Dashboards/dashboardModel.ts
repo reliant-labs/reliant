@@ -189,6 +189,11 @@ export function compareParam(value: unknown): CompareMode {
   return (COMPARE_MODES as readonly string[]).includes(String(value)) ? (value as CompareMode) : "off";
 }
 
+/** A dashboard's own comparison (forge dashspec defaultCompare), else off; a mode this console does not know is off. */
+export function dashboardDefaultCompare(value: string | undefined): CompareMode {
+  return value === "period" || value === "release" ? value : "off";
+}
+
 export function refreshParam(value: unknown): RefreshInterval {
   return (REFRESH_INTERVALS as readonly string[]).includes(String(value)) ? (value as RefreshInterval) : "off";
 }

@@ -4,6 +4,7 @@ package runtime
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -185,6 +186,23 @@ func (s *CapacityWakeSuite) TestStoppedThreads_OneWakeResumesTheWholeChat() {
 		resumed := e.reportFor(who + "#resume-1")
 		s.Require().NotNil(resumed, "%s reported its resumed run under a fresh slot", who)
 		s.Equal(2, reportKind(resumed), "%s completed", who)
+
+		// The wake brought no input, so the resumed run's first turn is
+		// marked as a resume: call_llm continues a cut-off tail instead of
+		// yielding it (reliant #2394). Exactly that turn, not the one the
+		// agent stopped on.
+		e.mu.Lock()
+		first, resumedTurn := e.callRuntime[who+"#1"], e.callRuntime[who+"#2"]
+		e.mu.Unlock()
+		s.False(first.ResumeTurn, "%s's original first turn is not a resume", who)
+		s.True(resumedTurn.ResumeTurn, "%s's first turn after the wake is a resume turn", who)
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for key, rtx := range e.callRuntime {
+		if strings.HasPrefix(key, "parent#") {
+			s.False(rtx.ResumeTurn, "the root's loop was paused, not stopped: %s is no resume turn", key)
+		}
 	}
 }
 

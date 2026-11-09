@@ -176,6 +176,9 @@ type GreenfieldProbeOutput struct {
 type GreenfieldProbeActivity struct {
 	repo   greenfieldStore
 	prober greenfieldProber
+	// probeTimeout bounds the daemon round trip; zero means
+	// greenfieldProbeTimeout. Only tests set it.
+	probeTimeout time.Duration
 }
 
 // NewGreenfieldProbeActivity builds the probe. prober may be nil (a worker
@@ -277,9 +280,13 @@ func (a *GreenfieldProbeActivity) probeCodePresence(ctx context.Context, userID,
 		return nil, fmt.Errorf("marshal payload: %w", err)
 	}
 
-	probeCtx, cancel := context.WithTimeout(ctx, greenfieldProbeTimeout)
+	timeout := greenfieldProbeTimeout
+	if a.probeTimeout > 0 {
+		timeout = a.probeTimeout
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	timeoutMs := int32(greenfieldProbeTimeout / time.Millisecond)
+	timeoutMs := int32(timeout / time.Millisecond)
 
 	var respBytes []byte
 	if daemonID != "" {

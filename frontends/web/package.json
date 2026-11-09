@@ -75,7 +75,7 @@
     "@monaco-editor/loader": "^1.7.0",
     "@monaco-editor/react": "^4.7.0",
     "@opentelemetry/api": "^1.9.1",
-    "@reliantlabs/forge-web-runtime": "^0.13.8",
+    "@reliantlabs/forge-web-runtime": "^0.13.9",
     "@reliantlabs/sdk": "workspace:*",
     "@rrweb/replay": "2.1.7",
     "@stripe/react-stripe-js": "3.10.0",
@@ -156,6 +156,8 @@
     "vitest": "^4.1.11"
   },
   "engines": {
+    "node": ">=22.12.0 <25",
     "pnpm": ">=12.15.0 <13"
-  }
+  },
+  "packageManager": "pnpm@12.15.0+sha512.b3951d6d6ff4a9f13dc7cf56cd28d2b8eb37dbcc9c68e52e1e1191873ea9f82a017287ab50baadc5ccc494f036c67c0e47eb13608c2fa36f47711b61ea128e61"
 }

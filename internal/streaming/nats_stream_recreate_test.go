@@ -56,7 +56,7 @@ func TestConsumeLoop_RecreatesStreamAfterNATSWipe(t *testing.T) {
 	hub.Publish(ctx, chatID, contentDelta("", 0, "hello"))
 	hub.Publish(ctx, chatID, StreamingDelta{DeltaType: DeltaTypeContentBlockStop, BlockIndex: 0})
 
-	got := drainAll(sub, 3*time.Second)
+	got := drainAll(sub, 3*time.Second, DeltaTypeContentBlockStop)
 	if len(got) == 0 {
 		t.Fatal("received no deltas after NATS wiped the stream: the hub did not recover, " +
 			"which is what drove the client reconnect storm")

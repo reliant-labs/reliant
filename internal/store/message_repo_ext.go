@@ -95,6 +95,19 @@ func FindMessage(ctx context.Context, db orm.Context, id string) (*core.Message,
 	return messageFromRow(row), nil
 }
 
+// ListMessagesByIDs reads messages by primary key, in one query. An id no
+// row holds is simply absent from the result; order is unspecified.
+func ListMessagesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*core.Message, error) {
+	if len(ids) == 0 {
+		return []*core.Message{}, nil
+	}
+	rows, err := ListMessage(ctx, db, orm.WhereIn(MessageFieldID, ids))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list messages by id: %w", err)
+	}
+	return messagesFromRows(rows), nil
+}
+
 // FindMessageByActivity reads the message a Temporal activity wrote into a
 // chat — the idempotency key of an activity retry — or nil. workflowID
 // narrows it to one workflow's activity ("" means any): child workflows of

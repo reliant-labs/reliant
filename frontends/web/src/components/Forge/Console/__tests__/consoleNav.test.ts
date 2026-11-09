@@ -19,12 +19,13 @@ const ENVS = [
 ];
 
 describe("buildConsoleNav", () => {
-  it("is Overview, Releases, Observability ›, Storage, then Configure, with Activity pinned last", () => {
+  it("is Overview, Releases, Observability ›, Data, Storage, then Configure, with Activity pinned last", () => {
     const { items, footer } = buildConsoleNav({ project: "shop", page: { kind: "overview" }, env: "prod", envs: ENVS });
     expect(items.map((item) => [item.label, item.section ?? ""])).toEqual([
       ["Overview", ""],
       ["Releases", ""],
       ["Observability", ""],
+      ["Data", ""],
       ["Storage", ""],
       ["Environments", "Configure"],
       ["Secrets", "Configure"],
@@ -39,6 +40,14 @@ describe("buildConsoleNav", () => {
     expect(storage.href).toBe("/forge/p/shop/storage?env=staging");
     expect(storage.active).toBe(true);
     expect(consoleCrumbs("shop", { kind: "storage" }, "staging")).toEqual([{ label: "Storage" }]);
+  });
+
+  it("links Data with the scope, lights it on its page, and crumbs it", () => {
+    const { items } = buildConsoleNav({ project: "shop", page: { kind: "data" }, env: "staging", envs: ENVS });
+    const data = items.find((item) => item.label === "Data")!;
+    expect(data.href).toBe("/forge/p/shop/data?env=staging");
+    expect(data.active).toBe(true);
+    expect(consoleCrumbs("shop", { kind: "data" }, "staging")).toEqual([{ label: "Data" }]);
   });
 
   it("opens Observability on Dashboards from its row: it has no home of its own", () => {

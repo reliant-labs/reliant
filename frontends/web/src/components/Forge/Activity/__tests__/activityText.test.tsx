@@ -62,6 +62,27 @@ describe("query_database", () => {
     expect(row).not.toHaveTextContent("select");
   });
 
+  it("says who opened a database, and who browsed a table, on which environment and why", () => {
+    const opened = event({ verb: "describe_database", via: "console", target: { kind: "database", id: "shop", label: "" }, detail: { reason: "checking a refund", duration_ms: "14" } });
+    expect(activitySentence(opened)).toBe("Ada opened the shop database on prod: checking a refund");
+    expect(activityText(opened).facts).toEqual(["14 ms"]);
+    const browsed = event({
+      verb: "browse_table",
+      via: "console",
+      target: { kind: "table", id: "public.orders", label: "" },
+      detail: { reason: "checking a refund", database: "shop", duration_ms: "9" },
+    });
+    expect(activitySentence(browsed)).toBe("Ada browsed public.orders in the shop database on prod: checking a refund");
+    render(
+      <ol>
+        <ActivityRow event={browsed} now={T + 60_000} />
+      </ol>
+    );
+    // The sentence names the environment: the row adds no second "in prod".
+    expect(screen.getByTestId("activity-a1")).toHaveTextContent("Ada browsed public.orders in the shop database on prod: checking a refund9 ms");
+    expect(activitySentence(event({ ...opened, env: null, detail: {} }))).toBe("Ada opened the shop database");
+  });
+
   it("says one row, and a database with no environment by name", () => {
     const one = event({ ...q, env: null, detail: { row_count: "1" } });
     expect(activitySentence(one)).toBe("Ada queried the shop database via CLI");

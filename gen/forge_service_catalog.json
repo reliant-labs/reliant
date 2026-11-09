@@ -3889,6 +3889,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.ChatService/GetContentBlockBodies",
+          "name": "GetContentBlockBodies",
+          "input": "reliant.v1.GetContentBlockBodiesRequest",
+          "output": "reliant.v1.GetContentBlockBodiesResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.ChatService/GetThreadWorkflowInputs",
           "name": "GetThreadWorkflowInputs",
           "input": "reliant.v1.GetThreadWorkflowInputsRequest",
@@ -4512,6 +4522,24 @@
             }
           },
           {
+            "Name": "GetContentBlockBodies",
+            "InputType": "GetContentBlockBodiesRequest",
+            "OutputType": "GetContentBlockBodiesResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Custom": true,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.GetContentBlockBodiesRequest",
+            "OutputTypeFQ": "reliant.v1.GetContentBlockBodiesResponse",
+            "InputProtoFile": "reliant/v1/chat.proto",
+            "OutputProtoFile": "reliant/v1/chat.proto",
+            "Activity": {
+              "Mutating": false
+            }
+          },
+          {
             "Name": "UpdateChatState",
             "InputType": "UpdateChatStateRequest",
             "OutputType": "UpdateChatStateResponse",
@@ -5090,6 +5118,11 @@
               "Name": "since_seq",
               "ProtoType": "int64",
               "IsOptional": false
+            },
+            {
+              "Name": "tool_bodies",
+              "ProtoType": "enum",
+              "IsOptional": true
             }
           ],
           "GetChatUpdatesResponse": [
@@ -5107,6 +5140,41 @@
             {
               "Name": "latest_sequence",
               "ProtoType": "int64",
+              "IsOptional": false
+            }
+          ],
+          "GetContentBlockBodiesRequest": [
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "block_ids",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            },
+            {
+              "Name": "full",
+              "ProtoType": "bool",
+              "IsOptional": true
+            }
+          ],
+          "GetContentBlockBodiesResponse": [
+            {
+              "Name": "bodies",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.ContentBlockBody"
+            },
+            {
+              "Name": "not_found",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            },
+            {
+              "Name": "deferred",
+              "ProtoType": "[]string",
               "IsOptional": false
             }
           ],
@@ -5351,6 +5419,11 @@
             {
               "Name": "thread_id",
               "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "tool_bodies",
+              "ProtoType": "enum",
               "IsOptional": true
             }
           ],
@@ -6558,6 +6631,42 @@
               "name": "original_size",
               "kind": "int64",
               "optional": true
+            },
+            {
+              "name": "body_elided",
+              "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "body_size",
+              "kind": "int64",
+              "optional": true
+            }
+          ],
+          "reliant.v1.ContentBlockBody": [
+            {
+              "name": "block_id",
+              "kind": "string"
+            },
+            {
+              "name": "input",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "content",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "truncated",
+              "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "original_size",
+              "kind": "int64",
+              "optional": true
             }
           ],
           "reliant.v1.DeleteChatRequest": [
@@ -6622,6 +6731,12 @@
             {
               "name": "since_seq",
               "kind": "int64"
+            },
+            {
+              "name": "tool_bodies",
+              "kind": "enum",
+              "type_name": "reliant.v1.ToolBodyMode",
+              "optional": true
             }
           ],
           "reliant.v1.GetChatUpdatesResponse": [
@@ -6638,6 +6753,43 @@
             {
               "name": "latest_sequence",
               "kind": "int64"
+            }
+          ],
+          "reliant.v1.GetContentBlockBodiesRequest": [
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "block_ids",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "full",
+              "kind": "bool",
+              "optional": true
+            }
+          ],
+          "reliant.v1.GetContentBlockBodiesResponse": [
+            {
+              "name": "bodies",
+              "kind": "message",
+              "type_name": "reliant.v1.ContentBlockBody",
+              "repeated": true
+            },
+            {
+              "name": "not_found",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "deferred",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.GetThreadWorkflowInputsRequest": [
@@ -6895,6 +7047,12 @@
             {
               "name": "thread_id",
               "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "tool_bodies",
+              "kind": "enum",
+              "type_name": "reliant.v1.ToolBodyMode",
               "optional": true
             }
           ],
@@ -7976,6 +8134,7 @@
           "reliant.v1.CompactChatRequest": "reliant/v1/chat.proto",
           "reliant.v1.CompactChatResponse": "reliant/v1/chat.proto",
           "reliant.v1.ContentBlock": "reliant/v1/chat.proto",
+          "reliant.v1.ContentBlockBody": "reliant/v1/chat.proto",
           "reliant.v1.DeleteChatRequest": "reliant/v1/chat.proto",
           "reliant.v1.DeleteChatResponse": "reliant/v1/chat.proto",
           "reliant.v1.DismissChatRequest": "reliant/v1/chat.proto",
@@ -7984,6 +8143,8 @@
           "reliant.v1.GetChatResponse": "reliant/v1/chat.proto",
           "reliant.v1.GetChatUpdatesRequest": "reliant/v1/chat.proto",
           "reliant.v1.GetChatUpdatesResponse": "reliant/v1/chat.proto",
+          "reliant.v1.GetContentBlockBodiesRequest": "reliant/v1/chat.proto",
+          "reliant.v1.GetContentBlockBodiesResponse": "reliant/v1/chat.proto",
           "reliant.v1.GetThreadWorkflowInputsRequest": "reliant/v1/chat.proto",
           "reliant.v1.GetThreadWorkflowInputsResponse": "reliant/v1/chat.proto",
           "reliant.v1.GetToolResultRequest": "reliant/v1/chat.proto",
@@ -8135,6 +8296,11 @@
             "STREAMING_STATE_COMPLETE",
             "STREAMING_STATE_FAILED"
           ],
+          "reliant.v1.ToolBodyMode": [
+            "TOOL_BODY_MODE_UNSPECIFIED",
+            "TOOL_BODY_MODE_FULL",
+            "TOOL_BODY_MODE_STUB"
+          ],
           "reliant.v1.ToolCallStatus": [
             "TOOL_CALL_STATUS_UNSPECIFIED",
             "TOOL_CALL_STATUS_PENDING",
@@ -8253,6 +8419,11 @@
             2,
             3
           ],
+          "reliant.v1.ToolBodyMode": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.ToolCallStatus": [
             0,
             1,
@@ -8333,6 +8504,10 @@
           "reliant.v1.StreamingState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "StreamingState"
+          },
+          "reliant.v1.ToolBodyMode": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ToolBodyMode"
           },
           "reliant.v1.ToolCallStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -11046,6 +11221,11 @@
               "name": "processes",
               "kind": "message",
               "type_name": "reliant.v1.ProcessReport"
+            },
+            {
+              "name": "worktree_reclaim",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimProposals"
             }
           ],
           "reliant.v1.DiskVolume": [
@@ -11486,6 +11666,100 @@
               "kind": "message",
               "type_name": "reliant.v1.DaemonInfo"
             }
+          ],
+          "reliant.v1.WorktreeReclaimProposal": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "fingerprint",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
+            },
+            {
+              "name": "work_summary",
+              "kind": "string"
+            },
+            {
+              "name": "unpushed_commits",
+              "kind": "int32"
+            },
+            {
+              "name": "idle_seconds",
+              "kind": "int64"
+            },
+            {
+              "name": "last_activity_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "size_bytes",
+              "kind": "int64"
+            },
+            {
+              "name": "owner",
+              "kind": "string"
+            },
+            {
+              "name": "row_id",
+              "kind": "string"
+            },
+            {
+              "name": "proposed_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            },
+            {
+              "name": "note_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "decision",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WorktreeReclaimProposals": [
+            {
+              "name": "mode",
+              "kind": "string"
+            },
+            {
+              "name": "pass_finished_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "proposals",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimProposal",
+              "repeated": true
+            },
+            {
+              "name": "total",
+              "kind": "int32"
+            }
           ]
         },
         "SchemaFiles": {
@@ -11528,7 +11802,9 @@
           "reliant.v1.SetLocalModelEndpointsRequest": "reliant/v1/daemon_registry.proto",
           "reliant.v1.SetLocalModelEndpointsResponse": "reliant/v1/daemon_registry.proto",
           "reliant.v1.SetMachineLabelsRequest": "reliant/v1/daemon_registry.proto",
-          "reliant.v1.SetMachineLabelsResponse": "reliant/v1/daemon_registry.proto"
+          "reliant.v1.SetMachineLabelsResponse": "reliant/v1/daemon_registry.proto",
+          "reliant.v1.WorktreeReclaimProposal": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.WorktreeReclaimProposals": "reliant/v1/tools_daemon.proto"
         },
         "Enums": {
           "reliant.v1.DaemonLifecyclePhase": [
@@ -15387,6 +15663,12 @@
               "kind": "message",
               "type_name": "reliant.v1.InboxAutomationDefinitionBroken",
               "oneof": "payload"
+            },
+            {
+              "name": "worktree_reclaim",
+              "kind": "message",
+              "type_name": "reliant.v1.InboxWorktreeReclaim",
+              "oneof": "payload"
             }
           ],
           "reliant.v1.InboxQuestion": [
@@ -15469,6 +15751,38 @@
             {
               "name": "daemon_name",
               "kind": "string"
+            }
+          ],
+          "reliant.v1.InboxWorktreeReclaim": [
+            {
+              "name": "daemon_id",
+              "kind": "string"
+            },
+            {
+              "name": "daemon_name",
+              "kind": "string"
+            },
+            {
+              "name": "online",
+              "kind": "bool"
+            },
+            {
+              "name": "reported_at",
+              "kind": "string"
+            },
+            {
+              "name": "mode",
+              "kind": "string"
+            },
+            {
+              "name": "proposals",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimProposal",
+              "repeated": true
+            },
+            {
+              "name": "total",
+              "kind": "int32"
             }
           ],
           "reliant.v1.ListInboxRequest": [
@@ -15695,6 +16009,80 @@
               "name": "message",
               "kind": "string"
             }
+          ],
+          "reliant.v1.WorktreeReclaimProposal": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "fingerprint",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
+            },
+            {
+              "name": "work_summary",
+              "kind": "string"
+            },
+            {
+              "name": "unpushed_commits",
+              "kind": "int32"
+            },
+            {
+              "name": "idle_seconds",
+              "kind": "int64"
+            },
+            {
+              "name": "last_activity_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "size_bytes",
+              "kind": "int64"
+            },
+            {
+              "name": "owner",
+              "kind": "string"
+            },
+            {
+              "name": "row_id",
+              "kind": "string"
+            },
+            {
+              "name": "proposed_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            },
+            {
+              "name": "note_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "decision",
+              "kind": "string"
+            }
           ]
         },
         "SchemaFiles": {
@@ -15719,6 +16107,7 @@
           "reliant.v1.InboxRefusedAutomation": "reliant/v1/inbox.proto",
           "reliant.v1.InboxStorage": "reliant/v1/inbox.proto",
           "reliant.v1.InboxWaitingForMachine": "reliant/v1/inbox.proto",
+          "reliant.v1.InboxWorktreeReclaim": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxRequest": "reliant/v1/inbox.proto",
           "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
           "reliant.v1.ProcessReport": "reliant/v1/tools_daemon.proto",
@@ -15728,7 +16117,8 @@
           "reliant.v1.RestoreInboxItemResponse": "reliant/v1/inbox.proto",
           "reliant.v1.TriggerEventDefinition": "reliant/v1/trigger.proto",
           "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
-          "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto"
+          "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto",
+          "reliant.v1.WorktreeReclaimProposal": "reliant/v1/tools_daemon.proto"
         },
         "Enums": {
           "reliant.v1.ApprovalType": [
@@ -15757,7 +16147,8 @@
             "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP",
             "INBOX_ITEM_KIND_RECOVERY",
             "INBOX_ITEM_KIND_AUTOMATION_RUN_PAUSED",
-            "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN"
+            "INBOX_ITEM_KIND_AUTOMATION_DEFINITION_BROKEN",
+            "INBOX_ITEM_KIND_WORKTREE_RECLAIM"
           ],
           "reliant.v1.TriggerHealthStatus": [
             "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -15796,7 +16187,8 @@
             8,
             9,
             10,
-            11
+            11,
+            12
           ],
           "reliant.v1.TriggerHealthStatus": [
             0,
@@ -17006,6 +17398,11 @@
               "Name": "message_id",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "tool_bodies",
+              "ProtoType": "enum",
+              "IsOptional": true
             }
           ],
           "GetMessageResponse": [
@@ -17110,12 +17507,28 @@
               "name": "original_size",
               "kind": "int64",
               "optional": true
+            },
+            {
+              "name": "body_elided",
+              "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "body_size",
+              "kind": "int64",
+              "optional": true
             }
           ],
           "reliant.v1.GetMessageRequest": [
             {
               "name": "message_id",
               "kind": "string"
+            },
+            {
+              "name": "tool_bodies",
+              "kind": "enum",
+              "type_name": "reliant.v1.ToolBodyMode",
+              "optional": true
             }
           ],
           "reliant.v1.GetMessageResponse": [
@@ -17287,6 +17700,11 @@
             "STREAMING_STATE_COMPLETE",
             "STREAMING_STATE_FAILED"
           ],
+          "reliant.v1.ToolBodyMode": [
+            "TOOL_BODY_MODE_UNSPECIFIED",
+            "TOOL_BODY_MODE_FULL",
+            "TOOL_BODY_MODE_STUB"
+          ],
           "reliant.v1.ToolCallStatus": [
             "TOOL_CALL_STATUS_UNSPECIFIED",
             "TOOL_CALL_STATUS_PENDING",
@@ -17338,6 +17756,11 @@
             2,
             3
           ],
+          "reliant.v1.ToolBodyMode": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.ToolCallStatus": [
             0,
             1,
@@ -17368,6 +17791,10 @@
           "reliant.v1.StreamingState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "StreamingState"
+          },
+          "reliant.v1.ToolBodyMode": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ToolBodyMode"
           },
           "reliant.v1.ToolCallStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -23386,6 +23813,10 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "using_credits",
+              "kind": "bool"
             }
           ],
           "reliant.v1.RefreshProviderAccountUsageRequest": [
@@ -29118,6 +29549,10 @@
             {
               "name": "created_at",
               "kind": "string"
+            },
+            {
+              "name": "using_credits",
+              "kind": "bool"
             }
           ],
           "reliant.v1.ProviderStatus": [
@@ -30111,6 +30546,11 @@
               "Name": "project_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "tool_bodies",
+              "ProtoType": "enum",
+              "IsOptional": true
             }
           ],
           "StreamUserUpdatesRequest": [
@@ -30368,6 +30808,16 @@
               "name": "original_size",
               "kind": "int64",
               "optional": true
+            },
+            {
+              "name": "body_elided",
+              "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "body_size",
+              "kind": "int64",
+              "optional": true
             }
           ],
           "reliant.v1.Heartbeat": [
@@ -30570,6 +31020,12 @@
             {
               "name": "project_id",
               "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "tool_bodies",
+              "kind": "enum",
+              "type_name": "reliant.v1.ToolBodyMode",
               "optional": true
             }
           ],
@@ -30843,6 +31299,11 @@
             "STREAMING_STATE_COMPLETE",
             "STREAMING_STATE_FAILED"
           ],
+          "reliant.v1.ToolBodyMode": [
+            "TOOL_BODY_MODE_UNSPECIFIED",
+            "TOOL_BODY_MODE_FULL",
+            "TOOL_BODY_MODE_STUB"
+          ],
           "reliant.v1.ToolCallStatus": [
             "TOOL_CALL_STATUS_UNSPECIFIED",
             "TOOL_CALL_STATUS_PENDING",
@@ -30965,6 +31426,11 @@
             2,
             3
           ],
+          "reliant.v1.ToolBodyMode": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.ToolCallStatus": [
             0,
             1,
@@ -31038,6 +31504,10 @@
           "reliant.v1.StreamingState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "StreamingState"
+          },
+          "reliant.v1.ToolBodyMode": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ToolBodyMode"
           },
           "reliant.v1.ToolCallStatus": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -34309,6 +34779,11 @@
               "name": "processes",
               "kind": "message",
               "type_name": "reliant.v1.ProcessReport"
+            },
+            {
+              "name": "worktree_reclaim",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimProposals"
             }
           ],
           "reliant.v1.DiskVolume": [
@@ -35341,6 +35816,100 @@
               "name": "account_email",
               "kind": "string"
             }
+          ],
+          "reliant.v1.WorktreeReclaimProposal": [
+            {
+              "name": "key",
+              "kind": "string"
+            },
+            {
+              "name": "fingerprint",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "repo",
+              "kind": "string"
+            },
+            {
+              "name": "branch",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "detail",
+              "kind": "string"
+            },
+            {
+              "name": "work_summary",
+              "kind": "string"
+            },
+            {
+              "name": "unpushed_commits",
+              "kind": "int32"
+            },
+            {
+              "name": "idle_seconds",
+              "kind": "int64"
+            },
+            {
+              "name": "last_activity_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "size_bytes",
+              "kind": "int64"
+            },
+            {
+              "name": "owner",
+              "kind": "string"
+            },
+            {
+              "name": "row_id",
+              "kind": "string"
+            },
+            {
+              "name": "proposed_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "note",
+              "kind": "string"
+            },
+            {
+              "name": "note_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "decision",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.WorktreeReclaimProposals": [
+            {
+              "name": "mode",
+              "kind": "string"
+            },
+            {
+              "name": "pass_finished_at_ms",
+              "kind": "int64"
+            },
+            {
+              "name": "proposals",
+              "kind": "message",
+              "type_name": "reliant.v1.WorktreeReclaimProposal",
+              "repeated": true
+            },
+            {
+              "name": "total",
+              "kind": "int32"
+            }
           ]
         },
         "SchemaFiles": {
@@ -35402,7 +35971,9 @@
           "reliant.v1.UnwatchProjectConfigsRequest": "reliant/v1/tools_daemon.proto",
           "reliant.v1.WatchProjectConfigsRequest": "reliant/v1/tools_daemon.proto",
           "reliant.v1.WhoAmIRequest": "reliant/v1/tools_daemon.proto",
-          "reliant.v1.WhoAmIResponse": "reliant/v1/tools_daemon.proto"
+          "reliant.v1.WhoAmIResponse": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.WorktreeReclaimProposal": "reliant/v1/tools_daemon.proto",
+          "reliant.v1.WorktreeReclaimProposals": "reliant/v1/tools_daemon.proto"
         },
         "Enums": {
           "reliant.v1.DiskGuardState": [

@@ -81,6 +81,11 @@ type WorkerDaemonRouter struct {
 	ControlPlane controlplane.Service
 }
 
+// A run step's retry reattaches through the worker's router
+// (toolexec.RemoteExecutor.ReattachTool); losing the method would quietly
+// turn every reattach back into a refusal.
+var _ toolexec.ToolRequestReattacher = (*WorkerDaemonRouter)(nil)
+
 // WorkerDaemonRouterDeps is the bus the router routes over, the database the
 // daemon records come from, and the control plane that wakes machines.
 type WorkerDaemonRouterDeps struct {

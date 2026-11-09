@@ -47,6 +47,10 @@ export const ERROR_REASONS = [
   // ── reliant: handlers ──
   /** SendMessage on a chat whose root run has not started (handlers/chat). */
   "chat_not_started",
+  /** Input to a live run in which no agent is running right now; nothing was queued (handlers/chat run_recipient.go). */
+  "run_no_listening_agent",
+  /** Input to a run with several agents running in parallel that names none of them; the message lists them (handlers/chat run_recipient.go). */
+  "run_recipient_ambiguous",
   /** A save raced a newer revision of the same definition (handlers/workflow). */
   "stale_revision",
   /** Killing a process that already exited (handlers/package_commands, background). */
@@ -91,20 +95,15 @@ export const ERROR_REASONS = [
   "obs_query_quota_soft",
   /** A console user already has the server's cap of observability reads running; the RetryInfo detail says when to try again. */
   "in_flight_limit",
-  // ── control-plane: audited reads of an environment's contents (StorageBrowserService; AppDatabaseService shares the first three) ──
-  /** An audited environment's read arrived without confirm_env_id and a reason. */
+  // ── control-plane: audited Data and Storage reads ──
   "confirmation_required",
-  /** The environment has not recorded what it deploys yet, so its buckets (and their policy) are not known. */
   "shape_unknown",
-  /** The per-principal read budget is spent; RetryInfo / Retry-After says when to try again. */
   "rate_limited",
-  /** The control plane cannot read the bucket (a self-managed MinIO, an undialable S3 endpoint, a hosted bucket not yet converged). */
+  "datasource_unreachable",
+  "query_in_flight",
   "bucket_unreachable",
-  /** A ListObjects page_token that was not issued for this bucket and prefix. */
   "bad_page_token",
-  /** PreviewObject: not an image, text or JSON object. */
   "not_previewable",
-  /** PreviewObject: over the preview's size cap (10 MiB for an image, 1 MiB for text). */
   "too_large",
   // ── control-plane: git credentials (internal/gitcredential; reliant token_git.go) ──
   /** No git provider account is connected for the user. */

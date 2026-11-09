@@ -48,6 +48,12 @@ import (
 // re-parked there; they must replay doing the same.
 const lateUserWakeChangeID = "late-user-wake-gets-a-turn"
 
+// noGraphRestartForWakeChangeID gates ending a run woken on a root thread no
+// agent loop ran on, instead of continuing it at graph entry
+// (continueAsNewForLateWake). Its own change id: lateUserWakeChangeID is read
+// at other sites with max version 1, and the first read records the version.
+const noGraphRestartForWakeChangeID = "late-wake-never-restarts-a-graph"
+
 // continueAsNewForLateWake is the end-of-run check: called after a ROOT run's
 // normal-completion bookkeeping, as the last thing before the workflow
 // returns. If thread was woken after its last turn began, it returns the
@@ -91,6 +97,21 @@ func continueAsNewForLateWake(ctx workflow.Context, input WorkflowInput, thread 
 		return nil
 	}
 	if workflow.GetVersion(ctx, lateUserWakeChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return nil
+	}
+	// A wake on a root thread no agent loop ran on is input nothing in this
+	// workflow can read: a graph run (pr-fix) whose agents run on threads of
+	// their own. Continuing as a fresh run at graph entry re-ran the whole
+	// workflow, side effects and all, and still left the message unread
+	// (reliant #2394, chat 4ece80a3). A pending message never restarts a
+	// workflow: the run ends, and the thread's completion has already marked
+	// the row undelivered (ThreadStatusActivity.resolveMailbox) — the record
+	// the sender and the UI read.
+	if !tracker.rootRanAgentLoop && workflow.GetVersion(ctx, noGraphRestartForWakeChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		workflow.GetLogger(ctx).Warn("[Workflow Runtime] Woken after its last turn on a root thread no agent reads; ending without re-running the workflow",
+			"chatID", input.ChatID,
+			"thread", thread,
+		)
 		return nil
 	}
 	workflow.GetLogger(ctx).Info("[Workflow Runtime] Woken after its last turn; continuing as a fresh run so the input gets a turn",

@@ -23,7 +23,9 @@ import type {
   ProtoMessageUpdate,
   UserUpdate,
 } from "./events.js";
+import { toolBodyModeOf } from "./content-block-bodies.js";
 import { ReconnectingStream, type StreamEnvironment } from "./reconnecting-stream.js";
+import type { ToolBodies } from "./types.js";
 import type { StreamingClient } from "./user-stream.js";
 
 // Log prefix for filtering/debugging
@@ -145,12 +147,22 @@ export interface ChatStreamOptions extends StreamEnvironment {
   /** The project the user stream is scoped to. */
   projectId?: string;
   hooks?: ChatStreamHooks;
+  /**
+   * How the snapshot and replay send the bodies of finished tool calls.
+   * "full" (the default) is what every client has always had. "stub" sends
+   * them elided (ContentBlock.body_elided) for fetchContentBlockBodies to read
+   * when shown; live frames stay full either way. A server that predates the
+   * option ignores it and sends full bodies, so act on each block's
+   * `bodyElided`, never on the mode asked for.
+   */
+  toolBodies?: ToolBodies;
 }
 
 export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
   private callbacks: ChatStreamCallbacks;
   private readonly client: () => StreamingClient;
   private readonly hooks: ChatStreamHooks;
+  private readonly toolBodies: ToolBodies | undefined;
   private chatId: string | undefined = undefined;
   private lastChatSequence: bigint = 0n;
   // The project the user stream is scoped to. The server forwards, on this
@@ -193,6 +205,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     this.client = options.client;
     this.hooks = options.hooks ?? {};
     this.projectId = options.projectId;
+    this.toolBodies = options.toolBodies;
     // Idle until the first subscribeToChat: there is nothing to stream yet.
     this.isIntentionallyClosed = true;
   }
@@ -418,6 +431,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
       chatId: this.chatId ?? "",
       sinceSeq: this.lastChatSequence,
       projectId: this.projectId,
+      toolBodies: toolBodyModeOf(this.toolBodies),
     });
     this.log.info("Connecting to chat stream", {
       chatId: this.chatId?.slice(0, 8),
